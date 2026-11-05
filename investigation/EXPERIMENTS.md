@@ -69569,3 +69569,19 @@ EXP2197 HARDWARE ACTUAL (2026-11-05T20:22:56Z): **OV2+OV3 engaged and REJECTED a
 - Caveat: the rerun was the second suite pass on that boot (EXP2196 was the first); the -9 % PERF gap is ~9x the ABBA noise (~1 %), the direction agrees across all three resolutions.
 - Verdict: ddcdbe9c CONFIRMED (feature published). OV2+OV3 REJECTED as a default; Wom1Ov2NoHazardLead stays off. Recovery rec2197h. Next: hand the OV2 session the regression (concurrent CDM + TA/3D on two queues costs frame time: candidates USC/TVB contention or serialization of the deferred resolve into the prelude); production work returns to C4 compute kernel cost (7.9 ms HD).
 - Recovery rec2197h (2026-11-05T20:27:38Z): RECOVERY_DONE, VISIBLE_INERT_PACKAGE_ABSENT_8CPU (boot 20:23:55Z -> 20:26:34Z), no manual reboot.
+
+EXP2198 HARDWARE BEFORE 2026-11-05T20:42:05Z:
+Switches: Wom1Ov2NoHazardLead=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true: a FHD FULL OV3B=1 (first arm), b HD FULL OV3B=1, c HD PERF OV3B=0, d HD PERF OV3B=1 (KMD receipts at poll 12), e HD PERF OV3B=1, f HD PERF OV3B=0 (ABBA c/d/e/f inside one boot).
+- WHY THIS HYPOTHESIS: (1) EXP2197 vs EXP2196 HD PERF: prelude rows 3.10 -> 4.36 per present; (2) rc_big_span +1.37 of +1.45 ms wall growth, of which rc_prelude_kick 1.16 ms; (3) c_work_exact only +0.26 ms, so CDM/TA contention is not the main cost (OV2 session analysis, tools/agx_gpu_frame_breakdown.py).
+- WINDOWS CONTRACT: a ResolveQueryData destination is read only after a barrier on it (CPU after the fence); delaying the copy to any point before those is legal.
+- AGX/ASAHI CONTRACT: a render batch's CDM prelude runs before its TA, behind all earlier render and compute (barriers plus the KMD COMPUTE_ON_3D/COMPUTE_ON_COMPUTE lead); a prelude render is never OV2-flagged.
+- TRANSLATION: copy only into renders that already have a prelude (batch->cdm.bo != NULL), so no new prelude or lead is created; otherwise keep it pending and drain natively at the existing drain points (destination barrier, query Begin/End, end of replay, present).
+- ATOMIC CONTRACT: none -- one env switch compared pairwise inside one boot; Wom1Ov2Receipt export (OV2-on only, ~1 ms per 2 s) is present in both arms.
+- WHAT IS STILL UNKNOWN: how often no prelude render follows a resolve before a drain (drained + reasons); whether existing prelude renders behind concurrent compute still eat the OV2 gain; Wom1Ov2Receipt waived vs refused.
+- Expected: suite 119/0; resolve-defer field 5 = 1 with into_render > 0 in OV3B=1 arms; prelude rows ~3.1/present; Waived > 0; HD PERF OV3B=1 > OV3B=0 in both pairs and >= 40.8 (EXP2196); FHD >= 5370.
+- Failure criteria: HD PERF OV3B=1 <= OV3B=0 or below EXP2196, drained == deferred in most ECLs, any fault/TDR/WER -> OV3b rejected; rec2198h.
+- Recovery: rec2198h (run recover.sh directly on the running guest, no manual reboot; AT_PROXY after a reset).
+- Probe: agx_d3d12_probe_e2198_arm64.exe = byte copy of e2196/e2197 (sha 5dbe904643ea842c, probe source unchanged).
+- Hashes: sys 2b0b47a72e1e, UmdArm64 b8ae7d0ad6e6, UmdX64 e527c81a06d9, Umd32 7a98034f5794; manifest d5b4bc90409b, hardware-manifest fcda94eb527d; probe2198.sh 706fea9a250e (PROBE_LINT_OK); visible recovery rec2198h 580f343a7e8a26db; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
+- Recovery rec2198h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2198-ov3b/run2198.sh.
