@@ -69485,3 +69485,15 @@ EXP2193 HARDWARE ACTUAL (2026-11-05T16:58:33Z): **D3D12 barrier map of GravityMa
 - Wom1RcDecisions (mid-run): render(prelude)->compute successors are already kicked (reason 0, running kind 2/1, next kind 3, class COMPUTE_ON_3D: 2231 + 827), but their lead Barrier waits on the render's 3D stamp; compute->prelude render successors kicked with COMPUTE_ON_COMPUTE (3819, dependent, correct); reason 55 (cross-process, DWM) 1560; reason 4 (preemption) 219.
 - Conclusion: the overlap available under D3D12 is render N || compute N+1 (three pairs per frame); implementation OV2-RC (independent compute successor's lead Barrier satisfied on arrival, flag via the Asahi header CdmBarrier/VdmBarrier NONE) in progress on exp/ov2-rc.
 - Recovery rec2193h. Evidence .local/experiments/EXP2193-ov1-receipt/evidence.
+
+EXP2194 HARDWARE BEFORE 2026-11-05T17:23:56Z:
+Steps: D3D12 suite; GravityMark D3D12 HD 100k -temporal 0 PERF, MESA_SHADER_CACHE_DISABLE=true: a control; b APPLE_AGX_D3D12_SPLIT_TAGS=e4d8b786,ecb5fd57,094e0b94,a3da7f9d,39e0399a,93891b99,7bc49152,03b52dfc (P0: prep/radix/trio pieces); c SPLIT_TAGS=7aa43c6c,9e9aea5a,cfb56a6a,65b3a258,9f0d0b9d,97efffb3,b1db88bf,520e6881 (traversal/P9/a826 stage); d control.
+- WHY THIS HYPOTHESIS: (1) EXP2192: Apple's C4 block (encoders c0-c9) takes 5.8 ms vs our ~7.7 ms (EXP2122b unsplit); (2) C4 is 128 dispatches; P0 (prep + radix + trio, 3.69 ms) has not been split on the current compiler; (3) without per-kernel times no kernel can be named as the +1.9 ms (offline map M3: ~+0.8 prep/radix, ~+0.9 traversal/pairs stage).
+- WINDOWS / AGX CONTRACT: unchanged; rc125 diagnostic only (batch ends before tagged dispatches; ~12 us per split, EXP2122).
+- ATOMIC CONTRACT: none (diagnostic arms).
+- WHAT IS STILL UNKNOWN: per-kernel GPU time of P0 and the traversal stage on the current package.
+- Expected: per-piece times from tools/agx_gpu_frame_breakdown.py --jobs summing to the control C4 within ~0.2 ms; scores of split arms lower than control (more jobs).
+- Failure criteria: suite regression or reset (diagnostic must be inert).
+- Recovery: rec2194h.
+- Hashes: sys 03fb262a8ef6, UmdArm64 abe9cd092af9, UmdX64 a51abb14d577, Umd32 e9bf3d415b5e; manifest f3d48034e0f8, hardware-manifest f979e97f9d76; probe2194.sh e57bfc7da614 (PROBE_LINT_OK); visible recovery rec2194h 271aae596854f9f8; m1n1 0d3a75b3.
+- Recovery rec2194h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2194-c4split/run2194.sh.
