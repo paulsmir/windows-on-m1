@@ -69219,3 +69219,14 @@ EXP2176-EXP2179 HARDWARE ACTUAL (2026-11-05T02:31:22Z), ABBA (same package code 
 - EXP2179 A: FHD 5192, HD 6344, suite 119/0.
 - Means A -> B: FHD 5150 -> 5228 (+1.5 %), HD 6385 -> 6510 (+2.0 %); B above A in both pairs at both resolutions; no TDR, hang or boot failure.
 - Verdict: CONFIRMED. Per the user's decision (ABBA first, then default): KMD defaults flipped in 10fd111e049e08ef7e9500dba536bb9d1476f97f (both switches on unless REG_DWORD 0); the split m1n1 becomes the working launch m1n1 and lastgood after the EXP2180 default-package check, 075e3980 stays the emergency fallback.
+
+EXP2180 HARDWARE BEFORE 2026-11-05T02:38:00Z:
+Switches: none. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a FHD FULL (first arm), b HD FULL.
+- WHY THIS HYPOTHESIS: (1) EXP2176-2179 ABBA: B (split + both switches) +1.5 % FHD / +2.0 % HD over A; (2) the defaults now select B's KMD behaviour without switches; (3) a switch-free run proves the default path (not only the switch path).
+- WINDOWS CONTRACT / AGX CONTRACT: as EXP2177/2178.
+- WHAT IS STILL UNKNOWN: none beyond run-to-run noise; expected to match B.
+- Expected: FHD ~5228, HD ~6510 (B means), suite 119/0.
+- Failure criteria: scores at A level (~5150 / ~6385) would mean the defaults did not take effect; suite regression, TDR, hang.
+- Recovery: rec2180h.
+- Hashes: sys 5ccdc2655254, UmdArm64 dae40bff121c, UmdX64 40d348fbeb27, Umd32 30e6f4c4dbae; manifest 83c7cfcc6be5, hardware-manifest 0b54e08c0e41; probe2180.sh fc3f98317c2b (PROBE_LINT_OK); visible recovery rec2180h 29a6b875ab5cc62b; m1n1 0d3a75b3.
+- Recovery rec2180h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2180-defaults/run2180.sh.
