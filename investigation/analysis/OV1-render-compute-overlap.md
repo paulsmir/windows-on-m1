@@ -30,3 +30,22 @@
 1. Receipt only: per job boundary, the D3D12 barriers recorded between the previous job's last command and this job's
    first command, with resource identity vs the previous job's written resources.
 2. If C0 -> R1 has no hazard barrier: KMD kicks R1 on Queue A without the Barrier on C0's stamp (one switch), measure.
+
+## RE of macOS 15.7.8 com.apple.AGXG13G (behaviour notes only; no Apple code copied)
+Extracted kernel collection, symbol dumps and annotated disassembly: .local/reference/macos-kernelcache-j313-15.7.8/extracted
+(kc/kernelcache.macho, kcscripts/agx.dsyms, kcdis/agx.ann). [E] = read in disassembly/strings, [I] = inference.
+- Per MTLCommandQueue a pool of firmware work queues: AGX3DWorkQueue (one TA + one 3D channel each) and AGXCLWorkQueue
+  (one CL channel each); defaults (AGXAccelerator::configureDevice): max 2 render work queues, max 3 compute work
+  queues, selection mode 3 (dependency-aware) [E]. Blits run on the 3D channel [E].
+- Each channel has its own stamp; completion is stamp-based (IOGPUEventMachine, signalStampsUpdated,
+  retireCommandBuffer); no notifier lists [E].
+- Dependencies: per encoder a wait event merged from the allocation list's resource events and the MTLFences named in the
+  kernel command (processComputeSetup / processRenderSetup, mergeEvent, retainMTLFence) [E]; no implicit wait on the
+  previous encoder [I]. Queue choice (choose3DWorkQueue / chooseCLWorkQueue): Dependent (a queue whose stamp is already in
+  the wait event -> FIFO satisfies it), Idle, Alloc New, Round robin [E]; stripExternalBarriers then removes waits
+  already satisfied by the chosen queue [E/I]; remaining cross-queue waits become firmware Barrier commands
+  (setupBarrierCommand, writeEventBarrierCommand) [E].
+- TVB: render work queues > 0 share work queue 0's parameter management unless configured otherwise [E].
+- Consequence for us: Q2c already gives compute its own Queue; the missing piece is emitting the cross-queue Barrier
+  only for real dependencies. For D3D12 the dependency source is the application's ResourceBarrier calls (Windows
+  contract), not BO identity.
