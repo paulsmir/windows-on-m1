@@ -69275,3 +69275,17 @@ EXP2182 HARDWARE ACTUAL (2026-11-05T10:03:34Z): **M1b CONFIRMED: HD FULL 6628 (n
 - Verdict: CONFIRMED. M1b stays default on (46050827). Evidence .local/experiments/EXP2182-m1b/evidence/EXP2182 (gm2182{b,c,d,e}-perf.json beside it).
 - Recovery: rec2182h (reboot + AGX_RECOVERY_ALLOW_AT_PROXY=1 recover.sh).
 - Next: L4 constant-load LICM (5cf2cf2b, APPLE_AGX_D3D_LICM_CONST=1 opt-in) under the same ABBA design, FHD FULL first.
+
+EXP2183 HARDWARE BEFORE 2026-11-05T10:11:00Z:
+Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true in every arm: a FHD FULL (L4 on, first arm), b HD FULL (on), c-f HD PERF ABBA (on, off, off, on); on = APPLE_AGX_D3D_LICM_CONST=1.
+- WHY THIS HYPOTHESIS: (1) offline C4 traversal (2.8 ms/frame): four loop-invariant constant-buffer loads addressed from groupshared (cb[shared[12]*57+48+k]) run every iteration, 2 of 9 serialized memory round trips per node visit (Apple m187: 7, values in uniforms); (2) L4 offline: traversal loop device loads 21 -> 17, waits 32 -> 28, loop instructions 568 -> 554, 1024 threads unchanged; corpus 35/182 change, no occupancy loss, C0 lighting 806ee7b1 448 -> 512 threads; (3) soft faults are active on hardware (measure-soft-faults 1 in EXP2182), which the speculative part requires.
+- WINDOWS CONTRACT: D3D groupshared visibility requires a barrier; a loop nest with no shared store/atomic/barrier observes no change by this invocation, so reading once before the nest is a permitted execution.
+- AGX/ASAHI CONTRACT: soft faults: shader loads of unmapped memory return zero, no fault (asahi_drm.h); speculative loads on untaken paths are discarded.
+- TRANSLATION: outermost writer-free loop nests: load_shared feeding a load address marked CAN_REORDER for one filtered nir_opt_licm run, then unmarked.
+- ATOMIC CONTRACT: none -- one compiler pass, controlled per arm by environment.
+- WHAT IS STILL UNKNOWN: the frame-time effect (C4 latency- vs occupancy-bound); C0's occupancy gain on hardware.
+- Expected: suite 119/0; correct images; on >= off in both ABBA pairs (+0.3..2 %); HD FULL >= ~6600; FHD >= ~5150 (first arm).
+- Failure criteria: wrong image / GPU fault / suite regression (miscompile) -> rejected; on <= off in both pairs -> rejected (C4 not round-trip bound).
+- Recovery: rec2183h.
+- Hashes: sys b4543aaaee39, UmdArm64 a933f1f085e0, UmdX64 ee1cce84d4a8, Umd32 8f43c08291a6; manifest 87c5c13256eb, hardware-manifest 038a0d0ce36f; probe2183.sh 255610ec1936 (PROBE_LINT_OK); visible recovery rec2183h bd5d63d30b74b6cf; m1n1 0d3a75b3.
+- Recovery rec2183h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2183-l4/run2183.sh.
