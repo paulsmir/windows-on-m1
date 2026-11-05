@@ -69341,3 +69341,15 @@ EXP2185 HARDWARE ACTUAL (2026-11-05T12:17:16Z): **O1 REJECTED: one-more-workgrou
 - Expected vs actual: if the a826 family were occupancy-bound, =2 (832 -> 1024 threads at +45 % instructions) would be faster; it is slower or equal. Together with EXP2183 (load latency) C4 is bound neither by dependent-load latency nor by occupancy; remaining candidates: memory throughput / atomics.
 - Verdict: REJECTED (O1 7a549e9b stays opt-in, APPLE_AGX_RA_GROUPS unset). Evidence .local/experiments/EXP2185-o1/evidence.
 - Recovery: rec2185h. Next: EXP2186 Q2c H0 rerun with the job-start refusal line diagnostic (1ca7adee).
+
+EXP2186 HARDWARE BEFORE 2026-11-05T12:24:51Z:
+Switches: Wom1ComputeOwnQueue=1 Wom1Depth2General=0 (same as EXP2184). Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD FULL, b HD PERF.
+- WHY THIS HYPOTHESIS: (1) EXP2184: firmware alive (Crashed 0), compute ring rptr = done = write, about 7.7k jobs completed before the reset, so the firmware accepted the second Queue's objects; (2) the reset was a KMD job-start refusal (SchedulerFaulted backend_platform_windows.c:6495: AdmissionPrepareG4Manager / AdmissionPrepareUnmanagedInitBm) whose failing term was not recorded; (3) 1ca7adee records the first false term (queue provider phase, provider/runtime pending fence, runtime phase, CompletionAvailable, manager fence) as SchedulerFaulted 0x40000 | line.
+- WINDOWS CONTRACT / AGX/ASAHI CONTRACT / TRANSLATION / ATOMIC CONTRACT: as EXP2184.
+- WHAT IS STILL UNKNOWN: which job-start precondition the Q2c (or depth-one + retained-slot) path leaves false.
+- Expected: either the run passes (EXP2184 was a rare race) or Wom1GpuReset names one term; no firmware crash.
+- Failure criteria: as EXP2184; the diagnostic outcome itself is the result.
+- Recovery: rec2186h (AT_PROXY after a guest reset; save full.log first).
+- Hashes: sys 54c66d2f6340, UmdArm64 dcd74b20ad4e, UmdX64 0ad2764bccde, Umd32 1f526a13d29a; manifest 0488dc87c5c8, hardware-manifest 926d9204037d; probe2186.sh 510ed91c7a60 (PROBE_LINT_OK); visible recovery rec2186h 49826b56431df8a7; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1ComputeOwnQueue=1 Wom1Depth2General=0.
+- Recovery rec2186h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2186-q2c/run2186.sh.
