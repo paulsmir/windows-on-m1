@@ -261,3 +261,21 @@ answer:
     with the C-range tracker will show it.
   - Whether hoisting R6's expansion ahead of C5 is legal per frame. Count/args writers would have to
     be C3 only; that needs a receipt.
+
+## OV4 parked (2026-11-05)
+- EXP2201 shows Apple never overlaps render->compute, so OV4 (split a compute batch after the preceding
+  render and flag its prefix independent) is parked: code dbaf4b68, opt-in APPLE_AGX_D3D12_OV4, never run.
+- BLOCKER (fork 6 review): after a split, the suffix S follows the waived prefix P. If P completes before
+  the render R, the depth-two window could kick S behind P alone (COMPUTE_ON_COMPUTE) while R still runs.
+  S would then need its own render-stamp wait. Not resolved; resolve it before OV4 is ever revived.
+
+## OV5 UMD -> KMD flag (proposal, 2026-11-05)
+- Device feature AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT = 0x4: the KMD publishes it only with its
+  own switch, and only when it can put the compute-stamp wait into the 3D ring.
+- Flag: a render packet without a compute prelude command whose render header carries cdm_barrier =
+  DRM_ASAHI_BARRIER_NONE (vdm_barrier 0). Today a plain render sends (0, 0) and a prelude render sends
+  (NONE, 1) on the render header after its compute command, so CdmBarrier = NONE on a render with no
+  compute command in its packet is unambiguous and cannot be confused with OV2 (VdmBarrier = NONE on a
+  compute envelope).
+- KMD meaning (not Asahi's): the TA does not wait on the compute stamp; the 3D ring waits on it. Without the
+  feature the parser refuses it.
