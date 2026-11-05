@@ -6,5 +6,9 @@
  * function bodies do not, so those bodies compile without the OV2 runtime
  * fields (the pure decision is tested in render_job_window.c). */
 #define ADMISSION_OV2_ON 1
+/* apple_agx_g4_submit.h defines the 0u fallback when included first (C4005) */
+#ifdef ADMISSION_G4_COMPUTE_PARSE_FLAGS
+#undef ADMISSION_G4_COMPUTE_PARSE_FLAGS
+#endif
 #define ADMISSION_G4_COMPUTE_PARSE_FLAGS(adapter) AdmissionG4ComputeParseFlags(adapter)
 #endif
