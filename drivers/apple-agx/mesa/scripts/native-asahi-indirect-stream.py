@@ -5,6 +5,66 @@ import json
 import re
 
 
+# IE1a (mesa/winsys/agx_win32_expand_ahead.h): the expansion batch lookup
+# needs agx_batch.c's static agx_get_batch_for_framebuffer.
+EXPAND_OPEN = '''/* IE1a: opens and links R's expansion batch, before R's draw is entered:
+ * a compute batch keyed by R's slot, which neither agx_get_compute_batch
+ * nor any framebuffer produces, and never ctx->batch. */
+struct agx_batch *
+agx_win32_expand_open(struct agx_context *ctx, struct agx_batch *render)
+{
+   if (ctx->any_faults || !render || agx_batch_is_compute(render) ||
+       !agx_batch_is_active(render))
+      return NULL;
+   struct pipe_framebuffer_state key = {.width = AGX_COMPUTE_BATCH_WIDTH};
+   key.height = (uint16_t)(AGX_WIN32_EXPAND_KEY_HEIGHT + agx_batch_idx(render));
+   struct agx_batch *expand = agx_get_batch_for_framebuffer(ctx, &key);
+   if (ctx->any_faults || !expand)
+      return NULL;
+   if (!agx_batch_is_compute(expand) || !expand->cdm.bo || !expand->cdm.current ||
+       (expand->windows_expand_owner && expand->windows_expand_owner != render)) {
+      AgxWin32AsahiMarkContextFault(ctx, (5u << 16) | __LINE__);
+      return NULL;
+   }
+   /* Making room may have evicted (submitted) R itself. */
+   if (!agx_batch_is_active(render) || agx_batch_is_submitted(render)) {
+      if (!expand->windows_expand_dispatches) {
+         expand->windows_expand_owner = NULL;
+         agx_batch_reset(ctx, expand);
+      }
+      return NULL;
+   }
+   expand->windows_expand_owner = render;
+   render->windows_expand = expand;
+   AgxWin32PerfNote("Expand ahead: expansion batch opened");
+   return expand;
+}
+
+/* IE1a: the CPU shadow of [va, va + bytes) in R's pipeline pool, inside
+ * what the pool handed out; NULL otherwise. */
+const void *
+agx_win32_expand_template_cpu(struct agx_batch *render, uint64_t va, size_t bytes)
+{
+   if (!va || !bytes)
+      return NULL;
+   util_dynarray_foreach(&render->pipeline_pool.bos, struct agx_bo *, entry) {
+      struct agx_bo *bo = *entry;
+      if (!bo || !bo->va || va < bo->va->addr)
+         continue;
+      const uint64_t offset = va - bo->va->addr;
+      const size_t used = bo == render->pipeline_pool.transient_bo ?
+         (size_t)render->pipeline_pool.transient_offset : bo->size;
+      if (offset > used || bytes > used - (size_t)offset)
+         continue;
+      const uint8_t *map = (const uint8_t *)agx_bo_map(bo);
+      return map ? map + (size_t)offset : NULL;
+   }
+   return NULL;
+}
+
+'''
+
+
 def once(text, old, new):
     if text.count(old) != 1:
         raise RuntimeError('Ambiguous indirect stream anchor: '+old[:100])
@@ -75,12 +135,17 @@ def project_sources(out, project, overlays):
    unsigned long long windows_stream_want, windows_stream_request_min[2], windows_stream_request_max[2];''')
     h=once(h,'struct agx_batch {', '''struct agx_batch {
    /* GPU-produced data only: never CPU-mapped or shadow-published. */
-   struct agx_pool windows_stream_pool, windows_stream_usc_pool;''')
+   struct agx_pool windows_stream_pool, windows_stream_usc_pool;
+   /* IE1a (agx_win32_expand_ahead.h): a render's open expansion batch, an
+    * expansion batch's render, and its stream dispatches. */
+   struct agx_batch *windows_expand, *windows_expand_owner;
+   unsigned windows_expand_dispatches;''')
     h=once(h,'''void agx_decompress_inplace(struct agx_batch *batch, struct pipe_surface *surf,
                             const char *reason);''','''void agx_decompress_inplace(struct agx_batch *batch, struct pipe_surface *surf,
                             const char *reason);
 
-#include "agx_win32_stream_scratch.h"''')
+#include "agx_win32_stream_scratch.h"
+#include "agx_win32_expand_ahead.h"''')
     save(path,h)
 
     path='src/gallium/drivers/asahi/agx_batch.c'
@@ -94,6 +159,20 @@ def project_sources(out, project, overlays):
    agx_pool_init(&batch->windows_stream_usc_pool, dev, "GPU indirect USC",
                  AGX_WIN32_BO_GPU_ONLY | AGX_BO_LOW_VA, false);
    agx_pool_init(&batch->pool, dev, "Batch pool", AGX_WIN32_BO_SHADOW, true);''')
+    # IE1a: no batch starts linked to an expansion batch or render.
+    s=once(s,'   batch->incoherent_writes = false;\n',
+           '''   batch->windows_expand = NULL;
+   batch->windows_expand_owner = NULL;
+   batch->windows_expand_dispatches = 0;
+   batch->incoherent_writes = false;
+''')
+    # IE1a: unlink; a render reset with an open expansion batch aborts it.
+    s=once(s,'   agx_bo_unreference(dev, screen->rodata);\n   agx_bo_unreference(dev, batch->vdm.bo);',
+           '''   agx_win32_expand_cleanup(ctx, batch);
+   agx_bo_unreference(dev, screen->rodata);
+   agx_bo_unreference(dev, batch->vdm.bo);''')
+    s=once(s,'void\nagx_flush_all(struct agx_context *ctx, const char *reason)\n', EXPAND_OPEN+
+           'void\nagx_flush_all(struct agx_context *ctx, const char *reason)\n')
     # RC71: the retired batch gives its stream outputs back to the context.
     s=once(s,'   agx_pool_cleanup(&batch->pipeline_pool);',
            '''   agx_pool_cleanup(&batch->pipeline_pool);

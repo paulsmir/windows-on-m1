@@ -285,4 +285,266 @@ int main(void){
                     self.assertEqual(r.returncode,0,r.stderr)
 
 
+# IE1a (APPLE_AGX_D3D12_EXPAND_AHEAD, agx_win32_expand_ahead.h): the glue
+# harness (production admission/emission, real kernel) with recording stubs.
+IE1A_STUBS = {
+    'static void agx_batch_add_bo(struct agx_batch *b,struct agx_bo *bo){assert(bo==&output_bos[output_refs++ % 2]);if(fault==10)b->ctx->any_faults=true;}':
+    'static struct agx_batch *add_batch[64],*launch_batch,*scratch_batch;static struct agx_bo *add_bo_log[64];static unsigned launch_barrier;\n'
+    'static void agx_batch_add_bo(struct agx_batch *b,struct agx_bo *bo){assert(bo&&output_refs<64);add_batch[output_refs]=b;add_bo_log[output_refs++]=bo;}',
+    ' assert(barrier==(AGX_BARRIER_ALL|AGX_PREGFX)&&entered==1);++launches;':
+    ' assert(entered==1);launch_batch=b;launch_barrier=barrier;++launches;',
+    'static struct agx_ptr agx_win32_stream_scratch(struct agx_batch *b,unsigned kind,size_t size,struct agx_bo **bo){\n':
+    'static struct agx_ptr agx_win32_stream_scratch(struct agx_batch *b,unsigned kind,size_t size,struct agx_bo **bo){\n scratch_batch=b;\n',
+}
+IE1A_MAIN = r'''/* IE1a harness main, appended to the glue harness prefix. */
+static uint8_t ecdm[2][1024];
+static struct agx_bo argbo,cntbo,fbbo;
+static void reset_counts(void){
+ allocations=reads=launches=entered=leaves=writer_flushes=capacity_flushes=output_refs=0;
+ get_batches=expand_opens=template_copies=batch_resets=flushes=aborts=fail_expand_flush=0;
+ launch_batch=scratch_batch=NULL;launch_barrier=0;
+ for(unsigned i=0;i<64;++i){free(blocks[i]);blocks[i]=NULL;}
+}
+static void render(struct agx_context *ctx,struct agx_batch *r,struct shader *vs){
+ init(ctx,r,vs);r->test_active=true;ctx->windows_stream_feedback=&fbbo;
+}
+static void expansion(struct agx_context *ctx,struct agx_batch *e,unsigned slab){
+ *e=(struct agx_batch){.ctx=ctx,.test_active=true};
+ e->cdm=(struct agx_encoder){&ecdm[slab],ecdm[slab],ecdm[slab]+sizeof(ecdm[slab])};
+}
+static unsigned logged(struct agx_batch *b,struct agx_bo *bo){
+ unsigned n=0;for(unsigned i=0;i<output_refs;++i)n+=add_batch[i]==b&&add_bo_log[i]==bo;return n;}
+static uint64_t fnv(const void *p,size_t n,uint64_t h){
+ const uint8_t *b=p;for(size_t i=0;i<n;++i){h^=b[i];h*=0x100000001b3ull;}return h;}
+#include <sys/mman.h>
+/* Arguments and count at one fixed address in both runs: the generated records
+ * embed the argument address, which ASLR would otherwise move. */
+static uint32_t *fixed_words;
+#define args fixed_words
+#define value fixed_words[64]
+static uint8_t tmpl[64];
+static struct agx_resource arguments,counter;
+static struct pipe_draw_indirect_info in;
+static uint8_t *draw(struct agx_context *ctx,struct agx_batch *r,uint8_t *out){
+ entered=leaves=0;
+ struct agx_win32_indirect_stream stream={&in,(uintptr_t)tmpl,sizeof(tmpl),8,12,MESA_PRIM_TRIANGLES};native_vs(&stream);
+ struct agx_draw d=agx_draw_indexed_indirect((uintptr_t)args+4,0x1000,256,AGX_INDEX_SIZE_U32,true);
+ return agx_win32_emit_indirect_stream(r,&stream,d,AGX_PRIMITIVE_TRIANGLES,out);
+}
+int main(int argc,char **argv){
+ const bool on=argc>1&&!strcmp(argv[1],"on");
+ if(on)setenv("APPLE_AGX_D3D12_EXPAND_AHEAD","1",1);else unsetenv("APPLE_AGX_D3D12_EXPAND_AHEAD");
+ assert(agx_win32_expand_ahead_enabled()==on);
+ /* Read once: a later environment change never flips a live context. */
+ setenv("APPLE_AGX_D3D12_EXPAND_AHEAD",on?"0":"1",1);assert(agx_win32_expand_ahead_enabled()==on);
+ assert(agx_win32_expand_ahead_parse("1")&&!agx_win32_expand_ahead_parse("0")&&
+        !agx_win32_expand_ahead_parse("11")&&!agx_win32_expand_ahead_parse("")&&
+        !agx_win32_expand_ahead_parse(NULL));
+ void *page=mmap((void *)0x200000000000ull,4096,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANON,-1,0);
+ assert(page==(void *)0x200000000000ull);fixed_words=page;value=3;
+ for(unsigned i=0;i<sizeof(tmpl);++i)tmpl[i]=(uint8_t)(i*7u+1u);
+ arguments=(struct agx_resource){{128},(uintptr_t)args,&argbo};
+ counter=(struct agx_resource){{4},(uintptr_t)&value,&cntbo};
+ in=(struct pipe_draw_indirect_info){&arguments.base,&counter.base,4,3,32,0};
+ for(unsigned i=0;i<3;++i){args[1+8*i]=3;args[2+8*i]=1;args[4+8*i]=i;}
+ forced_capacity=16;
+ struct agx_context ctx;struct agx_batch r,e,e2;struct shader vs={0};
+
+ /* 1. One counted ExecuteIndirect. Off: prelude in R's CDM, byte-identical
+  * to the validated path. On: dispatch into E; R gets no CDM. */
+ reset_counts();render(&ctx,&r,&vs);expansion(&ctx,&e,0);expand_next=&e;
+ agx_win32_stream_flush_inputs(&ctx,&in);
+ assert(!ctx.any_faults&&writer_flushes==2);
+ if(on)assert(get_batches==1&&expand_opens==1&&r.windows_expand==&e&&e.windows_expand_owner==&r);
+ else assert(!get_batches&&!expand_opens&&!r.windows_expand&&!e.windows_expand_owner);
+ uint32_t *out=(void *)(vdm+16);memset(out,0xff,32);
+ assert(draw(&ctx,&r,(void *)out)==(uint8_t *)out+8);
+ assert(!ctx.any_faults&&ctx.windows_indirect_path==3&&launches==1&&entered==leaves);
+ assert(scratch_batch==&r&&reads==2);           /* R owns, reads and retires the outputs */
+ assert(logged(&r,&output_bos[0])==1&&logged(&r,&output_bos[1])==1);
+ const struct agx_win32_stream_params *p;
+ if(on){
+  assert(launch_batch==&e&&launch_barrier==AGX_BARRIER_ALL&&!r.cdm.bo&&!r.cdm.current);
+  assert(e.windows_expand_dispatches==1&&template_copies==1&&allocations==4);
+  p=blocks[4];
+  /* E's own pool holds the template copy the kernel reads. */
+  assert(p->usc_template==(uintptr_t)blocks[1]&&!memcmp(blocks[1],tmpl,sizeof(tmpl)));
+  /* E lists what it reads and writes for residency, never as written. */
+  assert(logged(&e,&argbo)==1&&logged(&e,&cntbo)==1&&logged(&e,&fbbo)==1);
+  assert(logged(&e,&output_bos[0])==1&&logged(&e,&output_bos[1])==1&&output_refs==7);
+ }else{
+  assert(launch_batch==&r&&launch_barrier==(AGX_BARRIER_ALL|AGX_PREGFX)&&r.cdm.bo);
+  assert(!template_copies&&allocations==3&&output_refs==2&&!e.windows_expand_dispatches);
+  p=blocks[3];assert(p->usc_template==(uintptr_t)tmpl);
+ }
+ { struct agx_win32_stream_params q=*p;q.usc_template=0;
+   assert(q.feedback==(uintptr_t)feedback_words);q.feedback=0; /* a host global */
+   uint64_t h=fnv(&q,sizeof(q),0xcbf29ce484222325ull);
+   h=fnv(out,8,h);
+   h=fnv(blocks[on?2:1],value*agx_win32_stream_record_bytes(4)+AGX_VDM_STREAM_LINK_LENGTH,h);
+   h=fnv(blocks[on?3:2],value*agx_win32_stream_usc_stride(sizeof(tmpl),true),h);
+   printf("EXPANSION %016llx\n",(unsigned long long)h); }
+ if(!on){puts("IE1a harness: PASS");return 0;}
+
+ /* 2. agx_flush_batch(R) submits E strictly first; R then has no link. */
+ agx_flush_batch(&ctx,&r);
+ assert(flushes==2&&flush_log[0]==&e&&flush_log[1]==&r&&!ctx.any_faults&&!r.windows_expand);
+ assert(e.test_submitted&&r.test_submitted);
+
+ /* 3. A failed E submission faults the context and aborts R (1); an E the
+  * flush left open faults it as well (2). R is never submitted. */
+ for(unsigned mode=1;mode<=2;++mode){
+  reset_counts();render(&ctx,&r,&vs);expansion(&ctx,&e,0);expand_next=&e;
+  agx_win32_stream_flush_inputs(&ctx,&in);assert(draw(&ctx,&r,vdm+32));
+  fail_expand_flush=mode;agx_flush_batch(&ctx,&r);
+  assert(ctx.any_faults&&!flushes&&!r.test_submitted&&!e.test_submitted&&aborts==(mode==1?2u:1u));
+ }
+
+ /* 4. An E without dispatches is reset, never submitted. */
+ reset_counts();render(&ctx,&r,&vs);expansion(&ctx,&e,0);expand_next=&e;
+ agx_win32_stream_flush_inputs(&ctx,&in);assert(r.windows_expand==&e);
+ agx_flush_batch(&ctx,&r);
+ assert(batch_resets==1&&!e.test_active&&!e.test_submitted&&flushes==1&&flush_log[0]==&r);
+
+ /* 5. Statistics queries keep the prelude: the expansion writes them. */
+ { uint64_t stat=0;reset_counts();render(&ctx,&r,&vs);expansion(&ctx,&e,0);expand_next=&e;
+   ctx.pipeline_statistics[PIPE_STAT_QUERY_IA_VERTICES]=&stat;
+   assert(!agx_win32_expand_ahead_allowed(&ctx));
+   agx_win32_stream_flush_inputs(&ctx,&in);assert(!get_batches&&!expand_opens&&!r.windows_expand);
+   assert(draw(&ctx,&r,vdm+32)&&launch_batch==&r&&launch_barrier==(AGX_BARRIER_ALL|AGX_PREGFX));
+   /* inactive queries do not force it */
+   ctx.active_queries=false;assert(agx_win32_expand_ahead_allowed(&ctx));
+   ctx.active_queries=true;ctx.pipeline_statistics[PIPE_STAT_QUERY_IA_VERTICES]=NULL;
+   ctx.cond_query=&stat;assert(!agx_win32_expand_ahead_allowed(&ctx));ctx.cond_query=NULL; }
+
+ /* 6. Two ExecuteIndirects share E; a full E is flushed before entry and
+  * a new one opened, both ahead of R. */
+ reset_counts();render(&ctx,&r,&vs);expansion(&ctx,&e,0);expand_next=&e;
+ agx_win32_stream_flush_inputs(&ctx,&in);assert(draw(&ctx,&r,vdm+32));
+ agx_win32_stream_flush_inputs(&ctx,&in);assert(expand_opens==1&&draw(&ctx,&r,vdm+40));
+ assert(e.windows_expand_dispatches==2&&launches==2&&!r.cdm.bo);
+ e.cdm.current=e.cdm.end-2u*agx_win32_stream_cdm_bytes();expansion(&ctx,&e2,1);expand_next=&e2;
+ agx_win32_stream_flush_inputs(&ctx,&in);
+ assert(capacity_flushes==1&&flushes==1&&flush_log[0]==&e&&expand_opens==2&&r.windows_expand==&e2);
+ assert(draw(&ctx,&r,vdm+48)&&launch_batch==&e2&&e2.windows_expand_dispatches==1);
+ agx_flush_batch(&ctx,&r);assert(flushes==3&&flush_log[1]==&e2&&flush_log[2]==&r);
+
+ /* 7. Without room at the draw (or without E) the prelude stays in R. */
+ reset_counts();render(&ctx,&r,&vs);expansion(&ctx,&e,0);expand_next=&e;
+ agx_win32_stream_flush_inputs(&ctx,&in);e.cdm.current=e.cdm.end-8;
+ assert(draw(&ctx,&r,vdm+32)&&launch_batch==&r&&r.cdm.bo&&!e.windows_expand_dispatches);
+ reset_counts();render(&ctx,&r,&vs);expand_next=NULL;
+ agx_win32_stream_flush_inputs(&ctx,&in);assert(expand_opens==1&&!r.windows_expand);
+ assert(draw(&ctx,&r,vdm+32)&&launch_batch==&r&&!ctx.any_faults);
+
+ /* 8. A stale link (E submitted, or its slot reused) is never appended to. */
+ reset_counts();render(&ctx,&r,&vs);expansion(&ctx,&e,0);r.windows_expand=&e;e.windows_expand_owner=&e2;
+ assert(!agx_win32_expand_linked(&r)&&!r.windows_expand);
+ r.windows_expand=&e;e.windows_expand_owner=&r;e.test_active=false;e.test_submitted=true;
+ assert(!agx_win32_expand_linked(&r)&&!r.windows_expand);
+
+ /* 9. A render reset with an open E aborts it (E must not write outputs R
+  * gave back); E's own cleanup unlinks R. */
+ reset_counts();render(&ctx,&r,&vs);expansion(&ctx,&e,0);expand_next=&e;
+ agx_win32_stream_flush_inputs(&ctx,&in);assert(draw(&ctx,&r,vdm+32));
+ agx_win32_expand_cleanup(&ctx,&r);
+ assert(batch_resets==1&&!e.test_active&&!e.test_submitted&&!r.windows_expand&&!e.windows_expand_owner);
+ reset_counts();render(&ctx,&r,&vs);expansion(&ctx,&e,0);r.windows_expand=&e;e.windows_expand_owner=&r;
+ agx_win32_expand_cleanup(&ctx,&e);assert(!r.windows_expand&&!e.windows_expand_owner&&!batch_resets);
+
+ /* 10. A failure in E's template copy faults the context; nothing launches. */
+ reset_counts();render(&ctx,&r,&vs);expansion(&ctx,&e,0);expand_next=&e;
+ agx_win32_stream_flush_inputs(&ctx,&in);fault=1; /* first allocation: the template copy */
+ assert(!draw(&ctx,&r,vdm+32)&&ctx.any_faults&&!launches&&!entered);fault=0;
+ reset_counts();
+ puts("IE1a harness: PASS");
+ return 0;
+}
+'''
+
+
+class ExpandAhead(unittest.TestCase):
+    def test_expand_ahead_harness(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        IE1a must leave the default (switch off) prelude unchanged, and with
+        APPLE_AGX_D3D12_EXPAND_AHEAD=1 dispatch into the expansion batch E
+        (never R's CDM) with the same parameters and GPU-generated stream,
+        submit E strictly before R, abort R when E fails, never submit an
+        empty E, keep the outputs on R, list E's residency, keep the prelude
+        for statistics queries, and abort an open E with its render.
+        """
+        import test_d3d12_indirect_stream_glue as glue
+        mesa=local_tree('reference','mesa');build=local_tree('accelerated-desktop-ad03','mesa-build')
+        if not mesa or not build:
+            self.skipTest('reference Mesa tree not available')
+        with tempfile.TemporaryDirectory() as td:
+            p=Path(td)
+            out=project(p/'native')
+            state=(out/'src/gallium/drivers/asahi/agx_state.h').read_text()
+            shader=state[state.index('struct agx_uncompiled_shader {'):]
+            info=shader[shader.index('   struct {'):shader.index('   } info;')+10]
+            prefix=glue.GLUE[:glue.GLUE.index('int main(void){')].replace(
+                'struct shader {struct {unsigned system_values_read[16];} info;};',
+                'struct shader {\n'+info+'\n};')
+            for old,new in IE1A_STUBS.items():
+                self.assertEqual(prefix.count(old),1,old)
+                prefix=prefix.replace(old,new)
+            (p/'test.c').write_text(glue.PRELUDE+prefix+IE1A_MAIN)
+            cmd=['clang','-std=c11','-Werror','-Wno-unused-function','-Wno-c23-extensions',
+                 '-fsanitize=address,undefined','-DNDEBUG','-Dstatic_assert=_Static_assert',
+                 '-DHAVE___BUILTIN_CLZ','-DHAVE_STRUCT_TIMESPEC','-DHAVE_PTHREAD']
+            cmd+=['-I'+str(x) for x in (WINSYS,mesa/'src',mesa/'include',build/'src',
+                                      mesa/'src/asahi/libagx',build/'src/asahi/genxml')]
+            r=subprocess.run(cmd+[str(p/'test.c'),'-o',str(p/'test')],capture_output=True,text=True)
+            self.assertEqual(r.returncode,0,r.stderr[-6000:])
+            runs={}
+            for mode in ('off','on'):
+                r=subprocess.run([str(p/'test'),mode],capture_output=True,text=True)
+                self.assertEqual(r.returncode,0,mode+': '+r.stdout+r.stderr[-3000:])
+                self.assertIn('IE1a harness: PASS',r.stdout)
+                runs[mode]=[l for l in r.stdout.splitlines() if l.startswith('EXPANSION ')]
+            # Same parameters (but the template copy's address), VDM link,
+            # generated records and USC clones with and without E.
+            self.assertEqual(len(runs['off']),1)
+            self.assertEqual(runs['off'],runs['on'])
+
+    def test_expand_ahead_projection(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        E must be flushed before R is encoded or aborted, links must start
+        empty and be dropped on cleanup, and E must never be ctx->batch.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            out=project(Path(td)/'out')
+            asahi=out/'src/gallium/drivers/asahi'
+            header=(asahi/'agx_state.h').read_text()
+            batch_struct=header[header.index('struct agx_batch {'):].split('};',1)[0]
+            self.assertIn('struct agx_batch *windows_expand, *windows_expand_owner;',batch_struct)
+            self.assertIn('unsigned windows_expand_dispatches;',batch_struct)
+            self.assertLess(header.index('#include "agx_win32_stream_scratch.h"'),
+                            header.index('#include "agx_win32_expand_ahead.h"'))
+            batch=(asahi/'agx_batch.c').read_text()
+            init=function(batch,'static void\nagx_batch_init(')
+            for field in ('windows_expand = NULL;','windows_expand_owner = NULL;',
+                          'windows_expand_dispatches = 0;'):
+                self.assertIn('batch->'+field,init)
+            cleanup=function(batch,'static void\nagx_batch_cleanup(')
+            self.assertLess(cleanup.index('agx_win32_expand_cleanup(ctx, batch);'),
+                            cleanup.index('agx_win32_stream_scratch_retire(ctx, &batch->windows_stream_pool, 0)'))
+            opener=function(batch,'struct agx_batch *\nagx_win32_expand_open(')
+            self.assertIn('agx_get_batch_for_framebuffer(ctx, &key)',opener)
+            self.assertIn('.width = AGX_COMPUTE_BATCH_WIDTH',opener)
+            self.assertNotIn('ctx->batch',opener)
+            pipe=(asahi/'agx_pipe.c').read_text()
+            start=pipe.index('\nagx_flush_batch(struct agx_context *ctx, struct agx_batch *batch)')
+            body=pipe[start:pipe.index('\n}\n',start)]
+            order=[body.index(s) for s in (
+                'agx_win32_expand_flush_first(ctx, batch)',
+                'agx_win32_submit_order_writers(',
+                'if (!batch->draws && !batch->cdm.bo &&',
+                'if (ctx->any_faults || !batch->vdm.bo || !batch->initialized ||',
+                'agx_flush_compute(ctx, batch, &compute_storage);',
+                'agx_batch_submit(ctx, batch, compute, &render);')]
+            self.assertEqual(order,sorted(order))
+
+
 if __name__=='__main__': unittest.main()

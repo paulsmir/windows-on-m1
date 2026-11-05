@@ -273,6 +273,63 @@ class StreamScratch(unittest.TestCase):
     def test_stream_outputs_are_reused_after_their_batch_retires(self):
         run_stream_harness(self)
 
+    def test_expand_ahead_outputs_stay_with_the_render(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        IE1a (APPLE_AGX_D3D12_EXPAND_AHEAD): the expansion batch E writes
+        the stream outputs but runs and retires before its render R, which
+        reads them. If E took or gave back the outputs, R's VDM would read
+        storage another draw already reuses. The projected allocation must
+        keep them on R (the draw allocates from R): E's earlier retirement
+        returns nothing, and no output is handed out again until R retires.
+        """
+        main = r'''
+#define SLOTS 3u
+int main(void) {
+  static struct agx_context ctx; ctx.base.screen = &device;
+  static struct agx_batch render[SLOTS], expand[SLOTS];
+  static struct agx_bo *used[SLOTS][2 * CALLS];
+  unsigned steady_created = 0;
+  for (unsigned n = 0; n < BATCHES + 2; ++n) {
+    const unsigned slot = n % SLOTS, before = created;
+    if (n < BATCHES) {
+      struct agx_batch *e = &expand[slot], *r = &render[slot];
+      e->ctx = r->ctx = &ctx; batch_init(e); batch_init(r);
+      for (unsigned c = 0; c < CALLS; ++c) {
+        struct agx_bo *vb, *ub;
+        stream_draw(r, 60000u, 44u, 0x808u, c == 3 ? 192u : 128u, &vb, &ub);
+        assert(!vb->busy && !ub->busy); /* never one R still reads */
+        vb->busy = ub->busy = 1;
+        used[slot][2 * c] = vb; used[slot][2 * c + 1] = ub;
+      }
+      assert(!e->windows_stream_pool.bos.size && !e->windows_stream_usc_pool.bos.size);
+      assert(r->windows_stream_pool.bos.size == CALLS * sizeof(struct agx_bo *));
+    }
+    if (n >= 1 && n <= BATCHES) {
+      /* E of the previous R retires first: it returns nothing. */
+      const unsigned prev = (n - 1) % SLOTS;
+      unsigned long long live[2] = {ctx.windows_stream_live[0], ctx.windows_stream_live[1]};
+      batch_cleanup(&ctx, &expand[prev]);
+      assert(live[0] == ctx.windows_stream_live[0] && live[1] == ctx.windows_stream_live[1]);
+      for (unsigned i = 0; i < 2 * CALLS; ++i) assert(used[prev][i]->busy);
+    }
+    if (n >= 2) {
+      const unsigned old = (n - 2) % SLOTS;
+      for (unsigned i = 0; i < 2 * CALLS; ++i) { assert(used[old][i]->busy); used[old][i]->busy = 0; }
+      batch_cleanup(&ctx, &render[old]);
+    }
+    if (n >= 3) steady_created += created - before;
+  }
+  @@FINI@@
+  unsigned live = 0;
+  for (unsigned i = 0; i < created; ++i) live += bos[i]->refcnt != 0;
+  assert(steady_created == 0 && live == 0 && winsys_releases == created);
+  for (unsigned i = 0; i < created; ++i) { free(bos[i]->cpu); free(bos[i]); }
+  puts("RC71 stream scratch: PASS");
+  return 0;
+}
+'''
+        run_stream_harness(self, defines=('RC89_CAPACITY',), main=main)
+
 
 if __name__ == '__main__':
     unittest.main()
