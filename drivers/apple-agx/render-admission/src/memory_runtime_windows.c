@@ -340,6 +340,101 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
     status = STATUS_INVALID_ADDRESS;
     goto Fail;
   }
+  {
+    static const ULONGLONG fixedGpuVa[
+        APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_COUNT] = {
+        0x1100020000ULL, 0x1100010000ULL};
+    static const ULONG fixedBytes[
+        APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_COUNT] = {
+        0x40000u, 0x4000u};
+    const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts =
+        AppleAgxRenderTemplateObjectLayouts();
+    ULONG fixedIndex;
+    if (layouts == NULL) {
+      status = STATUS_INVALID_IMAGE_FORMAT;
+      goto Fail;
+    }
+    for (fixedIndex = 0u;
+         fixedIndex < APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_COUNT;
+         ++fixedIndex) {
+      const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *fixedInput =
+          &layouts[APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_FIRST_OBJECT +
+                   fixedIndex];
+      ULONGLONG fixedPhysical;
+      if (fixedInput->OriginalGpuVa != fixedGpuVa[fixedIndex] ||
+          fixedInput->Size != fixedBytes[fixedIndex] ||
+          fixedInput->ArenaOffset > ADMISSION_BACKEND_BYTES ||
+          fixedInput->Size >
+              ADMISSION_BACKEND_BYTES - fixedInput->ArenaOffset ||
+          runtime->LocalObject.DeviceAddress >
+              MAXULONGLONG - ADMISSION_LOCAL_ALLOCATION_BYTES -
+                  fixedInput->ArenaOffset) {
+        status = STATUS_INVALID_IMAGE_FORMAT;
+        goto Fail;
+      }
+      fixedPhysical = runtime->LocalObject.DeviceAddress +
+                      ADMISSION_LOCAL_ALLOCATION_BYTES +
+                      fixedInput->ArenaOffset;
+      if (AppleAgxUatMap(
+              ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
+              fixedGpuVa[fixedIndex], fixedPhysical, fixedBytes[fixedIndex],
+              AppleAgxUatGpuPipelineShared, &runtime->Residency.Allocator,
+              &runtime->Residency.Inventory) != AppleAgxUatResultOk) {
+        status = STATUS_INVALID_ADDRESS;
+        goto Fail;
+      }
+    }
+    {
+      APPLE_AGX_U32 aliasCount = 0u;
+      const ADMISSION_DYNAMIC_OVERLAY_ALIAS *aliases =
+          AdmissionDynamicOverlayShaderAliases(&aliasCount);
+      ULONG aliasIndex;
+      if (aliases == NULL ||
+          aliasCount != ADMISSION_DYNAMIC_OVERLAY_SHADER_ALIAS_COUNT) {
+        status = STATUS_INVALID_IMAGE_FORMAT;
+        goto Fail;
+      }
+      for (aliasIndex = 0u; aliasIndex < aliasCount; ++aliasIndex) {
+        const ADMISSION_DYNAMIC_OVERLAY_ALIAS *alias = &aliases[aliasIndex];
+        const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *fixedInput;
+        ULONGLONG aliasPhysical;
+        if (alias->ObjectIndex >= APPLE_AGX_RENDER_TEMPLATE_OBJECT_COUNT ||
+            alias->Reserved != 0u || alias->Bytes != 0x4000u ||
+            (alias->ObjectOffset & 0x3fffu) != 0u ||
+            (alias->GpuVirtualAddress & 0x3fffu) != 0u) {
+          status = STATUS_INVALID_IMAGE_FORMAT;
+          goto Fail;
+        }
+        fixedInput = &layouts[alias->ObjectIndex];
+        if (alias->ObjectOffset > fixedInput->Size ||
+            alias->Bytes > fixedInput->Size - alias->ObjectOffset ||
+            fixedInput->ArenaOffset > ADMISSION_BACKEND_BYTES ||
+            alias->ObjectOffset >
+                ADMISSION_BACKEND_BYTES - fixedInput->ArenaOffset ||
+            alias->Bytes > ADMISSION_BACKEND_BYTES -
+                               fixedInput->ArenaOffset -
+                               alias->ObjectOffset ||
+            runtime->LocalObject.DeviceAddress >
+                MAXULONGLONG - ADMISSION_LOCAL_ALLOCATION_BYTES -
+                    fixedInput->ArenaOffset - alias->ObjectOffset) {
+          status = STATUS_INVALID_IMAGE_FORMAT;
+          goto Fail;
+        }
+        aliasPhysical = runtime->LocalObject.DeviceAddress +
+                        ADMISSION_LOCAL_ALLOCATION_BYTES +
+                        fixedInput->ArenaOffset + alias->ObjectOffset;
+        if (AppleAgxUatMap(
+                ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
+                alias->GpuVirtualAddress, aliasPhysical, alias->Bytes,
+                AppleAgxUatGpuPipelineShared,
+                &runtime->Residency.Allocator,
+                &runtime->Residency.Inventory) != AppleAgxUatResultOk) {
+          status = STATUS_INVALID_ADDRESS;
+          goto Fail;
+        }
+      }
+    }
+  }
   runtime->MappingReady = TRUE;
   AdmissionMemoryRecordStart(Context, AdmissionMemoryStartTtbr,
                              STATUS_PENDING);
@@ -473,6 +568,80 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeResolveLocal(
           runtime->LocalObject.DeviceAddress, View))
     return STATUS_INVALID_ADDRESS;
   return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeReadResident(
+    ADMISSION_CONTEXT *Context, ULONG SegmentId,
+    ULONGLONG AllocationSegmentAddress, ULONGLONG AllocationSize,
+    ULONGLONG AllocationOffset, PVOID Destination, ULONG Bytes) {
+  ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);
+  NTSTATUS status = STATUS_SUCCESS;
+  ULONGLONG apertureOffset = 0ULL;
+  ULONGLONG copied = 0ULL;
+
+  if (runtime == NULL || Destination == NULL || Bytes == 0u ||
+      (SegmentId != ADMISSION_MEMORY_APERTURE_SEGMENT &&
+       SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT))
+    return STATUS_INVALID_PARAMETER;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_DEVICE_STATE;
+  if (AllocationOffset > AllocationSize ||
+      Bytes > AllocationSize - AllocationOffset)
+    return STATUS_INVALID_ADDRESS;
+  if (SegmentId == ADMISSION_MEMORY_APERTURE_SEGMENT) {
+    if (AllocationSegmentAddress < Context->Memory.Topology.Aperture.Base)
+      return STATUS_INVALID_ADDRESS;
+    apertureOffset =
+        AllocationSegmentAddress - Context->Memory.Topology.Aperture.Base;
+    if (apertureOffset > Context->Memory.Topology.Aperture.Size ||
+        AllocationSize >
+            Context->Memory.Topology.Aperture.Size - apertureOffset)
+      return STATUS_INVALID_ADDRESS;
+  }
+
+  ExAcquireFastMutex(&runtime->PagingLock);
+  if (SegmentId == ADMISSION_MEMORY_LOCAL_SEGMENT) {
+    ADMISSION_LOCAL_MEMORY_VIEW view;
+    status = AdmissionMemoryRuntimeResolveLocal(
+        Context, AllocationSegmentAddress, AllocationSize,
+        AllocationOffset, &view);
+    if (NT_SUCCESS(status)) {
+      if (view.CpuAddress == NULL || Bytes > view.Bytes)
+        status = STATUS_INVALID_ADDRESS;
+      else
+        RtlCopyMemory(Destination, view.CpuAddress, Bytes);
+    }
+  } else {
+    while (copied < Bytes) {
+      ULONGLONG position = apertureOffset + AllocationOffset + copied;
+      ULONGLONG physical;
+      ULONG chunk;
+      SIZE_T actual = 0u;
+      MM_COPY_ADDRESS source;
+      if (AppleAgxSoftwareApertureResolve(
+              &Context->Memory.Aperture, position, &physical) !=
+          AppleAgxSoftwareApertureOk) {
+        status = STATUS_INVALID_ADDRESS;
+        break;
+      }
+      chunk = (ULONG)PAGE_SIZE - (ULONG)(position & (PAGE_SIZE - 1ULL));
+      if (chunk > Bytes - (ULONG)copied)
+        chunk = Bytes - (ULONG)copied;
+      source.PhysicalAddress.QuadPart = (LONGLONG)physical;
+      status = MmCopyMemory(
+          (PUCHAR)Destination + (SIZE_T)copied, source, chunk,
+          MM_COPY_MEMORY_PHYSICAL, &actual);
+      if (!NT_SUCCESS(status) || actual != chunk) {
+        if (NT_SUCCESS(status))
+          status = STATUS_PARTIAL_COPY;
+        break;
+      }
+      copied += chunk;
+    }
+  }
+  KeMemoryBarrier();
+  ExReleaseFastMutex(&runtime->PagingLock);
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeBorrowIo(
@@ -657,7 +826,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeMapAperture(
   NTSTATUS status = STATUS_SUCCESS;
 
   if (runtime == NULL || Mdl == NULL || PageCount == 0u ||
-      PageCount != APPLE_AGX_SYSTEM_PAGES_PER_WDDM_PAGE ||
+      PageCount > Context->Memory.Aperture.PageCount ||
       (SIZE_T)PageCount > MAXSIZE_T / sizeof(*pages))
     return STATUS_INVALID_PARAMETER;
   mdlPages = ADDRESS_AND_SIZE_TO_SPAN_PAGES(
@@ -681,7 +850,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeMapAperture(
     pages[index] = (ULONGLONG)pfn << PAGE_SHIFT;
   }
   ExAcquireFastMutex(&runtime->PagingLock);
-  result = AdmissionMemoryMapAperture64K(
+  result = AdmissionMemoryMapAperturePages(
       &Context->Memory, ApertureByteOffset, pages, PageCount);
   ExReleaseFastMutex(&runtime->PagingLock);
   if (result != AppleAgxSoftwareApertureOk)
@@ -698,14 +867,14 @@ Done:
 
 _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeUnmapAperture(
     ADMISSION_CONTEXT *Context, ULONGLONG ApertureByteOffset,
-    ULONGLONG DummyPage) {
+    UINT PageCount, ULONGLONG DummyPage) {
   ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);
   APPLE_AGX_SOFTWARE_APERTURE_RESULT result;
   if (runtime == NULL)
     return STATUS_INVALID_DEVICE_STATE;
   ExAcquireFastMutex(&runtime->PagingLock);
-  result = AdmissionMemoryUnmapAperture64K(
-      &Context->Memory, ApertureByteOffset, DummyPage);
+  result = AdmissionMemoryUnmapAperturePages(
+      &Context->Memory, ApertureByteOffset, PageCount, DummyPage);
   ExReleaseFastMutex(&runtime->PagingLock);
   if (result == AppleAgxSoftwareApertureOk ||
       result == AppleAgxSoftwareApertureDummy)
@@ -757,6 +926,121 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeExecutePaging(
   if (result == AppleAgxPhysicalPagingUnsupportedEndpoint)
     return STATUS_NOT_SUPPORTED;
   return STATUS_INVALID_PARAMETER;
+}
+
+typedef struct _ADMISSION_PRESENT_MEMORY_IO {
+  ADMISSION_CONTEXT *Adapter;
+  ADMISSION_LOCAL_MEMORY_VIEW Source, Destination;
+  ULONGLONG ApertureOffset, SourceBytes;
+  UINT SourceSegment;
+  NTSTATUS Status;
+} ADMISSION_PRESENT_MEMORY_IO;
+
+static int AdmissionPresentReadMemory(void *Opaque, unsigned long long Offset,
+    void *Bytes, unsigned int ByteCount) {
+  ADMISSION_PRESENT_MEMORY_IO *io = Opaque;
+  ULONGLONG physical, position;
+  SIZE_T copied;
+  UINT chunk;
+  MM_COPY_ADDRESS source;
+  if (Offset > io->SourceBytes || ByteCount > io->SourceBytes - Offset)
+    return 0;
+  if (io->SourceSegment == 2u) {
+    RtlCopyMemory(Bytes, (PUCHAR)io->Source.CpuAddress + Offset, ByteCount);
+    return 1;
+  }
+  while (ByteCount != 0u) {
+    position = io->ApertureOffset + Offset;
+    if (AppleAgxSoftwareApertureResolve(&io->Adapter->Memory.Aperture,
+            position, &physical) != AppleAgxSoftwareApertureOk) {
+      io->Status = STATUS_INVALID_ADDRESS;
+      return 0;
+    }
+    chunk = (UINT)PAGE_SIZE - (UINT)(position & (PAGE_SIZE - 1ULL));
+    if (chunk > ByteCount)
+      chunk = ByteCount;
+    source.PhysicalAddress.QuadPart = (LONGLONG)physical;
+    copied = 0;
+    io->Status = MmCopyMemory(Bytes, source, chunk, MM_COPY_MEMORY_PHYSICAL, &copied);
+    if (!NT_SUCCESS(io->Status) || copied != chunk) {
+      if (NT_SUCCESS(io->Status))
+        io->Status = STATUS_PARTIAL_COPY;
+      return 0;
+    }
+    Offset += chunk;
+    Bytes = (PUCHAR)Bytes + chunk;
+    ByteCount -= chunk;
+  }
+  return 1;
+}
+
+static int AdmissionPresentWriteMemory(void *Opaque, unsigned long long Offset,
+    void *Bytes, unsigned int ByteCount) {
+  ADMISSION_PRESENT_MEMORY_IO *io = Opaque;
+  if (Offset > io->Destination.Bytes || ByteCount > io->Destination.Bytes - Offset)
+    return 0;
+  RtlCopyMemory((PUCHAR)io->Destination.CpuAddress + Offset, Bytes, ByteCount);
+  return 1;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeExecutePresent(
+    ADMISSION_CONTEXT *Context, const VOID *Command, UINT Bytes,
+    ULONGLONG *BytesCopied) {
+  ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);
+  ADMISSION_PRESENT_BLT_COMMAND command;
+  ADMISSION_PRESENT_MEMORY_IO io;
+  ULONGLONG sourceAddress, destinationAddress, sourceBacking, destinationBacking;
+  UINT destinationSegment, scratchBytes;
+  PVOID scratch;
+  NTSTATUS status;
+  int completed;
+  if (runtime == NULL || BytesCopied == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      !AdmissionPresentBltValidate(Command, Bytes, 1, &command) ||
+      !AdmissionPresentBltScratchBytes(&command, &scratchBytes))
+    return STATUS_INVALID_PARAMETER;
+  *BytesCopied = 0;
+  RtlZeroMemory(&io, sizeof(io));
+  io.Adapter = Context;
+  io.Status = STATUS_SUCCESS;
+  io.SourceBytes = command.SourceDescription.Size;
+  if (!AdmissionPresentLocationDecode(command.SourceLocation, &io.SourceSegment, &sourceAddress) ||
+      !AdmissionPresentLocationDecode(command.DestinationLocation, &destinationSegment, &destinationAddress) ||
+      destinationSegment != 2u ||
+      !AdmissionAllocationAlign64K(command.SourceDescription.Size, &sourceBacking) ||
+      !AdmissionAllocationAlign64K(command.DestinationDescription.Size, &destinationBacking))
+    return STATUS_INVALID_ADDRESS;
+  status = AdmissionMemoryRuntimeResolveLocal(Context, destinationAddress,
+      destinationBacking, 0ULL, &io.Destination);
+  if (!NT_SUCCESS(status))
+    return status;
+  io.Destination.Bytes = command.DestinationDescription.Size;
+  if (io.SourceSegment == 2u) {
+    status = AdmissionMemoryRuntimeResolveLocal(Context, sourceAddress,
+        sourceBacking, 0ULL, &io.Source);
+    if (!NT_SUCCESS(status))
+      return status;
+  } else {
+    if (sourceAddress < Context->Memory.Topology.Aperture.Base)
+      return STATUS_INVALID_ADDRESS;
+    io.ApertureOffset = sourceAddress - Context->Memory.Topology.Aperture.Base;
+    if (io.ApertureOffset > Context->Memory.Topology.Aperture.Size ||
+        io.SourceBytes > Context->Memory.Topology.Aperture.Size - io.ApertureOffset)
+      return STATUS_INVALID_ADDRESS;
+  }
+  scratch = ExAllocatePool2(POOL_FLAG_NON_PAGED, scratchBytes, ADMISSION_MEMORY_RUNTIME_TAG);
+  if (scratch == NULL)
+    return STATUS_INSUFFICIENT_RESOURCES;
+  /* Map/unmap and the actual aperture reads share this existing owner lock.
+   * Windows PFNs are IPAs, not the host PA used by AGX/UAT. */
+  ExAcquireFastMutex(&runtime->PagingLock);
+  completed = AdmissionPresentBltExecute(Command, Bytes,
+      AdmissionPresentReadMemory, AdmissionPresentWriteMemory, &io,
+      scratch, scratchBytes, BytesCopied);
+  KeMemoryBarrier();
+  ExReleaseFastMutex(&runtime->PagingLock);
+  ExFreePoolWithTag(scratch, ADMISSION_MEMORY_RUNTIME_TAG);
+  return completed ? STATUS_SUCCESS :
+      NT_SUCCESS(io.Status) ? STATUS_INVALID_PARAMETER : io.Status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStop(

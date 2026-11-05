@@ -1,0 +1,16 @@
+{
+  "architectural_recommendation": "NOT_REQUESTED",
+  "first_failure": "FRYZZING_VERIFY_CLANG timed out at approved 20 seconds with no stdout/stderr",
+  "hardware_used": false,
+  "input_commit": "c073bc68f288d55216af0cfb02f424ec29f962a3",
+  "raw_logs": [
+    "investigation/evidence/agent_tasks/VERIFY-FRYZZING-CLANG/raw/stdout.log",
+    "investigation/evidence/agent_tasks/VERIFY-FRYZZING-CLANG/raw/stderr.log",
+    "investigation/evidence/agent_tasks/VERIFY-FRYZZING-CLANG/raw/scope.json",
+    "investigation/evidence/agent_tasks/VERIFY-FRYZZING-CLANG/raw/summary.json"
+  ],
+  "result": "INCONCLUSIVE",
+  "source_changed": null,
+  "task_id": "VERIFY-FRYZZING-CLANG",
+  "worker": "deterministic-tier-c-runner"
+}

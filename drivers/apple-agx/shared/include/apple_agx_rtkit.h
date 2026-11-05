@@ -50,6 +50,7 @@ AppleAgxRtkitStartEndpoint(APPLE_AGX_RTKIT_U32 Endpoint,
  */
 APPLE_AGX_RTKIT_U64
 AppleAgxRtkitStopEndpoint(APPLE_AGX_RTKIT_U32 Endpoint);
+APPLE_AGX_RTKIT_U64 AppleAgxRtkitPing(void);
 /* AGX DoorbellMsg: type 0x83 in bits 63:48, channel in bits 15:0. */
 APPLE_AGX_RTKIT_U64 AppleAgxRtkitDoorbell(APPLE_AGX_RTKIT_U32 Channel);
 APPLE_AGX_RTKIT_U64 AppleAgxRtkitInitdata(APPLE_AGX_RTKIT_U64 Address);

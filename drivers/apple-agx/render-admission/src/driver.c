@@ -30,21 +30,25 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiSetPalette = AdmissionDdiSetPalette;
   initialization.DxgkDdiSetPointerPosition = AdmissionDdiSetPointerPosition;
   initialization.DxgkDdiSetPointerShape = AdmissionDdiSetPointerShape;
-  initialization.DxgkDdiIsSupportedVidPn = AdmissionDdiIsSupportedVidPn;
+  initialization.DxgkDdiIsSupportedVidPn =
+      AdmissionTraceDdiIsSupportedVidPn;
   initialization.DxgkDdiRecommendFunctionalVidPn =
-      AdmissionDdiRecommendFunctionalVidPn;
+      AdmissionTraceDdiRecommendFunctionalVidPn;
   initialization.DxgkDdiEnumVidPnCofuncModality =
-      AdmissionDdiEnumVidPnCofuncModality;
+      AdmissionTraceDdiEnumVidPnCofuncModality;
   initialization.DxgkDdiSetVidPnSourceVisibility =
-      AdmissionDdiSetVidPnSourceVisibility;
-  initialization.DxgkDdiCommitVidPn = AdmissionDdiCommitVidPn;
+      AdmissionTraceDdiSetVidPnSourceVisibility;
+  initialization.DxgkDdiCommitVidPn = AdmissionTraceDdiCommitVidPn;
   initialization.DxgkDdiUpdateActiveVidPnPresentPath =
-      AdmissionDdiUpdateActiveVidPnPresentPath;
+      AdmissionTraceDdiUpdateActiveVidPnPresentPath;
   initialization.DxgkDdiRecommendMonitorModes =
-      AdmissionDdiRecommendMonitorModes;
+      AdmissionTraceDdiRecommendMonitorModes;
+  initialization.DxgkDdiUpdateMonitorLinkInfo =
+      AdmissionTraceDdiUpdateMonitorLinkInfo;
   initialization.DxgkDdiGetScanLine = AdmissionDdiGetScanLine;
+  initialization.DxgkDdiStopCapture = AdmissionDdiStopCapture;
   initialization.DxgkDdiQueryVidPnHWCapability =
-      AdmissionDdiQueryVidPnHWCapability;
+      AdmissionTraceDdiQueryVidPnHWCapability;
   initialization.DxgkDdiSetVidPnSourceAddress =
       AdmissionDdiSetVidPnSourceAddress;
   initialization.DxgkDdiStopDeviceAndReleasePostDisplayOwnership =
@@ -66,6 +70,10 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiPreemptCommand = AdmissionDdiPreemptCommand;
   initialization.DxgkDdiRender = AdmissionDdiRender;
   initialization.DxgkDdiPresent = AdmissionDdiPresent;
+  initialization.DxgkDdiCreateOverlay = AdmissionDdiCreateOverlay;
+  initialization.DxgkDdiUpdateOverlay = AdmissionDdiUpdateOverlay;
+  initialization.DxgkDdiFlipOverlay = AdmissionDdiFlipOverlay;
+  initialization.DxgkDdiDestroyOverlay = AdmissionDdiDestroyOverlay;
   initialization.DxgkDdiResetFromTimeout = AdmissionDdiResetFromTimeout;
   initialization.DxgkDdiRestartFromTimeout = AdmissionDdiRestartFromTimeout;
   initialization.DxgkDdiEscape = AdmissionDdiEscape;

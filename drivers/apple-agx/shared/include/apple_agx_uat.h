@@ -20,12 +20,14 @@ typedef enum _APPLE_AGX_UAT_RESULT {
 typedef enum _APPLE_AGX_UAT_PROTECTION {
   AppleAgxUatFirmwareDeviceReadWrite = 1,
   AppleAgxUatFirmwareSharedReadWrite,
+  AppleAgxUatFirmwareGpuSharedReadWrite,
   AppleAgxUatFirmwarePrivateReadWrite,
   AppleAgxUatFirmwareGpuPrivateReadWrite,
   AppleAgxUatFirmwareReadWriteGpuReadOnly,
   AppleAgxUatGpuSharedReadOnly,
   AppleAgxUatGpuSharedWriteOnly,
   AppleAgxUatGpuSharedReadWrite,
+  AppleAgxUatGpuPipelineShared,
 } APPLE_AGX_UAT_PROTECTION;
 
 typedef enum _APPLE_AGX_UAT_HALF {

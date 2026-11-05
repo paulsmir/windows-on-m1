@@ -485,6 +485,12 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderIngestEvent(
   APPLE_AGX_BACKEND_BOOL taWasComplete;
   APPLE_AGX_G13_QUEUE_RUNTIME_RESULT result;
   APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  if (Provider != APPLE_AGX_G13_PROVIDER_NULL) {
+    Provider->LastIngestGuard =
+        AppleAgxG13QueueProviderIngestGuardInvalid;
+    Provider->LastIngestRuntimeResult =
+        (APPLE_AGX_BACKEND_U32)AppleAgxG13QueueRuntimeResultInvalidArgument;
+  }
   if (Provider == APPLE_AGX_G13_PROVIDER_NULL ||
       Message == APPLE_AGX_G13_PROVIDER_NULL ||
       Batch == APPLE_AGX_G13_PROVIDER_NULL ||
@@ -495,6 +501,8 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderIngestEvent(
   taWasComplete = Provider->Runtime.TaPending.Complete;
   result = AppleAgxG13QueueRuntimeHandleEvent(&Provider->Runtime, Message,
                                               MessageBytes);
+  Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardRuntime;
+  Provider->LastIngestRuntimeResult = (APPLE_AGX_BACKEND_U32)result;
   if (result == AppleAgxG13QueueRuntimeResultInvalidArgument ||
       result == AppleAgxG13QueueRuntimeResultInvalidState ||
       result == AppleAgxG13QueueRuntimeResultResetFailed) {
@@ -502,25 +510,38 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderIngestEvent(
       Provider->Phase = AppleAgxG13QueueProviderFaulted;
     return APPLE_AGX_BACKEND_FALSE;
   }
-  if ((!d3WasComplete && Provider->Runtime.D3Pending.Complete &&
-       !AppleAgxG13ProviderAppendObservation(
-           Provider, Batch, AppleAgxBackendQueue3d, &Provider->Config.D3,
-           &Provider->Runtime.D3Pending)) ||
-      (!taWasComplete && Provider->Runtime.TaPending.Complete &&
-       !AppleAgxG13ProviderAppendObservation(
-           Provider, Batch, AppleAgxBackendQueueTa, &Provider->Config.Ta,
-           &Provider->Runtime.TaPending))) {
+  if (!d3WasComplete && Provider->Runtime.D3Pending.Complete &&
+      !AppleAgxG13ProviderAppendObservation(
+          Provider, Batch, AppleAgxBackendQueue3d, &Provider->Config.D3,
+          &Provider->Runtime.D3Pending)) {
+    Provider->LastIngestGuard =
+        AppleAgxG13QueueProviderIngestGuardD3Observation;
     Provider->Phase = AppleAgxG13QueueProviderFaulted;
     return APPLE_AGX_BACKEND_FALSE;
   }
-  if (!AppleAgxG13QueueRuntimeTakeCompletion(&Provider->Runtime, &completion))
-    return APPLE_AGX_BACKEND_TRUE;
-  if (completion.Fence != Provider->PendingFence)
+  if (!taWasComplete && Provider->Runtime.TaPending.Complete &&
+      !AppleAgxG13ProviderAppendObservation(
+          Provider, Batch, AppleAgxBackendQueueTa, &Provider->Config.Ta,
+          &Provider->Runtime.TaPending)) {
+    Provider->LastIngestGuard =
+        AppleAgxG13QueueProviderIngestGuardTaObservation;
+    Provider->Phase = AppleAgxG13QueueProviderFaulted;
     return APPLE_AGX_BACKEND_FALSE;
+  }
+  if (!AppleAgxG13QueueRuntimeTakeCompletion(&Provider->Runtime, &completion)) {
+    Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardOk;
+    return APPLE_AGX_BACKEND_TRUE;
+  }
+  if (completion.Fence != Provider->PendingFence) {
+    Provider->LastIngestGuard =
+        AppleAgxG13QueueProviderIngestGuardCompletionFence;
+    return APPLE_AGX_BACKEND_FALSE;
+  }
   Batch->CompletedFence = completion.Fence;
   if (completion.Status == AppleAgxG13QueueCompletionSuccess) {
     AppleAgxG13ProviderClearStaged(Provider);
     Provider->Phase = AppleAgxG13QueueProviderCreated;
+    Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardOk;
     return APPLE_AGX_BACKEND_TRUE;
   }
   Batch->ObservationCount = 1u;
@@ -529,6 +550,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderIngestEvent(
   Batch->Observations[0].Status = AppleAgxBackendObservationFault;
   Provider->FailureQuiesced = APPLE_AGX_BACKEND_TRUE;
   Provider->Phase = AppleAgxG13QueueProviderFaulted;
+  Provider->LastIngestGuard = AppleAgxG13QueueProviderIngestGuardOk;
   return APPLE_AGX_BACKEND_TRUE;
 }
 

@@ -1,209 +1,225 @@
 # GPU current state
 
-Updated: 2026-09-04T17:51:22+02:00
+USER-REQUESTED PAUSE / CHECKPOINT 2026-09-09 (account usage preservation).
+Read AD04_RECAP_AND_CONTINUATION_20260909.md and GPU_ENGINEERING_PROCEDURE.md.
+Full original objective preserved in FULL_GRAPHICS_MISSION.md. Not complete.
+Latest action: actual Windows compiler control b1/b2 failed offline; b2 exposes
+MSVC internal agx_index packing assertion and missing off_t after isolated
+timespec/fourcc header fixes. No shader semantics change, no hardware EXP.
+LLVM20.1.8 official SHA-verified portable preparation on FRYZZING completed
+ExitCode0; clang-cl version20.1.8 verified. No clang compile yet.
+Next: executable compiler/backend integration, first prove internal Asahi layout
+without changing WDK ABI layout, then actual compiler/NIR link+execution.
+No new installable package. Machine state below is last verified, not fresh.
 
-## CURRENT PLATFORM
+Phase2 Tier-C execution harness is now implemented and tested. Registry command
+IDs are fixed argv only; unknown IDs, arbitrary shell, forbidden mutation,
+timeouts and hardware are fail-closed. Local suite is11/11 GREEN. One remote
+`VERIFY-FRYZZING-CLANG` demonstration used disposable worktree and approved
+SSH command, timed out at20s with empty output, preserved raw evidence, scope
+clean and exact cleanup. This is runner/control-plane INCONCLUSIVE, not a new
+AD04 compiler result. Devstral remains optional text compression and is never a
+shell executor. Do not repeat AD04 compilation. Next architect decision:
+define minimal u_atomic clang-cl compatibility overlay; then create a bounded
+Tier-B task for Spark, limited to that utility portability contract.
 
-- Live J313 is back on the normal current G2 pair: accepted EXP377 m1n1
-  `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`
-  plus Mu `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
-- EXP425 is complete and the machine is currently physically off after exact
-  cleanup. Normal-G2 restoration requires the next power-on; no AppleAgx
-  package/service/module remained before shutdown.
-- Current-compatible emergency non-AGX Mu remains
-  `279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`.
+2026-09-11 orchestration layer initialized at current HEAD5f42d64: persistent
+Spark implementation/review and Devstral mechanical worktrees are isolated on
+`agent/` branches; contracts/evidence/scope scripts in investigation/agent_tasks
+and scripts/agent; dry-run PASS. AD04-CLANG-DISCRIMINATOR is prepared but not
+dispatched: FRYZZING SSH had No route to host and local Ollama port11434 absent.
+This is a worker-control-plane blocker, not a compiler/GPU verdict. Do not run
+that task under another model or bypass the closed control plane; revalidate and
+dispatch its exact contract. No hardware action.
 
-## CURRENT WINDOWS BASELINE / PACKAGE STATE
+AD04-CLANG-DISCRIMINATOR completed as a source-read-only/no-hardware Tier C
+control under the exact approved builder command. Devstral local API was verified
+but has no shell/file execution capability, so it was not trusted to invent one;
+a deterministic SSH runner executed the fixed command and evidence was scope
+verified clean. Clang20.1.8 x86_64-pc-windows-msvc exit1 first reaches Mesa
+u_atomic intrinsic spelling (`_interlockedexchange64` undeclared; Clang exposes
+`_InterlockedExchange64`), then reports agx_index20!=8 and unknown off_t.
+timespec and BSD fourcc/ioccom errors are no longer first blockers. Do not add
+compiler flags, remove assertions, or change Mesa/WDK ABI without a new Tier-A
+ownership/portability decision. Evidence: investigation/evidence/
+AD04-asahi-windows-compiler/clang-b5-bundle/summary.json.
 
-- Fresh post-EXP412 current-G2 check: APPL0002 Code28/unbound with null
-  INF/service; no project Display package, AppleAgx service, SYS or loaded
-  module; SSH, 8 CPUs, AppleInput, stornvme, USBXHCI and sshd healthy.
-  Two stornvme Event129 records 6528/6529 occurred before the EXP412 bind
-  during synthetic-platform boot; no new 41/129/1001 occurred after bind,
-  through exact cleanup, or after ordinary-G2 restoration.
+Primary goal is now FULL GRAPHICS WINDOWS DESKTOP; OpenGL/CS1.6 are later.
+Full acceptance and current unmet requirements: FULL_GRAPHICS_DESKTOP_ACCEPTANCE.md.
+Goal remains active; all eleven final requirements need integrated hardware proof.
 
-## HARDWARE PROVEN
+Updated 2026-09-09T13:19Z. Main process only; no agents.
 
-OBSERVED:
-- EXP404 natural current-G2 bind produced APPL0002 Code0, exact running service
-  and 2560x1600x32 Windows video controller.
-- StartDevice stage 7, POST ownership, one source/target, child/topology,
-  VidPn enumeration/commit/visibility, pointer and PresentDisplayOnly all
-  recorded SUCCESS.
-- Code0, exact package and all system health remained stable through a separate
-  180-second post-bind window with no 41/129/1001.
-- EXP404 runner never enabled AGX routes 880/881 and had no watchdog/reset.
+## Machine
+Ordinary377/392 restored after EXP682. Verified13:13:40Z: APPL0002 Code28,
+null INF; no AppleAgx package/service/module/SYS/UMD; SSH,8CPU,NVMe2,USB5,
+keyboard1; no fresh41/1001/129. Ordinary launcher76592.
+Recovery: .local/experiments/EXP682-four-native-frames/recovery.log.
 
-INTERPRETATION:
-- Registering the inert ISR/DPC pair made Dxgkrnl connect/unmask current-G2
-  level AGX IRQs and caused the earlier cumulative-DPC watchdogs.
-- A synchronous no-VSync KMDOD must leave ISR/DPC unregistered until a real AGX
-  status/ack/completion handler exists.
-- EXP403 also proved SystemDisplay callbacks cannot perform registry I/O on the
-  any-IRQL bugcheck path; EXP404 contains that correction.
-- EXP412 hardware-proved the complete production memory qualification seam:
-  Windows DXGK physical objects/ADLs/maps, 70 real HVC 0x4d31 batches through
-  current m1n1, 4152 translated sub-40-bit host pages, context-63 four-page
-  16-KiB UAT, one exact 16-MiB mapping at GPU VA 0x1500000000, gpu-region TTBR
-  publication/readback, deterministic first/last leaf translation and reverse
-  cleanup. Its 128-byte proof has StartStage 10 and both statuses zero.
-- Therefore MEMORY_PAGING_IMPLEMENTED=YES and
-  MEMORY_PAGING_HW_PROVEN=YES. BuildPagingBuffer encode/worker/DMA completion
-  remain implementation-proven; they were not separately exercised by the
-  qualification branch.
-- EXP425 extends that hardware proof to one exact 64-MiB object: 263 HVC
-  calls, 16448 translated pages, five UAT pages, one context-63 mapping at
-  0x1500000000, exact first/last leaf readback and clean teardown. The lower
-  56 MiB is now the proven Windows/scanout range and the upper 8 MiB remains
-  the EXP208 tail.
+## Hardware proven
+EXP680 gray raw output: independent tiled64 image,72 pixels80808080 and184
+backgroundff112233; immutable1096-byte snapshot with1024 bytes; fence271.
+EXP681 original native-red: raw1024 bytes equal immutable EXP659 attachment,
+72 BGRA redffff0000 and184 background; poison0/guard0; physical TA3D/fence271.
+NATIVE_FRAGMENT_RED_HW_PROVEN=YES.
+FRAGMENT_OUTPUT_CORRECTNESS_HW_PROVEN=YES within the native16x16 workload.
 
-## FIRST UNKNOWN / FAILED BOUNDARY
+EXP682 four distinct allocation lifetimes: red/gray/red/gray, all raw images
+byte-exact against independent expectations; fences271/289/308/326;
+generations1/2/3/4. GPU VA1500fa0000/1500fb0000/1500fc0000/1500fd0000;
+PA97d190000/97d1a0000/97d1b0000/97d1c0000.
+Physical TA done2/3/4/5 and D3 done2/4/6/8 match expectations.
+HOLD15.030s: four producers alive, last snapshot unchanged, Code0,8CPU,
+no41/1001/129. Repeated raw rendering and HOLD are proven.
+Terminal output snapshots precede their Notify/DPC scalar update; those zeros
+are not direct four-frame DPC evidence. Output follows the existing notified
+transaction guard; the bounded two-call correlation is separate evidence.
+No standard Present or desktop PASS.
 
-Memory hardware qualification is closed by EXP412/EXP425. Functional readiness
-is now 14/14: commit `7cf5495` provides the exact real UMD resource/DirectFlip/
-Present path and commit `6c96d53` atomically publishes the complete Type1 group
-only after a fully successful StartDevice. Commit `230a99a` links the
-EXP425-proven lower
-56 MiB to the existing ABI-v2 fixed-panel broker, exact primary validation,
-nonblocking SetVidPnSourceAddress, matching D589/CRTC_VSYNC/DPC and synchronous
-POST restore/release. This is implementation evidence only; the integrated KMD
-scanout path is not hardware-proven. The first unknown is whether current
-Windows admits the complete Type1 vector and which exact downstream callback
-or UMD/backend boundary is reached first; no runtime layer is called proven
-until its own receipts exist.
+Evidence:
+- .local/experiments/EXP681-native-red-oracle/evidence/
+- .local/experiments/EXP682-four-native-frames/evidence/frame1..4 and hold/
+- Detailed source/launch/hash/results in EXPERIMENTS.md and CHANGES.csv.
+- Earlier long state preserved at .local/experiments/EXP682-four-native-frames/evidence/GPU_CURRENT_STATE-before-compaction.md.
 
-Commits `4d539ea`,
-`421a1ac` and `ec214ae` provide the offline-green one-node substrate:
-one monotonic queued/active/completed interval, exact active-fence completion,
-queued-work removal at DMA-buffer-boundary preemption, dispatch blocking until
-one preemption notification, and reset reporting the active fence or completed
-boundary while clearing outstanding work. The first unknown is now connection
-of the exact EXP208 arena/output binding to the production memory owner and
-then real AGX publication/completion. Commits `2ee3398` and `7912547`
-now prove RenderKm -> Patch -> exact sealed packet -> common queued fence
-offline. Commit `68172a3` proves the only truthful EXP208 workload is the
-exact 16x16 A8R8G8B8 ColorFill 0xff112233 and can rebase its arena inside the
-existing 16-MiB UAT mapping. Commit `45969de` reserves the upper 8 MiB for
-that arena and advertises only the lower 8 MiB to VidMm while leaving the
-EXP412-proven mapping unchanged. Commits `b6ee1a6`, `abe363f` and `eead97f`
-then resolve one exact Windows destination tuple, materialize/rebase/apply all
-159 relocations in the borrowed tail, and bind object 40 to that tuple before
-common enqueue. No activation, enqueue-only completion, AGX queue, physical
-IRQ or capability was added.
-Commit `4285cef` makes the existing EXP208 builder consume that rebased bound
-image and produce exact TA/3D roots, events, stamps and done pointers. Commits
-`f9ad365`, `35f5a68` and `c932a36` make the accumulated queue/completion stack
-reproducible and add an external-image mode: it retains firmware/channel/queue/
-event ownership but delegates image and prepared-range resolution to the
-EXP412-backed owner instead of allocating a second 64-MiB pool or republishing
-context 63. These portable provider modules are not yet linked to the Windows
-Start/Submit/DPC lifetime. Commit `3a4b55e` closes that implementation seam:
-the synthetic-889-only platform runtime reuses the production allocator for
-firmware context 0, borrows the already published context 63, runs the exact
-packet through the existing D3/TA provider, polls the event ring at PASSIVE,
-and advances the exact Windows fence only after both event/stamp/done-pointer
-observations. EXP423 WDK builds are green, but no hardware run has occurred.
+## Closed interpretations
+Do not repeat EXP674–682. EXP674 collided with poison, not a positive write
+proof. EXP678 did not establish a live-allocation race. Oracle now decodes
+tiled64 and separates expected/observed. EXP679 erased runtime expected during
+release; d146fdaf47ad580dcc7de73ae3c295d5fd9231f6 retains it in CompletedOutput.View.
+EXP680/681/682 validate that correction. Old red FNV98b3446c1b0a8215 matches
+native red; EXP681 raw evidence supersedes old zero-colour scalar claims.
+Do not reopen VA/UAT/PBE/store/encoder/RTKit without contrary evidence.
 
-## LAST KNOWN GOOD FOR THIS BOUNDARY
+## Next causal boundary
+Standard runtime-managed Present/DWM remains unproven. Source review:
+EXP682_STANDARD_PRESENT_BOUNDARY.md.
+EXP644/647/648 remain valid: BLT occluded due to DWM device failure, exclusive
+ownership denied, UMD loaded with pipeline0 and no CreateDevice. Current UMD
+still has a partial WDDM1_3 table. Selected architecture remains Mesa D3D10_0/
+FL10_0 reuse;121 mandatory implementation rows are incomplete.
+Do not enable caps or repeat rejected admission/desktop/exclusive experiments.
 
-- EXP404 source/test composite / SYS:
-  `1fe3c34ec6da571b89fe7aaa8524f89dd57cdfa0de04d548ff83375616315468` /
-  `9a4b43a6de0c7422324daf2f8a193c24363209389b5c47417cbeba545cc9b139`.
-- Phase-B / health / display inventory evidence SHA-256:
-  `37a4fc5f4ad082153204ed96f24f3a870f0cb4205e64db1b4a10240324efecb7` /
-  `e2c9c0d359582b5b06fce9d6f7954f96455edd5ce7965595d7e8acdeb33a7096` /
-  `9e92b5f3ae3fe5c265e3182861286e68a5841a156b01e7e78eeba824ae776b2e`.
-- EXP214 remains the byte-exact Full Graphics build/admission control:
-  source/test composite
-  `25718ba071971c8cb94a6847908f0a722ffdb4f6767b9ca4d548514ea6713d63`.
+Next implementation: selected Mesa D3D frontend with device-scoped Windows
+allocator/context callbacks and existing winsys, including real shared-resource
+ownership. Upstream software target, fake D3DKMT handles, flush_frontbuffer and
+NO_REDIRECTION are not hardware presentation. Reconcile adapter-scoped screen
+factory with device-scoped callbacks without a process-global device singleton.
+Displayable resource geometry/layout is also required: a small tiled render
+target cannot be relabelled as a full-size linear primary.
+No additional BLT patch was made; it would not solve runtime device admission.
+Keep pipeline mask0 until mandatory callbacks/backend invariants pass.
+No next hardware candidate is prepared.
 
-## REJECTED / DO NOT REUSE
+AD04 frontend compile control now passes x64 and ARM64 for15 pinned Mesa
+translation units, excluding D3DKMT.cpp software shims and d3d10_gdi.c.
+This is a static-library build, not a linked hardware UMD or production analysis
+PASS. Upstream conversion warnings remain recorded. Script commit
+b7094b1b6b00991806bc566ac1abf7eb215767bc; artifacts under
+.local/experiments/AD04-d3d10-frontend-build/results/.
+ARM64 library SHA256e957ea442643da32f0bec835edcc867a89e1d52b1dceb34dd8dbf8d3c99b8c7f.
+Existing agx_win32_pipe_screen.c already owns a device-scoped Gallium bridge;
+reuse it and its tested Windows transport rather than introducing a new screen.
 
-- EXP398–EXP412 package identities are terminal and clean.
-- Explicit receipt flush removal alone is rejected; inert IRQ registration is
-  the confirmed watchdog cause. Do not register ISR/DPC/ControlInterrupt before
-  implementing the real AGX interrupt contract.
-- Do not restore platform-version overrides, old recovery binaries, or disable
-  Defender/WdFilter.
+2026-09-09T13:48:53Z: Windows runtime-device ownership is now extracted into
+umd/src/umd_runtime_device.c, used by the existing UMD and independently
+linkable without OpenAdapter exports. Source commit
+a433262fbd037effedc0ef7afda62d8a870967bf. Initializer accepts typed D3D10_0 or
+WDDM1_3 runtime callback views, retains a per-device error callback, creates
+the existing Windows context/winsys, and shares existing finalization.
+WDK x64 tests prove two distinct devices/contexts/buffers/generations, error
+owner isolation, malformed/context-create/winsys-init rollback, unsupported
+interface and missing callback rejection. Final test ExitCode0; ARM64 UMD
+build/sign passes with0 production warnings/errors. No hardware run/install.
+DLL SHA256e466d774530e25789524ed8a7dfb1eff70218157dcefda752e190e8a97995e46.
+Evidence: .local/experiments/AD04-runtime-device-bridge/evidence/.
+This does not complete Mesa CreateDevice/DDI tables or raise any caps.
+Next: attach this runtime owner and existing pipe screen to the selected Mesa
+per-device factory; implement missing backend callbacks before device admission.
 
-## NEXT CANDIDATE
+Adapter metadata initialization is also shared, commit
+23ff1622f6ac1253031011bea70756c8e2809fd6. It queries the exact runtime adapter
+callback into a validated local candidate before publishing caller-owned state.
+No adapter-global pipe screen, DDI table or caps are created by this initializer.
+Existing UMD OpenAdapter uses it. WDK x64 tests prove two independent adapter
+identities and malformed/missing-callback rejection; ARM64 UMD build/sign passes
+with0 production warnings/errors. Evidence:
+.local/experiments/AD04-runtime-adapter-bridge/evidence/.
+Next concrete integration: selected Mesa adapter owns metadata only; each
+CreateDevice owns its common Windows runtime plus existing pipe screen/context.
+Check child resource/context retirement before releasing the runtime owner.
+No new hardware EXP and no capability change from these offline components.
 
-- Continue the committed EXP407 mandatory-feature vertical-slice plan at
-  render fence/progress while preserving the EXP406 coherent vector and
-  synthetic-only IRQ platform for any later admission hardware run.
-- The atomic readiness gate is implemented and wired into the real Type1 path
-  in commit `52d3bf6`: the current 4/14 state publishes zero mandatory caps and
-  an accidental premature all-ready state fails closed. All later layers must
-  earn their readiness bit through deterministic tests; the complete
-  capability writer is installed only at 14/14.
-- Typed nonpaged device/context ownership is implemented and pinned-WDK ARM64
-  KMD+UMD build, analysis, Universal validation, Inf2Cat and signing pass with
-  zero warnings/errors. This offline package is not an EXP407 hardware
-  candidate and must not be staged.
-- Segment1/Segment2 translation and allocation contracts are implemented in
-  commits `32cd23e` and `1e76707`: 4-KiB software aperture, 64-KiB local
-  GPU-VA segment, 16-KiB UAT prerequisite, paging plans, gated QuerySegment4,
-  and standard/create/destroy/describe/open/close allocation DDIs. The
-  functional memory readiness bit is now true; EXP412 supplies its required
-  physical-owner/HVC/UAT hardware proof while BuildPagingBuffer remains an
-  explicit later Windows-driven exercise.
-- `MEMORY_PAGING_IMPLEMENTED=YES` and
-  `MEMORY_PAGING_HW_PROVEN=YES`. EXP411 first proved physical-owner/HVC/local
-  allocation and isolated a false CPU-VA 16-KiB alignment guard at UAT stage 5.
-  Commit `4779f02` retained physical 16-KiB alignment while allowing a
-  naturally aligned kernel mapping; EXP412 then reached stage 10 with exact
-  PA/UAT/TTBR/readback/cleanup proof. Exact `oem5.inf` cleanup and stale
-  APPL0002 devnode removal restored the package-free ordinary-G2 baseline.
-- One-node lifecycle and paging-backed fence primitives exist in
-  `3df8e82` and the unified progress/preemption/reset substrate exists in
-  `4d539ea`, `421a1ac` and `ec214ae`. The current functional readiness
-  mask is 4/14
-  (WDDM3 identity, one-node topology, memory/paging, device/context).
-  SCHEDULER and DMA_BOUNDARY_PREEMPTION are now implementation-ready through
-  the linked non-paging provider, but hardware-unproven. PER_ENGINE_TDR remains
-  false because active reset cannot yet quiesce and restart the backend.
-- RenderKm/Patch is implemented in `2ee3398`: one pointer-free ColorFill
-  record, exact live allocation, one prerecorded destination relocation,
-  Segment-2-to-AGX-VA translation and irreversible exact-fence seal.
-- SubmitCommand/common ownership is implemented in `7912547`: the sealed
-  record is bound to its typed context/allocation lifetime and may enter only
-  the common scheduler Queued state. It is not activated or completed.
-- EXP208 compatibility is narrowed in `68172a3`: exact hardware capture
-  matches only a 16x16 A8R8G8B8 PATCOPY clear 0xff112233; output object 40 has
-  one GPU-VA edge and no physical edge. Its 5.8-MiB arena can be rebased to
-  0x1500800000 inside the EXP412-proven mapping. The supported primitive mask
-  intentionally remains zero until provider linkage is complete.
-- The non-overlapping memory partition is implemented in `45969de`: lower
-  8 MiB is the only advertised/translated allocation range; upper 8 MiB is a
-  checked borrowed backend view of the same CPU/host-PA/GPU-VA object. The
-  qualification build still proves the complete 16-MiB map.
-- Exact image and output binding are implemented in `b6ee1a6`, `abe363f` and
-  `eead97f`: production Start borrows the tail, materializes the accepted
-  image, rebases roots/descriptors, applies all relocations, and Submit binds
-  the sole object-40 edge to the packet's exact Windows CPU/host/GPU tuple.
-  EXP419-421 WDK gates are green and no package was staged.
-- `SCHEDULER`, `DMA_BOUNDARY_PREEMPTION`, `GDI_COMMAND_BUFFER`, and
-  `AGX_COMPLETION` are now IMPLEMENTED but HW_PROVEN=NO in `3a4b55e`; current
-  functional readiness is 8/14 and atomic Type1 still publishes zero.
-- Next implementation boundary: restartable per-engine TDR over the same
-  provider, then the remaining scanout/DirectFlip/UMD/non-VGA group. No
-  hardware bind until the complete truthful group exists or a separately
-  preregistered production-code qualification seam is justified.
-- `PER_ENGINE_TDR` is IMPLEMENTED/HW_PROVEN=NO in `660c187`; functional
-  readiness is 9/14. EXP425 then expands the one local mapping to 64 MiB so
-  Segment 2 can expose the exact 56-MiB scanout pool plus 8-MiB backend tail.
-  EXP425 has now hardware-proven that exact range and cleanup. The next source
-  boundary is Windows ownership of the existing Scanout ABI v2 pool and
-  nonblocking SetVidPnSourceAddress-to-latched-VSync completion.
-- `D589_SCANOUT`, `KMD_DIRECT_FLIP`, and `NON_VGA_STOP` are
-  IMPLEMENTED/HW_PROVEN=NO in `230a99a`. EXP426 passed 71 relevant tests and
-  both pinned-WDK build/package profiles with no new analysis diagnostic; no
-  package was staged.
-- `UMD_DIRECT_FLIP` and `INDEPENDENT_FLIP` are IMPLEMENTED/HW_PROVEN=NO in
-  `7cf5495`; EXP428 proves ARM64/export/build and portable exact compatibility,
-  not a Windows load/callback. Commit `6c96d53` completes atomic Type1 wiring;
-  functional readiness is 14/14. EXP429 is offline-only because its manifest
-  names the pre-commit source state; rebuild once at exact HEAD before staging.
-- Reuse current shared allocation/context/paging/scheduler/GDI/backend pieces,
-  current m1n1's hardware-proven retained DCP owner and the EXP208 graph. Do not
-  bind hardware until the entire mandatory group is real and offline-green.
+Checked Gallium pair release now implemented at
+a4f0b0f5bf4d2a7333df5b27c6ec9f7a433a98d2:
+AgxWin32PipeScreenReleaseDevice rejects live resources, extra contexts, foreign
+context and extra screen references without mutation. Success releases the
+owned screen/context pair and leaves the borrowed Windows winsys alive.
+Caller serializes teardown. ASan/UBSan and pinned MSVC analysis/test PASS;
+evidence .local/experiments/AD04-pipe-release/evidence/.
+This is CPU object lifetime, not a physical residency guarantee.
+The actual Mesa per-device factory attachment remains unfinished. Its guard
+must use this checked release before Windows runtime finalization, and it must
+not call CreateEmptyShader until required pipe shader/state callbacks exist.
+The current pipe_context exposes mapping/resource operations, not a complete
+D3D graphics pipeline. Keep caps0 and do not launch admission hardware yet.
+
+Per-device pipe factory composition now implemented at
+b66c1a8aa06c75d48b2ac063ae47bbb0ff28a469:
+AgxWin32PipeDeviceInitialize consumes the existing initialized Windows winsys,
+owns a separate screen/context and binds context.priv to that runtime owner.
+It rejects duplicate initialization; Close preserves busy or stale-generation
+objects and requires checked child release before clearing its own state.
+Windows runtime finalization remains a separate caller-owned step.
+Portable ASan/UBSan tests pass. WDK composition test executes common Windows
+adapter/device initializers and two factories together, verifies independent
+owners and close ordering; x64 ExitCode0 at14:27:00Z. x64 and ARM64 builds/
+analysis report0 warnings/errors for this test target, with pinned external
+Mesa headers classified external. ARM64 binary was built, not executed.
+Evidence: .local/experiments/AD04-pipe-device-factory/evidence/.
+Remaining production integration is explicit: selected Mesa State.h,
+Adapter.cpp and Device.cpp must use these owners/factory, not the upstream
+adapter-global screen. No DDI table or graphics pipeline readiness has changed.
+
+Lifecycle entry-point derivation is now implemented at
+724d30f8f5c6faf546e91db830c1b12bd5d68d4d. The reproducible preparer verifies
+pinned Mesa/clean frontend/input hashes, preserves pristine source and derives
+State.h/Adapter.cpp/Device.cpp using the Windows owner bridge. Adapter metadata
+and per-device heap owners replace the global screen; busy children remain
+reachable under their adapter. Missing startup shader callbacks fail before
+CreateEmptyShader. Owner composition test passes x64; x64/ARM64 compile checks
+pass with no owned-code warnings. Derived15-unit frontend libraries compile
+for x64/ARM64 with the recorded existing upstream conversion warnings.
+Evidence: .local/experiments/AD04-frontend-owner/evidence/ and
+.local/experiments/AD04-selected-frontend/evidence/{x64-b4,ARM64-b4}/.
+
+IMPORTANT NEXT INTEGRATION: current small AGX_WIN32_PIPE_CONTEXT is not an
+agx_context. Asahi agx_create_shader_state casts to the full agx_context and
+requires full agx_screen/device state. Do not graft its callbacks onto our
+small context. Integrate actual Asahi state/compiler/encoder and Windows BO/
+submit/fence transport as one coherent backend step. Frontend resources/DXGI
+still contain legacy software-oriented paths and NO_REDIRECTION; these are
+unfinished, not a production hardware UMD. No DLL is linked/installed and no
+D3D device or desktop PASS is claimed. Avoid further micro-helper-only EXPs.
+
+## Preserved constraints
+Retained root/broker, firmware/RTKit, context0 inventory, context63 memory,
+physical TA3D and completion remain controls. EXP640/651 retain their private
+full-frame scanout scope, not standard Present/DWM.
+Native graph reference is EXP659/Mesa7a4f2406; generic frontend selection is
+Mesa9aa1215f. Keep these distinct.
+Latest tested package30.0.680.0; red producer metadata source
+0fe2f489f94075cea7a0e733fc4a274efebf0c85.
+Do not touch native-ANS or unrelated dirty work. Event129 remains telemetry
+without causal evidence. Exact cleanup and ordinary recovery between tests.
+Roadmap: ACCELERATED_DESKTOP_ROADMAP.md.
+Selected contract: docs/superpowers/specs/accelerated-desktop-contract.json.
+Mission remains accelerated desktop, then accelerated OpenGL and CS1.6.
+Leave the final accepted working desktop package installed.
+
+Queued Tier-B task: `investigation/agent_tasks/AD04-UATOMIC-PORTABILITY-001.md`.
+It defines a separate hash-pinned clang-cl overlay for only observed u_atomic
+intrinsic spellings; it is not executed because no real Spark code-editing
+endpoint is callable in this session. Plain Ollama remains classification-only.
+Do not implement this patch in the architect checkout or substitute another
+model without a code-capable worker.

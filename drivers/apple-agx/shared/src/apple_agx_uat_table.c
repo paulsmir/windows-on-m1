@@ -274,6 +274,9 @@ APPLE_AGX_UAT_RESULT AppleAgxUatCreateAddressSpace(
   }
   Roots->Ttbr0PhysicalAddress = 0ULL;
   Roots->Ttbr1PhysicalAddress = 0ULL;
+#ifdef APPLE_AGX_FULL_CONTEXT0_BROKER
+  if (Context == 0u) return AppleAgxUatResultUnsupportedContext;
+#endif
   if (Context >= J313_AGX_G2_UAT_CONTEXT_COUNT) {
     return AppleAgxUatResultUnsupportedContext;
   }
@@ -303,6 +306,9 @@ APPLE_AGX_UAT_RESULT AppleAgxUatMap(
     unsigned long long Length, APPLE_AGX_UAT_PROTECTION Protection,
     const APPLE_AGX_UAT_ALLOCATOR *Allocator,
     APPLE_AGX_UAT_INVENTORY *Inventory) {
+#ifdef APPLE_AGX_FULL_CONTEXT0_BROKER
+  if (Context == 0u) return AppleAgxUatResultUnsupportedContext;
+#endif
   APPLE_AGX_UAT_RESULT result;
   APPLE_AGX_UAT_HALF half;
   APPLE_AGX_UAT_PAGE *root;
@@ -390,6 +396,9 @@ APPLE_AGX_UAT_RESULT AppleAgxUatMapPageList(
     unsigned int PageCount, APPLE_AGX_UAT_PROTECTION Protection,
     const APPLE_AGX_UAT_ALLOCATOR *Allocator,
     APPLE_AGX_UAT_INVENTORY *Inventory) {
+#ifdef APPLE_AGX_FULL_CONTEXT0_BROKER
+  if (Context == 0u) return AppleAgxUatResultUnsupportedContext;
+#endif
   APPLE_AGX_UAT_RESULT result;
   APPLE_AGX_UAT_HALF half;
   APPLE_AGX_UAT_PAGE *root;
@@ -542,6 +551,9 @@ APPLE_AGX_UAT_RESULT AppleAgxUatUnmap(
     unsigned long long VirtualAddress, unsigned long long Length,
     const APPLE_AGX_UAT_ALLOCATOR *Allocator,
     APPLE_AGX_UAT_INVENTORY *Inventory) {
+#ifdef APPLE_AGX_FULL_CONTEXT0_BROKER
+  if (Context == 0u) return AppleAgxUatResultUnsupportedContext;
+#endif
   APPLE_AGX_UAT_RESULT result;
   APPLE_AGX_UAT_HALF half;
   APPLE_AGX_UAT_PAGE *root;
@@ -665,6 +677,9 @@ APPLE_AGX_UAT_RESULT AppleAgxUatMapBatch(
     const APPLE_AGX_UAT_RANGE *Ranges, unsigned int RangeCount,
     const APPLE_AGX_UAT_ALLOCATOR *Allocator,
     APPLE_AGX_UAT_INVENTORY *Inventory) {
+#ifdef APPLE_AGX_FULL_CONTEXT0_BROKER
+  if (Context == 0u) return AppleAgxUatResultUnsupportedContext;
+#endif
   APPLE_AGX_UAT_RESULT result;
   unsigned int range_index;
 
@@ -700,6 +715,9 @@ APPLE_AGX_UAT_RESULT AppleAgxUatUnmapBatch(
     const APPLE_AGX_UAT_RANGE *Ranges, unsigned int RangeCount,
     const APPLE_AGX_UAT_ALLOCATOR *Allocator,
     APPLE_AGX_UAT_INVENTORY *Inventory) {
+#ifdef APPLE_AGX_FULL_CONTEXT0_BROKER
+  if (Context == 0u) return AppleAgxUatResultUnsupportedContext;
+#endif
   APPLE_AGX_UAT_RESULT result;
   unsigned int range_index;
 
@@ -731,6 +749,9 @@ APPLE_AGX_UAT_RESULT AppleAgxUatReplaceBatchWithPage(
     APPLE_AGX_UAT_PROTECTION ReplacementProtection,
     const APPLE_AGX_UAT_ALLOCATOR *Allocator,
     APPLE_AGX_UAT_INVENTORY *Inventory) {
+#ifdef APPLE_AGX_FULL_CONTEXT0_BROKER
+  if (Context == 0u) return AppleAgxUatResultUnsupportedContext;
+#endif
   APPLE_AGX_UAT_RESULT result;
   unsigned int range_index;
 
@@ -819,6 +840,9 @@ APPLE_AGX_UAT_RESULT AppleAgxUatReplaceBatch(
     const APPLE_AGX_UAT_RANGE *NewRanges, unsigned int RangeCount,
     const APPLE_AGX_UAT_ALLOCATOR *Allocator,
     APPLE_AGX_UAT_INVENTORY *Inventory) {
+#ifdef APPLE_AGX_FULL_CONTEXT0_BROKER
+  if (Context == 0u) return AppleAgxUatResultUnsupportedContext;
+#endif
   APPLE_AGX_UAT_RESULT result;
   unsigned int range_index;
 

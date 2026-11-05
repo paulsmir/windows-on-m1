@@ -71,13 +71,115 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("Interlocked", scanline)
         present = callbacks[
             callbacks.index("AdmissionDdiPresent("):
-            callbacks.index("FAIL2(AdmissionDdiEscape")
+            callbacks.index("AdmissionDdiEscape(")
         ]
         self.assertIn("Present->pDmaBuffer != NULL", present)
         self.assertIn("Present->Flags.Value != 0x4u", present)
         self.assertIn("ADMISSION_OPEN_ALLOCATION_MAGIC", present)
         self.assertIn("D3DDDIFMT_A8R8G8B8", present)
         self.assertIn("return STATUS_SUCCESS", present)
+
+    def test_render_core_legacy_callback_group_is_complete_but_inert(self):
+        driver = self.read("src/driver.c")
+        callbacks = self.read("src/callbacks.c")
+        header = self.read("include/render_admission.h")
+        lifecycle = self.read("src/lifecycle.c")
+
+        # Current dxgkrnl's ADAPTER_RENDER::CreateRenderCore rejects a mixed
+        # default/vendor legacy group before it creates the render adapter.
+        # Register the whole indivisible group without advertising overlays or
+        # capture support; unsupported entry points stay fail-closed.
+        names = (
+            "StopCapture",
+            "CreateOverlay",
+            "UpdateOverlay",
+            "FlipOverlay",
+            "DestroyOverlay",
+        )
+        for name in names:
+            self.assertIn(
+                f"initialization.DxgkDdi{name} = AdmissionDdi{name}", driver
+            )
+            self.assertIn(f"AdmissionDdi{name}", header)
+            self.assertIn(f"AdmissionDdi{name}", callbacks)
+
+        fail2 = callbacks[callbacks.index("#define FAIL2"):
+                          callbacks.index("AdmissionDdiNotifyAcpiEvent")]
+        self.assertIn("return STATUS_NOT_SUPPORTED", fail2)
+        for name in ("CreateOverlay", "UpdateOverlay", "FlipOverlay"):
+            self.assertIn(f"FAIL2(AdmissionDdi{name}", callbacks)
+        destroy = callbacks[callbacks.index("AdmissionDdiDestroyOverlay"):
+                            callbacks.index("AdmissionDdiEscape(")]
+        self.assertIn("return STATUS_NOT_SUPPORTED", destroy)
+
+        self.assertNotIn("SupportMultiPlaneOverlay = TRUE", lifecycle)
+        self.assertNotIn("SupportOverlay", lifecycle)
+
+    def test_post_start_admission_trace_is_receipt_only_and_bounded(self):
+        driver = self.read("src/driver.c")
+        receipts = self.read("src/receipts.c")
+        lifecycle = self.read("src/lifecycle.c")
+        display = self.read("src/display.c")
+        header = self.read("include/render_admission.h")
+
+        for name in (
+            "Wom1Type1Receipt", "Wom1DisplayCapsReceipt",
+            "Wom1WddmDeviceCapsReceipt",
+            "Wom1DisplayDdiReceipt",
+        ):
+            self.assertIn(name, receipts)
+            expected_count = 2 if name == "Wom1DisplayDdiReceipt" else 1
+            self.assertEqual(receipts.count(name), expected_count)
+        for split_field in (
+            "Wom1Type1Status", "Wom1Type1Size", "Wom1Type1Caps",
+            "Wom1Type16Status", "Wom1Type16Size", "Wom1Type16Caps",
+            "Wom1DisplayDdiId", "Wom1DisplayDdiPhase",
+            "Wom1DisplayDdiStatus", "Wom1DisplayDdiTime",
+        ):
+            self.assertNotIn(split_field, receipts)
+        self.assertIn("DXGK_DRIVERCAPS Caps", receipts)
+        self.assertIn("DXGK_WDDMDEVICECAPS Caps", receipts)
+        self.assertIn("DXGK_DISPLAY_DRIVERCAPS_EXTENSION Caps", receipts)
+        self.assertIn("sizeof(receipt.Caps)", receipts)
+        display_caps = receipts[
+            receipts.index("DXGKQAITYPE_DISPLAY_DRIVERCAPS_EXTENSION"):
+            receipts.index("DXGKQAITYPE_WDDMDEVICECAPS",
+                           receipts.index("DXGKQAITYPE_DISPLAY_DRIVERCAPS_EXTENSION"))
+        ]
+        self.assertIn("ADMISSION_DISPLAY_CAPS_RECEIPT", display_caps)
+        self.assertIn("Wom1DisplayCapsReceipt", display_caps)
+        self.assertIn("CapturedBytes", receipts)
+        self.assertIn("QueryAdapterInfo->pOutputData", lifecycle)
+        self.assertIn("AdmissionRecordDisplayDdi", header)
+        for ddi_id in (
+            "AdmissionDisplayDdiQueryChildRelations",
+            "AdmissionDisplayDdiQueryChildStatus",
+            "AdmissionDisplayDdiQueryDeviceDescriptor",
+        ):
+            self.assertIn(
+                f"AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, {ddi_id}",
+                " ".join(display.split()),
+            )
+        for name in (
+            "IsSupportedVidPn", "RecommendFunctionalVidPn",
+            "EnumVidPnCofuncModality", "SetVidPnSourceVisibility",
+            "CommitVidPn", "UpdateActiveVidPnPresentPath",
+            "RecommendMonitorModes", "QueryVidPnHWCapability",
+        ):
+            self.assertIn(
+                f"initialization.DxgkDdi{name} = AdmissionTraceDdi{name}",
+                " ".join(driver.split()),
+            )
+            self.assertIn(f"AdmissionTraceDdi{name}", header)
+            self.assertIn(f"AdmissionTraceDdi{name}", display)
+        self.assertIn(
+            "initialization.DxgkDdiSetVidPnSourceAddress =\n"
+            "      AdmissionDdiSetVidPnSourceAddress",
+            driver,
+        )
+        self.assertNotIn("AdmissionTraceDdiSetVidPnSourceAddress", driver)
+        self.assertNotIn("MmMapIoSpace", receipts)
+        self.assertNotIn("WRITE_REGISTER", receipts)
 
     def test_start_is_natural_hardware_inert_render_admission(self):
         lifecycle = self.read("src/lifecycle.c")
@@ -159,13 +261,13 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertNotIn("AdmissionDdiQueryChildRelations", lifecycle)
         self.assertIn("ChildRelationsSize < 2 * sizeof(DXGK_CHILD_DESCRIPTOR)", display)
         self.assertIn("ChildDeviceType = TypeVideoOutput", display)
+        self.assertIn("HpdAwarenessInterruptible", display)
         self.assertIn("D3DKMDT_VOT_INTERNAL", display)
         self.assertIn("StatusConnection", display)
         self.assertIn("HotPlug.Connected = TRUE", display)
         self.assertIn("STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED", display)
-        self.assertIn("VideoSignalInfo.TotalSize.cx = 2560", display)
-        self.assertIn("VideoSignalInfo.TotalSize.cy = 1600", display)
-        self.assertIn("D3DKMDT_FREQUENCY_NOTSPECIFIED", display)
+        # Native signal geometry/frequencies are exercised by the production
+        # helper test in test_apple_agx_render_timing.py.
         self.assertIn("D3DKMDT_MP_PREFERRED", display)
         self.assertIn("RtlZeroMemory(&VidPnHWCaps->VidPnHWCaps", display)
         self.assertIn("!SetPointerPosition->Flags.Visible", display)

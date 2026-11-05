@@ -265,6 +265,11 @@ static APPLE_AGX_FW_BOOL provider_unpublish_initdata(
   APPLE_AGX_FIRMWARE_PROVIDER *provider = context;
   if (!at_passive(provider))
     return APPLE_AGX_FW_FALSE;
+  if (provider->Primitives.RetireMappingsAfterAscStop &&
+      (provider->State & APPLE_AGX_FIRMWARE_PROVIDER_ASC) != 0u) {
+    /* Keep physical publication ownership until ASC no longer consumes it. */
+    return provider->Handoff->Locked ? release_handoff(provider) : APPLE_AGX_FW_TRUE;
+  }
   if ((provider->State & APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED) == 0u) {
     if (provider->Handoff->Locked != 0u)
       return release_handoff(provider) ? APPLE_AGX_FW_TRUE
@@ -318,6 +323,11 @@ static APPLE_AGX_FW_BOOL provider_stop_asc(void *context,
   provider->State &= ~(APPLE_AGX_FIRMWARE_PROVIDER_ASC |
                        APPLE_AGX_FIRMWARE_PROVIDER_FW_ENDPOINT |
                        APPLE_AGX_FIRMWARE_PROVIDER_DOORBELL_ENDPOINT);
+  if (provider->Primitives.RetireMappingsAfterAscStop &&
+      !provider_unpublish_initdata(provider, deadline)) {
+    record_boot(provider, APPLE_AGX_PROVIDER_BOOT_CLEANUP, 0u);
+    return APPLE_AGX_FW_FALSE;
+  }
   record_boot(provider, APPLE_AGX_PROVIDER_BOOT_CLEANUP, 1u);
   return APPLE_AGX_FW_TRUE;
 }

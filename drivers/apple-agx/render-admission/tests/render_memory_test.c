@@ -194,7 +194,61 @@ static void test_paging_plans_preserve_segment_and_uat_units(void) {
   assert(runs[0].Length == 0x10000ULL);
 }
 
+static void test_system_page_aperture_ranges_are_atomic(void) {
+  ADMISSION_MEMORY_CONTRACT memory;
+  APPLE_AGX_U64 pages[3] = {0x40000000ULL, 0x40003000ULL, 0x40008000ULL};
+  APPLE_AGX_U64 invalid[3] = {0x50000000ULL, 0x50001001ULL, 0x50002000ULL};
+  APPLE_AGX_U64 resolved = 0u;
+  APPLE_AGX_SOFTWARE_APERTURE_ENTRY before[3];
+
+  assert(AdmissionMemoryInitialize(&memory, entries, TEST_APERTURE_PAGES,
+                                   TEST_APERTURE_BASE, TEST_APERTURE_SIZE,
+                                   TEST_LOCAL_BASE, TEST_LOCAL_SIZE));
+  /* Exact EXP491 request: the last system page, not a64KiB allocation. */
+  assert(AdmissionMemoryMapAperture64K(&memory, 0x0ffff000ULL, pages, 1u) ==
+         AppleAgxSoftwareApertureInvalidArgument);
+  assert(AdmissionMemoryMapAperturePages(&memory, 0x0ffff000ULL, pages, 1u) ==
+         AppleAgxSoftwareApertureOk);
+  assert(AppleAgxSoftwareApertureResolve(&memory.Aperture, 0x0ffff123ULL,
+                                        &resolved) == AppleAgxSoftwareApertureOk);
+  assert(resolved == 0x40000123ULL);
+  assert(entries[TEST_APERTURE_PAGES - 2u].State ==
+         AppleAgxSoftwareApertureEntryEmpty);
+  assert(AdmissionMemoryUnmapAperturePages(&memory, 0x0ffff000ULL, 1u,
+                                          0x60000000ULL) ==
+         AppleAgxSoftwareApertureOk);
+  assert(AppleAgxSoftwareApertureResolve(&memory.Aperture, 0x0ffff123ULL,
+                                        &resolved) == AppleAgxSoftwareApertureDummy);
+  assert(resolved == 0x60000123ULL);
+  assert(AdmissionMemoryMapAperturePages(&memory, 0x1000ULL, pages, 3u) ==
+         AppleAgxSoftwareApertureOk);
+  memcpy(before, &entries[1], sizeof(before));
+  assert(AdmissionMemoryMapAperturePages(&memory, 0x1000ULL, invalid, 3u) ==
+         AppleAgxSoftwareApertureMisaligned);
+  assert(memcmp(before, &entries[1], sizeof(before)) == 0);
+  assert(AdmissionMemoryMapAperturePages(&memory, 0x1000ULL, pages, 0u) !=
+         AppleAgxSoftwareApertureOk);
+  assert(AdmissionMemoryMapAperturePages(&memory, 0x1001ULL, pages, 1u) !=
+         AppleAgxSoftwareApertureOk);
+  assert(AdmissionMemoryMapAperturePages(&memory, 0x0ffff000ULL, pages, 2u) ==
+         AppleAgxSoftwareApertureOutOfRange);
+  assert(AdmissionMemoryUnmapAperturePages(&memory, 0x0ffff000ULL, 2u,
+                                          0x60000000ULL) ==
+         AppleAgxSoftwareApertureOutOfRange);
+  assert(AdmissionMemoryUnmapAperturePages(&memory, 0x1000ULL, 0u,
+                                          0x60000000ULL) !=
+         AppleAgxSoftwareApertureOk);
+  assert(memcmp(before, &entries[1], sizeof(before)) == 0);
+  assert(AdmissionMemoryUnmapAperturePages(&memory, 0x2000ULL, 1u,
+                                          0x70000000ULL) ==
+         AppleAgxSoftwareApertureOk);
+  assert(memcmp(&before[0], &entries[1], sizeof(before[0])) == 0);
+  assert(memcmp(&before[2], &entries[3], sizeof(before[2])) == 0);
+  assert(entries[2].PhysicalPage == 0x70000000ULL);
+}
+
 int main(void) {
+  test_system_page_aperture_ranges_are_atomic();
   test_exact_two_segment_contract();
   test_aperture_and_local_address_translation();
   test_backend_tail_reservation_preserves_full_uat_mapping();

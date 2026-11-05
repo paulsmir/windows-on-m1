@@ -65,7 +65,8 @@ static void test_render_progress_separates_queued_active_and_completed(void) {
   assert(AppleAgxSchedulerQueuedFence(&scheduler, 0u, 0u) == 0u);
   assert(AppleAgxSchedulerActiveFence(&scheduler, 0u, 0u) == 5u);
   assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 6u));
-  assert(!AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerQueuedFence(&scheduler, 0u, 0u) == 6u);
   assert(!AppleAgxSchedulerCompleteActiveFence(&scheduler, 0u, 0u, 6u));
   assert(AppleAgxSchedulerCompleteActiveFence(&scheduler, 0u, 0u, 5u));
   assert(AppleAgxSchedulerCurrentFence(&scheduler, 0u, 0u) == 5u);
@@ -73,7 +74,9 @@ static void test_render_progress_separates_queued_active_and_completed(void) {
   assert(AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 6u));
   assert(AppleAgxSchedulerCompleteActiveFence(&scheduler, 0u, 0u, 6u));
   assert(AppleAgxSchedulerCurrentFence(&scheduler, 0u, 0u) == 6u);
-  assert(AppleAgxSchedulerLastSubmittedFence(&scheduler, 0u, 0u) == 6u);
+  assert(AppleAgxSchedulerLastSubmittedFence(&scheduler, 0u, 0u) == 7u);
+  assert(AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler, 0u, 0u, 7u));
   assert(!AppleAgxSchedulerHasOutstandingFence(&scheduler, 0u, 0u));
 }
 

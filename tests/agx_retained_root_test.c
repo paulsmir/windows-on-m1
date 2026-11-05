@@ -8,6 +8,9 @@
 #define VA 0xffffffa000000000ULL
 #define IPA 0x800000000ULL
 #define PA 0x810000000ULL
+#define SHARED_VA 0xffffffa041000000ULL
+#define TIMESTAMP_VA 0xffffffa071100000ULL
+#define COMMAND_VA 0xffffffa021000000ULL
 
 /* Real heap-backed tables, synthetic addresses: no firmware memory can be freed.
  * A removed ownership guard or premature release is an assertion/ASan failure. */
@@ -56,7 +59,7 @@ static void release(void *opaque, const APPLE_AGX_UAT_PAGE *page)
 static unsigned long long translate(void *opaque, unsigned long long ipa)
 {
     struct fixture *f = opaque;
-    return ipa >= IPA && ipa < IPA + 16 * PAGE ? f->translated + ipa - IPA : 0;
+    return ipa >= IPA && ipa < IPA + 257 * PAGE ? f->translated + ipa - IPA : 0;
 }
 
 static void sync_tables(void *opaque)
@@ -185,10 +188,11 @@ static void rejection(void)
     assert(hv_agx_retained_unmap(&f.core, 1, h, VA, IPA, 2 * PAGE) != HV_AGX_RETAINED_OK);
     assert(hv_agx_retained_unmap(&f.core, 1, h + 1, VA, IPA, PAGE) != HV_AGX_RETAINED_OK);
     assert(f.core.MappingCount == 1);
-    for (i = 1; i < 16; ++i)
-        assert(hv_agx_retained_map(&f.core, 1, VA + i * 0x2000000ULL,
+    for (i = 1; i < 256; ++i)
+        assert(hv_agx_retained_map(&f.core, 1, VA + i * PAGE,
             IPA + i * PAGE, PAGE, &ignored) == HV_AGX_RETAINED_OK);
-    assert(hv_agx_retained_map(&f.core, 1, VA + PAGE, IPA, PAGE, &ignored) != HV_AGX_RETAINED_OK);
+    assert(hv_agx_retained_map(&f.core, 1, VA + 256 * PAGE, IPA, PAGE, &ignored) ==
+        HV_AGX_RETAINED_ALLOCATION);
     check_prefix(&f);
     assert(hv_agx_retained_close(&f.core, 1, 1) == HV_AGX_RETAINED_OK);
     assert(!f.live);
@@ -351,8 +355,331 @@ static void invalid_intermediate_descriptors(void)
     }
 }
 
+/* The production graph exceeds the old record capacity and aliases its buffer
+ * manager page into TTBR0. A broad low window or copied TTBR1 fails this test. */
+static void production_inventory(void)
+{
+    struct fixture f;
+    unsigned long long handles[200], alias, ignored, pa, descriptor;
+    unsigned long long root0, system_pa, expected;
+    unsigned int i, lifetime;
+    initialize(&f);
+    for (lifetime = 1; lifetime <= 2; ++lifetime) {
+        assert(prepare(&f, lifetime) == 0);
+        firmware_boot(&f);
+        assert(hv_agx_retained_activate(&f.core) == 0);
+        root0 = f.core.Roots.Ttbr0PhysicalAddress;
+        system_pa = f.core.SystemPage.PhysicalAddress;
+        for (i = 0; i < 200; ++i) {
+            /* Spread over all 16 permitted high L2 tables. */
+            unsigned long long va = VA + (i % 16) * 0x2000000ULL + (i / 16) * PAGE;
+            assert(hv_agx_retained_map(&f.core, lifetime, va, IPA + i * PAGE,
+                PAGE, &handles[i]) == 0);
+            assert(hv_agx_retained_query(&f.core, lifetime, handles[i], va,
+                IPA + i * PAGE, PAGE, &pa) == 0 && pa == PA + i * PAGE);
+        }
+        assert(hv_agx_retained_map(&f.core, lifetime, 0x420000000ULL, IPA,
+            PAGE, &alias) == 0);
+        assert(hv_agx_retained_query(&f.core, lifetime, alias, 0x420000000ULL,
+            IPA, PAGE, &pa) == 0 && pa == PA);
+        assert(AppleAgxUatResolvePage(0, &f.core.Roots, 0x420000000ULL,
+            &f.core.Inventory, &pa, &descriptor) == AppleAgxUatResultOk);
+        assert(AppleAgxUatEncodePageDescriptor(
+            0, PA, AppleAgxUatFirmwareGpuSharedReadWrite,
+            &expected) == AppleAgxUatResultOk);
+        assert(descriptor == expected);
+        assert(hv_agx_retained_map(&f.core, lifetime, 0x420004000ULL, IPA,
+            PAGE, &ignored) == HV_AGX_RETAINED_RANGE);
+        assert(hv_agx_retained_map(&f.core, lifetime, 0x41fffc000ULL, IPA,
+            PAGE, &ignored) == HV_AGX_RETAINED_RANGE);
+        assert(hv_agx_retained_map(&f.core, lifetime, 0x430000000ULL, IPA,
+            PAGE, &ignored) == HV_AGX_RETAINED_RANGE);
+        assert(f.core.Roots.Ttbr0PhysicalAddress == root0);
+        check_prefix(&f);
+        assert(AppleAgxUatResolvePage(0, &f.core.Roots, f.core.SystemVa,
+            &f.core.Inventory, &pa, &descriptor) == AppleAgxUatResultOk);
+        assert(pa == system_pa);
+        assert(hv_agx_retained_close(&f.core, lifetime, 1) == 0);
+        assert(!f.live && !f.retained[2]);
+        check_prefix(&f);
+    }
+}
+
+/* An arbitrary query failure cannot establish that a caller's owned mapping
+ * was removed. Require the full prior UNMAP tuple and current real absence. */
+static void absent_receipt(void)
+{
+    const unsigned long long vas[] = {VA, 0x420000000ULL};
+    unsigned int i;
+    for (i = 0; i < 2; ++i) {
+        struct fixture f;
+        unsigned long long h, newer, keep, va = vas[i];
+        start(&f);
+        assert(hv_agx_retained_map(&f.core, 1, va, IPA, PAGE, &h) == 0);
+        /* Keep the high L2 present to distinguish a zero leaf from pruning. */
+        assert(hv_agx_retained_map(&f.core, 1, VA + PAGE, IPA + PAGE,
+            PAGE, &keep) == 0);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, h, va, IPA, PAGE) ==
+            HV_AGX_RETAINED_OWNERSHIP);
+        assert(hv_agx_retained_unmap(&f.core, 1, h, va, IPA, PAGE) == 0);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, h, va, IPA, PAGE) == 0);
+        assert(hv_agx_retained_verify_absent(&f.core, 0, h, va, IPA, PAGE) ==
+            HV_AGX_RETAINED_STATE);
+        assert(hv_agx_retained_verify_absent(&f.core, 2, h, va, IPA, PAGE) ==
+            HV_AGX_RETAINED_STATE);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, h + 1, va, IPA, PAGE) ==
+            HV_AGX_RETAINED_OWNERSHIP);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, h, va + PAGE, IPA, PAGE) ==
+            HV_AGX_RETAINED_OWNERSHIP);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, h, va, IPA + PAGE, PAGE) ==
+            HV_AGX_RETAINED_OWNERSHIP);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, h, va, IPA, 2 * PAGE) ==
+            HV_AGX_RETAINED_OWNERSHIP);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, h,
+            0xffffff8000000000ULL, IPA, PAGE) == HV_AGX_RETAINED_OWNERSHIP);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, h,
+            HV_AGX_RETAINED_SYSTEM_VA, IPA, PAGE) == HV_AGX_RETAINED_OWNERSHIP);
+        assert(hv_agx_retained_map(&f.core, 1, va, IPA, PAGE, &newer) == 0);
+        assert(newer != h);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, h, va, IPA, PAGE) ==
+            HV_AGX_RETAINED_OWNERSHIP);
+        assert(hv_agx_retained_unmap(&f.core, 1, newer, va, IPA, PAGE) == 0);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, h, va, IPA, PAGE) ==
+            HV_AGX_RETAINED_OWNERSHIP);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, newer, va, IPA, PAGE) == 0);
+        assert(hv_agx_retained_unmap(&f.core, 1, keep, VA + PAGE,
+            IPA + PAGE, PAGE) == 0);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, newer, va, IPA, PAGE) ==
+            HV_AGX_RETAINED_OWNERSHIP);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, keep, VA + PAGE,
+            IPA + PAGE, PAGE) == 0);
+        assert(hv_agx_retained_close(&f.core, 1, 1) == 0);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, keep, VA + PAGE,
+            IPA + PAGE, PAGE) == HV_AGX_RETAINED_STATE);
+        assert(prepare(&f, 2) == 0);
+        assert(hv_agx_retained_activate(&f.core) == 0);
+        assert(hv_agx_retained_verify_absent(&f.core, 2, keep, VA + PAGE,
+            IPA + PAGE, PAGE) == HV_AGX_RETAINED_OWNERSHIP);
+        assert(hv_agx_retained_close(&f.core, 2, 1) == 0);
+        assert(!f.live);
+    }
+}
+
+static APPLE_AGX_UAT_PAGE *fixture_page(struct fixture *f, unsigned long long pa)
+{
+    unsigned int i;
+    for (i = 0; i < f->core.Inventory.PageCount; ++i)
+        if (f->core.Pages[i].PhysicalAddress == pa)
+            return &f->core.Pages[i];
+    assert(0);
+    return NULL;
+}
+
+/* A table alias has two parents, so shared pruning would leave a dangling
+ * descriptor after freeing its child. Data aliases must remain allowed. */
+static void duplicate_table_parent(void)
+{
+    struct fixture f;
+    unsigned long long h;
+    unsigned int live;
+    start(&f);
+    assert(hv_agx_retained_map(&f.core, 1, VA, IPA, PAGE, &h) == 0);
+    fixture_page(&f, f.core.Roots.Ttbr0PhysicalAddress)->Entries[0] = f.retained[2];
+    live = f.live;
+    assert(hv_agx_retained_close(&f.core, 1, 1) == HV_AGX_RETAINED_TAINTED);
+    assert(f.live == live && f.core.MappingCount == 1);
+    discard_tainted_fixture(&f);
+}
+
+/* All entry points must reject malformed low and high intermediate entries
+ * before shared UAT can interpret only their PA, mutate them, or prune pages. */
+static void both_halves_malformed(void)
+{
+    unsigned int half, depth, corruption, operation;
+    for (half = 0; half < 2; ++half)
+    for (depth = 0; depth < 2; ++depth)
+    for (corruption = 0; corruption < 5; ++corruption)
+    for (operation = 0; operation < 5; ++operation) {
+        struct fixture f;
+        unsigned long long va = half ? 0x420000000ULL : VA;
+        unsigned long long h, pa = 1, ignored, *entry, invalid;
+        APPLE_AGX_UAT_PAGE *l1, *l2;
+        unsigned int live, released;
+        start(&f);
+        assert(hv_agx_retained_map(&f.core, 1, va, IPA, PAGE, &h) == 0);
+        entry = half ? &fixture_page(&f, f.core.Roots.Ttbr0PhysicalAddress)->Entries[0]
+                     : &f.retained[2];
+        l1 = fixture_page(&f, *entry & 0xffffffc000ULL);
+        l2 = fixture_page(&f, l1->Entries[(va >> 25) & 2047] & 0xffffffc000ULL);
+        if (depth)
+            entry = &l1->Entries[(va >> 25) & 2047];
+        if (operation == 4) {
+            /* Simulate a surviving sibling PTE so UNMAP keeps this path and
+             * absence verification must examine both intermediate levels. */
+            l2->Entries[1] = 3;
+            assert(hv_agx_retained_unmap(&f.core, 1, h, va, IPA, PAGE) == 0);
+            assert(hv_agx_retained_verify_absent(&f.core, 1, h, va, IPA, PAGE) == 0);
+        }
+        invalid = corruption == 0 ? *entry & ~1ULL :
+                  corruption == 1 ? *entry & ~2ULL :
+                  corruption == 2 ? *entry | (1ULL << 55) :
+                  corruption == 3 ? (ROOT_PA + PAGE) | 3ULL :
+                                    f.core.Roots.Ttbr0PhysicalAddress | 3ULL;
+        *entry = invalid;
+        live = f.live;
+        released = f.released;
+        if (operation == 0)
+            assert(hv_agx_retained_map(&f.core, 1, VA + 2 * PAGE, IPA,
+                PAGE, &ignored) == HV_AGX_RETAINED_TAINTED);
+        else if (operation == 1) {
+            assert(hv_agx_retained_query(&f.core, 1, h, va, IPA, PAGE, &pa) ==
+                HV_AGX_RETAINED_TAINTED);
+            assert(pa == 0);
+        } else if (operation == 2)
+            assert(hv_agx_retained_unmap(&f.core, 1, h, va, IPA, PAGE) ==
+                HV_AGX_RETAINED_TAINTED);
+        else if (operation == 3)
+            assert(hv_agx_retained_close(&f.core, 1, 1) == HV_AGX_RETAINED_TAINTED);
+        else
+            assert(hv_agx_retained_verify_absent(&f.core, 1, h, va, IPA, PAGE) ==
+                HV_AGX_RETAINED_TAINTED);
+        assert(f.live == live && f.released == released && *entry == invalid);
+        check_prefix(&f);
+        discard_tainted_fixture(&f);
+    }
+}
+
+/* PTE absence means zero, never a resolver error caused by invalid leaf bits. */
+static void absent_nonzero_leaf(void)
+{
+    unsigned int half, invalid;
+    for (half = 0; half < 2; ++half)
+    for (invalid = 0; invalid < 2; ++invalid) {
+        struct fixture f;
+        APPLE_AGX_UAT_PAGE *root, *l1, *l2;
+        unsigned long long va = half ? 0x420000000ULL : VA, h, saved;
+        start(&f);
+        assert(hv_agx_retained_map(&f.core, 1, va, IPA, PAGE, &h) == 0);
+        root = fixture_page(&f, half ? f.core.Roots.Ttbr0PhysicalAddress : ROOT_PA);
+        l1 = fixture_page(&f, root->Entries[half ? 0 : 2] & 0xffffffc000ULL);
+        l2 = fixture_page(&f, l1->Entries[(va >> 25) & 2047] & 0xffffffc000ULL);
+        saved = l2->Entries[0];
+        l2->Entries[1] = 3;
+        assert(hv_agx_retained_unmap(&f.core, 1, h, va, IPA, PAGE) == 0);
+        assert(hv_agx_retained_verify_absent(&f.core, 1, h, va, IPA, PAGE) == 0);
+        l2->Entries[0] = invalid ? saved & ~3ULL : saved;
+        assert(hv_agx_retained_verify_absent(&f.core, 1, h, va, IPA, PAGE) ==
+            HV_AGX_RETAINED_OWNERSHIP);
+        assert(l2->Entries[0] == (invalid ? saved & ~3ULL : saved));
+        discard_tainted_fixture(&f);
+    }
+}
+
+/* Failure of either low-alias table allocation must unwind only the new
+ * descendants, preserve high/system mappings, and permit a later retry. */
+static void low_alias_rollback(void)
+{
+    unsigned int fail;
+    for (fail = 1; fail <= 2; ++fail) {
+        struct fixture f;
+        unsigned long long high, low, pa;
+        unsigned int live;
+        start(&f);
+        assert(hv_agx_retained_map(&f.core, 1, VA, IPA, PAGE, &high) == 0);
+        live = f.live;
+        f.fail_at = f.allocated + fail;
+        assert(hv_agx_retained_map(&f.core, 1, 0x420000000ULL, IPA, PAGE, &low) ==
+            HV_AGX_RETAINED_ALLOCATION);
+        assert(f.live == live && f.core.MappingCount == 1 && !low);
+        assert(!fixture_page(&f, f.core.Roots.Ttbr0PhysicalAddress)->Entries[0]);
+        assert(hv_agx_retained_query(&f.core, 1, high, VA, IPA, PAGE, &pa) == 0 && pa == PA);
+        check_prefix(&f);
+        f.fail_at = 0;
+        assert(hv_agx_retained_map(&f.core, 1, 0x420000000ULL, IPA, PAGE, &low) == 0);
+        assert(hv_agx_retained_close(&f.core, 1, 1) == 0 && !f.live);
+    }
+}
+
+/* Class arenas are read-only broker capabilities for the current retained-root
+ * lifetime.  They cannot authorize native/private mappings or survive CLOSE. */
+static void class_arenas(void)
+{
+    struct fixture f;
+    AGX_RR_ARENA_DESCRIPTOR shared = {0}, timestamp = {0}, command = {0};
+    unsigned long long shared_handle, timestamp_handle, command_handle, ignored, pa;
+    initialize(&f);
+    assert(prepare(&f, 1) == HV_AGX_RETAINED_OK);
+    assert(hv_agx_retained_query_arena(&f.core, 1, AGX_RR_ARENA_SHARED,
+                                        &shared) == HV_AGX_RETAINED_STATE);
+    firmware_boot(&f);
+    assert(hv_agx_retained_activate(&f.core) == HV_AGX_RETAINED_OK);
+    assert(hv_agx_retained_map(&f.core, 1, SHARED_VA, IPA, PAGE, &ignored) ==
+           HV_AGX_RETAINED_RANGE);
+    assert(hv_agx_retained_map(&f.core, 1, COMMAND_VA, IPA, PAGE, &ignored) ==
+           HV_AGX_RETAINED_RANGE);
+    assert(hv_agx_retained_query_arena(&f.core, 0, AGX_RR_ARENA_SHARED,
+                                        &shared) == HV_AGX_RETAINED_STATE);
+    assert(hv_agx_retained_query_arena(&f.core, 1, 0, &shared) ==
+           HV_AGX_RETAINED_RANGE);
+    assert(hv_agx_retained_query_arena(&f.core, 1, 99, &shared) ==
+           HV_AGX_RETAINED_RANGE);
+    assert(hv_agx_retained_query_arena(&f.core, 1, AGX_RR_ARENA_SHARED,
+                                        &shared) == HV_AGX_RETAINED_OK);
+    assert(shared.Version == AGX_RR_ARENA_VERSION);
+    assert(shared.Class == AGX_RR_ARENA_SHARED);
+    assert(shared.Va == SHARED_VA && shared.Bytes == 0x01000000ULL);
+    assert(hv_agx_retained_query_arena(&f.core, 1, AGX_RR_ARENA_TIMESTAMP,
+                                        &timestamp) == HV_AGX_RETAINED_OK);
+    assert(timestamp.Version == AGX_RR_ARENA_VERSION);
+    assert(timestamp.Class == AGX_RR_ARENA_TIMESTAMP);
+    assert(timestamp.Va == TIMESTAMP_VA && timestamp.Bytes == 0x01000000ULL);
+    assert(hv_agx_retained_query_arena(&f.core, 1, AGX_RR_ARENA_COMMAND,
+                                        &command) == HV_AGX_RETAINED_OK);
+    assert(command.Version == AGX_RR_ARENA_VERSION);
+    assert(command.Class == AGX_RR_ARENA_COMMAND);
+    assert(command.Va == COMMAND_VA && command.Bytes == 0x01000000ULL);
+    assert(shared.Va + shared.Bytes <= timestamp.Va);
+    assert(hv_agx_retained_map(&f.core, 1, shared.Va - PAGE, IPA, PAGE,
+                                &ignored) == HV_AGX_RETAINED_RANGE);
+    assert(hv_agx_retained_map(&f.core, 1, shared.Va + shared.Bytes, IPA,
+                                PAGE, &ignored) == HV_AGX_RETAINED_RANGE);
+    assert(hv_agx_retained_map(&f.core, 1, shared.Va, IPA, PAGE,
+                                &shared_handle) == HV_AGX_RETAINED_OK);
+    assert(hv_agx_retained_map(&f.core, 1, timestamp.Va, IPA + PAGE, PAGE,
+                                &timestamp_handle) == HV_AGX_RETAINED_OK);
+    assert(hv_agx_retained_map(&f.core, 1, command.Va, IPA + 2 * PAGE, PAGE,
+                                &command_handle) == HV_AGX_RETAINED_OK);
+    assert(hv_agx_retained_query(&f.core, 1, shared_handle, shared.Va, IPA,
+                                  PAGE, &pa) == HV_AGX_RETAINED_OK && pa == PA);
+    assert(hv_agx_retained_unmap(&f.core, 1, timestamp_handle, timestamp.Va,
+                                  IPA + PAGE, PAGE) == HV_AGX_RETAINED_OK);
+    assert(hv_agx_retained_unmap(&f.core, 1, command_handle, command.Va,
+                                  IPA + 2 * PAGE, PAGE) == HV_AGX_RETAINED_OK);
+    assert(hv_agx_retained_unmap(&f.core, 1, shared_handle, shared.Va, IPA,
+                                  PAGE) == HV_AGX_RETAINED_OK);
+    check_prefix(&f);
+    assert(f.core.Roots.Ttbr1PhysicalAddress == ROOT_PA);
+    assert(hv_agx_retained_close(&f.core, 1, 1) == HV_AGX_RETAINED_OK);
+    assert(prepare(&f, 2) == HV_AGX_RETAINED_OK);
+    firmware_boot(&f);
+    assert(hv_agx_retained_activate(&f.core) == HV_AGX_RETAINED_OK);
+    assert(hv_agx_retained_map(&f.core, 2, SHARED_VA, IPA, PAGE, &ignored) ==
+           HV_AGX_RETAINED_RANGE);
+    assert(hv_agx_retained_map(&f.core, 2, COMMAND_VA, IPA, PAGE, &ignored) ==
+           HV_AGX_RETAINED_RANGE);
+    assert(hv_agx_retained_close(&f.core, 2, 1) == HV_AGX_RETAINED_OK);
+    assert(!f.live);
+}
+
 int main(void)
 {
+    class_arenas();
+    production_inventory();
+    absent_receipt();
+    duplicate_table_parent();
+    both_halves_malformed();
+    absent_nonzero_leaf();
+    low_alias_rollback();
     lifetime();
     rejection();
     rollback();

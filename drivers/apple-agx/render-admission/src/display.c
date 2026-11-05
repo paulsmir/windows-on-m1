@@ -1,5 +1,38 @@
 #include "render_admission.h"
 
+C_ASSERT(sizeof(DXGKARG_UPDATEMONITORLINKINFO) == 16);
+
+/* Fixed J313 mode2 measured from the retained DCP owner in EXP495.
+ * Active2560x1600,total2642x1682; fixed16:16 refresh3932151 derives266630kHz
+ * at the reference clock precision. This describes the inherited mode only. */
+static VOID AdmissionFillPanelSignalInfo(D3DKMDT_VIDEO_SIGNAL_INFO *Signal) {
+  RtlZeroMemory(Signal, sizeof(*Signal));
+  Signal->VideoStandard = D3DKMDT_VSS_OTHER;
+  Signal->ActiveSize.cx = 2560u;
+  Signal->ActiveSize.cy = 1600u;
+  Signal->TotalSize.cx = 2642u;
+  Signal->TotalSize.cy = 1682u;
+  Signal->PixelRate = 266630000ULL;
+  Signal->HSyncFreq.Numerator = 266630000u;
+  Signal->HSyncFreq.Denominator = 2642u;
+  Signal->VSyncFreq.Numerator = 266630000u;
+  Signal->VSyncFreq.Denominator = 2642u * 1682u;
+  Signal->ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiUpdateMonitorLinkInfo(
+    CONST HANDLE Adapter, DXGKARG_UPDATEMONITORLINKINFO *Args) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  if (context == NULL || !context->Started || Args == NULL ||
+      Args->VideoPresentTargetId != 0u)
+    return STATUS_INVALID_PARAMETER;
+  /* Answer the connection-lifetime query without advertising optional link
+   * features. UsageHints are OS input, not capability bits to echo back. */
+  Args->MonitorLinkInfo.Capabilities.Value = 0u;
+  Args->MonitorLinkInfo.DitheringSupport.Value = 0u;
+  return STATUS_SUCCESS;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSetPalette(
     HANDLE Adapter, const DXGKARG_SETPALETTE *SetPalette) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
@@ -19,16 +52,31 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildRelations(
     PVOID MiniportDeviceContext, PDXGK_CHILD_DESCRIPTOR ChildRelations,
     ULONG ChildRelationsSize) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  NTSTATUS status = STATUS_SUCCESS;
 
-  if (context == NULL || !context->Started || ChildRelations == NULL)
+  if (context == NULL)
     return STATUS_INVALID_PARAMETER;
-  if (ChildRelationsSize < 2 * sizeof(DXGK_CHILD_DESCRIPTOR))
-    return STATUS_BUFFER_TOO_SMALL;
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                            AdmissionDisplayDdiQueryChildRelations, 1u,
+                            STATUS_PENDING);
+  if (!context->Started || ChildRelations == NULL)
+    status = STATUS_INVALID_PARAMETER;
+  else if (ChildRelationsSize < 2 * sizeof(DXGK_CHILD_DESCRIPTOR))
+    status = STATUS_BUFFER_TOO_SMALL;
+  if (!NT_SUCCESS(status)) {
+    AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                              AdmissionDisplayDdiQueryChildRelations, 2u,
+                              status);
+    return status;
+  }
 
   RtlZeroMemory(ChildRelations, ChildRelationsSize);
   ChildRelations[0].ChildDeviceType = TypeVideoOutput;
   ChildRelations[0].ChildCapabilities.HpdAwareness =
-      HpdAwarenessAlwaysConnected;
+      /* J313 is a portable computer.  The integrated panel follows the
+       * documented portable-laptop contract: dxgkrnl may query connection
+       * status through DxgkDdiQueryChildStatus. */
+      HpdAwarenessInterruptible;
   ChildRelations[0].ChildCapabilities.Type.VideoOutput.InterfaceTechnology =
       D3DKMDT_VOT_INTERNAL;
   ChildRelations[0]
@@ -38,33 +86,54 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildRelations(
       FALSE;
   ChildRelations[0].AcpiUid = 0;
   ChildRelations[0].ChildUid = 0;
-  return STATUS_SUCCESS;
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                            AdmissionDisplayDdiQueryChildRelations, 2u,
+                            status);
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildStatus(
     PVOID MiniportDeviceContext, PDXGK_CHILD_STATUS ChildStatus,
     BOOLEAN NonDestructiveOnly) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  NTSTATUS status = STATUS_SUCCESS;
 
   UNREFERENCED_PARAMETER(NonDestructiveOnly);
-  if (context == NULL || !context->Started || ChildStatus == NULL ||
-      ChildStatus->ChildUid != 0)
+  if (context == NULL)
     return STATUS_INVALID_PARAMETER;
-  if (ChildStatus->Type != StatusConnection)
-    return STATUS_NOT_SUPPORTED;
-  ChildStatus->HotPlug.Connected = TRUE;
-  return STATUS_SUCCESS;
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                            AdmissionDisplayDdiQueryChildStatus, 1u,
+                            STATUS_PENDING);
+  if (!context->Started || ChildStatus == NULL || ChildStatus->ChildUid != 0)
+    status = STATUS_INVALID_PARAMETER;
+  else if (ChildStatus->Type != StatusConnection)
+    status = STATUS_NOT_SUPPORTED;
+  else
+    ChildStatus->HotPlug.Connected = TRUE;
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                            AdmissionDisplayDdiQueryChildStatus, 2u, status);
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryDeviceDescriptor(
     PVOID MiniportDeviceContext, ULONG ChildUid,
     PDXGK_DEVICE_DESCRIPTOR DeviceDescriptor) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  NTSTATUS status;
 
-  if (context == NULL || !context->Started || DeviceDescriptor == NULL ||
-      ChildUid != 0)
+  if (context == NULL)
     return STATUS_INVALID_PARAMETER;
-  return STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED;
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                            AdmissionDisplayDdiQueryDeviceDescriptor, 1u,
+                            STATUS_PENDING);
+  if (!context->Started || DeviceDescriptor == NULL || ChildUid != 0)
+    status = STATUS_INVALID_PARAMETER;
+  else
+    status = STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED;
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                            AdmissionDisplayDdiQueryDeviceDescriptor, 2u,
+                            status);
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSetPointerPosition(
@@ -276,24 +345,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
                                                         &targetMode);
       if (!NT_SUCCESS(status))
         goto Exit;
-      RtlZeroMemory(targetMode, sizeof(*targetMode));
-      targetMode->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
-      targetMode->VideoSignalInfo.TotalSize.cx = 2560;
-      targetMode->VideoSignalInfo.TotalSize.cy = 1600;
-      targetMode->VideoSignalInfo.ActiveSize =
-          targetMode->VideoSignalInfo.TotalSize;
-      targetMode->VideoSignalInfo.VSyncFreq.Numerator =
-          D3DKMDT_FREQUENCY_NOTSPECIFIED;
-      targetMode->VideoSignalInfo.VSyncFreq.Denominator =
-          D3DKMDT_FREQUENCY_NOTSPECIFIED;
-      targetMode->VideoSignalInfo.HSyncFreq.Numerator =
-          D3DKMDT_FREQUENCY_NOTSPECIFIED;
-      targetMode->VideoSignalInfo.HSyncFreq.Denominator =
-          D3DKMDT_FREQUENCY_NOTSPECIFIED;
-      targetMode->VideoSignalInfo.PixelRate =
-          D3DKMDT_FREQUENCY_NOTSPECIFIED;
-      targetMode->VideoSignalInfo.ScanLineOrdering =
-          D3DDDI_VSSLO_PROGRESSIVE;
+      /* The manager initializes Id and the V1 MinimumVSyncFreq sentinel.
+       * Clearing the whole WDDM2.9+ object turns that sentinel into an
+       * unsupported minimum-refresh request. Only fill our mode fields. */
+      AdmissionFillPanelSignalInfo(&targetMode->VideoSignalInfo);
       targetMode->Preference = D3DKMDT_MP_PREFERRED;
       status = targetSetInterface->pfnAddMode(targetSet, targetMode);
       if (!NT_SUCCESS(status))
@@ -545,21 +600,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRecommendMonitorModes(
     return status;
 
   RtlZeroMemory(monitorMode, sizeof(*monitorMode));
-  monitorMode->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
-  monitorMode->VideoSignalInfo.TotalSize.cx = 2560;
-  monitorMode->VideoSignalInfo.TotalSize.cy = 1600;
-  monitorMode->VideoSignalInfo.ActiveSize =
-      monitorMode->VideoSignalInfo.TotalSize;
-  monitorMode->VideoSignalInfo.VSyncFreq.Numerator =
-      D3DKMDT_FREQUENCY_NOTSPECIFIED;
-  monitorMode->VideoSignalInfo.VSyncFreq.Denominator =
-      D3DKMDT_FREQUENCY_NOTSPECIFIED;
-  monitorMode->VideoSignalInfo.HSyncFreq.Numerator =
-      D3DKMDT_FREQUENCY_NOTSPECIFIED;
-  monitorMode->VideoSignalInfo.HSyncFreq.Denominator =
-      D3DKMDT_FREQUENCY_NOTSPECIFIED;
-  monitorMode->VideoSignalInfo.PixelRate = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-  monitorMode->VideoSignalInfo.ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
+  AdmissionFillPanelSignalInfo(&monitorMode->VideoSignalInfo);
   monitorMode->Origin = D3DKMDT_MCO_DRIVER;
   monitorMode->Preference = D3DKMDT_MP_PREFERRED;
   monitorMode->ColorBasis = D3DKMDT_CB_SRGB;
@@ -610,10 +651,55 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
     CONST HANDLE MiniportDeviceContext,
     CONST DXGKARG_SETVIDPNSOURCEADDRESS *SetVidPnSourceAddress) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  ADMISSION_SOURCE_ADDRESS_RECEIPT *receipt = NULL;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  ADMISSION_STANDARD_PRESENT_EVENT traceEvent;
+#endif
 
   if (context == NULL)
     return status;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  RtlZeroMemory(&traceEvent, sizeof(traceEvent));
+  traceEvent.Kind = AdmissionStandardPresentEventSourceAddress;
+  traceEvent.Phase = AdmissionStandardPresentPhaseEntry;
+  traceEvent.Irql = KeGetCurrentIrql();
+  if (SetVidPnSourceAddress != NULL) {
+    traceEvent.Flags = SetVidPnSourceAddress->Flags.Value;
+    traceEvent.SourceId = SetVidPnSourceAddress->VidPnSourceId;
+    traceEvent.Segment = SetVidPnSourceAddress->PrimarySegment;
+    traceEvent.PrimaryAddress =
+        (ULONGLONG)SetVidPnSourceAddress->PrimaryAddress.QuadPart;
+    traceEvent.AllocationToken =
+        (ULONGLONG)(ULONG_PTR)SetVidPnSourceAddress->hAllocation;
+  }
+  AdmissionStandardPresentTraceRecordWindows(context, &traceEvent);
+#endif
+  /* A single caller owns the immutable receipt; no wait, allocation, registry
+   * call or deferred work is introduced into this potentially DIRQL path. */
+  if (InterlockedCompareExchange(&context->SourceAddressReceiptState, 1, 0) == 0) {
+    receipt = &context->SourceAddressReceipt;
+    receipt->Version = 1u;
+    receipt->Bytes = sizeof(*receipt);
+    receipt->Irql = KeGetCurrentIrql();
+    receipt->ArgsPresent = SetVidPnSourceAddress != NULL;
+    if (SetVidPnSourceAddress != NULL) {
+      receipt->SourceId = SetVidPnSourceAddress->VidPnSourceId;
+      receipt->PrimarySegment = SetVidPnSourceAddress->PrimarySegment;
+      receipt->PrimaryAddress = SetVidPnSourceAddress->PrimaryAddress.QuadPart;
+      receipt->Allocation = (ULONGLONG)(ULONG_PTR)SetVidPnSourceAddress->hAllocation;
+      receipt->Flags = SetVidPnSourceAddress->Flags.Value;
+      receipt->ContextCount = SetVidPnSourceAddress->ContextCount;
+    }
+    receipt->Width = context->CommittedWidth;
+    receipt->Height = context->CommittedHeight;
+    receipt->Stride = context->CommittedStride;
+    receipt->Format = context->CommittedFormat;
+    receipt->Started = context->Started;
+    receipt->DisplayActive = context->DisplayActive;
+    receipt->SourceVisible = context->SourceVisible;
+    receipt->ScanoutState = AdmissionScanoutReceiptState(context);
+  }
   InterlockedExchange(&context->SourceAddressStage, 1);
   InterlockedExchange(&context->SourceAddressStatus, (LONG)STATUS_PENDING);
   if (SetVidPnSourceAddress != NULL && context->Started &&
@@ -622,10 +708,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
       context->CommittedWidth == 2560 && context->CommittedHeight == 1600 &&
       context->CommittedStride == 10240 &&
       context->CommittedFormat == D3DDDIFMT_A8R8G8B8) {
+    if (receipt != NULL)
+      receipt->QueueCalled = 1u;
     status = AdmissionScanoutQueuePresent(context, SetVidPnSourceAddress);
   }
   InterlockedExchange(&context->SourceAddressStatus, (LONG)status);
   InterlockedExchange(&context->SourceAddressStage, 2);
+  if (receipt != NULL) {
+    receipt->Status = (ULONG)status;
+    InterlockedExchange(&context->SourceAddressReceiptState, 2);
+  }
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  traceEvent.Phase = AdmissionStandardPresentPhaseExit;
+  traceEvent.Status = (ULONG)status;
+  AdmissionStandardPresentTraceRecordWindows(context, &traceEvent);
+#endif
   return status;
 }
 
@@ -640,3 +737,61 @@ AdmissionDdiStopDeviceAndReleasePostDisplayOwnership(
   *DisplayInfo = context->PostDisplayInformation;
   return AdmissionDdiStopDevice(context);
 }
+
+#define ADMISSION_TRACE_DISPLAY_DDI(Name, Implementation, DdiId, ArgType)     \
+  _Use_decl_annotations_ NTSTATUS Name(CONST HANDLE MiniportDeviceContext,   \
+                                        ArgType Args) {                       \
+    ADMISSION_CONTEXT *context =                                             \
+        (ADMISSION_CONTEXT *)MiniportDeviceContext;                           \
+    NTSTATUS status;                                                          \
+    if (context != NULL)                                                      \
+      AdmissionFlushSourceAddressReceipt(context);                           \
+    if (context != NULL)                                                      \
+      AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, DdiId, 1u,    \
+                                STATUS_PENDING);                              \
+    status = Implementation(MiniportDeviceContext, Args);                     \
+    if (context != NULL)                                                      \
+      AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, DdiId, 2u,    \
+                                status);                                      \
+    return status;                                                            \
+  }
+
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiIsSupportedVidPn,
+                            AdmissionDdiIsSupportedVidPn,
+                            AdmissionDisplayDdiIsSupportedVidPn,
+                            DXGKARG_ISSUPPORTEDVIDPN *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiRecommendFunctionalVidPn,
+                            AdmissionDdiRecommendFunctionalVidPn,
+                            AdmissionDisplayDdiRecommendFunctionalVidPn,
+                            const DXGKARG_RECOMMENDFUNCTIONALVIDPN *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiEnumVidPnCofuncModality,
+                            AdmissionDdiEnumVidPnCofuncModality,
+                            AdmissionDisplayDdiEnumVidPnCofuncModality,
+                            const DXGKARG_ENUMVIDPNCOFUNCMODALITY *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiSetVidPnSourceVisibility,
+                            AdmissionDdiSetVidPnSourceVisibility,
+                            AdmissionDisplayDdiSetVidPnSourceVisibility,
+                            const DXGKARG_SETVIDPNSOURCEVISIBILITY *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiCommitVidPn,
+                            AdmissionDdiCommitVidPn,
+                            AdmissionDisplayDdiCommitVidPn,
+                            const DXGKARG_COMMITVIDPN *)
+ADMISSION_TRACE_DISPLAY_DDI(
+    AdmissionTraceDdiUpdateActiveVidPnPresentPath,
+    AdmissionDdiUpdateActiveVidPnPresentPath,
+    AdmissionDisplayDdiUpdateActiveVidPnPresentPath,
+    const DXGKARG_UPDATEACTIVEVIDPNPRESENTPATH *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiRecommendMonitorModes,
+                            AdmissionDdiRecommendMonitorModes,
+                            AdmissionDisplayDdiRecommendMonitorModes,
+                            const DXGKARG_RECOMMENDMONITORMODES *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiQueryVidPnHWCapability,
+                            AdmissionDdiQueryVidPnHWCapability,
+                            AdmissionDisplayDdiQueryVidPnHWCapability,
+                            DXGKARG_QUERYVIDPNHWCAPABILITY *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiUpdateMonitorLinkInfo,
+                            AdmissionDdiUpdateMonitorLinkInfo,
+                            AdmissionDisplayDdiUpdateMonitorLinkInfo,
+                            DXGKARG_UPDATEMONITORLINKINFO *)
+
+#undef ADMISSION_TRACE_DISPLAY_DDI

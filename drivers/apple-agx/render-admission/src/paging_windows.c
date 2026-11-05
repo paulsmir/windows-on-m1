@@ -27,7 +27,7 @@ static NTSTATUS AdmissionEncodePaging(
   return STATUS_SUCCESS;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
+static NTSTATUS AdmissionBuildPagingBuffer(
     HANDLE Adapter, DXGKARG_BUILDPAGINGBUFFER *Args) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   APPLE_AGX_PHYSICAL_PAGING_PLAN plan;
@@ -57,12 +57,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
             ADMISSION_MEMORY_APERTURE_SEGMENT ||
         Args->UnmapApertureSegment.OffsetInPages >
             (MAXULONGLONG >> PAGE_SHIFT) ||
-        Args->UnmapApertureSegment.NumberOfPages !=
-            (SIZE_T)APPLE_AGX_SYSTEM_PAGES_PER_WDDM_PAGE)
+        Args->UnmapApertureSegment.NumberOfPages > MAXULONG)
       return STATUS_INVALID_PARAMETER;
     return AdmissionMemoryRuntimeUnmapAperture(
         context,
         (ULONGLONG)Args->UnmapApertureSegment.OffsetInPages << PAGE_SHIFT,
+        (UINT)Args->UnmapApertureSegment.NumberOfPages,
         (ULONGLONG)Args->UnmapApertureSegment.DummyPage.QuadPart);
   case DXGK_OPERATION_TRANSFER:
     if (Args->Transfer.Flags.Reserved != 0u ||
@@ -114,6 +114,59 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
   return AdmissionEncodePaging(Args, &plan, mdl);
 }
 
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+static VOID AdmissionPagingBuildTraceWrite(
+    ADMISSION_CONTEXT *Context, ULONG Field, ULONG Value) {
+  volatile ULONG64 *request;
+  volatile ULONG *command;
+  if (Context == NULL || Context->BrokerBase == NULL)
+    return;
+  request = (volatile ULONG64 *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_REQUEST_SEQUENCE);
+  command = (volatile ULONG *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_COMMAND);
+  WRITE_REGISTER_ULONG64(
+      request, AdmissionPagingBuildTraceWord(Field, Value));
+  WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
+}
+
+static VOID AdmissionPagingBuildTrace(
+    ADMISSION_CONTEXT *Context, ULONG Irql, ULONG Operation,
+    ULONG DmaSize, ULONG PrivateSize, NTSTATUS Status) {
+  if (Context == NULL || Context->BrokerBase == NULL ||
+      InterlockedCompareExchange(
+          &Context->PagingCorrelationArmed, 0, 0) == 0 ||
+      InterlockedCompareExchange(
+          &Context->PagingBuildTraceClaimed, 1, 0) != 0)
+    return;
+  AdmissionPagingBuildTraceWrite(Context, 1u, 1u);
+  AdmissionPagingBuildTraceWrite(Context, 2u, Irql);
+  AdmissionPagingBuildTraceWrite(Context, 3u, Operation);
+  AdmissionPagingBuildTraceWrite(Context, 4u, DmaSize);
+  AdmissionPagingBuildTraceWrite(Context, 5u, PrivateSize);
+  AdmissionPagingBuildTraceWrite(Context, 6u, (ULONG)Status);
+}
+#else
+#define AdmissionPagingBuildTrace(Context, Irql, Operation, DmaSize, PrivateSize, Status) \
+  do {                                                                                     \
+    (void)(Context); (void)(Irql); (void)(Operation); (void)(DmaSize);                     \
+    (void)(PrivateSize); (void)(Status);                                                    \
+  } while (0)
+#endif
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
+    HANDLE Adapter, DXGKARG_BUILDPAGINGBUFFER *Args) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  ULONG irql = (ULONG)KeGetCurrentIrql();
+  ULONG operation = Args == NULL ? MAXULONG : (ULONG)Args->Operation;
+  ULONG dmaSize = Args == NULL ? 0u : Args->DmaSize;
+  ULONG privateSize = Args == NULL ? 0u : Args->DmaBufferPrivateDataSize;
+  NTSTATUS status = AdmissionBuildPagingBuffer(Adapter, Args);
+  AdmissionPagingBuildTrace(
+      context, irql, operation, dmaSize, privateSize, status);
+  return status;
+}
+
 typedef struct _ADMISSION_PAGING_NOTIFICATION {
   ADMISSION_CONTEXT *Context;
   UINT Fence;
@@ -147,6 +200,11 @@ static BOOLEAN AdmissionPagingNotifyAtInterrupt(PVOID Opaque) {
   }
   context->Interface.DxgkCbNotifyInterrupt(
       context->Interface.DeviceHandle, &data);
+  if (InterlockedCompareExchange(&context->PresentTransferState, 2, 2) == 2 &&
+      context->PresentTransferReceipt.Fence == notification->Fence) {
+    context->PresentTransferReceipt.NotifyInterrupt = 1u;
+    InterlockedExchange(&context->PresentTransferState, 3);
+  }
   InterlockedExchange(&context->PagingDpcPending, 1);
   (void)context->Interface.DxgkCbQueueDpc(
       context->Interface.DeviceHandle);
@@ -160,16 +218,25 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
   BOOLEAN synchronized = FALSE;
   NTSTATUS status = STATUS_SUCCESS;
   ULONG index;
+  ULONGLONG copiedBytes = 0ULL;
+  KIRQL oldIrql;
 
   UNREFERENCED_PARAMETER(DeviceObject);
   if (context == NULL)
     return;
-  for (index = 0u; index < context->PagingRecordCount; ++index) {
+  InterlockedIncrement(&context->PagingWorkersActive);
+  if (context->PresentCopyBytes != 0u)
+    status = AdmissionMemoryRuntimeExecutePresent(context,
+        context->PresentCopyCommand, context->PresentCopyBytes, &copiedBytes);
+  for (index = 0u; NT_SUCCESS(status) && index < context->PagingRecordCount; ++index) {
     status = AdmissionMemoryRuntimeExecutePaging(
         context, &context->PagingRecords[index]);
     if (!NT_SUCCESS(status))
       break;
   }
+  if (context->PresentCopyBytes != 0u)
+    AdmissionRecordPresentTransfer(context, context->PagingFence,
+        context->PresentCopyCommand, context->PresentCopyBytes, copiedBytes, status);
   if (NT_SUCCESS(status) &&
       !AdmissionSchedulerRecordCompletion(context, context->PagingFence))
     status = STATUS_INVALID_DEVICE_STATE;
@@ -180,11 +247,33 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
   status = context->Interface.DxgkCbSynchronizeExecution(
       context->Interface.DeviceHandle, AdmissionPagingNotifyAtInterrupt,
       &notification, 0u, &synchronized);
+  KeAcquireSpinLock(&context->PagingLock, &oldIrql);
   if (!NT_SUCCESS(status) || !synchronized) {
-    InterlockedExchange(&context->PagingDpcPending, 0);
-    InterlockedExchange(&context->PagingPending, 0);
-    KeSetEvent(&context->PagingIdle, IO_NO_INCREMENT, FALSE);
+    InterlockedExchange(&context->SchedulerFaulted, 1);
+    if (context->PagingFence == notification.Fence) {
+      InterlockedExchange(&context->PagingDpcPending, 0);
+      InterlockedExchange(&context->PagingPending, 0);
+      context->PagingRecordCount = context->PresentCopyBytes = 0u;
+    }
   }
+  InterlockedDecrement(&context->PagingWorkersActive);
+  AdmissionPagingUpdateIdleLocked(context);
+  KeReleaseSpinLock(&context->PagingLock, oldIrql);
+}
+
+_Use_decl_annotations_ void AdmissionPagingQueueActive(ADMISSION_CONTEXT *Context) {
+  IoQueueWorkItem(Context->PagingWorkItem, AdmissionPagingWorker, DelayedWorkQueue, Context);
+}
+
+_Use_decl_annotations_ void AdmissionPagingUpdateIdleLocked(ADMISSION_CONTEXT *Context) {
+  if (Context->CpuQueueCount == 0u &&
+      InterlockedCompareExchange(&Context->PagingPending, 0, 0) == 0 &&
+      InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) == 0 &&
+      InterlockedCompareExchange(&Context->PagingWorkersActive, 0, 0) == 0 &&
+      InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) == 0)
+    KeSetEvent(&Context->PagingIdle, IO_NO_INCREMENT, FALSE);
+  else
+    KeClearEvent(&Context->PagingIdle);
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionPagingStart(
@@ -204,6 +293,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingStart(
   if (Context->PagingWorkItem == NULL)
     return STATUS_INSUFFICIENT_RESOURCES;
   Context->PagingRecordCount = 0u;
+  Context->PresentCopyBytes = 0u;
+  Context->CpuQueueHead = Context->CpuQueueCount = Context->DispatchedFence = 0u;
   Context->PagingFence = 0u;
   Context->PagingLastSubmittedFence = 0u;
   Context->PagingLastCompletedFence = 0u;
@@ -211,6 +302,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingStart(
   InterlockedExchange(&Context->PagingPending, 0);
   InterlockedExchange(&Context->PagingStopping, 0);
   InterlockedExchange(&Context->PagingDpcPending, 0);
+  InterlockedExchange(&Context->PagingWorkersActive, 0);
+  InterlockedExchange(&Context->PagingDpcsActive, 0);
   if (!AdmissionMemoryMarkPagingReady(&Context->Memory)) {
     IoFreeWorkItem(Context->PagingWorkItem);
     Context->PagingWorkItem = NULL;
@@ -225,21 +318,32 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingStop(
     ADMISSION_CONTEXT *Context) {
   LARGE_INTEGER timeout;
   NTSTATUS status;
+  KIRQL oldIrql;
+  PIO_WORKITEM workItem;
   if (Context == NULL)
     return STATUS_INVALID_PARAMETER;
   if (Context->PagingWorkItem == NULL)
     return STATUS_SUCCESS;
   InterlockedExchange(&Context->PagingStopping, 1);
+  AdmissionDispatchQueuedWork(Context);
   timeout.QuadPart = -20000000LL;
   status = KeWaitForSingleObject(&Context->PagingIdle, Executive, KernelMode,
                                  FALSE, &timeout);
+  KeAcquireSpinLock(&Context->PagingLock, &oldIrql);
   if (!NT_SUCCESS(status) ||
+      Context->CpuQueueCount != 0u ||
       InterlockedCompareExchange(&Context->PagingPending, 0, 0) != 0 ||
-      InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) != 0)
+      InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) != 0 ||
+      InterlockedCompareExchange(&Context->PagingWorkersActive, 0, 0) != 0 ||
+      InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) != 0) {
+    KeReleaseSpinLock(&Context->PagingLock, oldIrql);
     return STATUS_DEVICE_BUSY;
-  IoFreeWorkItem(Context->PagingWorkItem);
+  }
+  workItem = Context->PagingWorkItem;
   Context->PagingWorkItem = NULL;
   Context->PagingRecordCount = 0u;
+  KeReleaseSpinLock(&Context->PagingLock, oldIrql);
+  IoFreeWorkItem(workItem);
   (void)InterlockedAnd(&Context->FeatureReadyMask,
                        ~((LONG)APPLE_AGX_WDDM_READY_MEMORY_PAGING));
   return STATUS_SUCCESS;
@@ -247,18 +351,32 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingStop(
 
 _Use_decl_annotations_ VOID AdmissionPagingDpc(
     ADMISSION_CONTEXT *Context) {
+  ULONG completedFence;
+  KIRQL oldIrql;
   if (Context == NULL ||
       InterlockedExchange(&Context->PagingDpcPending, 0) == 0)
     return;
-  if (Context->InterfaceValid &&
-      Context->Interface.DxgkCbNotifyDpc != NULL)
-    Context->Interface.DxgkCbNotifyDpc(
-        Context->Interface.DeviceHandle);
+  InterlockedIncrement(&Context->PagingDpcsActive);
+  KeAcquireSpinLock(&Context->PagingLock, &oldIrql);
+  completedFence = Context->PagingFence;
   if (NT_SUCCESS(Context->PagingCompletionStatus))
-    Context->PagingLastCompletedFence = Context->PagingFence;
+    Context->PagingLastCompletedFence = completedFence;
   Context->PagingRecordCount = 0u;
+  Context->PresentCopyBytes = 0u;
   InterlockedExchange(&Context->PagingPending, 0);
-  KeSetEvent(&Context->PagingIdle, IO_NO_INCREMENT, FALSE);
+  /* Release the completed slot before the OS can submit its successor. The
+   * active DPC counter still prevents teardown while notification is running. */
+  AdmissionPagingUpdateIdleLocked(Context);
+  KeReleaseSpinLock(&Context->PagingLock, oldIrql);
+  if (InterlockedCompareExchange(&Context->PresentTransferState, 3, 3) == 3 &&
+      Context->PresentTransferReceipt.Fence == completedFence) {
+    Context->PresentTransferReceipt.NotifyDpc = 1u;
+    InterlockedExchange(&Context->PresentTransferState, 4);
+  }
+  KeAcquireSpinLock(&Context->PagingLock, &oldIrql);
+  InterlockedDecrement(&Context->PagingDpcsActive);
+  AdmissionPagingUpdateIdleLocked(Context);
+  KeReleaseSpinLock(&Context->PagingLock, oldIrql);
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommand(
@@ -268,12 +386,47 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommand(
   SIZE_T privateBytes;
   UINT dmaBytes;
   UINT count;
-  KIRQL oldIrql;
+  ADMISSION_PRESENT_BLT_COMMAND presentCommand;
+  ULONG privateStage;
+  ULONG route;
+  NTSTATUS status;
+  BOOLEAN trace;
 
   if (context == NULL || Args == NULL)
     return STATUS_INVALID_PARAMETER;
-  if (!Args->Flags.Paging)
-    return AdmissionDdiSubmitRender(context, Args);
+  RtlZeroMemory(&presentCommand, sizeof(presentCommand));
+  privateStage = AdmissionPresentPrivateMissing;
+  if (!Args->Flags.Paging && Args->Flags.Present)
+    privateStage = AdmissionPresentPrivateStage(
+        Args->pDmaBufferPrivateData, Args->DmaBufferPrivateDataSize,
+        &presentCommand);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  else if (!Args->Flags.Paging)
+    privateStage = AdmissionPresentPrivateStage(
+        Args->pDmaBufferPrivateData, Args->DmaBufferPrivateDataSize,
+        &presentCommand);
+#endif
+  trace = AdmissionSubmitTraceBegin(context, Args, privateStage,
+      privateStage == AdmissionPresentPrivateValid ? &presentCommand : NULL);
+  if (!Args->Flags.Paging && Args->Flags.Present &&
+      privateStage == AdmissionPresentPrivateValid) {
+    route = AdmissionSubmitRoutePresent;
+    AdmissionSubmitTraceValueWindows(context, trace,
+        AdmissionSubmitTraceRoute, route);
+    status = AdmissionPresentSubmitTraced(context, Args, trace);
+    AdmissionSubmitTraceValueWindows(context, trace,
+        AdmissionSubmitTraceStatus, (ULONG)status);
+    return status;
+  }
+  if (!Args->Flags.Paging) {
+    route = AdmissionSubmitRouteRender;
+    AdmissionSubmitTraceValueWindows(context, trace,
+        AdmissionSubmitTraceRoute, route);
+    status = AdmissionDdiSubmitRender(context, Args);
+    AdmissionSubmitTraceValueWindows(context, trace,
+        AdmissionSubmitTraceStatus, (ULONG)status);
+    return status;
+  }
   if (!context->Started || Args->Flags.Reserved != 0u ||
       Args->NodeOrdinal != 0u || Args->EngineOrdinal != 0u ||
       Args->SubmissionFenceId == 0u ||
@@ -306,26 +459,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommand(
                                    ADMISSION_MAX_PAGING_RECORDS, dmaBytes))
     return STATUS_INVALID_PARAMETER;
 
-  KeAcquireSpinLock(&context->PagingLock, &oldIrql);
-  if (InterlockedCompareExchange(&context->PagingStopping, 0, 0) != 0 ||
-      InterlockedCompareExchange(&context->PagingPending, 0, 0) != 0 ||
-      !AdmissionPagingFenceCanSubmit(
-          context->PagingLastSubmittedFence, Args->SubmissionFenceId,
-          Args->Flags.Resubmission ? 1u : 0u) ||
-      !AdmissionSchedulerSubmitFence(context, Args->SubmissionFenceId)) {
-    KeReleaseSpinLock(&context->PagingLock, oldIrql);
-    return STATUS_DEVICE_BUSY;
-  }
-  InterlockedExchange(&context->PagingPending, 1);
-  RtlCopyMemory(context->PagingRecords, records,
-                count * sizeof(*records));
-  context->PagingRecordCount = count;
-  context->PagingFence = Args->SubmissionFenceId;
-  context->PagingLastSubmittedFence = Args->SubmissionFenceId;
-  context->PagingCompletionStatus = STATUS_PENDING;
-  KeClearEvent(&context->PagingIdle);
-  KeReleaseSpinLock(&context->PagingLock, oldIrql);
-  IoQueueWorkItem(context->PagingWorkItem, AdmissionPagingWorker,
-                  DelayedWorkQueue, context);
-  return STATUS_SUCCESS;
+  return AdmissionCpuQueueSubmit(context, Args, ADMISSION_CPU_PACKET_PAGING,
+      records, (UINT)privateBytes);
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionPagingSubmitPresent(
+    ADMISSION_CONTEXT *Context, const DXGKARG_SUBMITCOMMAND *Args,
+    const VOID *Command, UINT Bytes) {
+  if (Context == NULL || Args == NULL || Command == NULL || !Bytes ||
+      Bytes > sizeof(Context->PresentCopyCommand) || Context->PagingWorkItem == NULL)
+    return STATUS_INVALID_PARAMETER;
+  return AdmissionCpuQueueSubmit(Context, Args, ADMISSION_CPU_PACKET_PRESENT, Command, Bytes);
 }

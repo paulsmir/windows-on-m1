@@ -90,6 +90,9 @@ APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatPublishJ313Context(
     APPLE_AGX_UAT_PUBLICATION_STATE *State) {
   volatile unsigned char *mapped = 0;
   volatile unsigned char *pairBase;
+#ifdef APPLE_AGX_FULL_CONTEXT0_BROKER
+  if (Context == 0u) return AppleAgxUatPublicationResultInvalidArgument;
+#endif
 
   if (Snapshot == 0 || State == 0 ||
       AppleAgxUatPublicationIoValid(Io) == 0u || State->Active != 0u ||
@@ -122,6 +125,10 @@ APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatPublishJ313Context(
 APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatUnpublishJ313(
     const APPLE_AGX_UAT_PUBLICATION_IO *Io,
     APPLE_AGX_UAT_PUBLICATION_STATE *State) {
+#ifdef APPLE_AGX_FULL_CONTEXT0_BROKER
+  if (State != 0 && State->Context == 0u)
+    return AppleAgxUatPublicationResultInvalidArgument;
+#endif
   if (State == 0 || AppleAgxUatPublicationIoValid(Io) == 0u ||
       State->Active == 0u || State->MappedBase == 0)
     return AppleAgxUatPublicationResultInvalidArgument;

@@ -18,6 +18,15 @@ AppleAgxRtkitSessionAscResult(APPLE_AGX_ASC_RESULT Result) {
   }
 }
 
+static APPLE_AGX_RTKIT_BOOL AppleAgxRtkitSessionMessageIsEventWake(
+    const APPLE_AGX_ASC_MESSAGE *Message) {
+  return Message != APPLE_AGX_RTKIT_SESSION_NULL &&
+                 Message->Endpoint == 0x20u &&
+                 ((Message->Payload >> 48u) & 0xffffu) == 0x42u
+             ? APPLE_AGX_RTKIT_TRUE
+             : APPLE_AGX_RTKIT_FALSE;
+}
+
 static APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionSendOutput(
     const APPLE_AGX_ASC_IO *Io, const APPLE_AGX_RTKIT_BOOT_OUTPUT *Output,
     APPLE_AGX_ASC_U64 DeadlineMs) {
@@ -238,6 +247,44 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionBoot(
     return AppleAgxRtkitSessionForceRunOff(
         Session, Io, AppleAgxRtkitSessionResultTransportFailed);
   return AppleAgxRtkitSessionCompleteManagementBootstrap(Session, Io, DeadlineMs);
+}
+
+APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionHeartbeat(
+    APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
+    APPLE_AGX_ASC_U64 DeadlineMs) {
+  APPLE_AGX_ASC_MESSAGE message;
+  APPLE_AGX_RTKIT_MANAGEMENT decoded;
+  APPLE_AGX_RTKIT_SESSION_RESULT result;
+
+  if (Session == APPLE_AGX_RTKIT_SESSION_NULL ||
+      Io == APPLE_AGX_RTKIT_SESSION_NULL)
+    return AppleAgxRtkitSessionResultInvalidArgument;
+  if (!Session->Running || !Session->CpuReady ||
+      !AppleAgxRtkitBootIsReady(&Session->Boot) ||
+      Session->StopPhase != AppleAgxRtkitStopIdle)
+    return AppleAgxRtkitSessionResultInvalidState;
+
+  result = AppleAgxRtkitSessionAscResult(
+      AppleAgxAscSend(Io, AppleAgxRtkitPing(), 0u, DeadlineMs));
+  if (result != AppleAgxRtkitSessionResultOk)
+    return result;
+  for (;;) {
+    result = AppleAgxRtkitSessionAscResult(
+        AppleAgxAscReceive(Io, &message, DeadlineMs));
+    if (result != AppleAgxRtkitSessionResultOk) {
+      AppleAgxRtkitSessionCaptureFailureMailbox(Session, Io);
+      return result;
+    }
+    ++Session->ReceivedCount;
+    Session->LastRxEndpoint = message.Endpoint;
+    Session->LastRxPayload = message.Payload;
+    if (message.Endpoint == 0u &&
+        AppleAgxRtkitDecodeManagement(message.Payload, &decoded) &&
+        decoded.Type == AppleAgxRtkitManagementPong)
+      return AppleAgxRtkitSessionResultOk;
+    if (!AppleAgxRtkitSessionMessageIsEventWake(&message))
+      return AppleAgxRtkitSessionResultProtocolViolation;
+  }
 }
 
 static APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionWaitPower(

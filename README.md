@@ -1,45 +1,110 @@
-# Windows 11 ARM64 on the M1 MacBook Air
+# Windows 11 on the M1 MacBook Air — with its own Apple GPU driver
 
-Experimental native Windows boot for the 2020 M1 MacBook Air (`j313`, Apple T8103), built
-from a Project Mu firmware fork and an m1n1 EL2 hypervisor fork.
+Native Windows 11 ARM64 on the 2020 M1 MacBook Air (`j313`, Apple T8103): no virtual machine,
+Windows runs from the internal SSD with all eight CPU cores, the built-in keyboard and trackpad,
+USB, and an **Apple GPU driver written for Windows from scratch**.
 
-> **Warning:** This project exposes the internal SSD to experimental firmware and a custom
-> NVMe bridge. A wrong `diskpart` command can destroy macOS, Recovery, or the Asahi boot
-> environment. Keep a complete backup and read the entire installation guide before making
-> disk changes.
+![GravityMark Direct3D 12, 1920x1080, 100,000 asteroids: score 5,396 on Windows 11 on an M1 MacBook Air](documentation/images/gravitymark-d3d12-fhd-5396.jpg)
 
-## Current status
+> **Experimental.** This project exposes the internal SSD to experimental firmware and a custom
+> NVMe bridge, and the GPU driver is development-grade. A wrong `diskpart` command can destroy
+> macOS, Recovery, or the Asahi boot environment. Keep a complete backup and read the whole
+> installation guide first. Only the 2020 M1 MacBook Air (`j313`) is supported.
 
-Windows 11 ARM64 has booted from the internal Apple SSD, completed OOBE with a local
-account, reached the desktop, accepted USB keyboard and mouse input, and sustained an RDP
-session long enough to install software. The current validated assisted configuration exposes:
+## Where it stands (November 2026)
 
-- all eight M1 CPU cores: four Icestorm efficiency cores and four Firestorm
-  performance cores, with distinct Windows efficiency and scheduling classes;
-- a synthetic PCIe NVMe controller backed by the physical Apple ANS storage device;
-- physical USB xHCI with keyboard, mouse, hubs, and installation media;
-- native built-in Apple keyboard and Precision Touchpad through the J313 SPI-HID driver;
-- a Project Mu GOP framebuffer and a remotely observable virtual framebuffer;
-- virtual UART and Windows kernel-debug transport for assisted development.
+| Area | State |
+|---|---|
+| Boot | Windows 11 ARM64 boots from the internal Apple SSD through Project Mu firmware and a small m1n1-based hypervisor |
+| CPU | all 8 cores (4 Firestorm performance + 4 Icestorm efficiency), with Windows efficiency classes |
+| Storage | Apple ANS SSD exposed to Windows as an NVMe controller by the hypervisor |
+| Input | USB, built-in keyboard and Precision Touchpad (own SPI-HID driver) |
+| Display | internal panel through Apple's display coprocessor (DCP) |
+| **GPU** | own WDDM driver: **Direct3D 12 at feature level 12_1**, Direct3D 11, OpenGL 2.1 (also for x86 apps under emulation), desktop composition (DWM) on the GPU |
+| Benchmarks | GravityMark D3D12 runs at **~68 % of macOS Metal** on the same machine; 3DMark Night Raid completes; Counter-Strike 1.6 (OpenGL, x86) about 47 FPS in its timedemo |
+| Standalone | basic system boots standalone; the GPU driver still needs the assisted (second-Mac) setup |
 
-The eight-core assisted checkpoint reached the lock screen inside the hardware boot gate,
-completed bounded load on all processors, remained responsive during independent SSH probes,
-and retained healthy built-in keyboard and Precision Touchpad devices. It is still an
-experimental checkpoint: standalone cold boot, suspend/resume, long-duration thermal stress,
-and GPU acceleration remain separate qualification gates.  The J313 AGX resource
-contract and firmware-only G1 lifecycle now pass their hardware gate, but no render work
-or Windows graphics adapter exists yet.
+### GPU performance
 
-Only `j313` is currently supported. This is not a general Apple Silicon Windows installer.
+GravityMark 1.89, Direct3D 12, 100,000 asteroids, temporal anti-aliasing off, windowed, compared
+with macOS 15 + Metal **on the same MacBook Air**:
+
+| Resolution | Windows (this driver) | macOS + Metal | Ratio |
+|---|---|---|---|
+| 1920x1080 | **5,396** (32.3 FPS) | 7,814 (46.8 FPS) | 69 % |
+| 1280x720 | **6,769** (40.5 FPS) | 9,946 (59.5 FPS, near the 60 Hz cap) | 68 % |
+
+![GravityMark 1920x1080 score by day, approaching the macOS reference](documentation/images/gravitymark-fhd-progress.svg)
+
+One month earlier the same driver needed about 30 seconds to redraw the desktop. Recent gains came
+from measuring the whole frame and removing waits between GPU jobs: giving compute work its own
+firmware queue, keeping GPU address spaces resident, and compiler fixes.
+
+### OpenGL: Counter-Strike 1.6
+
+Counter-Strike 1.6 is a 32-bit x86 game; it runs under Windows' x86 emulation and draws through our
+x86 OpenGL driver (Mesa, OpenGL 2.1) on the Apple GPU. In a fixed recorded-demo benchmark
+(`timedemo`) it went from 40.5 FPS on its first measured run to about 47 FPS a few days later
+(3,771 frames, mid-October 2026); live play on a server measured 37–42 FPS (median).
+
+<details>
+<summary>1280x720 result</summary>
+
+![GravityMark Direct3D 12, 1280x720, 100,000 asteroids: score 6,769](documentation/images/gravitymark-d3d12-hd-6769.jpg)
+
+</details>
+
+## How it works
+
+```
+  Windows 11 ARM64
+    ├─ D3D12 / D3D11 user-mode driver  — Mesa's Asahi compiler + DXIL→NIR translation
+    ├─ WDDM kernel-mode driver         — talks to the Apple GPU firmware (RTKit) directly
+    └─ ACPI-described platform         — CPUs, timers, interrupts, PCIe, USB, NVMe
+  Project Mu UEFI firmware (Apple Silicon fork)
+  m1n1-based EL2 hypervisor             — GICv3 emulation, NVMe bridge, GPU page-table broker
+  Apple M1 (T8103)
+```
+
+- **Interrupts:** Windows requires an ARM GIC; Apple uses its own AIC, so the hypervisor emulates a
+  GICv3 (routing, timers, inter-processor interrupts).
+- **GPU memory:** Windows manages GPU memory in 4 KB pages, the Apple GPU uses 16 KB pages; the
+  hypervisor keeps both page-table views consistent.
+- **GPU work submission:** the kernel driver builds Apple firmware work queues the way Asahi Linux
+  does; render and compute run on separate firmware queues.
+- **Shaders:** DXIL from Windows applications is translated to NIR and compiled with Mesa's AGX
+  backend, plus Windows-specific passes.
+
+Every hardware run is recorded with its hypothesis, package hashes, and result in the investigation
+ledgers on the development branches.
+
+## Next steps
+
+**Main goal: the same GPU performance as macOS on the same machine.** Measurements on macOS show
+that Metal runs independent graphics and compute passes at the same time; Direct3D 12 allows the
+same when the application declares no dependency between them, so that comes next, followed by
+faster compute and shader code.
+
+Then the rest of the laptop:
+
+- **Storage speed:** the SSD is reached through an NVMe bridge in the hypervisor, which limits disk
+  performance; rework it for much faster I/O.
+- **Wi-Fi.**
+- **External display.**
+- **Sound.**
+- **Keyboard backlight** (the keyboard itself works).
+- **Built-in camera.**
+- **GPU without the second Mac:** bring the GPU driver to the standalone boot path.
+- More applications and games, then installable packages.
 
 ## Two operating modes
 
-1. **Standalone mode:** iBoot loads an Asahi-provisioned boot entry, m1n1 starts the embedded
-   Mu firmware, and Mu starts Windows from the internal SSD. A second computer is not part
-   of the runtime path.
-2. **Assisted development mode:** another Mac chainloads matching m1n1 and Mu builds over
-   USB and captures UART, hypervisor logs, framebuffer updates, telemetry, and KD traffic.
-   This mode can test firmware and driver changes without rewriting the Air ESP.
+1. **Standalone mode:** iBoot loads an Asahi-provisioned boot entry, m1n1 starts the embedded Mu
+   firmware, and Mu starts Windows from the internal SSD. No second computer is involved.
+2. **Assisted development mode:** another Mac chainloads matching m1n1 and Mu builds over USB and
+   captures UART, hypervisor logs, framebuffer updates, telemetry, and kernel-debug traffic. This
+   mode can test firmware and driver changes without rewriting the Air ESP. The GPU driver currently
+   runs in this mode.
 
 ## Documentation
 
@@ -48,52 +113,50 @@ Only `j313` is currently supported. This is not a general Apple Silicon Windows 
 - [Standalone and assisted operation](documentation/RUN.md)
 - [Launch profiles](documentation/CONFIGURATION.md)
 - [Architecture](documentation/ARCHITECTURE.md)
+- [GPU bring-up](documentation/AGX_BRINGUP.md)
 - [Platform roadmap and milestone gates](documentation/ROADMAP.md)
 - [Current stability checkpoint and iteration workflow](documentation/PLATFORM_STABILITY.md)
-- [Validated J313 four-efficiency-core baseline](documentation/STABLE_4E_BASELINE.md)
 - [Validated J313 eight-core and native-input checkpoint](documentation/STABLE_8CORE_INPUT.md)
+- [Validated J313 four-efficiency-core baseline](documentation/STABLE_4E_BASELINE.md)
+- [Built-in Apple keyboard and Precision Touchpad](documentation/APPLE_INPUT.md)
 - [Debugging and KD tools](documentation/DEBUGGING.md)
+- [Known limitations](documentation/LIMITATIONS.md)
 - [Engineering history](documentation/DEVELOPMENT_HISTORY.md)
 - [Historical artifact provenance](documentation/history/ARTIFACT_PROVENANCE.md)
-- [Known limitations](documentation/LIMITATIONS.md)
-- [Built-in Apple keyboard and Precision Touchpad](documentation/APPLE_INPUT.md)
 - [Changelog](CHANGELOG.md)
 
 ## Repository layout
 
 - `m1n1_windows/` — pinned hypervisor fork submodule.
 - `mu/` — pinned Apple Silicon Project Mu fork submodule.
-- `scripts/` — public build, ESP-install, standalone, and assisted-mode entry points.
-- `tools/` — deterministic layout and image-packaging tools.
+- `drivers/` — Windows drivers: built-in input and the Apple GPU driver (the newest GPU work is on
+  the [`integration/ad04-windows-compiler`](https://github.com/paulsmir/windows-on-m1/tree/integration/ad04-windows-compiler) branch).
+- `scripts/` — build, ESP-install, standalone, and assisted-mode entry points.
+- `tools/` — layout, packaging, and analysis tools.
 - `config/j313-guest-layout.json` — canonical guest physical-memory contract.
-- `run_uefi.py` — Python-assisted guest launcher used for development.
-- `tools/kd/` — focused Windows serial kernel-debug utilities.
-- `extra/` — framebuffer, UART, and source-level diagnostic helpers.
-
-## Upstream projects
-
-This work builds on [Asahi Linux](https://asahilinux.org/),
-[m1n1](https://github.com/AsahiLinux/m1n1),
-[Project Mu](https://github.com/microsoft/mu), and the Apple Silicon Windows work from
-[NT-for-ASi](https://github.com/NT-for-ASi). The active source forks are
-[paulsmir/m1n1_windows](https://github.com/paulsmir/m1n1_windows) and
-[paulsmir/apple_silicon_platforms_mu](https://github.com/paulsmir/apple_silicon_platforms_mu).
-See the submodule histories and licenses for their respective copyrights and terms.
+- `run_uefi.py` — assisted guest launcher used for development.
+- `tools/kd/` — Windows serial kernel-debug utilities.
+- `extra/` — framebuffer, UART, and diagnostic helpers.
 
 ## Release truthfulness
 
 Documentation distinguishes three states:
 
 - **validated:** observed on the development J313;
-- **implemented:** present in source and host-tested but awaiting the relevant hardware run;
+- **implemented:** present in source and host-tested, awaiting the relevant hardware run;
 - **planned:** not yet implemented.
 
-The physical internal-panel handoff, full-panel 2560x1600 Windows framebuffer, all four
-Icestorm and all four Firestorm guest CPUs, synthetic NVMe bridge, physical USB, and the
-test-signed built-in Apple keyboard and Precision Touchpad driver have been validated together
-in the assisted J313 checkpoint. The firmware-only AGX checkpoint is documented in
-[`documentation/AGX_BRINGUP.md`](documentation/AGX_BRINGUP.md); GPU acceleration remains
-an implementation milestone.
+Benchmark numbers above are single best runs on one machine with the experimental driver, measured
+with identical GravityMark settings on Windows and macOS; run-to-run spread is about 1.5–2 %.
 
-Native built-in input build, installation, diagnostics, and rollback are documented in
-[`documentation/APPLE_INPUT.md`](documentation/APPLE_INPUT.md).
+## Upstream projects
+
+This work builds on [Asahi Linux](https://asahilinux.org/),
+[m1n1](https://github.com/AsahiLinux/m1n1), [Mesa](https://mesa3d.org/),
+[Project Mu](https://github.com/microsoft/mu), and the Apple Silicon Windows work from
+[NT-for-ASi](https://github.com/NT-for-ASi). The active source forks are
+[paulsmir/m1n1_windows](https://github.com/paulsmir/m1n1_windows) and
+[paulsmir/apple_silicon_platforms_mu](https://github.com/paulsmir/apple_silicon_platforms_mu).
+See the submodule histories and licenses for their respective copyrights and terms.
+
+Developed with substantial help from AI coding assistants.

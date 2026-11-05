@@ -29,6 +29,8 @@ static void test_page_descriptor_protections(void) {
        BASE_BITS | BIT64(54) | BIT64(6) | BIT64(2)},
       {AppleAgxUatFirmwareSharedReadWrite,
        BASE_BITS | BIT64(54) | BIT64(6) | (2ULL << 2)},
+      {AppleAgxUatFirmwareGpuSharedReadWrite,
+       BASE_BITS | BIT64(54) | BIT64(53) | (2ULL << 2)},
       {AppleAgxUatFirmwarePrivateReadWrite,
        BASE_BITS | BIT64(54) | BIT64(6)},
       {AppleAgxUatFirmwareGpuPrivateReadWrite,
@@ -46,6 +48,8 @@ static void test_page_descriptor_protections(void) {
        BASE_BITS | BIT64(53) | BIT64(7) | (2ULL << 2)},
       {AppleAgxUatGpuSharedReadWrite,
        BASE_BITS | BIT64(54) | BIT64(7) | (2ULL << 2)},
+      {AppleAgxUatGpuPipelineShared,
+       BASE_BITS | BIT64(54) | BIT64(53) | (2ULL << 2)},
   };
   unsigned long long descriptor = 0;
   unsigned int index;

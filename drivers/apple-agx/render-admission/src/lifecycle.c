@@ -13,6 +13,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiAddDevice(
     return STATUS_INSUFFICIENT_RESOURCES;
   RtlZeroMemory(context, sizeof(*context));
   AdmissionObjectsInitializeAdapter(&context->ObjectAdapter);
+  context->Win32BootGeneration = (ULONG)KeQueryInterruptTime();
+  if (context->Win32BootGeneration == 0u)
+    context->Win32BootGeneration = 1u;
   context->FeatureReadyMask =
       APPLE_AGX_WDDM_READY_WDDM3_IDENTITY |
       APPLE_AGX_WDDM_READY_DEVICE_CONTEXT;
@@ -246,6 +249,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
   NTSTATUS status;
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
+  AdmissionFlushSourceAddressReceipt(context);
+  AdmissionFlushPresentTransfer(context);
+  AdmissionFlushGdiReceipt(context);
   AdmissionRecordDevice(context->PhysicalDeviceObject, AdmissionReceiptStop,
                         STATUS_SUCCESS);
   if (context->ObjectAdapter.DeviceCount != 0u)
@@ -294,6 +300,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceCon
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
+  AdmissionFlushSourceAddressReceipt(context);
+  AdmissionFlushPresentTransfer(context);
+  AdmissionFlushGdiReceipt(context);
   if (context->ScanoutRuntime != NULL &&
       !NT_SUCCESS(AdmissionScanoutStop(context)))
     return STATUS_DEVICE_BUSY;
@@ -326,6 +335,45 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     return STATUS_INVALID_PARAMETER;
 
   switch (QueryAdapterInfo->Type) {
+  case DXGKQAITYPE_UMDRIVERPRIVATE: {
+    AGX_WIN32_DEVICE_INFO *info;
+    if (QueryAdapterInfo->pInputData != NULL ||
+        QueryAdapterInfo->InputDataSize != 0u ||
+        QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize != sizeof(*info)) {
+      status = STATUS_INVALID_PARAMETER;
+      break;
+    }
+    info = (AGX_WIN32_DEVICE_INFO *)QueryAdapterInfo->pOutputData;
+    RtlZeroMemory(info, sizeof(*info));
+    info->Magic = AGX_WIN32_DEVICE_INFO_MAGIC;
+    info->Version = AGX_WIN32_DEVICE_INFO_VERSION;
+    info->Bytes = sizeof(*info);
+    info->BootGeneration = context->Win32BootGeneration;
+    info->GpuGeneration = 13u;
+    info->GpuVariant = AgxWin32GpuG13G;
+    info->PageBytes = 0x4000u;
+    info->ClassCount = AGX_WIN32_BUFFER_CLASS_COUNT;
+    info->Classes[0].ClassId = AgxWin32BufferClassGeneral;
+    info->Classes[0].MinimumAlignment = 0x4000u;
+    info->Classes[0].MaximumBytes = AGX_RR_SHARED_ARENA_BYTES;
+    info->Classes[0].Flags = AppleAgxWin32BufferCpuRead |
+        AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead |
+        AppleAgxWin32BufferGpuWrite;
+    info->Classes[1].ClassId = AgxWin32BufferClassShader;
+    info->Classes[1].MinimumAlignment = 0x4000u;
+    info->Classes[1].MaximumBytes = AGX_RR_SHARED_ARENA_BYTES;
+    info->Classes[1].Flags = AppleAgxWin32BufferCpuWrite |
+        AppleAgxWin32BufferGpuRead;
+    info->Classes[2].ClassId = AgxWin32BufferClassEncoder;
+    info->Classes[2].MinimumAlignment = 0x4000u;
+    info->Classes[2].MaximumBytes = AGX_RR_COMMAND_ARENA_BYTES;
+    info->Classes[2].Flags = AppleAgxWin32BufferCpuWrite |
+        AppleAgxWin32BufferGpuRead;
+    status = STATUS_SUCCESS;
+    break;
+  }
+
   case DXGKQAITYPE_DRIVERCAPS: {
     DXGK_DRIVERCAPS *caps;
     APPLE_AGX_WDDM_FEATURE_INPUT featureInput;
@@ -338,6 +386,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
       caps = (DXGK_DRIVERCAPS *)QueryAdapterInfo->pOutputData;
       RtlZeroMemory(caps, sizeof(*caps));
       caps->HighestAcceptableAddress.QuadPart = -1;
+      /* WDK 26100: must match DXGK_WDDMDEVICECAPS.WDDMVersion. */
+      caps->WDDMVersion = DXGKDDI_WDDMv3_0;
       RtlZeroMemory(&featureInput, sizeof(featureInput));
       featureInput.Version = APPLE_AGX_WDDM_FEATURE_CONTRACT_VERSION;
       featureInput.Size = sizeof(featureInput);
@@ -363,10 +413,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         caps->PreemptionCaps.GraphicsPreemptionGranularity =
             D3DKMDT_GRAPHICS_PREEMPTION_DMA_BUFFER_BOUNDARY;
         caps->PreemptionCaps.ComputePreemptionGranularity =
-            D3DKMDT_COMPUTE_PREEMPTION_NONE;
+            D3DKMDT_COMPUTE_PREEMPTION_DMA_BUFFER_BOUNDARY;
         caps->FlipCaps.FlipOnVSyncMmIo = 1u;
         caps->FlipCaps.FlipIndependent = 1u;
         caps->SupportNonVGA = TRUE;
+        /* WDDM 1.2+ full graphics requires this even when the only exposed
+         * path transform is the already-supported identity/Offset0 pair. */
+        caps->SupportSmoothRotation = TRUE;
         caps->SupportPerEngineTDR = TRUE;
         caps->SupportDirectFlip = TRUE;
         caps->PresentationCaps.SupportKernelModeCommandBuffer = 1u;
@@ -458,7 +511,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     break;
   }
   AdmissionRecordQuery(context->PhysicalDeviceObject, QueryAdapterInfo->Type,
-                       QueryAdapterInfo->OutputDataSize, status);
+                       QueryAdapterInfo->OutputDataSize, status,
+                       QueryAdapterInfo->pOutputData);
   return status;
 }
 

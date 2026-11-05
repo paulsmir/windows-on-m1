@@ -14,6 +14,7 @@ class AppleAgxSubmissionCoordinatorTest(unittest.TestCase):
             "apple_agx_exp208_dynamic.c",
             "apple_agx_render_provider.c",
             "apple_agx_render_shared_memory.c",
+            "apple_agx_relocation.c",
             "apple_agx_render_template.generated.c",
             "apple_agx_exp208_adapter.c",
             "apple_agx_g13_queue_provider.c",

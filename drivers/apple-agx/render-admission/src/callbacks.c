@@ -37,11 +37,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateDevice(
   ULONG flags;
 
   if (adapter == NULL || !adapter->Started || Args == NULL ||
-      Args->hDevice == NULL || Args->Pasid != 0 || Args->hKmdProcess != NULL)
+      Args->Pasid != 0 || Args->hKmdProcess != NULL)
     return STATUS_INVALID_PARAMETER;
   flags = Args->Flags.Value;
   if ((flags & ~ADMISSION_DEVICE_VALID_FLAGS) != 0u)
     return STATUS_NOT_SUPPORTED;
+  /* VidSch supplies no runtime device handle for its SystemDevice. The
+   * returned driver-owned object still has the normal lifetime/ownership. */
+  if (Args->hDevice == NULL && (flags & ADMISSION_DEVICE_SYSTEM) == 0u)
+    return STATUS_INVALID_PARAMETER;
   device = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*device),
                            ADMISSION_POOL_TAG);
   if (device == NULL)
@@ -64,15 +68,28 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyDevice(HANDLE Device) {
   return STATUS_SUCCESS;
 }
 
-FAIL2(AdmissionDdiRender, HANDLE, Context, DXGKARG_RENDER *, Args)
-
 _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     HANDLE Context, DXGKARG_PRESENT *Present) {
   ADMISSION_DEVICE *device = NULL;
+  ADMISSION_CONTEXT *adapter = NULL;
   ADMISSION_RENDER_CONTEXT *renderContext =
       (ADMISSION_RENDER_CONTEXT *)Context;
   ADMISSION_OPEN_ALLOCATION *source;
   const ADMISSION_ALLOCATION_DESCRIPTION *description;
+  NTSTATUS status;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  ADMISSION_STANDARD_PRESENT_EVENT traceEvent;
+  RtlZeroMemory(&traceEvent, sizeof(traceEvent));
+  traceEvent.Kind = AdmissionStandardPresentEventPresent;
+  traceEvent.Phase = AdmissionStandardPresentPhaseEntry;
+  traceEvent.ContextToken = (ULONGLONG)(ULONG_PTR)Context;
+  traceEvent.Irql = KeGetCurrentIrql();
+  if (Present != NULL) {
+    traceEvent.Flags = Present->Flags.Value;
+    traceEvent.NumSrc = Present->NumSrcAllocations;
+    traceEvent.NumDst = Present->NumDstAllocations;
+  }
+#endif
 
   if (renderContext != NULL &&
       renderContext->Object.Magic == ADMISSION_OBJECT_CONTEXT_MAGIC &&
@@ -85,58 +102,226 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
                ADMISSION_OBJECT_DEVICE_MAGIC)
     device = (ADMISSION_DEVICE *)Context;
 
+  if (device != NULL && device->Object.Adapter != NULL &&
+      device->Object.Adapter->Magic == ADMISSION_OBJECT_ADAPTER_MAGIC)
+    adapter = CONTAINING_RECORD(device->Object.Adapter,
+                                ADMISSION_CONTEXT, ObjectAdapter);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
+#endif
+
+  if (adapter != NULL)
+    AdmissionFlushPresentTransfer(adapter);
+  if (adapter != NULL)
+    AdmissionFlushGdiReceipt(adapter);
+  if (device != NULL && Present != NULL && Present->Flags.Value == 1u) {
+    status = AdmissionPresentBlt(device, Context, Present);
+    if (!NT_SUCCESS(status))
+      AdmissionRecordPresent(device, Present, 4u, status);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    if (NT_SUCCESS(status) && Present->pAllocationList != NULL) {
+      source = (ADMISSION_OPEN_ALLOCATION *)
+          Present->pAllocationList[DXGK_PRESENT_SOURCE_INDEX]
+              .hDeviceSpecificAllocation;
+      if (source != NULL &&
+          source->Magic == ADMISSION_OPEN_ALLOCATION_MAGIC &&
+          source->Device == device && source->Allocation != NULL &&
+          source->Allocation->Magic == ADMISSION_ALLOCATION_OBJECT_MAGIC)
+        traceEvent.AllocationToken =
+            (ULONGLONG)(ULONG_PTR)source->Allocation;
+    }
+    traceEvent.Phase = AdmissionStandardPresentPhaseExit;
+    traceEvent.Status = (ULONG)status;
+    AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
+#endif
+    return status;
+  }
+
   if (device == NULL || Present == NULL || Present->pDmaBuffer != NULL ||
       Present->Flags.Value != 0x4u || Present->pAllocationInfo == NULL ||
       Present->NumSrcAllocations != 1u || Present->NumDstAllocations != 0u ||
       Present->pPrivateDriverData != NULL ||
       Present->PrivateDriverDataSize != 0u ||
       Present->pAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX]
-              .hDeviceSpecificAllocation != NULL)
+              .hDeviceSpecificAllocation != NULL) {
+    AdmissionRecordPresent(device, Present, 1u, STATUS_INVALID_PARAMETER);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    traceEvent.Phase = AdmissionStandardPresentPhaseExit;
+    traceEvent.Status = (ULONG)STATUS_INVALID_PARAMETER;
+    AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
+#endif
     return STATUS_INVALID_PARAMETER;
+  }
   source = (ADMISSION_OPEN_ALLOCATION *)
       Present->pAllocationInfo[DXGK_PRESENT_SOURCE_INDEX]
           .hDeviceSpecificAllocation;
   if (source == NULL || source->Magic != ADMISSION_OPEN_ALLOCATION_MAGIC ||
       source->Device != device || source->Allocation == NULL ||
-      source->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC)
+      source->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC) {
+    AdmissionRecordPresent(device, Present, 2u, STATUS_INVALID_HANDLE);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    traceEvent.Phase = AdmissionStandardPresentPhaseExit;
+    traceEvent.Status = (ULONG)STATUS_INVALID_HANDLE;
+    AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
+#endif
     return STATUS_INVALID_HANDLE;
+  }
   description = &source->Allocation->Description;
   if (!AdmissionAllocationDescriptionValid(description) ||
       description->Width != 2560u || description->Height != 1600u ||
       description->Pitch != 10240u || description->BytesPerPixel != 4u ||
       description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
-      description->Format != (UINT)D3DDDIFMT_A8R8G8B8)
+      description->Format != (UINT)D3DDDIFMT_A8R8G8B8) {
+    AdmissionRecordPresent(device, Present, 3u,
+                            STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    traceEvent.Phase = AdmissionStandardPresentPhaseExit;
+    traceEvent.Status =
+        (ULONG)STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+    AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
+#endif
     return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+  }
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  traceEvent.Phase = AdmissionStandardPresentPhaseExit;
+  traceEvent.Status = (ULONG)STATUS_SUCCESS;
+  traceEvent.AllocationToken = (ULONGLONG)(ULONG_PTR)source->Allocation;
+  AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
+#endif
   return STATUS_SUCCESS;
 }
 
-FAIL2(AdmissionDdiEscape, HANDLE, Adapter, const DXGKARG_ESCAPE *, Args)
+_Use_decl_annotations_ NTSTATUS AdmissionDdiStopCapture(
+    HANDLE Adapter, const DXGKARG_STOPCAPTURE *StopCapture) {
+  UNUSED(Adapter);
+  UNUSED(StopCapture);
+  /* No capture engine or capture allocations exist, so nothing is active. */
+  return STATUS_SUCCESS;
+}
+
+FAIL2(AdmissionDdiCreateOverlay, HANDLE, Adapter, DXGKARG_CREATEOVERLAY *, Args)
+FAIL2(AdmissionDdiUpdateOverlay, HANDLE, Overlay, const DXGKARG_UPDATEOVERLAY *,
+      Args)
+FAIL2(AdmissionDdiFlipOverlay, HANDLE, Overlay, const DXGKARG_FLIPOVERLAY *,
+      Args)
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyOverlay(HANDLE Overlay) {
+  UNUSED(Overlay);
+  return STATUS_NOT_SUPPORTED;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
+    HANDLE Adapter, const DXGKARG_ESCAPE *Args) {
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  ULONG magic;
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  ADMISSION_PRESENT_QUERY *query;
+#endif
+  if (context == NULL || !context->Started || Args == NULL ||
+      Args->pPrivateDriverData == NULL || Args->PrivateDriverDataSize < sizeof(magic))
+    return STATUS_INVALID_PARAMETER;
+  magic = *(const ULONG *)Args->pPrivateDriverData;
+  if (magic == ADMISSION_STANDARD_PRESENT_TRACE_MAGIC &&
+      Args->PrivateDriverDataSize == sizeof(ADMISSION_STANDARD_PRESENT_TRACE))
+    return AdmissionStandardPresentTraceQueryWindows(
+        context, (ADMISSION_STANDARD_PRESENT_TRACE *)Args->pPrivateDriverData);
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  if (magic == ADMISSION_RETIREMENT_QUERY_MAGIC &&
+      Args->PrivateDriverDataSize == sizeof(ADMISSION_RETIREMENT_QUERY))
+    return AdmissionScanoutRetireQualification(
+        context, (ADMISSION_RETIREMENT_QUERY *)Args->pPrivateDriverData);
+  if (magic != ADMISSION_PRESENT_QUERY_MAGIC ||
+      Args->PrivateDriverDataSize != sizeof(*query))
+    return STATUS_INVALID_PARAMETER;
+  query = (ADMISSION_PRESENT_QUERY *)Args->pPrivateDriverData;
+  return AdmissionScanoutQueryQualification(context, query);
+#else
+  return STATUS_INVALID_PARAMETER;
+#endif
+#else
+  UNREFERENCED_PARAMETER(Adapter);
+  UNREFERENCED_PARAMETER(Args);
+  return STATUS_NOT_SUPPORTED;
+#endif
+}
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
     HANDLE Device, DXGKARG_CREATECONTEXT *Args) {
   ADMISSION_DEVICE *device = (ADMISSION_DEVICE *)Device;
   ADMISSION_CONTEXT *adapter;
   ADMISSION_RENDER_CONTEXT *context;
+  ADMISSION_WIN32_CONTEXT_CREATE win32Create;
   KIRQL oldIrql;
   ULONG flags;
+  APPLE_AGX_U32 win32Generation = 0u;
+  APPLE_AGX_BOOL win32Transport = APPLE_AGX_FALSE;
+  const VOID *privateData = NULL;
+  APPLE_AGX_BOOL legacyQualification = APPLE_AGX_FALSE;
+  APPLE_AGX_BOOL systemOrGdi;
+  ADMISSION_WIN32_TRANSPORT_RESULT win32Result;
+  BOOLEAN generationClaimed = FALSE;
+  LONG previousGeneration;
 
   if (device == NULL ||
-      device->Object.Magic != ADMISSION_OBJECT_DEVICE_MAGIC || Args == NULL ||
-      Args->hContext == NULL || Args->pPrivateDriverData != NULL ||
-      Args->PrivateDriverDataSize != 0u)
+      device->Object.Magic != ADMISSION_OBJECT_DEVICE_MAGIC || Args == NULL)
     return STATUS_INVALID_PARAMETER;
   flags = Args->Flags.Value;
   if ((flags & ~ADMISSION_CONTEXT_VALID_FLAGS) != 0u)
     return STATUS_NOT_SUPPORTED;
+  systemOrGdi = ((flags & ADMISSION_CONTEXT_SYSTEM) != 0u ||
+                 Args->Flags.GdiContext)
+                    ? APPLE_AGX_TRUE
+                    : APPLE_AGX_FALSE;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  legacyQualification = APPLE_AGX_TRUE;
+#endif
+  if (Args->pPrivateDriverData != NULL &&
+      Args->PrivateDriverDataSize == sizeof(win32Create)) {
+    __try {
+      RtlCopyMemory(&win32Create, Args->pPrivateDriverData,
+                    sizeof(win32Create));
+      privateData = &win32Create;
+    }
+    __except(EXCEPTION_EXECUTE_HANDLER) {
+      return STATUS_INVALID_USER_BUFFER;
+    }
+  }
+  win32Result = AdmissionWin32ContextCreateValidate(
+      privateData, Args->PrivateDriverDataSize, systemOrGdi,
+      legacyQualification, &win32Generation, &win32Transport);
+  if (win32Result != AdmissionWin32TransportSuccess)
+    return STATUS_INVALID_PARAMETER;
+  /* VidSch also supplies no runtime handle for its paging SystemContext. */
+  if (Args->hContext == NULL && (flags & ADMISSION_CONTEXT_SYSTEM) == 0u)
+    return STATUS_INVALID_PARAMETER;
+  if (win32Transport) {
+    previousGeneration = InterlockedCompareExchange(
+        &device->Win32Generation, (LONG)win32Generation, 0);
+    if (previousGeneration != 0 &&
+        (ULONG)previousGeneration != win32Generation)
+      return STATUS_INVALID_PARAMETER;
+    generationClaimed = previousGeneration == 0 ? TRUE : FALSE;
+  }
   context = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*context),
                             ADMISSION_POOL_TAG);
-  if (context == NULL)
+  if (context == NULL) {
+    if (generationClaimed)
+      (void)InterlockedCompareExchange(
+          &device->Win32Generation, 0, (LONG)win32Generation);
     return STATUS_INSUFFICIENT_RESOURCES;
+  }
   RtlZeroMemory(context, sizeof(*context));
+  context->Win32Generation = win32Generation;
+  context->Win32Transport = win32Transport ? TRUE : FALSE;
   AppleAgxSchedulerContextInitialize(&context->SchedulerContext);
+  AdmissionPrepatchedInitialize(&context->PrepatchedRender);
   if (!AdmissionObjectsCreateContext(
           &device->Object, Args->hContext, Args->NodeOrdinal,
           Args->EngineAffinity, flags, &context->Object)) {
+    if (generationClaimed)
+      (void)InterlockedCompareExchange(
+          &device->Win32Generation, 0, (LONG)win32Generation);
     ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
     return STATUS_INVALID_PARAMETER;
   }
@@ -148,6 +333,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
           Args->NodeOrdinal, Args->EngineAffinity)) {
     KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
     (void)AdmissionObjectsDestroyContext(&context->Object);
+    if (generationClaimed)
+      (void)InterlockedCompareExchange(
+          &device->Win32Generation, 0, (LONG)win32Generation);
     ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
     return STATUS_INVALID_DEVICE_STATE;
   }
@@ -156,9 +344,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
   RtlZeroMemory(&Args->ContextInfo, sizeof(Args->ContextInfo));
   Args->ContextInfo.DmaBufferSize = ADMISSION_DMA_BUFFER_SIZE;
   Args->ContextInfo.DmaBufferSegmentSet = 0u;
+  Args->ContextInfo.DmaBufferPrivateDataSize =
+      ADMISSION_GDI_DMA_PRIVATE_SIZE;
   if (Args->Flags.GdiContext) {
-    Args->ContextInfo.DmaBufferPrivateDataSize =
-        ADMISSION_GDI_DMA_PRIVATE_SIZE;
     Args->ContextInfo.AllocationListSize =
         ADMISSION_GDI_ALLOCATION_LIST_SIZE;
     Args->ContextInfo.PatchLocationListSize =
@@ -178,7 +366,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyContext(HANDLE Context) {
   if (context == NULL ||
       context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
       context->Object.Device == NULL || context->Object.Device->Adapter == NULL ||
-      context->Object.FenceOutstanding != 0u)
+      context->Object.FenceOutstanding != 0u ||
+      AdmissionPrepatchedActive(&context->PrepatchedRender))
     return STATUS_DEVICE_BUSY;
   adapter = CONTAINING_RECORD(context->Object.Device->Adapter,
                               ADMISSION_CONTEXT, ObjectAdapter);

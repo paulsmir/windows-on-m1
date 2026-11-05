@@ -111,6 +111,29 @@ typedef struct _APPLE_AGX_PLATFORM_PROVIDER_CONFIG {
   APPLE_AGX_BACKEND_BOOL DeferFirmwareMappings;
 } APPLE_AGX_PLATFORM_PROVIDER_CONFIG;
 
+typedef enum _APPLE_AGX_PLATFORM_POLL_GUARD {
+  AppleAgxPlatformPollGuardOk = 0u,
+  AppleAgxPlatformPollGuardInvalid = 1u,
+  AppleAgxPlatformPollGuardDrainEvents = 2u,
+  AppleAgxPlatformPollGuardClock = 3u,
+  AppleAgxPlatformPollGuardTimeoutCheck = 4u,
+  AppleAgxPlatformPollGuardTimeoutApply = 5u,
+} APPLE_AGX_PLATFORM_POLL_GUARD;
+
+typedef enum _APPLE_AGX_PLATFORM_DRAIN_GUARD {
+  AppleAgxPlatformDrainGuardOk = 0u,
+  AppleAgxPlatformDrainGuardInvalid = 1u,
+  AppleAgxPlatformDrainGuardBinding = 2u,
+  AppleAgxPlatformDrainGuardFlushState = 3u,
+  AppleAgxPlatformDrainGuardReadPointer = 4u,
+  AppleAgxPlatformDrainGuardWritePointer = 5u,
+  AppleAgxPlatformDrainGuardPointerRange = 6u,
+  AppleAgxPlatformDrainGuardFlushMessage = 7u,
+  AppleAgxPlatformDrainGuardPrepareEvent = 8u,
+  AppleAgxPlatformDrainGuardPublishRead = 9u,
+  AppleAgxPlatformDrainGuardApplyEvent = 10u,
+} APPLE_AGX_PLATFORM_DRAIN_GUARD;
+
 typedef struct _APPLE_AGX_PLATFORM_PROVIDER {
   APPLE_AGX_PLATFORM_CHANNEL_BINDINGS Channels;
   APPLE_AGX_PLATFORM_TRANSPORT_IO Transport;
@@ -133,6 +156,12 @@ typedef struct _APPLE_AGX_PLATFORM_PROVIDER {
   APPLE_AGX_BACKEND_BOOL BindingReady;
   APPLE_AGX_BACKEND_BOOL ExternalRenderReady;
   APPLE_AGX_BACKEND_BOOL Initialized;
+  APPLE_AGX_BACKEND_U32 LastPollGuard;
+  APPLE_AGX_BACKEND_U32 LastDrainGuard;
+  APPLE_AGX_BACKEND_U32 LastEventReadPointer;
+  APPLE_AGX_BACKEND_U32 LastEventWritePointer;
+  unsigned char LastEventMessage[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+  APPLE_AGX_BACKEND_BOOL LastEventMessageValid;
 } APPLE_AGX_PLATFORM_PROVIDER;
 
 APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderBindChannels(

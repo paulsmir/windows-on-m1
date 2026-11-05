@@ -27,15 +27,23 @@ class AppleAgxRenderType1ReadyTests(unittest.TestCase):
 
         self.assertIn("AppleAgxWddmFeatureContractReady", caps)
         self.assertIn("APPLE_AGX_WDDM_MANDATORY_CAPS_MASK", caps)
+        # WDK 26100 requires this to equal DXGK_WDDMDEVICECAPS.WDDMVersion;
+        # leaving Type-1 at zero matches the observed AddAdapter C0000059.
+        self.assertIn("caps->WDDMVersion = DXGKDDI_WDDMv3_0", caps)
+        self.assertLess(
+            caps.index("caps->WDDMVersion = DXGKDDI_WDDMv3_0"),
+            caps.index("AppleAgxWddmFeatureContractEvaluate"),
+        )
         for assignment in (
             "caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1u",
             "caps->SchedulingCaps.MultiEngineAware = 1u",
             "caps->SchedulingCaps.PreemptionAware = 1u",
             "D3DKMDT_GRAPHICS_PREEMPTION_DMA_BUFFER_BOUNDARY",
-            "D3DKMDT_COMPUTE_PREEMPTION_NONE",
+            "D3DKMDT_COMPUTE_PREEMPTION_DMA_BUFFER_BOUNDARY",
             "caps->FlipCaps.FlipOnVSyncMmIo = 1u",
             "caps->FlipCaps.FlipIndependent = 1u",
             "caps->SupportNonVGA = TRUE",
+            "caps->SupportSmoothRotation = TRUE",
             "caps->SupportPerEngineTDR = TRUE",
             "caps->SupportDirectFlip = TRUE",
             "caps->PresentationCaps.SupportKernelModeCommandBuffer = 1u",
@@ -44,7 +52,6 @@ class AppleAgxRenderType1ReadyTests(unittest.TestCase):
         for unsupported in (
             "FlipImmediateMmIo = 1",
             "FlipInterval = 1",
-            "SupportSmoothRotation = TRUE",
             "SupportMultiPlaneOverlay = TRUE",
             "MapAperture2Supported = 1",
         ):

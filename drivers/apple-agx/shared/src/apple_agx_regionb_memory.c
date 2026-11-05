@@ -110,6 +110,13 @@ APPLE_AGX_REGIONB_MEMORY_RESULT AppleAgxRegionBMemoryBuild(
     virtual_address += allocation_size + APPLE_AGX_MEMORY_PAGE_SIZE;
   }
 
+  /* Native G13/V13_5 GPUStats3D begins with two signed -1 sentinels:
+   * global.stats.cur_stamp_id and global.stats.unk_118. Not zero defaults. */
+  for (index = 0u; index < 4u; ++index) {
+    ((unsigned char *)Owner->Objects[AppleAgxRegionBMemoryStats3d].CpuAddress)[0x108u+index]=0xffu;
+    ((unsigned char *)Owner->Objects[AppleAgxRegionBMemoryStats3d].CpuAddress)[0x120u+index]=0xffu;
+  }
+
   Owner->Input.StatsTaAddress =
       Owner->VirtualAddresses[AppleAgxRegionBMemoryStatsTa];
   Owner->Input.Stats3dAddress =

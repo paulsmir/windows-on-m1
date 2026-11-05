@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WindowsPerformanceRecorder Version="1.0">
+  <Profiles>
+    <SystemCollector Id="AgxAdmissionImageCollector" Name="AppleAgx admission image identities">
+      <BufferSize Value="128" />
+      <Buffers Value="64" />
+    </SystemCollector>
+    <EventCollector Id="AgxAdmissionCollector" Name="AppleAgx admission diagnostics">
+      <BufferSize Value="128" />
+      <Buffers Value="128" />
+    </EventCollector>
+    <SystemProvider Id="AgxAdmissionImages">
+      <Keywords>
+        <Keyword Value="ProcessThread" />
+        <Keyword Value="Loader" />
+      </Keywords>
+    </SystemProvider>
+    <EventProvider Id="DxgAdmissionProvider" Name="802ec45a-1e99-4b83-9920-87c98277ba9d" Level="5" NonPagedMemory="true">
+      <Keywords>
+        <!-- Exact current dxgkrnl event 494 includes AzureTriageLogging. -->
+        <Keyword Value="0x40000000" />
+      </Keywords>
+    </EventProvider>
+    <EventProvider Id="DxgAdmissionStackProvider" Name="802ec45a-1e99-4b83-9920-87c98277ba9d" Level="5" NonPagedMemory="true" Stack="true">
+      <Keywords><Keyword Value="0x40000000" /></Keywords>
+    </EventProvider>
+    <Profile Id="AgxAdmission.Verbose.Memory" Name="AgxAdmission" Description="Bounded dxgkrnl admission error messages" LoggingMode="Memory" DetailLevel="Verbose">
+      <Collectors>
+        <EventCollectorId Value="AgxAdmissionCollector">
+          <EventProviders>
+            <EventProviderId Value="DxgAdmissionProvider" />
+          </EventProviders>
+        </EventCollectorId>
+      </Collectors>
+    </Profile>
+    <Profile Id="AgxAdmissionStacks.Verbose.Memory" Name="AgxAdmissionStacks" Description="Bounded admission error stacks with image identities" LoggingMode="Memory" DetailLevel="Verbose">
+      <Collectors>
+        <SystemCollectorId Value="AgxAdmissionImageCollector">
+          <SystemProviderId Value="AgxAdmissionImages" />
+        </SystemCollectorId>
+        <EventCollectorId Value="AgxAdmissionCollector">
+          <EventProviders>
+            <EventProviderId Value="DxgAdmissionStackProvider" />
+          </EventProviders>
+        </EventCollectorId>
+      </Collectors>
+    </Profile>
+  </Profiles>
+</WindowsPerformanceRecorder>

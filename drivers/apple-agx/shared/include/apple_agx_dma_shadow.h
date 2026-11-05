@@ -77,6 +77,9 @@ APPLE_AGX_BOOL AppleAgxDmaShadowPatchU64(void *Storage,
 APPLE_AGX_BOOL AppleAgxDmaShadowMatchesU64(
     const void *Storage, APPLE_AGX_U32 BytesUsed,
     APPLE_AGX_U32 PatchOffset, APPLE_AGX_U64 Value);
+APPLE_AGX_BOOL AppleAgxDmaShadowMatchesWritableU64(
+    const void *Storage, APPLE_AGX_U32 BytesUsed,
+    APPLE_AGX_U32 PatchOffset, APPLE_AGX_U64 Value);
 APPLE_AGX_BOOL AppleAgxDmaShadowCopySubmission(
     const void *Storage, APPLE_AGX_U32 BytesUsed,
     APPLE_AGX_U32 SubmissionStart, APPLE_AGX_U32 SubmissionEnd,

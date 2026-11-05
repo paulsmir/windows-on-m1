@@ -22,10 +22,12 @@ class AppleAgxRenderBackendImageTests(unittest.TestCase):
                 "-I", str(SHARED / "include"),
                 str(RENDER / "tests" / "render_backend_image_test.c"),
                 str(RENDER / "src" / "render_backend_image.c"),
+                str(RENDER / "src" / "render_allocation.c"),
                 str(SHARED / "src" / "apple_agx_render_template.generated.c"),
                 str(SHARED / "src" / "apple_agx_render_template_rebase.c"),
                 str(SHARED / "src" / "apple_agx_relocation.c"),
                 str(SHARED / "src" / "apple_agx_exp208_gdi.c"),
+                str(SHARED / "src" / "apple_agx_exp208_framebuffer.c"),
                 str(SHARED / "src" / "apple_agx_gdi.c"),
                 str(SHARED / "src" / "apple_agx_memory.c"),
                 str(SHARED / "src" / "apple_agx_exp208_adapter.c"),
@@ -58,6 +60,39 @@ class AppleAgxRenderBackendImageTests(unittest.TestCase):
         scheduler = (RENDER / "src" / "scheduler_windows.c").read_text()
         self.assertIn("AdmissionBackendImageBindSubmission", submission)
         self.assertIn("AdmissionBackendImageReleaseSubmission", scheduler)
+
+    def test_completion_uses_bound_output_snapshot_after_release(self):
+        source = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        complete = source[
+            source.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete("):
+            source.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(")
+        ]
+        capture = complete.index("AdmissionBackendImageCaptureOutput")
+        release = complete.index("AdmissionBackendImageReleaseSubmission")
+        finish = complete.index("AppleAgxCompletionTransactionFinish")
+        schedule = complete.index("KeSetEvent(&runtime->OutputWake")
+        self.assertLess(capture, release)
+        self.assertLess(release, finish)
+        self.assertLess(finish, schedule)
+        self.assertNotIn("AdmissionTerminalObserve(runtime", complete)
+
+        terminal = source[
+            source.index("static VOID AdmissionTerminalObserve("):
+            source.index("static VOID AdmissionTerminalExit(")
+        ]
+        self.assertIn("const ADMISSION_BACKEND_OUTPUT_VIEW *Output", terminal)
+        self.assertIn("Output->RenderedCpuAddress", terminal)
+        self.assertIn("Output->ExpectedColor", terminal)
+        self.assertNotIn("BackendImage.Binding", terminal)
+        output_worker = source[
+            source.index("static VOID AdmissionOutputProcess(",
+                         source.index("AdmissionBackendComplete(")):
+            source.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(")
+        ]
+        self.assertIn("AdmissionTerminalObserve(", output_worker)
+        self.assertIn("AdmissionScanoutPresentAgxResult(", output_worker)
+        self.assertIn("PsCreateSystemThread(", source)
+        self.assertNotIn("IoQueueWorkItem(runtime->OutputWorkItem", source)
 
 
 if __name__ == "__main__":

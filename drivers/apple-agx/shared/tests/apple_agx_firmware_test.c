@@ -1,4 +1,5 @@
 #include "apple_agx_firmware.h"
+#include "apple_agx_firmware_start_receipt.h"
 
 #include <assert.h>
 #include <stddef.h>
@@ -36,6 +37,7 @@ typedef struct _FAKE_TRANSPORT {
   APPLE_AGX_FW_U64 NowMs;
   APPLE_AGX_FW_U64 PublishedAddress;
   unsigned int RecordCount;
+  APPLE_AGX_FIRMWARE_START_RECEIPT FirstFailure;
 } FAKE_TRANSPORT;
 
 static void append_trace(FAKE_TRANSPORT *fake, unsigned char value) {
@@ -175,9 +177,7 @@ static void record_phase(void *context, APPLE_AGX_FIRMWARE_PHASE phase,
                          APPLE_AGX_FIRMWARE_RESULT result,
                          APPLE_AGX_FW_U32 completed_mask) {
   FAKE_TRANSPORT *fake = (FAKE_TRANSPORT *)context;
-  (void)phase;
-  (void)result;
-  (void)completed_mask;
+  AppleAgxFirmwareCaptureStartFailure(&fake->FirstFailure,phase,result,completed_mask);
   ++fake->RecordCount;
 }
 
@@ -442,6 +442,21 @@ static void test_cleanup_clock_regression_is_failure(void) {
 }
 
 int main(void) {
+  {
+    FAKE_TRANSPORT fake={0};
+    APPLE_AGX_FIRMWARE_IO io=make_io(&fake);
+    APPLE_AGX_FIRMWARE firmware;
+    fake.FailStartOperation=7;fake.FailCleanupOperation=2;
+    AppleAgxFirmwareInitialize(&firmware);
+    assert(AppleAgxFirmwareStart(&firmware,&io)==AppleAgxFirmwareResultCleanupFailed);
+    assert(fake.FirstFailure.Captured);
+    assert(fake.FirstFailure.Result==AppleAgxFirmwareResultTransportFailed);
+    assert(fake.FirstFailure.CompletedMask==0x3fu);
+    fake.FailCleanupOperation=0;
+    assert(AppleAgxFirmwareRollback(&firmware,&io)==AppleAgxFirmwareResultOk);
+    assert(fake.FirstFailure.Result==AppleAgxFirmwareResultTransportFailed);
+    assert(fake.FirstFailure.CompletedMask==0x3fu);
+  }
   test_ordered_start_and_idempotent_rollback();
   test_failure_after_every_start_operation_rolls_back_exactly();
   test_deadline_equality_passes_and_one_tick_late_fails();
