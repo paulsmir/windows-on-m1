@@ -297,7 +297,9 @@ static inline void AgxD3d12JobBarrierLocal(AGX_D3D12_JOB_BARRIERS *j) {
 /* OV3: owner work outside any command (a deferred resolve copied the
  * native way) joins the current compute batch */
 static inline void AgxD3d12JobBarrierForeign(AGX_D3D12_JOB_BARRIERS *j) {
-  ++j->ForeignSince;
+  /* EXP2203: the work belongs to the open compute batch only -- it makes
+   * that batch foreign (ComputeForeign, OV2) and its writes unplaced (OV5),
+   * and says nothing about a render submitted before that batch */
   j->ComputeForeign = 1u;
   j->ForeignKinds |= 1u << 31;
   j->RangeCompute.Overflow = 1u; /* OV5: its writes are not placed */
@@ -484,7 +486,9 @@ static inline unsigned AgxD3d12JobRenderTaRefusal(const AGX_D3D12_JOB_BARRIERS *
   if (j->Unknown) return 1u;
   if (j->PreviousKind != 2u) return 2u;
   if (prelude) return 9u;
-  if (j->ForeignSince > AgxD3d12JobBarrierForeignActive(j) || j->ComputeForeign) return 6u;
+  /* non-draw commands since the compute batch; driver work in a compute
+   * batch is that batch's (unplaced writes: 11), not this render's */
+  if (j->ForeignSince > AgxD3d12JobBarrierForeignActive(j)) return 6u;
   if (c->Overflow || r->Overflow) return 11u;
   if (j->GlobalUavSinceDispatch && c->Uav && r->Uav) return 12u;
   for (a = 0; a < r->Count; ++a) {

@@ -575,6 +575,7 @@ static unsigned run(int mode) {
   if (mode == 5) AgxD3d12JobBarrierDrawRange(&j, &S, 0, 16, VX);        /* vertex read of what C read */
   if (mode == 7) AgxD3d12JobBarrierDrawRange(&j, &V, 128, 192, 1u);     /* a PS UAV */
   AgxD3d12JobBarrierEnd(&j);
+  if (mode == 8) AgxD3d12JobBarrierForeign(&j); /* EXP2203: end-of-replay drain into the NEXT compute batch */
   AgxD3d12JobBarrierBegin(&j, 2);                    /* the next C submits R */
   {
     unsigned r = AgxD3d12JobRenderTaRefusal(&j, mode == 9);
@@ -584,7 +585,7 @@ static unsigned run(int mode) {
   }
 }
 int main(void) {
-  const int modes[] = {0, 1, 2, 3, 4, 5, 6, 7, 9};
+  const int modes[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
   for (unsigned i = 0; i < sizeof(modes) / sizeof(modes[0]); ++i) printf("%d %u\n", modes[i], run(modes[i]));
   return 0;
 }
@@ -600,6 +601,7 @@ int main(void) {
             '5 0',    # vertex read of what the compute only read
             '6 11',   # driver work in the compute batch: its writes are unplaced
             '7 12',   # global UAV barrier, UAVs on both sides
+            '8 0',    # EXP2203 R8: driver work in the compute batch after R
             '9 9'])   # a compute prelude
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         self.assertIn('const unsigned ta = AgxD3d12JobRenderTaRefusal(&owner_job_barriers, prelude);', owner)
