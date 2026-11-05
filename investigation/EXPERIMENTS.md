@@ -69434,3 +69434,8 @@ Switches: Wom1ComputeOwnQueue=1 only. Steps: D3D12 suite; GravityMark D3D12 100k
 - Hashes: sys e2b5eab509af, UmdArm64 86d409d0ac65, UmdX64 a9c826f8a91f, Umd32 f5243f3f21f7; manifest 4a35090dafda, hardware-manifest 9ee449969913; probe2190.sh c57137a1dc09 (PROBE_LINT_OK); visible recovery rec2190h 0cda3d52b71711b8; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1ComputeOwnQueue=1.
 - Recovery rec2190h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2190-q2c-nodiag/run2190.sh.
+
+EXP2190 HARDWARE ACTUAL (2026-11-05T14:55:13Z): **Q2c on, no receipts: FHD FULL 5396 (new best, first arm), HD FULL 6575, HD PERF 40.287 / 40.383 FPS; clean.**
+- Switches Wom1ComputeOwnQueue=1. Suite 119 PASS / 0 FAIL; WER 0; guest alive; no reset.
+- Against the receipt-free controls (EXP2182-2188): FHD first-arm 5268 / 5174 -> 5396 (+2.4 % over the best); HD FULL 6628 / 6595 / 6592 / 6468 -> 6575 (within spread); HD PERF controls 39.7-40.45 -> 40.29 / 40.38 (within spread).
+- Verdict: positive for FHD, neutral for HD within cross-boot noise; not enough for a default flip. Next: EXP2191 = same package design and arm order with Q2c off (cross-boot control pair). Recovery rec2190h.
