@@ -69312,3 +69312,11 @@ Switches: Wom1ComputeOwnQueue=1 Wom1Depth2General=0. Steps: D3D12 suite; Gravity
 - Hashes: sys b5c326ad043a, UmdArm64 c41f05acc458, UmdX64 d393edc7d695, Umd32 12a0dce705a0; manifest 996b1ffa38ad, hardware-manifest a71b6dfe52be; probe2184.sh 897b78fad564 (PROBE_LINT_OK); visible recovery rec2184h cf79b4dfe510224f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1ComputeOwnQueue=1 Wom1Depth2General=0.
 - Recovery rec2184h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2184-q2c/run2184.sh.
+
+EXP2184 HARDWARE ACTUAL (2026-11-05T11:14:54Z): **Q2c H0 FAIL (KMD refusal, not firmware): with Wom1ComputeOwnQueue=1 Wom1Depth2General=0 the guest reset ~71 s after the ordered restart, before the D3D12 suite (TOOL_SUITE PASS=0, guest unreachable).**
+- m1n1 console (evidence/EXP2184/full-at-reset.log): normal BROKERLOCK traffic, NVMe guest reset, PSCI RESET (bugcheck reboot); no firmware crash line.
+- Wom1GpuReset v4 (rec2184h/kmd-receipts-pre-disable.txt, decoded with tools/decode_wom1_gpu_fault.py): ResetEngine x2 then ResetFromTimeout 0xc0000483; SchedulerFaulted 0x4195f = backend_platform_windows.c:6495, i.e. AdmissionPrepareG4Manager / AdmissionPrepareUnmanagedInitBm refused the next job; packet active 0x1e35, completed 0x1e34 (about 7.7k jobs completed first), job_age 0, poll_age 3223 ms.
+- Wom1GpuFaultPostResume v4: firmware not halted, RTKit crashlog Crashed 0, compute ring rptr = done = write = 11 (compute completions on the own Queue were consumed), no pending stamps.
+- Interpretation: the firmware accepted the second Queue's NotifierList/Notifier/GpuContextData and delivered compute completions (Q1 not rejected); a KMD job-start precondition (queue provider/runtime phase, pending fence, CompletionAvailable or manager state) was false. Not yet separated: Q2c accounting vs the untested depth-one + retained-slot path.
+- Verdict: INCONCLUSIVE for Q1 (firmware side looks accepted); KMD refusal cause unknown. Wom1ComputeOwnQueue stays off.
+- Next: 1ca7adee makes the refusal name its failing term (SchedulerFaulted 0x40000 | line of the false term); rerun the same switches once with it. Recovery: rec2184h -> RECOVERY_DONE.
