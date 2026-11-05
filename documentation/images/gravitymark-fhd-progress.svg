@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" font-family="Helvetica, Arial, sans-serif">
+<rect width="1200" height="675" fill="#fcfcfb"/>
+<text x="110" y="52" font-size="30" font-weight="700" fill="#0b0b0b">GravityMark 1.89 on an M1 MacBook Air: native Windows 11, Direct3D 12</text>
+<text x="110" y="86" font-size="20" fill="#52514e">1920×1080, 100,000 asteroids, temporal AA off, windowed. Score; higher is better.</text>
+<line x1="110" x2="1140" y1="555.0" y2="555.0" stroke="#e4e3df" stroke-width="1"/>
+<text x="98" y="561.0" font-size="17" fill="#52514e" text-anchor="end">0</text>
+<line x1="110" x2="1140" y1="452.6" y2="452.6" stroke="#e4e3df" stroke-width="1"/>
+<text x="98" y="458.6" font-size="17" fill="#52514e" text-anchor="end">2,000</text>
+<line x1="110" x2="1140" y1="350.3" y2="350.3" stroke="#e4e3df" stroke-width="1"/>
+<text x="98" y="356.3" font-size="17" fill="#52514e" text-anchor="end">4,000</text>
+<line x1="110" x2="1140" y1="247.9" y2="247.9" stroke="#e4e3df" stroke-width="1"/>
+<text x="98" y="253.9" font-size="17" fill="#52514e" text-anchor="end">6,000</text>
+<line x1="110" x2="1140" y1="145.6" y2="145.6" stroke="#e4e3df" stroke-width="1"/>
+<text x="98" y="151.6" font-size="17" fill="#52514e" text-anchor="end">8,000</text>
+<line x1="110" x2="1140" y1="155.1" y2="155.1" stroke="#0b0b0b" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="1140" y="145.1" font-size="18" fill="#0b0b0b" text-anchor="end">macOS 15 + Metal on the same Mac: 7,814</text>
+<path d="M155.3,555.0 V329.4 Q155.3,325.4 159.3,325.4 H266.7 Q270.7,325.4 270.7,329.4 V555.0 Z" fill="#2a78d6"/>
+<text x="213.0" y="313.4" font-size="22" font-weight="700" fill="#0b0b0b" text-anchor="middle">4,487</text>
+<text x="213.0" y="585.0" font-size="18" fill="#52514e" text-anchor="middle">Nov 2 2026</text>
+<text x="213.0" y="609.0" font-size="15" fill="#52514e" text-anchor="middle">first like-for-like run</text>
+<path d="M361.3,555.0 V310.2 Q361.3,306.2 365.3,306.2 H472.7 Q476.7,306.2 476.7,310.2 V555.0 Z" fill="#2a78d6"/>
+<text x="419.0" y="294.2" font-size="22" font-weight="700" fill="#0b0b0b" text-anchor="middle">4,862</text>
+<text x="419.0" y="585.0" font-size="18" fill="#52514e" text-anchor="middle">Nov 3 2026</text>
+<path d="M567.3,555.0 V298.5 Q567.3,294.5 571.3,294.5 H678.7 Q682.7,294.5 682.7,298.5 V555.0 Z" fill="#2a78d6"/>
+<text x="625.0" y="282.5" font-size="22" font-weight="700" fill="#0b0b0b" text-anchor="middle">5,091</text>
+<text x="625.0" y="585.0" font-size="18" fill="#52514e" text-anchor="middle">Nov 4 2026</text>
+<path d="M773.3,555.0 V289.5 Q773.3,285.5 777.3,285.5 H884.7 Q888.7,285.5 888.7,289.5 V555.0 Z" fill="#2a78d6"/>
+<text x="831.0" y="273.5" font-size="22" font-weight="700" fill="#0b0b0b" text-anchor="middle">5,266</text>
+<text x="831.0" y="585.0" font-size="18" fill="#52514e" text-anchor="middle">Nov 5 a.m. 2026</text>
+<path d="M979.3,555.0 V282.9 Q979.3,278.9 983.3,278.9 H1090.7 Q1094.7,278.9 1094.7,282.9 V555.0 Z" fill="#2a78d6"/>
+<text x="1037.0" y="266.9" font-size="22" font-weight="700" fill="#0b0b0b" text-anchor="middle">5,396</text>
+<text x="1037.0" y="585.0" font-size="18" fill="#52514e" text-anchor="middle">Nov 5 p.m. 2026</text>
+<text x="1037.0" y="609.0" font-size="15" fill="#52514e" text-anchor="middle">compute on its own GPU queue</text>
+<line x1="110" x2="1140" y1="555.0" y2="555.0" stroke="#52514e" stroke-width="1.5"/>
+<text x="110" y="661" font-size="15" fill="#52514e">Best FULL score per day (167 s run). Same machine, same GravityMark build. Our driver is experimental.</text>
+</svg>
