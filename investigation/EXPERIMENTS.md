@@ -69647,3 +69647,18 @@ EXP2201 macOS DIAGNOSTIC (2026-11-05T22:23:30Z; BEFORE not recorded separately -
 - Overlap (median per frame): NO render->compute overlap at all (every compute encoder ovl_prev 0). Compute->render overlap: FHD c15 -> R16 1.95 ms (c15 1.94 ms fully inside R16 7.05 ms), c19 -> R20 1.45 ms; HD 0.95 / 0.72 ms. FHD wall 21.67 ms vs encoder sum 25.35; HD 17.01 vs 18.59.
 - Per-encoder FHD (ms): c0 0.63, c1 0.80, c5 1.35, c7 3.00, c9 0.15, R10 2.18, c11 1.46, c13 0.08, R14 1.26, c15 1.94, R16 7.05, R17 0.10, c18 0.44, c19 0.90, R20 2.26 (compute sum 10.75, render 12.85).
 - Verdict: CONFIRMED -- Apple's overlap is a render starting while the preceding independent compute runs (our C5->R6 and C7->R8 by position), not compute after render; OV2 targeted the wrong direction. Next: OV5 = independent RENDER successor of a compute (UMD: no barrier between C's last dispatch and R's first draw naming a range C accessed; KMD: waive the 3D lead wait on the compute stamp). Evidence .local/experiments/MACOS-20261105-hazard (hazard-fhd.csv, split2-fhd.csv, split2-hd.csv, mtlhazard.m, split2.command).
+
+EXP2202 HARDWARE BEFORE 2026-11-05T22:40:03Z:
+Switches: Wom1Ov2NoHazardLead=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true: d HD PERF APPLE_AGX_D3D12_OV3B=1 (KMD receipts at poll 12). One arm, diagnostic.
+- WHY THIS HYPOTHESIS: (1) EXP2201 macOS: Apple overlaps compute->render only (c15->R16 1.95 ms, c19->R20 1.45 ms FHD), at the TA stage (R16 depends on c15 only through its colour attachment); (2) our C7->R8 is prelude-free under OV3b (EXP2198), so it is the first OV5 candidate; (3) dbaf4b68 changed C9's classification (drained resolve copies stay foreign), Waived should drop to ~0.
+- WINDOWS CONTRACT: unchanged (receipt only).
+- AGX/ASAHI CONTRACT: unchanged.
+- ATOMIC CONTRACT: none -- receipts only, no behaviour change.
+- WHAT IS STILL UNKNOWN: value 22 per render-after-compute (expected R2/R4/R6 = 9 prelude, R8 = 0 if C7's writes miss R8's vertex inputs); values 12-15 OV4 prefixes; values 16-19 C3 foreign kinds (bit 11 IndirectExpand?).
+- Expected: suite 119/0; receipt rows with value 23 ~4 per frame ECL; Wom1Ov2Receipt Waived ~0; FPS ~40.2.
+- Failure criteria: no receipt rows, any fault/TDR/WER -> rec2202h.
+- Recovery: rec2202h (recover.sh directly on the running guest, no manual reboot).
+- Probe: agx_d3d12_probe_e2202_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c, probe source unchanged).
+- Hashes: sys f9a5aa4c2c78, UmdArm64 bd29ad721e94, UmdX64 10df9bd2c15a, Umd32 398cccc0738e; manifest d522a876d343, hardware-manifest 6ecb51f65d70; probe2202.sh 9f1aac4fc028 (PROBE_LINT_OK); visible recovery rec2202h e09e35108e33e6a3; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
+- Recovery rec2202h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2202-ov5-receipt/run2202.sh.
