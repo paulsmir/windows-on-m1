@@ -69188,3 +69188,15 @@ Switches: Wom1G3RetainedSlots=1 Wom1JobThreadAnyCore=1. Steps: D3D12 suite; Grav
 - Hashes: sys c85cfcb456ac, UmdArm64 22458bbb242b, UmdX64 8cefdfe0e205, Umd32 84532df2616b; manifest a6a479d531a1, hardware-manifest 724555db6c4d; probe2177.sh d2eb7e7ac905 (PROBE_LINT_OK); visible recovery rec2177h c3835a78ee1073ec; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1G3RetainedSlots=1 Wom1JobThreadAnyCore=1.
 - Recovery rec2177h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2177-abbab/run2177.sh.
+
+EXP2178 HARDWARE BEFORE 2026-11-05T01:53:31Z:
+Switches: Wom1G3RetainedSlots=1 Wom1JobThreadAnyCore=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a FHD FULL (first arm), b HD FULL.
+- WHY THIS HYPOTHESIS: (1) EXP2175 single run of B: HD 6581 / FHD 5266, both above the A-era bests (6524 / 5200); (2) the user asked for an ABBA confirmation before making B the default; (3) within-boot order effects (~3 %) and single-run noise (~1.5 %) require paired runs.
+- WINDOWS CONTRACT / AGX CONTRACT: as EXP2175 (B) / current defaults (A).
+- WHAT IS STILL UNKNOWN: the B-A difference beyond run-to-run noise.
+- Expected: B > A on both resolutions in both pairs.
+- Failure criteria: suite regression, TDR, hang, boot failure (lastgood relaunch).
+- Recovery: rec2178h.
+- Hashes: sys a4e33c76e88c, UmdArm64 92c91c2b8e37, UmdX64 b5331ca23c8a, Umd32 3a011680fc5b; manifest ab73fa9f6c93, hardware-manifest cee50a85f2cc; probe2178.sh 5e4f7dab8d81 (PROBE_LINT_OK); visible recovery rec2178h 1a26453027d91444; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1G3RetainedSlots=1 Wom1JobThreadAnyCore=1.
+- Recovery rec2178h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2178-abbab/run2178.sh.
