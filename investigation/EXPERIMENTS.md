@@ -69422,3 +69422,15 @@ EXP2189 HARDWARE ACTUAL (2026-11-05T14:32:55Z): **Q2c + F1 WORKS on depth two: s
 - Expected vs actual: expected the head event at its own end (gap < 0.1 ms) and +3..6 %; actual the per-kick delay fell ~40 % (0.42 -> 0.26 ms per compute kick) and HD FULL +2.6 % over the latest control (cross-boot); the remaining kick delay is the KMD/firmware start path, not the deferred notification.
 - Verdict: CONFIRMED (mechanism and stability, one boot). Q2c firmware contract (Q1/Q2) accepted on hardware. Default unchanged until a cross-boot comparison without receipts (EXP2190) and FHD.
 - Recovery rec2189h. Evidence .local/experiments/EXP2189-q2c-f1/evidence.
+
+EXP2190 HARDWARE BEFORE 2026-11-05T14:40:03Z:
+Switches: Wom1ComputeOwnQueue=1 only. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true: a FHD FULL (first arm), b HD FULL, c HD PERF, d HD PERF.
+- WHY THIS HYPOTHESIS: (1) EXP2189: Q2c + F1 runs cleanly and cuts the render->compute kick delay 1.69 -> 1.03 ms/frame (wall -1.7 % in PERF); (2) its HD FULL 6769 carried JobDiagnostics receipts, so a receipt-free run is needed against the receipt-free controls (HD FULL 6628/6595/6592/6468, FHD first-arm 5268/5174 in EXP2182-2188); (3) the switch is read at adapter start, so on/off comparisons are cross-boot.
+- WINDOWS / AGX CONTRACT / TRANSLATION / ATOMIC CONTRACT: as EXP2189.
+- WHAT IS STILL UNKNOWN: the receipt-free FHD and HD gain; FHD stability under Q2c.
+- Expected: suite 119/0; correct images; HD FULL > 6650, FHD first-arm > 5270, HD PERF > 40.3 FPS.
+- Failure criteria: any reset/TDR/fault/wrong image -> rec2190h, Q2c stays off; scores within the control spread -> no default flip.
+- Recovery: rec2190h.
+- Hashes: sys e2b5eab509af, UmdArm64 86d409d0ac65, UmdX64 a9c826f8a91f, Umd32 f5243f3f21f7; manifest 4a35090dafda, hardware-manifest 9ee449969913; probe2190.sh c57137a1dc09 (PROBE_LINT_OK); visible recovery rec2190h 0cda3d52b71711b8; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1ComputeOwnQueue=1.
+- Recovery rec2190h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2190-q2c-nodiag/run2190.sh.
