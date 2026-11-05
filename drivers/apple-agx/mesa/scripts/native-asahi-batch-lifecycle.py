@@ -1286,7 +1286,11 @@ agx_win32_should_lower_robustness_d3d(const nir_intrinsic_instr *intr,
     # agx_upload_textures fills holds nr_bindful_textures + 2 *
     # nr_bindful_images descriptors.
     state=replace(state,'''   NIR_PASS(_, nir, agx_nir_lower_texture);
-''','''   NIR_PASS(_, nir, agx_nir_lower_texture);
+''','''   /* T1: the D3D array-layer clamp without libagx_txs
+    * (winsys/agx_win32_d3d_texture_crawl.h, APPLE_AGX_D3D_MAX_LAYER=1) */
+   if (d3d_robust)
+      NIR_PASS(_, nir, agx_win32_lower_d3d_layer_clamp);
+   NIR_PASS(_, nir, agx_nir_lower_texture);
    if (d3d_robust)
       NIR_PASS(_, nir, agx_win32_speculate_texture_crawls,
                so->info.nr_bindful_textures + 2 * so->info.nr_bindful_images);

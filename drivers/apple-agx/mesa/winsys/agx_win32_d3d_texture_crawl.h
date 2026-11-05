@@ -106,6 +106,123 @@ agx_win32_speculate_texture_crawls(nir_shader *nir, unsigned descriptors)
    return progress;
 }
 
+/* T1: the array-layer clamp of a D3D sample without libagx_txs.
+ *
+ * Asahi clamps the layer of every array sample (agx_nir_lower_texture.c
+ * lower_regular_texture, not txf, not lod) to nr_layers - 1, nr_layers being
+ * the layer component of nir_get_texture_size, which lower_tex_crawl turns
+ * into libagx_txs (libagx/texture.cl): four descriptor loads and ~15 integer
+ * operations per sample (null check on the 64-bit address, linear-2D-array
+ * select, + 1, then - 1), GravityMark G-buffer PS 9fa121805cf5ea58 runs it
+ * for each of its three heap-indexed samples.  For the descriptor d (genxml
+ * Texture: Depth bits 110..123, layers - 1; Layout bits 4..5, Linear = 0;
+ * Depth (linear) bits 128..138) libagx_txs's layer count is, for
+ * d.address != AGX_ZERO_PAGE_ADDRESS,
+ *    (2D sampler && d.layout == Linear ? d.depth_linear : d.depth)
+ * (1D arrays read size.z, cube arrays component 2 = depth; "do not adjust
+ * array size" for the LOD), so max_layer = that field's encoded value: the
+ * same number, with no + 1 / - 1 and no address test.
+ *
+ * Null descriptors (address == AGX_ZERO_PAGE_ADDRESS): libagx returns 0
+ * layers, Asahi's clamp becomes umin(layer, ~0u), no clamp; here the layer
+ * is clamped to the encoded field.  The only writer of that address into a
+ * texture descriptor is agx_set_null_texture (agx_helpers.h; Gallium's
+ * unbound slots, the D3D12 heap's null and invalid SRVs through
+ * AgxWin32AsahiNullTextureDescriptor), whose Depth field encodes 1 layer and
+ * whose four swizzles are AGX_CHANNEL_0: the sample returns (0,0,0,0) for
+ * every layer, the D3D null-SRV result, and the clamped read stays at the
+ * first layer of the zero page.  On Windows AGX_ZERO_PAGE_ADDRESS is the
+ * device's zero page VA (EXP1069) while the libagx NIR compares the address
+ * with 1 << 32, so Asahi's null branch does not fire there and both forms
+ * already clamp a null descriptor to layer 0.
+ *
+ * Linear layouts are kept exact rather than excluded: D3D11 present-bindable
+ * textures (PIPE_BIND_DISPLAY_TARGET, d3d10umd translate_resource_flags) and
+ * the D3D12 imported presentation surface (AgxWin32AsahiImportLinearColor32)
+ * are linear, and agx_pack_texture packs a linear 1D/2D array view with
+ * depth_linear (its Depth bits are the Stride field).
+ *
+ * The layer is computed as Asahi computes it, umin(f2u32(fmax(rne(l), 0)),
+ * max_layer), and passed back as u2f32 of it with AGX_TEXTURE_FLAG_NO_CLAMP:
+ * lower_regular_texture then applies rne/fmax/f2u32 to an integral,
+ * non-negative value <= 16383 (exact in fp32), which returns it unchanged.
+ * Only samples with a divergent descriptor handle (a D3D12 heap index from
+ * per-thread data) are rewritten: with a uniform handle the whole clamp is
+ * uniform and Asahi's form already runs once in the preamble; rewriting it
+ * there only perturbed register allocation (CS 144a46de +53 instructions).
+ * APPLE_AGX_D3D_MAX_LAYER=1 (read when a shader is compiled) enables it;
+ * default off (Asahi's libagx_txs clamp). */
+#include "asahi/compiler/agx_nir_texture.h"
+
+static inline bool
+agx_win32_d3d_max_layer_enabled(void)
+{
+   const char *env = getenv("APPLE_AGX_D3D_MAX_LAYER");
+   return env && env[0] == '1' && !env[1];
+}
+
+static inline nir_def *
+agx_win32_descriptor_word(nir_builder *b, nir_def *descriptor, unsigned word)
+{
+   return nir_load_global_constant(b, 1, 32, nir_iadd_imm(b, descriptor, 4 * word), .align_mul = 4);
+}
+
+/* the encoded layers - 1 of the descriptor of tex (see above) */
+static inline nir_def *
+agx_win32_d3d_max_layer(nir_builder *b, nir_tex_instr *tex, nir_def *handle)
+{
+   nir_def *descriptor = nir_load_from_texture_handle_agx(b, handle);
+   nir_def *depth = nir_ubitfield_extract_imm(b, agx_win32_descriptor_word(b, descriptor, 3), 14, 14);
+   if (tex->sampler_dim != GLSL_SAMPLER_DIM_2D)
+      return depth;
+   nir_def *linear = nir_ieq_imm(b, nir_iand_imm(b, agx_win32_descriptor_word(b, descriptor, 0), 0x30), 0);
+   nir_def *depth_linear = nir_iand_imm(b, agx_win32_descriptor_word(b, descriptor, 4), 0x7ff);
+   return nir_bcsel(b, linear, depth_linear, depth);
+}
+
+static inline bool
+agx_win32_lower_d3d_layer_clamp_instr(nir_builder *b, nir_instr *instr, void *data)
+{
+   (void)data;
+   if (instr->type != nir_instr_type_tex)
+      return false;
+   nir_tex_instr *tex = nir_instr_as_tex(instr);
+   /* the samples lower_regular_texture clamps with nir_get_texture_size */
+   if (!tex->is_array || nir_tex_instr_is_query(tex) || tex->op == nir_texop_lod ||
+       tex->op == nir_texop_txf || tex->op == nir_texop_txf_ms ||
+       tex->sampler_dim == GLSL_SAMPLER_DIM_BUF || (tex->backend_flags & AGX_TEXTURE_FLAG_NO_CLAMP) ||
+       nir_tex_instr_src_index(tex, nir_tex_src_backend1) >= 0)
+      return false;
+   const int coord_idx = nir_tex_instr_src_index(tex, nir_tex_src_coord);
+   const int handle_idx = nir_tex_instr_src_index(tex, nir_tex_src_texture_handle);
+   if (coord_idx < 0 || handle_idx < 0)
+      return false;
+   /* a uniform handle's clamp is uniform: Asahi's form already runs once,
+    * in the preamble (nir_opt_preamble) */
+   if (!tex->src[handle_idx].src.ssa->divergent)
+      return false;
+   nir_def *coord = tex->src[coord_idx].src.ssa;
+   if (coord->bit_size != 32 || nir_tex_instr_src_type(tex, coord_idx) != nir_type_float)
+      return false;
+   b->cursor = nir_before_instr(instr);
+   const unsigned lidx = coord->num_components - 1;
+   nir_def *layer = nir_f2u32(b, nir_fmax(b, nir_fround_even(b, nir_channel(b, coord, lidx)), nir_imm_float(b, 0.0f)));
+   layer = nir_umin(b, layer, agx_win32_d3d_max_layer(b, tex, tex->src[handle_idx].src.ssa));
+   nir_src_rewrite(&tex->src[coord_idx].src, nir_vector_insert_imm(b, coord, nir_u2f32(b, layer), lidx));
+   tex->backend_flags |= AGX_TEXTURE_FLAG_NO_CLAMP;
+   return true;
+}
+
+/* right before agx_nir_lower_texture (D3D contexts) */
+static inline bool
+agx_win32_lower_d3d_layer_clamp(nir_shader *nir)
+{
+   if (!agx_win32_d3d_max_layer_enabled())
+      return false;
+   nir_divergence_analysis(nir);
+   return nir_shader_instructions_pass(nir, agx_win32_lower_d3d_layer_clamp_instr, nir_metadata_control_flow, NULL);
+}
+
 /* M3: Asahi never runs nir_opt_licm, so a texture descriptor crawl with a
  * loop-invariant handle (load_global_constant, CAN_REORDER by definition)
  * runs on every iteration of the loop around its sample (GravityMark planet

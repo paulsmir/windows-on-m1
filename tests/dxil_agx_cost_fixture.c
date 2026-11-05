@@ -49,6 +49,8 @@
 #include "agx_win32_d3d_robustness.h"
 #include "agx_win32_d3d_texture_crawl.h"
 #include "agx_win32_soft_fault.h"
+#include "asahi/lib/agx_abi.h"
+#include "genxml/agx_pack.h"
 
 /* Gallium agx_state.c should_lower_robustness for a robust context, minus
  * UBO/SSBO accesses (agx_win32_should_lower_robustness_d3d) */
@@ -624,6 +626,219 @@ selftest_const_licm(void)
    return 0;
 }
 
+/* T1: agx_win32_d3d_max_layer evaluated on packed descriptors.  The
+ * helper's descriptor loads are replaced by the packed words and the NIR is
+ * constant folded; the reference is libagx_txs's layer count (agx_unpack,
+ * libagx/texture.cl) minus one. */
+static uint32_t
+max_layer_reference(const struct agx_texture_packed *packed, enum glsl_sampler_dim dim, bool *null)
+{
+   agx_unpack(NULL, packed, TEXTURE, d);
+   *null = d.address == AGX_ZERO_PAGE_ADDRESS;
+   if (*null)
+      return 0u - 1u; /* Asahi: umin(layer, 0 - 1) */
+   const uint32_t layers = dim == GLSL_SAMPLER_DIM_2D && d.layout == AGX_LAYOUT_LINEAR ? d.depth_linear : d.depth;
+   return layers - 1u;
+}
+
+static bool
+max_layer_evaluated(const struct agx_texture_packed *packed, enum glsl_sampler_dim dim, uint32_t *value)
+{
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &agx_nir_options, "t1-max-layer");
+   nir_tex_instr *tex = nir_tex_instr_create(b.shader, 0);
+   tex->sampler_dim = dim;
+   tex->is_array = true;
+   nir_def *result = agx_win32_d3d_max_layer(&b, tex, nir_imm_int(&b, 0));
+   nir_store_global(&b, result, nir_imm_int64(&b, 0x1000), .write_mask = 1, .align_mul = 4);
+   const uint32_t *words = (const uint32_t *)packed;
+   nir_foreach_block(block, b.impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic ||
+             nir_instr_as_intrinsic(instr)->intrinsic != nir_intrinsic_load_global_constant)
+            continue;
+         nir_intrinsic_instr *load = nir_instr_as_intrinsic(instr);
+         nir_scalar addr = nir_scalar_resolved(load->src[0].ssa, 0);
+         uint64_t offset = 0;
+         if (nir_scalar_is_alu(addr) && nir_scalar_alu_op(addr) == nir_op_iadd) {
+            offset = nir_scalar_as_uint(nir_scalar_chase_alu_src(addr, 1));
+            addr = nir_scalar_chase_alu_src(addr, 0);
+         }
+         if (!nir_scalar_is_intrinsic(addr) || nir_scalar_intrinsic_op(addr) != nir_intrinsic_load_from_texture_handle_agx ||
+             offset % 4 || offset >= AGX_TEXTURE_LENGTH)
+            return false;
+         b.cursor = nir_before_instr(instr);
+         nir_def_replace(&load->def, nir_imm_int(&b, (int)words[offset / 4]));
+      }
+   }
+   bool progress;
+   do {
+      progress = false;
+      NIR_PASS(progress, b.shader, nir_opt_constant_folding);
+      NIR_PASS(progress, b.shader, nir_opt_copy_prop);
+      NIR_PASS(progress, b.shader, nir_opt_algebraic);
+      NIR_PASS(progress, b.shader, nir_opt_dce);
+   } while (progress);
+   bool ok = false;
+   nir_foreach_block(block, b.impl) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type == nir_instr_type_intrinsic &&
+             nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_store_global &&
+             nir_src_is_const(nir_instr_as_intrinsic(instr)->src[0])) {
+            *value = (uint32_t)nir_src_as_uint(nir_instr_as_intrinsic(instr)->src[0]);
+            ok = true;
+         }
+      }
+   }
+   ralloc_free(b.shader);
+   return ok;
+}
+
+/* the pass rewrites array samples whose handle is divergent only, and only
+ * with APPLE_AGX_D3D_MAX_LAYER=1 */
+static unsigned
+max_layer_rewritten(void)
+{
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, &agx_nir_options, "t1-max-layer-pass");
+   nir_def *x = nir_channel(&b, nir_load_global_invocation_id(&b, 32), 0);
+   nir_def *sum = nir_imm_float(&b, 0.0f);
+   for (unsigned i = 0; i < 2; ++i) {
+      nir_def *index = i ? nir_imul_imm(&b, nir_iand_imm(&b, x, 7), 24) : nir_imm_int(&b, 48);
+      nir_tex_instr *tex = nir_tex_instr_create(b.shader, 3);
+      tex->op = nir_texop_txl;
+      tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
+      tex->is_array = true;
+      tex->coord_components = 3;
+      tex->dest_type = nir_type_float32;
+      tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_coord, nir_vec3(&b, nir_imm_float(&b, 0.5f),
+                                                                    nir_imm_float(&b, 0.5f), nir_u2f32(&b, x)));
+      tex->src[1] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_float(&b, 0.0f));
+      tex->src[2] = nir_tex_src_for_ssa(nir_tex_src_texture_handle,
+                                        nir_bindless_image_agx(&b, index, .desc_set = DXBC_HEAP_HANDLE_MARK));
+      nir_def_init(&tex->instr, &tex->def, 4, 32);
+      nir_builder_instr_insert(&b, &tex->instr);
+      sum = nir_fadd(&b, sum, nir_channel(&b, &tex->def, 0));
+   }
+   nir_store_global(&b, sum, nir_imm_int64(&b, 0x1000), .write_mask = 1, .align_mul = 4);
+   agx_win32_lower_d3d_layer_clamp(b.shader);
+   nir_validate_shader(b.shader, "t1");
+   unsigned rewritten = 0;
+   nir_foreach_block(block, b.impl) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type == nir_instr_type_tex) {
+            nir_tex_instr *tex = nir_instr_as_tex(instr);
+            const bool divergent_handle =
+               !nir_src_is_const(tex->src[nir_tex_instr_src_index(tex, nir_tex_src_texture_handle)].src);
+            if (tex->backend_flags & AGX_TEXTURE_FLAG_NO_CLAMP)
+               rewritten |= divergent_handle ? 1u : 2u;
+         }
+      }
+   }
+   ralloc_free(b.shader);
+   return rewritten;
+}
+
+static int
+selftest_max_layer(void)
+{
+   struct agx_texture_packed packed[8];
+   enum glsl_sampler_dim dims[8];
+   const char *names[8];
+   unsigned n = 0;
+   /* twiddled 2D arrays of 1, 6 and 2048 layers */
+   static const unsigned layers[3] = {1, 6, 2048};
+   for (unsigned i = 0; i < 3; ++i, ++n) {
+      agx_pack(&packed[n], TEXTURE, cfg) {
+         cfg.dimension = AGX_TEXTURE_DIMENSION_2D_ARRAY;
+         cfg.layout = AGX_LAYOUT_TWIDDLED;
+         cfg.width = 256;
+         cfg.height = 128;
+         cfg.depth = layers[i];
+         cfg.address = 0x123450000ull;
+      }
+      dims[n] = GLSL_SAMPLER_DIM_2D;
+      names[n] = "twiddled-2d-array";
+   }
+   /* agx_pack_texture's linear 2D array view: depth_linear, extended */
+   agx_pack(&packed[n], TEXTURE, cfg) {
+      cfg.dimension = AGX_TEXTURE_DIMENSION_2D_ARRAY;
+      cfg.layout = AGX_LAYOUT_LINEAR;
+      cfg.width = 1920;
+      cfg.height = 1080;
+      cfg.stride = 1920 * 4 - 16;
+      cfg.depth_linear = 2;
+      cfg.layer_stride_linear = 0x800000 - 0x80;
+      cfg.extended = true;
+      cfg.address = 0x200000000ull;
+   }
+   dims[n] = GLSL_SAMPLER_DIM_2D;
+   names[n++] = "linear-2d-array";
+   /* a linear 2D view (D3D12 presentation surface) sampled as an array */
+   agx_pack(&packed[n], TEXTURE, cfg) {
+      cfg.dimension = AGX_TEXTURE_DIMENSION_2D;
+      cfg.layout = AGX_LAYOUT_LINEAR;
+      cfg.width = 1920;
+      cfg.height = 1080;
+      cfg.stride = 1920 * 4 - 16;
+      cfg.address = 0x200000000ull;
+   }
+   dims[n] = GLSL_SAMPLER_DIM_2D;
+   names[n++] = "linear-2d";
+   agx_pack(&packed[n], TEXTURE, cfg) {
+      cfg.dimension = AGX_TEXTURE_DIMENSION_CUBE_ARRAY;
+      cfg.layout = AGX_LAYOUT_TWIDDLED;
+      cfg.width = cfg.height = 64;
+      cfg.depth = 3;
+      cfg.address = 0x300000000ull;
+   }
+   dims[n] = GLSL_SAMPLER_DIM_CUBE;
+   names[n++] = "cube-array";
+   agx_pack(&packed[n], TEXTURE, cfg) {
+      cfg.dimension = AGX_TEXTURE_DIMENSION_1D_ARRAY;
+      cfg.layout = AGX_LAYOUT_TWIDDLED;
+      cfg.width = 512;
+      cfg.depth = 9;
+      cfg.address = 0x300000000ull;
+   }
+   dims[n] = GLSL_SAMPLER_DIM_1D;
+   names[n++] = "1d-array";
+   /* agx_helpers.h agx_set_null_texture (Gallium unbound slots, D3D12 null
+    * SRVs); test_d3d_max_layer.py holds the pinned body to these fields */
+   agx_pack(&packed[n], TEXTURE, cfg) {
+      cfg.layout = AGX_LAYOUT_TWIDDLED;
+      cfg.channels = AGX_CHANNELS_R8;
+      cfg.type = AGX_TEXTURE_TYPE_UNORM;
+      cfg.swizzle_r = AGX_CHANNEL_0;
+      cfg.swizzle_g = AGX_CHANNEL_0;
+      cfg.swizzle_b = AGX_CHANNEL_0;
+      cfg.swizzle_a = AGX_CHANNEL_0;
+      cfg.address = AGX_ZERO_PAGE_ADDRESS;
+   }
+   dims[n] = GLSL_SAMPLER_DIM_2D;
+   names[n++] = "null";
+   int failures = 0;
+   for (unsigned i = 0; i < n; ++i) {
+      bool null = false;
+      uint32_t got = 0;
+      const uint32_t want = max_layer_reference(&packed[i], dims[i], &null);
+      if (!max_layer_evaluated(&packed[i], dims[i], &got)) {
+         printf("MAXLAYER %s not-constant\n", names[i]);
+         ++failures;
+         continue;
+      }
+      bool ok = got == want;
+      if (null) {
+         /* clamped to the encoded single layer; every channel reads 0 */
+         agx_unpack(NULL, &packed[i], TEXTURE, d);
+         ok = got == d.depth - 1u && d.swizzle_r == AGX_CHANNEL_0 && d.swizzle_g == AGX_CHANNEL_0 &&
+              d.swizzle_b == AGX_CHANNEL_0 && d.swizzle_a == AGX_CHANNEL_0;
+      }
+      printf("MAXLAYER %s got %u want %u%s %s\n", names[i], got, want, null ? " (null)" : "", ok ? "ok" : "FAIL");
+      failures += !ok;
+   }
+   printf("MAXLAYER rewritten %u\n", max_layer_rewritten());
+   return failures ? 4 : 0;
+}
+
 static int
 selftest_index_masks(void)
 {
@@ -1038,6 +1253,8 @@ main(int argc, char **argv)
       return selftest_const_licm();
    if (argc > 1 && !strcmp(argv[1], "--selftest-index-masks"))
       return selftest_index_masks();
+   if (argc > 1 && !strcmp(argv[1], "--selftest-max-layer"))
+      return selftest_max_layer();
    nir_shader *nir = NULL;
    void *bytes = NULL;
    unsigned reads = 0;
@@ -1157,6 +1374,9 @@ main(int argc, char **argv)
             });
    struct counts counts = {0};
    count_cf(&nir_shader_get_entrypoint(nir)->body, 0, &counts);
+   /* T1: the D3D layer clamp without libagx_txs (APPLE_AGX_D3D_MAX_LAYER=1) */
+   if (d3d_robust)
+      NIR_PASS(_, nir, agx_win32_lower_d3d_layer_clamp);
    NIR_PASS(_, nir, agx_nir_lower_texture);
    /* RC78: the D3D context's crawl placement (native projection) */
    if (d3d_robust)
