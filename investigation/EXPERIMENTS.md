@@ -69211,3 +69211,11 @@ Switches: none. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a FHD FU
 - Recovery: rec2179h.
 - Hashes: sys 35fdcc73d9bb, UmdArm64 43c3ec601544, UmdX64 e448a477c5b2, Umd32 487e345d9468; manifest a5639dbcb0a0, hardware-manifest c1b0aac894cc; probe2179.sh 46e3f5d73cc3 (PROBE_LINT_OK); visible recovery rec2179h dc286243fd028dca; m1n1 0d3a75b3.
 - Recovery rec2179h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2179-abbaa/run2179.sh.
+
+EXP2176-EXP2179 HARDWARE ACTUAL (2026-11-05T02:31:22Z), ABBA (same package code in all four; A = m1n1 075e3980, no switches; B = m1n1 broker-lock split 1c35a20b + Wom1G3RetainedSlots=1 + Wom1JobThreadAnyCore=1):
+- EXP2176 A: FHD FULL 5108, HD FULL 6426, suite 119/0.
+- EXP2177 B: FHD 5224, HD 6499, suite 119/0.
+- EXP2178 B: FHD 5232, HD 6521, suite 119/0.
+- EXP2179 A: FHD 5192, HD 6344, suite 119/0.
+- Means A -> B: FHD 5150 -> 5228 (+1.5 %), HD 6385 -> 6510 (+2.0 %); B above A in both pairs at both resolutions; no TDR, hang or boot failure.
+- Verdict: CONFIRMED. Per the user's decision (ABBA first, then default): KMD defaults flipped in 10fd111e049e08ef7e9500dba536bb9d1476f97f (both switches on unless REG_DWORD 0); the split m1n1 becomes the working launch m1n1 and lastgood after the EXP2180 default-package check, 075e3980 stays the emergency fallback.
