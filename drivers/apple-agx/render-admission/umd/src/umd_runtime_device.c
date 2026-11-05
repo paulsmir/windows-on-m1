@@ -229,7 +229,9 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
   UINT i;
   LARGE_INTEGER diagnosticQpc = {0};
   DWORD diagnosticSession = MAXDWORD;
-  if (Stage == NULL || Count > 16u || (Count != 0u && Values == NULL))
+  /* EXP2202: 16 silently dropped the 24- and 26-value OV2 refusal receipt;
+   * 32 values fit the 512-byte line (test_umd_diagnostic_value_cap). */
+  if (Stage == NULL || Count > 32u || (Count != 0u && Values == NULL))
     goto done;
   path = AdmissionUmdTraceConfig(&refusalsOnly);
   if (path == NULL) goto done;
