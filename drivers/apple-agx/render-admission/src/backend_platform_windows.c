@@ -3531,6 +3531,27 @@ static APPLE_AGX_BACKEND_BOOL AdmissionPrepareG4Manager(
       AppleAgxG13QueueProviderRequireInitBm(&runtime->Provider.QueueProvider);
 }
 
+/* EXP2184: the job-start refusal below names its failing term. Evaluated
+ * only after AdmissionPrepareG4Manager / AdmissionPrepareUnmanagedInitBm
+ * refused (no side effect: RequireInitBm itself is not called); returns
+ * the __LINE__ of the first false term, stored as SchedulerFaulted
+ * 0x40000 | line so Wom1GpuReset decodes it as file:line. */
+static ULONG AdmissionPrepareFailureLine(const ADMISSION_PLATFORM_RUNTIME *runtime) {
+  const ADMISSION_BACKEND_IMAGE *image=&runtime->Adapter->BackendImage;
+  const APPLE_AGX_G13_QUEUE_PROVIDER *qp=&runtime->Provider.QueueProvider;
+  if (image->G4Manager) {
+    if (!image->G4Native) return __LINE__;
+    if (image->G4Manager->PendingFence) return __LINE__;
+    if (runtime->Initdata.RenderSharedMemory.ManagerFence) return __LINE__;
+  }
+  if (qp->Phase!=AppleAgxG13QueueProviderCreated) return __LINE__;
+  if (qp->PendingFence) return __LINE__;
+  if (qp->Runtime.Phase!=AppleAgxG13QueueRuntimeReady) return __LINE__;
+  if (qp->Runtime.PendingFence) return __LINE__;
+  if (qp->Runtime.CompletionAvailable) return __LINE__;
+  return __LINE__; /* none of the known terms: an unlisted refusal */
+}
+
 /* V1 (Wom1G3RetainedSlots): an unmanaged render (no private-scene buffer
  * manager) reuses the template buffer manager, whose queue InitBM copy --
  * with its context_id -- is refreshed only when the plan includes InitBM.
@@ -6492,7 +6513,8 @@ AdoptedJob:
 #endif
   if (!AdmissionPrepareG4Manager(runtime) ||
       !AdmissionPrepareUnmanagedInitBm(runtime)) {
-    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x40000L | __LINE__, 0);
+    InterlockedCompareExchange(&adapter->SchedulerFaulted,
+        (LONG)(0x40000UL | AdmissionPrepareFailureLine(runtime)), 0);
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
