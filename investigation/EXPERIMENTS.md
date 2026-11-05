@@ -69142,3 +69142,9 @@ Switches: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1 Wom1
 - Hashes: sys 8ea202f9e55a, UmdArm64 d4bb83e1f7e3, UmdX64 ec85d2e561d0, Umd32 d2656a204df7; manifest b67248d41816, hardware-manifest ae658dfb5d41; probe2174.sh b8a23b002c55 (PROBE_LINT_OK); visible recovery rec2174h 7ca168a9943aacce; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuFaultInfoRead=1 Wom1JobDiagnostics=1 Wom1G3RetainedSlots=1 Wom1JobThreadAnyCore=1.
 - Recovery rec2174h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2174-anycore/run2174.sh.
+
+EXP2174 HARDWARE ACTUAL (2026-11-05T00:23:47Z): **Unpinning the job thread (Wom1JobThreadAnyCore=1) removes the delayed post-preemption pickups: 0 of 96 preemptions with pickup > 1 ms (EXP2173 same configuration: 4 of 32, 1.6-16.9 ms); HD PERF 39.446 FPS (EXP2173 38.984, +1.2 %); R7-done -> C0-kick spans 931-1116 us on 19 of 20 frames (deployed m1n1 baseline ~1250 us), one 21.1 ms outlier (mid12) still unexplained.**
+- Suite 119/0, ARM_TASK True. Configuration: split m1n1 1c35a20b + Wom1G3RetainedSlots=1 + Wom1JobThreadAnyCore=1.
+- Interpretation: the job thread pinned to the performance cores is sometimes woken late (KeSetEvent issued, thread runs only at the next interrupt, ~vsync); with an unpinned thread the scheduler runs it on a running vCPU. Owner: the idle-vCPU wake path (m1n1 vGIC/WFI) or Windows scheduling on this topology; the KMD pinning (rc81) exposes it.
+- Verdict: CONFIRMED (pinning-dependent). Next: FULL scores of the combined stack; then decide the pinning default and the m1n1 wake investigation.
+- Recovery: rec2174h.
