@@ -69165,3 +69165,14 @@ EXP2175 HARDWARE ACTUAL (2026-11-05T00:45:31Z): **New bests with the combined st
 - Suite 119/0, ARM_TASK True, wer 0 both arms. Images: FHD mean diff 1.7 / >32 0.9 % vs EXP2168; HD 6.0 / 4.3 % vs EXP2159 (final score screen, content correct on inspection; asteroid positions differ).
 - Verdict: CONFIRMED (single runs; both resolutions above previous bests). The m1n1 split is an experimental build (user-approved), not lastgood; the KMD switches stay opt-in until a decision on defaults.
 - Recovery: rec2175h.
+
+EXP2176 HARDWARE BEFORE 2026-11-05T01:09:34Z:
+Switches: none. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a FHD FULL (first arm), b HD FULL.
+- WHY THIS HYPOTHESIS: (1) EXP2175 single run of B: HD 6581 / FHD 5266, both above the A-era bests (6524 / 5200); (2) the user asked for an ABBA confirmation before making B the default; (3) within-boot order effects (~3 %) and single-run noise (~1.5 %) require paired runs.
+- WINDOWS CONTRACT / AGX CONTRACT: as EXP2175 (B) / current defaults (A).
+- WHAT IS STILL UNKNOWN: the B-A difference beyond run-to-run noise.
+- Expected: B > A on both resolutions in both pairs.
+- Failure criteria: suite regression, TDR, hang, boot failure (lastgood relaunch).
+- Recovery: rec2176h.
+- Hashes: sys 93dc8ef2f538, UmdArm64 d48f7bd91bb4, UmdX64 4f940fd4ba0b, Umd32 57c791897808; manifest b0d5fa061ba6, hardware-manifest 45f4401d2977; probe2176.sh 2b32f271df05 (PROBE_LINT_OK); visible recovery rec2176h c72847a3ee8e1ae7; m1n1 0d3a75b3.
+- Recovery rec2176h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2176-abbaa/run2176.sh.
