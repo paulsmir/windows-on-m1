@@ -53,6 +53,15 @@ void AgxD3d12OwnerStageUploads(AGX_D3D12_OWNER *Owner);
  * a plain dispatch, else 0) and at the replay's end (0): submits the staged
  * upload copies unless only plain dispatches followed them so far. */
 void AgxD3d12OwnerUploadBoundary(AGX_D3D12_OWNER *Owner, int Dispatch);
+/* OV1 receipt-only (d3d12/agx_d3d12_job_barriers.h): TRUE when
+ * APPLE_AGX_D3D12_JOB_BARRIERS=1 and the UMD trace file is set. The replay
+ * feeds each recorded barrier before its command (type, flags, transition
+ * states, AgxD3d12JobBarrierId of the resource) and brackets each command's
+ * owner work with JobCommand(kind) ... JobCommand(0); every submitted batch
+ * then emits measure-d3d12-job-barriers. */
+BOOL AgxD3d12OwnerJobBarriersEnabled(void);
+void AgxD3d12OwnerJobBarrier(unsigned Type, unsigned Flags, unsigned Before, unsigned After, unsigned Id);
+void AgxD3d12OwnerJobCommand(unsigned Kind);
 BOOL AgxD3d12OwnerCpuMapIsPrivate(AGX_D3D12_OWNER *Owner, const void *Cpu);
 HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *Owner);
 /* CpuVisible: the heap's CPU page property is not NOT_AVAILABLE; only such

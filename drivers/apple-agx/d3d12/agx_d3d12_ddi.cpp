@@ -37,6 +37,7 @@ extern "C" {
 #include "agx_d3d12_tile_mapping.h"
 #include "agx_d3d12_heap_backing.h"
 #include "agx_d3d12_barrier_stats.h"
+#include "agx_d3d12_job_barriers.h"
 static_assert(AGX_D3D12_HEAP_FLAG_BUFFERS == static_cast<unsigned>(D3D12DDI_HEAP_FLAG_BUFFERS), "rc87 heap flag");
 static_assert(AGX_D3D12_HEAP_FLAG_TEXTURES == (static_cast<unsigned>(D3D12DDI_HEAP_FLAG_NON_RT_DS_TEXTURES) |
                                                static_cast<unsigned>(D3D12DDI_HEAP_FLAG_RT_DS_TEXTURES)),
@@ -4121,6 +4122,11 @@ struct AgxD3d12CommandList {
     /* rc105 receipt-only: ResourceBarrier kinds since the last Reset
      * (agx_d3d12_barrier_stats.h), summed into measure-d3d12-barriers */
     UINT barriers[8]; /* AGX_D3D12_BARRIER_COUNTERS (struct extracted by host tests) */
+    /* OV1 receipt-only (agx_d3d12_job_barriers.h): the barriers in record
+     * order, each with the index of the command it precedes; kept only when
+     * AgxD3d12OwnerJobBarriersEnabled (capacity kept across Reset) */
+    struct AgxD3d12JobBarrierRecord *job_barriers;
+    UINT job_barrier_count, job_barrier_capacity;
 };
 /* EXP1363: creating/resetting a list makes the runtime set its default
  * state (topology, viewports, scissors, blend factor, stencil ref, PSO,
@@ -4166,6 +4172,9 @@ static VOID APIENTRY DestroyCommandList(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDLIST 
     if (list->indirect_states) HeapFree(GetProcessHeap(), 0, list->indirect_states);
     list->indirect_states = nullptr;
     list->indirect_state_count = list->indirect_state_capacity = 0;
+    if (list->job_barriers) HeapFree(GetProcessHeap(), 0, list->job_barriers);
+    list->job_barriers = nullptr;
+    list->job_barrier_count = list->job_barrier_capacity = 0;
     if (!list->command) return;
     HeapFree(GetProcessHeap(), 0, list->command);
     list->command = nullptr;
@@ -4182,6 +4191,7 @@ static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     list->bundle_bytes = 0;
     list->indirect_state_count = 0;
     memset(list->barriers, 0, sizeof(list->barriers));
+    list->job_barrier_count = 0;
     list->state = 0;
     list->pso = nullptr;
     list->compute_root = nullptr;
@@ -6243,6 +6253,54 @@ static VOID APIENTRY ExecuteIndirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOM
  * are counted (agx_d3d12_barrier_stats.h). */
 static_assert(sizeof(((AgxD3d12CommandList *)0)->barriers) == AGX_D3D12_BARRIER_COUNTERS * sizeof(UINT),
               "rc105 barrier counters");
+/* OV1 receipt-only: one barrier of the list's job-barrier log (replay feeds
+ * it to the owner before the command at position; never replayed) */
+struct AgxD3d12JobBarrierRecord {
+    UINT position, type, flags, before, after, id;
+};
+template<class Barrier> static void RecordJobBarriers(AgxD3d12CommandList *list, UINT count, const Barrier *barriers) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (!list || !barriers || !count || !AgxD3d12OwnerJobBarriersEnabled()) return;
+    if (count > kListCommands || list->job_barrier_count > kListCommands - count) return;
+    if (list->job_barrier_count + count > list->job_barrier_capacity) {
+        UINT capacity = list->job_barrier_capacity ? list->job_barrier_capacity : 64u;
+        while (capacity < list->job_barrier_count + count) capacity *= 2u;
+        void *grown = list->job_barriers
+                          ? HeapReAlloc(GetProcessHeap(), 0, list->job_barriers, capacity * sizeof(AgxD3d12JobBarrierRecord))
+                          : HeapAlloc(GetProcessHeap(), 0, capacity * sizeof(AgxD3d12JobBarrierRecord));
+        if (!grown) return; /* receipt only: the list records on */
+        list->job_barriers = static_cast<AgxD3d12JobBarrierRecord *>(grown);
+        list->job_barrier_capacity = capacity;
+    }
+    for (UINT i = 0; i < count; ++i) {
+        const Barrier &b = barriers[i];
+        AgxD3d12JobBarrierRecord &r = list->job_barriers[list->job_barrier_count++];
+        r = {};
+        r.position = list->commands;
+        r.type = static_cast<UINT>(b.Type);
+        r.flags = static_cast<UINT>(b.Flags);
+        const void *resource = nullptr;
+        if (b.Type == D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION) {
+            r.before = static_cast<UINT>(b.Transition.StateBefore);
+            r.after = static_cast<UINT>(b.Transition.StateAfter);
+            resource = b.Transition.hResource.pDrvPrivate;
+        } else if (b.Type == D3D12DDI_RESOURCE_BARRIER_TYPE_UAV) {
+            resource = b.UAV.hResource.pDrvPrivate;
+        } else if constexpr (std::is_same_v<Barrier, D3D12DDIARG_RESOURCE_BARRIER_0003>) {
+            if (b.Type == D3D12DDI_RESOURCE_BARRIER_TYPE_ALIASING)
+                resource = b.Aliasing.hResourceAfter.pDrvPrivate ? b.Aliasing.hResourceAfter.pDrvPrivate
+                                                                 : b.Aliasing.hResourceBefore.pDrvPrivate;
+        } else {
+            if (r.type == 3u) resource = b.Ranged.hResource.pDrvPrivate;
+        }
+        r.id = AgxD3d12JobBarrierId(static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(resource)));
+    }
+#else
+    (void)list;
+    (void)count;
+    (void)barriers;
+#endif
+}
 static VOID APIENTRY ResourceBarrier(D3D12DDI_HCOMMANDLIST handle, UINT count, const D3D12DDIARG_RESOURCE_BARRIER_0003 *barriers) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
     for (UINT i = 0; list && barriers && i < count; ++i)
@@ -6251,6 +6309,7 @@ static VOID APIENTRY ResourceBarrier(D3D12DDI_HCOMMANDLIST handle, UINT count, c
                                  ? static_cast<unsigned>(barriers[i].Transition.StateBefore) : 0u,
                              barriers[i].Type == D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION
                                  ? static_cast<unsigned>(barriers[i].Transition.StateAfter) : 0u);
+    RecordJobBarriers(list, count, barriers);
 }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 /* The owner bindings of one stage's slot records: root views and table
@@ -6881,6 +6940,8 @@ static HRESULT ReplayIndirectExpand(AGX_D3D12_OWNER *owner, const AgxD3d12Comman
             scratch->bundle_bytes = scratch->bundle_capacity = 0;
             scratch->indirect_states = nullptr;
             scratch->indirect_state_count = scratch->indirect_state_capacity = 0;
+            scratch->job_barriers = nullptr; /* OV1: the snapshot shares the list's log */
+            scratch->job_barrier_count = scratch->job_barrier_capacity = 0;
             scratch->replay = 1;
         }
         const D3D12DDI_HCOMMANDLIST handle = {scratch};
@@ -6973,6 +7034,7 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
     QueryPerformanceCounter(&start);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     const bool measure = AdmissionUmdMeasureEnabled() != FALSE;
+    const bool job_receipt = AgxD3d12OwnerJobBarriersEnabled() != FALSE; /* OV1 receipt-only */
     LONGLONG command_ticks[6] = {};
     UINT command_counts[6] = {};
     AgxD3d12Device *device = nullptr;
@@ -6987,8 +7049,13 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
         AgxD3d12OptionalBinds pending = {}; /* C27/C37 */
         UINT deferred_first = 0, deferred_end = 0, deferred_draw = 0; /* rc76: clears the draw at deferred_draw runs */
+        UINT job_barrier = 0; /* OV1 receipt-only: the next list->job_barriers entry */
         for (UINT c = 0; SUCCEEDED(hr) && c < list->commands; ++c) {
             const AgxD3d12Command &command = list->command[c];
+            for (; job_barrier < list->job_barrier_count && list->job_barriers[job_barrier].position <= c; ++job_barrier) {
+                const AgxD3d12JobBarrierRecord &r = list->job_barriers[job_barrier];
+                AgxD3d12OwnerJobBarrier(r.type, r.flags, r.before, r.after, r.id);
+            }
             AdmissionUmdWaitSetPhase(command.kind == kCommandDraw ? AgxWaitPhaseDraw :
                 command.kind == kCommandDispatch || command.kind == kCommandIndirectExpand ?
                     AgxWaitPhaseDispatch : AgxWaitPhaseOther);
@@ -7014,6 +7081,14 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
                     ++absorb.immediate;
                 }
             }
+            /* OV1 receipt-only: a batch submitted inside this command's owner
+             * work ends the job before it (agx_d3d12_job_barriers.h); deferred
+             * clears, optional binds and query begin/end do no job work */
+            const bool job_command = job_receipt && !(c >= deferred_first && c < deferred_end) &&
+                                     command.kind != kCommandGsBind && command.kind != kCommandHsBind &&
+                                     command.kind != kCommandDsBind &&
+                                     !(command.kind == kCommandQuery && command.query.op != kQueryResolve);
+            if (job_command) AgxD3d12OwnerJobCommand(command.kind);
             if (c >= deferred_first && c < deferred_end) {
                 /* rc76: replayed by the draw at deferred_draw (AgxD3d12OwnerDrawWithClears) */
             } else if (command.kind == kCommandCopy) {
@@ -7105,12 +7180,18 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
             } else {
                 hr = ReplayDispatch(owner, command.dispatch);
             }
+            if (job_command) AgxD3d12OwnerJobCommand(0);
             if (measure) {
                 LARGE_INTEGER command_end;
                 QueryPerformanceCounter(&command_end);
                 command_ticks[ReplayTimingBucket(command.kind)] += command_end.QuadPart - command_start.QuadPart;
                 ++command_counts[ReplayTimingBucket(command.kind)];
             }
+        }
+        /* OV1 receipt-only: barriers after the list's last command */
+        for (; SUCCEEDED(hr) && job_barrier < list->job_barrier_count; ++job_barrier) {
+            const AgxD3d12JobBarrierRecord &r = list->job_barriers[job_barrier];
+            AgxD3d12OwnerJobBarrier(r.type, r.flags, r.before, r.after, r.id);
         }
 #endif
     }
@@ -7744,6 +7825,7 @@ static VOID APIENTRY ResourceBarrier0022(D3D12DDI_HCOMMANDLIST handle, UINT coun
                                  ? static_cast<unsigned>(barriers[i].Transition.StateBefore) : 0u,
                              barriers[i].Type == D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION
                                  ? static_cast<unsigned>(barriers[i].Transition.StateAfter) : 0u);
+    RecordJobBarriers(list, count, barriers);
 }
 static VOID APIENTRY Present0028(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDQUEUE queue,
                                  const D3D12DDIARG_PRESENT_0001 *arg, D3D12DDI_PRESENT_0028 *out) {
