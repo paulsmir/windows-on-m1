@@ -15,6 +15,7 @@ extern "C" {
 #include "agx_d3d12_windows.h"
 #include "../../d3d12/agx_d3d12_shared_open.h"
 #include "../../d3d12/agx_d3d12_queue_sync.h"
+#include "../../d3d12/agx_d3d12_job_barriers.h"
 #if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
 #include "../dxil/agx_owned_nir_handoff.h"
 #endif
@@ -577,8 +578,42 @@ static void owner_tile_layout(const uint32_t *values, unsigned count) {
 /* rc118 receipt-only: measure-batch-deps {kind (1 render, 2 compute),
  * conflict mask (agx_win32_batch_deps.h), reads, writes} per batch. */
 extern "C" void (*AgxWin32BatchDepsHook)(const uint32_t *values, unsigned count);
+/* OV1 receipt-only (agx_d3d12_job_barriers.h): measure-d3d12-job-barriers
+ * per submitted batch, the ResourceBarrier calls between it and the previous
+ * job. Off unless APPLE_AGX_D3D12_JOB_BARRIERS=1 and the UMD trace file is
+ * set; the replay then feeds the recorded barriers (ReplayAndSubmit). */
+static SRWLOCK owner_job_barriers_lock = SRWLOCK_INIT;
+static AGX_D3D12_JOB_BARRIERS owner_job_barriers;
+extern "C" BOOL AgxD3d12OwnerJobBarriersEnabled(void) {
+  static const BOOL enabled = [] {
+    char value[2] = {};
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_JOB_BARRIERS", value, sizeof(value)) == 1 && value[0] == '1' &&
+                   AdmissionUmdMeasureEnabled()
+               ? TRUE
+               : FALSE;
+  }();
+  return enabled;
+}
+extern "C" void AgxD3d12OwnerJobBarrier(unsigned type, unsigned flags, unsigned before, unsigned after,
+                                        unsigned id) {
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  AgxD3d12JobBarrierAdd(&owner_job_barriers, type, flags, before, after, id);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
+extern "C" void AgxD3d12OwnerJobCommand(unsigned kind) {
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  if (kind) AgxD3d12JobBarrierBegin(&owner_job_barriers, kind);
+  else AgxD3d12JobBarrierEnd(&owner_job_barriers);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
 static void owner_batch_deps(const uint32_t *values, unsigned count) {
   AdmissionUmdDiagnostic("measure-batch-deps", S_OK, values, count);
+  if (!count || !AgxD3d12OwnerJobBarriersEnabled()) return;
+  UINT job[AGX_D3D12_JOB_BARRIER_VALUES];
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  AgxD3d12JobBarrierBatch(&owner_job_barriers, values[0], job);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+  AdmissionUmdDiagnostic("measure-d3d12-job-barriers", S_OK, job, AGX_D3D12_JOB_BARRIER_VALUES);
 }
 static void owner_bo_time(unsigned mib, unsigned cls, unsigned create_us, unsigned bind_us, unsigned associate_us) {
   const UINT values[] = {mib, cls, create_us, bind_us, associate_us};
