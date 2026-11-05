@@ -120,18 +120,7 @@ agx_win32_hoist_loop_invariants(nir_shader *nir)
    const char *env = getenv("APPLE_AGX_D3D_LICM");
    if (env && env[0] == '0' && !env[1])
       return false;
-   /* G1 (graphics ranking 2026-11-05): the D3D array-layer rounding
-    * (fround_even -> f_to_u32 -> clamp) of a loop-invariant layer still
-    * reads the in-loop coordinate vector's nir_channel mov here, so LICM
-    * kept it in the planet PS / C0 ray-march loops (3 instructions per
-    * iteration); copy propagation first exposes the invariant source.
-    * APPLE_AGX_D3D_LICM=1 keeps M3's order (measurement control). */
-   bool progress = false;
-   if (!(env && env[0] == '1' && !env[1])) {
-      NIR_PASS(progress, nir, nir_opt_copy_prop);
-      NIR_PASS(progress, nir, nir_opt_dce);
-   }
-   return nir_opt_licm(nir, NULL) || progress;
+   return nir_opt_licm(nir, NULL);
 }
 
 #endif
