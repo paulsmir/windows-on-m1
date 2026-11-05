@@ -38,7 +38,17 @@ typedef enum _AGX_WIN32_BUFFER_FLAGS {
  * value Wom1SoftFaults = 1 and the published RegionC word 0xb; the UMD then
  * lets the compiler speculate shader memory loads. */
 #define AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS 0x1u
-#define AGX_WIN32_DEVICE_FEATURES_KNOWN AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS
+/* OV2 (investigation/analysis/OV1-render-compute-overlap.md): a compute
+ * envelope may name no render-subqueue wait (VdmBarrier =
+ * APPLE_AGX_G4_BARRIER_NONE, Asahi DRM_ASAHI_BARRIER_NONE) when the D3D12
+ * UMD proved it independent of the render job submitted just before it; the
+ * KMD then waives the depth-two lead Barrier's wait on that render's 3D end.
+ * Set only with REG_DWORD Wom1Ov2NoHazardLead = 1 and Q2c
+ * (Wom1ComputeOwnQueue, compute on its own Asahi Queue); the KMD parser
+ * refuses NONE without it. */
+#define AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE 0x2u
+#define AGX_WIN32_DEVICE_FEATURES_KNOWN \
+  (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS | AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE)
 
 typedef struct _AGX_WIN32_BUFFER_CLASS_INFO {
   APPLE_AGX_U32 ClassId;

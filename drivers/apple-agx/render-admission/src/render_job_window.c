@@ -94,6 +94,57 @@ unsigned int AdmissionJobWindowGeneralClasses(unsigned int TaOnCompute,
   return classes;
 }
 
+unsigned int AdmissionJobWindowOv2Refusal(unsigned int Enabled,
+    unsigned int Barrier, const ADMISSION_JOB_WINDOW_JOB *Running,
+    const ADMISSION_JOB_WINDOW_JOB *Next) {
+  if (!Enabled) return ADMISSION_JOB_WINDOW_OV2_OFF;
+  if (Barrier != ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D)
+    return ADMISSION_JOB_WINDOW_OV2_CLASS;
+  if (Running == 0 || Next == 0 ||
+      Next->Kind != ADMISSION_JOB_WINDOW_KIND_COMPUTE || !Next->Independent)
+    return ADMISSION_JOB_WINDOW_OV2_NOT_FLAGGED;
+  if (Running->Kind != ADMISSION_JOB_WINDOW_KIND_RENDER &&
+      Running->Kind != ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE)
+    return ADMISSION_JOB_WINDOW_OV2_RUNNING_KIND;
+  if (Running->Context == 0ULL || Running->Context != Next->Context ||
+      Running->Process == 0ULL || Running->Process != Next->Process)
+    return ADMISSION_JOB_WINDOW_OV2_CONTEXT;
+  return ADMISSION_JOB_WINDOW_OV2_WAIVE;
+}
+
+unsigned int AdmissionJobWindowOv2WaitValue(unsigned int Barrier,
+    unsigned int Expected, unsigned int WaiveStamp) {
+  return Barrier == ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D && WaiveStamp != 0u
+      ? WaiveStamp : Expected;
+}
+
+void AdmissionJobWindowOv2ReceiptInitialize(
+    ADMISSION_JOB_WINDOW_OV2_RECEIPT *Receipt) {
+  unsigned int i;
+  if (Receipt == 0) return;
+  Receipt->Version = ADMISSION_JOB_WINDOW_OV2_RECEIPT_VERSION;
+  Receipt->Bytes = (unsigned int)sizeof(*Receipt);
+  Receipt->Considered = Receipt->Waived = 0u;
+  for (i = 0u; i < ADMISSION_JOB_WINDOW_OV2_REASONS; ++i) Receipt->Refused[i] = 0u;
+  Receipt->LastFence = Receipt->LastExpected = Receipt->LastWaitValue = 0u;
+}
+
+unsigned int AdmissionJobWindowOv2Note(ADMISSION_JOB_WINDOW_OV2_RECEIPT *Receipt,
+    unsigned int Refusal, unsigned int Fence, unsigned int Expected,
+    unsigned int WaitValue) {
+  if (Receipt == 0) return 0u;
+  ++Receipt->Considered;
+  if (Refusal == ADMISSION_JOB_WINDOW_OV2_WAIVE) {
+    ++Receipt->Waived;
+    Receipt->LastFence = Fence;
+    Receipt->LastExpected = Expected;
+    Receipt->LastWaitValue = WaitValue;
+  } else if (Refusal < ADMISSION_JOB_WINDOW_OV2_REASONS) {
+    ++Receipt->Refused[Refusal];
+  }
+  return Receipt->Considered <= 16u || (Receipt->Considered & 0xffu) == 0u ? 1u : 0u;
+}
+
 unsigned int AdmissionJobWindowKickRefusal(
     const ADMISSION_JOB_WINDOW_KICK_STATE *s) {
   const ADMISSION_JOB_WINDOW_JOB *n, *m;

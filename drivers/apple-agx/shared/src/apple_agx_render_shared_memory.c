@@ -1277,6 +1277,32 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildLeadingBarrier(
   return APPLE_AGX_FALSE;
 }
 
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryReadFirmwareStamp(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner, APPLE_AGX_U32 Queue,
+    APPLE_AGX_U32 *Value) {
+  APPLE_AGX_U32 index;
+  const unsigned char *at;
+  if(!Owner||!Value) return APPLE_AGX_FALSE;
+  *Value=0u;
+  if(Queue==APPLE_AGX_RENDER_STAMP_QUEUE_COMPUTE) {
+    if(!queue_object_valid(Owner,APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR,
+                           0x10000u,APPLE_AGX_FALSE)) return APPLE_AGX_FALSE;
+    at=(const unsigned char *)Owner->Objects[
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress+
+        APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET;
+  } else {
+    if(Queue==APPLE_AGX_RENDER_STAMP_QUEUE_TA)
+      index=APPLE_AGX_RENDER_TA_FIRMWARE_STAMP_OBJECT;
+    else if(Queue==APPLE_AGX_RENDER_STAMP_QUEUE_3D)
+      index=APPLE_AGX_RENDER_3D_FIRMWARE_STAMP_OBJECT;
+    else return APPLE_AGX_FALSE;
+    if(!queue_object_valid(Owner,index,4u,APPLE_AGX_FALSE)) return APPLE_AGX_FALSE;
+    at=(const unsigned char *)Owner->Objects[index].CpuAddress+Owner->ObjectOffsets[index];
+  }
+  *Value=get_shared_u32(at,APPLE_AGX_FALSE);
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_U64 AppleAgxRenderSharedMemoryFirmwareStampAddress(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner, APPLE_AGX_U32 Queue) {
   APPLE_AGX_U32 index;

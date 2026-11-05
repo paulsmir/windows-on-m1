@@ -46,6 +46,12 @@ typedef struct _ADMISSION_JOB_WINDOW_JOB {
   unsigned int Kind;                /* ADMISSION_JOB_WINDOW_KIND_* */
   unsigned long long Process;       /* G3 process object, 0 = none */
   unsigned long long SceneId;       /* private scene of a render, 0 = none */
+  /* OV2: the WDDM context that submitted the job (0 = none) and, for a
+   * compute job, its envelope named no render-subqueue wait (VdmBarrier
+   * NONE: the D3D12 UMD proved it independent of the render job submitted
+   * just before it, AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE). */
+  unsigned long long Context;
+  unsigned int Independent;
 } ADMISSION_JOB_WINDOW_JOB;
 
 /* Firmware-side features the window needs for some pairs (rc95: all 0).
@@ -173,6 +179,51 @@ unsigned int AdmissionJobWindowBarrierEx(unsigned int RunningKind,
 #define ADMISSION_JOB_WINDOW_QUEUE_COMPUTE 2u
 unsigned int AdmissionJobWindowLeadQueue(unsigned int Barrier);
 unsigned int AdmissionJobWindowWaitQueue(unsigned int Barrier);
+
+/* OV2 (REG_DWORD Wom1Ov2NoHazardLead = 1 on Q2c, default off): the kicked
+ * successor N+1 is a compute job its UMD flagged independent of the render
+ * N it follows (same WDDM context, consecutive submissions). Its leading
+ * Barrier keeps its queue, slot and address but waits on the 3D stamp
+ * value already in memory when the kick was decided, so it is satisfied on
+ * arrival and the compute overlaps N's TA/3D. Nothing else changes (window
+ * depth, refusals, in-order completion). Refusals (stable receipt values):
+ *   1 switch off, 2 not a COMPUTE_ON_3D pair, 3 N+1 not a flagged compute
+ *   job, 4 N is not a render (with or without prelude), 5 another or no
+ *   WDDM context (or process), 6 the 3D stamp was unreadable or zero (the
+ *   Barrier encoder refuses a zero wait; KMD). */
+#define ADMISSION_JOB_WINDOW_OV2_WAIVE 0u
+#define ADMISSION_JOB_WINDOW_OV2_OFF 1u
+#define ADMISSION_JOB_WINDOW_OV2_CLASS 2u
+#define ADMISSION_JOB_WINDOW_OV2_NOT_FLAGGED 3u
+#define ADMISSION_JOB_WINDOW_OV2_RUNNING_KIND 4u
+#define ADMISSION_JOB_WINDOW_OV2_CONTEXT 5u
+#define ADMISSION_JOB_WINDOW_OV2_STAMP 6u
+#define ADMISSION_JOB_WINDOW_OV2_REASONS 7u
+unsigned int AdmissionJobWindowOv2Refusal(unsigned int Enabled,
+    unsigned int Barrier, const ADMISSION_JOB_WINDOW_JOB *Running,
+    const ADMISSION_JOB_WINDOW_JOB *Next);
+/* OV2: the lead Barrier's WaitValue: WaiveStamp (nonzero only for a waived
+ * pair) for COMPUTE_ON_3D, else Expected (N's 3D/compute end). */
+unsigned int AdmissionJobWindowOv2WaitValue(unsigned int Barrier,
+    unsigned int Expected, unsigned int WaiveStamp);
+/* OV2: cumulative receipt (device value Wom1Ov2Receipt, written by the
+ * worker with the rc102 export): kicked pairs considered, waived, the
+ * refusal per reason, and the last waived pair. */
+#define ADMISSION_JOB_WINDOW_OV2_RECEIPT_VERSION 1u
+typedef struct _ADMISSION_JOB_WINDOW_OV2_RECEIPT {
+  unsigned int Version, Bytes;
+  unsigned int Considered, Waived;
+  unsigned int Refused[ADMISSION_JOB_WINDOW_OV2_REASONS];
+  unsigned int LastFence, LastExpected, LastWaitValue;
+} ADMISSION_JOB_WINDOW_OV2_RECEIPT;
+void AdmissionJobWindowOv2ReceiptInitialize(
+    ADMISSION_JOB_WINDOW_OV2_RECEIPT *Receipt);
+/* Counts one kicked pair (Refusal as above; Fence N+1, Expected N's 3D
+ * stamp, WaitValue the Barrier's). Returns 1 when an export is due: the
+ * first 16 considered pairs, then every 256th. */
+unsigned int AdmissionJobWindowOv2Note(ADMISSION_JOB_WINDOW_OV2_RECEIPT *Receipt,
+    unsigned int Refusal, unsigned int Fence, unsigned int Expected,
+    unsigned int WaitValue);
 
 /* In-flight window: the jobs the firmware holds, oldest first. */
 #define ADMISSION_JOB_WINDOW_ENTRY_FREE 0u

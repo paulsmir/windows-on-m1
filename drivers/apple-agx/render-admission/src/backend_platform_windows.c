@@ -7,6 +7,7 @@
 #include "render_gpu_perf.h"
 #include "render_gpu_recovery_snapshot.h"
 #include "render_preempt_trace.h"
+#include "render_ov2.h"
 
 /* Fault diagnostics: first nonzero transition stores file tag 4 and
  * source line. Consumers retain zero/nonzero semantics; reset clears it. */
@@ -329,6 +330,14 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * sidecar's job-word sets A/B (still depth 1: nothing is kicked early). */
   ULONG Depth2Capabilities;
   ADMISSION_JOB_WINDOW_JOB Depth2Running;
+  /* OV2 (REG_DWORD Wom1Ov2NoHazardLead = 1 on Q2c, default off): the kicked
+   * compute successor's lead Barrier waits on the 3D stamp already in memory
+   * when its UMD proved it independent of the running render
+   * (render_job_window.h AdmissionJobWindowOv2Refusal). Ov2Waive is decided
+   * per kick; the receipt is Wom1Ov2Receipt. */
+  BOOLEAN Ov2Enabled;
+  BOOLEAN Ov2Waive;
+  ADMISSION_JOB_WINDOW_OV2_RECEIPT Ov2Receipt;
   BOOLEAN Depth2Noted;
   ULONG Depth2Sampled;
   /* rc102: device value Wom1JobDepth2Kick = 1, on top of Wom1JobDepth2Caps
@@ -1432,6 +1441,14 @@ static VOID AdmissionJobTimingExportWindows(
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
           &runtime->Depth2ReceiptSnapshot, sizeof(runtime->Depth2ReceiptSnapshot));
     }
+#if defined(ADMISSION_OV2_ON)
+    /* OV2: waived / refused lead Barrier waits (worker-owned). */
+    if (NT_SUCCESS(status) && runtime->Ov2Enabled) {
+      ADMISSION_JOB_WINDOW_OV2_RECEIPT ov2 = runtime->Ov2Receipt;
+      RtlInitUnicodeString(&name, L"Wom1Ov2Receipt");
+      status = ZwSetValueKey(key, &name, 0u, REG_BINARY, &ov2, sizeof(ov2));
+    }
+#endif
 #if defined(ADMISSION_PREEMPT_TRACE_ON)
     /* P1: attempted on its own; the live ring is copied unlocked (its
      * writers take no lock), a torn event is a diagnostic artefact. */
@@ -3704,6 +3721,25 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBuildLeadBarrier(
         owner, APPLE_AGX_RENDER_STAMP_QUEUE_3D);
     barrier.WaitValue = running->D3ExpectedStamp;
     barrier.WaitSlot = running->D3Event;
+#if defined(ADMISSION_OV2_ON)
+    /* OV2: an independent compute successor waits on the 3D stamp already in
+     * memory (satisfied on arrival) instead of the running render's end. */
+    if (runtime->Ov2Waive && cls == ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D) {
+      APPLE_AGX_U32 now = 0u;
+      unsigned int refusal = ADMISSION_JOB_WINDOW_OV2_STAMP;
+      if (AppleAgxRenderSharedMemoryReadFirmwareStamp(owner,
+              APPLE_AGX_RENDER_STAMP_QUEUE_3D, &now) && now != 0u) {
+        barrier.WaitValue = AdmissionJobWindowOv2WaitValue(cls,
+            running->D3ExpectedStamp, now);
+        refusal = ADMISSION_JOB_WINDOW_OV2_WAIVE;
+      }
+      if (AdmissionJobWindowOv2Note(&runtime->Ov2Receipt, refusal,
+              runtime->Depth2KickedFence, running->D3ExpectedStamp,
+              barrier.WaitValue))
+        runtime->RcExportPending = TRUE;
+      runtime->Ov2Waive = FALSE;
+    }
+#endif
   } else {
     if (running->Kind != AppleAgxBackendJobCompute) return APPLE_AGX_BACKEND_FALSE;
     barrier.WaitStampGpuAddress = AppleAgxRenderSharedMemoryFirmwareStampAddress(
@@ -5565,6 +5601,13 @@ static VOID AdmissionJobWindowDescribeLocked(const ADMISSION_BACKEND_IMAGE *imag
   job->Process = context != NULL ?
       (unsigned long long)(ULONG_PTR)context->GpuvaG3Process : 0ULL;
   job->SceneId = image->G4Native ? image->G4Lease.SceneId : 0ULL;
+  /* OV2: the submitting WDDM context; a compute envelope the parser admitted
+   * with VdmBarrier NONE (only under the device feature) is independent of
+   * the render submitted just before it. */
+  job->Context = (unsigned long long)(ULONG_PTR)context;
+  job->Independent = image->BoundFence == fence && image->G4Compute &&
+      image->G4ComputeEnvelope.Native.VdmBarrier == APPLE_AGX_G4_BARRIER_NONE
+      ? 1u : 0u;
 }
 
 /* rc95 receipt mode: job Fence runs alone and its successor was just bound
@@ -6095,6 +6138,21 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
           ((ADMISSION_G3_PROCESS *)context->GpuvaG3Process)->OsProcessId;
     AdmissionRcSampleWindows(runtime, ADMISSION_RC_BEFORE_BUILD, 0u, 0u);
   } else RtlZeroMemory(&runtime->RcCurrent, sizeof(runtime->RcCurrent));
+#if defined(ADMISSION_OV2_ON)
+  /* OV2: waive the lead Barrier's wait for an independent compute successor
+   * (counted here when refused; a waiver is counted where the Barrier is
+   * built). */
+  runtime->Ov2Waive = FALSE;
+  if (runtime->Ov2Enabled) {
+    unsigned int ov2 = AdmissionJobWindowOv2Refusal(1u, (unsigned int)barrier,
+        &s.Running, &s.Next);
+    if (ov2 == ADMISSION_JOB_WINDOW_OV2_WAIVE)
+      runtime->Ov2Waive = TRUE;
+    else if (ov2 != ADMISSION_JOB_WINDOW_OV2_CLASS &&
+             AdmissionJobWindowOv2Note(&runtime->Ov2Receipt, ov2, next, 0u, 0u))
+      runtime->RcExportPending = TRUE;
+  }
+#endif
   /* The kick: the fence is the scheduler's kicked fence from here on. */
   runtime->Depth2KickedFence = next;
   runtime->Depth2KickBarrier = barrier;
@@ -7664,6 +7722,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
    * F1); REG_DWORD Wom1ComputeOwnQueue = 0 restores the shared Queue. */
   runtime->Initdata.RenderSharedMemory.ComputeOwnQueue =
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1ComputeOwnQueue") ? TRUE : FALSE;
+#if defined(ADMISSION_OV2_ON)
+  /* OV2 (default off): REG_DWORD Wom1Ov2NoHazardLead = 1, only on Q2c. The
+   * device feature lets the UMD flag independent compute envelopes. */
+  runtime->Ov2Enabled = runtime->Initdata.RenderSharedMemory.ComputeOwnQueue &&
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1Ov2NoHazardLead") ? TRUE : FALSE;
+  runtime->Ov2Waive = FALSE;
+  AdmissionJobWindowOv2ReceiptInitialize(&runtime->Ov2Receipt);
+  InterlockedExchange(&Context->GpuIndependentSubqueue, runtime->Ov2Enabled ? 1 : 0);
+#endif
   if (!AppleAgxRenderSharedMemoryBindRelocationObjects(
           &runtime->Initdata.RenderSharedMemory,
           Context->BackendImage.ArenaCpuAddress,
@@ -8033,6 +8100,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->SoftFaultsRequested =
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1SoftFaults");
   InterlockedExchange(&Context->GpuSoftFaults, 0);
+  InterlockedExchange(&Context->GpuIndependentSubqueue, 0);
   RtlZeroMemory(&runtime->PostResume, sizeof(runtime->PostResume));
   KeInitializeEvent(&runtime->WorkIdle, NotificationEvent, TRUE);
   KeInitializeEvent(&runtime->SlotEvent, NotificationEvent, FALSE);
@@ -8108,6 +8176,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
 
 Fail:
   InterlockedExchange(&Context->GpuSoftFaults, 0);
+  InterlockedExchange(&Context->GpuIndependentSubqueue, 0);
   {
     NTSTATUS cleanup=AdmissionPlatformDestroy(runtime);
 #ifdef APPLE_AGX_BACKEND_QUALIFICATION
@@ -8133,6 +8202,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStop(
   if (runtime == NULL)
     return STATUS_SUCCESS;
   InterlockedExchange(&Context->GpuSoftFaults, 0);
+  InterlockedExchange(&Context->GpuIndependentSubqueue, 0);
   status = AdmissionPlatformDestroy(runtime);
   if (!NT_SUCCESS(status))
     return status;

@@ -434,7 +434,19 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
     unsigned int dma_bytes, unsigned int preempt_bytes,
     APPLE_AGX_G4_ACCESS_EX access, void *context,
     APPLE_AGX_G4_COMPUTE_VIEW *view, APPLE_AGX_G4_FAILURE *failure) {
+  return AppleAgxG4ParseComputeFlagsEx(private_data, private_capacity,
+      umd_private_bytes, dma_va, dma_bytes, preempt_bytes, 0u, access,
+      context, view, failure);
+}
+
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeFlagsEx(
+    const void *private_data, unsigned int private_capacity,
+    unsigned int umd_private_bytes, unsigned long long dma_va,
+    unsigned int dma_bytes, unsigned int preempt_bytes, unsigned int flags,
+    APPLE_AGX_G4_ACCESS_EX access, void *context,
+    APPLE_AGX_G4_COMPUTE_VIEW *view, APPLE_AGX_G4_FAILURE *failure) {
   AGX4_ACCESS_STATE state = {0};
+  int independent = 0;
   APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE header;
   APPLE_AGX_G4_NATIVE_HEADER native_header;
   APPLE_AGX_G4_NATIVE_COMPUTE compute;
@@ -445,6 +457,7 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
   if (view != 0) memset(view, 0, sizeof(*view));
   if (failure) memset(failure, 0, sizeof(*failure));
   if (!private_data || !view || !access || !preempt_bytes ||
+      (flags & ~APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE) != 0u ||
       private_capacity < sizeof(header) || umd_private_bytes < sizeof(header) ||
       umd_private_bytes > private_capacity ||
       dma_bytes == 0u || dma_bytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
@@ -460,7 +473,13 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
   memcpy(&native_header, bytes + sizeof(header), sizeof(native_header));
   if (native_header.Type != APPLE_AGX_G4_COMPUTE)
     return AppleAgxG4ParseUnsupported;
-  if (native_header.Size != sizeof(compute) || native_header.VdmBarrier != 0u ||
+  /* OV2: NONE (no wait on the render subqueue) only under the flag; the
+   * compute subqueue wait stays 0 (in order behind the previous compute). */
+  if (native_header.VdmBarrier == APPLE_AGX_G4_BARRIER_NONE &&
+      (flags & APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE) != 0u)
+    independent = 1;
+  if (native_header.Size != sizeof(compute) ||
+      (native_header.VdmBarrier != 0u && !independent) ||
       native_header.CdmBarrier != 0u)
     return AppleAgxG4ParseInvalid;
   memcpy(&compute, bytes + sizeof(header) + sizeof(native_header), sizeof(compute));
@@ -478,5 +497,6 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
   view->Preemption = header.Preemption;
   view->CommandBytes = dma_bytes;
   view->CommandVa = dma_va;
+  view->Independent = independent;
   return AppleAgxG4ParseOk;
 }

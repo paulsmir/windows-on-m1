@@ -893,6 +893,10 @@ typedef struct _ADMISSION_CONTEXT {
   /* rc82: nonzero while the started runtime reports soft faults to the UMD
    * (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS, receipt Wom1SoftFaultState). */
   volatile LONG GpuSoftFaults;
+  /* OV2: nonzero while the started runtime runs Wom1Ov2NoHazardLead = 1 on
+   * Q2c (AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE): the compute parser
+   * then admits a VdmBarrier NONE envelope. */
+  volatile LONG GpuIndependentSubqueue;
   volatile LONG FeatureReadyMask;
   /* EXP1321 receipt-only: broker failure count last staged (Wom1G3BrokerFailures). */
   volatile LONG64 G3BrokerFailuresStaged;

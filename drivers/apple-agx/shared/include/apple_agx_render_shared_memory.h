@@ -483,6 +483,11 @@ APPLE_AGX_BOOL AppleAgxG13BarrierEncode(
  * wait_stamp of a Barrier on that queue's last job; 0 when unavailable. */
 APPLE_AGX_U64 AppleAgxRenderSharedMemoryFirmwareStampAddress(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner, APPLE_AGX_U32 Queue);
+/* OV2: the firmware stamp value now in memory (the queue's last completed
+ * stamp); FALSE when the object is invalid. */
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryReadFirmwareStamp(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner, APPLE_AGX_U32 Queue,
+    APPLE_AGX_U32 *Value);
 /* rc98: the job-word set a compute build for StampValue uses: set A when
  * SecondSet is FALSE (the default path); otherwise the set of the last build
  * for a rebuild of the same stamp, else the other set than the last build,

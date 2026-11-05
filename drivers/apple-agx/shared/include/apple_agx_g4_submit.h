@@ -524,6 +524,9 @@ typedef struct {
   APPLE_AGX_G4_PROCESS_RANGE Preemption;
   unsigned int CommandBytes;
   unsigned long long CommandVa;
+  /* OV2: the command named no render-subqueue wait (VdmBarrier NONE),
+   * admitted only under APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE. */
+  int Independent;
 } APPLE_AGX_G4_COMPUTE_VIEW;
 
 /* G2: validate a compute envelope: header, the native compute command
@@ -535,6 +538,27 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
     const void *PrivateData, unsigned int PrivateCapacity,
     unsigned int UmdPrivateBytes, unsigned long long DmaVa,
     unsigned int DmaBytes, unsigned int PreemptBytes,
+    APPLE_AGX_G4_ACCESS_EX Access, void *AccessContext,
+    APPLE_AGX_G4_COMPUTE_VIEW *View, APPLE_AGX_G4_FAILURE *Failure);
+
+/* OV2 (AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE): Asahi
+ * DRM_ASAHI_BARRIER_NONE, a per-command barrier field naming no wait. */
+#define APPLE_AGX_G4_BARRIER_NONE 0xffffu
+/* OV2: AppleAgxG4ParseComputeFlagsEx flags. INDEPENDENT_SUBQUEUE (the KMD
+ * passes it only while it reports the device feature) admits VdmBarrier =
+ * APPLE_AGX_G4_BARRIER_NONE on the envelope's compute command (its first
+ * and only one; CdmBarrier stays 0) and sets View->Independent. Unknown
+ * flags are invalid. AppleAgxG4ParseComputeEx is this with Flags 0. */
+#define APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE 0x1u
+/* The KMD maps this to its device-feature state (render_ov2.h); elsewhere
+ * (host replays of single KMD functions) no flag is passed. */
+#ifndef ADMISSION_G4_COMPUTE_PARSE_FLAGS
+#define ADMISSION_G4_COMPUTE_PARSE_FLAGS(adapter) 0u
+#endif
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeFlagsEx(
+    const void *PrivateData, unsigned int PrivateCapacity,
+    unsigned int UmdPrivateBytes, unsigned long long DmaVa,
+    unsigned int DmaBytes, unsigned int PreemptBytes, unsigned int Flags,
     APPLE_AGX_G4_ACCESS_EX Access, void *AccessContext,
     APPLE_AGX_G4_COMPUTE_VIEW *View, APPLE_AGX_G4_FAILURE *Failure);
 

@@ -1,3 +1,4 @@
+#include "render_ov2.h"
 #include "gpuva_g3_private.h"
 #include <intrin.h> /* _ReturnAddress (cancel-caller receipt) */
 #include "apple_agx_g3_copy_abi.h"
@@ -3802,6 +3803,14 @@ static bool AdmissionG3TimedGraphBeginJob(ADMISSION_G3_STATE *state,
   return ok;
 }
 
+/* OV2: the compute envelope parser admits VdmBarrier NONE only while the
+ * device reports AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE. */
+static unsigned int AdmissionG4ComputeParseFlags(ADMISSION_CONTEXT *adapter) {
+  return adapter != NULL &&
+      InterlockedCompareExchange(&adapter->GpuIndependentSubqueue, 0, 0) != 0
+      ? APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE : 0u;
+}
+
 /* Packet: the job's own description (rc102: a successor's is its kicked
  * entry's). *Refusal (rc102 receipt, may be NULL): 0 begun, 1 the active-
  * job state (depth 1: another job; successor: not N's process, or a
@@ -3902,12 +3911,13 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
     ADMISSION_BACKEND_IMAGE *image = &adapter->BackendImage;
     APPLE_AGX_G4_COMPUTE_VIEW compute_view;
     if (image->BoundFence != fence ||
-        AppleAgxG4ParseComputeEx(&image->G4ComputeEnvelope,
+        AppleAgxG4ParseComputeFlagsEx(&image->G4ComputeEnvelope,
             (unsigned int)sizeof(image->G4ComputeEnvelope),
             (unsigned int)sizeof(image->G4ComputeEnvelope),
             image->G4ComputeEnvelope.Header.Base.CommandVa,
             image->G4ComputeEnvelope.Header.Base.CommandBytes,
-            APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES, AdmissionG4GraphAccessTyped,
+            APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+            ADMISSION_G4_COMPUTE_PARSE_FLAGS(adapter), AdmissionG4GraphAccessTyped,
             process, &compute_view, NULL) != AppleAgxG4ParseOk ||
         image->G4ComputeEnvelope.Header.Base.CommandVa !=
             context->GpuvaG3DmaBufferVa ||
@@ -5582,9 +5592,10 @@ static NTSTATUS AdmissionG4SubmitComputeLocked(ADMISSION_CONTEXT *adapter,
   if (args->DmaBufferUmdPrivateDataSize == sizeof(envelope) &&
       args->DmaBufferPrivateDataSize >= sizeof(envelope)) {
     RtlCopyMemory(&envelope, args->pDmaBufferPrivateData, sizeof(envelope));
-    result = AppleAgxG4ParseComputeEx(&envelope, (unsigned int)sizeof(envelope),
+    result = AppleAgxG4ParseComputeFlagsEx(&envelope, (unsigned int)sizeof(envelope),
         (unsigned int)sizeof(envelope), args->DmaBufferVirtualAddress,
         args->DmaBufferSize, APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+        ADMISSION_G4_COMPUTE_PARSE_FLAGS(adapter),
         AdmissionG4GraphAccessTyped, process, &view, &failure);
   }
   mapping_generation = process->Graph.MappingGeneration;
@@ -6237,9 +6248,10 @@ static NTSTATUS AdmissionG4PreflightLocked(ADMISSION_CONTEXT *adapter,
   if (q->PrivateBytes < sizeof(header)) return STATUS_INVALID_PARAMETER;
   RtlCopyMemory(&header, q->Private, sizeof(header));
   if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_COMPUTE) {
-    q->ParseResult = AppleAgxG4ParseComputeEx(q->Private, q->PrivateBytes,
+    q->ParseResult = AppleAgxG4ParseComputeFlagsEx(q->Private, q->PrivateBytes,
         q->PrivateBytes, q->CommandVa, q->CommandBytes,
-        APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES, AdmissionG4GraphAccessTyped,
+        APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+            ADMISSION_G4_COMPUTE_PARSE_FLAGS(adapter), AdmissionG4GraphAccessTyped,
         process, &compute, &q->Failure);
     return q->ParseResult == AppleAgxG4ParseOk ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
   }

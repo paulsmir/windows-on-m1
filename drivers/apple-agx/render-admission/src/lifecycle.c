@@ -740,6 +740,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     /* rc82: Wom1SoftFaults not 0 and RegionC fault_control 0xb. */
     info->Features = InterlockedCompareExchange(&context->GpuSoftFaults, 0, 0) != 0
         ? AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS : 0u;
+    /* OV2: Wom1Ov2NoHazardLead = 1 with Q2c (backend start). */
+    if (InterlockedCompareExchange(&context->GpuIndependentSubqueue, 0, 0) != 0)
+      info->Features |= AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE;
     status = STATUS_SUCCESS;
     break;
   }
