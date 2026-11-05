@@ -8,6 +8,18 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## CURRENT 2026-11-05 18:00Z -- OV2 IMPLEMENTED (default off), BLOCKED ON GRAVITYMARK BY QUERY RESOLVES; NEXT OV3
+- EXP2193: GravityMark frame = 8 jobs CRCRCRCR; C->R carry 16-18 D3D12 transitions; R->C carry no app barrier, but
+  each R is submitted by ResolveQueryData (pipeline-statistics heap, 1024 queries) and Asahi copies the results on the
+  GPU inside the next compute batch (agx_query.c flush_query_writers + libagx_copy_query_gl): C depends on R.
+- OV2 on integration (820cab01 KMD, e4090c71 UMD, 35ff4944 guard; Wom1Ov2NoHazardLead, default off, needs Q2c):
+  satisfied lead Barrier for a UMD-proven independent compute successor; the UMD refuses independence after foreign
+  owner work (resolves) or early dispatches, so it does not fire on GravityMark yet. Not run on hardware.
+- Next (OV3, UMD): defer the resolve GPU copy to the next barrier / ECL end and emit it in the following render's
+  prelude CDM (ordered behind C on the compute FIFO and behind R on the render FIFO), so C becomes independent of R.
+  Potential: overlap R1||C2, R3||C4, R5||C6 (macOS overlaps 4.3 ms FHD, EXP2192). exp/ov2-rc is superseded, unmerged.
+- Bench note: EXP2194 is the c4split run of another session; the next free EXP number follows its recovery.
+
 ## CURRENT 2026-11-05 17:30Z -- GOAL FHD >= 7814 (user protocol 2026-11-05); Q2c + F1 WORKS; FHD best 5396
 - Goal (user): GravityMark D3D12 1920x1080, 100k asteroids, -temporal 0, windowed, same GravityMark build as macOS, >= 7814 in
   three consecutive pre-agreed FULL FHD runs after a fresh boot; correct image, no fault/TDR/reset/removal, full suite.
