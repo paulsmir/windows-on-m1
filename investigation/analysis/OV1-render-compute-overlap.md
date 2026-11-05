@@ -279,3 +279,68 @@ answer:
   compute envelope).
 - KMD meaning (not Asahi's): the TA does not wait on the compute stamp; the 3D ring waits on it. Without the
   feature the parser refuses it.
+
+## OV5 KMD drill (step 1, 2026-11-05, offline; no hardware run yet)
+- Sources: Asahi `queue/render.rs` (frag Barrier: `wait_stamp` = vertex fw stamp, `stamp_self` =
+  `ev_frag.value.next()`, added to the frag job) and `queue/mod.rs` (explicit vdm/cdm barriers go only
+  into the vertex or compute job); our `AdmissionBuildLeadBarrier`, `AppleAgxG13ProviderSubmitRender`,
+  `AppleAgxG13QueueRuntimeSubmit`, `AppleAgxG13QueueProviderPlanSuccessor`, the sidecar layout in
+  `apple_agx_render_shared_memory.h`.
+- WINDOWS CONTRACT: none changes. The drill adds no D3D12/WDDM-visible ordering: the render already waits
+  for the compute job at its TA. VidSch sees the same fences in the same order.
+- AGX/ASAHI CONTRACT: a G13 Barrier work item (tag 4, 0x20 bytes) in a work queue holds that queue until
+  `*wait_stamp >= wait_value`. `stamp_self` is the waiting queue's own next stamp. Asahi never puts a
+  compute-stamp Barrier into the 3D (fragment) queue. The 3D queue's only Barrier is the one on the TA
+  stamp (our template object 14, D3 entry 0).
+- TRANSLATION (REG_DWORD `Wom1Ov5FragWaitDrill` = 1, default off, read at StartDevice; `ADMISSION_OV5_ON`
+  in `render_ov5.h`):
+  - Scope: a successor render with lead class TA_ON_COMPUTE and no compute work of its own. It keeps its
+    TA lead Barrier unchanged.
+  - The KMD also builds a second Barrier with the same wait: compute fw stamp (sidecar 0x8780),
+    `wait_value` = the running job's ComputeExpectedStamp, `wait_slot` = ComputeEvent, `stamp_self` = the
+    render's D3ExpectedStamp.
+  - It lies in a new sidecar slot, `APPLE_AGX_COMPUTE_3D_BARRIER_OFFSET` = 0x8840 (set B 0xa840), in the
+    render's job-word set. No other word of either set overlaps it; `test_ov5_frag_wait_drill`
+    SidecarSlot checks every extent.
+  - The provider puts it first in `submission.D3`, with the sidecar as its prepared range
+    (`D3LeadBarrierRange`, flushed before the 3D work), and sets `D3LeadingBarrier`. The runtime accepts
+    3 D3 entries only for such a successor.
+  - The plan's `D3BarrierExpectedDonePointer` (one more 3D entry) becomes the job's 3D done pointer.
+  - Refusal is never truncation: the pure `AdmissionJobWindowOv5DrillRefusal` checks the switch,
+    successor, class, compute work, D3 entries < `APPLE_AGX_G13_QUEUE_PUBLISH_MAX` and an in-ring done
+    pointer. A failed encoder or sidecar reservation also falls back to today's job. The provider rejects
+    the field on depth-1, compute-work and no-TA-lead jobs.
+  - Receipt `Wom1Ov5DrillReceipt` (v1, 68 bytes): Considered, Built, Placed (provider count), Refused[8],
+    last fence/wait/stamp_self/offset. Exported like Wom1Ov2Receipt: PASSIVE_LEVEL, at most every 2 s,
+    never flushed.
+  - Switch off: the provider probe's publication (rings, write pointers, flushed ranges, run messages) is
+    byte-identical to base 92dfda88f.
+- WHAT IS STILL UNKNOWN (hardware only):
+  - Does the G13 firmware accept a Barrier on the compute stamp in the 3D queue? Possible failures: a
+    firmware assert/RTKit crash, a channel error on the 3D queue, or a hang because the 3D queue
+    resolves stamps differently. The wait is always satisfied on arrival, so a hang would mean the
+    firmware rejects or misreads the item.
+  - Does a satisfied 3D Barrier ahead of the TA-stamp Barrier change 3D start latency?
+  - Firmware writes into the sidecar's shared statistics region (0x8600; its real extent is undocumented
+    here; Asahi's global GpuStatsComp is 0x3000 bytes) would reach 0x8840 as they would the
+    hardware-run 0x8800/0x8820 Barriers. That is no new exposure, but it is not proven.
+- Checkpoint (smallest falsifiable): one GravityMark FHD run with `Wom1JobDepth2Kick` = 1 and
+  `Wom1Ov5FragWaitDrill` = 1, all else as the current default package.
+  - Pass: `Wom1Ov5DrillReceipt` Built == Placed > 0 with Refused[7] (build) = 0; no TDR, firmware
+    recovery or channel error; frame time within run-to-run noise of the switch-off control.
+  - Fail: any firmware fault or hang with Placed > 0. Recovery: the switch off (REG_DWORD 0 / delete),
+    the standard recover.sh tail.
+- Step 2 sketch, the real waiver (not implemented):
+  - The KMD publishes device feature 0x4 `AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT` only behind
+    `Wom1Ov5TaWaiver` = 1, and only when the drill passed on hardware.
+  - The UMD flags a render as TA-independent per the OV5 rule above: render header `cdm_barrier` =
+    0xffff (NONE), `vdm_barrier` = 0, a packet without a compute command.
+  - For such a successor (TA_ON_COMPUTE, no compute work) the KMD drops the TA-ring lead Barrier: TA
+    publication = root only, TA done pointer = the plan's two-entry value without the lead.
+  - It keeps only the 3D Barrier above. The 3D queue then waits on both C's stamp and its own TA.
+  - Refusals: the switch off, feature unpublished, packet not flagged, class/compute work. Counted in a
+    new reason of the same receipt. Without the feature, the parser refuses the flag.
+  - Open for step 2: `AppleAgxG13ProviderTaValid` and `PlanSuccessor` count the TA lead as one entry.
+    The waiver needs a successor TA publication without one, which the runtime's
+    `Ta.GpuAddressCount == 1 + successor` check forbids today, and a backend-job validity rule other
+    than `LeadBarrierAddress != 0`.

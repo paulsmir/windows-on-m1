@@ -130,13 +130,16 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderProgressBindingValid(
 static APPLE_AGX_BACKEND_BOOL AppleAgxG13Provider3dValid(
     APPLE_AGX_G13_QUEUE_PROVIDER *Provider,
     const APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
+  /* OV5 drill: the 3D lead Barrier is one more 3D ring entry. */
   return Job != APPLE_AGX_G13_PROVIDER_NULL &&
          AppleAgxG13ProviderAddressesValid(Job->D3WorkAddresses,
                                            Job->D3WorkAddressCount) &&
          Job->D3Event == Provider->Config.D3.EventNumber &&
          Job->D3ExpectedStamp != 0u &&
          AppleAgxG13ProviderExpectedDone(
-             Provider, &Provider->Config.D3, Job->D3WorkAddressCount,
+             Provider, &Provider->Config.D3,
+             Job->D3WorkAddressCount +
+                 (Job->D3LeadBarrierAddress != 0ULL ? 1u : 0u),
              Job->D3ExpectedDonePointer);
 }
 
@@ -237,6 +240,12 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanSuccessor(
           &candidate.D3ExpectedDonePointer))
     return APPLE_AGX_BACKEND_FALSE;
   candidate.TaBarrierExpectedDonePointer = candidate.TaExpectedDonePointer;
+  /* OV5 drill: never a refusal (the same write pointer was just read); a
+   * failed read leaves the out-of-ring value the KMD refuses on. */
+  if (!AppleAgxG13ProviderNextDone(
+          Provider, &Provider->Config.D3, APPLE_AGX_G13_QUEUE_PUBLISH_MAX,
+          &candidate.D3BarrierExpectedDonePointer))
+    candidate.D3BarrierExpectedDonePointer = APPLE_AGX_G13_RING_CAPACITY;
   if (Provider->Config.HasCompute &&
       !AppleAgxG13ProviderNextDone(Provider, &Provider->Config.Compute, 2u,
                                    &candidate.ComputeExpectedDonePointer))
@@ -486,6 +495,41 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderSubmitRender(
     }
     submission.Successor = APPLE_AGX_BACKEND_TRUE;
   }
+  if (Job->D3LeadBarrierAddress != 0ULL) {
+    /* OV5 drill: the 3D queue of a successor render without compute work
+     * leads with its Barrier on the running compute job's stamp (the TA
+     * lead Barrier waits on the same stamp). Refused, never truncated, at
+     * the ring-entry limit. */
+    const APPLE_AGX_BACKEND_BOOL prepared =
+        submission.D3.PreparedRangeCount != 0u ? APPLE_AGX_BACKEND_TRUE
+                                               : APPLE_AGX_BACKEND_FALSE;
+    if (!Successor || Job->ComputeWorkAddressCount != 0u ||
+        Job->TaBarrierAddress != 0ULL || Job->LeadBarrierAddress == 0ULL ||
+        (Job->D3LeadBarrierAddress & 0x1fULL) ||
+        submission.D3.GpuAddressCount == 0u ||
+        submission.D3.GpuAddressCount >= APPLE_AGX_G13_QUEUE_PUBLISH_MAX ||
+        (prepared && (submission.D3LeadBarrierRange.Address ==
+                          APPLE_AGX_G13_PROVIDER_NULL ||
+                      submission.D3LeadBarrierRange.Bytes == 0u ||
+                      submission.D3.PreparedRangeCount !=
+                          submission.D3.GpuAddressCount)))
+      SUBMIT_REJECT(AppleAgxG13SubmitGuardBuild);
+    for (index = submission.D3.GpuAddressCount; index > 0u; --index) {
+      submission.D3.GpuAddresses[index] = submission.D3.GpuAddresses[index - 1u];
+      if (prepared)
+        submission.D3.PreparedRanges[index] =
+            submission.D3.PreparedRanges[index - 1u];
+    }
+    submission.D3.GpuAddresses[0] = Job->D3LeadBarrierAddress;
+    ++submission.D3.GpuAddressCount;
+    if (prepared) {
+      submission.D3.PreparedRanges[0].Address =
+          submission.D3LeadBarrierRange.Address;
+      submission.D3.PreparedRanges[0].Bytes = submission.D3LeadBarrierRange.Bytes;
+      ++submission.D3.PreparedRangeCount;
+    }
+    submission.D3LeadingBarrier = APPLE_AGX_BACKEND_TRUE;
+  }
   if (Job->TaBarrierAddress != 0ULL) {
     /* D3D-G1b: the TA queue leads with the firmware Barrier on the compute
      * stamp. It lives in the compute sidecar, whose prepared range the
@@ -540,6 +584,7 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderSubmitRender(
   if (Successor) {
     provider->SuccessorFence = Fence;
     provider->SuccessorComputeOnly = APPLE_AGX_BACKEND_FALSE;
+    if (submission.D3LeadingBarrier) ++provider->D3LeadPlaced;
     return APPLE_AGX_BACKEND_TRUE;
   }
   provider->ObservedMask = 0u;
@@ -560,7 +605,8 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
       &provider->ComputeIdentityDiagnostic.RunTa,
       (APPLE_AGX_BACKEND_U32)sizeof(provider->ComputeIdentityDiagnostic.RunTa));
 #define SUBMIT_REJECT(g) do { provider->LastSubmitGuard=(g); return APPLE_AGX_BACKEND_FALSE; } while(0)
-  if (Job == APPLE_AGX_G13_PROVIDER_NULL || Job->LeadBarrierAddress != 0ULL)
+  if (Job == APPLE_AGX_G13_PROVIDER_NULL || Job->LeadBarrierAddress != 0ULL ||
+      Job->D3LeadBarrierAddress != 0ULL)
     SUBMIT_REJECT(AppleAgxG13SubmitGuardArguments);
   if (provider->Phase != AppleAgxG13QueueProvider3dStaged) {
     provider->LastSubmitRuntimeResult = AppleAgxG13PhaseFenceGuardPhase;

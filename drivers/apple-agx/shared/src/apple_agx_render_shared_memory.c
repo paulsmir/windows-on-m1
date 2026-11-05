@@ -1274,6 +1274,9 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildLeadingBarrier(
   if(Queue==APPLE_AGX_RENDER_BARRIER_QUEUE_COMPUTE)
     return build_sidecar_barrier(Owner,Input,
         APPLE_AGX_COMPUTE_QUEUE_BARRIER_OFFSET,BarrierGpuAddress);
+  if(Queue==APPLE_AGX_RENDER_BARRIER_QUEUE_3D)
+    return build_sidecar_barrier(Owner,Input,
+        APPLE_AGX_COMPUTE_3D_BARRIER_OFFSET,BarrierGpuAddress);
   return APPLE_AGX_FALSE;
 }
 

@@ -145,6 +145,51 @@ unsigned int AdmissionJobWindowOv2Note(ADMISSION_JOB_WINDOW_OV2_RECEIPT *Receipt
   return Receipt->Considered <= 16u || (Receipt->Considered & 0xffu) == 0u ? 1u : 0u;
 }
 
+unsigned int AdmissionJobWindowOv5DrillRefusal(unsigned int Enabled,
+    unsigned int Successor, unsigned int Barrier,
+    unsigned int ComputeWorkCount, unsigned int D3Entries,
+    unsigned int PublishMax, unsigned int D3BarrierDone,
+    unsigned int RingCapacity) {
+  if (!Enabled) return ADMISSION_JOB_WINDOW_OV5_OFF;
+  if (!Successor) return ADMISSION_JOB_WINDOW_OV5_NOT_SUCCESSOR;
+  if (Barrier != ADMISSION_JOB_WINDOW_BARRIER_TA_ON_COMPUTE)
+    return ADMISSION_JOB_WINDOW_OV5_CLASS;
+  if (ComputeWorkCount != 0u) return ADMISSION_JOB_WINDOW_OV5_COMPUTE_WORK;
+  if (D3Entries == 0u || D3Entries >= PublishMax)
+    return ADMISSION_JOB_WINDOW_OV5_RING_LIMIT;
+  if (D3BarrierDone >= RingCapacity) return ADMISSION_JOB_WINDOW_OV5_DONE_POINTER;
+  return ADMISSION_JOB_WINDOW_OV5_PLACE;
+}
+
+void AdmissionJobWindowOv5ReceiptInitialize(
+    ADMISSION_JOB_WINDOW_OV5_RECEIPT *Receipt) {
+  unsigned int i;
+  if (Receipt == 0) return;
+  Receipt->Version = ADMISSION_JOB_WINDOW_OV5_RECEIPT_VERSION;
+  Receipt->Bytes = (unsigned int)sizeof(*Receipt);
+  Receipt->Considered = Receipt->Built = Receipt->Placed = 0u;
+  for (i = 0u; i < ADMISSION_JOB_WINDOW_OV5_REASONS; ++i) Receipt->Refused[i] = 0u;
+  Receipt->LastFence = Receipt->LastWaitValue = 0u;
+  Receipt->LastStampSelf = Receipt->LastOffset = 0u;
+}
+
+unsigned int AdmissionJobWindowOv5Note(ADMISSION_JOB_WINDOW_OV5_RECEIPT *Receipt,
+    unsigned int Refusal, unsigned int Fence, unsigned int WaitValue,
+    unsigned int StampSelf, unsigned int Offset) {
+  if (Receipt == 0) return 0u;
+  ++Receipt->Considered;
+  if (Refusal == ADMISSION_JOB_WINDOW_OV5_PLACE) {
+    ++Receipt->Built;
+    Receipt->LastFence = Fence;
+    Receipt->LastWaitValue = WaitValue;
+    Receipt->LastStampSelf = StampSelf;
+    Receipt->LastOffset = Offset;
+  } else if (Refusal < ADMISSION_JOB_WINDOW_OV5_REASONS) {
+    ++Receipt->Refused[Refusal];
+  }
+  return Receipt->Considered <= 16u || (Receipt->Considered & 0xffu) == 0u ? 1u : 0u;
+}
+
 unsigned int AdmissionJobWindowKickRefusal(
     const ADMISSION_JOB_WINDOW_KICK_STATE *s) {
   const ADMISSION_JOB_WINDOW_JOB *n, *m;

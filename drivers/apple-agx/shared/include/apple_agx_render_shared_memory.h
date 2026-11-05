@@ -65,6 +65,19 @@
  * set's TA Barrier. The TA leading Barrier of a render without a prelude
  * uses the set's TA Barrier slot (such a render has no prelude Barrier). */
 #define APPLE_AGX_COMPUTE_QUEUE_BARRIER_OFFSET 0x8820u
+/* OV5 drill (REG_DWORD Wom1Ov5FragWaitDrill = 1, default off): the 3D queue's
+ * Barrier on the compute stamp (a successor render without compute work
+ * whose TA already waits on the running compute job; first entry of its 3D
+ * publication), one per set, after the set's compute-queue Barrier. Free in
+ * both sets: set A's job words end at 0x831c (RunCompute), 0x85f0 (plain
+ * microsequence), 0x8840 (the two Barriers above), 0x9268 (timestamp
+ * microsequence) and 0x9420 (timestamp block); the shared words are the
+ * statistics (0x8600), the firmware stamp (0x8780, 8 bytes) and gpu_buf
+ * (0xc000); set B is set A + 0x2000 (0xa840, inside the free range
+ * 0x9420-0xc000 and before set B's timestamp microsequence at 0xb000). No
+ * builder zeroes or writes 0x8840-0x885f or 0xa840-0xa85f except this one
+ * (the queue-lifetime clear from the statistics up only zeroes it). */
+#define APPLE_AGX_COMPUTE_3D_BARRIER_OFFSET 0x8840u
 #define APPLE_AGX_COMPUTE_JOB_WORD_OFFSET(Set, OffsetA) \
   ((OffsetA) + ((Set) ? APPLE_AGX_COMPUTE_JOB_WORD_SET_B_DELTA : 0u))
 /* Q2c H0 (Wom1ComputeOwnQueue, default off): the compute work queue's own
@@ -171,6 +184,8 @@ typedef struct _APPLE_AGX_RENDER_BARRIER_INPUT {
 /* rc98: the queue a depth-2 leading Barrier is published on. */
 #define APPLE_AGX_RENDER_BARRIER_QUEUE_TA 0u
 #define APPLE_AGX_RENDER_BARRIER_QUEUE_COMPUTE 1u
+/* OV5 drill: the 3D queue (APPLE_AGX_COMPUTE_3D_BARRIER_OFFSET). */
+#define APPLE_AGX_RENDER_BARRIER_QUEUE_3D 2u
 
 typedef struct _APPLE_AGX_RENDER_RUNTIME_BINDINGS {
   APPLE_AGX_U64 StatsTaOwnerGpuAddress;
@@ -500,8 +515,8 @@ APPLE_AGX_U32 AppleAgxRenderSharedMemoryNextJobWordSet(
  * first queue on N's last firmware stamp, built in N+1's job-word set:
  * Queue TA uses the set's TA Barrier slot (a render without a prelude),
  * Queue COMPUTE the set's compute-queue Barrier slot (a compute job or a
- * v5 prelude). StampSelf is N+1's own stamp on that queue. Not published by
- * any path yet (no second kick before the depth-2 window, step 3/4). */
+ * v5 prelude), Queue 3D the set's 3D Barrier slot (OV5 drill). StampSelf
+ * is N+1's own stamp on that queue. */
 APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildLeadingBarrier(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const APPLE_AGX_RENDER_BARRIER_INPUT *Input, APPLE_AGX_U32 Queue,

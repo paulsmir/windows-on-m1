@@ -258,12 +258,13 @@ static void barriers(void) {
   /* each set's slots */
   for (set = 0u; set < 2u; ++set) {
     const APPLE_AGX_U32 d = set ? DELTA : 0u;
-    struct { APPLE_AGX_U32 queue, stamp_queue, offset; } c[3] = {
+    struct { APPLE_AGX_U32 queue, stamp_queue, offset; } c[4] = {
       {APPLE_AGX_RENDER_BARRIER_QUEUE_TA, APPLE_AGX_RENDER_STAMP_QUEUE_COMPUTE, 0x8800u}, /* TA on compute */
       {APPLE_AGX_RENDER_BARRIER_QUEUE_TA, APPLE_AGX_RENDER_STAMP_QUEUE_3D, 0x8800u},      /* TA_ON_3D */
       {APPLE_AGX_RENDER_BARRIER_QUEUE_COMPUTE, APPLE_AGX_RENDER_STAMP_QUEUE_3D, 0x8820u}, /* compute on 3D */
+      {APPLE_AGX_RENDER_BARRIER_QUEUE_3D, APPLE_AGX_RENDER_STAMP_QUEUE_COMPUTE, 0x8840u}, /* OV5 drill */
     };
-    for (i = 0; i < 3u; ++i) {
+    for (i = 0; i < 4u; ++i) {
       memset(store[0][SIDE], 0xcd, 0x10000);
       memset(&in, 0, sizeof(in));
       in.WaitStampGpuAddress = AppleAgxRenderSharedMemoryFirmwareStampAddress(o, c[i].stamp_queue);
@@ -282,7 +283,7 @@ static void barriers(void) {
   in.JobWordSet = 2u;
   assert(!AppleAgxRenderSharedMemoryBuildLeadingBarrier(o, &in, 0u, &address));
   in.JobWordSet = 0u;
-  assert(!AppleAgxRenderSharedMemoryBuildLeadingBarrier(o, &in, 2u, &address));
+  assert(!AppleAgxRenderSharedMemoryBuildLeadingBarrier(o, &in, 3u, &address));
   in.WaitSlot = 0x80u; assert(!AppleAgxG13BarrierEncode(&in, bytes));
   in.WaitSlot = 1u; in.WaitStampGpuAddress |= 2u; assert(!AppleAgxG13BarrierEncode(&in, bytes));
   free(arena);

@@ -278,11 +278,15 @@ class Depth2CapsWiring(unittest.TestCase):
         # rc102 (step 3/4): only a successor build publishes a leading
         # Barrier (AdmissionBuildLeadBarrier, called under Plan->Successor)
         text = WORKER.read_text()
-        self.assertEqual(text.count('AppleAgxRenderSharedMemoryBuildLeadingBarrier('), 1)
+        # (OV5 drill: the 3D Barrier builder, also only for successor builds)
+        self.assertEqual(text.count('AppleAgxRenderSharedMemoryBuildLeadingBarrier('), 2)
         self.assertIn('AppleAgxRenderSharedMemoryBuildLeadingBarrier(',
                       section(text, 'static APPLE_AGX_BACKEND_BOOL AdmissionBuildLeadBarrier('))
-        for call in re.finditer(r'AdmissionBuildLeadBarrier\(runtime', text):
-            self.assertIn('Plan->Successor', text[max(0, call.start() - 700):call.start()])
+        self.assertIn('AppleAgxRenderSharedMemoryBuildLeadingBarrier(',
+                      section(text, 'static VOID AdmissionBuildOv5FragBarrier('))
+        for call in re.finditer(r'AdmissionBuild(LeadBarrier|Ov5FragBarrier)\(runtime', text):
+            window = 700 if call.group(1) == 'LeadBarrier' else 1100
+            self.assertIn('Plan->Successor', text[max(0, call.start() - window):call.start()])
 
     def test_set_choice_of_the_compute_builds(self):
         text = WORKER.read_text()

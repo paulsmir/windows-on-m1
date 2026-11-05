@@ -165,6 +165,16 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION {
     const void *Address;
     APPLE_AGX_BACKEND_U32 Bytes;
   } LeadBarrierRange;
+  /* OV5 drill: D3.GpuAddresses[0] is the successor render's 3D Barrier
+   * (APPLE_AGX_BACKEND_JOB_IMAGE D3LeadBarrierAddress), one 3D ring entry
+   * more; only a Successor taken by SubmitRender (no compute work) has it.
+   * D3LeadBarrierRange is its prepared range, set by the submission
+   * builder like LeadBarrierRange. */
+  APPLE_AGX_BACKEND_BOOL D3LeadingBarrier;
+  struct {
+    const void *Address;
+    APPLE_AGX_BACKEND_U32 Bytes;
+  } D3LeadBarrierRange;
 } APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION;
 
 typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION {

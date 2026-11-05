@@ -225,6 +225,57 @@ unsigned int AdmissionJobWindowOv2Note(ADMISSION_JOB_WINDOW_OV2_RECEIPT *Receipt
     unsigned int Refusal, unsigned int Fence, unsigned int Expected,
     unsigned int WaitValue);
 
+/* OV5 drill (REG_DWORD Wom1Ov5FragWaitDrill = 1, default off): a kicked
+ * successor render without compute work (no CDM prelude) behind a running
+ * compute job (TA_ON_COMPUTE) keeps its TA lead Barrier and its 3D queue
+ * also leads with a Barrier on the same compute stamp. The TA already waits
+ * for that stamp, so the 3D Barrier is satisfied on arrival: no behaviour
+ * change, only the firmware's acceptance of a compute-stamp Barrier on the
+ * 3D queue is exercised (investigation/analysis/OV1-render-compute-
+ * overlap.md, OV5 KMD drill). Refusals (stable receipt values; the build
+ * then follows today's path):
+ *   1 switch off, 2 not a successor build, 3 not TA_ON_COMPUTE, 4 the render
+ *   has compute work of its own, 5 the 3D publication is at the ring-entry
+ *   limit, 6 the plan's 3D done pointer is out of the ring, 7 the Barrier
+ *   could not be built (KMD: encoder, sidecar or running job refused). */
+#define ADMISSION_JOB_WINDOW_OV5_PLACE 0u
+#define ADMISSION_JOB_WINDOW_OV5_OFF 1u
+#define ADMISSION_JOB_WINDOW_OV5_NOT_SUCCESSOR 2u
+#define ADMISSION_JOB_WINDOW_OV5_CLASS 3u
+#define ADMISSION_JOB_WINDOW_OV5_COMPUTE_WORK 4u
+#define ADMISSION_JOB_WINDOW_OV5_RING_LIMIT 5u
+#define ADMISSION_JOB_WINDOW_OV5_DONE_POINTER 6u
+#define ADMISSION_JOB_WINDOW_OV5_BUILD 7u
+#define ADMISSION_JOB_WINDOW_OV5_REASONS 8u
+/* D3Entries: the render's 3D work entries; PublishMax: the most entries one
+ * publication may carry; D3BarrierDone/RingCapacity: the plan's 3D done
+ * pointer with the Barrier and the 3D ring size. */
+unsigned int AdmissionJobWindowOv5DrillRefusal(unsigned int Enabled,
+    unsigned int Successor, unsigned int Barrier,
+    unsigned int ComputeWorkCount, unsigned int D3Entries,
+    unsigned int PublishMax, unsigned int D3BarrierDone,
+    unsigned int RingCapacity);
+/* OV5 drill: cumulative receipt (device value Wom1Ov5DrillReceipt, written
+ * by the worker like Wom1Ov2Receipt): successor render builds considered,
+ * 3D Barriers built (in the sidecar), placed (accepted first in the 3D
+ * publication; the provider's count, copied at export), refusals per
+ * reason, and the last built Barrier. */
+#define ADMISSION_JOB_WINDOW_OV5_RECEIPT_VERSION 1u
+typedef struct _ADMISSION_JOB_WINDOW_OV5_RECEIPT {
+  unsigned int Version, Bytes;
+  unsigned int Considered, Built, Placed;
+  unsigned int Refused[ADMISSION_JOB_WINDOW_OV5_REASONS];
+  unsigned int LastFence, LastWaitValue, LastStampSelf, LastOffset;
+} ADMISSION_JOB_WINDOW_OV5_RECEIPT;
+void AdmissionJobWindowOv5ReceiptInitialize(
+    ADMISSION_JOB_WINDOW_OV5_RECEIPT *Receipt);
+/* Counts one successor render build (Refusal as above; Fence N+1, the
+ * Barrier's WaitValue and StampSelf, its sidecar offset). Returns 1 when an
+ * export is due: the first 16 considered builds, then every 256th. */
+unsigned int AdmissionJobWindowOv5Note(ADMISSION_JOB_WINDOW_OV5_RECEIPT *Receipt,
+    unsigned int Refusal, unsigned int Fence, unsigned int WaitValue,
+    unsigned int StampSelf, unsigned int Offset);
+
 /* In-flight window: the jobs the firmware holds, oldest first. */
 #define ADMISSION_JOB_WINDOW_ENTRY_FREE 0u
 #define ADMISSION_JOB_WINDOW_ENTRY_KICKED 1u

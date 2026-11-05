@@ -60,6 +60,9 @@ typedef struct _APPLE_AGX_G13_QUEUE_JOB_PLAN {
    * Barrier (a render with compute work leads its compute queue; its TA
    * entry count already includes the D3D-G1b Barrier). */
   APPLE_AGX_BACKEND_BOOL Successor;
+  /* OV5 drill: a successor plan's 3D done pointer when the 3D queue leads
+   * with the drill's Barrier (one entry more); zero in a depth-1 plan. */
+  APPLE_AGX_BACKEND_U32 D3BarrierExpectedDonePointer;
 } APPLE_AGX_G13_QUEUE_JOB_PLAN;
 
 struct _APPLE_AGX_G13_QUEUE_PROVIDER;
@@ -159,6 +162,9 @@ typedef struct _APPLE_AGX_G13_QUEUE_PROVIDER {
   APPLE_AGX_BACKEND_BOOL SuccessorComputeOnly;
   APPLE_AGX_BACKEND_U32 ObservedMask;
   APPLE_AGX_BACKEND_U32 LastSuccessorGuard;
+  /* OV5 drill: successor renders accepted with a 3D lead Barrier
+   * (cumulative; the KMD's Wom1Ov5DrillReceipt Placed). */
+  APPLE_AGX_BACKEND_U32 D3LeadPlaced;
 } APPLE_AGX_G13_QUEUE_PROVIDER;
 
 enum {
