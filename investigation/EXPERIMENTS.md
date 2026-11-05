@@ -69380,3 +69380,15 @@ EXP2187 HARDWARE ACTUAL (2026-11-05T13:49:25Z): **Q2c on the default depth-two p
 - Interpretation: with the compute work queue on its own Queue, a render's buffer-manager save is left pending (Owner->ManagerFence) when the next job starts, at depth one and two alike; the firmware side (second NotifierList/Notifier/GpuContextData) keeps working.
 - Verdict: REJECTED as implemented (Wom1ComputeOwnQueue stays off); a KMD accounting defect in the Q2c path, root cause under offline analysis.
 - Recovery rec2187h -> RECOVERY_DONE. Next: offline root cause + RED test before any rerun; meanwhile EXP2188 G1 ABBA.
+
+EXP2188 HARDWARE BEFORE 2026-11-05T13:55:20Z:
+Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true: a FHD FULL (G1 on, first arm), b HD FULL (on), c-f HD PERF ABBA (on, APPLE_AGX_D3D_LICM=1 = M3 order, =1, on).
+- WHY THIS HYPOTHESIS: (1) graphics/compute ranking vs Apple: the D3D array-layer rounding of a loop-invariant layer stays in the planet PS and C0 ray-march loops (Apple converts once); (2) offline G1 shortens C0 loop bodies 45-49 -> 42-46 and planet PS inner bodies 51/47/43/37 -> 48/44/40/34 with unchanged static size/GPRs, no other shader changes; (3) C0 1.72 ms and the planet PS ~1.57 ms are ray-march-loop dominated.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (copy propagation and DCE are semantics-preserving SSA cleanups).
+- ATOMIC CONTRACT: none -- one compiler pass order, per arm by environment.
+- WHAT IS STILL UNKNOWN: the frame-time effect (estimate <= 0.2 ms HD).
+- Expected: suite 119/0; correct images; on >= off in both pairs (+0..0.8 %); HD FULL >= ~6600; FHD >= ~5200 (first arm).
+- Failure criteria: wrong image / fault / suite regression -> rejected; on < off in both pairs -> rejected.
+- Recovery: rec2188h.
+- Hashes: sys 68336439655a, UmdArm64 970ef71d501c, UmdX64 0ee9d63508c6, Umd32 07b963ef872b; manifest 45223d1f340d, hardware-manifest 8f1b25101660; probe2188.sh 44733822790d (PROBE_LINT_OK); visible recovery rec2188h 7d89f80b647c64ce; m1n1 0d3a75b3.
+- Recovery rec2188h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2188-g1/run2188.sh.
