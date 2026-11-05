@@ -44482,3 +44482,12 @@ be reclassified offline for both normal and expanded guest-RAM profiles.
 Recovery: nothing to undo; continue the normal launch from `Running proxy`. If the
 proxy wedges: power-cycle into the GPU-visible recovery profile already in use.
 Timeout: 5 minutes wall clock.
+
+### ANSDART001 — approval and slot status (2026-11-05T23:25Z)
+
+User approved ANSDART001 in chat ("давай"). Not run yet: live check at 2026-11-05T23:25Z found
+the bench in use — GPU launcher PID 31128 `run_uefi.py` from
+`.worktrees/integration-ad04-windows-compiler` (elapsed 12:04) holding
+/dev/cu.usbmodemC02HDNCCQ6L41/43. Not interrupted. Run only when the machine is
+at `Running proxy` between GPU runs, by agreement with the GPU session.
+Preregistration above is unchanged.
