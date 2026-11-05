@@ -69297,3 +69297,18 @@ EXP2183 HARDWARE ACTUAL (2026-11-05T10:30:33Z): **L4 REJECTED: no frame-time gai
 - Expected vs actual: expected on > off in both pairs (+0.3..2 %) -> actual on <= off. Removing two of nine serialized memory round trips per node visit (offline: loop loads 21 -> 17, waits 32 -> 28) does not shorten the frame: C4 is not latency-of-dependent-loads bound at 1024 threads; remaining candidates for C4 are execution/occupancy or memory throughput.
 - Verdict: REJECTED (L4 5cf2cf2b stays opt-in, APPLE_AGX_D3D_LICM_CONST unset). Evidence .local/experiments/EXP2183-l4/evidence.
 - Recovery: rec2183h. Next: EXP2184 Q2c H0 (Wom1ComputeOwnQueue=1 at depth one).
+
+EXP2184 HARDWARE BEFORE 2026-11-05T10:37:44Z:
+Switches: Wom1ComputeOwnQueue=1 Wom1Depth2General=0. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0: a HD FULL, b HD PERF.
+- WHY THIS HYPOTHESIS: (1) EXP2148/2149/2151: notifications are lost whenever two notifiers share one notifier list / work-queue set; Asahi gives every Queue its own NotifierList, Notifier (generation = queue id), Threshold and GpuContextData (queue/mod.rs:436-560); (2) our compute work queue is already a separate KMD-synthesized work queue (QueueInfo 36, event slot 2) that works on hardware, so giving it its own Queue objects changes only which list/notifier/context it names; (3) EXP2147: removing the render->compute notification deferral is worth +3.4..6.1 % FPS.
+- WINDOWS CONTRACT: unchanged (one node, fence order, HwQueuePacketCap per depth-two setting).
+- AGX/ASAHI CONTRACT: per Queue: NotifierList (list_head.next = self), Threshold, Notifier {threshold ptr, generation, cur_count, unk_10 0x50, unk_buf 0xff}, GpuContextData default; QueueInfo notifier_list +0x10, gpu_context +0xa4 (packed, G13 V13_5).
+- TRANSLATION: objects in the compute sidecar tail 0xf000-0xf1c0; QueueInfo 36 retargeted; compute microsequences name the own notifier (generation 11's + 1); threshold 12 counts renders only, the own threshold compute only.
+- ATOMIC CONTRACT: Asahi Queue identity = {NotifierList, Notifier, Threshold, GpuContextData} together (queue/mod.rs Queue::new allocates them as one unit; a work queue names list and context of one Queue).
+- WHAT IS STILL UNKNOWN: Q1 whether the firmware accepts the second Queue's objects on the synthesized compute work queue (generation 1, uuid cloned from 3D, context without registration); depth one isolates Q1 from cross-queue barrier behaviour (Q2).
+- Expected: suite 119/0; GravityMark completes with a correct image; no lost completion, TDR, RTKit crash or GPU fault; FPS at depth-one level (no gain expected at depth one).
+- Failure criteria: lost compute completion with firmware alive (Q1 rejected for this layout), RTKit crash / 0x116 at the first compute (layout), wrong image -> rec2184h, switch stays off.
+- Recovery: rec2184h.
+- Hashes: sys b5c326ad043a, UmdArm64 c41f05acc458, UmdX64 d393edc7d695, Umd32 12a0dce705a0; manifest 996b1ffa38ad, hardware-manifest a71b6dfe52be; probe2184.sh 897b78fad564 (PROBE_LINT_OK); visible recovery rec2184h cf79b4dfe510224f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1ComputeOwnQueue=1 Wom1Depth2General=0.
+- Recovery rec2184h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2184-q2c/run2184.sh.
