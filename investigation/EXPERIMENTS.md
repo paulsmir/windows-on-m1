@@ -69478,3 +69478,10 @@ Switches: Wom1RcReceipt=1 Wom1JobDiagnostics=1 (receipts only). Steps: D3D12 sui
 - Hashes: sys 54c979de5ecc, UmdArm64 2c07947b261e, UmdX64 5ced683e8839, Umd32 aa2cd4ce9cfe; manifest 95caaec7a111, hardware-manifest b68f418f50ba; probe2193.sh 4eee011fe6b3 (PROBE_LINT_OK); visible recovery rec2193h 8fff2f9badabed4a; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1RcReceipt=1 Wom1JobDiagnostics=1.
 - Recovery rec2193h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2193-ov1-receipt/run2193.sh.
+
+EXP2193 HARDWARE ACTUAL (2026-11-05T16:58:33Z): **D3D12 barrier map of GravityMark's frame: 8 jobs CRCRCRCR; every C->R boundary carries 16-18 transitions (real hazards); every R->C boundary (R1->C2, R3->C4, R5->C6) carries ZERO barriers in 3531/3531 frames -> the compute job after a render is independent of it by D3D12 rules.**
+- Switches Wom1RcReceipt=1 Wom1JobDiagnostics=1; APPLE_AGX_D3D12_JOB_BARRIERS=1 in both arms. Suite 119/0; WER 0; no reset. a FHD FULL 5056 (receipt-heavy run, not comparable), b HD PERF.
+- tools/agx_job_barriers.py gm2193a-umd.log (3547 frames): C0->R1 18 transitions (VCB|UAV|SRV|INDIRECT -> VCB|UAV|DEPTH_W|SRV|INDIRECT) + 2 UAV, 14 resources; C2->R3 17 + 2 UAV; C4->R5 16 + 1 UAV; C6->R7 2 transitions (UAV -> RT|PS_SRV); R7->next frame 1 transition RT->COMMON; R1->C2, R3->C4, R5->C6: none.
+- Wom1RcDecisions (mid-run): render(prelude)->compute successors are already kicked (reason 0, running kind 2/1, next kind 3, class COMPUTE_ON_3D: 2231 + 827), but their lead Barrier waits on the render's 3D stamp; compute->prelude render successors kicked with COMPUTE_ON_COMPUTE (3819, dependent, correct); reason 55 (cross-process, DWM) 1560; reason 4 (preemption) 219.
+- Conclusion: the overlap available under D3D12 is render N || compute N+1 (three pairs per frame); implementation OV2-RC (independent compute successor's lead Barrier satisfied on arrival, flag via the Asahi header CdmBarrier/VdmBarrier NONE) in progress on exp/ov2-rc.
+- Recovery rec2193h. Evidence .local/experiments/EXP2193-ov1-receipt/evidence.
