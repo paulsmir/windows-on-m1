@@ -69594,3 +69594,18 @@ EXP2198 HARDWARE ACTUAL (2026-11-05T21:02:30Z): **OV3b CONFIRMED vs OV3 (+6.5 % 
 - Wom1Ov2Receipt (u32): mid12-d (1, 56, Considered 54634, Waived 2, Refused[0..6] 0,0,0,54632,0,0,0, LastFence 148335); after-d (1, 56, 78666, 4, ..., Refused[3] 78662). Between the two snapshots (arms d/e/f): +24032 pairs considered, +2 waived.
 - Interpretation: OV3b removes OV3's extra preludes (the EXP2197 regression), but the OV2 waiver itself practically never applies because the UMD independence rule does not flag the compute successors. The remaining -1.7 % vs EXP2196 is cross-boot and inside the noise band of the OV2-on profile (receipt export ~1 ms / 2 s); no overlap gain exists to measure.
 - Verdict: OV3b CONFIRMED as the correct OV3 (no new preludes); OV2+OV3b REJECTED as a default for now (no gain; Wom1Ov2NoHazardLead stays off). Next: the OV2 session determines offline why the UMD flags ~0 of ~45 R->C pairs per frame (UMD independence rule vs GravityMark's barrier/resource pattern) before any further OV2 hardware run. Recovery rec2198h.
+
+EXP2199 HARDWARE BEFORE 2026-11-05T21:16:33Z:
+Switches: Wom1Ov2NoHazardLead=1. Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABLE=true: d HD PERF APPLE_AGX_D3D12_OV3B=1 (KMD receipts at poll 12). One arm, diagnostic.
+- WHY THIS HYPOTHESIS: (1) EXP2198 Wom1Ov2Receipt: 78662 of 78666 COMPUTE_ON_3D pairs refused reason 3 (N+1 not flagged by the UMD); (2) gm2198d measure-batch-deps: frame shape CRCRCRCRC, C3/C5/C7 share a BO with the R before them in ~all frames, C9 is BO-free in ~all frames, yet even C9 is not waived; (3) EXP2193: no application barrier in the R->C gaps, so the refusing condition is driver-side and the logs cannot name it.
+- WINDOWS CONTRACT: unchanged (receipt only).
+- AGX/ASAHI CONTRACT: unchanged.
+- ATOMIC CONTRACT: none -- one receipt, no behaviour change.
+- WHAT IS STILL UNKNOWN: which UMD condition refuses each R->C successor (1 unknown barriers, 2 previous not render, 3 gap barriers, 4 render DrawUav, 5 early dispatch, 6 foreign owner work, 7 non-UAV barrier inside C).
+- Expected: suite 119/0; measure-d3d12-ov2-refusal rows with value 9 ~4 per frame ECL and value 8 naming the reason per position; FPS ~40.0 (= EXP2198 d/e).
+- Failure criteria: no receipt rows, any fault/TDR/WER -> rec2199h.
+- Recovery: rec2199h (run recover.sh directly on the running guest, no manual reboot).
+- Probe: agx_d3d12_probe_e2199_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c, probe source unchanged).
+- Hashes: sys 6400484cbf2a, UmdArm64 58875c87f31f, UmdX64 c98c03239bf5, Umd32 fdfd76909297; manifest 56ffad65f39e, hardware-manifest b5ebb5cbdcbe; probe2199.sh ed4fb175e2d5 (PROBE_LINT_OK); visible recovery rec2199h 913507a0fa57e767; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
+- Recovery rec2199h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2199-ov2-refusal/run2199.sh.
