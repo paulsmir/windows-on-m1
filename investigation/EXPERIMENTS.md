@@ -44421,3 +44421,64 @@ The next architect decision is recorded in
 hash-pinned Windows clang-cl overlay for only observed u_atomic spellings.
 Spark dispatch is queued pending a real code-capable endpoint; no source
 implementation or hardware action was performed by Astra.
+
+### ANSDART001 — preregistration: read-only retained DART table census (2026-11-05T23:15Z)
+
+Status: PREREGISTERED, NOT RUN. Needs explicit user approval and a bench slot
+agreed with the GPU sessions (the single J313 is theirs by default).
+
+WHY THIS HYPOTHESIS:
+1. SOURCE `m1n1_windows/src/nvme.c:444-455,707-714`: ANS PRP/TCB carry raw
+   physical addresses; t8103 ANS has no DART, only `sart-ans` for RTKit buffers.
+   The DART_TABLES=UNOBSERVED blocker is therefore about *other* DARTs' retained
+   tables, whose PAs no source can supply.
+2. OBSERVED EXP464: tables of another IOMMU (AGX UAT TTBR 0x9d71a0000) sit inside
+   the GUEST_RAM window 0x850000000..0x9df708000, so "retained tables are never in
+   guest RAM" cannot be assumed.
+3. SOURCE `proxyclient/m1n1/hv/__init__.py:2105-2165`: only MCC TZ carveouts are
+   removed from stage-2, so an iBoot-retained table inside GUEST_RAM would be
+   guest-writable; only a measurement distinguishes "outside" from "conflict".
+
+Hypothesis (falsifiable): at `Running proxy`, every L1/L2 page referenced by a
+powered t8020 DART lies outside the GUEST_RAM window of the active launch profile
+(or inside an ADT memory-map reservation). Rejected if any page is
+`GUEST_RAM_CONFLICT`; inconclusive if the census is `INCOMPLETE`.
+
+Single variable: none in the launch chain. A read-only proxy script runs once at
+`Running proxy` before the operator's normal launch; no image, package, profile
+or guest change.
+
+Repository: public_windows `feature/j313-ans-native-offline` b5282f401766ad3b0c4c1fc5956193be09d6d52a
+(clean tracked tree, `git diff` sha256 e3b0c442...b855 = empty); m1n1_windows
+ba1cfa1cf7657a1f137a8957ea7864a9e9f393d4; mu baea35924287dd38ce24e97e331684b6f4ac3cd7.
+Tool `tools/ans_dart_census.py` sha256
+5ccb0cd7a9178ce9dd99c63763c476fe493bdfeebe8d911aaf183a94a2a34b38, offline tests
+`tests/test_ans_dart_census.py` (7 cases, part of `tools/test_ans_offline.py`,
+GREEN receipt `.local/ans-native/tests/receipts/89b20c29...bf3c.json`).
+No build. The proxy client is the m1n1_windows checkout above, run with the
+private `.local/ans-native/proxy-env` interpreter.
+
+Command (only after approval; endpoint and base read live, never guessed):
+
+    M1N1DEVICE=<proxy endpoint from the live check> \
+    .local/ans-native/proxy-env/bin/python tools/ans_dart_census.py \
+      --confirm-experiment ANSDART001 \
+      --guest-ram-base <phys_base of the launch profile the GPU line will boot next> \
+      --output .local/ans-native/ANSDART001/census.json
+
+Hardware access: PMGR PS register reads; for DARTs whose every clock gate reports
+ACTUAL=0xf, 64 TTBR reads and one 16 KiB memory read per valid TTBR; memory reads
+of the ADT. No MMIO write, no power transition, no `m1n1.setup` (it writes the PMU
+panic counter), no cpufreq, no hv_init.
+
+Expected checkpoint: exit 0, verdict NO_RETAINED_TABLE_IN_GUEST_RAM; receipt
+lists at least dart-disp0 (iBoot-locked scanout DART) as READ.
+Failure criteria: exit 2 CONFLICT (then fix stage-2/Mu reservation first, DMA
+stays denied); exit 3 INCOMPLETE; any proxy exception or SError (stop, save the
+console, do not retry).
+Evidence: `.local/ans-native/ANSDART001/census.json` (+ sha256 in the result
+entry), operator console log. Raw TTBR/L1/L2 PAs are profile-independent and can
+be reclassified offline for both normal and expanded guest-RAM profiles.
+Recovery: nothing to undo; continue the normal launch from `Running proxy`. If the
+proxy wedges: power-cycle into the GPU-visible recovery profile already in use.
+Timeout: 5 minutes wall clock.
