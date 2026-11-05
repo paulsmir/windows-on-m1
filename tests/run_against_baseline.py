@@ -2,7 +2,8 @@
 """Run test modules and report only failures that are not in the baseline.
 
 Usage: python3 run_against_baseline.py [module-or-glob ...]   (from tests/)
-Default modules: the D3D12, UMD, G2/G4 winsys, D3D-G1, R149, win32, C53, shader-frontend and D3D10/11 (WDDM 2.0) suites.
+Default modules: the D3D12, UMD, G2/G4 winsys, D3D-G1, R149, win32, C53, shader-frontend, D3D10/11 (WDDM 2.0),
+OV overlap and owner declaration-order suites.
 
 tests/known_failures.txt lists one failing test id per line
 (module.Class.method, or the module name for an import error), each with a
@@ -18,7 +19,8 @@ import sys
 HERE = Path(__file__).resolve().parent
 BASELINE = HERE / 'known_failures.txt'
 DEFAULT = ['test_d3d12_*', 'test_umd*', 'test_g4*', 'test_d3dg1*', 'test_r149*', 'test_g2*', 'test_apple_agx_win32*',
-           'test_c53*', 'test_dxil_to_nir', 'test_dxbc_to_nir', 'test_wddm2*', 'test_d3d10*', 'test_d3d11*']
+           'test_c53*', 'test_dxil_to_nir', 'test_dxbc_to_nir', 'test_wddm2*', 'test_d3d10*', 'test_d3d11*',
+           'test_ov*', 'test_owner_*']
 
 
 def modules(patterns):
