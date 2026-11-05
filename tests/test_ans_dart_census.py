@@ -63,9 +63,16 @@ class Census(unittest.TestCase):
         self.assertEqual(addr(devs[2]), 0x1060)
         on = {0x1058: 0xff, 0x1060: 0xff}
         self.assertTrue(c.powered([1, 2], devs, addr, on.get))
-        self.assertFalse(c.powered([1, 2], devs, addr, {0x1058: 0xff, 0x1060: 0x0f}.get))
         self.assertIsNone(c.powered([3], devs, addr, on.get))
         self.assertIsNone(c.powered([], devs, addr, on.get))
+        self.assertIsNone(c.powered([1, 2], devs, addr, {0x1058: 0xff, 0x1060: 0x00}.get))
+        self.assertFalse(c.powered([1, 2], devs, addr, {0x1058: 0x00, 0x1060: 0x00}.get))
+
+    def test_gates_fall_back_to_iommu_parent_consumers(self):
+        self.assertEqual(c.dart_gates({'clock-gates': [7], 'AAPL,phandle': 5}, [(5, [9])]), [7])
+        self.assertEqual(c.dart_gates({'clock-gates': [], 'AAPL,phandle': 5},
+                                      [(5, [9, 3]), (6, [4]), (5, [3])]), [3, 9])
+        self.assertEqual(c.dart_gates({'clock-gates': [], 'AAPL,phandle': None}, [(5, [9])]), [])
 
     def test_cli_refuses_without_experiment_id_before_proxy(self):
         with self.assertRaises(SystemExit):

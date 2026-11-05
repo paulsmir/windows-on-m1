@@ -66,7 +66,7 @@ def census(darts, read32, read64_block, guest_ram, reserved):
     out, complete = [], True
     for d in darts:
         rec = dict(path=d['path'], compatible=d['compatible'], base=hex(d['base']),
-                   powered=d['powered'], tables=[])
+                   gates=d.get('gates'), powered=d['powered'], tables=[])
         if d['compatible'] not in ('dart,t8020',):
             rec['status'] = 'UNSUPPORTED_COMPATIBLE'
             complete = False
@@ -103,15 +103,28 @@ def pmgr_ps_address(pmgr_regs, ps_regs, device):
 
 
 def powered(gate_ids, devices_by_id, ps_addr, read32):
+    """True only if every gate is active, False only if every gate is
+    inactive; mixed or unknown -> None (the DART is not read)."""
     if not gate_ids:
         return None
+    states = []
     for gid in gate_ids:
         dev = devices_by_id.get(gid)
         if dev is None:
             return None
-        if ((read32(ps_addr(dev)) >> 4) & 0xF) != PS_ACTIVE:
-            return False
-    return True
+        states.append(((read32(ps_addr(dev)) >> 4) & 0xF) == PS_ACTIVE)
+    return True if all(states) else False if not any(states) else None
+
+
+def dart_gates(dart_props, consumers):
+    """Own clock-gates, else the union of consumers that name this DART as
+    iommu-parent (ADT phandle).  consumers: [(iommu_parent, gates)]."""
+    own = list(dart_props.get('clock-gates') or [])
+    if own:
+        return sorted(set(own))
+    ph = dart_props.get('AAPL,phandle')
+    return sorted({g for parent, gates in consumers if ph is not None and parent == ph
+                   for g in gates})
 
 
 def main(argv=None):
@@ -141,15 +154,32 @@ def main(argv=None):
     ps_regs = [dict(reg=r.reg, offset=r.offset) for r in pmgr.ps_regs]
     u8id = pmgr.devices[0].id1 != pmgr.devices[1].id1
     by_id = {(d.id1 if u8id else d.id2): dict(psreg=d.psreg, psidx=d.psidx) for d in pmgr.devices}
+    def prop(node, name):
+        try:
+            return getattr(node, name.replace('-', '_'))
+        except AttributeError:
+            return None
+    def as_ids(v):
+        return [int(x) for x in v] if v is not None else []
+    nodes = list(adt['/arm-io'])
+    consumers = []
+    for node in nodes:
+        parent = prop(node, 'iommu-parent')
+        if parent is not None:
+            parents = parent if isinstance(parent, (list, tuple)) else [parent]
+            for ph in parents:
+                consumers.append((int(ph), as_ids(prop(node, 'clock-gates'))))
     darts = []
-    for node in adt['/arm-io']:
-        compat = getattr(node, 'compatible', [''])[0]
+    for node in nodes:
+        compat = (prop(node, 'compatible') or [''])[0]
         if not compat.startswith('dart,'):
             continue
-        gates = list(getattr(node, 'clock_gates', []) or [])
+        ph = prop(node, 'AAPL,phandle')
+        gates = dart_gates({'clock-gates': as_ids(prop(node, 'clock-gates')),
+                            'AAPL,phandle': int(ph) if ph is not None else None}, consumers)
         for inst in range(len(node.reg)):
             darts.append(dict(path=f'{node._path}#{inst}', compatible=compat,
-                              base=node.get_reg(inst)[0],
+                              base=node.get_reg(inst)[0], gates=gates,
                               powered=powered(gates, by_id,
                                               lambda d: pmgr_ps_address(pmgr_regs, ps_regs, d),
                                               p.read32)))
