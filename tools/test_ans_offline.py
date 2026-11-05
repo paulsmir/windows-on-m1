@@ -43,7 +43,7 @@ def main():
     run([sys.executable,'tools/generate_j313_ans_contract.py','--check'])
     run([sys.executable,'-m','unittest','tests.test_j313_ans_contract','tests.test_ans_launcher_mode',
          'tests.test_ans_qualification','tests.test_ans_launch_lock','tests.test_assisted_session',
-         'tests.test_ans_gate_receipts',
+         'tests.test_ans_gate_receipts','tests.test_ans_dart_census',
          'tests.test_public_scripts','tests.test_guest_layout_generation','tests.test_launch_profile',
          'tests.test_virtual_display','tests.test_launch_contract_proxy','-q'])
     cc=shutil.which('cc')
