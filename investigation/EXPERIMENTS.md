@@ -69289,3 +69289,11 @@ Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABL
 - Recovery: rec2183h.
 - Hashes: sys b4543aaaee39, UmdArm64 a933f1f085e0, UmdX64 ee1cce84d4a8, Umd32 8f43c08291a6; manifest 87c5c13256eb, hardware-manifest 038a0d0ce36f; probe2183.sh 255610ec1936 (PROBE_LINT_OK); visible recovery rec2183h bd5d63d30b74b6cf; m1n1 0d3a75b3.
 - Recovery rec2183h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2183-l4/run2183.sh.
+
+EXP2183 HARDWARE ACTUAL (2026-11-05T10:30:33Z): **L4 REJECTED: no frame-time gain (HD PERF ABBA +0.09 % and +1.30 % frame time with L4 on); correct, stays default off.**
+- Suite 119 PASS / 0 FAIL; WER 0 in all six arms; guest alive throughout.
+- a FHD FULL (L4 on, first arm): 5268 (previous best 5266, EXP2175; within the run-to-run spread). b HD FULL (on): 6468 / 38.7 FPS, image correct (Visible 154,746).
+- HD PERF (10 + 60 s): c on 39.839, d off 39.876, e off 39.819, f on 39.307 FPS. Pair d->c +0.09 % frame time (6/8 blocks faster, no significant change); pair e->f +1.30 % (2/8 faster, inconclusive).
+- Expected vs actual: expected on > off in both pairs (+0.3..2 %) -> actual on <= off. Removing two of nine serialized memory round trips per node visit (offline: loop loads 21 -> 17, waits 32 -> 28) does not shorten the frame: C4 is not latency-of-dependent-loads bound at 1024 threads; remaining candidates for C4 are execution/occupancy or memory throughput.
+- Verdict: REJECTED (L4 5cf2cf2b stays opt-in, APPLE_AGX_D3D_LICM_CONST unset). Evidence .local/experiments/EXP2183-l4/evidence.
+- Recovery: rec2183h. Next: EXP2184 Q2c H0 (Wom1ComputeOwnQueue=1 at depth one).
