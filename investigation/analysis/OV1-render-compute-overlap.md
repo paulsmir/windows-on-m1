@@ -104,3 +104,116 @@ Extracted kernel collection, symbol dumps and annotated disassembly: .local/refe
   receipt measure-d3d12-resolve-defer {deferred, into-render, drained, drain reasons} plus Wom1Ov2Receipt waived/refused.
 - Checkpoint: one FHD FULL + HD arms with Wom1Ov2NoHazardLead=1 against a cross-boot switch-off control; correct image,
   query values plausible (GravityMark shows its statistics), no fault/TDR.
+
+## Why macOS overlaps render and compute (RE, 2026-11-05)
+Source: the same kernelcache (com.apple.AGXG13G + com.apple.iokit.IOGPUFamily, macOS 15.7.8). IOGPU call targets
+were resolved with kcscripts/iogpu.dsyms, and IOGPU bodies were disassembled with r2 from
+kc/entries/com.apple.iokit.IOGPUFamily/__TEXT_EXEC.bin. These are behaviour notes only; no Apple code is
+copied. [E] = read in the disassembly, [I] = inference. Addresses are kernel VAs.
+
+### What a submission carries into the kernel
+- Per resource: the shared resource list is parsed by AGXAllocationList2::initWithSharedResourceList
+  (0xfffffe000909e170, AGXSegmentResourceList / ResourceDescGroup::parseAndValidate). Each entry has a 32-bit
+  resource id and a 16-bit usage word [E]. Bits 0x415 are read bits and bits 0x82a are the matching write
+  bits; a write bit requires its read bit [E]. Bit 0x80 means residency only [E]. Each usage bit puts the
+  resource in its own IOGPUWeakResourceSet at list +0x10 + 8*bit (bit0 +0x10, bit1 +0x18, bit7 +0x48,
+  bit10 +0x60, bit11 +0x68) [E]. The middle bits are probably the vertex and fragment stage pairs [I].
+- Untracked override: if the resource's byte +0xc1 is set, the entry is forced to 0x80 (residency only),
+  whatever usage userland sent [E, 0xfffffe000909e3b0]. That byte comes from bit 35 of the creation flags
+  word in IOGPUNewResourceArgs +0x58 (AGXResource::initialize, 0xfffffe000911ee60) [E]. That this bit is
+  Metal's MTLHazardTrackingModeUntracked is [I]. The userland side is needed to prove it.
+- Per kernel command (encoder): a list of u16 MTLFence ids (AGXHardwareKernelCommand +0x80 count, +0x90
+  array), each looked up with IOGPUDevice::retainMTLFence (processComputeSetup at 0xfffffe00090aefb4) [E].
+- Per command queue: an accumulated MTLEvent / shared-event wait event at IOGPUCommandQueue +0x4d8. It is
+  filled by IOGPUCommandQueue::processKernelCommand from IOGPUMTLEvent::copySubmitted and
+  IOGPUSharedEventFence (0xfffffe000ae910a0 / 0xae9120c / 0xae915b0) and merged into later submissions [E].
+  The queue also has a second event at +0x580, also used by processSignalSharedEvent and
+  processLateEvalWait [E]. Its writer was not found [I: shared-event / late-eval ordering].
+- IOGPUEvent = a 32-bit valid mask plus up to 15 slots of (stamp index byte | stamp value << 8)
+  (IOGPUEventMachine::setEventStampPair, 0xfffffe000ae686b4) [E]. This is a sparse vector clock over
+  firmware channel stamps.
+
+### How the kernel builds a compute encoder's wait (AGXCommandQueue::processComputeSetup, 0xfffffe00090ae8f8)
+1. wait = queue MTLEvent waits (+0x4d8) [E].
+2. Resource hazards (kernel-side, per IOGPUResource) [E]:
+   - for each resource in the write lists (+0x18, +0x68), merge its access event (all earlier reads and
+     writes: WAR and WAW);
+   - for each resource in the read lists (+0x10, +0x60), merge its write event (RAW), but only once the
+     storage has been GPU-written (storage flag bit 15, set by setEventsWithChannel on a write).
+   The residency-only list (+0x48) gets only IOGPUCommandDescriptor::addMemory and no event at all
+   [E, 0xfffffe00090aff00].
+3. Merge the MTLFence wait events [E].
+4. chooseCLWorkQueue(wait) (0xfffffe00090aa8d4) picks a firmware CL work queue: Dependent, Idle, AllocNew,
+   or RoundRobin (see above) [E].
+5. Build the firmware barrier: when the chosen work queue's bit is set in the queue mask at +0x79a,
+   stripExternalBarriers(wait, out) (0xfffffe00090b0458) keeps only the stamp slots that belong to this
+   command queue's own channels [E]. Those are the TA and 3D channels of each AGX3DWorkQueue (+0x5d8[i],
+   count +0x814) and the channel of each AGXCLWorkQueue (+0x5f8[i], count +0x818) [E]. The +0x4d8 and
+   +0x580 events are merged back in, and the result goes through IOGPUCommandDescriptor::mergeBarrierEvent
+   [E]. If byte +0x7c9 == 1, nothing is stripped (full copy, return 0) [E]. Stamps of other command queues
+   or processes are therefore not left in the firmware barrier; they are presumably satisfied before
+   submission (late-eval / CPU wait paths) [I]. stripExternalBarriers does not remove any dependency
+   inside the queue. It is also reused after submission on the per-storage events, to keep per-channel
+   bookkeeping (channel +0x158 / +0x198) [E]. That use is not part of the wait [I].
+6. After building the descriptor, the resources in the write lists are stamped with the chosen channel
+   (setEventsWithChannel(..., 1)), and the read lists with (..., 0) [E].
+- There is no implicit wait on the previous encoder or command buffer in this path [E: the only inputs are
+  the four sources above]. processRenderSetup (0xfffffe00090b28b0) uses the same helpers: 19
+  setEventsWithChannel calls, including unconditional writes (probably the render-pass attachments), plus
+  MTLFence and stripExternalBarriers [E]. Its line-by-line ordering was not traced [I: same model].
+
+### Answer to the four questions
+- Dependency info from userland: per-resource usage bits (read/write, per stage, residency-only), MTLFence
+  ids per encoder, and MTLEvent / shared-event waits per queue [E]. There are no explicit stamp lists from
+  userland. Stamps exist only in the kernel [E].
+- A compute encoder may start while the previous render runs exactly when its wait event has no slot for
+  that render's TA/3D stamp. Then it lands on a CL work queue with no barrier on the 3D channel, and the
+  firmware runs both [E for the mechanism; the concurrency is measured in EXP2192].
+- The kernel itself adds BO-level (IOGPUResource-level) RAW/WAR/WAW dependencies, but only for resources
+  that userland put in tracked usage lists and that are not flagged untracked (+0xc1) [E]. With a heap, the
+  kernel object is the heap allocation [I]. If GravityMark's heaps are untracked, the kernel never sees a
+  hazard on them [I].
+- stripExternalBarriers removes stamp slots of channels that do not belong to this command queue (other
+  queues and processes) from the firmware barrier. It runs on every compute and render setup when the
+  chosen work queue's bit is set in the queue mask at +0x79a [E]. It never weakens ordering within the
+  queue [E].
+
+### Most likely reason Apple overlaps while our BO check refuses [I, to confirm with mtlhazard]
+Metal's contract for untracked resources (heaps default to untracked) is that only the app's MTLFence /
+MTLEvent / memoryBarrier calls order encoders. The kernel follows it by reducing such resources to
+residency only. So C3/C5/C7 sharing a BO (heap) with the render before them creates no dependency on
+macOS. The D3D12 equivalent is exactly the Windows contract already noted above: only ResourceBarrier
+orders work. Our Mesa BO-level hazard check corresponds to Metal's *tracked* mode, which GravityMark does
+not use on macOS. What only the userland AGXMetal driver (dyld shared cache, not available here) can
+answer:
+- which Metal hazard mode sets bit 35 of the creation flags;
+- whether tracked resources inside one command buffer also go through these kernel lists or are resolved
+  in userland;
+- how MTLFence update/wait maps to the kernel fence ids;
+- whether a concurrent compute encoder changes anything below the kernel.
+
+### Measurement tool (Task 2): mtlhazard.dylib
+- Source: scratchpad mtltime/mtlhazard.m (session scratchpad
+  /private/tmp/claude-502/-Volumes-pwdev-public-windows/8fb8f1f9-56dc-46ab-b494-4d6264dd5576/scratchpad/mtltime/).
+  The README-mtlhazard.md next to it has the record layouts and the `.command` launcher.
+- It does not split command buffers. It hooks the concrete classes found at load time, and originals are
+  looked up per Method.
+- It logs resource and heap creation (storageMode, hazardTrackingMode, heap, offset), command buffer
+  new/commit/GPU time, and encoder order and kind with the compute dispatchType. It also logs render-pass
+  attachments, MTLFence update/wait (with stages), MTLEvent/MTLSharedEvent signal/wait,
+  memoryBarrierWithScope/Resources, and useResource(s)/useHeap(s).
+- Per encoder it counts binds split tracked/untracked. With MTLHAZARD_BINDS=1 it also emits the distinct
+  bound resources per encoder.
+- Build: `clang -fobjc-arc -dynamiclib -framework Metal -framework Foundation mtlhazard.m -o mtlhazard.dylib`
+  builds clean (also with -Wall -Wextra). dylib sha256 66cf721fbc4cb6bd... Local smoke test on the dev Mac
+  (M4 Pro, a small test program, not the J313): all record types appear and no selector is missing.
+- Run (needs the user to reboot the J313 into macOS):
+  `MTLHAZARD_OUT=~/gmdiag/hazard-fhd.csv MTLHAZARD_SKIP_CB=600 MTLHAZARD_MAX_CB=300 MTLHAZARD_BINDS=1 DYLD_INSERT_LIBRARIES=~/gmdiag/mtlhazard.dylib <gmdiag GravityMark binary> -temporal 0 -benchmark 1 -metal -asteroids 100000`
+  from a .command file launched with `open`.
+- Confirms the hypothesis if:
+  - the resources bound by c15/c18/c19 and by every compute encoder right after a render are hazard=1, or
+    come from an untracked heap;
+  - no `fence wait` in those compute encoders matches a `fence update` of the preceding render;
+  - no `event wait` lies between them.
+  It refutes the hypothesis if those resources are tracked, or if a fence or event links the pair and Apple
+  still overlaps it. Then the answer is in userland AGXMetal.
