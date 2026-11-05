@@ -65,3 +65,16 @@ Extracted kernel collection, symbol dumps and annotated disassembly: .local/refe
 - Alternative (KMD, Apple-like): a second compute Queue for preludes (macOS keeps up to 3 compute work queues per
   command queue), so a prelude never queues behind an independent compute job.
 - Decision waits on EXP2193 (barriers per boundary; refusal reasons per pair kind).
+
+## OV2 implementation and the query-resolve dependency (2026-11-05, offline)
+- OV2 is on integration (820cab01 KMD, e4090c71 UMD, guard below), default off (Wom1Ov2NoHazardLead); the superseded
+  subagent branch exp/ov2-rc stays unmerged (its per-batch position tags inspired the early-dispatch guard).
+- Found while comparing: EXP2193's render batches are submitted by ResolveQueryData (trigger 'query' at all three
+  R->C boundaries). Asahi resolves on the GPU: flush_query_writers submits R, then libagx_copy_query_gl runs in the
+  next compute batch (agx_query.c ~480-497). That compute batch reads R's query results, so C depends on R even with
+  no application barrier between them. The UMD rule refuses independence after such foreign owner work, so OV2 does
+  not fire on GravityMark as is.
+- Next design (OV3): take the resolve copy out of the compute job that follows R -- legal to delay until the next
+  barrier that names the destination (D3D12: the destination may only be read after a barrier); e.g. emit pending
+  resolve copies as their own compute job after C, ordered behind both R (3D stamp) and C. Needs a KMD rule so that
+  job waits for R when C was independent.
