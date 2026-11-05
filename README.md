@@ -80,15 +80,22 @@ ledgers on the development branches.
 
 ## Next steps
 
-1. **Run render and compute work concurrently.** Measurements on macOS show that Metal overlaps
-   independent render and compute passes (about 4 ms per 1080p frame); Direct3D 12 allows the same
-   when the application places no barrier between them, and GravityMark does exactly that.
-2. **Faster compute and shader code.** The asteroid simulation and the lighting pass are the largest
-   remaining differences against Apple's compiled shaders.
-3. **GPU without the second Mac.** Bring the GPU driver to the standalone boot path.
-4. **Wider application coverage and stability**, then installable packages.
+**Main goal: the same GPU performance as macOS on the same machine.** Measurements on macOS show
+that Metal runs independent graphics and compute passes at the same time; Direct3D 12 allows the
+same when the application declares no dependency between them, so that comes next, followed by
+faster compute and shader code.
 
-Goal: match macOS in GravityMark at 1920x1080, repeatably, with correct output and no driver resets.
+Then the rest of the laptop:
+
+- **Storage speed:** the SSD is reached through an NVMe bridge in the hypervisor, which limits disk
+  performance; rework it for much faster I/O.
+- **Wi-Fi.**
+- **External display.**
+- **Sound.**
+- **Keyboard backlight** (the keyboard itself works).
+- **Built-in camera.**
+- **GPU without the second Mac:** bring the GPU driver to the standalone boot path.
+- More applications and games, then installable packages.
 
 ## Two operating modes
 
