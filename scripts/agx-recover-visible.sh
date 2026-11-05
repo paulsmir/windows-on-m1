@@ -135,6 +135,24 @@ echo "PRE_DISABLE_RECEIPTS $(wc -l < "$R/kmd-receipts-pre-disable.txt" | tr -d '
 for f in "$W/scripts/agx-recovery-disable-service.ps1" "$R/disable-visible.ps1" "$R/cleanup-visible.ps1"; do
   perl -e 'alarm 60; exec @ARGV' "$T/airscp" "$f" "pavel@192.168.1.37:C:/Users/pavel/EXP$X/cleanup$X/" >/dev/null || { echo VISIBLE_COPY_FAILED "$f"; exit 3; }
 done
+# EXP2185: a recovery whose normal-absent guest then hung was rerun AT_PROXY;
+# the experiment profile booted without the package (removed by the first
+# recovery), so the disable script had no bound service to disable. When the
+# device is already Code 28 with no AppleAgxAdmission service and no staged
+# AppleAgx package, only the normal-absent boot and the final gates remain.
+absent=$(ssh_bounded 'powershell -NoProfile -Command "$d=@(Get-PnpDevice -PresentOnly | Where-Object InstanceId -like \"*APPL0002*\"); $st=@(Get-WindowsDriver -Online -All | Where-Object OriginalFileName -match \"AppleAgx\"); if($d.Count -eq 1 -and [int]$d[0].Problem -eq 28 -and !(Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\AppleAgxAdmission) -and $st.Count -eq 0){\"RESUME_PACKAGE_ABSENT\"}"' 2>/dev/null | tr -d '\r' || true)
+if [ "$absent" = RESUME_PACKAGE_ABSENT ] && [ "$owners" != NO_HOST_OWNER ]; then
+  echo RESUME_PACKAGE_ABSENT | tee "$R/visible-resume-absent.txt"
+  ssh_bounded 'shutdown /r /t 3'
+  wait_cycle "$owners"
+  launch_normal absent
+  ssh_long "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pavel\\EXP$X\\cleanup$X\\durable-transition.ps1 -Mode Preflight -ManifestPath C:\\Users\\pavel\\EXP$X\\cleanup$X\\durability.json" | tr -d '\r' | tee "$R/visible-preflight.txt"
+  grep -Eq '"Verdict": *"PASS"' "$R/visible-preflight.txt"
+  ssh_bounded 'powershell -NoProfile -Command "$ErrorActionPreference=\"Stop\"; $d=@(Get-PnpDevice -PresentOnly | Where-Object InstanceId -like \"*APPL0002*\"); if($d.Count -ne 1 -or [int]$d[0].Problem -ne 28 -or (Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\AppleAgxAdmission)){throw \"normal-inert gate\"}; $p=(Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors; if($p -ne 8){throw \"CPU count\"}; \"VISIBLE_INERT_PACKAGE_ABSENT_8CPU\""' | tee "$R/visible-inert-gate.txt"
+  grep -q VISIBLE_INERT_PACKAGE_ABSENT_8CPU "$R/visible-inert-gate.txt"
+  echo RECOVERY_DONE
+  exit 0
+fi
 # EXP2056: a recovery interrupted after the disable (the air was rebooted to
 # macOS) left the guest disabled-visible with its receipt; the disable script
 # never overwrites a receipt, so a rerun failed. Resume at the cleanup only
