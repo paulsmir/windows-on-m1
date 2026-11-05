@@ -69537,3 +69537,10 @@ Switches: Wom1Ov2NoHazardLead=1. Steps: D3D12 suite; GravityMark D3D12 100k -tem
 - Hashes: sys 412a9c723bb8, UmdArm64 95bc27defe59, UmdX64 7c441209d4cb, Umd32 085162200de5; manifest 80e01dfcd5e0, hardware-manifest 763ce464e54c; probe2196.sh de9de55a3c2a (PROBE_LINT_OK); visible recovery rec2196h 562d813dfb5b3d2f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
 - Recovery rec2196h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2196-ov3/run2196.sh.
+
+EXP2196 HARDWARE ACTUAL (2026-11-05T18:56:15Z): **INCONCLUSIVE -- OV2/OV3 never engaged: the KMD published Features=1 (no INDEPENDENT_SUBQUEUE) because AdmissionPlatformRuntimeStart zeroed GpuIndependentSubqueue after the OV2 enable.**
+- Suite 119 PASS / 0 FAIL; WER 0; guest alive after every arm; no fault, TDR or reset.
+- a FHD FULL 5370; b HD FULL 6713; c/d HD PERF 40.81 / 40.71 FPS (= production level, no OV2 receipts, no resolve-defer receipts).
+- UMD receipt measure-soft-faults ... 00000001 00000003 00000001 -> device features 1, bit 0x2 missing although Wom1Ov2NoHazardLead=1 reached the devnode.
+- Root cause: the RuntimeStart success path resets GpuSoftFaults and GpuIndependentSubqueue (=0) after the earlier OV2 enable; fixed in ddcdbe9c (regression test test_start_publishes_feature_after_reset, RED on 4c097f70).
+- Verdict: inconclusive for OV2/OV3 (not exercised); the scores are a valid switch-off control of package 4c097f70. Recovery rec2196h. Next: EXP2197 = same arms with ddcdbe9c, switch on, then cross-boot off control.
