@@ -69451,3 +69451,8 @@ Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0, MESA_SHADER_CACHE_DISABL
 - Recovery: rec2191h.
 - Hashes: sys b8813d8ba4ec, UmdArm64 df913ef90dc9, UmdX64 cceb5efc0236, Umd32 9697bdd26d16; manifest bb3f49abd39a, hardware-manifest 80e51539eea9; probe2191.sh 0061f181360a (PROBE_LINT_OK); visible recovery rec2191h 7f5e16e85e4c4371; m1n1 0d3a75b3.
 - Recovery rec2191h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2191-q2c-off/run2191.sh.
+
+EXP2191 HARDWARE ACTUAL (2026-11-05T15:18:20Z): **Q2c OFF control: FHD FULL 5212, HD FULL 6305, HD PERF 38.572 / 39.651 FPS; suite 119/0, clean. Against EXP2190 (Q2c on, same package design and arm order): FHD +3.5 %, HD FULL +4.3 %, HD PERF frame time -4.26 % (6/8 blocks) / -1.81 % (7/8, faster).**
+- Verdict: Q2c (+F1) CONFIRMED by the cross-boot pair EXP2190/2191 plus EXP2189's mechanism (compute kick delay 1.69 -> 1.03 ms/frame). Default flipped on in e28304ae1 (REG_DWORD Wom1ComputeOwnQueue = 0 restores the shared Queue).
+- Current FHD best: 5396 / 32.3 FPS (EXP2190). Goal 7814 / 46.8 FPS: -9.6 ms/frame still needed.
+- Recovery rec2191h. Next: Metal per-pass timing on macOS (user reboot; SSH; no Xcode -> command-buffer/encoder interposer), then the FHD budget on the new default package.
