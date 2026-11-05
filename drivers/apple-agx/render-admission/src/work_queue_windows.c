@@ -1,4 +1,5 @@
 #include "render_admission.h"
+#include "render_preempt_trace.h"
 
 _Use_decl_annotations_ NTSTATUS AdmissionCpuQueueSubmit(
     ADMISSION_CONTEXT *Context, const DXGKARG_SUBMITCOMMAND *Args,
@@ -115,6 +116,12 @@ _Use_decl_annotations_ void AdmissionDispatchQueuedWork(ADMISSION_CONTEXT *Conte
   APPLE_AGX_SCHEDULER *scheduler;
   ADMISSION_CPU_PACKET *queue;
   ULONG *head, *count, *dispatched;
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  /* P1 receipt only (render_preempt_trace.h v2): this pass's decision. */
+  ULONG traceOutcome, traceReserved;
+  ULONGLONG traceQpc;
+  BOOLEAN submitted;
+#endif
   if (Context == NULL || !Context->Started ||
       InterlockedCompareExchange(&Context->SchedulerInitialized, 0, 0) == 0 ||
       InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) != 0 ||
@@ -135,6 +142,20 @@ Retry:
   count = node ? &Context->PagingNodeCount : &Context->CpuQueueCount;
   dispatched = node ? &Context->PagingNodeDispatchedFence : &Context->DispatchedFence;
   fence = AppleAgxSchedulerQueuedFence(scheduler, 0u, 0u);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  /* The first failing predicate of the condition below, in its order. */
+  traceReserved = *dispatched;
+  traceOutcome = fence == 0u ? ADMISSION_PREEMPT_DISPATCH_EMPTY
+      : *dispatched != 0u ? ADMISSION_PREEMPT_DISPATCH_RESERVED
+      : InterlockedCompareExchange(&Context->PagingPending, 0, 0) != 0 &&
+            Context->PagingActiveNode == node
+          ? ADMISSION_PREEMPT_DISPATCH_PAGING
+      : AppleAgxSchedulerActiveFence(scheduler, 0u, 0u) != 0u
+          ? ADMISSION_PREEMPT_DISPATCH_ACTIVE
+      : AppleAgxSchedulerDispatchBlocked(scheduler)
+          ? ADMISSION_PREEMPT_DISPATCH_PHASE
+          : ADMISSION_PREEMPT_DISPATCH_HEAD;
+#endif
   if (fence != 0u && *dispatched == 0u &&
       (InterlockedCompareExchange(&Context->PagingPending, 0, 0) == 0 ||
        Context->PagingActiveNode != node) &&
@@ -184,7 +205,19 @@ Retry:
   KeReleaseSpinLock(&Context->PagingLock, oldIrql);
   if (cpu)
     AdmissionPagingQueueActive(Context);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  traceQpc = AdmissionPreemptTraceNow(Context);
+  submitted = render && AdmissionPlatformRuntimeSubmit(Context) ? TRUE : FALSE;
+  if (cpu) traceOutcome = ADMISSION_PREEMPT_DISPATCH_CPU;
+  else if (render) traceOutcome = ADMISSION_PREEMPT_DISPATCH_RENDER;
+  AdmissionPreemptTraceDispatch(Context, traceQpc, fence, traceReserved,
+      traceOutcome | (submitted ? ADMISSION_PREEMPT_DISPATCH_SUBMITTED : 0u) |
+      (attempt != 0u ? ADMISSION_PREEMPT_DISPATCH_RETRY : 0u) |
+      (node != 0u ? ADMISSION_PREEMPT_DISPATCH_NODE1 : 0u));
+  if (render && !submitted) {
+#else
   if (render && !AdmissionPlatformRuntimeSubmit(Context)) {
+#endif
     /* The preceding backend worker may still be returning after completion.
      * Its finished path retries dispatch after releasing WorkScheduled. */
     KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);

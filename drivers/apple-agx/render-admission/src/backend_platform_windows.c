@@ -381,6 +381,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   volatile LONG PreemptTraceCurrent, PreemptTraceSequence;
   PVOID PreemptTraceCommandThread[ADMISSION_PREEMPT_TRACE_CAPACITY];
   PVOID PreemptTraceSubmitThread[ADMISSION_PREEMPT_TRACE_CAPACITY];
+  /* v2: event index + 1 whose KeSetEvent(JobThreadWake) the job thread
+   * has not yet returned from (0 = none). */
+  volatile LONG PreemptTraceWakePending;
 #endif
 } ADMISSION_PLATFORM_RUNTIME;
 
@@ -681,6 +684,70 @@ VOID AdmissionPreemptTraceAwaitExit(ADMISSION_CONTEXT *Context,
   e->AwaitFirstReason = FirstReason;
   e->AwaitResult = Reason;
   AdmissionPreemptTraceStamp(&e->AwaitExitQpc);
+}
+
+/* v2: QPC now, or 0 when no event is recording. */
+ULONGLONG AdmissionPreemptTraceNow(ADMISSION_CONTEXT *Context) {
+  return AdmissionPreemptTraceCurrent(Context, NULL, NULL) != NULL
+      ? AdmissionJobQpc() : 0ULL;
+}
+
+/* v2: AdmissionDispatchQueuedWork's decision while SubmitFence waits for
+ * its pickup: the call whose queue head is SubmitFence, or the submit
+ * thread's own call. First decision wins; later ones are counted. */
+VOID AdmissionPreemptTraceDispatch(ADMISSION_CONTEXT *Context,
+    ULONGLONG DecideQpc, ULONG HeadFence, ULONG ReservedFence,
+    ULONG Outcome) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = NULL;
+  ULONG index = 0u;
+  BOOLEAN submitter;
+  ADMISSION_PREEMPT_EVENT *e =
+      AdmissionPreemptTraceCurrent(Context, &runtime, &index);
+  if (e == NULL || DecideQpc == 0u || e->SubmitFence == 0u ||
+      e->PickupQpc != 0u)
+    return;
+  submitter = runtime->PreemptTraceSubmitThread[index] ==
+      (PVOID)KeGetCurrentThread() ? TRUE : FALSE;
+  if (HeadFence != e->SubmitFence && !submitter) return;
+  (void)InterlockedIncrement((volatile LONG *)&e->DispatchCount);
+  if (InterlockedCompareExchange64((volatile LONG64 *)&e->DispatchQpc,
+                                   (LONG64)DecideQpc, 0) != 0)
+    return;
+  e->DispatchHeadFence = HeadFence;
+  e->DispatchReservedFence = ReservedFence;
+  e->DispatchOutcome = Outcome |
+      (submitter ? ADMISSION_PREEMPT_DISPATCH_SUBMITTER : 0u);
+}
+
+/* v2: RuntimeSubmit, before it hands Fence (the dispatch reservation) to
+ * the job thread. Arms the wait-return stamp for this request. */
+static VOID AdmissionPreemptTraceWakeSet(ADMISSION_CONTEXT *Context,
+                                         ULONG Fence) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = NULL;
+  ULONG index = 0u;
+  ADMISSION_PREEMPT_EVENT *e =
+      AdmissionPreemptTraceCurrent(Context, &runtime, &index);
+  if (e == NULL || Fence == 0u || e->SubmitFence != Fence ||
+      InterlockedCompareExchange64((volatile LONG64 *)&e->WakeSetQpc,
+                                   (LONG64)AdmissionJobQpc(), 0) != 0)
+    return;
+  e->WakeSetCpu = KeGetCurrentProcessorNumberEx(NULL);
+  InterlockedExchange(&runtime->PreemptTraceWakePending, (LONG)index + 1);
+}
+
+/* v2: the job thread took a request; WokeQpc is its wait return. */
+static VOID AdmissionPreemptTraceWoke(ADMISSION_PLATFORM_RUNTIME *runtime,
+                                      ULONGLONG WokeQpc) {
+  ULONG index = 0u;
+  LONG pending = InterlockedExchange(&runtime->PreemptTraceWakePending, 0);
+  ADMISSION_PREEMPT_EVENT *e;
+  if (pending == 0 || WokeQpc == 0u) return;
+  e = AdmissionPreemptTraceCurrent(runtime->Adapter, NULL, &index);
+  if (e == NULL || (LONG)index + 1 != pending ||
+      InterlockedCompareExchange64((volatile LONG64 *)&e->WakeQpc,
+                                   (LONG64)WokeQpc, 0) != 0)
+    return;
+  e->WakeCpu = KeGetCurrentProcessorNumberEx(NULL);
 }
 
 /* The job worker's Worker phase stamp of Fence. */
@@ -7003,6 +7070,9 @@ static VOID AdmissionJobThread(PVOID Context) {
   ADMISSION_PLATFORM_RUNTIME *runtime = (ADMISSION_PLATFORM_RUNTIME *)Context;
   GROUP_AFFINITY previous;
   BOOLEAN pinned = FALSE;
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  ULONGLONG woke;
+#endif
   if (runtime == NULL) {
     PsTerminateSystemThread(STATUS_INVALID_PARAMETER);
     return;
@@ -7016,11 +7086,18 @@ static VOID AdmissionJobThread(PVOID Context) {
   for (;;) {
     (void)KeWaitForSingleObject(&runtime->JobThreadWake, Executive,
                                 KernelMode, FALSE, NULL);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+    woke = AdmissionPreemptTraceNow(runtime->Adapter);
+#endif
     /* A request is consumed before a stop is honoured; Destroy stops the
      * thread only once the worker is idle. */
-    if (InterlockedExchange(&runtime->JobThreadRequest, 0) != 0)
+    if (InterlockedExchange(&runtime->JobThreadRequest, 0) != 0) {
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+      AdmissionPreemptTraceWoke(runtime, woke);
+#endif
       AdmissionPlatformWorker(runtime->Adapter->PhysicalDeviceObject,
                               runtime->Adapter);
+    }
     if (InterlockedCompareExchange(&runtime->JobThreadStop, 0, 0) != 0)
       break;
   }
@@ -7123,6 +7200,10 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeSubmit(
     /* rc81: the dedicated thread runs the worker. WorkScheduled admits one
      * request at a time; a successor dispatched from the worker's finished
      * path is taken by the same thread without a work-item hop. */
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+    /* Receipt only: the reservation the dispatcher set before this call. */
+    AdmissionPreemptTraceWakeSet(Context, Context->DispatchedFence);
+#endif
     InterlockedExchange(&runtime->JobThreadRequest, 1);
     KeSetEvent(&runtime->JobThreadWake, IO_NO_INCREMENT, FALSE);
   } else {

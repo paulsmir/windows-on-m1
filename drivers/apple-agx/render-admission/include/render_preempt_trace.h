@@ -18,7 +18,10 @@
 #define ADMISSION_PREEMPT_TRACE_ON 1
 #endif
 
-#define ADMISSION_PREEMPT_TRACE_VERSION 1u
+/* Version 2 (EXP2173 lost-pickup discriminator): the first dispatch of
+ * SubmitFence, the KeSetEvent(JobThreadWake) it issued and the job
+ * thread's return from that wait, with both processor numbers. */
+#define ADMISSION_PREEMPT_TRACE_VERSION 2u
 #define ADMISSION_PREEMPT_TRACE_CAPACITY 32u
 
 /* DeferMask: why a DMA_PREEMPTED report did not happen at once. */
@@ -58,6 +61,21 @@
 #define ADMISSION_PREEMPT_CLAIM_PASSIVE 2u   /* another thread, PASSIVE */
 #define ADMISSION_PREEMPT_CLAIM_DISPATCH 3u  /* another thread, >= DISPATCH */
 
+/* DispatchOutcome: bits 0-7 the AdmissionDispatchQueuedWork decision for
+ * the queue head, in its predicate order; flags above. */
+#define ADMISSION_PREEMPT_DISPATCH_RENDER 1u    /* render reserved, RuntimeSubmit called */
+#define ADMISSION_PREEMPT_DISPATCH_CPU 2u       /* CPU packet dispatched */
+#define ADMISSION_PREEMPT_DISPATCH_EMPTY 3u     /* no queued fence */
+#define ADMISSION_PREEMPT_DISPATCH_RESERVED 4u  /* DispatchedFence != 0 */
+#define ADMISSION_PREEMPT_DISPATCH_PAGING 5u    /* PagingPending on this node */
+#define ADMISSION_PREEMPT_DISPATCH_ACTIVE 6u    /* scheduler active fence */
+#define ADMISSION_PREEMPT_DISPATCH_PHASE 7u     /* preemption phase != idle */
+#define ADMISSION_PREEMPT_DISPATCH_HEAD 8u      /* head is no CPU/render/pending match */
+#define ADMISSION_PREEMPT_DISPATCH_SUBMITTED 0x100u /* RuntimeSubmit returned TRUE */
+#define ADMISSION_PREEMPT_DISPATCH_RETRY 0x200u     /* the lost-wakeup retry pass */
+#define ADMISSION_PREEMPT_DISPATCH_NODE1 0x400u     /* node 1 was selected */
+#define ADMISSION_PREEMPT_DISPATCH_SUBMITTER 0x800u /* on SubmitFence's submit thread */
+
 /* All stamps are KeQueryPerformanceCounter ticks, 0 = not reached. */
 typedef struct _ADMISSION_PREEMPT_EVENT {
   ULONGLONG EnterQpc;        /* DxgkDdiPreemptCommand entry */
@@ -76,6 +94,10 @@ typedef struct _ADMISSION_PREEMPT_EVENT {
   ULONGLONG PickupQpc;       /* worker pickup of SubmitFence */
   ULONGLONG FirstPickupQpc;  /* first worker pickup of any fence */
   ULONGLONG ResubmitQpc;     /* first resubmission */
+  /* Version 2. */
+  ULONGLONG DispatchQpc;     /* first dispatch decision for SubmitFence */
+  ULONGLONG WakeSetQpc;      /* KeSetEvent(JobThreadWake) for SubmitFence */
+  ULONGLONG WakeQpc;         /* job thread's wait return for that request */
   ULONG PreemptionFence, CutoffFence, ActiveFence;
   ULONG DroppedFence;        /* queued render packet discarded */
   ULONG PendingDropped;      /* Phase 5a pending entries dropped */
@@ -95,6 +117,13 @@ typedef struct _ADMISSION_PREEMPT_EVENT {
   ULONG FirstPickupFence;
   ULONG ResubmitFence;
   ULONG SubmitOrdinal;       /* SubmitCount at SubmitFence */
+  /* Version 2. */
+  ULONG DispatchOutcome;     /* ADMISSION_PREEMPT_DISPATCH_* of DispatchQpc */
+  ULONG DispatchHeadFence;   /* its scheduler queue head */
+  ULONG DispatchReservedFence; /* its DispatchedFence */
+  ULONG DispatchCount;       /* matching dispatch calls before the pickup */
+  ULONG WakeSetCpu;          /* KeGetCurrentProcessorNumberEx at WakeSetQpc */
+  ULONG WakeCpu;             /* the job thread's processor at WakeQpc */
 } ADMISSION_PREEMPT_EVENT;
 
 typedef struct _ADMISSION_PREEMPT_TRACE {
@@ -105,7 +134,7 @@ typedef struct _ADMISSION_PREEMPT_TRACE {
   ADMISSION_PREEMPT_EVENT Events[ADMISSION_PREEMPT_TRACE_CAPACITY];
 } ADMISSION_PREEMPT_TRACE;
 
-C_ASSERT(sizeof(ADMISSION_PREEMPT_EVENT) == 16u * 8u + 24u * 4u);
+C_ASSERT(sizeof(ADMISSION_PREEMPT_EVENT) == 19u * 8u + 30u * 4u);
 C_ASSERT(sizeof(ADMISSION_PREEMPT_TRACE) ==
          24u + ADMISSION_PREEMPT_TRACE_CAPACITY * sizeof(ADMISSION_PREEMPT_EVENT));
 
@@ -136,4 +165,10 @@ VOID AdmissionPreemptTraceSubmitPath(ADMISSION_CONTEXT *Context,
 VOID AdmissionPreemptTraceAwaitEnter(ADMISSION_CONTEXT *Context);
 VOID AdmissionPreemptTraceAwaitExit(ADMISSION_CONTEXT *Context,
     LONGLONG WaitStartQpc, ULONG FirstReason, ULONG Reason);
+/* QPC now, or 0 when no event is recording (diagnostics off). */
+ULONGLONG AdmissionPreemptTraceNow(ADMISSION_CONTEXT *Context);
+/* AdmissionDispatchQueuedWork, no lock held: one decision for HeadFence. */
+VOID AdmissionPreemptTraceDispatch(ADMISSION_CONTEXT *Context,
+    ULONGLONG DecideQpc, ULONG HeadFence, ULONG ReservedFence,
+    ULONG Outcome);
 #endif

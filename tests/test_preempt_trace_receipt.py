@@ -3,7 +3,10 @@
 WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? A receipt that misattributes
 a stamp (a stale DMA_PREEMPTED, a later submit's AwaitWork, a post-commit
 retry) or a decoder whose layout drifts from render_preempt_trace.h would
-turn the H1/H2/H3 discriminator into a wrong verdict. The helpers are sliced
+turn the H1/H2/H3 discriminator into a wrong verdict. Version 2: a dispatch
+decision or job-thread wake attributed to another fence, thread or event
+would misplace the EXP2173 lost pickup between dispatch, KeSetEvent and the
+wait return. The helpers are sliced
 from backend_platform_windows.c and run against host stubs; the bytes they
 produce are decoded by tools/agx_preempt_trace.py.
 """
@@ -62,6 +65,21 @@ class PreemptTraceReceiptTests(unittest.TestCase):
         s = module.spans(last, trace['hz'])
         self.assertGreater(s['ntfy>cmt'], 0)
         self.assertGreater(s['sub>pick'], 0)
+        # v2: dispatch -> KeSetEvent -> wait return -> pickup, in order.
+        for column in ('sub>disp', 'disp>set', 'set>wake', 'wake>pick'):
+            self.assertGreater(s[column], 0, column)
+        self.assertEqual(module.dispatch(last), 'render+subx2')
+        self.assertEqual(module.cpus(last), '3>5')
+        self.assertEqual(module.dispatch(trace['events'][0]), 'reserved=1019@submitter')
+        self.assertEqual(module.cpus(trace['events'][0]), '-')
+        self.assertIn('render+subx2 / 3>5 /', self.report(module, trace))
+
+    @staticmethod
+    def report(module, trace):
+        import io
+        out = io.StringIO()
+        module.report(trace, out)
+        return out.getvalue()
 
     def test_hooks_are_guarded_and_exported(self):
         header = (RENDER / 'include/render_preempt_trace.h').read_text()
@@ -94,10 +112,12 @@ typedef union { LONGLONG QuadPart; } LARGE_INTEGER;
 #define RtlZeroMemory(p, n) memset((p), 0, (n))
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 static KIRQL g_irql;
-static int g_thread;
+static int g_threads[2], g_cur;
+static ULONG g_cpu;
 static LONGLONG g_qpc = 100;
 static KIRQL KeGetCurrentIrql(void) { return g_irql; }
-static PVOID KeGetCurrentThread(void) { return &g_thread; }
+static PVOID KeGetCurrentThread(void) { return &g_threads[g_cur]; }
+static ULONG KeGetCurrentProcessorNumberEx(PVOID n) { (void)n; return g_cpu; }
 static LARGE_INTEGER KeQueryPerformanceCounter(LARGE_INTEGER *f) { LARGE_INTEGER r; if (f) f->QuadPart = 24000000; r.QuadPart = g_qpc++; return r; }
 static LONG InterlockedCompareExchange(volatile LONG *p, LONG v, LONG c) { LONG o = *p; if (o == c) *p = v; return o; }
 static LONG64 InterlockedCompareExchange64(volatile LONG64 *p, LONG64 v, LONG64 c) { LONG64 o = *p; if (o == c) *p = v; return o; }
@@ -128,6 +148,7 @@ typedef struct {
   volatile LONG PreemptTraceCurrent, PreemptTraceSequence;
   PVOID PreemptTraceCommandThread[ADMISSION_PREEMPT_TRACE_CAPACITY];
   PVOID PreemptTraceSubmitThread[ADMISSION_PREEMPT_TRACE_CAPACITY];
+  volatile LONG PreemptTraceWakePending;
 } ADMISSION_PLATFORM_RUNTIME;
 static ULONGLONG AdmissionJobQpc(VOID) { return (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart; }
 '''
@@ -139,7 +160,7 @@ int main(int argc, char **argv) {
   ADMISSION_PREEMPT_EVENT *e;
   int i;
   ctx.PlatformRuntime = &rt; rt.Adapter = &ctx;
-  rt.PreemptTrace.Version = 1; rt.PreemptTrace.Bytes = sizeof(rt.PreemptTrace); rt.PreemptTrace.QpcFrequency = 24000000;
+  rt.PreemptTrace.Version = ADMISSION_PREEMPT_TRACE_VERSION; rt.PreemptTrace.Bytes = sizeof(rt.PreemptTrace); rt.PreemptTrace.QpcFrequency = 24000000;
   /* off: nothing */
   AdmissionPreemptTraceEnter(&ctx, 5);
   assert(rt.PreemptTrace.Count == 0);
@@ -172,8 +193,45 @@ int main(int argc, char **argv) {
     AdmissionPreemptTraceDefer(&ctx, 0u, ADMISSION_PREEMPT_DEFER_FAULTED); /* after commit: ignored */
     AdmissionPreemptTraceSubmit(&ctx, 1u, f - 4u, TRUE);
     AdmissionPreemptTraceAwaitEnter(&ctx); /* another submit's: ignored */
+    /* v2: the job thread (thread 1) consumes no armed wake yet. */
+    g_cur = 1;
+    AdmissionPreemptTraceWoke(&rt, AdmissionJobQpc());
+    if (i == 2) {
+      /* Event 2 (oldest kept): only the submit thread's refused decision. */
+      g_cur = 0;
+      AdmissionPreemptTraceDispatch(&ctx, AdmissionPreemptTraceNow(&ctx), f - 1u, f - 1u,
+          ADMISSION_PREEMPT_DISPATCH_RESERVED);
+      g_cur = 1;
+    } else {
+      /* Another head on another thread: not this submit's decision. */
+      AdmissionPreemptTraceDispatch(&ctx, AdmissionPreemptTraceNow(&ctx), f - 1u, 0u,
+          ADMISSION_PREEMPT_DISPATCH_RENDER);
+      AdmissionPreemptTraceDispatch(&ctx, AdmissionPreemptTraceNow(&ctx), f + 5u, 0u,
+          ADMISSION_PREEMPT_DISPATCH_RENDER | ADMISSION_PREEMPT_DISPATCH_SUBMITTED);
+      AdmissionPreemptTraceDispatch(&ctx, AdmissionPreemptTraceNow(&ctx), f + 5u, f + 5u,
+          ADMISSION_PREEMPT_DISPATCH_RESERVED); /* counted, not recorded */
+      g_cpu = 3;
+      AdmissionPreemptTraceWakeSet(&ctx, f + 4u); /* another fence: ignored */
+      AdmissionPreemptTraceWakeSet(&ctx, f + 5u);
+      AdmissionPreemptTraceWakeSet(&ctx, f + 5u); /* first wins */
+      g_cpu = 5;
+      AdmissionPreemptTraceWoke(&rt, AdmissionJobQpc());
+      g_cpu = 6;
+      AdmissionPreemptTraceWoke(&rt, AdmissionJobQpc()); /* consumed: ignored */
+    }
+    g_cur = 0;
     AdmissionPreemptTracePickup(&rt, f + 5u);
+    /* After the pickup nothing more is attributed to SubmitFence. */
+    AdmissionPreemptTraceDispatch(&ctx, AdmissionPreemptTraceNow(&ctx), f + 5u, 0u,
+        ADMISSION_PREEMPT_DISPATCH_EMPTY);
   }
+  /* A wake armed for an older event is not stamped on the newest. */
+  rt.PreemptTraceWakePending = 1;
+  AdmissionPreemptTraceWoke(&rt, AdmissionJobQpc());
+  assert(rt.PreemptTrace.Events[1].WakeCpu == 5u);
+  rt.JobDiagnostics = FALSE;
+  assert(AdmissionPreemptTraceNow(&ctx) == 0u);
+  rt.JobDiagnostics = TRUE;
   assert(rt.PreemptTrace.Count == 34 && rt.PreemptTrace.Next == 2);
   e = &rt.PreemptTrace.Events[1];
   assert(e->PreemptionFence == 1330u && e->DroppedFence == 1326u && e->PendingDropped == 1u);
@@ -186,6 +244,14 @@ int main(int argc, char **argv) {
   assert(e->AwaitEnterQpc < e->AwaitExitQpc && e->AwaitWaitQpc == 7u && e->AwaitFirstReason == 16u);
   assert(e->EnterQpc < e->ExitQpc && e->ExitQpc < e->ClaimQpc && e->ClaimQpc < e->NotifyQpc);
   assert(e->NotifyQpc < e->CommitQpc && e->CommitQpc < e->PickupQpc && e->FirstPickupFence == 1335u);
+  assert(e->DispatchOutcome == (ADMISSION_PREEMPT_DISPATCH_RENDER | ADMISSION_PREEMPT_DISPATCH_SUBMITTED));
+  assert(e->DispatchHeadFence == 1335u && e->DispatchReservedFence == 0u && e->DispatchCount == 2u);
+  assert(e->SubmitQpc < e->DispatchQpc && e->DispatchQpc < e->WakeSetQpc);
+  assert(e->WakeSetQpc < e->WakeQpc && e->WakeQpc < e->PickupQpc);
+  assert(e->WakeSetCpu == 3u && e->WakeCpu == 5u && rt.PreemptTraceWakePending == 0);
+  e = &rt.PreemptTrace.Events[2];
+  assert(e->PreemptionFence == 1020u && e->DispatchCount == 1u && e->WakeSetQpc == 0u && e->WakeQpc == 0u);
+  assert(e->DispatchOutcome == (ADMISSION_PREEMPT_DISPATCH_RESERVED | ADMISSION_PREEMPT_DISPATCH_SUBMITTER));
   if (argc > 1) {
     FILE *f = fopen(argv[1], "w");
     const unsigned char *b = (const unsigned char *)&rt.PreemptTrace;
