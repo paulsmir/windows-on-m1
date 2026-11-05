@@ -906,6 +906,15 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderAppendRunning(
     }
     return APPLE_AGX_BACKEND_TRUE;
   }
+  /* A render with in-render compute (prelude / MIXED_BATCH) ends with its
+   * compute too (the runtime's completion rule). The backend ends a render
+   * fence on TA + 3D, so hand them over only once the compute is complete:
+   * otherwise the backend reports the fence while this provider still runs
+   * the job (EXP2184/2186/2187: next job refused at provider phase, TDR,
+   * once the compute's event came in a later poll). Completion and
+   * recovery append them with All. */
+  if (!All && runtime->ComputeInRender && !runtime->ComputePending.Complete)
+    return APPLE_AGX_BACKEND_TRUE;
   if ((Provider->ObservedMask & d3) == 0u &&
       (All || runtime->D3Pending.Complete)) {
     if (!AppleAgxG13ProviderAppendObservation(

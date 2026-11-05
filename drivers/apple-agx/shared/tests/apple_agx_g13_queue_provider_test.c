@@ -653,18 +653,28 @@ static void TestRenderWithComputeSubmitsTogether(void) {
          f.TaRing[0]==f.Job.TaBarrierAddress &&
          f.TaRing[1]==f.Job.TaWorkAddresses[0] &&
          f.TaRing[2]==f.Job.TaWorkAddresses[1]);
-  /* TA and 3D done, compute not yet: no completion. */
+  /* TA and 3D done, compute not yet: no completion, and no TA/3D
+   * observation either -- the backend ends a render fence on TA + 3D, so
+   * handing them over while the provider still runs the job's compute let
+   * the backend report the fence with the provider Submitted (EXP2184/
+   * 2186/2187: the next job refused at provider phase, then TDR). */
   f.D3Stamp=f.Job.D3ExpectedStamp; f.D3Done=f.D3Write; Event(event,9u);
   assert(AppleAgxG13QueueProviderIngestEvent(&f.Provider,event,sizeof(event),&batch) &&
-         batch.CompletedFence==0u);
+         batch.CompletedFence==0u && batch.ObservationCount==0u);
   f.TaStamp=f.Job.TaExpectedStamp; f.TaDone=f.TaWrite; Event(event,7u);
   assert(AppleAgxG13QueueProviderIngestEvent(&f.Provider,event,sizeof(event),&batch) &&
-         batch.CompletedFence==0u &&
+         batch.CompletedFence==0u && batch.ObservationCount==0u &&
          f.Provider.Phase==AppleAgxG13QueueProviderSubmitted);
   f.ComputeStamp=0x600u; f.ComputeDone=1u; Event(event,11u);
   assert(AppleAgxG13QueueProviderIngestEvent(&f.Provider,event,sizeof(event),&batch) &&
          batch.CompletedFence==41u &&
          f.Provider.Phase==AppleAgxG13QueueProviderCreated);
+  {
+    unsigned i, seen=0u;
+    for (i=0u;i<batch.ObservationCount;++i)
+      seen|=1u<<(unsigned)batch.Observations[i].Queue;
+    assert(seen==((1u<<(unsigned)AppleAgxBackendQueue3d)|(1u<<(unsigned)AppleAgxBackendQueueTa)));
+  }
 }
 /* G2: a standalone compute job runs alone on the compute queue and its
  * compute stamp completes the fence; the queues then take a render job. */
