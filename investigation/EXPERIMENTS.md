@@ -44584,3 +44584,43 @@ only of DARTs m1n1 itself already read successfully at boot (banner: dart-dcp lo
 dart-disp0 L1 at 0x9fff34000 + heap, dart-usb0/1), preferably from m1n1 C at
 PRE_GUEST instead of proxy MMIO, with every MMIO read exception-guarded and any fault
 ending the census as INCOMPLETE.
+
+### ANSDART001-R3 — preregistration (2026-11-06T00:50Z): census v2 at a fresh Running proxy
+
+Context: fork 6 handed the bench to the ANS work at the user's request (finish the
+SSD driver first); handover happens on its "BENCH HANDOVER" after its rec2205h
+recovery. The ANS session then owns launches/recoveries for its runs.
+
+WHY THIS HYPOTHESIS:
+1. OBSERVED ANSDART001 banner (00:12Z): dart-disp0 L1 0 at 0x9fff34000 lies above
+   mem_top 0x9df708000, and dart-dcp is iBoot-locked; L2 pages and dcp tables are the
+   only retained tables still unobserved.
+2. OBSERVED ANSDART001-R2: the failure came from reading a DART whose accessibility
+   was never proven (dart-scaler); v2 reads only the four DARTs m1n1 itself reports
+   accessing during the same boot, so the same failure cannot recur by construction.
+3. SOURCE m1n1 src/dart.c: m1n1 already reads TTBRs of locked/keep_pts DARTs at
+   boot; repeating those reads at Running proxy is the same access on a block m1n1
+   just proved live.
+
+Hypothesis: every retained L1/L2 page of dart-dcp/dart-disp0 (and the m1n1-owned
+dart-usb0/1 tables) lies outside GUEST_RAM [0x818000000, 0x9df708000). Rejected by
+CONFLICT; inconclusive on INCOMPLETE (no banner, any guarded fault, out-of-DRAM
+pointer).
+Single variable: none in the launch chain (read-only proxy tool before any launcher).
+Precondition: J313 at a *fresh* Running proxy after a reboot, so the banner is
+delivered to the census connection; if a different tool connected first, the census
+ends INCOMPLETE with NO_BOOT_BANNER and touches no MMIO.
+Repository: feature/j313-ans-native-offline 9fb711e306646bd782de4fed187bcd24ec08a7a6 (tool commit 9fb711e30),
+m1n1_windows ba1cfa1, mu baea359242. Tool sha256
+0746545bb6b69318a14d8bd3975466ffaa10e8073d86701b238bbe60c0884303. Offline:
+10 census cases + tools/test_ans_offline.py GREEN (receipt 58521c4b...d3ed).
+Command: M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 /Volumes/pwdev/public_windows/proxyenv/bin/python
+tools/ans_dart_census.py --confirm-experiment ANSDART001 --guest-ram-base 0x818000000
+--output .local/ans-native/ANSDART001-R3/census.json
+Access: 4 x 64 guarded TTBR reads, at most one 16 KiB DRAM read per valid TTBR, ADT
+fetch. No write, no power change.
+Expected: exit 0 NO_RETAINED_TABLE_IN_GUEST_RAM, dart-dcp and dart-disp0 READ.
+Failure: exit 2 CONFLICT; exit 3 INCOMPLETE; proxy link loss -> stop, no retry.
+Evidence: .local/ans-native/ANSDART001-R3/{census.json,banner.txt,adt.bin,console.log}.
+Recovery: no state written; afterwards run the existing GPU-visible recovery the
+bench owner documented for the current guest (recorded at handover). Timeout 5 min.
