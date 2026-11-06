@@ -44976,3 +44976,51 @@ it RAW. Not a wrapper defect; the user's stick mounts as exFAT in full Windows
 (ANSUSB001). (Attempt-2 launch in vm-005 was refused by the launch-input hash guard
 because attempt 1 had modified boot-media.img; a fresh vm-005b was used.)
 Attempt 3 (vm-005c): identical except --sizelimit = partition 1 size.
+
+ANSCOLLECT005 attempt 3 (vm-005c) result 2026-11-06T10:34:47Z: PASS. QEMU exited by
+wpeutil reboot (-no-reboot) at 312 s, no timeout. Wrapper reached S60 (HW-DONE
+export_exit=0, 73 files) and dismounted (a failed dismount would hold the shell). The
+marker and USER-FILE.TXT are byte-identical; fsck.exfat is clean. Command exits are
+identical to ANSCOLLECT004 (optional sc 127, DISM 0x80004002, WMIC 0x8007007e).
+Receipt 
+689f64f7...1238. Known gap: HW-DISMOUNT.LOG stays in X: (written after the export);
+the reboot itself is the dismount receipt.
+
+### ANS001-R3 — native ANS WinPE enumeration with USB evidence export (preregistered)
+
+Status: preregistered 2026-11-06T10:34:47Z. Bench: SLOT OK from fork 6 (it covers
+ANSUSB001 and ANS001-R2/R3); user autonomy grant 2026-11-06.
+WHY THIS HYPOTHESIS:
+1. ANS005B proved this exact m1n1 (167f189f...) boots a guest with the heap seal and
+   ADT carveout exclusion; ANS001 adds no DMA (no AppleAns package in WinPE).
+2. The ANSUSB001 stick identity and the E wrapper passed ANSCOLLECT005 end to end.
+3. Native Mu is RAM-disk-only, so neither the stick nor installed Windows can be booted.
+Hypothesis: on native ANS, WinPE enumerates ACPI\APPL0003 inert (no driver), and the
+collector inventory + export to the stick complete, followed by reboot to proxy.
+Variable vs ANS001-R2 packet: WinPE medium D -> E (export wrapper) only.
+Packet: 
+56025264001fd9de4c89ec8dbdcc24e391edf56bb7754b6d6a57ff14311d2d12 (dry-run exit 0).
+m1n1 167f189f..., Mu native 85157f29..., WinPE E e38ab04d....
+Commits: root e254b2c9dd071baa0ea91d66912745e2ae41c0d0, m1n1 470ef6872523, mu baea35924287 (worktree clean
+except untracked .local and the mu gitlink marker).
+Run: 10:34:48Z START
+10:34:48Z RESTART_REQUESTED owner=97240
+10:35:20Z AT_PROXY_BEFORE
+10:35:20Z ANS001_LAUNCH
+10:35:23Z LAUNCHER_EXITED_WITHOUT_REBOOT t=3s
+10:35:31Z RECOVERY_LAUNCH
+10:36:14Z RECOVERY_SSH_UP
+letter=E
+1
+10:36:21Z STICK_TAR bytes=   10240
+APPL0002=1 problem=CM_PROB_FAILED_INSTALL cpus=8
+10:36:24Z DONE (a1355db6...): drop the recovery guest to
+proxy, run-assisted hardware command (ANS001-R3-COMMANDS.json), wait for the proxy link
+to drop and return (cap 1500 s), stop only exact leftover PIDs, launch normal recovery
+(launch-normal2.sh 18ca41b1..., m1n1-exp377 + exp392), tar the stick's run folder over SSH.
+Recovery artifact: normal 377/392 profile; physical power cycle if the proxy does not return.
+Expected: PROXY_LINK_DROPPED, then PROXY_BACK; the stick holds WINPE\ with HW-DONE
+export_exit=0 and an ans.TXT listing APPL0003. Failure: no reboot within 1500 s (WinPE
+hold, crash or hang) or no WINPE folder -> FAILED with the hv log; no retry without a
+new reason.
+Evidence:  (full.log, hv.log copy, stick/, stick-results.tar).
