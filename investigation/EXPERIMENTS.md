@@ -45470,3 +45470,27 @@ Export to WINPE-ANS002 (80 files), wpeutil reboot 14:56:38, proxy back 14:56:44,
 ~14:57:2x, APPL0002 inert, 8 CPUs.
 Evidence .local/ans-native/ANS002-R1-run/ (hv.log, stick-results.tar 6624b1890c4db5ea8c73a314106362d2af9f96b7f63b3f53082193ab96a7ce21).
 Verdict: ANS002 CONFIRMED. Next: ANS003 (REGISTER_QUEUES: first EL2 controller boot + admin queue, package D stop2) - needs its own WINDOWS/ANS contract review before hardware.
+
+### ANS003-R1 — REGISTER_QUEUES: first EL2 native controller boot, then stop (preregistered 2026-11-06T15:26:59Z)
+
+Packet qualification 9082d31514f31ebafdb51d58dea3369a3a5071b64dd22bd6df9e339e87ab2c1e (ladder.py ANS003):
+m1n1 ANSBUILD010, native Mu ANSBUILD009, WinPE prepared-ANS003-A 5962cf57... with AppleAns
+ANSBUILD003-D (stop2, package a3db22ae...), testsigning, target WINPE-ANS003; VM COLLECT-ANS003 PASS;
+gate d87b6410; dry-run 0.
+WINDOWS CONTRACT: StorPort HwInitialize: QUERY, CLAIM, REGISTER_QUEUES, then qualified_stop
+  (AppleAnsNativeStop: QUIESCE + RELEASE) and FALSE -> Problem 10 by design.
+ANS/ASAHI CONTRACT: REGISTER_QUEUES -> boot_admin -> nvme_native_init (m1n1 nvme.c): PMGR soft reset
+  (ANS/ANS2), bounded RTKit boot, NVME_BOOT_STATUS == OK, controller disable/enable, READY; no admin
+  command, no I/O queue, no media access (same sequence as m1n1's own nvme_init, Asahi apple.c
+  boot order: RTKit boot -> boot status -> CC/CSTS). RELEASE with admin_started -> nvme_stop_bounded.
+TRANSLATION: driver stop2 path; broker ops 1,2,3,6,8.
+WHAT IS STILL UNKNOWN: whether the ANS coprocessor re-boots under EL2 after the EBS-time stop of the
+  inherited instance, and the bounded stop afterwards (actual hardware behaviour).
+WHY THIS HYPOTHESIS: (1) ANS002-R1 proved QUERY/CLAIM/QUIESCE/RELEASE on hardware with this driver;
+  (2) the EBS handoff already ran nvme_stop_bounded/retire successfully in every native run (R6-R9,
+  ANS002), and m1n1 itself booted ANS in hv.init of the same runs.
+Single variable vs ANS002-R1: AppleAns stop1 -> stop2 (REGISTER_QUEUES added).
+Expected: hv.log op=1,2 result=0; op=3 result=0 (state CLAIMED, queues registered); op=6, op=8
+  result=0; APPL0003 Problem 10; export to WINPE-ANS003; reboot; recovery.
+Failure: op=3 result!=0 (boot stage in broker telemetry; FAULTED), hang (runner stop -> observed
+  reboot), bugcheck. Recovery as ANS002-R1.
