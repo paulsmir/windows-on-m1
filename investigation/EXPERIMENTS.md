@@ -45232,3 +45232,26 @@ Run .local/ans-native/ANS001-R5-run/run.sh (805d7fb7...): same as R4, plus the h
 (guest still running at 1500 s -> stop the runner, accept freshness only after an observed
 link drop and return).
 Expected/failure/recovery as in R4; one run, no retry without a new reason.
+
+ANS001-R5 result (recorded 2026-11-06T11:43:31Z): PARTIAL — native Mu boot fix CONFIRMED; ExitBootServices ownership gate FAULTED.
+- 11:31:37 launch; 11:32:56 guest entry (79 s). WindowsAutoBootDxe: "ReadyToBoot hook
+  Success", "checking 1 filesystems", "[Security] 3rd party image[0] can be loaded after
+  EndOfDxe", bootmgfw.efi loaded at 0x10000000 (low window), "starting
+  \EFI\BOOT\BOOTAA64.EFI": the ANSBUILD008 fix works.
+- bootmgr ran and called ExitBootServices; then "Synchronous Exception at 0x9DCFE5A08".
+  Symbolized from the N2 build maps: 0x9DCFE5A08 = CpuDxe (base 0x9DCFDF000)
+  SynchronousExceptionSPx+0x8 (exception taken inside the vector, i.e. recursive); the next
+  frame 0x9DD9C38F0 = DxeCore (base 0x9DD9BB000) CoreExitBootServices+0x1f4, where the native
+  AppleAnsExitBootServicesGateLib reads ANS_BROKER_BASE with MmioRead64. The handler then
+  printed endless "PC" lines (1.8 M lines, 50 MB hv.log).
+- Cause (source): the T810X MemoryInitPeiLib stage-1 map covers 0x200000000+2 GiB and starts
+  the next MMIO range at 0x380000000; the broker window 0x300010000 is in neither, so the
+  first broker read is a stage-1 translation fault in DXE. No ANS DMA happened; WinPE did
+  not start; the stick is unchanged.
+- Recovery: runner stopped by exact PID 41517 at 11:37:22; link dropped 11:37:24 and returned
+  11:37:33 (observed reboot), normal recovery, SSH 11:38:17, APPL0002 inert, 8 CPUs.
+Fix in progress: native-only PcdAnsBrokerWindowBase/Size (0x300010000/0x4000, from
+config/j313-ans.json) and a DEVICE entry in the Mu stage-1 map (descriptor cap 19 -> 20);
+root contract test tests/test_ans_mu_broker_window.py (RED on mu HEAD, GREEN with the fix).
+Evidence: .local/ans-native/ANS001-R5-run/ (hv-head.log up to the exception + 400 lines,
+orchestrator.log).
