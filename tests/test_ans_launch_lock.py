@@ -73,4 +73,18 @@ class LaunchLockTests(unittest.TestCase):
                  patch.dict(os.environ,{'ANS_ASSISTED_LOCK_OWNER_PID':str(owner)},clear=True),\
                  self.assertRaisesRegex(ValueError,'legacy assisted/bootstrap'):
                 reject_legacy(alias)
+    def test_launch_refuses_non_fresh_proxy_before_discovery(self):
+        # ANS001-R3 attempt 4: no launch may chainload over an aborted hv.init.
+        import shutil
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);(root/'scripts').mkdir();(root/'tools').mkdir();(root/'.local').mkdir()
+            shutil.copy(ROOT/'scripts/run-assisted.sh',root/'scripts/run-assisted.sh')
+            shutil.copy(ROOT/'tools/ans_launch_lock.py',root/'tools/ans_launch_lock.py')
+            marker=root/'.local/ans-proxy-not-fresh';marker.write_text('2026-11-06T10:45:39Z\n')
+            env={k:v for k,v in os.environ.items() if not k.startswith('ANS_ASSISTED_LOCK')}
+            r=subprocess.run(['sh',str(root/'scripts/run-assisted.sh'),'--storage-mode','ANS_NATIVE'],cwd=root,capture_output=True,text=True,env=env)
+            self.assertEqual(r.returncode,3,r.stderr);self.assertIn('Proxy is not fresh',r.stderr)
+            self.assertNotIn('Connect the Air',r.stderr)
+            r=subprocess.run(['sh',str(root/'scripts/run-assisted.sh'),'--storage-mode','ANS_NATIVE','--dry-run'],cwd=root,capture_output=True,text=True,env=env)
+            self.assertNotIn('Proxy is not fresh',r.stderr)
 if __name__=='__main__':unittest.main()

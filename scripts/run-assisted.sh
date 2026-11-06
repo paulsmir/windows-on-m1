@@ -7,6 +7,11 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # Dry-run deliberately acquires no hardware ownership.
 LOCK_DRY_RUN=0
 for LOCK_ARG in "$@"; do [ "$LOCK_ARG" != --dry-run ] || LOCK_DRY_RUN=1; done
+NOT_FRESH="$ROOT/.local/ans-proxy-not-fresh"
+if [ "$LOCK_DRY_RUN" -eq 0 ] && [ -e "$NOT_FRESH" ]; then
+    echo "Proxy is not fresh (previous launch: $(cat "$NOT_FRESH")). Power-cycle or P_REBOOT to a clean 'Running proxy', then remove $NOT_FRESH." >&2
+    exit 3
+fi
 if [ "$LOCK_DRY_RUN" -eq 0 ]; then
     LOCK_PYTHON="$ROOT/proxyenv/bin/python"
     [ -x "$LOCK_PYTHON" ] || LOCK_PYTHON=python3
@@ -14,6 +19,12 @@ if [ "$LOCK_DRY_RUN" -eq 0 ]; then
         exec "$LOCK_PYTHON" "$ROOT/tools/ans_launch_lock.py" "$ROOT" "$ROOT/scripts/run-assisted.sh" "$@"
     fi
     "$LOCK_PYTHON" "$ROOT/tools/ans_launch_lock.py" --check "$ROOT"
+    # ANS001-R3 attempt 4: chainloading over a hypervisor whose hv.init aborted lost the
+    # Air. Every hardware launch marks the proxy "not fresh" before it can chainload or
+    # initialize anything; only an observed full SoC reboot (power cycle or proxy
+    # P_REBOOT, see .local/ans-native/*-run/run.sh) may remove the marker.
+    mkdir -p "$ROOT/.local"
+    date -u +%FT%TZ > "$NOT_FRESH"
 fi
 
 PROXY=${M1N1DEVICE:-}
