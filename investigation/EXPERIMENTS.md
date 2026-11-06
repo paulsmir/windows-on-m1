@@ -69954,3 +69954,17 @@ Verdict:
   pages, which is not observed.
 Next causal target: implement the Mu reservation (one variable, GPU-line Mu), then
 enable WOM1_HV_UNMAP_RAM_CARVEOUTS on the GPU line.
+
+EXP2206 HARDWARE BEFORE 2026-11-06T02:12:34Z:
+Steps: D3D12 suite; then (EXP2206-B) the standard CS 1.6 benchmark (cs-bench-run.sh playnoovl) and kmd-receipts.sh right after hl.exe exits (job spans, present timestamps, G3 private-scene/TVB counters).
+- WHY THIS HYPOTHESIS: (1) EXP2205-B: 18.634 fps vs EXP1378 44.784 with the same ICD source; present ~25.6 ms/frame, scene ACQUIRE stalls ~5.6 ms/frame (629 escapes >= 10 ms, median 36 ms); (2) source: the ICD's present blit and GL texture uploads take asahi_compute_blit (compute jobs), so GL frames are R/C-interleaved and the Q2c default (e28304ae) routes every C to its own queue; (3) source: rc80 TVB growth (5d6cdd44) waits up to 50 ms for idle on a cached scene hit, and 0c458548/bc72e1f5 allow foreign PRESSURE eviction.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (receipts only).
+- ATOMIC CONTRACT: none -- receipt switches only.
+- WHAT IS STILL UNKNOWN: GPU job spans of the GL render/blit jobs; whether the compute blits sit on the Q2c queue with cross-queue waits; scene HIT/MISS/TRIM/PRESSURE and TVB Grows/Failures/LastReason for hl.exe.
+- Expected: suite 119/0; CS completes ~18-19 fps (receipt overhead within noise); receipts name the dominant stall.
+- Failure criteria: no receipts, benchmark not completing, any fault/TDR/WER -> rec2206h.
+- Recovery: rec2206h (recover.sh directly on the running guest, no manual reboot); then the bench returns to the ANS session in its normal profile.
+- Probe: agx_d3d12_probe_e2206_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys 0db916f16eb9, UmdArm64 73568b163d9c, UmdX64 fe75b41578be, Umd32 268f2e1da0e5; manifest 261d49ace61f, hardware-manifest 2e1f9917b808; probe2206.sh 5bebd18e5f3e (PROBE_LINT_OK); visible recovery rec2206h 9642269c174fee1c; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1PresentTimestamps=1.
+- Recovery rec2206h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2206-cs16-diag/run2206.sh.
