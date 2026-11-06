@@ -45600,3 +45600,21 @@ Export WINPE-ANS005 0, wpeutil reboot 16:07:50, recovery SSH, APPL0002 inert, 8 
 Evidence .local/ans-native/ANS005-R1-run/ (hv.log, stick-results.tar 7ff86747637663ad7034b0d3fb067eb62ff743e6535c01fac279dcb88b99a98b).
 Verdict: ANS005 CONFIRMED. Native read path works end to end (StorPort -> broker -> EL2 PRP/TCB -> ANS -> DMA into guest RAM).
 Next: ANS006 read-only volume access + sequential read throughput in WinPE (disk set read-only, online, read a large file), then write support (driver V2) and native boot.
+
+### ANS006-R1 — read-only native volume + sequential read throughput (preregistered 2026-11-06T16:18:01Z)
+
+Packet dec8add86b12ac449dbfdf096ddac07904d57aee6a95b7bd0bf4e0d449dbe97d (ladder.py ANS006 R1 ANSBUILD011):
+same driver/firmware/m1n1 as ANS005-R1; WinPE prepared-ANS006-A a19a1f07... adds tools/ans_winpe/
+ANS006-READ.CMD (called by the wrapper at S55); VM PASS (no APPLE SSD in QEMU -> step skipped);
+gate 344086af; dry-run 0.
+Procedure inside WinPE: find the disk whose detail contains "APPLE SSD"; `attributes disk set
+readonly` and VERIFY "Read-only : Yes" (else stop); OnlineAll + rescan/list/online retries; restore
+OfflineAll; mountvol/list volume; pick the largest of pagefile/hiberfil/swapfile/MEMORY.DMP on the
+NTFS Windows volume; `copy /b <file> NUL` twice with %time% stamps; offline the disk.
+Safety: three independent write barriers (disk read-only attribute verified before online; AppleAns
+V1 read-only; broker I/O validation); NTFS mounts read-only on a read-only disk.
+WHY THIS HYPOTHESIS: ANS005-R1 proved enumeration + READ; only the volume mount and a long
+sequential read are new.
+Expected: STATUS readonly_verified=1, online_ok=1, windows_volume=<L>, two reads rc=0 with timing;
+offline; export; reboot. Failure: RO not verifiable (no online, step ends), online refusal, read
+errors (broker receipts), hang.
