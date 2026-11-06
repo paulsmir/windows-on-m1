@@ -31,7 +31,7 @@ static int io(BOOL write, ULONGLONG lba, void *buf, DWORD bytes)
     if(write ? !WriteFile(disk,buf,bytes,&done,NULL) : !ReadFile(disk,buf,bytes,&done,NULL))return 0;
     return done==bytes;
 }
-enum kind { ZERO, PATTERN, OTHER };
+enum kind { KIND_ZERO, KIND_PATTERN, KIND_OTHER };
 /* Classify and hash the whole range. Returns 0 on I/O failure. */
 static int scan(ULONGLONG first, ULONGLONG count, BYTE *buf, BYTE *ref, enum kind *k,
                 BYTE sha[32], double *seconds, ULONGLONG *first_bad, ULONGLONG *first_nonzero)
@@ -56,7 +56,7 @@ static int scan(ULONGLONG first, ULONGLONG count, BYTE *buf, BYTE *ref, enum kin
     }
     QueryPerformanceCounter(&t1);*seconds=(double)(t1.QuadPart-t0.QuadPart)/(double)f.QuadPart;
     BCryptFinishHash(h,sha,32,0);BCryptDestroyHash(h);BCryptCloseAlgorithmProvider(alg,0);
-    *k=zero?ZERO:pattern?PATTERN:OTHER;return 1;
+    *k=zero?KIND_ZERO:pattern?KIND_PATTERN:KIND_OTHER;return 1;
 }
 static void hex(const char *label,const BYTE sha[32])
 {
@@ -79,7 +79,7 @@ static int fill(ULONGLONG first, ULONGLONG count, BYTE *buf, int pattern, double
     QueryPerformanceCounter(&t1);*seconds=(double)(t1.QuadPart-t0.QuadPart)/(double)f.QuadPart;
     return 1;
 }
-static const char *name(enum kind k){return k==ZERO?"zero":k==PATTERN?"pattern":"other";}
+static const char *name(enum kind k){return k==KIND_ZERO?"zero":k==KIND_PATTERN?"pattern":"other";}
 int main(int argc, char **argv)
 {
     if(argc!=5){puts("usage: ansraw <disk> <first_lba> <count> <check|write|zero>");return 1;}
@@ -121,14 +121,14 @@ int main(int argc, char **argv)
     printf("ANSRAW before %s read_s %.3f\n",name(k),s);hex("ANSRAW before_sha256",sha);
     if(!writing){printf("ANSRAW RESULT check %s\n",name(k));return 0;}
     int pattern=!strcmp(mode,"write");
-    if(pattern?k!=ZERO:k==OTHER)return fail("unexpected pre-write contents");
+    if(pattern?k!=KIND_ZERO:k==KIND_OTHER)return fail("unexpected pre-write contents");
     if(!fill(first,count,buf,pattern,&s))return fail("write/flush");
     printf("ANSRAW wrote %s %llu blocks write_s %.3f MBps %.1f\n",pattern?"pattern":"zero",count,s,
            count*ANSRAW_BLOCK/1e6/s);
     if(!scan(first,count,buf,ref,&k,sha,&s,&bad,&nonzero))return fail("readback");
     printf("ANSRAW after %s read_s %.3f MBps %.1f\n",name(k),s,count*ANSRAW_BLOCK/1e6/s);
     hex("ANSRAW after_sha256",sha);
-    if(k!=(pattern?PATTERN:ZERO)){printf("ANSRAW first mismatching lba %llu\n",pattern?bad:nonzero);return fail("readback mismatch");}
+    if(k!=(pattern?KIND_PATTERN:KIND_ZERO)){printf("ANSRAW first mismatching lba %llu\n",pattern?bad:nonzero);return fail("readback mismatch");}
     printf("ANSRAW RESULT %s OK\n",mode);
     CloseHandle(disk);return 0;
 }
