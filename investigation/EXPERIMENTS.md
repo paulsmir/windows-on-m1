@@ -44934,3 +44934,26 @@ prepared-ANS001-D: winpeshl.ini launches ANS001-HW-START.CMD (rendered from the
 tracked template with values-E.json). The build asserts that collector, startnet
 and SYSTEM are byte-identical to D, and that HW-START is the only new path in both
 indices. Output `.local/ans-native/ans001-winpe/prepared-ANS001-E/`.
+
+ANS001-PREP-E result 2026-11-06T09:47Z (UTC): built, no hardware.
+prepared-ANS001-E image sha256 e38ab04d6481378e6c15d9b23d3bcfd6024afc75d142841a345f9b5a09f8d9db
+(838860800 bytes), boot.wim 2d9e6ccf...cdcf, HW-START 2ba7a4e8...42bb, winpeshl
+e20d8653...a98a, collector unchanged 01e22a7e...b61e, SAN policy 3, base D
+3db37261...e8da. Build asserts passed: collector/startnet/SYSTEM byte-identical to D
+in both indices, and HW-START is the only new path. Template committed with CRLF
+(78b254e1d).
+
+### ANSCOLLECT005 — VM qualification of the E medium (preregistered)
+
+Status: preregistered 2026-11-06T09:50Z (UTC). Software-only QEMU (TCG, 20-min
+cap, -no-reboot, no NIC), same machine shape as ANSCOLLECT004. Boot medium = E
+image plus a VM-only STARTUP.NSH; the WIM is untouched. Evidence disk = new 1 GiB
+sparse image, GPT with disk GUID {CF195BCF-7265-4A86-904E-CC960F32947C}, partition
+1 basic-data exFAT "WINDOWS ARM", containing ANS001-RESULTS-27a6a231\ANS001-EVIDENCE.TAG
+and a pre-existing USER-FILE.TXT.
+Expected: QEMU exits on `wpeutil reboot` (-no-reboot) well before the cap; the
+evidence volume holds ANS001-RESULTS-27a6a231\WINPE\ with COMMANDS.CSV, HW-DONE.TXT
+(export_exit=0), HW-DISMOUNT.LOG, and no HW-FAILED.TXT; the marker and USER-FILE.TXT
+are byte-identical; fsck.exfat is clean.
+Failure: timeout/hold, HW-FAILED.TXT, a changed user file or a dirty filesystem ->
+fix the wrapper offline; no ANS001.
