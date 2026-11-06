@@ -44795,3 +44795,15 @@ wait for proxy, normal launch; if the proxy does not return, stop and ask the us
 a physical reboot.
 Evidence: .local/ans-native/ANS005B/{run.log,launch.log,chainload.log,full.log,contract.bin,candidate-gate.txt,
 recovery-gate.txt,normal-launch.log}.
+
+### ANS005B attempt 1 — result (2026-11-06T02:32Z): NOT RUN (script defect), recovery OK
+
+02:26:16Z ordered restart of the normal guest (run_uefi 87992), 02:26:46Z at proxy;
+launch-ans005b.sh exited before any proxy access: its hash check used
+`echo hash  path`, which collapses the two spaces shasum -c requires ("no properly
+formatted SHA checksum lines"). No chainload, no candidate code ran. After the 300 s SSH
+wait the script launched the normal recovery: 02:32:28Z SSH up, gate APPL0002=1
+problem=CM_PROB_FAILED_INSTALL (inert Problem 28), 8 CPUs, 1 disk. Evidence moved to
+.local/ans-native/ANS005B/attempt1/. Verdict: INCONCLUSIVE (tool defect, no hardware
+result). Fix: printf-formatted check lines (verified against both artifacts offline);
+launch-ans005b.sh sha256 now b884a3c5db66229236fd6b67ae4d1940094f3dcc4815bd6c7b952e95a9f161dd. Attempt 2 = same preregistration, same artifacts.
