@@ -70316,3 +70316,16 @@ EXP2220 HARDWARE ACTUAL (2026-11-06T22:35:05Z): **CONFIRMED: the default-on firm
 - perf-baseline.json re-pinned to EXP2220 with the repeat method (GM 40.770, CS 49.943).
 - Recovery rec2220h. Evidence: evidence/EXP2220, EXP2220-gate, EXP2220-gmrep.
 - Verdict: CONFIRMED. Next: GPU_DRIVER_ARCHITECTURE.md priorities (refused depth-2 kick falls back instead of resetting; independent flip).
+
+EXP2221 HARDWARE BEFORE 2026-11-06T23:45:37Z:
+Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0; KMD receipts after d. No perf gate (diagnostic switches).
+- WHY THIS HYPOTHESIS: (1) EXP2213: a KMD-internal successor refusal escalated to an ENGINE reset (SchedulerFaulted 0x4xxxx); (2) offline, the real scheduler/backend/queue model with every 2nd kick refused shows no reset and every fence ending once in order (s_fallback; mutation without the unkick fails); (3) the undo is KMD-only state (scheduler KickedFence, G4 head Kicked->Prebound) and BeginJobAs changes nothing unless it succeeds -- the drill aborts the begun G3 job first, so the firmware sees nothing of the refused successor.
+- WINDOWS CONTRACT: a fence handed to DxgkDdiSubmitCommandVirtual completes once, in order; no TDR without a hang. AGX/ASAHI CONTRACT: a successor the firmware never received needs no firmware recovery. TRANSLATION: undo the kick, submit at depth 1. ATOMIC CONTRACT: none -- one switch (diagnostics as in EXP2216/2217).
+- WHAT IS STILL UNKNOWN: whether the AheadChain/dispatch path promotes the Prebound head as the model predicts on the real KMD (timing, locks).
+- Expected: suite 119/0; Wom1JobWindow kick_fallbacks > 0 (~kicks/15), kick_failures == kick_fallbacks, no ENGINE reset, no 0x116/TDR, GravityMark completes (wer 0); KickFail flags include FELL_BACK (0x400), begin_refusal 0xd.
+- Failure criteria: TDR/reset, a hang, kick_fallbacks 0 with kicks > 16, GravityMark fails -> rec2221h; fallback reverted or narrowed.
+- Recovery: rec2221h (run directly).
+- Probe: agx_d3d12_probe_e2221_arm64.exe = byte copy of e2220 (sha 5dbe904643ea842c).
+- Hashes: sys 01d9131c913b, UmdArm64 bde48c7308f9, UmdX64 6769e8f41b29, Umd32 fdf33a3faeb6; manifest 4101bf56915a, hardware-manifest 0a1d9846109d; probe2221.sh 72deadb2aba8 (PROBE_LINT_OK); visible recovery rec2221h 986fc250874a9343; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Depth2FallbackDrill=16 Wom1JobDiagnostics=1.
+- Recovery rec2221h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2221-depth2-fallback/run2221.sh.
