@@ -45540,3 +45540,14 @@ Data-path operations were not logged (by design of ANSBUILD010), so the cause is
 distinguishable. Next: ANSBUILD011 adds a capped receipt per AUTHORIZE_SUBMIT/REAP_COMPLETION
 (sqe opcode, tag, length, result, CQE DW3, PRP translation failures) - receipt-only; ANS004-R2
 reruns the identical driver/WinPE with only that m1n1 change.
+
+### ANS004-R2 (preregistered 2026-11-06T15:39:57Z)
+
+Packet bc9080801e608fce9767cd18fec43c253bfccc299aabe0d3489217a4030e0d50: identical to ANS004-R1 except
+m1n1 ANSBUILD011 (58733e1e, e1443c16...): capped "HV ANS data op=.." receipt per AUTHORIZE_SUBMIT /
+REAP_COMPLETION. Gate 014f4903, dry-run 0.
+WHY THIS HYPOTHESIS: ANS004-R1 showed exactly one data-path operation before the stop; the receipt
+distinguishes AUTHORIZE rejection (result, prp_fail) from a submitted command that never completes
+(result 0, no REAP) and from a completed command with an error status (cqe_dw3).
+Single variable vs R1: receipt-only m1n1 change. Expected: one or more "HV ANS data" lines naming the
+failing step. Recovery as R1.
