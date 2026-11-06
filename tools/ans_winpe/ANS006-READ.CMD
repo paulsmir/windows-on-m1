@@ -46,6 +46,7 @@ call :typefile "!BEST!" 1
 call :typefile "!BEST!" 2
 for %%F in (!WINVOL!:\Windows\System32\config\SOFTWARE !WINVOL!:\Windows\System32\config\SYSTEM !WINVOL!:\Windows\System32\config\COMPONENTS !WINVOL!:\Windows\System32\config\DRIVERS !WINVOL!:\Windows\System32\MRT.exe) do if exist "%%F" call :copyfile "%%F" %%~zF
 :offline
+wevtutil epl System "%R%\System.evtx" >"%R%\WEVT.LOG" 2>&1
 >"%R%\OFF.TXT" echo select disk !NDISK!
 >>"%R%\OFF.TXT" echo offline disk
 >>"%R%\OFF.TXT" echo exit
