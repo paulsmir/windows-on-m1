@@ -45176,3 +45176,30 @@ alive, manual recovery), or no WINPE folder. One run; no retry without a new rea
 Recovery: normal 377/392 after an observed reboot only; otherwise a power cycle.
 Evidence: .local/ans-native/ANS001-R4-run/.
 Root f20b86b83e9b76c63f412847ae004756decbd859; run.sh efa5de70cb81347e907e951cd6b5286dc26ffd5422d5a7deaa5ff885dbb11d02.
+
+ANS001-R4 result (recorded 2026-11-06T11:26:17Z): PARTIAL — m1n1 native boundary PASSED; native Mu boot of WinPE FAILED (EFI_ACCESS_DENIED).
+- 11:12:02 launch; 11:13:20 "Starting guest" (78 s): hv_map_ans_broker accepted the live
+  ADT (ANSBUILD007), LAUNCH_CONTRACT checkpoints 0-3 captured. First guest entry with
+  native ANS ownership.
+- Native Mu ran DXE; BootRamdiskHelperDxe found the preloaded RAM disk at 0x860001000
+  (0x32000000 bytes); the FAT partition and \EFI\BOOT\BOOTAA64.EFI were found, then:
+  "[Security] 3rd party image[0] is deferred to load before EndOfDxe:
+  VirtualDisk(0x860001000,0x892000FFF,0)/HD(1,MBR,...)/\EFI\BOOT\BOOTAA64.EFI" and
+  "ANS qualification: no eligible preloaded WinPE boot, status Access Denied" ->
+  CpuDeadLoop (by design: a native loader failure must not fall back).
+  No WinPE, no collector, no ANS DMA; the stick is unchanged.
+- Cause (offline, Mu source): WindowsAutoBootDxe starts the loader from the
+  SimpleFileSystem notify. The preloaded RAM disk appears during DXE, so LoadImage runs
+  before EndOfDxe and DxeDeferImageLoadLib defers the 3rd-party image with
+  EFI_ACCESS_DENIED. Native Mu + RAM disk had never been executed: the VM collector
+  qualification used stock QEMU edk2 firmware, not the native Mu.
+- Recovery: orchestrator shells and the runner were stopped by exact PID (37069, 37164,
+  37166) at 11:24:4x; the Air then rebooted to a fresh stage-1 proxy by itself (banner
+  showed chosen.asahi,m1n1-stage1-version, payload scan, "Running proxy", new m1n1 base
+  0x805e60000) at 11:24:58. Marker cleared after observing that banner; normal recovery
+  launch 11:25, SSH 11:25:59, APPL0002 inert, 8 CPUs, stick marker intact. No power cycle needed.
+Verdict: ANSBUILD007 broker fix CONFIRMED on hardware (guest entry); ANS001 hypothesis
+not yet tested (blocked in Mu). Next: Mu fix — start the native RAM-disk loader only
+after EndOfDxe (ReadyToBoot path), rebuild native Mu, qualify the Mu RAM-disk boot in a
+VM with the native Mu where possible, then ANS001-R5.
+Evidence: .local/ans-native/ANS001-R4-run/ (hv.log, orchestrator.log, full.log).
