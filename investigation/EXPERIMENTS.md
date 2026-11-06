@@ -45703,3 +45703,14 @@ Next R5: wrapper online retries 5 -> 12 with 10 s pauses (image ef978501, packet
 ### ANS006-R5 (preregistered 2026-11-06T17:43:52Z)
 
 Packet 21048e3ef02047932655b3e94947bd1a5347b689e27590555d1a563a308e8ce0; m1n1 ANSBUILD013; WinPE ef978501 (wrapper: 12 online tries, 10 s pauses); VM PASS; dry-run 0. WHY THIS HYPOTHESIS: the online succeeded on try 1-3 in R9/ANS002-ANS005/R2 and failed 0/5 in R4 - a timing-dependent VDS refusal, so more and longer retries are the smallest change. Single variable vs R4: wrapper retry budget. Expected: online_ok=1, ANS006 reads with timings, export, reboot.
+
+ANS006-R5 result (recorded 2026-11-06T17:54:42Z): PARTIAL — export works (USB online try 1); real read-failure cause localized: EL2 DMA policy DENIED for some 128 KiB READs.
+Wrapper: online_try=1 rc=0, export OK. ANS006: native disk 0 RO verified, online try 1, but no
+Windows volume found this time (file= bytes=0; ntoskrnl probe read likely failed). Receipts: 79
+logged, tcb_stat_nz=0 everywhere (TCB hypothesis of R3 NOT confirmed); failing receipts:
+"data op=4 seq=196/211/212 q=1 sqe_op=0x2 len=131072 result=9 (DENIED) prp_fail=1/2/3": the
+broker's PRP translation refused guest pages of 128 KiB READs (ans_prp_translate ->
+ans_memory_translate false). This is the source of the R2 "I/O device error" reads.
+Ruled out offline: pin table capacity (34 = 33 data + 1 list); RAM-disk window (Mu reserves the
+whole PcdPreloadedRamdiskMaxSize window). Next R6: ANSBUILD014 logs each denied IPA with its
+stage-2 leaf (raw, shift, OA) - receipt-only.
