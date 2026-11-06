@@ -70051,3 +70051,17 @@ EXP2207 = HVS2ISO004 HARDWARE ACTUAL (2026-11-06T02:51:33Z): **CONFIRMED: the GP
 - C: Windows SSH, 8 CPUs, TotalVisibleMemorySize 6848164 KiB (map OS-owned minus 1300 KiB runtime, the same gap as HVS2ISO003).
 - D: suite 119 PASS / 0 FAIL; d HD PERF 40.291 FPS (EXP2205-class ~40); GPU_RESET none; WER 0.
 - Verdict: CONFIRMED. Prepare tooling: prepare.sh AGX_MU_FD re-pins the Mu path and sha in full-owner and both manifests (verify-launch PASS). Next: HVS2ISO005 (the same launch + WOM1_HV_UNMAP_RAM_CARVEOUTS=1) and making 4ce521db the GPU-line Mu default. Recovery rec2207h.
+
+EXP2208 HARDWARE BEFORE 2026-11-06T02:57:58Z:
+Steps: D3D12 suite; then (EXP2208-B) the standard CS 1.6 benchmark; KMD receipts at ~60 s and ~160 s after hl.exe starts (cs-midrun-receipts.sh) plus right after hl.exe exits; UMD umd-all.log.
+- WHY THIS HYPOTHESIS: (1) EXP2206: 431 of 432 DWM reject-native-allocation rows hr 0x80070057, each followed by reject-batch kind 3 (agx_win32_gpuva_batch.c:1172) and ~184 ms later DWM device re-creation; 2582 of 2600 present-resource creates during hl; (2) EXP2206 G3 lock profile: UPDATE_PAGE_TABLE (paging:2055) held the G3 lock 112 s (max 68.7 ms), hl PrivateEscape waited 25.7 s behind it; (3) source: a well-formed not-ready query returns SUCCESS, so 0x80070057 comes from one of the 67 refusing predicates, which nothing recorded before.
+- WINDOWS CONTRACT: DxgkDdiEscape at PASSIVE; statuses unchanged. AGX/ASAHI CONTRACT: none (no broker/GPU/UAT access added).
+- ATOMIC CONTRACT: none -- receipt only (byte-identical outputs in the host replay); capture timing is collection only.
+- WHAT IS STILL UNKNOWN: which predicate fails and why only while hl runs.
+- Expected: Wom1G3NativeQueryRefusal present, one code >= 90 % of Total ~ the DWM reject-native-allocation count, First/Last records OsProcessId dwm, GpuVa 0x11_032f0000, bytes 0x10000; CS fps within +-5 % of EXP2206 (17.3); suite 119/0.
+- Failure criteria: value absent while DWM rejects appear; fps -5 %; bugcheck/TDR/hang -> rec2208h.
+- Recovery: rec2208h; recovery artifact = the EXP2206 package.
+- Probe: agx_d3d12_probe_e2208_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys 7493b7a6ebda, UmdArm64 2b623e631ff6, UmdX64 7e198aff6fc9, Umd32 b3842d28cb09; manifest 10595b07bf6f, hardware-manifest 8be70c275808; probe2208.sh c23541a22744 (PROBE_LINT_OK); visible recovery rec2208h 5ab38c0954dd0814; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1PresentTimestamps=1.
+- Recovery rec2208h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2208-cs16-nqrefusal/run2208.sh.
