@@ -70112,3 +70112,16 @@ EXP2210 HARDWARE ACTUAL (2026-11-06T04:01:01Z): **CONFIRMED: the G13 firmware ac
 - Wom1Ov5DrillReceipt (u32: version, bytes, Considered, Built, Placed, Refused[0..7], last fence/wait/stamp_self/offset): mid12-d (1, 68, 6908, 1219, 1219, 0,0,0,5689,0,0,0,0, 35597, 3918592, 1027352576, 34880); after-d (1, 68, 9653, 1836, 1836, 0,0,0,7817,0,0,0,0, 46735, 6193920, 1028770560, 43072). Built == Placed > 0 and no fault/channel error; Refused[3] are the drill's own non-candidates.
 - measure-d3d12-ov2-refusal value 22 = 0x00000999 in 3003 of 3011 rows (R2/R4/R6 = 9 prelude, R8 = 0 TA-independent), value 23 = 4: the 29708483 correction confirmed on hardware.
 - Verdict: CONFIRMED (drill) and CONFIRMED (R8 eligible). Next: OV5 step 2 (KMD): for a render flagged TA-independent (UMD header cdm_barrier NONE, feature 0x4 behind Wom1Ov5TaWaiver=1), drop the TA-ring compute-stamp Barrier and keep only the 3D one; first target C7->R8 (Apple c19->R20: 0.72 ms HD / 1.45 ms FHD overlap). Recovery rec2210h.
+
+EXP2211 HARDWARE BEFORE 2026-11-06T04:08:09Z:
+Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0 HD PERF arms: a submit receipt; b APPLE_AGX_D3D12_SPLIT_TAGS=fc968f7a,9e9aea5a,cfb56a6a,369f607b,52716231,f582ac2c,1f20788f,9726b186 (C3 per-kernel times); c SSV=0, d SSV=1 (KMD receipts at poll 12), e SSV=1, f SSV=0 (APPLE_AGX_SHARED_STORE_VECTORIZE ABBA).
+- WHY THIS HYPOTHESIS: (1) EXP2203 offline: ~4.1 ms/frame of real GPU idle at four boundaries (R2->C3 1.13, C3->R4 1.41, C5->R6 0.61, C1->R2 0.53 ms) where the successor's KMD SubmitQpc lands 0.005-0.17 ms after the predecessor's completion, while pre-submitted jobs start 0.06 ms after; (2) per-job vs macOS split2: C3 = the camera hierarchy traversal (fc968f7a family) 3.17 ms exact vs Apple c11 1.36 ms with static code at parity -- the per-kernel split decides where; (3) SSV: shared stores 79->37 / 64->23 in the traversal kernels (offline), never run on hardware; expected 0 to +0.1 ms.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (a, b receipt/diagnostic; SSV is an opt-in shader lowering already tested offline).
+- ATOMIC CONTRACT: none -- separate arms, each with its own receipts or ABBA pair.
+- WHAT IS STILL UNKNOWN: UMD-late vs dxgkrnl-late per late boundary and the UMD wait site; C3's dominant kernels; SSV's runtime effect.
+- Expected: suite 119/0; a: 9 measure-umd-submit rows per frame joinable by CommandVa; b: split pieces per kernel; c-f: SSV gain only if both pairs improve beyond noise; HD PERF ~40; no fault.
+- Failure criteria: rows missing/unjoinable; fault/TDR/WER -> rec2211h.
+- Recovery: rec2211h.
+- Probe: agx_d3d12_probe_e2211_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys c076c8db2a1d, UmdArm64 515a4548a326, UmdX64 5b8b442d14bc, Umd32 673a9d885ca8; manifest 94b20703f98d, hardware-manifest 5ce78da51f80; probe2211.sh 1a416798215b (PROBE_LINT_OK); visible recovery rec2211h 19c5cff0b19b0434; m1n1 0d3a75b3.
+- Recovery rec2211h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2211-submit-split/run2211.sh.
