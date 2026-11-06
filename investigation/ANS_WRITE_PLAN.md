@@ -1,6 +1,22 @@
-# ANS008 — native write support plan (offline draft, 2026-11-06)
+# ANS008 — native write support plan (2026-11-06, revised 2026-11-07)
 
-Status: offline design. Nothing here has run on hardware.
+Status: implemented offline (m1n1 3dab6ec8, outer 10233832/3bcc6015/366605f0/ea69e0e1/3009b236); ANS008-R1 pending.
+
+## Revision 2026-11-07: first window = the GPT Microsoft Reserved partition, not a scratch file
+
+Recovery `Get-Partition` (disk 0 over the bridge, 4096-byte sectors) shows partition 6 = MSR
+{e3c9e316-0b5c-4db8-817d-f92df00215ae}, offset 126616600576, 16777216 bytes = LBA 30912256, 4096 blocks.
+Its contents read through the bridge are all zero (SHA-256 080acf35..., = 16 MiB of zeros).
+Why the MSR instead of `C:\ANS-SCRATCH.BIN`:
+- no filesystem: raw `\\.\PhysicalDriveN` writes are allowed without locking/dismounting a volume
+  (an NTFS file would need FSCTL_LOCK_VOLUME/DISMOUNT and a remount risk in WinPE);
+- exact restore: the original content is known (zeros), so the disk returns byte-identical;
+- one contiguous GPT-described range: ansraw verifies it from the live layout before writing.
+R1 sequence: WinPE check (zero) -> clear read-only attribute -> ansraw write (pattern, flush, native
+readback) -> set read-only again -> check (pattern). Recovery then verifies over the bridge that the MSR
+holds the pattern (SHA-256 8b29ad3f... from tools/ans_raw_pattern.py), that the 1 MiB neighbours are
+unchanged, restores zeros and re-verifies 080acf35.
+
 
 ## Observed contract
 
