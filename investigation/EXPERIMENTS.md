@@ -45203,3 +45203,32 @@ not yet tested (blocked in Mu). Next: Mu fix — start the native RAM-disk loade
 after EndOfDxe (ReadyToBoot path), rebuild native Mu, qualify the Mu RAM-disk boot in a
 VM with the native Mu where possible, then ANS001-R5.
 Evidence: .local/ans-native/ANS001-R4-run/ (hv.log, orchestrator.log, full.log).
+
+### ANSBUILD008 (native Mu ReadyToBoot fix) + ANS001-R5 (preregistered 2026-11-06T11:29:57Z)
+
+Mu d1c061d6c (WindowsAutoBootDxe): under APPLE_ANS_RAMDISK_ONLY the SimpleFileSystem
+notify no longer starts the loader; only the ReadyToBoot handler does, after BDS has
+signalled EndOfDxe, so DxeDeferImageLoadLib no longer defers \EFI\BOOT\BOOTAA64.EFI
+(ANS001-R4). The recovery profile is unchanged (code is inside the native #ifdef).
+Build ANSBUILD008-N2: clone of the N1 native snapshot plus exactly two changed sources
+(this fix and the earlier clang-21 AppleAnsBootSource.h declaration), Build/ removed,
+same container/image/command. FD 8189f49f73cfbfd34a17b9e54f3b70fd9819eaf520d45b493bf55e6269ed702f;
+DSDT/G2 AML byte-identical to N1; DxeCore differs (it includes the changed header);
+receipt .local/ans-native/mu-build/ANSBUILD008-N2-receipt.json 975a1e02....
+No offline execution of the native Mu is possible (J313 platform image); the ReadyToBoot
+path is the one the recovery profile already uses on hardware.
+Packet ANS001-R5: qualification cf8404e81748b9d1a88c94975140e988443e97e9be7508749331f8d6f1f6e93f
+(R4 + ANSBUILD008 Mu + gate receipt 7b529aa7), dry-run exit 0. m1n1 ANSBUILD007 4769b322...,
+WinPE E e38ab04d....
+WHY THIS HYPOTHESIS:
+1. ANS001-R4 reached native Mu and failed exactly at LoadImage before EndOfDxe
+   ("deferred to load before EndOfDxe", EFI_ACCESS_DENIED); the fix moves only that call.
+2. Everything up to that point (broker, guest entry, RAM disk, FAT, loader file) is
+   hardware-proven in R4.
+Hypothesis: bootmgr starts from the RAM disk, WinPE boots on native ANS, enumerates
+APPL0003 inert, the collector exports to the stick and reboots.
+Single variable vs R4: native Mu N1 -> N2 (WindowsAutoBootDxe start point).
+Run .local/ans-native/ANS001-R5-run/run.sh (805d7fb7...): same as R4, plus the hang path
+(guest still running at 1500 s -> stop the runner, accept freshness only after an observed
+link drop and return).
+Expected/failure/recovery as in R4; one run, no retry without a new reason.
