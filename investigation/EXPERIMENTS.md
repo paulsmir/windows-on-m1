@@ -44894,3 +44894,15 @@ Failure: no USB disk / not ANSRESULT / not MBR-FAT32 -> port or format
 instruction to the user, no ANS001.
 Evidence: `.local/ans-native/ANSUSB001/` (inventory.txt, marker readback).
 Recovery: none needed (no state change beyond the marker file).
+
+ANSUSB001 amendment 2026-11-06T09:45Z (UTC), before any run: the user prefers
+keeping the existing data on the drive (relayed by fork 6). No reformat and no
+label requirement. Accepted volumes: FAT32/exFAT/NTFS on MBR or GPT (WinPE index1
+carries fastfat/exfat/ntfs/USBSTOR/uaspstor). The inventory now records partition
+style, signature/GUID, per-partition type/FS/label/free space, BitLocker state and
+the exact `diskpart uniqueid disk` line that the WinPE parser will match. The only
+write is a new folder `ANS001-RESULTS-27a6a231` holding `ANS001-EVIDENCE.TAG`
+(the marker); the WinPE export goes into its `WINPE` subfolder and refuses if that
+subfolder exists. The collector template (`tools/ans_winpe/ANS001-HW-START.CMD.in`)
+is parameterized by @DISKID@, @PARTNUM@, @RUNDIR@ and @MARKER@. Failure adds:
+BitLocker-locked or read-only volume, less than 256 MiB free.
