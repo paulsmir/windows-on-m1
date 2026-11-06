@@ -70026,3 +70026,7 @@ Recovery: relaunch with J313_EFI-m2f2c.fd (sha 1c7d87d6, the same as the control
 the documented recovery images.
 Next if CONFIRMED: HVS2ISO005 = the same launch plus WOM1_HV_UNMAP_RAM_CARVEOUTS=1 (m1n1_windows
 >= 23a01cb6), expecting 0 stage-2 aborts.
+
+EXP2206 HARDWARE ACTUAL (2026-11-06T02:25:55Z): **CONFIRMED (receipts collected): CS 1.6 benchmark 3771 frames / 217.654 s / 17.326 fps with Wom1JobDiagnostics=1 Wom1PresentTimestamps=1 (EXP2205 without them 18.634); suite 119/0; GPU_RESET none; PREEMPT_REFUSAL none; POOL peak 615 MiB, reservefail 0.**
+- Evidence evidence/EXP2206-B: kmd-receipts-after-cs.txt (taken right after hl.exe exited: Wom1G3PrivateProcs, Wom1JobTiming971, Wom1JobTiming971Hot present; Wom1PresentTs absent), umd-all.log (machine-wide UMD trace), cs-bench.log, cs-bench-mem.csv.
+- Verdict: receipts in hand; decode delegated to the OV2 session (scene HIT/MISS/TRIM/PRESSURE and TVB state of hl.exe, GL job mix and Q2c queue waits) to pick the single next variable (EXP2207: Wom1ComputeOwnQueue=0, or the scene/TVB policy). Recovery rec2206h RECOVERY_DONE, VISIBLE_INERT_PACKAGE_ABSENT_8CPU (normal recovery profile exp377/exp392, run_uefi PID 87992); bench handed back to the ANS session for ANS005B.
