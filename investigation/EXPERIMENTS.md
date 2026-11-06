@@ -44678,3 +44678,10 @@ Owner: m1n1 stage-2 (unmap [mem_top, DRAM end) except the framebuffer) — follo
 Next: ANS005A offline (heap ceiling + exact DART_TABLES region); decide offline how the
 18 unread DARTs are bounded (iBoot boot-state source / carveout map) before clearing
 the UNOBSERVED flag.
+
+### Bench lent to fork 6 for HVS2ISO001 (2026-11-06T01:25Z)
+
+ANS session replied SLOT OK to fork 6 (stage-2 unmap of the iBoot DCP/disp0 table
+carveouts found by ANSDART001-R3; preregistered in integration 21dac822b). State at
+hand-off: inert recovery guest via launch-normal2.sh (guard 47773, run_uefi 47806),
+inert gate passed 00:53Z. Fork 6 returns the bench with recovery facts afterwards.
