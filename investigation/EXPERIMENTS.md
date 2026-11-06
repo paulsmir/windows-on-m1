@@ -45066,3 +45066,23 @@ Expected: PROXY_LINK_DROPPED, then PROXY_BACK within 1500 s; stick WINPE\ with H
 export_exit=0. Failure: launcher refusal, no reboot within 1500 s, or no WINPE folder.
 Recovery: normal 377/392 (launch-normal2.sh); physical power cycle if the proxy does not return.
 Root commit 51f3fee561234e93be591ac33d06ce07e4d5ba83; run.sh sha256 a1355db6b0725db2615b4bbe433ac06ef72f57e9d3789e268470f5b8ca8bea02.
+
+ANS001-R3 attempt 2 result (recorded 2026-11-06T10:41:24Z): NOT RUN (host chainload failure).
+10:39:14 recovery guest to proxy; 10:39:47 launch passed the fixed lock and preflight
+(ANS_NATIVE, qualification OK); the chainload subprocess died in the host assembler
+(m1n1/asm.py -> /opt/homebrew/opt/lld/bin/ld.lld SIGABRT, Homebrew lld 22 vs llvm 23)
+before any image transfer, so the Air stayed at proxy. 10:39:58 normal recovery,
+10:40:32 SSH up, APPL0002 inert, 8 CPUs, stick unchanged (marker only). Cause:
+run.sh did not export LLDDIR=/tmp/agx-lld-dir/ (the lld wrapper with the matching
+DYLD path, already used by ANS005B). Verified offline: ARMAsm links with LLDDIR set
+and SIGABRTs without it. Evidence: .local/ans-native/ANS001-R3-run/attempt2/.
+
+### ANS001-R3 attempt 3 (preregistered)
+
+Same packet and hypothesis; the only change is the host environment: run.sh exports
+LLDDIR=/tmp/agx-lld-dir/ and refuses to run without that wrapper.
+WHY THIS HYPOTHESIS: (1) attempts 1-2 both stopped on host-side defects before any
+guest code ran, now both fixed and verified offline; (2) ANS005B (same m1n1, LLDDIR set)
+chainloaded and booted on this bench today.
+Expected/failure/recovery as in attempt 2.
+run.sh sha256 fab9908fe40ac2d3fa006cb4860de6b9f617ebe882f70075603d07b1ac4afcd9; root b52af6623996620eb7935133a3dac87073b96e61.
