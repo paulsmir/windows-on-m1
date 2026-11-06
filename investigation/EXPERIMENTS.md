@@ -44624,3 +44624,29 @@ Failure: exit 2 CONFLICT; exit 3 INCOMPLETE; proxy link loss -> stop, no retry.
 Evidence: .local/ans-native/ANSDART001-R3/{census.json,banner.txt,adt.bin,console.log}.
 Recovery: no state written; afterwards run the existing GPU-visible recovery the
 bench owner documented for the current guest (recorded at handover). Timeout 5 min.
+
+### ANSDART001-R3 — run plan after bench handover (2026-11-06T00:51:26Z)
+
+Bench handed over by fork 6 (rec2205h RECOVERY_DONE / VISIBLE_INERT_PACKAGE_ABSENT_8CPU).
+Live check at 2026-11-06T00:51:26Z: Windows SSH up (pavel@192.168.1.37 via .local/tandem/airssh);
+running launcher = air-serial-guard PID 46295 -> launch-normal2.sh PID 46302 ->
+run_uefi PID 46336 with .local/experiments/EXP810-g4-package817/recovery/J313_EFI-exp392.fd
+after chainloading .../recovery/m1n1-exp377.macho, --low-mem; its log reports pinned
+phys_base 0x850000000, Physical memory 0x850000000..0x9df708000. This differs from the
+handover text (expanded/brokerlock-split); the live process is authoritative, so the
+census classifies against base 0x850000000 and the raw PAs are reclassified offline for
+0x818000000.
+Sequence (one background script, fail-stop, log .local/ans-native/ANSDART001-R3/run.log):
+1. airssh 'shutdown /r /t 3' (ordered Windows restart, as agx-recover-visible.sh does);
+2. wait for run_uefi PID 46336 to exit (<=180 s), then both endpoints (<=60 s), +5 s;
+   no other proxy connection before the census so the m1n1 banner reaches it;
+3. census under the shared lock: air-serial-guard.py --port L41 --port L43 --
+   proxyenv/bin/python tools/ans_dart_census.py --confirm-experiment ANSDART001
+   --guest-ram-base 0x850000000 --output .local/ans-native/ANSDART001-R3/census.json
+   (perl alarm 300);
+4. recovery = the same normal launch: bash .local/experiments/EXP950-dwm-output-trace/launch-normal2.sh
+   (exp377 m1n1 + exp392 Mu), wait for SSH <=300 s, then the inert gate (one APPL0002,
+   Problem 28, no AppleAgxAdmission service, 8 logical CPUs).
+Fallback if 4 fails with the proxy alive: fork 6's documented
+AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2205h/recover.sh. If the proxy is wedged: stop and ask
+the user for physical action.
