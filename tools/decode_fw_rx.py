@@ -3,8 +3,10 @@
 
 Usage: decode_fw_rx.py <Wom1FwRx.bin | kmd-receipts.txt>
 A kmd-receipts text dump holds 'Wom1FwRx <hex>' lines; the last one wins.
-Verdict: 'stats ring full and stuck' when the stats write pointer is one
-behind the never-advanced read pointer and did not move across samples.
+Verdict: without the drain the read pointer never moves, so a full ring at
+the last sample (write pointer one behind read) is stuck whether or not the
+write pointer moved in earlier samples (EXP2216: 20 -> 255 once, then full);
+its Last* stats values are stale from the fill time.
 """
 import struct
 import sys
@@ -33,9 +35,8 @@ def decode(data):
      out['pstate_min'], out['pstate_max']) = v[56:60]
     (out['drain_calls'], out['drained_stats'], out['drained_ktrace'],
      out['drained_fwlog']) = v[60:64]
-    stuck = out['stats_full'] and not out['stats_write_changes'] and out['samples'] > 1
     out['verdict'] = ('drained (Wom1FwRxDrain)' if out['drain_calls'] else
-                      'stats ring full and stuck' if stuck else
+                      'stats ring full and stuck (values stale)' if out['stats_full'] else
                       'stats ring moving' if out['stats_write_changes'] else
                       'stats ring not full, not moving')
     return out

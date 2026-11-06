@@ -155,6 +155,20 @@ class FwRxReceipt(unittest.TestCase):
             self.assertEqual(d['verdict'], 'stats ring moving')
             self.assertEqual((d['drain_calls'], d['drain_failures']), (0, 0))
 
+    def test_ring_that_filled_during_sampling_is_stuck(self):
+        """EXP2216 after-d: write 20 -> 255 in one sample, then full; read 0."""
+        import importlib.util
+        import struct
+        spec = importlib.util.spec_from_file_location('decode_fw_rx', ROOT / 'tools/decode_fw_rx.py')
+        decoder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(decoder)
+        fields = [0] * len(struct.unpack(decoder.FMT, bytes(304)))
+        fields[0:10] = [1, 304, 78, 0, 0, 255, 20, 1, 0, 1]
+        d = decoder.decode(struct.pack(decoder.FMT, *fields))
+        self.assertEqual(d['verdict'], 'stats ring full and stuck (values stale)')
+        fields[9] = 0
+        self.assertEqual(decoder.decode(struct.pack(decoder.FMT, *fields))['verdict'], 'stats ring moving')
+
     def test_source_never_writes_channel_memory(self):
         text = (SHARED / 'src/apple_agx_fw_rx_receipt.c').read_text()
         sample = text[text.index('unsigned int AppleAgxFwRxSample('):text.index('/* One channel: read_ptr')]
