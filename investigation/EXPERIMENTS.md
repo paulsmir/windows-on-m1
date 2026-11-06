@@ -69867,3 +69867,33 @@ boot failure, or a capture_contract RuntimeError.
 Recovery: the same launch without the variable (the HVS2ISO001 ctl command); if at
 proxy, the documented AT_PROXY recovery path. Timeout 15 min.
 Evidence: .local/experiments/HVS2ISO003/{full.log,contract.bin,ssh-gate.txt}.
+
+### HVS2ISO002 — preregistration update (2026-11-06T01:41:08Z): tool frozen (NOT RUN)
+
+Tool: tools/hv_carveout_census.py at commit 7d59db3aba740e5be061bc1e6111bc06e2f1fc9b,
+sha256 405224b7fae0a03c1e64ff115fdfcd8c5fd6832424189bbccb7bfaf7c5897a62. Tests:
+tests/test_hv_carveout_census.py (sha256 107fcae6...16f4) 14/14 GREEN, including the
+fixture cross-check against in_ram_carveouts. Live refuse path checked at 2026-11-06T01:41:08Z: a
+run_uefi.py was alive, so the tool exited 4 REFUSED without opening the proxy.
+Preconditions enforced by the tool: no run_uefi.py process (pgrep); guest SSH
+unreachable (airssh, ConnectTimeout 6); m1n1_windows provides stage2_policy (>= 23a01cb6);
+the m1n1 boot banner ("boot_args at" + "Running proxy") is delivered to this connection;
+the live ADT yields exactly [0x860500000,0x8614a0000) and [0x864000000,0x86f518000).
+Access: iface.readmem in 256 KiB chunks bracketed by the exception counter
+(GUARD.SKIP|SILENT); 12586 pages per pass. No write, no MMIO, no m1n1.setup.
+Schedule: passes start at t0, t0+60 s and t0+180 s, or immediately after the previous
+pass if it ran longer; the actual start_s is recorded. A pass longer than 300 s ->
+INCOMPLETE.
+Command (fresh Running proxy, before HVS2ISO003, same slot):
+  cd /Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler &&
+  M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 perl -e 'alarm 1200; exec @ARGV' python3
+  scripts/air-serial-guard.py --port /dev/cu.usbmodemC02HDNCCQ6L41 --port
+  /dev/cu.usbmodemC02HDNCCQ6L43 -- /Users/pavel/public_windows/proxyenv/bin/python
+  tools/hv_carveout_census.py --confirm-experiment HVS2ISO002 --output
+  .local/experiments/HVS2ISO002/census.json > .local/experiments/HVS2ISO002/console.log 2>&1
+  (mkdir -p .local/experiments/HVS2ISO002 first.)
+Exit: 0 STABLE, 2 CHANGED (changed_pages lists the PA and pass), 3 INCOMPLETE,
+4 REFUSED (census.json carries the reason).
+Evidence: .local/experiments/HVS2ISO002/{census.json,banner.txt,console.log}.
+census.json is about 5 MB (3 x 12586 page hashes). banner.txt is console output, not
+the ADT; the tool writes no adt.bin, only its sha256.
