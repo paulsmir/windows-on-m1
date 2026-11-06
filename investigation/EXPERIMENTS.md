@@ -45566,3 +45566,24 @@ stick from ANS004-R1 (same image, same target) - my orchestration defect. The op
 guest at 16:02:54; observed reboot; normal recovery.
 Fix: ladder.py now emits a run.sh pre-step that renames an existing WINPE-<EXP> target on the stick
 (via SSH in the recovery guest) before every launch.
+
+### ANS005-R1 — full native read-only AppleAns (preregistered 2026-11-06T16:04:18Z)
+
+Packet faf8d4b6930abd8eec50383a189ed2fa2f0a5e798c92455d2a7a9e54434adb86 (ladder.py ANS005 R1 ANSBUILD011):
+WinPE prepared-ANS005-A 43600637... with AppleAns ANSBUILD003-A2 (full native read-only, stop0,
+package 6356177b...), testsigning; m1n1 ANSBUILD011; Mu ANSBUILD009; gate 014f4903; dry-run 0.
+run.sh renames an existing WINPE-ANS005 target before launch.
+WINDOWS CONTRACT: HwInitialize completes (QUERY, CLAIM, REGISTER_QUEUES, Identify x2, optional Get
+  Features 0x0a, CREATE IO CQ 0x05, CREATE IO SQ 0x01) -> Ready; StorPort reports one LUN; disk.sys
+  enumerates a read-only disk; partmgr reads the partition table (NVMe READ 0x02 on queue 1); any
+  write is rejected by the driver (read-only V1) and by the broker I/O validation.
+ANS CONTRACT: allowlisted admin opcodes 0x06/0x05/0x01/0x0a; I/O READ via AUTHORIZE_SUBMIT with PRP
+  translation of guest pages (from-device DMA only).
+WHAT IS STILL UNKNOWN: I/O queue creation and READ under EL2 on hardware; StorPort/disk stack
+  behaviour with this adapter; SAN policy 3 keeps the boot-time native disk offline (no mount).
+WHY THIS HYPOTHESIS: (1) ANS004-R2 proved admin submit/reap with DMA on hardware; (2) the I/O path
+  uses the same broker submit/reap and translation, only queue 1 and opcode 2.
+Single variable vs ANS004-R2: AppleAns stop3 -> full read-only (A2).
+Expected: data receipts for 0x05, 0x01 (admin) and 0x02 (q=1) with cqe status 0; WinPE: APPL0003
+  started (no problem), a disk "NVMe ..." listed (offline, read-only); export; reboot.
+Failure: any submit result!=0 / CQE error / timeout; bugcheck; hang. Recovery as before.
