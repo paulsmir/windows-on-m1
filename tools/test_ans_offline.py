@@ -65,6 +65,7 @@ def main():
         'ans_queue': ['ans_queue'],
         'hv_ans_pins': ['hv_ans_pins'],
         'hv_ans_service': ['hv_ans_service', 'hv_ans_broker', 'hv_ans_prp'],
+        'hv_ans_memory': ['hv_ans_memory', 'hv_ans_prp'],
     }.items():
         exe=OUT/name
         run([cc,'-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',
