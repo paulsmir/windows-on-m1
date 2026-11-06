@@ -33,6 +33,8 @@ unsigned AdmissionUmdWaitBegin(unsigned site);
 void AdmissionUmdWaitEnd(unsigned token);
 int AdmissionUmdWaitExecuteBegin(void);
 unsigned AdmissionUmdWaitSerial(void);
+/* EXP2210: per-class wait us since the previous submission; returns flags. */
+unsigned AdmissionUmdWaitSubmitDelta(unsigned *serial, unsigned out_us[6]);
 void AdmissionUmdWaitExecuteEnd(long status);
 void AdmissionUmdWaitSetPhase(unsigned phase);
 #ifdef __cplusplus

@@ -2643,6 +2643,40 @@ static int g4_preflight(ADMISSION_UMD_DEVICE *device, uint64_t va,
  * displayable ones become WrittenPrimaries, which D3DDDI_MAX_WRITTEN_PRIMARIES
  * bounds below. Matches the winsys AGX_G4_WRITTEN_LIMIT (EXP1851, EXP1994). */
 #define ADMISSION_UMD_WRITTEN_LIMIT 1024u
+/* EXP2210 receipt-only: measure-umd-submit, one row per SubmitCommandCb.
+ * Host replays that compile submit() alone leave it out. */
+#define ADMISSION_UMD_SUBMIT_RECEIPT_ON 1
+#if defined(ADMISSION_UMD_SUBMIT_RECEIPT_ON)
+/* {version, RenderCBSequence, command VA lo/hi, DMA bytes, private bytes,
+ *  private header words 0 (magic) and 1 (version | header bytes << 16),
+ *  written count, SubmitCommandCb result, QPC before lo/hi, QPC after
+ *  lo/hi, render fence this submission will signal lo/hi, wait serial,
+ *  wait us since the previous submission on this thread (InflightSlot,
+ *  QueryWriters, Flush, BatchPoll, RenderFence, NativeReadyEscape;
+ *  inclusive), wait flags}. The KMD completion stream joins it by command
+ *  VA (measure-gpu-completion). Only with diagnostics measuring. */
+static void submit_receipt(ADMISSION_UMD_DEVICE *device, uint64_t va,
+    uint32_t bytes, const void *private_data, uint32_t private_bytes,
+    unsigned written_count, UINT sequence, HRESULT result,
+    LONGLONG before, LONGLONG after) {
+  UINT values[24] = {};
+  UINT header[2] = {};
+  if (private_data && private_bytes >= sizeof(header))
+    memcpy(header, private_data, sizeof(header));
+  const uint64_t internal = device->NextRenderFence + 1u;
+  values[0] = 1u; values[1] = sequence;
+  values[2] = (UINT)va; values[3] = (UINT)(va >> 32);
+  values[4] = bytes; values[5] = private_bytes;
+  values[6] = header[0]; values[7] = header[1];
+  values[8] = written_count; values[9] = (UINT)result;
+  values[10] = (UINT)before; values[11] = (UINT)((ULONGLONG)before >> 32);
+  values[12] = (UINT)after; values[13] = (UINT)((ULONGLONG)after >> 32);
+  values[14] = (UINT)internal; values[15] = (UINT)(internal >> 32);
+  values[23] = AdmissionUmdWaitSubmitDelta(&values[16], &values[17]);
+  AdmissionUmdDiagnostic("measure-umd-submit", result, values, ARRAYSIZE(values));
+}
+#endif
+
 static int submit(void *context, const uint64_t *written,
                   unsigned written_count, uint64_t va, uint32_t bytes,
                   const void *private_data, uint32_t private_bytes,
@@ -2730,10 +2764,23 @@ static int submit(void *context, const uint64_t *written,
   AcquireSRWLockShared(&device->ScreenBufferLock);
   watch_slots(device,3u,NULL,0,NULL,0,request.RenderCBSequence,S_OK);
   ReleaseSRWLockShared(&device->ScreenBufferLock);
+#if defined(ADMISSION_UMD_SUBMIT_RECEIPT_ON)
+  const bool submit_measured = AdmissionUmdMeasureEnabled() != 0;
+  LARGE_INTEGER submit_before = {}, submit_after = {};
+  if (submit_measured) (void)QueryPerformanceCounter(&submit_before);
+#endif
   unsigned wait_pfnSubmitCommandCb_2=AdmissionUmdWaitBegin(AgxWaitSubmit);
   HRESULT submit_result = device->KernelCallbacks->pfnSubmitCommandCb(
       device->RuntimeDevice.handle, &request);
   AdmissionUmdWaitEnd(wait_pfnSubmitCommandCb_2);
+#if defined(ADMISSION_UMD_SUBMIT_RECEIPT_ON)
+  if (submit_measured) {
+    (void)QueryPerformanceCounter(&submit_after);
+    submit_receipt(device, va, bytes, private_data, private_bytes, written_count,
+                   request.RenderCBSequence, submit_result,
+                   submit_before.QuadPart, submit_after.QuadPart);
+  }
+#endif
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   measure_g4_phase(4u,submit_start,request.RenderCBSequence,bytes,submit_result);
 #endif

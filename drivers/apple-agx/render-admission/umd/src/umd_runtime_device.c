@@ -825,6 +825,16 @@ int AdmissionUmdWaitExecuteBegin(void) {
 unsigned AdmissionUmdWaitSerial(void) {
   return AdmissionWait.Active ? AdmissionWait.Serial : 0;
 }
+/* EXP2210 receipt-only: wait time completed since this thread's previous
+ * submission (umd_wait_profile.h AgxWaitSubmitDelta); no clock read. */
+static __declspec(thread) unsigned long long AdmissionWaitSubmitPrevious[AGX_WAIT_SUBMIT_CLASSES];
+static __declspec(thread) unsigned AdmissionWaitSubmitSerial;
+unsigned AdmissionUmdWaitSubmitDelta(unsigned *serial, unsigned out_us[6]) {
+  unsigned flags = AgxWaitSubmitDelta(&AdmissionWait, AdmissionWaitSubmitPrevious,
+                                      &AdmissionWaitSubmitSerial, out_us);
+  *serial = AdmissionWait.Active ? AdmissionWait.Serial : 0u;
+  return flags;
+}
 void AdmissionUmdWaitSetPhase(unsigned phase) {
   if (AdmissionWait.Active && phase<AgxWaitPhaseCount) AdmissionWait.Phase=phase;
 }

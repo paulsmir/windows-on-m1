@@ -405,7 +405,7 @@ int main() {
 
 
 class CpuPoolRehome(unittest.TestCase):
-    def build(self, cases, umd_text=None, env=None):
+    def build(self, cases, umd_text=None, env=None, extra_names=(), side=None):
         kmd = KMD.read_text()
         kmd_funcs = '\n'.join(body(kmd, n) for n in (
             'AdmissionG3CopyPte', 'AdmissionGpuvaG3NativeQueryEscape',
@@ -413,14 +413,14 @@ class CpuPoolRehome(unittest.TestCase):
         umd = umd_text if umd_text is not None else UMD.read_text()
         names = ('find_slot', 'trim_residency_with', 'trim_residency',
                  'residency_request', 'touch_device', 'placement_query',
-                 'evict_now', 'rehome_cpu_pool', 'native_held_ready', 'submit',
-                 'AdmissionUmdGpuvaValidateCpuPoolMap')
+                 'evict_now', 'rehome_cpu_pool', 'native_held_ready') + tuple(extra_names) + (
+                 'submit', 'AdmissionUmdGpuvaValidateCpuPoolMap')
         umd_funcs = '\n'.join(umd_function(umd, n) for n in names
                               if n in umd or n == 'find_slot')
         with tempfile.TemporaryDirectory(prefix='rc107-rehome-') as tmp:
             tmp = Path(tmp)
             (tmp / 'kmd.c').write_text(KMD_SIDE.replace('@@KMD@@', kmd_funcs))
-            (tmp / 'umd.cpp').write_text(UMD_SIDE.replace('@@UMD@@', umd_funcs)
+            (tmp / 'umd.cpp').write_text((side or UMD_SIDE).replace('@@UMD@@', umd_funcs)
                                          .replace('@@CASES@@', cases))
             flags = ['-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
                      '-ftrivial-auto-var-init=pattern', '-I', str(SHARED / 'include')]

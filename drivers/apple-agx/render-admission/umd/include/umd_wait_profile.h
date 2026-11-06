@@ -102,4 +102,39 @@ static inline void AgxWaitPack(AgxWaitProfile *p, unsigned out[16], unsigned que
   for(j=0;j<3;++j) { query[2+j*2]=p->Query[j].Count;query[3+j*2]=AgxWaitUs(p,p->Query[j].Ticks); }
   AgxWaitPackSites(p,out,0);
 }
+/* EXP2210 receipt-only (measure-umd-submit): the wait time completed on
+ * this thread since the previous submission, per class, so a late KMD
+ * submission can be attributed to the replay wait that preceded it. All are
+ * inclusive (nested time counts in the enclosing path class too) and sum
+ * over phases; a scope still open at the submission (e.g. the Flush around
+ * it) is counted at the next one. A new Execute (Serial change) restarts the
+ * baseline. Returns the flags: 1 profile inactive, 2 baseline restarted, and
+ * the profile's own flags << 8. */
+#define AGX_WAIT_SUBMIT_CLASSES 6u
+static inline unsigned AgxWaitSubmitSite(unsigned index) {
+  static const unsigned sites[AGX_WAIT_SUBMIT_CLASSES] = {
+      AgxWaitInflightSlot, AgxWaitQueryWriters, AgxWaitFlush,
+      AgxWaitBatchPoll, AgxWaitRenderFence, AgxWaitNativeReadyEscape};
+  return index < AGX_WAIT_SUBMIT_CLASSES ? sites[index] : 0u;
+}
+static inline unsigned AgxWaitSubmitDelta(AgxWaitProfile *p,
+    unsigned long long previous[AGX_WAIT_SUBMIT_CLASSES],
+    unsigned *previous_serial, unsigned out_us[AGX_WAIT_SUBMIT_CLASSES]) {
+  unsigned i, phase, flags = 0u;
+  memset(out_us, 0, AGX_WAIT_SUBMIT_CLASSES * sizeof(*out_us));
+  if (!p->Active) return 1u;
+  if (*previous_serial != p->Serial) {
+    memset(previous, 0, AGX_WAIT_SUBMIT_CLASSES * sizeof(*previous));
+    *previous_serial = p->Serial;
+    flags |= 2u;
+  }
+  for (i = 0u; i < AGX_WAIT_SUBMIT_CLASSES; ++i) {
+    unsigned long long total = 0u;
+    for (phase = 0u; phase < AgxWaitPhaseCount; ++phase)
+      total += p->Sites[phase * AgxWaitSiteCount + AgxWaitSubmitSite(i)].Inclusive;
+    out_us[i] = AgxWaitUs(p, total >= previous[i] ? total - previous[i] : 0u);
+    previous[i] = total;
+  }
+  return flags | (p->Flags << 8);
+}
 #endif
