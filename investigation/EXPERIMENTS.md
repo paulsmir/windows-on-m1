@@ -45677,3 +45677,16 @@ Fix: m1n1 053ed880 - status counted (tcb_inval_failures telemetry) and advisory;
 nvme_native_lifecycle_test RED->GREEN; receipts print tcb_stat_nz. ANSBUILD013 440f3a4e...
 Gate GREEN (offline-gate15) after the stuck R3 runner released the launch lock (gate14 had failed
 only on lock-holder tests while that runner was alive).
+
+### ANS006-R4 (preregistered 2026-11-06T17:17:19Z)
+
+Packet 1c98975cbdc329e6ddcf3417cb38a4a66870a39d8a39fe97b1cfa2bab1ef7023: as ANS006-R3 but m1n1
+ANSBUILD013 (053ed880, 440f3a4e...: native TCB status advisory + tcb_stat_nz in receipts); same WinPE
+f16bbce1...; gate c8ef990d; dry-run 0; run.sh with SIGKILL fallback and 3600 s cap.
+WHY THIS HYPOTHESIS: (1) three native runs lost a completion or failed later I/O while every logged
+CQE was successful; (2) the only native-vs-proven difference on the completion path is that native
+treated a nonzero NVMMU_TCB_STAT as fatal, which Asahi and the m1n1 recovery path do not.
+Single variable vs R3: queue_invalidate semantics (receipt field added).
+Expected: boot completes; ANS006 reads of D:\pagefile.sys (type) and the hives (copy) rc=0 with
+timings; receipts show tcb_stat_nz > 0 at some point (confirming the trigger) and no failed ops.
+Failure: lost completion/I-O error again (hypothesis rejected), hang. Recovery as before.
