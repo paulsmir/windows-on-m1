@@ -70229,3 +70229,17 @@ EXP2216 HARDWARE ACTUAL (2026-11-06T12:24:07Z): **CONFIRMED: preemption race fix
 - Suite 119 PASS / 0 FAIL; GPU_RESET none; PREEMPT_REFUSAL none (EXP2203/EXP2215 each had one ENGINE reset at scheduler_windows.c:537 in the same arm set). d HD PERF 40.472 FPS (Wom1JobDiagnostics=1).
 - Wom1FwRx (after-d, 78 samples, failures 0): stats_read 0, stats_write 255 (first sample 20), stats_write_changes 1, stats_full 1, scanned 255 entries (power 28, power_on 7, power_off 6, utilization 23, avg_power 32, temperature 27, power_state 42, fw_busy 6, pstate 28, temp_sensor 56); ktrace and fwlog x6 pointers 0/0. The newest decoded values (util 100/100/0/100, power_state pstate 1, PState min 1 max 1) are from the moment the ring filled shortly after boot, i.e. stale. Note: decode_fw_rx.py printed "stats ring moving" because write_changes > 0; the correct reading is full-and-stuck (one change, then write == read - 1).
 - Verdict: preemption fix CONFIRMED (class C, default); FwRx hypothesis step 1 CONFIRMED -> step 2 justified (Asahi gpu.rs drains stats/ktrace/fwlog on every interrupt). Next: EXP2217 = the same source with Wom1FwRxDrain=1 (+ Wom1JobDiagnostics=1 for the live stats) HD PERF, then a no-switch perf-gate boot. Recovery rec2216h.
+
+EXP2217 HARDWARE BEFORE 2026-11-06T12:32:16Z:
+Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0 (KMD receipts at poll 12 and after d).
+- WHY THIS HYPOTHESIS: (1) EXP2216 Wom1FwRx: stats ring full and stuck (read 0, write 255, one write change in 78 samples), ktrace/fwlog idle; (2) Asahi drm/asahi gpu.rs polls ch.fw_log/ktrace/stats/event on every firmware interrupt and channel.rs RxChannel::get_or_peek -> set_rptr advances read_ptr after each message; (3) unknown whether the firmware waits/spins on a full RX ring -- if it does, every job pays (uniform compute slowdown vs Apple, +4.5 ms/frame HD).
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: the firmware-to-host RX ring consumer contract (Asahi), read_ptr stores only.
+- ATOMIC CONTRACT: none -- one switch.
+- WHAT IS STILL UNKNOWN: whether draining changes job timing; the live pstate/utilization once the ring moves.
+- Expected: suite 119/0; Wom1FwRx drain_calls > 0, drained_stats > 0, stats_full 0, write pointer moving; live Utilization/PowerState/PState values; HD PERF vs EXP2216 40.472 (same switches otherwise): any gain beyond ~1 % is the ring cost.
+- Failure criteria: firmware fault/hang, DrainFailures > 0, GPU reset -> rec2217h, drain off.
+- Recovery: rec2217h.
+- Probe: agx_d3d12_probe_e2217_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys 953f4c17f858, UmdArm64 72ef7579f962, UmdX64 28bc4e98bb50, Umd32 ff3bf39b2b2e; manifest 6c5104d37774, hardware-manifest f1dfd1b5ad41; probe2217.sh ac888d624aa0 (PROBE_LINT_OK); visible recovery rec2217h 799bd4985bd1606a; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1FwRxDrain=1 Wom1JobDiagnostics=1.
+- Recovery rec2217h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2217-fwrx-drain/run2217.sh.
