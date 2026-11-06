@@ -45255,3 +45255,26 @@ config/j313-ans.json) and a DEVICE entry in the Mu stage-1 map (descriptor cap 1
 root contract test tests/test_ans_mu_broker_window.py (RED on mu HEAD, GREEN with the fix).
 Evidence: .local/ans-native/ANS001-R5-run/ (hv-head.log up to the exception + 400 lines,
 orchestrator.log).
+
+### ANSBUILD009 (Mu broker window) + ANS001-R6 (preregistered 2026-11-06T11:44:46Z)
+
+Mu 0ef54eabf: native-only PcdAnsBrokerWindowBase/Size = 0x300010000/0x4000 (DSC under
+J313_ANS_NATIVE_PROFILE) and a DEVICE entry in the T810X stage-1 map (descriptor cap 20).
+Root 9b97e83a9: tests/test_ans_mu_broker_window.py (DSC == config/j313-ans.json broker,
+DEVICE entry, capacity, window outside every existing range) in the offline gate; gate GREEN
+receipt b76a0a6d.... ANSBUILD009-N3: N2 snapshot + the 4 changed Mu files, clean Build;
+FD 13fc5d8b15b7c377f17ea005192bc0f2eec88169615baf30e6547b001d062aff; BUILD_REPORT shows
+PcdAnsBrokerWindowBase 0x300010000 / Size 0x4000 (FIXED); receipt ANSBUILD009-N3-receipt.json
+4e4c9ce7....
+Packet ANS001-R6 qualification 7fbdca5e2b9ce4bd24859e9e631a3e9ead3f0fad604f76389a08944c7c3f349d,
+dry-run exit 0; run.sh = R5 script with R6 paths (d990d8e2...).
+WHY THIS HYPOTHESIS:
+1. R5 faulted at the first broker read in CoreExitBootServices; the source shows the window
+   unmapped in Mu stage-1, and the build now maps it as device memory.
+2. Everything before ExitBootServices (guest entry, native Mu, bootmgr load/start) is
+   hardware-proven in R5.
+Hypothesis: the EBS gate completes the EL2 ownership handoff, WinPE boots on native ANS,
+enumerates APPL0003 inert, exports to the stick and reboots.
+Single variable vs R5: native Mu N2 -> N3 (broker window in the stage-1 map).
+Expected/failure/recovery as R5. If the gate refuses the handoff (EBS error, no fault),
+that is the next boundary; the gate keeps its stage/status in memory only.
