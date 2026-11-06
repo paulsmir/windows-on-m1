@@ -45879,3 +45879,12 @@ dry-run does not pass --confirm-experiment, so it did not catch this). run.sh th
 earlier native run, not this attempt. Pre-run bridge hashes: MSR 080acf35 (zero), neighbours 30e14955/7796c6da.
 Fix: run_uefi derives the choices from tools/ans_qualification.PROFILES (regression test
 test_runner_accepts_every_profile_confirmation). Next: ANS008-R2 = same artifacts, re-sealed with the fixed launcher.
+
+### ANS008-R2 (preregistered 2026-11-06T23:20:44Z)
+
+Identical hypothesis, single variable, safety layers, expected results and failure criteria as ANS008-R1 (above).
+Same artifacts: m1n1 ANSBUILD019 812e61c3, AppleAns ANSBUILD004-W 2670d5b3, ansraw a280ec1e, WinPE f4159ed8, Mu N3.
+Re-sealed packet 78d0064f765d2462c078b3492f8408ee2423143d09b5123f92023e859dce0b45 (.local/ans-native/ANS008-R2-ready),
+gate e8c73760cdd3101cc02d3de0c4086aefefde1623dec73b452531ebbb7c12405d GREEN, outer e2a3bb52 (launcher choices fix),
+run.sh 70b49d9c. A dry-run with --confirm-experiment ANS008 exits 0 and prints "ANS write window : 30912256:4096".
+Launch: bash .local/ans-native/ANS008-R2-run/run.sh. Recovery artifact: normal recovery launch, unchanged.
