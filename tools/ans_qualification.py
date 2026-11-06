@@ -19,8 +19,14 @@ PINNED = {'display': 'physical', 'debug': 'uart', 'low_mem': True, 'cpu_count': 
 # ANS001: package-free WinPE. ANS002: exactly one AppleAns package built with
 # QUALIFICATION_STOP=1 (QUERY + CLAIM, then QUIESCE/RELEASE; never REGISTER_QUEUES, so the
 # controller is never booted and no DMA can be issued) in the WinPE boot index.
+# ANS003: stop2 = REGISTER_QUEUES (EL2 boots the controller, no admin command), then stop.
+# ANS004: stop3 = admin Identify controller/namespace (first DMA, read-only), then stop.
+# ANS005: stop0 = full native read-only V1 (I/O queues, READ; writes are rejected by design).
 PROFILES = {'ANS001': {'scope': 'ans0-unbound-no-driver', 'appleans_profile': None},
-            'ANS002': {'scope': 'ans1-claim-stop', 'appleans_profile': 'native-read-only-stop1'}}
+            'ANS002': {'scope': 'ans1-claim-stop', 'appleans_profile': 'native-read-only-stop1'},
+            'ANS003': {'scope': 'ans2-admin-ready-stop', 'appleans_profile': 'native-read-only-stop2'},
+            'ANS004': {'scope': 'ans3-identify-stop', 'appleans_profile': 'native-read-only-stop3'},
+            'ANS005': {'scope': 'ans4-read-only-full', 'appleans_profile': 'native-read-only-stop0'}}
 OVERRIDES = ('phys_base', 'ramdisk_base', 'ramdisk_max_size', 'low_mem_base',
              'low_mem_size', 'low_mem_backing', 'fb_base', 'fb_width', 'fb_height', 'guest_ram_end')
 
@@ -103,10 +109,11 @@ def validate_manifest(path, expected_sha256, root):
     require(audit.get('bindings') == {r: hashes[r] for r in ROLES if r != 'qualification_audit'}, 'audit artifact/receipt bindings mismatch')
     keys = ['offline_gates_passed', 'mu_ramdisk_only', 'mu_native_gate_bound', 'mu_native_autoboot_bound',
             'agx_power_broker_disabled', 'no_installed_windows_boot', 'collector_test_passed']
-    keys += ['winpe_no_appleans'] if stop_profile is None else ['winpe_appleans_claim_stop', 'winpe_testsigning']
+    keys += ['winpe_no_appleans'] if stop_profile is None else ['winpe_appleans_profile_bound', 'winpe_testsigning']
     for key in keys:
         require(audit.get(key) is True, f'unproven qualification property: {key}')
     if stop_profile is not None:
+        require(audit.get('appleans_profile') == stop_profile, 'qualification audit binds a different AppleAns profile')
         require(audit.get('appleans_package_sha256') == winpe_audit['appleans_package_sha256'],
                 'qualification audit and WinPE audit bind different AppleAns packages')
     collector = read_json(paths['winpe_collector'])

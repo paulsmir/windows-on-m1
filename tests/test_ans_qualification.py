@@ -45,9 +45,9 @@ class QualificationTests(unittest.TestCase):
                'bindings':{r:self.m['artifacts'][r]['sha256'] for r in ROLES if r!='qualification_audit'}}
         for k in ('offline_gates_passed','mu_ramdisk_only','mu_native_gate_bound','mu_native_autoboot_bound',
                   'agx_power_broker_disabled','no_installed_windows_boot','collector_test_passed'):audit[k]=True
-        if self.m['experiment']=='ANS002':
-            audit['winpe_appleans_claim_stop']=True;audit['winpe_testsigning']=True
-            audit['appleans_package_sha256']='c'*64
+        if self.m['experiment']!='ANS001':
+            audit['winpe_appleans_profile_bound']=True;audit['winpe_testsigning']=True
+            audit['appleans_package_sha256']='c'*64;audit['appleans_profile']=self.audit_profile
         else:audit['winpe_no_appleans']=True
         self.paths['qualification_audit'].write_text(json.dumps(audit))
         self.m['artifacts']['qualification_audit']['sha256']=digest(self.paths['qualification_audit'])
@@ -103,8 +103,9 @@ class QualificationTests(unittest.TestCase):
         a['indices'][1]['appleans_packages']=[];p.write_text(json.dumps(a));self.seal()
         p=self.paths['winpe_collector'];a=json.loads(p.read_text());a['result']='pending';p.write_text(json.dumps(a));self.seal()
         with self.assertRaisesRegex(ValueError,'collector'):self.call()
-    def make_ans002(self,profile='native-read-only-stop1',second_index_pkgs=(),testsigning=True,confirm_flag=True):
-        self.m['experiment']='ANS002';self.m['scope']='ans1-claim-stop'
+    def make_ans002(self,profile='native-read-only-stop1',second_index_pkgs=(),testsigning=True,confirm_flag=True,
+                    experiment='ANS002',scope='ans1-claim-stop',audit_profile=None):
+        self.m['experiment']=experiment;self.m['scope']=scope;self.audit_profile=audit_profile or profile
         p=self.paths['winpe_audit'];a=json.loads(p.read_text())
         a['appleans_profile']=profile;a['appleans_package_sha256']='c'*64;a['testsigning']=testsigning
         a['indices'][0]['appleans_packages']=['oem0.inf'];a['indices'][1]['appleans_packages']=list(second_index_pkgs)
@@ -118,6 +119,16 @@ class QualificationTests(unittest.TestCase):
         for kw in ({'profile':'native-read-only-stop2'},{'profile':'native-read-only-stop0'},
                    {'second_index_pkgs':('oem1.inf',)},{'testsigning':False}):
             self.setUp();self.make_ans002(**kw)
+            with self.assertRaises(ValueError):self.call()
+    def test_ladder_profiles_bind_exact_stop_level(self):
+        for exp,scope,prof in (('ANS003','ans2-admin-ready-stop','native-read-only-stop2'),
+                               ('ANS004','ans3-identify-stop','native-read-only-stop3'),
+                               ('ANS005','ans4-read-only-full','native-read-only-stop0')):
+            self.setUp();self.make_ans002(profile=prof,experiment=exp,scope=scope)
+            self.assertEqual(self.call(execute=True,confirmation=exp)[0]['experiment'],exp)
+            self.setUp();self.make_ans002(profile='native-read-only-stop1',experiment=exp,scope=scope)
+            with self.assertRaises(ValueError):self.call()
+            self.setUp();self.make_ans002(profile=prof,experiment=exp,scope=scope,audit_profile='native-read-only-stop1')
             with self.assertRaises(ValueError):self.call()
     def test_ans001_still_rejects_any_package(self):
         p=self.paths['winpe_audit'];a=json.loads(p.read_text());a['indices'][0]['appleans_packages']=['oem0.inf']
