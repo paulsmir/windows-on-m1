@@ -44716,3 +44716,10 @@ probably reported to Windows as conventional memory; stage-2 maps them writable.
 HVS2ISO001 done per fork 6 (A-C pass, D not run, no table page written). Live check:
 run_uefi 65916 from launch-normal2.sh (exp377 + exp392 --low-mem), SSH up, 8 logical CPUs.
 Bench owned by the ANS work again; next ANS steps are offline.
+
+### Bench lent to fork 6 for HVS2ISO002+003 (2026-11-06T01:40Z)
+
+ANS session replied SLOT OK (002: read-only page-hash census of the 13 in-RAM
+carveouts; 003: recovery boot with them unmapped from stage-2). State at hand-off:
+normal profile, run_uefi 65916, SSH up, 8 CPUs. ANS005B waits for the user decision
+on the DART_TABLES flag and for the bench return.
