@@ -45505,3 +45505,25 @@ owner=1 gen=2 = bounded native stop succeeded. The op=2 CLAIM receipt line is ab
 WinPE: APPL0003 oem0.inf Problem 10 / 0xC0000001 (designed stop2), export WINPE-ANS003 0, wpeutil
 reboot 15:30:49, recovery SSH 15:31:3x, APPL0002 inert, 8 CPUs.
 Evidence .local/ans-native/ANS003-R1-run/ (hv.log, stick-results.tar 2271cf802d0827233e3eac38df3c8216ddf57f2235552e4fab71d72752f13f7b). Verdict: ANS003 CONFIRMED (first EL2 native ANS controller boot + stop). Next: ANS004 Identify (stop3, first DMA).
+
+### ANS004-R1 — admin Identify controller/namespace, first native DMA (preregistered 2026-11-06T15:33:48Z)
+
+Packet qualification f9e873f0dea8995d30dea20046d44b6fdaba32b592f86964a42aa22fd7779e44 (ladder.py ANS004):
+WinPE prepared-ANS004-A b6e635b0... with AppleAns ANSBUILD003-E (stop3, 3fce850f...), VM PASS,
+gate d87b6410, dry-run 0; m1n1 ANSBUILD010, Mu ANSBUILD009.
+WINDOWS CONTRACT: after REGISTER_QUEUES the driver issues two admin Identify commands (opcode 0x06,
+  CNS 1 controller -> page ANS_QUEUE_DEPTH, CNS 0 namespace 1 -> page +1) through
+  AUTHORIZE_SUBMIT/REAP_COMPLETION, parses the namespace (LBA 4096, no metadata, MDTS), then
+  qualified_stop -> Problem 10.
+ANS CONTRACT: broker allowlist admits admin 0x06; EL2 translates the guest IPA of each 4 KiB page via
+  stage-2 (ans_memory_translate: GUEST_RAM only, minus RAM disk/carveouts/private ranges), builds the
+  PRP/TCB (dma from-device), submits on the native admin queue, posts the CQE; the device writes
+  4 KiB into guest RAM. Read-only; no media write is possible (no write opcode is admitted).
+WHAT IS STILL UNKNOWN: real Identify data and CQE timing on hardware; whether TCB/PRP publication
+  under EL2 completes as in m1n1's own nvme_init.
+WHY THIS HYPOTHESIS: (1) ANS003-R1 proved the native controller boot/stop under EL2 with this stack;
+  (2) m1n1's own nvme_init performs exactly these Identify commands on the same controller in
+  every hv.init ("HV: NVMe backend: namespace 1, 61279344 x 4096-byte blocks").
+Single variable vs ANS003-R1: AppleAns stop2 -> stop3 (two admin Identify commands).
+Expected: broker ops 1,2,3; data-path submit/reap (not logged); 6, 8 result=0; APPL0003 Problem 10;
+  export; reboot. Failure: REAP timeout/fault (terminal containment), DMA denial, hang, bugcheck.
