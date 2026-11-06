@@ -45387,3 +45387,16 @@ WHY THIS HYPOTHESIS: (1) R6 and R7 both reached the collector, and only the USB 
 and H performs it, restoring OfflineAll immediately after.
 Single variable vs R7: wrapper policy step OfflineInternal -> OnlineAll (+ restore).
 Expected: unattended WINPE-R8 export and reboot; failure: same handling as R7.
+
+ANS001-R8 result (recorded 2026-11-06T13:50:02Z): FAILED at S42; native path reproduced again.
+Operator photo: san_exit=0 (OnlineAll), online_exit=-2147212283, san_restore_exit=0, S42
+vcount=0. So OnlineAll alone, applied by script immediately before `online disk`, still fails;
+the operator's success in R6 also had a rescan, an exit and a fresh session with list disk,
+seconds apart. Runner stopped by exact PID 58932 at 13:17:46; observed reboot; recovery SSH
+13:18:39, APPL0002 inert, 8 CPUs; stick unchanged.
+Variant I (VM-009/009b): S30 retries up to 5x {rescan + list disk session; 5 s pause; list disk,
+select, online in a fresh session}. In the VM the online succeeded on try 1, but S60 failed:
+"The media is write protected" because I had dropped `attributes disk clear readonly`
+(disks onlined under a SAN policy come up read-only). Variant I2 restores it after the online
+in the same session: image 8cc8b075157907b8852b8dd0db07b9d395cac7f9b373d0fadaf433dffd0cef1a,
+VM ANSCOLLECT010 running.

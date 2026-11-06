@@ -24,12 +24,11 @@ rem disks; S31 restores OfflineAll right after the online.
 diskpart /s "%OUT%\HW-SAN.TXT" >"%OUT%\HW-SAN.LOG" 2>&1
 >>"%OUT%\HW-WRAPPER.TXT" echo san_exit=!errorlevel!
 call :stage S30_ONLINE_IDENTIFIED_DISK
->"%OUT%\HW-ONLINE.TXT" echo select disk !EVIDDISK!
->>"%OUT%\HW-ONLINE.TXT" echo attributes disk clear readonly
->>"%OUT%\HW-ONLINE.TXT" echo online disk
->>"%OUT%\HW-ONLINE.TXT" echo exit
-diskpart /s "%OUT%\HW-ONLINE.TXT" >"%OUT%\HW-ONLINE.LOG" 2>&1
->>"%OUT%\HW-WRAPPER.TXT" echo online_exit=!errorlevel!
+rem ANS001-R8: right after the policy change VDS still answers "object not found". The
+rem operator succeeded after rescan, a new session and list disk; repeat that up to 5 times.
+set ONLINEOK=0
+for %%T in (1 2 3 4 5) do if "!ONLINEOK!"=="0" call :online_try %%T
+>>"%OUT%\HW-WRAPPER.TXT" echo online_ok=!ONLINEOK!
 call :stage S31_SAN_POLICY_RESTORE_OFFLINE_ALL
 >"%OUT%\HW-SAN-RESTORE.TXT" echo san policy=OfflineAll
 >>"%OUT%\HW-SAN-RESTORE.TXT" echo san
@@ -114,6 +113,23 @@ set DISMOUNTRC=!errorlevel!
 echo ANS001HW export_exit=!EXPORTRC! dismount_exit=!DISMOUNTRC!
 if not "!DISMOUNTRC!"=="0" goto failed
 wpeutil reboot
+exit /b 0
+:online_try
+>"%OUT%\HW-ONLINE-%1.TXT" echo rescan
+>>"%OUT%\HW-ONLINE-%1.TXT" echo list disk
+>>"%OUT%\HW-ONLINE-%1.TXT" echo exit
+diskpart /s "%OUT%\HW-ONLINE-%1.TXT" >"%OUT%\HW-ONLINE-%1-RESCAN.LOG" 2>&1
+ping -n 6 127.0.0.1 >nul
+>"%OUT%\HW-ONLINE-%1B.TXT" echo list disk
+>>"%OUT%\HW-ONLINE-%1B.TXT" echo select disk !EVIDDISK!
+>>"%OUT%\HW-ONLINE-%1B.TXT" echo online disk
+>>"%OUT%\HW-ONLINE-%1B.TXT" echo attributes disk clear readonly
+>>"%OUT%\HW-ONLINE-%1B.TXT" echo exit
+diskpart /s "%OUT%\HW-ONLINE-%1B.TXT" >"%OUT%\HW-ONLINE-%1.LOG" 2>&1
+set RC=!errorlevel!
+>>"%OUT%\HW-WRAPPER.TXT" echo online_try=%1 online_exit=!RC!
+if "!RC!"=="0" set ONLINEOK=1
+for /f "usebackq tokens=1,2,3" %%A in ("%OUT%\HW-ONLINE-%1.LOG") do if /i "%%A %%B %%C"=="DiskPart successfully onlined" set ONLINEOK=1
 exit /b 0
 :discover
 set MATCHES=0
