@@ -70091,3 +70091,18 @@ EXP2209 HARDWARE ACTUAL (2026-11-06T03:34:24Z): **CONFIRMED -- CS 1.6 regression
 - Suite 119 PASS / 0 FAIL; GPU_RESET none; PREEMPT_REFUSAL none.
 - Wom1G3NativeQueryRefusal absent ("no refusal since start"); DWM (pid 990) in umd-all.log: reject-native-allocation 0, reject-batch 0, measure-present-resource 0, measure-getcaps 0 -- no device re-creation loop. The mid160 capture did not fire (the benchmark ended at 83 s); mid60 and after-cs receipts collected.
 - Verdict: CONFIRMED -- the READ_ONLY data answer + UMD read-only re-proof (025ab1d6) removes the DWM refused-batch / re-creation churn that held the G3 lock across 16 MiB page-table updates; the GL path is back above its October level. The G3 lock split stays parked (no longer on the critical path for this workload). Recovery rec2209h.
+
+EXP2210 HARDWARE BEFORE 2026-11-06T03:55:14Z:
+Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0 APPLE_AGX_D3D12_OV3B=1 (KMD receipts at poll 12 and after d).
+- WHY THIS HYPOTHESIS: (1) EXP2201 macOS: Apple runs the render's TA while the preceding compute runs and orders only the 3D stage behind it (c15->R16 1.95 ms, c19->R20 1.45 ms FHD); OV5 needs a compute-stamp Barrier on our 3D ring; (2) Asahi only ever puts cross-queue Barriers into the vertex/compute work queues, so whether the G13 firmware accepts one on the 3D queue is undocumented hardware behaviour; the drill places a redundant, already-satisfied one (the TA lead still waits); (3) EXP2203 refused R8 with reason 6, traced offline to a drain bug (29708483) -- R8 should now report 0 or a real vertex conflict.
+- WINDOWS CONTRACT: unchanged (the drill changes no D3D12-visible ordering; the OV5 feature 0x4 stays unpublished).
+- AGX/ASAHI CONTRACT: G13 Barrier work item (tag 4, wait stamp/value/slot, stamp_self = the render's 3D stamp) first in the 3D publication of a successor render without compute work whose lead class is TA_ON_COMPUTE; sidecar slot 0x8840 (set A) / 0xa840 (set B).
+- ATOMIC CONTRACT: none -- the drill (KMD) and the R8 receipt (UMD, measurement only) are independent; the drill is a no-op ordering-wise.
+- WHAT IS STILL UNKNOWN: whether the firmware accepts, stalls on, or faults on a compute-stamp Barrier in the 3D queue; R8's verdict.
+- Expected: suite 119/0; Wom1Ov5DrillReceipt Built == Placed > 0, build refusals 0; no fault/TDR/channel error; HD PERF ~40 (no regression beyond noise); measure-d3d12-ov2-refusal value 22 nibble for R8 = 0 (or 0xA vertex conflict).
+- Failure criteria: firmware fault, channel error, GPU reset, hang (watchdog) -> drill rejected (OV5 closed on G13 3D-queue waits); Built != Placed; perf regression -> investigate.
+- Recovery: rec2210h (AT_PROXY after a reset; save full.log first).
+- Probe: agx_d3d12_probe_e2210_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys 5bf0bdfa7c3d, UmdArm64 979a922f3c54, UmdX64 597970f4f9a3, Umd32 d872efbdb702; manifest 55715f635cfd, hardware-manifest 9a8232db43c9; probe2210.sh a0fcec3e5087 (PROBE_LINT_OK); visible recovery rec2210h b681cd3673b68ca7; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5FragWaitDrill=1.
+- Recovery rec2210h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2210-ov5-drill/run2210.sh.
