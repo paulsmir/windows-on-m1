@@ -63,7 +63,11 @@ No flag is cleared by assertion; the policy still rejects any flagged region.
    RED/GREEN in `tests/hv_ans_handoff_memory_test.py` and an allocator test.
 3. Encode census result (§3C). If CONFLICT: m1n1 stage-2 unmap + Mu reserved
    memory for those pages first.
-4. ANS001 (sealed 2026-09 packet, WinPE-only handoff) is still a valid record
+4. ANS001-R2 packet sealed offline (qualification 7a3ae8bb..., ANSBUILD006 = ANS005B
+   m1n1, dry-run exit 0). Unattended blocker: WinPE evidence lives only in X: and needs
+   an operator USB export. Next: host-observable evidence channel (guest NIC is a USB
+   Realtek RTL8153, rtucx22arm64.sys; kdcom PL011 is DBG2-only), rebuild/requalify WinPE.
+   Old text: ANS001 (sealed 2026-09 packet, WinPE-only handoff) is still a valid record
    but its m1n1 is pre-merge 2d869eb and its rollback assumptions predate the
    current GPU recovery (expanded RAM, broker-lock m1n1). Rebuild/reseal on the
    merged line before running it; then ANS002 QUERY/CLAIM, ANS003 admin queue,
