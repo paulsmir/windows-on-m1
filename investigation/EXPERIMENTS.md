@@ -70086,3 +70086,8 @@ Steps: D3D12 suite; EXP2209-B: CS 1.6 benchmark, KMD receipts at ~60 s / ~160 s 
 - Hashes: sys ef879852c964, UmdArm64 76526cba1a96, UmdX64 41ea71c01566, Umd32 54ab1874949d; manifest adec72e801b1, hardware-manifest 85f0cc701503; probe2209.sh 8bd1bbf25064 (PROBE_LINT_OK); visible recovery rec2209h 486a314a85a793f2; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1PresentTimestamps=1.
 - Recovery rec2209h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2209-cs16-readonly/run2209.sh.
+
+EXP2209 HARDWARE ACTUAL (2026-11-06T03:34:24Z): **CONFIRMED -- CS 1.6 regression fixed: standard benchmark 3771 frames / 82.957 s / 45.457 fps (EXP2208 18.632, EXP1378 reference 44.784).**
+- Suite 119 PASS / 0 FAIL; GPU_RESET none; PREEMPT_REFUSAL none.
+- Wom1G3NativeQueryRefusal absent ("no refusal since start"); DWM (pid 990) in umd-all.log: reject-native-allocation 0, reject-batch 0, measure-present-resource 0, measure-getcaps 0 -- no device re-creation loop. The mid160 capture did not fire (the benchmark ended at 83 s); mid60 and after-cs receipts collected.
+- Verdict: CONFIRMED -- the READ_ONLY data answer + UMD read-only re-proof (025ab1d6) removes the DWM refused-batch / re-creation churn that held the G3 lock across 16 MiB page-table updates; the GL path is back above its October level. The G3 lock split stays parked (no longer on the critical path for this workload). Recovery rec2209h.
