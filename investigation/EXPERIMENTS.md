@@ -45527,3 +45527,16 @@ WHY THIS HYPOTHESIS: (1) ANS003-R1 proved the native controller boot/stop under 
 Single variable vs ANS003-R1: AppleAns stop2 -> stop3 (two admin Identify commands).
 Expected: broker ops 1,2,3; data-path submit/reap (not logged); 6, 8 result=0; APPL0003 Problem 10;
   export; reboot. Failure: REAP timeout/fault (terminal containment), DMA denial, hang, bugcheck.
+
+ANS004-R1 result (recorded 2026-11-06T15:39:02Z): PARTIAL — Identify did not complete; native stop clean.
+Broker control receipts: op=1 seq=1, op=2 seq=2, op=3 seq=3 (REGISTER_QUEUES result=0), op=6 seq=5,
+op=8 seq=6 (QUIESCE/RELEASE result=0, gen 2). Exactly one data-path operation (seq=4) happened
+between REGISTER_QUEUES and QUIESCE; a successful Identify pair needs four (2x AUTHORIZE_SUBMIT +
+2x REAP_COMPLETION). So the first admin Identify was either rejected at AUTHORIZE_SUBMIT or never
+reaped (driver poll timeout -> quarantine -> failure -> AppleAnsNativeStop), and the driver then
+stopped cleanly (no terminal containment). WinPE: APPL0003 Problem 10 (same code for the designed
+stop and for this failure); export/reboot/recovery OK (recovery SSH 15:38:06).
+Data-path operations were not logged (by design of ANSBUILD010), so the cause is not yet
+distinguishable. Next: ANSBUILD011 adds a capped receipt per AUTHORIZE_SUBMIT/REAP_COMPLETION
+(sqe opcode, tag, length, result, CQE DW3, PRP translation failures) - receipt-only; ANS004-R2
+reruns the identical driver/WinPE with only that m1n1 change.
