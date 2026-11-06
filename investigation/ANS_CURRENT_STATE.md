@@ -67,6 +67,8 @@ No flag is cleared by assertion; the policy still rejects any flagged region.
    m1n1, dry-run exit 0). Unattended blocker: WinPE evidence lives only in X: and needs
    an operator USB export. Next: host-observable evidence channel (guest NIC is a USB
    Realtek RTL8153, rtucx22arm64.sys; kdcom PL011 is DBG2-only), rebuild/requalify WinPE.
+   Plan ANS001-PREP-E: WinPE has inbox RTL8153 + ftp.exe -> export results over FTP to a
+   one-shot Mac receiver, then wpeutil reboot; requalify in VM (ANSCOLLECT005).
    Old text: ANS001 (sealed 2026-09 packet, WinPE-only handoff) is still a valid record
    but its m1n1 is pre-merge 2d869eb and its rollback assumptions predate the
    current GPU recovery (expanded RAM, broker-lock m1n1). Rebuild/reseal on the

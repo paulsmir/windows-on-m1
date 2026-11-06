@@ -44849,3 +44849,20 @@ human reading the screen. With no operator, ANS001 cannot produce durable eviden
 Next: give WinPE a host-observable evidence channel (candidate: the debug vUART that
 run-assisted already logs to guest-uart.log), rebuild the WinPE image, re-qualify in
 the VM, then run ANS001-R2 unattended.
+
+### ANS001-R2 evidence channel — offline design (2026-11-06T02:39Z)
+
+OBSERVED (read-only SSH to the normal guest): the guest NIC is a Realtek USB GbE
+USB\VID_0BDA&PID_8153 (rtucx22arm64.sys). OBSERVED offline in the ANS001 WinPE
+boot.wim index 1 (wimlib-imagex dir): inbox rtucx21arm64.inf lists
+USB\VID_0BDA&PID_8153; ndis.sys, tcpip.sys, wpeutil.exe, ftp.exe, net.exe,
+Robocopy.exe present; no curl/PowerShell.
+Design (ANS001-PREP-E): append to the collector, after the unchanged inventory, an
+evidence export: wpeutil InitializeNetwork, wait for DHCP, ftp -n -s:<script> upload of
+X:\ANS001-RESULTS to a one-shot FTP receiver on the Mac (stdlib-only Python, STOR only,
+fixed per-run token, writes into .local/ans-native/ANS001-R2-run/winpe-results, exits
+after the DONE marker); then wpeutil reboot, so the host sees the guest leave and can
+run the normal recovery without an operator. Inventory commands, SAN3 and "no disk
+online / no driver operation" stay unchanged; the network export is a new evidence
+step and must be qualified in the software VM again (ANSCOLLECT005) before hardware.
+The WIM can be updated on the Mac with wimlib-imagex (no Windows VM needed to edit).
