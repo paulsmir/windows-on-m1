@@ -45494,3 +45494,14 @@ Expected: hv.log op=1,2 result=0; op=3 result=0 (state CLAIMED, queues registere
   result=0; APPL0003 Problem 10; export to WINPE-ANS003; reboot; recovery.
 Failure: op=3 result!=0 (boot stage in broker telemetry; FAULTED), hang (runner stop -> observed
   reboot), bugcheck. Recovery as ANS002-R1.
+
+ANS003-R1 result (recorded 2026-11-06T15:32:02Z): CONFIRMED.
+15:27:33 launch; 15:28:52 guest entry. Broker receipts: op=1 QUERY result=0; op=3 REGISTER_QUEUES
+seq=3 result=0 state=3 owner=2 (native) gen=1 = EL2 nvme_native_init (PMGR reset, RTKit boot,
+boot status, controller enable) succeeded; op=6 QUIESCE result=0; op=8 RELEASE result=0 state=0
+owner=1 gen=2 = bounded native stop succeeded. The op=2 CLAIM receipt line is absent from hv.log
+(seq jumps 1 -> 3; UART line loss); CLAIM is nevertheless proven by REGISTER_QUEUES' own precondition
+(owner NATIVE and state CLAIMED, hv_ans_service.c) and its result=0. No admin command, no DMA.
+WinPE: APPL0003 oem0.inf Problem 10 / 0xC0000001 (designed stop2), export WINPE-ANS003 0, wpeutil
+reboot 15:30:49, recovery SSH 15:31:3x, APPL0002 inert, 8 CPUs.
+Evidence .local/ans-native/ANS003-R1-run/ (hv.log, stick-results.tar 2271cf802d0827233e3eac38df3c8216ddf57f2235552e4fab71d72752f13f7b). Verdict: ANS003 CONFIRMED (first EL2 native ANS controller boot + stop). Next: ANS004 Identify (stop3, first DMA).
