@@ -70147,3 +70147,19 @@ Steps: D3D12 suite; a HD PERF GravityMark 100k -temporal 0 with measure-umd-subm
 EXP2212 HARDWARE ACTUAL (2026-11-06T04:44:30Z): **CONFIRMED (capture): DxgKrnl ETW of 12 s steady-state HD PERF collected (ETW start 04:42:03Z, 25 s after GravityMark appeared); suite 119/0; GPU_RESET none; a HD PERF 40.105 FPS (whole window incl. the ETW interval).**
 - Evidence evidence/EXP2212-etw/dxg.etl (40.9 MB) + dxg.csv (149.5 MB, tracerpt); guest copies deleted (ETW_CLEANED); measure-umd-submit rows in evidence/EXP2212/gm2212a-umd.log for the join.
 - Verdict: capture done; the VidSch reason for the late hand-off at C3->R4 / R4->C5 / C5->R6 is decoded offline (OV2 session). Recovery rec2212h.
+
+EXP2213 HARDWARE BEFORE 2026-11-06T04:53:21Z:
+Steps: D3D12 suite; a FHD FULL OV3B=1 (image + score); c HD PERF OV3B=1; d HD PERF OV3B=1 (KMD receipts at poll 12 and after d).
+- WHY THIS HYPOTHESIS: (1) EXP2210: the firmware accepts the compute-stamp Barrier first in a successor 3D queue (Built == Placed 1836, no fault); (2) EXP2210: R8 is OV5-eligible (value 22 nibble 0 in 3003/3011 rows); (3) EXP2201: Apple overlaps c19 with R20's vertex stage (0.72 ms HD / 1.45 ms FHD); our R8's TA waits for all of C7 (~0.65 ms HD).
+- WINDOWS CONTRACT: D3D12 orders C7 -> R8 only through the ranges the UMD verdict checked (no barrier naming R8's vertex-stage ranges, no unplaceable access); the fragment stage stays ordered behind C7 by the 3D Barrier.
+- AGX/ASAHI CONTRACT: TA publication = root only; 3D queue leads with the compute-stamp Barrier (stamp_self = the render's 3D stamp); in-order completion; no third job planned while N runs.
+- TRANSLATION: UMD header cdm_barrier NONE (feature 0x4) -> KMD TaLeadWaived on a TA_ON_COMPUTE successor plain render from the same context/process.
+- ATOMIC CONTRACT: none -- one KMD switch; the UMD flag is inert without the published feature.
+- WHAT IS STILL UNKNOWN: whether the firmware runs the TA while compute runs; the 3D Barrier releasing on a genuinely unfinished compute stamp; buffer-manager grow behaviour; image correctness.
+- Expected: suite 119/0; Wom1Ov5WaiverReceipt Waived == Placed > 0 (~1 per frame), no fault/channel error/TDR; HD PERF up by at most ~2.5 % vs EXP2214; FHD image identical to EXP2214's.
+- Failure criteria: any fault/hang with Placed > 0 -> waiver rejected; image difference -> UMD proof wrong; no FPS change with Waived > 0 -> firmware serialises TA (inconclusive).
+- Recovery: rec2213h (AT_PROXY after a reset; save full.log first).
+- Probe: agx_d3d12_probe_e2213_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys 4879884298f5, UmdArm64 de82fea6d2f8, UmdX64 22cc98836453, Umd32 e28288024680; manifest c03551b4592a, hardware-manifest 6691100815f7; probe2213.sh b7f386e71879 (PROBE_LINT_OK); visible recovery rec2213h 2da4a3aff5afff9c; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
+- Recovery rec2213h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2213-ov5-waiver/run2213.sh.
