@@ -27,7 +27,7 @@ call :stage S30_ONLINE_IDENTIFIED_DISK
 rem ANS001-R8: right after the policy change VDS still answers "object not found". The
 rem operator succeeded after rescan, a new session and list disk; repeat that up to 5 times.
 set ONLINEOK=0
-for %%T in (1 2 3 4 5) do if "!ONLINEOK!"=="0" call :online_try %%T
+for %%T in (1 2 3 4 5 6 7 8 9 10 11 12) do if "!ONLINEOK!"=="0" call :online_try %%T
 >>"%OUT%\HW-WRAPPER.TXT" echo online_ok=!ONLINEOK!
 call :stage S31_SAN_POLICY_RESTORE_OFFLINE_ALL
 >"%OUT%\HW-SAN-RESTORE.TXT" echo san policy=OfflineAll
@@ -121,7 +121,7 @@ exit /b 0
 >>"%OUT%\HW-ONLINE-%1.TXT" echo list disk
 >>"%OUT%\HW-ONLINE-%1.TXT" echo exit
 diskpart /s "%OUT%\HW-ONLINE-%1.TXT" >"%OUT%\HW-ONLINE-%1-RESCAN.LOG" 2>&1
-ping -n 6 127.0.0.1 >nul
+ping -n 11 127.0.0.1 >nul
 >"%OUT%\HW-ONLINE-%1B.TXT" echo list disk
 >>"%OUT%\HW-ONLINE-%1B.TXT" echo select disk !EVIDDISK!
 >>"%OUT%\HW-ONLINE-%1B.TXT" echo online disk
