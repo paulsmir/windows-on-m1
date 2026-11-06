@@ -69906,3 +69906,51 @@ HVS2ISO003 HARDWARE ACTUAL (2026-11-06T01:53:41Z): **CONFIRMED (A-C): unmapping 
 
 HVS2ISO002 HARDWARE ACTUAL (2026-11-06T01:53:41Z): **STABLE -- no firmware writer in the in-RAM carveouts while no guest runs.** Correction to the preregistration order: run AFTER HVS2ISO003 in the same slot (fresh Running proxy after a Windows restart; the first invocation failed before connecting -- relative --output path under the worktree -- and was rerun with absolute paths). tools/hv_carveout_census.py (sha 405224b7fae0a03c): 3 passes over [0x860500000,0x8614a0000) and [0x864000000,0x86f518000), 12590 pages, changed_pages [] , nonzero 92 pages (runs: 0x864000000+3, 0x864200000+2, 0x86423c000+4, 0x864250000+14, 0x866284000+1, 0x86628c000+8, 0x8662b0000+2, 0x8662bc000+2, 0x8662c8000+2, 0x8662d4000+13, 0x866bf4000+29, 0x86bbfc000+1, 0x86d0fc000+1, 0x86d134000+2, 0x86d4f4000+1, 0x86f4fc000+7 pages), adt 9292c0f7. Evidence .local/experiments/HVS2ISO002/{census.json,console.log}. Interpretation: iBoot leftovers, no live writer at proxy (a writer during guest runtime is not excluded by this test).
 - Bench returned: m1n1_windows restored to 0d3a75b3; launch-normal2.sh normal boot, SSH up, 8 CPUs (run_uefi PID 75431).
+
+### HVS2ISO002 — correction (2026-11-06T01:55:05Z) to the "tool frozen" entry (commit 1aebb08a8)
+
+1. Command path: the documented relative --output (.local/experiments/HVS2ISO002/...)
+   resolves inside the integration worktree's own .local, not the main evidence tree
+   (fork 6 had to rerun with absolute paths). The correct command is:
+     mkdir -p /Users/pavel/public_windows/.local/experiments/HVS2ISO002 &&
+     cd /Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler &&
+     M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 perl -e 'alarm 1200; exec @ARGV' python3
+     scripts/air-serial-guard.py --port /dev/cu.usbmodemC02HDNCCQ6L41 --port
+     /dev/cu.usbmodemC02HDNCCQ6L43 -- /Users/pavel/public_windows/proxyenv/bin/python
+     tools/hv_carveout_census.py --confirm-experiment HVS2ISO002 --output
+     /Users/pavel/public_windows/.local/experiments/HVS2ISO002/census.json
+     > /Users/pavel/public_windows/.local/experiments/HVS2ISO002/console.log 2>&1
+2. Page count: 12590 pages per pass (0xfa0000/0x4000 = 1000 plus 0xb518000/0x4000 =
+   11590), not 12586. The tool computes this from RANGES; only the ledger text was wrong.
+
+### HVS2ISO003 / HVS2ISO002 — offline follow-up (2026-11-06T01:55:05Z): does Windows ever receive the carveouts?
+
+Question (fork 6): with the exp392 Mu, is the RAMDisk-window reservation released after
+"no preloaded RAMDisk ... falling back to the FV"? That decides whether the stage-2 unmap is
+defence in depth or a real fix.
+Evidence:
+1. HVS2ISO003 iso-full.log, Mu exp392: PEI logs "reserving preloaded RAMDisk window
+   0x860000000 + 0x40000000", and the DXE memory map lists
+   "0x860000000 - 0x8A0000000. Type:0" (EfiReservedMemoryType). BootRamdiskHelperDxe then
+   only logs "falling back to the FV"; no later conversion is logged.
+2. The Windows-side quantity is decisive. Summing that map's OS-owned types
+   (1/2/3/4/7) gives 5478040 KiB, and Windows reported 5476740 KiB visible
+   (Δ 1300 KiB, later runtime allocations). A released window would give about
+   6526616 KiB (+1 GiB). So the window, including all 13 carveouts, is **never given
+   to Windows** under exp392.
+3. GPU-line Mu (EXP2194/EXP2196 full.log): "0x85FFA0000 - 0x8A0100000. Type:7"
+   (EfiConventionalMemory), so the carveouts **are Windows RAM** there, and VidMM can also
+   give the pages to the GPU, whose retained backing does not exclude carveouts.
+Verdict:
+- exp392 launches: the stage-2 unmap is defence in depth. It blocks only stray guest CPU
+  access to EfiReserved pages, which HVS2ISO003 shows nobody makes (0 aborts).
+- GPU-line launches: it would be a real fix, but it is not deployable alone. Windows
+  owns those pages, so the unmap would fault on Windows allocations. The primary fix is
+  the designed Mu MemoryInitPeiLib carveout reservation, followed by the stage-2 unmap.
+- HVS2ISO002 STABLE (0 of 12590 pages changed over 180 s at proxy, 92 non-zero pages)
+  lowers the urgency: no firmware writer was active at proxy time. Corruption risk on the
+  GPU line is then Windows/GPU data overwriting iBoot leftovers, rather than firmware
+  overwriting Windows memory. That risk matters only if some firmware later reads those
+  pages, which is not observed.
+Next causal target: implement the Mu reservation (one variable, GPU-line Mu), then
+enable WOM1_HV_UNMAP_RAM_CARVEOUTS on the GPU line.

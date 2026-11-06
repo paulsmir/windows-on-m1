@@ -215,3 +215,14 @@ the receipt capacity in m1n1 C, which is a separate binary change.
 - default off.
 
 The fixture holds only carveout, vram, sgx and pmap values. adt.bin is never committed.
+
+### Verdict after HVS2ISO002 and HVS2ISO003 (2026-11-06)
+
+- **exp392 Mu:** the window 0x860000000+1 GiB stays EfiReservedMemoryType through boot.
+  Windows reports 5476740 KiB visible against a map-derived 5478040 KiB, 1 GiB short of
+  what a released window would give. The in-RAM stage-2 unmap is therefore defence in
+  depth.
+- **GPU-line Mu:** the window is EfiConventionalMemory, so the carveouts are Windows and
+  VidMM memory. The real fix is the Mu reservation, with the stage-2 unmap after it.
+- **HVS2ISO002:** 0 of 12590 pages changed over 180 s at proxy, so no live firmware
+  writer was observed.
