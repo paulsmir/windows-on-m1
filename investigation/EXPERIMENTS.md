@@ -44723,3 +44723,19 @@ ANS session replied SLOT OK (002: read-only page-hash census of the 13 in-RAM
 carveouts; 003: recovery boot with them unmapped from stage-2). State at hand-off:
 normal profile, run_uefi 65916, SSH up, 8 CPUs. ANS005B waits for the user decision
 on the DART_TABLES flag and for the bench return.
+
+### Bench returned after HVS2ISO002+003 (2026-11-06T01:54Z) and what it means for ANS
+
+Live check: run_uefi 75431 (launch-normal2.sh normal profile), SSH up, 8 CPUs.
+Fork 6 results (evidence /Volumes/pwdev/public_windows/.local/experiments/HVS2ISO002/census.json
+sha256 6fa31ad49286df0012c3145c016069e905720427997c72bb886dc971765b6fa3):
+HVS2ISO002 STABLE (3 passes / 180 s, 0 of 12590 pages changed, no guest running);
+92 non-zero 16 KiB pages. Mapped offline to carveout ids: 23:1, 158:3, 167:77,
+176:4, 179:7 (all 7 pages); none outside the carveouts. Entirely zero: 19, 159, 163,
+165, 180, 181, 182, 190. HVS2ISO003: guest boots with all 13 in-RAM carveouts
+unmapped from stage-2. Fork 6 also reports that both ranges lie inside Mu's reserved
+RAM-disk window 0x860000000+0x40000000, so Windows does not allocate them.
+ANS reading: the carveouts are real iBoot reservations with content, which supports
+the carveout-inventory hypothesis but does not prove completeness, and a writer active
+only while a guest runs is not excluded. The ANS carveout exclusion (m1n1 b89cce170)
+covers all 13 regardless of content. Bench owned by the ANS work again.
