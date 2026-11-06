@@ -45,7 +45,8 @@ def main():
          'tests.test_ans_qualification','tests.test_ans_launch_lock','tests.test_assisted_session',
          'tests.test_ans_gate_receipts','tests.test_ans_dart_census', 'tests.test_ans_mu_broker_window',
          'tests.test_public_scripts','tests.test_guest_layout_generation','tests.test_launch_profile',
-         'tests.test_virtual_display','tests.test_launch_contract_proxy','-q'])
+         'tests.test_virtual_display','tests.test_launch_contract_proxy',
+         'tests.test_ans_raw_pattern','-q'])
     cc=shutil.which('cc')
     clang=shutil.which('clang',path='/opt/homebrew/opt/llvm/bin:'+os.environ.get('PATH',''))
     run([sys.executable,'tools/test_ans_memory.py'])
