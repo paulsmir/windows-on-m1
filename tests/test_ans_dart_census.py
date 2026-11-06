@@ -68,6 +68,15 @@ class Census(unittest.TestCase):
         self.assertIsNone(c.powered([1, 2], devs, addr, {0x1058: 0xff, 0x1060: 0x00}.get))
         self.assertFalse(c.powered([1, 2], devs, addr, {0x1058: 0x00, 0x1060: 0x00}.get))
 
+    def test_adt_cells_accept_raw_bytes_as_seen_on_j313(self):
+        self.assertEqual(c.adt_u32s(b'\xdf\x00\x00\x00\xe0\x00\x00\x00\xe1\x00\x00\x00'),
+                         [0xdf, 0xe0, 0xe1])
+        self.assertEqual(c.adt_u32s(5), [5])
+        self.assertEqual(c.adt_u32s([1, 2]), [1, 2])
+        self.assertEqual(c.adt_u32s(None), [])
+        with self.assertRaises(ValueError):
+            c.adt_u32s(b'\x01\x02')
+
     def test_gates_fall_back_to_iommu_parent_consumers(self):
         self.assertEqual(c.dart_gates({'clock-gates': [7], 'AAPL,phandle': 5}, [(5, [9])]), [7])
         self.assertEqual(c.dart_gates({'clock-gates': [], 'AAPL,phandle': 5},

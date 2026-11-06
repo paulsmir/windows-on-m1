@@ -116,6 +116,20 @@ def powered(gate_ids, devices_by_id, ps_addr, read32):
     return True if all(states) else False if not any(states) else None
 
 
+def adt_u32s(v):
+    """ADT cell list as ints: None, int, raw bytes (u32 LE) or a sequence.
+    ANSDART001 saw iommu-parent arrive as raw bytes."""
+    if v is None:
+        return []
+    if isinstance(v, (bytes, bytearray)):
+        if len(v) % 4:
+            raise ValueError('ADT cell list length is not a multiple of 4')
+        return [int.from_bytes(v[i:i + 4], 'little') for i in range(0, len(v), 4)]
+    if isinstance(v, int):
+        return [v]
+    return [int(x) for x in v]
+
+
 def dart_gates(dart_props, consumers):
     """Own clock-gates, else the union of consumers that name this DART as
     iommu-parent (ADT phandle).  consumers: [(iommu_parent, gates)]."""
@@ -159,24 +173,22 @@ def main(argv=None):
             return getattr(node, name.replace('-', '_'))
         except AttributeError:
             return None
-    def as_ids(v):
-        return [int(x) for x in v] if v is not None else []
+    as_ids = adt_u32s
     nodes = list(adt['/arm-io'])
     consumers = []
     for node in nodes:
         parent = prop(node, 'iommu-parent')
         if parent is not None:
-            parents = parent if isinstance(parent, (list, tuple)) else [parent]
-            for ph in parents:
-                consumers.append((int(ph), as_ids(prop(node, 'clock-gates'))))
+            for ph in adt_u32s(parent):
+                consumers.append((ph, as_ids(prop(node, 'clock-gates'))))
     darts = []
     for node in nodes:
         compat = (prop(node, 'compatible') or [''])[0]
         if not compat.startswith('dart,'):
             continue
-        ph = prop(node, 'AAPL,phandle')
+        ph = adt_u32s(prop(node, 'AAPL,phandle'))
         gates = dart_gates({'clock-gates': as_ids(prop(node, 'clock-gates')),
-                            'AAPL,phandle': int(ph) if ph is not None else None}, consumers)
+                            'AAPL,phandle': ph[0] if len(ph) == 1 else None}, consumers)
         for inst in range(len(node.reg)):
             darts.append(dict(path=f'{node._path}#{inst}', compatible=compat,
                               base=node.get_reg(inst)[0], gates=gates,
