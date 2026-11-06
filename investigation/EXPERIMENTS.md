@@ -69709,3 +69709,17 @@ EXP2204 HARDWARE ACTUAL (2026-11-05T23:42:26Z): **CONFIRMED root cause of the CS
 - EXP2204-C (same boot, -Diag mode, hl-dumps.ps1): the main thread (tid 5488) Running at 100 % of one core (58/84/111 s CPU at 60/90/120 s); comsvcs full dumps evidence/EXP2204-C/hl-60.dmp, hl-120.dmp; builder x64 cdb: the hot frame is OPENGL32!__glTextureSpan (+xtajit), i.e. GDI-generic software rasterisation; AppleAgxOpenGL32 is loaded. C:\ProgramData\EXP2204-Trace\umd.log: reject-wgl-screen-create hr=0x80070057 value 1 in both hl.exe processes (pids 1272, 7036).
 - Packaging: run<N>.ps1 passes -WowOpenGLIcd $builderRoot\icd-x86\out61\libgallium_wgl.dll to every package since EXP1378 (83 BEFORE entries list d51ebf72); the ICD links its own umd_runtime_device/umd_gpuva/agx_kmt_gpuva_bridge copy, so KMD/UMD contract changes after 2026-10-16 broke it while the D3D12 suite (no GL) stayed green.
 - Verdict: CONFIRMED (default-path packaging defect, not OV2/GravityMark). Next: build the x86 ICD from the package source against the GL-capable x86 Mesa (AD04-d3d10-frontend-build / nir-x86) -- builder recipe icdb2204.ps1 compiled all 24 ICD units of the current source -- then a CS benchmark run with the rebuilt ICD; then make the ICD build part of every package (no pinned component). Recovery rec2204h.
+
+EXP2205 HARDWARE BEFORE 2026-11-06T00:02:38Z:
+Steps: D3D12 suite; then (EXP2205-B, same boot) the standard CS 1.6 benchmark (cs-bench-run.sh, playnoovl; Steam allowed by the user 2026-11-05).
+- WHY THIS HYPOTHESIS: (1) EXP2204-C: hl.exe renders through OPENGL32!__glTextureSpan (Microsoft generic software GL) at 100 % of one core; (2) the packaged ICD rejected its screen creation (reject-wgl-screen-create hr=0x80070057) in both hl.exe processes; (3) that ICD is the out61 binary of 2026-10-16 with its own copy of umd_runtime_device/umd_gpuva/agx_kmt_gpuva_bridge, while the KMD/UMD contract changed after it; the same ICD source compiles and links today (ICDB2204 test build db742777).
+- WINDOWS CONTRACT: unchanged (OpenGLDriverNameWow in the INF loads the package's AppleAgxOpenGL32.dll).
+- AGX/ASAHI CONTRACT: unchanged.
+- ATOMIC CONTRACT: none -- one component rebuilt from the same source.
+- WHAT IS STILL UNKNOWN: whether the current ICD source creates its screen and renders CS correctly (unvalidated since 2026-10-18); its fps vs EXP1378 44.784.
+- Expected: suite 119/0; trace has wgl-screen-create (no reject); CS benchmark completes, ~44.8 fps; no fault/TDR/WER.
+- Failure criteria: reject-wgl-screen-create again, benchmark not completing, wrong rendering, any fault -> ICD path needs a source fix; rec2205h.
+- Recovery: after EXP2205-B the guest is shut down to Running proxy for the ANS session's read-only ANSDART001 census, then AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2205h.
+- Probe: agx_d3d12_probe_e2205_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys f2d030b4c0e9, UmdArm64 23ba8863d1fa, UmdX64 d00ac2d65d1f, Umd32 bf2cd1a3ed3d; manifest 6cdc4f28e6e2, hardware-manifest d2d3836d476f; probe2205.sh 8671c25894ea (PROBE_LINT_OK); visible recovery rec2205h 860a09798c36b671; m1n1 0d3a75b3.
+- Recovery rec2205h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2205-cs16-icd/run2205.sh.
