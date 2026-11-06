@@ -2124,3 +2124,10 @@ c2eb9203ab6c75725e3d9754e9b4c8b6dd89116eb6e012c6231dbb82bc3f0744;
   - per-frame GPU time: lighting kernel bdb1944a, main pass;
   - per-job overhead (depth-2 job window);
   - the remaining 9-10 s stall (app work, page allocation).
+
+## 2026-11-06T00:53:08Z -- CS 1.6 / OpenGL regression (active), bench lent to the SSD work
+- Proven: the 5 fps was software GL; the packaged WOW64 ICD was the pinned 2026-10-16 out61 binary (EXP2204). Every package now builds the ICD from its own source (EXP2205, CHG ...-ICDBUILD); CS renders through the AGX ICD again: 18.634 fps vs EXP1378 44.784.
+- Frame budget (EXP2205-B receipts, offline): present ~25.6 ms (DXGI blit wait ~5.5), game-thread CPU ~14 ms, KMT waits ~4 ms, scene ACQUIRE stalls ~5.6 ms (629 escapes >= 10 ms, median 36 ms).
+- Hypotheses, ranked (from source): (1) Q2c default (e28304ae): the ICD's present blit and GL texture uploads take asahi_compute_blit, so GL frames are R/C-interleaved and every C now crosses to the compute queue with a cross-queue wait plus depth-2 kicks; at efa17240 one queue. (2) G3 private scene ACQUIRE: rc80 TVB growth waits up to 50 ms for idle on a cached hit (5d6cdd44), or foreign PRESSURE eviction by DWM (0c458548, bc72e1f5).
+- Next hardware (when the bench returns), one variable each: CS on the default package with Wom1JobDiagnostics=1 + Wom1PresentTimestamps=1, receipts captured right after hl.exe exits (job spans, PrivateStats HIT/MISS/TRIM/PRESSURE, per-process TVB Grows/Failures/LastReason); then Wom1ComputeOwnQueue=0 alone; then Wom1JobDepth2=0 alone only if needed.
+- Also open: KMD preemption-refusal engine reset (scheduler_windows.c:537, EXP2183/EXP2203; proposed as its own task); OV5 KMD drill (096c0cac) not yet on hardware.
