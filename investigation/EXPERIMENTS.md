@@ -45587,3 +45587,16 @@ Single variable vs ANS004-R2: AppleAns stop3 -> full read-only (A2).
 Expected: data receipts for 0x05, 0x01 (admin) and 0x02 (q=1) with cqe status 0; WinPE: APPL0003
   started (no problem), a disk "NVMe ..." listed (offline, read-only); export; reboot.
 Failure: any submit result!=0 / CQE error / timeout; bugcheck; hang. Recovery as before.
+
+ANS005-R1 result (recorded 2026-11-06T16:09:19Z): CONFIRMED — native read-only AppleAns reads the internal SSD.
+16:04:43 launch; 16:06:02 guest entry. Broker receipts: QUERY/CLAIM/REGISTER_QUEUES result=0; admin
+Identify x2, Get Features 0x0a, CREATE IO CQ 0x05, CREATE IO SQ 0x01 (all result=0, CQE status 0);
+then queue-1 I/O: READ 0x02 of 4 KiB and 16 KiB and FLUSH 0x00, all result=0, CQE status 0
+(cqe_dw3 0x10002 = phase 1, CID 2). 55 data receipts logged (cap 64), no failure, prp_fail=0.
+WinPE: ACPI\APPL0003 Started (oem0.inf, no problem); SCSI\Disk&Ven_NVMe&Prod_APPLE_SSD_AP0256
+"NVMe APPLE SSD AP0256 SCSI Disk Device" Started; diskpart: Disk 0 Offline 233 GB GPT (SAN policy 3
+keeps the native disk offline: no volume mounted, nothing written); the stick Disk 1 Online.
+Export WINPE-ANS005 0, wpeutil reboot 16:07:50, recovery SSH, APPL0002 inert, 8 CPUs.
+Evidence .local/ans-native/ANS005-R1-run/ (hv.log, stick-results.tar 7ff86747637663ad7034b0d3fb067eb62ff743e6535c01fac279dcb88b99a98b).
+Verdict: ANS005 CONFIRMED. Native read path works end to end (StorPort -> broker -> EL2 PRP/TCB -> ANS -> DMA into guest RAM).
+Next: ANS006 read-only volume access + sequential read throughput in WinPE (disk set read-only, online, read a large file), then write support (driver V2) and native boot.

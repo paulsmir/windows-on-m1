@@ -1,4 +1,4 @@
-# ANS current state — ANS002 CONFIRMED (claim-stop); next ANS003
+# ANS current state — ANS005 CONFIRMED: native read-only driver reads the SSD; next ANS006
 
 Updated 2026-11-06T11:10Z (UTC). The user delegated all ANS driver dev/test decisions (2026-11-06).
 Older text below: No hardware was accessed in this phase. No
@@ -20,8 +20,10 @@ sessions; every ANS run needs explicit user approval and an agreed slot.
 - Bench: owned by ANS until the SSD driver is finished (user decision via fork 6).
 - ANS002 CONFIRMED (ANS002-R1): test-signed AppleAns stop1 in WinPE (DISM + testsigning BCD) binds
   APPL0003; broker QUERY/CLAIM/QUIESCE/RELEASE all result=0; Problem 10 by design; no DMA.
-- Next: ANS003 (REGISTER_QUEUES = first EL2 controller boot + admin queue, package D stop2),
-  then ANS004 Identify (package E), READ, write, native boot.
+- ANS003-R1 (native controller boot+stop), ANS004-R2 (Identify DMA), ANS005-R1 (I/O queues + READ;
+  "NVMe APPLE SSD AP0256" 233 GB disk in WinPE, offline by SAN policy) all CONFIRMED.
+  Pipeline: .local/ans-native/ladder.py EXP RTAG M1N1BUILD. m1n1 ANSBUILD011 logs broker ops.
+- Next: ANS006 read-only volume + throughput; then write support (driver V2), native boot.
 - Follow-up: m1n1 tests/run_host_tests.sh full list fails on clang-21 -Werror (pre-existing).
 
 ## Read first after a reset
