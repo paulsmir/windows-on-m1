@@ -44739,3 +44739,15 @@ ANS reading: the carveouts are real iBoot reservations with content, which suppo
 the carveout-inventory hypothesis but does not prove completeness, and a writer active
 only while a guest runs is not excluded. The ANS carveout exclusion (m1n1 b89cce170)
 covers all 13 regardless of content. Bench owned by the ANS work again.
+
+### Decision (2026-11-06T02:03Z): DART_TABLES=UNOBSERVED lifted under HYP-ANS-CARVEOUT (offline)
+
+User decision "1" (lift with an explicit hypothesis label) was relayed verbatim by
+fork 6; direct confirmation in the ANS session is requested before any hardware use.
+Implemented offline: runner region 7 flags 0 size 0 (root d8f6519ba3e0320c0c615afccfa980a47da2e76e), m1n1 470ef6872
+requires heap ceiling == GUEST_RAM base and the carveout exclusions before admitting
+ANS memory. HYP-ANS-CARVEOUT: every iBoot-retained page is declared in
+/chosen/carveout-memory-map. Supporting evidence: ANSDART001-R3 (26/26 table pages in
+carveouts), HVS2ISO002 (92/92 non-zero in-RAM pages in carveouts). Not proven; a
+counterexample rejects this decision. ANS005B (first boot of this m1n1) still needs
+explicit user approval.

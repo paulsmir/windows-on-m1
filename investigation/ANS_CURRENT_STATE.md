@@ -1,4 +1,4 @@
-# ANS current state — DMA blocker reduced to one read-only census; WAIT FOR USER
+# ANS current state — DART_TABLES lifted under HYP-ANS-CARVEOUT (offline); WAIT FOR USER
 
 Updated 2026-11-05T23:20Z (UTC). No hardware was accessed in this phase. No
 Air permission has been given. The single J313 bench belongs to the GPU
@@ -56,8 +56,9 @@ No flag is cleared by assertion; the policy still rejects any flagged region.
    exclusion from the live ADT (m1n1 b89cce170; 13 iBoot carveouts lie inside
    GUEST_RAM); assisted heap sealed at descriptor publish (m1n1 0beb7b552).
    Open: standalone heap seal (its runtime allocates guest firmware from heapblock);
-   first hardware boot of this m1n1 must show no ceiling panic. Then decide the
-   DART_TABLES flag (exact region + carveout hypothesis label). Old ANS005A text — heapblock ceiling + exact DART_TABLES region publication
+   first hardware boot of this m1n1 must show no ceiling panic (ANS005B, needs user
+   approval). DART_TABLES lifted (root d8f6519ba, m1n1 470ef6872) under
+   HYP-ANS-CARVEOUT, user decision relayed by fork 6. Old ANS005A text — heapblock ceiling + exact DART_TABLES region publication
    (assisted + standalone), `run_uefi.py` assertion `phys_base >= natural`,
    RED/GREEN in `tests/hv_ans_handoff_memory_test.py` and an allocator test.
 3. Encode census result (§3C). If CONFLICT: m1n1 stage-2 unmap + Mu reserved
