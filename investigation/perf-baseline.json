@@ -1,0 +1,4 @@
+{
+  "gravitymark_hd_perf": {"fps": 40.291, "source": "EXP2207 d: default driver, no device switches, HD PERF 100k -temporal 0 (10 + 60 s window)"},
+  "cs16_benchmark": {"fps": 45.457, "source": "EXP2209-B: standard CS 1.6 benchmark (timedemo agxbench, 2560x1600, playnoovl), Wom1JobDiagnostics=1 Wom1PresentTimestamps=1"}
+}
