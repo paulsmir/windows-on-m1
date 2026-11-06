@@ -45822,3 +45822,22 @@ Expected: ANS006 reads are still correct (rc=0, same timing within noise). The p
 idle_ms >> busy_ms (guest-side bottleneck: small requests or serialization), or busy with large hw_us
 (device/IRQ path), or large isr_us/reap_us (guest interrupt/DPC latency).
 Failure criterion: a hang or no perf lines; collection uses hv.log in ANS006-R10-run/.
+
+ANS006-R10 result (recorded 2026-11-06T20:43:10Z): CONFIRMED (attribution) — the native read path is not the bottleneck; the 16 MB/s figure measured the `type` consumer, not the disk.
+Phases: guest started 20:26:32Z (t=76 s), WinPE reboot/link drop t=912 s, recovery SSH 20:41:20Z; display/USB/SSH
+alive in recovery, no stop code, no hang, no kick, no deny. STATUS: read-only verified, D: online, `type D:\pagefile.sys`
+5,637,144,576 B rc=0 twice (343.0 s, 342.7 s; same as R9 within noise), hive copies rc=0, disk offlined.
+Perf receipts (hv.log, 146 lines of 5 s):
+- `type` bulk phase, every window: ~628 READs of exactly 128 KiB (80 MB/5 s = 16 MB/s), queue depth 1 for all, busy
+  ~155 ms vs idle ~4845 ms (97% of wall time with zero requests in flight). Per request: EL2 submit service 11 us,
+  submit->physical IRQ (device) ~200 us, IRQ->guest PENDING read 5 us, PENDING->REAP 27 us, ~116 broker traps.
+  The guest issues the next READ ~7.7 ms after the REAP: the consumer (cmd TYPE writing to NUL) is CPU-bound at
+  ~16 MB/s and cache-manager read-ahead only keeps one 128 KiB request ahead of it.
+- Hive-copy window (copy /b to NUL, 161.6 MB in 0.19 s per STATUS timestamps): 1790 requests / 222 MB in one window,
+  queue depth up to 17+ (qd=619/251/493/272/136/19), busy 282 ms -> the native path delivers ~850 MB/s for a cold
+  CopyFile workload, ~2.8x the ~300 MB/s synchronous bridge.
+- Rare isr_us maxima ~7.9 ms (a few per minute) are guest interrupt-delivery outliers; the 10 ms kick never fired.
+Verdict: ANS007 performance hypothesis (EL2 trap cost / serialization) REJECTED for the read path; no driver or broker
+performance change is justified by this evidence. The instrumentation (m1n1 d1d6f7ca) is retained as receipts.
+Evidence .local/ans-native/ANS006-R10-run/ (hv.log, stick-results.tar e554e450977f914a16bc93c4034e7eaf788de53b22dce158927102bee433b8dd).
+Next: write support (driver V2 write admission + broker write authorization), then native Windows boot from the SSD.

@@ -1,10 +1,20 @@
-# ANS current state — ANS006 CONFIRMED: native read-only driver reads the SSD correctly (16 MB/s); next ANS007 performance
+# ANS current state — native read path CONFIRMED and fast (ANS006-R10: ~850 MB/s copy, device ~200 us/128 KiB); next: write support
 
 Updated 2026-11-06T11:10Z (UTC). The user delegated all ANS driver dev/test decisions (2026-11-06).
 Older text below: No hardware was accessed in this phase. No
 Air permission has been given. The single J313 bench belongs to the GPU
 sessions; every ANS run needs explicit user approval and an agreed slot.
 
+
+
+## ANS007 verdict (2026-11-06T20:43Z)
+
+- ANS006-R10 perf receipts: the 16 MB/s of R9 was the `type` consumer (97% of wall time with no request in flight,
+  next READ ~7.7 ms after each REAP). Cold `copy /b` reached ~850 MB/s at queue depth up to 17+. The EL2-trap-cost
+  hypothesis is rejected; no read-path performance work is justified.
+- Active target: write support (driver V2 write admission, broker write authorization, flush/FUA ordering),
+  then native boot of Windows from the SSD.
+- Open: intermittent lost first completion (R3/R7) is unexplained; kick safety net retained (never fired since).
 
 ## Current boundary (2026-11-06T14:05Z)
 
