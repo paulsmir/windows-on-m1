@@ -22,6 +22,7 @@
 #include "apple_agx_hwdata_profile.h"
 #include "apple_agx_firmware_start_receipt.h"
 #include "apple_agx_core_topology.h"
+#include "apple_agx_fw_rx_receipt.h"
 
 #define ADMISSION_PLATFORM_TAG 'pRGA'
 /* rc81: processor indexes with a known efficiency class (J313: 8). */
@@ -185,6 +186,10 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * sleeps fall back to KeDelayExecutionThread). Wom1JobPoll receipt. */
   ADMISSION_JOB_POLL_STATE JobPoll;
   ADMISSION_JOB_POLL_STATE JobPollSnapshot;
+  /* Wom1FwRx (receipt-only, with Wom1JobDiagnostics): the firmware->host
+   * channels the KMD does not drain (stats, ktrace, fwlog), sampled
+   * read-only at each export (apple_agx_fw_rx_receipt.h). */
+  APPLE_AGX_FW_RX_RECEIPT FwRx;
   PEX_TIMER JobPollTimer;
   KEVENT JobPollTimerEvent;
 #endif
@@ -1355,6 +1360,52 @@ static VOID AdmissionRcExportWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
     runtime->RcExportPending = FALSE;
 }
 
+/* Wom1FwRx: read-only views of the undrained firmware->host channels; every
+ * load goes through the transport's ReadU32, nothing is written. */
+static unsigned int AdmissionFwRxReadWindows(void *Context,
+    const volatile unsigned int *Address, unsigned int *Value) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = (ADMISSION_PLATFORM_RUNTIME *)Context;
+  APPLE_AGX_BACKEND_U32 value = 0u;
+  if (runtime == NULL || runtime->TransportIo.ReadU32 == NULL ||
+      !runtime->TransportIo.ReadU32(runtime,
+          (const volatile APPLE_AGX_BACKEND_U32 *)Address, &value))
+    return 0u;
+  *Value = (unsigned int)value;
+  return 1u;
+}
+
+static const volatile unsigned char *AdmissionFwRxObjectWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, unsigned int Index, ULONGLONG Bytes) {
+  const APPLE_AGX_MEMORY_OBJECT *object;
+  if (Index >= runtime->Initdata.ChannelMemory.ObjectCount) return NULL;
+  object = &runtime->Initdata.ChannelMemory.Objects[Index];
+  return object->CpuAddress != NULL && object->Length >= Bytes
+      ? (const volatile unsigned char *)object->CpuAddress : NULL;
+}
+
+static VOID AdmissionFwRxSampleWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
+    ULONGLONG Qpc) {
+  APPLE_AGX_FW_RX_VIEW view;
+  if (runtime == NULL || !runtime->JobDiagnostics) return;
+  if (runtime->FwRx.Version != APPLE_AGX_FW_RX_RECEIPT_VERSION)
+    AppleAgxFwRxReceiptInit(&runtime->FwRx);
+  RtlZeroMemory(&view, sizeof(view));
+  view.StatsState = AdmissionFwRxObjectWindows(runtime,
+      AppleAgxChannelMemoryStatsState, APPLE_AGX_FW_RX_STATE_BYTES);
+  view.StatsRing = AdmissionFwRxObjectWindows(runtime,
+      AppleAgxChannelMemoryStatsRing,
+      APPLE_AGX_FW_RX_STATS_ENTRIES * APPLE_AGX_FW_RX_STATS_ENTRY_BYTES);
+  view.KtraceState = AdmissionFwRxObjectWindows(runtime,
+      AppleAgxChannelMemoryKtraceState, APPLE_AGX_FW_RX_STATE_BYTES);
+  view.FwlogState = AdmissionFwRxObjectWindows(runtime,
+      AppleAgxChannelMemoryFwlogState,
+      APPLE_AGX_FW_RX_FWLOG_SUBCHANNELS * APPLE_AGX_FW_RX_STATE_BYTES);
+  view.ReadU32 = AdmissionFwRxReadWindows;
+  view.Context = runtime;
+  if (view.StatsState != NULL)
+    (void)AppleAgxFwRxSample(&runtime->FwRx, &view, Qpc);
+}
+
 static VOID AdmissionJobTimingExportWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime) {
   HANDLE key = NULL;
@@ -1489,6 +1540,7 @@ static VOID AdmissionJobTimingExportWindows(
   /* rc100: the poll state is the worker's own (this is the worker). */
   RtlCopyMemory(&runtime->JobPollSnapshot, &runtime->JobPoll,
       sizeof(runtime->JobPollSnapshot));
+  AdmissionFwRxSampleWindows(runtime, before);
   status = IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
       PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key);
   if (NT_SUCCESS(status)) {
@@ -1522,6 +1574,12 @@ static VOID AdmissionJobTimingExportWindows(
       RtlInitUnicodeString(&name, L"Wom1JobPoll");
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
           &runtime->JobPollSnapshot, sizeof(runtime->JobPollSnapshot));
+    }
+    /* attempted on its own: a missing channel object never blocks the rest */
+    if (runtime->FwRx.Samples != 0u) {
+      APPLE_AGX_FW_RX_RECEIPT rx = runtime->FwRx;
+      RtlInitUnicodeString(&name, L"Wom1FwRx");
+      (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &rx, sizeof(rx));
     }
     /* rc102: the wired window's receipt (worker-owned, as the poll's). */
     if (NT_SUCCESS(status) && runtime->JobDepth2Kick) {
