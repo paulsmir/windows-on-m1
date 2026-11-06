@@ -45341,3 +45341,23 @@ Image a86d4ad47026c3f347b4f1642962b91e85b7d39fd422bc4104ee9d654108819d, HW-START
 ANSCOLLECT007 expectation as in 006 (existing WINPE\OLD.TXT kept).
 Limitation: QEMU never reproduced the VDS refusal, so the VM proves the wrapper path, not
 the hardware VDS behaviour; that is decided on hardware (ANS001-R7).
+
+ANSCOLLECT007 result (recorded 2026-11-06T12:48:30Z): PASS (vm-007, 300 s, exit by wpeutil reboot). san_exit=0 ("SAN Policy : Offline Internal"), online_exit=0, partition->volume 1, backing disk 1, existing_marker_letters=1 letter=D (Windows auto-lettered the volume), S52, export_exit=0 into WINPE-R7 (76 files); marker, USER-FILE.TXT and the pre-existing WINPE\OLD.TXT unchanged; fsck.exfat clean. Receipt .local/ans-native/ans001-collector-vm-007/ANSCOLLECT007-result.json 738de178....
+
+### ANS001-R7 (preregistered)
+
+Packet ANS001-R7 qualification a95dad5e5754efd306c5d37b268ec9bd20c985bff2e51695d218bafa25233733
+= R6 with WinPE G (a86d4ad4...) and the ANSCOLLECT007 receipt; m1n1 ANSBUILD007, Mu ANSBUILD009;
+dry-run exit 0; run.sh de9f52cc... (R6 script, R7 paths, stick check on WINPE-R7).
+WHY THIS HYPOTHESIS:
+1. R6 proved the whole native boot up to the collector; only the USB online step failed, with
+   VDS "object not found" under the boot policy 3.
+2. The operator made the same online succeed after changing the SAN policy and opening a fresh
+   diskpart session; G performs exactly that (OfflineInternal, which keeps internal disks
+   offline), and the path is VM-proven end to end.
+Hypothesis: unattended ANS001 run: WinPE on native ANS, collector, stick export to WINPE-R7,
+reboot, automatic recovery.
+Single variable vs R6: WinPE medium E -> G (export wrapper only).
+Expected: GUEST_STARTED, PROXY_BACK within 1500 s, stick WINPE-R7\HW-DONE export_exit=0,
+APPL0003 Problem 28 with the contract resources again.
+Failure/recovery as R6 (hang -> runner stop -> observed reboot -> recovery).
