@@ -51,6 +51,8 @@ void AppleAgxSchedulerInitialize(APPLE_AGX_SCHEDULER *Scheduler) {
   Scheduler->Responsive = APPLE_AGX_TRUE;
   Scheduler->PreemptionPhase = AppleAgxPreemptionIdle;
   Scheduler->KickedFence = 0u;
+  Scheduler->DeliveredPreemptionFence = 0u;
+  Scheduler->EarlyCommittedPreemptionFence = 0u;
 }
 
 void AppleAgxSchedulerContextInitialize(
@@ -471,6 +473,20 @@ APPLE_AGX_BOOL AppleAgxSchedulerBeginBoundaryPreemption(
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 PreemptionFence,
     APPLE_AGX_U32 CutoffFence, APPLE_AGX_U32 ActiveFence) {
   APPLE_AGX_U32 kicked, rejected = 0u;
+  /* EXP2215 (Wom1PreemptRefusal: new 1104 while 1103 NotificationClaimed):
+   * dxgkrnl sends the next PreemptCommand only after it processed the
+   * previous DMA_PREEMPTED. A delivered claimed boundary is therefore
+   * complete; commit it here and let its claimer's late commit succeed. */
+  if (Scheduler != APPLE_AGX_NULL && PreemptionFence != 0u &&
+      Scheduler->PreemptionPhase == AppleAgxPreemptionNotificationClaimed &&
+      Scheduler->PendingPreemptionFence != 0u &&
+      Scheduler->DeliveredPreemptionFence == Scheduler->PendingPreemptionFence &&
+      PreemptionFence != Scheduler->PendingPreemptionFence) {
+    APPLE_AGX_U32 delivered = Scheduler->PendingPreemptionFence;
+    if (!AppleAgxSchedulerCommitBoundaryPreemption(Scheduler, delivered))
+      return APPLE_AGX_FALSE;
+    Scheduler->EarlyCommittedPreemptionFence = delivered;
+  }
   if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
       PreemptionFence == 0u ||
       Scheduler->PreemptionPhase != AppleAgxPreemptionIdle ||
@@ -561,10 +577,17 @@ APPLE_AGX_BOOL AppleAgxSchedulerClaimBoundaryPreemption(
 
 APPLE_AGX_BOOL AppleAgxSchedulerCommitBoundaryPreemption(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 PreemptionFence) {
-  if (Scheduler == APPLE_AGX_NULL ||
-      Scheduler->PreemptionPhase != AppleAgxPreemptionNotificationClaimed ||
+  if (Scheduler == APPLE_AGX_NULL || PreemptionFence == 0u)
+    return APPLE_AGX_FALSE;
+  /* EXP2215: a later PreemptCommand already committed this boundary. */
+  if (Scheduler->EarlyCommittedPreemptionFence == PreemptionFence) {
+    Scheduler->EarlyCommittedPreemptionFence = 0u;
+    return APPLE_AGX_TRUE;
+  }
+  if (Scheduler->PreemptionPhase != AppleAgxPreemptionNotificationClaimed ||
       Scheduler->PendingPreemptionFence != PreemptionFence)
     return APPLE_AGX_FALSE;
+  Scheduler->DeliveredPreemptionFence = 0u;
   Scheduler->PendingPreemptionFence = 0u;
   Scheduler->PreemptionCutoffFence = 0u;
   Scheduler->PreemptionActiveFence = 0u;
@@ -654,6 +677,8 @@ APPLE_AGX_BOOL AppleAgxSchedulerResetEngine(
   Scheduler->PreemptionLastCompletedFence = 0;
   Scheduler->PreemptionPending = APPLE_AGX_FALSE;
   Scheduler->PreemptionPhase = AppleAgxPreemptionIdle;
+  Scheduler->DeliveredPreemptionFence = 0u;
+  Scheduler->EarlyCommittedPreemptionFence = 0u;
   Scheduler->Responsive = APPLE_AGX_TRUE;
   return APPLE_AGX_TRUE;
 }

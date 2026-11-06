@@ -58,6 +58,14 @@ typedef struct _APPLE_AGX_SCHEDULER {
    * It stays the queued fence until it is activated, but no preemption or
    * reset may hand it back to VidSch: it may already have run. */
   APPLE_AGX_U32 KickedFence;
+  /* EXP2215: the claimed boundary whose DMA_PREEMPTED notification was
+   * handed to dxgkrnl (written in the interrupt-synchronized routine before
+   * DxgkCbNotifyInterrupt), and a claimed boundary that a later
+   * PreemptCommand already committed. VidSch may process the notification
+   * and issue the next PreemptCommand before the claiming caller re-takes
+   * the scheduler lock to commit; 0 = none. */
+  APPLE_AGX_U32 DeliveredPreemptionFence;
+  APPLE_AGX_U32 EarlyCommittedPreemptionFence;
 } APPLE_AGX_SCHEDULER;
 
 void AppleAgxSchedulerInitialize(APPLE_AGX_SCHEDULER *Scheduler);

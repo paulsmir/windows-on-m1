@@ -63,6 +63,15 @@ static BOOLEAN AdmissionNotifyPreemptionAtInterrupt(_In_ PVOID Opaque) {
       notification->Preemption.LastCompletedFence;
   data.DmaPreempted.NodeOrdinal = notification->Node;
   data.DmaPreempted.EngineOrdinal = ADMISSION_SCHEDULER_ENGINE;
+  /* EXP2215: before dxgkrnl can see the notification, mark the claimed
+   * boundary delivered, so the next PreemptCommand (possible as soon as
+   * VidSch processed it, before this caller's commit) commits it instead of
+   * refusing. Interlocked: the reader holds SchedulerLock on another CPU. */
+  if (notification->Preemption.PreemptionFence != 0u)
+    (void)InterlockedExchange((volatile LONG *)(notification->Node
+        ? &context->PagingScheduler.DeliveredPreemptionFence
+        : &context->Scheduler.DeliveredPreemptionFence),
+        (LONG)notification->Preemption.PreemptionFence);
   context->Interface.DxgkCbNotifyInterrupt(
       context->Interface.DeviceHandle, &data);
 #if defined(ADMISSION_PREEMPT_TRACE_ON)
