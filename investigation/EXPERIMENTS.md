@@ -45690,3 +45690,16 @@ Single variable vs R3: queue_invalidate semantics (receipt field added).
 Expected: boot completes; ANS006 reads of D:\pagefile.sys (type) and the hives (copy) rc=0 with
 timings; receipts show tcb_stat_nz > 0 at some point (confirming the trigger) and no failed ops.
 Failure: lost completion/I-O error again (hypothesis rejected), hang. Recovery as before.
+
+ANS006-R4 result (recorded 2026-11-06T17:43:52Z): PARTIAL — boot hang of R3 gone with ANSBUILD013; export failed at S42 (USB online 0/5).
+Receipts: QUERY..REGISTER_QUEUES, Identify, Get Features, CREATE CQ/SQ, FLUSH (reaped this time),
+READs; 16 data receipts, all result=0/status 0, tcb_stat_nz=0; no failing op logged. WinPE booted
+fully (R3 hung at boot). Operator photo: stick (now disk 1; native SSD is disk 0) online_try 1..5 all
+-2147212283, S42 vcount=0; ANS006 step not reached (it runs at S55). Operator rebooted; observed
+reboot; recovery SSH 17:34:30.
+The TCB-status hypothesis is not yet confirmed (no nonzero status observed, no long reads issued).
+Next R5: wrapper online retries 5 -> 12 with 10 s pauses (image ef978501, packet 21048e3e).
+
+### ANS006-R5 (preregistered 2026-11-06T17:43:52Z)
+
+Packet 21048e3ef02047932655b3e94947bd1a5347b689e27590555d1a563a308e8ce0; m1n1 ANSBUILD013; WinPE ef978501 (wrapper: 12 online tries, 10 s pauses); VM PASS; dry-run 0. WHY THIS HYPOTHESIS: the online succeeded on try 1-3 in R9/ANS002-ANS005/R2 and failed 0/5 in R4 - a timing-dependent VDS refusal, so more and longer retries are the smallest change. Single variable vs R4: wrapper retry budget. Expected: online_ok=1, ANS006 reads with timings, export, reboot.
