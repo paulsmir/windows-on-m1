@@ -1,0 +1,171 @@
+@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+set STAGE=S00_RAM_ENV
+if /i not "%SystemDrive%"=="X:" goto refused_env
+if /i not "%SystemRoot%"=="X:\Windows" goto refused_env
+reg query HKLM\SYSTEM\CurrentControlSet\Control\MiniNT >nul 2>&1
+if errorlevel 1 goto refused_env
+call X:\Windows\System32\startnet.cmd
+set COLLECTRC=!errorlevel!
+set OUT=X:\ANS001-RESULTS
+if not exist "%OUT%" mkdir "%OUT%"
+>"%OUT%\HW-WRAPPER.TXT" echo ANS001HW collector_return=!COLLECTRC!
+call :stage S20_INITIAL_DISCOVERY
+call :discover PRE
+if not "!MATCHES!"=="1" goto failed
+call :stage S30_ONLINE_IDENTIFIED_DISK
+>"%OUT%\HW-ONLINE.TXT" echo select disk !EVIDDISK!
+>>"%OUT%\HW-ONLINE.TXT" echo attributes disk clear readonly
+>>"%OUT%\HW-ONLINE.TXT" echo online disk
+>>"%OUT%\HW-ONLINE.TXT" echo exit
+diskpart /s "%OUT%\HW-ONLINE.TXT" >"%OUT%\HW-ONLINE.LOG" 2>&1
+>>"%OUT%\HW-WRAPPER.TXT" echo online_exit=!errorlevel!
+call :snapshot PRE
+call :stage S40_SINGLE_RESCAN
+>"%OUT%\HW-RESCAN.TXT" echo rescan
+>>"%OUT%\HW-RESCAN.TXT" echo exit
+diskpart /s "%OUT%\HW-RESCAN.TXT" >"%OUT%\HW-RESCAN.LOG" 2>&1
+>>"%OUT%\HW-WRAPPER.TXT" echo rescan_exit=!errorlevel! rescan_count=1
+call :stage S41_REDISCOVERY
+call :discover POST
+if not "!MATCHES!"=="1" goto failed
+call :snapshot POST
+call :stage S42_PARTITION_VOLUME_ASSOCIATION
+set VCOUNT=0
+set VOLNUM=
+for /f "usebackq tokens=1,2,3" %%A in ("%OUT%\HW-POST-PARTITION.LOG") do call :volume_row "%%A" "%%B" "%%C"
+>>"%OUT%\HW-WRAPPER.TXT" echo partition_volume_matches=!VCOUNT! volume=!VOLNUM! disk=!EVIDDISK!
+if not "!VCOUNT!"=="1" goto failed
+call :stage S43_VOLUME_BACKING_DISK
+>"%OUT%\HW-VOLUME.TXT" echo select volume !VOLNUM!
+>>"%OUT%\HW-VOLUME.TXT" echo detail volume
+>>"%OUT%\HW-VOLUME.TXT" echo exit
+diskpart /s "%OUT%\HW-VOLUME.TXT" >"%OUT%\HW-VOLUME.LOG" 2>&1
+set DCOUNT=0
+set BACKDISK=
+for /f "usebackq tokens=1,2,3" %%A in ("%OUT%\HW-VOLUME.LOG") do call :disk_row "%%A" "%%B" "%%C"
+>>"%OUT%\HW-WRAPPER.TXT" echo volume_backing_matches=!DCOUNT! backing_disk=!BACKDISK!
+if not "!DCOUNT!"=="1" goto failed
+if not "!BACKDISK!"=="!EVIDDISK!" goto failed
+>"%OUT%\HW-VERIFY-ID.TXT" echo select disk !BACKDISK!
+>>"%OUT%\HW-VERIFY-ID.TXT" echo uniqueid disk
+>>"%OUT%\HW-VERIFY-ID.TXT" echo exit
+diskpart /s "%OUT%\HW-VERIFY-ID.TXT" >"%OUT%\HW-VERIFY-ID.LOG" 2>&1
+set IDMATCH=0
+for /f "usebackq tokens=1,2,3,*" %%A in ("%OUT%\HW-VERIFY-ID.LOG") do if "%%A"=="Disk" if "%%B"=="ID:" if /i "%%C"=="@DISKID@" if "%%D"=="" set /a IDMATCH+=1
+if not "!IDMATCH!"=="1" goto failed
+call :stage S50_ASSIGN_VERIFIED_VOLUME
+set LETTER=
+for %%L in (V W Y Z U T S R Q P O N M L K J I H G F E D C) do if not defined LETTER if not exist %%L:\ set LETTER=%%L
+if not defined LETTER goto failed
+>"%OUT%\HW-ASSIGN.TXT" echo select volume !VOLNUM!
+>>"%OUT%\HW-ASSIGN.TXT" echo assign letter=!LETTER!
+>>"%OUT%\HW-ASSIGN.TXT" echo exit
+diskpart /s "%OUT%\HW-ASSIGN.TXT" >"%OUT%\HW-ASSIGN.LOG" 2>&1
+>>"%OUT%\HW-WRAPPER.TXT" echo assign_exit=!errorlevel! letter=!LETTER!
+call :stage S51_MARKER_PRESENT
+if not exist !LETTER!:\@RUNDIR@\ANS001-EVIDENCE.TAG goto failed
+call :stage S52_MARKER_EXACT
+set TAGMATCH=0
+set TAGINVALID=0
+for /f "usebackq delims=" %%A in ("!LETTER!:\@RUNDIR@\ANS001-EVIDENCE.TAG") do (
+ if "%%A"=="@MARKER@" (set /a TAGMATCH+=1) else (set TAGINVALID=1)
+)
+if not "!TAGMATCH!:!TAGINVALID!"=="1:0" goto failed
+call :stage S60_EXPORT
+if exist "!LETTER!:\@RUNDIR@\WINPE" goto failed
+set TARGET=!LETTER!:\@RUNDIR@\WINPE
+xcopy "%OUT%" "!TARGET!\" /e /h /i /y >X:\ANS001-EXPORT.LOG 2>&1
+set EXPORTRC=!errorlevel!
+copy /y X:\ANS001-EXPORT.LOG "!TARGET!\EXPORT.LOG" >nul
+>"!TARGET!\HW-DONE.TXT" echo ANS001HW export_exit=!EXPORTRC! collector_return=!COLLECTRC! rescan_count=1
+if not "!EXPORTRC!"=="0" goto failed
+call :stage S70_FLUSH_DISMOUNT
+>"%OUT%\HW-DISMOUNT.TXT" echo select volume !VOLNUM!
+>>"%OUT%\HW-DISMOUNT.TXT" echo remove letter=!LETTER! dismount
+>>"%OUT%\HW-DISMOUNT.TXT" echo exit
+diskpart /s "%OUT%\HW-DISMOUNT.TXT" >"%OUT%\HW-DISMOUNT.LOG" 2>&1
+set DISMOUNTRC=!errorlevel!
+echo ANS001HW export_exit=!EXPORTRC! dismount_exit=!DISMOUNTRC!
+if not "!DISMOUNTRC!"=="0" goto failed
+wpeutil reboot
+exit /b 0
+:discover
+set MATCHES=0
+set EVIDDISK=
+for %%N in (0 1 2 3 4 5 6 7) do call :probe %1 %%N
+>>"%OUT%\HW-WRAPPER.TXT" echo discovery=%1 matches=!MATCHES! disk=!EVIDDISK!
+exit /b 0
+:probe
+>"%OUT%\HW-%1-PROBE-%2.TXT" echo select disk %2
+>>"%OUT%\HW-%1-PROBE-%2.TXT" echo uniqueid disk
+>>"%OUT%\HW-%1-PROBE-%2.TXT" echo exit
+diskpart /s "%OUT%\HW-%1-PROBE-%2.TXT" >"%OUT%\HW-%1-PROBE-%2.LOG" 2>&1
+set IDMATCH=0
+for /f "usebackq tokens=1,2,3,*" %%A in ("%OUT%\HW-%1-PROBE-%2.LOG") do if "%%A"=="Disk" if "%%B"=="ID:" if /i "%%C"=="@DISKID@" if "%%D"=="" set /a IDMATCH+=1
+if "!IDMATCH!"=="1" (set /a MATCHES+=1 & set EVIDDISK=%2)
+exit /b 0
+:snapshot
+call :stage S_SNAPSHOT_%1
+>"%OUT%\HW-%1-SNAPSHOT.TXT" echo list disk
+>>"%OUT%\HW-%1-SNAPSHOT.TXT" echo select disk !EVIDDISK!
+>>"%OUT%\HW-%1-SNAPSHOT.TXT" echo uniqueid disk
+>>"%OUT%\HW-%1-SNAPSHOT.TXT" echo detail disk
+>>"%OUT%\HW-%1-SNAPSHOT.TXT" echo list partition
+>>"%OUT%\HW-%1-SNAPSHOT.TXT" echo select partition @PARTNUM@
+>>"%OUT%\HW-%1-SNAPSHOT.TXT" echo detail partition
+>>"%OUT%\HW-%1-SNAPSHOT.TXT" echo list volume
+>>"%OUT%\HW-%1-SNAPSHOT.TXT" echo exit
+diskpart /s "%OUT%\HW-%1-SNAPSHOT.TXT" >"%OUT%\HW-%1-SNAPSHOT.LOG" 2>&1
+>"%OUT%\HW-%1-PARTITION.TXT" echo select disk !EVIDDISK!
+>>"%OUT%\HW-%1-PARTITION.TXT" echo select partition @PARTNUM@
+>>"%OUT%\HW-%1-PARTITION.TXT" echo detail partition
+>>"%OUT%\HW-%1-PARTITION.TXT" echo exit
+diskpart /s "%OUT%\HW-%1-PARTITION.TXT" >"%OUT%\HW-%1-PARTITION.LOG" 2>&1
+type "%OUT%\HW-%1-SNAPSHOT.LOG"
+exit /b 0
+:volume_row
+set NUM=
+if "%~1"=="Volume" set NUM=%~2
+if "%~1"=="*" if "%~2"=="Volume" set NUM=%~3
+if not defined NUM exit /b 0
+call :numeric
+if not "!VALIDNUM!"=="1" exit /b 0
+set /a VCOUNT+=1
+set VOLNUM=!NUM!
+exit /b 0
+:disk_row
+set NUM=
+if "%~1"=="Disk" set NUM=%~2
+if "%~1"=="*" if "%~2"=="Disk" set NUM=%~3
+if not defined NUM exit /b 0
+call :numeric
+if not "!VALIDNUM!"=="1" exit /b 0
+set /a DCOUNT+=1
+set BACKDISK=!NUM!
+exit /b 0
+:numeric
+set VALIDNUM=1
+for /f "delims=0123456789" %%Q in ("!NUM!") do set VALIDNUM=0
+exit /b 0
+:stage
+set STAGE=%1
+echo ANS001HW stage !STAGE!
+>>"%OUT%\HW-WRAPPER.TXT" echo stage=!STAGE!
+exit /b 0
+:failed
+>"%OUT%\HW-FAILED.TXT" echo ANS001HW failed_stage=!STAGE! disk=!EVIDDISK! volume=!VOLNUM! backing=!BACKDISK! vcount=!VCOUNT! dcount=!DCOUNT!
+pnputil /enum-devices /class DiskDrive /connected /relations /deviceids /properties >"%OUT%\HW-PNP-RELATIONS.TXT" 2>&1
+for %%F in ("%OUT%\HW-*.LOG" "%OUT%\HW-PNP-RELATIONS.TXT" "%OUT%\SAN-POLICY.TXT" "%OUT%\COMMANDS.CSV" "%OUT%\HW-WRAPPER.TXT") do if exist "%%~F" (
+ echo ===== %%~nxF =====
+ type "%%~F"
+)
+echo ===== FAILURE SUMMARY =====
+type "%OUT%\HW-FAILED.TXT"
+echo RAM evidence retained. Interactive shell; no further mutations.
+goto hold
+:refused_env
+echo ANS001HW refused_stage=!STAGE! RAM environment not proved.
+:hold
+%SYSTEMROOT%\System32\cmd.exe /d /k
+goto hold

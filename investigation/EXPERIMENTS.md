@@ -44906,3 +44906,31 @@ write is a new folder `ANS001-RESULTS-27a6a231` holding `ANS001-EVIDENCE.TAG`
 subfolder exists. The collector template (`tools/ans_winpe/ANS001-HW-START.CMD.in`)
 is parameterized by @DISKID@, @PARTNUM@, @RUNDIR@ and @MARKER@. Failure adds:
 BitLocker-locked or read-only volume, less than 256 MiB free.
+
+ANSUSB001 result 2026-11-06T09:41Z (UTC): CONFIRMED. Slot from fork 6 after
+rec2215h; guest = normal recovery profile (exp392 --low-mem, base 0x850000000,
+run_uefi PID 97240), unchanged. Read-only inventory plus one marker write over SSH:
+- disk 1 `JetFlash Transcend 32GB` (USB, VID_8564), GPT, Disk ID
+  {CF195BCF-7265-4A86-904E-CC960F32947C}, one basic-data partition (1), exFAT,
+  label `WINDOWS ARM`, 22.76 GB free, BitLocker off, not read-only, healthy.
+  Behind the same Genesys/CH hubs as the Realtek RTL8153 NIC.
+- disk 2: an empty card-reader slot (No Media, Disk ID 00000000), no collision.
+- marker `E:\ANS001-RESULTS-27a6a231\ANS001-EVIDENCE.TAG` written and read back
+  byte-exact (sha256 0f1e0beb...b7, ASCII + CRLF); no other file touched.
+- the stick is the user's Windows ARM install/reinstall medium (efi/, bootmgfw.efi).
+  It cannot become a boot source for ANS001: native Mu is APPLE_ANS_RAMDISK_ONLY
+  (AppleAnsBootSource.h requires the preloaded RAM-disk device path), and exFAT is
+  not readable by the UEFI FAT driver. The recovery guest booted with it inserted.
+Evidence: `.local/ans-native/ANSUSB001/` inventory.txt (5460c189...), marker.txt
+(2ee3bcd9...), values-E.json (4a17ba1c...).
+Next: ANS001-PREP-E (offline): render ANS001-HW-START.CMD with these values,
+derive prepared-ANS001-E from D (`build-private-E.py`), requalify in the VM
+(ANSCOLLECT005) with an exFAT GPT evidence disk with the same GUID, then reseal.
+
+### ANS001-PREP-E — hardware-export WinPE medium (offline build, preregistered)
+
+Status: preregistered 2026-11-06T09:43Z (UTC). No hardware. Single change against
+prepared-ANS001-D: winpeshl.ini launches ANS001-HW-START.CMD (rendered from the
+tracked template with values-E.json). The build asserts that collector, startnet
+and SYSTEM are byte-identical to D, and that HW-START is the only new path in both
+indices. Output `.local/ans-native/ans001-winpe/prepared-ANS001-E/`.
