@@ -198,7 +198,8 @@ class FwRxReceipt(unittest.TestCase):
         drain = kmd[kmd.index('static VOID AdmissionFwRxDrainWindows('):]
         drain = drain[:drain.index('\n}\n')]
         self.assertIn('!runtime->FwRxDrain', drain)
-        self.assertIn('runtime->FwRxDrain =\n      AdmissionPlatformSwitchEnabled(Context, L"Wom1FwRxDrain");', kmd)
+        # EXP2219: class C, default on; only an explicit Wom1FwRxDrain = 0 disables it.
+        self.assertIn('runtime->FwRxDrain =\n      !AdmissionPlatformSwitchDisabled(Context, L"Wom1FwRxDrain");', kmd)
         self.assertIn('if (runtime->FwRxDrain) AdmissionFwRxDrainWindows(runtime);', kmd)
         project = (ROOT / 'drivers/apple-agx/render-admission/AppleAgxRenderAdmission.vcxproj').read_text()
         self.assertIn('..\\shared\\src\\apple_agx_fw_rx_receipt.c', project)

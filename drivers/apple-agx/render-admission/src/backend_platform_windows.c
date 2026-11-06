@@ -190,8 +190,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * channels the KMD does not drain (stats, ktrace, fwlog), sampled
    * read-only at each export (apple_agx_fw_rx_receipt.h). */
   APPLE_AGX_FW_RX_RECEIPT FwRx;
-  /* Wom1FwRxDrain = 1 (class C, off until hardware-validated): consume the
-   * stats, ktrace and fwlog channels as Asahi does (AppleAgxFwRxDrain). */
+  /* Firmware RX drain (class C, default on since EXP2219; Wom1FwRxDrain = 0
+   * turns it off): consume the stats, ktrace and fwlog channels as Asahi does
+   * (AppleAgxFwRxDrain). */
   BOOLEAN FwRxDrain;
   PEX_TIMER JobPollTimer;
   KEVENT JobPollTimerEvent;
@@ -8302,7 +8303,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDiagnostics");
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   runtime->FwRxDrain =
-      AdmissionPlatformSwitchEnabled(Context, L"Wom1FwRxDrain");
+      !AdmissionPlatformSwitchDisabled(Context, L"Wom1FwRxDrain");
 #endif
 #if defined(ADMISSION_PREEMPT_TRACE_ON)
   {
