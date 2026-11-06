@@ -45645,3 +45645,17 @@ Offline review: TCB construction matches Asahi apple.c t8103 (opcode 0, length=N
 dma_flags by direction); no defect found by inspection.
 Next (R3): ANSBUILD012 receipt selection = first 16 data ops + first 16 submits >16 KiB + up to 48
 failing ops (result!=0 or CQE status!=0), and ANS006-READ exports the WinPE System event log.
+
+### ANS006-R3 (preregistered 2026-11-06T17:00:45Z)
+
+Packet ff73d32bc8bdd9943a89d2589af46af800e32a509ed7cb878d494dcfdc71484a: m1n1 ANSBUILD012 (86644323,
+ad1521ea...: receipts = first 16 data ops + first 16 submits >16 KiB + up to 48 failing ops), WinPE
+f16bbce1... (ANS006-READ also exports System.evtx via wevtutil); gate 811eb043 (after two test-only
+flake fixes in tests/test_assisted_session.py); run.sh phase-2 cap 3600 s; dry-run 0.
+Host hygiene: /Volumes/pwdev was full (No space left on device during assembly); 26.8 GB of
+regenerable intermediates (prepared-*/tree, VM boot-media.img copies) deleted; ladder.py now
+deletes tree after verification and caches DISM output per package.
+WHY THIS HYPOTHESIS: ANS006-R2 reads failed with I/O device errors after the logged (all OK) small
+I/O, so the failure lies in operations that were not logged; R3 logs exactly those (large and failing).
+Single variable vs R2: receipt selection in m1n1 (+ event-log export). Expected: failing receipts
+with result/cqe status and length, plus disk/StorPort events. Recovery as R2.
