@@ -70143,3 +70143,7 @@ Steps: D3D12 suite; a HD PERF GravityMark 100k -temporal 0 with measure-umd-subm
 - Probe: agx_d3d12_probe_e2212_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
 - Hashes: sys 8c4c454f801e, UmdArm64 28437a313e5d, UmdX64 c6ee7d03d702, Umd32 ec1f4ddf4047; manifest f678536d91ba, hardware-manifest 106369d3fbb8; probe2212.sh f9b86c13d88e (PROBE_LINT_OK); visible recovery rec2212h 495e977564efa890; m1n1 0d3a75b3.
 - Recovery rec2212h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2212-dxg-etw/run2212.sh.
+
+EXP2212 HARDWARE ACTUAL (2026-11-06T04:44:30Z): **CONFIRMED (capture): DxgKrnl ETW of 12 s steady-state HD PERF collected (ETW start 04:42:03Z, 25 s after GravityMark appeared); suite 119/0; GPU_RESET none; a HD PERF 40.105 FPS (whole window incl. the ETW interval).**
+- Evidence evidence/EXP2212-etw/dxg.etl (40.9 MB) + dxg.csv (149.5 MB, tracerpt); guest copies deleted (ETW_CLEANED); measure-umd-submit rows in evidence/EXP2212/gm2212a-umd.log for the join.
+- Verdict: capture done; the VidSch reason for the late hand-off at C3->R4 / R4->C5 / C5->R6 is decoded offline (OV2 session). Recovery rec2212h.
