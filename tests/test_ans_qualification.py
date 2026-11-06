@@ -166,6 +166,16 @@ class QualificationTests(unittest.TestCase):
             self.assertEqual(stop.exception.code,0)
             self.assertIn(f'ANS write window         : {expected}',out.getvalue())
             self.assertEqual(env,None if expected.startswith('none') else expected)
+    def test_runner_accepts_every_profile_confirmation(self):
+        # ANS008-R1 never launched: argparse choices lagged PROFILES (ANS001..ANS006 only).
+        from tools.ans_qualification import PROFILES
+        src=(ROOT/'run_uefi.py').read_text()
+        self.assertNotIn('choices=("ANS001"',src)
+        for exp in PROFILES:
+            with patch.dict(os.environ,{},clear=True),patch.object(sys,'argv',self.argv()+['--dry-run','--confirm-experiment',exp]),patch('subprocess.run',side_effect=AssertionError('hardware subprocess')):
+                with contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()) as err,self.assertRaises(SystemExit):
+                    runpy.run_path(str(ROOT/'run_uefi.py'),run_name='__main__')
+            self.assertNotIn('invalid choice',err.getvalue(),exp)
     def test_inherited_write_window_environment_forbidden(self):
         with self.assertRaises(ValueError):
             validate_launch(self.path,self.sha,ROOT,environment={'WOM1_ANS_WRITE_WINDOW':'0:8'})
