@@ -45086,3 +45086,22 @@ guest code ran, now both fixed and verified offline; (2) ANS005B (same m1n1, LLD
 chainloaded and booted on this bench today.
 Expected/failure/recovery as in attempt 2.
 run.sh sha256 fab9908fe40ac2d3fa006cb4860de6b9f617ebe882f70075603d07b1ac4afcd9; root b52af6623996620eb7935133a3dac87073b96e61.
+
+ANS001-R3 attempt 3 result (recorded 2026-11-06T10:44:58Z): NOT RUN (orchestrator defect).
+10:42:07 launch; chainload of the ANS m1n1 succeeded (hv.log ends "Running proxy...
+Proxy is alive again"); the chainload re-enumerated the proxy USB link (drop at 3 s,
+back at 6 s) and run.sh misread that as the WinPE reboot, then stopped the runner
+(exact PID 26975) before guest entry. No guest started, no ANS access. 10:42:31 normal
+recovery (chainload exp377 over the ANS m1n1), 10:43:04 SSH up, APPL0002 inert, stick
+unchanged. Evidence: .local/ans-native/ANS001-R3-run/attempt3/.
+
+### ANS001-R3 attempt 4 (preregistered)
+
+Change: orchestrator only (run.sh a47d9927...). Phase 1 waits for "Starting guest" in the
+fresh hv.log (cap 300 s); only then does phase 2 watch for the WinPE reboot (proxy link
+drop + return, cap 1500 s). If the guest is still running at the cap, the runner is left
+alive and no automatic recovery is attempted (exit 30; the endpoints exist while the
+hypervisor runs, so "endpoints present" is not proof of proxy).
+WHY THIS HYPOTHESIS: attempts 1-3 stopped on three distinct host-side defects (lock,
+lld, orchestrator), each fixed; the chainload itself was proven in attempt 3.
+Expected/failure/recovery otherwise unchanged.
