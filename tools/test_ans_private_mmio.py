@@ -3,7 +3,7 @@
 from pathlib import Path
 import re,subprocess,os
 R=Path(__file__).resolve().parents[1]; O=R/'.local/ans-native/tests'; O.mkdir(parents=True,exist_ok=True)
-s=(R/'m1n1_windows/src/hv_ans_platform.c').read_text();start=s.index('bool hv_map_ans_broker(');b=s.index('{',start);end=b+1;depth=1
+s=(R/'m1n1_windows/src/hv_ans_platform.c').read_text();start=s.index('#define ANS_REJECT(why)');b=s.index('{',s.index('bool hv_map_ans_broker(',start));end=b+1;depth=1
 while depth: depth+=(s[end]=='{')-(s[end]=='}');end+=1
 asc=(R/'m1n1_windows/src/asc.c').read_text()
 assert 'asc->base = base + 0x8000;' in asc
@@ -13,14 +13,17 @@ pre='''#include "hv_ans_service.h"
 #include <stdio.h>
 typedef uint64_t u64; typedef uint32_t u32;
 #define T8103 0x8103
+/* Live J313 ADT /arm-io/ans reg0/reg3 sizes (ANSDART001-R3 adt.bin; ANS001-R3 attempt 4
+ * rejected the DT-sized expectation on hardware). */
+static u64 adt_coprocessor_size=0x6c000,adt_controller_size=0x60000;
 static u32 chip_id=T8103;static void *adt;
 static struct {bool mapped;struct ans_service service;unsigned active_tag;u32 physical_irq;} runtime;
 static bool hv_guest_has_started(void){return false;}
 static int adt_path_offset_trace(void*a,const char*p,int*out){(void)a;out[0]=p[8]=='s'?2:1;return 1;}
 static int adt_get_reg(void*a,int*p,const char*n,int i,u64*b,u64*s){(void)a;(void)n;
  if(p[0]==2){*b=ANS_EXPECTED_SART_BASE;*s=ANS_EXPECTED_SART_SIZE;}
- else if(i==3){*b=ANS_EXPECTED_CONTROLLER_BASE;*s=ANS_EXPECTED_CONTROLLER_SIZE;}
- else{*b=ANS_EXPECTED_COPROCESSOR_BASE;*s=ANS_EXPECTED_COPROCESSOR_SIZE;}return 0;}
+ else if(i==3){*b=ANS_EXPECTED_CONTROLLER_BASE;*s=adt_controller_size;}
+ else{*b=ANS_EXPECTED_COPROCESSOR_BASE;*s=adt_coprocessor_size;}return 0;}
 static const u32 irq=ANS_EXPECTED_PHYSICAL_IRQ;
 static const void*adt_getprop(void*a,int n,const char*p,u32*l){(void)a;(void)n;(void)p;*l=4;return &irq;}
 static bool hv_nvme_recovery_geometry(u64*b){*b=1000;return true;}
@@ -47,7 +50,12 @@ static int hv_map_hook(u64 b,void*hook,u64 n){(void)hook;assert(count<16);maps[c
 '''
 post='''
 static bool covered(u64 a,u64 n){for(unsigned i=0;i<count;i++)if(a>=maps[i].base&&n<=maps[i].size&&a-maps[i].base<=maps[i].size-n)return true;return false;}
-int main(void){assert(hv_map_ans_broker(ANS_BROKER_BASE,ANS_BROKER_SIZE,ANS_GUEST_GSIV,ANS_ABI_MAJOR));
+int main(void){
+ adt_coprocessor_size=ANS_EXPECTED_COPROCESSOR_SIZE;adt_controller_size=ANS_EXPECTED_CONTROLLER_SIZE;
+ assert(!hv_map_ans_broker(ANS_BROKER_BASE,ANS_BROKER_SIZE,ANS_GUEST_GSIV,ANS_ABI_MAJOR)&&!runtime.mapped&&count==0);
+ adt_coprocessor_size=0x6c000;adt_controller_size=0x60000;
+ assert(hv_map_ans_broker(ANS_BROKER_BASE,ANS_BROKER_SIZE,ANS_GUEST_GSIV,ANS_ABI_MAJOR));
+ assert(covered(ANS_EXPECTED_CONTROLLER_BASE,0x60000));assert(covered(ANS_EXPECTED_COPROCESSOR_BASE,0x6c000));
 '''
 for off in regs:post+=f'assert(covered(ANS_EXPECTED_COPROCESSOR_BASE+0x8000+{off},8));\n'
 post+='assert(covered(ANS_EXPECTED_MAILBOX_BASE,ANS_EXPECTED_MAILBOX_SIZE));puts("ANS private CPU/ASC mailbox mapping tests PASS");}\n'
