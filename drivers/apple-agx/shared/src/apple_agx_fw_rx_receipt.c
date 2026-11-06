@@ -124,3 +124,41 @@ unsigned int AppleAgxFwRxSample(APPLE_AGX_FW_RX_RECEIPT *Receipt,
   if (!ok) ++Receipt->Failures;
   return ok;
 }
+
+/* One channel: read_ptr := write_ptr when both are in range. */
+static unsigned int fw_rx_drain_one(const APPLE_AGX_FW_RX_DRAIN_VIEW *v,
+    volatile unsigned char *state, unsigned int entries, unsigned long long *drained) {
+  unsigned int read = 0u, write = 0u;
+  if (!state || !v->ReadU32(v->Context,
+          (const volatile unsigned int *)(state + APPLE_AGX_FW_RX_READ_OFFSET), &read) ||
+      !v->ReadU32(v->Context,
+          (const volatile unsigned int *)(state + APPLE_AGX_FW_RX_WRITE_OFFSET), &write) ||
+      read >= entries || write >= entries)
+    return 0u;
+  if (read == write) return 1u;
+  if (!v->PublishU32(v->Context,
+          (volatile unsigned int *)(state + APPLE_AGX_FW_RX_READ_OFFSET), write))
+    return 0u;
+  *drained += (write + entries - read) % entries;
+  return 1u;
+}
+
+unsigned int AppleAgxFwRxDrain(APPLE_AGX_FW_RX_RECEIPT *Receipt,
+    const APPLE_AGX_FW_RX_DRAIN_VIEW *View) {
+  unsigned int ok = 1u, i;
+  if (!Receipt || !View || !View->ReadU32 || !View->PublishU32 ||
+      Receipt->Version != APPLE_AGX_FW_RX_RECEIPT_VERSION)
+    return 0u;
+  ++Receipt->DrainCalls;
+  if (View->StatsState &&
+      !fw_rx_drain_one(View, View->StatsState, APPLE_AGX_FW_RX_STATS_ENTRIES,
+                       &Receipt->DrainedStats)) ok = 0u;
+  if (View->KtraceState &&
+      !fw_rx_drain_one(View, View->KtraceState, APPLE_AGX_FW_RX_KTRACE_ENTRIES,
+                       &Receipt->DrainedKtrace)) ok = 0u;
+  for (i = 0u; View->FwlogState && i < APPLE_AGX_FW_RX_FWLOG_SUBCHANNELS; ++i)
+    if (!fw_rx_drain_one(View, View->FwlogState + i * APPLE_AGX_FW_RX_STATE_BYTES,
+                         APPLE_AGX_FW_RX_FWLOG_ENTRIES, &Receipt->DrainedFwlog)) ok = 0u;
+  if (!ok) ++Receipt->DrainFailures;
+  return ok;
+}

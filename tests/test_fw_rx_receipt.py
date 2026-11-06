@@ -32,6 +32,10 @@ static unsigned rd(void *c, const volatile unsigned *a, unsigned *v) {
   if (fail_at && reads == fail_at) return 0;
   *v = *(const unsigned *)(const void *)a; return 1;
 }
+static unsigned publishes;
+static unsigned pub(void *c, volatile unsigned *a, unsigned v) {
+  (void)c; ++publishes; *(unsigned *)(void *)a = v; return 1;
+}
 static void put(unsigned char *b, unsigned off, unsigned v) { memcpy(b + off, &v, 4); }
 static void put64(unsigned char *b, unsigned off, unsigned long long v) { put(b, off, (unsigned)v); put(b, off + 4, (unsigned)(v >> 32)); }
 static void msg(unsigned slot, unsigned tag, unsigned long long ts, unsigned a, unsigned b) {
@@ -87,6 +91,41 @@ int main(int argc, char **argv) {
   /* no stats ring view: pointers only */
   v.StatsRing = 0;
   assert(AppleAgxFwRxSample(&r, &v, 7000));
+  /* Wom1FwRxDrain: read_ptr := write_ptr, nothing else written */
+  {
+    static unsigned char fwlog_before[sizeof(fwlog_state)];
+    unsigned char stats_before[sizeof(stats_state)], ktrace_before[sizeof(ktrace_state)];
+    APPLE_AGX_FW_RX_RECEIPT d;
+    AppleAgxFwRxReceiptInit(&d);
+    put(stats_state, 0x00, 0); put(stats_state, 0x20, 0xff);
+    put(ktrace_state, 0x00, 0x1f0); put(ktrace_state, 0x20, 0x10);
+    for (unsigned i = 0; i < 6; ++i) { put(fwlog_state, i * 0x30, 0); put(fwlog_state, i * 0x30 + 0x20, i ? 10 + i : 0); }
+    memcpy(stats_before, stats_state, sizeof(stats_state));
+    memcpy(ktrace_before, ktrace_state, sizeof(ktrace_state));
+    memcpy(fwlog_before, fwlog_state, sizeof(fwlog_state));
+    APPLE_AGX_FW_RX_DRAIN_VIEW dv = {stats_state, ktrace_state, fwlog_state, rd, pub, 0};
+    publishes = 0;
+    assert(AppleAgxFwRxDrain(&d, &dv));
+    assert(d.DrainCalls == 1 && !d.DrainFailures && d.DrainedStats == 0xff);
+    assert(d.DrainedKtrace == 0x20 /* 0x1f0 -> 0x10 wraps at 0x200 */);
+    assert(d.DrainedFwlog == 11 + 12 + 13 + 14 + 15 && publishes == 1 + 1 + 5);
+    unsigned rp; memcpy(&rp, stats_state, 4); assert(rp == 0xff);
+    memcpy(&rp, ktrace_state, 4); assert(rp == 0x10);
+    memcpy(&rp, fwlog_state + 5 * 0x30, 4); assert(rp == 15);
+    /* only bytes 0..3 of each state changed */
+    assert(!memcmp(stats_state + 4, stats_before + 4, sizeof(stats_state) - 4));
+    assert(!memcmp(ktrace_state + 4, ktrace_before + 4, sizeof(ktrace_state) - 4));
+    for (unsigned i = 0; i < 6; ++i)
+      assert(!memcmp(fwlog_state + i * 0x30 + 4, fwlog_before + i * 0x30 + 4, 0x2c));
+    /* already drained: no publish */
+    publishes = 0;
+    assert(AppleAgxFwRxDrain(&d, &dv) && !publishes && d.DrainCalls == 2 && d.DrainedStats == 0xff);
+    /* an out-of-range pointer is left alone and counted */
+    put(fwlog_state, 3 * 0x30 + 0x20, 0x100);
+    assert(!AppleAgxFwRxDrain(&d, &dv) && d.DrainFailures == 1);
+    memcpy(&rp, fwlog_state + 3 * 0x30, 4); assert(rp == 13);
+    put(fwlog_state, 3 * 0x30 + 0x20, 13);
+  }
   if (argc > 1) { FILE *f = fopen(argv[1], "wb"); fwrite(&r, sizeof(r), 1, f); fclose(f); }
   return 0;
 }
@@ -114,10 +153,16 @@ class FwRxReceipt(unittest.TestCase):
             self.assertEqual((d['power_state_pstate'], d['pstate_max'], d['last_qpc']), (7, 2, 7000))
             self.assertEqual(d['fwlog_write'], [10, 11, 12, 13, 14, 15])
             self.assertEqual(d['verdict'], 'stats ring moving')
+            self.assertEqual((d['drain_calls'], d['drain_failures']), (0, 0))
 
     def test_source_never_writes_channel_memory(self):
         text = (SHARED / 'src/apple_agx_fw_rx_receipt.c').read_text()
-        self.assertNotIn('PublishU32', text)
+        sample = text[text.index('unsigned int AppleAgxFwRxSample('):text.index('/* One channel: read_ptr')]
+        self.assertNotIn('PublishU32', sample)
+        drain = text[text.index('static unsigned int fw_rx_drain_one('):]
+        # the drain writes only the read pointer
+        self.assertEqual(drain.count('PublishU32('), 1)
+        self.assertIn('(state + APPLE_AGX_FW_RX_READ_OFFSET), write)', drain)
         self.assertNotRegex(text, r'\bv->(Stats|Ktrace|Fwlog)\w*\s*\[[^\]]*\]\s*=')
         header = (SHARED / 'include/apple_agx_fw_rx_receipt.h').read_text()
         for view in ('StatsState', 'StatsRing', 'KtraceState', 'FwlogState'):
@@ -136,6 +181,11 @@ class FwRxReceipt(unittest.TestCase):
         self.assertLess(export.index('runtime->JobTimingExportQpc = before;'),
                         export.index('AdmissionFwRxSampleWindows(runtime, before);'))
         self.assertIn('RtlInitUnicodeString(&name, L"Wom1FwRx");', export)
+        drain = kmd[kmd.index('static VOID AdmissionFwRxDrainWindows('):]
+        drain = drain[:drain.index('\n}\n')]
+        self.assertIn('!runtime->FwRxDrain', drain)
+        self.assertIn('runtime->FwRxDrain =\n      AdmissionPlatformSwitchEnabled(Context, L"Wom1FwRxDrain");', kmd)
+        self.assertIn('if (runtime->FwRxDrain) AdmissionFwRxDrainWindows(runtime);', kmd)
         project = (ROOT / 'drivers/apple-agx/render-admission/AppleAgxRenderAdmission.vcxproj').read_text()
         self.assertIn('..\\shared\\src\\apple_agx_fw_rx_receipt.c', project)
 

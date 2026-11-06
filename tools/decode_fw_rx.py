@@ -9,10 +9,10 @@ behind the never-advanced read pointer and did not move across samples.
 import struct
 import sys
 
-FMT = '<16I6I6I16IQQQ4IQIIQQ4I5Q'
+FMT = '<16I6I6I16IQQQ4IQIIQQ4I4QQ'
 NAMES = ('version bytes samples failures stats_read stats_write stats_write_first '
          'stats_write_changes stats_wrapped stats_full stats_unknown_tags stats_scanned '
-         'ktrace_read ktrace_write ktrace_write_changes reserved0').split()
+         'ktrace_read ktrace_write ktrace_write_changes drain_failures').split()
 TAGS = {0: 'power', 2: 'power_on', 3: 'power_off', 4: 'utilization', 9: 'avg_power',
         0xa: 'temperature', 0xb: 'power_state', 0xc: 'fw_busy', 0xd: 'pstate',
         0xe: 'temp_sensor'}
@@ -31,8 +31,11 @@ def decode(data):
     out['power_state_ts'], out['power_state_last_busy'] = v[54:56]
     (out['power_state_off'], out['power_state_pstate'],
      out['pstate_min'], out['pstate_max']) = v[56:60]
+    (out['drain_calls'], out['drained_stats'], out['drained_ktrace'],
+     out['drained_fwlog']) = v[60:64]
     stuck = out['stats_full'] and not out['stats_write_changes'] and out['samples'] > 1
-    out['verdict'] = ('stats ring full and stuck' if stuck else
+    out['verdict'] = ('drained (Wom1FwRxDrain)' if out['drain_calls'] else
+                      'stats ring full and stuck' if stuck else
                       'stats ring moving' if out['stats_write_changes'] else
                       'stats ring not full, not moving')
     return out

@@ -27,9 +27,25 @@
 #define APPLE_AGX_FW_RX_STATS_ENTRY_BYTES 0x40u
 #define APPLE_AGX_FW_RX_STATS_TAGS 16u
 #define APPLE_AGX_FW_RX_STATS_MAX_TAG 0xeu
+/* Asahi channel.rs ring sizes: ktrace 0x200, stats and each fwlog ring 0x100 */
+#define APPLE_AGX_FW_RX_KTRACE_ENTRIES 0x200u
+#define APPLE_AGX_FW_RX_FWLOG_ENTRIES 0x100u
 
 typedef unsigned int (*APPLE_AGX_FW_RX_READ_U32)(void *Context,
     const volatile unsigned int *Address, unsigned int *Value);
+
+typedef unsigned int (*APPLE_AGX_FW_RX_PUBLISH_U32)(void *Context,
+    volatile unsigned int *Address, unsigned int Value);
+
+/* The drain's writable view: only the read pointers are written. */
+typedef struct _APPLE_AGX_FW_RX_DRAIN_VIEW {
+  volatile unsigned char *StatsState;
+  volatile unsigned char *KtraceState;
+  volatile unsigned char *FwlogState;
+  APPLE_AGX_FW_RX_READ_U32 ReadU32;
+  APPLE_AGX_FW_RX_PUBLISH_U32 PublishU32;
+  void *Context;
+} APPLE_AGX_FW_RX_DRAIN_VIEW;
 
 typedef struct _APPLE_AGX_FW_RX_VIEW {
   const volatile unsigned char *StatsState;  /* 0x30 bytes */
@@ -49,7 +65,7 @@ typedef struct _APPLE_AGX_FW_RX_RECEIPT {
   unsigned int Version, Bytes, Samples, Failures;
   unsigned int StatsRead, StatsWrite, StatsWriteFirst, StatsWriteChanges;
   unsigned int StatsWrapped, StatsFull, StatsUnknownTags, StatsScanned;
-  unsigned int KtraceRead, KtraceWrite, KtraceWriteChanges, Reserved0;
+  unsigned int KtraceRead, KtraceWrite, KtraceWriteChanges, DrainFailures;
   unsigned int FwlogRead[APPLE_AGX_FW_RX_FWLOG_SUBCHANNELS];
   unsigned int FwlogWrite[APPLE_AGX_FW_RX_FWLOG_SUBCHANNELS];
   unsigned int StatsTags[APPLE_AGX_FW_RX_STATS_TAGS];
@@ -60,7 +76,9 @@ typedef struct _APPLE_AGX_FW_RX_RECEIPT {
   unsigned int FwBusy, PowerStateActive;
   unsigned long long PowerStateTimestamp, PowerStateLastBusy;
   unsigned int PowerStateOff, PowerStatePstate, PStateMin, PStateMax;
-  unsigned long long Reserved1[5];
+  /* AppleAgxFwRxDrain (Wom1FwRxDrain): calls and the messages it consumed */
+  unsigned long long DrainCalls, DrainedStats, DrainedKtrace, DrainedFwlog;
+  unsigned long long Reserved1;
 } APPLE_AGX_FW_RX_RECEIPT;
 
 typedef char apple_agx_fw_rx_receipt_size[
@@ -73,6 +91,14 @@ void AppleAgxFwRxReceiptInit(APPLE_AGX_FW_RX_RECEIPT *Receipt);
 /* One read-only sample. Returns 1 when every pointer was read. */
 unsigned int AppleAgxFwRxSample(APPLE_AGX_FW_RX_RECEIPT *Receipt,
     const APPLE_AGX_FW_RX_VIEW *View, unsigned long long Qpc);
+/* Asahi's consumer contract (drm/asahi gpu.rs: fw_log, ktrace and stats
+ * poll() on every firmware interrupt; channel.rs RxChannel::get advances
+ * read_ptr past each message): sets each undrained channel's read pointer
+ * to its write pointer. The messages are not interpreted (Asahi only logs
+ * them); counts go to the receipt. A pointer out of range is left alone and
+ * counted in DrainFailures. Returns 1 when every channel was handled. */
+unsigned int AppleAgxFwRxDrain(APPLE_AGX_FW_RX_RECEIPT *Receipt,
+    const APPLE_AGX_FW_RX_DRAIN_VIEW *View);
 #ifdef __cplusplus
 }
 #endif

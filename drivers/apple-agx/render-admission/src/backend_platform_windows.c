@@ -190,6 +190,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * channels the KMD does not drain (stats, ktrace, fwlog), sampled
    * read-only at each export (apple_agx_fw_rx_receipt.h). */
   APPLE_AGX_FW_RX_RECEIPT FwRx;
+  /* Wom1FwRxDrain = 1 (class C, off until hardware-validated): consume the
+   * stats, ktrace and fwlog channels as Asahi does (AppleAgxFwRxDrain). */
+  BOOLEAN FwRxDrain;
   PEX_TIMER JobPollTimer;
   KEVENT JobPollTimerEvent;
 #endif
@@ -1374,13 +1377,22 @@ static unsigned int AdmissionFwRxReadWindows(void *Context,
   return 1u;
 }
 
-static const volatile unsigned char *AdmissionFwRxObjectWindows(
+static unsigned int AdmissionFwRxPublishWindows(void *Context,
+    volatile unsigned int *Address, unsigned int Value) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = (ADMISSION_PLATFORM_RUNTIME *)Context;
+  return runtime != NULL && runtime->TransportIo.PublishU32 != NULL &&
+         runtime->TransportIo.PublishU32(runtime,
+             (volatile APPLE_AGX_BACKEND_U32 *)Address, (APPLE_AGX_BACKEND_U32)Value)
+      ? 1u : 0u;
+}
+
+static volatile unsigned char *AdmissionFwRxObjectWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, unsigned int Index, ULONGLONG Bytes) {
   const APPLE_AGX_MEMORY_OBJECT *object;
   if (Index >= runtime->Initdata.ChannelMemory.ObjectCount) return NULL;
   object = &runtime->Initdata.ChannelMemory.Objects[Index];
   return object->CpuAddress != NULL && object->Length >= Bytes
-      ? (const volatile unsigned char *)object->CpuAddress : NULL;
+      ? (volatile unsigned char *)object->CpuAddress : NULL;
 }
 
 static VOID AdmissionFwRxSampleWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
@@ -1404,6 +1416,28 @@ static VOID AdmissionFwRxSampleWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
   view.Context = runtime;
   if (view.StatsState != NULL)
     (void)AppleAgxFwRxSample(&runtime->FwRx, &view, Qpc);
+}
+
+/* Wom1FwRxDrain: after every job, as Asahi after every firmware interrupt;
+ * only the channels' read pointers are written. */
+static VOID AdmissionFwRxDrainWindows(ADMISSION_PLATFORM_RUNTIME *runtime) {
+  APPLE_AGX_FW_RX_DRAIN_VIEW view;
+  if (runtime == NULL || !runtime->FwRxDrain ||
+      runtime->TransportIo.PublishU32 == NULL) return;
+  if (runtime->FwRx.Version != APPLE_AGX_FW_RX_RECEIPT_VERSION)
+    AppleAgxFwRxReceiptInit(&runtime->FwRx);
+  RtlZeroMemory(&view, sizeof(view));
+  view.StatsState = AdmissionFwRxObjectWindows(runtime,
+      AppleAgxChannelMemoryStatsState, APPLE_AGX_FW_RX_STATE_BYTES);
+  view.KtraceState = AdmissionFwRxObjectWindows(runtime,
+      AppleAgxChannelMemoryKtraceState, APPLE_AGX_FW_RX_STATE_BYTES);
+  view.FwlogState = AdmissionFwRxObjectWindows(runtime,
+      AppleAgxChannelMemoryFwlogState,
+      APPLE_AGX_FW_RX_FWLOG_SUBCHANNELS * APPLE_AGX_FW_RX_STATE_BYTES);
+  view.ReadU32 = AdmissionFwRxReadWindows;
+  view.PublishU32 = AdmissionFwRxPublishWindows;
+  view.Context = runtime;
+  (void)AppleAgxFwRxDrain(&runtime->FwRx, &view);
 }
 
 static VOID AdmissionJobTimingExportWindows(
@@ -7427,6 +7461,7 @@ AdoptedKicked:
   }
   AdmissionPublishFirmwareRecovery(runtime);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (runtime->FwRxDrain) AdmissionFwRxDrainWindows(runtime);
   if (runtime->JobDiagnostics || runtime->RcReceiptEnabled || runtime->Depth2Drill.Mode ||
       runtime->PresentTsEnabled || runtime->Ov2Enabled || runtime->Ov5DrillEnabled ||
       runtime->Ov5Waiver)
@@ -8265,6 +8300,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1ManagerSlots");
   runtime->JobDiagnostics =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDiagnostics");
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  runtime->FwRxDrain =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1FwRxDrain");
+#endif
 #if defined(ADMISSION_PREEMPT_TRACE_ON)
   {
     LARGE_INTEGER frequency;
