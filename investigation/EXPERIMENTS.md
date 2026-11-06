@@ -44710,3 +44710,9 @@ prepare_memory() adds these ranges to the private exclusion list (13 <= 64).
 Side finding (CPU isolation / Mu, not ANS): Mu's MemoryInitPeiLib reserves only the
 framebuffer, CPU-stack carveouts, RAM disk and low window, so these 13 carveouts are
 probably reported to Windows as conventional memory; stage-2 maps them writable.
+
+### Bench returned by fork 6 (2026-11-06T01:36Z)
+
+HVS2ISO001 done per fork 6 (A-C pass, D not run, no table page written). Live check:
+run_uefi 65916 from launch-normal2.sh (exp377 + exp392 --low-mem), SSH up, 8 logical CPUs.
+Bench owned by the ANS work again; next ANS steps are offline.
