@@ -45150,3 +45150,29 @@ Orchestrator .local/ans-native/ANS001-R4-run/run.sh 81f9da86...: on an abort bef
 entry it now sends P_REBOOT to the proxy (proxy-reboot.py) and waits for a clean
 "Running proxy" instead of chainloading over the aborted hypervisor.
 Bench: down since 10:52Z (attempt-4 recovery loss); physical power cycle requested.
+
+### ANS001-R4 — native ANS WinPE enumeration with USB evidence export (preregistered 2026-11-06T11:11:13Z)
+
+Bench: power-cycled by the user (11:07Z, relayed by fork 6), normal recovery brought up from
+the fresh proxy by launch-normal2.sh at 11:07:33Z, SSH 11:08:06Z, APPL0002 inert, 8 CPUs,
+stick E:. Slot: fork 6 ("the bench is yours"); user autonomy grant 2026-11-06.
+WHY THIS HYPOTHESIS:
+1. Attempt 4 of ANS001-R3 failed only at the ADT-size pin in hv_map_ans_broker; the live
+   ADT values are now pinned (m1n1 f5439151e) and the extracted function passes with them.
+2. Everything before that point already worked on hardware in attempt 4: chainload, m1n1
+   ANS boot (RTKit v12), the HV NVMe backend and emulated PCIe.
+3. WinPE E + stick export passed ANSCOLLECT005; no AppleAns package in WinPE, so no DMA.
+Hypothesis: the native broker maps, the guest enters native Mu, WinPE enumerates
+ACPI\APPL0003 inert, the collector exports to the stick and reboots to proxy.
+Single variable vs ANS001-R3: m1n1 ANSBUILD006 -> ANSBUILD007 (broker preflight only).
+Packet ANS001-R4 qualification 1833b4abd4f6f48805afdfdacd4937e07627cd1147254c7fdeaff6b82aecc5e3;
+m1n1 4769b322..., Mu native 85157f29..., WinPE E e38ab04d....
+Host: launch-lock symlink fix, LLDDIR, guest-start gate, P_REBOOT on abort, non-fresh-proxy
+refusal (offline gate GREEN 7b529aa7).
+Expected: GUEST_STARTED, then PROXY_LINK_DROPPED/PROXY_BACK within 1500 s; stick
+ANS001-RESULTS-27a6a231\WINPE\HW-DONE.TXT export_exit=0; ans.TXT lists APPL0003.
+Failure: abort before guest (-> P_REBOOT, then recovery), no reboot within 1500 s (runner left
+alive, manual recovery), or no WINPE folder. One run; no retry without a new reason.
+Recovery: normal 377/392 after an observed reboot only; otherwise a power cycle.
+Evidence: .local/ans-native/ANS001-R4-run/.
+Root f20b86b83e9b76c63f412847ae004756decbd859; run.sh efa5de70cb81347e907e951cd6b5286dc26ffd5422d5a7deaa5ff885dbb11d02.
