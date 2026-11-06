@@ -107,6 +107,16 @@ int main(void)
     setup(&w,0);
     ((struct ans_broker_header *)memory)->features=0;
     assert(ans_wire_open(&w,&ops,memory)==ANS_WIRE_INVALID && !w.bound);
+    /* ANS008: exactly one of READ_ONLY / WRITE_WINDOW; TELEMETRY may accompany either. */
+    setup(&w,0);
+    ((struct ans_broker_header *)memory)->features=ANS_FEATURE_WRITE_WINDOW|ANS_FEATURE_TELEMETRY;
+    assert(ans_wire_open(&w,&ops,memory)==ANS_WIRE_OK && w.bound && (w.features&ANS_FEATURE_WRITE_WINDOW));
+    setup(&w,0);
+    ((struct ans_broker_header *)memory)->features=ANS_FEATURE_WRITE_WINDOW|ANS_FEATURE_READ_ONLY;
+    assert(ans_wire_open(&w,&ops,memory)==ANS_WIRE_INVALID && !w.bound);
+    setup(&w,0);
+    ((struct ans_broker_header *)memory)->features=ANS_FEATURE_TELEMETRY;
+    assert(ans_wire_open(&w,&ops,memory)==ANS_WIRE_INVALID && !w.bound);
     setup(&w,0);
     w.sequence=ANS_U64_MAX;unsigned old=bells;
     assert(call(&w,ANS_OP_QUERY)==ANS_WIRE_INVALID && bells==old);

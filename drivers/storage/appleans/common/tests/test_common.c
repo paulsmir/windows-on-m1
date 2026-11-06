@@ -230,8 +230,22 @@ static void status_tests(void)
     for (unsigned status = 2; status < 4096; status += 2)
         assert(ans_scsi_nvme_sense((uint16_t)status, 0).key != 0);
 }
+/* Every CDB that ans_scsi_prepare can plan as a payload SUBMIT needs PRPs built
+ * from the SRB scatter-gather list (ANS008: WRITE(10/16) was missing). */
+static void test_payload_cdbs_need_prps(void)
+{
+    struct ans_namespace ns={.blocks=1000,.block_size=4096,.nsid=1,.ready=1};
+    for (unsigned op=0;op<256;op++) {
+        ans_u8 cdb[16]={0};cdb[0]=(ans_u8)op;cdb[op>=0x80?13:8]=1;
+        struct ans_scsi_plan p=ans_scsi_prepare(&ns,cdb,op>=0x80?16:10,4096,NULL);
+        int payload=p.action==ANS_SCSI_SUBMIT && p.transfer_bytes;
+        assert(payload==ans_scsi_cdb_has_payload_prps(cdb[0]));
+    }
+    assert(ans_scsi_cdb_has_payload_prps(0x2a) && ans_scsi_cdb_has_payload_prps(0x8a));
+}
 int main(void)
 {
+    test_payload_cdbs_need_prps();
     fixture_strings();
     rw_tests(); discovery_tests(); cache_tests(); prp_tests(); status_tests();
     puts("ANS common SCSI + SG/PRP deterministic tests PASS");

@@ -10,6 +10,11 @@
 #ifndef APPLE_ANS_NATIVE_READ_ONLY
 #define APPLE_ANS_NATIVE_READ_ONLY 0
 #endif
+/* ANS008: a write-capable package still writes only when the broker advertises
+ * ANS_FEATURE_WRITE_WINDOW; EL2 denies any WRITE outside that window. */
+#ifndef APPLE_ANS_NATIVE_WRITE
+#define APPLE_ANS_NATIVE_WRITE 0
+#endif
 #ifndef APPLE_ANS_QUALIFICATION_STOP
 #define APPLE_ANS_QUALIFICATION_STOP 0
 #endif

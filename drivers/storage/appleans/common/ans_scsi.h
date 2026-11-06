@@ -37,6 +37,9 @@ struct ans_scsi_plan ans_scsi_prepare(const struct ans_namespace *ns,
     const ans_u8 *cdb, size_t cdb_length, ans_u32 buffer_length,
     const struct ans_sense *pending_sense);
 void ans_scsi_fixed_sense(struct ans_sense sense, ans_u8 out[18]);
+/* CDBs whose SUBMIT plan carries a payload: the wrapper must build PRPs for them. */
+static inline int ans_scsi_cdb_has_payload_prps(ans_u8 op)
+{ return op == 0x28 || op == 0x88 || op == 0x2a || op == 0x8a; }
 /* NVMe CQ status including phase bit. Unknown failures stay failures. */
 struct ans_sense ans_scsi_nvme_sense(ans_u16 status, int writing);
 

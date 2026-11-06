@@ -294,7 +294,8 @@ BOOLEAN AppleAnsNativeInitialize(PAPPLE_ANS_ADAPTER a)
     if (!admin(a, 5, 0, ((ANS_QUEUE_DEPTH-1) << 16) | 1, 3, 0, cqe)) goto failure;
     a->Stage = AppleAnsStageCreateSq;
     if (!admin(a, 1, 0, ((ANS_QUEUE_DEPTH-1) << 16) | 1, 0x10001, 0, cqe)) goto failure;
-    a->Namespace.read_only = 1;
+    a->Namespace.read_only =
+        !(APPLE_ANS_NATIVE_WRITE && (a->Wire.features & ANS_FEATURE_WRITE_WINDOW));
     a->Namespace.tagged_queuing = 1;
     a->Namespace.ready = 1;
     a->Ready = TRUE;
@@ -412,12 +413,18 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
     } else {
         AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
     }
-    if (plan.action==ANS_SCSI_SUBMIT && plan.nvme_opcode!=0 && plan.nvme_opcode!=2) {
+    if (plan.action==ANS_SCSI_SUBMIT && plan.nvme_opcode!=0 && plan.nvme_opcode!=2 &&
+        !(plan.nvme_opcode==1 && !a->Namespace.read_only)) {
         plan=(struct ans_scsi_plan){.action=ANS_SCSI_CHECK,.sense={7,0x27,0}};
     }
     if (plan.action==ANS_SCSI_SUBMIT && plan.nvme_opcode==2 &&
         (!x || !x->Valid || !(srb->SrbFlags & SRB_FLAGS_DATA_IN) ||
          (srb->SrbFlags & SRB_FLAGS_DATA_OUT))) {
+        AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
+    }
+    if (plan.action==ANS_SCSI_SUBMIT && plan.nvme_opcode==1 &&
+        (!x || !x->Valid || !(srb->SrbFlags & SRB_FLAGS_DATA_OUT) ||
+         (srb->SrbFlags & SRB_FLAGS_DATA_IN))) {
         AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
     }
     unsigned tag;
@@ -433,7 +440,8 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
     slot->Busy=TRUE;slot->Srb=srb;slot->Length=plan.transfer_bytes;
     slot->Plan=plan;slot->Token=token;slot->Shutdown=shutdown;
     if(plan.action==ANS_SCSI_SUBMIT &&
-        !ans_readonly_request(&plan,x?&x->Prps:NULL,tag,a->PageDma[tag],a->Pages[tag],&slot->Request)) {
+        !ans_io_request(&plan,x?&x->Prps:NULL,tag,a->PageDma[tag],a->Pages[tag],
+                        !a->Namespace.read_only,&slot->Request)) {
         ans_stats_add(&a->Stats,ANS_TELEM_PRP_TRANSLATION_FAILURES,1);
         (void)ans_order_cancel_queued(&a->Order,token);
         *slot=(APPLE_ANS_SLOT){0};AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);

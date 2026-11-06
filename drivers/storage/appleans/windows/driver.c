@@ -128,7 +128,7 @@ BOOLEAN AppleAnsBuildIo(PVOID DeviceExtension, PSCSI_REQUEST_BLOCK Srb)
     if (!Srb->CdbLength || Srb->CdbLength > sizeof(x->Cdb)) return TRUE;
     x->CdbLength = Srb->CdbLength;x->Length = Srb->DataTransferLength;
     RtlCopyMemory(x->Cdb,Srb->Cdb,x->CdbLength);
-    if (x->Cdb[0] == 0x28 || x->Cdb[0] == 0x88) {
+    if (ans_scsi_cdb_has_payload_prps(x->Cdb[0])) {
         struct ans_sg_span spans[ANS_MAX_DATA_PAGES];
         if (x->Length) {
             PSTOR_SCATTER_GATHER_LIST sg = StorPortGetScatterGatherList(DeviceExtension,Srb);

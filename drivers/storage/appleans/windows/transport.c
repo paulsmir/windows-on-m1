@@ -32,7 +32,8 @@ static int header(struct ans_wire *w, struct ans_broker_header *out)
         out->abi_major == ANS_ABI_MAJOR && out->abi_minor == ANS_ABI_MINOR &&
         out->size == sizeof(*out) && out->generation && !out->reserved &&
         out->state <= ANS_STATE_FAULTED &&
-        (out->features & ANS_FEATURE_READ_ONLY);
+        /* Exactly one write policy: read-only, or an EL2-enforced write window. */
+        (!(out->features & ANS_FEATURE_READ_ONLY) != !(out->features & ANS_FEATURE_WRITE_WINDOW));
 }
 int ans_wire_open(struct ans_wire *w, const struct ans_wire_ops *ops, void *ctx)
 {
