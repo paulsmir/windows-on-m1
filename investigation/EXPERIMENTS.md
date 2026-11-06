@@ -45551,3 +45551,18 @@ distinguishes AUTHORIZE rejection (result, prp_fail) from a submitted command th
 (result 0, no REAP) and from a completed command with an error status (cqe_dw3).
 Single variable vs R1: receipt-only m1n1 change. Expected: one or more "HV ANS data" lines naming the
 failing step. Recovery as R1.
+
+ANS004-R2 result (recorded 2026-11-06T16:03:58Z): CONFIRMED (Identify, first native DMA); export failed at S60 by an orchestration defect.
+Broker receipts (ANSBUILD011): op=1, op=2, op=3 result=0; data op=4 (AUTHORIZE_SUBMIT) q=0 tag=0
+sqe_op=0x6 len=4096 result=0 prp_fail=0; data op=5 (REAP) result=0 cqe_dw3=0x10000 (phase 1,
+status 0 = success); the same pair again for the namespace Identify; op=6 seq=8 and op=8 seq=9
+result=0 (clean native stop). The controller DMA-wrote two 4 KiB Identify pages into guest RAM
+through the EL2 translation; the driver parsed them and took its designed stop3 exit.
+ANS004-R1's single data operation (no REAP) therefore did not reproduce; R1 had no data receipts,
+so its exact cause stays unknown (recorded as an intermittent, watch item).
+Export: online took 3 tries (online_try 1,2 = -2147212283, try 3 = 0) - the retry design works;
+S60 then failed immediately (no X:\ANS001-EXPORT.LOG) because WINPE-ANS004 already existed on the
+stick from ANS004-R1 (same image, same target) - my orchestration defect. The operator rebooted the
+guest at 16:02:54; observed reboot; normal recovery.
+Fix: ladder.py now emits a run.sh pre-step that renames an existing WINPE-<EXP> target on the stick
+(via SSH in the recovery guest) before every launch.
