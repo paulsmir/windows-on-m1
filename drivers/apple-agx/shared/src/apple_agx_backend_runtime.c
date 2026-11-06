@@ -197,6 +197,20 @@ static APPLE_AGX_BOOL AppleAgxBackendSubmissionValid(
              Submission->Submission.DmaBytes;
 }
 
+/* rc102 / OV5 step 2: a successor waits on the running job either through its
+ * leading Barrier (LeadBarrierAddress) or, for an OV5-waived plain render
+ * (TaLeadWaived, no compute work, no TA prelude Barrier), only through its
+ * 3D-queue Barrier (D3LeadBarrierAddress). EXP2213: the waived shape was
+ * refused here as ImageFailed and every refused kick reset the engine. */
+static APPLE_AGX_BOOL
+AppleAgxBackendSuccessorLeadValid(const APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
+  if (Job->LeadBarrierAddress != 0ULL) return APPLE_AGX_TRUE;
+  return Job->TaLeadWaived != 0u && Job->D3LeadBarrierAddress != 0ULL &&
+                 Job->ComputeWorkAddressCount == 0u && Job->TaBarrierAddress == 0ULL
+             ? APPLE_AGX_TRUE
+             : APPLE_AGX_FALSE;
+}
+
 static APPLE_AGX_BOOL
 AppleAgxBackendJobValid(const APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
   APPLE_AGX_U32 index;
@@ -254,7 +268,7 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeSubmitSuccessor(
           &Runtime->Roots, submissionBytes, submissionByteCount, Submission,
           &Runtime->SuccessorJob) ||
       !AppleAgxBackendJobValid(&Runtime->SuccessorJob) ||
-      Runtime->SuccessorJob.LeadBarrierAddress == 0ULL) {
+      !AppleAgxBackendSuccessorLeadValid(&Runtime->SuccessorJob)) {
     AppleAgxBackendZero(&Runtime->SuccessorJob,
                         (APPLE_AGX_U32)sizeof(Runtime->SuccessorJob));
     return AppleAgxBackendRuntimeResultImageFailed;
