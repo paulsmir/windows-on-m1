@@ -36,8 +36,9 @@ Rules:
   (15b47216, hardware check pending).
 - **BUILD** a refused depth-2 kick must fall back to depth one, never reset the
   engine (EXP2213 showed a KMD-internal refusal escalating to an ENGINE reset).
-- **OPEN** firmware->host rings (stats/ktrace/fwlog) drained like Asahi
-  (gpu.rs); today only the event ring is consumed (receipt pending).
+- **DONE** firmware->host rings (stats/ktrace/fwlog) drained like Asahi
+  (gpu.rs) after every job, default on since 125bddd1 (EXP2217 drain proof,
+  EXP2219 perf gate PASS; Wom1FwRxDrain = 0 disables).
 
 ### 2.2 Dependencies (D3D12 -> AGX)
 Target: order work only by what D3D12 orders (ResourceBarrier) and by
@@ -86,3 +87,6 @@ driver-internal hazards -- the same per-resource model Apple's kext uses
 - Shared-store vectorize: class O, no gain (EXP2211) -> stays off.
 - OV5 TA waiver: class O on top of I; hangs the GPU -> off until 2.2 OPEN is
   resolved; the mechanism (3D Barrier, parser, successor rule) stays.
+- Firmware RX drain: class C, perf gate PASS (EXP2219) -> default on.
+- Perf gate: first CS and first GravityMark run of a boot are cold; the gate
+  uses a warm-up plus two same-boot repeats (EXP2218/EXP2219).

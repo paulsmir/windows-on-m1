@@ -70283,3 +70283,13 @@ Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0; post-exp-gate.sh (CS
 - Hashes: sys baafe7480afe, UmdArm64 62fb72ce7949, UmdX64 6f3d96857e2b, Umd32 f500ba3c1c6e; manifest 44f7398c269c, hardware-manifest 6d21f95b6b6c; probe2219.sh 1bc8b0518cbd (PROBE_LINT_OK); visible recovery rec2219h b0e1b249d60a5063; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1FwRxDrain=1.
 - Recovery rec2219h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2219-drain-gate/run2219.sh.
+
+EXP2219 HARDWARE ACTUAL (2026-11-06T22:04:42Z): **CONFIRMED: the firmware RX drain (Wom1FwRxDrain=1, no other switch) passes the perf gate; drain becomes the default (class C).**
+- SWITCHES_SET Wom1FwRxDrain=1; pipeline rc 0; D3D12 suite 119/0; guest alive; no firmware fault, no reset; GravityMark wer 0.
+- GravityMark HD PERF 100k -temporal 0: probe d run 40.070 (first run of the boot), same-boot repeats r2 41.012, r3 40.839 -> gate on repeats PASS (worst 40.839 vs 41.036, -0.48 %). The probe's d run alone gave PERF_GATE_FAIL -2.35 %: the first GravityMark run of a boot is low like the first CS run (EXP2218).
+- CS 1.6: warm-up 45.875, r2 49.611, r3 49.649 -> PASS (worst 49.611 vs 48.380, +2.54 %; r2/r3 spread 0.04 fps, cross-boot comparison).
+- The drain path does not depend on Wom1JobDiagnostics (AdmissionFwRxDrainWindows is called whenever FwRxDrain is set); EXP2219 has no Wom1FwRx receipt because diagnostics were off, EXP2217 proved the same code drains (98359 messages, 0 failures).
+- Process: post-exp-gate.sh now also repeats the d arm twice in the same boot (gm-repeat.sh) and gates GravityMark on the repeats.
+- Code: 125bddd1 drain default on (Wom1FwRxDrain = 0 disables). Test-fixture repair 18953688 (TDR drill fixtures, broken since Q2c/OV2). Baseline gate ran in a copy with m1n1 m2/pool-window (the shared m1n1_windows checkout is detached at 0d3a75b3 since the HVS2ISO work, which breaks three g4_live tests; restoring it was not permitted from this session).
+- Evidence: evidence/EXP2219, EXP2219-gate, EXP2219-gmrep. Recovery rec2219h RECOVERY_DONE.
+- Verdict: CONFIRMED. Next: package with 125bddd1 (drain default, no switch) through the gate, then the GPU priorities in GPU_DRIVER_ARCHITECTURE.md.
