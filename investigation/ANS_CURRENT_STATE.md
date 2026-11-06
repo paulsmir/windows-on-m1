@@ -49,6 +49,8 @@ No flag is cleared by assertion; the policy still rejects any flagged region.
    that boot already shows disp0 L1 0 at 0x9fff34000 (above mem_top 0x9df708000)
    and L1 1-3 in the m1n1 heap; dart-dcp is locked (unobserved). Needs one new slot
    from fork 6 (bench owner); never start run_uefi from the ANS session.
+   R2 (00:14Z) REJECTED the PMGR heuristic: dart-scaler TTBR read aborted at EL2
+   with PS active, USB dropped. Redesign offline before asking for any new slot.
 2. ANS005A offline — heapblock ceiling + exact DART_TABLES region publication
    (assisted + standalone), `run_uefi.py` assertion `phys_base >= natural`,
    RED/GREEN in `tests/hv_ans_handoff_memory_test.py` and an allocator test.
