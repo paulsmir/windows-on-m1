@@ -44866,3 +44866,31 @@ run the normal recovery without an operator. Inventory commands, SAN3 and "no di
 online / no driver operation" stay unchanged; the network export is a new evidence
 step and must be qualified in the software VM again (ANSCOLLECT005) before hardware.
 The WIM can be updated on the Mac with wimlib-imagex (no Windows VM needed to edit).
+
+### ANSUSB001 — USB evidence drive inventory in the recovery guest (preregistered)
+
+Status: preregistered 2026-11-06T09:29Z (UTC). Supersedes the FTP evidence
+channel plan (ANS001-PREP-E): the user offered to leave a USB flash drive in
+the J313 (relayed by fork 6, adopted under the user's direct ANS autonomy grant
+of 2026-11-06).
+
+WHY THIS HYPOTHESIS:
+1. The guest's only USB controller is the xHCI behind dart-usb1 (run_uefi.py
+   devices tuple, xhci 0x502280000), identical in VNVME_RECOVERY and ANS_NATIVE;
+   the other Type-C port carries the m1n1 proxy link.
+2. EXP-20260826-121 enumerated USB mass storage behind the guest-port hubs with
+   CM_PROB_NONE.
+3. ANSCOLLECT004 (VM) already PASSED an export by exact MBR disk ID + exact
+   marker, diskpart online/assign, xcopy; only the constants are hardware-specific.
+
+Variable: none in the platform — read-only SSH inventory of the running normal
+recovery guest (exp377/exp392) plus one marker file written to the user's
+freshly formatted FAT32/MBR drive labelled ANSRESULT. No reboot, no launch.
+Marker: `ANS001-EVIDENCE.TAG` containing 27a6a231-661c-4e2b-9897-a80e745c3b7a.
+Script: `.local/ans-native/ANSUSB001/inventory.ps1`.
+Expected: exactly one USB disk, MBR, one FAT32 volume ANSRESULT; marker reads
+back byte-exact; disk signature recorded for the hardware collector.
+Failure: no USB disk / not ANSRESULT / not MBR-FAT32 -> port or format
+instruction to the user, no ANS001.
+Evidence: `.local/ans-native/ANSUSB001/` (inventory.txt, marker readback).
+Recovery: none needed (no state change beyond the marker file).
