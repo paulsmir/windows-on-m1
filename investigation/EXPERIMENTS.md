@@ -44828,3 +44828,24 @@ alive. Scope: short boot (~1 min of guest time); a longer soak is not covered.
 Verdict: CONFIRMED — the ANS m1n1 line boots the recovery guest with the heap seal
 active and no ceiling panic. Next: rebuild the ANS001 packet on the merged line
 (native Mu + this m1n1), then ANS001/ANS002.
+
+### ANSBUILD006 + ANS001-R2 packet — offline result (2026-11-06T02:38Z)
+
+ANSBUILD006 = the ANS005B hardware-booted m1n1 (470ef6872, sha256 167f189f...6559),
+receipt .local/ans-native/m1n1-build/ANSBUILD006/receipt.json, source manifest
+ANSBUILD006-source.json sha256 00944b10ab4e5cc0be10252b2ddfae6d5bbca8fe8e8bb6a154bc4c9751f5d72d
+(762 tracked files, clean tree). Packet .local/ans-native/ANS001-R2-ready/ assembled by
+.local/ans-native/assemble-ans001-r2.py (copy of the 2026-09 assembler; only m1n1, test
+receipt 877b7846..., audit scope/recovery text changed). Unchanged and re-verified by
+hash: native Mu FD 85157f29..., WinPE image 3db37261..., collector/driver/signature
+evidence, recovery baseline 377/392. qualification.json sha256
+7a3ae8bb34d7c05eee19a998d624d831ac9c9f06593531476badfc28cc9a52ad; validate_manifest
+passed; run-assisted.sh --dry-run exit 0 (commands in .local/ans-native/ANS001-R2-COMMANDS.json).
+Mu was not rebuilt: since 85157f29 the only Mu change is the behavior-identical clang-21
+header fix (baea359242).
+Blocker for an unattended run (design, not a defect): the WinPE collector writes only to
+X:\ANS001-RESULTS and stops; export needs an operator-inventoried USB medium and a
+human reading the screen. With no operator, ANS001 cannot produce durable evidence.
+Next: give WinPE a host-observable evidence channel (candidate: the debug vUART that
+run-assisted already logs to guest-uart.log), rebuild the WinPE image, re-qualify in
+the VM, then run ANS001-R2 unattended.
