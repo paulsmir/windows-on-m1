@@ -45633,3 +45633,15 @@ for the hidden pagefile plus `copy /b` of large visible files (registry hives, M
 ### ANS006-R2 (preregistered 2026-11-06T16:31:08Z)
 
 Packet 84dc8d78457ad189aa5301abcc76b3e63714f64090f873ec4d8d26b0a1d20940 (WinPE ac3a7e73..., ANS006-READ with `type` for the hidden pagefile + `copy /b` of hives/MRT.exe). run.sh phase-2 cap raised 1500 -> 3600 s for the long reads. Single variable vs R1: the read tool. Expected: STATUS lines type1/type2 rc=0 with t0/t1 and copy lines; throughput = bytes / (t1-t0). Recovery as R1.
+
+ANS006-R2 result (recorded 2026-11-06T16:42:29Z): FAILED — native reads hit I/O errors under sustained load.
+Read-only mount again OK (RO verified, online try 1, D: Windows NTFS). `type D:\pagefile.sys >NUL`
+(5,637,144,576 B) ended with "The request could not be performed because of an I/O device error"
+in both passes (20.8 s and 113.5 s), so the timings are not throughput. `copy /b` of SOFTWARE
+(82.6 MB, 76.6 s), SYSTEM, COMPONENTS returned rc=1; DRIVERS (1.8 MB) rc=0. The 64 logged data
+receipts (cap) were all result=0/status 0 and covered only the early small I/O; the failing
+operations were not logged. Disk offlined again; export/reboot/recovery OK.
+Offline review: TCB construction matches Asahi apple.c t8103 (opcode 0, length=NLB, prp1/prp2,
+dma_flags by direction); no defect found by inspection.
+Next (R3): ANSBUILD012 receipt selection = first 16 data ops + first 16 submits >16 KiB + up to 48
+failing ops (result!=0 or CQE status!=0), and ANS006-READ exports the WinPE System event log.
