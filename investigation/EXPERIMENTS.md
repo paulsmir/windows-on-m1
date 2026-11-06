@@ -45400,3 +45400,11 @@ select, online in a fresh session}. In the VM the online succeeded on try 1, but
 (disks onlined under a SAN policy come up read-only). Variant I2 restores it after the online
 in the same session: image 8cc8b075157907b8852b8dd0db07b9d395cac7f9b373d0fadaf433dffd0cef1a,
 VM ANSCOLLECT010 running.
+
+ANSCOLLECT010 PASS (2026-11-06T13:55:25Z): I2 in VM, online_try=1 online_exit=0, clear readonly, san restore 0, export_exit=0 to WINPE-R9 (80 files), pre-existing files unchanged, fsck clean; receipt 496465b1....
+
+### ANS001-R9 (preregistered)
+
+Packet e77b0c839b93bd4ca93c110c013cd5cb8820b82dcef5f3a0a05ec50ffeb863cd (WinPE I2 8cc8b075...), dry-run 0.
+WHY THIS HYPOTHESIS: R8 showed OnlineAll alone is insufficient when online follows immediately; the operator succeeded only after rescan, a new session and list disk; I2 reproduces that with a 5 s pause and up to 5 retries, then clears read-only (VM-proven).
+Single variable vs R8: wrapper S30 (retry sequence + clear readonly). Expected: online_ok=1 within 5 tries, export to WINPE-R9, reboot.
