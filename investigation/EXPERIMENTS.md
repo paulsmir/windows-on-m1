@@ -44757,3 +44757,41 @@ explicit user approval.
 ANS005B waits for direct user confirmation in the ANS session (relayed approvals not
 accepted). Fork 6 returns the bench in the normal profile after the run in progress
 when the user confirms.
+
+### ANS005B — preregistration (2026-11-06T02:17Z): first boot of the ANS m1n1 line (heap seal) with the recovery guest
+
+Authority: user, directly in the ANS session ("Подтверждаю. Делай как лучше всего и не
+спрашивай ... разработкой и тестом драйвера"). Bench: fork 6 returns it after EXP2206.
+
+WHY THIS HYPOTHESIS:
+1. SOURCE m1n1 0beb7b552: descriptor publish now sets a heapblock ceiling at the guest
+   base; a crossing allocation panics. No hardware boot has exercised it.
+2. SOURCE m1n1 470ef6872 / root d8f6519ba: ANS memory admission now depends on that seal;
+   the ANS m1n1 line (merge ba1cfa1 + ANS commits) has never been hardware-booted
+   (ANSBUILD004C was offline only).
+3. OBSERVED ANSDART001-R3: m1n1 heap base 0x804d90000 / top_of_kernel_data 0x80554c000,
+   guest base 0x850000000, so the ceiling leaves ~1.2 GiB headroom; a panic would mean
+   an unexpected large or misplaced allocation, not normal growth.
+Hypothesis: the recovery guest boots to SSH with 8 CPUs and one inert APPL0002 under the
+ANS m1n1 + ANS-worktree runner, with no heapblock ceiling panic and launch-contract
+checkpoints captured. Rejected if SSH does not come up within 300 s or full.log shows a
+heapblock panic.
+Variable (ATOMIC CONTRACT): m1n1 binary + the runner/proxyclient of the same branch
+(proxy ABI and the new DART_TABLES descriptor are defined together); Mu unchanged.
+Candidate: .local/ans-native/ANS005B/m1n1-ans005b.macho sha256
+167f189f77f78576a2082f2fb75163b3eae4d587634772c9d0203eea5d2a6559 (m1n1 470ef6872, clean
+make LLDDIR=/tmp/agx-lld-dir, rustup cargo); root f25ca59279ab63e8de49dbd75f64960dba92ab9e; Mu
+.local/experiments/EXP810-g4-package817/recovery/J313_EFI-exp392.fd sha256
+16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06; runner run_uefi.py of
+this worktree, VNVME_RECOVERY, --display-mode physical --debug-mode off --low-mem,
+WOM1_ALLOW_LEGACY_LAUNCH_CONTRACT unset (contract opcodes present).
+Recovery artifact (known good, RECOVERY_BASELINE): m1n1-exp377.macho sha256
+fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a + exp392 via
+.local/experiments/EXP950-dwm-output-trace/launch-normal2.sh.
+Procedure: .local/ans-native/ANS005B/run.sh (sha256 70cdc4f9d7a26ab0fad94717f0d3cee5b51c425f06af4a93f75d813621d7d0ce) -> drop to proxy -> .local/ans-native/ANS005B/launch-ans005b.sh (sha256 734f5670571fcb401992e4f178864fbbe628f0059b0dc927158f98b5c7d3f485)
+under air-serial-guard -> SSH gate (APPL0002 count/problem, CPUs, disks) -> drop to proxy
+-> launch-normal2.sh -> SSH gate. On candidate failure: kill only the exact run_uefi PID,
+wait for proxy, normal launch; if the proxy does not return, stop and ask the user for
+a physical reboot.
+Evidence: .local/ans-native/ANS005B/{run.log,launch.log,chainload.log,full.log,contract.bin,candidate-gate.txt,
+recovery-gate.txt,normal-launch.log}.
