@@ -70243,3 +70243,8 @@ Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0 (KMD receipts at poll
 - Hashes: sys 953f4c17f858, UmdArm64 72ef7579f962, UmdX64 28bc4e98bb50, Umd32 ff3bf39b2b2e; manifest 6c5104d37774, hardware-manifest f1dfd1b5ad41; probe2217.sh ac888d624aa0 (PROBE_LINT_OK); visible recovery rec2217h 799bd4985bd1606a; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1FwRxDrain=1 Wom1JobDiagnostics=1.
 - Recovery rec2217h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2217-fwrx-drain/run2217.sh.
+
+EXP2217 HARDWARE ACTUAL (2026-11-06T12:38:23Z): **CONFIRMED (contract): draining the firmware RX rings works (stats ring moving, 98359 messages drained, 0 failures); no FPS change (HD PERF 39.915 vs EXP2216 40.472, cross-boot noise). New lead: the LIVE firmware stats during GravityMark report power_state.pstate 1 and PState min 1 / max 1.**
+- Suite 119 PASS / 0 FAIL; GPU_RESET none; PREEMPT_REFUSAL none. Switches Wom1FwRxDrain=1 Wom1JobDiagnostics=1.
+- Wom1FwRx after-d: samples 77, stats_read 55 = stats_write 55, write_changes 75, stats_full 0, drain_calls 31494, drained_stats 98359, ktrace/fwlog 0; live Utilization [100,100,0,100], FwBusy 1, PowerState active 1 pstate 1 (ts 6273742123), PState min 1 max 1.
+- Verdict: drain CONFIRMED as class C (firmware RX consumer contract, Asahi gpu.rs/channel.rs); stays opt-in until a no-switch perf-gate boot; the pstate reading is the next hypothesis (decoder offsets vs Asahi PState {pad8, ps_min, unk1, ps_max, unk2}, ADT perf-states meaning, initdata DVFS fields) -- the earlier "DVFS ruled out" verdict is to be re-checked against how it was measured. Recovery rec2217h.
