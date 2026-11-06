@@ -55,6 +55,14 @@ set IDMATCH=0
 for /f "usebackq tokens=1,2,3,*" %%A in ("%OUT%\HW-VERIFY-ID.LOG") do if "%%A"=="Disk" if "%%B"=="ID:" if /i "%%C"=="@DISKID@" if "%%D"=="" set /a IDMATCH+=1
 if not "!IDMATCH!"=="1" goto failed
 call :stage S50_ASSIGN_VERIFIED_VOLUME
+rem SAN policy 4 (OfflineInternal) onlines the USB stick at arrival and Windows gives it a
+rem letter (ANS001-R6: C:). Reuse a letter only if it holds this run's marker; else assign.
+set LETTER=
+set MARKCOUNT=0
+for %%L in (C D E F G H I J K L M N O P Q R S T U V W Y Z) do if exist %%L:\@RUNDIR@\ANS001-EVIDENCE.TAG (set /a MARKCOUNT+=1 & set LETTER=%%L)
+>>"%OUT%\HW-WRAPPER.TXT" echo existing_marker_letters=!MARKCOUNT! letter=!LETTER!
+if "!MARKCOUNT!"=="1" goto marker_check
+if not "!MARKCOUNT!"=="0" goto failed
 set LETTER=
 for %%L in (V W Y Z U T S R Q P O N M L K J I H G F E D C) do if not defined LETTER if not exist %%L:\ set LETTER=%%L
 if not defined LETTER goto failed
@@ -63,6 +71,7 @@ if not defined LETTER goto failed
 >>"%OUT%\HW-ASSIGN.TXT" echo exit
 diskpart /s "%OUT%\HW-ASSIGN.TXT" >"%OUT%\HW-ASSIGN.LOG" 2>&1
 >>"%OUT%\HW-WRAPPER.TXT" echo assign_exit=!errorlevel! letter=!LETTER!
+:marker_check
 call :stage S51_MARKER_PRESENT
 if not exist !LETTER!:\@RUNDIR@\ANS001-EVIDENCE.TAG goto failed
 call :stage S52_MARKER_EXACT
@@ -73,8 +82,8 @@ for /f "usebackq delims=" %%A in ("!LETTER!:\@RUNDIR@\ANS001-EVIDENCE.TAG") do (
 )
 if not "!TAGMATCH!:!TAGINVALID!"=="1:0" goto failed
 call :stage S60_EXPORT
-if exist "!LETTER!:\@RUNDIR@\WINPE" goto failed
-set TARGET=!LETTER!:\@RUNDIR@\WINPE
+if exist "!LETTER!:\@RUNDIR@\@TARGETSUB@" goto failed
+set TARGET=!LETTER!:\@RUNDIR@\@TARGETSUB@
 xcopy "%OUT%" "!TARGET!\" /e /h /i /y >X:\ANS001-EXPORT.LOG 2>&1
 set EXPORTRC=!errorlevel!
 copy /y X:\ANS001-EXPORT.LOG "!TARGET!\EXPORT.LOG" >nul

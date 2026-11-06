@@ -45306,3 +45306,24 @@ Verdict: ANS001 CONFIRMED on hardware (native ANS ownership through EBS, WinPE b
 enumerated inert with the exact contract resources). Open defect: unattended USB online in
 WinPE under SAN policy 3 (VDS "object not found"); to fix offline before ANS002.
 Evidence tar sha256 38e6db72df0d4e22b81b76b79d512af501ef5529778bd793f3718fed647fcd62.
+
+### ANS001-PREP-F + ANSCOLLECT006 (preregistered 2026-11-06T12:36:03Z)
+
+Fix for the ANS001-R6 export failure, from the R6 evidence and the operator's report
+("san policy=OnlineAll, exit diskpart, then online disk worked; the volume already had C:"):
+under SAN policy 3 (OfflineAll) VDS refuses `online disk` ("object not found") on the J313
+USB stick. Change: WinPE SYSTEM SanPolicy 3 -> 4 (OfflineInternal, documented: internal disks
+offline, external disks online at arrival), the collector precondition now requires 0x4, and
+the wrapper first reuses an existing letter holding this run's exact marker (exactly one) and
+only otherwise assigns one. The target subfolder is a per-run parameter (WINPE-R7), because
+the stick already holds the operator's manual WINPE export, which must stay untouched.
+Build: prepared-ANS001-F from D (two SYSTEM hives changed only in SanPolicy, verified by
+export diff; collector, HW-START, winpeshl replaced) image
+5b2b4d0a3e4a96e338f4dcdf2391e24fe084f02f0e0855158679c253da52c48d, collector 8b8f180e...,
+HW-START 4302ebff....
+ANSCOLLECT006 (VM, same shape as 005c; evidence disk additionally holds RUNDIR\WINPE\OLD.TXT):
+expected: the stick volume is online with a letter without `online disk`, the wrapper takes
+the existing-letter path (existing_marker_letters=1), exports to WINPE-R7, dismounts and
+reboots; OLD.TXT, USER-FILE.TXT and the marker are unchanged.
+ANS002+ checkpoint (open): confirm that the AppleAns disk is classified as internal and stays
+offline under policy 4.
