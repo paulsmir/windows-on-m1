@@ -70169,3 +70169,19 @@ EXP2213 HARDWARE ACTUAL (2026-11-06T05:02:07Z): **REJECTED as run -- every OV5-w
 - Wom1GpuReset: resets 5, ok 5, ENGINE, SchedulerFaulted tag 4 line 6499 = AdmissionJobWindowKickFailedWindows (backend_platform_windows.c in this source). Wom1JobWindowKickFail v2: Failures 5, Fence 0x345a, Running 0x3459, Line 6499, BackendResult 5 (ImageFailed), SubmitGuard 0 (the provider was never reached), BuildStep 30 RELOCATED, RunningKind 3 compute, NextKind 1 render, Barrier 1 TA_ON_COMPUTE. Wom1Ov5WaiverReceipt after-d: Considered 2440, Waived 5.
 - Root cause (source): AppleAgxBackendRuntimeSubmitSuccessor refused any successor with LeadBarrierAddress == 0 -- exactly the waived shape, whose only wait is D3LeadBarrierAddress. The step-2 tests drove the provider/queue runtime directly and missed this layer. Fixed in 56772879 (AppleAgxBackendSuccessorLeadValid; test_backend_successor_waived_lead RED -> GREEN). Secondary finding: a refused depth-2 kick is handled as an engine fault (reset) instead of a depth-1 fallback -- separate item.
 - Verdict: the waiver's hardware behaviour is still untested (no waived job reached the firmware). Next: EXP2214 = the same arms with the fix (waiver ON); then a waiver-OFF control on the same package. Recovery rec2213h.
+
+EXP2214 HARDWARE BEFORE 2026-11-06T05:10:09Z:
+Steps: D3D12 suite; a FHD FULL OV3B=1 (image + score); c HD PERF OV3B=1; d HD PERF OV3B=1 (KMD receipts at poll 12 and after d).
+- WHY THIS HYPOTHESIS: (0) EXP2213: all 5 waived kicks were refused by the backend runtime (LeadBarrierAddress == 0 guard), fixed in 56772879; (1) EXP2210: the firmware accepts the compute-stamp Barrier first in a successor 3D queue (Built == Placed 1836, no fault); (2) EXP2210: R8 is OV5-eligible (value 22 nibble 0 in 3003/3011 rows); (3) EXP2201: Apple overlaps c19 with R20's vertex stage (0.72 ms HD / 1.45 ms FHD); our R8's TA waits for all of C7 (~0.65 ms HD).
+- WINDOWS CONTRACT: D3D12 orders C7 -> R8 only through the ranges the UMD verdict checked (no barrier naming R8's vertex-stage ranges, no unplaceable access); the fragment stage stays ordered behind C7 by the 3D Barrier.
+- AGX/ASAHI CONTRACT: TA publication = root only; 3D queue leads with the compute-stamp Barrier (stamp_self = the render's 3D stamp); in-order completion; no third job planned while N runs.
+- TRANSLATION: UMD header cdm_barrier NONE (feature 0x4) -> KMD TaLeadWaived on a TA_ON_COMPUTE successor plain render from the same context/process.
+- ATOMIC CONTRACT: none -- one KMD switch; the UMD flag is inert without the published feature.
+- WHAT IS STILL UNKNOWN: whether the firmware runs the TA while compute runs; the 3D Barrier releasing on a genuinely unfinished compute stamp; buffer-manager grow behaviour; image correctness.
+- Expected: suite 119/0; Wom1Ov5WaiverReceipt Waived == Placed > 0 (~1 per frame), no fault/channel error/TDR; HD PERF up by at most ~2.5 % vs EXP2214; FHD image identical to EXP2214's.
+- Failure criteria: any fault/hang with Placed > 0 -> waiver rejected; image difference -> UMD proof wrong; no FPS change with Waived > 0 -> firmware serialises TA (inconclusive).
+- Recovery: rec2214h (AT_PROXY after a reset; save full.log first).
+- Probe: agx_d3d12_probe_e2214_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys a8f834463c80, UmdArm64 89cca7fe60a7, UmdX64 face7209e817, Umd32 f4e4b48f9b48; manifest b85bd9b6be6a, hardware-manifest 54df6af8f0da; probe2214.sh 06f7d89e960e (PROBE_LINT_OK); visible recovery rec2214h 4e4d3ad0f3b381a8; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
+- Recovery rec2214h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2214-ov5-waiver2/run2214.sh.
