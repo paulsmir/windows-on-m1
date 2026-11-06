@@ -45659,3 +45659,21 @@ WHY THIS HYPOTHESIS: ANS006-R2 reads failed with I/O device errors after the log
 I/O, so the failure lies in operations that were not logged; R3 logs exactly those (large and failing).
 Single variable vs R2: receipt selection in m1n1 (+ event-log export). Expected: failing receipts
 with result/cqe status and length, plus disk/StorPort events. Recovery as R2.
+
+ANS006-R3 result (recorded 2026-11-06T17:16:53Z): FAILED (guest hung at Windows boot); root-cause hypothesis found offline.
+Receipts (ANSBUILD012): QUERY/CLAIM/REGISTER_QUEUES ok; Identify x2, Get Features, CREATE CQ/SQ ok;
+then the first queue-1 operation, FLUSH (sqe_op 0x0, seq 14), was submitted (result 0) and never
+reaped; next receipt op=6 QUIESCE seq 15 result=0 (StorPort reset path), no RELEASE/RESET receipt;
+Windows stayed at the boot screen (operator). The runner ignored SIGTERM at 17:05:35 while blocked
+on the serial link; the operator power-cycled at ~17:15; the R3 orchestrator observed the reboot and
+recovered (SSH 17:16:13). No export (WinPE never reached the shell).
+Offline cause analysis (m1n1 src/nvme.c queue_invalidate vs Asahi apple.c apple_nvmmu_inval vs m1n1
+recovery path): native mode returned false (queue FAULT) when NVMMU_TCB_STAT (0x28120) is nonzero
+after TCB invalidation; Asahi only warns (dev_warn_ratelimited) and the proven recovery path treats
+its status read as advisory. A fault there drops the CQE (lost completion) and fails all later I/O,
+which matches ANS004-R1 (first Identify never reaped), ANS006-R2 (I/O device errors after many good
+ops) and ANS006-R3 (first FLUSH never reaped).
+Fix: m1n1 053ed880 - status counted (tcb_inval_failures telemetry) and advisory; regression test
+nvme_native_lifecycle_test RED->GREEN; receipts print tcb_stat_nz. ANSBUILD013 440f3a4e...
+Gate GREEN (offline-gate15) after the stuck R3 runner released the launch lock (gate14 had failed
+only on lock-holder tests while that runner was alive).
