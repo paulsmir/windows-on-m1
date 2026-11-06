@@ -70106,3 +70106,9 @@ Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0 APPLE_AGX_D3D12_OV3B=
 - Hashes: sys 5bf0bdfa7c3d, UmdArm64 979a922f3c54, UmdX64 597970f4f9a3, Umd32 d872efbdb702; manifest 55715f635cfd, hardware-manifest 9a8232db43c9; probe2210.sh a0fcec3e5087 (PROBE_LINT_OK); visible recovery rec2210h b681cd3673b68ca7; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5FragWaitDrill=1.
 - Recovery rec2210h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2210-ov5-drill/run2210.sh.
+
+EXP2210 HARDWARE ACTUAL (2026-11-06T04:01:01Z): **CONFIRMED: the G13 firmware accepts a compute-stamp Barrier as the first entry of a successor render's 3D queue (OV5 drill), and the corrected OV5 verdict makes R8 TA-eligible.**
+- Suite 119 PASS / 0 FAIL; GPU_RESET none; WER 0; guest alive. d HD PERF OV3B=1 39.983 FPS (EXP2203-class ~39.8-40.2: no regression).
+- Wom1Ov5DrillReceipt (u32: version, bytes, Considered, Built, Placed, Refused[0..7], last fence/wait/stamp_self/offset): mid12-d (1, 68, 6908, 1219, 1219, 0,0,0,5689,0,0,0,0, 35597, 3918592, 1027352576, 34880); after-d (1, 68, 9653, 1836, 1836, 0,0,0,7817,0,0,0,0, 46735, 6193920, 1028770560, 43072). Built == Placed > 0 and no fault/channel error; Refused[3] are the drill's own non-candidates.
+- measure-d3d12-ov2-refusal value 22 = 0x00000999 in 3003 of 3011 rows (R2/R4/R6 = 9 prelude, R8 = 0 TA-independent), value 23 = 4: the 29708483 correction confirmed on hardware.
+- Verdict: CONFIRMED (drill) and CONFIRMED (R8 eligible). Next: OV5 step 2 (KMD): for a render flagged TA-independent (UMD header cdm_barrier NONE, feature 0x4 behind Wom1Ov5TaWaiver=1), drop the TA-ring compute-stamp Barrier and keep only the 3D one; first target C7->R8 (Apple c19->R20: 0.72 ms HD / 1.45 ms FHD overlap). Recovery rec2210h.
