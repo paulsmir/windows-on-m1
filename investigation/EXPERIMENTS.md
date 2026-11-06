@@ -45618,3 +45618,14 @@ sequential read are new.
 Expected: STATUS readonly_verified=1, online_ok=1, windows_volume=<L>, two reads rc=0 with timing;
 offline; export; reboot. Failure: RO not verifiable (no online, step ends), online refusal, read
 errors (broker receipts), hang.
+
+ANS006-R1 result (recorded 2026-11-06T16:24:07Z): PARTIAL — read-only native volume mounted; throughput not measured (tool defect).
+WinPE: native disk 0 "NVMe APPLE SSD AP0256" (Disk ID {1E15883E-...}); `attributes disk set
+readonly` verified (Current Read-only State : Yes, Read-only : Yes); OnlineAll + online try 1 rc=0;
+volumes: D: "Windows" NTFS 110 GB Healthy, "EFI - SECON" FAT32 477 MB, "WINESP" FAT32 512 MB
+(APFS partitions unrecognised, no letter); OfflineAll restored; disk offlined again (rc 0).
+Largest candidate D:\pagefile.sys 5,637,144,576 bytes, but `copy /b` returned "The system cannot
+find the file specified" (COPY does not open hidden/system files) twice, so no timing. 63 broker
+data receipts, all result=0. Export, reboot, recovery OK.
+So: first read-only mount of the Windows NTFS volume from the native SSD path. Fix (R2): `type`
+for the hidden pagefile plus `copy /b` of large visible files (registry hives, MRT.exe).
