@@ -45714,3 +45714,7 @@ ans_memory_translate false). This is the source of the R2 "I/O device error" rea
 Ruled out offline: pin table capacity (34 = 33 data + 1 list); RAM-disk window (Mu reserves the
 whole PcdPreloadedRamdiskMaxSize window). Next R6: ANSBUILD014 logs each denied IPA with its
 stage-2 leaf (raw, shift, OA) - receipt-only.
+
+### ANS006-R6 (preregistered 2026-11-06T17:55:12Z)
+
+Packet 9dcc17a1715bd0738ad4535a31de27eddd8fae3050002ea066a42674827e951a: as R5 with m1n1 ANSBUILD014 (70680298, fd951e82...: "HV ANS deny" receipts with IPA and stage-2 leaf); gate 8e21da23; dry-run 0. WHY THIS HYPOTHESIS: R5 localized the read failures to EL2 PRP translation DENIED; R6 identifies the rejected pages (receipt-only change). Expected: "HV ANS deny ipa=.. leaf/raw/shift/oa" lines naming the region (low window, carveout, RAM disk, non-16K leaf...). Recovery as R5.
