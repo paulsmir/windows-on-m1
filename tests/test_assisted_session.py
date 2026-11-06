@@ -21,7 +21,7 @@ import sys,time
 from pathlib import Path
 from tools.ans_launch_lock import acquire
 from tools.assisted_session import AssistedSession
-root=Path(sys.argv[1]);s=AssistedSession(acquire(root),timeout=1)
+root=Path(sys.argv[1]);s=AssistedSession(acquire(root),timeout=5)
 s.start_reader([sys.executable,str(root/'reader.py'),str(root/'reader.pid'),str(root/'reader.closed')],root/'reader.log',root)
 for _ in range(100):
  if (root/'reader.pid').exists():break
