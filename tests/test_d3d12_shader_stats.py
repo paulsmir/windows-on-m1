@@ -185,6 +185,12 @@ class ShaderStatsReceipt(unittest.TestCase):
         self.assertLess(draw.index('const ShaderStatsDraw stats_draw(graphics);'), draw.index('pipe->draw_vbo('))
         graphics = function(text, 'extern "C" HRESULT AgxD3d12OwnerCreateGraphics(')
         self.assertLess(graphics.index('memset(graphics, 0, sizeof(*graphics));'), graphics.index('graphics->StatsHash[i] = tag.Hash;'))
+        # Asahi precompiles VS/FS default variants in create_*_state
+        # (agx_create_shader_state): the stage tags must already be in scope
+        created = graphics.index('const ShaderStatsDraw stats_create(graphics);')
+        self.assertLess(graphics.index('graphics->StatsHash[i] = tag.Hash;'), created)
+        self.assertLess(created, graphics.index('graphics->Vs = create_shader('))
+        self.assertLess(created, graphics.index('graphics->Fs = desc->Ps ? create_shader('))
 
     def test_dispatch_receipts_name_their_compute_shader(self):
         # The per-shader ranking joins measure-d3d12-dispatch (6th value) with

@@ -4004,6 +4004,11 @@ extern "C" HRESULT AgxD3d12OwnerCreateGraphics(AGX_D3D12_OWNER *owner, const AGX
       graphics->StatsBytes[i] = tag.Bytes;
     }
   }
+  /* Asahi precompiles the VS (and the FS, TCS, GS) default variants inside
+   * create_*_state (agx_create_shader_state), not at the first draw: tag them
+   * with the pipeline's stage hashes too (EXP2140: every VS/FS row was
+   * internal, stage | 0x100) */
+  const ShaderStatsDraw stats_create(graphics);
   struct pipe_context *pipe = owner->Context;
   /* C39: stream output from the geometry shader, else the vertex shader
    * (a pipeline with a hull/domain shader refuses it at draw recording) */
