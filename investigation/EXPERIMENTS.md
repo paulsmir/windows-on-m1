@@ -45790,3 +45790,35 @@ via ~16 trapped MMIO writes + doorbell + PENDING read + REAP, and the driver ser
 (effective queue depth 1, tag 2 throughout). Next: ANS007 performance (batched request ABI / queue
 depth), then write support and native boot.
 Evidence .local/ans-native/ANS006-R9-run/ (hv.log, stick-results.tar 3d41005e90d9ecba94ba1f029d9b3ca3fd2abf092d77b7c8844b79a5084c6087).
+
+## ANS007 — native read throughput attribution
+
+Correction to ANS006-R9 (does not change its verdict): "tag 2 throughout" was wrong. The 32 sampled
+data receipts in ANS006-R9-run/hv.log show I/O tags 2..7 (13x tag 2, up to tag 7), so concurrency >1
+did occur at least during mount. The bulk-read queue depth is unmeasured.
+
+Offline analysis (driver native.c/ans_order.c, m1n1 hv_ans_platform.c/ans_queue.c/hv_exc.c):
+16.4 MB/s with READs of up to 128 KiB is >= ~8 ms per request if requests are 128 KiB. Broker MMIO is
+an EL2 C hook (hv_map_hook), the physical IRQ is routed in EL2 (hv_exc_irq -> vGIC), and submit does not
+wait on hardware, so ~20 EL2 traps per request cannot explain milliseconds. The cost can sit in the
+guest (request size, idle gaps between requests, untagged serialization) or in the device/IRQ path;
+offline evidence cannot separate them.
+
+### ANS006-R10 (preregistered; ANS007 attribution run)
+
+Time 2026-11-06T20:24:36Z. Packet 24bca22596702161fda85653f68a76d41ee8b8d077697de2ac058f92e1f3d07f
+(ANSBUILD018 m1n1 d1d6f7ca, m1n1.macho f854b4bfff3a08a7d834d6500f08761ae70bdf6a180208ba11e1725e1daa5ac5;
+WinPE ef978501 unchanged, AppleAns A2 unchanged; gate c1b77e13 GREEN). run.sh beed5309.
+Launch: bash .local/ans-native/ANS006-R10-run/run.sh (recovery guest -> proxy -> ANS006 WinPE -> recovery).
+Recovery artifact: normal recovery launch (m1n1-exp377 + J313_EFI-exp392), unchanged.
+WHY THIS HYPOTHESIS: (1) per-request time (>= 8 ms) is three orders above the EL2 trap cost of the
+broker path, which is fully EL2-native; (2) the receipts show mixed sizes (4/32/92/128 KiB) and tags 2..7,
+so request size and queue depth during the bulk read are unknown; (3) no hardware wait exists in submit.
+Single variable vs R9: receipt-only perf attribution in the broker (one "HV ANS perf" line per 5 s:
+request-size and queue-depth histograms, submit->physical IRQ latency, IRQ->guest PENDING read latency,
+PENDING->REAP latency, EL2 service time, busy/idle time with zero requests in flight, trap count).
+Broker behaviour is unchanged.
+Expected: ANS006 reads are still correct (rc=0, same timing within noise). The perf lines show either
+idle_ms >> busy_ms (guest-side bottleneck: small requests or serialization), or busy with large hw_us
+(device/IRQ path), or large isr_us/reap_us (guest interrupt/DPC latency).
+Failure criterion: a hang or no perf lines; collection uses hv.log in ANS006-R10-run/.
