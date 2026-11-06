@@ -45422,3 +45422,37 @@ GSIV 0x379 (889), identical to R6. Evidence .local/ans-native/ANS001-R9-run/stic
 Verdict: ANS001 complete (hypothesis R6, unattended evidence channel R9). Next: ANS002
 (AppleAns package in WinPE, QUERY/CLAIM through the broker, no DMA), with the policy-4
 internal-disk checkpoint now moot (boot policy stays 3; only the stick is onlined).
+
+### ANS002-R1 — AppleAns claim-stop in WinPE on native ANS (preregistered 2026-11-06T14:53:00Z)
+
+Offline preparation (all no-hardware):
+- Validator: PROFILES ANS001/ANS002; ANS002 scope ans1-claim-stop requires exactly one AppleAns
+  package of profile native-read-only-stop1 in the WinPE boot index, testsigning, matching package
+  hashes in both audits, and --confirm-experiment equal to the sealed experiment (tests RED->GREEN).
+- m1n1 ANSBUILD010 (b8869345 + test-harness fix 52d83a58): capped receipt printf
+  "HV ANS op=.. seq=.. result=.. state=.. owner=.. gen=.." for broker control operations only;
+  m1n1.macho 72b453d9a875701c87c14074719c8228ae0ce35e08b000a9589752bc340836b2.
+- WinPE ANS002-A: base I2; on the builder DISM /Add-Driver /ForceUnsigned of ANSBUILD003-C
+  (source07, APPLE_ANS_QUALIFICATION_STOP=1, package 199492d0...) into index 1 (oem0.inf,
+  SCSIAdapter) and bcdedit /store BCD /set {default} testsigning on; wrapper target WINPE-ANS002.
+  Image sha256 in MANIFEST.json; VM ANSCOLLECT011 PASS (boots, package in store, export 0).
+- Packet ANS002-R1 qualification c416d3a12d6c72484c735f93c5af90bd80edb5ea8ae4f0bf34859bda26414820,
+  offline gate 744dbff9, dry-run 0, admission with --confirm-experiment ANS002 OK.
+WINDOWS CONTRACT: StorPort miniport (StartType 0, SCSIAdapter) binds ACPI\APPL0003, FindAdapter
+  validates the one memory resource + level interrupt, HwInitialize returns FALSE at the stop1
+  checkpoint -> device start fails (expected Problem 10 CM_PROB_FAILED_START), no disk.
+AGX/ASAHI CONTRACT (here ANS/broker): QUERY ok; CLAIM is logical (owner NATIVE, state CLAIMED);
+  QUIESCE/RELEASE return ownership; REGISTER_QUEUES (boot_admin, RTKit/controller) never sent.
+TRANSLATION: driver.c/native.c AppleAnsNativeInitialize stop1 path -> broker ops 1,2 then
+  AppleAnsNativeStop (6, 8).
+WHAT IS STILL UNKNOWN: whether test-signed AppleAns loads in this WinPE (testsigning + DISM
+  forceunsigned), whether FindAdapter accepts the hardware resource/interrupt translation, and the
+  exact broker op sequence on hardware.
+WHY THIS HYPOTHESIS: (1) ANS001-R9 proved APPL0003 with the exact broker resources in this WinPE;
+  (2) CLAIM in hv_ans_service.c is a pure state change, so the run cannot boot the controller.
+Single variable vs ANS001-R9: WinPE with the AppleAns stop1 package + testsigning (and the receipt
+  printf in m1n1).
+Expected: hv.log "HV ANS op=1 result=0", "op=2 result=0 ... owner=<native>", then op=6/op=8;
+  WinPE APPL0003 bound to AppleAns (oem0.inf) with Problem 10; export to WINPE-ANS002; reboot.
+Failure: driver not loaded (signature) / FindAdapter rejection (no broker ops) / bugcheck (PSCI
+  reset early) / no export. Recovery as ANS001-R9.
