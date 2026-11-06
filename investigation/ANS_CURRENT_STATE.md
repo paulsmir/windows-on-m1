@@ -52,7 +52,9 @@ No flag is cleared by assertion; the policy still rejects any flagged region.
    write those iBoot tables (m1n1 stage-2 follow-up, not an ANS DMA path).
    Bench: handed to the ANS work by fork 6 at the user's request; guest left running the
    inert recovery profile (launch-normal2.sh, run_uefi 47806).
-2. ANS005A offline — heapblock ceiling + exact DART_TABLES region publication
+2. DONE offline: heapblock ceiling primitive (m1n1 94d6a1262) and carveout DMA
+   exclusion from the live ADT (m1n1 b89cce170; 13 iBoot carveouts lie inside
+   GUEST_RAM). Remaining ANS005A offline — heapblock ceiling + exact DART_TABLES region publication
    (assisted + standalone), `run_uefi.py` assertion `phys_base >= natural`,
    RED/GREEN in `tests/hv_ans_handoff_memory_test.py` and an allocator test.
 3. Encode census result (§3C). If CONFLICT: m1n1 stage-2 unmap + Mu reserved
