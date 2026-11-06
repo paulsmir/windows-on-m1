@@ -45738,3 +45738,23 @@ Packet 4cea1b5fd52e2151805c9b84333dd278e5951cc528c8aed6552189db0df2f16b: m1n1 AN
 WinPE ef978501, gate e8be43fa, dry-run 0. WHY THIS HYPOTHESIS: R6 receipts show all denials inside
 the HEAP pad with a valid RW stage-2 leaf; nothing else denied. Single variable vs R6: the HEAP
 exclusion. Expected: no "HV ANS deny" / result=9; ANS006 type/copy rc=0 with timings (throughput).
+
+ANS006-R7 result (recorded 2026-11-06T18:27:09Z): FAILED — boot hang (same signature as R3); HEAP fix untested by this run.
+Receipts: init ok; first queue-1 FLUSH (seq 14) submitted, never reaped; op=6 QUIESCE seq 15
+(StorPort reset), no RESET/RELEASE receipt; Windows stuck at the boot screen (operator). Runner needed
+SIGKILL; the Air did not reboot by itself and proxy P_REBOOT timed out (EL2 unresponsive) -> operator
+power cycle; R7 orchestrator recovered (SSH 18:24:43).
+Pattern: R3 and R7 (1 in 3 since R3) lose the completion of the first I/O-queue command; admin
+commands at init (polled) never lose. Hypothesis: lost/unsignalled completion interrupt (the guest
+only consumes CQEs from its ISR via the broker PENDING read).
+Fix (m1n1 c9c269f0, ANSBUILD016 ce977725...): ans_queue_peek (lock-free, no consume; ans_queue_test
+RED->GREEN) + hv_ans_tick in hv_tick: a posted CQE unconsumed >=10 ms while submitted!=completed ->
+re-inject the ANS vINTID and log "HV ANS kick" (first 16). Analogous to Asahi's timeout CQ poll.
+Gate GREEN 51cbcfce.
+
+### ANS006-R8 (preregistered)
+
+Packet b9c8b10f912382e1f5fa8bfa9e39fb330027ee85e56aad89df72d669a85dbfd6 (ANSBUILD016, WinPE ef978501).
+WHY THIS HYPOTHESIS: two hangs with an identical signature at the first interrupt-driven completion,
+while every polled completion succeeded. Single variable vs R7: the EL2 re-signal. Expected: either
+no kick needed or "HV ANS kick" followed by the FLUSH reap; then ANS006 reads with timings, no deny.
