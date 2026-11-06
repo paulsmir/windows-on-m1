@@ -45629,3 +45629,7 @@ find the file specified" (COPY does not open hidden/system files) twice, so no t
 data receipts, all result=0. Export, reboot, recovery OK.
 So: first read-only mount of the Windows NTFS volume from the native SSD path. Fix (R2): `type`
 for the hidden pagefile plus `copy /b` of large visible files (registry hives, MRT.exe).
+
+### ANS006-R2 (preregistered 2026-11-06T16:31:08Z)
+
+Packet 84dc8d78457ad189aa5301abcc76b3e63714f64090f873ec4d8d26b0a1d20940 (WinPE ac3a7e73..., ANS006-READ with `type` for the hidden pagefile + `copy /b` of hives/MRT.exe). run.sh phase-2 cap raised 1500 -> 3600 s for the long reads. Single variable vs R1: the read tool. Expected: STATUS lines type1/type2 rc=0 with t0/t1 and copy lines; throughput = bytes / (t1-t0). Recovery as R1.
