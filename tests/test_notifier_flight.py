@@ -14,9 +14,13 @@ from test_render_job_depth2_caps_rc98 import SHARED, SHARED_SOURCES
 def retire_source():
     """Real retirement code for Windows completion fixtures with minimal WDK shims."""
     source=(SHARED/'src/apple_agx_render_shared_memory.c').read_text()
+    # Since Q2c/OV2 (f8a9942ee, 820cab01e) AppleAgxRenderFlightRetire calls the
+    # static threshold/flight helpers; extract them first, in dependency order.
     return '#include "apple_agx_render_shared_memory.h"\n'+ '\n'.join(
-        re.search(r'^(?:static )?void '+name+r'\(.*?^}',source,re.S|re.M)[0]
-        for name in ('zero_bytes','AppleAgxRenderFlightRetire'))+'\n'
+        re.search(r'^(?:static )?[A-Za-z_][A-Za-z0-9_ ]*\**\s*\b'+name+r'\s*\(.*?^}',source,re.S|re.M)[0]
+        for name in ('zero_bytes','align_up','notifier_threshold','notifier_copy_delta','threshold_word',
+                     'own_threshold_word','flight_on_a','flight_on_b','other_flight_on','write_threshold',
+                     'other_flight_live_older','AppleAgxRenderFlightRetire'))+'\n'
 
 
 EXERCISE = r'''
