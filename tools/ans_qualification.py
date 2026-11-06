@@ -26,7 +26,10 @@ PROFILES = {'ANS001': {'scope': 'ans0-unbound-no-driver', 'appleans_profile': No
             'ANS002': {'scope': 'ans1-claim-stop', 'appleans_profile': 'native-read-only-stop1'},
             'ANS003': {'scope': 'ans2-admin-ready-stop', 'appleans_profile': 'native-read-only-stop2'},
             'ANS004': {'scope': 'ans3-identify-stop', 'appleans_profile': 'native-read-only-stop3'},
-            'ANS005': {'scope': 'ans4-read-only-full', 'appleans_profile': 'native-read-only-stop0'}}
+            'ANS005': {'scope': 'ans4-read-only-full', 'appleans_profile': 'native-read-only-stop0'},
+            # ANS006: same read-only driver; WinPE onlines the native disk only after proving the
+            # read-only attribute and measures sequential read throughput.
+            'ANS006': {'scope': 'ans5-read-only-volume', 'appleans_profile': 'native-read-only-stop0'}}
 OVERRIDES = ('phys_base', 'ramdisk_base', 'ramdisk_max_size', 'low_mem_base',
              'low_mem_size', 'low_mem_backing', 'fb_base', 'fb_width', 'fb_height', 'guest_ram_end')
 

@@ -31,7 +31,7 @@ ap.add_argument("--qualification-sha256")
 ap.add_argument("--qualified-m1n1", type=pathlib.Path)
 ap.add_argument("--managed-vuart", help="runner-owned recovery UART reader endpoint")
 ap.add_argument("--qualified-vuart", help="native UART reader endpoint, started only after chainload")
-ap.add_argument("--confirm-experiment", choices=("ANS001", "ANS002", "ANS003", "ANS004", "ANS005"))
+ap.add_argument("--confirm-experiment", choices=("ANS001", "ANS002", "ANS003", "ANS004", "ANS005", "ANS006"))
 ap.add_argument("--require-execution-confirmation", action="store_true",
                 help="require execution confirmation during shell's hardware-free preflight")
 ap.add_argument("--layout", type=pathlib.Path, default=DEFAULT_LAYOUT_PATH,

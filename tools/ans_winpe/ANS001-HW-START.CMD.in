@@ -96,6 +96,8 @@ for /f "usebackq delims=" %%A in ("!LETTER!:\@RUNDIR@\ANS001-EVIDENCE.TAG") do (
  if "%%A"=="@MARKER@" (set /a TAGMATCH+=1) else (set TAGINVALID=1)
 )
 if not "!TAGMATCH!:!TAGINVALID!"=="1:0" goto failed
+call :stage S55_OPTIONAL_ANS006_READ
+if exist X:\Windows\System32\ANS006-READ.CMD call X:\Windows\System32\ANS006-READ.CMD
 call :stage S60_EXPORT
 if exist "!LETTER!:\@RUNDIR@\@TARGETSUB@" goto failed
 set TARGET=!LETTER!:\@RUNDIR@\@TARGETSUB@

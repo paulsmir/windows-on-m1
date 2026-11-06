@@ -123,7 +123,8 @@ class QualificationTests(unittest.TestCase):
     def test_ladder_profiles_bind_exact_stop_level(self):
         for exp,scope,prof in (('ANS003','ans2-admin-ready-stop','native-read-only-stop2'),
                                ('ANS004','ans3-identify-stop','native-read-only-stop3'),
-                               ('ANS005','ans4-read-only-full','native-read-only-stop0')):
+                               ('ANS005','ans4-read-only-full','native-read-only-stop0'),
+                               ('ANS006','ans5-read-only-volume','native-read-only-stop0')):
             self.setUp();self.make_ans002(profile=prof,experiment=exp,scope=scope)
             self.assertEqual(self.call(execute=True,confirmation=exp)[0]['experiment'],exp)
             self.setUp();self.make_ans002(profile='native-read-only-stop1',experiment=exp,scope=scope)
