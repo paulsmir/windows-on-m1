@@ -30,14 +30,18 @@ the frame in which the KMD observed its completion. Per frame roles:
   idle      wall time with no job of this process outstanding
 rc76 fixed-cost split (per frame, sums):
   c_kick    compute jobs: mapped firmware start - max(submit, previous
-            completion) = KMD completion handling of the previous job, the
-            worker's BeginJob/build/kick and the firmware's start latency
+            job's mapped firmware end) = the GPU idle before the job: at
+            depth 1 the previous job's detection and completion handling,
+            the worker's BeginJob/build/kick and the firmware's start
+            latency; for a depth-2 job only its Barrier/start latency
+            (EXP2215: from the previous KMD completion every depth-2 start
+            was clamped to 0 or dropped)
   r_small_ta small render jobs: mapped TA end - the same bound (kick, firmware
             start, compute prelude and TA); r_small_3d is the rest
 rc79 prelude split (completion v3 measure-gpu-prelude rows: the v5 render's
 compute prelude firmware start/end, same timebase as the TA end):
   rc_prelude    rc_big jobs with a valid row: prelude end - prelude start
-  rc_prelude_kick  their mapped prelude start - the span bound
+  rc_prelude_kick  their mapped prelude start - the c_kick bound
   rc_ta         their TA end - prelude end (TA barrier wake-up, VDM, vertex
                 shading, tiling); rc_prelude_jobs counts them
   prelude       the prelude time of every render job with a valid row
@@ -183,6 +187,12 @@ def timeline(jobs, hz):
         near = [r for r in raw[max(0, i - WINDOW):i + WINDOW + 1] if r is not None]
         offset = max(near) if near else None
         j['lo'] = max(j['sub'], prev['cmp']) if prev else j['sub']
+        # EXP2215: a depth-2 job starts at the previous job's firmware end,
+        # before the KMD detected that completion (prev cmp). Launches are
+        # measured from max(submit, previous mapped firmware end); against
+        # lo every early start was dropped or clamped (5945 of 7667 C->R
+        # preludes), leaving only the late-submitted tail.
+        j['lo_fw'] = max(j['sub'], prev['end_q']) if prev else j['sub']
         valid = raw[i] is not None and offset is not None
         j['end_q'] = j['end'] - offset if valid else j['cmp']
         j['end_q'] = min(max(j['end_q'], j['lo']), j['cmp'])
@@ -197,16 +207,17 @@ def timeline(jobs, hz):
         if (j['kind'] == RENDER and valid and j['p_end'] and j['ta_end'] and
                 j['p_start'] <= j['p_end'] <= j['ta_end'] and
                 j['p_end'] - j['p_start'] < hz and
-                j['lo'] <= j['p_start'] - offset <= j['end_q']):
+                j['lo_fw'] <= j['p_start'] - offset <= j['end_q']):
             j['prelude'] = (j['p_end'] - j['p_start']) * 1e3 / hz
-            j['prelude_kick'] = (j['p_start'] - offset - j['lo']) * 1e3 / hz
+            j['prelude_kick'] = (j['p_start'] - offset - j['lo_fw']) * 1e3 / hz
             j['ta'] = (j['ta_end'] - j['p_end']) * 1e3 / hz
         j['exact'] = None
         j['kick'] = None
         if (j['kind'] == COMPUTE and valid and j['start'] and
                 0 <= j['end'] - j['start'] < hz):
             j['exact'] = (j['end'] - j['start']) * 1e3 / hz
-            j['kick'] = (mapped(j['start']) - j['lo']) * 1e3 / hz
+            j['kick'] = (min(max(j['start'] - offset, j['lo_fw']), j['end_q']) -
+                         j['lo_fw']) * 1e3 / hz
         prev = j
     return jobs
 
@@ -276,7 +287,9 @@ def analyze(lines, skip=0.3):
 def positions(lines, skip=0.3):
     """rc94 --jobs: medians per job position of the frames with the most
     common job sequence (R render, C compute). A job's launch is its compute
-    kick, or a render's prelude kick (lo -> prelude start); to_ta is a
+    kick, or a render's prelude kick, from max(submit, the previous job's
+    mapped firmware end) (EXP2215: not from lo, which a depth-2 job
+    precedes) to its firmware start; to_ta is a
     render's lo -> TA end (launch, prelude and TA). late: submitted (KMD
     SubmitCommand) no earlier than the previous own job's completion, so
     nothing of it could be built while that job ran. foreign: the completion

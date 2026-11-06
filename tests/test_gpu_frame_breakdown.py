@@ -114,9 +114,10 @@ class GpuFrameBreakdown(unittest.TestCase):
         self.assertAlmostEqual(f['c_work_exact_ms'], 17)
         self.assertAlmostEqual(f['c_work_span_ms'], 18)
         self.assertEqual(f['c_empty_jobs'], 1)
-        # rc76: job 2 starts 1 ms after job 1 completed, job 3 2 ms after its submit
+        # rc76: job 2 starts 3 ms after job 1's firmware end (2 detection +
+        # 1 after the completion; EXP2215 bound), job 3 2 ms after its submit
         self.assertEqual(f['c_kick_jobs'], 2)
-        self.assertAlmostEqual(f['c_kick_ms'], 1 + 2)
+        self.assertAlmostEqual(f['c_kick_ms'], 3 + 2)
         self.assertAlmostEqual(f['r_small_ta_ms'], 0.3)
         g = frames[1]
         self.assertEqual(g['jobs'], 2)
@@ -150,6 +151,30 @@ class GpuFrameBreakdown(unittest.TestCase):
         self.assertAlmostEqual(r['foreign'], 0.5)
         self.assertAlmostEqual(c['late'], 0.0)
         self.assertAlmostEqual(r['to_ta'], (7 + 4) / 2)
+
+    def test_depth2_starts_before_the_previous_completion(self):
+        # EXP2215: a job kicked while its predecessor ran starts at the
+        # predecessor's firmware end, before the KMD saw that completion.
+        # Bounded by the completion (lo) the early start was dropped (the
+        # prelude) or clamped to 0 (the compute kick).
+        b = load()
+        log = [present(0)]
+        log += job(1, 2, 0, 12, start=1, end=10)                       # C, detected 2 ms late
+        log += job(2, 1, 3, 30, end=30, ta_end=20)                     # R kicked at depth 2
+        log += [prelude(2, 10.1, 10.2)]
+        log += job(3, 2, 4, 33, start=30.1, end=31)                    # C kicked at depth 2
+        log += job(4, 1, 40, 50, end=50, ta_end=45)                    # R submitted late
+        log += [prelude(4, 41, 41.5)]
+        log += job(5, 1, 41, 60, end=60, ta_end=55)                    # stale prelude row
+        log += [prelude(5, 20, 20.5)]
+        log += [present(100)]
+        jobs = b.timeline(b.parse(log)[2], 10000)
+        r2, c3, r4, r5 = jobs[1], jobs[2], jobs[3], jobs[4]
+        self.assertAlmostEqual(r2['prelude_kick'], 0.1)
+        self.assertAlmostEqual(r2['prelude'], 0.1)
+        self.assertAlmostEqual(c3['kick'], 0.1)
+        self.assertAlmostEqual(r4['prelude_kick'], 1)                  # from its submit
+        self.assertIsNone(r5['prelude'])                               # before job 4's end
 
     def test_failed_job_has_no_firmware_time(self):
         b = load()
