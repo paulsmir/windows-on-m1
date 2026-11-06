@@ -69968,3 +69968,61 @@ Steps: D3D12 suite; then (EXP2206-B) the standard CS 1.6 benchmark (cs-bench-run
 - Hashes: sys 0db916f16eb9, UmdArm64 73568b163d9c, UmdX64 fe75b41578be, Umd32 268f2e1da0e5; manifest 261d49ace61f, hardware-manifest 2e1f9917b808; probe2206.sh 5bebd18e5f3e (PROBE_LINT_OK); visible recovery rec2206h 9642269c174fee1c; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1PresentTimestamps=1.
 - Recovery rec2206h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2206-cs16-diag/run2206.sh.
+
+### HVS2ISO004 — preregistration (2026-11-06T02:21:43Z): GPU-line Mu with in-RAM carveout reservation (NOT RUN)
+
+Status: preregistered only. Fork 6 schedules it.
+Candidate: Mu feature/mu-reserve-ram-carveouts 4ce521db34e2af49f22d3a2dd0e0004a40fad680
+(one commit on 361a2134 = GPU line). Firmware
+/Users/pavel/public_windows/.local/experiments/HVS2ISO004-mu-4ce521db/firmware/J313_EFI-hvs2iso004-cand.fd
+sha256 a8ab868cb268162441d1fd9271f3ff38eb177a0961db9e1976a7f495e5920196.
+Build gate (builder pauls@192.168.1.24, WSL docker windows-on-m1-build:local, isolated worktrees
+/home/pavel/pwdev/hvs2iso004-mu/{ctl,cand}, mounted at /work, stuart_build RELEASE CLANGPDB with
+the M2F2C profile flags; scripts and hashes in that experiment directory):
+- control 361a2134 = 1c7d87d6fd4321feee605b5f9440dab6a350bc7a3964fb2c62b34602f565f3e5, **bit-identical**
+  to the GPU-line M2F2C-mu-361a2134/firmware/J313_EFI-m2f2c.fd;
+- candidate: FVMAIN.Fv (DXE) 506615ba... identical to the GPU line; FVMAIN_COMPACT f09198b2...
+  (GPU line b9384387...). .fd byte diff confined to offsets 32769..86058 (PrePi/PEI); the
+  string "reserving iBoot carveout" is present only in the candidate.
+Offline: parent tests/test_mu_ram_carveout_reservation.py 3/3 GREEN (MU_TREE=candidate,
+commit 1384b6333), which replays the extracted PEI code. The 37 existing Mu-related parent
+tests are GREEN against the candidate. Mutations (no gap merge, no allocation HOB, no
+subtraction) are RED.
+
+WHY THIS HYPOTHESIS:
+1. OBSERVED EXP2194/EXP2196 DXE map: 0x85FFA0000-0x8A0100000 Type:7 contains the 13 carveouts,
+   so Windows/VidMM own them on the GPU line.
+2. OBSERVED HVS2ISO002 STABLE and HVS2ISO003 PASS: the pages are static, and nothing in the guest
+   touches them when they are reserved.
+WINDOWS CONTRACT: Windows owns only EfiConventionalMemory and boot-services memory.
+EfiReservedMemoryType pages are excluded from the OS and from VidMM.
+AGX/ASAHI CONTRACT: owner unknown. m1n1 AGX local reserve V2 already avoids carveouts, and the
+local reserve (0x8E0000000) is disjoint from them.
+TRANSLATION: Mu PEI ReserveRamCarveouts() reads ADT region-id-N, and RamCarveoutPlan() yields
+[0x860500000,+0xFA0000) and [0x864000000,+0xB518000) on the expanded profile; each is then
+ReserveMemoryRegion() plus an EfiReservedMemoryType allocation HOB.
+WHAT IS STILL UNKNOWN: whether any Windows/AGX path needs those 196 MiB (e.g. VidMM sizing,
+the AGX local-reserve placement with less RAM). This is actual-OS behaviour.
+Hypothesis: with only the Mu image changed, the GPU line boots and the GPU suite matches its
+baseline. Windows loses exactly 0xC4B8000 bytes (201440 KiB), and the map differs from EXP2196
+only in those two ranges.
+Single variable: the Mu .fd (J313_EFI-m2f2c.fd -> J313_EFI-hvs2iso004-cand.fd). m1n1, run_uefi
+arguments (--guest-ram-profile expanded, --low-mem, WOM1_AGX_G2_POWER_BROKER=1, physical display),
+AGX package and guest disk stay as in the bench owner's current GPU-line launch.
+WOM1_HV_UNMAP_RAM_CARVEOUTS and WOM1_HV_ISOLATE_ABOVE_RAM stay OFF.
+Checks:
+ A. Mu log: exactly "reserving iBoot carveout 0x860500000 + 0xFA0000" and
+    "reserving iBoot carveout 0x864000000 + 0xB518000". There are no "invalid carveout plan" or
+    "not in one RAM HOB" lines. The AGX local reserve line is unchanged (0x8E0000000 + 0x18000000).
+ B. DXE "Memory Range" dump: identical to EXP2196 except 0x860500000-0x8614A0000 and
+    0x864000000-0x86F518000 now Type:0.
+ C. Windows: SSH up, 8 CPUs; TotalVisibleMemorySize = control - 201440 KiB (+/- runtime noise
+    < 4 MiB, measured against a same-session control boot or the latest EXP2196-class record).
+ D. GPU: package loads, and the bench owner's standard suite run (run_against_baseline.py)
+    gives BASELINE_OK.
+Failure: any of A-D. In particular, a missing log line (plan empty or HOB containment failed),
+a different map elsewhere, a boot or GPU regression.
+Recovery: relaunch with J313_EFI-m2f2c.fd (sha 1c7d87d6, the same as the control rebuild); else
+the documented recovery images.
+Next if CONFIRMED: HVS2ISO005 = the same launch plus WOM1_HV_UNMAP_RAM_CARVEOUTS=1 (m1n1_windows
+>= 23a01cb6), expecting 0 stage-2 aborts.
