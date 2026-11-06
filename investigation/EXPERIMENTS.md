@@ -70190,3 +70190,17 @@ EXP2214 HARDWARE ACTUAL (2026-11-06T05:21:21Z): **REJECTED: with the backend fix
 - Suite 119 PASS / 0 FAIL first (the backend fix removes the EXP2213 kick refusals). GUEST_DOWN_DURING_GRAVITYMARK a 3; full.log: dcp-iomfb swaps normal until the HV "NVMe guest reset #1" (crash-dump write) and PSCI RESET FROM ELR_EL2=0xfffff802ff435138; no m1n1/HV exception. The KMD reset after the TDR failed (0xc0000483) -- the same class as the EXP2100 prelude-pair firmware crash. Waiver receipts were not exported before the crash (no receipt files).
 - Evidence evidence/EXP2214/full.log, full-at-reset.log, 110626-17312-01.dmp (minidump; C:\Windows\MEMORY.DMP 765 MB left on the guest). Recovery AT_PROXY rec2214h: RECOVERY_DONE, VISIBLE_INERT_PACKAGE_ABSENT_8CPU.
 - Verdict: REJECTED -- running a successor render's TA while the preceding compute job runs, with only the 3D queue waiting on the compute stamp, hangs the G13 GPU in our encoding. Wom1Ov5TaWaiver stays off (default). OV5 step 2 parked: the expected gain was <= ~0.65 ms/frame HD (C7 length); the open question (what the firmware/our TA programming needs while compute runs -- e.g. shared TVB/buffer-manager or sidecar state touched by both) needs a bounded reproducer before any further hardware run. Next GPU priority: the C->R(prelude) depth-2 launch regression (~3 ms/frame, EXP2212 decode) via the Wom1JobDiagnostics refusal receipt.
+
+EXP2215 HARDWARE BEFORE 2026-11-06T09:29:33Z:
+Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0 (KMD receipts at poll 12 and after d).
+- WHY THIS HYPOTHESIS: (1) EXP2212 ETW: renders R2/R4/R6 are delivered to the KMD early (only 17-33 of ~510 late per render size), yet their CDM prelude starts 0.44-1.31 ms after the predecessor compute completes (~3 ms/frame); (2) compute successors start ~0.07 ms after their predecessor, so depth-2 works for them; (3) EXP2133 (2026-11-03) measured compute -> prelude start median 0.063 ms: the C->R(prelude) kick worked then and regressed since (candidates: reasons 61 manager NeedsIdle, 62 same job-word set under Q2c, 54 paging packet).
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (receipts only).
+- ATOMIC CONTRACT: none.
+- WHAT IS STILL UNKNOWN: the AdmissionJobWindowKickRefusal value of the prebound R2/R4/R6 successors.
+- Expected: suite 119/0; Wom1JobTiming971Hot per-job AheadRefusals (bytes 24-31) nonzero for the compute jobs preceding R2/R4/R6 -> one reason names the layer; no fault.
+- Failure criteria: no Hot receipt; fault/TDR -> rec2215h.
+- Recovery: rec2215h.
+- Probe: agx_d3d12_probe_e2215_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys fd6994ed63e6, UmdArm64 ccb971ced731, UmdX64 88dced7d60c0, Umd32 f6bcad79074c; manifest bbf17f69223a, hardware-manifest 2f4eae5abbbe; probe2215.sh 5c413211a18b (PROBE_LINT_OK); visible recovery rec2215h cc5accb4f438207d; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1.
+- Recovery rec2215h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2215-depth2-refusal/run2215.sh.
