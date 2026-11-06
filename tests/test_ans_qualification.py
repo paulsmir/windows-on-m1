@@ -44,7 +44,11 @@ class QualificationTests(unittest.TestCase):
         audit={'schema':'apple-ans-qualification-audit/v1','result':'pass',
                'bindings':{r:self.m['artifacts'][r]['sha256'] for r in ROLES if r!='qualification_audit'}}
         for k in ('offline_gates_passed','mu_ramdisk_only','mu_native_gate_bound','mu_native_autoboot_bound',
-                  'agx_power_broker_disabled','winpe_no_appleans','no_installed_windows_boot','collector_test_passed'):audit[k]=True
+                  'agx_power_broker_disabled','no_installed_windows_boot','collector_test_passed'):audit[k]=True
+        if self.m['experiment']=='ANS002':
+            audit['winpe_appleans_claim_stop']=True;audit['winpe_testsigning']=True
+            audit['appleans_package_sha256']='c'*64
+        else:audit['winpe_no_appleans']=True
         self.paths['qualification_audit'].write_text(json.dumps(audit))
         self.m['artifacts']['qualification_audit']['sha256']=digest(self.paths['qualification_audit'])
         self.path.write_text(json.dumps(self.m));self.sha=digest(self.path)
@@ -99,6 +103,26 @@ class QualificationTests(unittest.TestCase):
         a['indices'][1]['appleans_packages']=[];p.write_text(json.dumps(a));self.seal()
         p=self.paths['winpe_collector'];a=json.loads(p.read_text());a['result']='pending';p.write_text(json.dumps(a));self.seal()
         with self.assertRaisesRegex(ValueError,'collector'):self.call()
+    def make_ans002(self,profile='native-read-only-stop1',second_index_pkgs=(),testsigning=True,confirm_flag=True):
+        self.m['experiment']='ANS002';self.m['scope']='ans1-claim-stop'
+        p=self.paths['winpe_audit'];a=json.loads(p.read_text())
+        a['appleans_profile']=profile;a['appleans_package_sha256']='c'*64;a['testsigning']=testsigning
+        a['indices'][0]['appleans_packages']=['oem0.inf'];a['indices'][1]['appleans_packages']=list(second_index_pkgs)
+        p.write_text(json.dumps(a));self.ans002_flags=confirm_flag;self.seal()
+    def test_ans002_claim_stop_profile_admitted_only_with_exact_package(self):
+        self.make_ans002()
+        self.assertEqual(self.call()[0]['experiment'],'ANS002')
+        self.call(execute=True,confirmation='ANS002')
+        with self.assertRaisesRegex(ValueError,'confirm'):self.call(execute=True,confirmation='ANS001')
+    def test_ans002_rejects_dma_capable_profiles_and_extra_packages(self):
+        for kw in ({'profile':'native-read-only-stop2'},{'profile':'native-read-only-stop0'},
+                   {'second_index_pkgs':('oem1.inf',)},{'testsigning':False}):
+            self.setUp();self.make_ans002(**kw)
+            with self.assertRaises(ValueError):self.call()
+    def test_ans001_still_rejects_any_package(self):
+        p=self.paths['winpe_audit'];a=json.loads(p.read_text());a['indices'][0]['appleans_packages']=['oem0.inf']
+        a['appleans_profile']='native-read-only-stop1';p.write_text(json.dumps(a));self.seal()
+        with self.assertRaisesRegex(ValueError,'AppleAns'):self.call()
     def argv(self):return ['run_uefi.py','--storage-mode','ANS_NATIVE','--qualification-manifest',str(self.path),
         '--qualification-sha256',self.sha,'--display-mode','physical','--debug-mode','uart','--low-mem']
     def test_failed_build_and_recovery_firmware_receipt_rejected(self):

@@ -1,4 +1,4 @@
-"""Hardware-free ANS001 candidate admission. A manifest is evidence, not permission."""
+"""Hardware-free ANS001/ANS002 candidate admission. A manifest is evidence, not permission."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -16,6 +16,11 @@ CANONICAL = {'layout': 'config/j313-guest-layout.json',
 PINNED = {'display': 'physical', 'debug': 'uart', 'low_mem': True, 'cpu_count': 8,
           'no_pin': False, 'wdt_cpu': None, 'agx_power_broker': False,
           'chainload': True, 'boot_source': 'preloaded-ramdisk'}
+# ANS001: package-free WinPE. ANS002: exactly one AppleAns package built with
+# QUALIFICATION_STOP=1 (QUERY + CLAIM, then QUIESCE/RELEASE; never REGISTER_QUEUES, so the
+# controller is never booted and no DMA can be issued) in the WinPE boot index.
+PROFILES = {'ANS001': {'scope': 'ans0-unbound-no-driver', 'appleans_profile': None},
+            'ANS002': {'scope': 'ans1-claim-stop', 'appleans_profile': 'native-read-only-stop1'}}
 OVERRIDES = ('phys_base', 'ramdisk_base', 'ramdisk_max_size', 'low_mem_base',
              'low_mem_size', 'low_mem_backing', 'fb_base', 'fb_width', 'fb_height', 'guest_ram_end')
 
@@ -48,8 +53,9 @@ def validate_manifest(path, expected_sha256, root):
     require(digest(path) == expected_sha256, 'qualification manifest SHA-256 mismatch')
     m = read_json(path)
     require(set(m) == {'schema', 'experiment', 'platform', 'storage_mode', 'scope', 'read_only', 'launch', 'artifacts'}, 'unknown/missing qualification fields')
-    require((m['schema'], m['experiment'], m['platform'], m['storage_mode'], m['scope']) ==
-            (SCHEMA, 'ANS001', 'J313', 'ANS_NATIVE', 'ans0-unbound-no-driver'), 'wrong qualification profile')
+    profile = PROFILES.get(m['experiment'])
+    require(profile is not None and (m['schema'], m['platform'], m['storage_mode'], m['scope']) ==
+            (SCHEMA, 'J313', 'ANS_NATIVE', profile['scope']), 'wrong qualification profile')
     require(m['read_only'] is True and json.dumps(m['launch'], sort_keys=True) == json.dumps(PINNED, sort_keys=True), 'qualification launch contract mismatch')
     require(set(m['artifacts']) == set(ROLES), 'all exact artifact/evidence roles required')
     paths, hashes = {}, {}
@@ -76,15 +82,33 @@ def validate_manifest(path, expected_sha256, root):
     indices = audit.get('indices')
     require(isinstance(indices, list) and len(indices) == 2 and
             {x.get('index') for x in indices if isinstance(x, dict)} == {1, 2}, 'both WinPE indices must be audited')
-    for index in indices:
-        require(all(index.get(field) == [] for field in ('appleans_packages', 'appleans_services', 'appleans_drivers')),
-                'AppleAns package/service/driver present or audit incomplete')
+    stop_profile = profile['appleans_profile']
+    if stop_profile is None:
+        for index in indices:
+            require(all(index.get(field) == [] for field in ('appleans_packages', 'appleans_services', 'appleans_drivers')),
+                    'AppleAns package/service/driver present or audit incomplete')
+    else:
+        require(audit.get('appleans_profile') == stop_profile and audit.get('testsigning') is True and
+                isinstance(audit.get('appleans_package_sha256'), str) and
+                re.fullmatch('[0-9a-f]{64}', audit['appleans_package_sha256']),
+                'AppleAns claim-stop package/testsigning not proven by the WinPE audit')
+        for index in indices:
+            packages = index.get('appleans_packages')
+            expected = 1 if index.get('index') == audit.get('boot_index') else 0
+            require(isinstance(packages, list) and len(packages) == expected,
+                    'AppleAns package must exist exactly once, only in the boot index')
+    winpe_audit = audit
     audit = read_json(paths['qualification_audit'])
     require(audit.get('schema') == 'apple-ans-qualification-audit/v1' and audit.get('result') == 'pass', 'qualification audit pending/failed')
     require(audit.get('bindings') == {r: hashes[r] for r in ROLES if r != 'qualification_audit'}, 'audit artifact/receipt bindings mismatch')
-    for key in ('offline_gates_passed', 'mu_ramdisk_only', 'mu_native_gate_bound', 'mu_native_autoboot_bound',
-                'agx_power_broker_disabled', 'winpe_no_appleans', 'no_installed_windows_boot', 'collector_test_passed'):
+    keys = ['offline_gates_passed', 'mu_ramdisk_only', 'mu_native_gate_bound', 'mu_native_autoboot_bound',
+            'agx_power_broker_disabled', 'no_installed_windows_boot', 'collector_test_passed']
+    keys += ['winpe_no_appleans'] if stop_profile is None else ['winpe_appleans_claim_stop', 'winpe_testsigning']
+    for key in keys:
         require(audit.get(key) is True, f'unproven qualification property: {key}')
+    if stop_profile is not None:
+        require(audit.get('appleans_package_sha256') == winpe_audit['appleans_package_sha256'],
+                'qualification audit and WinPE audit bind different AppleAns packages')
     collector = read_json(paths['winpe_collector'])
     require(collector.get('schema') == 'apple-ans-winpe-collector-test/v1' and
             collector.get('result') == 'pass' and collector.get('image_sha256') == hashes['winpe'] and
@@ -124,10 +148,11 @@ def validate_launch(path, seal, root, *, firmware=None, m1n1=None, ramdisk=None,
     require(not overrides and not no_pin and wdt_cpu is None and not agx_power_broker,
             'native qualification forbids layout/no-pin/watchdog/AGX overrides')
     require(display == 'physical' and debug == 'uart' and low_mem is True, 'ANS001 requires physical/uart/low-memory profile')
-    require(not execute or confirmation == 'ANS001', 'execution requires explicit --confirm-experiment ANS001')
-    require(confirmation in (None, 'ANS001'), 'wrong experiment confirmation')
-    require(path is not None, 'native qualification candidate is not yet admitted: --qualification-manifest required')
+    require(confirmation is None or confirmation in PROFILES, 'wrong experiment confirmation')
     m, paths = validate_manifest(path, seal, root)
+    require(not execute or confirmation == m['experiment'],
+            f"execution requires explicit --confirm-experiment {m['experiment']}")
+    require(confirmation in (None, m['experiment']), 'experiment confirmation differs from the sealed manifest')
     for role, selected in (('mu', firmware), ('m1n1', m1n1), ('winpe', ramdisk), ('layout', layout)):
         require(selected is None or Path(selected).resolve() == paths[role], f'CLI {role} differs from sealed candidate')
     reject_output_aliases(root, paths, path, contract_output)
