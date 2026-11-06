@@ -743,6 +743,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     /* OV2: Wom1Ov2NoHazardLead = 1 with Q2c (backend start). */
     if (InterlockedCompareExchange(&context->GpuIndependentSubqueue, 0, 0) != 0)
       info->Features |= AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE;
+    /* OV5 step 2: Wom1Ov5TaWaiver = 1 with the 3D-queue Barrier path. */
+    if (InterlockedCompareExchange(&context->GpuRenderTaIndependent, 0, 0) != 0)
+      info->Features |= AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT;
     status = STATUS_SUCCESS;
     break;
   }

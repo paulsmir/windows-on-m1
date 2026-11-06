@@ -139,6 +139,12 @@ typedef struct _APPLE_AGX_BACKEND_JOB_IMAGE {
    * compute job also leads its 3D queue with a Barrier on the same compute
    * stamp (satisfied on arrival: the TA already waited); zero otherwise. */
   APPLE_AGX_U64 D3LeadBarrierAddress;
+  /* OV5 step 2 (Wom1Ov5TaWaiver, default off): nonzero for a successor
+   * render without compute work whose TA lead Barrier was waived (its
+   * LeadBarrierAddress is zero, its TA publication is the root alone); its
+   * D3LeadBarrierAddress then carries the only wait on the running compute
+   * job. Zero for every other job. */
+  APPLE_AGX_U32 TaLeadWaived;
 } APPLE_AGX_BACKEND_JOB_IMAGE;
 
 typedef struct _APPLE_AGX_BACKEND_OBSERVATION {

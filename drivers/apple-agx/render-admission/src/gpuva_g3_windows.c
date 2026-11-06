@@ -1,4 +1,5 @@
 #include "render_ov2.h"
+#include "render_ov5.h"
 #include "gpuva_g3_private.h"
 #include <intrin.h> /* _ReturnAddress (cancel-caller receipt) */
 #include "apple_agx_g3_copy_abi.h"
@@ -4018,6 +4019,15 @@ static unsigned int AdmissionG4ComputeParseFlags(ADMISSION_CONTEXT *adapter) {
       ? APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE : 0u;
 }
 
+/* OV5 step 2: the render parser admits CdmBarrier NONE (a TA-independent
+ * render without a compute command) only while the device reports
+ * AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT. */
+static unsigned int AdmissionG4RenderParseFlags(ADMISSION_CONTEXT *adapter) {
+  return adapter != NULL &&
+      InterlockedCompareExchange(&adapter->GpuRenderTaIndependent, 0, 0) != 0
+      ? APPLE_AGX_G4_PARSE_RENDER_TA_INDEPENDENT : 0u;
+}
+
 /* Packet: the job's own description (rc102: a successor's is its kicked
  * entry's). *Refusal (rc102 receipt, may be NULL): 0 begun, 1 the active-
  * job state (depth 1: another job; successor: not N's process, or a
@@ -4078,11 +4088,11 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
       if (prelude_valid) {
         RtlCopyMemory(state->G4ReparseV5.Command, image->G4Command,
                       image->G4CommandBytes);
-        prelude_valid = AppleAgxG4ParseSubmitComputeEx(&state->G4ReparseV5,
+        prelude_valid = AppleAgxG4ParseSubmitComputeFlagsEx(&state->G4ReparseV5,
             (unsigned int)sizeof(state->G4ReparseV5.Header) + image->G4CommandBytes,
             (unsigned int)sizeof(state->G4ReparseV5.Header) + image->G4CommandBytes,
             image->G4Header.Base.CommandVa, image->G4CommandBytes,
-            APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+            APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES, ADMISSION_G4_RENDER_PARSE_FLAGS(adapter),
             private_scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
             private_scene ? (void *)private_scene : (void *)process,
             &g4_view, NULL) == AppleAgxG4ParseOk && g4_view.HasCompute &&
@@ -4094,10 +4104,11 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
         image->G4CommandBytes == 0u ||
         image->G4CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
         !prelude_valid ||
-        (!image->G4WithCompute && AppleAgxG4ParseSubmitEx(&image->G4Header,
+        (!image->G4WithCompute && AppleAgxG4ParseSubmitFlagsEx(&image->G4Header,
             (unsigned int)sizeof(image->G4Header) + image->G4CommandBytes,
             (unsigned int)sizeof(image->G4Header) + image->G4CommandBytes,
             image->G4Header.Base.CommandVa, image->G4CommandBytes,
+            ADMISSION_G4_RENDER_PARSE_FLAGS(adapter),
             private_scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
             private_scene ? (void *)private_scene : (void *)process,
             &g4_view, NULL) != AppleAgxG4ParseOk) ||
@@ -6280,10 +6291,11 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
       }
     }
   }
-  result = AppleAgxG4ParseSubmitComputeEx(
+  result = AppleAgxG4ParseSubmitComputeFlagsEx(
       args->pDmaBufferPrivateData, args->DmaBufferPrivateDataSize,
       args->DmaBufferUmdPrivateDataSize, args->DmaBufferVirtualAddress,
       args->DmaBufferSize, APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+      ADMISSION_G4_RENDER_PARSE_FLAGS(adapter),
       private_scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
       private_scene ? (void *)private_scene : (void *)process, &view, &failure);
   if (result==AppleAgxG4ParseOk &&
@@ -6477,9 +6489,9 @@ static NTSTATUS AdmissionG4PreflightLocked(ADMISSION_CONTEXT *adapter,
         scene->ReleaseRequested || scene->Quarantined || scene->Queued ||
         scene->Submitting || scene->Started) return STATUS_INVALID_PARAMETER;
   }
-  q->ParseResult = AppleAgxG4ParseSubmitComputeEx(q->Private, q->PrivateBytes,
+  q->ParseResult = AppleAgxG4ParseSubmitComputeFlagsEx(q->Private, q->PrivateBytes,
       q->PrivateBytes, q->CommandVa, q->CommandBytes,
-      APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+      APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES, ADMISSION_G4_RENDER_PARSE_FLAGS(adapter),
       scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
       scene ? (void *)scene : (void *)process, &view, &q->Failure);
   if (q->ParseResult != AppleAgxG4ParseOk) return STATUS_INVALID_PARAMETER;

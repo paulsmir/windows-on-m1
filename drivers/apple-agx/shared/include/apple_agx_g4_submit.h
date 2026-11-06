@@ -515,6 +515,10 @@ typedef struct {
   int HasCompute;
   APPLE_AGX_G4_NATIVE_COMPUTE Compute;
   APPLE_AGX_G4_PROCESS_RANGE Preemption;
+  /* OV5: the render header named no compute-subqueue wait (CdmBarrier
+   * NONE, VdmBarrier 0, no compute command), admitted only under
+   * APPLE_AGX_G4_PARSE_RENDER_TA_INDEPENDENT. */
+  int TaIndependent;
 } APPLE_AGX_G4_SUBMIT_VIEW;
 
 /* G2: a validated compute envelope. */
@@ -585,5 +589,31 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitEx(
     unsigned int DmaBytes, APPLE_AGX_G4_ACCESS_EX Access,
     void *AccessContext, APPLE_AGX_G4_SUBMIT_VIEW *View,
     APPLE_AGX_G4_FAILURE *Failure);
+
+/* OV5 (AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT): render parse flags.
+ * RENDER_TA_INDEPENDENT (the KMD passes it only while it reports the device
+ * feature) admits a render header with CdmBarrier =
+ * APPLE_AGX_G4_BARRIER_NONE and VdmBarrier 0 in a packet without a compute
+ * command, and sets View->TaIndependent. Without it that header is
+ * AppleAgxG4ParseInvalid, as is CdmBarrier NONE after a compute command.
+ * Unknown flags are invalid. The *Ex entry points are these with Flags 0. */
+#define APPLE_AGX_G4_PARSE_RENDER_TA_INDEPENDENT 0x2u
+/* The KMD maps this to its device-feature state (render_ov5.h); elsewhere
+ * (host replays of single KMD functions) no flag is passed. */
+#ifndef ADMISSION_G4_RENDER_PARSE_FLAGS
+#define ADMISSION_G4_RENDER_PARSE_FLAGS(adapter) 0u
+#endif
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitFlagsEx(
+    const void *PrivateData, unsigned int PrivateCapacity,
+    unsigned int UmdPrivateBytes, unsigned long long DmaVa,
+    unsigned int DmaBytes, unsigned int Flags, APPLE_AGX_G4_ACCESS_EX Access,
+    void *AccessContext, APPLE_AGX_G4_SUBMIT_VIEW *View,
+    APPLE_AGX_G4_FAILURE *Failure);
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitComputeFlagsEx(
+    const void *PrivateData, unsigned int PrivateCapacity,
+    unsigned int UmdPrivateBytes, unsigned long long DmaVa,
+    unsigned int DmaBytes, unsigned int PreemptBytes, unsigned int Flags,
+    APPLE_AGX_G4_ACCESS_EX Access, void *AccessContext,
+    APPLE_AGX_G4_SUBMIT_VIEW *View, APPLE_AGX_G4_FAILURE *Failure);
 
 #endif

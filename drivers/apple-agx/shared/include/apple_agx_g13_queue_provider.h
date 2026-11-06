@@ -63,6 +63,10 @@ typedef struct _APPLE_AGX_G13_QUEUE_JOB_PLAN {
   /* OV5 drill: a successor plan's 3D done pointer when the 3D queue leads
    * with the drill's Barrier (one entry more); zero in a depth-1 plan. */
   APPLE_AGX_BACKEND_U32 D3BarrierExpectedDonePointer;
+  /* OV5 step 2: a successor plan's TA done pointer when its TA lead
+   * Barrier is waived (the root alone, one entry less); zero in a depth-1
+   * plan. */
+  APPLE_AGX_BACKEND_U32 TaWaivedExpectedDonePointer;
 } APPLE_AGX_G13_QUEUE_JOB_PLAN;
 
 struct _APPLE_AGX_G13_QUEUE_PROVIDER;
@@ -165,6 +169,9 @@ typedef struct _APPLE_AGX_G13_QUEUE_PROVIDER {
   /* OV5 drill: successor renders accepted with a 3D lead Barrier
    * (cumulative; the KMD's Wom1Ov5DrillReceipt Placed). */
   APPLE_AGX_BACKEND_U32 D3LeadPlaced;
+  /* OV5 step 2: successor renders accepted with a waived TA lead (the 3D
+   * lead Barrier their only wait; cumulative, Wom1Ov5WaiverReceipt Placed). */
+  APPLE_AGX_BACKEND_U32 TaLeadWaivedPlaced;
 } APPLE_AGX_G13_QUEUE_PROVIDER;
 
 enum {

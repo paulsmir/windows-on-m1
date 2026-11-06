@@ -52,6 +52,11 @@ typedef struct _ADMISSION_JOB_WINDOW_JOB {
    * just before it, AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE). */
   unsigned long long Context;
   unsigned int Independent;
+  /* OV5 (Wom1Ov5TaWaiver): a render without a compute prelude whose
+   * header named no compute-subqueue wait (CdmBarrier NONE: the D3D12 UMD
+   * proved its vertex/TA work independent of the compute job submitted just
+   * before it, AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT). */
+  unsigned int TaIndependent;
 } ADMISSION_JOB_WINDOW_JOB;
 
 /* Firmware-side features the window needs for some pairs (rc95: all 0).
@@ -275,6 +280,75 @@ void AdmissionJobWindowOv5ReceiptInitialize(
 unsigned int AdmissionJobWindowOv5Note(ADMISSION_JOB_WINDOW_OV5_RECEIPT *Receipt,
     unsigned int Refusal, unsigned int Fence, unsigned int WaitValue,
     unsigned int StampSelf, unsigned int Offset);
+
+/* OV5 step 2, the TA waiver (REG_DWORD Wom1Ov5TaWaiver = 1, default off;
+ * investigation/analysis/OV1-render-compute-overlap.md, "OV5 step 2"): a
+ * kicked successor render without compute work that its UMD flagged TA
+ * independent of the compute job N it follows (same WDDM context and
+ * process, TA_ON_COMPUTE) gets no TA lead Barrier; its 3D queue leads with
+ * the drill's Barrier on N's compute stamp instead. The TA overlaps N, the
+ * 3D still waits for N. Window depth, refusals and in-order completion are
+ * unchanged. Refusals (stable receipt values; a refused render is built
+ * exactly as without the switch):
+ *   1 switch off, 2 not a TA_ON_COMPUTE pair, 3 N+1 not a flagged plain
+ *   render, 4 N is not a compute job, 5 another or no WDDM context (or
+ *   process), 6 the render has compute work of its own (KMD build), 7 the
+ *   3D publication is at the ring-entry limit or a planned done pointer is
+ *   out of the ring, 8 the 3D Barrier could not be built (not a successor
+ *   build, encoder, sidecar or running job refused). */
+#define ADMISSION_JOB_WINDOW_OV5W_WAIVE 0u
+#define ADMISSION_JOB_WINDOW_OV5W_OFF 1u
+#define ADMISSION_JOB_WINDOW_OV5W_CLASS 2u
+#define ADMISSION_JOB_WINDOW_OV5W_NOT_FLAGGED 3u
+#define ADMISSION_JOB_WINDOW_OV5W_RUNNING_KIND 4u
+#define ADMISSION_JOB_WINDOW_OV5W_CONTEXT 5u
+#define ADMISSION_JOB_WINDOW_OV5W_COMPUTE_WORK 6u
+#define ADMISSION_JOB_WINDOW_OV5W_RING 7u
+#define ADMISSION_JOB_WINDOW_OV5W_BUILD 8u
+#define ADMISSION_JOB_WINDOW_OV5W_REASONS 9u
+/* The kick-time decision (refusals 1-5). */
+unsigned int AdmissionJobWindowOv5WaiverRefusal(unsigned int Enabled,
+    unsigned int Barrier, const ADMISSION_JOB_WINDOW_JOB *Running,
+    const ADMISSION_JOB_WINDOW_JOB *Next);
+/* The build-time check of a waived successor (refusals 6-8 or 0): its
+ * compute work, its 3D entries against PublishMax, the plan's 3D done
+ * pointer with the Barrier and TA done pointer without the lead against
+ * the ring sizes. */
+unsigned int AdmissionJobWindowOv5WaiverBuildRefusal(unsigned int Successor,
+    unsigned int ComputeWorkCount, unsigned int D3Entries,
+    unsigned int PublishMax, unsigned int D3BarrierDone,
+    unsigned int D3RingCapacity, unsigned int TaWaivedDone,
+    unsigned int TaRingCapacity);
+/* May the KMD publish AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT? Only
+ * with the switch, the depth-two kick on (the 3D-queue Barrier is a
+ * successor-only build), TA_ON_COMPUTE among its classes (KickClasses 0 =
+ * every class) and Q2c (ComputeOwnQueue: compute signals its own Queue's
+ * notifier, so a TA that now ends before the compute job cannot count
+ * toward that job's notifier threshold). */
+unsigned int AdmissionJobWindowOv5WaiverAvailable(unsigned int Switch,
+    unsigned int Kick, unsigned int KickClasses, unsigned int ComputeOwnQueue,
+    unsigned int HasCompute);
+/* OV5 waiver: cumulative receipt (device value Wom1Ov5WaiverReceipt,
+ * written by the worker like Wom1Ov5DrillReceipt): successor kicks
+ * considered (switch on), waived (built without a TA lead), placed (the
+ * provider's count, copied at export), refusals per reason, the last
+ * waived render's fence, its 3D Barrier's WaitValue, StampSelf and sidecar
+ * offset. */
+#define ADMISSION_JOB_WINDOW_OV5W_RECEIPT_VERSION 1u
+typedef struct _ADMISSION_JOB_WINDOW_OV5W_RECEIPT {
+  unsigned int Version, Bytes;
+  unsigned int Considered, Waived, Placed;
+  unsigned int Refused[ADMISSION_JOB_WINDOW_OV5W_REASONS];
+  unsigned int LastFence, LastWaitValue, LastStampSelf, LastOffset;
+} ADMISSION_JOB_WINDOW_OV5W_RECEIPT;
+void AdmissionJobWindowOv5WaiverReceiptInitialize(
+    ADMISSION_JOB_WINDOW_OV5W_RECEIPT *Receipt);
+/* Counts one decision (Refusal as above). Returns 1 when an export is due:
+ * the first 16 considered, then every 256th. */
+unsigned int AdmissionJobWindowOv5WaiverNote(
+    ADMISSION_JOB_WINDOW_OV5W_RECEIPT *Receipt, unsigned int Refusal,
+    unsigned int Fence, unsigned int WaitValue, unsigned int StampSelf,
+    unsigned int Offset);
 
 /* In-flight window: the jobs the firmware holds, oldest first. */
 #define ADMISSION_JOB_WINDOW_ENTRY_FREE 0u

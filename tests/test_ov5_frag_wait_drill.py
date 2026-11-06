@@ -454,11 +454,18 @@ class KmdWiring(unittest.TestCase):
         self.assertIn('if (Plan->Successor)\n      AdmissionBuildOv5FragBarrier(', prelude)
         drill = section(text, 'static VOID AdmissionBuildOv5FragBarrier(')
         self.assertIn('if (!runtime->Ov5DrillEnabled) return;', drill)
-        self.assertIn('barrier.StampSelf = Job->D3ExpectedStamp;', drill)
-        self.assertIn('barrier.WaitValue = running->ComputeExpectedStamp;', drill)
-        self.assertIn('barrier.WaitSlot = running->ComputeEvent;', drill)
-        self.assertIn('APPLE_AGX_RENDER_STAMP_QUEUE_COMPUTE', drill)
-        self.assertIn('APPLE_AGX_RENDER_BARRIER_QUEUE_3D', drill)
+        # OV5 step 2: the Barrier itself is built by the core the drill and
+        # the waiver share (the same wait and stamp_self rules)
+        self.assertIn('Job->LeadBarrierAddress == 0ULL ||\n'
+                      '       !AdmissionBuildOv5D3Barrier(runtime, Set, Job, &barrier, &address)', drill)
+        core = section(text, 'static APPLE_AGX_BACKEND_BOOL AdmissionBuildOv5D3Barrier(')
+        self.assertIn('Barrier->StampSelf = Job->D3ExpectedStamp;', core)
+        self.assertIn('Barrier->WaitValue = running->ComputeExpectedStamp;', core)
+        self.assertIn('Barrier->WaitSlot = running->ComputeEvent;', core)
+        self.assertIn('APPLE_AGX_RENDER_STAMP_QUEUE_COMPUTE', core)
+        self.assertIn('APPLE_AGX_RENDER_BARRIER_QUEUE_3D', core)
+        self.assertIn('running->Kind == AppleAgxBackendJobCompute', core)
+        self.assertNotRegex(core, r'LeadBarrierAddress\s*=[^=]')
         self.assertIn('Job->D3ExpectedDonePointer = Plan->D3BarrierExpectedDonePointer;', drill)
         # the TA lead Barrier is untouched by the drill
         self.assertNotRegex(drill, r'[^3]LeadBarrierAddress\s*=[^=]')

@@ -350,6 +350,20 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_JOB_WINDOW_OV5_RECEIPT Ov5Receipt;
   /* QPC of the last Wom1Ov5DrillReceipt export without Wom1JobDiagnostics. */
   ULONGLONG Ov5ExportQpc;
+  /* OV5 step 2 (REG_DWORD Wom1Ov5TaWaiver = 1, default off): a kicked
+   * successor render its UMD flagged TA independent of the running compute
+   * job gets no TA lead Barrier, only the drill's 3D one
+   * (render_job_window.h AdmissionJobWindowOv5WaiverRefusal). Ov5Waiver
+   * is the switch with the 3D-queue Barrier path available (the device
+   * feature, published at the end of start); Ov5Waive is the kick decision
+   * for the next successor build. Worker-owned; the receipt is
+   * Wom1Ov5WaiverReceipt. */
+  BOOLEAN Ov5WaiverSwitch;
+  BOOLEAN Ov5Waiver;
+  BOOLEAN Ov5Waive;
+  ADMISSION_JOB_WINDOW_OV5W_RECEIPT Ov5WaiverReceipt;
+  /* QPC of the last Wom1Ov5WaiverReceipt export without Wom1JobDiagnostics. */
+  ULONGLONG Ov5WaiverExportQpc;
   BOOLEAN Depth2Noted;
   ULONG Depth2Sampled;
   /* rc102: device value Wom1JobDepth2Kick = 1, on top of Wom1JobDepth2Caps
@@ -1351,7 +1365,7 @@ static VOID AdmissionJobTimingExportWindows(
   if (runtime == NULL ||
       (!runtime->JobDiagnostics && !runtime->RcReceiptEnabled && !runtime->Depth2Drill.Mode &&
        !runtime->PresentTsEnabled && !runtime->Ov2Enabled &&
-       !runtime->Ov5DrillEnabled) ||
+       !runtime->Ov5Waiver && !runtime->Ov5DrillEnabled) ||
       runtime->Adapter == NULL ||
       runtime->Adapter->PhysicalDeviceObject == NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return;
@@ -1398,6 +1412,25 @@ static VOID AdmissionJobTimingExportWindows(
       if (NT_SUCCESS(status)) {
         RtlInitUnicodeString(&name, L"Wom1Ov5DrillReceipt");
         (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &ov5, sizeof(ov5));
+        ZwClose(key);
+        key = NULL;
+      }
+    }
+  }
+  /* OV5 waiver: likewise; Placed is the provider's count. */
+  if (!runtime->JobDiagnostics && runtime->Ov5Waiver) {
+    LARGE_INTEGER frequency;
+    const ULONGLONG now = (ULONGLONG)KeQueryPerformanceCounter(&frequency).QuadPart;
+    if (runtime->Ov5WaiverExportQpc == 0ULL ||
+        now - runtime->Ov5WaiverExportQpc >= 2ULL * (ULONGLONG)frequency.QuadPart) {
+      ADMISSION_JOB_WINDOW_OV5W_RECEIPT ov5w = runtime->Ov5WaiverReceipt;
+      ov5w.Placed = runtime->Provider.QueueProvider.TaLeadWaivedPlaced;
+      runtime->Ov5WaiverExportQpc = now;
+      status = IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key);
+      if (NT_SUCCESS(status)) {
+        RtlInitUnicodeString(&name, L"Wom1Ov5WaiverReceipt");
+        (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &ov5w, sizeof(ov5w));
         ZwClose(key);
         key = NULL;
       }
@@ -1513,6 +1546,13 @@ static VOID AdmissionJobTimingExportWindows(
       ov5.Placed = runtime->Provider.QueueProvider.D3LeadPlaced;
       RtlInitUnicodeString(&name, L"Wom1Ov5DrillReceipt");
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY, &ov5, sizeof(ov5));
+    }
+    /* OV5 waiver: considered / waived / placed / refused (worker-owned). */
+    if (NT_SUCCESS(status) && runtime->Ov5Waiver) {
+      ADMISSION_JOB_WINDOW_OV5W_RECEIPT ov5w = runtime->Ov5WaiverReceipt;
+      ov5w.Placed = runtime->Provider.QueueProvider.TaLeadWaivedPlaced;
+      RtlInitUnicodeString(&name, L"Wom1Ov5WaiverReceipt");
+      status = ZwSetValueKey(key, &name, 0u, REG_BINARY, &ov5w, sizeof(ov5w));
     }
 #endif
 #if defined(ADMISSION_PREEMPT_TRACE_ON)
@@ -3831,18 +3871,44 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBuildLeadBarrier(
 }
 
 #if defined(ADMISSION_OV5_ON)
+/* OV5: the 3D queue's Barrier on the running compute job's stamp, in the
+ * successor render's job-word set Set (the sidecar's 3D Barrier slot).
+ * StampSelf is the render's own 3D stamp (Asahi queue/render.rs:
+ * stamp_self is the waiting queue's next event value). Shared by the drill
+ * (behind the TA lead Barrier: satisfied on arrival) and the step-2 waiver
+ * (the render's only wait on the compute job). FALSE: the running job is
+ * not a compute job or the encoder refused. */
+static APPLE_AGX_BACKEND_BOOL AdmissionBuildOv5D3Barrier(
+    ADMISSION_PLATFORM_RUNTIME *runtime, APPLE_AGX_U32 Set,
+    const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
+    APPLE_AGX_RENDER_BARRIER_INPUT *Barrier, APPLE_AGX_U64 *Address) {
+  const APPLE_AGX_BACKEND_JOB_IMAGE *running = &runtime->Backend.PendingJob;
+  APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *owner =
+      &runtime->Initdata.RenderSharedMemory;
+  RtlZeroMemory(Barrier, sizeof(*Barrier));
+  *Address = 0ULL;
+  Barrier->WaitStampGpuAddress = AppleAgxRenderSharedMemoryFirmwareStampAddress(
+      owner, APPLE_AGX_RENDER_STAMP_QUEUE_COMPUTE);
+  Barrier->WaitValue = running->ComputeExpectedStamp;
+  Barrier->WaitSlot = running->ComputeEvent;
+  Barrier->StampSelf = Job->D3ExpectedStamp;
+  Barrier->JobWordSet = Set;
+  return running->Kind == AppleAgxBackendJobCompute &&
+         AppleAgxRenderSharedMemoryBuildLeadingBarrier(owner, Barrier,
+             APPLE_AGX_RENDER_BARRIER_QUEUE_3D, Address)
+      ? APPLE_AGX_BACKEND_TRUE : APPLE_AGX_BACKEND_FALSE;
+}
+
 /* OV5 drill (Wom1Ov5FragWaitDrill): the successor render's 3D queue leads
  * with a Barrier on the running compute job's stamp, the wait of its TA
- * lead Barrier (built first, in the same job-word set Set); StampSelf is
- * the render's own 3D stamp (Asahi queue/render.rs: stamp_self is the
- * waiting queue's next event value). Satisfied on arrival (the TA already
- * waited), so nothing but the firmware's acceptance of a compute-stamp
- * Barrier on the 3D queue changes. Every refusal keeps today's job: no 3D
- * Barrier, the plan's 3D done pointer. Counted in Wom1Ov5DrillReceipt. */
+ * lead Barrier (built first, in the same job-word set Set). Satisfied on
+ * arrival (the TA already waited), so nothing but the firmware's
+ * acceptance of a compute-stamp Barrier on the 3D queue changes. Every
+ * refusal keeps today's job: no 3D Barrier, the plan's 3D done pointer.
+ * Counted in Wom1Ov5DrillReceipt. */
 static VOID AdmissionBuildOv5FragBarrier(
     ADMISSION_PLATFORM_RUNTIME *runtime, const APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan,
     APPLE_AGX_U32 Set, ULONG Fence, APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
-  const APPLE_AGX_BACKEND_JOB_IMAGE *running = &runtime->Backend.PendingJob;
   APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *owner =
       &runtime->Initdata.RenderSharedMemory;
   APPLE_AGX_RENDER_BARRIER_INPUT barrier;
@@ -3856,19 +3922,10 @@ static VOID AdmissionBuildOv5FragBarrier(
       Plan->D3BarrierExpectedDonePointer,
       runtime->Provider.QueueProvider.Config.D3.RingCapacity);
   RtlZeroMemory(&barrier, sizeof(barrier));
-  if (refusal == ADMISSION_JOB_WINDOW_OV5_PLACE) {
-    barrier.WaitStampGpuAddress = AppleAgxRenderSharedMemoryFirmwareStampAddress(
-        owner, APPLE_AGX_RENDER_STAMP_QUEUE_COMPUTE);
-    barrier.WaitValue = running->ComputeExpectedStamp;
-    barrier.WaitSlot = running->ComputeEvent;
-    barrier.StampSelf = Job->D3ExpectedStamp;
-    barrier.JobWordSet = Set;
-    if (running->Kind != AppleAgxBackendJobCompute ||
-        Job->LeadBarrierAddress == 0ULL ||
-        !AppleAgxRenderSharedMemoryBuildLeadingBarrier(owner, &barrier,
-            APPLE_AGX_RENDER_BARRIER_QUEUE_3D, &address))
-      refusal = ADMISSION_JOB_WINDOW_OV5_BUILD;
-  }
+  if (refusal == ADMISSION_JOB_WINDOW_OV5_PLACE &&
+      (Job->LeadBarrierAddress == 0ULL ||
+       !AdmissionBuildOv5D3Barrier(runtime, Set, Job, &barrier, &address)))
+    refusal = ADMISSION_JOB_WINDOW_OV5_BUILD;
   if (refusal == ADMISSION_JOB_WINDOW_OV5_PLACE) {
     Job->D3LeadBarrierAddress = address;
     Job->D3ExpectedDonePointer = Plan->D3BarrierExpectedDonePointer;
@@ -3879,6 +3936,55 @@ static VOID AdmissionBuildOv5FragBarrier(
           ? (unsigned int)(address - owner->VirtualAddresses[
                 APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR])
           : 0u);
+}
+
+/* OV5 step 2 (Wom1Ov5TaWaiver): the kick decided (Ov5Waive) that this
+ * successor render is TA independent of the running compute job. Build it
+ * without a TA lead Barrier: its TA publication is the root alone (the
+ * plan's TaWaivedExpectedDonePointer) and its 3D queue leads with the
+ * drill's Barrier on the compute stamp (the plan's
+ * D3BarrierExpectedDonePointer), so its TA runs while the compute job does
+ * and its 3D still starts after it. Returns TRUE when built so; FALSE (any
+ * refusal, counted in Wom1Ov5WaiverReceipt) leaves the job untouched and
+ * the caller builds today's TA lead Barrier. Called before that Barrier,
+ * in the same job-word set Set; the decision is consumed here. */
+static BOOLEAN AdmissionBuildOv5TaWaiver(
+    ADMISSION_PLATFORM_RUNTIME *runtime, const APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan,
+    APPLE_AGX_U32 Set, ULONG Fence, APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
+  APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *owner =
+      &runtime->Initdata.RenderSharedMemory;
+  APPLE_AGX_RENDER_BARRIER_INPUT barrier;
+  APPLE_AGX_U64 address = 0ULL;
+  unsigned int refusal;
+  if (!runtime->Ov5Waive) return FALSE;
+  runtime->Ov5Waive = FALSE;
+  refusal = AdmissionJobWindowOv5WaiverBuildRefusal(Plan->Successor ? 1u : 0u,
+      Job->ComputeWorkAddressCount, Job->D3WorkAddressCount,
+      APPLE_AGX_G13_QUEUE_PUBLISH_MAX, Plan->D3BarrierExpectedDonePointer,
+      runtime->Provider.QueueProvider.Config.D3.RingCapacity,
+      Plan->TaWaivedExpectedDonePointer,
+      runtime->Provider.QueueProvider.Config.Ta.RingCapacity);
+  RtlZeroMemory(&barrier, sizeof(barrier));
+  if (refusal == ADMISSION_JOB_WINDOW_OV5W_WAIVE &&
+      (runtime->Depth2KickBarrier != ADMISSION_JOB_WINDOW_BARRIER_TA_ON_COMPUTE ||
+       runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted ||
+       Job->LeadBarrierAddress != 0ULL || Job->D3LeadBarrierAddress != 0ULL ||
+       !AdmissionBuildOv5D3Barrier(runtime, Set, Job, &barrier, &address)))
+    refusal = ADMISSION_JOB_WINDOW_OV5W_BUILD;
+  if (refusal == ADMISSION_JOB_WINDOW_OV5W_WAIVE) {
+    Job->D3LeadBarrierAddress = address;
+    Job->D3ExpectedDonePointer = Plan->D3BarrierExpectedDonePointer;
+    Job->TaExpectedDonePointer = Plan->TaWaivedExpectedDonePointer;
+    Job->TaLeadWaived = 1u;
+  }
+  if (AdmissionJobWindowOv5WaiverNote(&runtime->Ov5WaiverReceipt, refusal, Fence,
+          barrier.WaitValue, barrier.StampSelf,
+          refusal == ADMISSION_JOB_WINDOW_OV5W_WAIVE
+              ? (unsigned int)(address - owner->VirtualAddresses[
+                    APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR])
+              : 0u))
+    runtime->RcExportPending = TRUE;
+  return refusal == ADMISSION_JOB_WINDOW_OV5W_WAIVE ? TRUE : FALSE;
 }
 #endif
 
@@ -4280,10 +4386,14 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
       goto BuildFailure;
     if (Plan->Successor) runtime->Depth2BuildStep = ADMISSION_KICK_BUILD_RENDER_LEAD;
 #if defined(ADMISSION_OV5_ON)
-    /* OV5 drill: refused (compute work of its own), counted only. */
+    /* OV5 drill: refused (compute work of its own), counted only; OV5
+     * waiver: never (compute work of its own: refusal 6, counted only). */
     if (Plan->Successor)
       AdmissionBuildOv5FragBarrier(runtime, Plan, output.JobWordSet,
                                    Submission->Submission.Fence, Job);
+    if (Plan->Successor)
+      (void)AdmissionBuildOv5TaWaiver(runtime, Plan, output.JobWordSet,
+                                      Submission->Submission.Fence, Job);
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     AdmissionJobTimingSubWindows(runtime, Submission->Submission.Fence,
@@ -4298,13 +4408,20 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
         &runtime->Initdata.RenderSharedMemory;
     APPLE_AGX_U32 set = AppleAgxRenderSharedMemoryNextJobWordSet(
         owner, Submission->Submission.Fence, APPLE_AGX_TRUE);
-    if (!runtime->Adapter->BackendImage.G4Native ||
+    BOOLEAN waived = FALSE; /* OV5 step 2: no TA lead, the 3D one only */
+    if (!runtime->Adapter->BackendImage.G4Native) goto BuildFailure;
+#if defined(ADMISSION_OV5_ON)
+    waived = AdmissionBuildOv5TaWaiver(runtime, Plan, set,
+                                       Submission->Submission.Fence, Job);
+#endif
+    if (!waived &&
         !AdmissionBuildLeadBarrier(runtime, ADMISSION_JOB_WINDOW_QUEUE_TA, set,
                                    Job->TaExpectedStamp, Job))
       goto BuildFailure;
 #if defined(ADMISSION_OV5_ON)
-    AdmissionBuildOv5FragBarrier(runtime, Plan, set,
-                                 Submission->Submission.Fence, Job);
+    if (!waived)
+      AdmissionBuildOv5FragBarrier(runtime, Plan, set,
+                                   Submission->Submission.Fence, Job);
 #endif
     owner->JobWordSet = set;
     owner->JobWordStamp = Submission->Submission.Fence;
@@ -5736,6 +5853,11 @@ static VOID AdmissionJobWindowDescribeLocked(const ADMISSION_BACKEND_IMAGE *imag
   job->Independent = image->BoundFence == fence && image->G4Compute &&
       image->G4ComputeEnvelope.Native.VdmBarrier == APPLE_AGX_G4_BARRIER_NONE
       ? 1u : 0u;
+  /* OV5: a plain render the parser admitted with CdmBarrier NONE (only
+   * under the device feature) is TA independent of the compute job
+   * submitted just before it. */
+  job->TaIndependent = image->BoundFence == fence && image->G4Native &&
+      !image->G4WithCompute && image->G4TaIndependent ? 1u : 0u;
 }
 
 /* rc95 receipt mode: job Fence runs alone and its successor was just bound
@@ -6278,6 +6400,21 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
       runtime->Ov2Waive = TRUE;
     else if (ov2 != ADMISSION_JOB_WINDOW_OV2_CLASS &&
              AdmissionJobWindowOv2Note(&runtime->Ov2Receipt, ov2, next, 0u, 0u))
+      runtime->RcExportPending = TRUE;
+  }
+#endif
+#if defined(ADMISSION_OV5_ON)
+  /* OV5 step 2: drop the TA lead Barrier of a TA-independent render behind
+   * a compute job; its 3D waits instead (refusals counted here, a waiver
+   * where the render is built). */
+  runtime->Ov5Waive = FALSE;
+  if (runtime->Ov5Waiver) {
+    unsigned int ov5w = AdmissionJobWindowOv5WaiverRefusal(1u,
+        (unsigned int)barrier, &s.Running, &s.Next);
+    if (ov5w == ADMISSION_JOB_WINDOW_OV5W_WAIVE)
+      runtime->Ov5Waive = TRUE;
+    else if (AdmissionJobWindowOv5WaiverNote(&runtime->Ov5WaiverReceipt, ov5w,
+                 next, 0u, 0u, 0u))
       runtime->RcExportPending = TRUE;
   }
 #endif
@@ -7233,7 +7370,8 @@ AdoptedKicked:
   AdmissionPublishFirmwareRecovery(runtime);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (runtime->JobDiagnostics || runtime->RcReceiptEnabled || runtime->Depth2Drill.Mode ||
-      runtime->PresentTsEnabled || runtime->Ov2Enabled || runtime->Ov5DrillEnabled)
+      runtime->PresentTsEnabled || runtime->Ov2Enabled || runtime->Ov5DrillEnabled ||
+      runtime->Ov5Waiver)
     AdmissionJobTimingExportWindows(runtime);
 #endif
 #if ADMISSION_JOB_AHEAD_BUILD
@@ -7866,7 +8004,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1Ov5FragWaitDrill") ? TRUE : FALSE;
   AdmissionJobWindowOv5ReceiptInitialize(&runtime->Ov5Receipt);
   runtime->Ov5ExportQpc = 0ULL;
+  /* OV5 step 2 (default off): REG_DWORD Wom1Ov5TaWaiver = 1. Effective
+   * (and the device feature published) only at the end of start, when the
+   * depth-two kick and Q2c it needs are known. */
+  runtime->Ov5WaiverSwitch =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1Ov5TaWaiver") ? TRUE : FALSE;
+  runtime->Ov5Waiver = FALSE;
+  runtime->Ov5Waive = FALSE;
+  AdmissionJobWindowOv5WaiverReceiptInitialize(&runtime->Ov5WaiverReceipt);
+  runtime->Ov5WaiverExportQpc = 0ULL;
 #endif
+  runtime->Ov5Waiver = FALSE;
+  InterlockedExchange(&Context->GpuRenderTaIndependent, 0);
   if (!AppleAgxRenderSharedMemoryBindRelocationObjects(
           &runtime->Initdata.RenderSharedMemory,
           Context->BackendImage.ArenaCpuAddress,
@@ -8312,6 +8461,19 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
    * runtime is started; AdmissionPlatformRuntimeStop releases it. */
   (void)ExSetTimerResolution(ADMISSION_PLATFORM_TIMER_RESOLUTION, TRUE);
   runtime->TimerResolutionRaised = TRUE;
+#if defined(ADMISSION_OV5_ON)
+  /* OV5 step 2: the waiver and its device feature, last on the success
+   * path (EXP2196: a reset after the publication hid OV2's feature). Only
+   * with the depth-two kick (the 3D Barrier is a successor build), the
+   * TA_ON_COMPUTE class and Q2c (render_job_window.h
+   * AdmissionJobWindowOv5WaiverAvailable). */
+  runtime->Ov5Waiver = AdmissionJobWindowOv5WaiverAvailable(
+      runtime->Ov5WaiverSwitch ? 1u : 0u, runtime->JobDepth2Kick ? 1u : 0u,
+      runtime->Depth2KickClasses,
+      runtime->Initdata.RenderSharedMemory.ComputeOwnQueue ? 1u : 0u,
+      runtime->Provider.QueueProvider.Config.HasCompute ? 1u : 0u) ? TRUE : FALSE;
+#endif
+  InterlockedExchange(&Context->GpuRenderTaIndependent, runtime->Ov5Waiver ? 1 : 0);
   AdmissionRecordPlatformStage(Context, AdmissionPlatformComplete,
                                STATUS_SUCCESS);
   return STATUS_SUCCESS;
@@ -8319,6 +8481,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
 Fail:
   InterlockedExchange(&Context->GpuSoftFaults, 0);
   InterlockedExchange(&Context->GpuIndependentSubqueue, 0);
+  InterlockedExchange(&Context->GpuRenderTaIndependent, 0);
   {
     NTSTATUS cleanup=AdmissionPlatformDestroy(runtime);
 #ifdef APPLE_AGX_BACKEND_QUALIFICATION
@@ -8345,6 +8508,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStop(
     return STATUS_SUCCESS;
   InterlockedExchange(&Context->GpuSoftFaults, 0);
   InterlockedExchange(&Context->GpuIndependentSubqueue, 0);
+  InterlockedExchange(&Context->GpuRenderTaIndependent, 0);
   status = AdmissionPlatformDestroy(runtime);
   if (!NT_SUCCESS(status))
     return status;

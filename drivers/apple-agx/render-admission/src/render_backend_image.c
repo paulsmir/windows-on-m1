@@ -377,6 +377,8 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
       AppleAgxG4TimestampPublishVa(&render.TimestampsFragment);
   Image->G4Lease = View->Lease;
   Image->G4WithCompute = View->HasCompute ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
+  Image->G4TaIndependent = View->TaIndependent && !View->HasCompute
+      ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
   if (View->HasCompute) {
     Image->G4PreludeCompute = View->Compute;
     Image->G4PreludePreemption = View->Preemption;

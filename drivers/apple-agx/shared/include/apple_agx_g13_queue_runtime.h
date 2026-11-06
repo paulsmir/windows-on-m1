@@ -175,6 +175,10 @@ typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION {
     const void *Address;
     APPLE_AGX_BACKEND_U32 Bytes;
   } D3LeadBarrierRange;
+  /* OV5 step 2: a Successor taken by SubmitRender whose TA publication has
+   * no leading Barrier (the root alone); only with D3LeadingBarrier, which
+   * then carries its wait on the running compute job. */
+  APPLE_AGX_BACKEND_BOOL TaLeadWaived;
 } APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION;
 
 typedef struct _APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION {
