@@ -70125,3 +70125,8 @@ Steps: D3D12 suite; GravityMark D3D12 100k -temporal 0 HD PERF arms: a submit re
 - Probe: agx_d3d12_probe_e2211_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
 - Hashes: sys c076c8db2a1d, UmdArm64 515a4548a326, UmdX64 5b8b442d14bc, Umd32 673a9d885ca8; manifest 94b20703f98d, hardware-manifest 5ce78da51f80; probe2211.sh 1a416798215b (PROBE_LINT_OK); visible recovery rec2211h 19c5cff0b19b0434; m1n1 0d3a75b3.
 - Recovery rec2211h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2211-submit-split/run2211.sh.
+
+EXP2211 HARDWARE ACTUAL (2026-11-06T04:24:52Z): **SSV REJECTED (no gain); submit receipt and C3 split collected (decode offline).**
+- Suite 119 PASS / 0 FAIL; GPU_RESET none; WER 0; guest alive after every arm.
+- HD PERF (10 + 60 s): a submit receipt 40.624 (25085 measure-umd-submit rows); b C3 split tags 37.464 (split cost expected); c SSV=0 41.134, d SSV=1 41.037, e SSV=1 40.731, f SSV=0 40.766 -> pairs c->d -0.24 %, f->e -0.09 %: APPLE_AGX_SHARED_STORE_VECTORIZE stays off.
+- Verdict: SSV REJECTED; arms a/b handed to the OV2 session for the late-submission (UMD vs dxgkrnl) decode and C3 per-kernel times. Evidence evidence/EXP2211 (gm2211a-umd.log, gm2211b-umd.log, kmd-receipts-mid12-d/after-f). Recovery rec2211h.
