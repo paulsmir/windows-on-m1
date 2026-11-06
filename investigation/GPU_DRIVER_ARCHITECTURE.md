@@ -34,8 +34,10 @@ Rules:
   classes (EXP2088-2134); Q2c: compute on its own Asahi queue (EXP2189).
 - **DONE** preemption state machine incl. the Claim->Commit race fix
   (15b47216, hardware check pending).
-- **BUILD** a refused depth-2 kick must fall back to depth one, never reset the
-  engine (EXP2213 showed a KMD-internal refusal escalating to an ENGINE reset).
+- **KEEP-ON (C), hardware check pending** a refused depth-2 kick falls back to
+  depth one instead of resetting the engine for refusals before the firmware
+  sees it (S1-S3, be8c6f7f, investigation/analysis/DEPTH2-KICK-FALLBACK.md);
+  **BUILD** S4a/S4b (refused SubmitSuccessor) after the builder rollback proof.
 - **DONE** firmware->host rings (stats/ktrace/fwlog) drained like Asahi
   (gpu.rs) after every job, default on since 125bddd1 (EXP2217 drain proof,
   EXP2219 perf gate PASS; Wom1FwRxDrain = 0 disables).
