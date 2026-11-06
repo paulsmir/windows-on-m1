@@ -151,7 +151,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if not a.confirm_experiment.startswith('ANS'):
         ap.error('an ANS experiment id is required')
-    if a.output.exists():
+    if a.output.exists() or (a.output.parent / 'adt.bin').exists():
         ap.error('refusing to overwrite existing evidence')
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'm1n1_windows/proxyclient'))
     # Not m1n1.setup: it writes the PMU panic counter.  Same bootstrap as
@@ -163,6 +163,11 @@ def main(argv=None):
     bootstrap_port(iface, p)
     u = ProxyUtils(p)
     adt = u.adt
+    # Evidence first: keep the raw ADT even if a later parse step fails.
+    a.output.parent.mkdir(parents=True, exist_ok=True)
+    adt_blob = adt.build()
+    with (a.output.parent / 'adt.bin').open('xb') as f:
+        f.write(adt_blob)
     pmgr = adt['/arm-io/pmgr']
     pmgr_regs = [pmgr.get_reg(i)[0] for i in range(len(pmgr.reg))]
     ps_regs = [dict(reg=r.reg, offset=r.offset) for r in pmgr.ps_regs]
@@ -206,7 +211,7 @@ def main(argv=None):
     receipt['experiment'] = a.confirm_experiment
     receipt['boot_args'] = dict(phys_base=hex(u.ba.phys_base), mem_size=hex(u.ba.mem_size),
                                 top_of_kernel_data=hex(u.ba.top_of_kernel_data))
-    receipt['adt_sha256'] = hashlib.sha256(adt.build()).hexdigest()
+    receipt['adt_sha256'] = hashlib.sha256(adt_blob).hexdigest()
     sart = adt['/arm-io/sart-ans']
     receipt['sart_ans'] = dict(base=hex(sart.get_reg(0)[0]),
                                version=repr(getattr(sart, 'sart_version', None)))  # ADT only
