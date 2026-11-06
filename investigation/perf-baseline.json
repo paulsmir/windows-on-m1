@@ -1,4 +1,4 @@
 {
-  "gravitymark_hd_perf": {"fps": 41.036, "source": "EXP2218 d: default driver, no device switches, HD PERF 100k -temporal 0 (10 + 60 s window); previous 40.291 (EXP2207 d)"},
-  "cs16_benchmark": {"fps": 48.380, "source": "EXP2218 warm runs r2/r3 (worst of 48.448/48.380): standard CS 1.6 benchmark (timedemo agxbench, 2560x1600, playnoovl), default driver, no device switches; the first run after boot is a cold warm-up (44.243) and is not gated; previous 45.457 (EXP2209-B, single cold run with diagnostics)"}
+  "gravitymark_hd_perf": {"fps": 40.770, "source": "EXP2220 (default: firmware RX drain on, no device switches): worst of same-boot repeats r2/r3 (40.770/40.973), HD PERF 100k -temporal 0 (10 + 60 s window); the probe's first run (40.377) is the warm-up; previous 41.036 (EXP2218, single first run)"},
+  "cs16_benchmark": {"fps": 49.943, "source": "EXP2220 (default: firmware RX drain on, no device switches): worst of warm runs r2/r3 (50.246/49.943), standard CS 1.6 benchmark (timedemo agxbench, 2560x1600, playnoovl); warm-up 46.394 not gated; previous 48.380 (EXP2218, drain off)"}
 }

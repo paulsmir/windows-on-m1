@@ -70307,3 +70307,12 @@ Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0 (warm-up); post-exp-g
 - Recovery rec2220h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2220-drain-default/run2220.sh.
 
 EXP2219 CORRECTION (2026-11-06T22:29:57Z): the ACTUAL's claim that the detached m1n1_windows checkout breaks three g4_live tests is wrong. m2/pool-window and the gitlink are the same commit (0d3a75b3); the tests compile m1n1 from Q22_M1N1_SOURCE (default ROOT/m1n1_windows) and need the live_additive code of codex/m1n1-q22 (7cce5a0e, worktree .worktrees/m1n1-q22). With Q22_M1N1_SOURCE set to that worktree they pass; gated-commit.sh now exports it by default. m1n1_windows was checked out on m2/pool-window with the user's permission (no content change). The BASELINE_OK verdict for 125bddd1/18953688 stands (those modules were unaffected by the commits).
+
+EXP2220 HARDWARE ACTUAL (2026-11-06T22:35:05Z): **CONFIRMED: the default-on firmware RX drain package (125bddd1, no device switches) passes the perf gate; the drain is now the validated default.**
+- Pipeline rc 0; D3D12 suite 119/0; guest alive; GravityMark wer 0; no firmware fault or reset.
+- GravityMark HD PERF 100k -temporal 0: warm-up 40.377, repeats 40.770 / 40.973 -> PASS (worst 40.770 vs 41.036, -0.65 %).
+- CS 1.6: warm-up 46.394, r2 50.246, r3 49.943 -> PASS (worst 49.943 vs 48.380, +3.23 %; EXP2219 with the switch 49.611/49.649).
+- Drain effect across EXP2218 (off) / EXP2219 (switch) / EXP2220 (default): CS warm 48.38-48.45 -> 49.61-49.65 -> 49.94-50.25 (+3 %), GravityMark repeats unchanged within noise.
+- perf-baseline.json re-pinned to EXP2220 with the repeat method (GM 40.770, CS 49.943).
+- Recovery rec2220h. Evidence: evidence/EXP2220, EXP2220-gate, EXP2220-gmrep.
+- Verdict: CONFIRMED. Next: GPU_DRIVER_ARCHITECTURE.md priorities (refused depth-2 kick falls back instead of resetting; independent flip).
