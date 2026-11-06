@@ -45105,3 +45105,20 @@ hypervisor runs, so "endpoints present" is not proof of proxy).
 WHY THIS HYPOTHESIS: attempts 1-3 stopped on three distinct host-side defects (lock,
 lld, orchestrator), each fixed; the chainload itself was proven in attempt 3.
 Expected/failure/recovery otherwise unchanged.
+
+ANS001-R3 attempt 4 result (recorded 2026-11-06T10:52:55Z): FAILED before guest entry; recovery FAILED -> physical power cycle needed.
+- 10:45:39 launch; chainload of the ANS m1n1 OK; run_uefi reached hv.init: m1n1 booted
+  ANS itself (sart-ans SARTv2 at 0x27bc50000, rtkit(nvme) v12, nvme at 0x27bcc0000,
+  HV NVMe backend ns1 61279344 x 4096 B) and the emulated PCIe/NVMe ECAM; then
+  map_ans_native_broker() raised "ANS native broker/ADT/ownership preflight failed"
+  (m1n1/hv/__init__.py:1892). No guest entry, no WinPE, no native ANS DMA. LAUNCH_CONTRACT
+  checkpoint 0 only.
+- 10:45:59 recovery: launch-normal2.sh chainloaded m1n1-exp377 over the ANS m1n1 whose
+  hv.init had been aborted half-way; chainload.py ended "Reconnection timed out" and the
+  Air left USB. At 10:52:41 there are no proxy endpoints and Windows SSH times out.
+  Physical power cycle requested (via fork 6 / the user).
+- Two new facts: (1) the native broker preflight in hv.init rejects this packet on live
+  hardware (cause to be read from map_ans_native_broker offline); (2) chainloading a new
+  m1n1 after an aborted ANS hv.init is NOT a safe recovery path; the recovery for an
+  aborted native launch must be a reboot to a clean proxy, not a chainload.
+Evidence: .local/ans-native/ANS001-R3-run/attempt4/.
