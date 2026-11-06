@@ -30,9 +30,11 @@ class NativeReadinessGeneration(unittest.TestCase):
  q.Reserved2=first;CHECK();assert(walks==48);
  q.Reserved2=~0ULL;CHECK();assert(walks==64);
  // Caller access is still authenticated on a warm cache.
+ // EXP2208: a write query on a read-only open is data, never a cache hit.
  opened.ReadOnly=1;q.Ready=0;q.Reason=0;q.FailedVa=0;
- assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0 && walks==64);
- opened.ReadOnly=0;
+ assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)==0 && walks==64);
+ assert(!q.Ready && q.Reason==APPLE_AGX_G3_NATIVE_QUERY_READ_ONLY);
+ opened.ReadOnly=0;q.Reserved2=first;
  p.Contexts=NULL;
  assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)!=0 && walks==64);
  p.Contexts=&c;c.GpuvaG3Closing=1;

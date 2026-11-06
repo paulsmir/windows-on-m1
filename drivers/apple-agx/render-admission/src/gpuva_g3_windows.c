@@ -1824,7 +1824,6 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
   if (opened->RuntimeAllocation != q.Allocation) NQ_UNLOCK(42u);
   if (!opened->Allocation) NQ_UNLOCK(43u);
   if (opened->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC) NQ_UNLOCK(44u);
-  if (q.Write && opened->ReadOnly) NQ_UNLOCK(45u);
   allocation = CONTAINING_RECORD(opened->Allocation, ADMISSION_ALLOCATION_HANDLE, Object);
   /* Adopted/imported slots expose logical surface bytes, while their KMD
    * allocation is rounded up. Authenticate that extent, then prove the whole
@@ -1836,6 +1835,13 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
   /* A well-formed query reports not-ready as data. It is not a failed paging
    * DDI or a failed scheduled submit; the UMD can decline before submission. */
   status = STATUS_SUCCESS;
+  /* EXP2208 (was refusal code 45): a write query on a read-only open is a
+   * well-formed question whose answer is "not writable for this device". */
+  if (q.Write && opened->ReadOnly) {
+    q.Reason = APPLE_AGX_G3_NATIVE_QUERY_READ_ONLY;
+    q.FailedVa = q.GpuVa;
+    goto Output;
+  }
   if (q.Version == APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION) {
     /* rc107: where VidMm's current logical mapping of this allocation
      * lives. EXP1974 republished a locked CPU-visible pool allocation in

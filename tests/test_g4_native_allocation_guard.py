@@ -321,7 +321,14 @@ int main(void) {
  BAD(e.hContext=NULL,e.hContext=&c);BAD(e.hKmdProcessHandle=NULL,e.hKmdProcessHandle=&p);
  BAD(e.hDevice=NULL,e.hDevice=&d);BAD(opened.Device=NULL,opened.Device=&d);
  BAD(p.Graph.Uncertain=1,p.Graph.Uncertain=0);
- BAD(p.CpuOnlyMappings=1,p.CpuOnlyMappings=0);BAD(opened.ReadOnly=1,opened.ReadOnly=0);
+ BAD(p.CpuOnlyMappings=1,p.CpuOnlyMappings=0);
+ /* EXP2208: a write query on a read-only open is answered as data, never a
+  * write proof; the read query still needs the full native proof. */
+ opened.ReadOnly=1;q.Ready=0;q.FailedVa=0;q.Reason=0;
+ assert(AdmissionGpuvaG3NativeQueryEscape(&a,&e)==0 && !q.Ready && q.FailedVa==va);
+ assert(q.Reason==APPLE_AGX_G3_NATIVE_QUERY_READ_ONLY && !locked && !refs);
+ q.Write=0;CHECK(1);leaves[1].AuxIpa=0;CHECK(0);leaves[1].AuxIpa=ipa+16384;
+ q.Write=1;opened.ReadOnly=0;
  BAD(q.GpuVa=(1ULL<<39)-16384,q.GpuVa=va);BAD(q.Write=2,q.Write=1);
  BAD(e.PrivateDriverDataSize--,e.PrivateDriverDataSize++);BAD(irql=1,irql=0);
  CHECK(1);

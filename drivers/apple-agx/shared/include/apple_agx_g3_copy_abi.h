@@ -48,6 +48,11 @@ typedef struct _APPLE_AGX_G3_COPY_REQUEST {
  * out = pool pages | (valid non-pool pages << 32). */
 #define APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION 4u
 #define APPLE_AGX_G3_NATIVE_QUERY_NOT_RESIDENT 0x103u
+/* EXP2208: Write was asked for an allocation this device opened read-only
+ * (DxgkDdiOpenAllocation Flags.ReadOnly). Answered as data (SUCCESS, Ready
+ * 0, FailedVa = GpuVa) after every identity and extent check; never a write
+ * proof. The UMD then proves the allocation for reading only. */
+#define APPLE_AGX_G3_NATIVE_QUERY_READ_ONLY 0x104u
 typedef struct _APPLE_AGX_G3_NATIVE_QUERY {
   APPLE_AGX_U32 Magic, Version, Bytes, Allocation;
   APPLE_AGX_U64 GpuVa, AllocationBytes;

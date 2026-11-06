@@ -2467,7 +2467,7 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
   auto *entries = (APPLE_AGX_G3_NATIVE_QUERY *)(batch + 1);
   auto *indices = (UINT *)((unsigned char *)batch + bytes);
   int ready = 0;
-  unsigned rehomes = 0u;
+  unsigned rehomes = 0u, read_only_marks = 0u;
   for (unsigned attempt = 0u; attempt < 2u + ADMISSION_UMD_REHOME_ROUNDS; ++attempt) {
     *batch = {};
     bool valid = true;
@@ -2529,6 +2529,26 @@ static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) 
     const bool valid_failure = batch->Ready == 0u &&
         batch->FailedIndex < batch->Count && batch->FailedIndex < capacity;
     const auto *q = &entries[valid_failure ? batch->FailedIndex : 0u];
+    /* EXP2208: the device opened this allocation read-only
+     * (DxgkDdiOpenAllocation Flags.ReadOnly, e.g. DWM's view of a GDI
+     * redirection surface), so the D3D runtime never lets it be written; the
+     * write capability came from the adoption flags. Drop it for this slot
+     * (its maps, proofs and downloads stay read-only) and prove the whole
+     * held set again, at most once per slot and without using an attempt. */
+    if (SUCCEEDED(hr) && valid_failure && q->Ready == 0u && q->Write &&
+        q->Reason == APPLE_AGX_G3_NATIVE_QUERY_READ_ONLY &&
+        read_only_marks < batch->Count) {
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      auto *slot = &device->ScreenBuffers[indices[batch->FailedIndex]];
+      const bool same = slot->Active && !slot->Transition && slot->CopyHeld &&
+          slot->KernelAllocation == q->Allocation && slot->CanonicalGpuVa == q->GpuVa;
+      if (same) slot->Flags &= ~(UINT)AppleAgxWin32BufferGpuWrite;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      if (!same) break;
+      ++read_only_marks;
+      --attempt;
+      continue;
+    }
     const bool missing = valid_failure && q->Ready == 0u &&
         q->FailedVa >= q->GpuVa && q->FailedVa - q->GpuVa < q->AllocationBytes &&
         (q->Reason == AppleAgxG3WalkNoRoot || q->Reason == AppleAgxG3WalkNoTable ||

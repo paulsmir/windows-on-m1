@@ -175,6 +175,8 @@ void kmd_place(unsigned i, unsigned where) {
  ++kmd_placements;
 }
 void kmd_foreign(unsigned i) { ptes[((VA0+(ULONGLONG)i*65536u)>>12)&8191].AllocationOffset+=4096u; }
+/* DxgkDdiOpenAllocation Flags.ReadOnly of allocation i for this device. */
+void kmd_read_only(unsigned i, unsigned ro) { opened[i].ReadOnly=ro; }
 /* Pool PTEs whose native leaves are not (yet) published. */
 void kmd_withdraw(unsigned i) {
  unsigned j;
@@ -234,7 +236,7 @@ using SIZE_T=size_t;using PVOID=void*;
 #define ADMISSION_UMD_SCREEN_BUFFER_SCAN(d) SLOTS
 extern "C" {
 void kmd_init(void); void kmd_place(unsigned,unsigned); void kmd_foreign(unsigned);
-void kmd_withdraw(unsigned);
+void kmd_withdraw(unsigned); void kmd_read_only(unsigned,unsigned);
 int kmd_escape(void*,unsigned);
 extern unsigned kmd_escapes, kmd_batches, kmd_placements;
 }
@@ -638,6 +640,41 @@ class CpuPoolRehome(unittest.TestCase):
  assert(batch(APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION)==0 && !b->Ready && !b->FailedIndex);
  assert(entry->Reason==AppleAgxG3WalkLeafAbsent && !entry->Reserved2);
  free(b);
+''')
+
+
+    def test_read_only_open_is_proved_for_reading_only(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP2208: DWM held
+        a GDI redirection surface it had opened read-only (DxgkDdiOpenAllocation
+        Flags.ReadOnly; all 452 refusals code 45 READ_ONLY) while the UMD
+        declared Write from its adoption flags. The readiness batch failed
+        STATUS_INVALID_PARAMETER, the batch was refused and DWM re-created its
+        device about twice per second. The KMD must answer a write query on a
+        read-only open as data, the UMD must then prove that slot for reading
+        only (never weaken the proof otherwise) and admit the job; later
+        submissions must not ask for write again."""
+        self.build(r'''
+ init(d);kmd_read_only(1,1);hold(d);
+ assert(submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence)==1);
+ assert(jobs==1 && d.GpuvaFailure==S_OK && !d.DrawTerminal);
+ assert(!(d.ScreenBuffers[2].Flags & AppleAgxWin32BufferGpuWrite));
+ assert((d.ScreenBuffers[1].Flags & AppleAgxWin32BufferGpuWrite) &&
+        (d.ScreenBuffers[3].Flags & AppleAgxWin32BufferGpuWrite));
+ /* no touch, no residency repair: only the read-only answer and the retry
+  * (a writable held set is proved by one batch) */
+ assert(!touches && kmd_batches==2 && !evicts && !makes && !rehome_receipts);
+ release(d);hold(d);
+ const unsigned batches=kmd_batches;
+ assert(submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence)==1 && jobs==2);
+ assert(kmd_batches==batches+1);
+ /* Read-only still needs a complete native proof. */
+ release(d);hold(d);kmd_withdraw(1);
+ assert(submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence)==0 && jobs==2);
+ assert(d.GpuvaFailure==E_OUTOFMEMORY);
+ /* A writable open is never downgraded. */
+ init(d);hold(d);
+ assert(submit(&d,nullptr,0,0x10000,256,&private_data,4,&fence)==1);
+ for(unsigned i=1;i<4;++i) assert(d.ScreenBuffers[i].Flags & AppleAgxWin32BufferGpuWrite);
 ''')
 
 

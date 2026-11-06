@@ -84,7 +84,8 @@ CASES = [
     (41, 'opened.Device=NULL', 'opened.Device=&d'),
     (43, 'opened.Allocation=NULL', 'opened.Allocation=&allocation.Object'),
     (44, 'allocation.Object.Magic=0', 'allocation.Object.Magic=ADMISSION_ALLOCATION_OBJECT_MAGIC'),
-    (45, 'opened.ReadOnly=1', 'opened.ReadOnly=0'),
+    # EXP2208: no longer a refusal; answered as READ_ONLY data.
+    (0, 'opened.ReadOnly=1', 'opened.ReadOnly=0'),
     (46, 'q.AllocationBytes=65537', 'q.AllocationBytes=65536'),
     (47, 'allocation.Object.Description.Size=1ULL<<32', 'allocation.Object.Description.Size=65536'),
     (48, 'q.GpuVa=(1ULL<<39)-65536;allocation.Object.Description.Size=131072',
@@ -118,7 +119,8 @@ class NativeQueryRefusalCodes(unittest.TestCase):
                 r'\bNQB?_(?:RETURN|QUERY_RETURN|UNLOCK)\((\d+)u', src)]
             codes += [int(c) for c in re.findall(r'refusal = !opened \? (\d+)u : (\d+)u', src)[0]] \
                 if 'refusal = !opened' in src else []
-        self.assertEqual(sorted(codes), list(range(1, 68)))
+        # 45 (READ_ONLY) retired by EXP2208: answered as data.
+        self.assertEqual(sorted(codes), [c for c in range(1, 68) if c != 45])
         last = int(re.search(r'APPLE_AGX_G3_NQ_LAST_CODE (\d+)u', HEADER.read_text()).group(1))
         self.assertEqual(last, 67)
         for code in codes:
