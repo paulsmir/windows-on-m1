@@ -45758,3 +45758,20 @@ Packet b9c8b10f912382e1f5fa8bfa9e39fb330027ee85e56aad89df72d669a85dbfd6 (ANSBUIL
 WHY THIS HYPOTHESIS: two hangs with an identical signature at the first interrupt-driven completion,
 while every polled completion succeeded. Single variable vs R7: the EL2 re-signal. Expected: either
 no kick needed or "HV ANS kick" followed by the FLUSH reap; then ANS006 reads with timings, no deny.
+
+ANS006-R8 result (recorded 2026-11-06T18:46:35Z): PARTIAL — no hang (FLUSH completed, no kick needed this run); reads still denied in the next launch region.
+Denials (16 logged): IPA 0x85120e000, 0x851210000, 0x851230000, 0x851310000 = region ADT (base
+phys_base+16 MiB) with the same valid RW 32 MiB stage-2 leaf; 48 failing submits logged (cap), incl.
+4/64/128 KiB READs. No "HV ANS kick" (no lost completion occurred). hv.log stalled 18:31Z; runner
+stopped by exact PID at 18:44, proxy P_REBOOT worked (link drop 18:45:05), R8 orchestrator recovered.
+Fix (m1n1 a5c08f23, ANSBUILD017 c70d9113...): all launch-layout labels inside GUEST_RAM (HEAP pad,
+ADT, BOOT_ARGS, FIRMWARE) are guest-owned after the EBS handoff once the heap seal is proven; RAM
+disk, framebuffer, DART tables, carveouts and private ranges stay excluded. hv_ans_memory_test
+RED (old) -> GREEN. Gate GREEN 009fb53a.
+
+### ANS006-R9 (preregistered)
+
+Packet 6cc37454798afb5659b546de02eb06e073b0f43b4046f12bc97fa9b6da2ebe76 (ANSBUILD017, WinPE ef978501).
+WHY THIS HYPOTHESIS: every denial in R5/R6/R8 lies in a launch-layout region inside GUEST_RAM with a
+valid RW stage-2 leaf, i.e. guest-writable memory. Single variable vs R8: the launch-region policy.
+Expected: no deny/result=9; ANS006 type/copy rc=0 with timings. Kick retained as a safety net.
