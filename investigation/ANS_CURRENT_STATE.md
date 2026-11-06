@@ -44,13 +44,14 @@ No flag is cleared by assertion; the policy still rejects any flagged region.
 
 ## Next steps (in order)
 
-1. ANSDART001 — user approved; first slot 2026-11-06T00:12Z FAILED in ADT parsing
-   (raw-byte iommu-parent) before any register read; fixed c31f47fcf. Banner of
-   that boot already shows disp0 L1 0 at 0x9fff34000 (above mem_top 0x9df708000)
-   and L1 1-3 in the m1n1 heap; dart-dcp is locked (unobserved). Needs one new slot
-   from fork 6 (bench owner); never start run_uefi from the ANS session.
-   R2 (00:14Z) REJECTED the PMGR heuristic: dart-scaler TTBR read aborted at EL2
-   with PS active, USB dropped. Redesign offline before asking for any new slot.
+1. ANSDART001-R3 (2026-11-06T00:52Z) CONFIRMED with census v2 (9fb711e30): all 26
+   L1/L2 pages of dart-dcp (iBoot-locked), dart-disp0, dart-usb0/1 lie outside both
+   GUEST_RAM windows (iBoot tables at 0x9fff04000-0x9fff40000 above mem_top; m1n1
+   tables in its heap). 18 other DART nodes remain unread (R2: blind reads abort).
+   Side finding: RAM-HIGH stage-2 maps [mem_top, 0xa00000000), so the guest CPU can
+   write those iBoot tables (m1n1 stage-2 follow-up, not an ANS DMA path).
+   Bench: handed to the ANS work by fork 6 at the user's request; guest left running the
+   inert recovery profile (launch-normal2.sh, run_uefi 47806).
 2. ANS005A offline — heapblock ceiling + exact DART_TABLES region publication
    (assisted + standalone), `run_uefi.py` assertion `phys_base >= natural`,
    RED/GREEN in `tests/hv_ans_handoff_memory_test.py` and an allocator test.

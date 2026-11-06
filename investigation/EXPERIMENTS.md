@@ -44650,3 +44650,31 @@ Sequence (one background script, fail-stop, log .local/ans-native/ANSDART001-R3/
 Fallback if 4 fails with the proxy alive: fork 6's documented
 AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2205h/recover.sh. If the proxy is wedged: stop and ask
 the user for physical action.
+
+### ANSDART001-R3 — result (2026-11-06T00:54Z): CONFIRMED for the four bannered DARTs
+
+Timeline (UTC): 00:52:00 ordered restart requested; 00:52:21 run_uefi 46336 exited;
+00:52:36 endpoints present; census exit 0 in <1 s; 00:52:36 recovery launch
+(launch-normal2.sh, guard 47773 -> run_uefi 47806); 00:53:19 SSH up; inert gate
+VISIBLE_INERT_PACKAGE_ABSENT_8CPU. No fault, no link loss, nothing written.
+Evidence (.local/ans-native/ANSDART001-R3): census.json=143ec8a11ce8291acdf0b5d19f73522d27ce63d6486f986e623836e2199bd650 banner.txt=eff0a0710d4961dd606961ca7546aa3895aa2023b7166aefc8ae4ecbe6ad91cd adt.bin=d1d057561a1add9b27471994541cf244b531540671bcbcaacbd31741eedfa733 console.log=ffd4c462d333235266303fc113f7d34abb89a4a9ceb1fca149b1619afcb1cbb2 run.log=6016ce3908e8fb46f39a9b0aaa3dd7869e6d85d5a84febf0fbcf0e3ae246fb18 inert-gate.txt=18772bcfa7760b247e4d40f56792420f2b2cfa2360c805732978ff59e9bc65a8 
+Boot args: phys_base 0x802078000, mem_size 0x1dd690000 (mem_top 0x9df708000),
+mem_size_actual 0x200000000 (DRAM end 0xa00000000), top_of_kernel_data 0x80554c000.
+Verdict NO_RETAINED_TABLE_IN_GUEST_RAM, complete=true, 26 table pages:
+- dart-dcp (iBoot-locked) stream0: L1 0x9fff0c000, L2 0x9fff10000/14000/18000;
+- dart-disp0 stream0: L1 0x9fff34000, L2 0x9fff38000/3c000/40000; stream4: L1
+  0x9fff04000, L2 0x9fff08000;
+- dart-usb0/usb1 stream1: L1+L2 at 0x8067a8000..0x8067c0000 / 0x806c84000..0x806d58000
+  (m1n1 heap, below both guest bases).
+Offline reclassification: every page is outside both GUEST_RAM windows
+[0x850000000,0x9df708000) and [0x818000000,0x9df708000). iBoot display tables sit in
+the top carveout [mem_top, DRAM end); m1n1 tables sit in its heap.
+Hypothesis CONFIRMED for dcp/disp0/usb0/usb1. Still UNOBSERVED: the other 18 DART
+nodes (aop, pmp, sep, sio, apcie*, acio*, scaler, jpeg*, ave, avd, isp, ane, dispext0,
+dcpext); R2 proved that reading them blindly is unsafe.
+Side finding (CPU isolation, not ANS): the iBoot display tables lie inside the RAM-HIGH
+stage-2 pass-through [phys_base, 0xa00000000), so the guest CPU can write them today.
+Owner: m1n1 stage-2 (unmap [mem_top, DRAM end) except the framebuffer) — follow-up.
+Next: ANS005A offline (heap ceiling + exact DART_TABLES region); decide offline how the
+18 unread DARTs are bounded (iBoot boot-state source / carveout map) before clearing
+the UNOBSERVED flag.
