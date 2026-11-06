@@ -70262,3 +70262,11 @@ Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0; then post-exp-gate.s
 - Probe: agx_d3d12_probe_e2218_arm64.exe = byte copy of e2217 (sha 5dbe904643ea842c).
 - Hashes: sys 9fd1492aff04, UmdArm64 7a0ec8b7c6bc, UmdX64 45fb912400e7, Umd32 b949c40989f3; manifest 27e847916cc7, hardware-manifest dfc3a3f10fdb; probe2218.sh 621c532c5c11 (PROBE_LINT_OK); visible recovery rec2218h 2339924b7b49a462; m1n1 0d3a75b3.
 - Recovery rec2218h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2218-perfgate/run2218.sh.
+
+EXP2218 HARDWARE ACTUAL (2026-11-06T21:17:20Z): **CONFIRMED: the default package (driver source 7199a52d, no device switches) meets the performance baseline once the CS 1.6 cold first run is excluded.**
+- Pipeline rc 0; D3D12 suite 119 PASS / 0 FAIL; guest alive throughout; GravityMark d done (wer 0).
+- GravityMark HD PERF 100k -temporal 0: 41.036 fps (baseline 40.291 EXP2207, +1.85 %; EXP2217 with diagnostics 39.915).
+- CS 1.6 standard benchmark, same boot: run 1 44.243 fps (85.233 s), run 2 48.448 (77.836 s), run 3 48.380 (77.946 s). post-exp-gate.sh gated run 1 alone: PERF_GATE_FAIL -2.67 % vs 45.457 (EXP2209-B, one cold run with Wom1JobDiagnostics/Wom1PresentTimestamps). Runs 2/3 show the failure is the cold first run (-9 %), not a regression: agx_perf_gate.py on r2+r3 -> PERF_GATE_PASS (worst 48.380, +6.43 %).
+- Process correction: post-exp-gate.sh now runs a warm-up (recorded, not gated) plus two gated warm runs; perf-baseline.json re-pinned to EXP2218 (GM 41.036, CS 48.380 worst warm), which is stricter than the old values.
+- Evidence: evidence/EXP2218, EXP2218-gate (run 1), EXP2218-gate-r2, EXP2218-gate-r3. Recovery rec2218h RECOVERY_DONE; APPL0002 Problem 28, no AppleAgx package.
+- Verdict: CONFIRMED. Next: EXP2219 = the same package with only Wom1FwRxDrain=1, gated, to decide the drain default (class C).

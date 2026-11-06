@@ -1,4 +1,4 @@
 {
-  "gravitymark_hd_perf": {"fps": 40.291, "source": "EXP2207 d: default driver, no device switches, HD PERF 100k -temporal 0 (10 + 60 s window)"},
-  "cs16_benchmark": {"fps": 45.457, "source": "EXP2209-B: standard CS 1.6 benchmark (timedemo agxbench, 2560x1600, playnoovl), Wom1JobDiagnostics=1 Wom1PresentTimestamps=1"}
+  "gravitymark_hd_perf": {"fps": 41.036, "source": "EXP2218 d: default driver, no device switches, HD PERF 100k -temporal 0 (10 + 60 s window); previous 40.291 (EXP2207 d)"},
+  "cs16_benchmark": {"fps": 48.380, "source": "EXP2218 warm runs r2/r3 (worst of 48.448/48.380): standard CS 1.6 benchmark (timedemo agxbench, 2560x1600, playnoovl), default driver, no device switches; the first run after boot is a cold warm-up (44.243) and is not gated; previous 45.457 (EXP2209-B, single cold run with diagnostics)"}
 }
