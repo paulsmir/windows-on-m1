@@ -44807,3 +44807,24 @@ problem=CM_PROB_FAILED_INSTALL (inert Problem 28), 8 CPUs, 1 disk. Evidence move
 .local/ans-native/ANS005B/attempt1/. Verdict: INCONCLUSIVE (tool defect, no hardware
 result). Fix: printf-formatted check lines (verified against both artifacts offline);
 launch-ans005b.sh sha256 now b884a3c5db66229236fd6b67ae4d1940094f3dcc4815bd6c7b952e95a9f161dd. Attempt 2 = same preregistration, same artifacts.
+
+### ANS005B attempt 2 — result (2026-11-06T02:36Z): CONFIRMED
+
+Timeline (UTC): 02:33:10 ordered restart (owner 89339); 02:33:42 at proxy; chainload of
+m1n1-ans005b.macho (hashes verified) -> "Proxy is alive again", chainloaded m1n1 heap
+base 0x805670000; run_uefi (ANS worktree, VNVME_RECOVERY) published the descriptor and
+captured LAUNCH_CONTRACT checkpoints 0-3 (publish now includes the heap seal, so the
+seal returned true; the legacy exp377 m1n1 has no such opcodes); m1n1 base 0x804eec000,
+pinned phys_base 0x850000000, Physical memory 0x850000000..0x9df708000; rtkit(nvme) and
+rtkit(dcp) booted; 02:34:27 guest SSH up (LastBootUpTime 03:33:28 local), gate
+APPL0002=1 problem=CM_PROB_FAILED_INSTALL (inert), 8 CPUs, 1 disk; full.log contains no
+"heapblock" line, no panic. 02:34:32 ordered restart (owner 93553), 02:34:52 at proxy,
+normal launch-normal2.sh recovery, 02:35:27 SSH up, same gate.
+Evidence .local/ans-native/ANS005B/ (sha256 prefixes): run.log 6f437566e52f980c,
+launch.log e962d8556fabcc6f, chainload.log ad4e45cc7cf2f13a, full.log bdbabd56d88640b8,
+contract.bin 7cacaef409c3b930, candidate-gate.txt 4b5406fb332ad57f.
+Display: not checked visually (no operator); SSH/storage (system disk via vNVMe)/8 CPUs
+alive. Scope: short boot (~1 min of guest time); a longer soak is not covered.
+Verdict: CONFIRMED — the ANS m1n1 line boots the recovery guest with the heap seal
+active and no ceiling panic. Next: rebuild the ANS001 packet on the merged line
+(native Mu + this m1n1), then ANS001/ANS002.

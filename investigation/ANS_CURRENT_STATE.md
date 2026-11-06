@@ -56,8 +56,8 @@ No flag is cleared by assertion; the policy still rejects any flagged region.
    exclusion from the live ADT (m1n1 b89cce170; 13 iBoot carveouts lie inside
    GUEST_RAM); assisted heap sealed at descriptor publish (m1n1 0beb7b552).
    Open: standalone heap seal (its runtime allocates guest firmware from heapblock);
-   first hardware boot of this m1n1 must show no ceiling panic (ANS005B, needs user
-   approval). DART_TABLES lifted (root d8f6519ba, m1n1 470ef6872) under
+   ANS005B (2026-11-06T02:34Z) CONFIRMED: ANS m1n1 line boots the recovery guest
+   with the heap seal, no ceiling panic. DART_TABLES lifted (root d8f6519ba, m1n1 470ef6872) under
    HYP-ANS-CARVEOUT, user decision relayed by fork 6. Old ANS005A text — heapblock ceiling + exact DART_TABLES region publication
    (assisted + standalone), `run_uefi.py` assertion `phys_base >= natural`,
    RED/GREEN in `tests/hv_ans_handoff_memory_test.py` and an allocator test.
