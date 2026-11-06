@@ -618,6 +618,7 @@ def kmd_job_poll(data, before=None):
 
 # rc102: Wom1JobWindow, ADMISSION_JOB_WINDOW_RECEIPT (render_job_window.h) v1.
 WINDOW_RECEIPT = struct.Struct('<IIII3I5IIIIIII')
+WINDOW_RECEIPT_V2 = struct.Struct('<IIII3I5IIIIIIII')  # + kick_fallbacks
 
 
 def kmd_job_window(data):
@@ -625,8 +626,11 @@ def kmd_job_window(data):
     raw = _registry_value(data, 'Wom1JobWindow')
     fields = WINDOW_RECEIPT.unpack_from(raw, 0)
     version, size = fields[0], fields[1]
-    if version != 1 or size != WINDOW_RECEIPT.size or len(raw) < size:
-        raise ValueError('not an ADMISSION_JOB_WINDOW_RECEIPT v1 snapshot')
+    layout = {1: WINDOW_RECEIPT, 2: WINDOW_RECEIPT_V2}.get(version)
+    if layout is None or size != layout.size or len(raw) < size:
+        raise ValueError('not an ADMISSION_JOB_WINDOW_RECEIPT v1/v2 snapshot')
+    fields = layout.unpack_from(raw, 0)
+    fallbacks = fields[18] if version >= 2 else 0
     kicks, max_in_flight = fields[2], fields[3]
     reported = fields[4:7]
     barriers = fields[7:12]
@@ -641,7 +645,8 @@ def kmd_job_window(data):
                 # re-proof, 5 context, 6 envelope, 7 output, 8 lease, 9 entry)
                 begin_successor_refusal=last_failure >> 16 & 0xff,
                 last_kick_status='%#010x' % last_status,
-                reset_aborts=aborts, last_kicked_fence=last_kicked)
+                reset_aborts=aborts, last_kicked_fence=last_kicked,
+                kick_fallbacks=fallbacks)
 
 
 # rc102 (EXP2045): Wom1JobWindowKickFail, ADMISSION_JOB_WINDOW_KICK_FAILURE

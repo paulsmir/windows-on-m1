@@ -145,8 +145,10 @@ class KickWiring(unittest.TestCase):
         self.assertLess(failed.index("AppleAgxG13QueueRuntimeFaulted"), abort)
         self.assertLess(abort, failed.index("AdmissionJobWindowKickFailedWindows("))
         self.assertIn("(ULONG)result, flags", failed)
+        record = section(WORKER.read_text(), "static VOID AdmissionJobWindowKickFailureRecordWindows(")
+        self.assertIn("f->BackendResult = result;", record)
         helper = section(WORKER.read_text(), "static VOID AdmissionJobWindowKickFailedWindows(")
-        self.assertLess(helper.index("f->BackendResult = result;"),
+        self.assertLess(helper.index("AdmissionJobWindowKickFailureRecordWindows("),
                         helper.index("AdmissionJobWindowKickFailureExportWindows(adapter, runtime);"))
         export = section(WORKER.read_text(), "static VOID AdmissionJobWindowKickFailureExportWindows(")
         self.assertIn('L"Wom1JobWindowKickFail"', export)
@@ -260,6 +262,7 @@ class KickReceipts(unittest.TestCase):
                                                compute_on_compute=0))
         self.assertEqual((out["adopted"], out["kick_failures"], out["last_kick_failure_line"],
                           out["reset_aborts"], out["last_kicked_fence"]), (3, 1, 5000, 1, 43))
+        self.assertEqual(out["kick_fallbacks"], 0)
         self.assertEqual((out["begin_successor_refusal"], out["last_kick_status"]), (7, "0xc0000184"))
 
     def test_kick_failure_record_decodes_the_c_struct(self):

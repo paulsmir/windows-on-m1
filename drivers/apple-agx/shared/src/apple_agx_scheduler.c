@@ -341,6 +341,19 @@ APPLE_AGX_BOOL AppleAgxSchedulerKickQueuedFence(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AppleAgxSchedulerUnkickFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence) {
+  if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
+      Fence == 0u || Scheduler->KickedFence != Fence ||
+      Scheduler->ActiveFence == 0u || Scheduler->QueueCount == 0u ||
+      Scheduler->QueuedFence != Fence ||
+      Scheduler->PreemptionPhase != AppleAgxPreemptionIdle)
+    return APPLE_AGX_FALSE;
+  Scheduler->KickedFence = 0u;
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_U32 AppleAgxSchedulerKickedFence(
     const APPLE_AGX_SCHEDULER *Scheduler) {
   return Scheduler == APPLE_AGX_NULL ? 0u : Scheduler->KickedFence;

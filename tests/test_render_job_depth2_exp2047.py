@@ -254,7 +254,7 @@ class Exp2047(unittest.TestCase):
         unstage = failed.index("AdmissionBackendImageUnstageJob(&adapter->BackendImage, next,")
         self.assertLess(abort, unstage)
         self.assertLess(unstage, failed.index("AdmissionJobWindowKickFailedWindows("))
-        helper = section(WORKER.read_text(), "static VOID AdmissionJobWindowKickFailedWindows(")
+        helper = section(WORKER.read_text(), "static VOID AdmissionJobWindowKickFailureRecordWindows(")
         self.assertIn("f->BuildRefusal = runtime->Initdata.RenderSharedMemory.LastBuildRefusal;",
                       helper)
 

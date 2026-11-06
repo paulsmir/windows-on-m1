@@ -2358,6 +2358,12 @@ VOID AdmissionG4PendingAheadUnbind(ADMISSION_CONTEXT *);
 BOOLEAN AdmissionG4PendingKickLocked(ADMISSION_CONTEXT *, ULONG Fence);
 BOOLEAN AdmissionG4PendingAdoptLocked(ADMISSION_CONTEXT *, ULONG Fence);
 VOID AdmissionG4PendingAbortKickedLocked(ADMISSION_CONTEXT *);
+/* Depth-2 kick fallback (investigation/analysis/DEPTH2-KICK-FALLBACK.md):
+ * the kick of the Kicked head with this fence was refused before the
+ * firmware saw it: the scheduler's kick is undone and the entry turns
+ * Prebound again, so the running job's ahead chain (or ordinary dispatch)
+ * submits it at depth 1 (PagingLock and SchedulerLock held). */
+BOOLEAN AdmissionG4PendingUnkickLocked(ADMISSION_CONTEXT *, ULONG Fence);
 /* rc102: a reset proved this fence's job never reached the firmware (a
  * kicked successor never handed over, or an active job whose submit
  * failed): end its graph job unrun (the lease stays with a job still

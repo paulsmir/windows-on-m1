@@ -194,6 +194,10 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * turns it off): consume the stats, ktrace and fwlog channels as Asahi does
    * (AppleAgxFwRxDrain). */
   BOOLEAN FwRxDrain;
+  /* Wom1Depth2FallbackDrill = N (diagnostic, default 0): every Nth successor
+   * BeginJob is refused to exercise the depth-2 kick fallback. */
+  ULONG Depth2FallbackDrill;
+  ULONG Depth2FallbackDrillCount;
   PEX_TIMER JobPollTimer;
   KEVENT JobPollTimerEvent;
 #endif
@@ -6205,7 +6209,7 @@ static VOID AdmissionJobWindowKickFailureExportWindows(
  * carries the BeginJobAs refusal in bits 16-23 (LastKickFailure); the
  * record keeps the backend, provider and queue runtime state at the
  * failure (EXP2045: SubmitSuccessor refused with no receipt). */
-static VOID AdmissionJobWindowKickFailedWindows(ADMISSION_CONTEXT *adapter,
+static VOID AdmissionJobWindowKickFailureRecordWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG line, ULONG fence,
     ULONG status, ULONG result, ULONG flags) {
   ADMISSION_JOB_WINDOW_KICK_FAILURE *f = &runtime->Depth2KickFailure;
@@ -6251,9 +6255,58 @@ static VOID AdmissionJobWindowKickFailedWindows(ADMISSION_CONTEXT *adapter,
   f->JobWordStamp = runtime->Initdata.RenderSharedMemory.JobWordStamp;
   f->JobWordSet = runtime->Initdata.RenderSharedMemory.JobWordSet;
   f->BuildRefusal = runtime->Initdata.RenderSharedMemory.LastBuildRefusal;
+}
+
+static VOID AdmissionJobWindowKickFailedWindows(ADMISSION_CONTEXT *adapter,
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG line, ULONG fence,
+    ULONG status, ULONG result, ULONG flags) {
+  AdmissionJobWindowKickFailureRecordWindows(runtime, line, fence, status,
+                                             result, flags);
   InterlockedCompareExchange(&adapter->SchedulerFaulted,
                              0x40000L | (LONG)(line & 0xffffu), 0);
   AdmissionJobWindowKickFailureExportWindows(adapter, runtime);
+}
+
+/* Depth-2 kick fallback (investigation/analysis/DEPTH2-KICK-FALLBACK.md):
+ * a decided kick refused before anything of it reached the firmware (no
+ * successor submitted, no G3 job left begun) is undone instead of faulting
+ * the scheduler: the scheduler and the G4 head forget the kick and the
+ * running job's ahead chain or ordinary dispatch submits the fence at depth
+ * one. FALSE when any precondition fails; the caller then fails closed. */
+static BOOLEAN AdmissionJobWindowKickFallbackWindows(ADMISSION_CONTEXT *adapter,
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG line, ULONG fence,
+    ULONG status, ULONG flags) {
+  BOOLEAN undone = FALSE;
+  KIRQL old_irql;
+  if (runtime->Depth2KickedFence != fence || fence == 0u ||
+      runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted ||
+      runtime->Backend.SuccessorPending ||
+      runtime->Backend.PendingSubmission.Submission.Fence == fence ||
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
+      InterlockedCompareExchange(&runtime->Resetting, 0, 0) != 0)
+    return FALSE;
+  KeAcquireSpinLock(&adapter->PagingLock, &old_irql);
+  KeAcquireSpinLockAtDpcLevel(&adapter->SchedulerLock);
+  if (InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) == 0)
+    undone = AdmissionG4PendingUnkickLocked(adapter, fence);
+  KeReleaseSpinLockFromDpcLevel(&adapter->SchedulerLock);
+  KeReleaseSpinLock(&adapter->PagingLock, old_irql);
+  if (!undone) return FALSE;
+  runtime->Depth2KickedFence = 0u;
+  runtime->Depth2KickBarrier = 0u;
+#if defined(ADMISSION_OV2_ON)
+  runtime->Ov2Waive = FALSE;
+#endif
+#if defined(ADMISSION_OV5_ON)
+  runtime->Ov5Waive = FALSE;
+#endif
+  AdmissionJobWindowKickFailureRecordWindows(runtime, line, fence, status, 0u,
+      flags | ADMISSION_KICK_FAIL_FELL_BACK);
+  runtime->Depth2KickRunningKind = 0u;
+  runtime->Depth2KickNextKind = 0u;
+  ++runtime->Depth2Receipt.KickFallbacks;
+  AdmissionJobWindowKickFailureExportWindows(adapter, runtime);
+  return TRUE;
 }
 
 /* rc102 (EXP2051): the builder's manager predicate for a render successor
@@ -6518,18 +6571,33 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseBeginBefore);
   runtime->Depth2BuildStep = 0u;
   if (context == NULL || context->GpuvaG3Process == NULL) {
-    AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next,
-                                        0u, 0u, 0u);
+    if (!AdmissionJobWindowKickFallbackWindows(adapter, runtime, __LINE__,
+                                               next, 0u, 0u))
+      AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next,
+                                          0u, 0u, 0u);
     return TRUE;
   }
   {
     ULONG beginRefusal = 0u;
     NTSTATUS begin = AdmissionGpuvaG3BeginSuccessorJob(adapter, context, next,
                                                        &beginRefusal);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    /* Wom1Depth2FallbackDrill = N: refuse every Nth BeginSuccessorJob as if
+     * BeginJobAs had (nothing begun), to prove the fallback on hardware. */
+    if (NT_SUCCESS(begin) && runtime->Depth2FallbackDrill != 0u &&
+        ++runtime->Depth2FallbackDrillCount % runtime->Depth2FallbackDrill == 0u) {
+      AdmissionGpuvaG3AbortJob(adapter, next);
+      begin = STATUS_INVALID_DEVICE_STATE;
+      beginRefusal = 0xdu;
+    }
+#endif
     if (!NT_SUCCESS(begin)) {
-      /* rc102 receipt: which BeginJob check refused, and its status. */
-      AdmissionJobWindowKickFailedWindows(adapter, runtime,
-          __LINE__ | (beginRefusal << 16), next, (ULONG)begin, 0u, 0u);
+      /* rc102 receipt: which BeginJob check refused, and its status.
+       * BeginJobAs changes nothing unless it succeeds: fall back. */
+      if (!AdmissionJobWindowKickFallbackWindows(adapter, runtime,
+              __LINE__ | (beginRefusal << 16), next, (ULONG)begin, 0u))
+        AdmissionJobWindowKickFailedWindows(adapter, runtime,
+            __LINE__ | (beginRefusal << 16), next, (ULONG)begin, 0u, 0u);
       return TRUE;
     }
   }
@@ -6540,8 +6608,10 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
       AdmissionJobWindowManagerNeedsIdle(owner, TRUE, FALSE, NULL, NULL,
                                          image->G4Manager, &image->G4ManagerKey)) {
     AdmissionGpuvaG3AbortJob(adapter, next);
-    AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next, 0u, 0u,
-                                        ADMISSION_KICK_FAIL_G3_ABORTED);
+    if (!AdmissionJobWindowKickFallbackWindows(adapter, runtime, __LINE__,
+            next, 0u, ADMISSION_KICK_FAIL_G3_ABORTED))
+      AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next, 0u,
+                                          0u, ADMISSION_KICK_FAIL_G3_ABORTED);
     return TRUE;
   }
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseBeginAfter);
@@ -8304,6 +8374,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   runtime->FwRxDrain =
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1FwRxDrain");
+  runtime->Depth2FallbackDrill = 0u;
+  runtime->Depth2FallbackDrillCount = 0u;
+  (void)AdmissionPlatformDwordValue(Context, L"Wom1Depth2FallbackDrill",
+                                    &runtime->Depth2FallbackDrill);
 #endif
 #if defined(ADMISSION_PREEMPT_TRACE_ON)
   {

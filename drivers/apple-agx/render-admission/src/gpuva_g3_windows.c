@@ -5655,6 +5655,24 @@ _Use_decl_annotations_ BOOLEAN AdmissionG4PendingKickLocked(
   return TRUE;
 }
 
+/* Depth-2 kick fallback (render_admission.h): undo KickLocked for a kick the
+ * firmware never saw. The context keeps the entry's DMA range and mapping
+ * generation (AheadPromoteLocked writes the same values). */
+_Use_decl_annotations_ BOOLEAN AdmissionG4PendingUnkickLocked(
+    ADMISSION_CONTEXT *adapter, ULONG fence) {
+  ADMISSION_G4_PENDING *entry;
+  if (adapter == NULL || fence == 0u || adapter->G4PendingCount == 0u)
+    return FALSE;
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  if (entry->State != AdmissionG4PendingKicked || entry->Fence != fence ||
+      entry->Context == NULL || adapter->G4PrebindFence != fence ||
+      adapter->BackendImage.BoundFence != fence ||
+      !AppleAgxSchedulerUnkickFence(&adapter->Scheduler, 0u, 0u, fence))
+    return FALSE;
+  entry->State = AdmissionG4PendingPrebound;
+  return TRUE;
+}
+
 /* rc102: the kicked head becomes the active packet: the binds and the
  * activation the dispatch and the worker would do for it (its image and
  * the firmware already hold it). */

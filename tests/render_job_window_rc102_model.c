@@ -94,6 +94,9 @@ typedef struct world {
   unsigned rep[MAXF], nr, repd[MAXF + 1], resub[MAXF + 1], aborted[MAXF + 1];
   unsigned kick_tick[MAXF + 1];
   unsigned now, max_fw, resets, last_aborted;
+  /* depth-2 kick fallback: every refuse_every-th decided kick is refused
+   * before the firmware sees it (BeginSuccessorJob refusal) and undone */
+  unsigned refuse_every, decided, fallbacks, fell_back[MAXF + 1];
   unsigned gate; /* VidSch depth: fence n is submitted once n-gate ended */
   void (*event)(struct world *);
   unsigned violations;
@@ -596,6 +599,9 @@ static void kick_successor(world *w) {
   unsigned m = AppleAgxSchedulerQueuedFence(&w->sch, 0u, 0u);
   if (!w->depth2 || !n || !m || w->be.SuccessorPending || AppleAgxSchedulerKickedFence(&w->sch))
     return;
+  /* the KMD's decision behind n is final (kickDone): a fallen-back fence
+   * is not kicked again, it runs at depth 1 */
+  if (w->fell_back[m]) return;
   if (w->prebound_at == 0 || w->prebound_at > w->now) {
     if (w->prebound_at == 0) w->prebound_at = w->now + 1;
     return;
@@ -616,6 +622,15 @@ static void kick_successor(world *w) {
     violate(w, "W4 kick while paging/preempting/faulted/resetting", m);
   if (w->win.Poisoned) violate(w, "W7 kick into a poisoned window", m);
   if (!AppleAgxSchedulerKickQueuedFence(&w->sch, 0u, 0u, m)) { violate(w, "scheduler refused the kick", m); return; }
+  if (w->refuse_every && ++w->decided % w->refuse_every == 0u) {
+    /* AdmissionJobWindowKickFallbackWindows: nothing submitted, undo the
+     * kick; m stays queued and runs at depth 1 after n. */
+    if (!AppleAgxSchedulerUnkickFence(&w->sch, 0u, 0u, m)) {
+      violate(w, "fallback unkick refused", m); w->faulted = 1; return;
+    }
+    ++w->fallbacks; w->fell_back[m] = 1;
+    return;
+  }
   sub = submission_for(w, m);
   if (AppleAgxBackendRuntimeSubmitSuccessor(&w->be, &sub) != AppleAgxBackendRuntimeResultOk) {
     violate(w, "successor submission failed", m); w->faulted = 1; return;
@@ -777,6 +792,24 @@ static unsigned s_order(void) {
   if (!w->rec.Barriers[ADMISSION_JOB_WINDOW_BARRIER_TA_ON_COMPUTE] ||
       !w->rec.Barriers[ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D])
     { printf("order: barrier classes missing\n"); ++w->violations; }
+  return w->violations;
+}
+/* Depth-2 kick fallback: every second decided kick is refused before the
+ * firmware sees it. Expected: no reset, the refused fence runs once at
+ * depth 1 after the running job, every fence ends once in order. */
+static unsigned s_fallback(void) {
+  world *w = &W; unsigned i, f;
+  start(w, "fallback");
+  w->refuse_every = 2u;
+  add(w, K_R, OUT_OK, 7);
+  for (i = 0; i < 15; ++i) add(w, (i % 3) == 2 ? K_R : K_C, OUT_OK, 7);
+  run(w, 500);
+  finish(w);
+  if (w->resets || w->faulted) { printf("fallback: resets %u faulted %u\n", w->resets, w->faulted); ++w->violations; }
+  if (w->fallbacks < 2u || !w->rec.Kicks) { printf("fallback: fallbacks %u kicks %u\n", w->fallbacks, w->rec.Kicks); ++w->violations; }
+  for (f = 1; f <= w->nsub; ++f)
+    if (w->fell_back[f] && (w->kicked_behind[f] || w->final_[f] != 1u || w->resub[f]))
+      { printf("fallback: f%u final %u behind %u resub %u\n", f, w->final_[f], w->kicked_behind[f], w->resub[f]); ++w->violations; }
   return w->violations;
 }
 static unsigned s_depth1(void) {
@@ -961,6 +994,7 @@ int main(void) {
   int unit = unit_scheduler();
   if (unit) { printf("FAIL scheduler unit %d\n", unit); return 1; }
   bad += s_order();
+  bad += s_fallback();
   bad += s_depth1();
   bad += s_prelude();
   bad += s_pairs();
