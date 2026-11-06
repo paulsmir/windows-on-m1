@@ -70270,3 +70270,16 @@ EXP2218 HARDWARE ACTUAL (2026-11-06T21:17:20Z): **CONFIRMED: the default package
 - Process correction: post-exp-gate.sh now runs a warm-up (recorded, not gated) plus two gated warm runs; perf-baseline.json re-pinned to EXP2218 (GM 41.036, CS 48.380 worst warm), which is stricter than the old values.
 - Evidence: evidence/EXP2218, EXP2218-gate (run 1), EXP2218-gate-r2, EXP2218-gate-r3. Recovery rec2218h RECOVERY_DONE; APPL0002 Problem 28, no AppleAgx package.
 - Verdict: CONFIRMED. Next: EXP2219 = the same package with only Wom1FwRxDrain=1, gated, to decide the drain default (class C).
+
+EXP2219 HARDWARE BEFORE 2026-11-06T21:30:12Z:
+Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0; post-exp-gate.sh (CS 1.6 warm-up + 2 gated warm runs) + agx_perf_gate.py vs perf-baseline.json (EXP2218: GM 41.036, CS 48.380, 2 %).
+- WHY THIS HYPOTHESIS: (1) EXP2216: without a drain the firmware stats ring is full and stuck; Asahi gpu.rs/channel.rs consume every RX ring on each firmware interrupt (class C contract); (2) EXP2217 proved the drain works (98359 messages, 0 failures) but only with Wom1JobDiagnostics on, which is not a gate configuration; (3) EXP2218 gives the same-source no-switch reference, so the only difference is the drain.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: firmware->host RX ring consumer (read_ptr := write_ptr), read-pointer stores only. ATOMIC CONTRACT: none -- one switch.
+- WHAT IS STILL UNKNOWN: whether the drain costs or gains anything without diagnostics.
+- Expected: suite 119/0; PERF_GATE_PASS vs EXP2218 (GM and CS within 2 %); no firmware fault. If PASS -> drain becomes default (class C).
+- Failure criteria: PERF_GATE_FAIL, suite failure, firmware fault/hang/GPU reset -> rec2219h, drain stays opt-in.
+- Recovery: rec2219h (run directly, no manual reboot).
+- Probe: agx_d3d12_probe_e2219_arm64.exe = byte copy of e2218 (sha 5dbe904643ea842c).
+- Hashes: sys baafe7480afe, UmdArm64 62fb72ce7949, UmdX64 6f3d96857e2b, Umd32 f500ba3c1c6e; manifest 44f7398c269c, hardware-manifest 6d21f95b6b6c; probe2219.sh 1bc8b0518cbd (PROBE_LINT_OK); visible recovery rec2219h b0e1b249d60a5063; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1FwRxDrain=1.
+- Recovery rec2219h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2219-drain-gate/run2219.sh.
