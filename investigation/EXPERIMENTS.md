@@ -45408,3 +45408,17 @@ ANSCOLLECT010 PASS (2026-11-06T13:55:25Z): I2 in VM, online_try=1 online_exit=0,
 Packet e77b0c839b93bd4ca93c110c013cd5cb8820b82dcef5f3a0a05ec50ffeb863cd (WinPE I2 8cc8b075...), dry-run 0.
 WHY THIS HYPOTHESIS: R8 showed OnlineAll alone is insufficient when online follows immediately; the operator succeeded only after rescan, a new session and list disk; I2 reproduces that with a 5 s pause and up to 5 retries, then clears read-only (VM-proven).
 Single variable vs R8: wrapper S30 (retry sequence + clear readonly). Expected: online_ok=1 within 5 tries, export to WINPE-R9, reboot.
+
+ANS001-R9 result (recorded 2026-11-06T14:00:45Z): CONFIRMED — first fully unattended ANS001 run.
+13:56:14 launch; 13:57:32 guest entry; native Mu -> bootmgr -> EBS handoff -> WinPE on native
+ANS; collector (wpeinit 0, ans 0, ans-reg 0, disks 0, volumes 0, pnp-all-reg 1, optional sc/
+WMIC/DISM as before); wrapper: san_exit=0, online_try=1 online_exit=0 (online_ok=1),
+san_restore_exit=0, existing_marker_letters=1 letter=C, S52, export_exit=0 to WINPE-R9
+(80 files), dismount, wpeutil reboot (PSCI RESET from the Windows kernel at 13:59:03); proxy
+back 13:59:09; normal recovery SSH 14:00:00, APPL0002 inert, 8 CPUs.
+ACPI\APPL0003\0 Problem 28 / 0xC0000490 with BootConfig = broker 0x300010000+0x4000 and
+GSIV 0x379 (889), identical to R6. Evidence .local/ans-native/ANS001-R9-run/stick-results.tar
+2a8abd5deb54cdfcd5cc23c71a6ec934de3848edfa30712f345c458d3af41f80.
+Verdict: ANS001 complete (hypothesis R6, unattended evidence channel R9). Next: ANS002
+(AppleAns package in WinPE, QUERY/CLAIM through the broker, no DMA), with the policy-4
+internal-disk checkpoint now moot (boot policy stays 3; only the stick is onlined).

@@ -1,4 +1,4 @@
-# ANS current state — ANS001-R4 packet ready; native broker preflight fixed offline; bench down (power cycle)
+# ANS current state — ANS001 CONFIRMED (unattended R9); next ANS002
 
 Updated 2026-11-06T11:10Z (UTC). The user delegated all ANS driver dev/test decisions (2026-11-06).
 Older text below: No hardware was accessed in this phase. No
@@ -6,24 +6,21 @@ Air permission has been given. The single J313 bench belongs to the GPU
 sessions; every ANS run needs explicit user approval and an agreed slot.
 
 
-## Current boundary (2026-11-06T11:10Z)
+## Current boundary (2026-11-06T14:05Z)
 
-- Evidence channel: the user's USB stick (Transcend 32 GB, GPT {CF195BCF-...}, exFAT,
-  in the NIC hub). ANSUSB001 CONFIRMED (marker folder ANS001-RESULTS-27a6a231).
-  WinPE E (export wrapper tools/ans_winpe/ANS001-HW-START.CMD.in) passed ANSCOLLECT005
-  (vm-005c).
-- ANS001-R3 on hardware: attempts 1-3 stopped on host defects (launch lock vs symlinked
-  root 58d2048b5; missing LLDDIR; orchestrator misreading the chainload link drop).
-  Attempt 4 reached hv.init: m1n1 booted ANS (RTKit v12), then map_ans_native_broker was
-  rejected because the live ADT windows (reg0 0x6c000, reg3 0x60000) != DT constants.
-  Fixed in m1n1 f5439151e (ANSBUILD007 4769b322...). Recovery by chainload over the aborted
-  hypervisor lost the Air -> physical power cycle requested 10:52Z.
-- Next: once at Running proxy, bring up normal recovery, BENCH RETURNED or keep the slot,
-  then preregister and run ANS001-R4 (.local/ans-native/ANS001-R4-run/run.sh, packet
-  1833b4ab...). On an abort before guest entry, run.sh now reboots the proxy (P_REBOOT)
-  instead of chainloading.
-- Follow-up: m1n1 tests/run_host_tests.sh full list fails on clang-21 -Werror in
-  asc_tx_gate_test.c and hv_autonomous_manifest.c (pre-existing).
+- ANS001 CONFIRMED on hardware: R6 (operator export) and R9 (fully unattended). Native ANS
+  launch with m1n1 ANSBUILD007 (live ADT window pin), native Mu ANSBUILD009 (ReadyToBoot
+  loader start, broker window in stage-1 map) passes the EBS ownership handoff; WinPE boots
+  and enumerates ACPI\APPL0003 inert (Problem 28) with broker 0x300010000+0x4000, GSIV 889.
+- Unattended evidence channel works: WinPE I2 wrapper (SAN OnlineAll + rescan/list/online
+  retries + clear readonly + OfflineAll restore) exports to the user's stick, then reboots;
+  orchestrator .local/ans-native/ANS001-R9-run/run.sh recovers automatically.
+- Host safety: run-assisted refuses a non-fresh proxy (marker), P_REBOOT on pre-guest abort,
+  runner stop on hang (observed reboot required).
+- Bench: owned by ANS until the SSD driver is finished (user decision via fork 6).
+- Next: ANS002 (AppleAns package in WinPE, QUERY/CLAIM through the broker, no DMA), then
+  ANS003 admin queue (first DMA), ANS004 Identify, READ, write, native boot.
+- Follow-up: m1n1 tests/run_host_tests.sh full list fails on clang-21 -Werror (pre-existing).
 
 ## Read first after a reset
 
