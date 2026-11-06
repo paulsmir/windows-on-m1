@@ -44957,3 +44957,10 @@ evidence volume holds ANS001-RESULTS-27a6a231\WINPE\ with COMMANDS.CSV, HW-DONE.
 are byte-identical; fsck.exfat is clean.
 Failure: timeout/hold, HW-FAILED.TXT, a changed user file or a dirty filesystem ->
 fix the wrapper offline; no ANS001.
+
+ANSCOLLECT005 attempt 1 result 2026-11-06T11:05Z (UTC): FAILED/INCONCLUSIVE. VM hit the
+1200 s cap (004 finished in 257 s); evidence volume unchanged (fsck clean, only the
+marker and USER-FILE.TXT), so the wrapper stopped in a refusal/hold path before
+S60_EXPORT. No screen was captured. Attempt 2: identical inputs (fresh copy of the
+stock VM vars), plus QMP screendumps every ~55 s to read the failing stage. Evidence:
+`.local/ans-native/ans001-collector-vm-005/attempt1/`.
