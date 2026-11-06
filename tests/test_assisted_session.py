@@ -63,8 +63,14 @@ os._exit(3)
                 if (root/'reader.closed').exists():break
                 time.sleep(.02)
             self.assertEqual((root/'reader.closed').read_text(),'flushed')
+            # The reader's exit (and its inherited lock fd) can lag its 'closed' marker by
+            # a few scheduler ticks under load; bounded retry, not an unbounded wait.
             with patch.dict(os.environ,{},clear=True):
-                fd=acquire(root);os.close(fd)
+                for attempt in range(100):
+                    try:fd=acquire(root);os.close(fd);break
+                    except ValueError:
+                        if attempt==99:raise
+                        time.sleep(.02)
     def test_failed_start_closes_guard(self):
         from tools.assisted_session import AssistedSession
         with tempfile.TemporaryDirectory() as tmp,patch.dict(os.environ,{},clear=True):
