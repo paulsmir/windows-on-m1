@@ -17,9 +17,9 @@ rem SAN policy must already have been set offline, before this guest boot.
 reg query HKLM\SYSTEM\CurrentControlSet\Services\partmgr\Parameters /v SanPolicy >"%OUT%\SAN-POLICY.TXT" 2>&1
 set SANQUERYRC=!errorlevel!
 set SANMATCH=0
-for /f "usebackq tokens=1,2,3,*" %%A in ("%OUT%\SAN-POLICY.TXT") do if /i "%%A"=="SanPolicy" if /i "%%B"=="REG_DWORD" if /i "%%C"=="0x4" if "%%D"=="" set /a SANMATCH+=1
+for /f "usebackq tokens=1,2,3,*" %%A in ("%OUT%\SAN-POLICY.TXT") do if /i "%%A"=="SanPolicy" if /i "%%B"=="REG_DWORD" if /i "%%C"=="0x3" if "%%D"=="" set /a SANMATCH+=1
 if not "!SANQUERYRC!:!SANMATCH!"=="0:1" (
-  >"%OUT%\INCOMPLETE.TXT" echo REFUSED: preconfigured offline-internal SAN policy (4) not proved; wpeinit not called
+  >"%OUT%\INCOMPLETE.TXT" echo REFUSED: preconfigured offline-all SAN policy not proved; wpeinit not called
   goto finished
 )
 wpeinit >"%OUT%\WPEINIT-CONSOLE.TXT" 2>&1

@@ -45327,3 +45327,17 @@ the existing-letter path (existing_marker_letters=1), exports to WINPE-R7, dismo
 reboots; OLD.TXT, USER-FILE.TXT and the marker are unchanged.
 ANS002+ checkpoint (open): confirm that the AppleAns disk is classified as internal and stays
 offline under policy 4.
+
+ANSCOLLECT006 result (recorded 2026-11-06T12:42:17Z): FAILED — WinPE F reset during kernel start (vm-006 82 s, vm-006b 84 s, both QEMU exits by -no-reboot; screens: TianoCore spinner, then black, no shell). The only boot-relevant change vs E is the hivex-rewritten SYSTEM hive (SanPolicy 4), so that hive is the prime suspect (not proven). Variant F is withdrawn; nothing of F reaches hardware.
+
+### ANS001-PREP-G + ANSCOLLECT007 (preregistered)
+
+G = E (SYSTEM hives untouched, SanPolicy 3 at boot; collector reverted to 01e22a7e) + wrapper
+changes only: S29 runs `san policy=OfflineInternal` in its own diskpart session (internal
+disks remain offline), then S30 `online disk` runs in a fresh session (the operator's working
+sequence in R6 used OnlineAll + a new session); S50 reuses a letter only if it holds this
+run's marker (exactly one), else assigns; target subfolder WINPE-R7.
+Image a86d4ad47026c3f347b4f1642962b91e85b7d39fd422bc4104ee9d654108819d, HW-START f12a65df....
+ANSCOLLECT007 expectation as in 006 (existing WINPE\OLD.TXT kept).
+Limitation: QEMU never reproduced the VDS refusal, so the VM proves the wrapper path, not
+the hardware VDS behaviour; that is decided on hardware (ANS001-R7).

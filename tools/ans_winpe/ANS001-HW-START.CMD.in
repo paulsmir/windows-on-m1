@@ -13,6 +13,15 @@ if not exist "%OUT%" mkdir "%OUT%"
 call :stage S20_INITIAL_DISCOVERY
 call :discover PRE
 if not "!MATCHES!"=="1" goto failed
+call :stage S29_SAN_POLICY_OFFLINE_INTERNAL
+rem ANS001-R6: under the boot-time policy 3 (OfflineAll) VDS rejects "online disk" for the
+rem USB stick (object not found). Relax to OfflineInternal (internal disks stay offline) in
+rem its own diskpart session; the online below runs in a fresh session.
+>"%OUT%\HW-SAN.TXT" echo san policy=OfflineInternal
+>>"%OUT%\HW-SAN.TXT" echo san
+>>"%OUT%\HW-SAN.TXT" echo exit
+diskpart /s "%OUT%\HW-SAN.TXT" >"%OUT%\HW-SAN.LOG" 2>&1
+>>"%OUT%\HW-WRAPPER.TXT" echo san_exit=!errorlevel!
 call :stage S30_ONLINE_IDENTIFIED_DISK
 >"%OUT%\HW-ONLINE.TXT" echo select disk !EVIDDISK!
 >>"%OUT%\HW-ONLINE.TXT" echo attributes disk clear readonly
