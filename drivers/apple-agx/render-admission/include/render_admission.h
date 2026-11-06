@@ -1455,6 +1455,11 @@ void AdmissionRecordG3PrivatePressure(_In_opt_ ADMISSION_CONTEXT *Context,
 void AdmissionRecordG3PrivateProcesses(_In_opt_ ADMISSION_CONTEXT *Context,
                                        _In_reads_bytes_(Bytes) const ULONG *Values,
                                        _In_ ULONG Bytes);
+/* EXP2206 receipt-only: Wom1G3NativeQueryRefusal, an
+ * APPLE_AGX_G3_NQ_REFUSAL_RECEIPT (apple_agx_g3_native_query_refusal.h);
+ * never flushed. */
+void AdmissionRecordG3NativeQueryRefusal(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_reads_bytes_(Bytes) const VOID *Receipt, _In_ ULONG Bytes);
 /* G2 HW2 receipt: the per-process private VA reservations (Wom1G3Reserve:
  * version, reserved, refused, last status, last VA low, last VA high). */
 #define ADMISSION_G3_RESERVE_RECEIPT_WORDS 6u

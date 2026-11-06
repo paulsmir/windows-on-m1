@@ -10,6 +10,9 @@
 #include "render_job_timing.h"
 #include "render_job_ahead.h"
 #include "render_preempt_trace.h"
+/* EXP2206 receipt-only: native readiness query refusal codes. */
+#include "apple_agx_g3_native_query_refusal.h"
+#define ADMISSION_G3_NATIVE_QUERY_REFUSAL_RECEIPT 1
 /* L1 receipt-only lock profile: every fast mutex in this file is the G3
  * state Lock (gpuva_g3_private.h). */
 #define ADMISSION_G3_LOCK_FILE 1u
@@ -1582,13 +1585,147 @@ static BOOLEAN AdmissionG3CaptureCopyQueryFailure(ADMISSION_CONTEXT *adapter,
  * submission holds exclude trim. Unlike T12, inspect only the named canonical
  * allocation, never unrelated mappings in this process. No wait for an active
  * GPU job is needed: the G3 mutex serializes publication and this walk. */
+#if defined(ADMISSION_G3_NATIVE_QUERY_REFUSAL_RECEIPT)
+/* EXP2206 receipt-only (apple_agx_g3_native_query_refusal.h): the refusing
+ * predicate of a readiness query. Claimed without blocking; a busy receipt
+ * counts the refusal as Dropped. Never changes the escape's status. */
+static APPLE_AGX_G3_NQ_REFUSAL_RECEIPT gG3NativeQueryRefusal;
+static volatile LONG gG3NativeQueryRefusalClaim;
+static volatile LONG64 gG3NativeQueryRefusalExportQpc;
+static volatile LONG gG3NativeQueryRefusalExportedTotal;
+
+static VOID AdmissionG3NativeQueryRefused(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args, const APPLE_AGX_G3_NATIVE_QUERY *q,
+    ULONG code, NTSTATUS status, ULONG flags, ADMISSION_G3_PROCESS *p,
+    ADMISSION_RENDER_CONTEXT *context, ADMISSION_OPEN_ALLOCATION *opened) {
+  APPLE_AGX_G3_NQ_REFUSAL_RECORD record;
+  ADMISSION_G3_STATE *state;
+  ADMISSION_RENDER_CONTEXT *c;
+  PLIST_ENTRY link;
+  RtlZeroMemory(&record, sizeof(record));
+  record.Code = code;
+  record.Status = (ULONG)status;
+  record.Flags = flags;
+  record.OsProcessId = HandleToULong(PsGetCurrentProcessId());
+  record.Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  if (args) {
+    record.Device = (ULONGLONG)(ULONG_PTR)args->hDevice;
+    record.Context = (ULONGLONG)(ULONG_PTR)args->hContext;
+    record.KmdProcess = (ULONGLONG)(ULONG_PTR)args->hKmdProcessHandle;
+  }
+  if (q && (flags & APPLE_AGX_G3_NQ_FLAG_QUERY)) {
+    record.QueryAllocation = q->Allocation;
+    record.QueryGpuVa = q->GpuVa;
+    record.QueryAllocationBytes = q->AllocationBytes;
+    record.QueryVersion = q->Version;
+    record.QueryReserved = q->Reserved;
+    record.QueryWrite = q->Write;
+    record.QueryBytes = q->Bytes;
+  }
+  if (opened) {
+    record.OpenedFlags = APPLE_AGX_G3_NQ_OPENED_FOUND;
+    if (opened->Magic == ADMISSION_OPEN_ALLOCATION_MAGIC) {
+      record.OpenedFlags |= APPLE_AGX_G3_NQ_OPENED_MAGIC_BIT;
+      record.OpenedDevice = (ULONGLONG)(ULONG_PTR)opened->Device;
+      record.OpenedRuntimeAllocation = (ULONG)opened->RuntimeAllocation;
+      if (q && opened->RuntimeAllocation == q->Allocation)
+        record.OpenedFlags |= APPLE_AGX_G3_NQ_OPENED_RUNTIME_MATCH;
+      if (opened->ReadOnly) record.OpenedFlags |= APPLE_AGX_G3_NQ_OPENED_READ_ONLY_BIT;
+      if (opened->Allocation) {
+        record.OpenedFlags |= APPLE_AGX_G3_NQ_OPENED_OBJECT_BIT;
+        if (opened->Allocation->Magic == ADMISSION_ALLOCATION_OBJECT_MAGIC) {
+          record.OpenedFlags |= APPLE_AGX_G3_NQ_OPENED_OBJECT_MAGIC_BIT;
+          record.DescriptionSize = opened->Allocation->Description.Size;
+        }
+      }
+    }
+  }
+  /* Process and context observations only under the G3 lock. */
+  state = adapter ? (ADMISSION_G3_STATE *)adapter->GpuvaG3State : NULL;
+  if ((flags & APPLE_AGX_G3_NQ_FLAG_LOCKED) && state && args) {
+    if (p) {
+      record.ProcessFlags = APPLE_AGX_G3_NQ_PROCESS_FOUND |
+          (p->Poisoned ? APPLE_AGX_G3_NQ_PROCESS_POISONED_BIT : 0u) |
+          (p->CpuOnlyMappings ? APPLE_AGX_G3_NQ_PROCESS_CPU_ONLY_BIT : 0u) |
+          (p->Graph.Created ? APPLE_AGX_G3_NQ_PROCESS_CREATED_BIT : 0u) |
+          (p->Graph.Uncertain ? APPLE_AGX_G3_NQ_PROCESS_UNCERTAIN_BIT : 0u);
+      for (c = p->Contexts; c; c = c->GpuvaG3NextContext) ++record.ProcessContexts;
+    }
+    for (link = state->Processes.Flink; link != &state->Processes;
+         link = link->Flink) {
+      ADMISSION_G3_PROCESS *other = CONTAINING_RECORD(link, ADMISSION_G3_PROCESS, Link);
+      if (!p && other->OsProcessId == record.OsProcessId && !record.PidProcess) {
+        record.ProcessFlags |= APPLE_AGX_G3_NQ_PROCESS_PID_MATCH;
+        record.PidProcess = (ULONGLONG)(ULONG_PTR)other;
+      }
+      if (other != p && !context && !record.ForeignOsProcessId)
+        for (c = other->Contexts; c; c = c->GpuvaG3NextContext)
+          if ((HANDLE)c == args->hContext) {
+            record.ContextFlags |= APPLE_AGX_G3_NQ_CONTEXT_FOREIGN;
+            record.ForeignOsProcessId = other->OsProcessId ? other->OsProcessId : 0xffffffffu;
+            break;
+          }
+    }
+    if (context) {
+      record.ContextFlags |= APPLE_AGX_G3_NQ_CONTEXT_FOUND |
+          (context->Win32Transport ? APPLE_AGX_G3_NQ_CONTEXT_TRANSPORT_BIT : 0u) |
+          (context->GpuvaG3Closing ? APPLE_AGX_G3_NQ_CONTEXT_CLOSING_BIT : 0u) |
+          (context->GpuvaG3Poisoned ? APPLE_AGX_G3_NQ_CONTEXT_POISONED_BIT : 0u);
+      if (context->Object.Device) {
+        ADMISSION_DEVICE *device =
+            CONTAINING_RECORD(context->Object.Device, ADMISSION_DEVICE, Object);
+        record.ContextFlags |= APPLE_AGX_G3_NQ_CONTEXT_DEVICE_BIT;
+        record.ContextDevice = (ULONGLONG)(ULONG_PTR)device;
+        if ((HANDLE)device == args->hDevice)
+          record.ContextFlags |= APPLE_AGX_G3_NQ_CONTEXT_DEVICE_MATCH;
+        if (device->Object.Adapter == &adapter->ObjectAdapter)
+          record.ContextFlags |= APPLE_AGX_G3_NQ_CONTEXT_ADAPTER_MATCH;
+        if (opened && opened->Magic == ADMISSION_OPEN_ALLOCATION_MAGIC &&
+            opened->Device == device)
+          record.OpenedFlags |= APPLE_AGX_G3_NQ_OPENED_DEVICE_MATCH;
+      }
+    }
+  }
+  if (InterlockedCompareExchange(&gG3NativeQueryRefusalClaim, 1, 0) == 0) {
+    AppleAgxG3NqRefusalNote(&gG3NativeQueryRefusal, code, &record);
+    InterlockedExchange(&gG3NativeQueryRefusalClaim, 0);
+  } else {
+    InterlockedIncrement((volatile LONG *)&gG3NativeQueryRefusal.Dropped);
+  }
+}
+
+/* PASSIVE_LEVEL, no lock held: at most every two seconds, or at once when
+ * the first refusal of a run is not yet exported. */
+static VOID AdmissionG3NativeQueryRefusalExport(ADMISSION_CONTEXT *adapter) {
+  APPLE_AGX_G3_NQ_REFUSAL_RECEIPT copy;
+  LARGE_INTEGER frequency;
+  LONGLONG now, last;
+  if (!adapter || KeGetCurrentIrql() != PASSIVE_LEVEL) return;
+  now = KeQueryPerformanceCounter(&frequency).QuadPart;
+  last = gG3NativeQueryRefusalExportQpc;
+  if (gG3NativeQueryRefusalExportedTotal != 0 &&
+      now - last < 2 * frequency.QuadPart) return;
+  if (InterlockedCompareExchange64(&gG3NativeQueryRefusalExportQpc, now, last) != last)
+    return;
+  if (InterlockedCompareExchange(&gG3NativeQueryRefusalClaim, 1, 0) != 0) {
+    InterlockedExchange64(&gG3NativeQueryRefusalExportQpc, last);
+    return;
+  }
+  RtlCopyMemory(&copy, &gG3NativeQueryRefusal, sizeof(copy));
+  InterlockedExchange(&gG3NativeQueryRefusalClaim, 0);
+  if (!copy.Total) return;
+  InterlockedExchange(&gG3NativeQueryRefusalExportedTotal, (LONG)copy.Total);
+  AdmissionRecordG3NativeQueryRefusal(adapter, &copy, (ULONG)sizeof(copy));
+}
+#endif
+
 NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
     const DXGKARG_ESCAPE *args) {
-  APPLE_AGX_G3_NATIVE_QUERY q;
+  APPLE_AGX_G3_NATIVE_QUERY q = {0};
   ADMISSION_G3_STATE *state;
-  ADMISSION_G3_PROCESS *p;
-  ADMISSION_RENDER_CONTEXT *context;
-  ADMISSION_OPEN_ALLOCATION *opened;
+  ADMISSION_G3_PROCESS *p = NULL;
+  ADMISSION_RENDER_CONTEXT *context = NULL;
+  ADMISSION_OPEN_ALLOCATION *opened = NULL;
   ADMISSION_ALLOCATION_HANDLE *allocation;
   ADMISSION_DEVICE *device;
   DXGKARGCB_GETHANDLEDATA lookup = {0};
@@ -1598,30 +1735,58 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
   ULONGLONG poolPages = 0ULL, otherPages = 0ULL;
   ULONGLONG firstOther = 0ULL, firstAbsent = 0ULL;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
-  if (!adapter || !adapter->Started || !args ||
-      KeGetCurrentIrql() != PASSIVE_LEVEL || args->Flags.Value ||
-      !args->pPrivateDriverData || args->PrivateDriverDataSize != sizeof(q) ||
-      !adapter->Interface.DxgkCbAcquireHandleData ||
-      !adapter->Interface.DxgkCbReleaseHandleData)
-    return STATUS_INVALID_PARAMETER;
+  /* EXP2206 receipt-only: every refusing exit names its predicate
+   * (apple_agx_g3_native_query_refusal.h codes 1-48, source order). The
+   * predicates, their order, statuses and outputs are the previous ones. */
+  ULONG refusal = 0u;
+#if defined(ADMISSION_G3_NATIVE_QUERY_REFUSAL_RECEIPT)
+#define NQ_NOTE(code, value, flags) AdmissionG3NativeQueryRefused(adapter, args, &q, \
+    (code), (value), (flags), p, context, opened)
+#define NQ_EXPORT() AdmissionG3NativeQueryRefusalExport(adapter)
+#else
+#define NQ_NOTE(code, value, flags) ((void)(code), (void)(value), (void)(flags))
+#define NQ_EXPORT() ((void)0)
+#endif
+#define NQ_RETURN(code, value) do { NQ_NOTE((code), (value), 0u); NQ_EXPORT(); \
+    return (value); } while (0)
+/* Flags: 0x4 the query was copied, 0x1 noted under the G3 lock. */
+#define NQ_QUERY_RETURN(code) do { NQ_NOTE((code), STATUS_INVALID_PARAMETER, 0x4u); \
+    NQ_EXPORT(); return STATUS_INVALID_PARAMETER; } while (0)
+#define NQ_UNLOCK(code) do { refusal = (code); goto Unlock; } while (0)
+  if (!adapter) NQ_RETURN(1u, STATUS_INVALID_PARAMETER);
+  if (!adapter->Started) NQ_RETURN(2u, STATUS_INVALID_PARAMETER);
+  if (!args) NQ_RETURN(3u, STATUS_INVALID_PARAMETER);
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL) NQ_RETURN(4u, STATUS_INVALID_PARAMETER);
+  if (args->Flags.Value) NQ_RETURN(5u, STATUS_INVALID_PARAMETER);
+  if (!args->pPrivateDriverData) NQ_RETURN(6u, STATUS_INVALID_PARAMETER);
+  if (args->PrivateDriverDataSize != sizeof(q)) NQ_RETURN(7u, STATUS_INVALID_PARAMETER);
+  if (!adapter->Interface.DxgkCbAcquireHandleData) NQ_RETURN(8u, STATUS_INVALID_PARAMETER);
+  if (!adapter->Interface.DxgkCbReleaseHandleData) NQ_RETURN(9u, STATUS_INVALID_PARAMETER);
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
-  if (!state) return STATUS_INVALID_DEVICE_STATE;
+  if (!state) NQ_RETURN(10u, STATUS_INVALID_DEVICE_STATE);
   RtlCopyMemory(&q, args->pPrivateDriverData, sizeof(q));
-  if (q.Magic != APPLE_AGX_G3_NATIVE_QUERY_MAGIC ||
-      ((q.Version != APPLE_AGX_G3_NATIVE_QUERY_VERSION || q.Reserved != 0u) &&
-       (q.Version != APPLE_AGX_G3_NATIVE_QUERY_POOL_VERSION ||
-        q.Reserved != APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY) &&
-       (q.Version != APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION ||
-        q.Reserved > APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY) &&
-       (q.Version != APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION ||
-        q.Reserved != 0u)) ||
-      q.Bytes != sizeof(q) ||
-      !q.Allocation || !q.GpuVa || (q.GpuVa & 0xffffULL) ||
-      q.GpuVa >= (1ULL << 39) || !q.AllocationBytes ||
-      q.AllocationBytes > MAXULONG || q.AllocationBytes > (1ULL << 39) - q.GpuVa ||
-      q.Write > 1u || q.Ready || q.Reason || q.FailedVa ||
-      (q.Version != APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION && q.Reserved2))
-    return STATUS_INVALID_PARAMETER;
+  if (q.Magic != APPLE_AGX_G3_NATIVE_QUERY_MAGIC) NQ_QUERY_RETURN(11u);
+  if ((q.Version != APPLE_AGX_G3_NATIVE_QUERY_VERSION || q.Reserved != 0u) &&
+      (q.Version != APPLE_AGX_G3_NATIVE_QUERY_POOL_VERSION ||
+       q.Reserved != APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY) &&
+      (q.Version != APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION ||
+       q.Reserved > APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY) &&
+      (q.Version != APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION ||
+       q.Reserved != 0u)) NQ_QUERY_RETURN(12u);
+  if (q.Bytes != sizeof(q)) NQ_QUERY_RETURN(13u);
+  if (!q.Allocation) NQ_QUERY_RETURN(14u);
+  if (!q.GpuVa) NQ_QUERY_RETURN(15u);
+  if (q.GpuVa & 0xffffULL) NQ_QUERY_RETURN(16u);
+  if (q.GpuVa >= (1ULL << 39)) NQ_QUERY_RETURN(17u);
+  if (!q.AllocationBytes) NQ_QUERY_RETURN(18u);
+  if (q.AllocationBytes > MAXULONG) NQ_QUERY_RETURN(19u);
+  if (q.AllocationBytes > (1ULL << 39) - q.GpuVa) NQ_QUERY_RETURN(20u);
+  if (q.Write > 1u) NQ_QUERY_RETURN(21u);
+  if (q.Ready) NQ_QUERY_RETURN(22u);
+  if (q.Reason) NQ_QUERY_RETURN(23u);
+  if (q.FailedVa) NQ_QUERY_RETURN(24u);
+  if (q.Version != APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION && q.Reserved2)
+    NQ_QUERY_RETURN(25u);
   lookup.hObject = q.Allocation;
   lookup.Type = DXGK_HANDLE_ALLOCATION;
   lookup.Flags.DeviceSpecific = 1u;
@@ -1630,32 +1795,43 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
       &lookup, &reference.ReleaseHandle);
   if (!opened || !reference.ReleaseHandle) {
     status = STATUS_INVALID_HANDLE;
+    refusal = !opened ? 26u : 27u;
+    NQ_NOTE(refusal, status, 0x4u);
     goto Release;
   }
   ExAcquireFastMutex(&state->Lock);
   p = AdmissionGpuvaG3FindProcess(state, args->hKmdProcessHandle);
-  if (!p || p->Poisoned || p->CpuOnlyMappings || !p->Graph.Created ||
-      p->Graph.Uncertain) goto Unlock;
+  if (!p) NQ_UNLOCK(28u);
+  if (p->Poisoned) NQ_UNLOCK(29u);
+  if (p->CpuOnlyMappings) NQ_UNLOCK(30u);
+  if (!p->Graph.Created) NQ_UNLOCK(31u);
+  if (p->Graph.Uncertain) NQ_UNLOCK(32u);
   for (context = p->Contexts; context && (HANDLE)context != args->hContext;
        context = context->GpuvaG3NextContext) {}
-  if (!context || !context->Win32Transport || context->GpuvaG3Closing ||
-      context->GpuvaG3Poisoned || !context->Object.Device) goto Unlock;
+  if (!context) NQ_UNLOCK(33u);
+  if (!context->Win32Transport) NQ_UNLOCK(34u);
+  if (context->GpuvaG3Closing) NQ_UNLOCK(35u);
+  if (context->GpuvaG3Poisoned) NQ_UNLOCK(36u);
+  if (!context->Object.Device) NQ_UNLOCK(37u);
   /* R147: paging selects the process graph before pre-submit escapes. The
    * context SetRoot notification is only guaranteed before execution; do not
    * require it here. Submit/BeginJob retain their context-root checks. */
   device = CONTAINING_RECORD(context->Object.Device, ADMISSION_DEVICE, Object);
-  if ((HANDLE)device != args->hDevice || device->Object.Adapter != &adapter->ObjectAdapter ||
-      opened->Magic != ADMISSION_OPEN_ALLOCATION_MAGIC ||
-      opened->Device != device || opened->RuntimeAllocation != q.Allocation ||
-      !opened->Allocation || opened->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC ||
-      (q.Write && opened->ReadOnly)) goto Unlock;
+  if ((HANDLE)device != args->hDevice) NQ_UNLOCK(38u);
+  if (device->Object.Adapter != &adapter->ObjectAdapter) NQ_UNLOCK(39u);
+  if (opened->Magic != ADMISSION_OPEN_ALLOCATION_MAGIC) NQ_UNLOCK(40u);
+  if (opened->Device != device) NQ_UNLOCK(41u);
+  if (opened->RuntimeAllocation != q.Allocation) NQ_UNLOCK(42u);
+  if (!opened->Allocation) NQ_UNLOCK(43u);
+  if (opened->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC) NQ_UNLOCK(44u);
+  if (q.Write && opened->ReadOnly) NQ_UNLOCK(45u);
   allocation = CONTAINING_RECORD(opened->Allocation, ADMISSION_ALLOCATION_HANDLE, Object);
   /* Adopted/imported slots expose logical surface bytes, while their KMD
    * allocation is rounded up. Authenticate that extent, then prove the whole
    * description extent, never a caller-selected safe prefix. */
-  if (q.AllocationBytes > allocation->Object.Description.Size ||
-      allocation->Object.Description.Size > MAXULONG ||
-      allocation->Object.Description.Size > (1ULL << 39) - q.GpuVa) goto Unlock;
+  if (q.AllocationBytes > allocation->Object.Description.Size) NQ_UNLOCK(46u);
+  if (allocation->Object.Description.Size > MAXULONG) NQ_UNLOCK(47u);
+  if (allocation->Object.Description.Size > (1ULL << 39) - q.GpuVa) NQ_UNLOCK(48u);
   q.AllocationBytes = allocation->Object.Description.Size;
   /* A well-formed query reports not-ready as data. It is not a failed paging
    * DDI or a failed scheduled submit; the UMD can decline before submission. */
@@ -1745,10 +1921,17 @@ NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
 Output:
   RtlCopyMemory(args->pPrivateDriverData, &q, sizeof(q));
 Unlock:
+  if (refusal) NQ_NOTE(refusal, status, 0x5u);
   ExReleaseFastMutex(&state->Lock);
 Release:
   if (reference.ReleaseHandle) adapter->Interface.DxgkCbReleaseHandleData(reference);
+  if (refusal) NQ_EXPORT();
   return status;
+#undef NQ_UNLOCK
+#undef NQ_QUERY_RETURN
+#undef NQ_RETURN
+#undef NQ_EXPORT
+#undef NQ_NOTE
 }
 
 /* Retain the single-query handle reference, graph mutex, full-description
@@ -1764,19 +1947,36 @@ NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *adapter,
   unsigned char *entries;
   ULONG i;
   NTSTATUS status;
-  if (!adapter || !adapter->Started || !args ||
-      KeGetCurrentIrql() != PASSIVE_LEVEL || args->Flags.Value ||
-      !args->pPrivateDriverData || args->PrivateDriverDataSize < sizeof(batch))
-    return STATUS_INVALID_PARAMETER;
+  /* EXP2206 receipt-only: refusal codes 49-67 (an entry the single query
+   * refuses keeps that query's code); predicates and statuses unchanged. */
+#if defined(ADMISSION_G3_NATIVE_QUERY_REFUSAL_RECEIPT)
+/* Flags: 0x2 batch exit, 0x4 the entry query was copied. */
+#define NQB_RETURN(code, entry, flags) do { AdmissionG3NativeQueryRefused(adapter, args, \
+    (entry), (code), STATUS_INVALID_PARAMETER, (flags), NULL, NULL, NULL); \
+    AdmissionG3NativeQueryRefusalExport(adapter); return STATUS_INVALID_PARAMETER; } while (0)
+#else
+#define NQB_RETURN(code, entry, flags) do { (void)(code); (void)(entry); (void)(flags); \
+    return STATUS_INVALID_PARAMETER; } while (0)
+#endif
+  if (!adapter) NQB_RETURN(49u, NULL, 0x2u);
+  if (!adapter->Started) NQB_RETURN(50u, NULL, 0x2u);
+  if (!args) NQB_RETURN(51u, NULL, 0x2u);
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL) NQB_RETURN(52u, NULL, 0x2u);
+  if (args->Flags.Value) NQB_RETURN(53u, NULL, 0x2u);
+  if (!args->pPrivateDriverData) NQB_RETURN(54u, NULL, 0x2u);
+  if (args->PrivateDriverDataSize < sizeof(batch)) NQB_RETURN(55u, NULL, 0x2u);
   RtlCopyMemory(&batch, args->pPrivateDriverData, sizeof(batch));
-  if (batch.Magic != APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC ||
-      (batch.Version != APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION &&
-       batch.Version != APPLE_AGX_G3_NATIVE_QUERY_BATCH_CACHED_VERSION) ||
-      !batch.Count || batch.Count > APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAX ||
-      batch.Bytes != sizeof(batch) + batch.Count * sizeof(query) ||
-      batch.Bytes != args->PrivateDriverDataSize || batch.Ready ||
-      batch.FailedIndex || batch.Reserved[0] || batch.Reserved[1])
-    return STATUS_INVALID_PARAMETER;
+  if (batch.Magic != APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC) NQB_RETURN(56u, NULL, 0x2u);
+  if (batch.Version != APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION &&
+      batch.Version != APPLE_AGX_G3_NATIVE_QUERY_BATCH_CACHED_VERSION) NQB_RETURN(57u, NULL, 0x2u);
+  if (!batch.Count) NQB_RETURN(58u, NULL, 0x2u);
+  if (batch.Count > APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAX) NQB_RETURN(59u, NULL, 0x2u);
+  if (batch.Bytes != sizeof(batch) + batch.Count * sizeof(query)) NQB_RETURN(60u, NULL, 0x2u);
+  if (batch.Bytes != args->PrivateDriverDataSize) NQB_RETURN(61u, NULL, 0x2u);
+  if (batch.Ready) NQB_RETURN(62u, NULL, 0x2u);
+  if (batch.FailedIndex) NQB_RETURN(63u, NULL, 0x2u);
+  if (batch.Reserved[0]) NQB_RETURN(64u, NULL, 0x2u);
+  if (batch.Reserved[1]) NQB_RETURN(65u, NULL, 0x2u);
   entries = (unsigned char *)args->pPrivateDriverData + sizeof(batch);
   single = *args;
   single.pPrivateDriverData = &query;
@@ -1786,10 +1986,10 @@ NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *adapter,
     RtlCopyMemory(&query, entries + i * sizeof(query), sizeof(query));
     if (batch.Version == APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION &&
         query.Version == APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION)
-      return STATUS_INVALID_PARAMETER;
+      NQB_RETURN(66u, &query, 0x6u);
     /* rc107: a placement census never proves native coverage. */
     if (query.Version == APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION)
-      return STATUS_INVALID_PARAMETER;
+      NQB_RETURN(67u, &query, 0x6u);
     token = query.Reserved2;
     status = AdmissionGpuvaG3NativeQueryEscape(adapter, &single);
     if (status != STATUS_SUCCESS) return status;
@@ -1805,6 +2005,7 @@ NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *adapter,
   batch.Ready = 1u;
   RtlCopyMemory(args->pPrivateDriverData, &batch, sizeof(batch));
   return STATUS_SUCCESS;
+#undef NQB_RETURN
 }
 
 typedef struct _ADMISSION_G3_COPY_PAGING_QUIESCENCE {
