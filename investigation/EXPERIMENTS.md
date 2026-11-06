@@ -69731,3 +69731,69 @@ EXP2205 HARDWARE ACTUAL (2026-11-06T00:12:50Z): **CONFIRMED: with the WOW64 Open
 - Recovery rec2205h (2026-11-06T00:50:07Z): after the ANS session's two ANSDART001 attempts at Running proxy (R1 parser failure; R2 EL2 data abort on the dart-scaler TTBR read, proxy USB re-enumerated; ANS ledger in .worktrees/ans-native), AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2205h (run on the user's confirmation that the J313 was at Running proxy): RECOVERY_DONE, VISIBLE_INERT_PACKAGE_ABSENT_8CPU. The user then prioritised the SSD driver: the bench is handed to the ANS session; GPU hardware runs paused.
 
 REC-EXP2205 / BENCH HANDOVER CORRECTION (2026-11-06T00:54:32Z): the handover message described the post-rec2205h guest as the expanded-profile brokerlock-split boot (base 0x818000000); the live launcher was the inert normal recovery profile run_uefi.py .local/experiments/EXP810-g4-package817/recovery/J313_EFI-exp392.fd --low-mem (exp377/exp392, guest RAM base 0x850000000), as the ANS session recorded from the live process. The expanded profile and brokerlock-split m1n1 apply to experiment launches, not to the recovery guest. ANS session result for reference (its ledger): ANSDART001-R3 DONE, no fault; it reports RAM-HIGH stage-2 mapping up to 0xa00000000 covers the iBoot DCP/disp0 DART tables at 0x9fff04000-0x9fff40000 (guest-writable) -- an m1n1 stage-2 follow-up, not changed (m1n1 changes need the user's separate permission).
+
+### HVS2ISO001 — preregistration (2026-11-06T01:15:59Z): stage-2 isolation of DRAM above mem_top (NOT RUN)
+
+Status: preregistered only. Do not run while the bench is lent to the ANS/SSD work. The
+bench owner schedules it with the ANS session. Design: docs/superpowers/specs/2026-11-06-hv-stage2-above-ram-isolation.md.
+
+WHY THIS HYPOTHESIS:
+1. OBSERVED EXP950/EXP2194/EXP2196 launch-contract checkpoint 3: [0x9e1338000,+0x5ae8000)
+   and [0x9ffe20000,+0x1e0000) are HW pass-through, so the guest CPU can write the iBoot
+   DART tables at 0x9ffeac000..0x9fff5c000 (ANSDART001-R3 census: dcp L1 0x9fff0c000,
+   disp0 L1 0x9fff34000/0x9fff04000).
+2. SOURCE: no guest consumer exists above mem_top except /vram, gfx-handoff and
+   gpu-region (Mu GOP framebuffer must lie in RAM; the AppleAgx _CRS lists only handoff
+   and gpu-region). The standalone runtime already clamps RAM to mem_top.
+
+WINDOWS CONTRACT: the guest sees RAM [phys_base, mem_top) from boot args, plus ACPI
+_CRS memory resources. Nothing in Mu or Windows maps any other address above mem_top.
+AGX/ASAHI CONTRACT: carveouts are reserved-memory (no-map). DCP and its DARTs are owned
+by m1n1. The AGX handoff and gpu-region are guest-exposed.
+TRANSLATION: above_ram_policy() keeps [0x9e2638000,0x9e5394000) /vram,
+[0x9fff70000,0x9fff74000) handoff and [0x9fff78000,0x9fffbc000) shared+gpu-region. It
+unmaps [0x9df708000,0x9e2638000), [0x9e5394000,0x9fff70000), [0x9fff74000,0x9fff78000)
+and [0x9fffbc000,0xa00000000).
+WHAT IS STILL UNKNOWN: whether any undocumented guest or firmware path touches an
+excluded page at runtime. This is actual hardware behaviour and is only observable as a
+stage-2 abort.
+
+Hypothesis: with isolation on, the guest boots to Windows with a working DCP scanout,
+and a guest store to a DART table page aborts to EL2 instead of reaching memory.
+Single variable: WOM1_HV_ISOLATE_ABOVE_RAM=1 (proxyclient-only change. The m1n1 binary,
+Mu image, ADT, guest disk and launcher arguments are identical to the control).
+Repository: m1n1_windows feature/hv-stage2-above-ram
+6698d0f4e2a188229a08aae639a67d0b9c603690 (base 0d3a75b3), a proxyclient-only diff over
+the base. The launch checkout's m1n1_windows must be at 6698d0f4 (verify
+`git -C m1n1_windows rev-parse HEAD` before the run). Root commit: the one recording
+this entry.
+Offline: m1n1_windows tests/hv_stage2_above_ram_test.py 13/13 GREEN (RED confirmed).
+Control: the bench owner's current normal GPU-visible launch at the time of the run,
+same chainloaded m1n1 and Mu .fd. Record their sha256 at run time. Recovery artifact =
+that same launch without the variable.
+Command: WOM1_HV_ISOLATE_ABOVE_RAM=1 WOM1_DABORT_FIPA_RECEIPT=1 + the control's exact
+run_uefi.py command line with --contract-output .local/experiments/HVS2ISO001/contract.bin
+(full log .local/experiments/HVS2ISO001/full.log).
+Checkpoints, in order:
+ A. The launch log has "Isolating DRAM above guest RAM [0x9df708000..0xa00000000)" with
+    exactly the four Unmap lines above. Contract checkpoint 3 captures (no overflow,
+    <=64 records) and shows those ranges as unmap records after the RAM-HIGH map.
+    Failure: a capture_contract RuntimeError, or a different range set -> stop, recover.
+ B. Display: "Internal DCP guest surface enabled" appears, Mu and Windows are visible on
+    the internal panel, and the DCP scanout broker stays live (no DCP crash or rtkit
+    error in full.log).
+ C. Guest boot: Windows SSH within 300 s, and the inert gate
+    VISIBLE_INERT_PACKAGE_ABSENT_8CPU (8 CPUs, USB input alive).
+ D. Write probe (needs a separately reviewed, test-signed one-shot probe; none exists
+    yet. Without it, record D as NOT RUN and rely on A as the architectural proof).
+    One 32-bit guest store to PA 0x9fff34000 (disp0 L1). Expected: an HV DABORT_FIPA_RECEIPT
+    with fipa=0x9fff34000 and no tracer. The page is unchanged, because the store never
+    reaches memory: verify by a host read of 0x9fff34000 against the pre-launch value
+    when back at proxy. B's scanout still works up to the recovery. The faulting vCPU
+    may re-fault in a loop under unattended_control, so D is the last step, followed
+    immediately by recovery.
+Failure criterion: an unexpected stage-2 abort on any excluded page during A–C (log
+FAR/ELR, reject), a DCP scanout loss, a boot failure, or the probe store succeeding.
+Recovery: stop the guest and launch the control (same command without the variable).
+If the guest is at proxy, use the documented AGX_RECOVERY_ALLOW_AT_PROXY=1 recover path.
+Timeout 15 min. Evidence: .local/experiments/HVS2ISO001/{full.log,contract.bin,ssh-gate.txt,probe.txt}.
