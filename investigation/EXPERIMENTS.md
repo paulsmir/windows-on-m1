@@ -45841,3 +45841,32 @@ Verdict: ANS007 performance hypothesis (EL2 trap cost / serialization) REJECTED 
 performance change is justified by this evidence. The instrumentation (m1n1 d1d6f7ca) is retained as receipts.
 Evidence .local/ans-native/ANS006-R10-run/ (hv.log, stick-results.tar e554e450977f914a16bc93c4034e7eaf788de53b22dce158927102bee433b8dd).
 Next: write support (driver V2 write admission + broker write authorization), then native Windows boot from the SSD.
+
+## ANS008 — first native write (EL2 LBA write window)
+
+### ANS008-R1 (preregistered 2026-11-06T23:08:36Z)
+
+Packet d577c513cf3ce3a940596a589e32bf54215c2f5769e5cfc2108f269122555fc8 (.local/ans-native/ANS008-R1-ready):
+m1n1 ANSBUILD019 (m1n1 3dab6ec8 = ANSBUILD018 + write window; m1n1.macho 812e61c3c6e9785e8fd1cb0cd32e61fbe82b172ef8ae3f1e7a7bf3b777ca2cd6),
+AppleAns ANSBUILD004-W (outer ea69e0e1, profile native-write-window-stop0, package 2670d5b31ebeae79f2b6276e237a597bb6e1544e1ef05908eabc1ce435990623,
+analysis 0 defects, InfVerif, test-signed), ansraw.exe a280ec1e79f1caec4581e06ef08cb5949fc5fdf0b1c46f5f49e856237a4850a8,
+WinPE f4159ed8ccdb98d87f0b6880a2b3678afced5dbb08d1096b11f9d8f55794f0b2 (QEMU collector pass), Mu ANSBUILD009-N3 unchanged
+(the only Mu-side source delta is the unused generated ANS_FEATURE_WRITE_WINDOW define, verified by the assembler),
+gate 62d9dd6078e460e044c9f9687246dd99c82ab1778d6cb1b54f1342f58c4e50d9 GREEN. Outer HEAD cb34ec87. run.sh b0162a51.
+Launch: bash .local/ans-native/ANS008-R1-run/run.sh (recovery -> proxy -> ANS008 WinPE -> recovery); dry-run shows
+"ANS write window : 30912256:4096". Recovery artifact: normal recovery launch (m1n1-exp377 + J313_EFI-exp392), unchanged.
+WHY THIS HYPOTHESIS: (1) ANS006-R10 proved the native READ path end to end (DMA, PRP, IRQ, completion) at ~850 MB/s;
+WRITE differs only in direction (TO_DEVICE, stage-2 read permission) and opcode, both already validated by the broker
+and PRP code paths offline; (2) the target range is the GPT Microsoft Reserved partition, LBA 30912256 + 4096 blocks,
+all zero over the bridge (SHA-256 080acf35...), no filesystem, so a raw write needs no volume lock and restores exactly.
+Single variable vs ANS006-R10: native WRITE admitted inside one sealed EL2 LBA window (m1n1 + matching driver profile);
+WinPE runs ansraw (check -> write pattern + flush + native readback -> check) instead of the read workload.
+Safety: EL2 DENIES any WRITE outside [30912256, 30916352); ansraw refuses unless the range is exactly the MSR and all
+zero; the disk read-only attribute is cleared only around the single write step.
+Expected: hv.log "HV ANS write window: lba 30912256 count 4096"; ANSRAW-WRITE.LOG "RESULT write OK" with after_sha256
+8b29ad3fe915ed1f608e97790031c8bce2b95272ed58c36fd5cbf9807375f139 (tools/ans_raw_pattern.py); CHECK2 = pattern.
+Recovery (bridge) then reads MSR = 8b29ad3f..., 1 MiB neighbours unchanged vs the pre-run baseline, restores zeros
+and re-verifies 080acf35. Broker telemetry shows writes=4096 blocks/128 writes of 128 KiB; any denials are writes
+outside the window issued by Windows itself (counted, not executed).
+Failure criterion: write or readback mismatch, any CHECK2 other than pattern, any neighbour hash change, a hang,
+or recovery not reaching SSH. Evidence: .local/ans-native/ANS008-R1-run/ (hv.log, stick-results.tar), ans008/*.txt.
