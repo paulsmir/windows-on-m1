@@ -121,3 +121,97 @@ RED check: with `del_tracer` skipped, the isolation test fails at 0x9e1338000.
    `isolate_above_ram=True`.
 3. **gfx-shared-region.** It is guest-unused by source. It could be excluded after an
    AGX-owner check.
+
+## Addendum 2026-11-06: iBoot carveouts inside guest RAM
+
+m1n1_windows `feature/hv-stage2-above-ram` 23a01cb6 adds this, opt-in via
+`WOM1_HV_UNMAP_RAM_CARVEOUTS=1`. Scope came from the ANS session (ce5aee349, "carveouts
+inside the guest window").
+
+### Inventory (ANSDART001-R3 ADT; identical in R2, a separate boot)
+
+There are 13 carveouts inside guest RAM [0x850000000, 0x9df708000): ids 19, 23, 158, 159,
+163, 165, 167, 176, 179, 180, 181, 182, 190. Together they are 0xc4a8000 bytes (~196 MiB)
+inside the span 0x860500000..0x86f518000. region-id-24 = [0x802078000, 0x9df708000) is
+iBoot's boot-args kernel range, a descriptor rather than a reservation. The policy skips
+it by geometry: it covers the whole guest window.
+
+### Owners: UNKNOWN (offline sources exhausted)
+
+- ADT: every `region-name-id-*` is empty. No property in any node references a PA in
+  0x86xxxxxxx. Every coprocessor `segment-ranges` and every nub `region-base` (ANS = TZ3,
+  DCP/DCPEXT above mem_top, AOP/PMP/SMC in SRAM, SIO/ISP/ANE/AVE/GFX images below
+  0x802078000) lies elsewhere.
+- macOS 15.7.8 kernelcache: the only literal carveout id is `region-id-55`, AppleARMBootPerf
+  "profile handoff", which is above mem_top. Nothing names the 13.
+- Asahi m1n1 `kboot.c dt_set_memory()`: Linux usable memory is
+  [boot phys_base, phys_base + mem_size). The only reserved-memory nodes are display
+  (region 50/57/94/95/73/74 and /vram), ISP heap, SIO fwdata, SEP firmware, ASC firmware
+  segments and GPU. **Asahi Linux therefore uses all 13 carveouts as ordinary RAM.** This
+  is broad field evidence that no iBoot-started coprocessor that Linux leaves running
+  (SMC, PMP, AOP, ANS) writes them at runtime. It is not proof: Linux does not run every
+  coprocessor the way macOS does, and silent corruption would not necessarily be noticed.
+- m1n1 already distrusts them: `local_reserve_carveouts_allow()` (AGX local reserve V2)
+  rejects any candidate in a carveout other than region-id-24. However,
+  `hv_agx_retained_backing_allowed()` (GPU retained backing) does not check carveouts.
+
+### Which Windows launches expose them today
+
+| Mu image | 0x860000000..0x8a0000000 | effect on the 13 |
+|---|---|---|
+| exp392 recovery (EXP950 normal, HVS2ISO001 ctl/iso) | `reserving preloaded RAMDisk window` (unconditional) | EfiReserved, so Windows never uses them. Stage-2 still maps them. |
+| GPU line since EXP1234 (EXP2194/EXP2196 logs) | `window is system memory` | **Windows conventional RAM.** VidMM may hand the pages to the GPU, and m1n1 retained backing allows them. |
+
+So the exposure is real only on the GPU line, which has done ~1000 launches since
+2026-10-12 with no attributed corruption. That is weak negative evidence, and I did not
+analyse it further (no archaeology pass).
+
+### Fix layer and ordering
+
+The guest firmware owns "what the OS may use", and stage-2 enforces it. Both are needed,
+in this order:
+
+1. **Mu (primary fix).** In `T810XFamilyPkg/.../MemoryInitPeiLib.c`, next to the existing
+   framebuffer and cpm-impl-reg reservations: for i in 0..255, read
+   `/chosen/carveout-memory-map` `region-id-<i>`. Skip entries that cover the whole system
+   memory range (the kernel descriptor). For each remaining entry, `ReserveMemoryRegion`
+   plus `BuildMemoryAllocationHob(EfiReservedMemoryType)` its page-aligned intersection
+   with system memory, merging gaps of <= 16 KiB exactly like the HV, so that
+   reserved ⊇ unmapped. This also takes the pages out of VidMM, which removes the GPU DMA
+   exposure without touching the AGX path. Cost: ~196 MiB less Windows RAM.
+2. **Stage-2 (enforcement).** `WOM1_HV_UNMAP_RAM_CARVEOUTS=1` only with a Mu that
+   satisfies 1. The exp392 recovery Mu already reserves a superset (the whole window), so
+   the stage-2 half can be tested on hardware before the Mu change. Enabling it with the
+   GPU-line Mu and no Mu fix would make Windows fault on its first allocation there.
+3. **Launcher.** A preloaded `--ramdisk` writes over the carveouts (window
+   0x860000000+1 GiB). `unmap_ram_carveouts(occupied=...)` refuses it. `run_uefi.py` should
+   pass its ramdisk, framebuffer and low-memory windows when it adopts the flag. The
+   current layout's windows are disjoint from the carveouts (tested); only a payload-bearing
+   ramdisk conflicts, and a payload would need the window moved above 0x86f518000.
+4. **ANS DMA exclusion (ANS session)** uses the same list (`in_ram_carveouts`, 2 merged
+   ranges, or 6 exact with `merge_gap=0`).
+5. Optional defence in depth (AGX owner): add a carveout check to
+   `hv_agx_retained_backing_allowed()`.
+
+### Receipt budget
+
+Each separate unmapped range costs about 2 records against HV_STAGE2_STATE_MAX_MAPPINGS =
+64 (an overflow aborts the launch in `capture_contract`). Six exact ranges would cost
+51 + 15 = 66 on the GPU profile, which overflows. Absorbing the four 16 KiB RAM gaps
+(64 KiB) gives 2 ranges: +7 total with above-RAM isolation, i.e. 56 records on the normal
+profile and 58 on the GPU profile. The simulation is anchored on real receipts: HVS2ISO001
+ctl = 49 and iso = 52, which is the simulated +3. If more ranges are ever needed, raise
+the receipt capacity in m1n1 C, which is a separate binary change.
+
+### Tests (21/21 GREEN)
+
+- exact and merged ranges;
+- the kernel descriptor is skipped for both phys_base 0x850000000 and 0x818000000;
+- the current layout windows are disjoint from the carveouts;
+- a ramdisk payload window is refused;
+- an `pt_update()` replay unmaps the carveouts and absorbed gaps and leaves all other RAM
+  pages identical;
+- receipt budget <= 64;
+- default off.
+
+The fixture holds only carveout, vram, sgx and pmap values. adt.bin is never committed.

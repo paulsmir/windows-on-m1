@@ -69805,3 +69805,65 @@ HVS2ISO001 HARDWARE ACTUAL (2026-11-06T01:36:07Z): **CONFIRMED for checkpoints A
 - Isolation (launch.sh iso 1): A: "Isolating DRAM above guest RAM [0x9df708000..0xa00000000)..." with exactly Unmap [0x9df708000..0x9e2637fff], [0x9e5394000..0x9fff6ffff], [0x9fff74000..0x9fff77fff] (no-carveout), [0x9fffbc000..0x9ffffffff] (region-id lists in iso-full.log); LAUNCH_CONTRACT checkpoints 1-3 captured (iso-contract.bin 14048 bytes). B: "Internal DCP guest surface enabled", no DCP/rtkit error (panel visibility not observed by the operator). C: SSH up, 8 CPUs, dwm+explorer alive; 0 DABORT/data-abort/FAR lines after ~5 min of guest uptime. D (write probe) NOT RUN: no reviewed one-shot probe exists.
 - Bench returned: guest rebooted to proxy, m1n1_windows restored to 0d3a75b3, the ANS session's launch-normal2.sh normal boot (main checkout) relaunched: SSH up, 8 CPUs (run_uefi PID 65916).
 - Verdict: CONFIRMED (architectural isolation of the above-mem_top iBoot regions works without breaking boot or DCP); not yet a default (the switch stays opt-in until D and a display check by eye). New scope from the ANS session (ce5aee349): 13 iBoot carveouts lie INSIDE the guest RAM window (0x860500000..0x86f518000, ~240 MiB), unreserved in Mu -- forwarded to the stage-2 session for offline analysis. Evidence .local/experiments/HVS2ISO001/.
+
+### HVS2ISO002 — preregistration (2026-11-06T01:37:08Z): in-RAM carveout write-activity census at Running proxy (NOT RUN)
+
+Status: preregistered only. Schedule it with fork 6 or the ANS session. It is read-only.
+Design: docs/superpowers/specs/2026-11-06-hv-stage2-above-ram-isolation.md (addendum).
+WHY THIS HYPOTHESIS:
+1. ADT (ANSDART001-R2/R3, two boots): 13 carveouts at identical PAs inside guest RAM,
+   with no named owner and no ADT reference.
+2. SOURCE: Asahi kboot gives them to Linux as RAM (suggesting no runtime writer), and m1n1
+   AGX local reserve V2 rejects them (suggesting distrust). Only a live observation can
+   tell whether a firmware writer is active.
+Hypothesis: with no guest running, the contents of the 2 merged ranges
+[0x860500000,0x8614a0000) and [0x864000000,0x86f518000) do not change over 180 s.
+Rejected if any 16 KiB page hash changes between passes.
+Single variable: none (a read-only proxy tool before any launcher).
+Procedure: fresh Running proxy, no guest. Three passes (t0, t0+60 s, t0+180 s), each
+reading every 16 KiB page via the proxy and recording sha256 per page plus
+zero/non-zero, into .local/experiments/HVS2ISO002/census.json. Budget: ~196 MiB per
+pass over USB; abort if one pass takes more than 5 min. No write, no MMIO, no power
+change. The tool must be written, reviewed and hash-recorded before the run (it does
+not exist yet).
+Expected: identical hashes (iBoot leftovers), so the stage-2/Mu fix is defence in depth.
+Changed pages identify a live writer and its page set: then the GPU-line Mu exposure is a
+real corruption source, and HVS2ISO003 plus the Mu fix become urgent.
+Recovery: none needed. Afterwards, the bench owner's normal launch.
+
+### HVS2ISO003 — preregistration (2026-11-06T01:37:08Z): stage-2 unmap of in-RAM carveouts (NOT RUN)
+
+WHY THIS HYPOTHESIS:
+1. OBSERVED EXP950/HVS2ISO001: the exp392 Mu logs "reserving preloaded RAMDisk window
+   0x860000000 + 0x40000000", a superset of the 13 carveouts, so Windows never allocates
+   them and an unmap there should be invisible to the guest.
+2. OBSERVED HVS2ISO001 iso: stage-2 above-RAM isolation booted with 52 receipt records.
+   The simulation predicts 56 with this change (<= 64).
+WINDOWS CONTRACT: Windows owns only EfiConventionalMemory and boot-services memory from
+GetMemoryMap. EfiReserved pages are never touched by the kernel or VidMM.
+AGX/ASAHI CONTRACT: no named owner. Asahi treats the pages as RAM; m1n1 treats them as
+not allocatable.
+TRANSLATION: in_ram_carveouts() gives 2 ranges, del_tracer(RAM-HIGH), which pt_update()
+turns into unmap records. The Mu exp392 reservation covers both.
+WHAT IS STILL UNKNOWN: whether any guest-side or firmware path touches these pages
+through the guest CPU (it would be seen as a stage-2 abort).
+Hypothesis: the HVS2ISO001 iso arm plus WOM1_HV_UNMAP_RAM_CARVEOUTS=1 boots to Windows
+with SSH up, 8 CPUs, DCP guest surface enabled and 0 stage-2 aborts.
+Single variable: WOM1_HV_UNMAP_RAM_CARVEOUTS=1, relative to the HVS2ISO001 iso arm (same
+m1n1-exp377, J313_EFI-exp392.fd, --low-mem, WOM1_HV_ISOLATE_ABOVE_RAM=1). m1n1_windows at
+feature/hv-stage2-above-ram 23a01cb6ced6e12d17fc3f557fe5421a7be3b862 (proxyclient-only
+over 6698d0f4). The launch checkout must verify this HEAD before the run.
+Must NOT be combined with a GPU-line Mu (window = system memory) until the Mu
+carveout-reservation change exists: that would make Windows fault on its first
+allocation in the window.
+Checks:
+ A. The log shows "Unmapping iBoot carveouts inside guest RAM" with exactly
+    [0x860500000..0x86149ffff] and [0x864000000..0x86f517fff]. Contract checkpoints 1-3
+    are captured with 56 records at checkpoint 3.
+ B. Mu still logs the ramdisk-window reservation; "Internal DCP guest surface enabled".
+ C. SSH up <= 300 s, the inert gate, 8 CPUs, 0 aborts at +1 min and +5 min.
+Failure: an abort with an FIPA in the ranges (record ELR/FAR and the caller, reject), a
+boot failure, or a capture_contract RuntimeError.
+Recovery: the same launch without the variable (the HVS2ISO001 ctl command); if at
+proxy, the documented AT_PROXY recovery path. Timeout 15 min.
+Evidence: .local/experiments/HVS2ISO003/{full.log,contract.bin,ssh-gate.txt}.
