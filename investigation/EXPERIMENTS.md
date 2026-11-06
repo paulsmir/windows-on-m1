@@ -70030,3 +70030,17 @@ Next if CONFIRMED: HVS2ISO005 = the same launch plus WOM1_HV_UNMAP_RAM_CARVEOUTS
 EXP2206 HARDWARE ACTUAL (2026-11-06T02:25:55Z): **CONFIRMED (receipts collected): CS 1.6 benchmark 3771 frames / 217.654 s / 17.326 fps with Wom1JobDiagnostics=1 Wom1PresentTimestamps=1 (EXP2205 without them 18.634); suite 119/0; GPU_RESET none; PREEMPT_REFUSAL none; POOL peak 615 MiB, reservefail 0.**
 - Evidence evidence/EXP2206-B: kmd-receipts-after-cs.txt (taken right after hl.exe exited: Wom1G3PrivateProcs, Wom1JobTiming971, Wom1JobTiming971Hot present; Wom1PresentTs absent), umd-all.log (machine-wide UMD trace), cs-bench.log, cs-bench-mem.csv.
 - Verdict: receipts in hand; decode delegated to the OV2 session (scene HIT/MISS/TRIM/PRESSURE and TVB state of hl.exe, GL job mix and Q2c queue waits) to pick the single next variable (EXP2207: Wom1ComputeOwnQueue=0, or the scene/TVB policy). Recovery rec2206h RECOVERY_DONE, VISIBLE_INERT_PACKAGE_ABSENT_8CPU (normal recovery profile exp377/exp392, run_uefi PID 87992); bench handed back to the ANS session for ANS005B.
+
+EXP2207 HARDWARE BEFORE 2026-11-06T02:45:16Z:
+Steps: D3D12 suite; d HD PERF GravityMark D3D12 100k -temporal 0 (KMD receipts at poll 12); then TotalVisibleMemorySize and the DXE memory map from full.log.
+- WHY THIS HYPOTHESIS: (1) EXP2194/EXP2196 DXE map: 0x85FFA0000-0x8A0100000 Type:7 contains the 13 iBoot carveouts, so Windows/VidMM own them on the GPU line; (2) HVS2ISO002 STABLE and HVS2ISO003 PASS: the pages are static and nothing in the guest needs them when reserved; (3) build gate: control rebuild bit-identical, candidate .fd differs only in PrePi/PEI, tests 3/3 + 37 Mu tests GREEN.
+- WINDOWS CONTRACT: Windows owns only EfiConventionalMemory and boot-services memory; EfiReservedMemoryType pages are excluded from the OS and VidMM.
+- AGX/ASAHI CONTRACT: owner unknown; m1n1 AGX local reserve V2 avoids carveouts; the local reserve (0x8E0000000) is disjoint.
+- TRANSLATION: Mu PEI ReserveRamCarveouts() -> [0x860500000,+0xFA0000) and [0x864000000,+0xB518000) as ReserveMemoryRegion + EfiReservedMemoryType HOB.
+- ATOMIC CONTRACT: none -- one firmware image.
+- WHAT IS STILL UNKNOWN: whether any Windows/AGX path needs those 196 MiB (VidMM sizing, AGX local-reserve placement).
+- Expected: A Mu log "reserving iBoot carveout 0x860500000 + 0xFA0000" and "... 0x864000000 + 0xB518000", AGX local reserve 0x8E0000000 + 0x18000000 unchanged; B DXE map identical to EXP2206 except those two ranges Type:0; C SSH, 8 CPUs, ~201440 KiB less visible memory than EXP2206; D suite 119/0, GravityMark clean, HD PERF ~40 fps.
+- Failure criteria: any of A-D; recovery rec2207h (visible recovery uses the EXP810 recovery images, Mu exp392).
+- Probe: agx_d3d12_probe_e2207_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys 41077f0652ec, UmdArm64 0611b5beec15, UmdX64 8cdeeb649bc5, Umd32 89fc73ae7099; manifest 6b3e25b26d88, hardware-manifest 6370875e3a00; probe2207.sh c99a1ed37cf9 (PROBE_LINT_OK); visible recovery rec2207h 9280b1181e76600b; m1n1 0d3a75b3.
+- Recovery rec2207h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2207-hvs2iso004/run2207.sh.
