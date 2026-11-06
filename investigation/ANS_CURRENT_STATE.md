@@ -54,7 +54,10 @@ No flag is cleared by assertion; the policy still rejects any flagged region.
    inert recovery profile (launch-normal2.sh, run_uefi 47806).
 2. DONE offline: heapblock ceiling primitive (m1n1 94d6a1262) and carveout DMA
    exclusion from the live ADT (m1n1 b89cce170; 13 iBoot carveouts lie inside
-   GUEST_RAM). Remaining ANS005A offline — heapblock ceiling + exact DART_TABLES region publication
+   GUEST_RAM); assisted heap sealed at descriptor publish (m1n1 0beb7b552).
+   Open: standalone heap seal (its runtime allocates guest firmware from heapblock);
+   first hardware boot of this m1n1 must show no ceiling panic. Then decide the
+   DART_TABLES flag (exact region + carveout hypothesis label). Old ANS005A text — heapblock ceiling + exact DART_TABLES region publication
    (assisted + standalone), `run_uefi.py` assertion `phys_base >= natural`,
    RED/GREEN in `tests/hv_ans_handoff_memory_test.py` and an allocator test.
 3. Encode census result (§3C). If CONFLICT: m1n1 stage-2 unmap + Mu reserved
