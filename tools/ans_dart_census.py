@@ -1,40 +1,72 @@
 #!/usr/bin/env python3
-"""Read-only census of retained DART page tables before guest entry (ANS005C).
+"""Read-only census of retained DART page tables before guest entry (v2).
 
 Purpose: replace the assisted descriptor's DART_TABLES=UNOBSERVED marker with
-an observation.  ANS on t8103 has no DART of its own (m1n1 src/nvme.c puts
-physical addresses in PRPs; only /arm-io/sart-ans filters ASC firmware
-buffers), so guest-authorized ANS DMA must never land in another device's
-DART tables.  This tool lists every table page that a powered DART points at
-when the machine sits at "Running proxy", before m1n1 hv_init and before any
-guest, and classifies each page against the planned guest RAM window.
+an observation.  t8103 ANS has no DART (m1n1 src/nvme.c puts physical
+addresses in PRPs; only /arm-io/sart-ans filters RTKit buffers), so guest-
+authorized ANS DMA must never land in another device's retained DART tables.
 
-Safety contract (enforced below):
-* the only MMIO reads are PMGR PS registers and, for DARTs whose every
-  clock-gate device reports ACTUAL==0xf, the DART TTBR block; nothing is
-  written, no power state is changed, no unpowered DART register is read;
-* t8110 DARTs and unknown compatibles make the census INCOMPLETE (exit 3),
-  never "empty";
-* --confirm-experiment is required before any proxy access.
+v1 was REJECTED by ANSDART001-R2: a PMGR PS "active" gate did not make
+dart-scaler readable (EL2 data abort at 0x263200200) and an unguarded bogus
+TTBR led to a memory read that dropped the proxy link.  v2 rules:
 
-The pure functions are exercised offline by tests/test_ans_dart_census.py.
+* A DART register block is read only if m1n1 itself reported accessing that
+  exact base during *this* boot (its "dart: dart <path> at <base> is a t8020"
+  banner, captured from the proxy console at connect time) AND the path is in
+  ALLOWED_DARTS AND the base is one of the node's ADT reg instances.  No banner
+  -> no MMIO at all, verdict INCOMPLETE.
+* Every MMIO read runs with GUARD.SKIP|SILENT and is checked against the m1n1
+  exception counter; the first fault ends the whole census (INCOMPLETE).
+* Memory is read only for 16 KiB-aligned table PAs that lie entirely inside
+  DRAM [ram_base, ram_base + mem_size_actual); anything else ends the census.
+* Nothing is written; --confirm-experiment is required before proxy access.
 """
 import argparse
 import hashlib
+import io
 import json
+import re
+import struct
 import sys
 from pathlib import Path
 
-PS_ACTIVE = 0xF
+ALLOWED_DARTS = ('/arm-io/dart-dcp', '/arm-io/dart-disp0',
+                 '/arm-io/dart-usb0', '/arm-io/dart-usb1')
 T8020_TTBR_OFF, T8020_TTBR_VALID, T8020_TTBR_ADDR = 0x200, 1 << 31, (1 << 31) - 1
 T8020_STREAMS, T8020_TTBRS = 16, 4          # proxyclient m1n1/hw/dart8020.py TTBR map
 PTE_VALID, PTE_OFFSET = 1, 0xFFFFFFC000     # m1n1 src/dart.c DART_T8020_PTE_OFFSET
 PAGE = 0x4000
 L1_ENTRIES = PAGE // 8
+BANNER = re.compile(r'dart: dart (/arm-io/[\w.-]+) at (0x[0-9a-f]+) is a (t8020|t6000|t8110)( \(locked\))?')
+BANNER_L1 = re.compile(r'dart: dart (/arm-io/[\w-]+)\.(\d+)\.(\d+) L1 (\d+) is real-time at (0x[0-9a-f]+)')
+
+
+class Fault(Exception):
+    """A guarded access faulted or a bound was violated; census stops."""
+
+
+def parse_banner(text):
+    """m1n1 boot banner -> ({path: {base, type, locked}}, [(path, sid?, ttbr, pa)])."""
+    darts, l1 = {}, []
+    for m in BANNER.finditer(text):
+        darts[m.group(1)] = dict(base=int(m.group(2), 16), type=m.group(3),
+                                 locked=bool(m.group(4)))
+    for m in BANNER_L1.finditer(text):
+        l1.append(dict(path=m.group(1), ttbr=int(m.group(4)), pa=int(m.group(5), 16)))
+    return darts, l1
+
+
+def select_targets(banner_darts, adt_regs):
+    """adt_regs: {path: [base, ...]} -> [(path, base)] allowed to be read."""
+    out = []
+    for path in ALLOWED_DARTS:
+        b = banner_darts.get(path)
+        if b and b['type'] == 't8020' and b['base'] in adt_regs.get(path, ()):
+            out.append((path, b['base']))
+    return out
 
 
 def ttbr_addresses(base):
-    """(stream, index, mmio address) for every t8020 TTBR register."""
     return [(s, i, base + T8020_TTBR_OFF + 16 * s + 4 * i)
             for s in range(T8020_STREAMS) for i in range(T8020_TTBRS)]
 
@@ -44,13 +76,15 @@ def decode_ttbr(value):
 
 
 def l2_tables(l1_words):
-    """Distinct L2 table PAs referenced by valid L1 entries."""
     return sorted({w & PTE_OFFSET for w in l1_words if w & PTE_VALID})
 
 
+def in_dram(pa, dram):
+    lo, size = dram
+    return pa % PAGE == 0 and lo <= pa and pa + PAGE <= lo + size
+
+
 def classify(pa, size, guest_ram, reserved):
-    """GUEST_RAM_CONFLICT if any byte lies in the DMA-admissible guest window
-    and is not covered by an explicit reservation; else OUTSIDE/RESERVED."""
     gb, gs = guest_ram
     if pa + size <= gb or pa >= gb + gs:
         return 'OUTSIDE_GUEST_RAM'
@@ -60,85 +94,67 @@ def classify(pa, size, guest_ram, reserved):
     return 'GUEST_RAM_CONFLICT'
 
 
-def census(darts, read32, read64_block, guest_ram, reserved):
-    """darts: [{path, compatible, base, powered}] -> receipt dict.
-    read32(addr) and read64_block(pa, count) are the only hardware accessors."""
-    out, complete = [], True
-    for d in darts:
-        rec = dict(path=d['path'], compatible=d['compatible'], base=hex(d['base']),
-                   gates=d.get('gates'), powered=d['powered'], tables=[])
-        if d['compatible'] not in ('dart,t8020',):
-            rec['status'] = 'UNSUPPORTED_COMPATIBLE'
-            complete = False
-        elif d['powered'] is None:
-            rec['status'] = 'POWER_UNKNOWN'
-            complete = False
-        elif not d['powered']:
-            # A gated DART has lost TTBR state; any later owner programs new
-            # tables through m1n1 (bounded heap) or the guest (guest memory).
-            rec['status'] = 'UNPOWERED_NOT_READ'
-        else:
-            rec['status'] = 'READ'
-            for s, i, addr in ttbr_addresses(d['base']):
+def census(targets, read32, read_table, dram, guest_ram, reserved, banner_seen=True):
+    """read32/read_table raise Fault on any guarded fault; first Fault stops."""
+    out, stop = [], None
+    if not banner_seen:
+        stop = 'NO_BOOT_BANNER'
+    for path, base in targets:
+        if stop:
+            break
+        rec = dict(path=path, base=hex(base), status='READ', tables=[])
+        out.append(rec)
+        try:
+            for s, i, addr in ttbr_addresses(base):
                 l1 = decode_ttbr(read32(addr))
                 if l1 is None:
                     continue
-                pages = [('L1', l1)] + [('L2', pa) for pa in l2_tables(read64_block(l1, L1_ENTRIES))]
+                if not in_dram(l1, dram):
+                    raise Fault(f'TTBR {path}[{s}][{i}] -> {l1:#x} outside DRAM')
+                pages = [('L1', l1)]
+                for pa in l2_tables(read_table(l1)):
+                    if not in_dram(pa, dram):
+                        raise Fault(f'L2 {pa:#x} under {l1:#x} outside DRAM')
+                    pages.append(('L2', pa))
                 for level, pa in pages:
                     rec['tables'].append(dict(stream=s, ttbr=i, level=level, pa=hex(pa),
                                               verdict=classify(pa, PAGE, guest_ram, reserved)))
-        out.append(rec)
+        except Fault as e:
+            rec['status'] = 'FAULT'
+            stop = str(e)
     conflicts = sum(t['verdict'] == 'GUEST_RAM_CONFLICT' for r in out for t in r['tables'])
-    return dict(schema='ans-dart-census-v1', guest_ram=[hex(x) for x in guest_ram],
-                reserved=[[hex(b), hex(s)] for b, s in reserved], darts=out,
+    complete = stop is None and len(out) == len(targets) and bool(targets)
+    return dict(schema='ans-dart-census-v2', guest_ram=[hex(x) for x in guest_ram],
+                dram=[hex(x) for x in dram], reserved=[[hex(b), hex(s)] for b, s in reserved],
+                targets=[[p, hex(b)] for p, b in targets], darts=out, stop=stop,
                 complete=complete, conflicts=conflicts,
                 verdict=('INCOMPLETE' if not complete else
                          'CONFLICT' if conflicts else 'NO_RETAINED_TABLE_IN_GUEST_RAM'))
 
 
-def pmgr_ps_address(pmgr_regs, ps_regs, device):
-    """m1n1 src/pmgr.c pmgr_device_get_addr() for die 0."""
-    reg = ps_regs[device['psreg']]
-    return pmgr_regs[reg['reg']] + reg['offset'] + (device['psidx'] << 3)
+def guarded_reader(p, guard_mode):
+    """Wrap proxy reads: guard on, compare exception counter around each read."""
+    p.set_exc_guard(guard_mode)
+
+    def read32(addr):
+        before = p.get_exc_count()
+        v = p.read32(addr)
+        if p.get_exc_count() != before:
+            raise Fault(f'MMIO fault at {addr:#x}')
+        return v
+    return read32
 
 
-def powered(gate_ids, devices_by_id, ps_addr, read32):
-    """True only if every gate is active, False only if every gate is
-    inactive; mixed or unknown -> None (the DART is not read)."""
-    if not gate_ids:
-        return None
-    states = []
-    for gid in gate_ids:
-        dev = devices_by_id.get(gid)
-        if dev is None:
-            return None
-        states.append(((read32(ps_addr(dev)) >> 4) & 0xF) == PS_ACTIVE)
-    return True if all(states) else False if not any(states) else None
+class _Tee(io.TextIOBase):
+    def __init__(self, a):
+        self.a, self.buf = a, io.StringIO()
 
+    def write(self, s):
+        self.buf.write(s)
+        return self.a.write(s)
 
-def adt_u32s(v):
-    """ADT cell list as ints: None, int, raw bytes (u32 LE) or a sequence.
-    ANSDART001 saw iommu-parent arrive as raw bytes."""
-    if v is None:
-        return []
-    if isinstance(v, (bytes, bytearray)):
-        if len(v) % 4:
-            raise ValueError('ADT cell list length is not a multiple of 4')
-        return [int.from_bytes(v[i:i + 4], 'little') for i in range(0, len(v), 4)]
-    if isinstance(v, int):
-        return [v]
-    return [int(x) for x in v]
-
-
-def dart_gates(dart_props, consumers):
-    """Own clock-gates, else the union of consumers that name this DART as
-    iommu-parent (ADT phandle).  consumers: [(iommu_parent, gates)]."""
-    own = list(dart_props.get('clock-gates') or [])
-    if own:
-        return sorted(set(own))
-    ph = dart_props.get('AAPL,phandle')
-    return sorted({g for parent, gates in consumers if ph is not None and parent == ph
-                   for g in gates})
+    def flush(self):
+        self.a.flush()
 
 
 def main(argv=None):
@@ -151,75 +167,70 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if not a.confirm_experiment.startswith('ANS'):
         ap.error('an ANS experiment id is required')
-    if a.output.exists() or (a.output.parent / 'adt.bin').exists():
+    evid = a.output.parent
+    if a.output.exists() or (evid / 'adt.bin').exists() or (evid / 'banner.txt').exists():
         ap.error('refusing to overwrite existing evidence')
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'm1n1_windows/proxyclient'))
-    # Not m1n1.setup: it writes the PMU panic counter.  Same bootstrap as
-    # run_uefi.py without cpufreq_init(); ProxyUtils only reads heapblock(0).
-    from m1n1.proxy import UartInterface, M1N1Proxy  # noqa: E402
+    from m1n1.proxy import UartInterface, M1N1Proxy, GUARD  # noqa: E402
     from m1n1.proxyutils import ProxyUtils, bootstrap_port  # noqa: E402
-    iface = UartInterface()
-    p = M1N1Proxy(iface, debug=False)
-    bootstrap_port(iface, p)
-    u = ProxyUtils(p)
-    adt = u.adt
-    # Evidence first: keep the raw ADT even if a later parse step fails.
-    a.output.parent.mkdir(parents=True, exist_ok=True)
-    adt_blob = adt.build()
-    with (a.output.parent / 'adt.bin').open('xb') as f:
+    evid.mkdir(parents=True, exist_ok=True)
+    tee, real = _Tee(sys.stdout), sys.stdout
+    sys.stdout = tee           # proxy.py prints the buffered m1n1 console as "TTY> ..."
+    try:
+        iface = UartInterface()
+        p = M1N1Proxy(iface, debug=False)
+        bootstrap_port(iface, p)   # same transport bootstrap as run_uefi.py, no cpufreq
+        u = ProxyUtils(p)          # not m1n1.setup: that writes the PMU panic counter
+        adt = u.adt
+        adt_blob = adt.build()
+    finally:
+        sys.stdout = real
+    banner_text = tee.buf.getvalue()
+    (evid / 'banner.txt').open('x').write(banner_text)
+    with (evid / 'adt.bin').open('xb') as f:
         f.write(adt_blob)
-    pmgr = adt['/arm-io/pmgr']
-    pmgr_regs = [pmgr.get_reg(i)[0] for i in range(len(pmgr.reg))]
-    ps_regs = [dict(reg=r.reg, offset=r.offset) for r in pmgr.ps_regs]
-    u8id = pmgr.devices[0].id1 != pmgr.devices[1].id1
-    by_id = {(d.id1 if u8id else d.id2): dict(psreg=d.psreg, psidx=d.psidx) for d in pmgr.devices}
-    def prop(node, name):
+    bdarts, bl1 = parse_banner(banner_text)
+    adt_regs = {}
+    for path in ALLOWED_DARTS:
         try:
-            return getattr(node, name.replace('-', '_'))
-        except AttributeError:
-            return None
-    as_ids = adt_u32s
-    nodes = list(adt['/arm-io'])
-    consumers = []
-    for node in nodes:
-        parent = prop(node, 'iommu-parent')
-        if parent is not None:
-            for ph in adt_u32s(parent):
-                consumers.append((ph, as_ids(prop(node, 'clock-gates'))))
-    darts = []
-    for node in nodes:
-        compat = (prop(node, 'compatible') or [''])[0]
-        if not compat.startswith('dart,'):
-            continue
-        ph = adt_u32s(prop(node, 'AAPL,phandle'))
-        gates = dart_gates({'clock-gates': as_ids(prop(node, 'clock-gates')),
-                            'AAPL,phandle': ph[0] if len(ph) == 1 else None}, consumers)
-        for inst in range(len(node.reg)):
-            darts.append(dict(path=f'{node._path}#{inst}', compatible=compat,
-                              base=node.get_reg(inst)[0], gates=gates,
-                              powered=powered(gates, by_id,
-                                              lambda d: pmgr_ps_address(pmgr_regs, ps_regs, d),
-                                              p.read32)))
-    def block(pa, n):  # one bulk memory read per table, no MMIO
-        import struct
-        return list(struct.unpack(f'<{n}Q', u.iface.readmem(pa, 8 * n)))
+            node = adt[path]
+            adt_regs[path] = [node.get_reg(i)[0] for i in range(len(node.reg))]
+        except Exception:  # absent node: never a target
+            adt_regs[path] = []
+    targets = select_targets(bdarts, adt_regs)
+    dram = (0x800000000, u.ba.mem_size_actual)  # m1n1 banner "MMU: RAM base: 0x800000000"
+
+    read32 = guarded_reader(p, GUARD.SKIP | GUARD.SILENT)
+
+    def read_table(pa):
+        if not in_dram(pa, dram):
+            raise Fault(f'table {pa:#x} outside DRAM')
+        before = p.get_exc_count()
+        words = list(struct.unpack(f'<{L1_ENTRIES}Q', u.iface.readmem(pa, PAGE)))
+        if p.get_exc_count() != before:
+            raise Fault(f'memory fault reading {pa:#x}')
+        return words
     mm = adt['chosen']['memory-map']
     reserved = [tuple(getattr(mm, k)) for k in ('DeviceTree', 'TrustCache', 'SEPFW', 'BootArgs')
                 if hasattr(mm, k)]
     end = a.guest_ram_end or (u.ba.phys_base + u.ba.mem_size)
-    receipt = census(darts, p.read32, block, (a.guest_ram_base, end - a.guest_ram_base), reserved)
-    receipt['experiment'] = a.confirm_experiment
-    receipt['boot_args'] = dict(phys_base=hex(u.ba.phys_base), mem_size=hex(u.ba.mem_size),
-                                top_of_kernel_data=hex(u.ba.top_of_kernel_data))
-    receipt['adt_sha256'] = hashlib.sha256(adt_blob).hexdigest()
-    sart = adt['/arm-io/sart-ans']
-    receipt['sart_ans'] = dict(base=hex(sart.get_reg(0)[0]),
-                               version=repr(getattr(sart, 'sart_version', None)))  # ADT only
+    try:
+        receipt = census(targets, read32, read_table, dram,
+                         (a.guest_ram_base, end - a.guest_ram_base), reserved,
+                         banner_seen=bool(bdarts))
+    finally:
+        p.set_exc_guard(GUARD.OFF)
+    receipt.update(experiment=a.confirm_experiment, banner_darts={k: dict(v, base=hex(v['base']))
+                                                                  for k, v in bdarts.items()},
+                   banner_l1=[dict(x, pa=hex(x['pa'])) for x in bl1],
+                   boot_args=dict(phys_base=hex(u.ba.phys_base), mem_size=hex(u.ba.mem_size),
+                                  mem_size_actual=hex(u.ba.mem_size_actual),
+                                  top_of_kernel_data=hex(u.ba.top_of_kernel_data)),
+                   adt_sha256=hashlib.sha256(adt_blob).hexdigest())
     data = (json.dumps(receipt, indent=2) + '\n').encode()
-    a.output.parent.mkdir(parents=True, exist_ok=True)
     with a.output.open('xb') as f:
         f.write(data)
-    print(f"{receipt['verdict']} sha256={hashlib.sha256(data).hexdigest()} -> {a.output}")
+    print(f"{receipt['verdict']} stop={receipt['stop']} sha256={hashlib.sha256(data).hexdigest()} -> {a.output}")
     return {'NO_RETAINED_TABLE_IN_GUEST_RAM': 0, 'CONFLICT': 2}.get(receipt['verdict'], 3)
 
 

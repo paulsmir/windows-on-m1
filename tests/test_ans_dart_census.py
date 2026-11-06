@@ -1,91 +1,114 @@
-"""Offline invariants of the read-only ANS DART census (no proxy access).
+"""Offline invariants of the read-only ANS DART census v2 (no proxy access).
 
-Real bug class caught: a census that silently reports "no retained table in
-guest RAM" while it skipped a DART it could not read, or that misses an L2
-table hanging off a valid L1 entry.
+Real bug classes caught (both seen on J313 in ANSDART001-R2):
+* reading a DART register block whose accessibility was not proven during
+  this boot (dart-scaler aborted at EL2 although PMGR said "active");
+* following a bogus TTBR/L2 value into a memory read outside DRAM.
 """
 import unittest
 
 from tools import ans_dart_census as c
 
-GUEST = (0x850000000, 0x18F708000)
+# Verbatim m1n1 boot banner lines captured by ANSDART001 (console.log, 00:12Z).
+BANNER = """TTY> dart: dart /arm-io/dart-dcp at 0x23130c000 is a t8020 (locked)
+TTY> dart: dart /arm-io/dart-disp0 at 0x231304000 is a t8020
+TTY> dart: dart /arm-io/dart-disp0.0.0 L1 0 is real-time at 0x9fff34000
+TTY> dart: dart /arm-io/dart-disp0.0.0 L1 1 is real-time at 0x80501c000
+TTY> dart: dart /arm-io/dart-usb0 at 0x382f80000 is a t8020
+TTY> dart: dart /arm-io/dart-usb1 at 0x502f80000 is a t8020
+"""
+# ADT reg instances from ANSDART001-R2 adt.bin (plus the faulting scaler).
+ADT_REGS = {'/arm-io/dart-dcp': [0x23130C000],
+            '/arm-io/dart-disp0': [0x231304000, 0x231300000],
+            '/arm-io/dart-usb0': [0x382F00000, 0x382F80000],
+            '/arm-io/dart-usb1': [0x502F00000, 0x502F80000],
+            '/arm-io/dart-scaler': [0x263200000]}
+DRAM = (0x800000000, 0x200000000)
+GUEST = (0x818000000, 0x9DF708000 - 0x818000000)
 
 
-class Census(unittest.TestCase):
-    def fake(self, ttbrs, memory):
-        return (lambda a: ttbrs.get(a, 0),
-                lambda pa, n: (memory.get(pa, []) + [0] * n)[:n])
+class CensusV2(unittest.TestCase):
+    def test_banner_parse_and_target_selection(self):
+        darts, l1 = c.parse_banner(BANNER)
+        self.assertTrue(darts['/arm-io/dart-dcp']['locked'])
+        self.assertEqual(l1[0], dict(path='/arm-io/dart-disp0', ttbr=0, pa=0x9FFF34000))
+        targets = c.select_targets(darts, ADT_REGS)
+        self.assertEqual(targets, [('/arm-io/dart-dcp', 0x23130C000),
+                                   ('/arm-io/dart-disp0', 0x231304000),
+                                   ('/arm-io/dart-usb0', 0x382F80000),
+                                   ('/arm-io/dart-usb1', 0x502F80000)])
 
-    def test_ttbr_layout_matches_proxyclient_map(self):
-        regs = c.ttbr_addresses(0x1000)
-        self.assertEqual(regs[0], (0, 0, 0x1200))
-        self.assertEqual(regs[5], (1, 1, 0x1214))
-        self.assertEqual(len(regs), 64)
-        self.assertEqual(c.decode_ttbr(0x80000000 | (0x9d71a8000 >> 12)), 0x9d71a8000)
-        self.assertIsNone(c.decode_ttbr(0x9d71a8))
+    def test_scaler_is_never_a_target_even_if_bannered(self):
+        darts, _ = c.parse_banner(BANNER + 'dart: dart /arm-io/dart-scaler at 0x263200000 is a t8020\n')
+        self.assertNotIn('/arm-io/dart-scaler', [p for p, _ in c.select_targets(darts, ADT_REGS)])
 
-    def test_l2_tables_follow_valid_l1_entries(self):
-        r32, blk = self.fake({0x1200: 0x80000000 | (0x800100000 >> 12)},
-                             {0x800100000: [0x900004003, 0, 0x900004003, 0x9e0000001]})
-        rec = c.census([dict(path='d', compatible='dart,t8020', base=0x1000, powered=True)],
-                       r32, blk, GUEST, [])
-        pas = [(t['level'], t['pa'], t['verdict']) for t in rec['darts'][0]['tables']]
-        self.assertEqual(pas, [('L1', '0x800100000', 'OUTSIDE_GUEST_RAM'),
+    def test_banner_base_must_match_adt(self):
+        darts, _ = c.parse_banner('dart: dart /arm-io/dart-dcp at 0x23130d000 is a t8020\n')
+        self.assertEqual(c.select_targets(darts, ADT_REGS), [])
+
+    def test_no_banner_means_no_mmio(self):
+        def boom(*_):
+            raise AssertionError('MMIO without banner')
+        r = c.census([('/arm-io/dart-dcp', 0x23130C000)], boom, boom, DRAM, GUEST, [],
+                     banner_seen=False)
+        self.assertEqual((r['verdict'], r['stop']), ('INCOMPLETE', 'NO_BOOT_BANNER'))
+        r = c.census([], boom, boom, DRAM, GUEST, [])
+        self.assertEqual(r['verdict'], 'INCOMPLETE')
+
+    def test_fault_stops_everything(self):
+        reads = []
+        def r32(a):
+            reads.append(a)
+            raise c.Fault('MMIO fault')
+        r = c.census([('/arm-io/dart-dcp', 0x23130C000), ('/arm-io/dart-disp0', 0x231304000)],
+                     r32, None, DRAM, GUEST, [])
+        self.assertEqual(len(reads), 1)
+        self.assertEqual(r['verdict'], 'INCOMPLETE')
+        self.assertEqual([d['status'] for d in r['darts']], ['FAULT'])
+
+    def test_bogus_ttbr_outside_dram_is_never_followed(self):
+        def tbl(_):
+            raise AssertionError('memory read of an out-of-DRAM table')
+        ttbr = {0x23130C200: 0x80000000 | (0x263200000 >> 12)}
+        r = c.census([('/arm-io/dart-dcp', 0x23130C000)], lambda a: ttbr.get(a, 0), tbl,
+                     DRAM, GUEST, [])
+        self.assertEqual(r['verdict'], 'INCOMPLETE')
+        self.assertIn('outside DRAM', r['stop'])
+
+    def test_l2_listing_and_classification(self):
+        ttbr = {0x231304200: 0x80000000 | (0x9FFF34000 >> 12)}
+        l1 = [0x9FFF38003, 0, 0x900004003] + [0] * (c.L1_ENTRIES - 3)
+        r = c.census([('/arm-io/dart-disp0', 0x231304000)], lambda a: ttbr.get(a, 0),
+                     lambda pa: l1, DRAM, GUEST, [])
+        got = [(t['level'], t['pa'], t['verdict']) for t in r['darts'][0]['tables']]
+        self.assertEqual(got, [('L1', '0x9fff34000', 'OUTSIDE_GUEST_RAM'),
                                ('L2', '0x900004000', 'GUEST_RAM_CONFLICT'),
-                               ('L2', '0x9e0000000', 'OUTSIDE_GUEST_RAM')])
-        self.assertEqual(rec['verdict'], 'CONFLICT')
+                               ('L2', '0x9fff38000', 'OUTSIDE_GUEST_RAM')])
+        self.assertEqual(r['verdict'], 'CONFLICT')
 
-    def test_reserved_cover_and_clean_verdict(self):
-        r32, blk = self.fake({0x1200: 0x80000000 | (0x900000000 >> 12)}, {})
-        rec = c.census([dict(path='d', compatible='dart,t8020', base=0x1000, powered=True)],
-                       r32, blk, GUEST, [(0x900000000, 0x4000)])
-        self.assertEqual(rec['darts'][0]['tables'][0]['verdict'], 'RESERVED')
-        self.assertEqual(rec['verdict'], 'NO_RETAINED_TABLE_IN_GUEST_RAM')
+    def test_l2_outside_dram_stops(self):
+        ttbr = {0x231304200: 0x80000000 | (0x9FFF34000 >> 12)}
+        l1 = [0xA00004003] + [0] * (c.L1_ENTRIES - 1)
+        r = c.census([('/arm-io/dart-disp0', 0x231304000)], lambda a: ttbr.get(a, 0),
+                     lambda pa: l1, DRAM, GUEST, [])
+        self.assertEqual(r['verdict'], 'INCOMPLETE')
 
-    def test_unreadable_darts_make_census_incomplete_not_empty(self):
-        r32, blk = self.fake({}, {})
-        for d in (dict(compatible='dart,t8110', powered=True),
-                  dict(compatible='dart,t8020', powered=None)):
-            rec = c.census([dict(path='d', base=0x1000, **d)], r32, blk, GUEST, [])
-            self.assertEqual(rec['verdict'], 'INCOMPLETE')
-
-    def test_unpowered_dart_registers_are_never_read(self):
-        def boom(_):
-            raise AssertionError('unpowered DART MMIO read')
-        rec = c.census([dict(path='d', compatible='dart,t8020', base=0x1000, powered=False)],
-                       boom, boom, GUEST, [])
-        self.assertEqual(rec['darts'][0]['status'], 'UNPOWERED_NOT_READ')
-        self.assertEqual(rec['verdict'], 'NO_RETAINED_TABLE_IN_GUEST_RAM')
-
-    def test_power_requires_every_gate_active(self):
-        devs = {1: dict(psreg=0, psidx=0), 2: dict(psreg=0, psidx=1)}
-        addr = lambda d: c.pmgr_ps_address([0x1000], [dict(reg=0, offset=0x58)], d)
-        self.assertEqual(addr(devs[2]), 0x1060)
-        on = {0x1058: 0xff, 0x1060: 0xff}
-        self.assertTrue(c.powered([1, 2], devs, addr, on.get))
-        self.assertIsNone(c.powered([3], devs, addr, on.get))
-        self.assertIsNone(c.powered([], devs, addr, on.get))
-        self.assertIsNone(c.powered([1, 2], devs, addr, {0x1058: 0xff, 0x1060: 0x00}.get))
-        self.assertFalse(c.powered([1, 2], devs, addr, {0x1058: 0x00, 0x1060: 0x00}.get))
-
-    def test_adt_cells_accept_raw_bytes_as_seen_on_j313(self):
-        self.assertEqual(c.adt_u32s(b'\xdf\x00\x00\x00\xe0\x00\x00\x00\xe1\x00\x00\x00'),
-                         [0xdf, 0xe0, 0xe1])
-        self.assertEqual(c.adt_u32s(5), [5])
-        self.assertEqual(c.adt_u32s([1, 2]), [1, 2])
-        self.assertEqual(c.adt_u32s(None), [])
-        with self.assertRaises(ValueError):
-            c.adt_u32s(b'\x01\x02')
-
-    def test_gates_fall_back_to_iommu_parent_consumers(self):
-        self.assertEqual(c.dart_gates({'clock-gates': [7], 'AAPL,phandle': 5}, [(5, [9])]), [7])
-        self.assertEqual(c.dart_gates({'clock-gates': [], 'AAPL,phandle': 5},
-                                      [(5, [9, 3]), (6, [4]), (5, [3])]), [3, 9])
-        self.assertEqual(c.dart_gates({'clock-gates': [], 'AAPL,phandle': None}, [(5, [9])]), [])
+    def test_guarded_reader_detects_exception_counter(self):
+        class P:
+            n = 0
+            def set_exc_guard(self, m): self.mode = m
+            def get_exc_count(self): return self.n
+            def read32(self, a):
+                if a == 0xbad: self.n += 1
+                return 0xffffffff
+        r32 = c.guarded_reader(P(), 0x101)
+        self.assertEqual(r32(0x10), 0xffffffff)
+        with self.assertRaises(c.Fault):
+            r32(0xbad)
 
     def test_cli_refuses_without_experiment_id_before_proxy(self):
         with self.assertRaises(SystemExit):
-            c.main(['--guest-ram-base', '0', '--guest-ram-end', '1', '--output', '/nonexistent/x'])
+            c.main(['--guest-ram-base', '0', '--output', '/nonexistent/x'])
 
 
 if __name__ == '__main__':
