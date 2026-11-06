@@ -97,6 +97,7 @@ typedef struct world {
   /* depth-2 kick fallback: every refuse_every-th decided kick is refused
    * before the firmware sees it (BeginSuccessorJob refusal) and undone */
   unsigned refuse_every, decided, fallbacks, fell_back[MAXF + 1];
+  unsigned preempt_on_refuse; /* EXP2221: a preemption begins between the kick and its refusal */
   unsigned gate; /* VidSch depth: fence n is submitted once n-gate ended */
   void (*event)(struct world *);
   unsigned violations;
@@ -592,6 +593,7 @@ static void check_pair(world *w, unsigned a, unsigned b) {
   if (AdmissionJobWindowUsesManager(w->job[a].kind) && AdmissionJobWindowUsesManager(w->job[b].kind))
     violate(w, "W3 two manager bindings live", b);
 }
+static void begin_preempt(world *w);
 static void kick_successor(world *w) {
   ADMISSION_JOB_WINDOW_KICK_STATE s;
   APPLE_AGX_BACKEND_SUBMISSION sub;
@@ -624,7 +626,9 @@ static void kick_successor(world *w) {
   if (!AppleAgxSchedulerKickQueuedFence(&w->sch, 0u, 0u, m)) { violate(w, "scheduler refused the kick", m); return; }
   if (w->refuse_every && ++w->decided % w->refuse_every == 0u) {
     /* AdmissionJobWindowKickFallbackWindows: nothing submitted, undo the
-     * kick; m stays queued and runs at depth 1 after n. */
+     * kick; m stays queued and runs at depth 1 after n (or, when a boundary
+     * preemption began meanwhile, is handed back to VidSch). */
+    if (w->preempt_on_refuse && !w->preempt && !w->resets) begin_preempt(w);
     if (!AppleAgxSchedulerUnkickFence(&w->sch, 0u, 0u, m)) {
       violate(w, "fallback unkick refused", m); w->faulted = 1; return;
     }
@@ -812,6 +816,27 @@ static unsigned s_fallback(void) {
       { printf("fallback: f%u final %u behind %u resub %u\n", f, w->final_[f], w->kicked_behind[f], w->resub[f]); ++w->violations; }
   return w->violations;
 }
+/* EXP2221: the refused kick's preemption race. A boundary preemption begins
+ * with the successor kicked, then the kick is refused before the firmware saw
+ * it. Expected: no reset; the never-started fence is handed back to VidSch
+ * once, the running job ends the preemption. */
+static unsigned s_fallback_preempt(void) {
+  world *w = &W; unsigned i, f, handed = 0;
+  start(w, "fallback-preempt");
+  w->refuse_every = 3u; w->preempt_on_refuse = 1u;
+  add(w, K_R, OUT_OK, 7);
+  for (i = 0; i < 15; ++i) add(w, (i % 3) == 2 ? K_R : K_C, OUT_OK, 7);
+  run(w, 600);
+  finish(w);
+  if (w->resets || w->faulted) { printf("fallback-preempt: resets %u faulted %u\n", w->resets, w->faulted); ++w->violations; }
+  for (f = 1; f <= w->nsub; ++f)
+    if (w->fell_back[f]) {
+      if (w->final_[f] != 3u || !w->resub[f]) { printf("fallback-preempt: f%u final %u resub %u\n", f, w->final_[f], w->resub[f]); ++w->violations; }
+      ++handed;
+    }
+  if (!handed) { puts("fallback-preempt: no refused kick"); ++w->violations; }
+  return w->violations;
+}
 static unsigned s_depth1(void) {
   world *w = &W; unsigned i;
   start(w, "depth1");
@@ -995,6 +1020,7 @@ int main(void) {
   if (unit) { printf("FAIL scheduler unit %d\n", unit); return 1; }
   bad += s_order();
   bad += s_fallback();
+  bad += s_fallback_preempt();
   bad += s_depth1();
   bad += s_prelude();
   bad += s_pairs();

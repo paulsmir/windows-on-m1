@@ -5663,13 +5663,33 @@ _Use_decl_annotations_ BOOLEAN AdmissionG4PendingUnkickLocked(
   ADMISSION_G4_PENDING *entry;
   if (adapter == NULL || fence == 0u || adapter->G4PendingCount == 0u)
     return FALSE;
+  APPLE_AGX_PREEMPTION_PHASE phase;
+  ADMISSION_RENDER_CONTEXT *context;
   entry = &adapter->G4Pending[adapter->G4PendingHead];
+  context = entry->Context;
+  phase = AppleAgxSchedulerPreemptionPhase(&adapter->Scheduler);
   if (entry->State != AdmissionG4PendingKicked || entry->Fence != fence ||
-      entry->Context == NULL || adapter->G4PrebindFence != fence ||
+      context == NULL || adapter->G4PrebindFence != fence ||
       adapter->BackendImage.BoundFence != fence ||
       !AppleAgxSchedulerUnkickFence(&adapter->Scheduler, 0u, 0u, fence))
     return FALSE;
-  entry->State = AdmissionG4PendingPrebound;
+  if (phase == AppleAgxPreemptionIdle) {
+    entry->State = AdmissionG4PendingPrebound;
+    return TRUE;
+  }
+  /* EXP2221: a boundary preemption began while the fence was kicked, so
+   * AdmissionG4PendingDropLocked kept its entry; the scheduler now hands the
+   * fence back to VidSch. Drop the entry as DropLocked drops a Prebound one:
+   * its private scene is preempted, the context retires the fence, and the
+   * worker that bound the image releases it (Dropped). */
+  if (context->Object.FenceOutstanding == fence ||
+      context->GpuvaG3SecondFence == fence) {
+    AdmissionGpuvaG3PrivatePreempt(context, fence);
+    AdmissionContextRetireFence(context, fence);
+  }
+  if (adapter->DispatchedFence == fence)
+    adapter->DispatchedFence = 0u;
+  entry->State = AdmissionG4PendingDropped;
   return TRUE;
 }
 

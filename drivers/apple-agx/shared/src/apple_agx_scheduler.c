@@ -344,12 +344,37 @@ APPLE_AGX_BOOL AppleAgxSchedulerKickQueuedFence(
 APPLE_AGX_BOOL AppleAgxSchedulerUnkickFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence) {
+  APPLE_AGX_U32 index;
   if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
       Fence == 0u || Scheduler->KickedFence != Fence ||
       Scheduler->ActiveFence == 0u || Scheduler->QueueCount == 0u ||
-      Scheduler->QueuedFence != Fence ||
-      Scheduler->PreemptionPhase != AppleAgxPreemptionIdle)
+      Scheduler->QueuedFence != Fence)
     return APPLE_AGX_FALSE;
+  if (Scheduler->PreemptionPhase == AppleAgxPreemptionIdle) {
+    Scheduler->KickedFence = 0u;
+    return APPLE_AGX_TRUE;
+  }
+  /* A boundary preemption that began with Fence kicked made it the boundary
+   * and its only queued fence (BeginBoundaryPreemption). Fence never reached
+   * the firmware: it is handed back to VidSch first among the preempted
+   * fences and the active fence becomes the boundary again. */
+  if (Scheduler->PreemptionPhase != AppleAgxPreemptionWaitCurrentBoundary ||
+      Scheduler->PreemptionActiveFence != Fence || Scheduler->QueueCount != 1u ||
+      Scheduler->FenceQueue[Scheduler->QueueHead] != Fence ||
+      Scheduler->PreemptedFenceCount >= APPLE_AGX_SCHEDULER_QUEUE_CAPACITY ||
+      (Scheduler->PreemptedFenceCount != 0u &&
+       !AppleAgxSchedulerFenceAfter(Scheduler->PreemptedFenceQueue[0], Fence)))
+    return APPLE_AGX_FALSE;
+  for (index = Scheduler->PreemptedFenceCount; index > 0u; --index) {
+    Scheduler->PreemptedFenceQueue[index] = Scheduler->PreemptedFenceQueue[index - 1u];
+    Scheduler->PreemptedRejectedAfter[index] = Scheduler->PreemptedRejectedAfter[index - 1u];
+  }
+  Scheduler->PreemptedFenceQueue[0] = Fence;
+  Scheduler->PreemptedRejectedAfter[0] = Scheduler->RejectedAfter[Scheduler->QueueHead];
+  ++Scheduler->PreemptedFenceCount;
+  Scheduler->QueueHead = Scheduler->QueueCount = 0u;
+  Scheduler->QueuedFence = 0u;
+  Scheduler->PreemptionActiveFence = Scheduler->ActiveFence;
   Scheduler->KickedFence = 0u;
   return APPLE_AGX_TRUE;
 }

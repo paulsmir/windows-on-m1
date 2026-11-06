@@ -126,8 +126,10 @@ APPLE_AGX_BOOL AppleAgxSchedulerKickQueuedFence(
 APPLE_AGX_U32 AppleAgxSchedulerKickedFence(
     const APPLE_AGX_SCHEDULER *Scheduler);
 /* Depth-2 kick fallback: undo the kick of Fence when the firmware never saw
- * it. Only the kicked queue head, with a fence active and no preemption in
- * progress; the fence stays queued and runs at depth 1 after the active one. */
+ * it. Only the kicked queue head with a fence active. Without a preemption
+ * the fence stays queued and runs at depth 1 after the active one; during a
+ * boundary preemption that waits for it, it is handed back to VidSch first
+ * among the preempted fences and the active fence becomes the boundary. */
 APPLE_AGX_BOOL AppleAgxSchedulerUnkickFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);

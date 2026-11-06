@@ -49,6 +49,13 @@ class Depth2KickFallback(unittest.TestCase):
         self.assertIn("entry->State != AdmissionG4PendingKicked", unkick)
         self.assertIn("AppleAgxSchedulerUnkickFence(&adapter->Scheduler, 0u, 0u, fence)", unkick)
         self.assertIn("entry->State = AdmissionG4PendingPrebound;", unkick)
+        # EXP2221: during a boundary preemption the fence goes back to VidSch;
+        # the entry is dropped like DropLocked drops a Prebound one.
+        self.assertLess(unkick.index("AppleAgxSchedulerPreemptionPhase(&adapter->Scheduler)"),
+                        unkick.index("AppleAgxSchedulerUnkickFence("))
+        self.assertIn("AdmissionGpuvaG3PrivatePreempt(context, fence);", unkick)
+        self.assertIn("AdmissionContextRetireFence(context, fence);", unkick)
+        self.assertIn("entry->State = AdmissionG4PendingDropped;", unkick)
 
 
 if __name__ == "__main__":
