@@ -45050,3 +45050,19 @@ test test_own_wrapper_via_symlinked_root_is_not_legacy (RED reproduced the exact
 message, GREEN after the fix).
 Prevention: ledger heredocs are now always quoted ('EOF'); values are inserted only
 by explicit substitution outside the heredoc.
+
+### ANS001-R3 attempt 2 (preregistered 2026-11-06T10:39:07Z)
+
+Same packet, run script and hypothesis as the ANS001-R3 entry above; the only change
+is the host-side launch-lock fix (58d2048b5, symlinked root), which never touches
+packet artifacts. Attempt-1 files moved to .local/ans-native/ANS001-R3-run/attempt1/.
+WHY THIS HYPOTHESIS:
+1. Attempt 1 stopped at host admission with a deterministic, now-fixed lock defect;
+   no guest-side evidence was produced, so the hypothesis is untested, not weakened.
+2. ANS005B (same m1n1) and ANSCOLLECT005 (same WinPE E) passed their separate checks.
+Packet qualification.json 56025264001fd9de4c89ec8dbdcc24e391edf56bb7754b6d6a57ff14311d2d12;
+m1n1 167f189f..., Mu native 85157f29..., WinPE E e38ab04d...
+Expected: PROXY_LINK_DROPPED, then PROXY_BACK within 1500 s; stick WINPE\ with HW-DONE
+export_exit=0. Failure: launcher refusal, no reboot within 1500 s, or no WINPE folder.
+Recovery: normal 377/392 (launch-normal2.sh); physical power cycle if the proxy does not return.
+Root commit 51f3fee561234e93be591ac33d06ce07e4d5ba83; run.sh sha256 a1355db6b0725db2615b4bbe433ac06ef72f57e9d3789e268470f5b8ca8bea02.
