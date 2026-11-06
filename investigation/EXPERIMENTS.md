@@ -45122,3 +45122,31 @@ ANS001-R3 attempt 4 result (recorded 2026-11-06T10:52:55Z): FAILED before guest 
   m1n1 after an aborted ANS hv.init is NOT a safe recovery path; the recovery for an
   aborted native launch must be a reboot to a clean proxy, not a chainload.
 Evidence: .local/ans-native/ANS001-R3-run/attempt4/.
+
+### ANS broker preflight fix + ANSBUILD007 + ANS001-R4 packet (offline)
+
+Cause of the ANS001-R3 attempt 4 rejection, from the live ADT (ANSDART001-R3 adt.bin):
+/arm-io/ans reg0 = 0x277400000+0x6c000 and reg3 = 0x27bcc0000+0x60000. hv_map_ans_broker()
+required the DT protocol sizes (0x4000 / 0x40000, generated ABI constants), so it can
+never pass on J313. The bases, sart-ans (0x27bc50000+0x10000) and IRQ 590 (one of
+584/583/586/585/590) match. The offline test passed only because its synthetic ADT
+reused the constants.
+Fix (m1n1 f5439151e): exact pin of the live ADT sizes in m1n1 only
+(ANS_J313_ADT_COPROCESSOR_SIZE 0x6c000, ANS_J313_ADT_CONTROLLER_SIZE 0x60000, with
+static asserts that they contain the DT ASC/mailbox/NVMe windows); the hooks already use
+the ADT sizes, so the whole windows are hidden from the guest; each reject now prints its
+reason. Python tracer (same commit) also reserves the full ADT windows so the /arm-io
+pass-through replay cannot re-expose the remainder. The shared ABI/Mu/driver headers are
+unchanged. Test (root 2ce7e323b): the synthetic ADT uses the live sizes, the DT-sized
+ADT is rejected, and the full windows are covered (RED before, GREEN after).
+Offline gate GREEN, receipt 4c5552f1...efbced. m1n1 host runner note: tests/run_host_tests.sh
+(full list) fails on pre-existing clang-21 -Werror issues in asc_tx_gate_test.c and
+src/hv_autonomous_manifest.c; untouched here, follow-up.
+ANSBUILD007: m1n1.macho 4769b32263cc4dd77d83760c788933a28a3e1a96339f3607cc8e3627c13c044d
+(clean f5439151e), receipt .local/ans-native/m1n1-build/ANSBUILD007/receipt.json.
+Packet ANS001-R4: qualification 1833b4abd4f6f48805afdfdacd4937e07627cd1147254c7fdeaff6b82aecc5e3
+(= R3 with ANSBUILD007 and the new gate receipt), run-assisted dry-run exit 0.
+Orchestrator .local/ans-native/ANS001-R4-run/run.sh 81f9da86...: on an abort before guest
+entry it now sends P_REBOOT to the proxy (proxy-reboot.py) and waits for a clean
+"Running proxy" instead of chainloading over the aborted hypervisor.
+Bench: down since 10:52Z (attempt-4 recovery loss); physical power cycle requested.
