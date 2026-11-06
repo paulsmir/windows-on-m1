@@ -44964,3 +44964,15 @@ marker and USER-FILE.TXT), so the wrapper stopped in a refusal/hold path before
 S60_EXPORT. No screen was captured. Attempt 2: identical inputs (fresh copy of the
 stock VM vars), plus QMP screendumps every ~55 s to read the failing stage. Evidence:
 `.local/ans-native/ans001-collector-vm-005/attempt1/`.
+
+ANSCOLLECT005 attempt 2 (vm-005b) result 2026-11-06T11:40Z (UTC): FAILED at
+S51_MARKER_PRESENT. Screens + interactive probe: GPT disk-GUID discovery (matches=1),
+online, rescan, partition->volume, volume->backing disk and assign letter=V all
+passed; `dir V:` returned "The volume does not contain a recognized file system".
+WinPE SYSTEM hive registers exfat (Start 3, Boot File System) like fastfat, so the
+cause is the VM fixture: mkfs.exfat ran on a loop device without --sizelimit, so the
+exFAT VolumeLength overran GPT partition 1 into the backup-GPT area and Windows mounts
+it RAW. Not a wrapper defect; the user's stick mounts as exFAT in full Windows
+(ANSUSB001). (Attempt-2 launch in vm-005 was refused by the launch-input hash guard
+because attempt 1 had modified boot-media.img; a fresh vm-005b was used.)
+Attempt 3 (vm-005c): identical except --sizelimit = partition 1 size.
