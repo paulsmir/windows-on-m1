@@ -45374,3 +45374,16 @@ ANS001-R7 result (recorded 2026-11-06T13:00:58Z): FAILED at S42 (export); native
   The run.sh stick count (72) counted the whole run folder (path substitution miss), not WINPE-R7.
 Next (variant H): OnlineAll for the online only (the operator's proven sequence), restored
 to OfflineAll immediately after (S31); the policy only affects disks that arrive later.
+
+ANSCOLLECT008 PASS (2026-11-06T13:07:26Z): H in VM: san_exit=0 (OnlineAll), online_exit=0, san_restore_exit=0 (OfflineAll), letter D reused by marker, export_exit=0 to WINPE-R8, pre-existing files unchanged, fsck clean; receipt c6337e23.... WinPE H image a9326cfc0df92220ada8c54f34d0d859cb6f15121c1b94266b8b33dd1b39d7fb.
+
+### ANS001-R8 (preregistered)
+
+Packet qualification 7cad1997c6234193b67f841df62333a83fca17df95363a8377228f83f7f4491f
+(R7 + WinPE H + ANSCOLLECT008), dry-run 0. Bench: handed over by fork 6 until the SSD driver
+is finished (user decision relayed 2026-11-06).
+WHY THIS HYPOTHESIS: (1) R6 and R7 both reached the collector, and only the USB online failed;
+(2) the operator's OnlineAll + fresh-session sequence made exactly that online succeed in R6,
+and H performs it, restoring OfflineAll immediately after.
+Single variable vs R7: wrapper policy step OfflineInternal -> OnlineAll (+ restore).
+Expected: unattended WINPE-R8 export and reboot; failure: same handling as R7.
