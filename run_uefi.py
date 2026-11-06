@@ -249,9 +249,12 @@ descriptor = pack_descriptor(
         (4, 0, bootargs_base, 0x4000),
         (5, 0, fb.base, fb.size),
         (6, 0, args.low_mem_backing, args.low_mem_size if args.low_mem else 0),
-        # A bounded getter for the dynamically allocated DART page tables is
-        # still pending. Zero size + UNOBSERVED is explicit, never guessed.
-        (7, 1, args.phys_base, 0),
+        # DART_TABLES inside GUEST_RAM: none (size 0, flags 0). Enforced by m1n1:
+        # the heap is sealed at phys_base on publish (proxy.c) and ANS DMA
+        # excludes every ADT carveout in GUEST_RAM (hv_ans_platform.c).
+        # HYP-ANS-CARVEOUT (user-approved 2026-11-06): every iBoot-retained page
+        # is a declared carveout (ANSDART001-R3, HVS2ISO002). Not proven.
+        (7, 0, args.phys_base, 0),
     ),
     devices=(layout.pci_ecam, 0, layout.xhci_base, dart_base, uart_base,
              fb.base, fb.width, fb.height, fb.stride, 0),
