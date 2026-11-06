@@ -69897,3 +69897,5 @@ Exit: 0 STABLE, 2 CHANGED (changed_pages lists the PA and pass), 3 INCOMPLETE,
 Evidence: .local/experiments/HVS2ISO002/{census.json,banner.txt,console.log}.
 census.json is about 5 MB (3 x 12586 page hashes). banner.txt is console output, not
 the ADT; the tool writes no adt.bin, only its sha256.
+
+HVS2ISO003 HARDWARE BEFORE (2026-11-06T01:41:20Z): run of the preregistration (d0f42f4dd), slot from the ANS session. One boot: .local/experiments/HVS2ISO003/launch.sh iso 1 (sha dc5a38853614a4cc) = the HVS2ISO001 iso arm + WOM1_HV_UNMAP_RAM_CARVEOUTS=1, m1n1_windows checked out at 23a01cb6 (was 0d3a75b3; restored afterwards), same EXP950 normal recovery images (m1n1-exp377 fae3444cc289cf52, J313_EFI-exp392.fd 16c177182e96b63e, --low-mem). Checkpoints A (the in-RAM carveout Unmap lines), B (Mu ramdisk-window reservation, Internal DCP guest surface enabled), C (SSH <= 300 s, 8 CPUs, 0 aborts at +1 and +5 min). Control = HVS2ISO001 iso arm (same session). HVS2ISO002 (read-only census) follows in the same slot only if its tool is ready and reviewed. Recovery / bench return: launch-normal2.sh normal boot.
