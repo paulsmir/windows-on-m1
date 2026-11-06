@@ -45278,3 +45278,31 @@ enumerates APPL0003 inert, exports to the stick and reboots.
 Single variable vs R5: native Mu N2 -> N3 (broker window in the stage-1 map).
 Expected/failure/recovery as R5. If the gate refuses the handoff (EBS error, no fault),
 that is the next boundary; the gate keeps its stage/status in memory only.
+
+ANS001-R6 result (recorded 2026-11-06T12:16:53Z): CONFIRMED (ANS001 hypothesis) — export wrapper FAILED at S42 (USB disk online), evidence saved by the operator.
+- 11:45:47 launch; 11:47:06 guest entry; native Mu ReadyToBoot start of bootmgfw.efi;
+  ExitBootServices passed with the broker window mapped (ANSBUILD009): first successful
+  EL2 ownership handoff gate. The Windows kernel ran (all 8 CPUs PSCI-on, vGIC, PL011 kd),
+  xHCI DART view and IRQ 857 route up; WinPE (MININT-56JERHV) booted on native ANS.
+- Collector completed (COLLECTED.TXT; exits: wpeinit 0, ans 0, connected 0, problems 0,
+  packages 0, ans-reg 0, loaded 0, disks 0, volumes 0, registry-services 0, pnp-all-reg 1;
+  optional sc 127 / WMIC / DISM as in the VM).
+- ACPI\APPL0003\0 (\_SB.ANS0) present, Problem 28 CM_PROB_FAILED_INSTALL, status 0xC0000490,
+  no driver; BootConfig = memory 0x300010000+0x4000 and interrupt 0x379 (GSIV 889) = the
+  broker contract. No ANS DMA was requested (no AppleAns package).
+- Export wrapper: discovery by GPT disk ID matched disk 0 (the stick), then HW-ONLINE:
+  "Disk attributes cleared successfully" followed by "online disk" -> "Virtual Disk Service
+  error: The object is not found." The stick stays "Offline (Policy)" (SAN policy 3), no
+  volume, S42 fails (vcount=0). The QEMU qualification never hit this (its online succeeded).
+- The user (physically present, external keyboard) worked in the hold shell; `online disk`
+  and `san policy=OnlineAll` + rescan first still showed no volume; the user then reported
+  "скопировал" and ran wpeutil reboot. The exact command that finally brought the volume
+  online is not recorded. The stick now holds ANS001-RESULTS-27a6a231\WINPE (70 files incl.
+  HW-FAILED.TXT); fetched over SSH as .local/ans-native/ANS001-R6-run/stick-results.tar.
+- Recovery: orchestrator shells stopped by exact PID (44006/44088) at 12:03Z to keep the RAM
+  evidence (runner kept); WinPE reboot observed 12:15:06 -> 12:15:15; marker cleared; normal
+  recovery SSH 12:16:13.
+Verdict: ANS001 CONFIRMED on hardware (native ANS ownership through EBS, WinPE boots, ANS0
+enumerated inert with the exact contract resources). Open defect: unattended USB online in
+WinPE under SAN policy 3 (VDS "object not found"); to fix offline before ANS002.
+Evidence tar sha256 38e6db72df0d4e22b81b76b79d512af501ef5529778bd793f3718fed647fcd62.
