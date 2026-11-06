@@ -70293,3 +70293,15 @@ EXP2219 HARDWARE ACTUAL (2026-11-06T22:04:42Z): **CONFIRMED: the firmware RX dra
 - Code: 125bddd1 drain default on (Wom1FwRxDrain = 0 disables). Test-fixture repair 18953688 (TDR drill fixtures, broken since Q2c/OV2). Baseline gate ran in a copy with m1n1 m2/pool-window (the shared m1n1_windows checkout is detached at 0d3a75b3 since the HVS2ISO work, which breaks three g4_live tests; restoring it was not permitted from this session).
 - Evidence: evidence/EXP2219, EXP2219-gate, EXP2219-gmrep. Recovery rec2219h RECOVERY_DONE.
 - Verdict: CONFIRMED. Next: package with 125bddd1 (drain default, no switch) through the gate, then the GPU priorities in GPU_DRIVER_ARCHITECTURE.md.
+
+EXP2220 HARDWARE BEFORE 2026-11-06T22:17:33Z:
+Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0 (warm-up); post-exp-gate.sh (GM repeats r2/r3, CS warm-up + r2/r3) vs perf-baseline.json (GM 41.036, CS 48.380, 2 %).
+- WHY THIS HYPOTHESIS: (1) EXP2219 passed the gate with Wom1FwRxDrain=1 set on the devnode; (2) 125bddd1 changes only how the flag is read (explicit 0 disables), so the default build must behave like EXP2219; (3) a code-default change must itself be hardware-validated before it is called default (AGENTS).
+- WINDOWS/AGX CONTRACT: unchanged from EXP2219. ATOMIC CONTRACT: none.
+- WHAT IS STILL UNKNOWN: nothing beyond confirming the default build reads the flag as designed (no registry value -> drain on).
+- Expected: suite 119/0; PERF_GATE_PASS; CS warm ~49.6 like EXP2219; Wom1FwRx not emitted (diagnostics off).
+- Failure criteria: PERF_GATE_FAIL, suite failure, firmware fault/hang -> rec2220h; revert 125bddd1.
+- Recovery: rec2220h (run directly).
+- Probe: agx_d3d12_probe_e2220_arm64.exe = byte copy of e2219 (sha 5dbe904643ea842c).
+- Hashes: sys e649012fc5ea, UmdArm64 6eb10221685e, UmdX64 e0b8a35ad67a, Umd32 cad785814188; manifest cb2517c22e5b, hardware-manifest 1f15788929fa; probe2220.sh 1bbdc9a87604 (PROBE_LINT_OK); visible recovery rec2220h b96750ebdeb56ed4; m1n1 0d3a75b3.
+- Recovery rec2220h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2220-drain-default/run2220.sh.
