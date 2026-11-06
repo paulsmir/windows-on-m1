@@ -309,7 +309,7 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmitCompute(
      !AppleAgxG13WorkValid(&Submission->Compute) ||
      Submission->Compute.GpuAddressCount!=(successor ? 2u : 1u) ||
      !Submission->ComputeOnly || Submission->TaLeadingBarrier ||
-     Submission->D3LeadingBarrier)
+     Submission->D3LeadingBarrier || Submission->TaLeadWaived)
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
   if(!AppleAgxG13PrepareQueue(Runtime,&Runtime->Config.Compute,
        &Submission->Compute,Runtime->ComputeFirstRun,Submission->Timestamp,
@@ -412,6 +412,7 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmitRenderWithComput
   if (!Runtime->Config.HasCompute || Submission->Fence == 0u ||
       Submission->NowTicks == 0ULL || Submission->ComputeOnly ||
       !Submission->TaLeadingBarrier || Submission->D3LeadingBarrier ||
+      Submission->TaLeadWaived ||
       !AppleAgxG13WorkValid(&Submission->Ta) ||
       !AppleAgxG13WorkValid(&Submission->D3) ||
       !AppleAgxG13WorkValid(&Submission->Compute) ||
@@ -556,10 +557,13 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmit(
   successor = Submission->Successor ? APPLE_AGX_BACKEND_TRUE
                                     : APPLE_AGX_BACKEND_FALSE;
   /* rc102: a successor render leads its TA queue with its Barrier; OV5
-   * drill: its 3D queue too, one 3D entry more. */
+   * drill: its 3D queue too, one 3D entry more; OV5 step 2: a waived
+   * successor leads only its 3D queue (TA = the root alone). */
   if (Submission->Fence == 0u || Submission->NowTicks == 0ULL ||
       Submission->TaLeadingBarrier ||
       (Submission->D3LeadingBarrier && !successor) ||
+      (Submission->TaLeadWaived &&
+       (!successor || !Submission->D3LeadingBarrier)) ||
       !AppleAgxG13WorkValid(&Submission->Ta) ||
       !AppleAgxG13WorkValid(&Submission->D3) ||
       Submission->D3.GpuAddressCount != APPLE_AGX_BACKEND_QUEUE_WORK_COUNT +
@@ -567,7 +571,7 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmit(
       Submission->Ta.GpuAddressCount !=
           (Runtime->BufferManagerInitialized ? 1u
                                              : APPLE_AGX_BACKEND_QUEUE_WORK_COUNT) +
-              (successor ? 1u : 0u) ||
+              (successor && !Submission->TaLeadWaived ? 1u : 0u) ||
       (successor && (!Runtime->BufferManagerInitialized ||
                      Runtime->TaFirstRun || Runtime->D3FirstRun)))
     return AppleAgxG13QueueRuntimeResultInvalidArgument;

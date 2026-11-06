@@ -278,14 +278,21 @@ class Depth2CapsWiring(unittest.TestCase):
         # rc102 (step 3/4): only a successor build publishes a leading
         # Barrier (AdmissionBuildLeadBarrier, called under Plan->Successor)
         text = WORKER.read_text()
-        # (OV5 drill: the 3D Barrier builder, also only for successor builds)
+        # (OV5: the 3D Barrier builder shared by the drill and the step-2
+        # waiver, both also only for successor builds)
         self.assertEqual(text.count('AppleAgxRenderSharedMemoryBuildLeadingBarrier('), 2)
         self.assertIn('AppleAgxRenderSharedMemoryBuildLeadingBarrier(',
                       section(text, 'static APPLE_AGX_BACKEND_BOOL AdmissionBuildLeadBarrier('))
         self.assertIn('AppleAgxRenderSharedMemoryBuildLeadingBarrier(',
+                      section(text, 'static APPLE_AGX_BACKEND_BOOL AdmissionBuildOv5D3Barrier('))
+        self.assertEqual(text.count('AdmissionBuildOv5D3Barrier(runtime'), 2)
+        self.assertIn('AdmissionBuildOv5D3Barrier(runtime',
                       section(text, 'static VOID AdmissionBuildOv5FragBarrier('))
-        for call in re.finditer(r'AdmissionBuild(LeadBarrier|Ov5FragBarrier)\(runtime', text):
-            window = 700 if call.group(1) == 'LeadBarrier' else 1100
+        self.assertIn('AdmissionBuildOv5D3Barrier(runtime',
+                      section(text, 'static BOOLEAN AdmissionBuildOv5TaWaiver('))
+        for call in re.finditer(r'AdmissionBuild(LeadBarrier|Ov5FragBarrier|Ov5TaWaiver)\(runtime', text):
+            # OV5 step 2: the waiver call sits between the branch and the TA lead
+            window = 900 if call.group(1) == 'LeadBarrier' else 1100
             self.assertIn('Plan->Successor', text[max(0, call.start() - window):call.start()])
 
     def test_set_choice_of_the_compute_builds(self):

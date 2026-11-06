@@ -190,6 +190,76 @@ unsigned int AdmissionJobWindowOv5Note(ADMISSION_JOB_WINDOW_OV5_RECEIPT *Receipt
   return Receipt->Considered <= 16u || (Receipt->Considered & 0xffu) == 0u ? 1u : 0u;
 }
 
+unsigned int AdmissionJobWindowOv5WaiverRefusal(unsigned int Enabled,
+    unsigned int Barrier, const ADMISSION_JOB_WINDOW_JOB *Running,
+    const ADMISSION_JOB_WINDOW_JOB *Next) {
+  if (!Enabled) return ADMISSION_JOB_WINDOW_OV5W_OFF;
+  if (Barrier != ADMISSION_JOB_WINDOW_BARRIER_TA_ON_COMPUTE)
+    return ADMISSION_JOB_WINDOW_OV5W_CLASS;
+  if (Running == 0 || Next == 0 ||
+      Next->Kind != ADMISSION_JOB_WINDOW_KIND_RENDER || !Next->TaIndependent)
+    return ADMISSION_JOB_WINDOW_OV5W_NOT_FLAGGED;
+  /* a present job (P1) is a compute job to the window, not the UMD's */
+  if (Running->Kind != ADMISSION_JOB_WINDOW_KIND_COMPUTE)
+    return ADMISSION_JOB_WINDOW_OV5W_RUNNING_KIND;
+  if (Running->Context == 0ULL || Running->Context != Next->Context ||
+      Running->Process == 0ULL || Running->Process != Next->Process)
+    return ADMISSION_JOB_WINDOW_OV5W_CONTEXT;
+  return ADMISSION_JOB_WINDOW_OV5W_WAIVE;
+}
+
+unsigned int AdmissionJobWindowOv5WaiverBuildRefusal(unsigned int Successor,
+    unsigned int ComputeWorkCount, unsigned int D3Entries,
+    unsigned int PublishMax, unsigned int D3BarrierDone,
+    unsigned int D3RingCapacity, unsigned int TaWaivedDone,
+    unsigned int TaRingCapacity) {
+  if (!Successor) return ADMISSION_JOB_WINDOW_OV5W_BUILD;
+  if (ComputeWorkCount != 0u) return ADMISSION_JOB_WINDOW_OV5W_COMPUTE_WORK;
+  if (D3Entries == 0u || D3Entries >= PublishMax ||
+      D3BarrierDone >= D3RingCapacity || TaWaivedDone >= TaRingCapacity)
+    return ADMISSION_JOB_WINDOW_OV5W_RING;
+  return ADMISSION_JOB_WINDOW_OV5W_WAIVE;
+}
+
+unsigned int AdmissionJobWindowOv5WaiverAvailable(unsigned int Switch,
+    unsigned int Kick, unsigned int KickClasses, unsigned int ComputeOwnQueue,
+    unsigned int HasCompute) {
+  return Switch && Kick && ComputeOwnQueue && HasCompute &&
+         (KickClasses == 0u ||
+          (KickClasses & (1u << ADMISSION_JOB_WINDOW_BARRIER_TA_ON_COMPUTE)))
+      ? 1u : 0u;
+}
+
+void AdmissionJobWindowOv5WaiverReceiptInitialize(
+    ADMISSION_JOB_WINDOW_OV5W_RECEIPT *Receipt) {
+  unsigned int i;
+  if (Receipt == 0) return;
+  Receipt->Version = ADMISSION_JOB_WINDOW_OV5W_RECEIPT_VERSION;
+  Receipt->Bytes = (unsigned int)sizeof(*Receipt);
+  Receipt->Considered = Receipt->Waived = Receipt->Placed = 0u;
+  for (i = 0u; i < ADMISSION_JOB_WINDOW_OV5W_REASONS; ++i) Receipt->Refused[i] = 0u;
+  Receipt->LastFence = Receipt->LastWaitValue = 0u;
+  Receipt->LastStampSelf = Receipt->LastOffset = 0u;
+}
+
+unsigned int AdmissionJobWindowOv5WaiverNote(
+    ADMISSION_JOB_WINDOW_OV5W_RECEIPT *Receipt, unsigned int Refusal,
+    unsigned int Fence, unsigned int WaitValue, unsigned int StampSelf,
+    unsigned int Offset) {
+  if (Receipt == 0) return 0u;
+  ++Receipt->Considered;
+  if (Refusal == ADMISSION_JOB_WINDOW_OV5W_WAIVE) {
+    ++Receipt->Waived;
+    Receipt->LastFence = Fence;
+    Receipt->LastWaitValue = WaitValue;
+    Receipt->LastStampSelf = StampSelf;
+    Receipt->LastOffset = Offset;
+  } else if (Refusal < ADMISSION_JOB_WINDOW_OV5W_REASONS) {
+    ++Receipt->Refused[Refusal];
+  }
+  return Receipt->Considered <= 16u || (Receipt->Considered & 0xffu) == 0u ? 1u : 0u;
+}
+
 unsigned int AdmissionJobWindowKickRefusal(
     const ADMISSION_JOB_WINDOW_KICK_STATE *s) {
   const ADMISSION_JOB_WINDOW_JOB *n, *m;

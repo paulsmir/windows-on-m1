@@ -897,6 +897,11 @@ typedef struct _ADMISSION_CONTEXT {
    * Q2c (AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE): the compute parser
    * then admits a VdmBarrier NONE envelope. */
   volatile LONG GpuIndependentSubqueue;
+  /* OV5 step 2: nonzero while the started runtime runs Wom1Ov5TaWaiver = 1
+   * with the 3D-queue Barrier path available
+   * (AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT): the render parser
+   * then admits a CdmBarrier NONE render header. */
+  volatile LONG GpuRenderTaIndependent;
   volatile LONG FeatureReadyMask;
   /* EXP1321 receipt-only: broker failure count last staged (Wom1G3BrokerFailures). */
   volatile LONG64 G3BrokerFailuresStaged;

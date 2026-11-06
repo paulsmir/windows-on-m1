@@ -61,6 +61,10 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
    * stream (compute, attachments, render); the job builder adds the compute
    * as the queue provider's compute-before-render work item. */
   APPLE_AGX_BOOL G4WithCompute;
+  /* OV5 (Wom1Ov5TaWaiver): the parser admitted the render header with
+   * CdmBarrier NONE (TA independent of the compute job before it; only
+   * without a compute command and under the device feature). */
+  APPLE_AGX_BOOL G4TaIndependent;
   APPLE_AGX_G4_NATIVE_COMPUTE G4PreludeCompute;
   APPLE_AGX_G4_PROCESS_RANGE G4PreludePreemption;
   APPLE_AGX_RENDER_MANAGER_STATE *G4Manager;

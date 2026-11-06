@@ -177,21 +177,28 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformLeadBarrierRange(
     APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION *Submission) {
   const APPLE_AGX_MEMORY_OBJECT *sidecar;
   APPLE_AGX_BACKEND_U64 sidecar_va;
-  if (Job->LeadBarrierAddress == 0ULL)
+  /* OV5 step 2: a waived TA lead keeps only the 3D lead Barrier. */
+  if (Job->LeadBarrierAddress == 0ULL && !Job->TaLeadWaived)
     return Job->D3LeadBarrierAddress == 0ULL ? APPLE_AGX_BACKEND_TRUE
                                              : APPLE_AGX_BACKEND_FALSE;
-  if (Provider->RenderSharedMemory == PLATFORM_NULL)
+  if (Provider->RenderSharedMemory == PLATFORM_NULL ||
+      (Job->TaLeadWaived && (Job->LeadBarrierAddress != 0ULL ||
+                             Job->D3LeadBarrierAddress == 0ULL)))
     return APPLE_AGX_BACKEND_FALSE;
   sidecar = &Provider->RenderSharedMemory->Objects[
       APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR];
   sidecar_va = Provider->RenderSharedMemory->VirtualAddresses[
       APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR];
   if (sidecar->CpuAddress == PLATFORM_NULL || sidecar->Length < 0x10000u ||
-      sidecar_va == 0ULL || Job->LeadBarrierAddress < sidecar_va ||
-      Job->LeadBarrierAddress - sidecar_va >= 0x10000u)
+      sidecar_va == 0ULL ||
+      (Job->LeadBarrierAddress != 0ULL &&
+       (Job->LeadBarrierAddress < sidecar_va ||
+        Job->LeadBarrierAddress - sidecar_va >= 0x10000u)))
     return APPLE_AGX_BACKEND_FALSE;
-  Submission->LeadBarrierRange.Address = sidecar->CpuAddress;
-  Submission->LeadBarrierRange.Bytes = 0x10000u;
+  if (Job->LeadBarrierAddress != 0ULL) {
+    Submission->LeadBarrierRange.Address = sidecar->CpuAddress;
+    Submission->LeadBarrierRange.Bytes = 0x10000u;
+  }
   /* OV5 drill: the 3D lead Barrier lies in the same sidecar. */
   if (Job->D3LeadBarrierAddress != 0ULL) {
     if (Job->D3LeadBarrierAddress < sidecar_va ||

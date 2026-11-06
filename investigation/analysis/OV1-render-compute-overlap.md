@@ -344,3 +344,137 @@ answer:
     The waiver needs a successor TA publication without one, which the runtime's
     `Ta.GpuAddressCount == 1 + successor` check forbids today, and a backend-job validity rule other
     than `LeadBarrierAddress != 0`.
+
+## OV5 step 2: the TA waiver (2026-11-06, offline; no hardware run yet)
+- Sources: EXP2210 (drill CONFIRMED: Built == Placed 1836, no fault; R8 OV5 verdict 0), Asahi `queue/render.rs`
+  (frag Barrier `stamp_self` = `ev_frag.value.next()`), `queue/mod.rs` (explicit barriers only in the vertex or compute
+  job; jobs signal in submission order), our `AppleAgxG13QueueRuntimeSubmit` / `HandleEvent` / `TakeCompletion` /
+  `AppleAgxG13WindowQueues`, `AppleAgxG13QueueProviderPlanSuccessor`, `AppleAgxG13ProviderSubmitRender`, the parser
+  `parse_submit`, the drill `AdmissionBuildOv5FragBarrier`, the OV2 feature publication (EXP2196) and the notifier
+  notes (N1/N2/Q2c) in `apple_agx_render_shared_memory.h`.
+- WINDOWS CONTRACT: as in "OV5" above. D3D12 does not order R's vertex work after C when no barrier names a
+  range that both C and R's vertex stage access with one of them writing. A transition on an attachment or
+  pixel-stage resource orders only R's use of that resource, i.e. the 3D stage. VidSch sees the same fences,
+  signalled in the same order (C, then R). The UMD half (ba402eb6) sends the flag only when the owner proved it
+  (`AgxD3d12JobRenderTaRefusal == 0`) and only while the KMD reports feature 0x4.
+- AGX/ASAHI CONTRACT:
+  - A render is a TA (vertex) work queue and a 3D (fragment) work queue. The 3D queue already starts with a
+    Barrier on the render's own TA stamp (template object 14, D3 entry 0).
+  - A G13 Barrier (tag 4) holds its queue until `*wait_stamp >= wait_value`. EXP2210: the firmware accepts a
+    compute-stamp Barrier first in a 3D queue.
+  - Each queue runs its jobs in ring order. Only the lead Barrier makes the TA queue depend on the compute queue.
+- TRANSLATION (REG_DWORD `Wom1Ov5TaWaiver` = 1, default off, read once at StartDevice):
+  - Feature: `AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT` (0x4) via `ADMISSION_CONTEXT.GpuRenderTaIndependent`.
+    - Published as the last write on the RuntimeStart success path (after the soft-fault/OV2 reset, the backend start
+      and the job thread; EXP2196); cleared at the start, on failure and on stop.
+    - Published only when `AdmissionJobWindowOv5WaiverAvailable` holds: the switch, the depth-two kick
+      (`JobDepth2Kick`; the 3D Barrier is a successor build), TA_ON_COMPUTE among `Depth2KickClasses` (0 = all),
+      Q2c (`ComputeOwnQueue`, see below) and a compute queue.
+  - Parser (`AppleAgxG4ParseSubmitFlagsEx` / `AppleAgxG4ParseSubmitComputeFlagsEx`, flag
+    `APPLE_AGX_G4_PARSE_RENDER_TA_INDEPENDENT` 0x2):
+    - `ADMISSION_G4_RENDER_PARSE_FLAGS` in `render_ov5.h` maps the feature to the flag at all four render parse
+      sites: submit, preflight and both begin re-proofs.
+    - A render header (vdm 0, cdm NONE) in a packet without a compute command is admitted only under the flag, and
+      sets `View.TaIndependent`.
+    - Without the flag it is `AppleAgxG4ParseInvalid`, the existing refusal of an unexpected barrier value. These
+      stay invalid: CdmBarrier NONE after a compute command, vdm NONE, cdm 1 without compute, unknown flags.
+    - The image keeps `G4TaIndependent`; `ADMISSION_JOB_WINDOW_JOB.TaIndependent` describes it, as OV2's
+      `Independent` does.
+  - Kick decision (`AdmissionJobWindowOv5WaiverRefusal`, next to OV2's):
+    - Waive only a TA_ON_COMPUTE pair whose successor is a flagged plain render (no prelude) and whose running job
+      is a compute job (not a present job) of the same WDDM context and process.
+    - The UMD proves independence from "the compute batch submitted just before it" in the same context. When R is
+      kicked, the window holds only N, so N is that batch.
+  - Build (`AdmissionBuildOv5TaWaiver`, called before the TA lead Barrier in the no-compute successor branch; it
+    consumes the decision):
+    - No TA lead Barrier is built.
+    - The shared core `AdmissionBuildOv5D3Barrier` builds the only wait on N. It is the drill's builder: compute fw
+      stamp, `wait_value` = N's ComputeExpectedStamp, `wait_slot` = ComputeEvent, `stamp_self` = the render's
+      D3ExpectedStamp, sidecar 0x8840/0xa840 in the render's job-word set.
+    - The TA done pointer is the plan's new `TaWaivedExpectedDonePointer` (root alone), the 3D one
+      `D3BarrierExpectedDonePointer`. The job carries `TaLeadWaived`.
+    - Every refusal builds today's job: the TA lead Barrier, plus the drill's if the drill is on. Refusal causes:
+      compute work, the ring limit or an out-of-ring planned pointer, a changed class or phase, the encoder or
+      sidecar.
+  - Provider/runtime:
+    - `TaLeadWaived` requires a successor, no TA lead, a 3D lead Barrier, no compute work and no D3D-G1b Barrier.
+      Otherwise `SubmitGuardBuild`, and nothing is published.
+    - A waived job publishes TA = root alone and sets `submission.TaLeadWaived`.
+    - The runtime accepts it only with `Successor && D3LeadingBarrier`, and then expects TA count 1 instead of
+      `1 + successor`. RunTa (depth 1), SubmitCompute and SubmitRenderWithCompute refuse it.
+    - The platform builder takes the sidecar range for a 3D Barrier without a TA lead only for a waived job.
+    - Counter: `TaLeadWaivedPlaced`.
+  - Receipt `Wom1Ov5WaiverReceipt` (v1, 72 bytes). Exported like Wom1Ov5DrillReceipt: PASSIVE_LEVEL, at most every
+    2 s, never flushed. Fields:
+    - Considered: with the switch on, every successor kick decision plus every waived build.
+    - Waived; Placed (the provider's count).
+    - Refused[9]: 1 off, 2 class, 3 not flagged, 4 running kind, 5 context, 6 compute work, 7 ring, 8 build.
+    - The last waived fence, wait value, stamp_self and offset.
+  - Unflagged renders and the switch off: the provider publication is byte-identical to the pre-OV5 golden trace
+    (`test_ov5_ta_waiver` against `test_ov5_frag_wait_drill.GOLDEN_OFF`).
+- Completion and "running" bookkeeping (the subtle point): R's TA may now end before N.
+  - The runtime reports only the head. With N a compute job (phase ComputeSubmitted), N completes on its compute
+    event + stamp + done pointer, or on the S1 compute-stamp poll.
+  - R's TA event only sets `Successor.TaPending.Complete`. `AppleAgxG13SuccessorComplete` also needs R's 3D, and
+    R's 3D waits on N's compute stamp.
+  - `TakeCompletion` promotes R only after N's verdict, so VidSch sees N, then R.
+  - No third job is planned or kicked while N runs. `PlanSuccessor` and `RunSuccessor` refuse while
+    `SuccessorFence` / `Runtime.Successor.Fence` is set (the test shows `plan_successor 0` after R's TA ended).
+    `AdmissionJobWindowKickRefusal` requires the running job alone in flight.
+  - After promotion, a successor of R waits on R's 3D stamp (TA_ON_3D / COMPUTE_ON_3D), and R's 3D stamp comes
+    after N's compute stamp.
+  - The backend completion (`AdmissionBackendComplete`) of a compute head reads only ComputeComplete; TaComplete
+    and D3Complete belong to a head render.
+  - Recovery (`AppleAgxG13WindowQueues`) judges the compute head on the compute stamp alone. R's TA stamp is a
+    different word, so R's early TA cannot pass for N's end.
+  - Notifier, and why the feature requires Q2c:
+    - With Q2c the compute job signals the compute Queue's own notifier. R's TA notification counts on the render
+      Queue's notifier, whose order (R6 TA, R6 3D, R8 TA, R8 3D) does not change.
+    - Without Q2c both share one notifier. Under N1 (OwnNotify), R's early TA could reach N's threshold before N
+      ends (the firmware notifies when the processed count equals the threshold, EXP2148), and N's own
+      notification would be lost.
+  - Test: `test_ta_end_before_the_compute_job_keeps_completion_in_order` drives the real runtime through TA end,
+    then compute end, then 3D end.
+- WHAT IS STILL UNKNOWN (hardware only):
+  - Does the firmware run a successor TA while the compute queue runs, held only by ring order with no Barrier? It
+    could instead serialise TA behind compute internally (e.g. shared USC or context arbitration), and the overlap
+    would not appear.
+  - Does a 3D Barrier on an unsatisfied compute stamp resolve correctly on the compute event? Unlike the drill's,
+    it now really waits. Possible failures: a 3D-queue stall until timeout, or a channel error.
+  - Does the early TA end change TVB/buffer-manager behaviour (grow events while compute runs)?
+  - Image correctness depends on the UMD proof (R8's vertex ranges disjoint from C7's writes). The FHD FULL image
+    check is the only end-to-end test of it.
+- Preregistration (one hardware run; EXP number assigned at run time):
+  - WHY THIS HYPOTHESIS:
+    1. EXP2210: the firmware accepts the compute-stamp Barrier first in a successor 3D queue (Built == Placed 1836,
+       no fault).
+    2. EXP2210: R8 is OV5-eligible (value 22 nibble 0 in 3003/3011 rows).
+    3. EXP2201: Apple overlaps c19's 1.45 ms FHD / 0.72 ms HD with R20's vertex stage. Our C7 is ~0.65 ms HD, and
+       today R8's TA waits for all of it.
+  - WINDOWS CONTRACT / AGX-ASAHI CONTRACT / TRANSLATION: this section.
+  - WHAT IS STILL UNKNOWN: the four items above.
+  - Variable: `Wom1Ov5TaWaiver` (1 vs 0). Fixed for both arms:
+    - `Wom1Ov2NoHazardLead=1`, `APPLE_AGX_D3D12_OV3B=1`;
+    - the current default package (Q2c on), `Wom1Ov5FragWaitDrill` absent/0;
+    - the same m1n1 and launcher as EXP2210.
+  - Run:
+    1. D3D12 suite.
+    2. HD PERF GravityMark 100k -temporal 0, ABBA (A = waiver off, B = waiver on; an ordered devnode restart flips
+       the switch between arms).
+    3. One FHD FULL run with the waiver on. Capture the framebuffer and compare it with the waiver-off FHD image
+       (same frame and seed).
+  - Expected:
+    - Suite 119/0.
+    - Waiver on: `Wom1Ov5WaiverReceipt` Waived == Placed > 0 (about one per frame, R8) and Refused[8] = 0;
+      Refused[2]/[3] carry the non-candidates.
+    - No fault, TDR, channel error or GPU reset.
+    - R8's TA starts before C7 ends (Wom1JobTiming / firmware timestamps).
+    - HD frame time improves by at most C7's length (~0.65 ms of ~25 ms, up to ~+2.5 % FPS).
+    - Waiver off: the receipt is absent, and FPS is within noise of EXP2210.
+  - Failure criteria:
+    - Any fault, channel error, TDR or hang with Placed > 0: waiver rejected, switch off.
+    - An image difference: the UMD proof is wrong (OV5 flag rule); waiver off.
+    - Waived == Placed > 0 with no FPS change beyond noise: the firmware serialises TA behind compute. Inconclusive
+      for OV5; measure TA start against compute end.
+  - Recovery: REG_DWORD `Wom1Ov5TaWaiver` = 0 (or delete it), then the ordered restart. After a reset, the
+    standard recover.sh tail (AT_PROXY after a reset; save full.log first).

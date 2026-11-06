@@ -246,6 +246,12 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanSuccessor(
           Provider, &Provider->Config.D3, APPLE_AGX_G13_QUEUE_PUBLISH_MAX,
           &candidate.D3BarrierExpectedDonePointer))
     candidate.D3BarrierExpectedDonePointer = APPLE_AGX_G13_RING_CAPACITY;
+  /* OV5 step 2: the TA root alone (no lead Barrier); likewise never a
+   * refusal, a failed read leaves an out-of-ring value. */
+  if (!AppleAgxG13ProviderNextDone(
+          Provider, &Provider->Config.Ta, 1u,
+          &candidate.TaWaivedExpectedDonePointer))
+    candidate.TaWaivedExpectedDonePointer = APPLE_AGX_G13_RING_CAPACITY;
   if (Provider->Config.HasCompute &&
       !AppleAgxG13ProviderNextDone(Provider, &Provider->Config.Compute, 2u,
                                    &candidate.ComputeExpectedDonePointer))
@@ -464,7 +470,19 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderSubmitRender(
     submission.Ta.GpuAddressCount = Job->TaWorkAddressCount;
   }
   submission.Ta.ExpectedStamp = Job->TaExpectedStamp;
-  if (Successor) {
+  /* OV5 step 2: a waived TA lead only on a successor render without
+   * compute work whose 3D queue carries the wait (checked below), never
+   * with a TA lead Barrier of its own. */
+  if (Job->TaLeadWaived &&
+      (!Successor || Job->LeadBarrierAddress != 0ULL ||
+       Job->D3LeadBarrierAddress == 0ULL || Job->ComputeWorkAddressCount != 0u ||
+       Job->TaBarrierAddress != 0ULL))
+    SUBMIT_REJECT(AppleAgxG13SubmitGuardBuild);
+  if (Successor && Job->TaLeadWaived) {
+    /* OV5 step 2: the TA publication is the root alone. */
+    submission.Successor = APPLE_AGX_BACKEND_TRUE;
+    submission.TaLeadWaived = APPLE_AGX_BACKEND_TRUE;
+  } else if (Successor) {
     /* rc102: the lead Barrier goes first in the queue the job starts on:
      * compute for a render with compute work, TA otherwise. */
     APPLE_AGX_G13_WORK_PUBLICATION *lead =
@@ -498,13 +516,15 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderSubmitRender(
   if (Job->D3LeadBarrierAddress != 0ULL) {
     /* OV5 drill: the 3D queue of a successor render without compute work
      * leads with its Barrier on the running compute job's stamp (the TA
-     * lead Barrier waits on the same stamp). Refused, never truncated, at
-     * the ring-entry limit. */
+     * lead Barrier waits on the same stamp; OV5 step 2: or no TA lead, the
+     * waiver). Refused, never truncated, at the ring-entry limit. */
     const APPLE_AGX_BACKEND_BOOL prepared =
         submission.D3.PreparedRangeCount != 0u ? APPLE_AGX_BACKEND_TRUE
                                                : APPLE_AGX_BACKEND_FALSE;
     if (!Successor || Job->ComputeWorkAddressCount != 0u ||
-        Job->TaBarrierAddress != 0ULL || Job->LeadBarrierAddress == 0ULL ||
+        Job->TaBarrierAddress != 0ULL ||
+        (Job->TaLeadWaived ? Job->LeadBarrierAddress != 0ULL
+                           : Job->LeadBarrierAddress == 0ULL) ||
         (Job->D3LeadBarrierAddress & 0x1fULL) ||
         submission.D3.GpuAddressCount == 0u ||
         submission.D3.GpuAddressCount >= APPLE_AGX_G13_QUEUE_PUBLISH_MAX ||
@@ -584,7 +604,9 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderSubmitRender(
   if (Successor) {
     provider->SuccessorFence = Fence;
     provider->SuccessorComputeOnly = APPLE_AGX_BACKEND_FALSE;
-    if (submission.D3LeadingBarrier) ++provider->D3LeadPlaced;
+    if (submission.D3LeadingBarrier && !submission.TaLeadWaived)
+      ++provider->D3LeadPlaced;
+    if (submission.TaLeadWaived) ++provider->TaLeadWaivedPlaced;
     return APPLE_AGX_BACKEND_TRUE;
   }
   provider->ObservedMask = 0u;
@@ -606,7 +628,7 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
       (APPLE_AGX_BACKEND_U32)sizeof(provider->ComputeIdentityDiagnostic.RunTa));
 #define SUBMIT_REJECT(g) do { provider->LastSubmitGuard=(g); return APPLE_AGX_BACKEND_FALSE; } while(0)
   if (Job == APPLE_AGX_G13_PROVIDER_NULL || Job->LeadBarrierAddress != 0ULL ||
-      Job->D3LeadBarrierAddress != 0ULL)
+      Job->D3LeadBarrierAddress != 0ULL || Job->TaLeadWaived != 0u)
     SUBMIT_REJECT(AppleAgxG13SubmitGuardArguments);
   if (provider->Phase != AppleAgxG13QueueProvider3dStaged) {
     provider->LastSubmitRuntimeResult = AppleAgxG13PhaseFenceGuardPhase;
