@@ -45870,3 +45870,12 @@ and re-verifies 080acf35. Broker telemetry shows writes=4096 blocks/128 writes o
 outside the window issued by Windows itself (counted, not executed).
 Failure criterion: write or readback mismatch, any CHECK2 other than pattern, any neighbour hash change, a hang,
 or recovery not reaching SSH. Evidence: .local/ans-native/ANS008-R1-run/ (hv.log, stick-results.tar), ans008/*.txt.
+
+ANS008-R1 result (recorded 2026-11-06T23:20:06Z): ABORTED BEFORE LAUNCH — no native run, nothing written.
+run.sh 23:08:56Z: the normal recovery guest rebooted to proxy (PSCI reset 23:09:39Z), then run_uefi.py exited at
+argument parsing: "--confirm-experiment: invalid choice: 'ANS008'" (choices were hard-coded to ANS001..ANS006; the
+dry-run does not pass --confirm-experiment, so it did not catch this). run.sh then relaunched normal recovery
+(SSH up 23:10:30Z, stick tarred, APPL0002 problem unchanged, 8 CPUs). ANS008-R1-run/hv.log is the stale copy of an
+earlier native run, not this attempt. Pre-run bridge hashes: MSR 080acf35 (zero), neighbours 30e14955/7796c6da.
+Fix: run_uefi derives the choices from tools/ans_qualification.PROFILES (regression test
+test_runner_accepts_every_profile_confirmation). Next: ANS008-R2 = same artifacts, re-sealed with the fixed launcher.
