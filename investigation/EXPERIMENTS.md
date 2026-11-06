@@ -45888,3 +45888,25 @@ Re-sealed packet 78d0064f765d2462c078b3492f8408ee2423143d09b5123f92023e859dce0b4
 gate e8c73760cdd3101cc02d3de0c4086aefefde1623dec73b452531ebbb7c12405d GREEN, outer e2a3bb52 (launcher choices fix),
 run.sh 70b49d9c. A dry-run with --confirm-experiment ANS008 exits 0 and prints "ANS write window : 30912256:4096".
 Launch: bash .local/ans-native/ANS008-R2-run/run.sh. Recovery artifact: normal recovery launch, unchanged.
+
+ANS008-R2 result (recorded 2026-11-06T23:42:46Z): CONFIRMED — first native write: exact, persistent, confined to the EL2 window.
+Phases: run.sh start 23:20:57Z, EL2 "HV ANS write window: lba 30912256 count 4096 (namespace 61279344 blocks)",
+guest started 23:22:48Z (t=76 s), WinPE export + reboot (link drop t=1135 s), recovery SSH 23:41:14Z, DONE 23:41:27Z.
+No stop code, no hang, no kick; display/USB/SSH alive in recovery; APPL0002 problem unchanged; 8 CPUs.
+WinPE STATUS: native_disk=0, readonly_verified=1, online_ok=1, check1_rc=0, readonly_cleared=1, write_rc=0,
+readonly_restored=1, check2_rc=0, offline_exit=0.
+ansraw: target = partition 6 (Microsoft Reserved), 4096-byte sectors, disk 251000193024 B. CHECK1 zero (080acf35).
+WRITE: pattern 4096 blocks (16 MiB) in 0.031 s (547.6 MB/s at QD1 incl. flush), native readback 0.057 s,
+after_sha256 8b29ad3fe915ed1f608e97790031c8bce2b95272ed58c36fd5cbf9807375f139 = prediction; "RESULT write OK".
+CHECK2 (read-only attribute set again): pattern.
+EL2 perf: the write window shows n=128 x 128 KiB = 16384 KiB, svc 11 us, device 24 us avg/622 max.
+Denials: every sampled WRITE outside the window (48 receipts: 43 x 4 KiB, 5 x 36 KiB, issued by Windows itself
+while the attribute was cleared) returned ANS_RESULT_DENIED (9) before any doorbell; the sample cap is 80 receipts.
+Recovery over the bridge (independent path, after controller handoff + reboot): MSR = 8b29ad3f (persisted);
+neighbour before the MSR (last MiB of partition 5) 30e14955 unchanged. First MiB of C: read 67cfdbd5 once, then
+7796c6da (= pre-run baseline) on two later reads: a live recovery-guest write, not the native run.
+Restore: zeros written over the bridge, MSR 080acf35 verified twice; both neighbours equal the baseline.
+Evidence: .local/ans-native/ANS008-R2-run/ (hv.log, stick-results.tar), .local/ans-native/ans008/*.txt.
+Verdict: native NVMe WRITE (driver ANSBUILD004-W + EL2 window ANSBUILD019) is correct and persistent; the EL2
+window held. Next: NTFS-level writes need a window covering one whole volume; candidate = a dedicated test
+partition/volume rather than the recovery guest's C:.
