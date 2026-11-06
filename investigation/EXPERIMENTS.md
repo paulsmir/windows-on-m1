@@ -70070,3 +70070,19 @@ EXP2208 HARDWARE ACTUAL (2026-11-06T03:07:10Z): **CONFIRMED: every DWM NativeQue
 - Suite 119/0; GPU_RESET none; PREEMPT_REFUSAL none. CS 1.6 benchmark 3771 frames / 202.399 s / 18.632 fps (EXP2206 17.326 with the same switches; EXP2205 18.634).
 - Wom1G3NativeQueryRefusal (tools/decode_g3_native_query_refusal.py): mid60 total 147, mid160 349, after-cs 452, dropped 0, all code 45 READ_ONLY (Status 0xc000000d, flags 0x5 = under G3 lock + query copied). First record: OsProcessId 1224 (DWM before a re-creation), Allocation 0x80001d40, GpuVa 0x110a3d0000, AllocationBytes 0x565680, QueryVersion 3, Write 1, QueryBytes 64, ProcessFlags 0x9, ContextFlags 0x73, OpenedFlags 0x7f, opened and context device identical, ProcessContexts 2. Last record: OsProcessId 9716 (dwm per procs-final.txt). ~200 refusals per 100 s of CS = the DWM re-creation cadence.
 - Verdict: CONFIRMED -- the READ_ONLY predicate is the trigger of the DWM refused-batch / device re-creation loop that drives the UPDATE_PAGE_TABLE churn under the G3 lock. Next (offline, OV2 session): which allocation (0x565680 bytes, opened read-only by DWM) and why the UMD batch declares a write to it; decide the contract-correct layer (UMD write classification of a read-only opened allocation vs the KMD read-only derivation), RED/GREEN, then one hardware run. Recovery rec2208h. Evidence evidence/EXP2208-B.
+
+EXP2209 HARDWARE BEFORE 2026-11-06T03:28:19Z:
+Steps: D3D12 suite; EXP2209-B: CS 1.6 benchmark, KMD receipts at ~60 s / ~160 s after hl.exe starts and after exit, umd-all.log, cs-bench.log/mem.csv.
+- WHY THIS HYPOTHESIS: (1) EXP2208 Wom1G3NativeQueryRefusal: 452 of 452 refusals code 45 READ_ONLY (Write 1 on a read-only open, ContextDevice == OpenedDevice); (2) EXP2206/2208: each DWM reject is followed by reject-batch kind 3 and ~184 ms later DWM device re-creation; 2582 of 2600 present-resource creates during hl; (3) EXP2206 G3 lock: UPDATE_PAGE_TABLE held the lock 112 s (max 68.7 ms), hl's escapes and completions waited ~48 s behind it.
+- WINDOWS CONTRACT: DXGK_OPENALLOCATIONFLAGS.ReadOnly as dxgkrnl passes it (allocation_windows.c:1001); the D3D runtime forbids write binds of a read-only shared open; DxgkDdiEscape at PASSIVE.
+- AGX/ASAHI CONTRACT: no change to GPU, UAT, broker or native leaves; the read proof is unchanged.
+- TRANSLATION: a write-readiness query on a read-only open is answered as data (SUCCESS, Ready 0, Reason 0x104 READ_ONLY); the UMD drops GpuWrite from that slot once and re-proves read access only (writable opens never downgraded).
+- ATOMIC CONTRACT: the KMD data answer and the UMD consumer are one change (either half alone keeps the batch refused; cross-version analysis in 025ab1d6).
+- WHAT IS STILL UNKNOWN: whether DWM's churn has a second trigger; how much of the 18.6 vs 44.8 fps gap this closes.
+- Expected: no code 45 (receipt absent or another code not climbing); DWM reject-native-allocation 0 during CS; no DWM device re-creation bursts during hl; DWM present-resource creates during hl near start-up count; G3 lock UPDATE_PAGE_TABLE holds and hl waits far below EXP2206; CS fps clearly above 18.6; suite 119/0; no reset.
+- Failure criteria: DWM rejects persist; a GPU fault in DWM on a read-only surface; fps not better with the churn gone; bugcheck/TDR/hang -> rec2209h.
+- Recovery: rec2209h; recovery artifact = the EXP2208 package.
+- Probe: agx_d3d12_probe_e2209_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys ef879852c964, UmdArm64 76526cba1a96, UmdX64 41ea71c01566, Umd32 54ab1874949d; manifest adec72e801b1, hardware-manifest 85f0cc701503; probe2209.sh 8bd1bbf25064 (PROBE_LINT_OK); visible recovery rec2209h 486a314a85a793f2; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1PresentTimestamps=1.
+- Recovery rec2209h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2209-cs16-readonly/run2209.sh.
