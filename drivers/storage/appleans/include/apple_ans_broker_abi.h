@@ -31,6 +31,7 @@ typedef uint8_t ans_u8; typedef uint16_t ans_u16; typedef uint32_t ans_u32; type
 #define ANS_TELEMETRY_OFFSET 2304
 #define ANS_TELEMETRY_MAGIC 0x31445441
 #define ANS_FEATURE_TELEMETRY 2
+#define ANS_FEATURE_WRITE_WINDOW 4
 #define ANS_REQUEST_OFFSET 256
 #define ANS_RESPONSE_OFFSET 512
 #define ANS_DOORBELL_OFFSET 768

@@ -131,6 +131,44 @@ class QualificationTests(unittest.TestCase):
             with self.assertRaises(ValueError):self.call()
             self.setUp();self.make_ans002(profile=prof,experiment=exp,scope=scope,audit_profile='native-read-only-stop1')
             with self.assertRaises(ValueError):self.call()
+    def make_ans008(self,window={'first_lba':1000,'count':16384},read_only=False,**kw):
+        self.m['read_only']=read_only
+        if window is not None:self.m['write_window']=window
+        self.make_ans002(profile='native-write-window-stop0',experiment='ANS008',scope='ans6-write-window-raw',**kw)
+    def test_ans008_binds_exact_write_window(self):
+        self.make_ans008()
+        m=self.call(execute=True,confirmation='ANS008')[0]
+        self.assertEqual(m['write_window'],{'first_lba':1000,'count':16384})
+        from tools.ans_qualification import write_window_env
+        self.assertEqual(write_window_env(m),'1000:16384')
+        self.assertIsNone(write_window_env({'read_only':True}))
+    def test_ans008_rejects_missing_unbounded_or_readonly_window(self):
+        for kw in ({'window':None},{'read_only':True},{'window':{'first_lba':1000,'count':0}},
+                   {'window':{'first_lba':1000,'count':16385}},{'window':{'first_lba':-1,'count':8}},
+                   {'window':{'first_lba':True,'count':8}},{'window':{'first_lba':1000,'count':8,'extra':1}},
+                   {'window':{'first_lba':'1000','count':8}}):
+            self.setUp();self.make_ans008(**kw)
+            with self.assertRaises(ValueError,msg=str(kw)):self.call()
+        self.setUp();self.make_ans008(audit_profile='native-read-only-stop0')
+        with self.assertRaises(ValueError):self.call()
+    def test_read_only_profiles_reject_a_write_window(self):
+        self.m['write_window']={'first_lba':0,'count':8};self.seal()
+        with self.assertRaises(ValueError):self.call()
+        self.setUp();self.m['write_window']={'first_lba':0,'count':8}
+        self.make_ans002(profile='native-read-only-stop0',experiment='ANS006',scope='ans5-read-only-volume')
+        with self.assertRaises(ValueError):self.call()
+    def test_runner_dryrun_reports_sealed_window_only(self):
+        for make,expected in ((lambda:None,'none (read-only)'),(self.make_ans008,'1000:16384')):
+            self.setUp();make();out=io.StringIO()
+            with patch.dict(os.environ,{},clear=True),patch.object(sys,'argv',self.argv()+['--dry-run']),patch('subprocess.run',side_effect=AssertionError('hardware subprocess')):
+                with contextlib.redirect_stdout(out),self.assertRaises(SystemExit) as stop:runpy.run_path(str(ROOT/'run_uefi.py'),run_name='__main__')
+                env=os.environ.get('WOM1_ANS_WRITE_WINDOW')
+            self.assertEqual(stop.exception.code,0)
+            self.assertIn(f'ANS write window         : {expected}',out.getvalue())
+            self.assertEqual(env,None if expected.startswith('none') else expected)
+    def test_inherited_write_window_environment_forbidden(self):
+        with self.assertRaises(ValueError):
+            validate_launch(self.path,self.sha,ROOT,environment={'WOM1_ANS_WRITE_WINDOW':'0:8'})
     def test_ans001_still_rejects_any_package(self):
         p=self.paths['winpe_audit'];a=json.loads(p.read_text());a['indices'][0]['appleans_packages']=['oem0.inf']
         a['appleans_profile']='native-read-only-stop1';p.write_text(json.dumps(a));self.seal()

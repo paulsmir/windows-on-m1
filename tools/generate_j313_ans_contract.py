@@ -73,6 +73,7 @@ def generate(root, check=False):
                   BROKER_BASE=c['broker']['guest_base']+'ULL', BROKER_SIZE=c['broker']['size'],
                   GUEST_GSIV=c['interrupt']['guest_gsiv'], FEATURE_READ_ONLY=1,
                   TELEMETRY_OFFSET=c['broker']['telemetry_offset'], TELEMETRY_MAGIC='0x31445441', FEATURE_TELEMETRY=2,
+                  FEATURE_WRITE_WINDOW=4,
                   REQUEST_OFFSET=c['broker']['request_offset'], RESPONSE_OFFSET=c['broker']['response_offset'],
                   DOORBELL_OFFSET=c['broker']['doorbell_offset'], ABORT_OFFSET=c['broker']['abort_offset'], PENDING_OFFSET=c['broker']['pending_offset'],
                   COMPLETION_OFFSET=c['broker']['completion_offset'],

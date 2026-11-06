@@ -75,12 +75,14 @@ ap.add_argument("--contract-output", type=pathlib.Path,
 args = ap.parse_args()
 # Ambient environment cannot opt an ordinary launch into native ANS ownership.
 os.environ["WOM1_STORAGE_MODE"] = args.storage_mode
+os.environ.pop("WOM1_ANS_WRITE_WINDOW", None)
 qualification_paths = None
+ans_write_window = None
 if args.storage_mode == "ANS_NATIVE":
-    from tools.ans_qualification import validate_launch, OVERRIDES
+    from tools.ans_qualification import validate_launch, write_window_env, OVERRIDES
     root = pathlib.Path(__file__).resolve().parent
     try:
-        _, qualification_paths = validate_launch(
+        qualification_manifest, qualification_paths = validate_launch(
             args.qualification_manifest, args.qualification_sha256, root,
             firmware=args.payload, m1n1=args.qualified_m1n1, ramdisk=args.ramdisk,
             layout=args.layout, display=args.display_mode, debug=args.debug_mode,
@@ -91,6 +93,10 @@ if args.storage_mode == "ANS_NATIVE":
         args.payload = qualification_paths['mu']
         args.qualified_m1n1 = qualification_paths['m1n1']
         args.ramdisk = qualification_paths['winpe']
+        # ANS008: only a sealed manifest can open the EL2 WRITE window.
+        ans_write_window = write_window_env(qualification_manifest)
+        if ans_write_window is not None:
+            os.environ["WOM1_ANS_WRITE_WINDOW"] = ans_write_window
     except (ValueError, OSError, TypeError) as error:
         ap.error(str(error))
 elif any((args.qualification_manifest, args.qualification_sha256, args.qualified_m1n1,
@@ -139,6 +145,8 @@ print("=" * 60)
 print(f"virtual framebuffer       : 0x{fb.base:x}..0x{fb.end:x}")
 print(f"geometry / stride / size  : {fb.width}x{fb.height} / {fb.stride} / 0x{fb.size:x}")
 print(f"storage mode             : {args.storage_mode}")
+if args.storage_mode == "ANS_NATIVE":
+    print(f"ANS write window         : {ans_write_window or 'none (read-only)'}")
 print(f"display mode             : {profile.display.value}")
 print(f"debug mode               : {profile.debug.value}")
 print(f"physical DCP             : {'enabled' if profile.physical_display else 'disabled'}")

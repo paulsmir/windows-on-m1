@@ -29,7 +29,11 @@ PROFILES = {'ANS001': {'scope': 'ans0-unbound-no-driver', 'appleans_profile': No
             'ANS005': {'scope': 'ans4-read-only-full', 'appleans_profile': 'native-read-only-stop0'},
             # ANS006: same read-only driver; WinPE onlines the native disk only after proving the
             # read-only attribute and measures sequential read throughput.
-            'ANS006': {'scope': 'ans5-read-only-volume', 'appleans_profile': 'native-read-only-stop0'}}
+            'ANS006': {'scope': 'ans5-read-only-volume', 'appleans_profile': 'native-read-only-stop0'},
+            # ANS008: write-capable driver; EL2 admits NVMe WRITE only inside the sealed LBA
+            # window (one preallocated scratch file, at most 64 MiB of 4 KiB blocks).
+            'ANS008': {'scope': 'ans6-write-window-raw', 'appleans_profile': 'native-write-window-stop0',
+                       'max_write_blocks': 16384}}
 OVERRIDES = ('phys_base', 'ramdisk_base', 'ramdisk_max_size', 'low_mem_base',
              'low_mem_size', 'low_mem_backing', 'fb_base', 'fb_width', 'fb_height', 'guest_ram_end')
 
@@ -61,11 +65,18 @@ def validate_manifest(path, expected_sha256, root):
             'explicit --qualification-sha256 is required')
     require(digest(path) == expected_sha256, 'qualification manifest SHA-256 mismatch')
     m = read_json(path)
-    require(set(m) == {'schema', 'experiment', 'platform', 'storage_mode', 'scope', 'read_only', 'launch', 'artifacts'}, 'unknown/missing qualification fields')
-    profile = PROFILES.get(m['experiment'])
+    fields = {'schema', 'experiment', 'platform', 'storage_mode', 'scope', 'read_only', 'launch', 'artifacts'}
+    profile = PROFILES.get(m.get('experiment'))
+    writable = profile is not None and 'max_write_blocks' in profile
+    require(set(m) == (fields | {'write_window'} if writable else fields), 'unknown/missing qualification fields')
     require(profile is not None and (m['schema'], m['platform'], m['storage_mode'], m['scope']) ==
             (SCHEMA, 'J313', 'ANS_NATIVE', profile['scope']), 'wrong qualification profile')
-    require(m['read_only'] is True and json.dumps(m['launch'], sort_keys=True) == json.dumps(PINNED, sort_keys=True), 'qualification launch contract mismatch')
+    require(m['read_only'] is (not writable) and json.dumps(m['launch'], sort_keys=True) == json.dumps(PINNED, sort_keys=True), 'qualification launch contract mismatch')
+    if writable:
+        w = m['write_window']
+        require(isinstance(w, dict) and set(w) == {'first_lba', 'count'} and
+                all(type(w[k]) is int for k in w) and w['first_lba'] >= 0 and
+                0 < w['count'] <= profile['max_write_blocks'], 'invalid/unbounded write window')
     require(set(m['artifacts']) == set(ROLES), 'all exact artifact/evidence roles required')
     paths, hashes = {}, {}
     for role in ROLES:
@@ -167,6 +178,12 @@ def validate_launch(path, seal, root, *, firmware=None, m1n1=None, ramdisk=None,
         require(selected is None or Path(selected).resolve() == paths[role], f'CLI {role} differs from sealed candidate')
     reject_output_aliases(root, paths, path, contract_output)
     return m, paths
+
+
+def write_window_env(manifest):
+    """WOM1_ANS_WRITE_WINDOW value for a validated manifest, or None (read-only)."""
+    w = manifest.get('write_window')
+    return None if w is None else f"{w['first_lba']}:{w['count']}"
 
 
 def reject_output_aliases(root, paths, manifest, contract_output=None):

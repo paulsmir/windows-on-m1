@@ -3,8 +3,9 @@
 from pathlib import Path
 import re,subprocess,os
 R=Path(__file__).resolve().parents[1]; O=R/'.local/ans-native/tests'; O.mkdir(parents=True,exist_ok=True)
-s=(R/'m1n1_windows/src/hv_ans_platform.c').read_text();start=s.index('#define ANS_REJECT(why)');b=s.index('{',s.index('bool hv_map_ans_broker(',start));end=b+1;depth=1
+s=(R/'m1n1_windows/src/hv_ans_platform.c').read_text();start=s.index('#define ANS_REJECT(why)');b=s.index('{',s.index('bool hv_ans_write_window(',start));end=b+1;depth=1
 while depth: depth+=(s[end]=='{')-(s[end]=='}');end+=1
+assert s.index('bool hv_map_ans_broker(',start)<b  # slice holds the mapper and the window entry
 asc=(R/'m1n1_windows/src/asc.c').read_text()
 assert 'asc->base = base + 0x8000;' in asc
 regs=[int(v,16) for n,v in re.findall(r'#define (ASC_MBOX_(?:A2I|I2A)_\w+)\s+(0x[0-9a-fA-F]+)',asc)]
@@ -18,7 +19,9 @@ typedef uint64_t u64; typedef uint32_t u32;
 static u64 adt_coprocessor_size=0x6c000,adt_controller_size=0x60000;
 static u32 chip_id=T8103;static void *adt;
 static struct {bool mapped;struct ans_service service;unsigned active_tag;u32 physical_irq;} runtime;
-static bool hv_guest_has_started(void){return false;}
+static bool guest_started;static unsigned window_calls;
+static bool hv_guest_has_started(void){return guest_started;}
+bool ans_service_set_write_window(struct ans_service*s,u64 f,u64 n){(void)s;window_calls++;return n&&f<1000&&n<=1000-f;}
 static int adt_path_offset_trace(void*a,const char*p,int*out){(void)a;out[0]=p[8]=='s'?2:1;return 1;}
 static int adt_get_reg(void*a,int*p,const char*n,int i,u64*b,u64*s){(void)a;(void)n;
  if(p[0]==2){*b=ANS_EXPECTED_SART_BASE;*s=ANS_EXPECTED_SART_SIZE;}
@@ -58,7 +61,15 @@ int main(void){
  assert(covered(ANS_EXPECTED_CONTROLLER_BASE,0x60000));assert(covered(ANS_EXPECTED_COPROCESSOR_BASE,0x6c000));
 '''
 for off in regs:post+=f'assert(covered(ANS_EXPECTED_COPROCESSOR_BASE+0x8000+{off},8));\n'
-post+='assert(covered(ANS_EXPECTED_MAILBOX_BASE,ANS_EXPECTED_MAILBOX_SIZE));puts("ANS private CPU/ASC mailbox mapping tests PASS");}\n'
+post+='''assert(covered(ANS_EXPECTED_MAILBOX_BASE,ANS_EXPECTED_MAILBOX_SIZE));
+ /* ANS008 window entry: ABI and pre-guest state are checked before the service. */
+ assert(!hv_ans_write_window(0,8,ANS_ABI_MAJOR+1)&&window_calls==0);
+ guest_started=true;assert(!hv_ans_write_window(0,8,ANS_ABI_MAJOR)&&window_calls==0);guest_started=false;
+ assert(!hv_ans_write_window(999,2,ANS_ABI_MAJOR)&&window_calls==1);
+ assert(hv_ans_write_window(990,10,ANS_ABI_MAJOR)&&window_calls==2);
+ runtime.mapped=false;assert(!hv_ans_write_window(0,8,ANS_ABI_MAJOR)&&window_calls==2);
+ puts("ANS private CPU/ASC mailbox mapping + write-window entry tests PASS");}
+'''
 f=O/'private-mmio.c';f.write_text(pre+s[start:end]+post)
 subprocess.run([os.environ.get('CC','cc'),'-std=c11','-Wall','-Wextra','-Werror','-I',str(R/'m1n1_windows/src'),str(f),'-o',str(O/'private-mmio')],check=True)
 subprocess.run([str(O/'private-mmio')],check=True)
