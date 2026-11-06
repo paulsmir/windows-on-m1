@@ -45456,3 +45456,17 @@ Expected: hv.log "HV ANS op=1 result=0", "op=2 result=0 ... owner=<native>", the
   WinPE APPL0003 bound to AppleAns (oem0.inf) with Problem 10; export to WINPE-ANS002; reboot.
 Failure: driver not loaded (signature) / FindAdapter rejection (no broker ops) / bugcheck (PSCI
   reset early) / no export. Recovery as ANS001-R9.
+
+ANS002-R1 result (recorded 2026-11-06T14:58:07Z): CONFIRMED.
+14:53:40 launch; 14:54:58 guest entry; WinPE on native ANS with the test-signed AppleAns stop1
+package. EL2 broker receipts (hv.log, in order): op=1 QUERY result=0 state=2 owner=1 gen=1;
+op=2 CLAIM result=0 state=3 owner=2 gen=1; op=6 QUIESCE result=0 state=4 owner=2; op=8 RELEASE
+result=0 state=0 owner=1 gen=2. REGISTER_QUEUES never sent: the controller was not booted, no DMA.
+WinPE: ACPI\APPL0003\0 "Apple ANS physical storage qualification adapter", SCSIAdapter, driver
+oem0.inf (appleans.inf, Best Ranked / Installed), Problem 10 CM_PROB_FAILED_START, status
+0xC0000001 = the designed stop1 HwInitialize FALSE; service AppleAns Kernel/Boot loaded then
+Stopped (driverquery). Test signing worked (testsigning BCD + DISM /ForceUnsigned).
+Export to WINPE-ANS002 (80 files), wpeutil reboot 14:56:38, proxy back 14:56:44, recovery SSH
+~14:57:2x, APPL0002 inert, 8 CPUs.
+Evidence .local/ans-native/ANS002-R1-run/ (hv.log, stick-results.tar 6624b1890c4db5ea8c73a314106362d2af9f96b7f63b3f53082193ab96a7ce21).
+Verdict: ANS002 CONFIRMED. Next: ANS003 (REGISTER_QUEUES: first EL2 controller boot + admin queue, package D stop2) - needs its own WINDOWS/ANS contract review before hardware.

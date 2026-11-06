@@ -1,4 +1,4 @@
-# ANS current state — ANS001 CONFIRMED (unattended R9); next ANS002
+# ANS current state — ANS002 CONFIRMED (claim-stop); next ANS003
 
 Updated 2026-11-06T11:10Z (UTC). The user delegated all ANS driver dev/test decisions (2026-11-06).
 Older text below: No hardware was accessed in this phase. No
@@ -18,8 +18,10 @@ sessions; every ANS run needs explicit user approval and an agreed slot.
 - Host safety: run-assisted refuses a non-fresh proxy (marker), P_REBOOT on pre-guest abort,
   runner stop on hang (observed reboot required).
 - Bench: owned by ANS until the SSD driver is finished (user decision via fork 6).
-- Next: ANS002 (AppleAns package in WinPE, QUERY/CLAIM through the broker, no DMA), then
-  ANS003 admin queue (first DMA), ANS004 Identify, READ, write, native boot.
+- ANS002 CONFIRMED (ANS002-R1): test-signed AppleAns stop1 in WinPE (DISM + testsigning BCD) binds
+  APPL0003; broker QUERY/CLAIM/QUIESCE/RELEASE all result=0; Problem 10 by design; no DMA.
+- Next: ANS003 (REGISTER_QUEUES = first EL2 controller boot + admin queue, package D stop2),
+  then ANS004 Identify (package E), READ, write, native boot.
 - Follow-up: m1n1 tests/run_host_tests.sh full list fails on clang-21 -Werror (pre-existing).
 
 ## Read first after a reset
