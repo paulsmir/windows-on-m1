@@ -44751,3 +44751,9 @@ ANS memory. HYP-ANS-CARVEOUT: every iBoot-retained page is declared in
 carveouts), HVS2ISO002 (92/92 non-zero in-RAM pages in carveouts). Not proven; a
 counterexample rejects this decision. ANS005B (first boot of this m1n1) still needs
 explicit user approval.
+
+### Bench lent to fork 6 for EXP2206/2207 (2026-11-06T02:04Z)
+
+ANS005B waits for direct user confirmation in the ANS session (relayed approvals not
+accepted). Fork 6 returns the bench in the normal profile after the run in progress
+when the user confirms.
