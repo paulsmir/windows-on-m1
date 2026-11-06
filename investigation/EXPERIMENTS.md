@@ -45024,3 +45024,29 @@ export_exit=0 and an ans.TXT listing APPL0003. Failure: no reboot within 1500 s 
 hold, crash or hang) or no WINPE folder -> FAILED with the hv log; no retry without a
 new reason.
 Evidence:  (full.log, hv.log copy, stick/, stick-results.tar).
+
+ANS001-R3 correction (2026-11-06T10:45Z UTC) to the entry above, which was committed
+garbled: PROCESS DEFECT. The preregistration was written with an unquoted shell
+heredoc, and the backticked path `run.sh` in its text was EXECUTED by command
+substitution at 10:34:48Z, before the entry existed; the run log was substituted into
+the "Run:" line, and the other backticked paths (packet, receipt, evidence dir) were
+stripped. Actual sequence (run.sh a1355db6):
+- 10:34:48 the recovery guest (run_uefi 97240) restarted to proxy; 10:35:20 at proxy;
+- 10:35:20 the ANS001 hardware command started; 10:35:23 it was REFUSED by
+  tools/ans_launch_lock.py before port discovery or chainload: "another legacy
+  assisted/bootstrap launcher is active (pid 24849)". No m1n1 chainload, no native Mu,
+  no WinPE, no ANS access;
+- 10:35:31 normal recovery relaunched (launch-normal2.sh); 10:36:14 SSH up;
+  APPL0002=1 problem 28 (inert), 8 CPUs; the stick (E:) holds only the marker
+  (10240-byte tar).
+Net hardware effect: one extra recovery reboot cycle. Verdict: NOT RUN (launcher
+refusal).
+Root cause of the refusal (deterministic, offline): /Users/pavel/public_windows is a
+symlink to /Volumes/pwdev/public_windows. reject_legacy() compares the guarded owner's
+argv path (/Users/.../scripts/run-assisted.sh) with the resolved own_script
+(/Volumes/...), so our own wrapper looks like a legacy launcher. The dry-run skips the
+lock, so it never exercised this path. Fix: compare with os.path.samefile; regression
+test test_own_wrapper_via_symlinked_root_is_not_legacy (RED reproduced the exact
+message, GREEN after the fix).
+Prevention: ledger heredocs are now always quoted ('EOF'); values are inserted only
+by explicit substitution outside the heredoc.
