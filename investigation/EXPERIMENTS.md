@@ -45361,3 +45361,16 @@ Single variable vs R6: WinPE medium E -> G (export wrapper only).
 Expected: GUEST_STARTED, PROXY_BACK within 1500 s, stick WINPE-R7\HW-DONE export_exit=0,
 APPL0003 Problem 28 with the contract resources again.
 Failure/recovery as R6 (hang -> runner stop -> observed reboot -> recovery).
+
+ANS001-R7 result (recorded 2026-11-06T13:00:58Z): FAILED at S42 (export); native boot path reproduced.
+- Native boot again reached WinPE and the collector (operator photo: ans-reg 0, disks 0,
+  volumes 0, pnp-all-reg 1). Wrapper: discovery matches=1 disk=0, S29 san_exit=0
+  (OfflineInternal), S30 online_exit=-2147212283 (same VDS failure as R6), S42 vcount=0.
+  So OfflineInternal does not admit this stick: Windows classifies the J313 USB stick as an
+  internal disk (hypothesis: the guest ACPI USB ports lack removable _UPC/_PLD data).
+- The runner was stopped by exact PID 56116 at 12:59:28 (no retry); the observed reboot was
+  followed by normal recovery (SSH 13:00:21, APPL0002 inert, 8 CPUs). The stick is unchanged
+  (no WINPE-R7); the RAM evidence was not exported; the operator's photo is the evidence.
+  The run.sh stick count (72) counted the whole run folder (path substitution miss), not WINPE-R7.
+Next (variant H): OnlineAll for the online only (the operator's proven sequence), restored
+to OfflineAll immediately after (S31); the policy only affects disks that arrive later.

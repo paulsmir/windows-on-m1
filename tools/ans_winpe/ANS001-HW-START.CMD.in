@@ -13,11 +13,12 @@ if not exist "%OUT%" mkdir "%OUT%"
 call :stage S20_INITIAL_DISCOVERY
 call :discover PRE
 if not "!MATCHES!"=="1" goto failed
-call :stage S29_SAN_POLICY_OFFLINE_INTERNAL
-rem ANS001-R6: under the boot-time policy 3 (OfflineAll) VDS rejects "online disk" for the
-rem USB stick (object not found). Relax to OfflineInternal (internal disks stay offline) in
-rem its own diskpart session; the online below runs in a fresh session.
->"%OUT%\HW-SAN.TXT" echo san policy=OfflineInternal
+call :stage S29_SAN_POLICY_ONLINE_ALL
+rem ANS001-R6/R7: under policy 3 (OfflineAll) and also under 4 (OfflineInternal: this USB stick
+rem is classified internal) VDS rejects "online disk" (object not found). The operator's working
+rem sequence: OnlineAll, fresh diskpart session, online. Policy affects only newly arriving
+rem disks; S31 restores OfflineAll right after the online.
+>"%OUT%\HW-SAN.TXT" echo san policy=OnlineAll
 >>"%OUT%\HW-SAN.TXT" echo san
 >>"%OUT%\HW-SAN.TXT" echo exit
 diskpart /s "%OUT%\HW-SAN.TXT" >"%OUT%\HW-SAN.LOG" 2>&1
@@ -29,6 +30,12 @@ call :stage S30_ONLINE_IDENTIFIED_DISK
 >>"%OUT%\HW-ONLINE.TXT" echo exit
 diskpart /s "%OUT%\HW-ONLINE.TXT" >"%OUT%\HW-ONLINE.LOG" 2>&1
 >>"%OUT%\HW-WRAPPER.TXT" echo online_exit=!errorlevel!
+call :stage S31_SAN_POLICY_RESTORE_OFFLINE_ALL
+>"%OUT%\HW-SAN-RESTORE.TXT" echo san policy=OfflineAll
+>>"%OUT%\HW-SAN-RESTORE.TXT" echo san
+>>"%OUT%\HW-SAN-RESTORE.TXT" echo exit
+diskpart /s "%OUT%\HW-SAN-RESTORE.TXT" >"%OUT%\HW-SAN-RESTORE.LOG" 2>&1
+>>"%OUT%\HW-WRAPPER.TXT" echo san_restore_exit=!errorlevel!
 call :snapshot PRE
 call :stage S40_SINGLE_RESCAN
 >"%OUT%\HW-RESCAN.TXT" echo rescan
