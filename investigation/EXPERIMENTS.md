@@ -70329,3 +70329,12 @@ Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0; KMD receipts after d
 - Hashes: sys 01d9131c913b, UmdArm64 bde48c7308f9, UmdX64 6769e8f41b29, Umd32 fdf33a3faeb6; manifest 4101bf56915a, hardware-manifest 0a1d9846109d; probe2221.sh 72deadb2aba8 (PROBE_LINT_OK); visible recovery rec2221h 986fc250874a9343; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Depth2FallbackDrill=16 Wom1JobDiagnostics=1.
 - Recovery rec2221h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2221-depth2-fallback/run2221.sh.
+
+EXP2221 HARDWARE ACTUAL (2026-11-06T23:59:42Z): **PARTIAL: the depth-2 kick fallback works for idle refusals (1352 refused kicks ran at depth 1 without a reset); 2 refusals during a boundary preemption still reset the engine.**
+- SWITCHES_SET Wom1Depth2FallbackDrill=16 Wom1JobDiagnostics=1; pipeline rc 0; D3D12 suite 119/0; GravityMark d completed (wer 0), 40.546 fps with diagnostics + drill; guest alive throughout.
+- Wom1JobWindow v2: kicks 20310, adopted 20310, kick_failures 1354, kick_fallbacks 1352, reset_aborts 0; last failure line 6598, begin_successor_refusal 13 (0xd = drill), status 0xc0000184.
+- Wom1GpuReset v4: resets 2, succeeded 2, SchedulerFaulted at entry 0x419c8 (backend_platform_windows.c line 6600: the S2 fail-closed call after the fallback refused), preemption wait-current-boundary, fences completed 0xdb5 / last aborted 0xdb6.
+- Cause: AppleAgxSchedulerUnkickFence required PreemptionPhase Idle; a boundary preemption that begins with the successor kicked makes that successor its boundary (BeginBoundaryPreemption), so the refusal could not be undone and failed closed.
+- Fix (offline, 55ea8d68): during that preemption the never-started fence is handed back to VidSch first among the preempted fences, the active fence becomes the boundary, and its G4 entry is dropped as AdmissionG4PendingDropLocked drops a Prebound one. Scheduler unit test, model scenario s_fallback_preempt + mutation; BASELINE_OK.
+- Evidence: evidence/EXP2221 (kmd-receipts-after-d.txt). Recovery rec2221h RECOVERY_DONE.
+- Verdict: PARTIAL (idle fallback CONFIRMED; preemption case REJECTED, fixed offline). Next: EXP2222 = the same drill on 55ea8d68, expecting kick_fallbacks == kick_failures and resets 0.
