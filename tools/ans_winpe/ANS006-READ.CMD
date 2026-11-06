@@ -42,8 +42,9 @@ set BESTSIZE=0
 for %%L in (C D E F G H I J K L M N O P Q R S T U V W Y Z) do call :scan %%L
 >>"%R%\STATUS.TXT" echo file=!BEST! bytes=!BESTSIZE!
 if not defined BEST goto offline
-call :readfile "!BEST!" 1
-call :readfile "!BEST!" 2
+call :typefile "!BEST!" 1
+call :typefile "!BEST!" 2
+for %%F in (!WINVOL!:\Windows\System32\config\SOFTWARE !WINVOL!:\Windows\System32\config\SYSTEM !WINVOL!:\Windows\System32\config\COMPONENTS !WINVOL!:\Windows\System32\config\DRIVERS !WINVOL!:\Windows\System32\MRT.exe) do if exist "%%F" call :copyfile "%%F" %%~zF
 :offline
 >"%R%\OFF.TXT" echo select disk !NDISK!
 >>"%R%\OFF.TXT" echo offline disk
@@ -84,6 +85,7 @@ exit /b 0
 if /i "%1"=="X" exit /b 0
 if not exist %1:\Windows\System32\ntoskrnl.exe exit /b 0
 >>"%R%\STATUS.TXT" echo windows_volume=%1
+set WINVOL=%1
 for %%F in (%1:\pagefile.sys %1:\hiberfil.sys %1:\swapfile.sys %1:\Windows\MEMORY.DMP) do if exist "%%F" call :consider "%%F" %%~zF
 exit /b 0
 
@@ -96,6 +98,20 @@ set B=!B:~-13!
 if "!S!" GTR "!B!" (set BEST=%~1& set BESTSIZE=%2)
 exit /b 0
 
+:typefile
+set T0=%time%
+type "%~1" >NUL 2>"%R%\TYPE%2.ERR"
+set CRC=!errorlevel!
+set T1=%time%
+>>"%R%\STATUS.TXT" echo type%2 file=%~1 bytes=!BESTSIZE! rc=!CRC! t0=!T0! t1=!T1!
+exit /b 0
+:copyfile
+set T0=%time%
+copy /b "%~1" NUL >"%R%\COPYF.LOG" 2>&1
+set CRC=!errorlevel!
+set T1=%time%
+>>"%R%\STATUS.TXT" echo copy file=%~1 bytes=%2 rc=!CRC! t0=!T0! t1=!T1!
+exit /b 0
 :readfile
 set T0=%time%
 copy /b "%~1" NUL >"%R%\COPY%2.LOG" 2>&1
