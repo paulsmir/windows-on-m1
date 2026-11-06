@@ -70044,3 +70044,10 @@ Steps: D3D12 suite; d HD PERF GravityMark D3D12 100k -temporal 0 (KMD receipts a
 - Probe: agx_d3d12_probe_e2207_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
 - Hashes: sys 41077f0652ec, UmdArm64 0611b5beec15, UmdX64 8cdeeb649bc5, Umd32 89fc73ae7099; manifest 6b3e25b26d88, hardware-manifest 6370875e3a00; probe2207.sh c99a1ed37cf9 (PROBE_LINT_OK); visible recovery rec2207h 9280b1181e76600b; m1n1 0d3a75b3.
 - Recovery rec2207h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2207-hvs2iso004/run2207.sh.
+
+EXP2207 = HVS2ISO004 HARDWARE ACTUAL (2026-11-06T02:51:33Z): **CONFIRMED: the GPU-line Mu with the in-RAM iBoot carveout reservation (4ce521db, .fd a8ab868cb2681624) boots, keeps the GPU suite and GravityMark intact, and removes exactly the two carveout ranges from Windows.**
+- A: Mu log "MemoryInitPeiLib: reserving iBoot carveout 0x860500000 + 0xFA0000" and "... 0x864000000 + 0xB518000"; no "invalid carveout plan"/"not in one RAM HOB"; AGX local reserve 0x8E0000000 + 0x18000000 unchanged (the "AGX local reserve unavailable reason=unmapped" HV line appears in EXP2206 too).
+- B: DXE "Memory Range" dump vs EXP2206 (23 -> 26 rows): 0x85FFA0000-0x8A0100000 Type:7 split into Type:7 / 0x860500000-0x8614A0000 Type:0 / Type:7 / 0x864000000-0x86F518000 Type:0 / Type:7; otherwise only a one-page shift of the Type:3/4 loader allocations at 0x9DCFFE000-0x9DD00F000 (boot-time allocation noise). OS-owned types (1,2,3,4,7) 7050904 -> 6849464 KiB, delta exactly 201440 KiB as predicted.
+- C: Windows SSH, 8 CPUs, TotalVisibleMemorySize 6848164 KiB (map OS-owned minus 1300 KiB runtime, the same gap as HVS2ISO003).
+- D: suite 119 PASS / 0 FAIL; d HD PERF 40.291 FPS (EXP2205-class ~40); GPU_RESET none; WER 0.
+- Verdict: CONFIRMED. Prepare tooling: prepare.sh AGX_MU_FD re-pins the Mu path and sha in full-owner and both manifests (verify-launch PASS). Next: HVS2ISO005 (the same launch + WOM1_HV_UNMAP_RAM_CARVEOUTS=1) and making 4ce521db the GPU-line Mu default. Recovery rec2207h.
