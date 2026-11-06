@@ -152,3 +152,18 @@ ANSDART001 (preregistered in `investigation/EXPERIMENTS.md`): read-only census
 at `Running proxy`, no image change, no guest, no ANS access. Recovery: none
 needed beyond continuing the normal launch (no state is written); if the proxy
 faults, power-cycle to the existing recovery profile.
+
+## 8. Update 2026-11-06 — census and carveout results
+
+- ANSDART001-R3 (census v2) OBSERVED all 26 L1/L2 pages of dart-dcp (locked),
+  dart-disp0, dart-usb0/1: iBoot tables at 0x9fff04000-0x9fff40000 (carveouts 16-18,
+  above mem_top), m1n1 tables in its heap. None in GUEST_RAM.
+- The ADT carveout map has 13 regions inside GUEST_RAM (0x860500000..0x86f518000),
+  owners unknown. §3(c) is therefore implemented as: exclude every carveout that
+  intersects GUEST_RAM (except the exact boot-args kernel range, region-id-24) from
+  ANS DMA, plus the heap ceiling (§3A, primitive in m1n1 94d6a1262). This also bounds
+  the 18 DARTs that cannot be read safely, under the explicit HYPOTHESIS that every
+  iBoot-retained page is declared as a carveout (all 26 observed pages are).
+- DART_TABLES may be published with flags=0 only after: heap ceiling set before guest
+  entry, carveout exclusions loaded from the live ADT, and a regression test proving a
+  PRP into any of them is denied.

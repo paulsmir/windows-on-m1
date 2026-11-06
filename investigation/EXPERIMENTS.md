@@ -44685,3 +44685,28 @@ ANS session replied SLOT OK to fork 6 (stage-2 unmap of the iBoot DCP/disp0 tabl
 carveouts found by ANSDART001-R3; preregistered in integration 21dac822b). State at
 hand-off: inert recovery guest via launch-normal2.sh (guard 47773, run_uefi 47806),
 inert gate passed 00:53Z. Fork 6 returns the bench with recovery facts afterwards.
+
+### ANSDART001-R3 — offline ADT analysis (2026-11-06T01:27Z): carveouts inside the guest window
+
+Source: ANSDART001-R3 adt.bin (sha256 in the R3 result entry; not committed — the ADT
+carries device identifiers and keys). /chosen/memory-map entries all end below
+0x805584088 (outside both guest windows). /chosen/carveout-memory-map has 64 regions;
+region-id-24 = [0x802078000, 0x9df708000) is exactly the boot-args kernel DRAM range
+(not a reservation). 13 others lie INSIDE both guest windows:
+19 0x860500000+0xfa0000, 23 0x864000000+0x4000, 158 0x864004000+0x200000,
+167 0x864204000+0x7a00000, 163 0x86bc08000+0x40000, 165 0x86bc4c000+0x440000,
+159 0x86c090000+0x1000000, 181 0x86d094000+0x10000, 190 0x86d0a4000+0x10000,
+182 0x86d0b4000+0x48000, 176 0x86d0fc000+0x400000, 180 0x86d4fc000+0x2000000,
+179 0x86f4fc000+0x1c000 (span 0x860500000..0x86f518000, ~240 MiB). No ADT property
+references their PAs or ids, so their owners are UNKNOWN.
+Every one of the 26 R3 table pages lies inside a carveout (ids 16, 17, 18).
+Consequence for ANS admission (design change): "retained iBoot memory is outside
+GUEST_RAM" is FALSE as a general rule; the carveout map is the authoritative
+inventory. ANS DMA must exclude every carveout intersecting GUEST_RAM (except the
+exact kernel-range entry), which bounds the 18 unread DARTs' tables too, under the
+HYPOTHESIS that iBoot-retained memory is always declared as a carveout (consistent
+with all 26 observed pages). Implementation target: m1n1 hv_ans_platform
+prepare_memory() adds these ranges to the private exclusion list (13 <= 64).
+Side finding (CPU isolation / Mu, not ANS): Mu's MemoryInitPeiLib reserves only the
+framebuffer, CPU-stack carveouts, RAM disk and low window, so these 13 carveouts are
+probably reported to Windows as conventional memory; stage-2 maps them writable.
