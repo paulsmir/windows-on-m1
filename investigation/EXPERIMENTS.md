@@ -44544,3 +44544,15 @@ the RAM-HIGH stage-2 map, which ends at 0xa00000000) and L1 1-3 at
 0x80501c000/0x805024000/0x80502c000 (m1n1 heap, below the guest). L2 pages and all
 dart-dcp tables remain unobserved, so the census is still required.
 Tool fix c31f47fcf9a38ebe253e779c1553115e3f97b7bf (adt_u32s), sha256 53dea919498299975c78efdcab326cfc31cef4a3644b6f31222714c1079f78d6, 9 offline cases GREEN.
+
+### ANSDART001 — retry readiness (2026-11-06T00:14Z)
+
+Bench owner fork 6 agreed to one more slot after a later GPU run (it will message
+"SLOT OPEN"). Tool at b1954252998bd743e375576890ce7fb9b0c256f9, sha256 3569fd9776266467dc28d68c79172c1fc04eb85cc5abfd80a4648d8bd843e63e: raw ADT saved as adt.bin before parsing; the
+`iommu-parent` / `AAPL,phandle` / `clock-gates` cells accept raw u32-LE bytes, int
+and list (unit test + main() dry run against a fake ADT with all three forms; 9
+offline cases GREEN). No real ADT dump existed locally; the retry's adt.bin is the
+first one. Retry output dir: .local/ans-native/ANSDART001-R2/ (the failed run's
+directory is kept unchanged). Same command otherwise, guest RAM base 0x818000000.
+At 2026-11-06T00:14Z fork 6 reported its own AT_PROXY recovery blocked pending the user; the bench
+is closed to the ANS session until fork 6 opens a slot.
