@@ -70210,3 +70210,17 @@ EXP2215 HARDWARE ACTUAL (2026-11-06T09:39:55Z): **REJECTED hypothesis (no C->pre
 - Wom1JobTiming971Hot (mid12): depth2 wired kicked 47 of 64 (46 while busy, max 2 in flight), barriers compute_on_3d 20 / compute_on_compute 22 / ta_on_compute 5, kick lead median 2.07 ms, refusals {55: 7}.
 - Firmware stamps (gm2215d-umd.log, OV2 session plsel.py): 7667 C->R pairs; 6241 submitted before the predecessor completed -> gap median 0.063 ms; 1426 submitted after it completed -> gap median 1.40 ms. The tool's positions() kept a prelude only when its start was after max(submit, previous KMD completion), dropping 5945 of 7667 early preludes.
 - Verdict: REJECTED (window/Q2c not at fault; the Wom1ComputeOwnQueue=0 boot is not needed). Remaining per-pair cost: prelude end -> TA end 1.57 ms median (TA work plus a possible Q2c N1 threshold-deferred TA wake -- hypothesis), and the 19 % late-submitted renders. Tool fix and re-ranked HD budget pending (OV2 session). Recovery rec2215h; bench handed to the ANS session for ANSUSB001 / ANS001-R2.
+
+EXP2216 HARDWARE BEFORE 2026-11-06T12:18:27Z:
+Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0 (KMD receipts at poll 12 and after d; Wom1FwRx is sampled at every receipt export).
+- WHY THIS HYPOTHESIS: (1) preemption: EXP2203/EXP2215 ENGINE resets with Wom1PreemptRefusal PreemptionFence 1104 while Pending 1103 in phase NotificationClaimed; the source drops the lock between Claim and Commit around DxgkCbSynchronizeExecution; test reproduces it (RED on the parent); (2) FwRx: only the event channel is consumed (AppleAgxPlatformProviderDrainEvents) while Asahi drains fw_log/ktrace/stats on every interrupt (gpu.rs ~372), so the stats ring (0x100 entries) is expected full; (3) budget: the fixed tool bounds launch by the previous firmware end (test_depth2_starts_before_the_previous_completion).
+- WINDOWS CONTRACT: DxgkDdiPreemptCommand / DMA_PREEMPTED ordering unchanged; DIRQL side adds one interlocked store. AGX CONTRACT: FwRx reads only; no firmware command.
+- ATOMIC CONTRACT: none -- independent items with their own receipts.
+- WHAT IS STILL UNKNOWN: whether the race was the only reset path; whether the firmware rings are full and stuck.
+- Expected: suite 119/0; no Wom1GpuReset / ENGINE reset; Wom1PreemptRefusal absent or Refusals 0; Wom1FwRx StatsFull=1 with no write-pointer change across exports (or moving pointers -> no drain needed); --jobs launches ~0.065 ms except C3.
+- Failure criteria: any refusal with phase 3 and Delivered == Pending; any new TDR; FwRx Failures > 0 or value absent -> rec2216h.
+- Recovery: rec2216h.
+- Probe: agx_d3d12_probe_e2216_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys e240b6bf62fa, UmdArm64 ecc037cc56cb, UmdX64 5a176278aa78, Umd32 97031d57a6ac; manifest 47aab123f201, hardware-manifest 3eed4ffd6a09; probe2216.sh 3a9caa22790b (PROBE_LINT_OK); visible recovery rec2216h 4d9f211d04a7268c; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1.
+- Recovery rec2216h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2216-preempt-fwrx/run2216.sh.
