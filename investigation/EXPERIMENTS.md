@@ -45775,3 +45775,18 @@ Packet 6cc37454798afb5659b546de02eb06e073b0f43b4046f12bc97fa9b6da2ebe76 (ANSBUIL
 WHY THIS HYPOTHESIS: every denial in R5/R6/R8 lies in a launch-layout region inside GUEST_RAM with a
 valid RW stage-2 leaf, i.e. guest-writable memory. Single variable vs R8: the launch-region policy.
 Expected: no deny/result=9; ANS006 type/copy rc=0 with timings. Kick retained as a safety net.
+
+ANS006-R9 result (recorded 2026-11-06T19:03:42Z): CONFIRMED — sustained native reads are correct; throughput 16.4 MB/s.
+WinPE: native disk 0 read-only verified, online try 1, D: Windows NTFS. `type D:\pagefile.sys >NUL`
+5,637,144,576 B rc=0 twice: 1:02:48.71 -> 1:08:33.01 (344.3 s) and -> 1:14:18.20 (345.2 s) =
+16.4 MB/s; registry hives copied rc=0 (served from cache, sub-second). Broker: 0 denials, 0 failing
+ops, no lost-completion kick; logged sizes include 4/32/92/128 KiB READs. Disk offlined; export;
+reboot; recovery.
+Verdict: ANS006 CONFIRMED for correctness (read path end to end under sustained load). The DMA
+policy fixes (m1n1 4ae08bed + a5c08f23) are hardware-validated. The TCB-advisory change (053ed880)
+and the kick (c9c269f0) were not exercised here (tcb_stat_nz stayed 0; no kick).
+Performance gap: 16.4 MB/s vs ~300 MB/s through the synchronous bridge. Each request crosses EL2
+via ~16 trapped MMIO writes + doorbell + PENDING read + REAP, and the driver serializes wire exchanges
+(effective queue depth 1, tag 2 throughout). Next: ANS007 performance (batched request ABI / queue
+depth), then write support and native boot.
+Evidence .local/ans-native/ANS006-R9-run/ (hv.log, stick-results.tar 3d41005e90d9ecba94ba1f029d9b3ca3fd2abf092d77b7c8844b79a5084c6087).
