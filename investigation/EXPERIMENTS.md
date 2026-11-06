@@ -44517,3 +44517,30 @@ identical to the frozen ANS proxy-env receipt; nothing installed). The private
 Command at slot: M1N1DEVICE=<live endpoint> /Volumes/pwdev/public_windows/proxyenv/bin/python
 tools/ans_dart_census.py --confirm-experiment ANSDART001 --guest-ram-base 0x818000000
 --output .local/ans-native/ANSDART001/census.json
+
+### ANSDART001 — result (2026-11-06T00:13Z): FAILED before any hardware register read
+
+Run 00:12:32Z at the slot fork 6 opened after EXP2205 (no launcher running, both
+endpoints present, output path free, tool sha256 c78339a5... matched). Exit 1 in
+ADT parsing: `iommu-parent` arrived as raw bytes (u32 LE phandle list), so
+`int()` raised before any PMGR PS or DART TTBR read. Proxy traffic: bootstrap and one
+ADT fetch (memory read). No write; no census.json written. Console
+.local/ans-native/ANSDART001/console.log sha256 7cadd6647479749c182a516a4a87de66d1ff74fd2ad5e29621eaef306029124e. Side observation from the
+proxy banner: m1n1 itself initialized dart-usb0 (0x382f80000) and dart-usb1
+(0x502f80000) before Running proxy, so their tables are m1n1-owned (heap population).
+Display/USB/SSH: guest not running (by design). Not retried per agreement;
+reported FAILED to fork 6, which then runs its AT_PROXY recovery.
+Verdict: INCONCLUSIVE (tool defect). Next: fix phandle/gate byte parsing
+offline with a regression test; one new slot only with the bench owner's agreement.
+
+### ANSDART001 — OBSERVED from the m1n1 boot banner in the same console log
+
+Banner before Running proxy (console.log above): ba.phys_base 0x802078000,
+mem_size 0x1dd690000 (mem_top 0x9df708000), mem_size_actual 0x200000000 (DRAM end
+0xa00000000), heap base 0x804d90000. dart-dcp 0x23130c000 is t8020 **locked** (TTBRs
+not printed). dart-disp0 0x231304000 L1 tables: L1 0 at 0x9fff34000 (above mem_top,
+outside GUEST_RAM [0x818000000,0x9df708000) of the expanded profile; still inside
+the RAM-HIGH stage-2 map, which ends at 0xa00000000) and L1 1-3 at
+0x80501c000/0x805024000/0x80502c000 (m1n1 heap, below the guest). L2 pages and all
+dart-dcp tables remain unobserved, so the census is still required.
+Tool fix c31f47fcf9a38ebe253e779c1553115e3f97b7bf (adt_u32s), sha256 53dea919498299975c78efdcab326cfc31cef4a3644b6f31222714c1079f78d6, 9 offline cases GREEN.
