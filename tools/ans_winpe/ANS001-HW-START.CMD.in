@@ -98,6 +98,8 @@ for /f "usebackq delims=" %%A in ("!LETTER!:\@RUNDIR@\ANS001-EVIDENCE.TAG") do (
 if not "!TAGMATCH!:!TAGINVALID!"=="1:0" goto failed
 call :stage S55_OPTIONAL_ANS006_READ
 if exist X:\Windows\System32\ANS006-READ.CMD call X:\Windows\System32\ANS006-READ.CMD
+call :stage S56_OPTIONAL_ANS008_WRITE
+if exist X:\Windows\System32\ANS008-WRITE.CMD call X:\Windows\System32\ANS008-WRITE.CMD
 call :stage S60_EXPORT
 if exist "!LETTER!:\@RUNDIR@\@TARGETSUB@" goto failed
 set TARGET=!LETTER!:\@RUNDIR@\@TARGETSUB@
