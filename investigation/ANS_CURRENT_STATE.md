@@ -1,4 +1,19 @@
-# ANS current state — native read path CONFIRMED and fast (ANS006-R10: ~850 MB/s copy, device ~200 us/128 KiB); next: write support
+# ANS current state — native READ (~850 MB/s) and native WRITE CONFIRMED (ANS008-R2); next: NTFS writes on a dedicated volume
+
+## ANS008 verdict (2026-11-07T00:00Z)
+
+- ANS008-R2 CONFIRMED: AppleAns ANSBUILD004-W (write-window profile) + m1n1 ANSBUILD019 (EL2 LBA window, one-shot,
+  pre-guest, sealed in the qualification manifest) wrote a 16 MiB LBA-dependent pattern into the GPT MSR
+  (LBA 30912256, 4096 blocks) natively, read it back exact (8b29ad3f), and recovery read the same over the bridge.
+  EL2 DENIED every sampled Windows write outside the window. MSR restored to zeros (080acf35); neighbours unchanged.
+- Write window tooling: manifest field write_window (ANS008 profile, <=16384 blocks today) -> run_uefi env ->
+  proxy P_HV_ANS_WRITE_WINDOW (0xc21) -> ans_service_set_write_window. No window = read-only.
+- Next causal target: NTFS-level writes need a window covering one whole volume. Do it on a dedicated test
+  partition (create in recovery, e.g. shrink C: by 1 GiB), never the recovery guest's C:. Then flush/FUA ordering
+  under NTFS, then raise max_write_blocks / full-namespace window for native Windows boot.
+- Open: intermittent lost first completion (R3/R7, kick never fired since); ANS004-R1 single-op failure.
+
+<!-- previous header: ANS current state — native read path CONFIRMED and fast (ANS006-R10: ~850 MB/s copy, device ~200 us/128 KiB); next: write support -->
 
 Updated 2026-11-06T11:10Z (UTC). The user delegated all ANS driver dev/test decisions (2026-11-06).
 Older text below: No hardware was accessed in this phase. No
