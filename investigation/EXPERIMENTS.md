@@ -45718,3 +45718,23 @@ stage-2 leaf (raw, shift, OA) - receipt-only.
 ### ANS006-R6 (preregistered 2026-11-06T17:55:12Z)
 
 Packet 9dcc17a1715bd0738ad4535a31de27eddd8fae3050002ea066a42674827e951a: as R5 with m1n1 ANSBUILD014 (70680298, fd951e82...: "HV ANS deny" receipts with IPA and stage-2 leaf); gate 8e21da23; dry-run 0. WHY THIS HYPOTHESIS: R5 localized the read failures to EL2 PRP translation DENIED; R6 identifies the rejected pages (receipt-only change). Expected: "HV ANS deny ipa=.. leaf/raw/shift/oa" lines naming the region (low window, carveout, RAM disk, non-16K leaf...). Recovery as R5.
+
+ANS006-R6 result (recorded 2026-11-06T18:06:52Z): CONFIRMED cause of the native read failures.
+"HV ANS deny" receipts: every denied page lies in IPA 0x850000000..0x851000000 (0x8509c9000,
+0x850e38000, 0x850ee2000, 0x850fbb000; dir=1 from-device), stage-2 leaf valid 32 MiB block
+raw 0x8500007fd (RW, AF), OA 0x850000000. That is descriptor region 1 (HV_CONTRACT_REGION_HEAP,
+phys_base + 16 MiB): in the assisted path it is load_raw's 16 MiB alignment pad before the ADT,
+ordinary guest RAM that Mu/Windows allocate from; the m1n1 heap is sealed below phys_base
+(ANS005A). ans_memory_translate's backing_allowed treated HEAP as an EL2 exclusion -> DENIED ->
+"I/O device error" in Windows for 128 KiB READs whose buffers landed in the pad.
+Fix (m1n1 4ae08bed): ans_memory_context.heap_sealed_below_guest (set by prepare_memory only after
+heap_sealed_below_guest() proves ceiling == GUEST_RAM base) lets HEAP inside GUEST_RAM through; all
+other kinds still excluded. hv_ans_memory_test RED->GREEN and now part of the offline gate.
+Recovery R6 OK (SSH ~18:03).
+
+### ANS006-R7 (preregistered)
+
+Packet 4cea1b5fd52e2151805c9b84333dd278e5951cc528c8aed6552189db0df2f16b: m1n1 ANSBUILD015 (97bc05b2...),
+WinPE ef978501, gate e8be43fa, dry-run 0. WHY THIS HYPOTHESIS: R6 receipts show all denials inside
+the HEAP pad with a valid RW stage-2 leaf; nothing else denied. Single variable vs R6: the HEAP
+exclusion. Expected: no "HV ANS deny" / result=9; ANS006 type/copy rc=0 with timings (throughput).
