@@ -52,4 +52,25 @@ class LaunchLockTests(unittest.TestCase):
                     reject_legacy(ROOT)
             finally:p.communicate('\n',timeout=5)
             self.assertEqual(p.returncode,0)
+    def test_own_wrapper_via_symlinked_root_is_not_legacy(self):
+        # ANS001-R3 (2026-11-06): /Users/pavel/public_windows is a symlink to
+        # /Volumes/pwdev/public_windows; the guarded run-assisted.sh ancestor was
+        # rejected as "legacy" because its argv path was compared unresolved.
+        with tempfile.TemporaryDirectory() as temp:
+            real=Path(temp)/'real';(real/'scripts').mkdir(parents=True)
+            (real/'scripts/run-assisted.sh').write_text('')
+            alias=Path(temp)/'alias';alias.symlink_to(real)
+            owner=999001
+            ps=f"{os.getpid()} {owner} python ans_launch_lock.py --check {alias}\n{owner} 1 sh {alias}/scripts/run-assisted.sh --storage-mode ANS_NATIVE\n"
+            other=f"{owner+1} 1 sh {temp}/elsewhere/run-assisted.sh\n"
+            fake=lambda *a,**k:subprocess.CompletedProcess(a,0,ps,'')
+            with patch('tools.ans_launch_lock.subprocess.run',fake),patch('tools.ans_launch_lock.inherited_fd',lambda r:5),\
+                 patch.dict(os.environ,{'ANS_ASSISTED_LOCK_OWNER_PID':str(owner)},clear=True):
+                reject_legacy(alias)
+                reject_legacy(real)
+            fake2=lambda *a,**k:subprocess.CompletedProcess(a,0,ps+other,'')
+            with patch('tools.ans_launch_lock.subprocess.run',fake2),patch('tools.ans_launch_lock.inherited_fd',lambda r:5),\
+                 patch.dict(os.environ,{'ANS_ASSISTED_LOCK_OWNER_PID':str(owner)},clear=True),\
+                 self.assertRaisesRegex(ValueError,'legacy assisted/bootstrap'):
+                reject_legacy(alias)
 if __name__=='__main__':unittest.main()

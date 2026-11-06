@@ -37,6 +37,11 @@ def acquire(root):
     os.environ[OWNER_ENV]=str(os.getpid())
     return fd
 
+def _same_file(path, target):
+    """argv paths may name the root through a symlink (/Users/... -> /Volumes/...)."""
+    try:return os.path.samefile(path,target)
+    except OSError:return False
+
 def reject_legacy(root):
     p=subprocess.run(['ps','-axo','pid=,ppid=,args='],capture_output=True,text=True)
     if p.returncode:raise ValueError('cannot establish launcher exclusivity')
@@ -70,7 +75,7 @@ def reject_legacy(root):
         if '--dry-run' in words and all(Path(w).name in {'run-assisted.sh','run_uefi.py'} for w in launch):continue
         # Only our guarded shell/wrapper ancestry is legitimate. An ancestral
         # chainload or original-tree bootstrap is not silently exempted.
-        if pid in ancestors and pid == owner and inherited and all(w==own_script for w in launch):continue
+        if pid in ancestors and pid == owner and inherited and all(_same_file(w,own_script) for w in launch):continue
         raise ValueError(f'another legacy assisted/bootstrap launcher is active (pid {pid})')
 
 def main():
