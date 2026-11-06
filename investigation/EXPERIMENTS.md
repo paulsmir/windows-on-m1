@@ -44556,3 +44556,31 @@ first one. Retry output dir: .local/ans-native/ANSDART001-R2/ (the failed run's
 directory is kept unchanged). Same command otherwise, guest RAM base 0x818000000.
 At 2026-11-06T00:14Z fork 6 reported its own AT_PROXY recovery blocked pending the user; the bench
 is closed to the ANS session until fork 6 opens a slot.
+
+### ANSDART001-R2 — result (2026-11-06T00:15Z): FAILED — EL2 data abort on a DART TTBR read, proxy USB dropped
+
+Slot opened by fork 6 (J313 at Running proxy, no launcher, endpoints L41/L43, base
+0x818000000). Pre-checks passed: tool b19542529 unchanged, sha256 3569fd97... recorded.
+Run 00:14:41Z -> exit 1 at 00:14:42Z.
+Observed: adt.bin saved (sha256 0bd9f8aa757e8018d05cf062f3a4942b7c536c9b9c1d09b4768cdd5af34d951b).
+TTBR read of dart-scaler (base 0x263200000, own clock-gate 328) faulted although its
+PMGR PS reported ACTUAL=0xf: m1n1 "Exception: SYNC from EL2h", ESR 0x96000018, FAR
+0x263200200, L2C_ERR_STS 0x11000ffc00000080, L2C_ERR_ADR 0x300000263200200,
+"Recovering from exception (ELR=0x80473a458)". The tool did not detect the fault,
+treated the returned value as a valid TTBR, issued a 16 KiB readmem at that PA, and
+the serial read failed with Errno 6 "Device not configured" (USB endpoint gone).
+Endpoints re-enumerated by 00:15:16Z; J313 state unknown, not touched by the ANS session.
+No write was issued by the tool. No census.json. console.log sha256
+55c32898c9982fe9bcf68c77e824e7387b957f786afb145f7ed5b9111385986e.
+Reported FAILED to fork 6; guest recovery stays with fork 6 and the user. Not retried.
+ADT facts (offline from adt.bin): 22 t8020 DART nodes; only sio(321), usb0(322),
+usb1(323), scaler(328), jpeg0/1, ave, avd, isp, ane carry own clock-gates; disp0, dcp,
+dispext0, dcpext, aop, pmp, sep, apcie*, acio* carry none and no iommu-parent consumers
+were found, so the gate model could not have covered the display DARTs anyway.
+Verdict: REJECTED — "PMGR PS ACTUAL=0xf for the DART's own gate" does not prove its
+registers are readable, and the tool lacked exception-guarded reads.
+Next (offline only, no new slot until reviewed): drop the PMGR heuristic; read TTBRs
+only of DARTs m1n1 itself already read successfully at boot (banner: dart-dcp locked,
+dart-disp0 L1 at 0x9fff34000 + heap, dart-usb0/1), preferably from m1n1 C at
+PRE_GUEST instead of proxy MMIO, with every MMIO read exception-guarded and any fault
+ending the census as INCOMPLETE.
