@@ -70130,3 +70130,16 @@ EXP2211 HARDWARE ACTUAL (2026-11-06T04:24:52Z): **SSV REJECTED (no gain); submit
 - Suite 119 PASS / 0 FAIL; GPU_RESET none; WER 0; guest alive after every arm.
 - HD PERF (10 + 60 s): a submit receipt 40.624 (25085 measure-umd-submit rows); b C3 split tags 37.464 (split cost expected); c SSV=0 41.134, d SSV=1 41.037, e SSV=1 40.731, f SSV=0 40.766 -> pairs c->d -0.24 %, f->e -0.09 %: APPLE_AGX_SHARED_STORE_VECTORIZE stays off.
 - Verdict: SSV REJECTED; arms a/b handed to the OV2 session for the late-submission (UMD vs dxgkrnl) decode and C3 per-kernel times. Evidence evidence/EXP2211 (gm2211a-umd.log, gm2211b-umd.log, kmd-receipts-mid12-d/after-f). Recovery rec2211h.
+
+EXP2212 HARDWARE BEFORE 2026-11-06T04:38:47Z:
+Steps: D3D12 suite; a HD PERF GravityMark 100k -temporal 0 with measure-umd-submit; outside the probe, dxg-etw-window.sh captures Microsoft-Windows-DxgKrnl ({802EC45A-...}) for 12 s after 25 s of the arm (elevated SSH logman, circular 512 MB), tracerpt CSV, fetch, delete on the guest.
+- WHY THIS HYPOTHESIS: (1) EXP2211 arm a: the UMD calls SubmitCommandCb 38-48 ms before the KMD's SubmitQpc for every job (0 unmatched of 25085), so the replay is not late; (2) at the idle boundaries (C3->R4 1.59 ms, R4->C5 1.22, C5->R6 1.30 firmware gap) the KMD SubmitQpc lands +0.14-0.18 ms after the predecessor's CompleteQpc; (3) our virtual submit never returns busy and the UMD inserts no GPU waits, so dxgkrnl's VidSch holds them.
+- WINDOWS CONTRACT / AGX CONTRACT: unchanged (ETW + receipts only).
+- ATOMIC CONTRACT: none.
+- WHAT IS STILL UNKNOWN: the VidSch reason (paging fence, hardware-queue depth, residency/MakeResident wait, sync-object wait).
+- Expected: suite 119/0; ETW CSV with DmaPacket/QueuePacket start/stop and VidSch submit events for the GravityMark context; HD PERF ~40 (ETW overhead during the window acceptable); no fault.
+- Failure criteria: no DxgKrnl events (logman failure); disk gate; fault/TDR/WER -> rec2212h.
+- Recovery: rec2212h. Guest ETL/CSV deleted after the fetch (4 GiB gate).
+- Probe: agx_d3d12_probe_e2212_arm64.exe = byte copy of e2196 (sha 5dbe904643ea842c).
+- Hashes: sys 8c4c454f801e, UmdArm64 28437a313e5d, UmdX64 c6ee7d03d702, Umd32 ec1f4ddf4047; manifest f678536d91ba, hardware-manifest 106369d3fbb8; probe2212.sh f9b86c13d88e (PROBE_LINT_OK); visible recovery rec2212h 495e977564efa890; m1n1 0d3a75b3.
+- Recovery rec2212h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2212-dxg-etw/run2212.sh.
