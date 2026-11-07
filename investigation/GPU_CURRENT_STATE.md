@@ -8,6 +8,15 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-07 21:50Z -- SLC WAS OFF; ENABLED IN m1n1 (EXP2242/2243) -- NEW WORKING m1n1
+- EXP2242: T8103 system-level cache (8 MiB) read 0/16 ways on all 4 MCC planes at the proxy: upstream m1n1 enables it
+  only in kboot_boot(); our HV path never did. DRAMCFG on all 8 DCS channels = m1n1 "DEFAULT" (not FAST).
+- EXP2243: m1n1 exp/m1n1-brokerlock-slc a0790a21 (default-on, byte-identical sha 83e5f207) -> GM HD 44.43 fps vs
+  40.73-41.07 (+8.5 %), suite 119/0. GPU device-load latency only 15-25 % lower at 256K-1M; 4M+ unchanged -> SLC was part
+  of the gap, not all of it. WORKING GPU m1n1 = brokerlock-slc; last-good stays brokerlock-split 550c7f23.
+- Next causal targets: DRAMCFG FAST (macOS _mccSelectDynamicDRAMCFGMode; separate variable), GPU-side memory config.
+  CPU plan (DVFS via CPPC + SMBIOS identity): investigation/analysis/CPU-DVFS-SMBIOS-PLAN.md.
+
 ## UPDATE 2026-11-07 20:15Z -- DEVICE-LOAD GAP IS INSIDE THE GPU MEMORY PATH (EXP2238-2241)
 - CORRECTION: MEMBW (EXP2226-2237) read its buffer via SRV ld_raw -> nir txf (texture path); Metal twin used device
   loads. MEMBWUAV (34e9c89f3, UAV -> load_ssbo) is the like-for-like probe: ours 16K 132-134 / 256K 330-350 / 1M 365 /
