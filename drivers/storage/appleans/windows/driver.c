@@ -147,13 +147,17 @@ BOOLEAN AppleAnsBuildIo(PVOID DeviceExtension, PSCSI_REQUEST_BLOCK Srb)
         if (x->Length) {
             PSTOR_SCATTER_GATHER_LIST sg = StorPortGetScatterGatherList(DeviceExtension,Srb);
             if (!sg || !sg->NumberOfElements || sg->NumberOfElements > ANS_MAX_DATA_PAGES) {
+                x->DiagValue=(0xFu<<20);x->DiagCount=sg?sg->NumberOfElements:0;
                 x->PrpFailure=TRUE;return TRUE;
             }
             for (unsigned i=0;i<sg->NumberOfElements;i++) {
                 spans[i].address = (ULONGLONG)sg->List[i].PhysicalAddress.QuadPart;
                 spans[i].length = sg->List[i].Length;
             }
-            if (ans_sg_to_prps(spans,sg->NumberOfElements,x->Length,&x->Prps) != ANS_PRP_OK) {
+            int prp_error=ans_sg_to_prps(spans,sg->NumberOfElements,x->Length,&x->Prps);
+            if (prp_error != ANS_PRP_OK) {
+                x->DiagValue=((ULONG)prp_error<<20)|(ULONG)((spans[0].address>>12)&0xfffff);
+                x->DiagCount=sg->NumberOfElements;
                 x->PrpFailure=TRUE;return TRUE;
             }
         }

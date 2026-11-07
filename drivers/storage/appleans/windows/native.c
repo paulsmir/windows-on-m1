@@ -338,6 +338,11 @@ static VOID sense(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, struct ans_sens
     }
     AppleAnsComplete(a, srb, status, 0);
 }
+VOID AppleAnsDiag(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, ULONG code, ULONG value)
+{
+    if (InterlockedIncrement(&a->DiagLogs) > APPLE_ANS_DIAG_MAX) return;
+    StorPortLogError(a, srb, 0, 0, 0, SP_INTERNAL_ADAPTER_ERROR, (code << 24) | (value & 0xffffff));
+}
 VOID AppleAnsFinish(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, USHORT status, ULONG length)
 {
     if (status>>1) sense(a,srb,ans_scsi_nvme_sense(status,0));
@@ -406,6 +411,8 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
     PAPPLE_ANS_SRB x=srb->SrbExtension;
     if(srb->Function==SRB_FUNCTION_EXECUTE_SCSI && x && x->PrpFailure) {
         ans_stats_add(&a->Stats,ANS_TELEM_PRP_TRANSLATION_FAILURES,1);x->PrpFailure=FALSE;
+        AppleAnsDiag(a,srb,0xA2,x->DiagValue);
+        if (x->DiagCount) AppleAnsDiag(a,srb,0xA3,x->DiagCount);
     }
     struct ans_scsi_plan plan={0};
     enum ans_order_attribute attribute=ANS_ORDER_UNTAGGED;
@@ -460,8 +467,15 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
     struct ans_logical_prps translated;
     const struct ans_logical_prps *prps=x?&x->Prps:NULL;
     if(a->Direct && prps && prps->count) {
-        if(!ansd_translate_prps(prps,&translated)) prps=NULL;
-        else prps=&translated;
+        if(!ansd_translate_prps(prps,&translated)) {
+            for (ans_u32 i=0;i<prps->count;i++) {
+                ans_u64 pa,off=prps->page[i]&(ANS_PRP_PAGE_SIZE-1);
+                if (!ansd_translate(prps->page[i],ANS_PRP_PAGE_SIZE-off,&pa) || (i && off)) {
+                    AppleAnsDiag(a,srb,0xA1,(ULONG)(prps->page[i]>>12));break;
+                }
+            }
+            prps=NULL;
+        } else prps=&translated;
     }
     if(plan.action==ANS_SCSI_SUBMIT &&
         !ans_io_request(&plan,prps,tag,a->PageDma[tag],a->Pages[tag],

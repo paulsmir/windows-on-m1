@@ -201,6 +201,7 @@ static VOID complete_tag(PAPPLE_ANS_ADAPTER a, const struct ansd_cqe *e)
     }
     ans_stats_add(&a->Stats, ANS_TELEM_CQES, 1);
     ans_stats_complete(&a->Stats, 1, slot->Request.sqe[0], slot->Length, (status >> 1) == 0);
+    if (status >> 1) AppleAnsDiag(a, slot->Srb, 0xA4, ((ULONG)(status >> 1) << 8) | slot->Request.sqe[0]);
     if (slot->Shutdown) {
         a->ShutdownTag = tag; a->ShutdownFlushOk = (status >> 1) == 0;
         (void)StorPortIssueDpc(a, &a->ShutdownDpc, NULL, NULL);
@@ -289,6 +290,7 @@ BOOLEAN AppleAnsDirectStop(PAPPLE_ANS_ADAPTER a)
 BOOLEAN AppleAnsDirectReset(PAPPLE_ANS_ADAPTER a)
 {
     ans_stats_add(&a->Stats, ANS_TELEM_RESETS, 1);
+    AppleAnsDiag(a, NULL, 0xA5, (ULONG)(a->Ansd.q[1].outstanding & 0xffffff));
     a->Ready = FALSE; a->Namespace.ready = 0; a->Stage = AppleAnsStageReset;
     if (!a->Direct || a->Ansd.crashed) return FALSE;
     /* CC.EN=0 with RDY=0 is the controller's stop proof; only then are SRBs failed. */

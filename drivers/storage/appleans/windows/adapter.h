@@ -38,7 +38,7 @@ enum APPLE_ANS_STAGE {
 };
 typedef struct _APPLE_ANS_SRB {
     UCHAR Cdb[16], CdbLength, Valid, PrpFailure;
-    ULONG Length;
+    ULONG Length, DiagValue, DiagCount;
     struct ans_logical_prps Prps;
 } APPLE_ANS_SRB, *PAPPLE_ANS_SRB;
 typedef struct _APPLE_ANS_SLOT {
@@ -74,6 +74,7 @@ typedef struct _APPLE_ANS_ADAPTER {
     BOOLEAN Direct;
     PUCHAR Ctrl, Mbox;
     struct ansd_ctrl Ansd;
+    volatile LONG DiagLogs; /* ANS012-R3 receipt-only System-log records (bounded) */
 } APPLE_ANS_ADAPTER, *PAPPLE_ANS_ADAPTER;
 BOOLEAN AppleAnsNativeResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config);
 BOOLEAN AppleAnsNativeInitialize(PAPPLE_ANS_ADAPTER a);
@@ -89,6 +90,12 @@ BOOLEAN AppleAnsDirectStop(PAPPLE_ANS_ADAPTER a);
 int AppleAnsDirectSubmit(PAPPLE_ANS_ADAPTER a, unsigned tag, const struct ans_broker_request *r);
 VOID AppleAnsDirectPeer(PAPPLE_ANS_ADAPTER a, struct ans_telemetry *peer);
 VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a);
+/* Receipt-only diagnostics: StorPortLogError UniqueId = code<<24 | (value & 0xffffff), at most
+ * APPLE_ANS_DIAG_MAX per adapter start. Codes: 0xA1 DMA translation reject (value = IPA>>12),
+ * 0xA2 SG->PRP reject (value = error<<20 | (first SG address>>12 & 0xfffff)), 0xA3 SG element
+ * count (value = count), 0xA4 NVMe CQE error (value = status<<8 | opcode), 0xA5 reset. */
+#define APPLE_ANS_DIAG_MAX 96
+VOID AppleAnsDiag(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, ULONG code, ULONG value);
 VOID AppleAnsFinish(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, USHORT nvme_status, ULONG length);
 HW_PASSIVE_INITIALIZE_ROUTINE AppleAnsPassiveInitialize;
 VOID AppleAnsComplete(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, UCHAR status, ULONG length);
