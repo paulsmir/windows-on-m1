@@ -46192,3 +46192,26 @@ Expected:
 - then the R1 pass criteria.
 
 If no broker operation again: the configuration hypothesis is rejected; next is capturing the stop code (KiBugCheckData) before any other change.
+
+### ANS010-R2 result + ANS010-R3 preregistration (2026-11-07T08:19:43Z)
+
+ANS010-R2 result: REJECTED (configuration-records hypothesis).
+- Identical to R1: GUEST_STARTED at 79 s, then no broker operation at all.
+- Snapshot with base fffff802bb800000 (KASLR moved it): cpu0 xHalHaltSystem+0, cpu1-7 KiCheckStall+0xa4.
+- NO_NATIVE_SSH_WITHIN_1200s; HV_REJECTS=0, HV_STUCK=0.
+- Recovery: C: not dirty, chkdsk 0, APPLEANS Start=3, APPL0002=1 problem 28, 8 CPUs.
+- So the missing DriverDatabase records were not the only blocker. They stay on C: (they match the working WinPE layout).
+
+ANS010-R3 (stop-code capture, no Windows/firmware change):
+- Same packet as R2 (seal ee3dd665...), plus the runner diagnostic --snapshot-kernel-read 0xdbc9c0:40.
+  - f7cfdf6638c891d9d0dfaa1ac94ecd09dec7a95a: KiBugCheckData RVA in .data of ntoskrnl 26200, PDB 287D4F3D-731D-E7A3-AA2D-C7DD8F8AEF76.
+  - tools/ans_snapshot.py with tests/test_ans_snapshot.py.
+- run.sh 2b8836bd...: SSH wait shortened to 600 s; SIGINT + SNAPSHOT_KERNEL capture before stopping the runner.
+- Commands: ANS010-R3-COMMANDS.json. run-assisted dry-run exit 0.
+
+WHY THIS HYPOTHESIS:
+1. R1 and R2 are bit-identical failures in a halted bugcheck, and two offline passes produced no further distinguishing configuration difference.
+2. AGENTS anti-loop rule: the stop code and parameters (e.g. 0x7B arg1/arg2 versus another code) are the smallest measurement that separates "boot device never configured", "boot driver failed to load" and an unrelated early crash.
+
+Expected: SNAPSHOT_KERNEL words = BugCheckCode P1 P2 P3 P4.
+Failure: no base found or an unmapped read (then use a KD capture).
