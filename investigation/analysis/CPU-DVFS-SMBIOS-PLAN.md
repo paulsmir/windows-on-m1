@@ -26,3 +26,12 @@ User requirement: CPU at macOS-equivalent frequencies; Task Manager shows the co
 3. Interim measurement: fixed P12 (2988 MHz) via WOM1_PCPU_PSTATE on a GPU/CPU run, with preregistered thermal stop
    criteria (fanless Air), to quantify CPU-bound gains before CPPC lands.
 Related memory-side fix: T8103 SLC was disabled on this path (EXP2242); EXP2243 tests enabling it in m1n1.
+
+## Live Windows view (2026-11-07 ~22:00Z, normal recovery, read-only)
+- Registry CentralProcessor\0: ProcessorNameString "Not Specified" (= SMBIOS Type 4 Version -> confirms the name source),
+  Identifier "ARMv8 (64-bit) Family 8 Model 22 Revision 101", VendorIdentifier "Apple Inc.", **~MHz = 22**.
+- Win32_Processor: Name "Not Specified", Max/CurrentClockSpeed 22, cores/logical 8/8, L2 65536 KB, L3 8192 KB.
+- ~MHz 22 does not come from SMBIOS (MaxSpeed 3228). Hypothesis: Windows ARM64 calibrates the clock with the PMU cycle
+  counter against the generic timer; the HV maps PMCCNTR_EL0 -> APL PMC0 (m1n1 src/hv_exc.c:1252, Python hv
+  PMCCNTR handler) and PMC0 is not counting EL1 cycles at the expected rate (PMCR0/PMCR1 state at guest entry).
+  Next: verify the Windows ~MHz source in Microsoft documentation, then read PMCR0/PMCR1/PMC0 deltas at guest entry.
