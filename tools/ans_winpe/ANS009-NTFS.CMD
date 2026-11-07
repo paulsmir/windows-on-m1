@@ -47,6 +47,7 @@ call :attr clear RW
 if not "!RWOK!"=="1" goto protect
 rem Drop the read-only mount so the next access mounts NTFS writable.
 fsutil volume dismount %T%: >"%R%\DISMOUNT0.LOG" 2>&1
+>>"%R%\STATUS.TXT" echo dismount0_rc=!errorlevel!
 fsutil fsinfo volumeinfo %T%: >"%R%\VOLINFO2.LOG" 2>&1
 set T0=%time%
 robocopy X:\Windows\System32 %T%:\ANS009\SYS32 *.dll /R:0 /W:0 /NP /NFL /NDL >"%R%\COPY.LOG" 2>&1
@@ -57,9 +58,20 @@ dir /s /-c %T%:\ANS009 >"%R%\DIR.LOG" 2>&1
 rem Flush + dismount: the compare below must read the media, not the cache.
 fsutil volume dismount %T%: >"%R%\DISMOUNT1.LOG" 2>&1
 >>"%R%\STATUS.TXT" echo dismount1_rc=!errorlevel!
+rem Full content verification is done by recovery over the bridge (hashes); fc /b over 552 MB is a
+rem CPU-bound consumer that overran the 1500 s budget in ANS009-R1. Compare the first and last files only.
 set BAD=0
 set N=0
-for %%F in (X:\Windows\System32\*.dll) do call :cmp "%%~nxF"
+set FIRST=
+set LAST=
+for %%F in (X:\Windows\System32\*.dll) do (
+ if not defined FIRST set "FIRST=%%~nxF"
+ set "LAST=%%~nxF"
+)
+call :cmp "!FIRST!"
+call :cmp "!LAST!"
+fsutil volume dismount %T%: >"%R%\DISMOUNT2.LOG" 2>&1
+>>"%R%\STATUS.TXT" echo dismount2_rc=!errorlevel! first=!FIRST! last=!LAST!
 >>"%R%\STATUS.TXT" echo compared=!N! mismatches=!BAD!
 chkdsk %T%: >"%R%\CHKDSK.LOG" 2>&1
 >>"%R%\STATUS.TXT" echo chkdsk_rc=!errorlevel!
