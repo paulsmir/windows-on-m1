@@ -11,6 +11,12 @@
 enum ans_prp_error ans_sg_to_prps(const struct ans_sg_span *sg, size_t count,
     ans_u32 bytes, struct ans_logical_prps *out)
 {
+    return ans_sg_to_prps_ex(sg, count, bytes, out, 0);
+}
+
+enum ans_prp_error ans_sg_to_prps_ex(const struct ans_sg_span *sg, size_t count,
+    ans_u32 bytes, struct ans_logical_prps *out, int allow_repeated_pages)
+{
     struct ans_logical_prps p = {0};
     ans_u64 total = 0;
     ans_u32 left = 0;
@@ -37,7 +43,7 @@ enum ans_prp_error ans_sg_to_prps(const struct ans_sg_span *sg, size_t count,
                 if (p.count == ANS_MAX_DATA_PAGES) return ANS_PRP_RANGE;
                 if (p.count && (addr & (ANS_PRP_PAGE_SIZE - 1)))
                     return ANS_PRP_FRAGMENT;
-                for (ans_u32 j = 0; j < p.count; ++j)
+                for (ans_u32 j = 0; j < p.count && !allow_repeated_pages; ++j)
                     if ((p.page[j] & ~(ans_u64)(ANS_PRP_PAGE_SIZE - 1)) ==
                         (addr & ~(ans_u64)(ANS_PRP_PAGE_SIZE - 1)))
                         return ANS_PRP_FRAGMENT;

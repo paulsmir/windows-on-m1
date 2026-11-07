@@ -54,4 +54,10 @@ struct ans_logical_prps {
  * Output is all zero on failure; repeated data pages are rejected. */
 enum ans_prp_error ans_sg_to_prps(const struct ans_sg_span *sg, size_t count,
     ans_u32 transfer_bytes, struct ans_logical_prps *out);
+/* ANS-DIRECT: the Windows memory manager maps one physical "dummy" page several times into
+ * clustered paging-read MDLs (ANS012-R3: 48 FRAGMENT rejects, 8..29 SG elements). NVMe PRP lists
+ * may name a page more than once; only the EL2 broker forbade it (pin bookkeeping). Every other
+ * PRP shape rule is unchanged. */
+enum ans_prp_error ans_sg_to_prps_ex(const struct ans_sg_span *sg, size_t count,
+    ans_u32 transfer_bytes, struct ans_logical_prps *out, int allow_repeated_pages);
 #endif

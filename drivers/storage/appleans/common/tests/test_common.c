@@ -193,6 +193,19 @@ static void prp_tests(void)
     assert(ans_sg_to_prps(sg, 3, 4096, &p) == ANS_PRP_FRAGMENT);
     sg[2].address = 0x1000;
     assert(ans_sg_to_prps(sg, 3, 4096, &p) == ANS_PRP_FRAGMENT);
+    /* Clustered paging read with the memory manager's dummy page D repeated (ANS012-R3). */
+    sg[0] = (struct ans_sg_span){0x76c97000, 4096};
+    sg[1] = (struct ans_sg_span){0x44576000, 4096};
+    sg[2] = (struct ans_sg_span){0x84724000, 4096};
+    sg[3] = (struct ans_sg_span){0x44576000, 4096};
+    assert(ans_sg_to_prps(sg, 4, 16384, &p) == ANS_PRP_FRAGMENT && p.count == 0);
+    assert(ans_sg_to_prps_ex(sg, 4, 16384, &p, 1) == ANS_PRP_OK && p.count == 4 &&
+           p.page[1] == 0x44576000 && p.page[3] == 0x44576000 && p.bytes == 16384);
+    /* Repeats never relax the other PRP rules: a mid-transfer element must start page aligned. */
+    sg[2].address = 0x84724200;
+    assert(ans_sg_to_prps_ex(sg, 4, 16384, &p, 1) == ANS_PRP_FRAGMENT && p.count == 0);
+    sg[2].address = 0x84724000; sg[1].length = 2048;
+    assert(ans_sg_to_prps_ex(sg, 4, 14336, &p, 1) == ANS_PRP_FRAGMENT);
     sg[0] = (struct ans_sg_span){UINT64_MAX - 3, 4};
     assert(ans_sg_to_prps(sg, 1, 4, &p) == ANS_PRP_RANGE);
     sg[0] = (struct ans_sg_span){0x1001, 4096};

@@ -154,7 +154,9 @@ BOOLEAN AppleAnsBuildIo(PVOID DeviceExtension, PSCSI_REQUEST_BLOCK Srb)
                 spans[i].address = (ULONGLONG)sg->List[i].PhysicalAddress.QuadPart;
                 spans[i].length = sg->List[i].Length;
             }
-            int prp_error=ans_sg_to_prps(spans,sg->NumberOfElements,x->Length,&x->Prps);
+            /* Direct mode accepts the memory manager's repeated dummy page; the broker never did. */
+            int prp_error=ans_sg_to_prps_ex(spans,sg->NumberOfElements,x->Length,&x->Prps,
+                                            ((PAPPLE_ANS_ADAPTER)DeviceExtension)->Direct);
             if (prp_error != ANS_PRP_OK) {
                 x->DiagValue=((ULONG)prp_error<<20)|(ULONG)((spans[0].address>>12)&0xfffff);
                 x->DiagCount=sg->NumberOfElements;
