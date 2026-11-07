@@ -70351,3 +70351,10 @@ Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0; KMD receipts after d
 - Hashes: sys 696fe72ecf1c, UmdArm64 862d129f6952, UmdX64 3a9e939de095, Umd32 c139cd6b8b3a; manifest 7ab54fb41b01, hardware-manifest c6224d152ed9; probe2222.sh 25e742c69986 (PROBE_LINT_OK); visible recovery rec2222h f933dd8f3c34e70b; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Depth2FallbackDrill=16 Wom1JobDiagnostics=1.
 - Recovery rec2222h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2222-depth2-fallback2/run2222.sh.
+
+EXP2222 HARDWARE ACTUAL (2026-11-07T00:17:52Z): **CONFIRMED: with 55ea8d68 every refused depth-2 kick fell back to depth 1; no engine reset.**
+- SWITCHES_SET Wom1Depth2FallbackDrill=16 Wom1JobDiagnostics=1; pipeline rc 0; D3D12 suite 119/0; GravityMark d completed (wer 0), 40.533 fps (EXP2221 40.546, same switches).
+- Wom1JobWindow v2: kicks 21235, adopted 21235, kick_failures 1415, kick_fallbacks 1415, reset_aborts 0. No Wom1GpuReset receipt (no DxgkDdiResetEngine this boot; EXP2221 had 2).
+- Limitation: the receipt does not say whether a refusal hit the boundary-preemption race in this boot (EXP2221 hit it twice in ~1354); the preemption branch is proved offline (scheduler unit test, model s_fallback_preempt). A FELL_BACK_PREEMPT receipt bit would make this observable.
+- Recovery rec2222h. Evidence: evidence/EXP2222.
+- Verdict: CONFIRMED for the fallback (S1-S3) on hardware; preemption branch offline-proved, not separately observed. Next: perf-gate boot of the default package (no drill) when the bench is free; S4a/S4b builder rollback design.
