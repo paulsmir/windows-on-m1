@@ -71,6 +71,9 @@ ap.add_argument("--no-pin", action="store_true",
 ap.add_argument("--wdt-cpu", type=int, choices=range(8), default=None,
                 help="reserve one physical CPU for the hypervisor watchdog (0..7). Omit this "
                      "for an eight-core guest; a reserved CPU must not also be enabled in MADT.")
+ap.add_argument("--snapshot-kernel-read", metavar="RVA:LEN",
+                help="read-only diagnostic: on each SIGINT snapshot, print LEN bytes at ntoskrnl+RVA "
+                     "(kernel base found from the interrupted guest PC), e.g. KiBugCheckData")
 ap.add_argument("--contract-output", type=pathlib.Path,
                 help="write four CRC-framed launch-contract checkpoints")
 args = ap.parse_args()
@@ -343,6 +346,15 @@ def unattended_control(*_args, **_kwargs):
         snapshot_reboot_requested = False
         print("HOST CONTROL: diagnostic snapshot captured; rebooting Air")
         return EXC_RET.UNHANDLED
+    if args.snapshot_kernel_read and hv.ctx is not None:
+        # Read-only EL2 translate + memory read on the CPU servicing the proxy.
+        from tools.ans_snapshot import parse as snapshot_parse, snapshot_kernel_read
+        try:
+            rva, length = snapshot_parse(args.snapshot_kernel_read)
+            print(snapshot_kernel_read(lambda va: hv.p.hv_translate(va, False, False),
+                                       hv.iface.readmem, hv.ctx.elr, rva, length))
+        except Exception as error:  # diagnostics must never change recovery policy
+            print(f"SNAPSHOT_KERNEL error: {error}")
     print("HOST CONTROL: diagnostic snapshot captured; continuing guest")
     return EXC_RET.HANDLED
 

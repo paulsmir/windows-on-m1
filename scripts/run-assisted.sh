@@ -54,7 +54,7 @@ usage() {
     echo "          [--storage-mode VNVME_RECOVERY|ANS_NATIVE]" >&2
     echo "          [--qualification-manifest JSON --qualification-sha256 SHA256 --confirm-experiment ANS001]" >&2
     echo "          [--agx-power-broker]" >&2
-    echo "          [--no-low-mem] [--foreground] [--dry-run]" >&2
+    echo "          [--no-low-mem] [--foreground] [--dry-run] [--snapshot-kernel-read RVA:LEN]" >&2
     exit 2
 }
 
@@ -77,6 +77,7 @@ while [ "$#" -gt 0 ]; do
         --storage-mode) [ "$#" -ge 2 ] || usage; STORAGE_MODE=$2; shift 2 ;;
         --agx-power-broker) AGX_POWER_BROKER=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
+        --snapshot-kernel-read) [ "$#" -ge 2 ] || usage; SNAPSHOT_KERNEL_READ=$2; shift 2 ;;
         -h|--help) usage ;;
         *) usage ;;
     esac
@@ -229,6 +230,7 @@ set -- "$FIRMWARE" --storage-mode "$STORAGE_MODE" --device "$PROXY" --display-mo
 [ -z "$RAMDISK" ] || set -- "$@" --ramdisk "$RAMDISK"
 [ -z "$CONTRACT_OUTPUT" ] || set -- "$@" --contract-output "$CONTRACT_OUTPUT"
 [ "$LOW_MEM" -eq 0 ] || set -- "$@" --low-mem
+[ -z "${SNAPSHOT_KERNEL_READ:-}" ] || set -- "$@" --snapshot-kernel-read "$SNAPSHOT_KERNEL_READ"
 if [ "$STORAGE_MODE" = VNVME_RECOVERY ] && [ "$DEBUG" != off ]; then
     set -- "$@" --managed-vuart "$VUART"
 fi
