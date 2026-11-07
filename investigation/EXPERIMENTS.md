@@ -70443,3 +70443,10 @@ Steps: MEMBW probe step twice (16 KiB..64 MiB dependent chase, 1024 and 32 threa
 - Probe: agx_d3d12_probe_e2227_arm64.exe = byte copy of e2225 (sha 5dbe904643ea842c); probe2227.sh = probe2225.sh + two MEMBW steps (PROBE_LINT_OK).
 - Hashes: sys 8c700eaecf56, UmdArm64 d2da3b4e9482, UmdX64 fe64c6694642, Umd32 40333c85158b; manifest 7a7f466d2eab, hardware-manifest ba166be5ba26; probe2227.sh 0a1317208b16 (PROBE_LINT_OK); visible recovery rec2227h 4d7053acfd5b949f; m1n1 0d3a75b3.
 - Recovery rec2227h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2227-memlat-ctl/run2227.sh.
+
+EXP2227 HARDWARE ACTUAL (2026-11-07T13:29:43Z): **CONFIRMED (control): the latency gap reproduces on the current package with the GC m1n1 and no switch; m1n1 brokerlock-gc is neutral without Wom1GpuPrivateCached.**
+- EXP2227_PIPELINE_RC 0; suite 119 PASS / 0 FAIL; GPU reset none; WER 0; guest alive after every step; GPUVA-GC receipt lines 0 (switch off).
+- MEMBW (run 1 / run 2), ns per dependent step: 1024 threads 16K 204/215, 64K 269/280, 256K 323/298, 1M 596/631, 4M 1097/1081, 16M 1355/1307, 64M 5119/5226; 32 threads 16K 211/209, 64K 298/324, 256K 460/546, 1M 608/570, 4M 698/842, 16M 1017/945, 64M 1269/1239; stream 54.2/50.7 GB/s. macOS (EXP2226) 32 threads: 118-123 / 130-134 / 117-123 / 132-138 / 176-177 / 181-182 / 452-459 ns.
+- HD PERF d (first GravityMark run of the boot = cold): 40.536 fps, 2431 frames in 60 s (perf baseline 40.770).
+- Evidence evidence/EXP2227 (tool-membw*-std.txt, gm2227d-umd.log, full.log). Recovery rec2227h.
+- Next: EXP2228 = same package/m1n1 + Wom1GpuPrivateCached=1 (after ANS012 uses the bench).
