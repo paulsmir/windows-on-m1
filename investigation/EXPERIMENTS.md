@@ -46763,3 +46763,26 @@ Expected:
 - recovery gate unchanged.
 
 ANS013-R1 amendment: the package is now ANSBUILD011-I 0.4.1 (own signer 35F48BAE + fix + diag); run.sh sha b3956bc71405c87a…. It still runs only after R4 passes.
+
+### ANS012-R4 result — 2026-11-07T15:28Z: CONFIRMED (GPU daily boot fully works on the native SSD)
+
+- **Native session** (G2 images, AppleAns 0.3.2 with the repeated-page fix):
+  - handoff at 19 s, SSH at 32 s;
+  - APPL0003 OK with resources 0x27bcc0000, 0x277408000 and IRQ 960; PCI_PRESENT=0; APPL0002 Code 28; 8 CPUs; RAM 6.53 GB (expanded);
+  - user pavel console session Active, explorer=1, LogonUI=0, WMI working;
+  - the operator confirms the desktop is visible and CrystalDiskMark reports 2.5-3 GB/s.
+- **Bench:**
+
+  | Case | MB/s | IOPS |
+  | --- | --- | --- |
+  | seq read 1M QD8 | 3182 | |
+  | seq write 1M QD8 | 2328 | |
+  | rnd read 4K QD32 | | 85061 |
+  | rnd write 4K QD32 | | 39594 |
+
+- **Receipts:** 0 AppleAns receipts and 0 disk Event 51 during the session. The last Event 51 was at 14:49:20, from R3.
+- **Recovery:** probe match, chkdsk 0, not dirty, no StartOverride, gate unchanged, E9BE15BD count 0.
+
+Verdict: CONFIRMED. ANS-DIRECT works with the GPU daily images (m1n1 c6f0c8cb, Mu G2 7c283fb1).
+
+The earlier black desktop (ANS011, R3) was caused by failed paging reads, not by the display path.
