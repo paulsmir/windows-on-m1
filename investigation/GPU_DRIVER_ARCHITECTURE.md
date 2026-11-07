@@ -41,7 +41,7 @@ Rules:
   **DONE (C)** S4a: a SubmitSuccessor refused before RunSuccessor gives the
   built successor back and runs it at depth one (20e34f05; EXP2224: 1380/1380
   build_undone fallbacks incl. 2 inside a boundary preemption, no reset;
-  perf gate of the S4a default package pending -- EXP2223 gated S1-S3 only
+  EXP2225 perf gate PASS on the S4a default package
   ); **OPEN** S4b (QueueFailed
   with the provider guard before PublishPreparedWork) needs the same proof on
   the provider/queue-runtime side; S4c/S5 stay reset (possibly visible).
@@ -102,4 +102,4 @@ driver-internal hazards -- the same per-resource model Apple's kext uses
 
 ## 4. Decisions log (2026-11-07)
 - Depth-2 kick fallback S4a: class C (a firmware-invisible refusal must not
-  reset the engine), default on; EXP2224 drill proof; perf gate next (EXP2225).
+  reset the engine), default on; EXP2224 drill proof; EXP2225 perf gate PASS.

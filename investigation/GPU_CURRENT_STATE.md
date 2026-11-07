@@ -12,7 +12,7 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 - Accepted default: firmware RX drain on (125bddd1, EXP2219/2220); depth-2 kick fallback S1-S3
   (be8c6f7f+55ea8d68, EXP2222) and S4a (20e34f05, EXP2224: 1380/1380 build_undone, 2 in a boundary
   preemption, 0 resets); window receipt v3 (675486d7). EXP2223 perf gate PASS (GM 41.016, CS 49.451);
-  EXP2225 = perf gate of the S4a package (running).
+  EXP2225 perf gate PASS on the S4a package (GM 40.776, CS 49.812).
 - Perf baseline investigation/perf-baseline.json (EXP2220): GM HD PERF 40.770, CS 49.943; gate = warm-up +
   two same-boot repeats, worst gated, 2 %.
 - Still reset by design: S4b/S4c (QueueFailed inside RunSuccessor) and S5 (adoption) -- possibly visible;

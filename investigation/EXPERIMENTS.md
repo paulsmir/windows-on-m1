@@ -70408,3 +70408,8 @@ Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0 (warm-up); post-exp-g
 - Probe: agx_d3d12_probe_e2225_arm64.exe = byte copy of e2223 (sha 5dbe904643ea842c).
 - Hashes: sys 2e45990a4697, UmdArm64 b47d285d3fc3, UmdX64 704d4b97911b, Umd32 239fc2b03af2; manifest 797a26fe8bdd, hardware-manifest 975b85f510fe; probe2225.sh c256f2ff99d6 (PROBE_LINT_OK); visible recovery rec2225h 937dc06d4b71a29c; m1n1 0d3a75b3.
 - Recovery rec2225h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2225-s4a-gate/run2225.sh.
+
+EXP2225 HARDWARE ACTUAL (2026-11-07T03:45:08Z): **CONFIRMED: the default package with the S4a kick fallback passes the performance gate.**
+- Package 30.0.2225.0 = 9c50f64e (source archive = EXP2224, KMD 20e34f05), no device switches; pipeline rc 0; D3D12 suite 119/0; GravityMark d completed (wer 0); guest alive.
+- post-exp-gate: CS warm-up 45.847 (not gated), r2 49.812, r3 50.574 -> PASS worst 49.812 vs 49.943 (-0.26 %); GM repeats PASS worst 40.776 vs 40.770 (+0.01 %). PERF_GATE_PASS.
+- Expected vs actual: PASS, no reset -> as expected. Verdict: confirmed; S4a is the default. Recovery rec2225h RECOVERY_DONE (VISIBLE_INERT_PACKAGE_ABSENT_8CPU).
