@@ -2,7 +2,7 @@
   Keep the installed Windows bootable in BOTH storage modes (native AppleAns and the m1n1
   vNVMe bridge / stornvme) without a manual switch before each reboot.
     install   : AppleAns Start=0, clear both StartOverrides now, and register the SYSTEM task
-                "AppleAnsDualBoot" (at startup, then every 5 minutes) that runs "clear".
+                "AnsStartOverrideGuard" (at startup, then every 5 minutes) that runs "clear".
     clear     : remove Services\{AppleAns,stornvme}\StartOverride (idempotent; the task action).
     uninstall : remove the task and return to the recovery contract (AppleAns Start=3).
     status    : print the contract state.
@@ -14,7 +14,7 @@
 param([Parameter(Mandatory)][ValidateSet('install','clear','uninstall','status')][string]$Mode)
 $ErrorActionPreference = 'Stop'
 $svc = 'HKLM:\SYSTEM\CurrentControlSet\Services'
-$task = 'AppleAnsDualBoot'
+$task = 'AnsStartOverrideGuard'
 $self = 'C:\ProgramData\AppleAns\ans-dual-boot.ps1'
 function Clear-Overrides {
     foreach ($n in 'AppleAns', 'stornvme') {
@@ -50,6 +50,12 @@ switch ($Mode) {
         Register-ScheduledTask -TaskName $task -Action $action -Trigger $boot -Principal $principal -Settings $settings -Force | Out-Null
         Set-ItemProperty "$svc\AppleAns" -Name Start -Value 0
         Clear-Overrides
+        # One-command revert for the other users of this install (GPU work).
+        $revert = 'C:\Users\pavel\ans-revert-bootstart.ps1'
+        Set-Content -Encoding ASCII $revert @(
+            '# Revert the ANS dual-boot change: AppleAns Start=3, remove AnsStartOverrideGuard, keep stornvme boot-start.',
+            "& powershell -NoProfile -ExecutionPolicy Bypass -File `"$self`" uninstall")
+        "REVERT_SCRIPT $revert"
     }
     'uninstall' {
         Unregister-ScheduledTask -TaskName $task -Confirm:$false -EA SilentlyContinue
