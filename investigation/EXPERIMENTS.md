@@ -45966,3 +45966,14 @@ Expected: export present; STATUS copy_rc<8, dismount1_rc=0, compared=2 mismatche
 hashes equal ans009/expected-dll-hashes-all.txt, chkdsk T: /scan clean, neighbours unchanged.
 Discriminator for R1's open question: if dismount1_rc=0 and the WinPE run ends cleanly, any zero-filled tail in
 recovery is a FLUSH/ordering defect; all 904 exact = NTFS durability through the native path confirmed.
+
+ANS009-R2 result (recorded 2026-11-07T01:41:14Z): REJECTED as a timing artifact — the R1 failure is deterministic, not the fc loop.
+Guest started 01:11:25Z; again no reboot within 1500 s -> runner stopped 01:36:25Z; recovery SSH 01:37:17Z; no
+export. Recovery: 904 files on T:, the same 133-file tail from index 771 (uiautomationcore.dll, after 476.6 MB of
+cumulative data) reads as zeros, as in R1; chkdsk T: clean. No "HV ANS deny" (DMA translation) lines. hv.log keeps
+showing periodic small READ windows to the end (guest alive; same background pattern as ANS008-R2 WinPE).
+Interpretation: after ~476 MB something stops NTFS metadata (valid data length) write-back while data reaches the
+media (R1 raw read), and the WinPE script never finishes. The capped early receipts cannot show it.
+Next: ANS009-R3 with receipt-only diagnostics (m1n1 16b52e8c: every rejected I/O submit with LBA/len, and any I/O
+tag in flight >1 s per 5 s window) and live WinPE progress (STATUS + per-file robocopy log written to the stick
+as it runs, ANS009-LIVE-*), plus a guard that T: must be the ANSTEST volume. R2 files deleted first.
