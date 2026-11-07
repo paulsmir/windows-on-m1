@@ -46650,3 +46650,33 @@ Expected:
 - recovery probe match and chkdsk 0.
 
 Recovery: as R1, including the revert script.
+
+### ANS013-R1 — AppleAns as a standard driver (own permanent signer) (preregistered 2026-11-07T14:03:05Z)
+
+Runs only if ANS012-R2 passes, in the same bench grant (fork 6 agreed).
+
+User requirement (relayed by fork 6): AppleAns is a standard driver of the image, like AppleInput, always loading, with permanent certificates.
+
+WHY THIS HYPOTHESIS:
+1. AppleInput is signed by its own permanent test cert (71CD0A26) that the AGX rollbacks never touch. The AGX cleanup removes only E9BE15BD (fork 6 verified remove-experiment-driver.ps1 and cleanup-staged-only*.ps1).
+2. ANS012-R1 B/B2/D proved bridge boots with AppleAns Start=0 and the guard task.
+3. ANS012-R2 (if it passes) proves the native path with the same images.
+
+Single variable vs ANS012-R2: the AppleAns package and signer. Before: 0.3 / E9BE15BD, staged with a transient trust. Now: ANSBUILD008-F 0.4, sys b14f362a…, signed by 35F48BAE3E8BDCD1AC0BA7CFF66DDB6E063AF20B, installed by `install-appleans.ps1` with the cert permanent. Firmware, launcher and C: records/devnode are unchanged.
+
+Run: `.local/ans-native/ANS013-R1-run/run.sh` (sha 8078f73e05aba454…).
+- **A.** prep-standard.ps1 → install-appleans.ps1.
+- **B.** launch-normal2.
+- **B2.** GPU experiment launcher, bridge.
+- **C.** launch-gpu-ans.sh, G2 images, diagnostic runner.
+- **D.** launch-normal2.
+
+Expected:
+- 35F48BAE count 1 in both stores after every boot;
+- E9BE15BD unchanged by us;
+- the same gates as ANS012-R1 B/B2/D;
+- C natively up with APPL0003 OK.
+
+Revert:
+- `C:\Users\pavel\ans-revert-bootstart.ps1`;
+- ImagePath back to the 0.3 store dir 8aa920c3.
