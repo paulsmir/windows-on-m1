@@ -70491,3 +70491,11 @@ EXP2229 HARDWARE ACTUAL (2026-11-07T14:34:58Z): **INCONCLUSIVE for TLB (probe de
 - EXP2229_PIPELINE_RC 0; suite 119/0; no reset; WER 0; HD PERF d 40.634 fps (cold). Region rows reproduce EXP2227 (32 threads 16K 212/228, 256K 488/490, 4M 688/620, 16M 836/801 ns).
 - Note: 4 lines on 4 pages (256 B of data) cost 606 ns vs 212 ns for 256 lines inside one page -> same-set aliasing (or per-page TLB cost) dominates; the fix spreads the in-page offset ((k*17 + case) mod 256 lines) so lines map to different sets, and the same layout runs on macOS for the reference.
 - Evidence evidence/EXP2229. Recovery rec2229h.
+
+EXP2230 MACOS REFERENCE (2026-11-07T15:16:05Z; recorded after the run, macOS only, no Windows/driver state): **Apple keeps a page-spread chase at L1 latency (65-92 ns) for 4..1024 pages, in both the EXP2229 (fixed in-page offset) and the fixed (varied offset) layouts; ours is 606/653/807/962 ns for the same EXP2229 layout -> ~9-12x, already at 4 pages (256 B of data).**
+- tools/macos/membw_metal.m (c9c15e4c, varied offset), J313 macOS 15.7.8, caffeinate on, two runs: PAGES 4/64/256/1024 = 64.6/67.4/87.3/68.7 and 64.6/67.3/92.3/72.3 ns; regions 32 threads 118/130/118/132/176/179/449 ns (same as EXP2226); stream 55.7 GB/s.
+- EXP2229 layout (membw_metal.m at 7511568b, fixed offset): 64.6/67.6/91.3/79.7 and 64.6/67.9/93.2/83.9 ns.
+- Ours (EXP2229, same layout): 606.0/652.9/806.8/961.5 and 602.0/642.4/751.1/907.4 ns; one page with 256 lines (16 KiB region) 212-228 ns.
+- Interpretation (hypothesis, to be tested): on our side every change of 16 KiB page costs ~400 ns even among 4 pages, i.e. the GPU keeps (almost) no translations -- continuous TLB invalidation (Windows broadcast TLBIs with VMID 0 / shared ASIDs, or our own flushes) or translations not being cached; set aliasing is excluded on this hardware by the macOS run.
+- Next: EXP2231 Windows run of the varied-offset probe (agx_d3d12_probe_e2230, sha edb222b7) to confirm the per-page cost, then a minimal m1n1 diagnostic counting guest TLBI instructions (HCR_EL2.TTLB trap, receipt only).
+- Evidence /Users/pavel/public_windows/.local/experiments/EXP2226-macos-splitd/membw-macos-pages*.txt.
