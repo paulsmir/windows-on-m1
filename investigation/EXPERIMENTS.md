@@ -70338,3 +70338,16 @@ EXP2221 HARDWARE ACTUAL (2026-11-06T23:59:42Z): **PARTIAL: the depth-2 kick fall
 - Fix (offline, 55ea8d68): during that preemption the never-started fence is handed back to VidSch first among the preempted fences, the active fence becomes the boundary, and its G4 entry is dropped as AdmissionG4PendingDropLocked drops a Prebound one. Scheduler unit test, model scenario s_fallback_preempt + mutation; BASELINE_OK.
 - Evidence: evidence/EXP2221 (kmd-receipts-after-d.txt). Recovery rec2221h RECOVERY_DONE.
 - Verdict: PARTIAL (idle fallback CONFIRMED; preemption case REJECTED, fixed offline). Next: EXP2222 = the same drill on 55ea8d68, expecting kick_fallbacks == kick_failures and resets 0.
+
+EXP2222 HARDWARE BEFORE 2026-11-07T00:12:20Z:
+Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0; KMD receipts after d.
+- WHY THIS HYPOTHESIS: (1) EXP2221: 1352 of 1354 refused kicks fell back; the 2 others reset the engine at line 6600 with preemption wait-current-boundary; (2) BeginBoundaryPreemption makes a kicked successor the boundary and its only queued fence, and UnkickFence refused any non-idle phase; (3) offline the hand-back path passes the scheduler unit test and the model scenario s_fallback_preempt (mutation keeping the kicked boundary fails).
+- WINDOWS CONTRACT: a packet not started at a preemption boundary is reported preempted (DXGK_INTERRUPT_DMA_PREEMPTED) and resubmitted by dxgkrnl; never completed twice. AGX/ASAHI CONTRACT: the firmware never received it. TRANSLATION: hand back first among the preempted fences, boundary = running fence. ATOMIC CONTRACT: the scheduler hand-back and the G4 entry drop are one invariant (a handed-back fence must not keep a live G4 entry, DropLocked contract).
+- WHAT IS STILL UNKNOWN: whether dxgkrnl resubmission and the worker's Dropped-entry image release behave as the model predicts on the real KMD; preemption refusals are rare (2 in EXP2221), so the drill may not hit the race at all.
+- Expected: suite 119/0; kick_fallbacks == kick_failures; Wom1GpuReset resets 0; GravityMark completes.
+- Failure criteria: any reset/TDR, hang, kick_fallbacks < kick_failures, GravityMark failure -> rec2222h.
+- Recovery: rec2222h (run directly).
+- Probe: agx_d3d12_probe_e2222_arm64.exe = byte copy of e2221 (sha 5dbe904643ea842c).
+- Hashes: sys 696fe72ecf1c, UmdArm64 862d129f6952, UmdX64 3a9e939de095, Umd32 c139cd6b8b3a; manifest 7ab54fb41b01, hardware-manifest c6224d152ed9; probe2222.sh 25e742c69986 (PROBE_LINT_OK); visible recovery rec2222h f933dd8f3c34e70b; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Depth2FallbackDrill=16 Wom1JobDiagnostics=1.
+- Recovery rec2222h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2222-depth2-fallback2/run2222.sh.
