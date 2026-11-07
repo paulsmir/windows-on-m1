@@ -46497,3 +46497,4 @@ Failure criteria:
 - any chkdsk error.
 
 Recovery: launch-normal2.sh (unchanged). AppleAns Start=3 via ans-boot-mode recovery. Driver rollback: rollback-direct.ps1.
+Correction to the ANS011-R1 preregistration above: the "packet" line lost its path to shell quoting. The packet is `.local/ans-native/ANS011-R1-ready` (seal 948e8152…).
