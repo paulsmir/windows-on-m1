@@ -35,3 +35,14 @@ Related memory-side fix: T8103 SLC was disabled on this path (EXP2242); EXP2243 
   counter against the generic timer; the HV maps PMCCNTR_EL0 -> APL PMC0 (m1n1 src/hv_exc.c:1252, Python hv
   PMCCNTR handler) and PMC0 is not counting EL1 cycles at the expected rate (PMCR0/PMCR1 state at guest entry).
   Next: verify the Windows ~MHz source in Microsoft documentation, then read PMCR0/PMCR1/PMC0 deltas at guest entry.
+
+## macOS MCC behaviour (kext RE, com.apple.driver.AppleT8101, macOS 15.7.8; evidence scratchpad dramcfg-re/)
+- start(): mccEnableCacheMode -> SLC ways = mcc config-data[0].u32[0] (16 if absent; boot-arg mcc_clampwaycount clamps);
+  broadcast write plane+0x1c00, poll +0x1c04 data/tag ways on 4 planes. No dynamic way changes on T8103.
+- _mccSelectDynamicDRAMCFGMode(0|1): mode 1 writes mcc dramcfg-data[0] (0xdc4 then 0xdbc) to every enabled DCS channel;
+  mode 0 restores the per-channel values read at boot (iBoot's). Only caller: AppleT8101PMGR::setPerfState(domain 5,
+  pstate) -> FAST while pstate >= frequencyMHzToPerfState(5, pmgr mcx-fast-pcpu-frequency) (domain 5 = P-cluster, inferred).
+  No GPU path. Not called at start.
+- Consequence for us: DRAMCFG FAST belongs to the CPU P-state policy (m1n1/HV CPPC owner): apply dramcfg-data[0] whenever
+  the P-cluster is at/above mcx-fast-pcpu-frequency, restore boot values below. Needs the live ADT values (mcc_status.py
+  now prints dramcfg-data, config-data, pmgr mcx-*).
