@@ -38,7 +38,7 @@
   <ItemDefinitionGroup>
     <ClCompile><LanguageStandard_C>stdc11</LanguageStandard_C><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><Optimization>MaxSpeed</Optimization><PreprocessorDefinitions>_ARM64_;ARM64;_WIN64;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
     <Link><AdditionalDependencies>storport.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
-    <Inf><TimeStamp>0.3.0.0</TimeStamp></Inf>
+    <Inf><TimeStamp>0.4.0.0</TimeStamp></Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(AppleAnsNativeReadOnly)'=='true'">
     <ClCompile><PreprocessorDefinitions>APPLE_ANS_NATIVE_READ_ONLY=1;APPLE_ANS_NATIVE_WRITE=$(AppleAnsNativeWrite);APPLE_ANS_QUALIFICATION_STOP=$(AppleAnsQualificationStop);%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
