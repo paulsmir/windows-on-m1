@@ -70548,3 +70548,9 @@ Steps: MEMBW twice (regions + MEMBW_PAGES_NS); D3D12 suite; d HD PERF GravityMar
 - Probe: agx_d3d12_probe_e2233_arm64.exe = byte copy of e2230 (sha edb222b713c2f802); probe2233.sh = probe2231.sh.
 - Hashes: sys d84bf7cdd922, UmdArm64 097ace4020ad, UmdX64 521632ccb588, Umd32 ea3633113273; manifest 77158140f952, hardware-manifest 07db0f7713c1; probe2233.sh 23a57313d853 (PROBE_LINT_OK); visible recovery rec2233h c321d9593f39a6e9; m1n1 0d3a75b3.
 - Recovery rec2233h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2233-vmid1-gl2/run2233.sh.
+
+EXP2233 HARDWARE ACTUAL (2026-11-07T16:37:50Z): **REJECTED: guest VMID 1 with the broker's GPU TLBI on VMID 0 (VTTBR switch inside GL2) boots and runs cleanly but does not change the per-page cost: page-spread 598/655/852/1033 and 523/654/841/1043 ns vs control EXP2231 600/666/844/1032 and 483/647/816/972. Windows' VMID-0 broadcast TLBIs are not the cause (or the GPU ignores the VMID).**
+- EXP2233_PIPELINE_RC 0; suite 119/0; no reset, no EL2 exception (gl2_call VTTBR switch works); HD PERF d 40.727 fps (cold). Regions 32 threads 16K 215/211, 256K 477/458, 4M 617/576, 16M 848/636 ns. mk-lastgood (fixed) produced full-owner2233.sh.lastgood + hardware-manifest.json.lastgood.
+- m1n1 counters during the run: broker "service" ~6-13k ops/s even idle, v5 publications up to ~38k/s (BROKERLOCK receipts); each v5 publish does sync_tables (ASIDE1OS ASID 0) + ASIDE1OS per owner slot, but never while that owner has a job running, so the probe's own ASID is not flushed inside a dispatch.
+- Leaf encoding re-checked against Asahi pgtable.rs (type 3, AF, non-global, AP, memattr, high bits): identical.
+- Next: EXP2234 = GC m1n1 + Wom1GpuPrivateCached=1 with the page-spread probe (EXP2228 predates the page cases): if page-spread falls to ~70 ns, uncached data (MEMATTR 2) bypasses the GPU L1/L2 and the per-"page" cost is a data-cache effect.
