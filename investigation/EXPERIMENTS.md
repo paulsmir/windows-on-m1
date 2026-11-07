@@ -46498,3 +46498,59 @@ Failure criteria:
 
 Recovery: launch-normal2.sh (unchanged). AppleAns Start=3 via ans-boot-mode recovery. Driver rollback: rollback-direct.ps1.
 Correction to the ANS011-R1 preregistration above: the "packet" line lost its path to shell quoting. The packet is `.local/ans-native/ANS011-R1-ready` (seal 948e8152…).
+
+### ANS011-R1 result — 2026-11-07T13:05Z: CONFIRMED (ANS-DIRECT works on hardware)
+
+Timeline: START 12:57:39Z. Pre-native: boot-mode native; ImagePath binary f723843c verified. Then:
+
+| Elapsed | Event |
+| --- | --- |
+| 79 s | GUEST_STARTED |
+| 86 s | HV log "HV ANS direct handoff: controller 0x27bcc0000+0x40000 mailbox 0x277408000+0x4000 IRQ 590->889 passthrough; RTKit running, NVMe disabled" |
+| 98 s | NATIVE_SSH_UP |
+| ~13:01:22Z | Evidence done; boot-mode recovery; clean PSCI reset |
+| 246 s | Proxy back |
+| 13:03:13Z | Recovery SSH up |
+| 13:05:17Z | Verify done |
+
+Native session (AppleAns ANSBUILD006-D2 in direct mode):
+- APPL0003 OK/CM_PROB_NONE, service AppleAns. Resources: memory 0x27bcc0000 and 0x277408000, IRQ 889. PCI_PRESENT=0.
+- **EL2: HV_DIRECT=1, HV_ANS_OPS_AFTER=0** (no broker op/data/perf line after the handoff), HV_REJECTS=0.
+- 64 MiB probe written + flushed in 94 ms; sha 89f5122f….
+- Unbuffered bench (1 GiB file, 10 s per case):
+
+  | Case | MB/s | IOPS | avg µs |
+  | --- | --- | --- | --- |
+  | seq write 1M QD1 | 2147 | | |
+  | seq write 1M QD8 | 2117 | | |
+  | seq read 1M QD1 | 1564 | | |
+  | seq read 1M QD8 | 2811 | | |
+  | rnd read 4K QD1 | | 10388 | 96 |
+  | rnd read 4K QD32 | | 87378 | |
+  | rnd write 4K QD1 | | 24969 | 39 |
+  | rnd write 4K QD32 | | 85489 | |
+
+- C: not dirty before or after the bench. The native kernel demoted stornvme (StartOverride 0:3); `ans-boot-mode recovery` cleared it.
+- Operator report: boot graphics, "Welcome" and "Restarting" were visible; the desktop after logon stayed black. The SSH/bench workload was unaffected. The display path is the same physical DCP guest surface (hv.log swap_id=10). Open: the ANS packet uses ANS-branch m1n1/Mu/run_uefi, whereas the ordinary recovery uses m1n1-exp377 + J313_EFI-exp392 from the GPU branch.
+
+Recovery after the native session:
+- Probe over the bridge MATCH=True; chkdsk exit 0; not dirty.
+- No StartOverride on either driver. APPL0002=1 (Code 28), 8 CPUs.
+- Bridge bench for comparison:
+
+  | Case | MB/s | IOPS |
+  | --- | --- | --- |
+  | seq write 1M QD1 | 927 | |
+  | seq write 1M QD8 | 1083 | |
+  | seq read 1M QD1 | 410 | |
+  | seq read 1M QD8 | 478 | |
+  | rnd read 4K QD32 | | 12835 |
+  | rnd write 4K QD32 | | 63840 |
+
+Verdict: CONFIRMED.
+- The driver-owned ANS2 runtime with m1n1 out of the data path works on hardware: boot, NTFS write/flush/readback, sustained unbuffered I/O, clean shutdown.
+- Native read is 5.9x the bridge at 1 MiB QD8 and 6.8x at 4K QD32.
+
+Next:
+1. Production integration: put the direct handoff and the Mu direct/installed profile into the m1n1/Mu that the GPU work boots, so display fixes and ANS-DIRECT are in one image, plus an ordinary (non-qualification) launch.
+2. Resolve the black desktop against that integrated image.
