@@ -70396,3 +70396,15 @@ EXP2224 HARDWARE ACTUAL (2026-11-07T03:17:14Z): **CONFIRMED: a SubmitSuccessor r
 - Expected vs actual: expected fallbacks == failures, build_undone, 0 resets; actual 1380/1380, build_undone, 0 resets. The boundary-preemption fallback branch was observed on hardware for the first time (2). Verdict: confirmed. Recovery rec2224h RECOVERY_DONE (VISIBLE_INERT_PACKAGE_ABSENT_8CPU). Next: EXP2225 perf gate of the S4a default package.
 
 EXP2215 CORRECTION (2026-11-07T03:19:01Z, offline): the hypothesis "Q2c N1 threshold-deferred TA wake" named in the EXP2215 ACTUAL is REJECTED without hardware. Source: N1 (apple_agx_render_shared_memory.c publish_own / AppleAgxRenderFlightRetire) defers only the notifier THRESHOLD write, which gates the firmware's completion notification to the host, not the TA queue's start (TA/3D order on stamps and Barriers). EXP2133 measured compute -> TA idle at 3.2 % of GPU time, so the 1.57 ms prelude-end -> TA-end median is TA execution. Remaining lever: execution time (compute runtime gap, GPU_DRIVER_ARCHITECTURE 2.5).
+
+EXP2225 HARDWARE BEFORE 2026-11-07T03:25:42Z:
+Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0 (warm-up); post-exp-gate.sh (GM repeats r2/r3, CS warm-up + r2/r3) vs perf-baseline.json (GM 40.770, CS 49.943, 2 %).
+- WHY THIS HYPOTHESIS: (1) EXP2224 proved S4a only with Wom1Depth2FallbackDrillBuilt=16 + Wom1JobDiagnostics=1, which are excluded from the gate; (2) 20e34f05 is a class C default-path change and every default package must pass the perf gate (GPU_DRIVER_ARCHITECTURE 1); (3) EXP2223 passed on the S1-S3 code, and S4a adds code only on the refusal path.
+- WINDOWS/AGX CONTRACT: unchanged from EXP2224. ATOMIC CONTRACT: none.
+- WHAT IS STILL UNKNOWN: nothing beyond confirming no measurable cost (expected none).
+- Expected: suite 119/0; PERF_GATE_PASS; no reset.
+- Failure criteria: PERF_GATE_FAIL, suite failure, reset, hang -> rec2225h; revert the S4 branch of 20e34f05.
+- Recovery: rec2225h (run directly).
+- Probe: agx_d3d12_probe_e2225_arm64.exe = byte copy of e2223 (sha 5dbe904643ea842c).
+- Hashes: sys 2e45990a4697, UmdArm64 b47d285d3fc3, UmdX64 704d4b97911b, Umd32 239fc2b03af2; manifest 797a26fe8bdd, hardware-manifest 975b85f510fe; probe2225.sh c256f2ff99d6 (PROBE_LINT_OK); visible recovery rec2225h 937dc06d4b71a29c; m1n1 0d3a75b3.
+- Recovery rec2225h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2225-s4a-gate/run2225.sh.
