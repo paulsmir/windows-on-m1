@@ -46026,3 +46026,86 @@ with only the windowed volume writable, native NTFS writes are correct and durab
 robocopy (single-threaded, QD1 cached writes; not a throughput test).
 Next: native Windows boot from the SSD requires the window to cover the whole Windows volume (and later the namespace
 minus macOS), with flush/FUA ordering under a real boot; design offline first.
+
+### ANS010-PREP + ANS010-R1 — installed native boot of C: (preregistered 2026-11-07T07:20:02Z)
+
+Offline implementation (no hardware):
+- Mu a33217e38: new J313_ANS_INSTALLED_BOOT profile (WindowsAutoBootAnsInstalled + AppleAnsInstalledExitBootServicesGateLib):
+  - connects the PCI NVMe at ReadyToBoot;
+  - boots only the pinned WINESP HD(GPT F05B9952-..., 0x1D5AF00, 0x20000) BOOTAA64/BOOTMGFW.
+- Root:
+  - 1e7a690c4: AppleAns refuses DumpMode != 0 before broker access;
+  - 264dcfef0: ANS010 profile with pinned window 30781184:29187328 = WINESP+MSR+C:+ANSTEST (config/j313-ans-installed-boot.json; tests/test_ans_installed_boot.py).
+- Offline gate GREEN, receipt 2be00d27.... Mu host tests (incl. installed_source_test) PASS.
+- Driver ANSBUILD005-W (source-10 964185c5..., package 3ae7eda9..., sys 3dae12cd...; 10 analysis files with 0 defects; InfVerif passed; test-signed E9BE15BD...).
+- Firmware ANSBUILD021-I1: FD 37976e03f8601fded60f17e5777756a6ce5e5275f4cacd01cbcda0203ad3c548, receipt b5aa7baf... The receipt checks:
+  - the installed gate is in DxeCore;
+  - the installed auto-boot module is used and the native one is absent;
+  - the ESP PCDs are FIXED;
+  - the AML is byte-identical to N1.
+- m1n1 ANSBUILD020 unchanged (e0489e10..., 16b52e8c).
+- Plan: investigation/ANS_NATIVE_BOOT_PLAN.md.
+
+ANS010-PREP (done 2026-11-07T07:20:02Z; recovery guest over the bridge, no reboot, no launch):
+- ANSBUILD005-W staged on C: as oem6.inf (driver store appleans.inf_arm64_68a73bcd7b60fbb4).
+- DriverDatabase maps ACPI\APPL0003 to oem6.inf.
+- Test certificate added to LocalMachine Root and TrustedPublisher.
+- Service AppleAns created: Type=1, Start=3, Group "SCSI Miniport", ImagePath = store copy.
+- Receipt .local/ans-native/ans010/installed-windows-prep.json 92eed679...
+- Recovery baseline: chkdsk C: /scan clean; C: not dirty; APPL0002 present (problem 28, as before); 8 CPUs.
+
+ANS010-R1 packet:
+- qualification .local/ans-native/ANS010-R1-ready/qualification.json, seal dff2f3b777b0fd7738e1faa2a08a553f2e686f843a2474b47b426f62e6b3d421; dry-run exit 0 (window 30781184:29187328).
+- The WinPE RAMDisk (ANS009 image) is preloaded but cannot be booted by this firmware.
+- run.sh c9b1014e...; pre-native.ps1 91c4b0a8...; native-evidence.ps1 5806557e...; recovery-verify.ps1 0254047f...
+- Command: ANS010-R1-COMMANDS.json hardware_command (run-assisted ANS_NATIVE --confirm-experiment ANS010).
+- Recovery artifact: the unchanged launch-normal2.sh recovery profile.
+- Rollback of C:: `pnputil /delete-driver oem6.inf /force`, then delete the AppleAns service key.
+
+WHY THIS HYPOTHESIS:
+1. ANS009-R4 proved native NTFS writes are exact under the EL2 window, with 0 rejects and 0 stuck tags. ANS006 proved a sustained native read path (~850 MB/s).
+2. The installed-boot blockers are known from logs, not guesses:
+   - native Mu never created NVMe BlockIo (ANS009-R4 hv.log);
+   - the boot ESP path is exact (EXP2225);
+   - ACPI\APPL0003 was configured in the kernel from the driver store (WinPE inventory without setupapi);
+   - PCI vanishes after the handoff.
+3. The window covers every volume Windows mounts from this disk except p4 "EFI - SECON" (FAT, no letter, not the system partition).
+
+Single variable: the boot source (installed C: via WINESP) instead of the WinPE RAMDisk, on the same EL2/broker/driver path.
+
+WINDOWS CONTRACT:
+- winload loads Start=0 SCSI Miniport services.
+- The kernel configures new devices from DriverDatabase.
+- partmgr finds the boot volume by GPT partition GUID.
+- The StorPort dump stack calls HwFindAdapter with DumpMode set.
+
+AGX/ASAHI CONTRACT (here: ANS):
+- EL2 owns ANS.
+- The vNVMe bridge before ExitBootServices; the handoff freezes, drains, flushes and seals it.
+- The broker validates every queue entry and the LBA window.
+
+TRANSLATION:
+- Mu bridge reads bootmgr/winload/boot drivers → handoff → AppleAns serves C: through the broker. SRB FLUSH/SHUTDOWN map to NVMe Flush; FUA is not advertised.
+
+WHAT IS STILL UNKNOWN:
+- Whether the bootmgr/winload reads before ExitBootServices, with a live Mu NvmExpressDxe frontend, still pass the handoff drain/flush.
+- Whether in-kernel configuration of APPL0003 happens early enough for the boot volume, or ends in INACCESSIBLE_BOOT_DEVICE.
+- Whether a full Windows boot workload hits the open lost-first-completion issue.
+- Whether anything writes to p4.
+
+Expected:
+- GUEST_STARTED;
+- BROKER_ACTIVE;
+- NATIVE_SSH_UP within 1200 s;
+- APPL0003 OK/AppleAns; BOOT_DISK_PARENT ACPI\APPL0003\0; PCI_PRESENT=0;
+- probe written natively, hash identical over the bridge;
+- HV_REJECTS=0 and HV_STUCK=0;
+- clean reboot; recovery chkdsk /scan exit 0; not dirty.
+
+Failure criteria:
+- no SSH within 1200 s (INACCESSIBLE_BOOT_DEVICE, hang or bugcheck);
+- any reject or stuck tag;
+- probe mismatch;
+- dirty C: or a chkdsk error.
+
+Evidence: .local/ans-native/ANS010-R1-run/{full.log,hv.log,pre-native.txt,native-evidence.txt,recovery-verify.txt,normal-launch.log}.

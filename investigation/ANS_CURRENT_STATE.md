@@ -1,4 +1,13 @@
-# ANS current state — native READ (~850 MB/s), raw WRITE (ANS008-R2) and NTFS WRITE (ANS009-R4) CONFIRMED; next: native Windows boot design
+# ANS current state — NTFS WRITE CONFIRMED (ANS009-R4); installed native boot of C: implemented offline, ANS010-R1 preregistered
+
+## ANS010 (2026-11-07)
+
+- Plan + contract: investigation/ANS_NATIVE_BOOT_PLAN.md. Mu a33217e38 installed-boot profile (pinned WINESP),
+  driver ANSBUILD005-W (DumpMode refusal), firmware ANSBUILD021-I1, window 30781184:29187328 (WINESP+MSR+C:+ANSTEST).
+- C: staged (ANS010-PREP): oem6.inf, service AppleAns Start=3 (0 only for a native boot). Packet seal dff2f3b7..., dry-run 0.
+- Next: ANS010-R1 on hardware (needs the bench from fork 6).
+
+<!-- previous header: ANS current state — native READ (~850 MB/s), raw WRITE (ANS008-R2) and NTFS WRITE (ANS009-R4) CONFIRMED; next: native Windows boot design -->
 
 ## ANS009 verdict (2026-11-07T02:35Z)
 
