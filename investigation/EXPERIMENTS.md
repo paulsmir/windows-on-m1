@@ -70567,3 +70567,7 @@ Steps: MEMBW twice (regions + MEMBW_PAGES_NS); D3D12 suite; d HD PERF GravityMar
 - Hashes: sys a9450bb1f149, UmdArm64 293ccf3ba727, UmdX64 6073697e6cb5, Umd32 30cc1f6c9a9b; manifest 968c82d3b636, hardware-manifest 53d89ffd37d1; probe2234.sh 790111d3261d (PROBE_LINT_OK); visible recovery rec2234h eca25222dea96744; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuPrivateCached=1.
 - Recovery rec2234h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2234-gc-pages/run2234.sh.
+
+EXP2234 HARDWARE ACTUAL (2026-11-07T16:57:50Z): **REJECTED (with a coverage caveat): GPU-private cached leaves (MEMATTR 0, GC m1n1 + Wom1GpuPrivateCached=1) leave the per-page cost unchanged: page-spread 596/657/833/935 and 611/655/808/953 ns vs control 600/666/844/1032 / 483/647/816/972.**
+- EXP2234_PIPELINE_RC 0; "GPUVA-GC: private cached leaves 1" (count 1..65536, coverage of the MEMBW buffer not proven); suite 119/0; no reset; HD PERF d 40.766 fps (cold). Regions 32 threads 16K 211/211, 256K 444/494, 4M 715/611, 16M 856/808 ns.
+- Verdict: neither guest TLBI isolation (EXP2233) nor the data attribute (EXP2234) moves the ~400 ns per page change; PTE format, initdata/hwdata equal Asahi. Remaining layer: how the GPU MMU/TLB is configured and used -- compare with the macOS AGX kext (UAT setup, TTBR/context flags, GPU MMU control registers, block/large mappings) offline; Asahi Linux behaviour on this probe is unknown.
