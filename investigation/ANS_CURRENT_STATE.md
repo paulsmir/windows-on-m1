@@ -1,4 +1,15 @@
-# ANS current state — NTFS WRITE CONFIRMED (ANS009-R4); installed native boot of C: implemented offline, ANS010-R1 preregistered
+# ANS current state — installed Windows C: BOOTS NATIVELY through AppleAns (ANS010-R7 CONFIRMED)
+
+## ANS010 verdict (2026-11-07T09:30Z)
+
+- ANS010-R7: Mu installed profile (pinned WINESP) -> EBS handoff -> winload loads AppleAns (Start=0, no StartOverride)
+  -> C: on native ANS; SSH at 98 s; 64 MiB probe native == bridge; chkdsk clean; 0 EL2 rejects/stuck.
+- Windows contract (R1-R6 lessons): DriverDatabase records + persisted Enum\ACPI\APPL0003\0; Windows writes
+  Services\<drv>\StartOverride\0=3 for an unused boot-start storage driver (AppleAns in recovery, stornvme in native),
+  so every boot-mode switch must clear the other mode's override.
+- Next: idempotent boot-mode switch tool + tests, longer native workload, cold boot, evidence-script PnP fix.
+
+<!-- previous header: ANS current state — NTFS WRITE CONFIRMED (ANS009-R4); installed native boot of C: implemented offline, ANS010-R1 preregistered -->
 
 ## ANS010 (2026-11-07)
 

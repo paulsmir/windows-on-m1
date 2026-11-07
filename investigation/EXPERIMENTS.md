@@ -46337,3 +46337,37 @@ Single variable: StartOverride removed before the native boot.
 Open risk: the intermediate recovery reboot (Start=0, phantom devnode since PREP3) could rewrite the override before the SoC reset. Then R7 repeats R6 and its module list shows it.
 
 Expected: AppleAns.sys loaded; broker QUERY/CLAIM; native SSH; the R1 pass criteria.
+
+### ANS010-R7 result (recorded 2026-11-07T09:28:14Z) — CONFIRMED: installed Windows (C:) boots natively through AppleAns
+
+Timeline (UTC):
+- 09:22:22 pre-native: StartOverride 0:3 removed.
+- GUEST_STARTED at 79 s; broker QUERY/CLAIM (op 1/2/3) at 86 s; NATIVE_SSH_UP at 98 s.
+- 09:25:12 evidence done; clean restart (PSCI RESET from the native kernel).
+- Proxy back at 179 s; recovery SSH at 09:26:46; verify done at 09:27:25.
+
+Native session:
+- ntbtlog shows AppleAns.sys loaded from the driver store.
+- PCI_PRESENT=0, so C: was served only by AppleAns through the EL2 broker.
+- 64 MiB probe written + flushed through NTFS in 122 ms. 338.8 MB of System32 DLLs read in 1348 ms.
+- Busiest broker window: n=1641, 40372 KiB, QD up to 17+, hw_us avg 164 / max 1453. 0 rejects, 0 stuck.
+- The native kernel demoted stornvme (StartOverride 0:3); the script removed it before the reboot.
+- PnP/CIM queries (Get-PnpDevice/Get-Disk/LastBootUpTime) returned empty in that early SSH session (evidence-script gap, not a storage failure).
+
+Recovery after the native session:
+- Probe over the bridge 705ccaef... MATCH=True; C: not dirty; chkdsk /scan exit 0.
+- No StartOverride on AppleAns or stornvme; AppleAns Start=3.
+- APPL0002=1/28, 8 CPUs.
+
+Verdict: CONFIRMED.
+- The native installed boot works: Mu ANSBUILD021-I1 + m1n1 ANSBUILD020 + AppleAns ANSBUILD005-W, window 30781184:29187328.
+- Required Windows-side contract:
+  - DriverDatabase package records;
+  - a persisted Enum\ACPI\APPL0003\0;
+  - AppleAns Start=0 without StartOverride for the native boot;
+  - stornvme StartOverride removed before returning to recovery.
+
+Next:
+- Make the boot-mode switch a tested, idempotent tool (Start/StartOverride for both drivers).
+- Longer native workload and a cold-boot run.
+- Fix the evidence-script PnP queries.
