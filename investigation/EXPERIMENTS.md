@@ -70554,3 +70554,16 @@ EXP2233 HARDWARE ACTUAL (2026-11-07T16:37:50Z): **REJECTED: guest VMID 1 with th
 - m1n1 counters during the run: broker "service" ~6-13k ops/s even idle, v5 publications up to ~38k/s (BROKERLOCK receipts); each v5 publish does sync_tables (ASIDE1OS ASID 0) + ASIDE1OS per owner slot, but never while that owner has a job running, so the probe's own ASID is not flushed inside a dispatch.
 - Leaf encoding re-checked against Asahi pgtable.rs (type 3, AF, non-global, AP, memattr, high bits): identical.
 - Next: EXP2234 = GC m1n1 + Wom1GpuPrivateCached=1 with the page-spread probe (EXP2228 predates the page cases): if page-spread falls to ~70 ns, uncached data (MEMATTR 2) bypasses the GPU L1/L2 and the per-"page" cost is a data-cache effect.
+
+EXP2234 HARDWARE BEFORE 2026-11-07T16:51:26Z:
+Steps: MEMBW twice (regions + MEMBW_PAGES_NS); D3D12 suite; d HD PERF GravityMark 100k -temporal 0.
+- WHY THIS HYPOTHESIS: (1) EXP2231/2233: every 16 KiB page change costs ~400 ns even among 4 pages, and guest VMID 1 changed nothing (EXP2233), so external TLB invalidation is unlikely; (2) PTE format equals Asahi; the remaining layer that differs from macOS is the data attribute: our user leaves are MEMATTR 2 (uncached), and uncached GPU loads may bypass L1/L2 so that 4 lines on 4 pages miss every time while one page is partly served (212 ns); (3) EXP2228 (MEMATTR 0 on GPU-only leaves) lowered region latency 15-35 % but ran before the page-spread cases existed.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: MEMATTR 0 = cached non-coherent; no invalidation on unmap in this build -> measurement only (EXP2137 contract). ATOMIC CONTRACT: GC m1n1 capability + KMD switch (EXP2137).
+- WHAT IS STILL UNKNOWN: whether the per-page cost is a data-cache attribute effect.
+- Expected: hypothesis holds -> MEMBW_PAGES_NS ~65-150 ns (near macOS 65-92) with GPUVA-GC count > 0; otherwise unchanged ~600-1000 ns -> attribute excluded for the per-page cost.
+- Failure criteria: suite failure, GPU fault, reset, hang -> rec2234h (m1n1 last-good brokerlock-split 550c7f23).
+- Recovery: rec2234h (run directly).
+- Probe: agx_d3d12_probe_e2234_arm64.exe = byte copy of e2230 (sha edb222b713c2f802); probe2234.sh = probe2231.sh.
+- Hashes: sys a9450bb1f149, UmdArm64 293ccf3ba727, UmdX64 6073697e6cb5, Umd32 30cc1f6c9a9b; manifest 968c82d3b636, hardware-manifest 53d89ffd37d1; probe2234.sh 790111d3261d (PROBE_LINT_OK); visible recovery rec2234h eca25222dea96744; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuPrivateCached=1.
+- Recovery rec2234h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2234-gc-pages/run2234.sh.
