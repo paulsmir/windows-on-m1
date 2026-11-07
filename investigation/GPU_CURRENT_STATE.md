@@ -8,6 +8,25 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-07 07:27Z -- HD FRAME RE-RANKED (offline, existing evidence only)
+- Bench lent to the ANS session (ANS010-R1) at ~07:05Z from normal recovery, no AGX package staged.
+- EXP2225 default package, HD PERF (gm2225d, 2084 frames, `agx_gpu_frame_breakdown.py --jobs`), per frame 24.77 ms:
+  compute exact 13.7, render 3D 4.15 + TA 3.95, launch 1.40, late submit 1.20, foreign (DWM) 0.99, detect 1.10, idle 0.19.
+  DWM composition + late hand-off together are <= 2.2 ms/frame (9 %); EXP2212 ETW: VidSch keeps a packet at the
+  KMD 96.7 % of the 12.9 s window (GM 4137, DWM 452 packets, 16 preemptions). Independent flip is impossible for the
+  windowed 1280x720 benchmark on the 2560x1600 panel without MPO -> not the next lever.
+- Compute vs Apple (EXP2192 HD encoders): ours 13.7 vs Apple 9.2 ms (+4.5). C4 7.9 vs 5.8 (+2.1, levers closed
+  2026-11-07); the rest 5.8 vs 3.4 (+2.4).
+- New decode of EXP2211 arm b (SPLIT_TAGS, previously undecoded): C3 (3.17 ms; Apple c11+c13 ~1.6) is dominated by one
+  indirect launch of the camera-hierarchy traversal fc968f7a (~1.29 ms), then pieces of 0.66 / 0.33 / 0.33 / 0.25 /
+  0.21 ms. Offline cost of fc968f7a: 128x1x1, 91 GPRs, 1024 threads (max occupancy), 0 spills, 6 atomics, 165 shared
+  ops, 2 barriers -- static code is not the cause. The two traversal launches (fc968f7a in C3, 7aa43c6c in C4,
+  1.51 ms) are the largest single kernels of the frame.
+- WHAT IS STILL UNKNOWN: Apple's GPU time for the same traversal dispatch. Next discriminator (needs macOS on the bench,
+  after ANS returns it): extend mtlsplit to commit every compute dispatch of c7/c11 in its own encoder and compare
+  fc968f7a / 7aa43c6c dispatch for dispatch. If Apple's launch is also >1 ms the gap is elsewhere in C3/C4; if it is
+  ~0.3-0.5 ms the traversal's runtime environment (indirect grid size, buffer/descriptor path, atomics) is the target.
+
 ## CURRENT 2026-11-07 03:30Z -- DEPTH-2 KICK FALLBACK S1-S4a ON HARDWARE; DEFAULT PACKAGE GATED
 - Accepted default: firmware RX drain on (125bddd1, EXP2219/2220); depth-2 kick fallback S1-S3
   (be8c6f7f+55ea8d68, EXP2222) and S4a (20e34f05, EXP2224: 1380/1380 build_undone, 2 in a boundary
