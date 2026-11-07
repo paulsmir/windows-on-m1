@@ -269,8 +269,10 @@ if os.environ.get("WOM1_PCPU_PSTATE"):
 u = ProxyUtils(p, heap_size=(64 if expanded_ram else 768) * 1024 * 1024)
 # EXP2246: DRAM controller mode follows the P-cluster operating point like macOS
 # (tools/j313_cpufreq.py apply_dramcfg): mcc dramcfg-data[0] while the P-cluster
-# is at or above pmgr mcx-fast-pcpu-frequency.  Opt-in until hardware-validated.
-if os.environ.get("WOM1_DRAMCFG_FOLLOW_PSTATE") == "1":
+# is at or above pmgr mcx-fast-pcpu-frequency.  Default since EXP2246 (CPU DRAM
+# latency -8 % at P12, GPU neutral); WOM1_DRAMCFG_FOLLOW_PSTATE=0 is a diagnostic
+# opt-out.  Below the threshold (default P7) nothing is written.
+if os.environ.get("WOM1_DRAMCFG_FOLLOW_PSTATE", "1") != "0":
     from tools.j313_cpufreq import PCPU_MHZ, apply_dramcfg, dramcfg_fast_wanted
     _mcc = u.adt["/arm-io/mcc"]
     _pcpu_mhz = PCPU_MHZ[int(os.environ.get("WOM1_PCPU_PSTATE") or 7)]
