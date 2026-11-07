@@ -7,6 +7,8 @@
 // returned as a proxy: every dispatch after the first ends the current real encoder,
 // commits it, opens a fresh encoder in a fresh command buffer and replays the bound
 // state (last value per setter slot, every useResource/useHeap) before dispatching.
+// An indirect piece starts with its grid-capture blit, which may overlap the previous
+// piece: use duration = gpu_end - max(gpu_start, previous piece gpu_end).
 // M1 has no dispatch-boundary counter sampling, so this is the only per-dispatch GPU
 // time available on Apple's own driver.
 //
@@ -15,7 +17,8 @@
 // Env:   MTLSPLITD_OUT (default /tmp/mtlsplitd.csv), MTLSPLITD_ENC (e.g. "7,11").
 // CSV:   kind,app_cb_seq,enc_index,dispatch_index,gpu_start_s,gpu_end_s,pipeline,
 //        tg_x,tg_y,tg_z,tptg_x,tptg_y,tptg_z,indirect
-//        (kind compute-d = one split dispatch piece; groups 0 for indirect).
+//        [,grid=XxYxZ for indirect: the GPU-written counts, copied by a 12-byte blit]
+//        (compute-d = one dispatch piece; compute-e = an empty piece before an indirect one).
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <objc/runtime.h>
@@ -175,19 +178,36 @@ static void deep_copy(NSInvocation *inv) {
   [curCb commit];
 }
 
-- (void)openNew {
+// A new piece; with an indirect buffer, a 12-byte blit first copies the GPU-written
+// threadgroup counts into a shared buffer so the CSV records the real grid.
+- (void)openNewIndirect:(id<MTLBuffer>)ib offset:(NSUInteger)off {
   curCb = [queue commandBuffer];
+  pending = nil;
   id<MTLCommandBuffer> mine = curCb;
+  id<MTLBuffer> cap = nil;
+  if (ib) {
+    cap = [queue.device newBufferWithLength:12 options:MTLResourceStorageModeShared];
+    id<MTLBlitCommandEncoder> b = o_bplain(curCb, @selector(blitCommandEncoder));
+    [b copyFromBuffer:ib sourceOffset:off toBuffer:cap destinationOffset:0 size:12];
+    o_end_b(b, @selector(endEncoding));
+  }
   [curCb addCompletedHandler:^(id<MTLCommandBuffer> c) {
     NSString *f = objc_getAssociatedObject(mine, kSub);
-    out_line([NSString stringWithFormat:@"%@,%.9f,%.9f", f ? f : @"compute-d,?", c.GPUStartTime,
-                                        c.GPUEndTime]);
+    NSString *grid = @"";
+    if (cap) {
+      const uint32_t *g = cap.contents;
+      grid = [NSString stringWithFormat:@",grid=%ux%ux%u", g[0], g[1], g[2]];
+    }
+    out_line([NSString stringWithFormat:@"%@,%.9f,%.9f%@", f ? f : @"compute-d,?", c.GPUStartTime,
+                                        c.GPUEndTime, grid]);
   }];
   cur = make_real(self, curCb);
   for (NSInvocation *inv in uses) [inv invokeWithTarget:cur];
   for (NSInvocation *inv in state.allValues) [inv invokeWithTarget:cur];
   dispatchedInCur = NO;
 }
+
+- (void)openNew { [self openNewIndirect:nil offset:0]; }
 
 - (void)forwardInvocation:(NSInvocation *)inv {
   SEL sel = inv.selector;
@@ -198,12 +218,21 @@ static void deep_copy(NSInvocation *inv) {
   }
   BOOL isDispatch = [name hasPrefix:@"dispatch"];
   if (isDispatch) {
-    if (dispatchedInCur) {
+    BOOL indirect = [name containsString:@"Indirect"];
+    if (indirect) {
+      // always a fresh piece, so the grid capture blit precedes the dispatch
+      __unsafe_unretained id ib = nil;
+      NSUInteger off = 0;
+      [inv getArgument:&ib atIndex:2];
+      [inv getArgument:&off atIndex:3];
+      if (!dispatchedInCur) pending = [NSString stringWithFormat:@"compute-e,%u,%u,-", seq, enc];
+      [self flushCur];
+      [self openNewIndirect:ib offset:off];
+    } else if (dispatchedInCur) {
       [self flushCur];
       [self openNew];
     }
     MTLSize g = {0, 0, 0}, t = {0, 0, 0};
-    BOOL indirect = [name containsString:@"Indirect"];
     NSUInteger n = inv.methodSignature.numberOfArguments;
     if (!indirect) [inv getArgument:&g atIndex:2];
     [inv getArgument:&t atIndex:n - 1];
