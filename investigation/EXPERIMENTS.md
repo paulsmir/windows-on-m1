@@ -74533,3 +74533,17 @@ EXP2246 ACTUAL (2026-11-07T21:47:32Z): CONFIRMED for the CPU memory path, NEUTRA
 - GPU MEMBWUAV 32-thread: 64K 171, 256K 272, 1M 308, 4M 422, 16M 556, 64M 724; pages 228-434 -> unchanged vs EXP2243 (DRAMCFG is not the GPU device-load cause).
 - GM HD PERF 44.311 fps vs EXP2243 44.434 / EXP2244 43.881 (noise band).
 - Verdict: keep (macOS-equivalent contract, CPU DRAM latency gain, no regression); make it the launcher default (writes nothing below 2184 MHz). GPU device-load gap remains open: next candidates on the GPU side (UAT/TLB walk, GPU-side cache config, firmware perf state).
+
+EXP2247 HARDWARE BEFORE 2026-11-07T22:11:02Z:
+Steps: CPU identity (registry ~MHz + Win32_Processor clock); CPU chase; D3D12 suite; d HD PERF GravityMark.
+- WHY THIS HYPOTHESIS: (1) EXP2244: ~MHz / Win32_Processor Max/CurrentClockSpeed = 22 although SMBIOS MaxSpeed = 3204 -> Windows measures the clock live; (2) m1n1 src/hv_exc.c PMCCFILTR write path clears BIT(16) (EL1 enable) in the U=1 branch (copy-paste; the Python HV twin clears bit 8), so a kernel request "count EL1 only" disables EL1 counting and the cycle counter barely advances in the Windows kernel.
+- WINDOWS CONTRACT: Arm PMUv3 PMCCFILTR_EL0 (P bit 31 excludes EL1, U bit 30 excludes EL0), PMCCNTR_EL0 counts CPU cycles.
+- AGX/ASAHI CONTRACT: Apple PMCR1 counter-0 enables: bit 8 EL0 (A64), bit 16 EL1 (Asahi/m1n1 definitions).
+- TRANSLATION: U -> PMCR1 bit 8, P -> PMCR1 bit 16 (as the Python HV already does).
+- WHAT IS STILL UNKNOWN: which filter value Windows writes; whether ~MHz is derived only from this counter.
+- Expected: ~MHz and Win32_Processor clock become a real frequency (2064 E-core boot CPU or 2988 P12), name stays "Apple M1"; suite 119/0; GM ~44 fps. Unchanged 22 -> the PMU filter is not the ~MHz source.
+- Failure criteria: boot failure, PMU-related exceptions/hangs, suite failure, GPU fault -> rec2247h (last-good m1n1 brokerlock-split).
+- Recovery: rec2247h (run directly).
+- Probe: agx_d3d12_probe_e2247_arm64.exe = byte copy of e2244 (432443c0); probe2247.sh = probe2244.sh.
+- Hashes: sys 7a930845f93f, UmdArm64 e6da58f20c48, UmdX64 5f3bc63fff60, Umd32 d7bb3ee6b696; manifest 5749c1cdf8de, hardware-manifest 99665156a564; probe2247.sh 2178fbb78393 (PROBE_LINT_OK); visible recovery rec2247h 1dea77eb3f685d00; m1n1 0d3a75b3.
+- Recovery rec2247h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2247-pmufix/run2247.sh.
