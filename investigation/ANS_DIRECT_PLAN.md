@@ -134,3 +134,21 @@ Installed native boot (ANS010 profile) with direct mode:
   - Initialize fails before CC enable → INACCESSIBLE_BOOT_DEVICE with no writes.
   - Hang → runner SIGINT snapshot (PCs, KiBugCheckData, devnodes, modules).
 - **Recovery:** the unchanged `launch-normal2.sh` bridge profile. AppleAns Start=3 and StartOverride cleared by `ans-boot-mode.ps1 recovery`.
+
+## Offline status (2026-11-07T12:50Z)
+
+| Piece | Commit / artifact | Offline verification |
+| --- | --- | --- |
+| Driver (ANS-DIRECT runtime) | root dfe3a7bff..cacfe4768 | common test_direct (simulated controller), windows tests, contract test |
+| AppleAns package | ANSBUILD006-D2 73026b75…, sys f723843c… | 12 analysis files, 0 defects, InfVerif VALID, signed, DriverVer 0.2.0.0 |
+| m1n1 direct handoff | 280ce100, ANSBUILD022 db18a837… | m1n1 host tests; receipted build |
+| Mu direct ACPI | 5bb92245, ANSBUILD023-D1 FD e321b5c4… | receipt checks the DSDT resources (controller, mailbox, GSIV 889, no broker page) |
+| Launcher | `--ans-direct` bound to the ANS011 profile | test_ans_qualification, test_ans_launcher_mode |
+
+Steps that need the bench, in this order:
+
+1. **`.local/ans-native/ans011/prep.sh`.** Recovery guest: stage D2 next to oem6 and repoint ImagePath. Single variable vs ANS010-R7: the binary. Then write `ans011/installed-windows-prep.json`.
+2. **Offline gate:** `tools/test_ans_offline.py`. Needs a fresh proxy marker state.
+3. **Packet:** `assemble-ans011-r1.py <gate receipt>`, then ANS011-R1-COMMANDS.json (`--ans-direct --confirm-experiment ANS011`) and a dry-run.
+4. **Preregister ANS011-R1, then run `ANS011-R1-run/run.sh`.**
+   - **Rollback:** `ans011/rollback-direct.ps1` in recovery. Recovery itself is unchanged: `launch-normal2.sh`, AppleAns Start=3.
