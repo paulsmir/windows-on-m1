@@ -45910,3 +45910,29 @@ Evidence: .local/ans-native/ANS008-R2-run/ (hv.log, stick-results.tar), .local/a
 Verdict: native NVMe WRITE (driver ANSBUILD004-W + EL2 window ANSBUILD019) is correct and persistent; the EL2
 window held. Next: NTFS-level writes need a window covering one whole volume; candidate = a dedicated test
 partition/volume rather than the recovery guest's C:.
+
+## ANS009 — first native NTFS writes (dedicated volume window)
+
+Prep (user-approved 2026-11-07, recovery guest over the bridge, 00:23:20Z): C: shrunk by exactly 1 GiB
+(117923905536 B now) and partition 9 "ANSTEST" NTFS 4 KiB clusters created directly after it: offset 244557283328,
+1073741824 B = LBA 59706368 + 262144 blocks; ends 483328 B before partition 8. C: and T: Healthy. Script and output:
+.local/ans-native/ans009/make-partition.{ps1,log}, window.json.
+
+### ANS009-R1 (preregistered 2026-11-07T00:30:21Z)
+
+Packet e853758a5ee401f30ab43b81a22ba08adf35124a4ef0a1e5e13ecce7b37a4fa1 (.local/ans-native/ANS009-R1-ready): same
+m1n1 ANSBUILD019 812e61c3, AppleAns ANSBUILD004-W 2670d5b3 and Mu N3 as ANS008-R2; WinPE 088e384a (adds
+ANS009-NTFS.CMD 8be400ca..; QEMU collector pass); gate 59009570 GREEN; outer 083b2d1c; run.sh 17141f1b.
+Sealed window 59706368:262144 (dry-run "ANS write window : 59706368:262144"); profile ANS009 caps it at 262144 blocks.
+Launch: bash .local/ans-native/ANS009-R1-run/run.sh. Recovery artifact: normal recovery launch, unchanged.
+WHY THIS HYPOTHESIS: (1) ANS008-R2 proved native WRITE exact and persistent and the EL2 window enforced (all
+outside writes DENIED); (2) NTFS adds only filesystem traffic (metadata, log, FLUSH via dismount) inside one volume
+whose exact LBA range is the window; (3) the remaining unknowns are mixed-size/queued writes and FLUSH ordering.
+Single variable vs ANS008-R2: window = whole ANSTEST partition and the WinPE workload = NTFS file writes
+(robocopy of the 703 WinPE System32 DLLs, 552 MB) + dismount + fc /b + chkdsk (read-only) on that volume.
+Expected: STATUS copy_rc<8, compared=703 mismatches=0, chkdsk_rc=0; EL2 DENIES writes to any other volume.
+Recovery over the bridge: all 703 file hashes equal .local/ans-native/ans009/expected-dll-hashes.txt, chkdsk T: /scan
+clean, neighbours c_tail 1cdca0e8 / p8_head 5d1b6dc6 / gap 792fb941 unchanged (c_tail may change only through
+recovery-guest activity on C:).
+Failure criterion: any mismatch, chkdsk errors on T:, a neighbour change attributable to the native run, a hang,
+or recovery not reaching SSH. Evidence: .local/ans-native/ANS009-R1-run/, .local/ans-native/ans009/*.txt.
