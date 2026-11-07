@@ -78,6 +78,7 @@ while [ "$#" -gt 0 ]; do
         --agx-power-broker) AGX_POWER_BROKER=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         --snapshot-kernel-read) [ "$#" -ge 2 ] || usage; SNAPSHOT_KERNEL_READ=$2; shift 2 ;;
+        --snapshot-devnodes) [ "$#" -ge 2 ] || usage; SNAPSHOT_DEVNODES=$2; shift 2 ;;
         -h|--help) usage ;;
         *) usage ;;
     esac
@@ -231,6 +232,7 @@ set -- "$FIRMWARE" --storage-mode "$STORAGE_MODE" --device "$PROXY" --display-mo
 [ -z "$CONTRACT_OUTPUT" ] || set -- "$@" --contract-output "$CONTRACT_OUTPUT"
 [ "$LOW_MEM" -eq 0 ] || set -- "$@" --low-mem
 [ -z "${SNAPSHOT_KERNEL_READ:-}" ] || set -- "$@" --snapshot-kernel-read "$SNAPSHOT_KERNEL_READ"
+[ -z "${SNAPSHOT_DEVNODES:-}" ] || set -- "$@" --snapshot-devnodes "$SNAPSHOT_DEVNODES"
 if [ "$STORAGE_MODE" = VNVME_RECOVERY ] && [ "$DEBUG" != off ]; then
     set -- "$@" --managed-vuart "$VUART"
 fi

@@ -49,3 +49,49 @@ def snapshot_kernel_read(translate, readmem, pc, rva, length):
     data = read_virtual(translate, readmem, base + rva, length)
     words = ' '.join(f'0x{int.from_bytes(data[i:i + 8], "little"):x}' for i in range(0, len(data) - 7, 8))
     return f'SNAPSHOT_KERNEL pc=0x{pc:x} base=0x{base:x} rva=0x{rva:x} words={words}'
+
+
+def parse_devnodes(spec):
+    """'ROOT_RVA,child,sibling,instance,service,state,problem,problem_status' (hex/dec)."""
+    v = [int(x, 0) for x in spec.split(',')]
+    if len(v) != 8 or v[0] <= 0:
+        raise ValueError('snapshot devnodes needs 8 comma-separated values')
+    return dict(zip(('root_rva', 'child', 'sibling', 'instance', 'service', 'state', 'problem', 'pstatus'), v))
+
+
+def _u64(translate, readmem, va):
+    return int.from_bytes(read_virtual(translate, readmem, va, 8), 'little')
+
+
+def _unicode(translate, readmem, va, limit=512):
+    length = int.from_bytes(read_virtual(translate, readmem, va, 2), 'little')
+    buf = _u64(translate, readmem, va + 8)
+    if not length or not buf:
+        return ''
+    return read_virtual(translate, readmem, buf, min(length, limit)).decode('utf-16-le', 'replace')
+
+
+def snapshot_devnodes(translate, readmem, pc, o, max_nodes=400):
+    """DFS of the kernel PnP tree from *IopRootDeviceNode; one line per devnode."""
+    base = find_kernel_base(translate, readmem, pc)
+    if base is None:
+        return [f'SNAPSHOT_DEVNODE no MZ base below pc=0x{pc:x}']
+    lines, stack, seen = [], [_u64(translate, readmem, base + o['root_rva'])], set()
+    while stack and len(lines) < max_nodes:
+        node = stack.pop()
+        if not node or node in seen:
+            continue
+        seen.add(node)
+        try:
+            inst = _unicode(translate, readmem, node + o['instance'])
+            svc = _unicode(translate, readmem, node + o['service'])
+            st = int.from_bytes(read_virtual(translate, readmem, node + o['state'], 4), 'little')
+            pr = int.from_bytes(read_virtual(translate, readmem, node + o['problem'], 4), 'little')
+            ps = int.from_bytes(read_virtual(translate, readmem, node + o['pstatus'], 4), 'little')
+            lines.append(f'SNAPSHOT_DEVNODE state=0x{st:x} problem={pr} pstatus=0x{ps:08x} svc={svc} inst={inst}')
+            stack.append(_u64(translate, readmem, node + o['sibling']))
+            stack.append(_u64(translate, readmem, node + o['child']))
+        except ValueError as error:
+            lines.append(f'SNAPSHOT_DEVNODE unreadable node=0x{node:x}: {error}')
+    lines.append(f'SNAPSHOT_DEVNODE_COUNT {len(lines)}')
+    return lines

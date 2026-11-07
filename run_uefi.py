@@ -74,6 +74,9 @@ ap.add_argument("--wdt-cpu", type=int, choices=range(8), default=None,
 ap.add_argument("--snapshot-kernel-read", metavar="RVA:LEN",
                 help="read-only diagnostic: on each SIGINT snapshot, print LEN bytes at ntoskrnl+RVA "
                      "(kernel base found from the interrupted guest PC), e.g. KiBugCheckData")
+ap.add_argument("--snapshot-devnodes", metavar="SPEC",
+                help="read-only diagnostic: on each SIGINT snapshot, walk the kernel PnP tree "
+                     "(ROOT_RVA,child,sibling,instance,service,state,problem,problem_status)")
 ap.add_argument("--contract-output", type=pathlib.Path,
                 help="write four CRC-framed launch-contract checkpoints")
 args = ap.parse_args()
@@ -355,6 +358,14 @@ def unattended_control(*_args, **_kwargs):
                                        hv.iface.readmem, hv.ctx.elr, rva, length))
         except Exception as error:  # diagnostics must never change recovery policy
             print(f"SNAPSHOT_KERNEL error: {error}")
+    if args.snapshot_devnodes and hv.ctx is not None:
+        from tools.ans_snapshot import parse_devnodes, snapshot_devnodes
+        try:
+            for line in snapshot_devnodes(lambda va: hv.p.hv_translate(va, False, False), hv.iface.readmem,
+                                          hv.ctx.elr, parse_devnodes(args.snapshot_devnodes)):
+                print(line)
+        except Exception as error:
+            print(f"SNAPSHOT_DEVNODE error: {error}")
     print("HOST CONTROL: diagnostic snapshot captured; continuing guest")
     return EXC_RET.HANDLED
 
