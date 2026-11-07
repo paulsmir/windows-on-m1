@@ -46786,3 +46786,34 @@ ANS013-R1 amendment: the package is now ANSBUILD011-I 0.4.1 (own signer 35F48BAE
 Verdict: CONFIRMED. ANS-DIRECT works with the GPU daily images (m1n1 c6f0c8cb, Mu G2 7c283fb1).
 
 The earlier black desktop (ANS011, R3) was caused by failed paging reads, not by the display path.
+
+### ANS013-R1 result — 2026-11-07T15:41Z: CONFIRMED (AppleAns is a standard driver with its own permanent signer)
+
+- **A** (install-appleans.ps1):
+  - 35F48BAE added permanently to Root and TrustedPublisher;
+  - ANSBUILD011-I 0.4.1 staged as oem11.inf (store dir appleans.inf_arm64_bcb77f94…); ImagePath set;
+  - records and devnode already present, so untouched;
+  - guard installed, AppleAns Start=0; E9BE15BD count 0.
+- **B** (launch-normal2): SSH 35 s, gate pass, certificate counts Root/TP 35F48BAE=1, E9BE15BD=0.
+- **B2** (GPU experiment launcher, bridge): SSH 37 s, gate pass.
+- **C** (GPU daily images + ANS-DIRECT):
+  - SSH 30 s; APPL0003 OK, IRQ 960; user session Active with explorer; RAM 6.53 GB; APPL0002 Code 28; not dirty.
+  - Bench:
+
+    | Case | MB/s | IOPS |
+    | --- | --- | --- |
+    | seq read 1M QD8 | 3433 | |
+    | seq write 1M QD1 | 2381 | |
+    | rnd read 4K QD32 | | 94453 |
+    | rnd write 4K QD32 | | 58061 |
+
+- **D** (launch-normal2): SSH 31 s, probe match, chkdsk 0, not dirty, no StartOverride, certificates unchanged.
+
+Verdict: CONFIRMED.
+
+Final AppleAns contract for the shared Windows install:
+- cert 35F48BAE3E8BDCD1AC0BA7CFF66DDB6E063AF20B permanent in LocalMachine\Root and TrustedPublisher;
+- service AppleAns Type=1 Start=0 Group "SCSI Miniport", ImagePath = driver store copy of AppleAns.sys 77fbc3e3…;
+- SYSTEM task AnsStartOverrideGuard;
+- revert C:\Users\pavel\ans-revert-bootstart.ps1;
+- bridge boots (launch-normal2, GPU experiment launcher) and the native GPU-daily boot all work.
