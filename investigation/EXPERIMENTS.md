@@ -46591,3 +46591,9 @@ Failure handling:
 Rollback:
 - `ans-dual-boot.ps1 uninstall`;
 - ImagePath back to 68a73bcd (`C:\ANS011\rollback-direct.ps1`).
+ANS012-R1 preregistration amendment (2026-11-07T13:21:13Z). Applies fork 6's conditions for the C: change:
+- The task is named AnsStartOverrideGuard. The revert is C:\Users\pavel\ans-revert-bootstart.ps1 (Start=3, task removed).
+- Step B also measures SSH-up time against the ANS011 Start=3 baseline (48 s), the AppleAns devnode absence, and Service Control Manager/PnP errors.
+- New step B2: one boot of the unmodified GPU experiment launcher (`production/launch-gpu-bridge.sh` = full-owner2225 files and flags: brokerlock-split 1c35a20b…, HVS2ISO004 a8ab868c…, bridge, no ANS env). It must reach SSH with APPL0002 Code 28, 8 CPUs, and no StartOverride.
+- If B or B2 fails: revert to Start=3 before returning the bench.
+- run.sh is now sha d1581396a2e83482….
