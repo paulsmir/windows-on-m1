@@ -31,7 +31,7 @@ ULONG DriverEntry(PVOID DriverObject, PVOID RegistryPath)
     init.HwAdapterControl = AppleAnsAdapterControl;
     init.DeviceExtensionSize = sizeof(APPLE_ANS_ADAPTER);
     init.SrbExtensionSize = sizeof(APPLE_ANS_SRB);
-    init.NumberOfAccessRanges = 1;
+    init.NumberOfAccessRanges = 2; /* broker: 1, direct: controller + mailbox */
     init.MapBuffers = STOR_MAP_NON_READ_WRITE_BUFFERS;
     init.NeedPhysicalAddresses = TRUE;
     init.TaggedQueuing = TRUE;
@@ -51,7 +51,7 @@ ULONG AppleAnsFindAdapter(PVOID DeviceExtension, PVOID HwContext,
     UNREFERENCED_PARAMETER(ArgumentString);
     UNREFERENCED_PARAMETER(Reserved3);
     /* A PnP restart must never erase ownership after an unproven stop. */
-    if (a->Signature == ANS_MAGIC && (a->MayOwn || a->Wire.faulted))
+    if (a->Signature == ANS_MAGIC && (a->MayOwn || a->Wire.faulted || a->Ansd.faulted))
         return SP_RETURN_ERROR;
     RtlZeroMemory(a, sizeof(*a));
     a->Signature = ANS_MAGIC;a->Version = 2;a->Stage = AppleAnsStageFindAdapter;
@@ -59,7 +59,8 @@ ULONG AppleAnsFindAdapter(PVOID DeviceExtension, PVOID HwContext,
     ans_stats_init(&a->Stats);
     a->ShutdownTag=ANS_QUEUE_DEPTH;
     if (ConfigInfo->Length < sizeof(*ConfigInfo) ||
-        ConfigInfo->NumberOfAccessRanges != 1 || ConfigInfo->AccessRanges == NULL) {
+        ConfigInfo->NumberOfAccessRanges < 1 || ConfigInfo->NumberOfAccessRanges > 2 ||
+        ConfigInfo->AccessRanges == NULL) {
         a->Stage = AppleAnsStageResourcesRejected;return SP_RETURN_NOT_FOUND;
     }
     /* Crash-dump/hibernation instance (dump_AppleAns.sys): the broker is owned by the live
@@ -77,7 +78,14 @@ ULONG AppleAnsFindAdapter(PVOID DeviceExtension, PVOID HwContext,
         .memory=range->RangeInMemory,.level_sensitive=ConfigInfo->InterruptMode==LevelSensitive,
         .virtual_device=ConfigInfo->VirtualDevice
     };
-    if (!ans_resources_valid(&resources)) {
+    BOOLEAN direct=FALSE;
+    if (ConfigInfo->NumberOfAccessRanges == 2) {
+        PACCESS_RANGE range2 = &(*ConfigInfo->AccessRanges)[1];
+        resources.base2=(ULONGLONG)range2->RangeStart.QuadPart;
+        resources.length2=range2->RangeLength;resources.memory2=range2->RangeInMemory;
+        direct=ans_direct_resources_valid(&resources) != 0;
+    }
+    if (!direct && !ans_resources_valid(&resources)) {
         a->Stage = AppleAnsStageResourcesRejected;return SP_RETURN_NOT_FOUND;
     }
     a->BrokerAddress = range->RangeStart;a->BrokerLength = range->RangeLength;
@@ -96,7 +104,7 @@ ULONG AppleAnsFindAdapter(PVOID DeviceExtension, PVOID HwContext,
     ConfigInfo->AlignmentMask = 3;
     ConfigInfo->SynchronizationModel = StorSynchronizeFullDuplex;
 #if APPLE_ANS_NATIVE_READ_ONLY
-    if (!AppleAnsNativeResources(a, ConfigInfo)) {
+    if (direct ? !AppleAnsDirectResources(a, ConfigInfo) : !AppleAnsNativeResources(a, ConfigInfo)) {
         a->Stage = AppleAnsStageResourcesRejected;return SP_RETURN_ERROR;
     }
 #endif

@@ -199,6 +199,38 @@ class QualificationTests(unittest.TestCase):
         b=json.loads(self.paths['mu_build'].read_text());b['builds'][0]['expected_autoboot']='WindowsAutoBootAnsInstalled'
         self.paths['mu_build'].write_text(json.dumps(b));self.seal()
         with self.assertRaises(ValueError):self.call()
+    def make_ans011(self,window=None,read_only=False,drop=(),audit_extra=None):
+        self.m['read_only']=read_only
+        if window is not None:self.m['write_window']=window
+        b=json.loads(self.paths['mu_build'].read_text())
+        b['builds'][0]['expected_core_gate']='AppleAnsInstalledExitBootServicesGateLib'
+        b['builds'][0]['expected_autoboot']='WindowsAutoBootAnsInstalled'
+        self.paths['mu_build'].write_text(json.dumps(b))
+        self.make_ans002(profile='native-direct-stop0',experiment='ANS011',scope='ans9-direct-installed-native-boot')
+        a=json.loads(self.paths['qualification_audit'].read_text())
+        for k in ('mu_ramdisk_only','no_installed_windows_boot'):a.pop(k,None)
+        a.update({'mu_installed_esp_only':True,'installed_windows_prepared':True,
+                  'mu_ans_direct_acpi':True,'m1n1_ans_direct_handoff':True,
+                  'appleans_package_sha256':'d'*64,'installed_package_sha256':'d'*64})
+        a.update(audit_extra or {})
+        for k in drop:a.pop(k,None)
+        self.paths['qualification_audit'].write_text(json.dumps(a))
+        self.m['artifacts']['qualification_audit']['sha256']=digest(self.paths['qualification_audit'])
+        self.path.write_text(json.dumps(self.m));self.sha=digest(self.path)
+    def test_ans011_direct_profile_has_no_el2_window_and_binds_direct_evidence(self):
+        from tools.ans_qualification import direct_mode,write_window_env
+        self.make_ans011()
+        m=self.call(execute=True,confirmation='ANS011')[0]
+        self.assertTrue(direct_mode(m));self.assertIsNone(write_window_env(m))
+        self.assertFalse(direct_mode({'experiment':'ANS010'}))
+        # Direct means no EL2 window: a manifest window, a read-only manifest or missing
+        # direct-handoff evidence is refused.
+        for kw in ({'window':{'first_lba':30781184,'count':29187328}},{'read_only':True},
+                   {'drop':('mu_ans_direct_acpi',)},{'drop':('m1n1_ans_direct_handoff',)},
+                   {'drop':('installed_windows_prepared',)},
+                   {'audit_extra':{'installed_package_sha256':'e'*64}}):
+            self.setUp();self.make_ans011(**kw)
+            with self.assertRaises(ValueError,msg=str(kw)):self.call()
     def test_read_only_profiles_reject_a_write_window(self):
         self.m['write_window']={'first_lba':0,'count':8};self.seal()
         with self.assertRaises(ValueError):self.call()

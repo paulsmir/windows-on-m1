@@ -33,7 +33,7 @@ typedef uint32_t ULONG;
 #define FALSE false
 #define AppleAnsStageReset 19
 #define SRB_STATUS_BUS_RESET 14
-struct adapter { bool Ready,MayOwn; struct { unsigned ready; } Namespace;
+struct adapter { bool Ready,MayOwn,Direct; struct { unsigned ready; } Namespace;
     unsigned Stage,Failure; struct ans_wire Wire; struct ans_telemetry Stats; };
 typedef struct adapter *PAPPLE_ANS_ADAPTER;
 static struct ans_service svc;
@@ -62,6 +62,7 @@ static void retire(PAPPLE_ANS_ADAPTER a,unsigned status){
     assert(status==SRB_STATUS_BUS_RESET && stops && stop_ok && releases==ANS_QUEUE_DEPTH);
     assert(svc.broker.owner==ANS_OWNER_NONE && svc.broker.header.state==ANS_STATE_READY);
     retired++;a->MayOwn=false;}
+static BOOLEAN AppleAnsDirectReset(PAPPLE_ANS_ADAPTER a){(void)a;assert(!"broker reset entered direct path");return false;}
 static BOOLEAN AppleAnsNativeInitialize(PAPPLE_ANS_ADAPTER a){(void)a;
     assert(retired && svc.broker.header.sequence==0);restarts++;return true;}
 '''+function('wire_call')+'\n'+function('operation')+'\n'+reset+r'''

@@ -95,3 +95,20 @@ entries. These counters alone are not a native-storage hardware qualification.
 `tests/telemetry_test.c` covers real counter arithmetic, admin/I/O opcode distinction,
 QD high-water tracking, failure byte accounting, overflow/uncertainty validity,
 stopped retirement and deliberately unaligned query buffers with guard bytes.
+
+## ANS-DIRECT record (source 3)
+
+In direct mode there is no broker. A query with `ANS_IOCTL_BROKER` returns the driver's
+direct-runtime record in the second slot instead: `source = 3` and `generation = 0x544345524944` ("DIRECT").
+
+| Field | Meaning in direct mode |
+| --- | --- |
+| `physical_irqs` | IOP mailbox messages received |
+| `guest_irq_injections` | mailbox echoes sent (syslog LOG, ioreport 0x8/0xc) |
+| `broker_rejections` | unknown mailbox messages (counted, not answered) |
+| `tcb_inval_failures` | nonzero advisory NVMMU TCB_STAT reads |
+| `cqes`, `invalid_cqe` | CQEs consumed and rejected by the direct queue engine |
+| `last_stage` | `enum ansd_stage` |
+| `last_error` | bit 0 = faulted, bit 1 = IOP crashed |
+
+Only these fields are set in `valid_fields`.

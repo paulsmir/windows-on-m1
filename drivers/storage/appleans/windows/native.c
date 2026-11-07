@@ -52,6 +52,10 @@ static VOID quarantine(PAPPLE_ANS_ADAPTER a)
     a->Failure = ANS_RESULT_IO_ERROR;
     a->Stage = AppleAnsStageQuarantined;
 }
+static BOOLEAN faulted(PAPPLE_ANS_ADAPTER a)
+{
+    return a->Direct ? (a->Ansd.faulted != 0) : (a->Wire.faulted != 0);
+}
 /* Platform contract: this one-way MMIO abort holds all guest vCPUs and retains
  * every DMA pin/backing allocation. It is not a successful controller stop. */
 static DECLSPEC_NORETURN VOID terminal_containment(PAPPLE_ANS_ADAPTER a)
@@ -102,7 +106,8 @@ static BOOLEAN telemetry_query(PAPPLE_ANS_ADAPTER a,PSCSI_REQUEST_BLOCK srb)
         AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
     }
     struct ans_telemetry peer={0};
-    if((sources&ANS_IOCTL_BROKER) && a->Broker && a->Wire.bound &&
+    if((sources&ANS_IOCTL_BROKER) && a->Direct) AppleAnsDirectPeer(a,&peer);
+    else if((sources&ANS_IOCTL_BROKER) && a->Broker && a->Wire.bound &&
         (a->Wire.features&ANS_FEATURE_TELEMETRY)) {
         /* Pure software CSR. Lowest DWORD latches all 232 bytes; later words
          * do not read controller hardware or drain a completion queue. */
@@ -240,6 +245,7 @@ BOOLEAN AppleAnsNativeInitialize(PAPPLE_ANS_ADAPTER a)
 #if APPLE_ANS_QUALIFICATION_STOP == 0 || APPLE_ANS_QUALIFICATION_STOP == 3
     ans_u8 cqe[16];
 #endif
+    if (a->Direct) return AppleAnsDirectInitialize(a);
     ans_stats_add(&a->Stats,ANS_TELEM_STARTS,1);
     a->Ready = FALSE;
     a->Namespace.ready = 0;
@@ -311,6 +317,7 @@ failure:
     return FALSE;
 #endif /* paths after the CLAIM stop */
 }
+VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a);
 VOID AppleAnsComplete(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, UCHAR status, ULONG length)
 {
     srb->SrbStatus = status;
@@ -331,9 +338,14 @@ static VOID sense(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, struct ans_sens
     }
     AppleAnsComplete(a, srb, status, 0);
 }
-static VOID dispatch(PAPPLE_ANS_ADAPTER a)
+VOID AppleAnsFinish(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, USHORT status, ULONG length)
 {
-    for (unsigned budget=0;budget<ANS_QUEUE_DEPTH && a->Ready && !a->Wire.faulted;budget++) {
+    if (status>>1) sense(a,srb,ans_scsi_nvme_sense(status,0));
+    else { srb->ScsiStatus=SCSISTAT_GOOD;AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,length); }
+}
+VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a)
+{
+    for (unsigned budget=0;budget<ANS_QUEUE_DEPTH && a->Ready && !faulted(a);budget++) {
         struct ans_order_token token;
         int picked=ans_order_pick(&a->Order,&token);
         if (picked==ANS_ORDER_EMPTY || picked==ANS_ORDER_BUSY) return;
@@ -366,7 +378,12 @@ static VOID dispatch(PAPPLE_ANS_ADAPTER a)
             continue;
         }
         struct ans_broker_response response;
-        int ret=wire_call(a,&slot->Request,&response);
+        int ret;
+        if (a->Direct) {
+            /* Every ansd_submit failure returns before the doorbell: no hardware ownership. */
+            int d=AppleAnsDirectSubmit(a,token.tag,&slot->Request);
+            ret=d==ANSD_OK?ANS_WIRE_OK:ANS_WIRE_INVALID;
+        } else ret=wire_call(a,&slot->Request,&response);
         if (ret==ANS_WIRE_REJECTED || ret==ANS_WIRE_INVALID) {
             /* Authenticated nonfaulted rejection, or local rejection before a
              * doorbell: the task ended without hardware owning its payload. */
@@ -392,7 +409,7 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
     }
     struct ans_scsi_plan plan={0};
     enum ans_order_attribute attribute=ANS_ORDER_UNTAGGED;
-    if (!a->Ready || a->Wire.faulted || a->ShuttingDown || srb->PathId || srb->TargetId || srb->Lun) {
+    if (!a->Ready || faulted(a) || a->ShuttingDown || srb->PathId || srb->TargetId || srb->Lun) {
         AppleAnsComplete(a,srb,SRB_STATUS_NO_DEVICE,0);return TRUE;
     }
     if (srb->SrbFlags & SRB_FLAGS_QUEUE_ACTION_ENABLE) {
@@ -439,8 +456,15 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
     APPLE_ANS_SLOT *slot=&a->Slots[tag];
     slot->Busy=TRUE;slot->Srb=srb;slot->Length=plan.transfer_bytes;
     slot->Plan=plan;slot->Token=token;slot->Shutdown=shutdown;
+    /* Direct: controller PAs (guest DMA view translated); PageDma already holds PAs. */
+    struct ans_logical_prps translated;
+    const struct ans_logical_prps *prps=x?&x->Prps:NULL;
+    if(a->Direct && prps && prps->count) {
+        if(!ansd_translate_prps(prps,&translated)) prps=NULL;
+        else prps=&translated;
+    }
     if(plan.action==ANS_SCSI_SUBMIT &&
-        !ans_io_request(&plan,x?&x->Prps:NULL,tag,a->PageDma[tag],a->Pages[tag],
+        !ans_io_request(&plan,prps,tag,a->PageDma[tag],a->Pages[tag],
                         !a->Namespace.read_only,&slot->Request)) {
         ans_stats_add(&a->Stats,ANS_TELEM_PRP_TRANSLATION_FAILURES,1);
         (void)ans_order_cancel_queued(&a->Order,token);
@@ -448,12 +472,13 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
         return TRUE;
     }
     if (shutdown) a->ShuttingDown=TRUE;
-    dispatch(a);
+    AppleAnsDispatch(a);
     return TRUE;
 }
 BOOLEAN AppleAnsNativeInterrupt(PAPPLE_ANS_ADAPTER a)
 {
     ans_u64 pending;
+    if (a->Direct) return AppleAnsDirectInterrupt(a);
     ans_stats_add(&a->Stats,ANS_TELEM_ISR_ENTRIES,1);
     if (!a->Ready || !a->Broker || a->Wire.faulted) {
         ans_stats_add(&a->Stats,ANS_TELEM_SPURIOUS_IRQS,1);return FALSE;
@@ -496,7 +521,7 @@ BOOLEAN AppleAnsNativeInterrupt(PAPPLE_ANS_ADAPTER a)
         if (status>>1) sense(a,srb,ans_scsi_nvme_sense(status,0));
         else { srb->ScsiStatus=SCSISTAT_GOOD;AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,length); }
     }
-    dispatch(a);
+    AppleAnsDispatch(a);
     return TRUE;
 }
 static VOID retire(PAPPLE_ANS_ADAPTER a, UCHAR status)
@@ -513,6 +538,7 @@ static VOID retire(PAPPLE_ANS_ADAPTER a, UCHAR status)
 }
 BOOLEAN AppleAnsNativeStop(PAPPLE_ANS_ADAPTER a)
 {
+    if (a->Direct) return AppleAnsDirectStop(a);
     ans_stats_add(&a->Stats,ANS_TELEM_STOPS,1);
     a->Ready=FALSE;a->Namespace.ready=0;
     if (!a->MayOwn) { a->Stage=AppleAnsStageStopped;return TRUE; }
@@ -525,6 +551,7 @@ BOOLEAN AppleAnsNativeStop(PAPPLE_ANS_ADAPTER a)
 }
 BOOLEAN AppleAnsNativeReset(PAPPLE_ANS_ADAPTER a)
 {
+    if (a->Direct) return AppleAnsDirectReset(a);
     ans_stats_add(&a->Stats,ANS_TELEM_RESETS,1);
     a->Ready=FALSE;a->Namespace.ready=0;a->Stage=AppleAnsStageReset;
     if (!a->Wire.bound) return FALSE;
@@ -560,7 +587,12 @@ VOID AppleAnsShutdownDpc(PSTOR_DPC Dpc,PVOID HwDeviceExtension,
         /* CQE+REAP already retired hardware ownership. Keep the SRB outstanding
          * in this callback until the controller/RTKit stop receipt is checked. */
         a->Slots[tag].Srb=NULL;a->ShutdownTag=ANS_QUEUE_DEPTH;
-        if (!AppleAnsNativeStop(a)) terminal_containment(a);
+        if (!AppleAnsNativeStop(a)) {
+            /* Direct: no stop proof -> fail the SHUTDOWN SRB and keep every buffer (never freed
+             * before power-off/reset). Broker: one-way EL2 containment. */
+            if (!a->Direct) terminal_containment(a);
+            flushed=FALSE;
+        }
         if (flushed) srb->ScsiStatus=SCSISTAT_GOOD;
         AppleAnsComplete(a,srb,flushed?SRB_STATUS_SUCCESS:SRB_STATUS_ERROR,0);
     }

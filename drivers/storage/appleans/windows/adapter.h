@@ -6,6 +6,7 @@
 #include "transport.h"
 #include "identify.h"
 #include "../common/ans_order.h"
+#include "../common/ans_direct.h"
 #include "telemetry.h"
 #ifndef APPLE_ANS_NATIVE_READ_ONLY
 #define APPLE_ANS_NATIVE_READ_ONLY 0
@@ -23,6 +24,9 @@
 #endif
 #define APPLE_ANS_METADATA_PAGES (ANS_QUEUE_DEPTH + 2)
 #define APPLE_ANS_METADATA_BYTES (APPLE_ANS_METADATA_PAGES * ANS_PRP_PAGE_SIZE + ANS_PRP_PAGE_SIZE - 1)
+/* Direct mode: six 16 KiB queue arrays (admin/IO SQ, CQ, TCB), then the metadata pages,
+ * plus alignment slack (StorPortGetUncachedExtension guarantees only page alignment). */
+#define APPLE_ANS_DIRECT_BYTES (6u * ANSD_QUEUE_ALIGN + APPLE_ANS_METADATA_PAGES * ANS_PRP_PAGE_SIZE + ANSD_QUEUE_ALIGN)
 enum APPLE_ANS_STAGE {
     AppleAnsStageEntry=1, AppleAnsStageFindAdapter=2, AppleAnsStageResourcesRejected=3,
     AppleAnsStageResourcesAccepted=4, AppleAnsStageTransportUnavailable=5,
@@ -66,6 +70,10 @@ typedef struct _APPLE_ANS_ADAPTER {
     volatile LONG DpcReady;
     BOOLEAN ShuttingDown, ShutdownFlushOk;
     unsigned ShutdownTag;
+    /* ANS-DIRECT: selected by the ACPI resource shape (controller + mailbox ranges). */
+    BOOLEAN Direct;
+    PUCHAR Ctrl, Mbox;
+    struct ansd_ctrl Ansd;
 } APPLE_ANS_ADAPTER, *PAPPLE_ANS_ADAPTER;
 BOOLEAN AppleAnsNativeResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config);
 BOOLEAN AppleAnsNativeInitialize(PAPPLE_ANS_ADAPTER a);
@@ -73,6 +81,15 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb);
 BOOLEAN AppleAnsNativeInterrupt(PAPPLE_ANS_ADAPTER a);
 BOOLEAN AppleAnsNativeReset(PAPPLE_ANS_ADAPTER a);
 BOOLEAN AppleAnsNativeStop(PAPPLE_ANS_ADAPTER a);
+BOOLEAN AppleAnsDirectResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config);
+BOOLEAN AppleAnsDirectInitialize(PAPPLE_ANS_ADAPTER a);
+BOOLEAN AppleAnsDirectInterrupt(PAPPLE_ANS_ADAPTER a);
+BOOLEAN AppleAnsDirectReset(PAPPLE_ANS_ADAPTER a);
+BOOLEAN AppleAnsDirectStop(PAPPLE_ANS_ADAPTER a);
+int AppleAnsDirectSubmit(PAPPLE_ANS_ADAPTER a, unsigned tag, const struct ans_broker_request *r);
+VOID AppleAnsDirectPeer(PAPPLE_ANS_ADAPTER a, struct ans_telemetry *peer);
+VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a);
+VOID AppleAnsFinish(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, USHORT nvme_status, ULONG length);
 HW_PASSIVE_INITIALIZE_ROUTINE AppleAnsPassiveInitialize;
 VOID AppleAnsComplete(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, UCHAR status, ULONG length);
 #endif

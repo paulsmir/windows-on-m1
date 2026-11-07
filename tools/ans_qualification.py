@@ -44,7 +44,12 @@ PROFILES = {'ANS001': {'scope': 'ans0-unbound-no-driver', 'appleans_profile': No
             # The preloaded WinPE stays a sealed but unbootable RAMDisk.
             'ANS010': {'scope': 'ans8-installed-native-boot', 'appleans_profile': 'native-write-window-stop0',
                        'max_write_blocks': 29187328, 'write_window': (30781184, 29187328),
-                       'installed_boot': True}}
+                       'installed_boot': True},
+            # ANS011 (investigation/ANS_DIRECT_PLAN.md): same installed boot, but m1n1 releases the
+            # controller to the guest at EBS (--ans-direct). No EL2 broker and no EL2 write window:
+            # the driver writes what Windows asks, like any storage driver.
+            'ANS011': {'scope': 'ans9-direct-installed-native-boot', 'appleans_profile': 'native-direct-stop0',
+                       'installed_boot': True, 'direct': True}}
 OVERRIDES = ('phys_base', 'ramdisk_base', 'ramdisk_max_size', 'low_mem_base',
              'low_mem_size', 'low_mem_backing', 'fb_base', 'fb_width', 'fb_height', 'guest_ram_end')
 
@@ -78,12 +83,14 @@ def validate_manifest(path, expected_sha256, root):
     m = read_json(path)
     fields = {'schema', 'experiment', 'platform', 'storage_mode', 'scope', 'read_only', 'launch', 'artifacts'}
     profile = PROFILES.get(m.get('experiment'))
-    writable = profile is not None and 'max_write_blocks' in profile
-    require(set(m) == (fields | {'write_window'} if writable else fields), 'unknown/missing qualification fields')
+    windowed = profile is not None and 'max_write_blocks' in profile
+    direct = profile is not None and profile.get('direct', False)
+    writable = windowed or direct
+    require(set(m) == (fields | {'write_window'} if windowed else fields), 'unknown/missing qualification fields')
     require(profile is not None and (m['schema'], m['platform'], m['storage_mode'], m['scope']) ==
             (SCHEMA, 'J313', 'ANS_NATIVE', profile['scope']), 'wrong qualification profile')
     require(m['read_only'] is (not writable) and json.dumps(m['launch'], sort_keys=True) == json.dumps(PINNED, sort_keys=True), 'qualification launch contract mismatch')
-    if writable:
+    if windowed:
         w = m['write_window']
         require(isinstance(w, dict) and set(w) == {'first_lba', 'count'} and
                 all(type(w[k]) is int for k in w) and w['first_lba'] >= 0 and
@@ -140,6 +147,8 @@ def validate_manifest(path, expected_sha256, root):
     keys += (['mu_installed_esp_only', 'installed_windows_prepared'] if installed
              else ['mu_ramdisk_only', 'no_installed_windows_boot'])
     keys += ['winpe_no_appleans'] if stop_profile is None else ['winpe_appleans_profile_bound', 'winpe_testsigning']
+    if direct:
+        keys += ['mu_ans_direct_acpi', 'm1n1_ans_direct_handoff']
     for key in keys:
         require(audit.get(key) is True, f'unproven qualification property: {key}')
     if stop_profile is not None:
@@ -203,6 +212,11 @@ def validate_launch(path, seal, root, *, firmware=None, m1n1=None, ramdisk=None,
         require(selected is None or Path(selected).resolve() == paths[role], f'CLI {role} differs from sealed candidate')
     reject_output_aliases(root, paths, path, contract_output)
     return m, paths
+
+
+def direct_mode(manifest):
+    """True when the validated manifest's profile releases ANS to the guest (--ans-direct)."""
+    return bool(PROFILES.get(manifest.get('experiment'), {}).get('direct', False))
 
 
 def write_window_env(manifest):

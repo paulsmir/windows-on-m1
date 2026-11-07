@@ -41,6 +41,7 @@ CONTRACT_OUTPUT=
 FOREGROUND=0
 AGX_POWER_BROKER=0
 STORAGE_MODE=VNVME_RECOVERY
+ANS_DIRECT=0
 QUALIFICATION_MANIFEST=
 QUALIFICATION_SHA256=
 CONFIRM_EXPERIMENT=
@@ -51,7 +52,7 @@ usage() {
     echo "          [--display none|physical|virtual|both] [--debug off|uart|full|monitor]" >&2
     echo "          [--ramdisk FILE] [--chainload] [--m1n1 FILE]" >&2
     echo "          [--contract-output FILE]" >&2
-    echo "          [--storage-mode VNVME_RECOVERY|ANS_NATIVE]" >&2
+    echo "          [--storage-mode VNVME_RECOVERY|ANS_NATIVE] [--ans-direct]" >&2
     echo "          [--qualification-manifest JSON --qualification-sha256 SHA256 --confirm-experiment ANS001]" >&2
     echo "          [--agx-power-broker]" >&2
     echo "          [--no-low-mem] [--foreground] [--dry-run] [--snapshot-kernel-read RVA:LEN]" >&2
@@ -76,6 +77,7 @@ while [ "$#" -gt 0 ]; do
         --confirm-experiment) [ "$#" -ge 2 ] || usage; CONFIRM_EXPERIMENT=$2; shift 2 ;;
         --storage-mode) [ "$#" -ge 2 ] || usage; STORAGE_MODE=$2; shift 2 ;;
         --agx-power-broker) AGX_POWER_BROKER=1; shift ;;
+        --ans-direct) ANS_DIRECT=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         --snapshot-kernel-read) [ "$#" -ge 2 ] || usage; SNAPSHOT_KERNEL_READ=$2; shift 2 ;;
         --snapshot-devnodes) [ "$#" -ge 2 ] || usage; SNAPSHOT_DEVNODES=$2; shift 2 ;;
@@ -136,6 +138,7 @@ if [ "$STORAGE_MODE" = ANS_NATIVE ]; then
         --qualified-m1n1 "$M1N1" --ramdisk "$RAMDISK" --display-mode "$DISPLAY" --debug-mode "$DEBUG"
     [ -z "$CONTRACT_OUTPUT" ] || set -- "$@" --contract-output "$CONTRACT_OUTPUT"
     [ -z "$CONFIRM_EXPERIMENT" ] || set -- "$@" --confirm-experiment "$CONFIRM_EXPERIMENT"
+    [ "$ANS_DIRECT" -eq 0 ] || set -- "$@" --ans-direct
     [ "$DRY_RUN" -eq 1 ] || set -- "$@" --require-execution-confirmation
     "$PYTHON" "$ROOT/run_uefi.py" "$@"
     if [ "$DRY_RUN" -eq 0 ] && pgrep -f '[r]un_uefi.py' >/dev/null; then
@@ -143,6 +146,8 @@ if [ "$STORAGE_MODE" = ANS_NATIVE ]; then
     fi
 elif [ -n "$QUALIFICATION_MANIFEST$QUALIFICATION_SHA256$CONFIRM_EXPERIMENT" ]; then
     echo "Qualification arguments require explicit ANS_NATIVE mode" >&2; exit 2
+elif [ "$ANS_DIRECT" -eq 1 ]; then
+    echo "--ans-direct requires explicit ANS_NATIVE mode" >&2; exit 2
 fi
 
 if [ "$DRY_RUN" -eq 0 ]; then
@@ -157,6 +162,7 @@ fi
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "mode: assisted development"
     echo "storage: $STORAGE_MODE"
+    [ "$ANS_DIRECT" -eq 0 ] || echo "ANS ownership: direct"
     echo "display: $DISPLAY"
     echo "debug: $DEBUG"
     [ "$FOREGROUND" -eq 0 ] && echo "execution: detached" || echo "runner: foreground"
@@ -242,6 +248,7 @@ if [ "$STORAGE_MODE" = ANS_NATIVE ]; then
     set -- "$@" --qualification-manifest "$QUALIFICATION_MANIFEST" \
         --qualification-sha256 "$QUALIFICATION_SHA256" --qualified-m1n1 "$M1N1" \
         --qualified-vuart "$VUART" --confirm-experiment "$CONFIRM_EXPERIMENT"
+    [ "$ANS_DIRECT" -eq 0 ] || set -- "$@" --ans-direct
 fi
 
 if [ "$FOREGROUND" -eq 1 ]; then

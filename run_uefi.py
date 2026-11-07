@@ -26,6 +26,10 @@ ap.add_argument("--dry-run", action="store_true",
                 help="validate and print the virtual framebuffer contract without USB")
 ap.add_argument("--storage-mode", choices=("VNVME_RECOVERY", "ANS_NATIVE"),
                 default="VNVME_RECOVERY", help="explicit storage ownership profile")
+ap.add_argument("--ans-direct", action="store_true",
+                help="ANS_NATIVE only: the EBS handoff cold-boots ANS to the Asahi hand-off state and "
+                     "passes the controller to the guest driver (no EL2 broker, no EL2 write window); "
+                     "exclusive with a manifest write window")
 ap.add_argument("--qualification-manifest", type=pathlib.Path)
 ap.add_argument("--qualification-sha256")
 ap.add_argument("--qualified-m1n1", type=pathlib.Path)
@@ -86,10 +90,11 @@ args = ap.parse_args()
 # Ambient environment cannot opt an ordinary launch into native ANS ownership.
 os.environ["WOM1_STORAGE_MODE"] = args.storage_mode
 os.environ.pop("WOM1_ANS_WRITE_WINDOW", None)
+os.environ.pop("WOM1_ANS_DIRECT", None)
 qualification_paths = None
 ans_write_window = None
 if args.storage_mode == "ANS_NATIVE":
-    from tools.ans_qualification import validate_launch, write_window_env, OVERRIDES
+    from tools.ans_qualification import validate_launch, write_window_env, direct_mode, OVERRIDES
     root = pathlib.Path(__file__).resolve().parent
     try:
         qualification_manifest, qualification_paths = validate_launch(
@@ -105,10 +110,19 @@ if args.storage_mode == "ANS_NATIVE":
         args.ramdisk = qualification_paths['winpe']
         # ANS008: only a sealed manifest can open the EL2 WRITE window.
         ans_write_window = write_window_env(qualification_manifest)
+        if args.ans_direct and ans_write_window is not None:
+            raise ValueError("--ans-direct is exclusive with the manifest EL2 write window")
+        if args.ans_direct != direct_mode(qualification_manifest):
+            raise ValueError("--ans-direct must match the sealed manifest's direct profile")
         if ans_write_window is not None:
             os.environ["WOM1_ANS_WRITE_WINDOW"] = ans_write_window
+        # ANS-DIRECT: set only after admission, like the window (no ambient opt-in).
+        if args.ans_direct:
+            os.environ["WOM1_ANS_DIRECT"] = "1"
     except (ValueError, OSError, TypeError) as error:
         ap.error(str(error))
+elif args.ans_direct:
+    ap.error("--ans-direct requires explicit --storage-mode ANS_NATIVE")
 elif any((args.qualification_manifest, args.qualification_sha256, args.qualified_m1n1,
           args.confirm_experiment, args.require_execution_confirmation, args.qualified_vuart)):
     ap.error("qualification arguments require explicit --storage-mode ANS_NATIVE")
@@ -156,7 +170,10 @@ print(f"virtual framebuffer       : 0x{fb.base:x}..0x{fb.end:x}")
 print(f"geometry / stride / size  : {fb.width}x{fb.height} / {fb.stride} / 0x{fb.size:x}")
 print(f"storage mode             : {args.storage_mode}")
 if args.storage_mode == "ANS_NATIVE":
-    print(f"ANS write window         : {ans_write_window or 'none (read-only)'}")
+    if args.ans_direct:
+        print("ANS ownership            : direct (guest driver owns the controller after EBS)")
+    else:
+        print(f"ANS write window         : {ans_write_window or 'none (read-only)'}")
 print(f"display mode             : {profile.display.value}")
 print(f"debug mode               : {profile.debug.value}")
 print(f"physical DCP             : {'enabled' if profile.physical_display else 'disabled'}")
