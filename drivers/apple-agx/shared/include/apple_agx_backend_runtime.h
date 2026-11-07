@@ -111,11 +111,40 @@ typedef struct _APPLE_AGX_BACKEND_JOB_IMAGE {
    * firmware Barrier on the compute stamp; zero for every other job. */
   APPLE_AGX_U64 TaBarrierAddress;
   /* GPU timestamps (T1): the compute job's KMD timestamp block (job start,
-   * job end, requested start, requested end; firmware-written), or NULL. */
+   * job end, requested start, requested end; firmware-written), or NULL.
+   * rc79: a render job's compute prelude block, read only as the completion
+   * record's PreludeStart/PreludeEnd (every other reader requires Kind
+   * Compute). */
   const void *ComputeTimestampBlock;
+  /* This render's parity copy of template objects 28..35: 3D, TA,
+   * user 3D and user TA start/end pairs. Bound by the shared builder,
+   * retained with PendingJob/SuccessorJob until completion is reported.
+   * The mutable relocation table may already name a successor's copy. */
+  const void *RenderTimestampPointers[8];
   /* GPU timestamps: the G4 envelope's command (DMA buffer) GPU VA, which
    * the UMD names its batch by; 0 for jobs without a G4 envelope. */
   APPLE_AGX_U64 CommandVa;
+  /* RC40: validated process destination for completion's end nanoseconds;
+   * never passed to the firmware. Zero preserves the escape-only path. */
+  APPLE_AGX_U64 TimestampPublishVa;
+  /* Retained across completion retries after the image has been restored. */
+  APPLE_AGX_U64 TimestampEndNs;
+  /* rc102 (depth 2): a successor job's leading firmware Barrier on the
+   * running job's last firmware stamp, the first entry of the queue the
+   * job starts on (TA for a render without compute work, compute
+   * otherwise); zero for every job kicked at depth 1. */
+  APPLE_AGX_U64 LeadBarrierAddress;
+  /* OV5 drill (Wom1Ov5FragWaitDrill, default off): a successor render
+   * without compute work whose TA leads with its Barrier on the running
+   * compute job also leads its 3D queue with a Barrier on the same compute
+   * stamp (satisfied on arrival: the TA already waited); zero otherwise. */
+  APPLE_AGX_U64 D3LeadBarrierAddress;
+  /* OV5 step 2 (Wom1Ov5TaWaiver, default off): nonzero for a successor
+   * render without compute work whose TA lead Barrier was waived (its
+   * LeadBarrierAddress is zero, its TA publication is the root alone); its
+   * D3LeadBarrierAddress then carries the only wait on the running compute
+   * job. Zero for every other job. */
+  APPLE_AGX_U32 TaLeadWaived;
 } APPLE_AGX_BACKEND_JOB_IMAGE;
 
 typedef struct _APPLE_AGX_BACKEND_OBSERVATION {
@@ -180,6 +209,13 @@ typedef struct _APPLE_AGX_BACKEND_IO {
                                  APPLE_AGX_U32 Fence);
     APPLE_AGX_BOOL (*Stop)(void *Context, APPLE_AGX_U32 Fence);
     APPLE_AGX_BOOL (*Reset)(void *Context, APPLE_AGX_U32 Fence);
+    /* rc102 (optional): kick Job as the successor of the running job (one
+     * atomic admission of any kind, its leading Barrier first). FALSE
+     * means the fence never reached the firmware unless the queue owner
+     * faulted (the running job's next observation then fails). */
+    APPLE_AGX_BOOL (*RunSuccessor)(void *Context,
+                                   const APPLE_AGX_BACKEND_JOB_IMAGE *Job,
+                                   APPLE_AGX_U32 Fence);
   } Queues;
   /*
    * TRUE is the ownership receipt: the exact fence has been accepted by the
@@ -224,6 +260,14 @@ typedef struct _APPLE_AGX_BACKEND_RUNTIME {
   APPLE_AGX_BACKEND_COMPLETION_STATUS TerminalStatus;
   APPLE_AGX_BACKEND_RUNTIME_PHASE TerminalNextPhase;
   APPLE_AGX_BACKEND_RUNTIME_RESULT TerminalResult;
+  /* rc102 (depth-2 job window): the job kicked behind PendingSubmission,
+   * which becomes the pending job once the running job's completion was
+   * accepted (Io.Complete); its observations then apply as usual. */
+  APPLE_AGX_BACKEND_SUBMISSION SuccessorSubmission;
+  APPLE_AGX_BACKEND_JOB_IMAGE SuccessorJob;
+  APPLE_AGX_BOOL SuccessorPending;
+  APPLE_AGX_U32 SuccessorKicks;
+  APPLE_AGX_U32 SuccessorPromotions;
 } APPLE_AGX_BACKEND_RUNTIME;
 
 void AppleAgxBackendRuntimeInitialize(APPLE_AGX_BACKEND_RUNTIME *Runtime,
@@ -236,6 +280,13 @@ APPLE_AGX_BOOL AppleAgxBackendSubmissionFromEntry(
 APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStart(
     APPLE_AGX_BACKEND_RUNTIME *Runtime, const APPLE_AGX_BACKEND_IO *Io);
 APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeSubmit(
+    APPLE_AGX_BACKEND_RUNTIME *Runtime,
+    const APPLE_AGX_BACKEND_SUBMISSION *Submission);
+/* rc102: kick Submission as the successor of the submitted job (depth 2):
+ * it is relocated into SuccessorJob (which must carry its leading
+ * Barrier) and handed to Io.Queues.RunSuccessor. Busy while a successor
+ * or a terminal state is pending; the submitted job is never touched. */
+APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeSubmitSuccessor(
     APPLE_AGX_BACKEND_RUNTIME *Runtime,
     const APPLE_AGX_BACKEND_SUBMISSION *Submission);
 APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeObserve(

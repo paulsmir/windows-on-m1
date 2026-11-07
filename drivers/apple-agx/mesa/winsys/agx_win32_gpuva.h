@@ -2,6 +2,7 @@
 #define AGX_WIN32_GPUVA_H
 
 #include <stdint.h>
+#include "agx_win32_submission_window.h"
 #include "apple_agx_g3_private_abi.h"
 
 #ifdef __cplusplus
@@ -10,9 +11,8 @@ extern "C" {
 
 #define AGX_GPUVA_MAP_WRITE 1u
 #define AGX_GPUVA_MAP_EXECUTE 2u
-/* EXP1203: submissions that may be in flight at once (the newest included).
- * Must equal ADMISSION_UMD_IN_FLIGHT_SETS (umd_internal.h): the UMD lets a
- * slot join a new submission while fewer than this many sets hold it. */
+/* Default submissions in flight (newest included). Q19 configures the
+ * same bounded window in the winsys and runtime hold admission. */
 #define AGX_GPUVA_IN_FLIGHT 4u
 
 /* Host-testable boundary around WDDM callbacks. Return 0 on failure, 1 for
@@ -38,6 +38,10 @@ typedef struct {
    * QPC, for calibration); 0 when the KMD holds none. */
   int (*GpuTimestamps)(void *, uint64_t, uint64_t *, uint64_t *, uint64_t *,
                        uint64_t *);
+  /* C53 B0 (optional): Map at an allocation offset (in 4 KiB pages) into a
+   * reserved range; an alias, never the allocation's canonical VA. Same
+   * results as Map. */
+  int (*MapAt)(void *, uint64_t, uint64_t, uint64_t, uint64_t, unsigned, uint64_t *);
 } AGX_WIN32_GPUVA_OPS;
 
 typedef struct {
@@ -46,6 +50,28 @@ typedef struct {
   uint64_t Bytes;
   unsigned Bound;
 } AGX_WIN32_GPUVA_BO;
+
+/* Diagnostic snapshots contain values, never borrowed resource pointers. */
+enum AGX_WIN32_REF_KIND {
+  AgxRefDescriptor=1, AgxRefCbv, AgxRefSrv, AgxRefUav, AgxRefVertex,
+  AgxRefIndex, AgxRefIndirect, AgxRefCount, AgxRefTarget, AgxRefDepth,
+  AgxRefStreamOutput, AgxRefEncoder, AgxRefPool, AgxRefSampler,
+  AgxRefQuery, AgxRefScratch, AgxRefNative, AgxRefHeap
+};
+enum AGX_WIN32_REF_RESULT {
+  AgxRefMissing=1, AgxRefOwner, AgxRefRange, AgxRefIncomplete, AgxRefNotResident
+};
+typedef struct {
+  uint64_t Va, Bytes, Allocation, Object, Execute;
+  unsigned Command, Kind, Stage, Slot, Root, Path, List;
+} AGX_WIN32_REF;
+typedef struct {
+  AGX_WIN32_REF *Items;
+  unsigned Count, Capacity, Incomplete;
+} AGX_WIN32_REF_LIST;
+int AgxWin32RefAppend(AGX_WIN32_REF_LIST *, const AGX_WIN32_REF *);
+void AgxWin32RefCleanup(AGX_WIN32_REF_LIST *);
+unsigned AgxWin32RefCheck(const AGX_WIN32_REF *, const AGX_WIN32_GPUVA_BO *const *, unsigned);
 
 /* EXP1093: a submission still in flight behind the newest one. */
 typedef struct {
@@ -66,11 +92,18 @@ typedef struct {
    * AGX_GPUVA_IN_FLIGHT submissions in flight (was two): CS 1.6 submits
    * three per frame, so with two every frame waited for its own previous
    * submission. A submission needs a free older slot. */
-  AGX_WIN32_GPUVA_SET Older[AGX_GPUVA_IN_FLIGHT - 1u];
+  AGX_WIN32_GPUVA_SET Older[AGX_SUBMISSION_WINDOW_MAX - 1u];
+  unsigned SubmissionWindow; /* zero/default: four; opt-in: sixteen */
   unsigned OlderCount;
   unsigned Terminal;
   unsigned LastFailure; /* diagnostic: source line of the last refused call */
   unsigned LastDetail;  /* diagnostic: MakeResident/Submit callback result */
+  /* Set only for the duration of one caller-serialized native submission. */
+  const AGX_WIN32_REF_LIST *Validation;
+  void (*RefReport)(void *, const AGX_WIN32_REF *, unsigned);
+  int (*RefResident)(void *, uint64_t); /* UMD token has a residency + submit hold */
+  unsigned RefRefuse, RefReported;
+
 } AGX_WIN32_GPUVA_SPACE;
 
 int AgxWin32GpuvaInit(AGX_WIN32_GPUVA_SPACE *, const AGX_WIN32_GPUVA_OPS *, void *);
@@ -78,6 +111,21 @@ int AgxWin32GpuvaBind(AGX_WIN32_GPUVA_SPACE *, AGX_WIN32_GPUVA_BO *,
                       uint64_t Allocation, uint64_t Bytes, int LowVa,
                       unsigned Protection);
 int AgxWin32GpuvaUnbind(AGX_WIN32_GPUVA_SPACE *, AGX_WIN32_GPUVA_BO *);
+/* C53 B0 (D3D12-C53-tiled-buffers-plan.md): a reserved range of 64 KiB tiles
+ * with no backing; tiles are then mapped at allocation offsets. A range and
+ * its size are 64 KiB aligned; a map is AGX_WIN32_GPUVA_MAP_PAGE aligned. Free refuses while any
+ * submission is in flight, as Unbind does. C53 B4: each reservation carries
+ * one never-mapped 64 KiB guard tile after its Bytes (reserved and freed with
+ * it), so no tile mapping, and no merged UMD alias, continues into the next
+ * reservation. */
+#define AGX_WIN32_GPUVA_RANGE_GUARD 0x10000ull
+/* C53 T2D: MapRange maps whole AGX pages (16 KiB): a reserved texture binds
+ * its hardware tiles one page each. Ranges stay 64 KiB tiles. */
+#define AGX_WIN32_GPUVA_MAP_PAGE 0x4000ull
+int AgxWin32GpuvaReserveRange(AGX_WIN32_GPUVA_SPACE *, uint64_t Bytes, uint64_t *Va);
+int AgxWin32GpuvaMapRange(AGX_WIN32_GPUVA_SPACE *, uint64_t Va, uint64_t Allocation,
+                          uint64_t Offset, uint64_t Bytes, unsigned Protection);
+int AgxWin32GpuvaFreeRange(AGX_WIN32_GPUVA_SPACE *, uint64_t Va, uint64_t Bytes);
 int AgxWin32GpuvaSubmit(AGX_WIN32_GPUVA_SPACE *,
                         const AGX_WIN32_GPUVA_BO *const *, unsigned Count,
                         const AGX_WIN32_GPUVA_BO *Command, uint32_t CommandBytes,
@@ -92,6 +140,15 @@ int AgxWin32GpuvaComplete(AGX_WIN32_GPUVA_SPACE *, uint64_t CompletionFence);
 uint64_t AgxWin32GpuvaHoldingFence(const AGX_WIN32_GPUVA_SPACE *, uint64_t Allocation);
 /* Whether CompletionFence is an in-flight (held) submission's fence. */
 int AgxWin32GpuvaFenceHeld(const AGX_WIN32_GPUVA_SPACE *, uint64_t CompletionFence);
+/* RC71: the completion fence of the newest submission in flight (0: none). */
+uint64_t AgxWin32GpuvaNewestFence(const AGX_WIN32_GPUVA_SPACE *);
+/* RC71 (EXP1990): free the VA of a BO whose allocation is already destroyed
+ * once Fence -- the newest submission in flight when it was released
+ * (AgxWin32GpuvaNewestFence) -- has retired. Submissions retire in order and
+ * no later one can name a destroyed allocation, so nothing can still use the
+ * range. Fence 0 needs an idle space, as Unbind. 0 while Fence is in flight. */
+int AgxWin32GpuvaUnbindAfter(AGX_WIN32_GPUVA_SPACE *, AGX_WIN32_GPUVA_BO *,
+                             uint64_t Fence);
 
 #ifdef __cplusplus
 }

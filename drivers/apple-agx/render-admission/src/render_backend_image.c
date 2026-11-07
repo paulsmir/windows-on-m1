@@ -155,6 +155,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
     return APPLE_AGX_FALSE;
   }
   Image->Binding = candidate;
+  Image->JobVmSlot = 0u;
   Image->BoundFence = Packet->Fence;
   *Binding = candidate;
   return APPLE_AGX_TRUE;
@@ -237,6 +238,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindDynamicSubmission(
     return APPLE_AGX_FALSE;
   }
   Image->Binding = candidate;
+  Image->JobVmSlot = 0u;
   Image->BoundFence = Packet->Fence;
   *Binding = candidate;
   return APPLE_AGX_TRUE;
@@ -284,7 +286,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindNativeSubmission(
   Image->NativeWidth=Native->SurfaceWidth;
   Image->NativeHeight=Native->SurfaceHeight;
   Image->NativePitch=Native->SurfacePitch;
-  Image->Binding=candidate; Image->BoundFence=Packet->Fence;
+  Image->Binding=candidate; Image->JobVmSlot=0u; Image->BoundFence=Packet->Fence;
   *Binding=candidate;
   return APPLE_AGX_TRUE;
 }
@@ -301,6 +303,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   APPLE_AGX_EXP208_GDI_BINDING candidate;
   APPLE_AGX_EXP208_RELOCATION_OBJECT saved;
   APPLE_AGX_U32 sequence;
+  APPLE_AGX_U32 step = 0u;
   /* M2-c: a target outside the local reserve has no CPU token or host
    * physical address (both zero); the scene reaches it by GPU VA only. */
   if (Image == 0 || Packet == 0 ||
@@ -332,17 +335,22 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
   if (Image->Pristine != APPLE_AGX_TRUE &&
       !AdmissionBackendImagePrepare(Image, &backend)) {
     Image->Ready = APPLE_AGX_FALSE;
+    Image->BindFailure = 1u;
     return APPLE_AGX_FALSE;
   }
-  Image->Pristine = APPLE_AGX_FALSE;
-  if (!AppleAgxG4BuildTa3d(View, Image->ArenaCpuAddress,
-          Image->ArenaBytes, 1u, Image->Objects,
-          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)) {
-    Image->Ready = APPLE_AGX_FALSE;
-    return APPLE_AGX_FALSE;
-  }
-  /* Template reconstruction is not a firmware queue restart. */
+  /* Template reconstruction is not a firmware queue restart, refused scene
+   * or not. */
   Image->Sequence = sequence;
+  Image->Pristine = APPLE_AGX_FALSE;
+  /* EXP1902N: a scene the builder refuses is that job's refusal only. The
+   * image stays Ready and not Pristine, so the next bind re-Prepares the
+   * arena from the template (a cleared Ready refused every later job). */
+  if (!AppleAgxG4BuildTa3dEx(View, Image->ArenaCpuAddress,
+          Image->ArenaBytes, 1u, Image->Objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &step)) {
+    Image->BindFailure = 20u + step;
+    return APPLE_AGX_FALSE;
+  }
   saved = Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
   Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].Data =
       (unsigned char *)DestinationCpuAddress;
@@ -354,19 +362,23 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
       Packet->DestinationBytes;
   if (!AppleAgxG4ApplySceneRelocations(Image->Objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)) {
-    Image->Ready = APPLE_AGX_FALSE;
+    Image->BindFailure = 3u;
     return APPLE_AGX_FALSE;
   }
   if (!AppleAgxG4ComposeHeaderV2(&Image->G4Header, &render,
           View->CommandVa, View->CommandBytes,
           View->ColorFormat, View->Process)) {
-    Image->Ready = APPLE_AGX_FALSE;
+    Image->BindFailure = 4u;
     return APPLE_AGX_FALSE;
   }
   memcpy(Image->G4Command, View->Native, View->CommandBytes);
   Image->G4CommandBytes = View->CommandBytes;
+  Image->TimestampPublishVa =
+      AppleAgxG4TimestampPublishVa(&render.TimestampsFragment);
   Image->G4Lease = View->Lease;
   Image->G4WithCompute = View->HasCompute ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
+  Image->G4TaIndependent = View->TaIndependent && !View->HasCompute
+      ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
   if (View->HasCompute) {
     Image->G4PreludeCompute = View->Compute;
     Image->G4PreludePreemption = View->Preemption;
@@ -386,7 +398,9 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Submission(
       (AppleAgxG4ColorBytes(View->ColorFormat) ?
        AppleAgxG4ColorBytes(View->ColorFormat) : 4u);
   Image->Binding = candidate;
+  Image->JobVmSlot = 0u;
   Image->BoundFence = Packet->Fence;
+  Image->BindFailure = 0u;
   *Binding = candidate;
   return APPLE_AGX_TRUE;
 }
@@ -403,7 +417,10 @@ APPLE_AGX_BOOL AdmissionBackendImageBindG4Compute(
       Envelope->Native.Type != APPLE_AGX_G4_COMPUTE)
     return APPLE_AGX_FALSE;
   memcpy(&Image->G4ComputeEnvelope, Envelope, sizeof(*Envelope));
+  Image->TimestampPublishVa =
+      AppleAgxG4TimestampPublishVa(&Envelope->Compute.Timestamps);
   AdmissionBackendBindingZero(&Image->Binding);
+  Image->JobVmSlot = 0u;
   Image->G4Compute = APPLE_AGX_TRUE;
   Image->BoundFence = Fence;
   return APPLE_AGX_TRUE;
@@ -421,7 +438,9 @@ APPLE_AGX_BOOL AdmissionBackendImageBindPresentCompute(
           &Present->DestinationRect, Present->Rects, Present->RectCount))
     return APPLE_AGX_FALSE;
   memcpy(&Image->Present, Present, sizeof(*Present));
+  Image->TimestampPublishVa = 0ULL;
   AdmissionBackendBindingZero(&Image->Binding);
+  Image->JobVmSlot = 0u;
   Image->PresentCompute = APPLE_AGX_TRUE;
   Image->BoundFence = Fence;
   return APPLE_AGX_TRUE;
@@ -546,6 +565,7 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
     memset(&Image->G4ComputeEnvelope, 0, sizeof(Image->G4ComputeEnvelope));
     memset(&Image->Present, 0, sizeof(Image->Present));
     Image->G4Compute = APPLE_AGX_FALSE;
+    Image->TimestampPublishVa = 0ULL;
     Image->PresentCompute = APPLE_AGX_FALSE;
     Image->BoundFence = 0u;
     Image->JobFence = 0u;
@@ -693,6 +713,19 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmissionRestore(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AdmissionBackendImageReleasesWithoutPrepare(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_BACKEND_IMAGE_SNAPSHOT *Snapshot, APPLE_AGX_U32 Fence) {
+  if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
+      Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
+      Image->BoundFence != Fence)
+    return APPLE_AGX_FALSE;
+  if (Image->G4Compute || Image->PresentCompute)
+    return APPLE_AGX_TRUE;
+  return Image->G4Native && snapshot_matches(Snapshot, Image)
+      ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
+}
+
 APPLE_AGX_BOOL AdmissionBackendImageSelectVmSlot(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Slot) {
   if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
@@ -703,6 +736,20 @@ APPLE_AGX_BOOL AdmissionBackendImageSelectVmSlot(
       Image->ArenaCpuAddress, Image->ArenaCapacity, Slot);
 }
 
+APPLE_AGX_BOOL AdmissionBackendImageRetargetVmSlot(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 DefaultSlot) {
+  APPLE_AGX_U32 slot;
+  if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
+      Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
+      Image->BoundFence != Fence || Image->G4Compute || Image->PresentCompute)
+    return APPLE_AGX_FALSE;
+  slot = Image->JobVmSlot ? Image->JobVmSlot : DefaultSlot;
+  if (slot == 0u) return APPLE_AGX_TRUE;
+  return AppleAgxRenderTemplateRetargetVmSlot(Image->ArenaCpuAddress,
+      Image->ArenaCapacity, slot, 0);
+}
+
 APPLE_AGX_BOOL AdmissionBackendImageRestartQueueLifetime(
     ADMISSION_BACKEND_IMAGE *Image) {
   if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
@@ -710,6 +757,28 @@ APPLE_AGX_BOOL AdmissionBackendImageRestartQueueLifetime(
       Image->JobFence != 0u || Image->JobReady != APPLE_AGX_FALSE)
     return APPLE_AGX_FALSE;
   Image->Sequence = 0u;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AdmissionBackendImageUnstageJob(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 PreviousSequence,
+    const APPLE_AGX_EXP208_DYNAMIC_RESULT *PreviousDynamic) {
+  unsigned char *job_bytes;
+  APPLE_AGX_U32 index;
+  if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
+      PreviousDynamic == ADMISSION_BACKEND_IMAGE_NULL || Fence == 0u ||
+      !Image->JobReady || Image->JobFence != Fence ||
+      Image->BoundFence != Fence || PreviousSequence == 0xffffffffu ||
+      Image->Sequence != PreviousSequence + 1u)
+    return APPLE_AGX_FALSE;
+  Image->Sequence = PreviousSequence;
+  Image->Dynamic = *PreviousDynamic;
+  job_bytes = (unsigned char *)&Image->Job;
+  for (index = 0u; index < (APPLE_AGX_U32)sizeof(Image->Job); ++index)
+    job_bytes[index] = 0u;
+  Image->JobFence = 0u;
+  Image->JobReady = APPLE_AGX_FALSE;
   return APPLE_AGX_TRUE;
 }
 

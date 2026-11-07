@@ -1,3 +1,9 @@
+"""WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+Terminal CPU paging/present failures, including errors without a fault VA,
+must report DMA_PAGE_FAULTED rather than the reserved DMA_FAULTED interrupt.
+The actual failed fence must retire before notification without releasing a
+different packet, so query/preemption cannot regress behind the error fence.
+"""
 from pathlib import Path
 import os
 import re
@@ -61,7 +67,7 @@ typedef struct {
   struct {unsigned FaultedFenceId;ULONGLONG FaultedPrimitiveAPISequenceNumber;
     unsigned FaultedPipelineStage,FaultedBindTableEntry,PageFaultFlags;
     ULONGLONG FaultedVirtualAddress;unsigned NodeOrdinal,EngineOrdinal,PageTableLevel;
-    struct {unsigned IsDeviceSpecificCode:1,GeneralErrorCode:31;} FaultErrorCode;
+    struct {unsigned IsDeviceSpecificCode:1,DeviceSpecificCode:31;} FaultErrorCode;
     void *FaultedProcessHandle;} DmaPageFaulted;
 } DXGKARGCB_NOTIFY_INTERRUPT_DATA;
 typedef struct {unsigned Fence,NotifyInterrupt;} ADMISSION_PRESENT_TRANSFER_RECEIPT;
@@ -70,6 +76,7 @@ typedef struct _ADMISSION_CONTEXT {
   struct {void *DeviceHandle;void (*DxgkCbNotifyInterrupt)(void*,DXGKARGCB_NOTIFY_INTERRUPT_DATA*);
     int (*DxgkCbQueueDpc)(void*);} Interface;
   LONG PresentTransferState,PagingDpcPending;
+  long long PagingNotifyQpc;
   ADMISSION_PRESENT_TRANSFER_RECEIPT PresentTransferReceipt;
 } ADMISSION_CONTEXT;
 static DXGKARGCB_NOTIFY_INTERRUPT_DATA observed;
@@ -80,6 +87,7 @@ static int queue(void *device){assert(device==(void*)0x1234);++queued;return 1;}
 static LONG InterlockedCompareExchange(LONG *value,LONG exchange,LONG compare){
   LONG previous=*value;if(previous==compare)*value=exchange;return previous;}
 static LONG InterlockedExchange(LONG *value,LONG exchange){LONG previous=*value;*value=exchange;return previous;}
+static struct {long long QuadPart;} KeQueryPerformanceCounter(void *p){(void)p;return (__typeof__(KeQueryPerformanceCounter(0))){1};}
 '''
         test = r'''
 int main(void){
@@ -99,6 +107,13 @@ int main(void){
   assert(AdmissionPagingNotifyAtInterrupt(&notification));
   assert(observed.InterruptType==DXGK_INTERRUPT_DMA_PAGE_FAULTED);
   assert(observed.DmaPageFaulted.PageFaultFlags==DXGK_PAGE_FAULT_WRITE);
+  notification.FaultVa=0;notification.FaultWrite=0;
+  assert(AdmissionPagingNotifyAtInterrupt(&notification));
+  assert(observed.InterruptType==DXGK_INTERRUPT_DMA_PAGE_FAULTED);
+  assert(observed.DmaPageFaulted.FaultedFenceId==0x6c54);
+  assert(observed.DmaPageFaulted.FaultedVirtualAddress==0);
+  assert(observed.DmaPageFaulted.FaultErrorCode.IsDeviceSpecificCode==1);
+  assert(observed.DmaPageFaulted.FaultErrorCode.DeviceSpecificCode==0x7ffffffdu);
   notification.Status=STATUS_SUCCESS;notification.FaultVa=0;
   assert(AdmissionPagingNotifyAtInterrupt(&notification));
   assert(observed.InterruptType==DXGK_INTERRUPT_DMA_COMPLETED);

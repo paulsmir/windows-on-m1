@@ -118,7 +118,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionVisibleAgxResolveDestination(
       description->Pitch != APPLE_AGX_SCANOUT_J313_STRIDE ||
       description->BytesPerPixel != 4u ||
       description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
-      description->Format != (UINT)D3DDDIFMT_A8R8G8B8 ||
+      description->Format != (UINT)Adapter->CommittedFormat ||
       !AdmissionAllocationAlign64K(description->Size, &aligned_size) ||
       !NT_SUCCESS(AdmissionMemoryRuntimeResolveLocal(
           Adapter, (ULONGLONG)entry->PhysicalAddress.QuadPart,

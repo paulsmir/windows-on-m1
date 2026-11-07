@@ -1,5 +1,9 @@
 """EXP995: GPU-written private slots without a CPU mapping sync lazily.
 
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Private maps must copy GPU
+results, while RC25/SystemDirect canonical maps must never copy or overwrite
+those results via stale staging, whether currently mapped or not.
+
 EXP994 DWM profile (251 s): 3.16 GB of downloads of seven never-mapped
 2560x1600 private render targets (193 downloads, ~320 ms each) and ~50 s of
 per-submit staging hashes of the same slots. Their staging can change only
@@ -52,7 +56,7 @@ static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclus
 static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SRWLOCK*){}
 struct SYNC { BOOL Valid; };
 struct SLOT { uint64_t Token; uint64_t Bytes; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried;
-  UINT Flags,SubmissionHolds; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa;  unsigned char *PrivateStaging; D3DKMT_HANDLE StagingAllocation; const void *NativeBo; int (*NativeMapRelease)(const void*,const void*,int); };
+  UINT Flags,SubmissionHolds; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa;  unsigned char *PrivateStaging; D3DKMT_HANDLE StagingAllocation; const void *NativeBo; int (*NativeMapRelease)(const void*,const void*,int); BOOL UploadRingPending; };
 static int touches;
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct CB { void *pfnLockCb, *pfnUnlockCb; };
@@ -95,6 +99,17 @@ int main(){
  /* Mapped or unknown tokens need no work here. */
  assert(AdmissionUmdGpuvaPrepareCpuMap(&d,11)==1 && downloads[1]==1);
  assert(AdmissionUmdGpuvaPrepareCpuMap(&d,99)==1);
+ // RC25/SystemDirect already shares canonical bytes with the CPU. Neither
+ // persistent maps nor unmapped direct BOs participate in staging transfers.
+ for(unsigned mapped=0;mapped<2;++mapped) {
+  auto &s=d.ScreenBuffers[3];s={};s.Active=s.CopyHeld=s.SystemDirect=TRUE;
+  s.Token=13;s.KernelAllocation=0x103;s.CanonicalGpuVa=0x40000;
+  s.Flags=AppleAgxWin32BufferGpuWrite;s.Mapped=mapped;
+  uint64_t written=13;assert(mark_written(&d,&written,1));
+  assert(transfer_held(&d,false) && transfer_held(&d,true));
+  assert(AdmissionUmdGpuvaPrepareCpuMap(&d,13));
+  assert(!uploads[3] && !downloads[3]);
+ }
  puts("EXP995 lazy private download: PASS");
 }
 '''

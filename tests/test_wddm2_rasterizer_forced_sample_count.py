@@ -6,9 +6,9 @@ rasterizer10 refused every non-zero count with E_NOTIMPL and the processes
 recreated their devices without end (10249 reject-wddm2-rasterizer and
 7721 adapter opens in one boot). D3D11_RASTERIZER_DESC1: 0 means not forced;
 1 rasterizes single-sampled (no depth-stencil view, no depth test) -- what
-a single-sampled or attachment-less render (D3D-G11) already does. Counts
-above 1 need target-independent rasterization, which is not reported, and
-conservative rasterization stays refused.
+a single-sampled or attachment-less render (D3D-G11) already does. FL 11_1:
+4, 8 and 16 are accepted for the TIR variants (D3D11-FL111-TIR.md), 2 and
+other counts stay invalid, and conservative rasterization stays refused.
 """
 from pathlib import Path
 import os
@@ -42,7 +42,10 @@ int main() {
   assert(rasterizer10(dev, &in, &out) && out.FillMode == 3 && out.DepthClipEnable == 1);
   in.ForcedSampleCount = 1;  /* the desktop's FL 11_0 state */
   assert(rasterizer10(dev, &in, &out) && refusals == 0);
-  in.ForcedSampleCount = 4;
+  /* FL 11_1: 4, 8 and 16 run the TIR variants; other counts are invalid */
+  const UINT counts[3] = {4u, 8u, 16u};
+  for (UINT n : counts) { in.ForcedSampleCount = n; assert(rasterizer10(dev, &in, &out) && refusals == 0); }
+  in.ForcedSampleCount = 2;
   assert(!rasterizer10(dev, &in, &out) && refusals == 1);
   in.ForcedSampleCount = 0; in.ConservativeRasterizationMode = D3DWDDM2_0DDI_CONSERVATIVE_RASTERIZATION_ON;
   assert(!rasterizer10(dev, &in, &out) && refusals == 2);

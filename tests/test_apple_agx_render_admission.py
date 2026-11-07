@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -76,7 +77,11 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("Present->pDmaBuffer != NULL", present)
         self.assertIn("(Present->Flags.Value & ~0x8u) != 0x4u", present)
         self.assertIn("ADMISSION_OPEN_ALLOCATION_MAGIC", present)
-        self.assertIn("D3DDDIFMT_A8R8G8B8", present)
+        # rc110 (EXP2049): any broker format on a linear scanout-capable
+        # allocation; the PRESENT carries the primary's own format
+        self.assertIn("ScanoutCapable", present)
+        self.assertIn("AdmissionScanoutFormatSupported(adapter,", present)
+        self.assertNotIn("description->Format != (UINT)adapter->CommittedFormat", present)
         self.assertIn("return STATUS_SUCCESS", present)
 
     def test_render_core_legacy_callback_group_is_complete_but_inert(self):
@@ -315,7 +320,21 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("VidPnTargetId != 0", display)
         self.assertIn("D3DKMDT_RMT_GRAPHICS", display)
         self.assertIn("D3DDDIFMT_A8R8G8B8", display)
-        self.assertIn("Format.Graphics.Stride = 10240", display)
+        # D3D-FS1: the A8B8G8R8 source mode exists only behind the RGBA scanout capability
+        self.assertIn("AdmissionScanoutFormatSupported(context, D3DDDIFMT_A8B8G8R8)", display)
+        # EXP1884: the VidPN manager gives every new source/target mode a
+        # unique Id; zeroing a fresh mode duplicated Id 0 for the second
+        # source mode (STATUS_GRAPHICS_MODE_ID_MUST_BE_UNIQUE) and the VidPN
+        # was never committed. Every zeroed new mode keeps its Id.
+        # rc106: every source mode (each offered size and format) is built
+        # by the one AdmissionDisplayAddSourceMode helper.
+        zeroed = re.findall(r"(\w+) = (\w+)->Id;\s*RtlZeroMemory\((\w+), sizeof\(\*\3\)\);\s*\3->Id = \1;", display)
+        self.assertEqual(display.count("RtlZeroMemory(sourceMode, sizeof(*sourceMode));"), 1)
+        self.assertEqual([z for z in zeroed if z[1] == z[2] == 'sourceMode'], [('sourceModeId', 'sourceMode', 'sourceMode')])
+        self.assertEqual(display.count("pfnCreateNewModeInfo(SourceSet, &sourceMode)"), 1)
+        self.assertNotIn("RtlZeroMemory(targetMode", display)
+        self.assertIn("Format.Graphics.Stride = Stride", display)
+        self.assertIn("AdmissionScanoutSourceModeAt(context, modeIndex", display)
         self.assertIn("D3DKMDT_VPPS_IDENTITY", display)
         self.assertIn("D3DKMDT_VPPR_IDENTITY", display)
         self.assertIn("STATUS_GRAPHICS_NO_RECOMMENDED_FUNCTIONAL_VIDPN", display)
@@ -463,7 +482,14 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         names = re.search(r"^HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,(.+)$", inf, re.M).group(1).split(",")
         # Microsoft's contract: a file name, the file in %systemroot%\SysWOW64
         # (EXP1223: a driver-store path was not loaded).
-        self.assertEqual(names, ["AppleAgxRenderAdmissionUmd32.dll"] * 4)
+        # EXP1889 D3D9_DEFAULT: slot 0 (the D3D9 UMD) is dxgkrnl's "<>" marker
+        # for "no D3D9 driver", so d3d9.dll runs D3D9 devices through
+        # D3D9On12; the UMD has no OpenAdapter (D3D9 DDI) export.
+        self.assertEqual(names, ['"<>"'] + ["AppleAgxRenderAdmissionUmd32.dll"] * 3)
+        native = re.search(r"^HKR,,UserModeDriverName,%REG_MULTI_SZ%,(.+)$", inf, re.M).group(1).split(",")
+        self.assertEqual(native, ['"<>"'] + ["AppleAgxRenderAdmissionUmd.dll"] * 3)
+        exports = self.read("umd/AppleAgxRenderAdmissionUmd.def").split()
+        self.assertNotIn("OpenAdapter", exports)
         section = re.search(r"^\[Admission\.WowUmdCopyFiles\]\n(\S+)$", inf, re.M).group(1)
         self.assertEqual(section.split(",")[0], "AppleAgxRenderAdmissionUmd32.dll")
         self.assertIn("Admission.WowUmdCopyFiles=10,SysWOW64", inf)

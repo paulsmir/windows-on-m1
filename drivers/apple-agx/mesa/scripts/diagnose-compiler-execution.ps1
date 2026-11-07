@@ -1,5 +1,6 @@
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
 $ErrorActionPreference='Stop'
-$root='C:\Users\pauls\AD04-fullcompiler-001'
+$root="$builderRoot\AD04-fullcompiler-001"
 $attempt="$root\asahi-d25a261c91764f0597fae88dec4bf195"
 $cdb='C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe'
 $out=Join-Path $root ('execution-debug-'+[guid]::NewGuid().ToString('N'))

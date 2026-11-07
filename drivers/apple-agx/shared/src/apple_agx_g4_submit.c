@@ -54,6 +54,7 @@ static APPLE_AGX_G4_PARSE_RESULT validate_render(
     unsigned long long Va; unsigned int Bytes; int Write;
   } addresses[19];
   unsigned int index, count = 0u;
+  unsigned long long timestamp_va;
 #define AGX4_RANGE(value, bytes, write) do { \
   addresses[count].Va = (value); addresses[count].Bytes = (bytes); \
   addresses[count].Write = (write); ++count; \
@@ -74,15 +75,23 @@ static APPLE_AGX_G4_PARSE_RESULT validate_render(
       (!render.SampleSizeBytes && render.Samples != 1u))
     return AppleAgxG4ParseInvalid;
   if (render.TimestampsVertex.StartHandle ||
-      render.TimestampsVertex.EndHandle ||
-      render.TimestampsFragment.StartHandle ||
-      render.TimestampsFragment.EndHandle)
+      render.TimestampsVertex.EndHandle)
     return AppleAgxG4ParseUnsupported;
   if (render.TimestampsVertex.StartOffset ||
-      render.TimestampsVertex.EndOffset ||
-      render.TimestampsFragment.StartOffset ||
-      render.TimestampsFragment.EndOffset)
+      render.TimestampsVertex.EndOffset)
     return AppleAgxG4ParseInvalid;
+  timestamp_va = AppleAgxG4TimestampPublishVa(&render.TimestampsFragment);
+  if (!timestamp_va) {
+    if (render.TimestampsFragment.StartHandle ||
+        render.TimestampsFragment.EndHandle)
+      return AppleAgxG4ParseUnsupported;
+    if (render.TimestampsFragment.StartOffset ||
+        render.TimestampsFragment.EndOffset)
+      return AppleAgxG4ParseInvalid;
+  } else if (!check_access(access, timestamp_va, 8u, 1,
+                          AppleAgxG4AccessTimestamp)) {
+    return AppleAgxG4ParseUnmapped;
+  }
   AGX4_ADDRESS(render.VdmCtrlStreamBase, 0);
   AGX4_ADDRESS(usc_va(render.VertexHelper.Binary), 0);
   AGX4_ADDRESS(render.VertexHelper.Data, 0);
@@ -144,9 +153,10 @@ static APPLE_AGX_G4_PARSE_RESULT validate_compute_fields(
         !valid_va(compute->Helper.Data, 1u))))
     return AppleAgxG4ParseInvalid;
   /* GPU timestamps (T1): a request per end, recorded in the KMD block. */
-  if (compute->Timestamps.StartHandle > APPLE_AGX_G4_TIMESTAMP_REQUEST ||
+  if (!AppleAgxG4TimestampPublishVa(&compute->Timestamps) &&
+      (compute->Timestamps.StartHandle > APPLE_AGX_G4_TIMESTAMP_REQUEST ||
       compute->Timestamps.EndHandle > APPLE_AGX_G4_TIMESTAMP_REQUEST ||
-      compute->Timestamps.StartOffset || compute->Timestamps.EndOffset)
+      compute->Timestamps.StartOffset || compute->Timestamps.EndOffset))
     return AppleAgxG4ParseInvalid;
   if (compute->CdmCtrlStreamBase >= compute->CdmCtrlStreamEnd ||
       (compute->CdmCtrlStreamBase & 3ULL) || (compute->CdmCtrlStreamEnd & 3ULL))
@@ -176,6 +186,8 @@ static APPLE_AGX_G4_PARSE_RESULT validate_compute_access(
     const APPLE_AGX_G4_PROCESS_RANGE *preemption, AGX4_ACCESS_STATE *state) {
   unsigned long long stream_bytes =
       compute->CdmCtrlStreamEnd - compute->CdmCtrlStreamBase;
+  unsigned long long timestamp_va =
+      AppleAgxG4TimestampPublishVa(&compute->Timestamps);
   if (!check_access(state, compute->CdmCtrlStreamBase, (unsigned int)stream_bytes,
                     0, AppleAgxG4AccessComputeStream) ||
       (compute->SamplerCount &&
@@ -187,6 +199,8 @@ static APPLE_AGX_G4_PARSE_RESULT validate_compute_access(
                       AppleAgxG4AccessComputeStream) ||
         !check_access(state, compute->Helper.Data, 1u, 0,
                       AppleAgxG4AccessComputeStream))) ||
+      (timestamp_va && !check_access(state, timestamp_va, 8u, 1,
+                                     AppleAgxG4AccessTimestamp)) ||
       !check_access(state, preemption->Va, preemption->Bytes, 1,
                     AppleAgxG4AccessComputePreemption))
     return AppleAgxG4ParseUnmapped;
@@ -196,8 +210,8 @@ static APPLE_AGX_G4_PARSE_RESULT validate_compute_access(
 static APPLE_AGX_G4_PARSE_RESULT parse_submit(
     const void *private_data, unsigned int private_capacity,
     unsigned int umd_private_bytes, unsigned long long dma_va,
-    unsigned int dma_bytes, unsigned int preempt_bytes, AGX4_ACCESS_STATE *access,
-    APPLE_AGX_G4_SUBMIT_VIEW *view) {
+    unsigned int dma_bytes, unsigned int preempt_bytes, unsigned int flags,
+    AGX4_ACCESS_STATE *access, APPLE_AGX_G4_SUBMIT_VIEW *view) {
   APPLE_AGX_G4_PRIVATE_HEADER header;
   APPLE_AGX_G4_PRIVATE_HEADER_V2 header_v2 = {0};
   APPLE_AGX_G4_PRIVATE_HEADER_V3 header_v3 = {0};
@@ -206,11 +220,12 @@ static APPLE_AGX_G4_PARSE_RESULT parse_submit(
   APPLE_AGX_G4_NATIVE_COMPUTE compute = {0};
   const unsigned char *bytes = (const unsigned char *)private_data;
   unsigned int position = 0u, start = 0u, index, attachments = 0u;
-  int with_compute;
+  int with_compute, ta_independent = 0;
   const APPLE_AGX_G4_ATTACHMENT *attachment_base = 0;
   if (view != 0) memset(view, 0, sizeof(*view));
   if (access && access->Failure) memset(access->Failure, 0, sizeof(*access->Failure));
   if (!private_data || !view || !access || (!access->Old && !access->Typed) ||
+      (flags & ~APPLE_AGX_G4_PARSE_RENDER_TA_INDEPENDENT) != 0u ||
       private_capacity < sizeof(header) ||
       umd_private_bytes < sizeof(header) ||
       umd_private_bytes > private_capacity ||
@@ -289,6 +304,11 @@ static APPLE_AGX_G4_PARSE_RESULT parse_submit(
         dma_bytes - sizeof(native_header) < sizeof(compute))
       return AppleAgxG4ParseInvalid;
     memcpy(&compute, bytes + sizeof(native_header), sizeof(compute));
+    /* A render publishes its fragment end once; its compute prelude does
+     * not represent this batch's completion. Legacy request fields retain
+     * their existing contract. */
+    if (compute.Timestamps.StartHandle == APPLE_AGX_G4_TIMESTAMP_PUBLISH)
+      return AppleAgxG4ParseInvalid;
     compute_result = validate_compute_fields(&compute, &header_v5.Preemption,
         preempt_bytes, dma_va, dma_bytes);
     if (compute_result == AppleAgxG4ParseOk)
@@ -327,10 +347,17 @@ static APPLE_AGX_G4_PARSE_RESULT parse_submit(
   if (native_header.Type != APPLE_AGX_G4_RENDER)
     return AppleAgxG4ParseUnsupported;
   /* A render that follows its compute waits on it (vdm NONE, cdm 1);
-   * otherwise it waits on the previous submission (0, 0). */
+   * otherwise it waits on the previous submission (0, 0). OV5: a render
+   * without a compute command may name no compute-subqueue wait (0, NONE)
+   * only under APPLE_AGX_G4_PARSE_RENDER_TA_INDEPENDENT; the KMD then moves
+   * that wait from its TA to its 3D ring. Without the flag it is invalid. */
+  if (!with_compute && native_header.VdmBarrier == 0u &&
+      native_header.CdmBarrier == APPLE_AGX_G4_BARRIER_NONE &&
+      (flags & APPLE_AGX_G4_PARSE_RENDER_TA_INDEPENDENT) != 0u)
+    ta_independent = 1;
   if (native_header.Size != sizeof(APPLE_AGX_G4_NATIVE_RENDER) ||
       native_header.VdmBarrier != (with_compute ? 0xffffu : 0u) ||
-      native_header.CdmBarrier != (with_compute ? 1u : 0u) ||
+      (native_header.CdmBarrier != (with_compute ? 1u : 0u) && !ta_independent) ||
       dma_bytes - position != sizeof(native_header) + native_header.Size)
     return AppleAgxG4ParseInvalid;
   {
@@ -365,6 +392,7 @@ static APPLE_AGX_G4_PARSE_RESULT parse_submit(
     view->Compute = compute;
     view->Preemption = header_v5.Preemption;
   }
+  view->TaIndependent = ta_independent;
   return AppleAgxG4ParseOk;
 }
 
@@ -377,7 +405,7 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmit(
   state.Old = access;
   state.Context = context;
   return parse_submit(private_data, private_capacity, umd_private_bytes,
-      dma_va, dma_bytes, 0u, &state, view);
+      dma_va, dma_bytes, 0u, 0u, &state, view);
 }
 
 APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitEx(
@@ -385,18 +413,38 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitEx(
     unsigned int umd_private_bytes, unsigned long long dma_va,
     unsigned int dma_bytes, APPLE_AGX_G4_ACCESS_EX access, void *context,
     APPLE_AGX_G4_SUBMIT_VIEW *view, APPLE_AGX_G4_FAILURE *failure) {
+  return AppleAgxG4ParseSubmitFlagsEx(private_data, private_capacity,
+      umd_private_bytes, dma_va, dma_bytes, 0u, access, context, view, failure);
+}
+
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitFlagsEx(
+    const void *private_data, unsigned int private_capacity,
+    unsigned int umd_private_bytes, unsigned long long dma_va,
+    unsigned int dma_bytes, unsigned int flags, APPLE_AGX_G4_ACCESS_EX access,
+    void *context, APPLE_AGX_G4_SUBMIT_VIEW *view, APPLE_AGX_G4_FAILURE *failure) {
   AGX4_ACCESS_STATE state = {0};
   state.Typed = access;
   state.Context = context;
   state.Failure = failure;
   return parse_submit(private_data, private_capacity, umd_private_bytes,
-      dma_va, dma_bytes, 0u, &state, view);
+      dma_va, dma_bytes, 0u, flags, &state, view);
 }
 
 APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitComputeEx(
     const void *private_data, unsigned int private_capacity,
     unsigned int umd_private_bytes, unsigned long long dma_va,
     unsigned int dma_bytes, unsigned int preempt_bytes,
+    APPLE_AGX_G4_ACCESS_EX access, void *context,
+    APPLE_AGX_G4_SUBMIT_VIEW *view, APPLE_AGX_G4_FAILURE *failure) {
+  return AppleAgxG4ParseSubmitComputeFlagsEx(private_data, private_capacity,
+      umd_private_bytes, dma_va, dma_bytes, preempt_bytes, 0u, access, context,
+      view, failure);
+}
+
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitComputeFlagsEx(
+    const void *private_data, unsigned int private_capacity,
+    unsigned int umd_private_bytes, unsigned long long dma_va,
+    unsigned int dma_bytes, unsigned int preempt_bytes, unsigned int flags,
     APPLE_AGX_G4_ACCESS_EX access, void *context,
     APPLE_AGX_G4_SUBMIT_VIEW *view, APPLE_AGX_G4_FAILURE *failure) {
   AGX4_ACCESS_STATE state = {0};
@@ -406,7 +454,7 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitComputeEx(
   state.Context = context;
   state.Failure = failure;
   return parse_submit(private_data, private_capacity, umd_private_bytes,
-      dma_va, dma_bytes, preempt_bytes, &state, view);
+      dma_va, dma_bytes, preempt_bytes, flags, &state, view);
 }
 
 APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
@@ -415,7 +463,19 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
     unsigned int dma_bytes, unsigned int preempt_bytes,
     APPLE_AGX_G4_ACCESS_EX access, void *context,
     APPLE_AGX_G4_COMPUTE_VIEW *view, APPLE_AGX_G4_FAILURE *failure) {
+  return AppleAgxG4ParseComputeFlagsEx(private_data, private_capacity,
+      umd_private_bytes, dma_va, dma_bytes, preempt_bytes, 0u, access,
+      context, view, failure);
+}
+
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeFlagsEx(
+    const void *private_data, unsigned int private_capacity,
+    unsigned int umd_private_bytes, unsigned long long dma_va,
+    unsigned int dma_bytes, unsigned int preempt_bytes, unsigned int flags,
+    APPLE_AGX_G4_ACCESS_EX access, void *context,
+    APPLE_AGX_G4_COMPUTE_VIEW *view, APPLE_AGX_G4_FAILURE *failure) {
   AGX4_ACCESS_STATE state = {0};
+  int independent = 0;
   APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE header;
   APPLE_AGX_G4_NATIVE_HEADER native_header;
   APPLE_AGX_G4_NATIVE_COMPUTE compute;
@@ -426,6 +486,7 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
   if (view != 0) memset(view, 0, sizeof(*view));
   if (failure) memset(failure, 0, sizeof(*failure));
   if (!private_data || !view || !access || !preempt_bytes ||
+      (flags & ~APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE) != 0u ||
       private_capacity < sizeof(header) || umd_private_bytes < sizeof(header) ||
       umd_private_bytes > private_capacity ||
       dma_bytes == 0u || dma_bytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
@@ -441,7 +502,13 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
   memcpy(&native_header, bytes + sizeof(header), sizeof(native_header));
   if (native_header.Type != APPLE_AGX_G4_COMPUTE)
     return AppleAgxG4ParseUnsupported;
-  if (native_header.Size != sizeof(compute) || native_header.VdmBarrier != 0u ||
+  /* OV2: NONE (no wait on the render subqueue) only under the flag; the
+   * compute subqueue wait stays 0 (in order behind the previous compute). */
+  if (native_header.VdmBarrier == APPLE_AGX_G4_BARRIER_NONE &&
+      (flags & APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE) != 0u)
+    independent = 1;
+  if (native_header.Size != sizeof(compute) ||
+      (native_header.VdmBarrier != 0u && !independent) ||
       native_header.CdmBarrier != 0u)
     return AppleAgxG4ParseInvalid;
   memcpy(&compute, bytes + sizeof(header) + sizeof(native_header), sizeof(compute));
@@ -459,5 +526,6 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
   view->Preemption = header.Preemption;
   view->CommandBytes = dma_bytes;
   view->CommandVa = dma_va;
+  view->Independent = independent;
   return AppleAgxG4ParseOk;
 }

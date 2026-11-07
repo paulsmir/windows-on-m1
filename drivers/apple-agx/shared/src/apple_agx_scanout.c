@@ -142,6 +142,31 @@ static APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutWaitForReceipt(
   return AppleAgxScanoutPollLimit;
 }
 
+/* The surface registers of one PRESENT.  Without CAP_SCALED_SOURCE the
+ * traffic is exactly the fixed J313 sequence m1n1 0d3a75b3 validates. */
+static APPLE_AGX_SCANOUT_BOOL AppleAgxScanoutWriteSurface(
+    APPLE_AGX_SCANOUT_CLIENT *Client, APPLE_AGX_SCANOUT_U64 SurfaceOffset) {
+  if (!AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_SURFACE_OFFSET,
+                              SurfaceOffset) ||
+      !AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_SURFACE_SIZE,
+                              Client->PresentSurfaceBytes) ||
+      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_WIDTH,
+                              Client->PresentWidth) ||
+      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_HEIGHT,
+                              Client->PresentHeight) ||
+      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_STRIDE,
+                              Client->PresentStride) ||
+      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_FORMAT,
+                              Client->PresentFormat))
+    return APPLE_AGX_SCANOUT_FALSE;
+  if ((Client->Capabilities & APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE) == 0u)
+    return APPLE_AGX_SCANOUT_TRUE;
+  return AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_DEST_ORIGIN,
+                                Client->PresentDestOrigin) &&
+         AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_DEST_SIZE,
+                                Client->PresentDestSize);
+}
+
 APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutInitialize(
     APPLE_AGX_SCANOUT_CLIENT *Client, const APPLE_AGX_SCANOUT_IO *Io,
     APPLE_AGX_SCANOUT_U64 FirstSequence, APPLE_AGX_SCANOUT_U32 MaxPolls) {
@@ -163,6 +188,14 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutInitialize(
   Client->PoolBytes = 0ULL;
   Client->Qualified = APPLE_AGX_SCANOUT_FALSE;
   Client->PresentPending = APPLE_AGX_SCANOUT_FALSE;
+  Client->PresentFormat = APPLE_AGX_SCANOUT_FORMAT_BGRA8888;
+  Client->PresentWidth = APPLE_AGX_SCANOUT_J313_WIDTH;
+  Client->PresentHeight = APPLE_AGX_SCANOUT_J313_HEIGHT;
+  Client->PresentStride = APPLE_AGX_SCANOUT_J313_STRIDE;
+  Client->PresentSurfaceBytes = APPLE_AGX_SCANOUT_J313_SURFACE_SIZE;
+  Client->PresentDestOrigin = 0u;
+  Client->PresentDestSize = APPLE_AGX_SCANOUT_J313_WIDTH |
+                            (APPLE_AGX_SCANOUT_J313_HEIGHT << 16u);
   return AppleAgxScanoutOk;
 }
 
@@ -233,8 +266,9 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutPresentApplied(
   APPLE_AGX_SCANOUT_RESULT result;
   if (Client == APPLE_AGX_SCANOUT_NULL || SwapId == APPLE_AGX_SCANOUT_NULL ||
       (SurfaceOffset & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL ||
-      Client->PoolBytes < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
-      SurfaceOffset > Client->PoolBytes - APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
+      Client->PresentSurfaceBytes == 0ULL ||
+      Client->PoolBytes < Client->PresentSurfaceBytes ||
+      SurfaceOffset > Client->PoolBytes - Client->PresentSurfaceBytes)
     return AppleAgxScanoutInvalidArgument;
   *SwapId = 0u;
   if (!Client->Qualified)
@@ -242,18 +276,7 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutPresentApplied(
   result = AppleAgxScanoutTakeSequence(Client, &sequence);
   if (result != AppleAgxScanoutOk)
     return result;
-  if (!AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_SURFACE_OFFSET,
-                              SurfaceOffset) ||
-      !AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_SURFACE_SIZE,
-                              APPLE_AGX_SCANOUT_J313_SURFACE_SIZE) ||
-      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_WIDTH,
-                              APPLE_AGX_SCANOUT_J313_WIDTH) ||
-      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_HEIGHT,
-                              APPLE_AGX_SCANOUT_J313_HEIGHT) ||
-      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_STRIDE,
-                              APPLE_AGX_SCANOUT_J313_STRIDE) ||
-      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_FORMAT,
-                              APPLE_AGX_SCANOUT_FORMAT_BGRA8888) ||
+  if (!AppleAgxScanoutWriteSurface(Client, SurfaceOffset) ||
       !AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_REQUEST_SEQUENCE,
                               sequence) ||
       !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_COMMAND,
@@ -272,8 +295,9 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutQueuePresent(
 
   if (Client == APPLE_AGX_SCANOUT_NULL || Sequence == APPLE_AGX_SCANOUT_NULL ||
       (SurfaceOffset & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL ||
-      Client->PoolBytes < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
-      SurfaceOffset > Client->PoolBytes - APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
+      Client->PresentSurfaceBytes == 0ULL ||
+      Client->PoolBytes < Client->PresentSurfaceBytes ||
+      SurfaceOffset > Client->PoolBytes - Client->PresentSurfaceBytes)
     return AppleAgxScanoutInvalidArgument;
   *Sequence = 0ULL;
   if (!Client->Qualified)
@@ -288,18 +312,7 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutQueuePresent(
   result = AppleAgxScanoutTakeSequence(Client, &sequence);
   if (result != AppleAgxScanoutOk)
     return result;
-  if (!AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_SURFACE_OFFSET,
-                              SurfaceOffset) ||
-      !AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_SURFACE_SIZE,
-                              APPLE_AGX_SCANOUT_J313_SURFACE_SIZE) ||
-      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_WIDTH,
-                              APPLE_AGX_SCANOUT_J313_WIDTH) ||
-      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_HEIGHT,
-                              APPLE_AGX_SCANOUT_J313_HEIGHT) ||
-      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_STRIDE,
-                              APPLE_AGX_SCANOUT_J313_STRIDE) ||
-      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_FORMAT,
-                              APPLE_AGX_SCANOUT_FORMAT_BGRA8888) ||
+  if (!AppleAgxScanoutWriteSurface(Client, SurfaceOffset) ||
       !AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_REQUEST_SEQUENCE,
                               sequence) ||
       !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_COMMAND,

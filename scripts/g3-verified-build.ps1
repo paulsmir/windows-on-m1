@@ -6,8 +6,9 @@ param(
     [Parameter(Mandatory=$true)][int]$PackageBuild,
     [switch]$VerifyOnly
 )
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
 $ErrorActionPreference = 'Stop'
-$repository = 'C:\Users\pauls\AD04-persistent-dwm-next'
+$repository = "$builderRoot\AD04-persistent-dwm-next"
 $driver = Join-Path $repository 'drivers\apple-agx\render-admission'
 $verify = Join-Path $PSScriptRoot 'verify-committed-sources.ps1'
 & $verify -ManifestPath $SourceManifestPath -RepositoryRoot $repository `
@@ -16,9 +17,9 @@ if ($VerifyOnly) { return }
 
 $build = Join-Path $driver 'scripts\build-driver.ps1'
 & $build -Configuration Release -GpuvaG3Qualification -UmdAdmissionTrace `
-    -NativeFrontend -NativeRuntimeProps 'C:\Users\pauls\AD04-fullcompiler-001\asahi-runtime-arm64-dwm-next-verified-arm64\NativeRuntime.props' `
-    -MesaSourceRoot 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa' `
-    -MesaGeneratedRoot 'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated' `
+    -NativeFrontend -NativeRuntimeProps "$builderRoot\AD04-fullcompiler-001\asahi-runtime-arm64-dwm-next-verified-arm64\NativeRuntime.props" `
+    -MesaSourceRoot "$builderRoot\AD04-d3d10-frontend-build\mesa" `
+    -MesaGeneratedRoot "$builderRoot\AD04-asahi-windows-compiler\b5\generated" `
     -PackageBuild $PackageBuild -GpuvaG1bPageProfile 16 `
     -SourceManifestPath $SourceManifestPath *> $BuildLogPath
 if ($LASTEXITCODE) { throw "build-driver exit $LASTEXITCODE" }

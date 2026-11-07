@@ -1,7 +1,7 @@
 #ifndef G3_VIDMM_REPLAY_SHIM_H
 #define G3_VIDMM_REPLAY_SHIM_H
 /* Shared-memory retirement boundary is exercised by R153 callback replay. */
-#define AdmissionSaveG4Manager(r,f) ((void)(r),(void)(f),1)
+#define AdmissionSaveG4Manager(r,f,s) ((void)(r),(void)(f),(void)(s),1)
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -13,6 +13,7 @@
 #define FIELD_OFFSET(t, m) offsetof(t, m)
 #include "apple_agx_gpuva_g3_translation.h"
 #include "apple_agx_gpuva_g3_graph.h"
+#include "apple_agx_g3_native_cache.h"
 #include "apple_agx_g4_submit.h"
 #include "apple_agx_g13_compute_work.h"
 #include "apple_agx_present_job.h"
@@ -191,20 +192,7 @@ typedef struct { UINT Operation, DmaSize, DmaBufferPrivateDataSize,
     DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL TransferVirtual;
     DXGK_BUILDPAGINGBUFFER_SIGNALMONITOREDFENCE SignalMonitoredFence; };
 } DXGKARG_BUILDPAGINGBUFFER;
-enum { AdmissionPagingPhysical=0, AdmissionPagingVirtualFill=1,
-       AdmissionPagingVirtualTransfer=2, AdmissionPagingMonitoredFence=3 };
-typedef struct { UINT Magic,Version,RecordBytes,Reserved; } ADMISSION_PAGING_MARKER;
-enum { AppleAgxPhysicalPagingUpload=1, AppleAgxPhysicalPagingDownload=2,
-       AppleAgxPhysicalPagingLocalCopy=3, AppleAgxPhysicalPagingFill=4,
-       AppleAgxPhysicalPagingDiscard=5 };
-typedef struct { UINT Kind; ULONGLONG LocalOffset,SecondLocalOffset,
-  SystemOffset,Bytes; UINT FillPattern; } APPLE_AGX_PHYSICAL_PAGING_PLAN;
-typedef struct { ADMISSION_PAGING_MARKER Header; APPLE_AGX_PHYSICAL_PAGING_PLAN Plan;
-  void *SystemMdl; UINT Kind,SourceSegment,DestinationSegment,PatternOffset;
-  ULONGLONG SourceIpa,DestinationIpa; UINT Bytes,FillPattern;
-  ULONGLONG FenceValue;
-  ULONGLONG Seq;
-} ADMISSION_PAGING_RECORD;
+#include "../drivers/apple-agx/render-admission/include/render_paging.h"
 #define ADMISSION_PAGING_MAGIC 0x504d4152u
 #define ADMISSION_PAGING_VERSION 1u
 #define ADMISSION_PAGING_LOCAL_SEGMENT 2u
@@ -297,6 +285,7 @@ static inline void AdmissionContextRetireFence(ADMISSION_RENDER_CONTEXT *c, ULON
 #define ADMISSION_G3_LEAF_RING 8192u
 #define ADMISSION_G3_LEAF_EVENT_RESET 0x10u
 #define ADMISSION_G3_LEAF_EVENT_SYSTEM_RETIRE 0x20u
+#define ADMISSION_G3_LEAF_EVENT_UNMAP_OWNER 0x40u
 typedef struct _ADMISSION_G3_LEAF_HISTORY {
   ULONGLONG Qpc, ProcessId, TableIpa, Allocation, FirstVa, MappingGeneration;
   ULONG First, Count, ValidCount, Flags, Status, FirstSegment;
@@ -361,6 +350,8 @@ typedef struct _ADMISSION_G3_ALLOC_TRACK {
   /* EXP983: physical/virtual FILL and TRANSFER paging operations. */
   ULONGLONG LastFillQpc, LastTransferQpc;
   ULONG Fills, Transfers, LastPagingSegment, LastPagingOperation;
+  ULONGLONG AllocationBytes;
+  ULONG ClassId, Win32Flags, AllocationType, CpuVisible, MetadataValid, LastStatus;
 } ADMISSION_G3_ALLOC_TRACK;
 typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
   ULONG Version, Bytes, Next, Predicate;
@@ -374,7 +365,7 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
 } ADMISSION_G3_LEAF_HISTORY_SNAPSHOT;
 #define ADMISSION_G3_UPLOAD_TRACE_COUNT 64u
 typedef struct { ULONGLONG ProcessId,Va; ULONG Bytes,Hash,GpuHash,Checks; } ADMISSION_G3_UPLOAD_TRACE;
-typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; KEVENT JobEvent; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ULONGLONG Leaf64KPtes[32]; ULONGLONG SystemGroups[8]; ADMISSION_G3_SYSTEM_SHAPE SystemShapes[ADMISSION_G3_SYSTEM_SHAPE_COUNT]; ULONG SystemShapesGeneration; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT]; ULONGLONG PrivateStats[16]; LONGLONG ProcessReceiptQpc; LONG ReserveMade,ReserveRefused,PresentArenasMade,PresentArenasRefused; } ADMISSION_G3_STATE;
+typedef struct _ADMISSION_G3_STATE { ADMISSION_CONTEXT *Adapter; FAST_MUTEX Lock; KEVENT JobEvent; LIST_ENTRY Processes; APPLE_AGX_GPUVA_V5_CLIENT Client; APPLE_AGX_GPUVA_G3_REGISTRY Registry; APPLE_AGX_G3_PRIVATE_POOL PrivatePool; ULONGLONG NextProcessId; ULONG ProcessCount; ADMISSION_G3_PROCESS *ActiveProcess; void *ActiveContext; ULONG ActiveFence,LastCompletedFence,PrivateCompletionFence; ULONGLONG UnpublishedGroups[32]; ULONGLONG Leaf64KPtes[32]; ULONGLONG SystemGroups[8]; ADMISSION_G3_SYSTEM_SHAPE SystemShapes[ADMISSION_G3_SYSTEM_SHAPE_COUNT]; ULONG SystemShapesGeneration; ADMISSION_G3_UPLOAD_TRACE UploadTrace[ADMISSION_G3_UPLOAD_TRACE_COUNT]; ULONG UploadTraceNext,UploadVerifyChecks,UploadVerifyMismatch,UploadVerifyUnmapped; ADMISSION_G3_UPLOAD_TRACE UploadFirstMismatch; ADMISSION_G3_LEAF_HISTORY LeafHistory[ADMISSION_G3_LEAF_RING]; ULONG LeafHistoryNext; ADMISSION_G3_ALLOC_TRACK AllocTrack[ADMISSION_G3_ALLOC_TRACK_COUNT]; ULONGLONG PrivateStats[16]; ULONG PrivatePressure[12]; LONGLONG ProcessReceiptQpc; LONG ReserveMade,ReserveRefused,PresentArenasMade,PresentArenasRefused; } ADMISSION_G3_STATE;
 enum { ADMISSION_G3_PRIVATE_STAT_HIT, ADMISSION_G3_PRIVATE_STAT_MISS, ADMISSION_G3_PRIVATE_STAT_TRIM, ADMISSION_G3_PRIVATE_STAT_PRESSURE,
   ADMISSION_G3_PRIVATE_STAT_RELEASED, ADMISSION_G3_PRIVATE_STAT_MAPPED_PAGES, ADMISSION_G3_PRIVATE_STAT_UNMAPPED_PAGES,
   ADMISSION_G3_PRIVATE_STAT_CACHED_RELEASE, ADMISSION_G3_PRIVATE_STAT_CACHED_REAP, ADMISSION_G3_PRIVATE_STAT_RELEASE_QUEUED,
@@ -392,12 +383,18 @@ typedef struct _ADMISSION_G3_PRIVATE_SCENE {
 } ADMISSION_G3_PRIVATE_SCENE;
 #define ADMISSION_G3_PRIVATE_SCENE_CACHE 8u
 #define ADMISSION_G3_PROCESS_RECEIPT_SLOTS 16u
-#define ADMISSION_G3_PROCESS_RECEIPT_WORDS (8u + 16u * ADMISSION_G3_PROCESS_RECEIPT_SLOTS)
+#define ADMISSION_G3_PROCESS_RECEIPT_TVB_WORDS 4u
+#define ADMISSION_G3_PROCESS_RECEIPT_WORDS (8u + 16u * ADMISSION_G3_PROCESS_RECEIPT_SLOTS + \
+    ADMISSION_G3_PROCESS_RECEIPT_TVB_WORDS * ADMISSION_G3_PROCESS_RECEIPT_SLOTS)
+#include "apple_agx_g3_tvb.h"
+/* render_pool_slab.h private lease (rc80 TVB granules). */
+typedef struct _ADMISSION_POOL_PRIVATE { void *Slab; unsigned int Slot; } ADMISSION_POOL_PRIVATE;
 
 struct _ADMISSION_G3_PROCESS {
   LIST_ENTRY Link;
   ADMISSION_G3_STATE *State;
   APPLE_AGX_GPUVA_G3_GRAPH Graph;
+  APPLE_AGX_G3_NATIVE_CACHE NativeReady;
   APPLE_AGX_MEMORY_IO Io;
   APPLE_AGX_MEMORY_OBJECT BootstrapRoot;
   ADMISSION_G3_TABLE_SHADOW *TableShadows;
@@ -412,6 +409,11 @@ struct _ADMISSION_G3_PROCESS {
   APPLE_AGX_G3_PRIVATE_EXTENT PresentArena;
   APPLE_AGX_G3_PRIVATE_MANAGER PrivateManager;
   APPLE_AGX_RENDER_MANAGER_STATE FirmwareManager;
+  ULONGLONG TvbVa;
+  APPLE_AGX_G3_PRIVATE_EXTENT TvbLeafTables[APPLE_AGX_G3_TVB_LEAVES];
+  ULONGLONG TvbLeafIpa[APPLE_AGX_G3_TVB_LEAVES];
+  ADMISSION_POOL_PRIVATE *TvbLeases;
+  APPLE_AGX_G3_TVB_STATE Tvb;
   ADMISSION_G3_PRIVATE_SCENE *PrivateScenes;
   ADMISSION_RENDER_CONTEXT *Contexts;
   HANDLE DxgkProcess;
@@ -549,7 +551,7 @@ static BOOLEAN AdmissionPagingQuiescent(ADMISSION_CONTEXT *a) {
   return replay_paging_pending==0;
 }
 static void AdmissionPagingNoteEncoded(ADMISSION_CONTEXT *a,UINT n) {(void)a;replay_encoded_records+=n;}
-int AdmissionPagingLocalRun(const ADMISSION_PAGING_RECORD *);
+int AdmissionPagingContiguousRun(const ADMISSION_PAGING_RECORD *);
 int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *,UINT,UINT,UINT);
 static UINT replay_paging_submits,replay_paging_submit_bytes,replay_paging_submit_fence;
 static NTSTATUS AdmissionCpuQueueSubmit(ADMISSION_CONTEXT *adapter,
@@ -585,6 +587,9 @@ static NTSTATUS AdmissionG4SubmitReject(ADMISSION_CONTEXT *a,
 static BOOLEAN AdmissionG3OutputMatchesLocal(ADMISSION_CONTEXT *a,
     APPLE_AGX_GPUVA_G3_GRAPH *g) {(void)a;(void)g;return TRUE;}
 static BOOLEAN AdmissionG3OutputAccessible(ADMISSION_CONTEXT *a,APPLE_AGX_GPUVA_G3_GRAPH *g) {return AdmissionG3OutputMatchesLocal(a,g);}
+/* rc102: BeginJob proves the job's own packet (the same stub). */
+static BOOLEAN AdmissionG3OutputAccessibleFor(ADMISSION_CONTEXT *a,APPLE_AGX_GPUVA_G3_GRAPH *g,
+    const void *p) {(void)p;return AdmissionG3OutputMatchesLocal(a,g);}
 typedef ADMISSION_SCANOUT_MEMORY_VIEW ADMISSION_BACKEND_MEMORY_VIEW;
 static unsigned char *local_cpu;
 static ULONGLONG local_ipa=0x10000000ULL;
@@ -619,6 +624,17 @@ static BOOLEAN AdmissionMemoryPoolView(const ADMISSION_CONTEXT *a,ADMISSION_SCAN
 /* M2-f3: a case sets replay_pool_demand (and the adapter's PoolDemand) to run
  * the real granule state machine under the paging code. */
 static ADMISSION_POOL_DEMAND *replay_pool_demand;
+/* rc80 TVB granules: replay hands out distinct 64 KiB-aligned IPAs above
+ * the local reserve; replay_tvb_fail_after refuses the Nth take. */
+static ULONGLONG replay_tvb_next_ipa=0x7000000000ULL;
+static unsigned replay_tvb_live, replay_tvb_takes, replay_tvb_fail_after;
+static BOOLEAN AdmissionMemoryPoolTvbTake(ADMISSION_CONTEXT *a,ADMISSION_POOL_PRIVATE *l,ULONGLONG *ipa) {
+  (void)a;*ipa=0;if(l->Slab)return FALSE;
+  if(replay_tvb_fail_after&&++replay_tvb_takes>=replay_tvb_fail_after)return FALSE;
+  l->Slab=(void *)(uintptr_t)replay_tvb_next_ipa;l->Slot=1u;*ipa=replay_tvb_next_ipa;
+  replay_tvb_next_ipa+=0x10000ULL;++replay_tvb_live;return TRUE;}
+static BOOLEAN AdmissionMemoryPoolTvbGive(ADMISSION_CONTEXT *a,ADMISSION_POOL_PRIVATE *l) {
+  (void)a;if(!l->Slab)return TRUE;l->Slab=NULL;l->Slot=0u;--replay_tvb_live;return TRUE;}
 static ADMISSION_POOL_DEMAND *AdmissionMemoryPoolLock(ADMISSION_CONTEXT *a) {return a&&a->PoolDemand?replay_pool_demand:NULL;}
 static VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *a) {(void)a;}
 static VOID AdmissionMemoryPoolNoteRecord(ADMISSION_CONTEXT *a,ADMISSION_PAGING_RECORD *r) {
@@ -795,6 +811,8 @@ static bool AppleAgxSchedulerDestroyContext(int *s,ADMISSION_SCHEDULER_CONTEXT *
 
 /* Prototypes for cross-file calls inside extracted production functions. */
 static ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(ADMISSION_G3_STATE *,HANDLE);
+static BOOLEAN AdmissionG3TvbRelease(ADMISSION_G3_PROCESS *p);
+static BOOLEAN AdmissionG3TvbReturnLeases(ADMISSION_G3_PROCESS *p);
 static NTSTATUS AdmissionGpuvaG3ResolveTable(ADMISSION_CONTEXT *,const DXGK_PAGETABLEUPDATEADDRESS *,DXGK_PAGETABLEUPDATEMODE,ULONGLONG *);
 static NTSTATUS AdmissionGpuvaG3BrokerTable(ADMISSION_G3_PROCESS *,ULONGLONG,BOOLEAN,ULONGLONG *);
 static NTSTATUS AdmissionGpuvaG3MirrorTable(ADMISSION_G3_PROCESS *,ULONGLONG,PVOID);
@@ -808,3 +826,12 @@ static void AdmissionGpuvaG3DetachContext(ADMISSION_RENDER_CONTEXT *);
 
 /* Read-only display diagnostic is outside the VidMm replay boundary. */
 static NTSTATUS AdmissionScanoutQueryTimeline(ADMISSION_CONTEXT *c, APPLE_AGX_VSYNC_QUERY *q) { (void)c; (void)q; return STATUS_INVALID_PARAMETER; }
+
+/* rc81 BeginJob receipt flags (render_job_timing.h); the job-timing slots
+ * are outside the VidMm replay boundary. */
+#define ADMISSION_JOB_FLAG_MAPPING_UNCHANGED 0x1u
+#define ADMISSION_JOB_FLAG_PRIVATE_SCENE 0x2u
+#define ADMISSION_JOB_FLAG_BEGIN_JOB 0x4u
+static void AdmissionJobTimingNoteWindows(ADMISSION_CONTEXT *c, ULONG f, ULONG flags) { (void)c; (void)f; (void)flags; }
+
+#include "g4_live_wait_capture.h"

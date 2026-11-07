@@ -31,6 +31,8 @@ SHIM = r"""
 #define ADMISSION_GPUVA_G1B_PAGE_PROFILE 0
 #define ADMISSION_GPUVA_G1B_ALLOCATION_HINT 0
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
+#define AppleAgxWin32BufferGpuOnly 0x20u
+#define AgxWin32BufferClassGeneral 1u
 #define ADMISSION_MEMORY_LOCAL_SEGMENT 2u
 #define ADMISSION_LOCAL_SEGMENT_SET 2u
 #define ADMISSION_CPU_VISIBLE_SEGMENT_SET 3u
@@ -54,11 +56,12 @@ enum { STATUS_SUCCESS=0, STATUS_INVALID_PARAMETER=-1,
        STATUS_NO_MEMORY=-4 };
 #define D3DDDIFMT_A8R8G8B8 21u
 #define D3DKMDT_GDISURFACE_TEXTURE 2u
-typedef struct { unsigned Type, Format; uint64_t Size; unsigned CpuVisible, Reserved; }
+typedef struct { unsigned Type, Format; uint64_t Size; unsigned CpuVisible, Reserved,
+                 BytesPerPixel; }
     ADMISSION_ALLOCATION_DESCRIPTION;
 typedef struct { ADMISSION_ALLOCATION_DESCRIPTION Description; } ALLOCATION_OBJECT;
 typedef struct { ALLOCATION_OBJECT Object; unsigned Win32ClassId, Win32Flags;
-                 int WrittenPrimary, Presentation;
+                 int WrittenPrimary, Presentation, ScanoutCapable;
                  unsigned PrimaryRefreshNumerator, PrimaryRefreshDenominator;
                  ULONGLONG PoolReserved; }
     ADMISSION_ALLOCATION_HANDLE;
@@ -72,7 +75,15 @@ static void AdmissionPresentResourceRefreshRate(const ADMISSION_PRESENT_RESOURCE
                                                 unsigned *numerator, unsigned *denominator) {
   (void)data; *numerator = 0; *denominator = 1;
 }
-typedef struct { int Memory; void *PhysicalDeviceObject; } ADMISSION_CONTEXT;
+typedef struct { int Memory; void *PhysicalDeviceObject; int SysmemSpill; int SysmemShadow; } ADMISSION_CONTEXT;
+/* Scanout capability is an OS/backend boundary, unrelated to BO placement.
+ * This fixture exposes only the original BGRA scanout format. */
+typedef unsigned D3DDDIFORMAT;
+static int AdmissionScanoutFormatSupported(ADMISSION_CONTEXT *context,
+                                         D3DDDIFORMAT format) {
+  (void)context;
+  return format == D3DDDIFMT_A8R8G8B8;
+}
 typedef struct { unsigned Value, SegmentId0, SegmentId1; } SEGMENT_HINT;
 /* M2-f2: production asks pool_windows.c whether segment 3 is mapped. */
 typedef struct { void *CpuAddress; uint64_t GuestIpaAddress, GpuVirtualAddress,
@@ -212,7 +223,7 @@ static int AdmissionAllocationDestroy(ALLOCATION_OBJECT *object) {
 
 MAIN = r"""
 int main(void) {
-  ADMISSION_CONTEXT context = {1, NULL};
+  ADMISSION_CONTEXT context = {1, NULL, 0, 0};
   INPUT native = {1, 1, 0x10000};
   DXGK_ALLOCATIONINFO info = {0};
   DXGKARG_CREATEALLOCATION args = {0};

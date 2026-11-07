@@ -160,19 +160,37 @@ class D3d11DdiTable(unittest.TestCase):
             self.assertIn("D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED", create)
 
     def test_uav_bindings_match_the_translator(self):
-        # The frontend binds what the translated shaders read: raw/structured
-        # views at shader buffer u#, typed views at image u#, hidden counters
-        # at DXBC_NIR_UAV_COUNTER_SLOT + u#.  A different counter base binds
-        # every append/consume counter to a slot the shader never reads.
+        # The frontend binds what the translated shaders read. FL 11_1:
+        # every translated shader carries its D3D11.1 UAV map (typed views
+        # at image u#, buffer views and counters at the compacted shader
+        # buffers it names); a shader without one keeps u0..u7 at their slots
+        # and counters at DXBC_NIR_UAV_COUNTER_SLOT + u#. Binding without the
+        # map sends u63 or any counter to a slot the shader never reads.
         header = (ROOT / "drivers/apple-agx/mesa/dxbc/dxbc_to_nir.h").read_text()
         self.assertIn("#define DXBC_NIR_UAV_COUNTER_SLOT DXBC_NIR_MAX_UAVS", header)
         fill = MODULE.read_text()
-        self.assertIn("#define AGX_D3D11_UAV_SLOTS DXBC_NIR_MAX_UAVS", fill)
-        bind = function_body(fill, "bind_uavs")
-        self.assertIn("set_shader_buffers(pipe, stage, first, count, buffers", bind)
-        self.assertIn("set_shader_buffers(pipe, stage, AGX_D3D11_UAV_SLOTS + first, count, counters", bind)
-        self.assertIn("set_shader_images(pipe, stage, first, count, 0, images)", bind)
-        self.assertIn("bind_uavs(device, MESA_SHADER_FRAGMENT", function_body(fill, "SetRenderTargets11"))
+        self.assertIn("#define AGX_D3D11_UAV_SLOTS DXBC_NIR_UAV11_SLOTS", fill)
+        apply = function_body(fill, "apply_uavs")
+        # EXP1887: Asahi binds 32 images (32-bit image_mask); slot u + 32
+        # unbound slot u, so typed views compact into images 0..31 too
+        for needle in ("images[image] = view->image;", "map ? map->image[u]", "map ? map->buffer[u]",
+                       "map ? map->counter[u]", "DXBC_NIR_UAV_COUNTER_SLOT + u", "buffers[buffer] = view->buffer;",
+                       "set_shader_images(device->pipe, stage, 0, DXBC_NIR_UAV11_IMAGES, 0, images)"):
+            with self.subTest(needle=needle):
+                self.assertIn(needle, apply)
+        self.assertIn("bind_uavs(device, false", function_body(fill, "SetRenderTargets11"))
+        self.assertIn("bind_uavs(device, true", function_body(fill, "CsSetUnorderedAccessViews11"))
+        # every stage's bind re-places the pipeline's views by the new map
+        for setter in ("CsSetShader11", "bind_tessellation_shader"):
+            with self.subTest(setter=setter):
+                self.assertIn("note_stage_shader(device,", function_body(fill, setter))
+        for wrapper in ("VsSetShader11", "GsSetShader11", "PsSetShader11"):
+            self.assertIn(f"AGX_D3D11_SET_SHADER({wrapper},", fill)
+        self.assertIn("translate_uav64(shader, code", function_body(fill, "CreateComputeShader11"))
+        self.assertIn("translate_uav64(shader, code", function_body(fill, "create_tessellation_shader"))
+        script = (ROOT / "drivers/apple-agx/mesa/scripts/build-native-asahi-state.py").read_text()
+        self.assertIn("dxbc_translate_tokens_uav64(code,", script)
+        self.assertEqual(script.count("pShader->agx_uav64 = NULL;"), 5)  # four creates, destroy
         body = fill[fill.index("AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f,"):]
         assigned = dict(re.findall(r"\bf->(pfn\w+)\s*=\s*(\w+);", body))
         self.assertEqual(assigned["pfnCopyStructureCount"], "CopyStructureCount11")
@@ -233,6 +251,8 @@ class D3d11DdiTable(unittest.TestCase):
             limits = function_body(resource, "AgxD3d10ResourceWithinRequiredLimits")
             self.assertNotIn("D3D10_REQ_TEXTURE", limits)
             self.assertNotIn("D3D10_REQ_MIP_LEVELS", limits)
+            # EXP1888G: buffer widths are bytes (resource size), not view elements
+            self.assertNotIn("TEXEL_COUNT", limits)
             for define, value in (("AGX_D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION", "16384u"),
                                   ("AGX_D3D11_REQ_TEXTURECUBE_DIMENSION", "16384u"),
                                   ("AGX_D3D11_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION", "2048u"),
@@ -268,7 +288,7 @@ class D3d11DdiTable(unittest.TestCase):
                 self.assertFalse(assigned[entry].endswith("None"), assigned[entry])
         self.assertIn("set_patch_vertices", function_body(fill, "IaSetTopology11"))
         create = function_body(fill, "create_tessellation_shader")
-        self.assertLess(create.index("memset"), create.index("dxbc_translate_tokens_hs"))
+        self.assertLess(create.index("memset"), create.index("translate_uav64"))
         with tempfile.TemporaryDirectory(prefix="d3d11-tess-") as tmp:
             out = project(Path(tmp) / "out")
             if out is None:

@@ -10,7 +10,8 @@ typedef unsigned long long APPLE_AGX_SCANOUT_U64;
 #define APPLE_AGX_SCANOUT_TRUE ((APPLE_AGX_SCANOUT_BOOL)1u)
 
 #define APPLE_AGX_SCANOUT_MMIO_OFFSET 0x400u
-#define APPLE_AGX_SCANOUT_MMIO_SIZE 0xa0u
+/* rc106: the window ends after REG_DEST_SIZE (m1n1 codex/m1n1-scaled). */
+#define APPLE_AGX_SCANOUT_MMIO_SIZE 0xa8u
 #define APPLE_AGX_SCANOUT_MAGIC 0x53584741u
 #define APPLE_AGX_SCANOUT_ABI_VERSION_V1 1u
 #define APPLE_AGX_SCANOUT_ABI_VERSION_V2 2u
@@ -23,6 +24,14 @@ typedef unsigned long long APPLE_AGX_SCANOUT_U64;
 #define APPLE_AGX_SCANOUT_CAP_REPEATED_PRESENT (1u << 4u)
 #define APPLE_AGX_SCANOUT_CAP_LATCHED_RECEIPT (1u << 5u)
 #define APPLE_AGX_SCANOUT_CAP_LATCHED_IRQ (1u << 6u)
+/* D3D-FS1: the broker scans out RGBA8888 (DCP 'RGBA') as well as BGRA8888 */
+#define APPLE_AGX_SCANOUT_CAP_RGBA8888 (1u << 7u)
+/* rc106 (m1n1 codex/m1n1-scaled, absent from 0d3a75b3): the broker accepts
+ * a source smaller than the panel and DCP scales it into the destination
+ * rectangle (iomfb swap destination[0]).  The guest writes
+ * DEST_ORIGIN/DEST_SIZE and a non-native WIDTH/HEIGHT/STRIDE/SURFACE_SIZE
+ * only when this bit is set. */
+#define APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE (1u << 8u)
 #define APPLE_AGX_SCANOUT_REQUIRED_CAPABILITIES                              \
   (APPLE_AGX_SCANOUT_CAP_FIXED_J313 | APPLE_AGX_SCANOUT_CAP_BGRA8888 |       \
    APPLE_AGX_SCANOUT_CAP_REGISTERED_POOL |                                   \
@@ -41,6 +50,7 @@ typedef unsigned long long APPLE_AGX_SCANOUT_U64;
 #define APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE 0x3b800000ULL
 #define APPLE_AGX_SCANOUT_ALIGNMENT 0x10000ULL
 #define APPLE_AGX_SCANOUT_FORMAT_BGRA8888 1u
+#define APPLE_AGX_SCANOUT_FORMAT_RGBA8888 2u
 #define APPLE_AGX_SCANOUT_IRQ_LATCHED (1u << 0u)
 #define APPLE_AGX_SCANOUT_IRQ_ERROR (1u << 1u)
 #define APPLE_AGX_SCANOUT_IRQ_MASK                                             \
@@ -72,6 +82,10 @@ typedef enum _APPLE_AGX_SCANOUT_REGISTER {
   APPLE_AGX_SCANOUT_REG_FORMAT = 0x8cu,
   APPLE_AGX_SCANOUT_REG_REQUEST_SEQUENCE = 0x90u,
   APPLE_AGX_SCANOUT_REG_COMMAND = 0x98u,
+  /* CAP_SCALED_SOURCE only: X | Y << 16 and Width | Height << 16 of the
+   * panel rectangle the source is scaled into (MMIO size 0xa8). */
+  APPLE_AGX_SCANOUT_REG_DEST_ORIGIN = 0xa0u,
+  APPLE_AGX_SCANOUT_REG_DEST_SIZE = 0xa4u,
 } APPLE_AGX_SCANOUT_REGISTER;
 
 typedef enum _APPLE_AGX_SCANOUT_COMMAND {
@@ -151,6 +165,16 @@ typedef struct _APPLE_AGX_SCANOUT_CLIENT {
   APPLE_AGX_SCANOUT_U64 PoolBytes;
   APPLE_AGX_SCANOUT_BOOL Qualified;
   APPLE_AGX_SCANOUT_BOOL PresentPending;
+  /* D3D-FS1: format each present carries (the committed mode's) */
+  APPLE_AGX_SCANOUT_U32 PresentFormat;
+  /* rc106: geometry each present carries (the committed mode's); native
+   * J313 unless CAP_SCALED_SOURCE admitted a smaller source. */
+  APPLE_AGX_SCANOUT_U32 PresentWidth;
+  APPLE_AGX_SCANOUT_U32 PresentHeight;
+  APPLE_AGX_SCANOUT_U32 PresentStride;
+  APPLE_AGX_SCANOUT_U64 PresentSurfaceBytes;
+  APPLE_AGX_SCANOUT_U32 PresentDestOrigin;
+  APPLE_AGX_SCANOUT_U32 PresentDestSize;
 } APPLE_AGX_SCANOUT_CLIENT;
 
 APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutInitialize(

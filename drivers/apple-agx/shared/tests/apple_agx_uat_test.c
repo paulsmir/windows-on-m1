@@ -158,7 +158,29 @@ static void test_range_validation(void) {
          AppleAgxUatResultInvalidArgument);
 }
 
+/* GC: the GPU-private cached leaves differ from the shared ones only in the
+ * memory attribute (bits 2-4: 0 = cached instead of 2), and never encode in
+ * the firmware context. */
+static void test_gpu_private_cached(void) {
+  unsigned long long shared = 0, cached = 0;
+  assert(AppleAgxUatEncodePageDescriptor(1, 0x23400000ULL,
+             AppleAgxUatGpuSharedReadWrite, &shared) == AppleAgxUatResultOk);
+  assert(AppleAgxUatEncodePageDescriptor(1, 0x23400000ULL,
+             AppleAgxUatGpuPrivateReadWrite, &cached) == AppleAgxUatResultOk);
+  assert(((shared >> 2) & 7u) == 2u && ((cached >> 2) & 7u) == 0u);
+  assert((shared & ~(7ULL << 2)) == (cached & ~(7ULL << 2)));
+  assert(AppleAgxUatEncodePageDescriptor(1, 0x23400000ULL,
+             AppleAgxUatGpuSharedReadOnly, &shared) == AppleAgxUatResultOk);
+  assert(AppleAgxUatEncodePageDescriptor(1, 0x23400000ULL,
+             AppleAgxUatGpuPrivateReadOnly, &cached) == AppleAgxUatResultOk);
+  assert((shared & ~(7ULL << 2)) == (cached & ~(7ULL << 2)));
+  assert(AppleAgxUatEncodePageDescriptor(0, 0x23400000ULL,
+             AppleAgxUatGpuPrivateReadWrite, &cached) ==
+         AppleAgxUatResultUnsupportedProtection);
+}
+
 int main(void) {
+  test_gpu_private_cached();
   APPLE_AGX_UAT_TTBR_PAIR pair = {0xaaaaaaaaaaaaaaaaULL,
                                   0xbbbbbbbbbbbbbbbbULL};
   APPLE_AGX_UAT_ROOTS roots = {0x10004000ULL, 0x10008000ULL};

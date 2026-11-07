@@ -53,7 +53,7 @@ class BackendRuntimePackageTests(unittest.TestCase):
 
     def test_backend_runtime_is_registered_in_wdk_project(self):
         project = (
-            ROOT / "drivers/apple-agx/windows/AppleAgx.vcxproj"
+            ROOT / "drivers/apple-agx/render-admission/AppleAgxRenderAdmission.vcxproj"
         ).read_text()
 
         self.assertIn("apple_agx_backend_runtime.c", project)

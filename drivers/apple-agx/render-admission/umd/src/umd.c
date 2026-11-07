@@ -161,9 +161,13 @@ static BOOLEAN AdmissionUmdDescribePrimary(
       CreateResource->pMipInfoList[0].TexelWidth > 8192u ||
       CreateResource->pMipInfoList[0].TexelHeight > 8192u ||
       CreateResource->pMipInfoList[0].TexelDepth != 1u ||
+      /* rc106: a primary must be an offered fixed-panel source mode (the
+       * native 2560x1600 one before it); the KMD commits only those. */
       (CreateResource->pPrimaryDesc != NULL &&
-       (CreateResource->pMipInfoList[0].TexelWidth != 2560u ||
-        CreateResource->pMipInfoList[0].TexelHeight != 1600u)) ||
+       AppleAgxFixedPanelModeIndex(
+           CreateResource->pMipInfoList[0].TexelWidth,
+           CreateResource->pMipInfoList[0].TexelHeight) >=
+           APPLE_AGX_FIXED_PANEL_MODE_COUNT) ||
       CreateResource->Usage != D3D10_DDI_USAGE_DEFAULT || CreateResource->MapFlags ||
       (CreateResource->MiscFlags & ~allowedMiscFlags) ||
       ((CreateResource->MiscFlags &
@@ -735,6 +739,13 @@ VOID APIENTRY AdmissionUmdCreateResource(
     const D3D11DDIARG_CREATERESOURCE *CreateResource,
     D3D10DDI_HRESOURCE ResourceHandle,
     D3D10DDI_HRTRESOURCE RuntimeResource) {
+  AdmissionUmdCreateResourceWithMetadata(DeviceHandle, CreateResource, ResourceHandle, RuntimeResource, 0u);
+}
+
+VOID AdmissionUmdCreateResourceWithMetadata(
+    D3D10DDI_HDEVICE DeviceHandle, const D3D11DDIARG_CREATERESOURCE *CreateResource,
+    D3D10DDI_HRESOURCE ResourceHandle, D3D10DDI_HRTRESOURCE RuntimeResource,
+    UINT MetadataFlags) {
   ADMISSION_UMD_DEVICE *device = AdmissionUmdDeviceFromHandle(DeviceHandle);
   ADMISSION_UMD_RESOURCE *resource =
       (ADMISSION_UMD_RESOURCE *)ResourceHandle.pDrvPrivate;
@@ -785,6 +796,7 @@ VOID APIENTRY AdmissionUmdCreateResource(
        (CreateResource->MiscFlags &
         D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE) != 0u)
       ? ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY : 0u;
+  resourceData.Flags |= MetadataFlags;
   if (CreateResource->pPrimaryDesc != NULL &&
       CreateResource->pPrimaryDesc->ModeDesc.RefreshRate.Denominator != 0u) {
     resourceData.RefreshNumerator =

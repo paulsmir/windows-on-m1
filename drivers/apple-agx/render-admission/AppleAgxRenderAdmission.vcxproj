@@ -122,6 +122,7 @@
     <ClCompile Include="src\render_pool_demand.c" />
     <ClCompile Include="src\render_pool_slab.c" />
     <ClCompile Include="src\pool_windows.c" />
+    <ClCompile Include="src\native_staging_windows.c" />
     <ClCompile Include="src\memory_windows.c" />
     <ClCompile Include="src\render_allocation.c" />
     <ClCompile Include="src\allocation_windows.c" />
@@ -152,6 +153,8 @@
     <ClCompile Include="src\render_gdi_receipt.c" />
     <ClCompile Include="src\render_call_correlation.c" />
     <ClCompile Include="src\render_job_timing.c" />
+    <ClCompile Include="src\render_job_ahead.c" />
+    <ClCompile Include="src\render_job_window.c" />
     <ClCompile Include="src\render_gpu_fault.c" />
     <ClCompile Include="src\render_wow64.c" />
     <ClCompile Include="src\render_call_correlation_windows.c" />
@@ -182,6 +185,7 @@
     <ClCompile Include="..\shared\src\apple_agx_g4_builder.c" />
     <ClCompile Include="..\shared\src\apple_agx_win32_abi.c" />
     <ClCompile Include="..\shared\src\apple_agx_scheduler.c" />
+    <ClCompile Include="..\shared\src\apple_agx_fw_rx_receipt.c" />
     <ClCompile Include="..\shared\src\apple_agx_gdi.c" />
     <ClCompile Include="..\shared\src\apple_agx_exp208_gdi.c" />
     <ClCompile Include="..\shared\src\apple_agx_exp208_framebuffer.c" />

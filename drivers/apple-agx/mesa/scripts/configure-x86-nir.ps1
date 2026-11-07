@@ -7,11 +7,12 @@
 # default debugoptimized build keeps every Mesa/Asahi assert and runs NIR
 # validation after each compiler pass.
 param([string]$Name='nir-x86',[switch]$NDebug)
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
 $ErrorActionPreference='Stop'
-$root='C:\Users\pauls\AD04-fullcompiler-001'
+$root="$builderRoot\AD04-fullcompiler-001"
 $tool='C:\VS2022Community\VC\Tools\MSVC\14.44.35207'
 $kit='C:\Program Files (x86)\Windows Kits\10'
-$clang='C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin'
+$clang="$builderRoot\AD04-asahi-windows-compiler\llvm20\bin"
 $here=Split-Path -Parent $MyInvocation.MyCommand.Path
 $env:PATH="$root\winflex;$root\venv\Scripts;$clang;$tool\bin\HostX64\x86;$tool\bin\HostX64\x64;"+$env:PATH
 $env:INCLUDE="$tool\include;$kit\Include\10.0.26100.0\ucrt;$kit\Include\10.0.26100.0\shared;$kit\Include\10.0.26100.0\um"
@@ -19,7 +20,7 @@ $env:LIB="$tool\lib\x86;$kit\Lib\10.0.26100.0\ucrt\x86;$kit\Lib\10.0.26100.0\um\
 if(Test-Path "$root\$Name"){throw 'Preserve existing x86 configure'}
 $out=Join-Path $root ('x86-config-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $out | Out-Null
-$args=@('setup',"$root\$Name",'C:\Users\pauls\AD04-d3d10-frontend-build\mesa',
+$args=@('setup',"$root\$Name","$builderRoot\AD04-d3d10-frontend-build\mesa",
  '--cross-file',"$here\compiler-x86.ini",'--buildtype=debugoptimized','--wrap-mode=nofallback',
  '-Dplatforms=windows','-Dgallium-drivers=softpipe','-Dvulkan-drivers=[]','-Dopengl=true',
  '-Dgles1=disabled','-Dgles2=disabled','-Dglx=disabled','-Degl=disabled',

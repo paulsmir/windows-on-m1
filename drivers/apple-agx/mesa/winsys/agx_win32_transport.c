@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define AGX_WIN32_BUFFER_FLAGS_ALLOWED 0x1fu
+#define AGX_WIN32_BUFFER_FLAGS_ALLOWED 0x3fu
 #define AGX_WIN32_CPU_ACCESS_ALLOWED                                    \
   ((APPLE_AGX_U32)AppleAgxWin32BufferCpuRead |                         \
    (APPLE_AGX_U32)AppleAgxWin32BufferCpuWrite)

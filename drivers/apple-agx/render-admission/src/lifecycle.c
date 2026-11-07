@@ -17,6 +17,35 @@ C_ASSERT(DXGK_INVALID_MMU_ID == APPLE_AGX_GPUVA_G3_INVALID_MMU_ID);
     defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "apple_agx_render_template_vm_slot.h"
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+/* RC27: the raw-RAM broker and a second private pool do not establish
+ * VidMm shared-backing ownership/accounting or fallible page-in. Recognize
+ * the requested contract, but refuse until it is implemented; see
+ * investigation/analysis/RC27-system-segment-contract.md. */
+static BOOLEAN AdmissionSystemSegmentRequested(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1SystemSegment");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
 static BOOLEAN AdmissionReportGpuvaArmConsumed(ADMISSION_CONTEXT *context) {
   ULONGLONG payload, result;
   if (context == NULL || context->Win32BootGeneration == 0u) {
@@ -226,6 +255,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   }
 #endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_DEVICE_STATE;
   context->StartInfo = *DxgkStartInfo;
   context->Interface = *DxgkInterface;
   context->InterfaceValid = TRUE;
@@ -245,6 +276,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     return STATUS_DEVICE_NOT_READY;
   }
   if (!AdmissionConsumeGpuvaArm(context, L"G3Armed", TRUE)) {
+    AdmissionRecordStartStage(context, AdmissionStartEntered,
+                              STATUS_NOT_SUPPORTED);
+    return STATUS_NOT_SUPPORTED;
+  }
+  /* Consume the one-shot arm as usual, then stop before any runtime owner
+   * starts. Refusing later in G3 would unnecessarily unwind live scanout. */
+  if (AdmissionSystemSegmentRequested(context)) {
     AdmissionRecordStartStage(context, AdmissionStartEntered,
                               STATUS_NOT_SUPPORTED);
     return STATUS_NOT_SUPPORTED;
@@ -497,6 +535,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   context->CommittedHeight = APPLE_AGX_SCANOUT_J313_HEIGHT;
   context->CommittedStride = APPLE_AGX_SCANOUT_J313_STRIDE;
   context->CommittedFormat = D3DDDIFMT_A8R8G8B8;
+  context->CommittedScaling = (ULONG)D3DKMDT_VPPS_IDENTITY;
   /* QueryAdapterInfo cannot run until StartDevice returns. Publish the complete
    * immutable implementation vector only after every runtime owner above has
    * started and the adapter object is live. */
@@ -684,7 +723,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     info->Classes[0].MaximumBytes = AdmissionGeneralMaximumBytes(context);
     info->Classes[0].Flags = AppleAgxWin32BufferCpuRead |
         AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead |
-        AppleAgxWin32BufferGpuWrite;
+        AppleAgxWin32BufferGpuWrite | AppleAgxWin32BufferGpuOnly;
     info->Classes[1].ClassId = AgxWin32BufferClassShader;
     info->Classes[1].MinimumAlignment = 0x4000u;
     info->Classes[1].MaximumBytes = AGX_RR_SHARED_ARENA_BYTES;
@@ -698,6 +737,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     /* EXP1317: 0/0 until the first power-on read a valid topology. */
     info->CoresPerCluster = context->GpuCoreMask ? context->GpuCoresPerCluster : 0u;
     info->CoreMask = context->GpuCoreMask;
+    /* rc82: Wom1SoftFaults not 0 and RegionC fault_control 0xb. */
+    info->Features = InterlockedCompareExchange(&context->GpuSoftFaults, 0, 0) != 0
+        ? AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS : 0u;
+    /* OV2: Wom1Ov2NoHazardLead = 1 with Q2c (backend start). */
+    if (InterlockedCompareExchange(&context->GpuIndependentSubqueue, 0, 0) != 0)
+      info->Features |= AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE;
+    /* OV5 step 2: Wom1Ov5TaWaiver = 1 with the 3D-queue Barrier path. */
+    if (InterlockedCompareExchange(&context->GpuRenderTaIndependent, 0, 0) != 0)
+      info->Features |= AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT;
     status = STATUS_SUCCESS;
     break;
   }
@@ -721,7 +769,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
       featureInput.Size = sizeof(featureInput);
       featureInput.WddmMajor = 3u;
       featureInput.WddmMinor = 0u;
-      featureInput.NodeCount = 1u;
+      featureInput.NodeCount = context->LiveAdditivePaging ? 2u : 1u;
       featureInput.ReadyMask = (ULONG)InterlockedCompareExchange(
           &context->FeatureReadyMask, 0, 0);
       featureResult = AppleAgxWddmFeatureContractEvaluate(
@@ -738,6 +786,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1u;
         caps->SchedulingCaps.MultiEngineAware = 1u;
         caps->SchedulingCaps.PreemptionAware = 1u;
+        /* Q8: a kicked successor still owns a pending entry and the
+         * context's second fence. Bound VidSch's entire node to the two
+         * packets we can retain, including active/kicked work. This is a
+         * DMA packet limit, not MaxQueuedFlipOnVSync or a HWQueue count.
+         * General absent preserves the zeroed legacy caps byte for byte. */
+        if (AdmissionPlatformRuntimeGeneralDepth2(context))
+          caps->SchedulingCaps.HwQueuePacketCap = 2u;
         caps->PreemptionCaps.GraphicsPreemptionGranularity =
             D3DKMDT_GRAPHICS_PREEMPTION_DMA_BUFFER_BOUNDARY;
         caps->PreemptionCaps.ComputePreemptionGranularity =
@@ -767,8 +822,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
               model.VirtualAddressingSupported;
           caps->MemoryManagementCaps.GpuMmuSupported =
               model.AdapterGpuMmuSupported;
-          caps->MemoryManagementCaps.PagingNode = model.PagingNode;
-          caps->GpuEngineTopology.NbAsymetricProcessingNodes = model.NodeCount;
+          caps->MemoryManagementCaps.PagingNode = context->LiveAdditivePaging ? 1u : model.PagingNode;
+          caps->GpuEngineTopology.NbAsymetricProcessingNodes = context->LiveAdditivePaging ? 2u : model.NodeCount;
         }
 #endif
         status = STATUS_SUCCESS;
@@ -901,7 +956,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     }
     output->PagingBufferSize =
         (UINT32)context->Memory.Topology.PagingBufferSize;
-    output->PagingBufferPrivateDataSize = PAGE_SIZE;
+    output->PagingBufferPrivateDataSize = (UINT)ADMISSION_PAGING_PRIVATE_BYTES;
     status = STATUS_SUCCESS;
     break;
   }
@@ -1113,4 +1168,8 @@ VOID AdmissionDdiResetDevice(PVOID MiniportDeviceContext) {
   UNREFERENCED_PARAMETER(MiniportDeviceContext);
 }
 
-VOID AdmissionDdiUnload(VOID) {}
+VOID AdmissionDdiUnload(VOID) {
+#ifdef APPLE_AGX_NATIVE_STAGING
+  AdmissionNativeStagingUninitialize();
+#endif
+}

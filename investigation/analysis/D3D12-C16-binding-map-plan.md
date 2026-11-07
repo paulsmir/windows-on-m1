@@ -109,11 +109,11 @@ Execution: inline using the established agx-d3d12-loop; no delegation needed.
 - [x] Run affected tests and builder syncheck3x rc0; full host suite once
       before commit, recording known unrelated failures without claiming GREEN.
       Read tandem review, commit implementation, append CHANGES with its hash.
-- [ ] Preregister EXP1379 (one driver factor SRV capacity), preserve exact
+- [x] Preregister EXP1379 (one driver factor SRV capacity), preserve exact
       recovery; build/sign/hash package and require both stack gates<=16384.
       If capacity growth exceeds a frame, move only that scratch storage to
       the process heap before committing/building the final candidate.
-- [ ] Run hardware to C16A and existing D3D12 controls, collect regression
+- [x] Run hardware to C16A and existing D3D12 controls, collect regression
       receipts, recover/remove exact package, record ACTUAL and verdict.
 
 Ownership: UMD and owner initialize/replay slot records, Asahi owns NIR/GPU
@@ -124,3 +124,27 @@ separate KMD issue and must be reported if it recurs, not hidden in this fix.
 C16A shader generated with fxc cs_5_0: root t127/table t126, root u7, root CBV b13 with bias7; output5*i+207 for16384 words. DDI and owner syntax3x rc0, probe ARM64 SHA256 98a330e1a36fcc65802be6c8059cab4e04d69f09c49e9355bc7b7da02bbdd58c. Targeted32testsPASS. Asahi set_sampler_views starts0 and loops the count, texture upload emits/nulls all indices through nr_bindful_textures; no sampler-limit16 assumption is used for sampler views.
 
 Full host suite1499 tests in165.841s:68failures/51errors/2skips, identical failure signatures to the pre-capacity1498-test baseline (new failures0, removed0). Relevant32tests PASS; syntax3x rc0, ARM64 probe BUILD_PASS. Logs .local/experiments/EXP1379-verification. Tandem historical OPEN items remain DEFER at the unrelated G3/firmware boundary as recorded in the C14 note; R85/R47 hash/profile gates and R48 single-launcher lock remain ACCEPT.
+
+## Next namespace source checkpoint (offline while EXP1379 runs)
+
+Self-authored cs_5_1 example compiled with pinned fxc: two RWByteAddressBuffers
+both at logical u0, in spaces1 and2, plus b0/space3. Actual declarations are
+CB0[0:0][1] space3, U0[0:0] space1, U1[0:0] space2; stores use U0[0] and U1[0].
+This confirms the distinct meanings of range ID and HLSL register. Source,
+compiler script and generated header are retained in
+.local/d3d12-sm51-space-reference; no external code imported and no hardware
+uses this shader yet. A coherent compiler/replay map must keep those two u0
+bindings distinct; simply ignoring spaces aliases them.
+
+Current translator requires direct resource/sampler indices and 2D CBV operands;
+SM5.1 uses 2D resource operands and 3D CBVs. Existing dynamic-array ps51 fixture
+must stay fail-closed until its declaration metadata, dynamic offsets and
+bounds are supported coherently. First namespace checkpoint may be static
+bindings only, with that limitation explicit; no shader-model cap change.
+Root-signature lifetime/copying and per-stage visibility need source review
+before implementing a shared map; do not retain an unchecked root pointer in
+compiled shader state.
+
+EXP1379 C16A hardware checkpoint PASS at12:20:05Z: root t127/table t126/UAV u7/CBV b13, bad0 first207,212 last82122, fence7. All35D3D12 PASS including C14 controls. Shared capacity correction a1a954ef verified on the compute owner; higher graphics-slot coverage and SM5.1 namespace mapping remain separate targets. Final regression/recovery verdict still pending. ARM64 stack12800/x866544 bothPASS.
+
+EXP1379 final: all35D3D12 PASS,73SMOKE PASS+knownMSAA only, GL52.3/internal59.6, CS46.391, corpus64/4 without hangs or pixel differences, DWM faults0; rec1379h RECOVERY_DONE PackageAbsent. Capacitya1a954ef and probea9dd189f hardware validated. Private-pool failure from EXP1378 did not recur but remains an independent open issue.

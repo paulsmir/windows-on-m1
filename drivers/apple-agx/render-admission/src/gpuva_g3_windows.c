@@ -1,11 +1,150 @@
+#include "render_ov2.h"
+#include "render_ov5.h"
 #include "gpuva_g3_private.h"
 #include <intrin.h> /* _ReturnAddress (cancel-caller receipt) */
 #include "apple_agx_g3_copy_abi.h"
+#include "apple_agx_g3_copy_gate.h"
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_g4_preflight.h"
 #include "apple_agx_g13_compute_work.h"
 #include "apple_agx_present_job.h"
+#include "render_job_timing.h"
+#include "render_job_ahead.h"
+#include "render_preempt_trace.h"
+/* EXP2206 receipt-only: native readiness query refusal codes. */
+#include "apple_agx_g3_native_query_refusal.h"
+#define ADMISSION_G3_NATIVE_QUERY_REFUSAL_RECEIPT 1
+/* L1 receipt-only lock profile: every fast mutex in this file is the G3
+ * state Lock (gpuva_g3_private.h). */
+#define ADMISSION_G3_LOCK_FILE 1u
+#define ExAcquireFastMutex(m) ADMISSION_G3_PROFILED_ACQUIRE(m)
+#define ExReleaseFastMutex(m) ADMISSION_G3_PROFILED_RELEASE(m)
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+
+/* EXP1932: the rolling omission ring can be overwritten before collection.
+ * Snapshot the first valid fault's current group while JOB_BEGIN still owns
+ * the graph. Never wait behind paging/recovery or dereference a saved token. */
+VOID AdmissionGpuvaG3CaptureFaultMapping(ADMISSION_CONTEXT *Adapter,
+    const ADMISSION_GPU_FAULT_EVENT *Event, ADMISSION_GPU_FAULT_MAPPING *Receipt) {
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  ADMISSION_RENDER_CONTEXT *context;
+  ADMISSION_G3_TABLE_SHADOW *shadow;
+  const APPLE_AGX_GPUVA_G3_NODE *leaf;
+  ULONG bucket, first, i;
+  if (Receipt == NULL || Receipt->Version || Event == NULL ||
+      (Event->Flags & (ADMISSION_GPU_FAULT_INFO_READ | ADMISSION_GPU_FAULT_INFO_VALID)) !=
+          (ADMISSION_GPU_FAULT_INFO_READ | ADMISSION_GPU_FAULT_INFO_VALID))
+    return;
+  RtlZeroMemory(Receipt, sizeof(*Receipt));
+  Receipt->Version = 2u;
+  Receipt->Bytes = sizeof(*Receipt);
+  Receipt->Fence = Event->Fence;
+  Receipt->ContextToken = Event->ContextToken;
+  Receipt->FaultInfo = Event->FaultInfo;
+  Receipt->FaultVa = (Event->FaultInfo >> 30) << 6;
+  if (Adapter == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      Adapter->GpuvaG3State == NULL) return;
+  state = (ADMISSION_G3_STATE *)Adapter->GpuvaG3State;
+  Receipt->Status = AdmissionGpuFaultMappingBusy;
+  if (!ExTryToAcquireFastMutex(&state->Lock)) return;
+  Receipt->Status = AdmissionGpuFaultMappingIdentity;
+  process = state->ActiveProcess;
+  if (process == NULL || state->ActiveFence != Event->Fence ||
+      !(Event->Flags & ADMISSION_GPU_FAULT_JOB_KNOWN)) goto Done;
+  for (context = process->Contexts; context != NULL;
+       context = context->GpuvaG3NextContext)
+    if ((ULONGLONG)(ULONG_PTR)context == Event->ContextToken) break;
+  if (context == NULL) goto Done;
+  if (process->FaultDrill.Fence == Event->Fence &&
+      process->FaultDrill.GpuVa == Receipt->FaultVa &&
+      process->Graph.Slot == ((Event->FaultInfo >> 17) & 0x3fu))
+    process->FaultDrill.FaultInfo = Event->FaultInfo;
+  Receipt->OsProcessId = process->OsProcessId;
+  Receipt->VmSlot = process->Graph.Slot;
+  Receipt->GraphUncertain = process->Graph.Uncertain;
+  Receipt->CpuOnlyMappings = process->CpuOnlyMappings;
+  Receipt->JobInFlight = process->Graph.JobInFlight;
+  Receipt->GraphProcessId = process->Graph.ProcessId;
+  Receipt->RootIpa = process->Graph.RootIpa;
+  Receipt->ProcessGeneration = process->Graph.ProcessGeneration;
+  Receipt->MappingGeneration = process->Graph.MappingGeneration;
+  Receipt->LeaseToken = process->Graph.LeaseToken;
+  Receipt->Status = AdmissionGpuFaultMappingVm;
+  if (Receipt->VmSlot != ((Event->FaultInfo >> 17) & 0x3fu)) goto Done;
+  Receipt->Status = AdmissionGpuFaultMappingUncertain;
+  if (Receipt->GraphUncertain || !Receipt->JobInFlight ||
+      !Receipt->LeaseToken || Receipt->CpuOnlyMappings) goto Done;
+  Receipt->Status = AdmissionGpuFaultMappingNoTable;
+  if (!AppleAgxGpuvaG3GraphLeafTableIpa(&process->Graph,
+          Receipt->FaultVa, &Receipt->TableIpa)) goto Done;
+  leaf = AppleAgxGpuvaG3GraphLeaf(&process->Graph, Receipt->TableIpa,
+      (ULONG)((Receipt->FaultVa >> 14) & 2047u));
+  if (leaf != NULL) {
+    Receipt->NativePresent = leaf->AuxIpa != 0ULL;
+    Receipt->NativeIpa = leaf->AuxIpa;
+    Receipt->NativeWritable = leaf->Writable;
+    Receipt->NativeKind = (ULONG)leaf->Kind;
+  }
+  Receipt->Status = AdmissionGpuFaultMappingNoShadow;
+  bucket = (ULONG)((Receipt->TableIpa >> 14) ^ (Receipt->TableIpa >> 22) ^
+      (Receipt->TableIpa >> 30)) & 255u;
+  for (shadow = process->TableShadowBrokerBuckets[bucket]; shadow != NULL;
+       shadow = shadow->NextBroker)
+    if (shadow->BrokerIpa == Receipt->TableIpa) break;
+  if (shadow == NULL || shadow->LogicalPtes == NULL) goto Done;
+  first = (ULONG)((Receipt->FaultVa >> 12) & 8191u) & ~3u;
+  for (i = 0u; i < 4u; ++i) {
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte = &shadow->LogicalPtes[first + i];
+    Receipt->Ptes[i].GuestIpa = pte->GuestIpa;
+    Receipt->Ptes[i].Allocation = pte->Allocation;
+    Receipt->Ptes[i].AllocationOffset = pte->AllocationOffset;
+    Receipt->Ptes[i].Segment = pte->SegmentId;
+    Receipt->Ptes[i].Flags = pte->Flags;
+  }
+  Receipt->Status = AdmissionGpuFaultMappingCaptured;
+Done:
+  /* No allocation, wait, handle lookup or paging decision here. Only inspect
+   * the existing locked ring after process/fence/VM authentication. Include
+   * all four logical pages: changing a neighbor can remove a native leaf.
+   * VA matches survive table replacement; table/index matches cover records
+   * made before linking a table and whole-table clear/retire events. */
+  if (Receipt->Status >= AdmissionGpuFaultMappingNoTable) {
+    ULONGLONG base = Receipt->FaultVa & ~0x3fffULL;
+    ULONG group = (ULONG)((base >> 12) & 8191u), n;
+    Receipt->HistoryNext = state->LeafHistoryNext;
+    Receipt->HistoryScanned = state->LeafHistoryNext < ADMISSION_G3_LEAF_RING ?
+        state->LeafHistoryNext : ADMISSION_G3_LEAF_RING;
+    for (n = 0u; n < Receipt->HistoryScanned; ++n) {
+      ULONG sequence = state->LeafHistoryNext - n;
+      const ADMISSION_G3_LEAF_HISTORY *h =
+          &state->LeafHistory[(sequence - 1u) % ADMISSION_G3_LEAF_RING];
+      ULONG match = 0u;
+      ADMISSION_GPU_FAULT_HISTORY *out;
+      if (h->ProcessId != Receipt->GraphProcessId || !h->Count ||
+          h->Count > 8192u) continue;
+      if (h->FirstVa && (h->FirstVa <= base ?
+          base - h->FirstVa < (ULONGLONG)h->Count * 0x1000ULL :
+          h->FirstVa - base < 0x4000ULL)) match |= 1u;
+      if (Receipt->TableIpa && h->TableIpa == Receipt->TableIpa &&
+          h->First < 8192u && h->Count <= 8192u - h->First &&
+          h->First < group + 4u && group < h->First + h->Count) match |= 2u;
+      if (!match) continue;
+      ++Receipt->HistoryMatches;
+      if (Receipt->HistoryCount == ADMISSION_GPU_FAULT_HISTORY_COUNT) continue;
+      out = &Receipt->History[Receipt->HistoryCount++];
+      out->Qpc = h->Qpc; out->ProcessId = h->ProcessId;
+      out->TableIpa = h->TableIpa; out->Allocation = h->Allocation;
+      out->FirstVa = h->FirstVa; out->MappingGeneration = h->MappingGeneration;
+      out->First = h->First; out->Count = h->Count;
+      out->ValidCount = h->ValidCount; out->Flags = h->Flags;
+      out->Status = h->Status; out->FirstSegment = h->FirstSegment;
+      out->Sequence = sequence; out->Match = match;
+    }
+  }
+  ExReleaseFastMutex(&state->Lock);
+}
 
 /* Branch IDs are a stable diagnostic ABI for Wom1G4SubmitFailure. */
 enum {
@@ -23,7 +162,34 @@ enum {
   AdmissionG4RejectQueue = 12,
   AdmissionG4RejectLegacyShape = 13,
   AdmissionG4RejectLegacyPacket = 14,
-  AdmissionG4RejectLegacySubmit = 15
+  AdmissionG4RejectLegacySubmit = 15,
+  AdmissionG4RejectStatus = 16,
+  /* Version 4 PrepareMask: path/result bits and observed predicates.
+   * Queue reason bits are meaningful only with QueueRefused. */
+  AdmissionG4PrepareDeferred = 0x1u,
+  AdmissionG4PrepareImmediate = 0x2u,
+  AdmissionG4PrepareAdmissible = 0x4u,
+  AdmissionG4PrepareFenceOutstanding = 0x8u,
+  AdmissionG4PrepareSecondFence = 0x10u,
+  AdmissionG4PreparePendingFull = 0x20u,
+  AdmissionG4PrepareTailBusy = 0x40u,
+  AdmissionG4PreparePacketBusy = 0x80u,
+  AdmissionG4PrepareFaulted = 0x100u,
+  AdmissionG4PrepareQueueAttempted = 0x200u,
+  AdmissionG4PrepareQueueRefused = 0x400u,
+  AdmissionG4PrepareEntryChanged = 0x800u,
+  AdmissionG4PrepareInvalidShape = 0x1000u,
+  AdmissionG4PreparePacketRefused = 0x2000u,
+  AdmissionG4PrepareQueueFull = 0x4000u,
+  AdmissionG4PreparePreemptionBlocked = 0x8000u,
+  AdmissionG4PrepareZeroFence = 0x10000u,
+  AdmissionG4PrepareFenceNotAfter = 0x20000u,
+  AdmissionG4PrepareInvalidEngine = 0x40000u,
+  /* PrepareSite values, independent of render versus compute. */
+  AdmissionG4PrepareShape = 1u,
+  AdmissionG4PrepareReserve = 2u,
+  AdmissionG4PreparePublish = 3u,
+  AdmissionG4PreparePacket = 4u
 };
 
 static NTSTATUS AdmissionG4SubmitRejectDetail(
@@ -38,7 +204,7 @@ static NTSTATUS AdmissionG4SubmitRejectDetail(
           &adapter->G4SubmitFailure;
       RtlZeroMemory(first, sizeof(*first));
       if (detail != NULL) *first = *detail;
-      first->Version = 2u;
+      first->Version = 4u;
       first->Bytes = sizeof(*first);
       first->Branch = branch;
       first->Status = (ULONG)status;
@@ -65,6 +231,45 @@ static NTSTATUS AdmissionG4SubmitRejectDetail(
   return status;
 }
 
+/* EXP1901N receipt-only: the first prepared job whose backend-image bind
+ * failed (1 compute, 2 present, 3 render). Read without the scheduler lock:
+ * the bind itself runs outside it. */
+static VOID AdmissionG4RecordBindRefusal(ADMISSION_CONTEXT *adapter,
+    ULONG kind, ULONG fence) {
+  struct _ADMISSION_G4_BIND_REFUSAL *r;
+  const ADMISSION_BACKEND_IMAGE *image;
+  if (adapter == NULL ||
+      InterlockedCompareExchange(&adapter->G4BindRefusalClaim, 1, 0) != 0)
+    return;
+  r = &adapter->G4BindRefusal;
+  image = &adapter->BackendImage;
+  RtlZeroMemory(r, sizeof(*r));
+  r->Version = 2u;
+  r->Bytes = sizeof(*r);
+  r->Kind = kind;
+  r->Fence = fence;
+  r->EntryMs = (ULONG)(KeQueryInterruptTime() / 10000ull);
+  r->Ready = (ULONG)image->Ready;
+  r->BoundFence = image->BoundFence;
+  r->JobFence = image->JobFence;
+  r->JobReady = (ULONG)image->JobReady;
+  r->NativeBound = (ULONG)image->NativeBound;
+  r->G4Native = (ULONG)image->G4Native;
+  r->G4Compute = (ULONG)image->G4Compute;
+  r->PresentCompute = (ULONG)image->PresentCompute;
+  r->CompletedFence = adapter->Scheduler.CompletedFence;
+  r->LastSubmittedFence = adapter->Scheduler.LastSubmittedFence;
+  r->ActiveFence = adapter->Scheduler.ActiveFence;
+  r->PreemptionPhase = (ULONG)adapter->Scheduler.PreemptionPhase;
+  r->PacketState = (ULONG)AdmissionRenderPacketState(&adapter->RenderPacket);
+  r->PacketFence = adapter->RenderPacket.Description.Fence;
+  r->DispatchedFence = adapter->DispatchedFence;
+  r->RenderWorkerScheduled = AdmissionPlatformRenderWorkerScheduled(adapter) ? 1u : 0u;
+  r->BindFailure = image->BindFailure;
+  KeMemoryBarrier();
+  InterlockedExchange(&adapter->G4BindRefusalClaim, 2);
+}
+
 static NTSTATUS AdmissionG4SubmitReject(
     ADMISSION_CONTEXT *adapter, const ADMISSION_RENDER_CONTEXT *context,
     const DXGKARG_SUBMITCOMMANDVIRTUAL *args, ULONG branch,
@@ -84,6 +289,9 @@ static int AdmissionG4GraphAccessTyped(void *opaque, unsigned long long va,
     unsigned int ordinal);
 static int AdmissionG4LogicalEnvelopeAccess(ADMISSION_G3_PROCESS *process,
     unsigned long long va, unsigned int bytes);
+/* rc80 TVB growth (defined after AdmissionG3ManagerWord). */
+static BOOLEAN AdmissionG3TvbRelease(ADMISSION_G3_PROCESS *p);
+static BOOLEAN AdmissionG3TvbReturnLeases(ADMISSION_G3_PROCESS *p);
 
 static void *AdmissionG3AllocateNode(void *opaque, unsigned long long bytes) {
   UNREFERENCED_PARAMETER(opaque);
@@ -165,8 +373,116 @@ static VOID AdmissionG3DetachMailbox(ADMISSION_G3_STATE *state) {
   state->Mailbox = NULL;
 }
 
+/* RC26: explicit ABI probe request; default off. */
+static BOOLEAN AdmissionSysmemGpuMapRequested(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1SysmemGpuMap");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
+static BOOLEAN AdmissionLiveAdditivePagingRequested(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1LiveAdditivePaging");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
+/* GC (experiment): device value Wom1GpuPrivateCached = 1. */
+static BOOLEAN AdmissionGpuPrivateCachedRequested(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1GpuPrivateCached");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
+/* PASSIVE_LEVEL startup only, before process creation. Accepted means the
+ * capability enabled adapter topology; each process still negotiates later.
+ * QWORDs: version, bytes, requested, queried, answered, status (UINT_MAX if
+ * unanswered), flags, caps, extension ABI, accepted, paging node, epoch. */
+static VOID AdmissionG3RecordLiveAdditiveState(ADMISSION_CONTEXT *Context,
+    BOOLEAN Requested, const APPLE_AGX_GPUVA_V5_CLIENT *Client) {
+  ULONGLONG value[12] = {0};
+  UNICODE_STRING name;
+  HANDLE key = NULL;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      Context->PhysicalDeviceObject == NULL) return;
+  value[0] = 1u;
+  value[1] = sizeof(value);
+  value[2] = Requested ? 1u : 0u;
+  value[3] = Client->LiveAdditiveQueried;
+  value[4] = Client->LiveAdditiveAnswered;
+  value[5] = Client->LiveAdditiveAnswered ? Client->LiveAdditiveCaps.Status : ~0u;
+  value[6] = Client->LiveAdditiveCaps.Flags;
+  value[7] = Client->LiveAdditiveCaps.Reserved[0];
+  value[8] = Client->LiveAdditiveCaps.Reserved[1];
+  value[9] = Context->LiveAdditivePaging;
+  value[10] = Context->ObjectAdapter.PagingNode;
+  value[11] = Client->Epoch;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  RtlInitUnicodeString(&name, L"Wom1LiveAdditiveState");
+  (void)ZwSetValueKey(key, &name, 0, REG_BINARY, value, sizeof(value));
+  ZwClose(key);
+}
+
 NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
   ADMISSION_G3_STATE *state;
+  BOOLEAN liveRequested;
   AGX_GPUVA_V5_REQUEST probe = {0};
   AGX_GPUVA_V5_RESPONSE response = {0};
   if (context == NULL || context->GpuvaG3State != NULL ||
@@ -190,6 +506,22 @@ NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
     ExFreePoolWithTag(state, ADMISSION_POOL_TAG);
     return STATUS_DEVICE_HARDWARE_ERROR;
   }
+  /* RC26 is an ABI prerequisite, not permission to publish shadow backing.
+   * Old brokers refuse the appended query; opt-in fails before attachment. */
+  if (AdmissionSysmemGpuMapRequested(context) && !AppleAgxGpuvaV5ClientHasSysmem(&state->Client)) {
+    ExFreePoolWithTag(state, ADMISSION_POOL_TAG);
+    return STATUS_NOT_SUPPORTED;
+  }
+  liveRequested = AdmissionLiveAdditivePagingRequested(context);
+  context->LiveAdditivePaging = liveRequested &&
+      AppleAgxGpuvaV5ClientHasLiveAdditive(&state->Client) ? 1u : 0u;
+  context->ObjectAdapter.PagingNode = context->LiveAdditivePaging;
+  AdmissionG3RecordLiveAdditiveState(context, liveRequested, &state->Client);
+  /* GC (experiment, measurement only): GPU-only allocations as cached
+   * leaves; the broker refuses the leaf bit unless it advertises it. */
+  context->GpuPrivateCached =
+      AdmissionGpuPrivateCachedRequested(context) &&
+      AppleAgxGpuvaV5ClientHasPrivateCached(&state->Client) ? 1u : 0u;
   AdmissionG3AttachMailbox(state);
   context->GpuvaG3State = state;
   return STATUS_SUCCESS;
@@ -198,8 +530,15 @@ NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
 NTSTATUS AdmissionGpuvaG3Stop(ADMISSION_CONTEXT *context) {
   ADMISSION_G3_STATE *state;
   if (context == NULL) return STATUS_INVALID_PARAMETER;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (!AdmissionNativeStagingAdapterIdle(context)) return STATUS_DEVICE_BUSY;
+#endif
   state = (ADMISSION_G3_STATE *)context->GpuvaG3State;
   if (state == NULL) return STATUS_SUCCESS;
+  /* Lifecycle tears down G3 before ordinary paging. Live CPU workers borrow
+   * this state: stop admission and drain their complete callbacks first. */
+  if (context->LiveAdditivePaging &&
+      !NT_SUCCESS(AdmissionPagingStop(context))) return STATUS_DEVICE_BUSY;
   ExAcquireFastMutex(&state->Lock);
   if (state->ProcessCount != 0u || !IsListEmpty(&state->Processes) ||
       state->ActiveProcess != NULL) {
@@ -328,7 +667,7 @@ static NTSTATUS AdmissionG3PreparePrivateStorageObserved(ADMISSION_G3_PROCESS *p
   ADMISSION_BACKEND_MEMORY_VIEW view;
   NTSTATUS status;
   if (process == NULL || process->Poisoned || process->Graph.Uncertain ||
-      process->Graph.JobInFlight || process->Graph.LeaseToken)
+      process->Graph.JobInFlight)
     return STATUS_INVALID_DEVICE_STATE;
   status = AdmissionMemoryRuntimePrivateView(process->State->Adapter, &view);
   if (!NT_SUCCESS(status)) return status;
@@ -407,8 +746,7 @@ static NTSTATUS AdmissionG3PrivateTables(ADMISSION_G3_PROCESS *p,
     *predicate=3u;
   else if (!AppleAgxGpuvaG3GraphRegisterTable(&p->Graph,p->PrivateLeafIpa,2u))
     *predicate=4u;
-  else if (!AppleAgxGpuvaG3GraphAttachPrivate(&p->Graph,p->PrivateVa,
-          p->PrivateMiddleIpa,p->PrivateLeafIpa))
+  else if (!AdmissionG3AttachPrivateLeaves(p))
     *predicate=5u;
   /* The node a later root move needs to re-link the leaf (PrepareTableReuse). */
   else if (!AppleAgxGpuvaG3GraphReserveNode(&p->Graph))
@@ -423,7 +761,7 @@ static BOOLEAN AdmissionG3PrivateReleaseScene(ADMISSION_G3_PROCESS *p,
   ADMISSION_G3_PRIVATE_SCENE **link=&p->PrivateScenes;
   UINT i;
   if (scene->Queued || scene->Submitting || scene->Quarantined || p->Graph.Uncertain ||
-      p->Graph.JobInFlight || p->Graph.LeaseToken) return FALSE;
+      p->Graph.JobInFlight) return FALSE;
   for (i=0;i<6;++i)
     if (!AdmissionG3PrivateMapExtent(p,view,&scene->Storage.Extents[i],FALSE)) {
       scene->Quarantined=1u;ADMISSION_G3_POISON(p,1u);return FALSE;
@@ -522,6 +860,59 @@ static BOOLEAN AdmissionG3PrivateEvictCached(ADMISSION_G3_PROCESS *p,
   return TRUE;
 }
 
+/* The physical pool is adapter-wide. A miss must not fail merely because
+ * another idle process retains released cache entries. Keep requester LRU
+ * first (it can also relieve its VA/quota); foreign eviction only addresses
+ * physical pressure, never a requester quota refusal. `failed` is the exact
+ * allocation-failure snapshot, before Prepare rolls back temporary extents. */
+static BOOLEAN AdmissionG3PrivateEvictPressure(ADMISSION_G3_PROCESS *p,
+    ADMISSION_BACKEND_MEMORY_VIEW *view, UINT failedBytes,
+    const APPLE_AGX_G3_PRIVATE_POOL_STATS *failed) {
+  LIST_ENTRY *link;
+  UINT units;
+  if (!failedBytes || failedBytes>(8u<<20)) return FALSE; /* allocator hard limit */
+  units=(failedBytes+APPLE_AGX_G3_PRIVATE_UNIT-1u)/APPLE_AGX_G3_PRIVATE_UNIT;
+  if (AdmissionG3PrivateEvictCached(p,view)) return TRUE;
+  if (p->Poisoned || p->Graph.Uncertain || !failed ||
+      failed->OwnerUnits>APPLE_AGX_G3_PROCESS_UNITS ||
+      units>APPLE_AGX_G3_PROCESS_UNITS-failed->OwnerUnits ||
+      failed->LargestFreeUnits>=units) return FALSE;
+  for (link=p->State->Processes.Flink;link!=&p->State->Processes;link=link->Flink) {
+    ADMISSION_G3_PROCESS *owner=CONTAINING_RECORD(link,ADMISSION_G3_PROCESS,Link);
+    ADMISSION_G3_PRIVATE_SCENE *s,*oldest=NULL;
+    APPLE_AGX_G3_PRIVATE_POOL_STATS before,after;
+    if (owner==p || owner->Poisoned || !owner->Graph.Created ||
+        owner->Graph.Uncertain || owner->Graph.JobInFlight)
+      continue;
+    for (s=owner->PrivateScenes;s;s=s->Next)
+      if (s->Cached && s->Reported && s->ReleaseRequested && !s->Queued &&
+          !s->Submitting && !s->Quarantined &&
+          (!oldest || s->CachedAt<oldest->CachedAt)) oldest=s;
+    if (!oldest) continue;
+    AppleAgxG3PrivatePoolStats(&p->State->PrivatePool,p->Graph.ProcessId,&before);
+    /* This retains the victim's graph/root/owner through leaf invalidation,
+     * backing revoke, zeroing and generation-checked free. Failure quarantines
+     * that owner in the existing release path; never try a different victim. */
+    if (!AdmissionG3PrivateReleaseScene(owner,oldest,view)) return FALSE;
+    AppleAgxG3PrivatePoolStats(&p->State->PrivatePool,p->Graph.ProcessId,&after);
+    ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_PRESSURE];
+    p->State->PrivatePressure[0]=1u;
+    ++p->State->PrivatePressure[1];
+    p->State->PrivatePressure[2]=p->OsProcessId;
+    p->State->PrivatePressure[3]=owner->OsProcessId;
+    p->State->PrivatePressure[4]=before.GlobalUnits;
+    p->State->PrivatePressure[5]=after.GlobalUnits;
+    p->State->PrivatePressure[6]=before.GlobalUnits-after.GlobalUnits;
+    p->State->PrivatePressure[7]=before.OwnerUnits;
+    p->State->PrivatePressure[8]=failedBytes;
+    p->State->PrivatePressure[9]=(ULONG)owner->Graph.RootIpa;
+    p->State->PrivatePressure[10]=(ULONG)(owner->Graph.RootIpa>>32);
+    p->State->PrivatePressure[11]=after.LargestFreeUnits;
+    return TRUE;
+  }
+  return FALSE;
+}
+
 /* Interrupt/DPC owners hold SchedulerLock and publish only a cancellation
  * marker. The matching scene reference pins Context until PASSIVE reaping. */
 VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *context,
@@ -612,7 +1003,7 @@ static BOOLEAN AdmissionG3PrivateReap(ADMISSION_G3_PROCESS *p) {
     if (s->ReleaseRequested && !s->Queued && !s->Cached && AdmissionG3PrivateCacheScene(p,s))
       ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_CACHED_REAP];
     if (s->ReleaseRequested && !s->Queued && !AdmissionG3PrivateCacheScene(p,s) &&
-        !p->Graph.JobInFlight && !p->Graph.LeaseToken &&
+        !p->Graph.JobInFlight &&
         !AdmissionG3PrivateReleaseScene(p,s,&view)) return FALSE;
   }
   return !p->Poisoned && !p->Graph.Uncertain;
@@ -633,6 +1024,10 @@ BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *adapter) {
       if (s->Queued && s->Started) {
         s->Quarantined=1u;ADMISSION_G3_POISON(p,1u);safe=FALSE;
       }
+    /* V1: after a reset no idle process keeps a slot (the baseline state). */
+    if (!p->Graph.Uncertain && !AppleAgxGpuvaG3GraphReleaseRetained(&p->Graph)) {
+      ADMISSION_G3_POISON(p,1u);safe=FALSE;
+    }
   }
   ExReleaseFastMutex(&state->Lock);
   return safe; /* No GPU stop/TLB proof exists for an active private reset. */
@@ -709,7 +1104,7 @@ BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *context) 
     if (s->Queued || s->Quarantined) goto Done;
   }
   if (!p->PrivateManager.Generation) {ok=TRUE;goto Done;}
-  if (p->Graph.JobInFlight || p->Graph.LeaseToken ||
+  if (p->Graph.JobInFlight ||
       !NT_SUCCESS(AdmissionMemoryRuntimePrivateView(p->State->Adapter,&view))) goto Done;
   for (s=p->PrivateScenes;s;s=next) {
     next=s->Next;
@@ -721,6 +1116,8 @@ BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *context) 
       manager_used=TRUE;
   if (!manager_used && !p->PrivateScenes) {
     UINT extents=AppleAgxG3PrivateManagerExtentCount(&p->PrivateManager);
+    /* rc80: the TVB window blocks end with the manager (graph idle above). */
+    if (!AdmissionG3TvbRelease(p)) goto Done;
     for (i=0;i<extents;++i)
       if (!AdmissionG3PrivateMapExtent(p,&view,
               AppleAgxG3PrivateManagerExtent(&p->PrivateManager,i),FALSE)) {
@@ -760,6 +1157,12 @@ static BOOLEAN AdmissionG3PrivateDestroyStorage(ADMISSION_G3_PROCESS *p) {
   while (p->PrivateScenes) {
     ADMISSION_G3_PRIVATE_SCENE *scene=p->PrivateScenes;
     p->PrivateScenes=scene->Next;ExFreePoolWithTag(scene,ADMISSION_POOL_TAG);
+  }
+  /* rc80: the same proof covers the TVB window granules. A granule that
+   * could not be zeroed stays held, and so does the lease array. */
+  if (AdmissionG3TvbReturnLeases(p) && p->TvbLeases) {
+    ExFreePoolWithTag(p->TvbLeases,ADMISSION_POOL_TAG);
+    p->TvbLeases=NULL;
   }
   return TRUE;
 }
@@ -847,6 +1250,36 @@ static const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *AdmissionG3CopyPte(
   }
   if(!shadow || !shadow->ResidentPtes) return NULL;
   return &shadow->ResidentPtes[(UINT)((va>>12)&8191u)];
+}
+
+/* Every native mutation uses the graph callback, including private helpers,
+ * rollback and table retirement. Private-only leaves have no VidMm shadow
+ * and cannot invalidate an authenticated user allocation. */
+static void AdmissionG3NativeInvalidate(void *opaque, ULONGLONG table, UINT index) {
+  ADMISSION_G3_PROCESS *p = (ADMISSION_G3_PROCESS *)opaque;
+  ADMISSION_G3_TABLE_SHADOW *shadow;
+  ULONG bucket;
+  if (!table) { AppleAgxG3NativeCacheInvalidateAll(&p->NativeReady); return; }
+  bucket = (ULONG)((table >> 14) ^ (table >> 22) ^ (table >> 30)) & 255u;
+  for (shadow = p->TableShadowBrokerBuckets[bucket]; shadow; shadow = shadow->NextBroker)
+    if (shadow->BrokerIpa == table) {
+      AdmissionG3NativeInvalidatePtes(p, shadow->ResidentPtes, index * 4u, 4u);
+      break;
+    }
+}
+
+/* Allocation addresses may be reused after destroy. Drop identity keys from
+ * every process before freeing; never dereference an old cache/PTE key. */
+void AdmissionGpuvaG3InvalidateAllocation(ADMISSION_CONTEXT *adapter, HANDLE allocation) {
+  ADMISSION_G3_STATE *state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  PLIST_ENTRY link;
+  if (!state) return;
+  ExAcquireFastMutex(&state->Lock);
+  for (link = state->Processes.Flink; link != &state->Processes; link = link->Flink) {
+    ADMISSION_G3_PROCESS *p = CONTAINING_RECORD(link, ADMISSION_G3_PROCESS, Link);
+    AppleAgxG3NativeCacheInvalidate(&p->NativeReady, (ULONGLONG)(ULONG_PTR)allocation);
+  }
+  ExReleaseFastMutex(&state->Lock);
 }
 
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
@@ -1149,6 +1582,439 @@ static BOOLEAN AdmissionG3CaptureCopyQueryFailure(ADMISSION_CONTEXT *adapter,
   return TRUE;
 }
 
+/* Read-only metadata query, after the UMD's residency fence and while its
+ * submission holds exclude trim. Unlike T12, inspect only the named canonical
+ * allocation, never unrelated mappings in this process. No wait for an active
+ * GPU job is needed: the G3 mutex serializes publication and this walk. */
+#if defined(ADMISSION_G3_NATIVE_QUERY_REFUSAL_RECEIPT)
+/* EXP2206 receipt-only (apple_agx_g3_native_query_refusal.h): the refusing
+ * predicate of a readiness query. Claimed without blocking; a busy receipt
+ * counts the refusal as Dropped. Never changes the escape's status. */
+static APPLE_AGX_G3_NQ_REFUSAL_RECEIPT gG3NativeQueryRefusal;
+static volatile LONG gG3NativeQueryRefusalClaim;
+static volatile LONG64 gG3NativeQueryRefusalExportQpc;
+static volatile LONG gG3NativeQueryRefusalExportedTotal;
+
+static VOID AdmissionG3NativeQueryRefused(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args, const APPLE_AGX_G3_NATIVE_QUERY *q,
+    ULONG code, NTSTATUS status, ULONG flags, ADMISSION_G3_PROCESS *p,
+    ADMISSION_RENDER_CONTEXT *context, ADMISSION_OPEN_ALLOCATION *opened) {
+  APPLE_AGX_G3_NQ_REFUSAL_RECORD record;
+  ADMISSION_G3_STATE *state;
+  ADMISSION_RENDER_CONTEXT *c;
+  PLIST_ENTRY link;
+  RtlZeroMemory(&record, sizeof(record));
+  record.Code = code;
+  record.Status = (ULONG)status;
+  record.Flags = flags;
+  record.OsProcessId = HandleToULong(PsGetCurrentProcessId());
+  record.Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  if (args) {
+    record.Device = (ULONGLONG)(ULONG_PTR)args->hDevice;
+    record.Context = (ULONGLONG)(ULONG_PTR)args->hContext;
+    record.KmdProcess = (ULONGLONG)(ULONG_PTR)args->hKmdProcessHandle;
+  }
+  if (q && (flags & APPLE_AGX_G3_NQ_FLAG_QUERY)) {
+    record.QueryAllocation = q->Allocation;
+    record.QueryGpuVa = q->GpuVa;
+    record.QueryAllocationBytes = q->AllocationBytes;
+    record.QueryVersion = q->Version;
+    record.QueryReserved = q->Reserved;
+    record.QueryWrite = q->Write;
+    record.QueryBytes = q->Bytes;
+  }
+  if (opened) {
+    record.OpenedFlags = APPLE_AGX_G3_NQ_OPENED_FOUND;
+    if (opened->Magic == ADMISSION_OPEN_ALLOCATION_MAGIC) {
+      record.OpenedFlags |= APPLE_AGX_G3_NQ_OPENED_MAGIC_BIT;
+      record.OpenedDevice = (ULONGLONG)(ULONG_PTR)opened->Device;
+      record.OpenedRuntimeAllocation = (ULONG)opened->RuntimeAllocation;
+      if (q && opened->RuntimeAllocation == q->Allocation)
+        record.OpenedFlags |= APPLE_AGX_G3_NQ_OPENED_RUNTIME_MATCH;
+      if (opened->ReadOnly) record.OpenedFlags |= APPLE_AGX_G3_NQ_OPENED_READ_ONLY_BIT;
+      if (opened->Allocation) {
+        record.OpenedFlags |= APPLE_AGX_G3_NQ_OPENED_OBJECT_BIT;
+        if (opened->Allocation->Magic == ADMISSION_ALLOCATION_OBJECT_MAGIC) {
+          record.OpenedFlags |= APPLE_AGX_G3_NQ_OPENED_OBJECT_MAGIC_BIT;
+          record.DescriptionSize = opened->Allocation->Description.Size;
+        }
+      }
+    }
+  }
+  /* Process and context observations only under the G3 lock. */
+  state = adapter ? (ADMISSION_G3_STATE *)adapter->GpuvaG3State : NULL;
+  if ((flags & APPLE_AGX_G3_NQ_FLAG_LOCKED) && state && args) {
+    if (p) {
+      record.ProcessFlags = APPLE_AGX_G3_NQ_PROCESS_FOUND |
+          (p->Poisoned ? APPLE_AGX_G3_NQ_PROCESS_POISONED_BIT : 0u) |
+          (p->CpuOnlyMappings ? APPLE_AGX_G3_NQ_PROCESS_CPU_ONLY_BIT : 0u) |
+          (p->Graph.Created ? APPLE_AGX_G3_NQ_PROCESS_CREATED_BIT : 0u) |
+          (p->Graph.Uncertain ? APPLE_AGX_G3_NQ_PROCESS_UNCERTAIN_BIT : 0u);
+      for (c = p->Contexts; c; c = c->GpuvaG3NextContext) ++record.ProcessContexts;
+    }
+    for (link = state->Processes.Flink; link != &state->Processes;
+         link = link->Flink) {
+      ADMISSION_G3_PROCESS *other = CONTAINING_RECORD(link, ADMISSION_G3_PROCESS, Link);
+      if (!p && other->OsProcessId == record.OsProcessId && !record.PidProcess) {
+        record.ProcessFlags |= APPLE_AGX_G3_NQ_PROCESS_PID_MATCH;
+        record.PidProcess = (ULONGLONG)(ULONG_PTR)other;
+      }
+      if (other != p && !context && !record.ForeignOsProcessId)
+        for (c = other->Contexts; c; c = c->GpuvaG3NextContext)
+          if ((HANDLE)c == args->hContext) {
+            record.ContextFlags |= APPLE_AGX_G3_NQ_CONTEXT_FOREIGN;
+            record.ForeignOsProcessId = other->OsProcessId ? other->OsProcessId : 0xffffffffu;
+            break;
+          }
+    }
+    if (context) {
+      record.ContextFlags |= APPLE_AGX_G3_NQ_CONTEXT_FOUND |
+          (context->Win32Transport ? APPLE_AGX_G3_NQ_CONTEXT_TRANSPORT_BIT : 0u) |
+          (context->GpuvaG3Closing ? APPLE_AGX_G3_NQ_CONTEXT_CLOSING_BIT : 0u) |
+          (context->GpuvaG3Poisoned ? APPLE_AGX_G3_NQ_CONTEXT_POISONED_BIT : 0u);
+      if (context->Object.Device) {
+        ADMISSION_DEVICE *device =
+            CONTAINING_RECORD(context->Object.Device, ADMISSION_DEVICE, Object);
+        record.ContextFlags |= APPLE_AGX_G3_NQ_CONTEXT_DEVICE_BIT;
+        record.ContextDevice = (ULONGLONG)(ULONG_PTR)device;
+        if ((HANDLE)device == args->hDevice)
+          record.ContextFlags |= APPLE_AGX_G3_NQ_CONTEXT_DEVICE_MATCH;
+        if (device->Object.Adapter == &adapter->ObjectAdapter)
+          record.ContextFlags |= APPLE_AGX_G3_NQ_CONTEXT_ADAPTER_MATCH;
+        if (opened && opened->Magic == ADMISSION_OPEN_ALLOCATION_MAGIC &&
+            opened->Device == device)
+          record.OpenedFlags |= APPLE_AGX_G3_NQ_OPENED_DEVICE_MATCH;
+      }
+    }
+  }
+  if (InterlockedCompareExchange(&gG3NativeQueryRefusalClaim, 1, 0) == 0) {
+    AppleAgxG3NqRefusalNote(&gG3NativeQueryRefusal, code, &record);
+    InterlockedExchange(&gG3NativeQueryRefusalClaim, 0);
+  } else {
+    InterlockedIncrement((volatile LONG *)&gG3NativeQueryRefusal.Dropped);
+  }
+}
+
+/* PASSIVE_LEVEL, no lock held: at most every two seconds, or at once when
+ * the first refusal of a run is not yet exported. */
+static VOID AdmissionG3NativeQueryRefusalExport(ADMISSION_CONTEXT *adapter) {
+  APPLE_AGX_G3_NQ_REFUSAL_RECEIPT copy;
+  LARGE_INTEGER frequency;
+  LONGLONG now, last;
+  if (!adapter || KeGetCurrentIrql() != PASSIVE_LEVEL) return;
+  now = KeQueryPerformanceCounter(&frequency).QuadPart;
+  last = gG3NativeQueryRefusalExportQpc;
+  if (gG3NativeQueryRefusalExportedTotal != 0 &&
+      now - last < 2 * frequency.QuadPart) return;
+  if (InterlockedCompareExchange64(&gG3NativeQueryRefusalExportQpc, now, last) != last)
+    return;
+  if (InterlockedCompareExchange(&gG3NativeQueryRefusalClaim, 1, 0) != 0) {
+    InterlockedExchange64(&gG3NativeQueryRefusalExportQpc, last);
+    return;
+  }
+  RtlCopyMemory(&copy, &gG3NativeQueryRefusal, sizeof(copy));
+  InterlockedExchange(&gG3NativeQueryRefusalClaim, 0);
+  if (!copy.Total) return;
+  InterlockedExchange(&gG3NativeQueryRefusalExportedTotal, (LONG)copy.Total);
+  AdmissionRecordG3NativeQueryRefusal(adapter, &copy, (ULONG)sizeof(copy));
+}
+#endif
+
+NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args) {
+  APPLE_AGX_G3_NATIVE_QUERY q = {0};
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *p = NULL;
+  ADMISSION_RENDER_CONTEXT *context = NULL;
+  ADMISSION_OPEN_ALLOCATION *opened = NULL;
+  ADMISSION_ALLOCATION_HANDLE *allocation;
+  ADMISSION_DEVICE *device;
+  DXGKARGCB_GETHANDLEDATA lookup = {0};
+  DXGKARGCB_RELEASEHANDLEDATA reference = {0};
+  APPLE_AGX_GPUVA_G3_WALK_FAILURE walk = {0};
+  ULONGLONG page, end, ipa;
+  ULONGLONG poolPages = 0ULL, otherPages = 0ULL;
+  ULONGLONG firstOther = 0ULL, firstAbsent = 0ULL;
+  NTSTATUS status = STATUS_INVALID_PARAMETER;
+  /* EXP2206 receipt-only: every refusing exit names its predicate
+   * (apple_agx_g3_native_query_refusal.h codes 1-48, source order). The
+   * predicates, their order, statuses and outputs are the previous ones. */
+  ULONG refusal = 0u;
+#if defined(ADMISSION_G3_NATIVE_QUERY_REFUSAL_RECEIPT)
+#define NQ_NOTE(code, value, flags) AdmissionG3NativeQueryRefused(adapter, args, &q, \
+    (code), (value), (flags), p, context, opened)
+#define NQ_EXPORT() AdmissionG3NativeQueryRefusalExport(adapter)
+#else
+#define NQ_NOTE(code, value, flags) ((void)(code), (void)(value), (void)(flags))
+#define NQ_EXPORT() ((void)0)
+#endif
+#define NQ_RETURN(code, value) do { NQ_NOTE((code), (value), 0u); NQ_EXPORT(); \
+    return (value); } while (0)
+/* Flags: 0x4 the query was copied, 0x1 noted under the G3 lock. */
+#define NQ_QUERY_RETURN(code) do { NQ_NOTE((code), STATUS_INVALID_PARAMETER, 0x4u); \
+    NQ_EXPORT(); return STATUS_INVALID_PARAMETER; } while (0)
+#define NQ_UNLOCK(code) do { refusal = (code); goto Unlock; } while (0)
+  if (!adapter) NQ_RETURN(1u, STATUS_INVALID_PARAMETER);
+  if (!adapter->Started) NQ_RETURN(2u, STATUS_INVALID_PARAMETER);
+  if (!args) NQ_RETURN(3u, STATUS_INVALID_PARAMETER);
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL) NQ_RETURN(4u, STATUS_INVALID_PARAMETER);
+  if (args->Flags.Value) NQ_RETURN(5u, STATUS_INVALID_PARAMETER);
+  if (!args->pPrivateDriverData) NQ_RETURN(6u, STATUS_INVALID_PARAMETER);
+  if (args->PrivateDriverDataSize != sizeof(q)) NQ_RETURN(7u, STATUS_INVALID_PARAMETER);
+  if (!adapter->Interface.DxgkCbAcquireHandleData) NQ_RETURN(8u, STATUS_INVALID_PARAMETER);
+  if (!adapter->Interface.DxgkCbReleaseHandleData) NQ_RETURN(9u, STATUS_INVALID_PARAMETER);
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (!state) NQ_RETURN(10u, STATUS_INVALID_DEVICE_STATE);
+  RtlCopyMemory(&q, args->pPrivateDriverData, sizeof(q));
+  if (q.Magic != APPLE_AGX_G3_NATIVE_QUERY_MAGIC) NQ_QUERY_RETURN(11u);
+  if ((q.Version != APPLE_AGX_G3_NATIVE_QUERY_VERSION || q.Reserved != 0u) &&
+      (q.Version != APPLE_AGX_G3_NATIVE_QUERY_POOL_VERSION ||
+       q.Reserved != APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY) &&
+      (q.Version != APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION ||
+       q.Reserved > APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY) &&
+      (q.Version != APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION ||
+       q.Reserved != 0u)) NQ_QUERY_RETURN(12u);
+  if (q.Bytes != sizeof(q)) NQ_QUERY_RETURN(13u);
+  if (!q.Allocation) NQ_QUERY_RETURN(14u);
+  if (!q.GpuVa) NQ_QUERY_RETURN(15u);
+  if (q.GpuVa & 0xffffULL) NQ_QUERY_RETURN(16u);
+  if (q.GpuVa >= (1ULL << 39)) NQ_QUERY_RETURN(17u);
+  if (!q.AllocationBytes) NQ_QUERY_RETURN(18u);
+  if (q.AllocationBytes > MAXULONG) NQ_QUERY_RETURN(19u);
+  if (q.AllocationBytes > (1ULL << 39) - q.GpuVa) NQ_QUERY_RETURN(20u);
+  if (q.Write > 1u) NQ_QUERY_RETURN(21u);
+  if (q.Ready) NQ_QUERY_RETURN(22u);
+  if (q.Reason) NQ_QUERY_RETURN(23u);
+  if (q.FailedVa) NQ_QUERY_RETURN(24u);
+  if (q.Version != APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION && q.Reserved2)
+    NQ_QUERY_RETURN(25u);
+  lookup.hObject = q.Allocation;
+  lookup.Type = DXGK_HANDLE_ALLOCATION;
+  lookup.Flags.DeviceSpecific = 1u;
+  reference.Type = DXGK_HANDLE_ALLOCATION;
+  opened = (ADMISSION_OPEN_ALLOCATION *)adapter->Interface.DxgkCbAcquireHandleData(
+      &lookup, &reference.ReleaseHandle);
+  if (!opened || !reference.ReleaseHandle) {
+    status = STATUS_INVALID_HANDLE;
+    refusal = !opened ? 26u : 27u;
+    NQ_NOTE(refusal, status, 0x4u);
+    goto Release;
+  }
+  ExAcquireFastMutex(&state->Lock);
+  p = AdmissionGpuvaG3FindProcess(state, args->hKmdProcessHandle);
+  if (!p) NQ_UNLOCK(28u);
+  if (p->Poisoned) NQ_UNLOCK(29u);
+  if (p->CpuOnlyMappings) NQ_UNLOCK(30u);
+  if (!p->Graph.Created) NQ_UNLOCK(31u);
+  if (p->Graph.Uncertain) NQ_UNLOCK(32u);
+  for (context = p->Contexts; context && (HANDLE)context != args->hContext;
+       context = context->GpuvaG3NextContext) {}
+  if (!context) NQ_UNLOCK(33u);
+  if (!context->Win32Transport) NQ_UNLOCK(34u);
+  if (context->GpuvaG3Closing) NQ_UNLOCK(35u);
+  if (context->GpuvaG3Poisoned) NQ_UNLOCK(36u);
+  if (!context->Object.Device) NQ_UNLOCK(37u);
+  /* R147: paging selects the process graph before pre-submit escapes. The
+   * context SetRoot notification is only guaranteed before execution; do not
+   * require it here. Submit/BeginJob retain their context-root checks. */
+  device = CONTAINING_RECORD(context->Object.Device, ADMISSION_DEVICE, Object);
+  if ((HANDLE)device != args->hDevice) NQ_UNLOCK(38u);
+  if (device->Object.Adapter != &adapter->ObjectAdapter) NQ_UNLOCK(39u);
+  if (opened->Magic != ADMISSION_OPEN_ALLOCATION_MAGIC) NQ_UNLOCK(40u);
+  if (opened->Device != device) NQ_UNLOCK(41u);
+  if (opened->RuntimeAllocation != q.Allocation) NQ_UNLOCK(42u);
+  if (!opened->Allocation) NQ_UNLOCK(43u);
+  if (opened->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC) NQ_UNLOCK(44u);
+  allocation = CONTAINING_RECORD(opened->Allocation, ADMISSION_ALLOCATION_HANDLE, Object);
+  /* Adopted/imported slots expose logical surface bytes, while their KMD
+   * allocation is rounded up. Authenticate that extent, then prove the whole
+   * description extent, never a caller-selected safe prefix. */
+  if (q.AllocationBytes > allocation->Object.Description.Size) NQ_UNLOCK(46u);
+  if (allocation->Object.Description.Size > MAXULONG) NQ_UNLOCK(47u);
+  if (allocation->Object.Description.Size > (1ULL << 39) - q.GpuVa) NQ_UNLOCK(48u);
+  q.AllocationBytes = allocation->Object.Description.Size;
+  /* A well-formed query reports not-ready as data. It is not a failed paging
+   * DDI or a failed scheduled submit; the UMD can decline before submission. */
+  status = STATUS_SUCCESS;
+  /* EXP2208 (was refusal code 45): a write query on a read-only open is a
+   * well-formed question whose answer is "not writable for this device". */
+  if (q.Write && opened->ReadOnly) {
+    q.Reason = APPLE_AGX_G3_NATIVE_QUERY_READ_ONLY;
+    q.FailedVa = q.GpuVa;
+    goto Output;
+  }
+  if (q.Version == APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION) {
+    /* rc107: where VidMm's current logical mapping of this allocation
+     * lives. EXP1974 republished a locked CPU-visible pool allocation in
+     * segment 0; the UMD needs to tell that from eviction (invalid pages)
+     * before it asks VidMm to page the allocation back into the pool. No
+     * graph walk, native leaf or token is consulted or issued here. */
+    end = q.GpuVa + q.AllocationBytes;
+    for (page = q.GpuVa; page < end; page += 0x1000ULL) {
+      const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte = AdmissionG3CopyPte(p, page);
+      if (!pte || !(pte->Flags & APPLE_AGX_GPUVA_G3_VALID)) {
+        if (!firstAbsent) firstAbsent = page;
+        continue;
+      }
+      if (pte->Allocation != (ULONGLONG)(ULONG_PTR)allocation ||
+          pte->AllocationOffset != page - q.GpuVa) {
+        q.Reason = APPLE_AGX_G3_NATIVE_QUERY_IDENTITY;
+        q.FailedVa = page;
+        goto Output;
+      }
+      if (pte->SegmentId == ADMISSION_MEMORY_POOL_SEGMENT) {
+        ++poolPages;
+      } else {
+        if (!otherPages) firstOther = page;
+        ++otherPages;
+      }
+    }
+    q.Reserved2 = poolPages | (otherPages << 32);
+    if (otherPages) {
+      q.Reason = APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL;
+      q.FailedVa = firstOther;
+    } else if (firstAbsent) {
+      q.Reason = APPLE_AGX_G3_NATIVE_QUERY_NOT_RESIDENT;
+      q.FailedVa = firstAbsent;
+    } else {
+      q.Ready = 1u;
+    }
+    goto Output;
+  }
+  if (q.Version == APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION) {
+    if (AppleAgxG3NativeCacheHit(&p->NativeReady,
+        (ULONGLONG)(ULONG_PTR)allocation, q.GpuVa, q.AllocationBytes,
+        q.Write | (q.Reserved << 1), q.Reserved2)) {
+      q.Ready = 1u;
+      goto Output;
+    }
+    q.Reserved2 = 0ULL;
+  }
+  if (!AppleAgxGpuvaG3GraphInspectRangeAccess(&p->Graph, q.GpuVa,
+          (UINT)q.AllocationBytes, q.Write != 0u, &walk)) {
+    q.FailedVa = walk.Va;
+    q.Reason = walk.Reason;
+    goto Output;
+  }
+  end = q.GpuVa + q.AllocationBytes;
+  for (page = q.GpuVa; page < end; page += 0x1000ULL) {
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte = AdmissionG3CopyPte(p, page);
+    q.FailedVa = page;
+    q.Reason = APPLE_AGX_G3_NATIVE_QUERY_IDENTITY;
+    if (!pte || !(pte->Flags & APPLE_AGX_GPUVA_G3_VALID) ||
+        (q.Write && !(pte->Flags & APPLE_AGX_GPUVA_G3_WRITE)) ||
+        pte->Allocation != (ULONGLONG)(ULONG_PTR)allocation ||
+        pte->AllocationOffset != page - q.GpuVa) goto Output;
+    if ((q.Reserved & APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY) &&
+        pte->SegmentId != ADMISSION_MEMORY_POOL_SEGMENT) {
+      q.Reason = APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL;
+      goto Output;
+    }
+    q.Reason = APPLE_AGX_G3_NATIVE_QUERY_TRANSLATION;
+    /* Native identity is committed only after publication acknowledgement.
+     * Until an ordered shadow owner exists, the only admitted backing mode
+     * is direct: native and original paging identities must also agree. */
+    if (!pte->NativeIpa || pte->NativeIpa != pte->GuestIpa ||
+        !AppleAgxGpuvaG3GraphTranslateVa(&p->Graph, page, &ipa) ||
+        ipa != pte->NativeIpa) goto Output;
+  }
+  q.Ready = 1u;
+  q.FailedVa = 0ULL;
+  q.Reason = 0u;
+  if (q.Version == APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION)
+    q.Reserved2 = AppleAgxG3NativeCacheStore(&p->NativeReady,
+        (ULONGLONG)(ULONG_PTR)allocation, q.GpuVa, q.AllocationBytes,
+        q.Write | (q.Reserved << 1));
+Output:
+  RtlCopyMemory(args->pPrivateDriverData, &q, sizeof(q));
+Unlock:
+  if (refusal) NQ_NOTE(refusal, status, 0x5u);
+  ExReleaseFastMutex(&state->Lock);
+Release:
+  if (reference.ReleaseHandle) adapter->Interface.DxgkCbReleaseHandleData(reference);
+  if (refusal) NQ_EXPORT();
+  return status;
+#undef NQ_UNLOCK
+#undef NQ_QUERY_RETURN
+#undef NQ_RETURN
+#undef NQ_EXPORT
+#undef NQ_NOTE
+}
+
+/* Retain the single-query handle reference, graph mutex, full-description
+ * extent and page-by-page identity/translation proof on every cache miss.
+ * The UMD's submission holds retain residency across entries and submission,
+ * exactly as for separate escapes. v2 returns hits/misses in Reserved[0..1].
+ * Local entry copies also keep each proof independent of output writes. */
+NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args) {
+  APPLE_AGX_G3_NATIVE_QUERY_BATCH batch;
+  APPLE_AGX_G3_NATIVE_QUERY query;
+  DXGKARG_ESCAPE single;
+  unsigned char *entries;
+  ULONG i;
+  NTSTATUS status;
+  /* EXP2206 receipt-only: refusal codes 49-67 (an entry the single query
+   * refuses keeps that query's code); predicates and statuses unchanged. */
+#if defined(ADMISSION_G3_NATIVE_QUERY_REFUSAL_RECEIPT)
+/* Flags: 0x2 batch exit, 0x4 the entry query was copied. */
+#define NQB_RETURN(code, entry, flags) do { AdmissionG3NativeQueryRefused(adapter, args, \
+    (entry), (code), STATUS_INVALID_PARAMETER, (flags), NULL, NULL, NULL); \
+    AdmissionG3NativeQueryRefusalExport(adapter); return STATUS_INVALID_PARAMETER; } while (0)
+#else
+#define NQB_RETURN(code, entry, flags) do { (void)(code); (void)(entry); (void)(flags); \
+    return STATUS_INVALID_PARAMETER; } while (0)
+#endif
+  if (!adapter) NQB_RETURN(49u, NULL, 0x2u);
+  if (!adapter->Started) NQB_RETURN(50u, NULL, 0x2u);
+  if (!args) NQB_RETURN(51u, NULL, 0x2u);
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL) NQB_RETURN(52u, NULL, 0x2u);
+  if (args->Flags.Value) NQB_RETURN(53u, NULL, 0x2u);
+  if (!args->pPrivateDriverData) NQB_RETURN(54u, NULL, 0x2u);
+  if (args->PrivateDriverDataSize < sizeof(batch)) NQB_RETURN(55u, NULL, 0x2u);
+  RtlCopyMemory(&batch, args->pPrivateDriverData, sizeof(batch));
+  if (batch.Magic != APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC) NQB_RETURN(56u, NULL, 0x2u);
+  if (batch.Version != APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION &&
+      batch.Version != APPLE_AGX_G3_NATIVE_QUERY_BATCH_CACHED_VERSION) NQB_RETURN(57u, NULL, 0x2u);
+  if (!batch.Count) NQB_RETURN(58u, NULL, 0x2u);
+  if (batch.Count > APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAX) NQB_RETURN(59u, NULL, 0x2u);
+  if (batch.Bytes != sizeof(batch) + batch.Count * sizeof(query)) NQB_RETURN(60u, NULL, 0x2u);
+  if (batch.Bytes != args->PrivateDriverDataSize) NQB_RETURN(61u, NULL, 0x2u);
+  if (batch.Ready) NQB_RETURN(62u, NULL, 0x2u);
+  if (batch.FailedIndex) NQB_RETURN(63u, NULL, 0x2u);
+  if (batch.Reserved[0]) NQB_RETURN(64u, NULL, 0x2u);
+  if (batch.Reserved[1]) NQB_RETURN(65u, NULL, 0x2u);
+  entries = (unsigned char *)args->pPrivateDriverData + sizeof(batch);
+  single = *args;
+  single.pPrivateDriverData = &query;
+  single.PrivateDriverDataSize = sizeof(query);
+  for (i = 0u; i < batch.Count; ++i) {
+    ULONGLONG token;
+    RtlCopyMemory(&query, entries + i * sizeof(query), sizeof(query));
+    if (batch.Version == APPLE_AGX_G3_NATIVE_QUERY_BATCH_VERSION &&
+        query.Version == APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION)
+      NQB_RETURN(66u, &query, 0x6u);
+    /* rc107: a placement census never proves native coverage. */
+    if (query.Version == APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION)
+      NQB_RETURN(67u, &query, 0x6u);
+    token = query.Reserved2;
+    status = AdmissionGpuvaG3NativeQueryEscape(adapter, &single);
+    if (status != STATUS_SUCCESS) return status;
+    RtlCopyMemory(entries + i * sizeof(query), &query, sizeof(query));
+    if (query.Ready != 1u) {
+      batch.FailedIndex = i;
+      RtlCopyMemory(args->pPrivateDriverData, &batch, sizeof(batch));
+      return STATUS_SUCCESS;
+    }
+    if (batch.Version == APPLE_AGX_G3_NATIVE_QUERY_BATCH_CACHED_VERSION)
+      ++batch.Reserved[token && token == query.Reserved2 ? 0u : 1u];
+  }
+  batch.Ready = 1u;
+  RtlCopyMemory(args->pPrivateDriverData, &batch, sizeof(batch));
+  return STATUS_SUCCESS;
+#undef NQB_RETURN
+}
+
 typedef struct _ADMISSION_G3_COPY_PAGING_QUIESCENCE {
   ULONG Version, Bytes, Status, OsProcessId;
   LONG RecordsUnsubmitted;
@@ -1201,6 +2067,10 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   UINT pte_wait=0u;
   ULONGLONG pte_wait_start=0ULL;
   LARGE_INTEGER delay;
+  /* RC68: job gate of this request (AppleAgxG3CopyJobGate); strict drops
+   * the UMD proof once the allocation is known to be a presentation one. */
+  UINT gate=APPLE_AGX_G3_COPY_GATE_IDLE, outcome=0u;
+  BOOLEAN strict=FALSE;
   /* Read only the operation tag when the OS-buffered envelope covers it.
    * An absent/truncated tag is not guessed to be a QUERY. */
   if(args && KeGetCurrentIrql()==PASSIVE_LEVEL && args->pPrivateDriverData &&
@@ -1233,7 +2103,9 @@ NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *adapter,
   COPY_REJECT_IF(q->Magic!=APPLE_AGX_G3_COPY_MAGIC, 10u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(q->Version!=1u, 11u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(q->Bytes!=sizeof(*q), 12u, STATUS_INVALID_PARAMETER, Free);
-  COPY_REJECT_IF(q->Reserved || q->Reserved2, 13u, STATUS_INVALID_PARAMETER, Free);
+  /* RC68: Reserved may carry the UMD proof and echo a previous outcome
+   * (ignored on input); any other bit is invalid. */
+  COPY_REJECT_IF((q->Reserved&~APPLE_AGX_G3_COPY_RESERVED_MASK) || q->Reserved2, 13u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(q->Operation>APPLE_AGX_G3_COPY_DOWNLOAD, 14u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(!q->Allocation, 15u, STATUS_INVALID_PARAMETER, Free);
   COPY_REJECT_IF(!q->GpuVa, 16u, STATUS_INVALID_PARAMETER, Free);
@@ -1266,10 +2138,17 @@ RetryPagingQuiescence:
      * FILL/TRANSFER ran; otherwise it writes the new placement and a later
      * transfer overwrites it (or it reads the placement before the move). */
     /* EXP1002: canonical copies are process-private and run under this
-     * lock (BeginJob takes it too); only this process's job conflicts. */
-    if(!p || (state->ActiveProcess!=p && !p->Graph.JobInFlight && !p->Graph.LeaseToken &&
+     * lock (BeginJob takes it too); only this process's job conflicts.
+     * RC68: a job of the caller's own context does not conflict when the
+     * UMD proved that no submission which may still run holds the slot. */
+    gate=p ? AppleAgxG3CopyJobGate(q->Operation,strict ? 0u : q->Reserved,
+        state->ActiveProcess==p || p->Graph.JobInFlight,
+        state->ActiveProcess==p && state->ActiveContext==(ADMISSION_RENDER_CONTEXT *)args->hContext,
+        FALSE) : APPLE_AGX_G3_COPY_GATE_WAIT;
+    if(!p || (gate!=APPLE_AGX_G3_COPY_GATE_WAIT &&
         (q->Operation==APPLE_AGX_G3_COPY_QUERY || AdmissionPagingQuiescent(adapter))) ||
        KeQueryInterruptTime()>=deadline) break;
+    if(gate==APPLE_AGX_G3_COPY_GATE_WAIT) outcome|=APPLE_AGX_G3_COPY_RESULT_WAITED;
     ExReleaseFastMutex(&state->Lock);
     /* EXP1138: wake when this process's job ends (1 ms backstop for the
      * paging-quiescence condition, which has no event). */
@@ -1302,9 +2181,23 @@ RetryPagingQuiescence:
   COPY_REJECT_IF(allocation->Object.Description.CpuVisible, 40u, STATUS_INVALID_PARAMETER, Unlock);
   COPY_REJECT_IF(!allocation->Presentation &&
       allocation->Object.Description.Type!=ADMISSION_WIN32_ALLOCATION_GPU_LOCAL, 41u, STATUS_INVALID_PARAMETER, Unlock);
-  COPY_REJECT_IF(state->ActiveProcess==p, 42u, STATUS_DEVICE_BUSY, Unlock);
-  COPY_REJECT_IF(p->Graph.JobInFlight, 43u, STATUS_DEVICE_BUSY, Unlock);
-  COPY_REJECT_IF(p->Graph.LeaseToken, 44u, STATUS_DEVICE_BUSY, Unlock);
+  /* RC68: the proof never covers a presentation allocation (present and
+   * flip work reads it outside the UMD holds): wait as before. */
+  gate=AppleAgxG3CopyJobGate(q->Operation,strict ? 0u : q->Reserved,
+      state->ActiveProcess==p || p->Graph.JobInFlight,
+      state->ActiveProcess==p && state->ActiveContext==(ADMISSION_RENDER_CONTEXT *)args->hContext,
+      allocation->Presentation!=0u);
+  if(gate==APPLE_AGX_G3_COPY_GATE_WAIT && !strict &&
+     (q->Reserved&APPLE_AGX_G3_COPY_FLAG_UNREFERENCED) && allocation->Presentation &&
+     KeQueryInterruptTime()<deadline) {
+    strict=TRUE;
+    ExReleaseFastMutex(&state->Lock);
+    goto RetryPagingQuiescence;
+  }
+  COPY_REJECT_IF(gate==APPLE_AGX_G3_COPY_GATE_WAIT && state->ActiveProcess==p, 42u, STATUS_DEVICE_BUSY, Unlock);
+  COPY_REJECT_IF(gate==APPLE_AGX_G3_COPY_GATE_WAIT && p->Graph.JobInFlight, 43u, STATUS_DEVICE_BUSY, Unlock);
+  COPY_REJECT_IF(gate==APPLE_AGX_G3_COPY_GATE_WAIT && p->Graph.LeaseToken, 44u, STATUS_DEVICE_BUSY, Unlock);
+  if(gate==APPLE_AGX_G3_COPY_GATE_OVERLAP) outcome|=APPLE_AGX_G3_COPY_RESULT_OVERLAPPED;
   /* A paging buffer can be built between the initial check and either final
    * check. Retry the whole owner/context validation on either late change,
    * preserving the original cumulative 3 s bound and R161 guard. */
@@ -1400,6 +2293,9 @@ RetryPagingQuiescence:
     if(q->Operation==APPLE_AGX_G3_COPY_UPLOAD)
       AdmissionG3TraceUpload(state,p,first,(ULONG)length,q->Data);
   }
+  /* RC68 receipt: the input flag is consumed; Reserved returns the gate
+   * outcome (the UMD restores its flag before reusing the request). */
+  q->Reserved=outcome;
   RtlCopyMemory(args->pPrivateDriverData,q,sizeof(*q));status=STATUS_SUCCESS;
 Unlock:
   if(pte_wait && predicate) {
@@ -1497,7 +2393,7 @@ Unlock:
         s->Records[out++]=state->LeafHistory[
             (state->LeafHistoryNext-1u-n)%ADMISSION_G3_LEAF_RING];
     }
-    s->Version=3u;
+    s->Version=4u; /* T7: appended allocation metadata in Track. */
     if(allocation) {
       ULONGLONG key=(ULONGLONG)(ULONG_PTR)allocation;
       const ADMISSION_G3_ALLOC_TRACK *t=&state->AllocTrack[
@@ -1575,7 +2471,7 @@ static BOOLEAN AdmissionG3CapturePrivateFailure(ADMISSION_CONTEXT *adapter,
     return FALSE;
   r=&adapter->G3PrivateFailure;
   RtlZeroMemory(r,sizeof(*r));
-  r->Version=1u;r->Bytes=sizeof(*r);r->Branch=branch;r->Status=(UINT)status;
+  r->Version=2u;r->Bytes=sizeof(*r);r->Branch=branch;r->Status=(UINT)status;
   r->Pid=HandleToULong(PsGetCurrentProcessId());r->Operation=q->Operation;
   r->ProcessHandle=(ULONGLONG)(ULONG_PTR)args->hKmdProcessHandle;
   r->ContextHandle=(ULONGLONG)(ULONG_PTR)args->hContext;
@@ -1602,6 +2498,9 @@ static BOOLEAN AdmissionG3CapturePrivateFailure(ADMISSION_CONTEXT *adapter,
     r->ManagerGeneration=p->PrivateManager.Generation;
     r->ManagerPresent=p->PrivateManager.Generation!=0;
     r->FreshManager=!r->ManagerPresent;r->Poisoned=p->Poisoned;
+    /* v2 preserves the cause before the first scene exists: completion-time
+     * Wom1G3Poison cannot run when an earlier paging failure prevented jobs. */
+    r->Reserved=p->PoisonSite;
     r->GraphUncertain=p->Graph.Uncertain;r->JobInFlight=p->Graph.JobInFlight;
     for (scene=p->PrivateScenes;scene;scene=scene->Next) {
       ++r->SceneCount;
@@ -1624,7 +2523,7 @@ static NTSTATUS AdmissionG3GrowPrivateHeap(ADMISSION_G3_PROCESS *p,
   APPLE_AGX_G3_PRIVATE_MANAGER *m=&p->PrivateManager;
   APPLE_AGX_G3_PRIVATE_EXTENT *grown;
   UINT previous=m->Blocks;
-  if (p->Graph.JobInFlight || p->Graph.LeaseToken) return STATUS_DEVICE_BUSY;
+  if (p->Graph.JobInFlight) return STATUS_DEVICE_BUSY;
   if (!AppleAgxG3PrivateGrowHeap(&p->State->PrivatePool,p->Graph.ProcessId,
           (unsigned char *)view->CpuAddress,m,blocks,&grown))
     return STATUS_INSUFFICIENT_RESOURCES;
@@ -1650,6 +2549,198 @@ static ULONG AdmissionG3ManagerWord(const unsigned char *bytes, ULONG offset) {
   return value;
 }
 
+/* rc80 (apple_agx_g3_tvb.h): TVB growth. All below run under State->Lock at
+ * PASSIVE (fast mutex: APC_LEVEL) and map only while this process has no job
+ * or lease (Asahi grows while the buffer manager is idle). */
+
+/* Firmware Stats max_pages of the current manager (Asahi fw/buffer.rs Stats
+ * word 0, saved by AdmissionSaveG4Manager after a joined completion), or 0. */
+static ULONG AdmissionG3TvbUsedPages(const ADMISSION_G3_PROCESS *p) {
+  const APPLE_AGX_RENDER_MANAGER_STATE *m=&p->FirmwareManager;
+  if (!m->Valid || m->PendingFence || !p->PrivateManager.Generation ||
+      m->Key.Owner!=p->Graph.ProcessId ||
+      m->Key.Generation!=p->PrivateManager.Generation) return 0u;
+  return AdmissionG3ManagerWord(m->Stats,0x0u);
+}
+
+static UINT AdmissionG3TvbTargetFor(const ADMISSION_G3_PROCESS *p,
+    UINT size_blocks) {
+  return AppleAgxG3TvbTarget(AdmissionG3TvbUsedPages(p),size_blocks,
+      p->PrivateManager.Blocks,p->TvbVa ? APPLE_AGX_G3_TVB_MAX_BLOCKS :
+                                          APPLE_AGX_G3_TVB_FLOOR_BLOCKS);
+}
+
+static ULONGLONG AdmissionG3TvbNowMs(VOID) {
+  return KeQueryInterruptTime()/10000ULL;
+}
+
+/* A growth step is due: an ACQUIRE that hits a cached scene waits (bounded)
+ * for this process to be idle instead of returning at once. */
+static BOOLEAN AdmissionG3TvbWantsIdle(const ADMISSION_G3_PROCESS *p,
+    UINT size_blocks) {
+  if (!p->PrivateManager.Generation || p->Poisoned || p->Graph.Uncertain ||
+      !p->PrivateLeafIpa) return FALSE;
+  return AppleAgxG3TvbShouldTry(&p->Tvb,AdmissionG3TvbTargetFor(p,size_blocks),
+      p->PrivateManager.Blocks,AdmissionG3TvbNowMs()) ? TRUE : FALSE;
+}
+
+static BOOLEAN AdmissionG3TvbUnmapPages(ADMISSION_G3_PROCESS *p,
+    ULONGLONG leaf_ipa, UINT pte, UINT count) {
+  UINT i;
+  for (i=0u;i<count;++i)
+    if (!AppleAgxGpuvaG3GraphUpdateLeafBacking(&p->Graph,leaf_ipa,pte+i,0ULL,
+            FALSE,AppleAgxGpuvaG3PrivateBacking)) return FALSE;
+  p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_UNMAPPED_PAGES]+=count;
+  return TRUE;
+}
+
+/* A window leaf table: one private-pool unit, zeroed, registered at level 2
+ * and linked below the private middle table (or the root's current one). */
+static UINT AdmissionG3TvbEnsureLeaf(ADMISSION_G3_PROCESS *p,
+    ADMISSION_BACKEND_MEMORY_VIEW *view, UINT leaf) {
+  if (!p->TvbLeafIpa[leaf]) {
+    APPLE_AGX_G3_PRIVATE_EXTENT *e=&p->TvbLeafTables[leaf];
+    ULONGLONG ipa;
+    if (!e->Generation) {
+      if (!AppleAgxG3PrivateAllocate(&p->State->PrivatePool,p->Graph.ProcessId,
+              0x10000u,e)) return APPLE_AGX_G3_TVB_FAIL_TABLE;
+      RtlZeroMemory((PUCHAR)view->CpuAddress+e->Offset,e->Bytes);
+      KeMemoryBarrier();
+    }
+    ipa=view->GuestIpaAddress+e->Offset;
+    if (!AppleAgxGpuvaG3GraphRegisterTable(&p->Graph,ipa,2u)) {
+      /* An acknowledged refusal registered nothing; keep it if uncertain. */
+      if (!p->Graph.Uncertain) (void)AdmissionG3PrivateFreeExtent(p,view,e);
+      return APPLE_AGX_G3_TVB_FAIL_TABLE;
+    }
+    p->TvbLeafIpa[leaf]=ipa;
+    p->Tvb.Leaves|=1u<<leaf;
+  }
+  if (!AppleAgxGpuvaG3GraphAttachPrivate(&p->Graph,
+          p->TvbVa+(ULONGLONG)leaf*APPLE_AGX_G3_TVB_LEAF_BYTES,
+          p->PrivateMiddleIpa,p->TvbLeafIpa[leaf]))
+    return APPLE_AGX_G3_TVB_FAIL_ATTACH;
+  return APPLE_AGX_G3_TVB_FAIL_NONE;
+}
+
+/* Back window block `block` with two zeroed slab granules and map its eight
+ * 16 KiB pages writable. All or nothing for the block; a failed unmap of a
+ * partial block leaves its granules held and the process poisoned. */
+static UINT AdmissionG3TvbMapBlock(ADMISSION_G3_PROCESS *p,
+    ADMISSION_BACKEND_MEMORY_VIEW *view, UINT block) {
+  ADMISSION_POOL_PRIVATE *leases;
+  ULONGLONG ipa[APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK]={0};
+  UINT leaf=0u, pte=0u, g, i, reason;
+  if (!AppleAgxG3TvbBlockSlot(block,&leaf,&pte) || !p->TvbLeases)
+    return APPLE_AGX_G3_TVB_FAIL_MAP;
+  reason=AdmissionG3TvbEnsureLeaf(p,view,leaf);
+  if (reason) return reason;
+  leases=&p->TvbLeases[(block-APPLE_AGX_G3_TVB_FLOOR_BLOCKS)*
+                       APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK];
+  for (g=0u;g<APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK;++g)
+    if (!AdmissionMemoryPoolTvbTake(p->State->Adapter,&leases[g],&ipa[g])) {
+      while (g) (void)AdmissionMemoryPoolTvbGive(p->State->Adapter,&leases[--g]);
+      return APPLE_AGX_G3_TVB_FAIL_LEASE;
+    }
+  for (i=0u;i<APPLE_AGX_G3_TVB_GPU_PAGES_PER_BLOCK;++i)
+    if (!AppleAgxGpuvaG3GraphUpdateLeafBacking(&p->Graph,p->TvbLeafIpa[leaf],
+            pte+i,ipa[i/4u]+(ULONGLONG)(i%4u)*0x4000ULL,TRUE,
+            AppleAgxGpuvaG3PrivateBacking)) {
+      if (p->Graph.Uncertain ||
+          !AdmissionG3TvbUnmapPages(p,p->TvbLeafIpa[leaf],pte,i)) {
+        ADMISSION_G3_POISON(p,1u);
+        return APPLE_AGX_G3_TVB_FAIL_MAP;
+      }
+      for (g=0u;g<APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK;++g)
+        (void)AdmissionMemoryPoolTvbGive(p->State->Adapter,&leases[g]);
+      return APPLE_AGX_G3_TVB_FAIL_MAP;
+    }
+  p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_MAPPED_PAGES]+=
+      APPLE_AGX_G3_TVB_GPU_PAGES_PER_BLOCK;
+  return APPLE_AGX_G3_TVB_FAIL_NONE;
+}
+
+/* Asahi queue/render.rs auto_grow + ensure_blocks at a safe point. Fail-soft:
+ * every block mapped before a refusal stays; the render is admitted with the
+ * blocks backed (>= its capped minimum, which the caller still enforces). */
+static VOID AdmissionG3TvbGrow(ADMISSION_G3_PROCESS *p,
+    ADMISSION_BACKEND_MEMORY_VIEW *view, UINT size_blocks) {
+  APPLE_AGX_G3_PRIVATE_MANAGER *m=&p->PrivateManager;
+  ULONGLONG now=AdmissionG3TvbNowMs();
+  UINT target, step=0u, before, reason=APPLE_AGX_G3_TVB_FAIL_NONE, offset=0u;
+  if (!m->Generation || p->Poisoned || p->Graph.Uncertain ||
+      p->Graph.JobInFlight || !p->PrivateLeafIpa) return;
+  p->Tvb.LastUsedPages=AdmissionG3TvbUsedPages(p);
+  target=AdmissionG3TvbTargetFor(p,size_blocks);
+  if (!AppleAgxG3TvbShouldTry(&p->Tvb,target,m->Blocks,now)) return;
+  before=m->Blocks;
+  if (m->Blocks<APPLE_AGX_G3_TVB_FLOOR_BLOCKS &&
+      !NT_SUCCESS(AdmissionG3GrowPrivateHeap(p,view,
+          AppleAgxG3TvbStep(m->Blocks,target),&offset)))
+    reason=APPLE_AGX_G3_TVB_FAIL_FLOOR;
+  if (!reason && target>m->Blocks) {
+    step=AppleAgxG3TvbStep(m->Blocks,target);
+    if (!p->TvbVa) reason=APPLE_AGX_G3_TVB_FAIL_NO_WINDOW;
+    else if (!p->TvbLeases) {
+      p->TvbLeases=ExAllocatePool2(POOL_FLAG_NON_PAGED,
+          (SIZE_T)APPLE_AGX_G3_TVB_WINDOW_BLOCKS*
+              APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK*sizeof(*p->TvbLeases),
+          ADMISSION_POOL_TAG);
+      if (!p->TvbLeases) reason=APPLE_AGX_G3_TVB_FAIL_LIST;
+    }
+    while (!reason && m->Blocks<step) {
+      reason=AdmissionG3TvbMapBlock(p,view,m->Blocks);
+      if (!reason) { ++m->Blocks; ++p->Tvb.LeaseBlocks; }
+    }
+    if (!reason && m->Blocks<target) {
+      /* One window step per call; keep the target due for the next one. */
+      AppleAgxG3TvbNoteResult(&p->Tvb,target,before,m->Blocks,reason,now);
+      if (m->Blocks>before) ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_HEAP_GROW];
+      return;
+    }
+  }
+  AppleAgxG3TvbNoteResult(&p->Tvb,target,before,m->Blocks,reason,now);
+  if (m->Blocks>before) ++p->State->PrivateStats[ADMISSION_G3_PRIVATE_STAT_HEAP_GROW];
+}
+
+/* Manager teardown (no job or lease of this process): unmap every window
+ * block, newest first, and return its granules. FALSE: the process is
+ * poisoned and the remaining blocks stay mapped and held. */
+static BOOLEAN AdmissionG3TvbRelease(ADMISSION_G3_PROCESS *p) {
+  while (p->Tvb.LeaseBlocks) {
+    UINT block=APPLE_AGX_G3_TVB_FLOOR_BLOCKS+p->Tvb.LeaseBlocks-1u, leaf=0u, pte=0u, g;
+    ADMISSION_POOL_PRIVATE *leases;
+    if (!p->TvbLeases || !AppleAgxG3TvbBlockSlot(block,&leaf,&pte) ||
+        p->Graph.JobInFlight || p->Graph.Uncertain ||
+        !AdmissionG3TvbUnmapPages(p,p->TvbLeafIpa[leaf],pte,
+            APPLE_AGX_G3_TVB_GPU_PAGES_PER_BLOCK)) {
+      ADMISSION_G3_POISON(p,1u);
+      return FALSE;
+    }
+    leases=&p->TvbLeases[(block-APPLE_AGX_G3_TVB_FLOOR_BLOCKS)*
+                         APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK];
+    for (g=0u;g<APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK;++g)
+      (void)AdmissionMemoryPoolTvbGive(p->State->Adapter,&leases[g]);
+    --p->Tvb.LeaseBlocks;
+    if (p->PrivateManager.Blocks>APPLE_AGX_G3_TVB_FLOOR_BLOCKS)
+      --p->PrivateManager.Blocks;
+  }
+  return TRUE;
+}
+
+/* Process teardown after GraphDestroy revoked every grant: return all
+ * granules. TRUE when none is still held (the lease array may be freed). */
+static BOOLEAN AdmissionG3TvbReturnLeases(ADMISSION_G3_PROCESS *p) {
+  BOOLEAN all=TRUE;
+  UINT i;
+  if (!p->TvbLeases) return TRUE;
+  for (i=0u;i<APPLE_AGX_G3_TVB_WINDOW_BLOCKS*APPLE_AGX_G3_TVB_GRANULES_PER_BLOCK;++i)
+    if (p->TvbLeases[i].Slab &&
+        !AdmissionMemoryPoolTvbGive(p->State->Adapter,&p->TvbLeases[i])) all=FALSE;
+  p->Tvb.LeaseBlocks=0u;
+  return all;
+}
+
 /* EXP1114 receipt-only, under Lock, at most every two seconds: each process's
  * private units and scenes, the largest render it asked storage for, and its
  * saved firmware buffer-manager Stats/Info/BlockControl words (Asahi
@@ -1669,7 +2760,7 @@ static BOOLEAN AdmissionG3SnapshotProcesses(ADMISSION_G3_STATE *state,
   state->ProcessReceiptQpc=now;
   RtlZeroMemory(out,ADMISSION_G3_PROCESS_RECEIPT_WORDS*sizeof(ULONG));
   AppleAgxG3PrivatePoolStats(&state->PrivatePool,0ULL,&stats);
-  out[0]=1u;out[2]=stats.GlobalUnits;out[3]=stats.LargestFreeUnits;
+  out[0]=2u;out[2]=stats.GlobalUnits;out[3]=stats.LargestFreeUnits;
   out[4]=(ULONG)now;out[5]=(ULONG)((ULONGLONG)now>>32);out[6]=(ULONG)frequency.QuadPart;
   for (link=state->Processes.Flink;link!=&state->Processes;link=link->Flink) {
     ADMISSION_G3_PROCESS *p=CONTAINING_RECORD(link,ADMISSION_G3_PROCESS,Link);
@@ -1696,6 +2787,16 @@ static BOOLEAN AdmissionG3SnapshotProcesses(ADMISSION_G3_STATE *state,
     r[12]=AdmissionG3ManagerWord(m->Info,0x28u);r[13]=AdmissionG3ManagerWord(m->Info,0x30u);
     r[14]=AdmissionG3ManagerWord(m->BlockControl,0x0u);
     r[15]=AdmissionG3ManagerWord(m->BlockControl,0x4u);
+    /* rc80 version 2 tail, same slot: window blocks backed | registered leaf
+     * mask << 16 | window reserved << 31; growth steps | refused steps << 16;
+     * last target | last reason << 24; Stats max_pages it was sized from. */
+    r=&out[8u+16u*ADMISSION_G3_PROCESS_RECEIPT_SLOTS+
+           ADMISSION_G3_PROCESS_RECEIPT_TVB_WORDS*slot];
+    r[0]=(p->Tvb.LeaseBlocks&0xffffu)|((p->Tvb.Leaves&0xffu)<<16)|
+         (p->TvbVa ? 0x80000000u : 0u);
+    r[1]=(p->Tvb.Grows&0xffffu)|((p->Tvb.Failures&0xffffu)<<16);
+    r[2]=(p->Tvb.LastTarget&0xffffffu)|((p->Tvb.LastReason&0xffu)<<24);
+    r[3]=p->Tvb.LastUsedPages;
   }
   out[1]=used;out[7]=total;
   return TRUE;
@@ -1719,8 +2820,10 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
   UINT required[9]={0}, tablePredicate=0u, mapOffset=0u;
   APPLE_AGX_G3_PRIVATE_POOL_STATS observed={0};
   APPLE_AGX_G3_PRIVATE_PREPARE_DIAGNOSTIC prepare={0};
-  BOOLEAN captured=FALSE, snapshot=FALSE;
-  ULONG receipt[ADMISSION_G3_PROCESS_RECEIPT_WORDS];
+  BOOLEAN captured=FALSE, snapshot=FALSE, growWaited=FALSE;
+  ULONGLONG growDeadline;
+  ULONG receipt[ADMISSION_G3_PROCESS_RECEIPT_WORDS], pressure[12];
+  ULONG pressureBefore;
 #define PRIVATE_CAPTURE(b,t,o) do { \
   if (AdmissionG3CapturePrivateFailure(adapter,state,p,args,&q,required,b, \
       status,tablePredicate,mapOffset,t,&prepare,o)) captured=TRUE; \
@@ -1743,18 +2846,27 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
    * DWM ~1 s per 15.9 s (1236 waits); wake on the job's end instead, with
    * the same 1 ms backstop and a 3 s wall-clock bound. */
   deadline=KeQueryInterruptTime()+3000ULL*10000ULL;
+  /* rc80: a cached scene returns at once unless a TVB growth step is due;
+   * then wait (at most 50 ms) for the idle point growth needs. */
+  growDeadline=KeQueryInterruptTime()+50ULL*10000ULL;
   for (wait_ms=0u;;++wait_ms) {
     KeClearEvent(&state->JobEvent);
     ExAcquireFastMutex(&state->Lock);
     p=AdmissionGpuvaG3FindProcess(state,args->hKmdProcessHandle);
     if (!p || q.Operation==APPLE_AGX_G3_PRIVATE_RELEASE ||
-        (!p->Graph.JobInFlight && !p->Graph.LeaseToken) ||
-        KeQueryInterruptTime()>=deadline ||
-        AdmissionG3PrivateCachedScene(p,args->hContext,&q)) break;
+        !p->Graph.JobInFlight ||
+        KeQueryInterruptTime()>=deadline) break;
+    if (AdmissionG3PrivateCachedScene(p,args->hContext,&q)) {
+      if (KeQueryInterruptTime()>=growDeadline ||
+          !AdmissionG3TvbWantsIdle(p,AppleAgxG4TvbBlocksForSize(q.Width,q.Height)))
+        break;
+      growWaited=TRUE;
+    }
     ExReleaseFastMutex(&state->Lock);
     delay.QuadPart=-10000LL;
     (void)KeWaitForSingleObject(&state->JobEvent,Executive,KernelMode,FALSE,&delay);
   }
+  pressureBefore=state->PrivatePressure[1];
   if (!p || p->Poisoned || p->Graph.Uncertain) {PRIVATE_CAPTURE(1u,~0u,NULL);goto Done;}
   /* Compare handles against attached objects before dereferencing them. */
   for (context=p->Contexts;context && (HANDLE)context!=args->hContext;
@@ -1768,7 +2880,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
    * bounded quiescence wait timed out. The broker also checks owner jobs. */
   if (q.Operation!=APPLE_AGX_G3_PRIVATE_RELEASE &&
       !AdmissionG3PrivateCachedScene(p,args->hContext,&q) &&
-      (p->Graph.JobInFlight || p->Graph.LeaseToken))
+      p->Graph.JobInFlight)
     {status=STATUS_DEVICE_BUSY;PRIVATE_CAPTURE(7u,~0u,NULL);goto Done;}
   if (!AdmissionG3PrivateReap(p)) {status=STATUS_DEVICE_HARDWARE_ERROR;PRIVATE_CAPTURE(3u,~0u,NULL);goto Done;}
   status=AdmissionMemoryRuntimePrivateView(adapter,&view);
@@ -1792,7 +2904,7 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     else if (AdmissionG3PrivateCacheScene(p,scene))
       ++state->PrivateStats[ADMISSION_G3_PRIVATE_STAT_CACHED_RELEASE];
     if (scene->Queued || scene->Submitting || scene->Cached ||
-        p->Graph.JobInFlight || p->Graph.LeaseToken)
+        p->Graph.JobInFlight)
       { status=STATUS_SUCCESS;goto Done; }
     status=AdmissionG3PrivateReleaseScene(p,scene,&view) ? STATUS_SUCCESS : STATUS_DEVICE_BUSY;
     goto Done;
@@ -1812,6 +2924,17 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     ULONG blocks=AppleAgxG4MinTvbBlocks(q.Width,q.Height);
     if (blocks>p->MaxTvbBlocks) { p->MaxTvbBlocks=blocks;p->MaxShape=q.Width|(q.Height<<16); }
   }
+  /* rc80: grow the TVB while this process is idle (Asahi auto_grow and
+   * ensure_blocks before the scene). A cached hit that waited and still
+   * found the process busy holds the step off instead of waiting again. */
+  if (!p->Graph.JobInFlight) {
+    AdmissionG3TvbGrow(p,&view,AppleAgxG4TvbBlocksForSize(q.Width,q.Height));
+    if (p->Poisoned || p->Graph.Uncertain)
+      {status=STATUS_DEVICE_HARDWARE_ERROR;PRIVATE_CAPTURE(14u,2u,NULL);goto Done;}
+  } else if (growWaited)
+    AppleAgxG3TvbNoteResult(&p->Tvb,AdmissionG3TvbTargetFor(p,
+        AppleAgxG4TvbBlocksForSize(q.Width,q.Height)),p->PrivateManager.Blocks,
+        p->PrivateManager.Blocks,APPLE_AGX_G3_TVB_FAIL_BUSY,AdmissionG3TvbNowMs());
   scene=AdmissionG3PrivateCachedScene(p,args->hContext,&q);
   if (scene) {
     if (!AdmissionG3PrivateReuseScene(p,scene,&view))
@@ -1846,6 +2969,11 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
     if (!AdmissionG3PrivateTrimCache(p,&view)) {status=STATUS_DEVICE_HARDWARE_ERROR;goto Done;}
   }
   status=AdmissionG3PrivateTables(p,&view,&tablePredicate,&observed);
+  while (status==STATUS_INSUFFICIENT_RESOURCES && tablePredicate<=2u &&
+      AdmissionG3PrivateEvictPressure(p,&view,0x10000u,&observed)) {
+    tablePredicate=0u;
+    status=AdmissionG3PrivateTables(p,&view,&tablePredicate,&observed);
+  }
   if (!NT_SUCCESS(status)) {PRIVATE_CAPTURE(9u,~0u,&observed);goto Done;}
   scene=ExAllocatePool2(POOL_FLAG_NON_PAGED,sizeof(*scene),ADMISSION_POOL_TAG);
   if (!scene) {status=STATUS_INSUFFICIENT_RESOURCES;PRIVATE_CAPTURE(10u,~0u,NULL);goto Done;}
@@ -1855,14 +2983,22 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
       APPLE_AGX_G3_PRIVATE_HEAP_BLOCKS) {
     UINT need=AppleAgxG4MinTvbBlocks(render.WidthPx,render.HeightPx);
     status=AdmissionG3GrowPrivateHeap(p,&view,need,&mapOffset);
-    while (status==STATUS_INSUFFICIENT_RESOURCES && AdmissionG3PrivateEvictCached(p,&view))
+    while (status==STATUS_INSUFFICIENT_RESOURCES) {
+      UINT bytes=(need-p->PrivateManager.Blocks)*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK;
+      AppleAgxG3PrivatePoolStats(&state->PrivatePool,p->Graph.ProcessId,&observed);
+      if (!AdmissionG3PrivateEvictPressure(p,&view,bytes,&observed)) break;
       status=AdmissionG3GrowPrivateHeap(p,&view,need,&mapOffset);
+    }
     if (!NT_SUCCESS(status)) {
       PRIVATE_CAPTURE(14u,2u,NULL);ExFreePoolWithTag(scene,ADMISSION_POOL_TAG);goto Done;
     }
   }
   status=AdmissionG3PreparePrivateStorageObserved(p,&render,&p->PrivateManager,&scene->Storage,&prepare);
-  while (status==STATUS_INSUFFICIENT_RESOURCES && AdmissionG3PrivateEvictCached(p,&view)) {
+  while (status==STATUS_INSUFFICIENT_RESOURCES && prepare.Predicate==3u &&
+      prepare.FailedRange<9u && AdmissionG3PrivateEvictPressure(p,&view,
+          fresh && prepare.FailedRange==2u ?
+              AppleAgxG4MinTvbBlocks(render.WidthPx,render.HeightPx)*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK :
+              required[prepare.FailedRange],&prepare.Stats)) {
     RtlZeroMemory(&prepare,sizeof(prepare));
     status=AdmissionG3PreparePrivateStorageObserved(p,&render,&p->PrivateManager,&scene->Storage,&prepare);
   }
@@ -1904,7 +3040,9 @@ NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *adapter,
 Done:
   if (p && p->Graph.Uncertain) ADMISSION_G3_POISON(p,1u);
   snapshot=AdmissionG3SnapshotProcesses(state,receipt);
+  RtlCopyMemory(pressure,state->PrivatePressure,sizeof(pressure));
   ExReleaseFastMutex(&state->Lock);
+  if (pressure[1]!=pressureBefore) AdmissionRecordG3PrivatePressure(adapter,pressure,sizeof(pressure));
   if (captured) AdmissionRecordG3PrivateFailure(adapter);
   if (snapshot) AdmissionRecordG3PrivateProcesses(adapter,receipt,sizeof(receipt));
 #undef PRIVATE_CAPTURE
@@ -1913,6 +3051,10 @@ Done:
 
 /* The private pool's per-process VA window is the reserved span. */
 C_ASSERT(APPLE_AGX_G4_PRIVATE_VA_BYTES == APPLE_AGX_G3_PRIVATE_VA_BYTES);
+/* rc80: the TVB window follows the private window in the same root slot. */
+C_ASSERT((APPLE_AGX_G4_PRIVATE_VA_BASE >> 36) ==
+         ((APPLE_AGX_G4_PRIVATE_VA_BASE + APPLE_AGX_G4_PRIVATE_VA_BYTES +
+           APPLE_AGX_G3_TVB_VA_BYTES - 1ULL) >> 36));
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
     PVOID MiniportDeviceContext, DXGKARG_CREATEPROCESS *Args) {
@@ -1983,6 +3125,23 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
     process->PrivateVa = reserve.StartVirtualAddress;
     process->DxgkProcess = Args->hDxgkProcess;
   }
+  {
+    /* rc80: the TVB window starts where the private window ends, in the same
+     * root slot, so its leaves hang below the same middle table and the heap
+     * stays VA-contiguous (apple_agx_g3_tvb.h). Fail-soft: without it the
+     * heap keeps the 32-block floor. */
+    DXGKARGCB_RESERVEGPUVIRTUALADDRESSRANGE reserve = {0};
+    ULONGLONG base = process->PrivateVa + APPLE_AGX_G3_PRIVATE_VA_BYTES;
+    reserve.hDxgkProcess = Args->hDxgkProcess;
+    reserve.SizeInBytes = APPLE_AGX_G3_TVB_VA_BYTES;
+    reserve.Alignment = (UINT)APPLE_AGX_G3_TVB_LEAF_BYTES;
+    reserve.BaseAddress = base;
+    if (NT_SUCCESS(adapter->Interface.DxgkCbReserveGpuVirtualAddressRange(
+            adapter->Interface.DeviceHandle, &reserve)) &&
+        reserve.StartVirtualAddress == base &&
+        reserve.SizeInBytes >= APPLE_AGX_G3_TVB_VA_BYTES)
+      process->TvbVa = base;
+  }
   status = AdmissionG3BootstrapRoot(process);
   if (!NT_SUCCESS(status)) goto Fail;
   status = AdmissionMemoryRuntimeLocalView(adapter, &local_view);
@@ -2010,6 +3169,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
    * IPA base is stable for the broker epoch and common to every process. */
   process->Graph.SharedBackingGeneration = local_view.GuestIpaAddress;
   process->Graph.Registry = &state->Registry;
+  process->Graph.InvalidateNative = AdmissionG3NativeInvalidate;
+  process->Graph.InvalidateContext = process;
   if (!AppleAgxGpuvaG3GraphCreate(&process->Graph, process->BootstrapIpa,
                                   Args->Flags.SystemProcess != 0u)) {
     if (process->Graph.Uncertain) {
@@ -2021,6 +3182,27 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateProcess(
     }
     ExReleaseFastMutex(&state->Lock);
     status = STATUS_DEVICE_HARDWARE_ERROR;
+    goto Fail;
+  }
+  process->Graph.PrivateCached = adapter->GpuPrivateCached ? 1u : 0u;
+  /* V1: with Wom1G3RetainedSlots the process keeps its VM slot between
+   * jobs; without it the graph stays unattached (lease per job). */
+  if (adapter->G3RetainedSlots &&
+      AppleAgxGpuvaG3SlotsEnable(&state->Slots, ADMISSION_G3_RETAINED_FIRST_SLOT,
+                                 ADMISSION_G3_RETAINED_SLOT_COUNT))
+    process->Graph.SlotTable = &state->Slots;
+  if (adapter->LiveAdditivePaging &&
+      !AppleAgxGpuvaG3GraphNegotiateLive(&process->Graph, true)) {
+    /* A topology already exposed to VidMm cannot change per process. */
+    if (!AppleAgxGpuvaG3GraphDestroy(&process->Graph)) {
+      ADMISSION_G3_POISON(process,1u);
+      InsertTailList(&state->Processes, &process->Link);
+      ++state->ProcessCount;
+      ExReleaseFastMutex(&state->Lock);
+      return STATUS_DEVICE_HARDWARE_ERROR;
+    }
+    ExReleaseFastMutex(&state->Lock);
+    status = STATUS_NOT_SUPPORTED;
     goto Fail;
   }
   InsertTailList(&state->Processes, &process->Link);
@@ -2035,6 +3217,64 @@ Fail:
   return status;
 }
 
+#ifdef APPLE_AGX_NATIVE_STAGING
+NTSTATUS AdmissionGpuvaG3NativeStagingEscape(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args) {
+  ADMISSION_NATIVE_STAGING_REQUEST q;
+  ADMISSION_DEVICE *device;
+  ADMISSION_RENDER_CONTEXT *context;
+  ADMISSION_G3_PROCESS *process;
+  ADMISSION_G3_STATE *state;
+  NTSTATUS status;
+  BOOLEAN valid;
+  if (!adapter || !adapter->Started || !args || args->Flags.Value ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL || !args->pPrivateDriverData ||
+      args->PrivateDriverDataSize != sizeof(q)) return STATUS_INVALID_PARAMETER;
+  RtlCopyMemory(&q, args->pPrivateDriverData, sizeof(q));
+  if (q.Magic != ADMISSION_NATIVE_STAGING_MAGIC || q.Version != 1u ||
+      q.Bytes != sizeof(q) || q.UserVa ||
+      (q.Capacity ? q.Token != 0ULL : q.Token == 0ULL) ||
+      (q.Capacity & 65535u) || q.Capacity > ADMISSION_NATIVE_STAGING_MAX_BYTES)
+    return STATUS_INVALID_PARAMETER;
+  device = (ADMISSION_DEVICE *)args->hDevice;
+  context = (ADMISSION_RENDER_CONTEXT *)args->hContext;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (!state || !device || !context ||
+      device->Object.Magic != ADMISSION_OBJECT_DEVICE_MAGIC ||
+      device->Object.Adapter != &adapter->ObjectAdapter ||
+      context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
+      context->Object.Device != &device->Object) return STATUS_INVALID_HANDLE;
+  ExAcquireFastMutex(&state->Lock);
+  process = AdmissionGpuvaG3FindProcess(state, device->GpuvaG3Process);
+  valid = process && process == context->GpuvaG3Process &&
+      process->NativeMapRefs != MAXULONG &&
+      process->OsProcessId == HandleToULong(PsGetCurrentProcessId()) &&
+      (!q.Capacity || (!process->NativeClosing && !process->Poisoned &&
+                       !process->Graph.Uncertain));
+  if (valid) ++process->NativeMapRefs;
+  ExReleaseFastMutex(&state->Lock);
+  if (!valid) return STATUS_INVALID_HANDLE;
+  /* Hold our own process reference through manager registration and cleanup;
+   * do not infer this lifetime from an OS handle supplied to a Level-0 DDI.
+   * No GPU/pool lock may cover the process-notification registry. */
+  status = q.Capacity ? AdmissionNativeStagingMap(adapter, process, q.Capacity,
+      &q.Token, &q.UserVa) : AdmissionNativeStagingCancel(adapter, process, q.Token);
+  ExAcquireFastMutex(&state->Lock);
+  if (q.Capacity && NT_SUCCESS(status) && process->NativeClosing) {
+    ExReleaseFastMutex(&state->Lock);
+    AdmissionNativeStagingUnmapProcess(adapter, process);
+    status = STATUS_DEVICE_BUSY;
+    ExAcquireFastMutex(&state->Lock);
+  }
+  /* Publish the buffered reply before releasing our reference, in the same
+   * critical section as the final closing check. */
+  if (NT_SUCCESS(status)) RtlCopyMemory(args->pPrivateDriverData, &q, sizeof(q));
+  --process->NativeMapRefs;
+  ExReleaseFastMutex(&state->Lock);
+  return status;
+}
+#endif
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
     PVOID MiniportDeviceContext, HANDLE KmdProcessHandle) {
   ADMISSION_CONTEXT *adapter = (ADMISSION_CONTEXT *)MiniportDeviceContext;
@@ -2044,6 +3284,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
     return STATUS_INVALID_PARAMETER;
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
   if (state == NULL) return STATUS_INVALID_DEVICE_STATE;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  /* Close admission before dropping the GPU lock. An escape may still be
+   * preparing a mapping and must finish cleanup before this object can die. */
+  ExAcquireFastMutex(&state->Lock);
+  process = AdmissionGpuvaG3FindProcess(state, KmdProcessHandle);
+  if (process == NULL) {
+    ExReleaseFastMutex(&state->Lock);
+    return STATUS_INVALID_HANDLE;
+  }
+  process->NativeClosing = TRUE;
+  ExReleaseFastMutex(&state->Lock);
+  /* CPU teardown is independent of a later uncertain GPU retirement. */
+  AdmissionNativeStagingUnmapProcess(adapter, KmdProcessHandle);
+  if (!AdmissionNativeStagingProcessIdle(adapter, KmdProcessHandle))
+    return STATUS_DEVICE_BUSY;
+#endif
   ExAcquireFastMutex(&state->Lock);
   process = AdmissionGpuvaG3FindProcess(state, KmdProcessHandle);
   if (process == NULL) {
@@ -2058,6 +3314,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
       }
   }
   if (process->DeviceRefs || process->ContextRefs ||
+#ifdef APPLE_AGX_NATIVE_STAGING
+      process->NativeMapRefs ||
+#endif
       process->Graph.Uncertain ||
       (process->Graph.Created &&
        !AppleAgxGpuvaG3GraphDestroy(&process->Graph))) {
@@ -2106,6 +3365,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyProcess(
   --state->ProcessCount;
   process->Magic = 0u;
   ExReleaseFastMutex(&state->Lock);
+#ifdef APPLE_AGX_NATIVE_STAGING
+  AdmissionNativeStagingDestroyProcess(adapter, process);
+#endif
   ExFreePoolWithTag(process, ADMISSION_POOL_TAG);
   return STATUS_SUCCESS;
 }
@@ -2156,7 +3418,7 @@ static NTSTATUS AdmissionG3PresentArenaEnsure(ADMISSION_G3_PROCESS *p,
   *predicate = 0u;
   if (p->PresentArena.Generation) return STATUS_SUCCESS;
   if (p->Poisoned || p->Graph.Uncertain || p->Graph.JobInFlight ||
-      p->Graph.LeaseToken || p->CpuOnlyMappings) {
+      p->CpuOnlyMappings) {
     *predicate = 10u;
     return STATUS_DEVICE_BUSY;
   }
@@ -2368,9 +3630,7 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
     step = 3u;
   else if (!AppleAgxGpuvaG3GraphBindRoot(&process->Graph, root_ipa)) step = 4u;
   else if (process->PrivateLeafIpa &&
-           !AppleAgxGpuvaG3GraphAttachPrivate(&process->Graph,
-               process->PrivateVa, process->PrivateMiddleIpa,
-               process->PrivateLeafIpa)) step = 5u;
+           !AdmissionG3AttachPrivateLeaves(process)) step = 5u;
   if (step != 0u) {
     context->GpuvaG3Poisoned = TRUE;
     /* Step 5 names the AttachPrivate refusal (file 0x20 + reason). */
@@ -2383,11 +3643,13 @@ _Use_decl_annotations_ VOID AdmissionDdiSetRootPageTable(
   ExReleaseFastMutex(&process->State->Lock);
 }
 
-static BOOLEAN AdmissionG3OutputMatchesLocal(
-    ADMISSION_CONTEXT *adapter, APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+/* rc102: Packet is the job's own description: the render packet's at
+ * depth 1, the kicked entry's for a depth-2 successor (the render packet
+ * still describes the running job then). */
+static BOOLEAN AdmissionG3OutputMatchesLocalFor(
+    ADMISSION_CONTEXT *adapter, APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *packet) {
   ADMISSION_SCANOUT_MEMORY_VIEW view;
-  const ADMISSION_RENDER_PACKET_DESCRIPTION *packet =
-      &adapter->RenderPacket.Description;
   ULONGLONG ipa, offset, position;
   if (packet->DestinationGpuVa == 0ULL ||
       packet->DestinationBytes == 0u ||
@@ -2415,18 +3677,19 @@ static BOOLEAN AdmissionG3OutputMatchesLocal(
 
 /* M2-c: a VA-only destination (outside the local reserve) must still be
  * mapped writable; a local one must still be its recorded local pages. */
-static BOOLEAN AdmissionG3OutputAccessible(
-    ADMISSION_CONTEXT *adapter, APPLE_AGX_GPUVA_G3_GRAPH *graph) {
-  const ADMISSION_RENDER_PACKET_DESCRIPTION *packet =
-      &adapter->RenderPacket.Description;
+static BOOLEAN AdmissionG3OutputAccessibleFor(
+    ADMISSION_CONTEXT *adapter, APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *packet) {
   if (adapter->BackendImage.G4Native &&
       packet->DestinationPhysical == 0ULL &&
       packet->DestinationCpuToken == 0ULL)
     return packet->DestinationGpuVa != 0ULL &&
         packet->DestinationBytes != 0u &&
-        AppleAgxGpuvaG3GraphContainsRangeAccess(graph,
+        /* L3-P1: the parse proved this target moments ago; the cached
+         * proof answers exactly as the walk (graph mutations drop it). */
+        AppleAgxGpuvaG3GraphContainsRangeAccessCached(graph,
             packet->DestinationGpuVa, packet->DestinationBytes, TRUE);
-  return AdmissionG3OutputMatchesLocal(adapter, graph);
+  return AdmissionG3OutputMatchesLocalFor(adapter, graph, packet);
 }
 
 static ADMISSION_G3_PRIVATE_SCENE *AdmissionG4FindPrivateScene(
@@ -2515,10 +3778,14 @@ static int AdmissionG4PrivateGraphAccess(void *opaque, unsigned long long va,
     if (ordinal>=9u || va!=scene->Storage.Ranges[ordinal].Va ||
         bytes!=scene->Storage.Ranges[ordinal].Bytes || !write) return 0;
     /* EXP1115: of the TVB heap window only the backed prefix is mapped and
-     * named to the firmware: the job's count, else the manager's now. */
+     * named to the firmware: the job's count, else the manager's now.
+     * rc80: past the 32-block range the prefix continues into this
+     * process's TVB window (VA-contiguous); prove every named block. */
     if (ordinal==2u) {
       ULONG blocks=scene->HeapBlocks ? scene->HeapBlocks : p->PrivateManager.Blocks;
-      if (!blocks || (ULONGLONG)blocks*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK>bytes) return 0;
+      if (!blocks || ((ULONGLONG)blocks*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK>bytes &&
+          (!p->TvbVa || bytes!=APPLE_AGX_G3_TVB_FLOOR_BLOCKS*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK ||
+           va+bytes!=p->TvbVa || blocks>APPLE_AGX_G3_TVB_MAX_BLOCKS))) return 0;
       bytes=blocks*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK;
     }
     return AdmissionG4GraphAccess(&p->Graph,va,bytes,write);
@@ -2641,14 +3908,149 @@ static BOOLEAN AdmissionG3PresentAccessible(ADMISSION_G3_PROCESS *process,
             AppleAgxG4AccessProcess, 0u))) ? TRUE : FALSE;
 }
 
-NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
-    ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
+/* RC37 diagnostic. The caller can arm only its existing process object;
+ * query is still available after that device has entered error. */
+NTSTATUS AdmissionGpuvaG3FaultDrillEscape(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args) {
+  ADMISSION_GPU_FAULT_DRILL query;
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *owner = NULL;
+  PLIST_ENTRY link;
+  ULONG pid;
+  NTSTATUS status = STATUS_INVALID_HANDLE;
+  if (adapter == NULL || args == NULL || args->pPrivateDriverData == NULL ||
+      args->PrivateDriverDataSize != sizeof(query) ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_PARAMETER;
+  if (!adapter->GpuFaultDrillAllowed)
+    return STATUS_NOT_SUPPORTED;
+  RtlCopyMemory(&query, args->pPrivateDriverData, sizeof(query));
+  if (query.Magic != ADMISSION_GPU_FAULT_DRILL_MAGIC || query.Version != 1u ||
+      query.Bytes != sizeof(query) || query.Operation > 1u)
+    return STATUS_INVALID_PARAMETER;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (state == NULL) return STATUS_INVALID_DEVICE_STATE;
+  pid = HandleToULong(PsGetCurrentProcessId());
+  ExAcquireFastMutex(&state->Lock);
+  for (link = state->Processes.Flink; link != &state->Processes; link = link->Flink) {
+    ADMISSION_G3_PROCESS *p = CONTAINING_RECORD(link, ADMISSION_G3_PROCESS, Link);
+    if (p->Magic != ADMISSION_G3_PROCESS_MAGIC || p->OsProcessId != pid ||
+        p->CpuOnlyMappings) continue;
+    if (owner != NULL) { status = STATUS_DEVICE_BUSY; goto Done; }
+    owner = p;
+  }
+  if (owner == NULL) goto Done;
+  if (query.Operation == 1u) {
+    if (owner->Poisoned || owner->Graph.Uncertain || !owner->Graph.Created) {
+      status = STATUS_INVALID_DEVICE_STATE;
+      goto Done;
+    }
+    RtlZeroMemory(&owner->FaultDrill, sizeof(owner->FaultDrill));
+    owner->FaultDrill.Armed = 1u;
+  }
+  query.Armed = owner->FaultDrill.Armed;
+  query.Fence = owner->FaultDrill.Fence;
+  query.GpuVa = owner->FaultDrill.GpuVa;
+  query.FaultInfo = owner->FaultDrill.FaultInfo;
+  RtlCopyMemory(args->pPrivateDriverData, &query, sizeof(query));
+  status = STATUS_SUCCESS;
+Done:
+  ExReleaseFastMutex(&state->Lock);
+  return status;
+}
+
+/* Called only after ordinary BeginJob validation/JOB_BEGIN and before work
+ * encoding/publication. The leased graph cannot be paged underneath the test.
+ * This changes CDM instruction fetch, not a shader pointer or another process. */
+BOOLEAN AdmissionGpuvaG3FaultDrillApply(ADMISSION_CONTEXT *adapter,
+    ULONG fence, unsigned long long *streamBase, unsigned int *streamBytes) {
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  APPLE_AGX_GPUVA_G3_WALK_FAILURE walk;
+  const ULONGLONG faultVa = 0x10000ULL;
+  BOOLEAN injected = FALSE;
+  if (adapter == NULL || !adapter->GpuFaultDrillAllowed ||
+      streamBase == NULL || streamBytes == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL || !fence)
+    return FALSE;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (state == NULL) return FALSE;
+  ExAcquireFastMutex(&state->Lock);
+  process = state->ActiveProcess;
+  if (state->ActiveFence != fence || process == NULL ||
+      !process->FaultDrill.Armed) goto Done;
+  process->FaultDrill.Armed = 0u; /* consume before any GPU-visible effect */
+  RtlZeroMemory(&walk, sizeof(walk));
+  if (process->Poisoned || process->CpuOnlyMappings || !process->Graph.Created ||
+      process->Graph.Uncertain || !process->Graph.JobInFlight ||
+      !process->Graph.RootTable || !process->Graph.RootIpa || !process->Graph.LeaseToken ||
+      process->Graph.Slot == 0u ||
+      AppleAgxGpuvaG3GraphInspectRangeAccess(&process->Graph, faultVa, 64u,
+          FALSE, &walk) ||
+      /* NoRoot means an absent root EDGE here, with RootTable proven above. */
+      (walk.Reason != AppleAgxG3WalkNoRoot && walk.Reason != AppleAgxG3WalkNoTable &&
+       walk.Reason != AppleAgxG3WalkLeafAbsent)) goto Done;
+  *streamBase = faultVa;
+  *streamBytes = 64u;
+  process->FaultDrill.Fence = fence;
+  process->FaultDrill.GpuVa = faultVa;
+  injected = TRUE;
+Done:
+  ExReleaseFastMutex(&state->Lock);
+  return injected;
+}
+
+/* L1b: the graph begin (V5 LEASE + JOB_BEGIN) timed for the begin split. */
+static bool AdmissionG3TimedGraphBeginJob(ADMISSION_G3_STATE *state,
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, unsigned int slot) {
+  bool ok;
+  const BOOLEAN on = state->LockProfile.Enabled ? TRUE : FALSE;
+  if (on) state->BeginLeaseStart = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  ok = AppleAgxGpuvaG3GraphBeginJob(graph, slot);
+  if (on) state->BeginLeaseEnd = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  return ok;
+}
+
+/* OV2: the compute envelope parser admits VdmBarrier NONE only while the
+ * device reports AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE. */
+static unsigned int AdmissionG4ComputeParseFlags(ADMISSION_CONTEXT *adapter) {
+  return adapter != NULL &&
+      InterlockedCompareExchange(&adapter->GpuIndependentSubqueue, 0, 0) != 0
+      ? APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE : 0u;
+}
+
+/* OV5 step 2: the render parser admits CdmBarrier NONE (a TA-independent
+ * render without a compute command) only while the device reports
+ * AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT. */
+static unsigned int AdmissionG4RenderParseFlags(ADMISSION_CONTEXT *adapter) {
+  return adapter != NULL &&
+      InterlockedCompareExchange(&adapter->GpuRenderTaIndependent, 0, 0) != 0
+      ? APPLE_AGX_G4_PARSE_RENDER_TA_INDEPENDENT : 0u;
+}
+
+/* Packet: the job's own description (rc102: a successor's is its kicked
+ * entry's). *Refusal (rc102 receipt, may be NULL): 0 begun, 1 the active-
+ * job state (depth 1: another job; successor: not N's process, or a
+ * successor already), 2 a private completion pending, 3 process poisoned,
+ * 4 the bound image's re-proof, 5 context poisoned or another root,
+ * 6 envelope access, 7 output access, 8 the graph lease (JOB_BEGIN). */
+#ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
+/* L1b: inside BeginJobAs only, the graph begin is the timed one. */
+#define AppleAgxGpuvaG3GraphBeginJob(g, s) AdmissionG3TimedGraphBeginJob(state, (g), (s))
+#endif
+static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG fence, BOOLEAN successor,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *packet, ULONG *Refusal) {
+  ULONG refusal = 0u;
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *process;
   APPLE_AGX_G4_SUBMIT_VIEW g4_view = {0};
   BOOLEAN g4_valid = TRUE;
   ADMISSION_G3_PRIVATE_SCENE *private_scene = NULL;
   NTSTATUS status = STATUS_INVALID_DEVICE_STATE;
+#ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
+  ADMISSION_G3_BEGIN_SPLIT split = {0};
+#endif
   if (adapter == NULL || context == NULL || fence == 0u ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return STATUS_INVALID_PARAMETER;
   state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
@@ -2658,6 +4060,12 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
       process->CpuOnlyMappings)
     return STATUS_INVALID_DEVICE_STATE;
   ExAcquireFastMutex(&state->Lock);
+#ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
+  if (state->LockProfile.Enabled) {
+    split.Acquired = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+    state->BeginLeaseStart = state->BeginLeaseEnd = 0ULL;
+  }
+#endif
 #if ADMISSION_G3_VERIFY_UPLOADS_ON_BEGIN_JOB
   AdmissionG3VerifyUploads(adapter,state,process);
 #endif
@@ -2680,11 +4088,11 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
       if (prelude_valid) {
         RtlCopyMemory(state->G4ReparseV5.Command, image->G4Command,
                       image->G4CommandBytes);
-        prelude_valid = AppleAgxG4ParseSubmitComputeEx(&state->G4ReparseV5,
+        prelude_valid = AppleAgxG4ParseSubmitComputeFlagsEx(&state->G4ReparseV5,
             (unsigned int)sizeof(state->G4ReparseV5.Header) + image->G4CommandBytes,
             (unsigned int)sizeof(state->G4ReparseV5.Header) + image->G4CommandBytes,
             image->G4Header.Base.CommandVa, image->G4CommandBytes,
-            APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+            APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES, ADMISSION_G4_RENDER_PARSE_FLAGS(adapter),
             private_scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
             private_scene ? (void *)private_scene : (void *)process,
             &g4_view, NULL) == AppleAgxG4ParseOk && g4_view.HasCompute &&
@@ -2696,10 +4104,11 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
         image->G4CommandBytes == 0u ||
         image->G4CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
         !prelude_valid ||
-        (!image->G4WithCompute && AppleAgxG4ParseSubmitEx(&image->G4Header,
+        (!image->G4WithCompute && AppleAgxG4ParseSubmitFlagsEx(&image->G4Header,
             (unsigned int)sizeof(image->G4Header) + image->G4CommandBytes,
             (unsigned int)sizeof(image->G4Header) + image->G4CommandBytes,
             image->G4Header.Base.CommandVa, image->G4CommandBytes,
+            ADMISSION_G4_RENDER_PARSE_FLAGS(adapter),
             private_scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
             private_scene ? (void *)private_scene : (void *)process,
             &g4_view, NULL) != AppleAgxG4ParseOk) ||
@@ -2720,12 +4129,13 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     ADMISSION_BACKEND_IMAGE *image = &adapter->BackendImage;
     APPLE_AGX_G4_COMPUTE_VIEW compute_view;
     if (image->BoundFence != fence ||
-        AppleAgxG4ParseComputeEx(&image->G4ComputeEnvelope,
+        AppleAgxG4ParseComputeFlagsEx(&image->G4ComputeEnvelope,
             (unsigned int)sizeof(image->G4ComputeEnvelope),
             (unsigned int)sizeof(image->G4ComputeEnvelope),
             image->G4ComputeEnvelope.Header.Base.CommandVa,
             image->G4ComputeEnvelope.Header.Base.CommandBytes,
-            APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES, AdmissionG4GraphAccessTyped,
+            APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+            ADMISSION_G4_COMPUTE_PARSE_FLAGS(adapter), AdmissionG4GraphAccessTyped,
             process, &compute_view, NULL) != AppleAgxG4ParseOk ||
         image->G4ComputeEnvelope.Header.Base.CommandVa !=
             context->GpuvaG3DmaBufferVa ||
@@ -2733,25 +4143,47 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
             context->GpuvaG3DmaBufferBytes)
       g4_valid = FALSE;
   }
-  if (state->ActiveProcess == NULL && !state->PrivateCompletionFence && !process->Poisoned &&
-      g4_valid &&
-      !context->GpuvaG3Poisoned && context->GpuvaG3RootIpa != 0ULL &&
-      context->GpuvaG3RootIpa == process->Graph.RootIpa &&
-      /* A present job's GPU work is in its arena, not its DMA buffer. */
-      (adapter->BackendImage.PresentCompute ? TRUE :
-       adapter->BackendImage.G4Native || adapter->BackendImage.G4Compute ?
-          AdmissionG4LogicalEnvelopeAccess(process,
-              context->GpuvaG3DmaBufferVa,
-              context->GpuvaG3DmaBufferBytes) :
-          AppleAgxGpuvaG3GraphContainsRange(&process->Graph,
-              context->GpuvaG3DmaBufferVa,
-              context->GpuvaG3DmaBufferBytes)) &&
-      /* A compute job has no destination allocation to prove; a present
-       * job's destination was proven above. */
-      (adapter->BackendImage.G4Compute || adapter->BackendImage.PresentCompute ||
-       AdmissionG3OutputAccessible(adapter, &process->Graph)) &&
-      AppleAgxGpuvaG3GraphBeginJob(&process->Graph,
-          ADMISSION_GPUVA_G3_JOB_VM_SLOT)) {
+#ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
+  if (state->LockProfile.Enabled)
+    split.Parsed = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+#endif
+  /* rc102: a successor joins the active job of its own process. The same
+   * checks in the same order as before; the first that fails is noted. */
+  if (!(successor ? state->ActiveProcess == process && state->ActiveFence != 0u &&
+                        state->ActiveFence != fence && state->SuccessorFence == 0u
+                  : state->ActiveProcess == NULL))
+    refusal = 1u;
+  else if (state->PrivateCompletionFence)
+    refusal = 2u;
+  else if (process->Poisoned)
+    refusal = 3u;
+  else if (!g4_valid)
+    refusal = 4u;
+  else if (context->GpuvaG3Poisoned || context->GpuvaG3RootIpa == 0ULL ||
+           context->GpuvaG3RootIpa != process->Graph.RootIpa)
+    refusal = 5u;
+  /* A present job's GPU work is in its arena, not its DMA buffer. */
+  else if (!(adapter->BackendImage.PresentCompute ? TRUE :
+             adapter->BackendImage.G4Native || adapter->BackendImage.G4Compute ?
+                AdmissionG4LogicalEnvelopeAccess(process,
+                    context->GpuvaG3DmaBufferVa,
+                    context->GpuvaG3DmaBufferBytes) :
+                AppleAgxGpuvaG3GraphContainsRange(&process->Graph,
+                    context->GpuvaG3DmaBufferVa,
+                    context->GpuvaG3DmaBufferBytes)))
+    refusal = 6u;
+  /* A compute job has no destination allocation to prove; a present job's
+   * destination was proven above. rc102 (EXP2042): the job's own output,
+   * not the running job's packet. */
+  else if (!(adapter->BackendImage.G4Compute || adapter->BackendImage.PresentCompute ||
+             AdmissionG3OutputAccessibleFor(adapter, &process->Graph, packet)))
+    refusal = 7u;
+  else if (!(successor ? AppleAgxGpuvaG3GraphBeginNestedJob(&process->Graph)
+                       : AppleAgxGpuvaG3GraphBeginJob(&process->Graph,
+                             ADMISSION_GPUVA_G3_JOB_VM_SLOT)))
+    refusal = 8u;
+  if (Refusal != NULL) *Refusal = refusal;
+  if (refusal == 0u) {
     if (private_scene) {
       ADMISSION_BACKEND_IMAGE *image=&adapter->BackendImage;
       private_scene->Started=1u;
@@ -2760,18 +4192,35 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
       image->G4ManagerKey.Owner=process->Graph.ProcessId;
       image->G4ManagerKey.Generation=process->PrivateManager.Generation;
       image->G4ManagerKey.RootIpa=process->Graph.RootIpa;
+      image->G4ManagerKey.VmSlot=process->Graph.Slot;
       RtlCopyMemory(image->G4ManagerKey.Backing,private_scene->Storage.Ranges,
           sizeof(image->G4ManagerKey.Backing));
       /* A different backed block count is a different manager: InitBM. */
       image->G4ManagerKey.Backing[2].Bytes=
           private_scene->HeapBlocks*APPLE_AGX_G3_PRIVATE_HEAP_BLOCK;
     }
+    /* V1: the builders put the leased slot into this job's firmware
+     * commands (compute, prelude, present VmSlot; render context_id). */
+    if (process->Graph.SlotTable)
+      adapter->BackendImage.JobVmSlot = process->Graph.Slot;
+    /* rc81 receipt: would the generation alone have proven this reparse
+     * redundant (no page-table update since the submission's parse)? */
+    AdmissionJobTimingNoteWindows(adapter, fence, ADMISSION_JOB_FLAG_BEGIN_JOB |
+        (context->GpuvaG3MappingGeneration == process->Graph.MappingGeneration ?
+             ADMISSION_JOB_FLAG_MAPPING_UNCHANGED : 0u) |
+        (private_scene != NULL ? ADMISSION_JOB_FLAG_PRIVATE_SCENE : 0u));
     /* The graph lock covers fresh range/output validation and JOB_BEGIN.
      * A process-wide epoch also changes for unrelated mappings; it cannot
      * invalidate an otherwise valid job. JOB_BEGIN pins the validated graph. */
     context->GpuvaG3MappingGeneration = process->Graph.MappingGeneration;
-    state->ActiveProcess = process;
-    state->ActiveFence = fence;
+    if (successor) {
+      state->SuccessorContext = context;
+      state->SuccessorFence = fence;
+    } else {
+      state->ActiveProcess = process;
+      state->ActiveContext = context;
+      state->ActiveFence = fence;
+    }
     status = STATUS_SUCCESS;
 #ifdef _MSC_VER
     if (adapter->BackendImage.G4Native && g4_valid && g4_view.Render &&
@@ -2884,14 +4333,225 @@ NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
     ADMISSION_G3_POISON(process,1u);
     status = STATUS_DEVICE_HARDWARE_ERROR;
   }
+#ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
+  if (state->LockProfile.Enabled && split.Acquired) {
+    ADMISSION_G3_BEGIN_SPLIT *e = &state->BeginSplits.Ring[
+        state->BeginSplits.Next++ % ADMISSION_G3_BEGIN_SPLIT_RING];
+    split.Fence = fence; split.Successor = successor ? 1u : 0u;
+    split.Refusal = refusal;
+    split.Native = adapter->BackendImage.G4Native ? 1u :
+        adapter->BackendImage.G4Compute ? 2u :
+        adapter->BackendImage.PresentCompute ? 3u : 0u;
+    split.LeaseStart = state->BeginLeaseStart;
+    split.LeaseEnd = state->BeginLeaseEnd;
+    split.Released = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+    *e = split;
+  }
+#endif
   ExReleaseFastMutex(&state->Lock);
 #ifdef _MSC_VER
   if (KeGetCurrentIrql() == PASSIVE_LEVEL) AdmissionRecordG4DrawSnapshot(adapter);
 #endif
   return status;
 }
+#ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
+#undef AppleAgxGpuvaG3GraphBeginJob
+#endif
 
-BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
+NTSTATUS AdmissionGpuvaG3BeginJob(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG fence) {
+  if (adapter == NULL) return STATUS_INVALID_PARAMETER;
+  return AdmissionGpuvaG3BeginJobAs(adapter, context, fence, FALSE,
+                                    &adapter->RenderPacket.Description, NULL);
+}
+
+/* q1: eviction retains keys, not process pointers, across process teardown. */
+BOOLEAN AdmissionGpuvaG3StoreManagerSnapshot(ADMISSION_CONTEXT *adapter,
+    const APPLE_AGX_RENDER_MANAGER_STATE *snapshot) {
+  ADMISSION_G3_STATE *state;
+  PLIST_ENTRY link;
+  BOOLEAN ok=TRUE;
+  if (!adapter || !snapshot || KeGetCurrentIrql()!=PASSIVE_LEVEL) return FALSE;
+  state=(ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (!state) return TRUE; /* registry already destroyed; no owner to restore */
+  ExAcquireFastMutex(&state->Lock);
+  for (link=state->Processes.Flink;link!=&state->Processes;link=link->Flink) {
+    ADMISSION_G3_PROCESS *p=CONTAINING_RECORD(link,ADMISSION_G3_PROCESS,Link);
+    if (p->Graph.ProcessId!=snapshot->Key.Owner) continue;
+    ok=AppleAgxRenderManagerAcceptSnapshot(&p->FirmwareManager,snapshot) ? TRUE : FALSE;
+    break;
+  }
+  ExReleaseFastMutex(&state->Lock);
+  return ok;
+}
+
+/* rc102 (EXP2051): gpuva_g3_private.h. The same lookup and key as
+ * AdmissionGpuvaG3BeginJobAs's private-scene branch. */
+BOOLEAN AdmissionGpuvaG3PendingManager(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG fence,
+    APPLE_AGX_RENDER_MANAGER_STATE **Manager, APPLE_AGX_RENDER_MANAGER_KEY *Key) {
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  ADMISSION_G3_PRIVATE_SCENE *scene = NULL;
+  ADMISSION_BACKEND_IMAGE *image;
+  if (adapter == NULL || context == NULL || fence == 0u || Manager == NULL ||
+      Key == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return FALSE;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  process = (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
+  image = &adapter->BackendImage;
+  if (state == NULL || process == NULL || process->State != state)
+    return FALSE;
+  ExAcquireFastMutex(&state->Lock);
+  if (image->G4Native && image->BoundFence == fence && image->G4Lease.SceneId)
+    scene = AdmissionG4FindPrivateScene(process, context, &image->G4Lease,
+                                        fence, TRUE);
+  if (scene != NULL) {
+    RtlZeroMemory(Key, sizeof(*Key));
+    *Manager = &process->FirmwareManager;
+    Key->Owner = process->Graph.ProcessId;
+    Key->Generation = process->PrivateManager.Generation;
+    Key->RootIpa = process->Graph.RootIpa;
+    /* V1: the successor joins this process's lease; an unleased process
+     * (0) cannot match, so the decision stays conservative. */
+    Key->VmSlot = process->Graph.LeaseToken ? process->Graph.Slot : 0u;
+    RtlCopyMemory(Key->Backing, scene->Storage.Ranges, sizeof(Key->Backing));
+    Key->Backing[2].Bytes = scene->HeapBlocks * APPLE_AGX_G3_PRIVATE_HEAP_BLOCK;
+  }
+  ExReleaseFastMutex(&state->Lock);
+  return scene != NULL ? TRUE : FALSE;
+}
+
+/* rc102: the successor is the Kicked head entry; its packet describes it
+ * (the render packet still holds the running job). */
+NTSTATUS AdmissionGpuvaG3BeginSuccessorJob(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG fence, ULONG *Refusal) {
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  const ADMISSION_G4_PENDING *entry;
+  BOOLEAN found = FALSE;
+  KIRQL old_irql;
+  if (Refusal != NULL) *Refusal = 9u;
+  if (adapter == NULL || context == NULL || fence == 0u ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(&packet, sizeof(packet));
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  if (adapter->G4PendingCount != 0u && entry->State == AdmissionG4PendingKicked &&
+      entry->Fence == fence && entry->Context == context) {
+    packet = entry->Packet;
+    found = TRUE;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (!found) return STATUS_INVALID_DEVICE_STATE;
+  return AdmissionGpuvaG3BeginJobAs(adapter, context, fence, TRUE, &packet,
+                                    Refusal);
+}
+
+/* RC40: the graph job still pins this process mapping. Recheck its published
+ * write access and its resident CPU shadow before writing through the native
+ * local/pool view; never turn an arbitrary process GPUVA into a CPU pointer. */
+static BOOLEAN AdmissionG3PublishTimestampLocked(ADMISSION_CONTEXT *adapter,
+    ADMISSION_G3_PROCESS *process, ULONGLONG va, ULONGLONG endNs) {
+  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *pte;
+  ULONGLONG ipa, offset;
+  if (!process || process->Poisoned || process->CpuOnlyMappings ||
+      !process->Graph.JobInFlight || !process->Graph.LeaseToken ||
+      process->Graph.Uncertain || !endNs || va < 0x10000ULL ||
+      va >= (1ULL << 39) || (va & 7ULL) ||
+      !AppleAgxGpuvaG3GraphContainsRangeAccess(&process->Graph, va, 8u, TRUE) ||
+      !AppleAgxGpuvaG3GraphTranslateVa(&process->Graph, va, &ipa))
+    return FALSE;
+  pte = AdmissionG3CopyPte(process, va);
+  if (!pte || !pte->Allocation ||
+      pte->Flags != (APPLE_AGX_GPUVA_G3_VALID | APPLE_AGX_GPUVA_G3_WRITE) ||
+      pte->GuestIpa > (~0ULL) - (va & 0xfffULL) ||
+      ipa != pte->GuestIpa + (va & 0xfffULL))
+    return FALSE;
+  RtlZeroMemory(&view, sizeof(view));
+  if (pte->SegmentId == ADMISSION_MEMORY_LOCAL_SEGMENT) {
+    if (!NT_SUCCESS(AdmissionMemoryRuntimeLocalView(adapter, &view))) return FALSE;
+  } else if (pte->SegmentId == ADMISSION_MEMORY_POOL_SEGMENT) {
+    if (!NT_SUCCESS(AdmissionMemoryPoolView(adapter, &view))) return FALSE;
+  } else {
+    return FALSE;
+  }
+  if (!view.CpuAddress ||
+      !AppleAgxGpuvaG3TableSpanWithinLocal(view.GuestIpaAddress, view.Bytes,
+                                         ipa, sizeof(endNs)))
+    return FALSE;
+  offset = ipa - view.GuestIpaAddress;
+  KeMemoryBarrier();
+  RtlCopyMemory((PUCHAR)view.CpuAddress + (SIZE_T)offset, &endNs, sizeof(endNs));
+  KeMemoryBarrier();
+  return TRUE;
+}
+
+VOID AdmissionGpuvaG3LockProfileExport(ADMISSION_CONTEXT *adapter, HANDLE key,
+    BOOLEAN dense) {
+  ADMISSION_G3_STATE *state;
+  UNICODE_STRING name;
+  LARGE_INTEGER frequency;
+  /* V1 receipt (Wom1G3RetainedSlots only): QWORDs version, bytes, first
+   * slot, count, quarantined mask, leases, reuses, steals, releases,
+   * quarantines, recovered quarantines, clock; v2: 8 release source lines
+   * and their counts. */
+  ULONGLONG slots[28];
+  ULONG site;
+  if (adapter == NULL || key == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (state == NULL) return;
+  (void)KeQueryPerformanceCounter(&frequency);
+  /* Raw lock: this export is not one of the profiled sites. */
+  ExAcquireFastMutex(&state->Lock);
+  if (!state->LockProfile.Enabled) {
+    state->LockProfile.Version = 1u;
+    state->LockProfile.Bytes = sizeof(state->LockProfile);
+    state->LockProfile.QpcFrequency = (ULONGLONG)frequency.QuadPart;
+    /* 100 us */
+    state->LockProfile.ThresholdTicks = (ULONGLONG)frequency.QuadPart / 10000ULL;
+    state->LockProfile.Enabled = 1u;
+  }
+  RtlCopyMemory(&state->LockProfileSnapshot, &state->LockProfile,
+                sizeof(state->LockProfileSnapshot));
+  state->BeginSplits.Version = 1u;
+  state->BeginSplits.Bytes = sizeof(state->BeginSplits);
+  RtlCopyMemory(&state->BeginSplitsSnapshot, &state->BeginSplits,
+                sizeof(state->BeginSplitsSnapshot));
+  slots[0] = 2u; slots[1] = sizeof(slots);
+  for (site = 0u; site < 8u; ++site) {
+    slots[12u + site] = state->Slots.ReleaseSite[site];
+    slots[20u + site] = state->Slots.ReleaseSiteCount[site];
+  }
+  slots[2] = state->Slots.First; slots[3] = state->Slots.Count;
+  slots[4] = state->Slots.Quarantined; slots[5] = state->Slots.Leases;
+  slots[6] = state->Slots.Reuses; slots[7] = state->Slots.Steals;
+  slots[8] = state->Slots.Releases; slots[9] = state->Slots.Quarantines;
+  slots[10] = state->Slots.Recovered; slots[11] = state->Slots.Clock;
+  ExReleaseFastMutex(&state->Lock);
+  if (slots[3]) {
+    RtlInitUnicodeString(&name, L"Wom1G3RetainedSlotsReceipt");
+    (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, slots, sizeof(slots));
+  }
+  RtlInitUnicodeString(&name, L"Wom1G3LockProfile");
+  (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &state->LockProfileSnapshot,
+                      sizeof(state->LockProfileSnapshot));
+  RtlInitUnicodeString(&name, L"Wom1G3BeginSplit");
+  (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &state->BeginSplitsSnapshot,
+                      sizeof(state->BeginSplitsSnapshot));
+  if (dense) {
+    RtlInitUnicodeString(&name, L"Wom1G3LockProfileHot");
+    (void)ZwSetValueKey(key, &name, 0u, REG_BINARY,
+                        &state->LockProfileSnapshot,
+                        sizeof(state->LockProfileSnapshot));
+  }
+}
+
+BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG fence, ULONGLONG timestampVa,
+    ULONGLONG timestampEndNs) {
   ADMISSION_G3_STATE *state;
   ADMISSION_G3_PROCESS *process;
   BOOLEAN complete;
@@ -2901,11 +4561,21 @@ BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
   if (state == NULL) return FALSE;
   ExAcquireFastMutex(&state->Lock);
   process = state->ActiveProcess;
-  if (process == NULL && state->LastCompletedFence == fence) {
+  /* A retried completion; rc102: the successor may run meanwhile. */
+  if ((process == NULL || state->ActiveFence != fence) &&
+      state->LastCompletedFence == fence) {
     ExReleaseFastMutex(&state->Lock);
     return TRUE;
   }
   if (process == NULL || state->ActiveFence != fence) {
+    ExReleaseFastMutex(&state->Lock);
+    return FALSE;
+  }
+  if (timestampVa &&
+      (context == NULL || context->GpuvaG3Process != process ||
+       context->GpuvaG3Poisoned ||
+       !AdmissionG3PublishTimestampLocked(adapter, process, timestampVa,
+                                         timestampEndNs))) {
     ExReleaseFastMutex(&state->Lock);
     return FALSE;
   }
@@ -2916,8 +4586,18 @@ BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
       if (s->Queued && s->Started && s->Fence==fence) {
         s->GpuDone=1u;state->PrivateCompletionFence=fence;
       }
-    state->ActiveProcess = NULL;
-    state->ActiveFence = 0u;
+    if (state->SuccessorFence != 0u) {
+      /* rc102: the job kicked behind it is the active job now; the graph
+       * lease stays with it (GraphEndJob ended only the older job). */
+      state->ActiveContext = state->SuccessorContext;
+      state->ActiveFence = state->SuccessorFence;
+      state->SuccessorContext = NULL;
+      state->SuccessorFence = 0u;
+    } else {
+      state->ActiveProcess = NULL;
+      state->ActiveContext = NULL;
+      state->ActiveFence = 0u;
+    }
     state->LastCompletedFence = fence;
   } else {
     ADMISSION_G3_POISON(process,1u);
@@ -2926,6 +4606,52 @@ BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
   /* EXP1138: wake escapes waiting for this process's job to end. */
   if (complete) KeSetEvent(&state->JobEvent, IO_NO_INCREMENT, FALSE);
   return complete;
+}
+
+BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *adapter, ULONG fence) {
+  return AdmissionGpuvaG3CompleteJobTimestamp(adapter, NULL, fence, 0ULL, 0ULL);
+}
+
+/* rc102: the job of this fence never reached the firmware (render_admission.h). */
+_Use_decl_annotations_ VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *adapter,
+    ULONG fence) {
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  if (adapter == NULL || fence == 0u || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (state == NULL) return;
+  ExAcquireFastMutex(&state->Lock);
+  process = state->ActiveProcess;
+  if (process != NULL &&
+      (state->SuccessorFence == fence || state->ActiveFence == fence)) {
+    ADMISSION_G3_PRIVATE_SCENE *s;
+    /* The reset proved the firmware never received this job (a kicked
+     * successor or an active job whose submit failed): its graph job ends
+     * unrun and its scene was never started on the GPU. */
+    /* V1: an aborted job leaves no retained lease (reset baseline). */
+    if (!AppleAgxGpuvaG3GraphEndJob(&process->Graph) ||
+        !AppleAgxGpuvaG3GraphReleaseRetained(&process->Graph))
+      ADMISSION_G3_POISON(process,1u);
+    for (s = process->PrivateScenes; s; s = s->Next)
+      if (s->Queued && s->Started && s->Fence == fence && !s->GpuDone)
+        s->Started = 0u;
+    if (state->SuccessorFence == fence) {
+      state->SuccessorContext = NULL;
+      state->SuccessorFence = 0u;
+    } else if (state->SuccessorFence != 0u) {
+      state->ActiveContext = state->SuccessorContext;
+      state->ActiveFence = state->SuccessorFence;
+      state->SuccessorContext = NULL;
+      state->SuccessorFence = 0u;
+    } else {
+      state->ActiveProcess = NULL;
+      state->ActiveContext = NULL;
+      state->ActiveFence = 0u;
+    }
+  }
+  ExReleaseFastMutex(&state->Lock);
+  KeSetEvent(&state->JobEvent, IO_NO_INCREMENT, FALSE);
 }
 
 NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
@@ -2955,7 +4681,8 @@ NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
       args->DmaBufferPrivateDataSize == 0u ||
       args->DmaBufferPrivateDataSize % sizeof(ADMISSION_PAGING_RECORD) != 0u ||
       (args->Flags.Value & ~(1u << 7u)) != pagingFlags.Value ||
-      args->NodeOrdinal != 0u ||
+      args->NodeOrdinal != adapter->LiveAdditivePaging ||
+      context->Object.NodeOrdinal != args->NodeOrdinal ||
       args->EngineOrdinal != 0u || args->SubmissionFenceId == 0u ||
       KeGetCurrentIrql() > DISPATCH_LEVEL)
     return AdmissionG4SubmitReject(adapter, context, args,
@@ -2987,10 +4714,15 @@ NTSTATUS AdmissionGpuvaG3SubmitVirtualPaging(
       status, (ULONG)status, TRUE);
 }
 
+/* rc81 (EXP2011): G4 parse access runs under the G3 state lock, at submit
+ * and again at BeginJob. A large range (the grown TVB heap: 6624 pages at
+ * 828 blocks) is proven once and then answered from the graph's proof
+ * cache until a mutation of a crossed leaf table or the topology drops it,
+ * so a job's proof no longer scales with the TVB size. */
 static int AdmissionG4GraphAccess(void *opaque, unsigned long long va,
                                   unsigned int bytes, int write) {
   APPLE_AGX_GPUVA_G3_GRAPH *graph = (APPLE_AGX_GPUVA_G3_GRAPH *)opaque;
-  return AppleAgxGpuvaG3GraphContainsRangeAccess(
+  return AppleAgxGpuvaG3GraphContainsRangeAccessCached(
       graph, va, bytes, write != 0) ? 1 : 0;
 }
 
@@ -3208,6 +4940,9 @@ static int AdmissionG4GraphAccessTyped(void *opaque, unsigned long long va,
   if (process == NULL) return 0;
   if (bytes && va < process->PrivateVa + APPLE_AGX_G3_PRIVATE_VA_BYTES &&
       va + bytes > process->PrivateVa) return 0;
+  /* rc80: the TVB window is KMD-owned like the private window. */
+  if (bytes && process->TvbVa && va < process->TvbVa + APPLE_AGX_G3_TVB_VA_BYTES &&
+      va + bytes > process->TvbVa) return 0;
   if (kind == AppleAgxG4AccessCpuEnvelope)
     return !write && AdmissionG4LogicalEnvelopeAccess(process, va, bytes);
   return AdmissionG4GraphAccess(&process->Graph, va, bytes, write);
@@ -3262,6 +4997,7 @@ static void AdmissionG4SnapshotFailure(
   snapshot->AccessBytes = failure->Bytes;
   snapshot->Write = failure->Write;
   snapshot->OwnerProcessId = process->Graph.ProcessId;
+  snapshot->OwnerOsProcessId = process->OsProcessId;
   snapshot->RootIpa = process->Graph.RootIpa;
   snapshot->ProcessGeneration = process->Graph.ProcessGeneration;
   snapshot->MappingGeneration = process->Graph.MappingGeneration;
@@ -3287,6 +5023,28 @@ static void AdmissionG4SnapshotFailure(
     snapshot->LogicalIpa[i] = pte->GuestIpa;
     snapshot->LogicalSegment[i] = pte->SegmentId;
     snapshot->LogicalFlags[i] = pte->Flags;
+    snapshot->LogicalAllocation[i] = pte->Allocation;
+    snapshot->LogicalAllocationOffset[i] = pte->AllocationOffset;
+  }
+  /* Select the actual failing 4-KiB page, not necessarily group[0]. Both
+   * the shadow and leaf metadata writers use the caller's G3 state lock.
+   * Existing fill/transfer counters are best-effort unlocked diagnostics;
+   * validate the copied identity too. Never dereference a shadow handle. */
+  if (process->State != NULL) {
+    ULONGLONG key = snapshot->LogicalAllocation[(failure->Va >> 12) & 3u];
+    const ADMISSION_G3_ALLOC_TRACK *track = &process->State->AllocTrack[
+        (ULONG)((key >> 6) ^ (key >> 16)) % ADMISSION_G3_ALLOC_TRACK_COUNT];
+    if (key != 0ULL && track->Allocation == key &&
+        track->ProcessId == process->Graph.ProcessId) {
+      snapshot->Track = *track;
+      if (snapshot->Track.Allocation == key &&
+          snapshot->Track.ProcessId == process->Graph.ProcessId &&
+          track->Allocation == key &&
+          track->ProcessId == process->Graph.ProcessId)
+        snapshot->TrackFound = 1u;
+      else
+        RtlZeroMemory(&snapshot->Track, sizeof(snapshot->Track));
+    }
   }
 }
 
@@ -3335,7 +5093,7 @@ static BOOLEAN AdmissionG4ResolveOutput(
     packet->DestinationCpuToken =
         (ULONGLONG)(ULONG_PTR)((PUCHAR)local->CpuAddress + (SIZE_T)offset);
     packet->DestinationPhysical = local->HostPhysicalAddress + offset;
-  } else if (AppleAgxGpuvaG3GraphContainsRangeAccess(&process->Graph,
+  } else if (AppleAgxGpuvaG3GraphContainsRangeAccessCached(&process->Graph,
                  attachment->Pointer, (UINT)attachment->Size, TRUE)) {
     packet->DestinationCpuToken = 0ULL;
     packet->DestinationPhysical = 0ULL;
@@ -3417,6 +5175,71 @@ static BOOLEAN AdmissionG4PendingAdmissible(ADMISSION_CONTEXT *adapter,
   return admissible;
 }
 
+/* Receipt only. Caller holds SchedulerLock at the failing decision, before
+ * rollback. The Admissible bit records the original path selection; never
+ * re-run PendingAdmissible here (it also checks runtime state outside this
+ * lock). Raw state flags are observations, not all causal on every path. */
+static VOID AdmissionG4CapturePrepareLocked(ADMISSION_CONTEXT *adapter,
+    const ADMISSION_RENDER_CONTEXT *context,
+    const DXGKARG_SUBMITCOMMANDVIRTUAL *args, ULONG site, ULONG mask,
+    struct _ADMISSION_G4_SUBMIT_FAILURE *detail) {
+  ULONG tail, distance;
+  if (detail == NULL) return;
+  tail = (adapter->G4PendingHead + adapter->G4PendingCount) %
+      ADMISSION_G4_PENDING_CAPACITY;
+  detail->PrepareSite = site;
+  detail->PrepareFence = args->SubmissionFenceId;
+  detail->PrepareFenceOutstanding = context->Object.FenceOutstanding;
+  detail->PrepareSecondFence = context->GpuvaG3SecondFence;
+  detail->PreparePendingCount = adapter->G4PendingCount;
+  detail->PreparePendingCapacity = ADMISSION_G4_PENDING_CAPACITY;
+  detail->PrepareTail = tail;
+  detail->PrepareTailState = (ULONG)adapter->G4Pending[tail].State;
+  detail->PreparePacketState = (ULONG)AdmissionRenderPacketState(&adapter->RenderPacket);
+  detail->PrepareSchedulerFaulted = (ULONG)InterlockedCompareExchange(
+      &adapter->SchedulerFaulted, 0, 0);
+  detail->PreparePreemptionPhase = (ULONG)adapter->Scheduler.PreemptionPhase;
+  detail->PrepareSchedulerQueueCount = adapter->Scheduler.QueueCount;
+  detail->PrepareSchedulerQueueCapacity = APPLE_AGX_SCHEDULER_QUEUE_CAPACITY;
+  detail->PrepareSchedulerLastSubmittedFence = adapter->Scheduler.LastSubmittedFence;
+  detail->PrepareEntryState = 0u; /* Set by the publish caller, if applicable. */
+  if (detail->PrepareFenceOutstanding != 0u)
+    mask |= AdmissionG4PrepareFenceOutstanding;
+  if (detail->PrepareSecondFence != 0u)
+    mask |= AdmissionG4PrepareSecondFence;
+  if (detail->PreparePendingCount >= ADMISSION_G4_PENDING_CAPACITY)
+    mask |= AdmissionG4PreparePendingFull;
+  if (detail->PrepareTailState != (ULONG)AdmissionG4PendingFree)
+    mask |= AdmissionG4PrepareTailBusy;
+  if (detail->PreparePacketState != AdmissionRenderPacketEmpty)
+    mask |= AdmissionG4PreparePacketBusy;
+  if (detail->PrepareSchedulerFaulted != 0u)
+    mask |= AdmissionG4PrepareFaulted;
+  if ((mask & AdmissionG4PrepareQueueRefused) != 0u) {
+    /* Mirror QueueFence's read-only predicates; do not call it a second
+     * time. Regression cases compare these with the real scheduler. */
+    if (!AppleAgxSchedulerValidateEngine(&adapter->Scheduler, 0u, 0u))
+      mask |= AdmissionG4PrepareInvalidEngine;
+    if (args->SubmissionFenceId == 0u)
+      mask |= AdmissionG4PrepareZeroFence;
+    if (adapter->Scheduler.QueueCount >= APPLE_AGX_SCHEDULER_QUEUE_CAPACITY)
+      mask |= AdmissionG4PrepareQueueFull;
+    if (adapter->Scheduler.PreemptionPhase != AppleAgxPreemptionIdle &&
+        adapter->Scheduler.PreemptionPhase != AppleAgxPreemptionNotificationClaimed)
+      mask |= AdmissionG4PreparePreemptionBlocked;
+    distance = args->SubmissionFenceId - adapter->Scheduler.LastSubmittedFence;
+    if (distance == 0u || distance >= 0x80000000u)
+      mask |= AdmissionG4PrepareFenceNotAfter;
+  }
+  if (site == AdmissionG4PreparePacket &&
+      detail->PreparePacketState == AdmissionRenderPacketEmpty &&
+      detail->PreparePendingCount == 0u &&
+      detail->PrepareFenceOutstanding == 0u &&
+      detail->PrepareSchedulerFaulted == 0u)
+    mask |= AdmissionG4PreparePacketRefused;
+  detail->PrepareMask = mask;
+}
+
 /* Phase 5a: copy a validated submission into the tail pending entry and
  * queue its fence. The entry is reserved under SchedulerLock, filled outside
  * it, and published with the fence; the worker binds it in order. */
@@ -3428,14 +5251,15 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
     const APPLE_AGX_G4_SUBMIT_VIEW *view,
     const APPLE_AGX_G4_COMPUTE_ENVELOPE *compute,
     const ADMISSION_PRESENT_COMPUTE *present,
-    ULONGLONG mapping_generation) {
+    ULONGLONG mapping_generation,
+    struct _ADMISSION_G4_SUBMIT_FAILURE *detail) {
   ADMISSION_G4_PENDING *entry = NULL;
   KIRQL old_irql;
   ULONG slot;
   BOOLEAN queued = FALSE;
   /* G2: exactly one of a render view, a compute envelope or a present. */
-  if (compute != NULL && present != NULL) return FALSE;
-  if (compute != NULL || present != NULL ?
+  if ((compute != NULL && present != NULL) ||
+      (compute != NULL || present != NULL ?
       (view != NULL || private_scene != NULL ||
        packet->Kind != ADMISSION_RENDER_PACKET_KIND_COMPUTE) :
       (view == NULL || view->Native == NULL || view->Render == NULL ||
@@ -3443,8 +5267,16 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
        view->AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS ||
        view->RenderBytes != sizeof(APPLE_AGX_G4_NATIVE_RENDER) ||
        view->CommandBytes == 0u ||
-       view->CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES))
+       view->CommandBytes > APPLE_AGX_G4_NATIVE_MAX_BYTES))) {
+    if (detail != NULL) {
+      KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+      AdmissionG4CapturePrepareLocked(adapter, context, args,
+          AdmissionG4PrepareShape, AdmissionG4PrepareDeferred |
+          AdmissionG4PrepareAdmissible | AdmissionG4PrepareInvalidShape, detail);
+      KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+    }
     return FALSE;
+  }
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   slot = (adapter->G4PendingHead + adapter->G4PendingCount) %
       ADMISSION_G4_PENDING_CAPACITY;
@@ -3460,6 +5292,10 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
     else
       context->GpuvaG3SecondFence = args->SubmissionFenceId;
   }
+  if (entry == NULL)
+    AdmissionG4CapturePrepareLocked(adapter, context, args,
+        AdmissionG4PrepareReserve,
+        AdmissionG4PrepareDeferred | AdmissionG4PrepareAdmissible, detail);
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
   if (entry == NULL)
     return FALSE;
@@ -3500,6 +5336,13 @@ static BOOLEAN AdmissionG4PendingQueue(ADMISSION_CONTEXT *adapter,
     ++adapter->G4PendingCount;
     queued = TRUE;
   } else {
+    AdmissionG4CapturePrepareLocked(adapter, context, args,
+        AdmissionG4PreparePublish, AdmissionG4PrepareDeferred |
+        AdmissionG4PrepareAdmissible |
+        (entry->State == AdmissionG4PendingFilling ?
+            AdmissionG4PrepareQueueAttempted | AdmissionG4PrepareQueueRefused :
+            AdmissionG4PrepareEntryChanged), detail);
+    if (detail != NULL) detail->PrepareEntryState = (ULONG)entry->State;
     entry->State = AdmissionG4PendingFree;
     entry->Context = NULL;
     AdmissionContextRetireFence(context, args->SubmissionFenceId);
@@ -3605,7 +5448,10 @@ _Use_decl_annotations_ VOID AdmissionG4PendingDropLocked(
     ADMISSION_G4_PENDING *entry = &adapter->G4Pending[
         (adapter->G4PendingHead + index) % ADMISSION_G4_PENDING_CAPACITY];
     ADMISSION_RENDER_CONTEXT *context = entry->Context;
-    if (entry->State == AdmissionG4PendingDropped) {
+    /* rc102: a kicked entry is with the firmware: it completes (or a reset
+     * aborts it, AdmissionG4PendingAbortKickedLocked). */
+    if (entry->State == AdmissionG4PendingDropped ||
+        entry->State == AdmissionG4PendingKicked) {
       kept = 1u;
       continue;
     }
@@ -3618,7 +5464,10 @@ _Use_decl_annotations_ VOID AdmissionG4PendingDropLocked(
     }
     if (adapter->DispatchedFence == entry->Fence)
       adapter->DispatchedFence = 0u;
-    if (entry->State == AdmissionG4PendingBinding) {
+    /* rc90: a Prebound entry holds the backend image like a Binding one;
+     * the worker that bound it releases the image and frees it. */
+    if (entry->State == AdmissionG4PendingBinding ||
+        entry->State == AdmissionG4PendingPrebound) {
       entry->State = AdmissionG4PendingDropped;
       kept = 1u;
     } else {
@@ -3627,6 +5476,349 @@ _Use_decl_annotations_ VOID AdmissionG4PendingDropLocked(
     }
   }
   adapter->G4PendingCount = kept;
+}
+
+/* rc90 build-ahead (render_job_ahead.h). The decision values mirror the
+ * enums they are compared with. SchedulerFaulted set here: file tag 5. */
+C_ASSERT((UINT)AdmissionG4PendingQueued == ADMISSION_JOB_AHEAD_PENDING_QUEUED);
+C_ASSERT((UINT)AdmissionG4PendingDropped == ADMISSION_JOB_AHEAD_PENDING_DROPPED);
+C_ASSERT((UINT)AdmissionG4PendingPrebound == ADMISSION_JOB_AHEAD_PENDING_PREBOUND);
+C_ASSERT((UINT)AdmissionRenderPacketEmpty == ADMISSION_JOB_AHEAD_PACKET_EMPTY);
+C_ASSERT((UINT)AdmissionRenderPacketActive == ADMISSION_JOB_AHEAD_PACKET_ACTIVE);
+C_ASSERT(AppleAgxPreemptionIdle == 0);
+
+_Use_decl_annotations_ VOID AdmissionJobAheadFillLocked(
+    ADMISSION_CONTEXT *adapter, ADMISSION_JOB_AHEAD_STATE *s) {
+  const ADMISSION_BACKEND_IMAGE *image;
+  const ADMISSION_G4_PENDING *head;
+  if (adapter == NULL || s == NULL) return;
+  image = &adapter->BackendImage;
+  head = &adapter->G4Pending[adapter->G4PendingHead];
+  s->Faulted = InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) != 0
+      ? 1u : 0u;
+  s->PreemptionPhase =
+      (unsigned int)AppleAgxSchedulerPreemptionPhase(&adapter->Scheduler);
+  s->PagingPending =
+      InterlockedCompareExchange(&adapter->PagingPending, 0, 0) != 0 ? 1u : 0u;
+  s->QueuedFence = AppleAgxSchedulerQueuedFence(&adapter->Scheduler, 0u, 0u);
+  s->ActiveFence = AppleAgxSchedulerActiveFence(&adapter->Scheduler, 0u, 0u);
+  s->DispatchedFence = adapter->DispatchedFence;
+  s->PacketState = (unsigned int)AdmissionRenderPacketState(&adapter->RenderPacket);
+  s->PacketFence = adapter->RenderPacket.Description.Fence;
+  s->PendingCount = adapter->G4PendingCount;
+  s->PendingHeadState = adapter->G4PendingCount != 0u ? (unsigned int)head->State : 0u;
+  s->PendingHeadFence = adapter->G4PendingCount != 0u ? head->Fence : 0u;
+  s->ImageBoundFence = image->BoundFence;
+  s->ImageKind = image->BoundFence == 0u ? ADMISSION_JOB_AHEAD_IMAGE_NONE :
+      image->G4Compute ? ADMISSION_JOB_AHEAD_IMAGE_G4_COMPUTE :
+      image->PresentCompute ? ADMISSION_JOB_AHEAD_IMAGE_PRESENT :
+      image->G4Native ? ADMISSION_JOB_AHEAD_IMAGE_G4_RENDER :
+      ADMISSION_JOB_AHEAD_IMAGE_OTHER;
+  s->ImageFastRelease = image->BoundFence != 0u &&
+      AdmissionBackendImageReleasesWithoutPrepare(image,
+          &adapter->BackendSnapshot, image->BoundFence) ? 1u : 0u;
+}
+
+/* rc90 build-ahead: while the running job (State->JobFence, its image
+ * released right after its kick) runs, bind the head pending submission,
+ * the scheduler's next fence, into the free backend image: the same binds
+ * as AdmissionG4PendingBindHead, without the render packet, which still
+ * holds the running job. The context's DMA range and mapping generation
+ * are applied only when the worker promotes the entry (BeginJob of the
+ * running job already read them). A refused or dropped bind leaves the
+ * entry for the ordinary path. */
+_Use_decl_annotations_ BOOLEAN AdmissionG4PendingPrebindHead(
+    ADMISSION_CONTEXT *adapter, ADMISSION_JOB_AHEAD_STATE *State,
+    ULONG *Refusal) {
+  ADMISSION_G4_PENDING *entry;
+  APPLE_AGX_G4_SUBMIT_VIEW view;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  KIRQL old_irql;
+  ULONG refusal;
+  BOOLEAN bound, dropped, prebound = FALSE;
+  if (Refusal != NULL) *Refusal = 0u;
+  if (adapter == NULL || State == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return FALSE;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  AdmissionJobAheadFillLocked(adapter, State);
+  refusal = AdmissionJobAheadPrebindRefusal(State);
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  if (refusal == 0u && adapter->G4PrebindFence != 0u) refusal = 27u;
+  if (refusal == 0u) {
+    /* Binding: a preemption or reset meanwhile marks it Dropped. */
+    entry->State = AdmissionG4PendingBinding;
+    adapter->G4PrebindFence = entry->Fence;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (Refusal != NULL) *Refusal = refusal;
+  if (refusal != 0u) return FALSE;
+  view = entry->View;
+  view.Native = entry->Native;
+  view.Render = entry->Render;
+  view.Attachments = entry->Attachments;
+  RtlZeroMemory(&binding, sizeof(binding));
+  bound = (entry->Present ?
+      AdmissionBackendImageBindPresentCompute(&adapter->BackendImage,
+          entry->Fence, &entry->PresentJob) :
+      entry->Compute ?
+      AdmissionBackendImageBindG4Compute(&adapter->BackendImage,
+          entry->Fence, &entry->ComputeEnvelope) :
+      AdmissionBackendImageBindG4Submission(&adapter->BackendImage,
+          &entry->Packet, (PVOID)(ULONG_PTR)entry->Packet.DestinationCpuToken,
+          &view, &binding)) ? TRUE : FALSE;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  dropped = entry->State == AdmissionG4PendingDropped ? TRUE : FALSE;
+  if (bound && !dropped) {
+    entry->State = AdmissionG4PendingPrebound;
+    prebound = TRUE;
+  } else {
+    /* As AdmissionG4PendingBindHead: the release of a G4 binding restores
+     * the snapshot; a refused bind left nothing bound (the next bind
+     * re-Prepares the arena). */
+    if (bound)
+      (void)AdmissionBackendImageReleaseSubmissionRestore(
+          &adapter->BackendImage, &adapter->BackendSnapshot, entry->Fence);
+    if (dropped) {
+      entry->State = AdmissionG4PendingFree;
+      entry->Context = NULL;
+      adapter->G4PendingHead = (adapter->G4PendingHead + 1u) %
+          ADMISSION_G4_PENDING_CAPACITY;
+      --adapter->G4PendingCount;
+    } else {
+      entry->State = AdmissionG4PendingQueued;
+    }
+    adapter->G4PrebindFence = 0u;
+    if (Refusal != NULL) *Refusal = dropped ? 28u : 29u;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  return prebound;
+}
+
+/* rc90 build-ahead: the running job completed; its worker moves the
+ * Prebound head into the empty render packet as Queued, exactly the state
+ * AdmissionG4PendingBindHead leaves (the image already holds the binding). */
+_Use_decl_annotations_ BOOLEAN AdmissionG4PendingAheadPromoteLocked(
+    ADMISSION_CONTEXT *adapter, ULONG fence) {
+  ADMISSION_G4_PENDING *entry;
+  ADMISSION_RENDER_CONTEXT *context;
+  if (adapter == NULL || fence == 0u || adapter->G4PendingCount == 0u)
+    return FALSE;
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  context = entry->Context;
+  if (entry->State != AdmissionG4PendingPrebound || entry->Fence != fence ||
+      adapter->G4PrebindFence != fence || context == NULL ||
+      adapter->BackendImage.BoundFence != fence ||
+      AdmissionRenderPacketState(&adapter->RenderPacket) !=
+          AdmissionRenderPacketEmpty ||
+      AppleAgxSchedulerQueuedFence(&adapter->Scheduler, 0u, 0u) != fence ||
+      !AdmissionRenderPacketPrepare(&adapter->RenderPacket, &entry->Packet))
+    return FALSE;
+  if (!AdmissionRenderPacketQueue(&adapter->RenderPacket, entry->Fence,
+          (ULONGLONG)(ULONG_PTR)context, entry->Packet.PrivateDataToken, 0u,
+          entry->Packet.DmaEnd)) {
+    (void)AdmissionRenderPacketCancelPrepared(&adapter->RenderPacket,
+        (ULONGLONG)(ULONG_PTR)context);
+    return FALSE;
+  }
+  context->GpuvaG3MappingGeneration = entry->MappingGeneration;
+  context->GpuvaG3DmaBufferVa = entry->DmaBufferVa;
+  context->GpuvaG3DmaBufferBytes = entry->DmaBufferBytes;
+  InterlockedIncrement(&adapter->SubmitPath.Binds);
+  entry->State = AdmissionG4PendingFree;
+  entry->Context = NULL;
+  adapter->G4PendingHead = (adapter->G4PendingHead + 1u) %
+      ADMISSION_G4_PENDING_CAPACITY;
+  --adapter->G4PendingCount;
+  adapter->G4PrebindFence = 0u;
+  return TRUE;
+}
+
+/* rc102 (render_admission.h): the Prebound head is kicked behind the
+ * running job. */
+_Use_decl_annotations_ BOOLEAN AdmissionG4PendingKickLocked(
+    ADMISSION_CONTEXT *adapter, ULONG fence) {
+  ADMISSION_G4_PENDING *entry;
+  ADMISSION_RENDER_CONTEXT *context;
+  if (adapter == NULL || fence == 0u || adapter->G4PendingCount == 0u)
+    return FALSE;
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  context = entry->Context;
+  if (entry->State != AdmissionG4PendingPrebound || entry->Fence != fence ||
+      adapter->G4PrebindFence != fence || context == NULL ||
+      adapter->BackendImage.BoundFence != fence ||
+      !AppleAgxSchedulerKickQueuedFence(&adapter->Scheduler, 0u, 0u, fence))
+    return FALSE;
+  context->GpuvaG3MappingGeneration = entry->MappingGeneration;
+  context->GpuvaG3DmaBufferVa = entry->DmaBufferVa;
+  context->GpuvaG3DmaBufferBytes = entry->DmaBufferBytes;
+  entry->State = AdmissionG4PendingKicked;
+  return TRUE;
+}
+
+/* Depth-2 kick fallback (render_admission.h): undo KickLocked for a kick the
+ * firmware never saw. The context keeps the entry's DMA range and mapping
+ * generation (AheadPromoteLocked writes the same values). */
+_Use_decl_annotations_ BOOLEAN AdmissionG4PendingUnkickLocked(
+    ADMISSION_CONTEXT *adapter, ULONG fence) {
+  ADMISSION_G4_PENDING *entry;
+  if (adapter == NULL || fence == 0u || adapter->G4PendingCount == 0u)
+    return FALSE;
+  APPLE_AGX_PREEMPTION_PHASE phase;
+  ADMISSION_RENDER_CONTEXT *context;
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  context = entry->Context;
+  phase = AppleAgxSchedulerPreemptionPhase(&adapter->Scheduler);
+  if (entry->State != AdmissionG4PendingKicked || entry->Fence != fence ||
+      context == NULL || adapter->G4PrebindFence != fence ||
+      adapter->BackendImage.BoundFence != fence ||
+      !AppleAgxSchedulerUnkickFence(&adapter->Scheduler, 0u, 0u, fence))
+    return FALSE;
+  if (phase == AppleAgxPreemptionIdle) {
+    entry->State = AdmissionG4PendingPrebound;
+    return TRUE;
+  }
+  /* EXP2221: a boundary preemption began while the fence was kicked, so
+   * AdmissionG4PendingDropLocked kept its entry; the scheduler now hands the
+   * fence back to VidSch. Drop the entry as DropLocked drops a Prebound one:
+   * its private scene is preempted, the context retires the fence, and the
+   * worker that bound the image releases it (Dropped). */
+  if (context->Object.FenceOutstanding == fence ||
+      context->GpuvaG3SecondFence == fence) {
+    AdmissionGpuvaG3PrivatePreempt(context, fence);
+    AdmissionContextRetireFence(context, fence);
+  }
+  if (adapter->DispatchedFence == fence)
+    adapter->DispatchedFence = 0u;
+  entry->State = AdmissionG4PendingDropped;
+  return TRUE;
+}
+
+/* rc102: the kicked head becomes the active packet: the binds and the
+ * activation the dispatch and the worker would do for it (its image and
+ * the firmware already hold it). */
+_Use_decl_annotations_ BOOLEAN AdmissionG4PendingAdoptLocked(
+    ADMISSION_CONTEXT *adapter, ULONG fence) {
+  ADMISSION_G4_PENDING *entry;
+  ADMISSION_RENDER_CONTEXT *context;
+  if (adapter == NULL || fence == 0u || adapter->G4PendingCount == 0u)
+    return FALSE;
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  context = entry->Context;
+  if (entry->State != AdmissionG4PendingKicked || entry->Fence != fence ||
+      context == NULL ||
+      AppleAgxSchedulerKickedFence(&adapter->Scheduler) != fence ||
+      AppleAgxSchedulerActiveFence(&adapter->Scheduler, 0u, 0u) != 0u ||
+      AdmissionRenderPacketState(&adapter->RenderPacket) !=
+          AdmissionRenderPacketEmpty ||
+      !AdmissionRenderPacketPrepare(&adapter->RenderPacket, &entry->Packet))
+    return FALSE;
+  if (!AdmissionRenderPacketQueue(&adapter->RenderPacket, entry->Fence,
+          (ULONGLONG)(ULONG_PTR)context, entry->Packet.PrivateDataToken, 0u,
+          entry->Packet.DmaEnd)) {
+    (void)AdmissionRenderPacketCancelPrepared(&adapter->RenderPacket,
+        (ULONGLONG)(ULONG_PTR)context);
+    return FALSE;
+  }
+  if (!AppleAgxSchedulerActivateFence(&adapter->Scheduler, 0u, 0u, fence) ||
+      !AdmissionRenderPacketActivate(&adapter->RenderPacket, fence)) {
+    /* The packet holds the kicked job; nothing can complete it now. */
+    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x50000L | __LINE__, 0);
+    return FALSE;
+  }
+  adapter->DispatchedFence = fence;
+  InterlockedIncrement(&adapter->SubmitPath.Binds);
+  entry->State = AdmissionG4PendingFree;
+  entry->Context = NULL;
+  adapter->G4PendingHead = (adapter->G4PendingHead + 1u) %
+      ADMISSION_G4_PENDING_CAPACITY;
+  --adapter->G4PendingCount;
+  adapter->G4PrebindFence = 0u;
+  return TRUE;
+}
+
+_Use_decl_annotations_ VOID AdmissionG4PendingAbortKickedLocked(
+    ADMISSION_CONTEXT *adapter) {
+  ADMISSION_G4_PENDING *entry;
+  ADMISSION_RENDER_CONTEXT *context;
+  if (adapter == NULL || adapter->G4PendingCount == 0u)
+    return;
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  if (entry->State != AdmissionG4PendingKicked)
+    return;
+  context = entry->Context;
+  if (context != NULL &&
+      (context->Object.FenceOutstanding == entry->Fence ||
+       context->GpuvaG3SecondFence == entry->Fence)) {
+    /* It may have run: cancelled, as the aborted active packet's scene. */
+    AdmissionGpuvaG3PrivateCancel(context, entry->Fence, FALSE);
+    AdmissionContextRetireFence(context, entry->Fence);
+  }
+  if (adapter->DispatchedFence == entry->Fence)
+    adapter->DispatchedFence = 0u;
+  /* The image still holds its binding (it was never adopted). */
+  if (adapter->BackendImage.BoundFence == entry->Fence &&
+      !AdmissionBackendImageReleaseSubmission(&adapter->BackendImage,
+                                             entry->Fence))
+    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x50000L | __LINE__, 0);
+  entry->State = AdmissionG4PendingFree;
+  entry->Context = NULL;
+  adapter->G4PendingHead = (adapter->G4PendingHead + 1u) %
+      ADMISSION_G4_PENDING_CAPACITY;
+  --adapter->G4PendingCount;
+  adapter->G4PrebindFence = 0u;
+}
+
+/* rc90 build-ahead: the worker leaves (or does not chain) with an entry
+ * still bound ahead: release the image; a dropped entry is freed (its
+ * context was released by the drop), any other returns to Queued for
+ * AdmissionG4PendingBindHead. PASSIVE_LEVEL, no lock held. */
+_Use_decl_annotations_ VOID AdmissionG4PendingAheadUnbind(
+    ADMISSION_CONTEXT *adapter) {
+  ADMISSION_G4_PENDING *entry;
+  KIRQL old_irql;
+  ULONG fence;
+  BOOLEAN dropped, released;
+  if (adapter == NULL) return;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  fence = adapter->G4PrebindFence;
+  entry = &adapter->G4Pending[adapter->G4PendingHead];
+  /* rc102: a kicked entry belongs to the firmware: it is adopted or a
+   * reset aborts it, never unbound. */
+  if (fence != 0u && adapter->G4PendingCount != 0u && entry->Fence == fence &&
+      entry->State == AdmissionG4PendingKicked) {
+    KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+    return;
+  }
+  if (fence == 0u || adapter->G4PendingCount == 0u || entry->Fence != fence ||
+      (entry->State != AdmissionG4PendingPrebound &&
+       entry->State != AdmissionG4PendingDropped)) {
+    if (fence != 0u)
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x50000L | __LINE__, 0);
+    adapter->G4PrebindFence = 0u;
+    KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+    return;
+  }
+  dropped = entry->State == AdmissionG4PendingDropped ? TRUE : FALSE;
+  if (!dropped) entry->State = AdmissionG4PendingBinding;
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  released = AdmissionBackendImageReleaseSubmissionRestore(
+      &adapter->BackendImage, &adapter->BackendSnapshot, fence) ? TRUE : FALSE;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (dropped || entry->State == AdmissionG4PendingDropped) {
+    entry->State = AdmissionG4PendingFree;
+    entry->Context = NULL;
+    adapter->G4PendingHead = (adapter->G4PendingHead + 1u) %
+        ADMISSION_G4_PENDING_CAPACITY;
+    --adapter->G4PendingCount;
+  } else {
+    entry->State = AdmissionG4PendingQueued;
+  }
+  adapter->G4PrebindFence = 0u;
+  /* The image could not return to its Prepare state: no later bind can
+   * succeed; the TDR reset recovers. */
+  if (!released)
+    InterlockedCompareExchange(&adapter->SchedulerFaulted, 0x50000L | __LINE__, 0);
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
 }
 
 /* G2: a compute envelope becomes one standalone RunCompute job. It takes
@@ -3656,9 +5848,10 @@ static NTSTATUS AdmissionG4SubmitComputeLocked(ADMISSION_CONTEXT *adapter,
   if (args->DmaBufferUmdPrivateDataSize == sizeof(envelope) &&
       args->DmaBufferPrivateDataSize >= sizeof(envelope)) {
     RtlCopyMemory(&envelope, args->pDmaBufferPrivateData, sizeof(envelope));
-    result = AppleAgxG4ParseComputeEx(&envelope, (unsigned int)sizeof(envelope),
+    result = AppleAgxG4ParseComputeFlagsEx(&envelope, (unsigned int)sizeof(envelope),
         (unsigned int)sizeof(envelope), args->DmaBufferVirtualAddress,
         args->DmaBufferSize, APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+        ADMISSION_G4_COMPUTE_PARSE_FLAGS(adapter),
         AdmissionG4GraphAccessTyped, process, &view, &failure);
   }
   mapping_generation = process->Graph.MappingGeneration;
@@ -3681,13 +5874,13 @@ static NTSTATUS AdmissionG4SubmitComputeLocked(ADMISSION_CONTEXT *adapter,
   packet.DmaEnd = view.CommandBytes;
   if (deferred) {
     if (AdmissionG4PendingQueue(adapter, state, context, NULL, args,
-            &packet, NULL, &envelope, NULL, mapping_generation)) {
+            &packet, NULL, &envelope, NULL, mapping_generation, &detail)) {
       InterlockedIncrement(&adapter->SubmitPath.Deferred);
       AdmissionDispatchQueuedWork(adapter);
       return STATUS_SUCCESS;
     }
-    return AdmissionG4SubmitReject(adapter, context, args,
-        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
+    return AdmissionG4SubmitRejectDetail(adapter, context, args,
+        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE, &detail);
   }
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
@@ -3699,12 +5892,18 @@ static NTSTATUS AdmissionG4SubmitComputeLocked(ADMISSION_CONTEXT *adapter,
     context->Object.FenceOutstanding = args->SubmissionFenceId;
     prepared = TRUE;
   }
+  if (!prepared)
+    AdmissionG4CapturePrepareLocked(adapter, context, args,
+        AdmissionG4PreparePacket, AdmissionG4PrepareImmediate, &detail);
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
   if (!prepared)
-    return AdmissionG4SubmitReject(adapter, context, args,
-        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
+    return AdmissionG4SubmitRejectDetail(adapter, context, args,
+        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE, &detail);
   if (!AdmissionBackendImageBindG4Compute(&adapter->BackendImage,
-          args->SubmissionFenceId, &envelope)) goto Rollback;
+          args->SubmissionFenceId, &envelope)) {
+    AdmissionG4RecordBindRefusal(adapter, 1u, args->SubmissionFenceId);
+    goto Rollback;
+  }
   context->GpuvaG3MappingGeneration = mapping_generation;
   context->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
   context->GpuvaG3DmaBufferBytes = args->DmaBufferSize;
@@ -3864,7 +6063,7 @@ static NTSTATUS AdmissionG3SubmitPresentComputeInner(ADMISSION_CONTEXT *adapter,
   packet.DmaEnd = (ULONG)sizeof(present);
   if (deferred) {
     if (AdmissionG4PendingQueue(adapter, state, context, NULL, args,
-            &packet, NULL, NULL, &present, mapping_generation)) {
+            &packet, NULL, NULL, &present, mapping_generation, NULL)) {
       InterlockedIncrement(&adapter->SubmitPath.Deferred);
       AdmissionDispatchQueuedWork(adapter);
       return STATUS_SUCCESS;
@@ -3885,7 +6084,10 @@ static NTSTATUS AdmissionG3SubmitPresentComputeInner(ADMISSION_CONTEXT *adapter,
   if (!prepared) ADMISSION_PRESENT_CPU(8u);
   /* From here the fence is this job's: a failure is a rejected submit. */
   if (!AdmissionBackendImageBindPresentCompute(&adapter->BackendImage,
-          args->SubmissionFenceId, &present)) goto Rollback;
+          args->SubmissionFenceId, &present)) {
+    AdmissionG4RecordBindRefusal(adapter, 2u, args->SubmissionFenceId);
+    goto Rollback;
+  }
   context->GpuvaG3MappingGeneration = mapping_generation;
   context->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
   context->GpuvaG3DmaBufferBytes = args->DmaBufferSize;
@@ -4012,6 +6214,9 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
   /* Phase 5a: while the render slot holds another context's job, queue
    * instead of waiting on dxgkrnl's VidSch worker thread. */
   deferred = AdmissionG4PendingAdmissible(adapter, context);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceSubmitPath(adapter, args->SubmissionFenceId, deferred);
+#endif
   if (ADMISSION_G4_REJECTS(1u, KeGetCurrentIrql() != PASSIVE_LEVEL) ||
       ADMISSION_G4_REJECTS(2u, state == NULL) ||
       ADMISSION_G4_REJECTS(3u, process == NULL) ||
@@ -4124,10 +6329,11 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
       }
     }
   }
-  result = AppleAgxG4ParseSubmitComputeEx(
+  result = AppleAgxG4ParseSubmitComputeFlagsEx(
       args->pDmaBufferPrivateData, args->DmaBufferPrivateDataSize,
       args->DmaBufferUmdPrivateDataSize, args->DmaBufferVirtualAddress,
       args->DmaBufferSize, APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+      ADMISSION_G4_RENDER_PARSE_FLAGS(adapter),
       private_scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
       private_scene ? (void *)private_scene : (void *)process, &view, &failure);
   if (result==AppleAgxG4ParseOk &&
@@ -4202,14 +6408,14 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
         TRUE, &detail);
   if (deferred) {
     if (AdmissionG4PendingQueue(adapter, state, context, private_scene, args,
-            &packet, &view, NULL, NULL, mapping_generation)) {
+            &packet, &view, NULL, NULL, mapping_generation, &detail)) {
       InterlockedIncrement(&adapter->SubmitPath.Deferred);
       AdmissionDispatchQueuedWork(adapter);
       return STATUS_SUCCESS;
     }
     AdmissionG4PrivateUnqueue(process,private_scene,args->SubmissionFenceId);
-    return AdmissionG4SubmitReject(adapter, context, args,
-        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
+    return AdmissionG4SubmitRejectDetail(adapter, context, args,
+        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE, &detail);
   }
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
@@ -4221,15 +6427,21 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
     context->Object.FenceOutstanding = args->SubmissionFenceId;
     prepared = TRUE;
   }
+  if (!prepared)
+    AdmissionG4CapturePrepareLocked(adapter, context, args,
+        AdmissionG4PreparePacket, AdmissionG4PrepareImmediate, &detail);
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
   if (!prepared) {
     AdmissionG4PrivateUnqueue(process,private_scene,args->SubmissionFenceId);
-    return AdmissionG4SubmitReject(adapter, context, args,
-        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE);
+    return AdmissionG4SubmitRejectDetail(adapter, context, args,
+        AdmissionG4RejectPrepare, STATUS_INVALID_PARAMETER, 0u, TRUE, &detail);
   }
   if (!AdmissionBackendImageBindG4Submission(&adapter->BackendImage,
           &packet, (PVOID)(ULONG_PTR)packet.DestinationCpuToken,
-          &view, &binding)) goto Rollback;
+          &view, &binding)) {
+    AdmissionG4RecordBindRefusal(adapter, 3u, args->SubmissionFenceId);
+    goto Rollback;
+  }
   context->GpuvaG3MappingGeneration = mapping_generation;
   context->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
   context->GpuvaG3DmaBufferBytes = args->DmaBufferSize;
@@ -4275,6 +6487,113 @@ Rollback:
       rollbackBranch, STATUS_INVALID_PARAMETER, 0u, TRUE);
 }
 
+/* Caller holds the process graph mutex. Validate immutable submission
+ * inputs without reserving a scheduler/private-fence slot or binding an image.
+ * Context root installation and slot availability belong to scheduled submit. */
+static NTSTATUS AdmissionG4PreflightLocked(ADMISSION_CONTEXT *adapter,
+    ADMISSION_G3_PROCESS *process, ADMISSION_RENDER_CONTEXT *context,
+    APPLE_AGX_G4_PREFLIGHT *q) {
+  APPLE_AGX_G4_PRIVATE_HEADER header;
+  APPLE_AGX_G4_PRIVATE_HEADER_V3 v3;
+  APPLE_AGX_G4_SUBMIT_VIEW view;
+  APPLE_AGX_G4_COMPUTE_VIEW compute;
+  ADMISSION_G3_PRIVATE_SCENE *scene = NULL;
+  ADMISSION_SCANOUT_MEMORY_VIEW local;
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  APPLE_AGX_G4_ATTACHMENT color;
+  NTSTATUS status;
+  if (q->PrivateBytes < sizeof(header)) return STATUS_INVALID_PARAMETER;
+  RtlCopyMemory(&header, q->Private, sizeof(header));
+  if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_COMPUTE) {
+    q->ParseResult = AppleAgxG4ParseComputeFlagsEx(q->Private, q->PrivateBytes,
+        q->PrivateBytes, q->CommandVa, q->CommandBytes,
+        APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES,
+            ADMISSION_G4_COMPUTE_PARSE_FLAGS(adapter), AdmissionG4GraphAccessTyped,
+        process, &compute, &q->Failure);
+    return q->ParseResult == AppleAgxG4ParseOk ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
+  }
+  if (header.Version == APPLE_AGX_G4_PRIVATE_VERSION_PRIVATE_VA ||
+      header.Version == APPLE_AGX_G4_PRIVATE_VERSION_RENDER_COMPUTE) {
+    if (q->PrivateBytes < sizeof(v3)) return STATUS_INVALID_PARAMETER;
+    RtlCopyMemory(&v3, q->Private, sizeof(v3));
+    if (!v3.Lease.ManagerId || v3.Lease.ManagerId != process->Graph.ProcessId ||
+        v3.Lease.ManagerGeneration != process->PrivateManager.Generation ||
+        v3.Lease.ManagerGeneration != context->GpuvaG3PrivateManagerGeneration)
+      return STATUS_INVALID_PARAMETER;
+    for (scene = process->PrivateScenes; scene; scene = scene->Next)
+      if (scene->Storage.Generation == v3.Lease.SceneId) break;
+    if (!scene || scene->Context != context ||
+        scene->Storage.Generation != v3.Lease.SceneGeneration ||
+        scene->ReleaseRequested || scene->Quarantined || scene->Queued ||
+        scene->Submitting || scene->Started) return STATUS_INVALID_PARAMETER;
+  }
+  q->ParseResult = AppleAgxG4ParseSubmitComputeFlagsEx(q->Private, q->PrivateBytes,
+      q->PrivateBytes, q->CommandVa, q->CommandBytes,
+      APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES, ADMISSION_G4_RENDER_PARSE_FLAGS(adapter),
+      scene ? AdmissionG4PrivateGraphAccess : AdmissionG4GraphAccessTyped,
+      scene ? (void *)scene : (void *)process, &view, &q->Failure);
+  if (q->ParseResult != AppleAgxG4ParseOk) return STATUS_INVALID_PARAMETER;
+  if ((scene && !AdmissionG4PrivateGeometry(scene, &view)) ||
+      !view.AttachmentCount || view.AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS)
+    return STATUS_INVALID_PARAMETER;
+  status = AdmissionMemoryRuntimeLocalView(adapter, &local);
+  if (!NT_SUCCESS(status)) return status;
+  RtlZeroMemory(&packet, sizeof(packet));
+  RtlCopyMemory(&color, view.Attachments, sizeof(color));
+  if (!AdmissionG4ResolveOutput(process, &color, &local, &packet)) {
+    q->Failure.Subsite = AppleAgxG4FailureOutput;
+    q->Failure.Kind = AppleAgxG4AccessAttachment;
+    q->Failure.Va = color.Pointer; q->Failure.Bytes = (ULONG)color.Size;
+    q->Failure.Write = 1u;
+    return STATUS_INVALID_PARAMETER;
+  }
+  return STATUS_SUCCESS;
+}
+
+NTSTATUS AdmissionGpuvaG4PreflightEscape(ADMISSION_CONTEXT *adapter,
+    const DXGKARG_ESCAPE *args) {
+  APPLE_AGX_G4_PREFLIGHT q;
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  ADMISSION_RENDER_CONTEXT *context;
+  ADMISSION_DEVICE *device;
+  if (!adapter || !adapter->Started || !args ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL || args->Flags.Value ||
+      !args->pPrivateDriverData || args->PrivateDriverDataSize != sizeof(q))
+    return STATUS_INVALID_PARAMETER;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  if (!state) return STATUS_INVALID_DEVICE_STATE;
+  RtlCopyMemory(&q, args->pPrivateDriverData, sizeof(q));
+  if (q.Magic != APPLE_AGX_G4_PREFLIGHT_MAGIC ||
+      q.Version != APPLE_AGX_G4_PREFLIGHT_VERSION || q.Bytes != sizeof(q) ||
+      !q.PrivateBytes || q.PrivateBytes > sizeof(q.Private) ||
+      q.Ready || q.Status || q.ParseResult || q.Failure.Subsite ||
+      q.Failure.Kind || q.Failure.Ordinal || q.Failure.Va ||
+      q.Failure.Bytes || q.Failure.Write) return STATUS_INVALID_PARAMETER;
+  q.Status = (ULONG)STATUS_INVALID_DEVICE_STATE;
+  ExAcquireFastMutex(&state->Lock);
+  process = AdmissionGpuvaG3FindProcess(state, args->hKmdProcessHandle);
+  if (!process || process->Poisoned || process->CpuOnlyMappings ||
+      !process->Graph.Created || process->Graph.Uncertain ||
+      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0)) goto Output;
+  for (context = process->Contexts; context && (HANDLE)context != args->hContext;
+       context = context->GpuvaG3NextContext) {}
+  if (!context || !context->Win32Transport || context->GpuvaG3Closing ||
+      context->GpuvaG3Poisoned || !context->Object.Device ||
+      !(context->Object.Flags & ADMISSION_CONTEXT_VIRTUAL_ADDRESSING) ||
+      (context->Object.Flags & (ADMISSION_CONTEXT_SYSTEM | ADMISSION_CONTEXT_GDI))) goto Output;
+  device = CONTAINING_RECORD(context->Object.Device, ADMISSION_DEVICE, Object);
+  if ((HANDLE)device != args->hDevice ||
+      device->Object.Adapter != &adapter->ObjectAdapter) goto Output;
+  /* R147: SetRoot is only guaranteed before scheduled execution. */
+  q.Status = (ULONG)AdmissionG4PreflightLocked(adapter, process, context, &q);
+  q.Ready = q.Status == (ULONG)STATUS_SUCCESS;
+Output:
+  ExReleaseFastMutex(&state->Lock);
+  RtlCopyMemory(args->pPrivateDriverData, &q, sizeof(q));
+  return STATUS_SUCCESS;
+}
+
 /* EXP1003: residency touch, completed by the CPU queue in fence order. */
 static NTSTATUS AdmissionG4SubmitTouch(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context, const DXGKARG_SUBMITCOMMANDVIRTUAL *args) {
@@ -4310,7 +6629,7 @@ static NTSTATUS AdmissionDdiSubmitCommandVirtualInner(
       Args->hContext == NULL || Args->DmaBufferVirtualAddress == 0ULL ||
       Args->DmaBufferSize == 0u ||
       Args->pDmaBufferPrivateData == NULL ||
-      Args->NodeOrdinal != 0u ||
+      Args->NodeOrdinal != (Args->Flags.Paging ? adapter->LiveAdditivePaging : 0u) ||
       Args->EngineOrdinal != 0u || Args->SubmissionFenceId == 0u ||
       KeGetCurrentIrql() > DISPATCH_LEVEL)
     return AdmissionG4SubmitReject(adapter, NULL, Args,
@@ -4318,7 +6637,8 @@ static NTSTATUS AdmissionDdiSubmitCommandVirtualInner(
   context = (ADMISSION_RENDER_CONTEXT *)Args->hContext;
   if (context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
       context->Object.Device == NULL ||
-      context->Object.Device->Adapter != &adapter->ObjectAdapter)
+      context->Object.Device->Adapter != &adapter->ObjectAdapter ||
+      context->Object.NodeOrdinal != Args->NodeOrdinal)
     return AdmissionG4SubmitReject(adapter, NULL, Args,
         AdmissionG4RejectContext, STATUS_INVALID_PARAMETER, 0u, FALSE);
   if ((context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u)
@@ -4329,6 +6649,12 @@ static NTSTATUS AdmissionDdiSubmitCommandVirtualInner(
     AdmissionJobTimingStartWindows(adapter, context,
         ((ADMISSION_G3_PROCESS *)context->GpuvaG3Process)->OsProcessId,
         Args->SubmissionFenceId, Args->DmaBufferSize);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  if (context->GpuvaG3Process != NULL)
+    AdmissionPreemptTraceSubmit(adapter,
+        ((ADMISSION_G3_PROCESS *)context->GpuvaG3Process)->OsProcessId,
+        Args->SubmissionFenceId, Args->Flags.Resubmission ? TRUE : FALSE);
+#endif
 #if defined(APPLE_AGX_BLT_PROBE_QUALIFICATION)
   InterlockedIncrement((volatile LONG *)&adapter->BltProbe.VirtualSubmitCalls);
 #endif
@@ -4409,6 +6735,28 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommandVirtual(
     }
   }
   status = AdmissionDdiSubmitCommandVirtualInner(Adapter, Args);
+  /* WDDM permits exactly SUCCESS or INVALID_PARAMETER here. In particular,
+   * CPU touch/paging queue backpressure must not leak DEVICE_BUSY (0x119/2).
+   * Retain the original failure, and attach the rejected fence to its actual
+   * predecessor: it becomes completed only after that work retires. This
+   * never releases a GPU job, fabricates an interrupt or clears a fault. */
+  if (status != STATUS_SUCCESS) {
+    if (overlap != NULL && Args != NULL &&
+        Args->NodeOrdinal <= overlap->LiveAdditivePaging && Args->EngineOrdinal == 0u &&
+        InterlockedCompareExchange(&overlap->SchedulerInitialized, 0, 0) != 0) {
+      KIRQL oldIrql;
+      KeAcquireSpinLock(&overlap->SchedulerLock, &oldIrql);
+      (void)AppleAgxSchedulerRejectFence(Args->NodeOrdinal ?
+          &overlap->PagingScheduler : &overlap->Scheduler, 0u, 0u,
+                                        Args->SubmissionFenceId);
+      KeReleaseSpinLock(&overlap->SchedulerLock, oldIrql);
+    }
+    if (status != STATUS_INVALID_PARAMETER)
+      (void)AdmissionG4SubmitReject(overlap, NULL, Args,
+          AdmissionG4RejectStatus, STATUS_INVALID_PARAMETER, (ULONG)status,
+          FALSE);
+    status = STATUS_INVALID_PARAMETER;
+  }
   if (overlap != NULL) InterlockedDecrement(&overlap->G4SubmitVirtualInFlight);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   if (Args != NULL)

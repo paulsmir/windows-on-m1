@@ -1,5 +1,7 @@
-param([string]$Root = 'C:\Users\pauls\AD04-uatomic')
-$clang = 'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin\clang-cl.exe'
+param([string]$Root = '')
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
+if (!$Root) { $Root = "$builderRoot\AD04-uatomic" }
+$clang = "$builderRoot\AD04-asahi-windows-compiler\llvm20\bin\clang-cl.exe"
 $overlay = Join-Path $Root 'uatomic_clang_compat.h'
 $source = Join-Path $Root 'uatomic_semantics_test.c'
 $object = Join-Path $Root 'uatomic-arm64.obj'

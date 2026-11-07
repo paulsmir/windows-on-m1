@@ -1,7 +1,9 @@
 #ifndef APPLE_AGX_G3_PRIVATE_FAILURE_H
 #define APPLE_AGX_G3_PRIVATE_FAILURE_H
 
-/* Versioned, immutable diagnostic only. No handles are dereferenced by readers. */
+/* Versioned, immutable diagnostic only. No handles are dereferenced by readers.
+ * Version 2 keeps the 232-byte layout; Reserved now carries the first PoisonSite
+ * ((file << 16) | line). Version 1 left it zero and provides no poison location. */
 typedef struct {
   unsigned Version, Bytes, Branch, Status;
   unsigned Pid, Operation, TablePredicate, MapPredicate;

@@ -1,5 +1,52 @@
 #include "render_admission.h"
 
+#include "render_ddi_status.h"
+
+/* Module lifetime, never reset while writers may be active. One supported
+ * adapter; Object is the opaque first DDI argument, not necessarily a device.
+ * SubmitCommandVirtual has no allocation argument: Allocation stays zero. */
+static ADMISSION_DDI_STATUS_SLOT AdmissionDdiStatuses[ADMISSION_DDI_STATUS_SLOTS];
+C_ASSERT(sizeof(ADMISSION_DDI_STATUS_SLOT) == 48);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+static void AdmissionWriteDdiStatuses(ADMISSION_CONTEXT *Context);
+#endif
+
+BOOLEAN AdmissionRecordDdiStatus(ULONG Slot, NTSTATUS Status, ULONG Operation,
+    ULONGLONG Allocation, ULONGLONG Object) {
+  if (Slot >= ADMISSION_DDI_STATUS_SLOTS || NT_SUCCESS(Status)) return FALSE;
+  return (BOOLEAN)AdmissionDdiStatusAccumulate(&AdmissionDdiStatuses[Slot],
+      Status, (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart,
+      Allocation, Object, Operation);
+}
+
+HANDLE AdmissionPagingStatusAllocation(const DXGKARG_BUILDPAGINGBUFFER *Args) {
+  if (Args == NULL) return NULL;
+  switch (Args->Operation) {
+  case DXGK_OPERATION_TRANSFER: return Args->Transfer.hAllocation;
+  case DXGK_OPERATION_FILL: return Args->Fill.hAllocation;
+  case DXGK_OPERATION_DISCARD_CONTENT: return Args->DiscardContent.hAllocation;
+  case DXGK_OPERATION_MAP_APERTURE_SEGMENT: return Args->MapApertureSegment.hAllocation;
+  case DXGK_OPERATION_UNMAP_APERTURE_SEGMENT: return Args->UnmapApertureSegment.hAllocation;
+  case DXGK_OPERATION_SPECIAL_LOCK_TRANSFER: return Args->SpecialLockTransfer.hAllocation;
+  case DXGK_OPERATION_VIRTUAL_TRANSFER: return Args->TransferVirtual.hAllocation;
+  case DXGK_OPERATION_VIRTUAL_FILL: return Args->FillVirtual.hAllocation;
+  case DXGK_OPERATION_UPDATE_PAGE_TABLE: return Args->UpdatePageTable.hAllocation;
+  case DXGK_OPERATION_INIT_CONTEXT_RESOURCE: return Args->InitContextResource.hAllocation;
+  case DXGK_OPERATION_NOTIFY_RESIDENCY: return Args->NotifyResidency.hAllocation;
+  default: return NULL; /* No single allocation in the supported operation. */
+  }
+}
+
+void AdmissionRecordPagingInternalStatus(ADMISSION_CONTEXT *Context,
+    const DXGKARG_BUILDPAGINGBUFFER *Args, NTSTATUS Status) {
+  ULONG operation = Args != NULL ? (ULONG)Args->Operation : MAXULONG;
+  if (AdmissionRecordDdiStatus(112u + (operation < 15u ? operation : 15u),
+      Status, operation, (ULONGLONG)(ULONG_PTR)AdmissionPagingStatusAllocation(Args),
+      (ULONGLONG)(ULONG_PTR)Context))
+    AdmissionQueueDdiStatus(Context);
+}
+
+
 #define ADMISSION_QUERY_RECEIPT_VERSION 1u
 #define ADMISSION_DISPLAY_DDI_RECEIPT_VERSION 1u
 
@@ -213,6 +260,39 @@ _Use_decl_annotations_ VOID AdmissionRecordVisibleAgx(
   }
 }
 #endif
+
+static VOID AdmissionWriteEventDrain(
+    HANDLE Key, const ADMISSION_EVENT_DRAIN_RECEIPT *Receipt) {
+  WriteBinary(Key, L"Wom1EventDrainReceipt", Receipt, sizeof(*Receipt));
+}
+
+_Use_decl_annotations_ VOID AdmissionRecordEventDrain(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_EVENT_DRAIN_RECEIPT *Receipt) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (Context == NULL || Receipt == NULL ||
+      Receipt->Version != ADMISSION_EVENT_DRAIN_RECEIPT_VERSION ||
+      Receipt->Bytes != sizeof(*Receipt) ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (Context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key))) {
+    AdmissionWriteEventDrain(key, Receipt);
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    AdmissionWriteEventDrain(key, Receipt);
+    ZwClose(key);
+  }
+}
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 
@@ -621,39 +701,6 @@ _Use_decl_annotations_ VOID AdmissionRecordKTrace(
       OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1KTraceReceipt", Receipt, sizeof(*Receipt));
-    ZwClose(key);
-  }
-}
-
-static VOID AdmissionWriteEventDrain(
-    HANDLE Key, const ADMISSION_EVENT_DRAIN_RECEIPT *Receipt) {
-  WriteBinary(Key, L"Wom1EventDrainReceipt", Receipt, sizeof(*Receipt));
-}
-
-_Use_decl_annotations_ VOID AdmissionRecordEventDrain(
-    ADMISSION_CONTEXT *Context,
-    const ADMISSION_EVENT_DRAIN_RECEIPT *Receipt) {
-  HANDLE key = NULL;
-  OBJECT_ATTRIBUTES attributes;
-  UNICODE_STRING servicePath;
-  if (Context == NULL || Receipt == NULL ||
-      Receipt->Version != ADMISSION_EVENT_DRAIN_RECEIPT_VERSION ||
-      Receipt->Bytes != sizeof(*Receipt) ||
-      KeGetCurrentIrql() != PASSIVE_LEVEL)
-    return;
-  if (Context->PhysicalDeviceObject != NULL &&
-      NT_SUCCESS(IoOpenDeviceRegistryKey(
-          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
-          KEY_SET_VALUE, &key))) {
-    AdmissionWriteEventDrain(key, Receipt);
-    ZwClose(key);
-  }
-  RtlInitUnicodeString(&servicePath,
-      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
-  InitializeObjectAttributes(&attributes, &servicePath,
-      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
-  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
-    AdmissionWriteEventDrain(key, Receipt);
     ZwClose(key);
   }
 }
@@ -1779,7 +1826,9 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3Node(
   }
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject,
       PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
-  WriteBinary(key, L"Wom1G3Node0", &receipt, sizeof(receipt));
+  /* Keep the CPU paging node from overwriting the render-node evidence. */
+  WriteBinary(key, NodeOrdinal == 1u ? L"Wom1G3Node1" : L"Wom1G3Node0",
+              &receipt, sizeof(receipt));
   (void)ZwFlushKey(key);
   ZwClose(key);
 }
@@ -2012,6 +2061,7 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3PagingResult(
  * paging failure, unpublished groups, paging wait) are copied here and
  * written by a work item, so DxgkDdiBuildPagingBuffer does no registry I/O. */
 enum {
+  AdmissionPagingReceiptDdiStatus = 1024u,
   AdmissionPagingReceiptFlush = 1u,
   AdmissionPagingReceiptFailure = 2u,
   AdmissionPagingReceiptUnpublished = 4u,
@@ -2020,7 +2070,10 @@ enum {
   AdmissionPagingReceiptSystemGroups = 32u,
   AdmissionPagingReceiptSystemShapes = 64u,
   AdmissionPagingReceiptPoolDemand = 128u,
-  AdmissionPagingReceiptBrokerFailures = 256u
+  AdmissionPagingReceiptOmittedLeaves = 512u,
+  AdmissionPagingReceiptBrokerFailures = 256u,
+  AdmissionPagingReceiptNativePteRefusal = 2048u,
+  AdmissionPagingReceiptLiveWait = 4096u
 };
 typedef struct _ADMISSION_PAGING_RECEIPTS {
   KSPIN_LOCK Lock;
@@ -2036,6 +2089,12 @@ typedef struct _ADMISSION_PAGING_RECEIPTS {
   ADMISSION_G3_SYSTEM_SHAPE SystemShapes[ADMISSION_G3_SYSTEM_SHAPE_COUNT];
   ADMISSION_POOL_DEMAND_RECEIPT PoolDemand;
   ADMISSION_G3_BROKER_FAILURES Broker;
+  ADMISSION_OMITTED_LEAVES Omitted;
+  ADMISSION_NATIVE_PTE_REFUSAL NativePteRefusal;
+  ADMISSION_G3_LIVE_WAIT_RECEIPT LiveWait;
+  /* Only the serial worker writes this snapshot. Keep the 3912-byte buffer
+   * off the kernel stack; publishers touch LiveWait under Lock only. */
+  ADMISSION_G3_LIVE_WAIT_RECEIPT LiveWaitSnapshot;
 } ADMISSION_PAGING_RECEIPTS;
 
 static IO_WORKITEM_ROUTINE AdmissionPagingReceiptWorker;
@@ -2065,6 +2124,21 @@ static void AdmissionPagingReceiptStage(ADMISSION_CONTEXT *Context,
       RtlCopyMemory(&receipts->PoolDemand, Data, sizeof(receipts->PoolDemand));
     else if (Kind == AdmissionPagingReceiptBrokerFailures)
       RtlCopyMemory(&receipts->Broker, Data, sizeof(receipts->Broker));
+    else if (Kind == AdmissionPagingReceiptOmittedLeaves)
+      RtlCopyMemory(&receipts->Omitted, Data, sizeof(receipts->Omitted));
+    else if (Kind == AdmissionPagingReceiptNativePteRefusal)
+      RtlCopyMemory(&receipts->NativePteRefusal, Data,
+                    sizeof(receipts->NativePteRefusal));
+    else if (Kind == AdmissionPagingReceiptLiveWait) {
+      const ADMISSION_G3_LIVE_WAIT_ENTRY *entry = (const ADMISSION_G3_LIVE_WAIT_ENTRY *)Data;
+      ADMISSION_G3_LIVE_WAIT_RECEIPT *r = &receipts->LiveWait;
+      ULONG slot = (ULONG)(r->Total % ADMISSION_LIVE_WAIT_ENTRIES);
+      r->Version = 1u; r->Bytes = sizeof(*r);
+      if (r->Total >= ADMISSION_LIVE_WAIT_ENTRIES) ++r->Overwritten;
+      r->Entries[slot] = *entry;
+      r->Entries[slot].Sequence = ++r->Total;
+      if (entry->Reason < AdmissionLiveWaitReasonCount) ++r->Histogram[entry->Reason];
+    }
     receipts->Dirty |= Kind;
     if (InterlockedCompareExchange(&receipts->Queued, 1, 0) == 0) {
       KeClearEvent(&receipts->Idle);
@@ -2075,6 +2149,11 @@ static void AdmissionPagingReceiptStage(ADMISSION_CONTEXT *Context,
   if (queue)
     IoQueueWorkItem(receipts->WorkItem, AdmissionPagingReceiptWorker,
                     DelayedWorkQueue, Context);
+}
+
+void AdmissionQueueDdiStatus(ADMISSION_CONTEXT *Context) {
+  if (Context != NULL && KeGetCurrentIrql() <= DISPATCH_LEVEL)
+    AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptDdiStatus, NULL);
 }
 
 static void AdmissionPagingReceiptWrite(ADMISSION_CONTEXT *Context,
@@ -2103,11 +2182,16 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     ADMISSION_G3_SYSTEM_SHAPE shapes[ADMISSION_G3_SYSTEM_SHAPE_COUNT];
     ADMISSION_POOL_DEMAND_RECEIPT pool;
     ADMISSION_G3_BROKER_FAILURES broker;
+    ADMISSION_OMITTED_LEAVES omitted;
+    ADMISSION_NATIVE_PTE_REFUSAL native;
     ADMISSION_G3_PAGING_WAIT_RECEIPT wait;
     ULONG dirty;
     KIRQL oldIrql;
     KeAcquireSpinLock(&receipts->Lock, &oldIrql);
     dirty = receipts->Dirty;
+    if (dirty & AdmissionPagingReceiptLiveWait)
+      RtlCopyMemory(&receipts->LiveWaitSnapshot, &receipts->LiveWait,
+                    sizeof(receipts->LiveWaitSnapshot));
     receipts->Dirty = 0u;
     RtlCopyMemory(&flush, &receipts->Flush, sizeof(flush));
     RtlCopyMemory(&failure, &receipts->Failure, sizeof(failure));
@@ -2117,6 +2201,8 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     RtlCopyMemory(shapes, receipts->SystemShapes, sizeof(shapes));
     RtlCopyMemory(&pool, &receipts->PoolDemand, sizeof(pool));
     RtlCopyMemory(&broker, &receipts->Broker, sizeof(broker));
+    RtlCopyMemory(&omitted, &receipts->Omitted, sizeof(omitted));
+    RtlCopyMemory(&native, &receipts->NativePteRefusal, sizeof(native));
     if (dirty == 0u) {
       /* Cleared under the lock that Stage sets Dirty under: no lost wakeup. */
       InterlockedExchange(&receipts->Queued, 0);
@@ -2125,6 +2211,18 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
       return;
     }
     KeReleaseSpinLock(&receipts->Lock, oldIrql);
+    if (dirty & AdmissionPagingReceiptLiveWait)
+      AdmissionPagingReceiptWrite(context, L"Wom1G3LivePagingWait",
+          &receipts->LiveWaitSnapshot, sizeof(receipts->LiveWaitSnapshot), FALSE);
+    if (dirty & AdmissionPagingReceiptDdiStatus)
+      AdmissionWriteDdiStatuses(context);
+    if (dirty & AdmissionPagingReceiptOmittedLeaves)
+      AdmissionPagingReceiptWrite(context, L"Wom1G4OmittedLeaves",
+                                  &omitted, sizeof(omitted), TRUE);
+    if (dirty & AdmissionPagingReceiptNativePteRefusal)
+      /* Flushed: a later device removal or bugcheck must keep the page. */
+      AdmissionPagingReceiptWrite(context, L"Wom1G3NativePteRefusal",
+                                  &native, sizeof(native), TRUE);
     if (dirty & AdmissionPagingReceiptFlush)
       AdmissionPagingReceiptWrite(context, L"Wom1G3FlushInput", &flush,
                                   sizeof(flush), FALSE);
@@ -2181,6 +2279,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingReceiptsStart(
     return STATUS_INSUFFICIENT_RESOURCES;
   }
   Context->PagingReceipts = receipts;
+  AdmissionQueueDdiStatus(Context);
   return STATUS_SUCCESS;
 }
 
@@ -2310,6 +2409,12 @@ _Use_decl_annotations_ void AdmissionRecordG3Poison(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordG3LiveWait(
+    ADMISSION_CONTEXT *Context, const ADMISSION_G3_LIVE_WAIT_ENTRY *Entry) {
+  if (Context == NULL || Entry == NULL || Entry->Iterations == 0ULL) return;
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptLiveWait, Entry);
+}
+
 _Use_decl_annotations_ void AdmissionRecordG3PagingWait(
     ADMISSION_CONTEXT *Context) {
   if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
@@ -2373,6 +2478,30 @@ _Use_decl_annotations_ void AdmissionRecordG3PrivateProcesses(
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
   WriteBinary(key, L"Wom1G3PrivateProcs", Values, Bytes);
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordG3NativeQueryRefusal(
+    ADMISSION_CONTEXT *Context, const VOID *Receipt, ULONG Bytes) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Receipt == NULL || Bytes == 0u || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G3NativeQueryRefusal", Receipt, Bytes);
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordG3PrivatePressure(
+    ADMISSION_CONTEXT *Context, const ULONG *Values, ULONG Bytes) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Values == NULL || Bytes == 0u || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) return;
+  WriteBinary(key, L"Wom1G3PrivatePressure", Values, Bytes);
   ZwClose(key);
 }
 
@@ -2503,7 +2632,7 @@ _Use_decl_annotations_ void AdmissionRecordG4SubmitFailure(
       InterlockedCompareExchange(&Context->G4SubmitFailureClaim, 0, 0) != 2)
     return;
   snapshot = Context->G4SubmitFailure;
-  if (snapshot.Version != 2u || snapshot.Bytes != sizeof(snapshot)) return;
+  if (snapshot.Version != 4u || snapshot.Bytes != sizeof(snapshot)) return;
   snapshot.TotalFailures = (ULONG)InterlockedCompareExchange(
       &Context->G4SubmitFailureCount, 0, 0);
   if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
@@ -2511,6 +2640,10 @@ _Use_decl_annotations_ void AdmissionRecordG4SubmitFailure(
           KEY_SET_VALUE, &key)))
     return;
   WriteBinary(key, L"Wom1G4SubmitFailure", &snapshot, sizeof(snapshot));
+  /* EXP1901N: the backend image at the first Bind refusal */
+  if (InterlockedCompareExchange(&Context->G4BindRefusalClaim, 0, 0) == 2)
+    WriteBinary(key, L"Wom1G4BindRefusal", &Context->G4BindRefusal,
+                sizeof(Context->G4BindRefusal));
   (void)ZwFlushKey(key);
   ZwClose(key);
 }
@@ -2576,6 +2709,21 @@ _Use_decl_annotations_ void AdmissionRecordGpuvaG3SystemShapes(
   AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptSystemShapes,
                               Shapes);
 }
+void AdmissionRecordG4OmittedLeaves(ADMISSION_CONTEXT *Context,
+                                   const ADMISSION_OMITTED_LEAVES *Receipt) {
+  if (!Context || !Receipt) return;
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptOmittedLeaves, Receipt);
+}
+_Use_decl_annotations_ void AdmissionRecordG3NativePteRefusal(
+    ADMISSION_CONTEXT *Context, const ADMISSION_NATIVE_PTE_REFUSAL *Receipt) {
+  /* Called under the G3 state lock from UpdatePageTable: staging only. */
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      Receipt == NULL || Receipt->Version != ADMISSION_NATIVE_PTE_REFUSAL_VERSION)
+    return;
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptNativePteRefusal,
+                              Receipt);
+}
+
 #endif
 
 _Use_decl_annotations_ void AdmissionRecordPresentTransfer(
@@ -2804,6 +2952,41 @@ _Use_decl_annotations_ void AdmissionFlushSourceAddressReceipt(
   }
 }
 
+/* rc110: Wom1DisplayModesReceipt, after every traced display DDI. */
+_Use_decl_annotations_ void AdmissionRecordDisplayModes(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_DISPLAY_MODES_RECEIPT snapshot;
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  RtlCopyMemory(&snapshot, (const VOID *)&Context->DisplayModes,
+                sizeof(snapshot));
+  snapshot.Version = (LONG)ADMISSION_DISPLAY_MODES_RECEIPT_VERSION;
+  snapshot.Bytes = (LONG)sizeof(snapshot);
+  snapshot.BuildSwitch = (LONG)ADMISSION_DISPLAY_SCALED_MODES;
+  {
+    ULONG abi = 0u, caps = 0u;
+    AdmissionScanoutBrokerInfo(Context, &abi, &caps);
+    snapshot.BrokerAbi = (LONG)abi;
+    snapshot.BrokerCaps = (LONG)caps;
+    snapshot.ScaledModes = AdmissionScanoutScaledModes(Context) ? 1 : 0;
+  }
+  snapshot.CommittedWidth = (LONG)Context->CommittedWidth;
+  snapshot.CommittedHeight = (LONG)Context->CommittedHeight;
+  snapshot.CommittedStride = (LONG)Context->CommittedStride;
+  snapshot.CommittedFormat = (LONG)Context->CommittedFormat;
+  snapshot.CommittedScaling = (LONG)Context->CommittedScaling;
+  snapshot.SourceVisible = Context->SourceVisible ? 1 : 0;
+  snapshot.DisplayActive = Context->DisplayActive ? 1 : 0;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+                                          PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1DisplayModesReceipt", &snapshot, sizeof(snapshot));
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordDisplayDdi(
     PDEVICE_OBJECT DeviceObject, ULONG DdiId, ULONG Phase, NTSTATUS Status) {
   HANDLE key = NULL;
@@ -2915,6 +3098,7 @@ _Use_decl_annotations_ void AdmissionRecordPagingProfile(
       InterlockedCompareExchange64(&Context->PagingProfile.LastPublishedQpc,
                                    now, last) != last)
     return;
+  AdmissionQueueDdiStatus(Context);
   RtlZeroMemory(value, sizeof(value));
   value[0] = 1u;
   value[1] = (ULONGLONG)now;
@@ -2990,6 +3174,62 @@ _Use_decl_annotations_ void AdmissionRecordGpuReset(ADMISSION_CONTEXT *Context) 
     return;
   WriteBinary(key, L"Wom1GpuReset", &Context->GpuReset,
               sizeof(Context->GpuReset));
+  /* EXP1899N: the refused preemption that led to the reset, when one did */
+  if (InterlockedCompareExchange(&Context->PreemptRefusalClaim, 0, 0) == 2)
+    WriteBinary(key, L"Wom1PreemptRefusal", &Context->PreemptRefusal,
+                sizeof(Context->PreemptRefusal));
   (void)ZwFlushKey(key);
   ZwClose(key);
 }
+
+#if !defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+void AdmissionQueueDdiStatus(ADMISSION_CONTEXT *Context) {
+  UNREFERENCED_PARAMETER(Context);
+}
+#endif
+
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+/* Sole publisher: the serial PASSIVE worker. Heap snapshot avoids adding 6 KiB to the KMD stack.
+ * First records are immutable after release publication; counters are sampled
+ * atomically, independently (not a globally atomic point-in-time snapshot). */
+static void AdmissionWriteDdiStatuses(ADMISSION_CONTEXT *Context) {
+  struct SNAPSHOT {
+    ULONG Version, Bytes, Slots, SlotBytes;
+    ULONGLONG Qpc, Frequency;
+    ADMISSION_DDI_STATUS_SLOT Entries[ADMISSION_DDI_STATUS_SLOTS];
+  } *snapshot;
+  LARGE_INTEGER frequency;
+  HANDLE key = NULL;
+  ULONG i;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL) return;
+  snapshot = ExAllocatePool2(POOL_FLAG_PAGED, sizeof(*snapshot), ADMISSION_POOL_TAG);
+  if (snapshot == NULL) return;
+  snapshot->Version = 1u;
+  snapshot->Bytes = sizeof(*snapshot);
+  snapshot->Slots = ADMISSION_DDI_STATUS_SLOTS;
+  snapshot->SlotBytes = sizeof(ADMISSION_DDI_STATUS_SLOT);
+  snapshot->Qpc = KeQueryPerformanceCounter(&frequency).QuadPart;
+  snapshot->Frequency = frequency.QuadPart;
+  for (i = 0u; i < ADMISSION_DDI_STATUS_SLOTS; ++i) {
+    ADMISSION_DDI_STATUS_SLOT *source = &AdmissionDdiStatuses[i];
+    ADMISSION_DDI_STATUS_SLOT *target = &snapshot->Entries[i];
+    if (InterlockedCompareExchange(&source->Ready, 2, 2) == 2) {
+      target->Qpc = source->Qpc;
+      target->Allocation = source->Allocation;
+      target->Object = source->Object;
+      target->Operation = source->Operation;
+      target->Status = source->Status;
+      target->Ready = 2;
+    }
+    target->Count = InterlockedCompareExchange64(&source->Count, 0, 0);
+  }
+  if (NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+      PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1DdiStatus", snapshot, sizeof(*snapshot));
+    ZwClose(key);
+  }
+  ExFreePoolWithTag(snapshot, ADMISSION_POOL_TAG);
+}
+
+#endif

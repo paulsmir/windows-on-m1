@@ -1,6 +1,7 @@
 param([ValidateSet('b2','b3','b4')][string]$Attempt='b2', [ValidateSet('x64','ARM64')][string]$Architecture='x64')
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
 $ErrorActionPreference = 'Stop'
-$root = 'C:\Users\pauls\AD04-d3d10-frontend-build'
+$root = "$builderRoot\AD04-d3d10-frontend-build"
 $mesa = Join-Path $root 'mesa'
 $output = Join-Path $root "$Architecture-$Attempt"
 $archive = Join-Path $root 'mesa-source.tar.gz'
@@ -14,7 +15,7 @@ $kit = 'C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0'
 $compilerBin = if ($Architecture -eq 'ARM64') { "$tool\bin\HostX86\arm64" } else { "$tool\bin\HostX64\x64" }
 $env:PATH = "$compilerBin;" + $env:PATH
 $env:INCLUDE = "$tool\include;$kit\ucrt;$kit\shared;$kit\um;$kit\km"
-$generated = 'C:\Users\pauls\AD03-pipe-screen\.local\accelerated-desktop-ad03\mesa-build\src'
+$generated = "$builderRoot\AD03-pipe-screen\.local\accelerated-desktop-ad03\mesa-build\src"
 if (-not (Test-Path $generated)) { throw 'proven generated Mesa headers unavailable' }
 $include = @("/I$mesa\include","/I$mesa\include\winddk","/I$mesa\src","/I$mesa\src\gallium\include","/I$mesa\src\gallium\auxiliary","/I$generated")
 $frontend = Join-Path $mesa 'src\gallium\frontends\d3d10umd'

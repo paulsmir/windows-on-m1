@@ -1,0 +1,23 @@
+{
+  "inputs": {
+    "agx_win32_query_ia.cl": "d3af82e06d0c6d7f4ab075cdb062682675f2cfc730500f515128dd9bab41aecc",
+    "generate-query-ia.py": "91e5e006484e659ee039eb7fe7cb99dce8c79e04ec22839ed97e3100ade58569",
+    "mesa_clc": "66c18e352e0d143668007d710a2eaf774f22f0be60647b0302ea2b94717d7dea",
+    "asahi_clc": "9019c2368ae69fec007b69ae7dda3fc90fa966b9966e7308ac1cb15fafa800a3",
+    "libcl.h": "85dced14fe9802e67efbf4f122aa0f3c7ec40a8d89cf816e971f1274ef96f2a7",
+    "stdint.h": "d345a6cbd8350cac0c48069449f8cc1c22a78694c72e4fc8db45296a7fed90fd",
+    "macros.h": "f965ee46d99dcd390d49c86aa9df63bc62ad706ab13d8e3e2ae1b4db57afb238",
+    "shader_enums.h": "6912964721b5ce26fb295b8d0fba20e5378b1f126755eafca63d4651fb8e59ca"
+  },
+  "outputs": {
+    "agx_win32_query_ia_shaders.h": "5bfe69bcb8925c499308b542b642aca344a1a1bcf7f738641195fa02d195f988",
+    "agx_win32_query_ia_shaders.c": "25ef02b9025e20a28b1efc99db87eacc500854a42095e654e99fa0bba0092010",
+    "LICENSE.txt": "82792c3bc5d8f93c20b327b3d52206af04e8d8554e36671cc92a7196b5244573"
+  },
+  "spirv_sha256": "066292a5232bc5995f26daf60c8b7ba4757ae718aa360acff44959d62fb22bae",
+  "targets": [
+    "g13g",
+    "g13x"
+  ],
+  "license": "MIT; original kernel, Mesa compiler; notices retained"
+}

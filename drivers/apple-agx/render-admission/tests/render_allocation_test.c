@@ -14,7 +14,16 @@ static void test_displayable_resource_metadata(void) {
   assert(AdmissionPresentResourceDataValid(&opened));
   opened.Flags = 0u; /* Ordinary shared BGRA is not a written primary. */
   assert(AdmissionPresentResourceDataValid(&opened));
-  opened.Flags = 2u;
+  /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? v4 may label an
+   * auxiliary converted surface; legacy v3 must not acquire that meaning,
+   * and unrecognized flag bits must still fail closed. */
+  opened.Flags = ADMISSION_PRESENT_RESOURCE_CONVERTED;
+  assert(AdmissionPresentResourceDataValid(&opened));
+  opened.Version = 3u;
+  assert(!AdmissionPresentResourceDataValid(&opened));
+  opened.Flags = 0u;
+  assert(AdmissionPresentResourceDataValid(&opened));
+  opened = data;opened.Flags = 4u;
   assert(!AdmissionPresentResourceDataValid(&opened));
   opened = data;opened.Format = 65u; /* the creator's DXGI format: opaque */
   assert(AdmissionPresentResourceDataValid(&opened));

@@ -1,0 +1,442 @@
+{
+  "schema": 1,
+  "scope": "HOST_CPU_ACTUAL_NIR_MAP_ONLY_NO_TRANSLATOR_BACKEND_WINDOWS_GPU",
+  "commands": [
+    [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang",
+      "-I@ROOT@/tests",
+      "-isysroot",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
+      "-Werror=implicit-function-declaration",
+      "-std=c11",
+      "-g",
+      "-O1",
+      "-fsanitize=address,undefined",
+      "-D__STDC_CONSTANT_MACROS",
+      "-D__STDC_FORMAT_MACROS",
+      "-D__STDC_LIMIT_MACROS",
+      "-DPACKAGE_VERSION=\"26.3.0-devel\"",
+      "-DHAVE_OPENGL=0",
+      "-DHAVE_OPENGL_ES_1=0",
+      "-DHAVE_OPENGL_ES_2=0",
+      "-DHAVE_ASAHI",
+      "-DMESA_SYSTEM_HAS_KMS_DRM=0",
+      "-DBUILDING_MESA",
+      "-DVK_ENABLE_BETA_EXTENSIONS",
+      "-DVIDEO_CODEC_VC1DEC=0",
+      "-DVIDEO_CODEC_H264DEC=0",
+      "-DVIDEO_CODEC_H264ENC=0",
+      "-DVIDEO_CODEC_H265DEC=0",
+      "-DVIDEO_CODEC_H265ENC=0",
+      "-DVIDEO_CODEC_AV1DEC=1",
+      "-DVIDEO_CODEC_AV1ENC=1",
+      "-DVIDEO_CODEC_VP9DEC=1",
+      "-DVIDEO_CODEC_MPEG12DEC=1",
+      "-DVIDEO_CODEC_JPEGDEC=1",
+      "-DUSE_LIBGLVND=0",
+      "-DHAVE_GFX_COMPUTE",
+      "-DGLAPI_EXPORT_PROTO_ENTRY_POINTS=1",
+      "-DALLOW_KCMP",
+      "-DMESA_DEBUG=0",
+      "-DENABLE_SHADER_CACHE",
+      "-DHAVE___BUILTIN_BSWAP32",
+      "-DHAVE___BUILTIN_BSWAP64",
+      "-DHAVE___BUILTIN_CLZ",
+      "-DHAVE___BUILTIN_CLZLL",
+      "-DHAVE___BUILTIN_CTZ",
+      "-DHAVE___BUILTIN_EXPECT",
+      "-DHAVE___BUILTIN_FFS",
+      "-DHAVE___BUILTIN_FFSLL",
+      "-DHAVE___BUILTIN_POPCOUNT",
+      "-DHAVE___BUILTIN_POPCOUNTLL",
+      "-DHAVE___BUILTIN_UNREACHABLE",
+      "-DHAVE___BUILTIN_TYPES_COMPATIBLE_P",
+      "-DHAVE___BUILTIN_ADD_OVERFLOW",
+      "-DHAVE_FUNC_ATTRIBUTE_CONST",
+      "-DHAVE_FUNC_ATTRIBUTE_FLATTEN",
+      "-DHAVE_FUNC_ATTRIBUTE_MALLOC",
+      "-DHAVE_FUNC_ATTRIBUTE_PURE",
+      "-DHAVE_FUNC_ATTRIBUTE_UNUSED",
+      "-DHAVE_FUNC_ATTRIBUTE_WARN_UNUSED_RESULT",
+      "-DHAVE_FUNC_ATTRIBUTE_WEAK",
+      "-DHAVE_FUNC_ATTRIBUTE_FORMAT",
+      "-DHAVE_FUNC_ATTRIBUTE_PACKED",
+      "-DHAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL",
+      "-DHAVE_FUNC_ATTRIBUTE_NORETURN",
+      "-DHAVE_FUNC_ATTRIBUTE_COLD",
+      "-DHAVE_FUNC_ATTRIBUTE_VISIBILITY",
+      "-DHAVE_UINT128",
+      "-DHAVE_FMEMOPEN",
+      "-DUSE_GCC_ATOMIC_BUILTINS",
+      "-DHAS_SCHED_H",
+      "-DHAVE_SYS_SYSCTL_H",
+      "-DHAVE_XLOCALE_H",
+      "-DHAVE_DLFCN_H",
+      "-DHAVE_SYS_SHM_H",
+      "-DHAVE_CET_H",
+      "-DHAVE_POLL_H",
+      "-DHAVE_STRTOF",
+      "-DHAVE_MKOSTEMP",
+      "-DHAVE_FLOCK",
+      "-DHAVE_STRTOK_R",
+      "-DHAVE_SYSCONF",
+      "-DHAVE_BSD_QSORT_R",
+      "-DHAVE_STRUCT_TIMESPEC",
+      "-DHAVE_POSIX_MEMALIGN",
+      "-DHAVE_DIRENT_D_TYPE",
+      "-DHAVE_STRTOD_L",
+      "-DHAVE_DLADDR",
+      "-DHAVE_ZLIB",
+      "-DHAVE_ZSTD",
+      "-DHAVE_COMPRESSION",
+      "-DHAVE_PTHREAD",
+      "-DMESA_LLVM_VERSION_STRING=\"23.1.0\"",
+      "-DLLVM_IS_SHARED=1",
+      "-DDRAW_LLVM_AVAILABLE=1",
+      "-DAMD_LLVM_AVAILABLE=1",
+      "-DGALLIVM_USE_ORCJIT=0",
+      "-DHAVE_SPIRV_TOOLS",
+      "-DTHREAD_SANITIZER=0",
+      "-DHAVE_LIBUNWIND",
+      "-DHAVE_RENDERDOC_INTEGRATION=0",
+      "-DXXH_FORCE_ALIGN_CHECK=0",
+      "-DXXH_FORCE_MEMORY_ACCESS=0",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a.p",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src/compiler/nir",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/include",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/include",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src/compiler",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/format",
+      "-I/opt/homebrew/opt/zstd/include",
+      "-I",
+      "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi",
+      "-I",
+      "/Users/pavel/public_windows/.local/reference/mesa/src/asahi",
+      "-I@ROOT@/drivers/apple-agx/mesa/dxil",
+      "-I@ROOT@/drivers/apple-agx/mesa/dxbc",
+      "-MMD",
+      "-MF",
+      "@OUT@/agx_dxil_nir_map.d",
+      "-c",
+      "@ROOT@/drivers/apple-agx/mesa/dxil/agx_dxil_nir_map.c",
+      "-o",
+      "@OUT@/agx_dxil_nir_map.o"
+    ],
+    [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang",
+      "-I@ROOT@/tests",
+      "-isysroot",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
+      "-Werror=implicit-function-declaration",
+      "-std=c11",
+      "-g",
+      "-O1",
+      "-fsanitize=address,undefined",
+      "-D__STDC_CONSTANT_MACROS",
+      "-D__STDC_FORMAT_MACROS",
+      "-D__STDC_LIMIT_MACROS",
+      "-DPACKAGE_VERSION=\"26.3.0-devel\"",
+      "-DHAVE_OPENGL=0",
+      "-DHAVE_OPENGL_ES_1=0",
+      "-DHAVE_OPENGL_ES_2=0",
+      "-DHAVE_ASAHI",
+      "-DMESA_SYSTEM_HAS_KMS_DRM=0",
+      "-DBUILDING_MESA",
+      "-DVK_ENABLE_BETA_EXTENSIONS",
+      "-DVIDEO_CODEC_VC1DEC=0",
+      "-DVIDEO_CODEC_H264DEC=0",
+      "-DVIDEO_CODEC_H264ENC=0",
+      "-DVIDEO_CODEC_H265DEC=0",
+      "-DVIDEO_CODEC_H265ENC=0",
+      "-DVIDEO_CODEC_AV1DEC=1",
+      "-DVIDEO_CODEC_AV1ENC=1",
+      "-DVIDEO_CODEC_VP9DEC=1",
+      "-DVIDEO_CODEC_MPEG12DEC=1",
+      "-DVIDEO_CODEC_JPEGDEC=1",
+      "-DUSE_LIBGLVND=0",
+      "-DHAVE_GFX_COMPUTE",
+      "-DGLAPI_EXPORT_PROTO_ENTRY_POINTS=1",
+      "-DALLOW_KCMP",
+      "-DMESA_DEBUG=0",
+      "-DENABLE_SHADER_CACHE",
+      "-DHAVE___BUILTIN_BSWAP32",
+      "-DHAVE___BUILTIN_BSWAP64",
+      "-DHAVE___BUILTIN_CLZ",
+      "-DHAVE___BUILTIN_CLZLL",
+      "-DHAVE___BUILTIN_CTZ",
+      "-DHAVE___BUILTIN_EXPECT",
+      "-DHAVE___BUILTIN_FFS",
+      "-DHAVE___BUILTIN_FFSLL",
+      "-DHAVE___BUILTIN_POPCOUNT",
+      "-DHAVE___BUILTIN_POPCOUNTLL",
+      "-DHAVE___BUILTIN_UNREACHABLE",
+      "-DHAVE___BUILTIN_TYPES_COMPATIBLE_P",
+      "-DHAVE___BUILTIN_ADD_OVERFLOW",
+      "-DHAVE_FUNC_ATTRIBUTE_CONST",
+      "-DHAVE_FUNC_ATTRIBUTE_FLATTEN",
+      "-DHAVE_FUNC_ATTRIBUTE_MALLOC",
+      "-DHAVE_FUNC_ATTRIBUTE_PURE",
+      "-DHAVE_FUNC_ATTRIBUTE_UNUSED",
+      "-DHAVE_FUNC_ATTRIBUTE_WARN_UNUSED_RESULT",
+      "-DHAVE_FUNC_ATTRIBUTE_WEAK",
+      "-DHAVE_FUNC_ATTRIBUTE_FORMAT",
+      "-DHAVE_FUNC_ATTRIBUTE_PACKED",
+      "-DHAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL",
+      "-DHAVE_FUNC_ATTRIBUTE_NORETURN",
+      "-DHAVE_FUNC_ATTRIBUTE_COLD",
+      "-DHAVE_FUNC_ATTRIBUTE_VISIBILITY",
+      "-DHAVE_UINT128",
+      "-DHAVE_FMEMOPEN",
+      "-DUSE_GCC_ATOMIC_BUILTINS",
+      "-DHAS_SCHED_H",
+      "-DHAVE_SYS_SYSCTL_H",
+      "-DHAVE_XLOCALE_H",
+      "-DHAVE_DLFCN_H",
+      "-DHAVE_SYS_SHM_H",
+      "-DHAVE_CET_H",
+      "-DHAVE_POLL_H",
+      "-DHAVE_STRTOF",
+      "-DHAVE_MKOSTEMP",
+      "-DHAVE_FLOCK",
+      "-DHAVE_STRTOK_R",
+      "-DHAVE_SYSCONF",
+      "-DHAVE_BSD_QSORT_R",
+      "-DHAVE_STRUCT_TIMESPEC",
+      "-DHAVE_POSIX_MEMALIGN",
+      "-DHAVE_DIRENT_D_TYPE",
+      "-DHAVE_STRTOD_L",
+      "-DHAVE_DLADDR",
+      "-DHAVE_ZLIB",
+      "-DHAVE_ZSTD",
+      "-DHAVE_COMPRESSION",
+      "-DHAVE_PTHREAD",
+      "-DMESA_LLVM_VERSION_STRING=\"23.1.0\"",
+      "-DLLVM_IS_SHARED=1",
+      "-DDRAW_LLVM_AVAILABLE=1",
+      "-DAMD_LLVM_AVAILABLE=1",
+      "-DGALLIVM_USE_ORCJIT=0",
+      "-DHAVE_SPIRV_TOOLS",
+      "-DTHREAD_SANITIZER=0",
+      "-DHAVE_LIBUNWIND",
+      "-DHAVE_RENDERDOC_INTEGRATION=0",
+      "-DXXH_FORCE_ALIGN_CHECK=0",
+      "-DXXH_FORCE_MEMORY_ACCESS=0",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a.p",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src/compiler/nir",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/include",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/include",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src/compiler",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util",
+      "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/format",
+      "-I/opt/homebrew/opt/zstd/include",
+      "-I",
+      "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi",
+      "-I",
+      "/Users/pavel/public_windows/.local/reference/mesa/src/asahi",
+      "-I@ROOT@/drivers/apple-agx/mesa/dxil",
+      "-I@ROOT@/drivers/apple-agx/mesa/dxbc",
+      "-MMD",
+      "-MF",
+      "@OUT@/map_nir_fixture.d",
+      "-c",
+      "@ROOT@/tests/data/dxil_nir_map_fixture.c",
+      "-o",
+      "@OUT@/map_nir_fixture.o"
+    ],
+    [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang",
+      "-isysroot",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk",
+      "-g",
+      "-O1",
+      "-fsanitize=address,undefined",
+      "@OUT@/agx_dxil_nir_map.o",
+      "@OUT@/map_nir_fixture.o",
+      "-o",
+      "@OUT@/map-nir-check",
+      "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/spirv/libvtn.a",
+      "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/compiler/libasahi_compiler.a",
+      "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/isa/libagx2_disasm.a",
+      "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/layout/libasahi_layout.a",
+      "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a",
+      "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/libcompiler.a",
+      "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util.a",
+      "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util_simd.a",
+      "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/c11/impl/libmesa_util_c11.a",
+      "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/blake3/libblake3.a",
+      "-L/opt/homebrew/opt/zstd/lib",
+      "-lzstd",
+      "-lz",
+      "-lpthread",
+      "/opt/homebrew/opt/spirv-tools/lib/libSPIRV-Tools.dylib",
+      "-lc++"
+    ],
+    [
+      "@OUT@/map-nir-check",
+      "/Users/pavel/public_windows/.local/c15-composite-host-1421-retry3/mixed.spv",
+      "@OUT@/pre.nir",
+      "@OUT@/post.nir",
+      "/Users/pavel/public_windows/.local/c15-spaces-1397/oracle-output"
+    ]
+  ],
+  "external_inputs": {
+    "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang": {
+      "bytes": 124676976,
+      "sha256": "1590ac950a3d627817d09ade5cb60b2115f17a72182a3141e010b4bcc482a0c9"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-composite-host-1421-retry3/mixed.spv": {
+      "bytes": 2152,
+      "sha256": "24e3df26411f940c71e4dc2322d38226cb3c1d50725e07d27b890aa9b2b307d4"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-composite-host-1421-retry3/mixed-map.json": {
+      "bytes": 240,
+      "sha256": "b2d13468feae64f3bd6f1901c8fadf5ab6a0a040ec865333d2db0cb20d575d40"
+    },
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/SDKSettings.json": {
+      "bytes": 7948,
+      "sha256": "7b93ad7e534cc4b31c6a4e39d19b5e0288acf2168c2649479a796d1cb51939fb"
+    },
+    "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/21/share/asan_ignorelist.txt": {
+      "bytes": 703,
+      "sha256": "f0180e94133315446c6e45287e1801e70ea94de1905a237c974627a732ebeadc"
+    },
+    "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/spirv/nir_spirv.h": {
+      "bytes": 5738,
+      "sha256": "af160db74b5fed349804eb06b5e230de17b6aea85416e7666c8ef1840b52e130"
+    },
+    "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/spirv/vtn_variables.c": {
+      "bytes": 123327,
+      "sha256": "bd539039fed2c7cc22840a023fc8171322ca6f4db18c9e755e754ae55d3b50ee"
+    },
+    "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/nir/nir_intrinsics.py": {
+      "bytes": 153655,
+      "sha256": "25ab3bb0e77b858690f099b7d1cda0714f00cbf5d8842960d36ebff6d5fccf2b"
+    },
+    "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/nir/nir_lower_explicit_io.c": {
+      "bytes": 91634,
+      "sha256": "d718cd03d56f81c61b55f8ae21c660dd23ec2de42875abed168546ebf0c240a3"
+    },
+    "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/nir/nir_lower_samplers.c": {
+      "bytes": 5189,
+      "sha256": "80f0e6056bb10557d567b331f5bb3ffd1690b0d72589e2975c0455c364ce03b2"
+    },
+    "/Volumes/pwdev/public_windows/.local/reference/mesa/src/gallium/drivers/asahi/agx_state.c": {
+      "bytes": 191469,
+      "sha256": "5015b75863202a170f8d6015eb82a76a70ecd4b92204894fa3d1886b1baa94ba"
+    },
+    "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/spirv/libvtn.a": {
+      "bytes": 4393080,
+      "sha256": "6e5fa798b4b5953787d8a2f3747e23e890d95dba187da1f0df6531ae90772d81"
+    },
+    "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/compiler/libasahi_compiler.a": {
+      "bytes": 6534632,
+      "sha256": "f28c73fc3cc18fc724760f4d368f47ef98c9830de4a38d0e7170f23575767b54"
+    },
+    "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/isa/libagx2_disasm.a": {
+      "bytes": 302112,
+      "sha256": "c955d1be99f75603e37b178b7745d472c36e81c1124d29210b3dec69bfe56f85"
+    },
+    "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/layout/libasahi_layout.a": {
+      "bytes": 152192,
+      "sha256": "959e39df3a280422a7c8db9f3cd7c955a539594451cfe95dc918fc942cd0ae26"
+    },
+    "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a": {
+      "bytes": 45850960,
+      "sha256": "ed2a3afcf609dc3277b704a8e4ff21f1b97e117fa2f17fffefb263a3224a0598"
+    },
+    "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/libcompiler.a": {
+      "bytes": 360304,
+      "sha256": "c9be5de1032e4049dca14e69481c5e5f1b18592aa055ba76da099269a590ce7f"
+    },
+    "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util.a": {
+      "bytes": 6907320,
+      "sha256": "d2536eca98f8c7ec95830340a7cb9184dd4d786b97ecab0f4916c57d66400c7f"
+    },
+    "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util_simd.a": {
+      "bytes": 3880,
+      "sha256": "1a6d03bfccb12d7541c357b54d1106f292b6c63ee7e350100fa45e93fa257d36"
+    },
+    "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/c11/impl/libmesa_util_c11.a": {
+      "bytes": 26752,
+      "sha256": "ef036f3cb25bf989228659745e60b24eb5b274bf89771febb4ea85cb078e4f22"
+    },
+    "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/blake3/libblake3.a": {
+      "bytes": 237744,
+      "sha256": "26dff477989b965d3af3ac9206530f0b6747589aac5eb80fcd7a5da5fe17fe7b"
+    },
+    "/opt/homebrew/Cellar/spirv-tools/1.4.357.0/lib/libSPIRV-Tools.dylib": {
+      "bytes": 1948272,
+      "sha256": "5d57212ec1d710fa3494be3efb1346ae57a22f4bdad03d899369e5585d4b9f70"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/cbv_b0_space3.bin": {
+      "bytes": 16,
+      "sha256": "a8522a1dcbea0b5db570e2cf2fcf870bdb749b083fdbc9381c999421d713f1c5"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/srv_t0_space2.bin": {
+      "bytes": 768,
+      "sha256": "901abe1c10552838ca6b03a6a278843ee164d57cb4ed87a7ae4e911ad95ac67e"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/srv_t0_space7.bin": {
+      "bytes": 768,
+      "sha256": "9b84ababf0ae07d761e7751c5e0f4ffc6d45411938cf9ad3ed458e38ff454b2b"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/initial_u0_space1.bin": {
+      "bytes": 768,
+      "sha256": "d830053706e352ad46a336bcc29b6a7e7e93a1eee50b3e8b6403781a92606bb4"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/initial_u0_space9.bin": {
+      "bytes": 768,
+      "sha256": "f080dcf3ec9f7c11262b0a5a697e20376dd9d8ba82a84faae39ae93d1ffa1311"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/expected_u0_space1.bin": {
+      "bytes": 768,
+      "sha256": "aba11b1d128a762fb39b374a9d1817115a34f468622a8b20f8be6a085cdac6f2"
+    },
+    "/Volumes/pwdev/public_windows/.local/c15-spaces-1397/oracle-output/expected_u0_space9.bin": {
+      "bytes": 768,
+      "sha256": "af2f46607d4dc7bf008997bc0f09b1df07ca7884e9cc3358894021e6eeef1967"
+    },
+    "/opt/homebrew/Cellar/zstd/1.5.7_1/lib/libzstd.1.5.7.dylib": {
+      "bytes": 653328,
+      "sha256": "69d8dee81bccdee425d167300d11431f3c5ecc34a3011400e536aa89f7756189"
+    },
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/libc++.1.tbd": {
+      "bytes": 156194,
+      "sha256": "d5813bdd04b5208c8a1e684594de78347082365be2776835f1e1e5faa89d9bcd"
+    },
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/libz.1.tbd": {
+      "bytes": 1985,
+      "sha256": "7326dfca9e65f8d74c70ec28496074b8285cecbbfde4172701fe66980a86275f"
+    },
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/libSystem.B.tbd": {
+      "bytes": 347931,
+      "sha256": "01089e97e7372fdda64ef480f2c99d483daf0c7fc99298a137425ee3230588ab"
+    }
+  },
+  "header_inventory_sha256": "4e9bdb74a5610c238b50ef5f1ce18479f63b55d9acc28a1df755760983c216dd",
+  "header_count": 6958,
+  "run_markers": [
+    "C15_MAP_NIR_REFUSALS cases=7 shader_and_map_unchanged=YES stats_empty=YES",
+    "C15_NIR_SEMANTIC_PASS lanes=192 active=173 tail=19 compared_words=384 stores=346"
+  ],
+  "expected_vectors": [
+    {
+      "actual": "actual_u0_space1.bin",
+      "expected_input": "/Users/pavel/public_windows/.local/c15-spaces-1397/oracle-output/expected_u0_space1.bin"
+    },
+    {
+      "actual": "actual_u0_space9.bin",
+      "expected_input": "/Users/pavel/public_windows/.local/c15-spaces-1397/oracle-output/expected_u0_space9.bin"
+    }
+  ],
+  "observed_scope": "EXP1442 four rc0 empty stderr MMDclosure; actual7refusals semanticvectors; result563e7784a691e323e46f98e11d25f47f54f5451646963f864e41a8a9647a4b06"
+}

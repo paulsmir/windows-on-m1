@@ -1,9 +1,10 @@
 """EXP935: replay the actual projected clear against an unbound RTV.
 
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 Catches the observed valid ClearRenderTargetView -> E_NOTIMPL device failure,
 and clearing/leaking the caller's existing MRT/depth framebuffer instead.
 D3D-G10a: views of any mip level and slice range clear (slice by slice);
-only a non-texture view is refused.
+a buffer without a clear_buffer callback is refused.
 """
 import ast
 import os
@@ -11,6 +12,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from test_d3d11_buffer_rtv import projected, body
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'drivers/apple-agx/mesa/scripts/build-native-asahi-state.py'
@@ -39,14 +41,21 @@ struct pipe_resource {unsigned target,format,nr_samples,array_size,last_level,wi
 struct pipe_surface {pipe_resource *texture;unsigned format,level,first_layer,last_layer;};
 struct pipe_framebuffer_state {unsigned width,height,layers,samples,nr_cbufs;pipe_surface cbufs[8],zsbuf;};
 union pipe_color_union {float f[4];};
+using UINT=unsigned;
+struct RenderTargetView {pipe_surface surface;UINT buffer_first_element,buffer_num_elements;};
+static RenderTargetView *CastRenderTargetView(RenderTargetView*v){return v;}
+static unsigned util_format_get_blocksize(unsigned){return 4;}
+static void util_format_pack_rgba(unsigned,void*d,const void*s,unsigned){memcpy(d,s,4);}
 struct pipe_context {
  void (*clear_render_target)(pipe_context*,pipe_surface*,const pipe_color_union*,unsigned,unsigned,unsigned,unsigned,bool);
  void (*clear)(pipe_context*,unsigned,uint32_t,uint8_t,const void*,const pipe_color_union*,double,unsigned);
  void (*set_framebuffer_state)(pipe_context*,const pipe_framebuffer_state*);
+ void (*clear_buffer)(pipe_context*,pipe_resource*,unsigned,unsigned,const void*,int);
  pipe_framebuffer_state active;
 };
 struct Device {pipe_context *pipe;pipe_framebuffer_state fb;void *windows;int error;};
 static Device *CastDevice(Device *p){return p;}
+static bool CheckPredicate(Device*){return true;}
 static void AgxD3d10WindowsDiagnosticState(void*,const char*){}
 static void SetError(Device *p,int e){p->error=e;}
 #define LOG_UNSUPPORTED(x) ((void)0)
@@ -63,7 +72,9 @@ static void native_clear(pipe_context*p,unsigned mask,uint32_t channels,uint8_t 
  assert(p->active.width==r->width && p->active.height==r->height);
  r->pixel=c->f[1];clears++;
 }
+// BUFFER_HELPER
 static void clear_view(Device*hDevice,pipe_surface*surface,pipe_color_union clear_color){
+ RenderTargetView view={*surface,0,0};auto *hRenderTargetView=&view;
  auto *pipe=hDevice->pipe;
 // ACTUAL_BODY
 }
@@ -94,7 +105,7 @@ int main(){
  view.level=0;view.first_layer=1;view.last_layer=3;clear_view(&d,&view,green);
  assert(d.error==0 && clears==6);
  assert(memcmp(&pipe.active,&saved,sizeof(saved))==0);
- // A non-texture view still fails without modifying framebuffer state.
+ // A buffer without a native clear callback fails without modifying framebuffer state.
  pipe_resource buffer=target;buffer.target=PIPE_BUFFER;
  pipe_surface bad={&buffer,buffer.format,0,0,0};
  clear_view(&d,&bad,green);
@@ -108,7 +119,8 @@ class ClearViewBindingTests(unittest.TestCase):
     def test_actual_clear_handles_unbound_view_and_restores_mrt_depth(self):
         with tempfile.TemporaryDirectory(prefix='agx-clear-view-') as td:
             source=Path(td)/'clear.cpp';binary=Path(td)/'clear'
-            source.write_text(SHIM.replace('// ACTUAL_BODY',clear_body()))
+            helper = 'bool AgxD3d11ClearBufferRtv(Device *device, RenderTargetView *view, const pipe_color_union *color, UINT first, UINT count)\n' + body(projected('OutputMerger.cpp'), 'AgxD3d11ClearBufferRtv')
+            source.write_text(SHIM.replace('// BUFFER_HELPER', helper).replace('// ACTUAL_BODY',clear_body()))
             subprocess.run([os.environ.get('CXX','clang++'),'-std=c++17',
                             '-fsanitize=address,undefined','-fno-omit-frame-pointer',
                             str(source),'-o',str(binary)],check=True)

@@ -43,6 +43,11 @@ typedef unsigned long long ULONGLONG; typedef long long LONGLONG;
 #define FALSE 0
 #define S_OK 0
 #define ARRAYSIZE(a) (sizeof(a)/sizeof((a)[0]))
+#define D3DDDIERR_DEVICEREMOVED ((HRESULT)0x88760870u)
+#define DXGI_ERROR_DEVICE_REMOVED ((HRESULT)0x887a0005u)
+#define DXGI_ERROR_DEVICE_HUNG ((HRESULT)0x887a0006u)
+#define DXGI_ERROR_DEVICE_RESET ((HRESULT)0x887a0007u)
+#define DXGI_ERROR_DRIVER_INTERNAL_ERROR ((HRESULT)0x887a0020u)
 #define E_FAIL ((HRESULT)0x80004005u)
 #define ADMISSION_UMD_SCREEN_BUFFER_LIMIT 16u
 #define ADMISSION_UMD_SCREEN_BUFFER_SCAN(d) ADMISSION_UMD_SCREEN_BUFFER_LIMIT
@@ -53,16 +58,18 @@ static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclus
 struct LARGE_INTEGER { LONGLONG QuadPart; };
 struct SYNC { BOOL Valid; };
 struct SLOT { uint64_t Token; uint64_t Bytes; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried;
-  UINT Flags; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa;  unsigned char *PrivateStaging; D3DKMT_HANDLE StagingAllocation; const void *NativeBo; int (*NativeMapRelease)(const void*,const void*,int); };
+  UINT Flags; D3DKMT_HANDLE KernelAllocation; SYNC Sync; uint64_t CanonicalGpuVa;  unsigned char *PrivateStaging; D3DKMT_HANDLE StagingAllocation; const void *NativeBo; int (*NativeMapRelease)(const void*,const void*,int); BOOL UploadRingPending; };
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct CB { void *pfnLockCb, *pfnUnlockCb; };
-struct ADMISSION_UMD_DEVICE { SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; };
+struct ADMISSION_UMD_DEVICE { HRESULT GpuvaFailure; BOOL DrawTerminal; SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; };
 struct APPLE_AGX_G3_COPY_REQUEST { D3DKMT_HANDLE Allocation; UINT Operation; ULONGLONG Offset; UINT TransferBytes; ULONGLONG ProcessGeneration, MappingGeneration; };
 static int touches, queries, query_ok_after, remaps;
-static int cycles;
+static bool touch_ok=true;
+static int cycles;static HRESULT query_error;
 static int replace_canonical(ADMISSION_UMD_DEVICE*, SLOT *s){ assert(s->CanonicalGpuVa); ++remaps; ++cycles; return 1; }
-static int touch_device(ADMISSION_UMD_DEVICE*, uint64_t va){ assert(va); ++touches; return 1; }
-static int copy_escape(ADMISSION_UMD_DEVICE*, APPLE_AGX_G3_COPY_REQUEST *q){
+static int touch_device(ADMISSION_UMD_DEVICE*, uint64_t va){ assert(va); ++touches; return touch_ok; }
+static int copy_escape(ADMISSION_UMD_DEVICE *d, APPLE_AGX_G3_COPY_REQUEST *q){
+  d->GpuvaFailure=query_error;
   ++queries; if(queries>query_ok_after){q->ProcessGeneration=q->MappingGeneration=1;return 1;} return 0; }
 static int transfer_slot(ADMISSION_UMD_DEVICE*, SLOT*, bool, UINT*, ULONGLONG*) { return 1; }
 static void AdmissionUmdDiagnostic(const char *, HRESULT, const UINT *, UINT) {}
@@ -73,6 +80,11 @@ int main(){
     s.CanonicalGpuVa=0x10000*(i+1);s.Flags=AppleAgxWin32BufferGpuWrite;s.Queried=1;s.Sync.Valid=1;}
   assert(transfer_held(&d,false)==1 && touches==0);
   d.ScreenBuffers[2].Queried=0;
+  /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? An upload must not
+   * continue copying after its prerequisite scheduling touch failed. */
+  touch_ok=false;
+  assert(!transfer_held(&d,false) && touches==1);
+  touch_ok=true;touches=0;
   assert(transfer_held(&d,false)==1);
   if(touches!=1){printf("expected one touch before first copy, got %d\n",touches);return 1;}
   touches=0; assert(transfer_held(&d,true)==1 && touches==0);
@@ -84,6 +96,9 @@ int main(){
   assert(query_canonical(&d,&s,&q) && queries==2 && remaps==1 && cycles==1 && s.Queried);
   remaps=0; queries=0; query_ok_after=5; s.Queried=0;
   assert(!query_canonical(&d,&s,&q) && queries==2 && remaps==1 && !s.Queried);
+  query_error=D3DDDIERR_DEVICEREMOVED;
+  remaps=0;queries=0;query_ok_after=5;s.Queried=0;
+  assert(!query_canonical(&d,&s,&q) && remaps==0 && d.GpuvaFailure==D3DDDIERR_DEVICEREMOVED);
   puts("EXP1003 residency touch: PASS");
 }
 '''

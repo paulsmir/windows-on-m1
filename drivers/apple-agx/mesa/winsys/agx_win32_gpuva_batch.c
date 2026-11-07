@@ -65,16 +65,25 @@ _Static_assert(offsetof(struct drm_asahi_cmd_compute,ts)==
 _Static_assert(offsetof(APPLE_AGX_G4_COMPUTE_ENVELOPE,Native)==
                sizeof(APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE), "compute envelope layout");
 /* The UMD bridge marks at most this many written allocations per submission
- * (D3DDDI_MAX_WRITTEN_PRIMARIES in umd_gpuva_windows.c submit). */
-#define AGX_G4_WRITTEN_LIMIT 16u
+ * (ADMISSION_UMD_WRITTEN_LIMIT in umd_gpuva_windows.c submit). EXP1851: 16
+ * (the WDK's written-primaries bound) refused a D3D12 compute batch with the
+ * frame's dispatches; only direct displayable slots count as primaries.
+ * EXP1994 RC73B: 128 refused one compute batch writing 128 UAV buffers, the
+ * readback copy target and the timestamp (130; reject-batch {3, line of the
+ * writer add_written in AgxWin32AsahiBatchFinishCompute}). The list is only
+ * the UMD's CPU-copy refresh set (distinct active slots, no WDK bound); 1024
+ * entries are 8 KiB of stack per submission. */
+#define AGX_G4_WRITTEN_LIMIT 1024u
 
 typedef struct {
   struct agx_bo *Command;
+  struct agx_bo *Timestamp;
   /* G2: the CDM context-store buffer of a compute job, in this process's VM
    * (Asahi allocates one per job from the user VM, queue/compute.rs). */
   struct agx_bo *Preemption;
   APPLE_AGX_G4_PRIVATE_LEASE Lease;
   uint64_t Fence;
+  AGX_WIN32_REF_LIST Expected;
   unsigned Entered, ComputeEntered, Submitted, Retired, Rejected;
   /* GPU timestamps: where Mesa's timestamp buffer takes each value
    * (TimestampEnd 0: the job's start, 1: its end). */
@@ -151,6 +160,230 @@ static AGX_G4_BATCH *capsule(struct agx_batch *batch) {
   return batch ? (AGX_G4_BATCH *)batch->windows_batch : NULL;
 }
 
+/* Independent expected ranges: capture values while the API binding is live,
+ * retain them in this capsule through unbind/rollover, never agx_bo_reference.
+ * A virtual BO has a synthetic canonical allocation plus separate backing;
+ * validate those allocations recursively, not its intentionally sparse VA. */
+static void expect_bo(struct agx_batch *batch, struct agx_bo *bo,
+    AGX_WIN32_REF origin, uint64_t offset, uint64_t bytes) {
+  AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
+  AGX_G4_BATCH *g=capsule(batch);
+  if(!b || !b->ValidateRefs || !g || !bo) return;
+  const AGX_WIN32_GPUVA_BO *mapped=AgxWin32AsahiGpuvaBo(b,bo);
+  if(!mapped) { g->Expected.Incomplete=1; return; }
+  if(bo->va && bo->va->addr!=mapped->Va) {
+    /* The virtual coordinate can span many pages; its canonical BO is a
+     * small handle anchor. Check logical bounds before holding that anchor
+     * and the actual backing allocations, each in its own VA range. */
+    if(offset>=bo->size || (bytes && bytes>bo->size-offset)) {
+      g->Expected.Incomplete=1;return;
+    }
+    offset=0;bytes=mapped->Bytes;
+  }
+  origin.Allocation=mapped->Allocation;
+  origin.Va=mapped->Va;
+  origin.Bytes=bytes ? bytes : (offset < mapped->Bytes ? mapped->Bytes-offset : 0);
+  if(offset>UINT64_MAX-origin.Va) { g->Expected.Incomplete=1; return; }
+  origin.Va+=offset;
+  (void)AgxWin32RefAppend(&g->Expected,&origin);
+  for(unsigned i=0,n=AgxWin32AsahiVirtualBackingCount(bo);i<n;++i)
+    expect_bo(batch,AgxWin32AsahiVirtualBacking(bo,i),origin,0,0);
+  struct agx_bo *table=AgxWin32AsahiVirtualTable(bo);
+  if(table) expect_bo(batch,table,origin,0,0);
+}
+void AgxWin32AsahiExpectBo(struct agx_batch *batch, struct agx_bo *bo,
+    unsigned kind,unsigned slot,unsigned path) {
+  AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
+  if(!b || !b->ValidateRefs) return;
+  AGX_WIN32_REF r=b->RefOrigin;
+  r.Kind=kind;r.Slot=slot;r.Path=path;
+  expect_bo(batch,bo,r,0,0);
+}
+static void expect_resource(struct agx_batch *batch, struct pipe_resource *res,
+    unsigned kind,unsigned stage,unsigned slot,uint64_t offset,uint64_t bytes,
+    uint64_t object) {
+  if(!res) return;
+  AGX_WIN32_REF r=backend(batch)->RefOrigin;
+  r.Kind=kind;r.Stage=stage;r.Slot=slot;r.Path=2;r.Object=object;
+  r.Root=~0u;
+  unsigned binding=kind==AgxRefCbv ? 0 : kind==AgxRefSrv ? 1 : 2;
+  if(stage<6 && slot<128 && (kind==AgxRefCbv || kind==AgxRefSrv || kind==AgxRefUav)) {
+    unsigned root=backend(batch)->RefRoots[stage][binding][slot];
+    if(root) r.Root=root-1;
+  }
+  struct agx_resource *native=agx_resource(res);
+  /* Textures may be placed within a BO; retain the whole backing allocation.
+   * Buffer offsets are relative to agx_map_gpu, including a placed offset. */
+  if(res->target!=PIPE_BUFFER) { offset=0;bytes=0; }
+  else if(native->bo && native->bo->va) {
+    uint64_t base=agx_map_gpu(native)-native->bo->va->addr;
+    if(offset>UINT64_MAX-base) { capsule(batch)->Expected.Incomplete=1;return; }
+    offset+=base;
+  }
+  expect_bo(batch,native->bo,r,offset,bytes);
+  if(native->separate_stencil)
+    expect_bo(batch,native->separate_stencil->bo,r,0,0);
+}
+void AgxWin32AsahiExpectResource(struct pipe_context *pipe,int compute,
+    struct pipe_resource *res,unsigned kind,unsigned stage,unsigned slot,
+    uint64_t object) {
+  if(!pipe) return;
+  AGX_WIN32_ASAHI_BACKEND *b=agx_device(pipe->screen)->windows_private;
+  if(!b || !b->ValidateRefs) return;
+  struct agx_context *ctx=agx_context(pipe);
+  if(ctx->any_faults) return;
+  struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  if(batch && capsule(batch)) expect_resource(batch,res,kind,stage,slot,0,0,object);
+}
+static void capture_stage_refs(struct agx_batch *batch,unsigned stage) {
+  struct agx_stage *s=&batch->ctx->stage[stage];
+  if(!s->shader) return;
+  for(unsigned i=0;i<PIPE_MAX_CONSTANT_BUFFERS;++i)
+    if(s->cb_mask & (1u<<i)) expect_resource(batch,s->cb[i].buffer,AgxRefCbv,
+        stage,i,s->cb[i].buffer_offset,s->cb[i].buffer_size,0);
+  for(unsigned i=0;i<PIPE_MAX_SHADER_BUFFERS;++i)
+    if(s->ssbo_mask & (1u<<i)) expect_resource(batch,s->ssbo[i].buffer,AgxRefUav,
+        stage,i,s->ssbo[i].buffer_offset,s->ssbo[i].buffer_size,0);
+  for(unsigned i=0;i<32u && i<s->shader->info.nr_bindful_images;++i)
+    if(s->image_mask & (1u<<i)) expect_resource(batch,s->images[i].resource,
+        AgxRefUav,stage,i,0,0,0);
+  for(unsigned i=0;i<s->texture_count && i<s->shader->info.nr_bindful_textures;++i) if(s->textures[i])
+    expect_resource(batch,&s->textures[i]->rsrc->base,AgxRefSrv,stage,i,0,0,0);
+}
+void AgxWin32AsahiCaptureComputeRefs(struct agx_batch *batch,
+    const struct pipe_grid_info *info) {
+  if(!backend(batch)->ValidateRefs) return;
+  capture_stage_refs(batch,MESA_SHADER_COMPUTE);
+  expect_resource(batch,info->indirect,AgxRefIndirect,MESA_SHADER_COMPUTE,0,
+      info->indirect_offset,info->indirect ? 12 : 0,0);
+}
+static void capture_draw_refs(struct agx_batch *batch,
+    const struct pipe_draw_info *info,const struct pipe_draw_indirect_info *indirect) {
+  if(!backend(batch)->ValidateRefs) return;
+  for(unsigned s=0;s<MESA_SHADER_STAGES;++s)
+    if(s!=MESA_SHADER_COMPUTE) capture_stage_refs(batch,s);
+  struct agx_context *ctx=batch->ctx;
+  for(unsigned i=0;i<PIPE_MAX_ATTRIBS;++i)
+    if((ctx->vb_mask & (1u<<i)) && !ctx->vertex_buffers[i].is_user_buffer &&
+       ctx->vertex_buffers[i].buffer.resource)
+      expect_resource(batch,ctx->vertex_buffers[i].buffer.resource,AgxRefVertex,0,i,0,0,0);
+  if(info->index_size && !info->has_user_indices)
+    expect_resource(batch,info->index.resource,AgxRefIndex,0,0,0,0,0);
+  if(indirect) {
+    expect_resource(batch,indirect->buffer,AgxRefIndirect,0,0,0,0,0);
+    expect_resource(batch,indirect->indirect_draw_count,AgxRefCount,0,0,0,0,0);
+  }
+  for(unsigned i=0;i<ctx->streamout.num_targets;++i) if(ctx->streamout.targets[i]) {
+    expect_resource(batch,ctx->streamout.targets[i]->buffer,AgxRefStreamOutput,0,i,0,0,0);
+    expect_resource(batch,agx_so_target(ctx->streamout.targets[i])->offset,AgxRefCount,0,i,0,0,0);
+  }
+}
+/* Native envelope addresses are checked independently of its BO list. */
+static void expect_address_origin(struct agx_batch *batch,uint64_t va,uint64_t bytes,
+    AGX_WIN32_REF r) {
+  AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
+  if(!b->ValidateRefs || !va) return;
+  r.Va=va;r.Bytes=bytes;r.Allocation=0;
+  APPLE_AGX_U32 cursor=0;
+  const struct agx_bo *bo;
+  while(b->Ops.NextBo && (bo=b->Ops.NextBo(b->Owner,&cursor))!=NULL) {
+    const AGX_WIN32_GPUVA_BO *map=AgxWin32AsahiGpuvaBo(b,(struct agx_bo *)bo);
+    if(map && AgxWin32AsahiVirtualContains((struct agx_bo *)bo,va,bytes)) {
+      /* Alias address is bounded separately; holds are canonical/backing. */
+      expect_bo(batch,(struct agx_bo *)bo,r,0,0);return;
+    }
+    if(map && va>=map->Va && va-map->Va<map->Bytes) {
+      r.Allocation=map->Allocation;break;
+    }
+  }
+  (void)AgxWin32RefAppend(&capsule(batch)->Expected,&r);
+}
+static void expect_address(struct agx_batch *batch,uint64_t va,uint64_t bytes,
+    unsigned kind,unsigned slot) {
+  AGX_WIN32_REF r=backend(batch)->RefOrigin;
+  r.Kind=kind;r.Slot=slot;r.Path=4;
+  expect_address_origin(batch,va,bytes,r);
+}
+void AgxWin32AsahiExpectDescriptors(struct pipe_context *pipe,int compute,
+    const void *packed,unsigned stage,unsigned slot,uint64_t object) {
+  AGX_WIN32_ASAHI_BACKEND *b=agx_device(pipe->screen)->windows_private;
+  if(!b || !b->ValidateRefs) return;
+  struct agx_context *ctx=agx_context(pipe);
+  if(ctx->any_faults) return;
+  struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  if(!batch || !capsule(batch)) return;
+  if(!packed) { capsule(batch)->Expected.Incomplete=1;return; }
+  AGX_WIN32_REF origin=b->RefOrigin;
+  origin.Kind=AgxRefDescriptor;origin.Stage=stage;origin.Slot=slot;origin.Object=object;origin.Path=5;
+  struct AGX_TEXTURE texture;
+  if(!AGX_TEXTURE_unpack(stderr,packed,&texture)) { capsule(batch)->Expected.Incomplete=1;return; }
+  expect_address_origin(batch,texture.address,1,origin);
+  if(texture.compressed) expect_address_origin(batch,texture.acceleration_buffer,1,origin);
+  for(unsigned i=0;i<2;++i) {
+    struct AGX_PBE pbe;
+    if(!AGX_PBE_unpack(stderr,(const uint8_t *)packed+AGX_TEXTURE_LENGTH+i*AGX_PBE_LENGTH,&pbe)) {
+      capsule(batch)->Expected.Incomplete=1;return;
+    }
+    expect_address_origin(batch,pbe.buffer,1,origin);
+    if(pbe.compressed) expect_address_origin(batch,pbe.acceleration_buffer,1,origin);
+  }
+}
+static void capture_compute_addresses(struct agx_batch *batch,
+    const struct drm_asahi_cmd_compute *c) {
+  if(!c || !backend(batch)->ValidateRefs) return;
+  expect_address(batch,c->cdm_ctrl_stream_base,
+      c->cdm_ctrl_stream_end-c->cdm_ctrl_stream_base,AgxRefEncoder,1);
+  expect_address(batch,c->sampler_heap,(uint64_t)c->sampler_count*APPLE_AGX_G4_SAMPLER_BYTES,AgxRefSampler,0);
+  expect_address(batch,c->helper.data,1,AgxRefScratch,2);
+  if(c->helper.binary) expect_address(batch,
+      APPLE_AGX_G4_USC_EXECUTION_BASE+(c->helper.binary & ~63u),1,AgxRefNative,0);
+}
+static void capture_render_addresses(struct agx_batch *batch,
+    const struct drm_asahi_cmd_render *r) {
+  if(!r || !backend(batch)->ValidateRefs) return;
+  expect_address(batch,r->vdm_ctrl_stream_base,1,AgxRefEncoder,0);
+  expect_address(batch,r->isp_scissor_base,1,AgxRefNative,1);
+  expect_address(batch,r->isp_dbias_base,1,AgxRefNative,2);
+  expect_address(batch,r->isp_oclqry_base,APPLE_AGX_G4_OCCLUSION_HEAP_BYTES,AgxRefQuery,0);
+  expect_address(batch,r->sampler_heap,(uint64_t)r->sampler_count*APPLE_AGX_G4_SAMPLER_BYTES,AgxRefSampler,0);
+  expect_address(batch,r->depth.base,1,AgxRefDepth,0);
+  expect_address(batch,r->depth.comp_base,1,AgxRefDepth,1);
+  expect_address(batch,r->stencil.base,1,AgxRefDepth,2);
+  expect_address(batch,r->stencil.comp_base,1,AgxRefDepth,3);
+  const uint32_t usc[]={r->vertex_helper.binary,r->fragment_helper.binary,
+      r->bg.usc,r->eot.usc,r->partial_bg.usc,r->partial_eot.usc};
+  for(unsigned i=0;i<sizeof(usc)/sizeof(usc[0]);++i)
+    if(usc[i]) expect_address(batch,APPLE_AGX_G4_USC_EXECUTION_BASE+(usc[i] & ~63u),1,AgxRefNative,3+i);
+  expect_address(batch,r->vertex_helper.data,1,AgxRefScratch,0);
+  expect_address(batch,r->fragment_helper.data,1,AgxRefScratch,1);
+}
+static void capture_native_refs(struct agx_batch *batch) {
+  if(!backend(batch)->ValidateRefs) return;
+  AGX_G4_BATCH *g=capsule(batch);
+  struct agx_device *dev=agx_device(batch->ctx->base.screen);
+  AgxWin32AsahiExpectBo(batch,dev->zero_bo,AgxRefNative,10,3);
+  AgxWin32AsahiExpectBo(batch,dev->scratch_bo,AgxRefScratch,3,3);
+  AgxWin32AsahiExpectBo(batch,agx_screen(batch->ctx->base.screen)->rodata,AgxRefNative,11,3);
+  AgxWin32AsahiExpectBo(batch,g->Command,AgxRefNative,0,3);
+  AgxWin32AsahiExpectBo(batch,g->Preemption,AgxRefNative,1,3);
+  AgxWin32AsahiExpectBo(batch,batch->vdm.bo,AgxRefEncoder,0,3);
+  AgxWin32AsahiExpectBo(batch,batch->cdm.bo,AgxRefEncoder,1,3);
+  AgxWin32AsahiExpectBo(batch,batch->sampler_heap.bo,AgxRefSampler,0,3);
+  AgxWin32AsahiExpectBo(batch,batch->geom_params_bo,AgxRefNative,2,3);
+  AgxWin32AsahiExpectBo(batch,batch->geom_index_bo,AgxRefIndex,0,3);
+  if(batch->vs_scratch) AgxWin32AsahiExpectBo(batch,batch->ctx->scratch_vs.buf,AgxRefScratch,0,3);
+  if(batch->fs_scratch) AgxWin32AsahiExpectBo(batch,batch->ctx->scratch_fs.buf,AgxRefScratch,1,3);
+  if(batch->cs_scratch) AgxWin32AsahiExpectBo(batch,batch->ctx->scratch_cs.buf,AgxRefScratch,2,3);
+  for(unsigned i=0;i<batch->key.nr_cbufs;++i)
+    expect_resource(batch,batch->key.cbufs[i].texture,AgxRefTarget,0,i,0,0,0);
+  expect_resource(batch,batch->key.zsbuf.texture,AgxRefDepth,0,0,0,0,0);
+  util_dynarray_foreach(&batch->pool.bos,struct agx_bo *,bo)
+    AgxWin32AsahiExpectBo(batch,*bo,AgxRefPool,0,3);
+  util_dynarray_foreach(&batch->pipeline_pool.bos,struct agx_bo *,bo)
+    AgxWin32AsahiExpectBo(batch,*bo,AgxRefPool,1,3);
+}
+
+
 int AgxWin32AsahiBatchConfigure(AGX_WIN32_ASAHI_BACKEND *b,
     const AGX_WIN32_ASAHI_BATCH_OPS *ops,void *owner) {
   (void)ops;
@@ -175,6 +408,62 @@ void (*AgxWin32VdmTraceHook)(uint64_t va, const uint32_t *words,
  * sample while clears and copies reach them): the render fields that carry
  * the sample count, for every multisampled render, as submitted. */
 void (*AgxWin32RenderTraceHook)(const uint32_t *values, unsigned count);
+/* rc110 receipt-only: the tile-buffer configuration of every distinct
+ * render layout this process submits (sample bytes, samples, utile width and
+ * height, render width and height), once each: the hardware proof of the
+ * utile APPLE_AGX_TILE_BUFFER_BYTES selects (agx_win32_tile_limit.h). */
+void (*AgxWin32TileLayoutHook)(const uint32_t *values, unsigned count);
+/* rc118 receipt-only (agx_win32_batch_deps.h): measure-batch-deps {kind,
+ * conflict mask, reads, writes} per submitted batch (MSVC only, like the
+ * render trace: the host models extract the submit bodies alone). */
+void (*AgxWin32BatchDepsHook)(const uint32_t *values, unsigned count);
+/* OV1/OV2 (agx_d3d12_job_barriers.h): every submitted batch, kind 1 render /
+ * 2 compute, before a compute envelope is composed; nonzero for a compute
+ * batch the D3D12 owner proved independent of the render submitted just
+ * before it (only while the KMD reports
+ * AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE). */
+unsigned (*AgxWin32BatchKindHook)(unsigned kind);
+extern volatile unsigned AgxWin32Ov2Feature;
+/* OV5: read-only, before the render packet is built: nonzero when the
+ * D3D12 owner proved the render's vertex/TA work independent of the compute
+ * batch submitted just before it (prelude: the packet has a compute command;
+ * the owner never flags those) -- only while the KMD reports
+ * AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT. */
+unsigned (*AgxWin32RenderTaHook)(unsigned prelude);
+extern volatile unsigned AgxWin32Ov5Feature;
+#ifdef _MSC_VER
+#include "agx_win32_batch_deps.h"
+static AGX_WIN32_BATCH_DEPS batch_deps;
+static void note_batch_deps(struct agx_batch *batch, unsigned kind) {
+  int h;
+  if(!AgxWin32BatchDepsHook) return;
+  AgxWin32BatchDepsBegin(&batch_deps,kind);
+  AGX_BATCH_FOREACH_BO_HANDLE(batch,h)
+    AgxWin32BatchDepsAdd(&batch_deps,(unsigned)h,
+        agx_writer_get(batch->ctx,(unsigned)h)==batch);
+  {
+    const unsigned reads=batch_deps.Current.Reads,writes=batch_deps.Current.Writes;
+    const uint32_t values[4]={kind,AgxWin32BatchDepsCommit(&batch_deps),reads,writes};
+    AgxWin32BatchDepsHook(values,4u);
+  }
+}
+#endif
+#ifdef _MSC_VER
+#define AGX_WIN32_TILE_LAYOUT_SLOTS 16u
+static uint32_t agx_win32_tile_layouts[AGX_WIN32_TILE_LAYOUT_SLOTS][6];
+static unsigned agx_win32_tile_layout_count;
+static void note_tile_layout(const APPLE_AGX_G4_NATIVE_RENDER *r) {
+  const uint32_t values[6]={r->SampleSizeBytes,r->Samples,r->UtileWidthPx,r->UtileHeightPx,
+      r->WidthPx,r->HeightPx};
+  unsigned i;
+  if(!AgxWin32TileLayoutHook) return;
+  for(i=0;i<agx_win32_tile_layout_count;++i)
+    if(!memcmp(agx_win32_tile_layouts[i],values,sizeof(values))) return;
+  if(agx_win32_tile_layout_count<AGX_WIN32_TILE_LAYOUT_SLOTS)
+    memcpy(agx_win32_tile_layouts[agx_win32_tile_layout_count++],values,sizeof(values));
+  AgxWin32TileLayoutHook(values,6u);
+}
+#endif
 /* EXP1317 receipt-only: every pixel shader whose indexable temporary Asahi
  * lowers to scratch (above 256 bytes) hung the GPU (agx_scratch_smoke n=24,
  * DEVICE_HUNG) with the SGX core topology reported. The fragment helper
@@ -257,13 +546,15 @@ static struct agx_batch *submitted_at(struct agx_batch *batch,uint64_t fence) {
  * and that batch later retires by the same fence. */
 static int retire_held(struct agx_batch *batch,AGX_WIN32_ASAHI_BACKEND *b) {
   /* EXP1203: room is needed only when every older slot is taken. */
-  if(b->Gpuva.OlderCount<AGX_GPUVA_IN_FLIGHT-1u) return 1;
+  const unsigned limit=AgxSubmissionWindowLimit(b->Gpuva.SubmissionWindow);
+  if(b->Gpuva.OlderCount<limit-1u) return 1;
   uint64_t oldest=b->Gpuva.Older[0].Fence;
   struct agx_batch *old=submitted_at(batch,oldest);
-  if(!old) return AgxWin32GpuvaRetire(&b->Gpuva,oldest) &&
-                  b->Gpuva.OlderCount<AGX_GPUVA_IN_FLIGHT-1u;
-  return AgxWin32AsahiBatchPoll(old,1000) &&
-         b->Gpuva.OlderCount<AGX_GPUVA_IN_FLIGHT-1u;
+  unsigned wait_token=AgxWin32WaitBegin(AgxWaitInflightSlot);
+  int retired=old ? AgxWin32AsahiBatchPoll(old,1000) :
+                   AgxWin32GpuvaRetire(&b->Gpuva,oldest);
+  AgxWin32WaitEnd(wait_token);
+  return retired && b->Gpuva.OlderCount<limit-1u;
 }
 
 int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
@@ -298,8 +589,18 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *batch) {
   }
   AGX_G4_BATCH *g=calloc(1,sizeof(*g));
   if(!g) return batch_refuse(1u, __LINE__, 0u, 0u);
+  /* EndQuery can name an already submitted batch. Allocate immutable output
+   * before submission, and keep it GPU-only so no CPU shadow can overwrite
+   * the KMD completion store. KMD writes it before signalling this job. */
+  g->Timestamp=agx_bo_create(agx_device(batch->ctx->base.screen),sizeof(uint64_t),
+      0,AGX_WIN32_BO_GPU_ONLY,"Batch timestamp");
+  if(!g->Timestamp) { free(g); return batch_refuse(1u,__LINE__,0u,0u); }
   batch->windows_batch=g;
   return 1;
+}
+struct agx_bo *AgxWin32AsahiBatchTimestampBo(struct agx_batch *batch) {
+  AGX_G4_BATCH *g=capsule(batch);
+  return g ? g->Timestamp : NULL;
 }
 /* EXP1166: the Asahi draw path re-enters draw_vbo on the current batch
  * (util_draw_multi for num_draws > 1, unrolled/emulated indirect draws,
@@ -341,6 +642,7 @@ int AgxWin32AsahiBatchPrepareDraw(struct agx_batch *batch,
     const struct pipe_draw_info *info,const struct pipe_draw_indirect_info *indirect,
     const struct pipe_draw_start_count_bias *draw) {
   AGX_G4_BATCH *g=capsule(batch);
+  if(g && info && backend(batch)->ValidateRefs) capture_draw_refs(batch,info,indirect);
   return g && !g->Submitted && !g->Rejected && info &&
          (indirect ? indirect_arguments(indirect) :
                      draw && draw->count && info->instance_count);
@@ -444,6 +746,32 @@ static int add_bo(AGX_WIN32_ASAHI_BACKEND *b,
     if(refs[i]->Allocation==view->Allocation) return 1;
   if(*count==limit) return 0;
   refs[(*count)++]=view;
+  /* C53 B1: a virtual BO's tiles read and write its backing BOs (B4: each
+   * distinct one, the tile scratch included) */
+  for(unsigned i=0,n=AgxWin32AsahiVirtualBackingCount(bo);i<n;++i)
+    if(!add_bo(b,refs,count,limit,AgxWin32AsahiVirtualBacking(bo,i))) return 0;
+  /* C53 T2D: and its Sparse Block table, which texture reads go through */
+  return add_bo(b,refs,count,limit,AgxWin32AsahiVirtualTable(bo));
+}
+
+/* A BO the batch writes, for the UMD's CPU-copy refresh; a virtual BO
+ * (C53 B1) marks its backing BOs. */
+static int add_written(AGX_WIN32_ASAHI_BACKEND *b,const AGX_WIN32_GPUVA_BO **written,
+                       unsigned *written_count,struct agx_bo *bo) {
+  const AGX_WIN32_GPUVA_BO *mapped=AgxWin32AsahiGpuvaBo(b,bo);
+  unsigned duplicate=0;
+  if(!mapped) return 0;
+  for(unsigned j=0;j<*written_count;++j)
+    if(written[j]==mapped) duplicate=1;
+  if(!duplicate) {
+    if(*written_count==AGX_G4_WRITTEN_LIMIT) return 0;
+    written[(*written_count)++]=mapped;
+  }
+  for(unsigned i=0,n=AgxWin32AsahiVirtualBackingCount(bo);i<n;++i) {
+    struct agx_bo *backing=AgxWin32AsahiVirtualBacking(bo,i);
+    if(!AgxWin32AsahiIsTileScratch(b,backing) && !add_written(b,written,written_count,backing))
+      return 0;
+  }
   return 1;
 }
 
@@ -582,6 +910,7 @@ static int publish_shadows(struct agx_batch *batch) {
     struct agx_bo *stream=encoders[i]->bo;
     if(!stream) continue;
     uintptr_t map=(uintptr_t)agx_bo_map(stream),current=(uintptr_t)encoders[i]->current;
+    if(!map || !current) return 0;
     size_t used=stream->size;
     if(map && current>=map && current-map<=stream->size)
       used=(size_t)(current-map)+AGX_WIN32_ENCODER_TAIL;
@@ -626,7 +955,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
    * VDM, rodata, zero and scratch pages (EXP1069), depth/stencil, the CDM
    * stream, compute preemption and sampler heap (D3D-G1), and slack.
    * The entry guard and the reference limit must use the same count. */
-  enum { fixed_refs=19u };
+  enum { fixed_refs=20u };
   if(!b || !g || !render || b->Failed || b->Gpuva.Terminal ||
      !batch_has_render_work(batch) || (compute!=NULL)!=(batch->cdm.bo!=NULL) ||
      compute_refused || g->Submitted || g->Rejected ||
@@ -667,6 +996,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   pool_count=util_dynarray_num_elements(&batch->pool.bos,struct agx_bo *);
   pipeline_count=util_dynarray_num_elements(&batch->pipeline_pool.bos,struct agx_bo *);
   limit=batch->bo_list.bit_count+PIPE_MAX_COLOR_BUFS+fixed_refs;
+  if(b->VirtualBackingRefs>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
+  limit+=b->VirtualBackingRefs; /* C53 B1 */
   if(pool_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
   limit+=(unsigned)pool_count;
   if(pipeline_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
@@ -674,11 +1005,16 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   memcpy(&native_render,render,sizeof(native_render));
   strip_timestamps(&native_render.TimestampsVertex);
   strip_timestamps(&native_render.TimestampsFragment);
+  if(!g->Timestamp || !g->Timestamp->va) { fail_site=__LINE__; goto fail; }
+  AppleAgxG4TimestampPublish(&native_render.TimestampsFragment,g->Timestamp->va->addr);
   /* The first G13 scene constructor uses one cluster. Asahi selects this
    * firmware path with the UAPI NO_VERTEX_CLUSTERING bit. */
   native_render.Flags|=1u<<2;
   if(!prepare_process_buffers(b,g,&native_render,ranges)) { fail_site=__LINE__; goto fail; }
 #ifdef _MSC_VER
+  /* rc110 receipt (MSVC only, like the render trace: the host models extract
+   * this function's body without the file-scope helper) */
+  note_tile_layout(&native_render);
   if(AgxWin32RenderTraceHook && native_render.Samples>1) {
     const uint32_t values[14]={native_render.Samples,native_render.SampleSizeBytes,
         native_render.UtileWidthPx|((uint32_t)native_render.UtileHeightPx<<8),
@@ -711,7 +1047,13 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
        !append_native(&packet,&compute_command,sizeof(compute_command))) { fail_site=__LINE__; goto fail; }
   }
   if(!append_attachments(batch,&packet)) { fail_site=__LINE__; goto fail; }
+  /* OV5: a TA-independent plain render names no compute-subqueue wait
+   * (the KMD moves that wait to its 3D ring) */
   command_header=compute ? agx_cmd_header(false,DRM_ASAHI_BARRIER_NONE,1) :
+#ifdef _MSC_VER
+                 AgxWin32Ov5Feature && AgxWin32RenderTaHook && AgxWin32RenderTaHook(0u) ?
+                           agx_cmd_header(false,0,DRM_ASAHI_BARRIER_NONE) :
+#endif
                            agx_cmd_header(false,0,0);
   if(!append_native(&packet,&command_header,sizeof(command_header)) ||
      !append_native(&packet,&native_render,sizeof(native_render))) { fail_site=__LINE__; goto fail; }
@@ -749,15 +1091,20 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   }
   refs=calloc(limit,sizeof(*refs));
   if(!refs) { fail_site=__LINE__; goto fail; }
-  if(!add_bo(b,refs,&count,limit,g->Command) ||
+  if(!add_bo(b,refs,&count,limit,g->Timestamp) ||
+     !add_written(b,written,&written_count,g->Timestamp) ||
+     !add_bo(b,refs,&count,limit,g->Command) ||
      !add_bo(b,refs,&count,limit,batch->vdm.bo) ||
      !add_bo(b,refs,&count,limit,agx_screen(batch->ctx->base.screen)->rodata) ||
      /* EXP1069: descriptors may name the device's zero/scratch pages. */
      !add_bo(b,refs,&count,limit,agx_device(batch->ctx->base.screen)->zero_bo) ||
      !add_bo(b,refs,&count,limit,agx_device(batch->ctx->base.screen)->scratch_bo) ||
+     /* Bindless graphics uses this heap without a CDM command too. It is
+      * owned separately from bo_list/pools: hold, upload and validate its
+      * canonical allocation for every render submission (EXP1934). */
+     !add_bo(b,refs,&count,limit,batch->sampler_heap.bo) ||
      (compute && (!add_bo(b,refs,&count,limit,batch->cdm.bo) ||
-                  !add_bo(b,refs,&count,limit,g->Preemption) ||
-                  !add_bo(b,refs,&count,limit,batch->sampler_heap.bo))))
+                  !add_bo(b,refs,&count,limit,g->Preemption))))
     { fail_site=__LINE__; goto fail; }
   for(unsigned i=0;i<batch->key.nr_cbufs;++i) {
     if(batch->key.cbufs[i].texture) {
@@ -800,15 +1147,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
      * writer of, as for a G2 compute batch, so the UMD refreshes their CPU
      * copies after the job. */
     if(compute && agx_writer_get(batch->ctx,(unsigned)handle)==batch) {
-      const AGX_WIN32_GPUVA_BO *mapped=AgxWin32AsahiGpuvaBo(b,referenced);
-      unsigned duplicate=0;
-      if(!mapped) { fail_site=__LINE__; goto fail; }
-      for(unsigned j=0;j<written_count;++j)
-        if(written[j]==mapped) duplicate=1;
-      if(!duplicate) {
-        if(written_count==AGX_G4_WRITTEN_LIMIT) { fail_site=__LINE__; goto fail; }
-        written[written_count++]=mapped;
-      }
+      if(!add_written(b,written,&written_count,referenced)) { fail_site=__LINE__; goto fail; }
     }
   }
   util_dynarray_foreach(&batch->pool.bos,struct agx_bo *,bo) {
@@ -818,16 +1157,27 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
     if(!*bo || !add_bo(b,refs,&count,limit,*bo)) { fail_site=__LINE__; goto fail; }
   }
   if(!publish_shadows(batch)) { fail_site=__LINE__; goto fail; }
+  capture_render_addresses(batch,render);
+#ifdef _MSC_VER
+  /* OV5 receipt: 0x100 = the render has a CDM prelude (it queues on compute) */
+  if(AgxWin32BatchKindHook) (void)AgxWin32BatchKindHook(1u | (batch->cdm.bo ? 0x100u : 0u));
+  note_batch_deps(batch,1u);
+#endif
+  capture_native_refs(batch);
+  capture_compute_addresses(batch,compute);
+  b->Gpuva.Validation=b->ValidateRefs ? &g->Expected : NULL;
   if(!AgxWin32GpuvaSubmit(&b->Gpuva,refs,count,
       AgxWin32AsahiGpuvaBo(b,g->Command),packet.Header.V2.Base.CommandBytes,
       written,written_count,private_data,private_bytes,
       &g->Fence)) { fail_site=__LINE__; goto fail; }
+  b->Gpuva.Validation=NULL;
   g->Submitted=1;
   if(g->Fence>b->NewestFence) b->NewestFence=g->Fence;
   free(with_compute);
   free(refs);
   return 1;
 fail:
+  b->Gpuva.Validation=NULL;
   free(with_compute);
   free(refs);
   (void)batch_refuse(3u, fail_site, b->Gpuva.LastFailure, b->Gpuva.LastDetail);
@@ -865,7 +1215,7 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   int handle;
   /* Command, stream, preemption, rodata, zero and scratch pages, sampler
    * heap and slack. */
-  enum { fixed_refs=8u };
+  enum { fixed_refs=9u };
   if(!b || !g || !compute || b->Failed || b->Gpuva.Terminal ||
      !compute_only(batch) || g->Submitted || g->Rejected || g->ComputeEntered ||
      compute->flags || batch->bo_list.bit_count>UINT32_MAX-fixed_refs)
@@ -879,6 +1229,8 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   pool_count=util_dynarray_num_elements(&batch->pool.bos,struct agx_bo *);
   pipeline_count=util_dynarray_num_elements(&batch->pipeline_pool.bos,struct agx_bo *);
   limit=batch->bo_list.bit_count+fixed_refs;
+  if(b->VirtualBackingRefs>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
+  limit+=b->VirtualBackingRefs; /* C53 B1 */
   if(pool_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
   limit+=(unsigned)pool_count;
   if(pipeline_count>UINT32_MAX-limit) { fail_site=__LINE__; goto fail; }
@@ -890,10 +1242,21 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   if(!g->Preemption || !g->Command || !AgxWin32AsahiGpuvaBo(b,g->Preemption) ||
      !AgxWin32AsahiGpuvaBo(b,g->Command)) { fail_site=__LINE__; goto fail; }
   memset(&envelope,0,sizeof(envelope));
+  /* OV2: an independent compute job names no wait on the render subqueue
+   * (Asahi DRM_ASAHI_BARRIER_NONE); the KMD admits it only under the device
+   * feature and then waives its depth-two lead Barrier's wait. */
+#ifdef _MSC_VER
+  command_header=agx_cmd_header(true,
+      AgxWin32BatchKindHook && AgxWin32BatchKindHook(2u) &&
+      AgxWin32Ov2Feature ? DRM_ASAHI_BARRIER_NONE : 0,0);
+#else
   command_header=agx_cmd_header(true,0,0);
+#endif
   memcpy(&envelope.Native,&command_header,sizeof(envelope.Native));
   memcpy(&envelope.Compute,compute,sizeof(envelope.Compute));
   strip_timestamps(&envelope.Compute.Timestamps);
+  if(!g->Timestamp || !g->Timestamp->va) { fail_site=__LINE__; goto fail; }
+  AppleAgxG4TimestampPublish(&envelope.Compute.Timestamps,g->Timestamp->va->addr);
   preemption.Va=g->Preemption->va->addr;
   preemption.Bytes=(unsigned)g->Preemption->size;
   preemption.Reserved=0u;
@@ -903,7 +1266,9 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   memcpy(cpu,&envelope.Native,command_bytes);
   refs=calloc(limit,sizeof(*refs));
   if(!refs) { fail_site=__LINE__; goto fail; }
-  if(!add_bo(b,refs,&count,limit,g->Command) ||
+  if(!add_bo(b,refs,&count,limit,g->Timestamp) ||
+     !add_written(b,written,&written_count,g->Timestamp) ||
+     !add_bo(b,refs,&count,limit,g->Command) ||
      !add_bo(b,refs,&count,limit,batch->cdm.bo) ||
      !add_bo(b,refs,&count,limit,g->Preemption) ||
      !add_bo(b,refs,&count,limit,agx_screen(batch->ctx->base.screen)->rodata) ||
@@ -916,15 +1281,7 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
     if(!referenced || !add_bo(b,refs,&count,limit,referenced))
       { fail_site=__LINE__; goto fail; }
     if(agx_writer_get(batch->ctx,(unsigned)handle)==batch) {
-      const AGX_WIN32_GPUVA_BO *mapped=AgxWin32AsahiGpuvaBo(b,referenced);
-      unsigned duplicate=0;
-      if(!mapped) { fail_site=__LINE__; goto fail; }
-      for(unsigned j=0;j<written_count;++j)
-        if(written[j]==mapped) duplicate=1;
-      if(!duplicate) {
-        if(written_count==AGX_G4_WRITTEN_LIMIT) { fail_site=__LINE__; goto fail; }
-        written[written_count++]=mapped;
-      }
+      if(!add_written(b,written,&written_count,referenced)) { fail_site=__LINE__; goto fail; }
     }
   }
   util_dynarray_foreach(&batch->pool.bos,struct agx_bo *,bo) {
@@ -934,14 +1291,22 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
     if(!*bo || !add_bo(b,refs,&count,limit,*bo)) { fail_site=__LINE__; goto fail; }
   }
   if(!publish_shadows(batch)) { fail_site=__LINE__; goto fail; }
+#ifdef _MSC_VER
+  note_batch_deps(batch,2u);
+#endif
+  capture_native_refs(batch);
+  capture_compute_addresses(batch,compute);
+  b->Gpuva.Validation=b->ValidateRefs ? &g->Expected : NULL;
   if(!AgxWin32GpuvaSubmit(&b->Gpuva,refs,count,
       AgxWin32AsahiGpuvaBo(b,g->Command),command_bytes,written,written_count,
       &envelope,(unsigned)sizeof(envelope),&g->Fence)) { fail_site=__LINE__; goto fail; }
+  b->Gpuva.Validation=NULL;
   g->Submitted=1;
   if(g->Fence>b->NewestFence) b->NewestFence=g->Fence;
   free(refs);
   return 1;
 fail:
+  b->Gpuva.Validation=NULL;
   free(refs);
   (void)batch_refuse(3u, fail_site, b->Gpuva.LastFailure, b->Gpuva.LastDetail);
   g->Rejected=1;
@@ -1005,15 +1370,22 @@ int AgxWin32AsahiFenceWait(struct agx_device *dev,APPLE_AGX_U64 fence) {
 int AgxWin32AsahiBatchPoll(struct agx_batch *batch,APPLE_AGX_U32 timeout) {
   AGX_G4_BATCH *g=capsule(batch);
   AGX_WIN32_ASAHI_BACKEND *b=backend(batch);
-  (void)timeout;
   if(!g || g->Retired || g->Rejected) return 1;
   if(!b || !g->Submitted || !g->Fence) return 0;
+  if(!timeout && (!b->Gpuva.Ops.QueryRender ||
+                  !AgxWin32GpuvaComplete(&b->Gpuva,g->Fence))) return 0;
   /* EXP1082: a CPU map may already have retired this submission's residency
    * set (native_map); then only its fence is waited for. */
+  unsigned wait_token=timeout ? AgxWin32WaitBegin(AgxWaitBatchPoll) : 0;
+  int retired;
   if(AgxWin32GpuvaFenceHeld(&b->Gpuva,g->Fence)) {
-    if(!AgxWin32GpuvaRetire(&b->Gpuva,g->Fence)) return 0;
-  } else if(b->Gpuva.Terminal || !b->Gpuva.Ops.WaitRender ||
-            !b->Gpuva.Ops.WaitRender(b->Gpuva.Context,g->Fence)) return 0;
+    retired=AgxWin32GpuvaRetire(&b->Gpuva,g->Fence);
+  } else {
+    retired=!b->Gpuva.Terminal && b->Gpuva.Ops.WaitRender &&
+            b->Gpuva.Ops.WaitRender(b->Gpuva.Context,g->Fence);
+  }
+  AgxWin32WaitEnd(wait_token);
+  if(!retired) return 0;
   g->Retired=1;
   (void)release_lease(b,g); /* a failed release is retried by Release */
   return 1;
@@ -1050,8 +1422,10 @@ int AgxWin32AsahiBatchRelease(struct agx_batch *batch) {
     return 0;
   if(!release_lease(b,g)) return 0;
   if(g->Command) agx_bo_unreference(b->Native,g->Command);
+  if(g->Timestamp) agx_bo_unreference(b->Native,g->Timestamp);
   if(g->Preemption) agx_bo_unreference(b->Native,g->Preemption);
   batch->windows_batch=NULL;
+  AgxWin32RefCleanup(&g->Expected);
   free(g);
   return 1;
 }

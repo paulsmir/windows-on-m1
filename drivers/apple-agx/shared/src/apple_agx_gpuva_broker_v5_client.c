@@ -154,3 +154,47 @@ bool AppleAgxGpuvaV5ClientDetachMailbox(APPLE_AGX_GPUVA_V5_CLIENT *client)
     client->Mailbox = 0;
     return true;
 }
+
+bool AppleAgxGpuvaV5ClientHasSysmem(APPLE_AGX_GPUVA_V5_CLIENT *client)
+{
+    AGX_GPUVA_V5_REQUEST q = {0};
+    AGX_GPUVA_V5_RESPONSE r = {0};
+    if (!client || !client->Epoch) return false;
+    q.Command = AGX_GPUVA_V5_QUERY_CAPS;
+    return AppleAgxGpuvaV5ClientCall(client, &q, &r) &&
+           !r.Status && !r.Flags &&
+           r.Reserved[1] == AGX_GPUVA_V5_SYSMEM_ABI &&
+           (r.Reserved[0] & AGX_GPUVA_V5_CAP_SYSMEM) != 0;
+}
+
+/* Unknown appended commands mean extension absent, including old firmware. */
+/* GC: the broker accepts GPU-private cached leaves (experiment builds). */
+bool AppleAgxGpuvaV5ClientHasPrivateCached(APPLE_AGX_GPUVA_V5_CLIENT *client)
+{
+    AGX_GPUVA_V5_REQUEST q = {0};
+    AGX_GPUVA_V5_RESPONSE r = {0};
+    if (!client || !client->Epoch) return false;
+    q.Command = AGX_GPUVA_V5_QUERY_CAPS;
+    return AppleAgxGpuvaV5ClientCall(client, &q, &r) && !r.Status && !r.Flags &&
+           (r.Reserved[0] & AGX_GPUVA_V5_CAP_PRIVATE_CACHED) != 0;
+}
+
+bool AppleAgxGpuvaV5ClientHasLiveAdditive(APPLE_AGX_GPUVA_V5_CLIENT *client)
+{
+    AGX_GPUVA_V5_REQUEST q = {0};
+    AGX_GPUVA_V5_RESPONSE r = {0};
+    bool answered;
+    if (!client) return false;
+    client->LiveAdditiveQueried = 0u;
+    client->LiveAdditiveAnswered = 0u;
+    memset(&client->LiveAdditiveCaps, 0, sizeof(client->LiveAdditiveCaps));
+    if (!client->Epoch) return false;
+    q.Command = AGX_GPUVA_V5_QUERY_CAPS;
+    client->LiveAdditiveQueried = 1u;
+    answered = AppleAgxGpuvaV5ClientCall(client, &q, &r);
+    client->LiveAdditiveAnswered = answered ? 1u : 0u;
+    if (answered) client->LiveAdditiveCaps = r;
+    return answered && !r.Status && !r.Flags &&
+           r.Reserved[1] == AGX_GPUVA_V5_LIVE_ABI &&
+           (r.Reserved[0] & AGX_GPUVA_V5_CAP_LIVE_ADDITIVE) != 0;
+}

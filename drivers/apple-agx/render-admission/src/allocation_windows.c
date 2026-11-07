@@ -280,19 +280,25 @@ static NTSTATUS AdmissionGetStandardAllocationDriverDataImpl(
         StandardAllocation->pCreateSharedPrimarySurfaceData;
     /* Windows tags/pins the primary. Its backing uses our existing linear
        local-segment allocation, not a new resource or platform owner. */
+    /* rc106: any offered source mode (2560x1600 alone unless the broker
+     * scales); its linear pitch is the mode stride. */
     if (primary == NULL || primary->VidPnSourceId != 0u ||
-        primary->Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
-        primary->Height != APPLE_AGX_SCANOUT_J313_HEIGHT ||
-        primary->Format != D3DDDIFMT_A8R8G8B8 ||
+        !AdmissionScanoutFormatSupported((ADMISSION_CONTEXT *)Adapter,
+                                         primary->Format) ||
         !AdmissionAllocationDescribe(
             primary->Width, primary->Height, 4u,
             (UINT)D3DKMDT_GDISURFACE_TEXTURE, (UINT)primary->Format,
-            0u, &description))
+            0u, &description) ||
+        !AdmissionScanoutSourceModeSupported(
+            (ADMISSION_CONTEXT *)Adapter, primary->Width, primary->Height,
+            description.Pitch))
       return STATUS_INVALID_PARAMETER;
   } else if (StandardAllocation->StandardAllocationType ==
              D3DKMDT_STANDARDALLOCATION_SHADOWSURFACE) {
     shadow = StandardAllocation->pCreateShadowSurfaceData;
-    if (shadow == NULL || shadow->Format != D3DDDIFMT_A8R8G8B8 ||
+    if (shadow == NULL ||
+        !AdmissionScanoutFormatSupported((ADMISSION_CONTEXT *)Adapter,
+                                         shadow->Format) ||
         !AdmissionAllocationDescribe(
             shadow->Width, shadow->Height, 4u,
             (UINT)D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE,
@@ -436,9 +442,22 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   if (resourceData != NULL &&
       (resourceData->Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u &&
        (description->CpuVisible != 0u ||
-       description->Format != (UINT)D3DDDIFMT_A8R8G8B8 ||
+       !AdmissionScanoutFormatSupported(context,
+                                        (D3DDDIFORMAT)description->Format) ||
        description->Type != (UINT)D3DKMDT_GDISURFACE_TEXTURE))
     return STATUS_INVALID_PARAMETER;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* RC23 stop gate: private leases are storage, not an authorized/coherent
+   * shadow. Until cache/grants, ordered copies, shared generations and teardown
+   * are integrated, refuse at this fallible boundary before reserving pages or
+   * publishing a handle. In particular, SysmemSpill must not silently satisfy
+   * a shadow request with scattered direct backing. Default/CPU maps stay on
+   * their existing paths. See investigation/analysis/RC23-shadow-stop-gate.md. */
+  if (context->SysmemShadow && classId == AgxWin32BufferClassGeneral &&
+      description->CpuVisible == 0u &&
+      (flags & AppleAgxWin32BufferGpuOnly) != 0u)
+    return STATUS_NOT_SUPPORTED;
+#endif
   allocation = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*allocation),
                                ADMISSION_POOL_TAG);
   if (allocation == NULL)
@@ -453,6 +472,17 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   allocation->WrittenPrimary = resourceData != NULL &&
       (resourceData->Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u;
   allocation->Presentation = resourceData != NULL && classId == 0u;
+  /* rc110 (EXP2049): scanout admits only a plain linear description, never
+   * an R105 native resource (its layout is the Mesa layer's), and only a
+   * GPU-only 32-bpp GDI-surface texture in a broker format. */
+  allocation->ScanoutCapable =
+      !r105Enabled && description->Type == (UINT)D3DKMDT_GDISURFACE_TEXTURE &&
+              description->CpuVisible == 0u &&
+              description->BytesPerPixel == 4u &&
+              AdmissionScanoutFormatSupported(
+                  context, (D3DDDIFORMAT)description->Format)
+          ? 1u
+          : 0u;
   AdmissionPresentResourceRefreshRate(resourceData,
                                       &allocation->PrimaryRefreshNumerator,
                                       &allocation->PrimaryRefreshDenominator);
@@ -512,7 +542,11 @@ static NTSTATUS AdmissionCreateAllocationImpl(
    * alone. Segment 2 is the fixed firmware reserve; 4 x 64 MiB targets
    * exhausted it. Without an aperture in its set VidMm evicts it to system
    * memory (paging TRANSFER) instead of making it resident there. */
-  if (classId != 0u && AdmissionMemoryPoolView(context, &pool)) {
+  if (classId != 0u &&
+#ifdef APPLE_AGX_NATIVE_STAGING
+      info->PrivateDriverDataSize != sizeof(ADMISSION_NATIVE_STAGING_ALLOCATION) &&
+#endif
+      AdmissionMemoryPoolView(context, &pool)) {
     /* M2-f5: the pages this allocation may occupy in segment 3 are taken
      * from Windows now, so its later placement (UpdatePageTable, also from
      * the paging process) never fails for memory. Microsoft
@@ -534,6 +568,40 @@ static NTSTATUS AdmissionCreateAllocationImpl(
     info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
   }
 #endif
+  /* T7h: only the explicit GPU-only request excludes aperture residency.
+   * The validator requires General, LOCAL and CpuVisible=0. Without a pool,
+   * segment 2 is the native-leaf firmware reserve. CPU-visible policy above
+   * remains the EXP1028/C75c shape. */
+  if ((flags & AppleAgxWin32BufferGpuOnly) != 0u) {
+    info->PreferredSegment.Value = 0u;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    info->PreferredSegment.SegmentId0 = allocation->PoolReserved != 0u
+        ? ADMISSION_MEMORY_POOL_SEGMENT : ADMISSION_MEMORY_LOCAL_SEGMENT;
+    info->SupportedReadSegmentSet = allocation->PoolReserved != 0u
+        ? ADMISSION_POOL_SEGMENT_SET : ADMISSION_LOCAL_SEGMENT_SET;
+#else
+    info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_LOCAL_SEGMENT;
+    info->SupportedReadSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
+#endif
+    info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
+  }
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* RC13: allow VidMm to spill GPU-only General BOs into its existing
+   * system-memory aperture when segment 3 has no placement. Preserve the
+   * pool reservation: VidMm may still page this allocation into any local
+   * slot. This is an opt-in placement experiment, not a contiguous-page
+   * guarantee. The existing 4K/64K decoder only publishes complete aligned
+   * 16K physical groups; scattered groups remain unmapped and fail the
+   * native-coverage gate before submission. CPU-visible BOs are unchanged. */
+  if (context->SysmemSpill && classId == AgxWin32BufferClassGeneral &&
+      description->CpuVisible == 0u &&
+      (flags & AppleAgxWin32BufferGpuOnly) != 0u &&
+      allocation->PoolReserved != 0u) {
+    info->PreferredSegment.SegmentId1 = ADMISSION_MEMORY_APERTURE_SEGMENT;
+    info->SupportedReadSegmentSet |= ADMISSION_APERTURE_SEGMENT_SET;
+    info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
+  }
+#endif
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;
   info->FlagsWddm2.Value = 0u;
@@ -552,6 +620,28 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   info->AllocationPriority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
   info->Flags2.Value = 0u;
   info->PhysicalAdapterIndex = 0u;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (info->PrivateDriverDataSize == sizeof(ADMISSION_NATIVE_STAGING_ALLOCATION)) {
+    const ADMISSION_NATIVE_STAGING_ALLOCATION *native =
+        (const ADMISSION_NATIVE_STAGING_ALLOCATION *)info->pPrivateDriverData;
+    if (resourceData != NULL || !AdmissionNativeStagingBind(context,
+          native->Token, native->Offset, aligned, &allocation->NativeStagingBinding)) {
+      info->hAllocation = NULL;
+      (void)AdmissionAllocationDestroy(&allocation->Object);
+      ExFreePoolWithTag(allocation, ADMISSION_POOL_TAG);
+      return STATUS_INVALID_PARAMETER;
+    }
+    /* The original pinned MDL supplies the physical pages. VidMm receives
+     * its user VA as pSystemMem and may only map that system backing. There
+     * is no second segment-3 promise or local copy to migrate into. */
+    info->PreferredSegment.Value = 0u;
+    info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_APERTURE_SEGMENT;
+    info->SupportedReadSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
+    info->SupportedWriteSegmentSet = ADMISSION_APERTURE_SEGMENT_SET;
+    info->FlagsWddm2.ExistingSysMem = 1u;
+    info->FlagsWddm2.AccessedPhysically = 0u;
+  }
+#endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (r105Enabled) {
     AdmissionR105Apply(info, &r105);
@@ -640,10 +730,14 @@ static NTSTATUS AdmissionDestroyAllocationImpl(
     ADMISSION_ALLOCATION_HANDLE *allocation =
         (ADMISSION_ALLOCATION_HANDLE *)Args->pAllocationList[index];
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionGpuvaG3InvalidateAllocation(context, allocation);
     /* M2-f3: the segment-3 placement ends with the allocation. */
     AdmissionMemoryPoolForget(context, &allocation->PoolPlacement);
     /* M2-f5: so does its reservation. */
     AdmissionMemoryPoolUnreserve(context, allocation->PoolReserved);
+#endif
+#ifdef APPLE_AGX_NATIVE_STAGING
+    AdmissionNativeStagingUnbind(allocation->NativeStagingBinding);
 #endif
     (void)AdmissionAllocationDestroy(&allocation->Object);
     ExFreePoolWithTag(allocation, ADMISSION_POOL_TAG);
@@ -875,6 +969,10 @@ static NTSTATUS AdmissionOpenAllocationImpl(
       goto Rollback;
     }
     if (!AdmissionAllocationDescriptionValid(description) ||
+#ifdef APPLE_AGX_NATIVE_STAGING
+        (allocation->NativeStagingBinding && !AdmissionNativeStagingOwns(
+            allocation->NativeStagingBinding, adapter, device->GpuvaG3Process)) ||
+#endif
         !AdmissionAllocationDescriptionValid(&allocation->Object.Description) ||
         RtlCompareMemory(description, &allocation->Object.Description,
                          sizeof(*description)) != sizeof(*description) ||

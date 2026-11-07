@@ -2,6 +2,7 @@
 #define AGX_WIN32_ASAHI_BO_H
 
 #include "agx_win32_native_device.h"
+#include "agx_win32_wait.h"
 #include "agx_win32_reloc_capture.h"
 #include <stdint.h>
 #ifdef APPLE_AGX_GPUVA_WINSYS
@@ -12,16 +13,25 @@
  * batches at once and their pool slabs overflowed 16 entries; DWM then
  * re-created ~42 BOs/s, each a MakeResident + map paging-fence wait (phase 2:
  * 9.4 s of a 60 s window drag, 2880/512/256/64 KiB BOs). */
+#define AGX_WIN32_BO_GPU_ONLY (1u << 29)
+
 #define AGX_WIN32_BO_CACHE_LIMIT 128u
 #define AGX_WIN32_BO_CACHE_BYTES (64ull << 20)
+/* EXP979/RC71: released VAs deferred until their submissions retire */
+#define AGX_WIN32_PENDING_VA_LIMIT 64u
 
 struct agx_device;
 struct agx_bo;
 struct pipe_screen;
 struct pipe_context;
+struct pipe_resource;
 struct _AGX_WIN32_ASAHI_CAPTURE;
 typedef int (*AGX_WIN32_ASAHI_MAP_RELEASE)(
     const void *NativeBo, const void *ExpectedAddress, int Commit);
+typedef struct {
+  void *PrivateMap; /* stable mapped T13 storage, NULL for other mappings */
+  APPLE_AGX_U64 Bytes; /* retained private staging and merge baseline */
+} AGX_WIN32_ASAHI_CPU_STORAGE;
 typedef struct {
   int (*Enter)(void *, AGX_WIN32_SCREEN *);
   void (*Leave)(void *);
@@ -30,6 +40,9 @@ typedef struct {
   int (*Detach)(void *, APPLE_AGX_U64, const void *, APPLE_AGX_U64);
   int (*Identity)(void *, const void *, APPLE_AGX_U64, AGX_WIN32_RELOC_ALLOCATION *);
   const void *(*NextBo)(void *, APPLE_AGX_U32 *);
+  /* Optional, queried under native-owner serialization; identity must match. */
+  int (*CpuStorage)(void *, const void *, APPLE_AGX_U64,
+                    AGX_WIN32_ASAHI_CPU_STORAGE *);
 } AGX_WIN32_ASAHI_OWNER_OPS;
 
 /* One caller-serialized native device. Screen/owner storage must outlive it.
@@ -67,14 +80,38 @@ typedef struct {
   APPLE_AGX_U32 HandleMapCap, HandleMapCount;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   AGX_WIN32_GPUVA_SPACE Gpuva;
+  /* Q21: D3D12 opt-in; return completed batch BOs before new allocations. */
+  unsigned ReclaimBeforeBatch;
+  unsigned ValidateRefs;
+  AGX_WIN32_REF RefOrigin;
+  unsigned char RefRoots[6][3][128]; /* Mesa stage, CBV/SRV/UAV, shader slot; root+1 */
   int GpuvaReady;
   /* EXP1195: completion fence of the newest accepted submission (pipe
    * fences); render fences increase with every submission. */
   APPLE_AGX_U64 NewestFence;
   /* EXP979: VA ranges whose allocation is already destroyed but whose
    * reservation could not be freed yet (submission in flight). */
-  AGX_WIN32_GPUVA_BO PendingVa[64];
+  AGX_WIN32_GPUVA_BO PendingVa[AGX_WIN32_PENDING_VA_LIMIT];
   APPLE_AGX_U32 PendingVaCount;
+  /* RC71 (EXP1990): the newest submission in flight when each PendingVa
+   * entry was deferred; the entry is freed once that fence retires. Only
+   * AgxWin32AsahiCollect drained the list, and only with no submission in
+   * flight, so a GPU kept busy filled it for good and every later release
+   * was refused: the BO, its allocation and its VA stayed registered. */
+  APPLE_AGX_U64 PendingVaFence[AGX_WIN32_PENDING_VA_LIMIT];
+  /* RC71: a release was refused for a full PendingVa; its BO waits for a
+   * drain that makes room (AgxWin32AsahiDrainPendingVa). */
+  int RefusedRelease;
+  /* C53 B1/B4: distinct backing BOs of live virtual BOs -- an upper bound
+   * on the references a submission adds by expanding them. */
+  APPLE_AGX_U32 VirtualBackingRefs;
+  /* C53 B4: the scratch BO unmapped tiles map (created on first use). */
+  struct agx_bo *TileScratch;
+  /* C53 Tier 2: the zeroed BO read-only shadows map for unmapped tiles */
+  struct agx_bo *TileZero;
+  /* C53 T2D: the next agx_bo_create makes a virtual BO (a reserved
+   * texture's image; AgxWin32AsahiArmVirtual) */
+  int NextVirtual;
   /* EXP996: released native BOs kept bound, mapped and resident for reuse
    * (Mesa's own BO cache is replaced by agx_bo_create below). */
   void *Cache[AGX_WIN32_BO_CACHE_LIMIT];
@@ -88,6 +125,20 @@ typedef struct {
   APPLE_AGX_U64 TimestampOffset;
 #endif
 } AGX_WIN32_ASAHI_BACKEND;
+
+struct agx_batch;
+struct pipe_grid_info;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+/* Snapshots do not add BO references or repair the set being checked. */
+void AgxWin32AsahiCaptureComputeRefs(struct agx_batch *, const struct pipe_grid_info *);
+void AgxWin32AsahiExpectDescriptors(struct pipe_context *, int Compute,
+    const void *PackedTexturePbeCounter, unsigned Stage, unsigned Slot, uint64_t Object);
+void AgxWin32AsahiExpectBo(struct agx_batch *, struct agx_bo *, unsigned Kind,
+                          unsigned Slot, unsigned Path);
+void AgxWin32AsahiExpectResource(struct pipe_context *, int Compute,
+    struct pipe_resource *, unsigned Kind, unsigned Stage, unsigned Slot,
+    uint64_t Object);
+#endif
 
 /* EXP1056 receipt-only: the first transition of a backend to Failed reports
  * (file << 16) | line through an optional hook; the result is unchanged.
@@ -110,6 +161,11 @@ void AgxWin32PerfNote(const char *fmt, ...);
 int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *, struct agx_device *,
     AGX_WIN32_SCREEN *, const AGX_WIN32_ASAHI_OWNER_OPS *, void *, APPLE_AGX_U64);
 int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *);
+/* RC71: free the VA of every deferred release whose fence has retired, then
+ * retry the releases a full list refused. Every BO creation and release
+ * drains first, so the list stays bounded by the releases of the
+ * submissions in flight. */
+void AgxWin32AsahiDrainPendingVa(AGX_WIN32_ASAHI_BACKEND *);
 int AgxWin32AsahiDetach(AGX_WIN32_ASAHI_BACKEND *);
 int AgxWin32AsahiIdentity(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *,
     AGX_WIN32_RELOC_ALLOCATION *);
@@ -135,6 +191,46 @@ struct agx_bo *AgxWin32AsahiImportBo(
 #ifdef APPLE_AGX_GPUVA_WINSYS
 const AGX_WIN32_GPUVA_BO *AgxWin32AsahiGpuvaBo(
     AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *);
+/* C53 B1 (D3D12-C53-tiled-buffers-plan.md): a reserved buffer of 64 KiB
+ * tiles. Its handle, residency and in-flight tracking come from its own
+ * 64 KiB anchor allocation; its VA is a reserved range whose tiles map the
+ * backend's tile scratch BO until MapVirtualTiles maps backing BO tiles
+ * (NULL backing: scratch again). A remap first retires the submissions
+ * naming it. Submissions naming it also hold its backing BOs. It has no CPU
+ * map. */
+struct agx_bo *AgxWin32AsahiCreateVirtualBo(struct agx_device *, size_t Bytes,
+                                            const char *Label);
+int AgxWin32AsahiMapVirtualTiles(struct agx_bo *Virtual, unsigned FirstTile,
+                                 unsigned Tiles, struct agx_bo *Backing,
+                                 unsigned BackingTile);
+/* C53 T2D: the same in 16 KiB AGX pages (a reserved texture's hardware
+ * tiles); MapVirtualTiles maps 4 pages per tile. */
+int AgxWin32AsahiMapVirtualPages(struct agx_bo *Virtual, unsigned FirstPage,
+                                 unsigned Pages, struct agx_bo *Backing,
+                                 unsigned BackingPage);
+/* C53 B4: the distinct BOs a virtual BO's tiles map, the tile scratch
+ * included (0 for an ordinary BO); IsTileScratch tells the scratch and the
+ * shadow zero BO apart (never CPU-read, so never marked written). */
+unsigned AgxWin32AsahiVirtualBackingCount(struct agx_bo *);
+int AgxWin32AsahiVirtualContains(struct agx_bo *, uint64_t Va, uint64_t Bytes);
+struct agx_bo *AgxWin32AsahiVirtualBacking(struct agx_bo *, unsigned Index);
+int AgxWin32AsahiIsTileScratch(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *);
+/* C53 T2D (D3D12-C53-tiled-textures.md): a reserved texture. Arm makes the
+ * next agx_bo_create (the resource's image BO) a virtual BO; Disarm clears
+ * an unused arm. AttachSparseTable gives a virtual BO its zeroed Sparse
+ * Block table of Bytes (held by submissions naming it: VirtualTable), whose
+ * VA the texture descriptor points at (SparseTableVa, 0 for other BOs).
+ * AgxWin32AsahiMapVirtualTilePages (agx_win32_sparse.h) binds one tile. */
+int AgxWin32AsahiArmVirtual(struct agx_device *);
+void AgxWin32AsahiDisarmVirtual(struct agx_device *);
+int AgxWin32AsahiIsVirtual(struct agx_bo *);
+int AgxWin32AsahiAttachSparseTable(struct agx_bo *Virtual, size_t Bytes);
+APPLE_AGX_U64 AgxWin32AsahiSparseTableVa(struct agx_bo *);
+/* C53 Tier 2: a reserved buffer's read-only shadow, whose unmapped tiles
+ * read 0 (attach at creation); ReadShadowVa is its VA, 0 without one. */
+int AgxWin32AsahiAttachReadShadow(struct agx_bo *Virtual);
+APPLE_AGX_U64 AgxWin32AsahiReadShadowVa(struct agx_bo *);
+struct agx_bo *AgxWin32AsahiVirtualTable(struct agx_bo *);
 /* EXP1207: winsys creation flag beside enum agx_bo_flags. The BO's CPU map
  * (agx_bo_map) is a cached shadow of the allocation; nothing reaches the
  * allocation the GPU reads until AgxWin32AsahiShadowPublish copies the

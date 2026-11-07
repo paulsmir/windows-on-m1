@@ -432,6 +432,46 @@ int main(void) {
   assert(read_u64(active_objects[15].Data + 604u) ==
          bindings.Stats3dOwnerGpuAddress +
              APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET);
+  /* G2: off keeps the captured update_ts; on points the TA start/end
+   * Timestamp ops at the relocated TimestampPointers start/end fields. */
+  assert(read_u64(active_objects[17].Data + 0x1a0u) == 0xdeadbeefULL);
+  assert(read_u64(active_objects[17].Data + 0x1e0u) == 0xdeadbeefULL);
+  owner.TaStartTimestamps = APPLE_AGX_TRUE;
+  assert(AppleAgxRenderSharedMemoryBuildActiveJob(
+      &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES,
+      source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      0x1500800000ULL, APPLE_AGX_TRUE, &bindings, &staged_job,
+      active_objects, &active_job));
+  owner.TaStartTimestamps = APPLE_AGX_FALSE;
+  assert(read_u64(active_objects[17].Data + 0x198u) ==
+         active_objects[19].GpuVa + 0x5bcu);
+  assert(read_u64(active_objects[17].Data + 0x1a0u) ==
+         active_objects[19].GpuVa + 0x5bcu);
+  assert(read_u64(active_objects[17].Data + 0x1e0u) ==
+         active_objects[19].GpuVa + 0x5c4u);
+  assert(read_u32(active_objects[17].Data + 0x18cu) == 0x80000019u);
+  /* Poison this job's TA start/end, then build twice (the slot copies
+   * alternate): the same copy must be zeroed again before reuse. */
+  {
+    unsigned char *ta_start = active_objects[30].Data;
+    unsigned char *ta_end = active_objects[31].Data;
+    unsigned int round;
+    memset(ta_start, 0xa5, 8u);
+    memset(ta_end, 0xa5, 8u);
+    owner.TaStartTimestamps = APPLE_AGX_TRUE;
+    /* Steady state: no queue initialization, so no template refresh. */
+    for (round = 0u; round < 2u; ++round)
+      assert(AppleAgxRenderSharedMemoryBuildActiveJob(
+          &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES,
+          source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+          0x1500800000ULL, APPLE_AGX_FALSE, &bindings, &staged_job,
+          active_objects, &active_job));
+    owner.TaStartTimestamps = APPLE_AGX_FALSE;
+    assert(active_objects[30].Data == ta_start);
+    assert(read_u64(ta_start) == 0u && read_u64(ta_end) == 0u);
+  }
+  assert(read_u64(active_objects[17].Data + 0x190u) ==
+         active_objects[19].GpuVa + 0x5b4u);
   assert(active_job.TaWorkAddresses[0] ==
          owner.VirtualAddresses[16] + owner.ObjectOffsets[16]);
   assert(active_job.TaWorkAddresses[1] ==

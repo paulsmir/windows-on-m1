@@ -56,10 +56,10 @@ typedef struct {unsigned InterruptType;struct {unsigned PreemptionFenceId,LastCo
 typedef struct {void *DeviceHandle;NTSTATUS (*DxgkCbSynchronizeExecution)(void*,BOOLEAN(*)(void*),void*,ULONG,BOOLEAN*);
  void (*DxgkCbNotifyInterrupt)(void*,DXGKARGCB_NOTIFY_INTERRUPT_DATA*);BOOLEAN (*DxgkCbQueueDpc)(void*);} INTERFACE;
 typedef struct {void *PlatformRuntime;int SchedulerLock,InterfaceValid;volatile LONG SchedulerInitialized,SchedulerFaulted,SchedulerDpcPending;
- volatile LONG PagingPending,PagingDpcPending,PagingDpcsActive;ULONG DispatchedFence;INTERFACE Interface;APPLE_AGX_SCHEDULER Scheduler;} ADMISSION_CONTEXT;
+ volatile LONG PagingPending,PagingDpcPending,PagingDpcsActive;ULONG DispatchedFence;INTERFACE Interface;APPLE_AGX_SCHEDULER Scheduler, PagingScheduler; ULONG LiveAdditivePaging, PagingActiveNode, PagingNodeHead, PagingNodeCount; LONG PagingWorkersActive;} ADMISSION_CONTEXT;
 typedef struct {ADMISSION_CONTEXT *Adapter;int ProviderReady,BackendStarted;struct {int Phase;} Backend;void *WorkItem;
  volatile LONG Stopping,Resetting,WorkScheduled,WorkersActive;int WorkIdle,SlotEvent;} ADMISSION_PLATFORM_RUNTIME;
-typedef struct {ADMISSION_CONTEXT *Context;APPLE_AGX_PREEMPTION Preemption;} ADMISSION_PREEMPTION_NOTIFICATION;
+typedef struct {ADMISSION_CONTEXT *Context;APPLE_AGX_PREEMPTION Preemption; ULONG Node;} ADMISSION_PREEMPTION_NOTIFICATION;
 static int locks,interrupts,dpcs,dispatches;
 static ULONG enqueueOnDpc, expectedPreempt=77, expectedCompleted;
 static int replayPaging, activations;
@@ -113,7 +113,7 @@ static void setup(ADMISSION_CONTEXT *a,ADMISSION_PLATFORM_RUNTIME *r){
 int main(void){
  ADMISSION_CONTEXT a;ADMISSION_PLATFORM_RUNTIME r;setup(&a,&r);
  assert(!AdmissionPlatformRuntimeReady(&a));
- assert(AdmissionSchedulerTryNotifyPreemption(&a));
+ assert(AdmissionSchedulerTryNotifyPreemption(&a,0u));
  assert(!interrupts && AppleAgxSchedulerPreemptionPhase(&a.Scheduler)==AppleAgxPreemptionReadyToNotify);
  AdmissionPlatformWorkerFinished(&r);
  assert(interrupts==1 && dpcs==1 && !a.SchedulerFaulted && !locks && dispatches>=1);
@@ -122,14 +122,14 @@ int main(void){
  assert(AppleAgxSchedulerQueueFence(&a.Scheduler,0,0,11));
  /* Outstanding render or CPU completion must still be reported first. */
  setup(&a,&r);a.DispatchedFence=10;AdmissionPlatformWorkerFinished(&r);assert(!interrupts);
- a.DispatchedFence=0;assert(AdmissionSchedulerTryNotifyPreemption(&a));assert(interrupts==1);
+ a.DispatchedFence=0;assert(AdmissionSchedulerTryNotifyPreemption(&a,0u));assert(interrupts==1);
  setup(&a,&r);a.PagingPending=1;AdmissionPlatformWorkerFinished(&r);assert(!interrupts);
- a.PagingPending=0;assert(AdmissionSchedulerTryNotifyPreemption(&a));assert(interrupts==1);
+ a.PagingPending=0;assert(AdmissionSchedulerTryNotifyPreemption(&a,0u));assert(interrupts==1);
  setup(&a,&r);r.Stopping=1;AdmissionPlatformWorkerFinished(&r);assert(!interrupts && !dispatches);
  setup(&a,&r);r.Resetting=1;AdmissionPlatformWorkerFinished(&r);assert(!interrupts && !dispatches);
  setup(&a,&r);AppleAgxSchedulerInitialize(&a.Scheduler);AdmissionPlatformWorkerFinished(&r);assert(!interrupts && !a.SchedulerFaulted);
  /* An already retired worker keeps the immediate preemption path. */
- setup(&a,&r);r.WorkScheduled=0;assert(AdmissionSchedulerTryNotifyPreemption(&a));assert(interrupts==1);
+ setup(&a,&r);r.WorkScheduled=0;assert(AdmissionSchedulerTryNotifyPreemption(&a,0u));assert(interrupts==1);
  /* EXP915 exact empty-queue dump: normal paging F972 follows completedF971
   * while the old notification is already visible to Windows. */
  setup(&a,&r);AppleAgxSchedulerInitialize(&a.Scheduler);
@@ -137,12 +137,12 @@ int main(void){
  expectedPreempt=0x117;expectedCompleted=0xf971;
  assert(AppleAgxSchedulerBeginBoundaryPreemption(&a.Scheduler,0,0,0x117,0xf971,0));
  r.WorkScheduled=0;enqueueOnDpc=0xf972;
- assert(AdmissionSchedulerTryNotifyPreemption(&a));
+ assert(AdmissionSchedulerTryNotifyPreemption(&a,0u));
  assert(activations==1 && a.Scheduler.ActiveFence==0xf972 && a.Scheduler.CompletedFence==0xf971);
  assert(!a.SchedulerFaulted && interrupts==1 && dpcs==1);
  /* Same-ID paging replay has the same admission boundary. */
  setup(&a,&r);r.WorkScheduled=0;enqueueOnDpc=10;replayPaging=1;
- assert(AdmissionSchedulerTryNotifyPreemption(&a));
+ assert(AdmissionSchedulerTryNotifyPreemption(&a,0u));
  assert(activations==1 && a.Scheduler.ActiveFence==10 && a.Scheduler.CompletedFence==0);
  puts("preemption waits for reserved worker; exact notification then valid resubmission; no fake completion");return 0;
 }

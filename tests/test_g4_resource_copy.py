@@ -70,8 +70,8 @@ class ResourceCopyRegionOverlay(unittest.TestCase):
 
     def test_region_bounds_and_empty_box(self):
         b = region_body()
-        self.assertIn("right - left <= dstW - DstX", b)
-        self.assertIn("bottom - top <= dstH - DstY", b)
+        self.assertIn("right - left <= dstWa - DstX", b)  # C72: block-aligned extent
+        self.assertIn("bottom - top <= dstHa - DstY", b)
         self.assertIn("right <= left || bottom <= top || back <= front", b)
         self.assertIn('"reject-resource-copy-region"', b)
 

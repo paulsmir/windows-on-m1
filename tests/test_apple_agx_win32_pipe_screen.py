@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -29,6 +30,9 @@ class AppleAgxWin32PipeScreenTests(unittest.TestCase):
             command = [
                 os.environ.get("CC", "clang"), "-std=c11", "-Wall",
                 "-Wextra", "-Werror", "-fsanitize=address,undefined",
+                # glibc: util/u_endian.h needs <endian.h>, util/os_time.h
+                # localtime_r (as the host tree's meson defines)
+                *([] if sys.platform == "darwin" else ["-DHAVE_ENDIAN_H", "-D_GNU_SOURCE"]),
                 "-I", str(BUILD / "src"), "-I", str(BUILD),
                 "-I", str(MESA / "include"), "-I", str(MESA / "src"),
                 "-I", str(MESA / "src/gallium/include"),

@@ -66,6 +66,7 @@ static LONG InterlockedExchange(volatile LONG *p, LONG v){ LONG o=*p; *p=v; retu
 static ADMISSION_G3_PROCESS *AdmissionGpuvaG3FindProcess(ADMISSION_G3_STATE *s, HANDLE h){ return h==s->handle ? s->only : NULL; }
 static NTSTATUS inner_status;
 static NTSTATUS AdmissionGpuvaG3BuildPagingBuffer(ADMISSION_CONTEXT*, DXGKARG_BUILDPAGINGBUFFER*){ return inner_status; }
+static void AdmissionRecordPagingInternalStatus(ADMISSION_CONTEXT*, const DXGKARG_BUILDPAGINGBUFFER*, NTSTATUS){}
 @@FUNCS@@
 int main(){
   ADMISSION_G3_PROCESS p={0,0}; ADMISSION_G3_STATE st={0,&p,(HANDLE)0x55}; ADMISSION_CONTEXT c={&st,0,0};

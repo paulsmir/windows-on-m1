@@ -85,6 +85,53 @@ class VgicIrqQueueContractTest(unittest.TestCase):
             r"(?s:.*?)aic_set_mask\(route->hw_irq, false\)",
         )
 
+    def test_queued_hardware_irq_keeps_the_guest_programmed_priority(self):
+        # Running-priority preemption makes the LR priority part of Windows' IRQL
+        # contract: a queued line injected above its programmed priority would nest
+        # inside ISRs at its own IRQL, where Windows defers it without an EOI.
+        exc = HV_EXC.read_text()
+        irq = function_body(exc, "void hv_exc_irq(struct exc_info *ctx)")
+        queued = irq.split("virq_t pending = {", 1)[1].split("};", 1)[0]
+
+        self.assertIn(".priority = hv_vgic3_get_priority(vintid),", queued)
+
+    def test_hardware_cpu_interface_cannot_signal_behind_running_priority(self):
+        # EXP1894: with VMCR.VENG1 set the Apple virtual CPU interface signalled a
+        # Pending timer LR that the emulated running priority (an ACTIVE SGI) blocks;
+        # the emulated IAR answered spurious and five vCPUs re-entered the IRQ
+        # vector forever.  Only HCR_EL2.VI, computed by update_vi, may signal.
+        vgic = HV_VGIC.read_text()
+        enable = function_body(vgic, "int hv_vgicv3_enable_virtual_interrupts(void)")
+        writes = re.findall(r"msr\(ICH_VMCR_EL2,\s*([^;]*)\);", enable)
+        self.assertTrue(writes)
+        for value in writes:
+            self.assertNotIn("BIT(0)", value)
+            self.assertNotIn("BIT(1)", value)
+        self.assertIn("msr(ICH_VMCR_EL2, 0xFFUL << 24);", enable)
+
+        update = function_body(vgic, "void hv_vgic3_update_vi(void)")
+        self.assertNotIn("BIT(1)", update)
+        self.assertIn("hv_vgic_diag_priority_deliverable(", update)
+
+    def test_lr_priority_reads_the_byte_the_guest_programmed(self):
+        # EXP1898: SPI priorities were read at (intid - 32) / 4 while the
+        # distributor stores IPRIORITYR<n> at n = intid / 4, and byte writes landed
+        # in lane 0.  vINTID 889 (IRQL 9, 0x60) carried 0x00 and, once ACTIVE,
+        # blocked every interrupt on CPU0 under running-priority preemption.
+        vgic = HV_VGIC.read_text()
+        get = function_body(vgic, "u8 hv_vgic3_get_priority_cpu(u64 intd, int cpu)")
+        self.assertNotIn("intd - 32", get)
+        self.assertIn("hv_vgic_diag_spi_priority(distributor->gicd_interrupt_priority_regs, intd)", get)
+
+        dist_write = function_body(vgic, "static bool handle_vgic_dist_access(")
+        self.assertNotIn("gicd_interrupt_priority_regs[reg_num] = *val;", dist_write)
+        self.assertIn("hv_vgic_diag_priority_word_write(distributor->gicd_interrupt_priority_regs",
+                      dist_write)
+        redist = function_body(vgic, "static bool handle_vgic_redist_access(")
+        self.assertNotIn("ipriority_reg[reg_num] = *val;", redist)
+        self.assertEqual(redist.count("hv_vgic_diag_priority_word_write("), 2)
+        self.assertEqual(redist.count("hv_vgic_diag_priority_word_read("), 2)
+
     def test_sgi_queue_console_trace_requires_explicit_hot_path_tracing(self):
         exc = HV_EXC.read_text()
         queue = function_body(exc, "static void hv_vgic3_queue_sgi(int cpu, u32 intid)")

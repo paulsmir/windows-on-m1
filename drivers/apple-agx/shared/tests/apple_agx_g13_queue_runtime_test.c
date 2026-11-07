@@ -714,6 +714,32 @@ static void TestEventAloneCannotComplete(void) {
                                                &completion));
 }
 
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * A resume write is not DMA retirement. Neither a flag event nor just stamps
+ * can release the faulted submission before every queue consumer has retired. */
+static void TestRetireRecovery(TEST_FIXTURE *f,
+    const APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION *s) {
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+  assert(!AppleAgxG13QueueRuntimeTakeCompletion(&f->Runtime, &completion));
+  TestEvent(event, 7u, 9u);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&f->Runtime, event, sizeof(event)) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(!AppleAgxG13QueueRuntimeTakeCompletion(&f->Runtime, &completion));
+  f->TaStamp = s->Ta.ExpectedStamp;
+  f->D3Stamp = s->D3.ExpectedStamp;
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&f->Runtime, 5001ULL) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(!AppleAgxG13QueueRuntimeTakeCompletion(&f->Runtime, &completion));
+  f->TaDone = f->TaWrite;
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&f->Runtime, 5002ULL) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(!AppleAgxG13QueueRuntimeTakeCompletion(&f->Runtime, &completion));
+  f->D3Done = f->D3Write;
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&f->Runtime, 5003ULL) ==
+         AppleAgxG13QueueRuntimeResultOk);
+}
+
 /* G4-recovery (EXP1241/EXP1242): the KMD deadline is not a hang verdict.
  * The firmware reports job faults itself (Timeout/Fault events) and the
  * Windows TDR owns hang detection; the terminal Quiesce that used to run here
@@ -750,6 +776,7 @@ static void TestDeadlineIsRecordedNotTerminal(void) {
                                             sizeof(event)) ==
          AppleAgxG13QueueRuntimeResultOk);
   assert(fixture.IoState.Recovers == 1u && fixture.IoState.Quiesces == 0u);
+  TestRetireRecovery(&fixture, &submission);
   assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime,
                                                &completion));
   assert(completion.Fence == 44u &&
@@ -804,9 +831,9 @@ static void TestPartialTransportFailureFaultsWithoutFence(void) {
                                                 &completion));
 }
 
-/* EXP1075: a firmware Timeout (kind 4) halted the firmware; resuming it
- * completes the job as Recovered without the queue Quiesce (an RTKit stop the
- * halted firmware cannot acknowledge), and the next job runs. A failed resume
+/* A firmware Timeout (kind 4) halted the firmware. Resume plus observed
+ * retirement completes the job as Recovered without queue Quiesce (an RTKit
+ * stop the halted firmware cannot acknowledge), and the next job runs. A failed resume
  * or a platform without Recover keeps the old terminal path. */
 static void TestFirmwareTimeoutRecovers(void) {
   TEST_FIXTURE fixture;
@@ -827,6 +854,7 @@ static void TestFirmwareTimeoutRecovers(void) {
   assert(fixture.IoState.Recovers == 1u && fixture.IoState.Quiesces == 0u);
   assert(fixture.IoState.RecoverKind == (unsigned)AppleAgxG13EventTimeout);
   assert(fixture.Runtime.RecoveredFaults == 1u);
+  TestRetireRecovery(&fixture, &submission);
   assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime, &completion));
   assert(completion.Fence == 50u &&
          completion.Status == AppleAgxG13QueueCompletionRecovered);
@@ -851,6 +879,8 @@ static void TestFirmwareTimeoutRecovers(void) {
                                             sizeof(event)) ==
          AppleAgxG13QueueRuntimeResultOk);
   assert(fixture.IoState.Recovers == 2u && fixture.IoState.Quiesces == 0u);
+  fixture.TaStamp = fixture.D3Stamp = 0u;
+  TestRetireRecovery(&fixture, &submission);
   assert(AppleAgxG13QueueRuntimeTakeCompletion(&fixture.Runtime, &completion));
   assert(completion.Status == AppleAgxG13QueueCompletionRecovered);
 

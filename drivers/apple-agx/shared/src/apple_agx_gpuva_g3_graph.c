@@ -60,6 +60,37 @@ static APPLE_AGX_GPUVA_G3_NODE *slot(APPLE_AGX_GPUVA_G3_NODE *table,
   return table && table->Slots ? table->Slots[index] : 0;
 }
 
+/* rc81: drop the range proofs a mutation of TableIpa (0 = topology) can
+ * change; called before every native mutation, with InvalidateNative. */
+/* L3-P1b: a leaf change (table_ipa, index) alters only the page at
+ * LeafVaBase[k] + index * 16 KiB for each segment k the proof recorded for
+ * that table (every page of a proof is in a recorded segment); index ~0u
+ * means unknown and drops every proof crossing the table. */
+static void proof_invalidate(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+                             unsigned long long table_ipa, unsigned int index) {
+  unsigned int i, k;
+  for (i = 0; i < APPLE_AGX_GPUVA_G3_PROOF_ENTRIES; ++i) {
+    APPLE_AGX_GPUVA_G3_RANGE_PROOF *p = &graph->Proofs[i];
+    if (!p->Valid) continue;
+    if (!table_ipa) { p->Valid = 0u; continue; }
+    for (k = 0; k < p->TableCount; ++k) {
+      unsigned long long page;
+      if (p->LeafTables[k] != table_ipa) continue;
+      if (index >= 2048u) { p->Valid = 0u; break; }
+      page = p->LeafVaBase[k] + (unsigned long long)index * G3_PAGE;
+      if (page + G3_PAGE > (p->Va & ~(unsigned long long)(G3_PAGE - 1u)) &&
+          page < p->Va + p->Bytes) { p->Valid = 0u; break; }
+    }
+  }
+}
+
+static void native_invalidate(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    unsigned long long table_ipa, unsigned int index) {
+  proof_invalidate(graph, table_ipa, index);
+  if (graph->InvalidateNative)
+    graph->InvalidateNative(graph->InvalidateContext, table_ipa, index);
+}
+
 static bool call_with_response(APPLE_AGX_GPUVA_G3_GRAPH *graph,
                  AGX_GPUVA_V5_REQUEST *request,
                  AGX_GPUVA_V5_RESPONSE *response_out) {
@@ -82,6 +113,125 @@ static bool call_with_response(APPLE_AGX_GPUVA_G3_GRAPH *graph,
 static bool call(APPLE_AGX_GPUVA_G3_GRAPH *graph,
                  AGX_GPUVA_V5_REQUEST *request) {
   return call_with_response(graph, request, 0);
+}
+
+/* V1: the graph keeps its lease between jobs (apple_agx_gpuva_g3_graph.h). */
+static bool retained(const APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+  return graph->SlotTable != 0 && graph->SlotTable->Count != 0u;
+}
+
+bool AppleAgxGpuvaG3SlotsEnable(APPLE_AGX_GPUVA_G3_SLOTS *table,
+                                unsigned int first, unsigned int count) {
+  if (!table || !first || !count || first > APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX ||
+      count > APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX + 1u - first)
+    return false;
+  if (table->Count) return table->First == first && table->Count == count;
+  table->First = first;
+  table->Count = count;
+  return true;
+}
+
+static bool slot_in_table(const APPLE_AGX_GPUVA_G3_SLOTS *table, unsigned int s) {
+  return s >= table->First && s - table->First < table->Count;
+}
+
+static void slot_quarantine(APPLE_AGX_GPUVA_G3_SLOTS *table, unsigned int s) {
+  if (!(table->Quarantined & (1u << s))) ++table->Quarantines;
+  table->Quarantined |= 1u << s;
+  table->QuarantinedAt[s] = table->Clock;
+}
+
+/* Not quarantined, or quarantined long enough ago to be tried again. */
+static bool slot_usable(APPLE_AGX_GPUVA_G3_SLOTS *table, unsigned int s) {
+  if (!(table->Quarantined & (1u << s))) return true;
+  if (table->Clock - table->QuarantinedAt[s] < APPLE_AGX_GPUVA_G3_QUARANTINE_RETRY)
+    return false;
+  table->Quarantined &= ~(1u << s);
+  ++table->Recovered;
+  return true;
+}
+
+bool AppleAgxGpuvaG3GraphReleaseIdle(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+  AGX_GPUVA_V5_REQUEST request = {0};
+  APPLE_AGX_GPUVA_G3_SLOTS *table;
+  if (!graph) return false;
+  if (!graph->LeaseToken) return true;
+  if (graph->JobInFlight || graph->JobNested || graph->Uncertain) return false;
+  request.Command = AGX_GPUVA_V5_RELEASE;
+  request.Slot = graph->Slot;
+  request.Token = graph->LeaseToken;
+  if (!call(graph, &request)) {
+    graph->Uncertain = 1u;
+    return false;
+  }
+  table = graph->SlotTable;
+  if (table && graph->Slot <= APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX &&
+      table->Owner[graph->Slot] == graph) {
+    table->Owner[graph->Slot] = 0;
+    ++table->Releases;
+  }
+  graph->LeaseToken = 0ULL;
+  graph->Slot = 0u;
+  return true;
+}
+
+/* Rule R: every translation change of a graph retaining an idle lease runs
+ * after RELEASE (TTBR cleared, slot invalidated), as in the baseline where
+ * no lease outlives a job; the next LEASE writes the TTBR and invalidates. */
+bool AppleAgxGpuvaG3GraphReleaseRetainedAt(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+                                           unsigned int site) {
+  APPLE_AGX_GPUVA_G3_SLOTS *table;
+  unsigned int i;
+  if (!graph) return false;
+  if (!retained(graph) || !graph->LeaseToken || graph->JobInFlight) return true;
+  table = graph->SlotTable;
+  for (i = 0; i < 8u; ++i)
+    if (table->ReleaseSite[i] == site || !table->ReleaseSite[i]) {
+      table->ReleaseSite[i] = site;
+      ++table->ReleaseSiteCount[i];
+      break;
+    }
+  return AppleAgxGpuvaG3GraphReleaseIdle(graph);
+}
+
+/* Preferred slot, else the least recently used free slot, else the least
+ * recently used idle lease of another graph (RELEASE first). 0: none. */
+static unsigned int slot_pick(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+  APPLE_AGX_GPUVA_G3_SLOTS *table = graph->SlotTable;
+  APPLE_AGX_GPUVA_G3_GRAPH *owner;
+  unsigned int s = graph->PreferredSlot, pick = 0u, end = table->First + table->Count;
+  if (slot_in_table(table, s) && !table->Owner[s] && slot_usable(table, s)) return s;
+  for (s = table->First; s < end; ++s)
+    if (!table->Owner[s] && slot_usable(table, s) &&
+        (!pick || table->LastUse[s] < table->LastUse[pick])) pick = s;
+  if (pick) return pick;
+  for (s = table->First; s < end; ++s) {
+    owner = table->Owner[s];
+    if (owner && owner != graph && slot_usable(table, s) &&
+        owner->LeaseToken && owner->Slot == s && !owner->JobInFlight &&
+        !owner->JobNested && !owner->Uncertain &&
+        (!pick || table->LastUse[s] < table->LastUse[pick])) pick = s;
+  }
+  if (!pick) return 0u;
+  if (!AppleAgxGpuvaG3GraphReleaseIdle(table->Owner[pick])) {
+    slot_quarantine(table, pick);
+    return 0u;
+  }
+  ++table->Steals;
+  return pick;
+}
+
+bool AppleAgxGpuvaG3GraphNegotiateLive(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+                                        bool enable) {
+  AGX_GPUVA_V5_REQUEST q = {0};
+  if (!graph || !graph->Created || graph->Uncertain || graph->JobInFlight)
+    return false;
+  q.Command = AGX_GPUVA_V5_NEGOTIATE_LIVE;
+  q.Token = enable ? AGX_GPUVA_V5_CAP_LIVE_ADDITIVE : 0ULL;
+  q.AllocationGeneration = AGX_GPUVA_V5_LIVE_ABI;
+  if (!call(graph, &q)) return false;
+  graph->LiveAdditive = enable ? 1u : 0u;
+  return true;
 }
 
 static APPLE_AGX_GPUVA_G3_NODE *find_table(
@@ -299,6 +449,7 @@ bool AppleAgxGpuvaG3GraphCreate(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   graph->RootTable = root;
   graph->RootIpa = root_ipa;
   graph->Created = 1u;
+  graph->LiveAdditive = 0u;
   return true;
 }
 
@@ -361,6 +512,9 @@ bool AppleAgxGpuvaG3GraphRegisterTable(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   for (existing = graph->Tables; existing; existing = existing->Next)
     if (existing->Ipa == ipa) break;
   if (existing && existing->Level == level) return true;
+  if (existing && graph->JobInFlight) return false;
+  if (existing && !AppleAgxGpuvaG3GraphReleaseRetained(graph)) return false;
+  if (existing) native_invalidate(graph, 0ULL, 0u);
   /* VidMm reuses a freed page-table page at another level (EXP846 0x10E/0xB).
    * Retire the old table only when no parent still links it: clear its own
    * entries, revoke it, then register the page at the new level. */
@@ -399,6 +553,9 @@ bool AppleAgxGpuvaG3GraphBindRoot(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   if (!graph || !graph->Created || graph->Uncertain ||
       !find_table(graph, ipa, 0u) || graph->MappingGeneration == ~0ULL) return false;
   if (graph->RootIpa == ipa) return true;
+  if (graph->JobInFlight) return false;
+  if (!AppleAgxGpuvaG3GraphReleaseRetained(graph)) return false;
+  native_invalidate(graph, 0ULL, 0u);
   request.Command = AGX_GPUVA_V5_RELOCATE_ROOT;
   request.TableIpa = ipa;
   if (!call(graph, &request)) return false;
@@ -414,7 +571,7 @@ bool AppleAgxGpuvaG3GraphUpdateParent(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   AGX_GPUVA_V5_REQUEST request = {0};
   APPLE_AGX_GPUVA_G3_NODE *parent, *edge, *new_edge = 0, *child = 0;
   if (!graph || !graph->Created || graph->Uncertain) return false;
-  if (graph->JobInFlight || graph->MappingGeneration == ~0ULL) return false;
+  if (graph->MappingGeneration == ~0ULL) return false;
   parent = find_table(graph, table_ipa, 0u);
   if (!parent) parent = find_table(graph, table_ipa, 1u);
   if (child_ipa && parent)
@@ -423,8 +580,13 @@ bool AppleAgxGpuvaG3GraphUpdateParent(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       (child_ipa && !child))
     return false;
   edge = find_edge(graph->Parents, table_ipa, index);
+  if (graph->LiveAdditive && !child_ipa && !edge) return true;
+  if (graph->JobInFlight && (!graph->LiveAdditive || edge || !child_ipa))
+    return false;
   if (child_ipa && edge && edge->AuxIpa == child_ipa) return true;
   if (!child_ipa && !edge) return true;
+  if (!AppleAgxGpuvaG3GraphReleaseRetained(graph)) return false;
+  native_invalidate(graph, 0ULL, 0u);
   if (child_ipa && !edge && !(new_edge = node(graph))) return false;
   request.Command = AGX_GPUVA_V5_UPDATE_PARENT;
   request.TableIpa = table_ipa;
@@ -471,12 +633,22 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned long long table_ipa, unsigned int index,
     unsigned long long guest_ipa, bool writable,
     APPLE_AGX_GPUVA_G3_BACKING_KIND kind, bool *unavailable) {
+  return AppleAgxGpuvaG3GraphTryLeafBackingEx(graph, table_ipa, index,
+      guest_ipa, writable, kind, unavailable, false);
+}
+
+bool AppleAgxGpuvaG3GraphTryLeafBackingEx(APPLE_AGX_GPUVA_G3_GRAPH *graph,
+    unsigned long long table_ipa, unsigned int index,
+    unsigned long long guest_ipa, bool writable,
+    APPLE_AGX_GPUVA_G3_BACKING_KIND kind, bool *unavailable, bool gpu_private) {
   AGX_GPUVA_V5_REQUEST request = {0};
+  /* GC: cached only when the graph opted in and the leaf maps memory. */
+  const unsigned cached = graph && graph->PrivateCached && gpu_private && guest_ipa ? 1u : 0u;
   APPLE_AGX_GPUVA_G3_NODE *leaf, *new_leaf = 0, *backing = 0;
   APPLE_AGX_GPUVA_G3_NODE *old_backing = 0, *table;
   bool new_backing = false;
   if (unavailable) *unavailable = false;
-  if (!graph || !graph->Created || graph->Uncertain || graph->JobInFlight ||
+  if (!graph || !graph->Created || graph->Uncertain ||
       graph->MappingGeneration == ~0ULL ||
       (kind != AppleAgxGpuvaG3LocalBacking && kind != AppleAgxGpuvaG3SystemBacking &&
        kind != AppleAgxGpuvaG3PrivateBacking) ||
@@ -485,9 +657,18 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   /* table->Slots[index] is the Leaves edge (table_ipa, index): set on insert,
    * cleared before removal, freed only with the retired table. */
   leaf = slot(table, index);
+  if (graph->LiveAdditive && !guest_ipa && !leaf) return true;
+  if (graph->JobInFlight && (!graph->LiveAdditive || leaf || !guest_ipa))
+    return false;
   if (guest_ipa && leaf && leaf->AuxIpa == guest_ipa &&
-      leaf->Writable == (unsigned)writable && leaf->Kind == kind) return true;
+      leaf->Writable == (unsigned)writable && leaf->Kind == kind &&
+      leaf->PrivateCached == cached) return true;
   if (!guest_ipa && !leaf) return true;
+  /* V1 receipt: site = line | kind << 16 | gpu_private << 20 | unmap << 21 */
+  if (!AppleAgxGpuvaG3GraphReleaseRetainedAt(graph, (unsigned int)__LINE__ |
+          ((unsigned int)kind << 16) | ((gpu_private ? 1u : 0u) << 20) |
+          ((guest_ipa ? 0u : 1u) << 21))) return false;
+  native_invalidate(graph, table_ipa, index);
   if (guest_ipa) {
     if (!leaf) {
       new_leaf = node(graph);
@@ -558,7 +739,7 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   request.Command = AGX_GPUVA_V5_UPDATE_LEAF;
   request.TableIpa = table_ipa;
   request.Index = index;
-  request.Flags = 15u;
+  request.Flags = 15u | (cached ? AGX_GPUVA_V5_LEAF_PRIVATE_CACHED : 0u);
   if (guest_ipa) {
     request.AllocationGeneration = backing->Generation;
     request.ValidMask = 15u;
@@ -591,6 +772,7 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       leaf->Kind = kind;
       leaf->Generation = backing->Generation;
       leaf->Writable = writable ? 1u : 0u;
+      leaf->PrivateCached = cached;
       if (old_backing != backing &&
           !revoke_unused_backing(graph, old_backing)) return false;
     } else {
@@ -600,6 +782,7 @@ bool AppleAgxGpuvaG3GraphTryLeafBacking(APPLE_AGX_GPUVA_G3_GRAPH *graph,
       new_leaf->Generation = backing->Generation;
       new_leaf->Index = index;
       new_leaf->Writable = writable ? 1u : 0u;
+      new_leaf->PrivateCached = cached;
       push_node(&graph->Leaves, new_leaf);
       table->Slots[index] = new_leaf;
       reuse_backing(graph, backing);
@@ -723,6 +906,66 @@ bool AppleAgxGpuvaG3GraphContainsRangeAccess(
   return AppleAgxGpuvaG3GraphInspectRangeAccess(graph, start_va, bytes, write, NULL);
 }
 
+bool AppleAgxGpuvaG3GraphContainsRangeAccessCached(
+    APPLE_AGX_GPUVA_G3_GRAPH *graph, unsigned long long start_va,
+    unsigned int bytes, bool write) {
+  APPLE_AGX_GPUVA_G3_RANGE_PROOF candidate;
+  unsigned long long va, end;
+  unsigned int i;
+  if (!bytes || start_va >= (1ULL << 39) ||
+      bytes > (1ULL << 39) - start_va || !graph || !graph->Created ||
+      graph->Uncertain) return false;
+  end = start_va + bytes;
+  if (((end + G3_PAGE - 1u) & ~(G3_PAGE - 1u)) - (start_va & ~(G3_PAGE - 1u)) <
+      (unsigned long long)APPLE_AGX_GPUVA_G3_PROOF_MIN_PAGES * G3_PAGE)
+    return AppleAgxGpuvaG3GraphInspectRangeAccess(graph, start_va, bytes, write, NULL);
+  for (i = 0; i < APPLE_AGX_GPUVA_G3_PROOF_ENTRIES; ++i) {
+    const APPLE_AGX_GPUVA_G3_RANGE_PROOF *p = &graph->Proofs[i];
+    if (p->Valid && p->Va == start_va && p->Bytes == bytes &&
+        p->RootIpa == graph->RootIpa && (p->Write || !write))
+      return true;
+  }
+  memset(&candidate, 0, sizeof(candidate));
+  candidate.Valid = 1u;
+  for (va = start_va & ~(G3_PAGE - 1u); va < end; va += G3_PAGE) {
+    unsigned int ri = (unsigned int)((va >> 36) & 7u);
+    unsigned int mi = (unsigned int)((va >> 25) & 2047u);
+    unsigned int li = (unsigned int)((va >> 14) & 2047u);
+    APPLE_AGX_GPUVA_G3_NODE *root_edge = slot(graph->RootTable, ri);
+    APPLE_AGX_GPUVA_G3_NODE *middle_edge, *leaf;
+    if (!root_edge) return false;
+    middle_edge = slot(root_edge->ChildTable, mi);
+    if (!middle_edge) return false;
+    leaf = slot(middle_edge->ChildTable, li);
+    if (!leaf || !leaf->AuxIpa || (write && !leaf->Writable)) return false;
+    /* the leaf table of this page (consecutive pages share it) */
+    /* L3-P1b: a new segment per (leaf table, 32 MiB VA base) pair */
+    if (!candidate.TableCount ||
+        candidate.LeafTables[candidate.TableCount - 1u] != middle_edge->AuxIpa ||
+        candidate.LeafVaBase[candidate.TableCount - 1u] != (va & ~((1ULL << 25) - 1u))) {
+      if (candidate.TableCount == APPLE_AGX_GPUVA_G3_PROOF_TABLES)
+        candidate.Valid = 0u;
+      else {
+        candidate.LeafVaBase[candidate.TableCount] = va & ~((1ULL << 25) - 1u);
+        candidate.LeafTables[candidate.TableCount++] = middle_edge->AuxIpa;
+      }
+    }
+  }
+  if (candidate.Valid) {
+    candidate.Va = start_va;
+    candidate.Bytes = bytes;
+    candidate.RootIpa = graph->RootIpa;
+    candidate.Write = write ? 1u : 0u;
+    /* an invalidated entry first; otherwise the oldest insertion */
+    for (i = 0; i < APPLE_AGX_GPUVA_G3_PROOF_ENTRIES; ++i)
+      if (!graph->Proofs[i].Valid) break;
+    if (i == APPLE_AGX_GPUVA_G3_PROOF_ENTRIES)
+      i = graph->NextProof++ % APPLE_AGX_GPUVA_G3_PROOF_ENTRIES;
+    graph->Proofs[i] = candidate;
+  }
+  return true;
+}
+
 /* A private leaf is grafted into the actual current shadow root. VidMm may
  * supply the middle table; only the reserved leaf slot belongs to the KMD. */
 bool AppleAgxGpuvaG3GraphAttachPrivate(APPLE_AGX_GPUVA_G3_GRAPH *g,
@@ -743,6 +986,7 @@ bool AppleAgxGpuvaG3GraphAttachPrivate(APPLE_AGX_GPUVA_G3_GRAPH *g,
    * process may be running.  An existing exact link needs no publication,
    * so it does not wait for process quiescence (EXP1053 DWM poison). */
   if (root_edge && leaf_edge && leaf_edge->AuxIpa==leaf) return true;
+  if (!AppleAgxGpuvaG3GraphReleaseRetained(g)) { g->AttachFailure=3u; return false; }
   if (g->JobInFlight || g->LeaseToken) {
     g->AttachFailure = g->JobInFlight ? 2u : 3u;
     return false;
@@ -763,38 +1007,111 @@ bool AppleAgxGpuvaG3GraphAttachPrivate(APPLE_AGX_GPUVA_G3_GRAPH *g,
 }
 
 /* Root parking must ignore only our own private branch, and must preserve
- * every ordinary mapping as a real nonempty-root conflict. */
-bool AppleAgxGpuvaG3GraphCanDetachPrivateRoot(APPLE_AGX_GPUVA_G3_GRAPH *g,
-    unsigned long long va, unsigned long long root, unsigned long long leaf) {
+ * every ordinary mapping as a real nonempty-root conflict. rc80: the branch
+ * may hold more private leaves (the TVB window) below the same middle table;
+ * entry 0 is the private window's leaf and must be linked, the others may be
+ * absent (they are re-linked after the move). */
+bool AppleAgxGpuvaG3GraphCanDetachPrivateRootSet(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    unsigned long long root, const unsigned long long *vas,
+    const unsigned long long *leaves, unsigned count) {
   APPLE_AGX_GPUVA_G3_NODE *edge, *private_edge;
-  unsigned ri=(unsigned)(va>>36), mi=(unsigned)((va>>25)&2047u);
-  if (!g || g->Uncertain || g->JobInFlight || g->LeaseToken ||
-      va<(1ULL<<25) || va>=(1ULL<<39) || (va&0x1ffffffULL)) return false;
+  unsigned ri, i;
+  if (!g || !vas || !leaves || !count || g->Uncertain || g->JobInFlight ||
+      g->LeaseToken) return false;
+  ri=(unsigned)(vas[0]>>36);
+  for (i=0;i<count;++i)
+    if (vas[i]<(1ULL<<25) || vas[i]>=(1ULL<<39) || (vas[i]&0x1ffffffULL) ||
+        (unsigned)(vas[i]>>36)!=ri || !leaves[i]) return false;
   private_edge=find_edge(g->Parents,root,ri);
   if (!private_edge) {
     for (edge=g->Parents;edge;edge=edge->Next)
       if (edge->Ipa==root) return false;
     return true;
   }
-  for (edge=g->Parents;edge;edge=edge->Next)
-    if ((edge->Ipa==root && edge!=private_edge) ||
-        (edge->Ipa==private_edge->AuxIpa &&
-         (edge->Index!=mi || edge->AuxIpa!=leaf))) return false;
-  edge=find_edge(g->Parents,private_edge->AuxIpa,mi);
-  if (!edge || edge->AuxIpa!=leaf) return false;
+  for (edge=g->Parents;edge;edge=edge->Next) {
+    if (edge->Ipa==root && edge!=private_edge) return false;
+    if (edge->Ipa==private_edge->AuxIpa) {
+      for (i=0;i<count;++i)
+        if (edge->Index==(unsigned)((vas[i]>>25)&2047u) &&
+            edge->AuxIpa==leaves[i]) break;
+      if (i==count) return false;
+    }
+  }
+  edge=find_edge(g->Parents,private_edge->AuxIpa,(unsigned)((vas[0]>>25)&2047u));
+  if (!edge || edge->AuxIpa!=leaves[0]) return false;
   return true;
+}
+
+bool AppleAgxGpuvaG3GraphCanDetachPrivateRoot(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    unsigned long long va, unsigned long long root, unsigned long long leaf) {
+  return AppleAgxGpuvaG3GraphCanDetachPrivateRootSet(g,root,&va,&leaf,1u);
+}
+
+bool AppleAgxGpuvaG3GraphDetachPrivateRootSet(APPLE_AGX_GPUVA_G3_GRAPH *g,
+    unsigned long long root, const unsigned long long *vas,
+    const unsigned long long *leaves, unsigned count) {
+  if (!AppleAgxGpuvaG3GraphReleaseRetained(g) ||
+      !AppleAgxGpuvaG3GraphCanDetachPrivateRootSet(g,root,vas,leaves,count))
+    return false;
+  return AppleAgxGpuvaG3GraphUpdateParent(g,root,(unsigned)(vas[0]>>36),0);
 }
 
 bool AppleAgxGpuvaG3GraphDetachPrivateRoot(APPLE_AGX_GPUVA_G3_GRAPH *g,
     unsigned long long va, unsigned long long root, unsigned long long leaf) {
-  if (!AppleAgxGpuvaG3GraphCanDetachPrivateRoot(g,va,root,leaf)) return false;
-  return AppleAgxGpuvaG3GraphUpdateParent(g,root,(unsigned)(va>>36),0);
+  return AppleAgxGpuvaG3GraphDetachPrivateRootSet(g,root,&va,&leaf,1u);
+}
+
+/* V1: BeginJob of a graph attached to an enabled slot table. A held lease
+ * needs JOB_BEGIN only. Otherwise lease a slot the table picks; a slot the
+ * broker refuses as occupied (BUSY) or not clean (OWNERSHIP) is quarantined
+ * and the next one tried, at most Count times. */
+static bool begin_retained(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+  APPLE_AGX_GPUVA_G3_SLOTS *table = graph->SlotTable;
+  AGX_GPUVA_V5_REQUEST request = {0};
+  AGX_GPUVA_V5_RESPONSE response = {0};
+  unsigned int attempt, slot;
+  if (!graph->Created || graph->Uncertain || graph->JobInFlight) return false;
+  if (graph->LeaseToken) {
+    if (!slot_in_table(table, graph->Slot) ||
+        table->Owner[graph->Slot] != graph) return false;
+    ++table->Reuses;
+  }
+  for (attempt = 0u; !graph->LeaseToken; ++attempt) {
+    if (attempt >= table->Count || !(slot = slot_pick(graph))) return false;
+    request = (AGX_GPUVA_V5_REQUEST){0};
+    request.Command = AGX_GPUVA_V5_LEASE;
+    request.Slot = slot;
+    if (!call_with_response(graph, &request, &response) || !response.Token) {
+      if (!graph->Uncertain && graph->LastStatus == 0u) graph->Uncertain = 1u;
+      if (graph->Uncertain || (graph->LastStatus != 3u && graph->LastStatus != 4u))
+        return false;
+      slot_quarantine(table, slot);
+      continue;
+    }
+    graph->LeaseToken = response.Token;
+    graph->Slot = slot;
+    graph->PreferredSlot = slot;
+    table->Owner[slot] = graph;
+    ++table->Leases;
+  }
+  request = (AGX_GPUVA_V5_REQUEST){0};
+  request.Command = AGX_GPUVA_V5_JOB_BEGIN;
+  request.Slot = graph->Slot;
+  request.Token = graph->LeaseToken;
+  if (!call(graph, &request)) {
+    graph->Uncertain = 1u;
+    return false;
+  }
+  graph->JobInFlight = 1u;
+  table->LastUse[graph->Slot] = ++table->Clock;
+  return true;
 }
 
 bool AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
     unsigned int slot) {
   AGX_GPUVA_V5_REQUEST request = {0};
   AGX_GPUVA_V5_RESPONSE response = {0};
+  if (graph && retained(graph)) return begin_retained(graph);
   if (!graph || !graph->Created || graph->Uncertain || graph->LeaseToken ||
       graph->JobInFlight || slot == 0u || slot >= 63u) return false;
   request.Command = AGX_GPUVA_V5_LEASE;
@@ -818,10 +1135,22 @@ bool AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   return true;
 }
 
+bool AppleAgxGpuvaG3GraphBeginNestedJob(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+  if (!graph || !graph->Created || graph->Uncertain || !graph->LeaseToken ||
+      !graph->JobInFlight || graph->JobNested) return false;
+  graph->JobNested = 1u;
+  return true;
+}
+
 bool AppleAgxGpuvaG3GraphEndJob(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   AGX_GPUVA_V5_REQUEST request = {0};
   if (!graph || !graph->JobInFlight || !graph->LeaseToken ||
       graph->Uncertain) return false;
+  /* rc102: the older of two jobs ended; the newer keeps the lease. */
+  if (graph->JobNested) {
+    graph->JobNested = 0u;
+    return true;
+  }
   request.Command = AGX_GPUVA_V5_JOB_END;
   request.Slot = graph->Slot;
   request.Token = graph->LeaseToken;
@@ -830,6 +1159,12 @@ bool AppleAgxGpuvaG3GraphEndJob(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
     return false;
   }
   graph->JobInFlight = 0u;
+  /* V1: the lease stays with the graph (rule R releases it before any
+   * translation change; another graph may steal it while idle). */
+  if (retained(graph) && graph->Slot <= APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX) {
+    graph->SlotTable->LastUse[graph->Slot] = ++graph->SlotTable->Clock;
+    return true;
+  }
   request.Command = AGX_GPUVA_V5_RELEASE;
   if (!call(graph, &request)) {
     graph->Uncertain = 1u;
@@ -844,8 +1179,11 @@ bool AppleAgxGpuvaG3GraphDestroy(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   AGX_GPUVA_V5_REQUEST request = {0};
   APPLE_AGX_GPUVA_G3_NODE *item;
   unsigned int level;
+  if (graph && graph->Created && !AppleAgxGpuvaG3GraphReleaseRetained(graph))
+    return false;
   if (!graph || !graph->Created || graph->Uncertain ||
       graph->LeaseToken || graph->JobInFlight) return false;
+  proof_invalidate(graph, 0ULL, ~0u);
   while (graph->Leaves) {
     item = graph->Leaves;
     if (!AppleAgxGpuvaG3GraphUpdateLeaf(graph, item->Ipa,
@@ -885,6 +1223,7 @@ bool AppleAgxGpuvaG3GraphDestroy(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   if (graph->SpareNode) graph->Free(graph->MemoryContext, graph->SpareNode);
   graph->SpareNode = 0;
   graph->Created = 0u;
+  graph->LiveAdditive = 0u;
   graph->RootIpa = 0ULL;
   graph->RootTable = 0;
   return true;

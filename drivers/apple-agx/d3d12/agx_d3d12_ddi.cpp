@@ -5,26 +5,61 @@
  * whose every DDI stays fail-closed, so the runtime's next requests become
  * measurable. Ordinary processes still get E_NOTIMPL from OpenAdapter12. */
 #include <windows.h>
+#define ADMISSION_UMD_WATCH_WINDOWS
+#include "umd_va_watch.h"
 /* d3dkmddi.h expects NTSTATUS, which user-mode windows.h does not define. */
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(disable : 4201)
 #include <d3d12umddi.h>
 #include <cstddef>
+#include <cstdint>
 #include <climits>
 #include <cstring>
+#include <cstdlib>
+#include <limits>
+#include <new>
+#include <tuple>
 #include <type_traits>
+#include "agx_d3d12_view_mapping.h"
+#include "agx_d3d12_shared_open.h"
+#include "agx_d3d12_queue_sync.h"
+#include "agx_d3d12_r1_blend_projection.h"
+#include "agx_d3d12_r1_shader_span.h"
+#include "agx_d3d12_zero_cache_library.h"
+#include "agx_shader_input_provider.h"
+#include "agx_d3d12_r1_io_span.h"
+#include "agx_d3d12_r1_shader_transaction.h"
 extern "C" {
 #include "apple_agx_win32_device_info.h"
 #include "render_win32_transport.h"
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 #include "agx_d3d12_windows.h"
+#include "agx_d3d12_tile_mapping.h"
+#include "agx_d3d12_heap_backing.h"
+#include "agx_d3d12_barrier_stats.h"
+#include "agx_d3d12_job_barriers.h"
+static_assert(AGX_D3D12_HEAP_FLAG_BUFFERS == static_cast<unsigned>(D3D12DDI_HEAP_FLAG_BUFFERS), "rc87 heap flag");
+static_assert(AGX_D3D12_HEAP_FLAG_TEXTURES == (static_cast<unsigned>(D3D12DDI_HEAP_FLAG_NON_RT_DS_TEXTURES) |
+                                               static_cast<unsigned>(D3D12DDI_HEAP_FLAG_RT_DS_TEXTURES)),
+              "rc87 heap flags");
+static_assert(AGX_D3D12_CPU_PAGE_NOT_AVAILABLE == static_cast<unsigned>(D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE),
+              "rc87 page property");
+#include "../mesa/dxbc/dxbc_minmax_bits.h"
+#include "agx_d3d12_volume_registry.h"
 #endif
 /* agx_win32_screen.c (compiled into this UMD) */
 int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info);
 }
 
+#if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
+#include "../mesa/dxil/agx_owned_nir_handoff.h"
+#endif
+
 /* the UMD trace logger (umd_runtime_device.c; C linkage through umd_internal.h) */
 extern "C" VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status, const UINT *Values, UINT Count);
+extern "C" BOOL AdmissionUmdMeasureEnabled(VOID);
+#include "../mesa/winsys/agx_win32_wait.h"
+#include "../mesa/winsys/agx_win32_shader_stats.h"
 
 namespace {
 /* D3D12 A3 (EXP1343: OpenAdapter12 returned a NULL driver adapter handle
@@ -38,50 +73,254 @@ struct AgxD3d12Adapter {
     /* C2: the KMD buffer classes (the D3D10 adapter's query, umd_runtime_device.c) */
     AGX_WIN32_DEVICE_INFO info;
     BOOL info_valid;
+    /* C50: the interface the runtime negotiated (CalcPrivateDeviceSize
+     * Interface/Version, D3D12DDI_SUPPORTED_* form): CORE_0012 and CORE_0033
+     * have the same size, so FillDDITable selects tables by it. */
+    UINT64 negotiated;
 };
 static AgxD3d12Adapter adapter_object;
 static D3D12DDI_HRTTABLE list_table;
 static volatile LONG queue_generation; /* per-device Win32 generations */
-static const D3D12DDI_CORELAYER_DEVICECALLBACKS_0003 *callbacks;
-static D3D12DDI_HRTDEVICE runtime_device;
 
 /* EXP1347: the runtime destroyed the device after the caps with no traced
  * call; each fail-closed entry records its table (D3D12DDI_TABLE_TYPE) and
  * member offset so the receipt names the DDI the runtime needed. */
 template<class T> struct TableOf;
 template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0003> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
+template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0010> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
+template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0033> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
+template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0040> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
+template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0070> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
+template<> struct TableOf<D3D12DDI_DEVICE_FUNCS_CORE_0075> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_DEVICE_CORE; };
 template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
+template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0033> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
+template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0040> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
+template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0062> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
+template<> struct TableOf<D3D12DDI_COMMAND_LIST_FUNCS_3D_0074> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D; };
 template<> struct TableOf<D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001> { static constexpr UINT value = D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D; };
+static void ReportRejectedDeviceError(D3D12DDI_HDEVICE handle, HRESULT error);
+static void ReportRejectedListError(D3D12DDI_HCOMMANDLIST handle, HRESULT error);
+
+static void ReportRejectedQueueError(D3D12DDI_HCOMMANDQUEUE handle, HRESULT error);
 template<class T, UINT Table, UINT Offset> struct Rejected;
 template<class R, class... A, UINT Table, UINT Offset> struct Rejected<R (APIENTRY *)(A...), Table, Offset> {
-    static R APIENTRY call(A...) {
+    static R APIENTRY call(A... args) {
+        ((void)args, ...);
         OutputDebugStringA("AGX D3D12 ABI gate: unimplemented DDI\n");
         const UINT receipt[] = {Table, Offset};
         AdmissionUmdDiagnostic("measure-d3d12-rejected", E_NOTIMPL, receipt, 2);
-        if (callbacks && callbacks->pfnSetErrorCb)
-            callbacks->pfnSetErrorCb(runtime_device, E_NOTIMPL);
-        /* Command-list errors need the runtime list handle; no list is created here. */
-        (void)(callbacks && callbacks->pfnSetCommandListErrorCb);
+        if constexpr (Table == D3D12DDI_TABLE_TYPE_DEVICE_CORE) {
+            static_assert(sizeof...(A) > 0 &&
+                          std::is_same_v<std::tuple_element_t<0, std::tuple<A...>>, D3D12DDI_HDEVICE>,
+                          "rejected DEVICE_CORE DDI must start with HDEVICE");
+            ReportRejectedDeviceError(std::get<0>(std::forward_as_tuple(args...)), E_NOTIMPL);
+        } else if constexpr (Table == D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D) {
+            static_assert(sizeof...(A) > 0 &&
+                          std::is_same_v<std::tuple_element_t<0, std::tuple<A...>>, D3D12DDI_HCOMMANDLIST>,
+                          "rejected COMMAND_LIST DDI must start with HCOMMANDLIST");
+            ReportRejectedListError(std::get<0>(std::forward_as_tuple(args...)), E_NOTIMPL);
+        } else {
+            static_assert(Table == D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D && sizeof...(A) > 0 &&
+                          std::is_same_v<std::tuple_element_t<0, std::tuple<A...>>, D3D12DDI_HCOMMANDQUEUE>,
+                          "rejected COMMAND_QUEUE DDI must start with HCOMMANDQUEUE");
+            ReportRejectedQueueError(std::get<0>(std::forward_as_tuple(args...)), E_NOTIMPL);
+        }
         if constexpr (std::is_same_v<R, HRESULT>) return E_NOTIMPL;
         else if constexpr (!std::is_void_v<R>) return R{};
     }
 };
 #define AGX_REJECT(T, M) Rejected<decltype(((T *)0)->M), TableOf<T>::value, static_cast<UINT>(offsetof(T, M))>::call
 #define AGX_ASSIGN(T, M, F) (f).M = &F
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+#define AGX_TILED_QUEUE(M, F) F
+#define AGX_TILED_DEVICE(T, M, F) F
+#else
+#define AGX_TILED_QUEUE(M, F) AGX_REJECT(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, M)
+#define AGX_TILED_DEVICE(T, M, F) AGX_REJECT(T, M)
+#endif
 
+/* C44: SM 6 needs the R1 interface (0011): the 0003 runtime never asks
+ * D3D12DDICAPS_TYPE_0011_SHADER_MODELS and keeps applications at SM 5.1.
+ * Validated on J313 in APPLE_AGX_D3D12_SM6=1 processes (EXP1859-EXP1865:
+ * probes 103/103 on ARM64 and x64, samples and MiniEngine as the 0003
+ * interface, the runtime converting DXBC to DXIL), R1 build 2 with SM 6.0
+ * and wave operations is the default; APPLE_AGX_D3D12_SM6=0 keeps a process
+ * at the 0003 interface and SM 5.1. */
+/* 12_1 ROVs (D3D12-FL-program.md "ROV path"): DXIL and DXBC ROV shaders
+ * take AGX's pixel interlock; ordering validated on hardware (EXP1893:
+ * C59A, C59B), reported by default since then (the runtime shows it at FL
+ * >= 11_1); APPLE_AGX_D3D12_ROV=0 opts a process out. */
+/* 12_1 conservative rasterization Tier 1 (the TIR expansion GS with a
+ * touched-pixel pixel shader, behind the vertex or domain shader or inside
+ * the application's GS): validated on hardware (C61A EXP1891B, C61B EXP1895,
+ * C61C EXP1896) and reported by default; APPLE_AGX_D3D12_CR=0 opts a
+ * process out. Stream output with CR keeps plain rasterization (receipt). */
+static BOOL ConservativeRasterEnabled() {
+    char value[2] = {};
+    return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_CR", value, sizeof(value)) == 1 && value[0] == '0');
+}
+
+static BOOL RovEnabled() {
+    char value[2] = {};
+    return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_ROV", value, sizeof(value)) == 1 && value[0] == '0');
+}
+
+/* C53 (D3D12-C53-tiled-textures.md): Tiled Resources Tier 2 (C53T feedback,
+ * C65 min/max) and the TILED format bit by default, validated on J313 by
+ * EXP1902 (every C53B step; C65A heap, slot, static and cube min/max);
+ * APPLE_AGX_D3D12_TILED=1 keeps a process at Tier 1, =0 at none. */
+static BOOL TiledEnabled() {
+    char value[2] = {};
+    return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && value[0] == '0');
+}
+static BOOL TiledTier2() {
+    char value[2] = {};
+    return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && (value[0] == '0' || value[0] == '1'));
+}
+
+/* M16: exactly "1" in APPLE_AGX_D3D12_MIN16_CAPS reports 16-bit minimum
+ * precision (D3D12_FEATURE_DATA_D3D12_OPTIONS::MinPrecisionSupport). Legal
+ * with fp32 execution: min-precision operations may run at any precision of
+ * at least 16 bits. GravityMark's Tellusim maps half to min16float. */
+static D3D12DDI_SHADER_MIN_PRECISION MinPrecisionCaps() {
+    static const D3D12DDI_SHADER_MIN_PRECISION caps = [] {
+        char value[3] = {};
+        return GetEnvironmentVariableA("APPLE_AGX_D3D12_MIN16_CAPS", value, sizeof(value)) == 1 && value[0] == '1'
+                   ? D3D12DDI_SHADER_MIN_PRECISION_16_BIT
+                   : D3D12DDI_SHADER_MIN_PRECISION_NONE;
+    }();
+    return caps;
+}
+
+static bool ShaderModel6Enabled() {
+    static const bool enabled = [] {
+        char value[2] = {};
+        return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_SM6", value, sizeof(value)) == 1 && value[0] == '0');
+    }();
+    return enabled;
+}
+/* C50 (D3D12-C50-interface-0033.md): SM 6.1 is D3D12DDI_SHADER_MODEL_6_1_RELEASE_0033,
+ * so it needs R3 build 3 (0033); C51 (D3D12-C51-interface-plan.md): SM 6.2 is
+ * _0042, R4 build 2; SM 6.3-6.5 are _0054/_0062/_0071. EXP1871: the runtime
+ * accepts 0076 (and 0065, 0054), not 0071, so SM 6.3-6.5 ride on 0076 (R7
+ * build 6). APPLE_AGX_D3D12_DDI=0033, 0042 or 0076 offers that interface to
+ * an SM6 process until hardware validates its tables. */
+/* EXP1869: offered {0071, 0042, ...} the runtime negotiated 0042.
+ * APPLE_AGX_D3D12_DDI=scan offers every WDK build from 0099 down to 0043
+ * so d3d12-device-size names the highest one the runtime accepts (EXP1870:
+ * 0099); sNNN offers only the builds at or below NNN. A negotiated
+ * interface without tables here fails closed (FillDDITable). */
+static constexpr UINT64 kInterfaceScan = ~0ULL;
+static UINT ScanBound() {
+    static const UINT bound = [] {
+        char value[5] = {};
+        if (GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI", value, sizeof(value)) != 4 || value[0] != 's') return 0u;
+        UINT n = 0;
+        for (UINT i = 1; i < 4; ++i) {
+            if (value[i] < '0' || value[i] > '9') return 0u;
+            n = n * 10 + static_cast<UINT>(value[i] - '0');
+        }
+        return n;
+    }();
+    return bound;
+}
+/* a D3D12DDI_SUPPORTED_00NN value's NN: interface minor + build, the build
+ * itself from 0090 (D3D12DDI_BUILD_VERSION_0090 is 90) */
+static UINT InterfaceNumber(UINT64 version) {
+    const UINT build = static_cast<UINT>((version >> 16) & 0xffffu);
+    return build >= 90u ? build : static_cast<UINT>((version >> 32) & 0xffffu) + build;
+}
+static const UINT64 kScanVersions[] = {
+    D3D12DDI_SUPPORTED_0099, D3D12DDI_SUPPORTED_0098, D3D12DDI_SUPPORTED_0097, D3D12DDI_SUPPORTED_0096,
+    D3D12DDI_SUPPORTED_0095, D3D12DDI_SUPPORTED_0094, D3D12DDI_SUPPORTED_0093, D3D12DDI_SUPPORTED_0092,
+    D3D12DDI_SUPPORTED_0091, D3D12DDI_SUPPORTED_0090, D3D12DDI_SUPPORTED_0089, D3D12DDI_SUPPORTED_0088,
+    D3D12DDI_SUPPORTED_0086, D3D12DDI_SUPPORTED_0084, D3D12DDI_SUPPORTED_0083, D3D12DDI_SUPPORTED_0082,
+    D3D12DDI_SUPPORTED_0081, D3D12DDI_SUPPORTED_0080, D3D12DDI_SUPPORTED_0076, D3D12DDI_SUPPORTED_0075,
+    D3D12DDI_SUPPORTED_0074, D3D12DDI_SUPPORTED_0073, D3D12DDI_SUPPORTED_0072, D3D12DDI_SUPPORTED_0071,
+    D3D12DDI_SUPPORTED_0070, D3D12DDI_SUPPORTED_0065, D3D12DDI_SUPPORTED_0064, D3D12DDI_SUPPORTED_0063,
+    D3D12DDI_SUPPORTED_0062, D3D12DDI_SUPPORTED_0061, D3D12DDI_SUPPORTED_0060, D3D12DDI_SUPPORTED_0054,
+    D3D12DDI_SUPPORTED_0053, D3D12DDI_SUPPORTED_0052, D3D12DDI_SUPPORTED_0051, D3D12DDI_SUPPORTED_0050,
+    D3D12DDI_SUPPORTED_0043};
+/* C55: validated on J313 (EXP1871/EXP1872: probes 105/107 at 0033, 106/107
+ * at 0042, 107/107 at 0076 on ARM64 and x64; samples and MiniEngine through
+ * 0042), interface 0076 with SM 6.5 is the default of an SM6 process;
+ * APPLE_AGX_D3D12_DDI=0012 keeps R1 build 2 (SM 6.0), 0033/0042 the
+ * intermediate interfaces, APPLE_AGX_D3D12_SM6=0 the 0003 interface. */
+static UINT64 InterfaceOptIn() {
+    static const UINT64 offered = [] {
+        char value[5] = {};
+        if (!ShaderModel6Enabled()) return UINT64{0};
+        if (GetEnvironmentVariableA("APPLE_AGX_D3D12_DDI", value, sizeof(value)) != 4) return D3D12DDI_SUPPORTED_0076;
+        return !memcmp(value, "scan", 4) || ScanBound() ? kInterfaceScan
+               : !memcmp(value, "0076", 4) ? D3D12DDI_SUPPORTED_0076
+               : !memcmp(value, "0042", 4) ? D3D12DDI_SUPPORTED_0042
+               : !memcmp(value, "0033", 4) ? D3D12DDI_SUPPORTED_0033
+               : !memcmp(value, "0012", 4) ? UINT64{0}
+                                           : D3D12DDI_SUPPORTED_0076;
+    }();
+    return offered;
+}
+static bool Negotiated0033() { return adapter_object.negotiated == D3D12DDI_SUPPORTED_0033; }
+static bool Negotiated0042() { return adapter_object.negotiated == D3D12DDI_SUPPORTED_0042; }
+static bool Negotiated0076() { return adapter_object.negotiated == D3D12DDI_SUPPORTED_0076; }
+static bool NegotiatedR2() { return adapter_object.negotiated >= D3D12DDI_SUPPORTED_0021; }
+/* C48: R1 build 2 (0012) adds the wave caps (D3D12DDI_SHADER_CAPS_0012) and
+ * one device entry, pfnGetDebugAllocationInfo; SM6 processes negotiate it. */
 static HRESULT APIENTRY GetVersions(D3D12DDI_HADAPTER, UINT32 *count, UINT64 *versions) {
-    const UINT receipt[] = {count ? *count : 0, versions != nullptr};
-    AdmissionUmdDiagnostic("d3d12-versions", count ? S_OK : E_INVALIDARG, receipt, 2);
+    UINT scanned = 0;
+    UINT64 scan[ARRAYSIZE(kScanVersions)] = {};
+    if (InterfaceOptIn() == kInterfaceScan)
+        for (UINT64 v : kScanVersions)
+            if (!ScanBound() || InterfaceNumber(v) <= ScanBound()) scan[scanned++] = v;
+    const UINT offered = scanned                                       ? scanned + 5u
+                         : InterfaceOptIn() == D3D12DDI_SUPPORTED_0076 ? 6u
+                         : InterfaceOptIn() == D3D12DDI_SUPPORTED_0042 ? 5u
+                         : InterfaceOptIn() == D3D12DDI_SUPPORTED_0033 ? 4u
+                         : ShaderModel6Enabled()                       ? 3u
+                                                                       : 1u;
+    const UINT receipt[] = {count ? *count : 0, versions != nullptr, offered};
+    AdmissionUmdDiagnostic("d3d12-versions", count ? S_OK : E_INVALIDARG, receipt, 3);
     if (!count) return E_INVALIDARG;
-    if (!versions) { *count = 1; return S_OK; }
-    if (*count < 1) { *count = 1; return E_INVALIDARG; }
-    versions[0] = D3D12DDI_SUPPORTED_0003;
-    *count = 1;
+    if (!versions) { *count = offered; return S_OK; }
+    if (*count < offered) { *count = offered; return E_INVALIDARG; }
+    UINT n = 0;
+    for (UINT i = 0; i < scanned; ++i) versions[n++] = scan[i];
+    if (offered == 6u) versions[n++] = D3D12DDI_SUPPORTED_0076;
+    if (offered >= 5u) versions[n++] = D3D12DDI_SUPPORTED_0042;
+    if (offered >= 4u) versions[n++] = D3D12DDI_SUPPORTED_0033;
+    if (offered >= 3u) {
+        versions[n++] = D3D12DDI_SUPPORTED_0012;
+        versions[n++] = D3D12DDI_SUPPORTED_0011;
+    }
+    versions[n++] = D3D12DDI_SUPPORTED_0003;
+    *count = n;
     return S_OK;
 }
 /* C1: the pipeline level the development profile admits (D3D12 drivers
  * start at FL 11_0; the C8 baseline gates admission outside the profile). */
 static const D3D12DDI_3DPIPELINELEVEL kProfileLevel = D3D12DDI_3DPIPELINELEVEL_11_0;
+/* FL 11_1 (D3D12-FL-program.md): logic ops (C57), 64 UAVs (C47 tier 2) and
+ * forced sample counts (C60A), validated at 11_1 on hardware (EXP1890:
+ * C62A, C57A, C60A); the default since then, APPLE_AGX_D3D12_FL111=0 keeps a
+ * process at 11_0. The runtime reports ROVs and conservative rasterization
+ * only at 11_1 and above (EXP1891). */
+/* C68 (D3D12-FL-program.md): 12_0 is 11_1 plus Tiled Resources Tier 2 with
+ * min/max filtering (C53T/C65, EXP1902) and the 18 typed UAV load formats
+ * (C49); 12_1 adds ROVs and conservative rasterization Tier 1 (EXP1893-1897).
+ * The level follows the features each process actually has, so an opt-out
+ * of one of them lowers it; APPLE_AGX_D3D12_FL12=0 keeps a process at 11_1. */
+static D3D12DDI_3DPIPELINELEVEL ProfileLevel() {
+    char value[2] = {};
+    if (GetEnvironmentVariableA("APPLE_AGX_D3D12_FL111", value, sizeof(value)) == 1 && value[0] == '0')
+        return kProfileLevel;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    const bool fl12 = !(GetEnvironmentVariableA("APPLE_AGX_D3D12_FL12", value, sizeof(value)) == 1 && value[0] == '0');
+    if (fl12 && TiledTier2())
+        return RovEnabled() && ConservativeRasterEnabled() ? D3D12DDI_3DPIPELINELEVEL_12_1
+                                                           : D3D12DDI_3DPIPELINELEVEL_12_0;
+#endif
+    return D3D12DDI_3DPIPELINELEVEL_11_1;
+}
 /* Answers a caps type with T, its remaining bytes zero (a larger, newer
  * structure keeps every later field at its "not supported" zero). */
 template<class T, class F> static HRESULT Answer(const D3D12DDIARG_GETCAPS *arg, F fill) {
@@ -90,6 +329,79 @@ template<class T, class F> static HRESULT Answer(const D3D12DDIARG_GETCAPS *arg,
     fill(*static_cast<T *>(arg->pData));
     return S_OK;
 }
+/* C21G (D3D12-C21G-volume-generality.md): the Texture3D layout registry
+ * (agx_d3d12_volume_registry.h): one exact pattern per AGX tile shape and
+ * element size, pattern and layout IDs 0x100 + index; layout i has the slots
+ * [i, i + 1, ...] (two in 0003, six per plane in 0022). */
+static HRESULT VolumeLayoutCaps(const D3D12DDIARG_GETCAPS *arg) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if(!arg || !arg->pData) return E_INVALIDARG;
+    const auto VolumeInterleave=[](UINT pattern,D3D12DDI_SWIZZLE_BIT_ENTRY *bits) {
+        AGX_VOLUME_BIT entries[32];
+        const unsigned n=agx_volume_pattern_bits(pattern,entries);
+        for(unsigned k=0;k<n;++k) {
+            bits[k].Valid=1;bits[k].ChannelIndex=entries[k].Channel;bits[k].SourceBitIndex=entries[k].SourceBit;
+        }
+    };
+    if(arg->Type==D3D12DDICAPS_TYPE_TEXTURE_LAYOUT) {
+        if(!arg->pInfo) {
+            if(arg->DataSize!=sizeof(D3D12DDI_TEXTURE_LAYOUT_CAPS) &&
+               arg->DataSize!=sizeof(D3D12DDI_TEXTURE_LAYOUT_CAPS_0001)) return E_INVALIDARG;
+            memset(arg->pData,0,arg->DataSize);
+            auto *caps=static_cast<D3D12DDI_TEXTURE_LAYOUT_CAPS *>(arg->pData);
+            caps->DeviceDependentLayoutCount=AGX_VOLUME_PATTERNS;caps->DeviceDependentSwizzleCount=AGX_VOLUME_PATTERNS;
+            return S_OK;
+        }
+        UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));
+        if(index>=AGX_VOLUME_PATTERNS || arg->DataSize!=2*sizeof(D3D12DDI_SWIZZLE_PATTERN)) return E_INVALIDARG;
+        const D3D12DDI_SWIZZLE_PATTERN patterns[2]={
+            static_cast<D3D12DDI_SWIZZLE_PATTERN>(0x100u+agx_volume_layout_slot(index,0)),
+            static_cast<D3D12DDI_SWIZZLE_PATTERN>(0x100u+agx_volume_layout_slot(index,1))};
+        memcpy(arg->pData,patterns,sizeof(patterns));return S_OK;
+    }
+    if(arg->Type==D3D12DDICAPS_TYPE_SWIZZLE_PATTERN) {
+        if(!arg->pInfo || arg->DataSize!=sizeof(D3D12DDI_SWIZZLE_PATTERN_DESC_0003)) return E_INVALIDARG;
+        UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));if(index>=AGX_VOLUME_PATTERNS)return E_INVALIDARG;
+        D3D12DDI_SWIZZLE_PATTERN_DESC_0003 pattern={};
+        VolumeInterleave(index,pattern.InterleavePatternSourceBits);
+        memcpy(arg->pData,&pattern,sizeof(pattern));return S_OK;
+    }
+    /* EXP1870: R2+ runtimes ask the 0022 forms (1060/1061) instead: caps
+     * _0026 (no standard swizzle, no row-major textures), six pattern slots
+     * per plane (the 0022 MipLevelSwizzleTransition[5] segments) and the
+     * 0022 descriptor with the same interleave and no XOR terms. */
+    if(arg->Type==D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT) {
+        if(!arg->pInfo) {
+            if(arg->DataSize!=sizeof(D3D12DDI_TEXTURE_LAYOUT_CAPS_0026)) return E_INVALIDARG;
+            memset(arg->pData,0,arg->DataSize);
+            auto *caps=static_cast<D3D12DDI_TEXTURE_LAYOUT_CAPS_0026 *>(arg->pData);
+            caps->DeviceDependentLayoutCount=AGX_VOLUME_PATTERNS;caps->DeviceDependentSwizzleCount=AGX_VOLUME_PATTERNS;
+            return S_OK;
+        }
+        UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));
+        if(index>=AGX_VOLUME_PATTERNS || arg->DataSize!=18*sizeof(D3D12DDI_SWIZZLE_PATTERN)) return E_INVALIDARG;
+        D3D12DDI_SWIZZLE_PATTERN patterns[18];
+        for(UINT i=0;i<18;++i)
+            patterns[i]=static_cast<D3D12DDI_SWIZZLE_PATTERN>(0x100u+agx_volume_layout_slot(index,i%6));
+        memcpy(arg->pData,patterns,sizeof(patterns));return S_OK;
+    }
+    if(arg->Type==D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN) {
+        if(!arg->pInfo || arg->DataSize!=sizeof(D3D12DDI_SWIZZLE_PATTERN_DESC_0022)) return E_INVALIDARG;
+        UINT index=0;memcpy(&index,arg->pInfo,sizeof(index));if(index>=AGX_VOLUME_PATTERNS)return E_INVALIDARG;
+        D3D12DDI_SWIZZLE_PATTERN_DESC_0022 pattern={};
+        VolumeInterleave(index,pattern.InterleavePatternSourceBits);
+        memcpy(arg->pData,&pattern,sizeof(pattern));return S_OK;
+    }
+#else
+    (void)arg;
+#endif
+    return E_NOTIMPL;
+}
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static constexpr BOOL kTypedUavLoads = TRUE; /* C49 */
+#else
+static constexpr BOOL kTypedUavLoads = FALSE;
+#endif
 static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *arg) {
     HRESULT hr = E_NOTIMPL;
     if (arg && arg->pData) switch (arg->Type) {
@@ -98,12 +410,43 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
          * the output field is written. */
         if (arg->DataSize >= sizeof(D3D12DDI_3DPIPELINESUPPORT1_DATA_0081)) {
             static_cast<D3D12DDI_3DPIPELINESUPPORT1_DATA_0081 *>(arg->pData)
-                ->MaximumDriverSupportedFeatureLevel = kProfileLevel;
+                ->MaximumDriverSupportedFeatureLevel = ProfileLevel();
             hr = S_OK;
         }
         break;
     case D3D12DDICAPS_TYPE_3DPIPELINESUPPORT:
-        hr = Answer<D3D12DDI_3DPIPELINELEVEL>(arg, [](auto &d) { d = kProfileLevel; });
+        hr = Answer<D3D12DDI_3DPIPELINELEVEL>(arg, [](auto &d) { d = ProfileLevel(); });
+        break;
+    /* C44: SM 5.1 and 6.0 (DXIL through agx_dxil_to_nir) under R1 */
+    case D3D12DDICAPS_TYPE_0011_SHADER_MODELS:
+        if (ShaderModel6Enabled() && arg->DataSize >= sizeof(D3D12DDI_D3D12_SHADER_MODELS_DATA_0011)) {
+            /* C50: SM 6.1 at 0033: SV_ViewID lowers to view 0 (ViewInstancingTier
+             * NOT_SUPPORTED, View Instancing spec), barycentrics stay unsupported;
+             * C51: SM 6.2 at 0042 (native 16-bit ops stay unsupported); C52:
+             * SM 6.3-6.5 at 0076 (their core intrinsics -- packed dot products,
+             * wave match and multi-prefix -- lower through dxil-spirv; DXR,
+             * mesh shaders, VRS and sampler feedback stay unsupported) */
+            static const D3D12DDI_SHADER_MODEL models[] = {D3D12DDI_SHADER_MODEL_5_1_RELEASE_0011,
+                                                           D3D12DDI_SHADER_MODEL_6_0_RELEASE_0011,
+                                                           D3D12DDI_SHADER_MODEL_6_1_RELEASE_0033,
+                                                           D3D12DDI_SHADER_MODEL_6_2_RELEASE_0042,
+                                                           D3D12DDI_SHADER_MODEL_6_3_RELEASE_0054,
+                                                           D3D12DDI_SHADER_MODEL_6_4_RELEASE_0062,
+                                                           D3D12DDI_SHADER_MODEL_6_5_RELEASE_0071};
+            const UINT offered = Negotiated0076() ? 7u : Negotiated0042() ? 4u : Negotiated0033() ? 3u : 2u;
+            auto *data = static_cast<D3D12DDI_D3D12_SHADER_MODELS_DATA_0011 *>(arg->pData);
+            if (!data->pNumShaderModelsSupported) {
+                hr = E_INVALIDARG;
+            } else if (!data->pShaderModelsSupported) {
+                *data->pNumShaderModelsSupported = offered;
+                hr = S_OK;
+            } else {
+                const UINT n = *data->pNumShaderModelsSupported < offered ? *data->pNumShaderModelsSupported : offered;
+                memcpy(data->pShaderModelsSupported, models, n * sizeof(models[0]));
+                *data->pNumShaderModelsSupported = n;
+                hr = S_OK;
+            }
+        }
         break;
     /* EXP1345: after CreateDevice the runtime asks D3D12_OPTIONS (28 bytes,
      * the 0003 structure) and fails creation on E_NOTIMPL. C1 answers the
@@ -112,25 +455,97 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
      * renderer (Asahi); no coherence is claimed. */
     case D3D12DDICAPS_TYPE_D3D12_OPTIONS:
         hr = Answer<D3D12DDI_D3D12_OPTIONS_DATA_0003>(arg, [](auto &d) {
-            d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_1;
-            d.ConservativeRasterizationTier = D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_NOT_SUPPORTED;
-            d.TiledResourcesTier = D3D12DDI_TILED_RESOURCES_TIER_NOT_SUPPORTED;
+            /* C47 (D3D12-C47-binding-tier2.md): SRV tables over the full heap,
+             * 64 UAVs (counters included) and 2048 samplers per stage through
+             * the descriptor heap; 14 CBVs per stage */
+            d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_2;
+            d.ConservativeRasterizationTier = ConservativeRasterEnabled() ? D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1
+                                                                          : D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_NOT_SUPPORTED;
+            d.TiledResourcesTier = TiledTier2()     ? D3D12DDI_TILED_RESOURCES_TIER_2 /* C53T */
+                                   : TiledEnabled() ? D3D12DDI_TILED_RESOURCES_TIER_1 /* C53 */
+                                                    : D3D12DDI_TILED_RESOURCES_TIER_NOT_SUPPORTED;
             d.CrossNodeSharingTier = D3D12DDI_CROSS_NODE_SHARING_TIER_NOT_SUPPORTED;
             d.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation = FALSE;
-            d.OutputMergerLogicOp = FALSE;
+            d.OutputMergerLogicOp = TRUE; /* C57 */
             d.ResourceHeapTier = D3D12DDI_RESOURCE_HEAP_TIER_1;
         });
         break;
+    /* EXP1869: an R2+ runtime failed device creation on the unanswered
+     * UMD-based queue priority caps (1062) after the tables; the R2+ caps
+     * whose "not supported" value is defined answer it (R1 runtimes keep
+     * the validated E_NOTIMPL) */
+    case D3D12DDICAPS_TYPE_0023_UMD_BASED_COMMAND_QUEUE_PRIORITY:
+        if (NegotiatedR2())
+            hr = Answer<D3D12DDICAPS_UMD_BASED_COMMAND_QUEUE_PRIORITY_DATA_0023>(
+                arg, [](auto &d) { d.SupportedQueueFlagsForGlobalRealtimeQueues = D3D12DDI_COMMAND_QUEUE_FLAG_NONE; });
+        break;
+    case D3D12DDICAPS_TYPE_0022_CPU_PAGE_TABLE_FALSE_POSITIVES:
+        if (NegotiatedR2())
+            hr = Answer<D3D12DDI_COMMAND_QUEUE_FLAGS>(arg, [](auto &d) { d = D3D12DDI_COMMAND_QUEUE_FLAG_NONE; });
+        break;
+    case D3D12DDICAPS_TYPE_0030_PROTECTED_RESOURCE_SESSION_SUPPORT:
+        /* NodeIndex is the input: only Support is written */
+        if (NegotiatedR2() &&
+            arg->DataSize >= sizeof(D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_DATA_0030)) {
+            static_cast<D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_DATA_0030 *>(arg->pData)->Support =
+                D3D12DDI_PROTECTED_RESOURCE_SESSION_SUPPORT_FLAG_0030_NONE;
+            hr = S_OK;
+        }
+        break;
+    case D3D12DDICAPS_TYPE_0074_PROTECTED_RESOURCE_SESSION_TYPE_COUNT:
+        /* no protected session types (NodeIndex is the input) */
+        if (NegotiatedR2() && arg->DataSize >= sizeof(D3D12DDI_PROTECTED_RESOURCE_SESSION_TYPE_COUNT_DATA_0074)) {
+            static_cast<D3D12DDI_PROTECTED_RESOURCE_SESSION_TYPE_COUNT_DATA_0074 *>(arg->pData)->Count = 0;
+            hr = S_OK;
+        }
+        break;
+    case D3D12DDICAPS_TYPE_EXECUTECOMMANDLISTS_PARALLELISM:
+    case D3D12DDICAPS_TYPE_0073_SUPPORT_BATCHED_MARKERS:
+        if (NegotiatedR2())
+            hr = Answer<BOOL>(arg, [](auto &d) { d = FALSE; });
+        break;
+    /* C52: 0050+ runtimes may ask for scheduling groups; 0 = none */
+    case D3D12DDICAPS_TYPE_0050_HARDWARE_SCHEDULING_CAPS:
+        hr = Answer<D3D12DDICAPS_HARDWARE_SCHEDULING_CAPS_0050>(arg, [](auto &d) { d.ComputeQueuesPer3DQueue = 0; });
+        break;
     case D3D12DDICAPS_TYPE_MEMORY_ARCHITECTURE:
+        /* EXP1821: the x86/x64 D3D12Core refuses IOCoherent FALSE on UMA
+         * (CDevice::CacheHeapCaps: "UMA systems must set TRUE", 0x887A0020).
+         * AGX accesses to system memory are coherent with the CPU caches
+         * (Asahi maps DRM_ASAHI_GEM_WRITEBACK BOs CPU-cached and Mesa does no
+         * cache maintenance for them), and this driver maps every CPU-visible
+         * allocation write-combined, so the runtime never needs to flush.
+         * CacheCoherent stays FALSE: CPU mappings are not write-back. */
         hr = Answer<D3D12DDI_MEMORY_ARCHITECTURE_CAPS>(arg, [](auto &d) {
-            d.UMA = TRUE; d.IOCoherent = FALSE; d.CacheCoherent = FALSE;
+            d.UMA = TRUE; d.IOCoherent = TRUE; d.CacheCoherent = FALSE;
         });
         break;
     case D3D12DDICAPS_TYPE_SHADER:
+        /* C49: typed UAV loads of the TypedUavLoadFormat set (CheckFormatSupport
+         * reports UAV_READS for them) with the native owner */
+        /* C48: under 0012 the wave caps: AGX runs 32-wide SIMD groups (Asahi
+         * subgroup size 32), every SM 6.0 wave/quad intrinsic lowers to AGX
+         * subgroup operations (test_dxil_to_nir); 128 lanes per core (Apple
+         * M1 GPU: 128 ALUs per core) times the present cores (EXP1317:
+         * CoreMask 0xfe, seven) */
+        if (ShaderModel6Enabled() && arg->DataSize >= sizeof(D3D12DDI_SHADER_CAPS_0012)) {
+            hr = Answer<D3D12DDI_SHADER_CAPS_0012>(arg, [](auto &d) {
+                d.MinPrecision = MinPrecisionCaps();
+                d.TypedUAVLoadAdditionalFormats = kTypedUavLoads;
+                d.ROVs = RovEnabled(); /* EXP1889: SM 6 processes take this answer */
+                d.WaveOps = TRUE;
+                d.WaveLaneCountMin = d.WaveLaneCountMax = 32;
+                const AGX_WIN32_DEVICE_INFO &info = adapter_object.info;
+                UINT cores = info.CoreMask ? 0u : info.CoresPerCluster;
+                for (UINT mask = info.CoreMask; mask; mask &= mask - 1u) ++cores;
+                d.TotalLaneCount = adapter_object.info_valid ? 128u * cores : 0u;
+            });
+            break;
+        }
         hr = Answer<D3D12DDI_SHADER_CAPS_0003>(arg, [](auto &d) {
-            d.MinPrecision = D3D12DDI_SHADER_MIN_PRECISION_NONE;
+            d.MinPrecision = MinPrecisionCaps();
             d.Doubles = FALSE; d.ShaderSpecifiedStencilRef = FALSE;
-            d.TypedUAVLoadAdditionalFormats = FALSE; d.ROVs = FALSE;
+            d.TypedUAVLoadAdditionalFormats = kTypedUavLoads; d.ROVs = RovEnabled();
         });
         break;
     case D3D12DDICAPS_TYPE_ARCHITECTURE_INFO:
@@ -146,10 +561,28 @@ static HRESULT APIENTRY GetCaps(D3D12DDI_HADAPTER, const D3D12DDIARG_GETCAPS *ar
         });
         break;
     case D3D12DDICAPS_TYPE_TEXTURE_LAYOUT:
-        /* no device-dependent layouts or swizzles, no 64 KiB standard
-         * swizzle, no row-major textures (EXP1346: asked as the 16-byte
-         * D3D12DDI_TEXTURE_LAYOUT_CAPS_0001) */
-        hr = Answer<D3D12DDI_TEXTURE_LAYOUT_CAPS>(arg, [](auto &) {});
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        hr=VolumeLayoutCaps(arg);
+#else
+        hr=Answer<D3D12DDI_TEXTURE_LAYOUT_CAPS>(arg, [](auto &) {});
+#endif
+        break;
+    case D3D12DDICAPS_TYPE_SWIZZLE_PATTERN:
+        hr=VolumeLayoutCaps(arg);break;
+    /* EXP1870: the R2+ forms of the two cases above */
+    case D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT:
+        if (!NegotiatedR2()) break;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        hr=VolumeLayoutCaps(arg);
+#else
+        hr=arg->pInfo ? E_INVALIDARG : Answer<D3D12DDI_TEXTURE_LAYOUT_CAPS_0026>(arg, [](auto &) {});
+#endif
+        break;
+    case D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN:
+        if (NegotiatedR2()) hr=VolumeLayoutCaps(arg);
+        break;
+    case D3D12DDICAPS_TYPE_TEXTURE_LAYOUT1:
+        /* <=2patterns: stay in the documented legacy mode. */
         break;
     case D3D12DDICAPS_TYPE_TEXTURE_LAYOUT_SETS:
         /* EXP1346: asked for row-major ({D3D12DDI_TL_ROW_MAJOR, functional
@@ -182,36 +615,223 @@ struct AgxD3d12Device {
     /* C2: created with the first heap, so device creation is unchanged */
     D3DKMT_HANDLE paging_queue;
     volatile UINT64 *paging_fence;
-    /* C4b: the native Asahi owner (agx_d3d12_windows.cpp), created with the
-     * first heap; heaps are its buffer resources and lists copy through it. */
-    void *owner;
-    BOOL owner_failed;
+    /* C4b: the native Asahi owner (agx_d3d12_windows.cpp), admitted during
+     * CreateDevice; heaps are its buffer resources and lists copy through it. */
+    void *volatile owner;
+    volatile LONG owner_failed;
+    volatile LONG owner_initializing;
     /* EXP1365: the KMD binds one Win32 generation per kernel device, so the
      * owner's context and every queue context carry this one */
     ULONG generation;
+    AgxCpuProvider *shader_provider;
+    AgxCpuDevice shader_provider_device;
+    AgxD3d12Device *identity_next;
     /* C5: the owner heaps by GPU VA, so a root descriptor (a VA) resolves
      * to its buffer and offset */
+    SRWLOCK heap_lock;
     UINT heap_count;
     struct AgxD3d12Heap *heaps[4096];
+    /* EXP1855: the shader-visible CBV/SRV/UAV descriptor heaps whose
+     * shadows a CPU descriptor handle may point into (heap_lock) */
+    UINT mirrored_count;
+    struct AgxD3d12Heap *mirrored[64];
+    /* EXP1868: the kernel callbacks the owner uses, with the allocation
+     * entries an R2+ runtime leaves empty bridged to its core-layer
+     * pfnAllocateCb/pfnDeallocateCb (KernelAllocationBridge) */
+    D3DDDI_DEVICECALLBACKS kernel_bridge;
 };
+struct AgxD3d12PipelineState;
+static SRWLOCK identity_registry_lock = SRWLOCK_INIT;
+static AgxD3d12Device *live_identity_devices = nullptr;
+static AgxD3d12PipelineState *live_identity_psos = nullptr;
+
+/* Keep this lock around address-only metadata. No runtime or native callback
+ * executes under it. Runtime-private storage remains owned by the runtime. */
+static void PublishDeviceIdentity(AgxD3d12Device *device) {
+    AcquireSRWLockExclusive(&identity_registry_lock);
+    for (auto *current = live_identity_devices; current; current = current->identity_next)
+        if (current == device) {
+            ReleaseSRWLockExclusive(&identity_registry_lock);
+            return;
+        }
+    device->identity_next = live_identity_devices;
+    live_identity_devices = device;
+    ReleaseSRWLockExclusive(&identity_registry_lock);
+}
+static void RetireDeviceIdentity(AgxD3d12Device *device) {
+    AcquireSRWLockExclusive(&identity_registry_lock);
+    auto **entry = &live_identity_devices;
+    while (*entry && *entry != device) entry = &(*entry)->identity_next;
+    if (*entry) {
+        *entry = device->identity_next;
+        device->identity_next = nullptr;
+    }
+    ReleaseSRWLockExclusive(&identity_registry_lock);
+}
+/* EXP1868: under interface 0033 the owner refused the kernel callbacks
+ * (AdmissionUmdRuntimeDeviceInitializeForQueue E_INVALIDARG before its
+ * first paging queue). From 0022 the runtime offers allocation through
+ * D3D12DDI_CORELAYER_DEVICECALLBACKS_0022 (pfnAllocateCb/pfnDeallocateCb,
+ * D3D12DDICB_ALLOCATE_0022); the bridge serves the owner's D3DDDICB_ALLOCATE
+ * (D3DDDI_ALLOCATIONINFO) and D3DDDICB_DEALLOCATE calls through them. */
+static const D3D12DDI_CORELAYER_DEVICECALLBACKS_0022 *CoreLayer0022Of(HANDLE runtime) {
+    const D3D12DDI_CORELAYER_DEVICECALLBACKS_0022 *result = nullptr;
+    AcquireSRWLockShared(&identity_registry_lock);
+    for (auto *device = live_identity_devices; device; device = device->identity_next)
+        if (device->runtime.handle == runtime) {
+            result = reinterpret_cast<const D3D12DDI_CORELAYER_DEVICECALLBACKS_0022 *>(device->callbacks);
+            break;
+        }
+    ReleaseSRWLockShared(&identity_registry_lock);
+    return result;
+}
+static HRESULT APIENTRY BridgeAllocateCb(HANDLE runtime, D3DDDICB_ALLOCATE *arg) {
+    const auto *core = CoreLayer0022Of(runtime);
+    if (!core || !core->pfnAllocateCb || !arg || (arg->NumAllocations && !arg->pAllocationInfo) ||
+        arg->NumAllocations > 16)
+        return E_INVALIDARG;
+    D3D12DDI_ALLOCATION_INFO_0022 info[16] = {};
+    for (UINT i = 0; i < arg->NumAllocations; ++i) {
+        const D3DDDI_ALLOCATIONINFO &in = arg->pAllocationInfo[i];
+        info[i].pSystemMem = in.pSystemMem;
+        info[i].pPrivateDriverData = in.pPrivateDriverData;
+        info[i].PrivateDriverDataSize = in.PrivateDriverDataSize;
+        info[i].VidPnSourceId = in.VidPnSourceId;
+        info[i].Flags = static_cast<D3D12DDI_ALLOCATION_INFO_FLAGS_0022>(
+            (in.Flags.Primary ? D3D12DDI_ALLOCATION_INFO_FLAGS_0022_PRIMARY : 0) |
+            (in.Flags.Stereo ? D3D12DDI_ALLOCATION_INFO_FLAGS_0022_STEREO : 0));
+    }
+    D3D12DDICB_ALLOCATE_0022 allocate = {};
+    allocate.pPrivateDriverData = arg->pPrivateDriverData;
+    allocate.PrivateDriverDataSize = arg->PrivateDriverDataSize;
+    allocate.hResource = arg->hResource;
+    allocate.NumAllocations = arg->NumAllocations;
+    allocate.pAllocationInfo = info;
+    D3D12DDI_HRTDEVICE device = {};
+    device.handle = runtime;
+    const HRESULT hr = core->pfnAllocateCb(device, &allocate);
+    if (SUCCEEDED(hr)) {
+        arg->hKMResource = allocate.hKMResource;
+        for (UINT i = 0; i < arg->NumAllocations; ++i) arg->pAllocationInfo[i].hAllocation = info[i].hAllocation;
+    }
+    return hr;
+}
+static HRESULT APIENTRY BridgeDeallocateCb(HANDLE runtime, const D3DDDICB_DEALLOCATE *arg) {
+    const auto *core = CoreLayer0022Of(runtime);
+    if (!core || !core->pfnDeallocateCb || !arg) return E_INVALIDARG;
+    D3D12DDICB_DEALLOCATE_0022 deallocate = {};
+    deallocate.hResource = arg->hResource;
+    deallocate.NumAllocations = arg->NumAllocations;
+    deallocate.HandleList = arg->HandleList;
+    D3D12DDI_HRTDEVICE device = {};
+    device.handle = runtime;
+    return core->pfnDeallocateCb(device, &deallocate);
+}
+static_assert(std::is_same_v<decltype(&BridgeAllocateCb), PFND3DDDI_ALLOCATECB>);
+static_assert(std::is_same_v<decltype(&BridgeDeallocateCb), PFND3DDDI_DEALLOCATECB>);
+/* the owner's kernel callback set (AdmissionUmdRuntimeDeviceInitializeForQueue):
+ * bit i set = entry i absent, receipted at CreateDevice */
+static UINT KernelCallbackGaps(const D3DDDI_DEVICECALLBACKS *k) {
+    if (!k) return ~0u;
+    const void *entries[] = {
+        reinterpret_cast<const void *>(k->pfnAllocateCb), reinterpret_cast<const void *>(k->pfnDeallocateCb),
+        reinterpret_cast<const void *>(k->pfnLockCb), reinterpret_cast<const void *>(k->pfnUnlockCb),
+        reinterpret_cast<const void *>(k->pfnSignalSynchronizationObject2Cb),
+        reinterpret_cast<const void *>(k->pfnMakeResidentCb), reinterpret_cast<const void *>(k->pfnEvictCb),
+        reinterpret_cast<const void *>(k->pfnWaitForSynchronizationObjectFromCpuCb),
+        reinterpret_cast<const void *>(k->pfnCreatePagingQueueCb), reinterpret_cast<const void *>(k->pfnDestroyPagingQueueCb),
+        reinterpret_cast<const void *>(k->pfnCreateSynchronizationObject2Cb),
+        reinterpret_cast<const void *>(k->pfnDestroySynchronizationObjectCb),
+        reinterpret_cast<const void *>(k->pfnReserveGpuVirtualAddressCb),
+        reinterpret_cast<const void *>(k->pfnMapGpuVirtualAddressCb),
+        reinterpret_cast<const void *>(k->pfnFreeGpuVirtualAddressCb), reinterpret_cast<const void *>(k->pfnSubmitCommandCb),
+        reinterpret_cast<const void *>(k->pfnSignalSynchronizationObjectFromGpu2Cb),
+        reinterpret_cast<const void *>(k->pfnCreateContextVirtualCb), reinterpret_cast<const void *>(k->pfnDestroyContextCb)};
+    UINT gaps = 0;
+    for (UINT i = 0; i < ARRAYSIZE(entries); ++i)
+        if (!entries[i]) gaps |= 1u << i;
+    return gaps;
+}
+static const D3DDDI_DEVICECALLBACKS *AdmitKernelCallbacks(AgxD3d12Device *device, const D3D12DDIARG_CREATEDEVICE_0003 *arg) {
+    const UINT gaps = KernelCallbackGaps(arg->pKTCallbacks);
+    const auto *core = reinterpret_cast<const D3D12DDI_CORELAYER_DEVICECALLBACKS_0022 *>(arg->p12UMCallbacks);
+    const bool r2 = adapter_object.negotiated >= D3D12DDI_SUPPORTED_0022 && core;
+    const UINT receipt[] = {gaps, r2 ? 1u : 0u, r2 && core->pfnAllocateCb ? 1u : 0u, r2 && core->pfnDeallocateCb ? 1u : 0u};
+    AdmissionUmdDiagnostic("d3d12-kernel-callbacks", S_OK, receipt, 4);
+    if (!arg->pKTCallbacks || !(gaps & 3u) || !r2 || !core->pfnAllocateCb || !core->pfnDeallocateCb)
+        return arg->pKTCallbacks;
+    device->kernel_bridge = *arg->pKTCallbacks;
+    if (!device->kernel_bridge.pfnAllocateCb) device->kernel_bridge.pfnAllocateCb = BridgeAllocateCb;
+    if (!device->kernel_bridge.pfnDeallocateCb) device->kernel_bridge.pfnDeallocateCb = BridgeDeallocateCb;
+    return &device->kernel_bridge;
+}
+extern "C" const void *AgxD3d12ZeroCacheResolveDevice(D3D12DDI_HDEVICE handle) {
+    const void *result = nullptr;
+    AcquireSRWLockShared(&identity_registry_lock);
+    for (auto *device = live_identity_devices; device; device = device->identity_next)
+        if (device == handle.pDrvPrivate) {
+            result = device;
+            break;
+        }
+    ReleaseSRWLockShared(&identity_registry_lock);
+    return result;
+}
+static void ReportRejectedDeviceError(D3D12DDI_HDEVICE handle, HRESULT error) {
+    auto *device = static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (device) AgxD3d12OwnerRecordError(static_cast<AGX_D3D12_OWNER *>(device->owner), error);
+#endif
+    if (device && device->callbacks && device->callbacks->pfnSetErrorCb)
+        device->callbacks->pfnSetErrorCb(device->runtime, error);
+}
 static SIZE_T APIENTRY CalcPrivateDeviceSize(D3D12DDI_HADAPTER,
                                              const D3D12DDIARG_CALCPRIVATEDEVICESIZE *arg) {
     const UINT receipt[] = {arg ? arg->Interface : 0, arg ? arg->Version : 0};
     AdmissionUmdDiagnostic("d3d12-device-size", S_OK, receipt, 2);
+    if (arg) adapter_object.negotiated = (static_cast<UINT64>(arg->Interface) << 32) | arg->Version;
     return sizeof(AgxD3d12Device);
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static AGX_D3D12_OWNER *EnsureOwner(AgxD3d12Device *device);
+#endif
 static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
                                      const D3D12DDIARG_CREATEDEVICE_0003 *arg) {
     HRESULT hr = arg && arg->hDrvDevice.pDrvPrivate ? S_OK : E_INVALIDARG;
     if (SUCCEEDED(hr)) {
         auto *device = static_cast<AgxD3d12Device *>(arg->hDrvDevice.pDrvPrivate);
+        /* Runtime allocation may contain reused bytes; all lazy state is ours. */
+        memset(device, 0, sizeof(*device));
+        InitializeSRWLock(&device->heap_lock);
         device->runtime = arg->hRTDevice;
         device->callbacks = arg->p12UMCallbacks;
-        device->kernel = arg->pKTCallbacks;
+        device->kernel = AdmitKernelCallbacks(device, arg);
         device->generation = ((((GetCurrentProcessId() & 0xffffu) << 16) ^
                                static_cast<ULONG>(InterlockedIncrement(&queue_generation))) | 0x80000000u);
-        callbacks = arg->p12UMCallbacks;
-        runtime_device = arg->hRTDevice;
+        device->shader_provider = AgxCpuProviderCreate();
+        if (!device->shader_provider) {
+            hr = E_OUTOFMEMORY;
+        } else {
+            const auto status = AgxCpuRegisterDevice(device->shader_provider,
+                arg->hDrvDevice, nullptr, nullptr, &device->shader_provider_device);
+            if (status != AgxCpuProviderStatus::Ok) {
+                (void)AgxCpuProviderDestroy(&device->shader_provider);
+                hr = status == AgxCpuProviderStatus::ProjectOOM ||
+                     status == AgxCpuProviderStatus::Exhausted ? E_OUTOFMEMORY : E_INVALIDARG;
+            } else {
+                PublishDeviceIdentity(device);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+                /* Complete the one-time native owner construction before the
+                 * runtime can issue free-threaded resource creates. */
+                AGX_D3D12_OWNER *owner = EnsureOwner(device);
+                /* C53 HW1: off-by-default reserved-buffer self-test; receipts
+                 * only, the caps are unchanged (D3D12-C53-tiled-buffers-plan.md) */
+                char selftest[2] = {};
+                if (owner && GetEnvironmentVariableA("APPLE_AGX_D3D12_RESERVED_SELFTEST", selftest,
+                                                     sizeof(selftest)) == 1 && selftest[0] == '1')
+                    (void)AgxD3d12OwnerReservedSelfTest(owner);
+#endif
+            }
+        }
     }
     const UINT receipt[] = {arg ? arg->Interface : 0, arg ? arg->Version : 0,
                             arg ? static_cast<UINT>(arg->Flags) : 0};
@@ -220,8 +840,14 @@ static HRESULT APIENTRY CreateDevice(D3D12DDI_HADAPTER,
 }
 static void APIENTRY DestroyDevice(D3D12DDI_HDEVICE handle) {
     AdmissionUmdDiagnostic("d3d12-destroy-device", S_OK, nullptr, 0);
-#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     auto *device = static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
+    RetireDeviceIdentity(device);
+    if (device && device->shader_provider) {
+        if (device->shader_provider_device.value)
+            (void)AgxCpuRetireDevice(device->shader_provider, device->shader_provider_device);
+        (void)AgxCpuProviderDestroy(&device->shader_provider);
+    }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if (device && device->owner) {
         (void)AgxD3d12OwnerDestroy(static_cast<AGX_D3D12_OWNER *>(device->owner));
         device->owner = nullptr;
@@ -229,7 +855,6 @@ static void APIENTRY DestroyDevice(D3D12DDI_HDEVICE handle) {
 #else
     (void)handle;
 #endif
-    callbacks = nullptr;
 }
 static HRESULT APIENTRY GetOptionalDDITables(D3D12DDI_HADAPTER, UINT32 *entries,
                                              D3D12DDI_TABLE_REQUEST *) {
@@ -241,16 +866,137 @@ static HRESULT APIENTRY GetOptionalDDITables(D3D12DDI_HADAPTER, UINT32 *entries,
 /* C1d (EXP1348): device initialisation calls these three device-core DDIs
  * after the architecture caps; a refused one reports E_NOTIMPL through
  * pfnSetErrorCb and creation fails. They answer only what this stage
- * implements: no optional format capability (D3D12DDI_FORMAT_SUPPORT_* are
- * the optional bits; no D3D12 resource exists before C2), single-sample
- * only, and one node. */
-static VOID APIENTRY CheckFormatSupport(D3D12DDI_HDEVICE, DXGI_FORMAT, UINT *support) {
-    if (support) *support = 0;
+ * implements (D3D12DDI_FORMAT_SUPPORT_* are the optional bits) and one node.
+ *
+ * C32 (EXP1827: 2x/4x levels reported with no format-support bit threw in
+ * D3D12Core!CDevice::LLOCompleteLayerConstruction): for each typeless
+ * format the runtime walks its cast set; a member without
+ * D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET must report 0 levels at
+ * every count above 1, a member with it the typeless format's levels, and
+ * the bit must agree across the set (the typeless format itself must not
+ * report it when D3D12 decides its multisample support). EXP1828: a format
+ * D3D12 never multisample-renders (CD3D11FormatHelper::
+ * MultisampleRenderTargetSupport -1: the typeless ones and the depth view
+ * formats R24_UNORM_X8_TYPELESS, X24_TYPELESS_G8_UINT,
+ * R32_FLOAT_X8X24_TYPELESS, X32_TYPELESS_G8X24_UINT) must not report the
+ * bit either, so those view formats report nothing. So multisampling
+ * is answered per cast set: the sets below (the AGX's 1x1-block colour and
+ * depth formats up to 64 bits per sample; not R10G10B10A2, whose set may
+ * hold the XR_BIAS display format) report 2x and 4x everywhere,
+ * their typed members the multisample bits, everything else nothing. */
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static bool MultisampleCastSet(DXGI_FORMAT format, bool *typeless) {
+    *typeless = false;
+    switch (format) {
+    case DXGI_FORMAT_R16G16B16A16_TYPELESS: case DXGI_FORMAT_R32G32_TYPELESS: case DXGI_FORMAT_R32G8X24_TYPELESS:
+    case DXGI_FORMAT_R8G8B8A8_TYPELESS: case DXGI_FORMAT_R16G16_TYPELESS:
+    case DXGI_FORMAT_R32_TYPELESS: case DXGI_FORMAT_R24G8_TYPELESS: case DXGI_FORMAT_R8G8_TYPELESS:
+    case DXGI_FORMAT_R16_TYPELESS: case DXGI_FORMAT_R8_TYPELESS: case DXGI_FORMAT_B8G8R8A8_TYPELESS:
+    case DXGI_FORMAT_B8G8R8X8_TYPELESS:
+        *typeless = true;
+        return true;
+    case DXGI_FORMAT_R16G16B16A16_FLOAT: case DXGI_FORMAT_R16G16B16A16_UNORM: case DXGI_FORMAT_R16G16B16A16_UINT:
+    case DXGI_FORMAT_R16G16B16A16_SNORM: case DXGI_FORMAT_R16G16B16A16_SINT:
+    case DXGI_FORMAT_R32G32_FLOAT: case DXGI_FORMAT_R32G32_UINT: case DXGI_FORMAT_R32G32_SINT:
+    case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+    case DXGI_FORMAT_R8G8B8A8_UNORM: case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: case DXGI_FORMAT_R8G8B8A8_UINT:
+    case DXGI_FORMAT_R8G8B8A8_SNORM: case DXGI_FORMAT_R8G8B8A8_SINT:
+    case DXGI_FORMAT_R16G16_FLOAT: case DXGI_FORMAT_R16G16_UNORM: case DXGI_FORMAT_R16G16_UINT:
+    case DXGI_FORMAT_R16G16_SNORM: case DXGI_FORMAT_R16G16_SINT:
+    case DXGI_FORMAT_D32_FLOAT: case DXGI_FORMAT_R32_FLOAT: case DXGI_FORMAT_R32_UINT: case DXGI_FORMAT_R32_SINT:
+    case DXGI_FORMAT_D24_UNORM_S8_UINT:
+    case DXGI_FORMAT_R8G8_UNORM: case DXGI_FORMAT_R8G8_UINT: case DXGI_FORMAT_R8G8_SNORM: case DXGI_FORMAT_R8G8_SINT:
+    case DXGI_FORMAT_R16_FLOAT: case DXGI_FORMAT_D16_UNORM: case DXGI_FORMAT_R16_UNORM: case DXGI_FORMAT_R16_UINT:
+    case DXGI_FORMAT_R16_SNORM: case DXGI_FORMAT_R16_SINT:
+    case DXGI_FORMAT_R8_UNORM: case DXGI_FORMAT_R8_UINT: case DXGI_FORMAT_R8_SNORM: case DXGI_FORMAT_R8_SINT:
+    case DXGI_FORMAT_B8G8R8A8_UNORM: case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+    case DXGI_FORMAT_B8G8R8X8_UNORM: case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
+        return true;
+    default:
+        return false;
+    }
 }
-static VOID APIENTRY CheckMultisampleQualityLevels(D3D12DDI_HDEVICE, DXGI_FORMAT, UINT samples,
-                                                   D3D12DDI_MULTISAMPLE_QUALITY_LEVEL_FLAGS,
+#endif
+/* C49: typed UAV loads beyond R32 (TypedUAVLoadAdditionalFormats): the set
+ * D3D12 requires together with the cap (RGBA32/16/8, R16, R8 float/uint/
+ * sint/unorm) and the optional formats Asahi takes as shader images
+ * (agx_is_format_supported: every valid pixel format but emulated RGB32 and
+ * alpha/luminance). Typed UAVs carry no format in the shader (the DXBC and
+ * DXIL frontends emit PIPE_FORMAT_NONE), Asahi loads them by the view's
+ * format (image_load_formatted). */
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static bool TypedUavLoadFormat(DXGI_FORMAT format) {
+    switch (format) {
+    case DXGI_FORMAT_R32G32B32A32_FLOAT: case DXGI_FORMAT_R32G32B32A32_UINT: case DXGI_FORMAT_R32G32B32A32_SINT:
+    case DXGI_FORMAT_R16G16B16A16_FLOAT: case DXGI_FORMAT_R16G16B16A16_UINT: case DXGI_FORMAT_R16G16B16A16_SINT:
+    case DXGI_FORMAT_R8G8B8A8_UNORM: case DXGI_FORMAT_R8G8B8A8_UINT: case DXGI_FORMAT_R8G8B8A8_SINT:
+    case DXGI_FORMAT_R16_FLOAT: case DXGI_FORMAT_R16_UINT: case DXGI_FORMAT_R16_SINT:
+    case DXGI_FORMAT_R8_UNORM: case DXGI_FORMAT_R8_UINT: case DXGI_FORMAT_R8_SINT:
+    case DXGI_FORMAT_R32_FLOAT: case DXGI_FORMAT_R32_UINT: case DXGI_FORMAT_R32_SINT:
+    /* optional */
+    case DXGI_FORMAT_R16G16B16A16_UNORM: case DXGI_FORMAT_R16G16B16A16_SNORM:
+    case DXGI_FORMAT_R32G32_FLOAT: case DXGI_FORMAT_R32G32_UINT: case DXGI_FORMAT_R32G32_SINT:
+    case DXGI_FORMAT_R10G10B10A2_UNORM: case DXGI_FORMAT_R10G10B10A2_UINT: case DXGI_FORMAT_R11G11B10_FLOAT:
+    case DXGI_FORMAT_R8G8B8A8_SNORM:
+    case DXGI_FORMAT_R16G16_FLOAT: case DXGI_FORMAT_R16G16_UNORM: case DXGI_FORMAT_R16G16_UINT:
+    case DXGI_FORMAT_R16G16_SNORM: case DXGI_FORMAT_R16G16_SINT:
+    case DXGI_FORMAT_R8G8_UNORM: case DXGI_FORMAT_R8G8_UINT: case DXGI_FORMAT_R8G8_SNORM: case DXGI_FORMAT_R8G8_SINT:
+    case DXGI_FORMAT_R16_UNORM: case DXGI_FORMAT_R16_SNORM: case DXGI_FORMAT_R8_SNORM:
+        return true;
+    default:
+        return false;
+    }
+}
+#endif
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C53: formats a reserved Texture2D takes (agx_win32_sparse: elements of 1,
+ * 2, 4, 8 or 16 bytes, 1x1 texels or BC 4x4 blocks), except the depth
+ * family: reserved depth/stencil resources are refused. */
+static bool TiledFormat(DXGI_FORMAT format) {
+    switch (format) {
+    case DXGI_FORMAT_R32G8X24_TYPELESS: case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+    case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS: case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
+    case DXGI_FORMAT_R32_TYPELESS: case DXGI_FORMAT_D32_FLOAT:
+    case DXGI_FORMAT_R24G8_TYPELESS: case DXGI_FORMAT_D24_UNORM_S8_UINT:
+    case DXGI_FORMAT_R24_UNORM_X8_TYPELESS: case DXGI_FORMAT_X24_TYPELESS_G8_UINT:
+    case DXGI_FORMAT_R16_TYPELESS: case DXGI_FORMAT_D16_UNORM:
+        return false;
+    default:
+        break;
+    }
+    unsigned bw = 0, bh = 0;
+    const unsigned block = AgxD3d12FormatBlock(format, &bw, &bh);
+    return block == 1 || block == 2 || block == 4 || block == 8 || block == 16;
+}
+#endif
+static VOID APIENTRY CheckFormatSupport(D3D12DDI_HDEVICE, DXGI_FORMAT format, UINT *support) {
+    if (!support) return;
+    *support = 0;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    bool typeless = false;
+    if (MultisampleCastSet(format, &typeless) && !typeless)
+        *support = D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET | D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD;
+    if (TypedUavLoadFormat(format)) *support |= D3D12DDI_FORMAT_SUPPORT_UAV_READS;
+    if (TiledEnabled() && TiledFormat(format)) *support |= D3D12DDI_FORMAT_SUPPORT_TILED; /* C53 */
+#else
+    (void)format;
+#endif
+}
+static VOID APIENTRY CheckMultisampleQualityLevels(D3D12DDI_HDEVICE, DXGI_FORMAT format, UINT samples,
+                                                   D3D12DDI_MULTISAMPLE_QUALITY_LEVEL_FLAGS flags,
                                                    UINT *levels) {
-    if (levels) *levels = samples == 1 ? 1u : 0u;
+    if (!levels) return;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* C32: one quality level of 2x and 4x for every member of a
+     * multisampled cast set; no tiled multisampled resources */
+    bool typeless = false;
+    *levels = samples == 1 ? 1u
+            : !flags && (samples == 2 || samples == 4) && MultisampleCastSet(format, &typeless) ? 1u : 0u;
+#else
+    (void)format;
+    (void)flags;
+    *levels = samples == 1 ? 1u : 0u;
+#endif
 }
 static VOID APIENTRY QueryNodeMap(D3D12DDI_HDEVICE, UINT adapters, UINT *map) {
     for (UINT i = 0; map && i < adapters; ++i) map[i] = 0; /* physical adapter i -> node 0 */
@@ -287,6 +1033,7 @@ struct AgxD3d12RootSignature {
     UINT flags;
     UINT dwords;
     UINT range_count;
+    AgxCpuRoot provider_root;
     AgxD3d12RootParameter parameter[1];
     /* followed by AgxD3d12Range[range_count] */
 };
@@ -298,6 +1045,8 @@ static AgxD3d12Range *RangesOf(const AgxD3d12RootSignature *root) {
 static D3D12DDI_STATIC_SAMPLER *StaticSamplersOf(const AgxD3d12RootSignature *root) {
     return reinterpret_cast<D3D12DDI_STATIC_SAMPLER *>(RangesOf(root) + root->range_count);
 }
+#include "agx_d3d12_r1_root_canonical.h"
+#include "agx_d3d12_r1_root_layout.h"
 static UINT RootParameterDwords(const D3D12DDI_ROOT_PARAMETER &p) {
     switch (p.ParameterType) {
     case D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE: return 1;
@@ -305,21 +1054,29 @@ static UINT RootParameterDwords(const D3D12DDI_ROOT_PARAMETER &p) {
     default: return 2; /* root CBV/SRV/UAV: a 64-bit GPU virtual address */
     }
 }
+static constexpr AgxR1RootLayoutPolicy kCurrentRootLayoutPolicy = {64u, UINT_MAX, 2032u, 64u};
 static SIZE_T APIENTRY CalcPrivateRootSignatureSize(D3D12DDI_HDEVICE,
                                                     const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0001 *arg) {
-    const UINT count = arg && arg->pRootSignature ? arg->pRootSignature->NumParameters : 0;
-    SIZE_T ranges = 0;
-    for (UINT i = 0; i < count; ++i)
-        if (arg->pRootSignature->pRootParameters[i].ParameterType == D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE)
-            ranges += arg->pRootSignature->pRootParameters[i].DescriptorTable.NumDescriptorRanges;
-    const SIZE_T samplers = arg && arg->pRootSignature ? arg->pRootSignature->NumStaticSamplers : 0;
-    return offsetof(AgxD3d12RootSignature, parameter) + (count ? count : 1) * sizeof(AgxD3d12RootParameter) +
-           ranges * sizeof(AgxD3d12Range) + samplers * sizeof(D3D12DDI_STATIC_SAMPLER);
+    SIZE_T bytes = 0;
+    UINT ranges = 0;
+    return arg && AgxD3d12MeasureR1RootPrivate(arg->pRootSignature, kCurrentRootLayoutPolicy,
+                                                 &bytes, &ranges) ? bytes : 0;
 }
-static HRESULT APIENTRY CreateRootSignature(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0001 *arg,
+static HRESULT APIENTRY CreateRootSignature(D3D12DDI_HDEVICE device_handle, const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0001 *arg,
                                             D3D12DDI_HROOTSIGNATURE handle) {
     auto *root = static_cast<AgxD3d12RootSignature *>(handle.pDrvPrivate);
-    if (!arg || !arg->pRootSignature || !root) return E_INVALIDARG;
+    auto *device = static_cast<AgxD3d12Device *>(device_handle.pDrvPrivate);
+    SIZE_T bytes = 0;
+    UINT measured_ranges = 0;
+    if (!root || !device || !device->shader_provider ||
+        !device->shader_provider_device.value || !arg ||
+        !AgxD3d12MeasureR1RootPrivate(arg->pRootSignature, kCurrentRootLayoutPolicy,
+                                      &bytes, &measured_ranges))
+        return E_INVALIDARG;
+    /* Calc reserved the same checked extent; Create receives no capacity. */
+    (void)bytes;
+    (void)measured_ranges;
+    root->provider_root = {};
     const D3D12DDI_ROOT_SIGNATURE &desc = *arg->pRootSignature;
     root->parameters = desc.NumParameters;
     root->static_samplers = desc.NumStaticSamplers;
@@ -364,19 +1121,55 @@ static HRESULT APIENTRY CreateRootSignature(D3D12DDI_HDEVICE, const D3D12DDIARG_
         memcpy(StaticSamplersOf(root), desc.pStaticSamplers, desc.NumStaticSamplers * sizeof(D3D12DDI_STATIC_SAMPLER));
     else
         root->static_samplers = 0;
+    SIZE_T canonical_bytes = 0;
+    if (!AgxD3d12MeasureRootCanonical(root, bytes, &canonical_bytes))
+        return E_INVALIDARG;
+    auto *canonical = static_cast<unsigned char *>(std::malloc(canonical_bytes));
+    if (!canonical) return E_OUTOFMEMORY;
+    SIZE_T written = 0;
+    const bool encoded = AgxD3d12EncodeRootCanonical(root, bytes, canonical,
+                                                       canonical_bytes, &written);
+    AgxCpuProviderStatus registered = AgxCpuProviderStatus::Invalid;
+    if (encoded && written == canonical_bytes)
+        registered = AgxCpuRegisterRoot(device->shader_provider,
+            device->shader_provider_device, handle, {canonical, written}, &root->provider_root);
+    std::free(canonical);
+    if (registered != AgxCpuProviderStatus::Ok)
+        return registered == AgxCpuProviderStatus::ProjectOOM ||
+               registered == AgxCpuProviderStatus::Exhausted ? E_OUTOFMEMORY : E_INVALIDARG;
     const UINT receipt[] = {root->parameters, root->static_samplers, root->flags, root->dwords};
     AdmissionUmdDiagnostic("measure-d3d12-root-signature", S_OK, receipt, 4);
     return S_OK;
 }
-static VOID APIENTRY DestroyRootSignature(D3D12DDI_HDEVICE, D3D12DDI_HROOTSIGNATURE) {}
+static VOID APIENTRY DestroyRootSignature(D3D12DDI_HDEVICE device_handle,
+                                          D3D12DDI_HROOTSIGNATURE handle) {
+    auto *device = static_cast<AgxD3d12Device *>(device_handle.pDrvPrivate);
+    auto *root = static_cast<AgxD3d12RootSignature *>(handle.pDrvPrivate);
+    if (device && device->shader_provider && root && root->provider_root.value) {
+        (void)AgxCpuRetireRoot(device->shader_provider, device->shader_provider_device,
+                               root->provider_root);
+        root->provider_root = {};
+    }
+}
 /* C1g (EXP1351): device initialisation creates a shader after its (empty)
  * root signature; a refused pfnCalcPrivateShaderSize removes the device.
  * The shader object keeps a copy of the D3D10+ tokenized program
  * (pShaderCode[0] = program type and version, pShaderCode[1] = length in
  * DWORDs); compilation to AGX (DXBC -> NIR -> libagx) happens when a
  * pipeline state is created (C5). */
+/* C39 (D3D12-C39-stream-output.md): a stream-output declaration as
+ * pfnCreateGeometryShaderWithStreamOutput passes it (entries over
+ * kSoEntries or strides over 4 keep entries = UINT_MAX: refused at compile) */
+static constexpr UINT kSoEntries = 64;
+struct AgxD3d12StreamOutput {
+    UINT declared, entries, rasterized, num_strides, strides[4];
+    struct { UINT stream, slot, reg, mask; } entry[kSoEntries];
+    UINT position_registers; /* output-signature registers holding SV_Position (DXIL capture) */
+};
 struct AgxD3d12Shader {
     UINT stage; /* the stage the runtime created it for (D3D10_SB program type) */
+    UINT hs_registers, hs_positions; /* C37: a hull shader's pass-through registers */
+    AgxD3d12StreamOutput so; /* C39 */
     UINT dwords;
     UINT tokens[1];
 };
@@ -385,27 +1178,154 @@ static SIZE_T APIENTRY CalcPrivateShaderSize(D3D12DDI_HDEVICE, const UINT *code,
     const UINT dwords = code ? code[1] : 0;
     return offsetof(AgxD3d12Shader, tokens) + (dwords ? dwords : 1) * sizeof(UINT);
 }
-static void StoreShader(const UINT *code, D3D12DDI_HSHADER handle) {
+static void StoreShader(D3D12DDI_HDEVICE device, const UINT *code, D3D12DDI_HSHADER handle) {
     auto *shader = static_cast<AgxD3d12Shader *>(handle.pDrvPrivate);
     if (!code || !shader || code[1] < 2) {
-        if (callbacks && callbacks->pfnSetErrorCb) callbacks->pfnSetErrorCb(runtime_device, E_INVALIDARG);
+        ReportRejectedDeviceError(device, E_INVALIDARG);
         return;
     }
     shader->stage = code[0] >> 16;
+    shader->hs_registers = shader->hs_positions = 0;
+    shader->so.declared = 0;
     shader->dwords = code[1];
     memcpy(shader->tokens, code, code[1] * sizeof(UINT));
     const UINT receipt[] = {shader->stage, code[0] & 0xffffu, shader->dwords};
     AdmissionUmdDiagnostic("measure-d3d12-shader", S_OK, receipt, 3);
 }
-static VOID APIENTRY CreateShader(D3D12DDI_HDEVICE, const UINT *code, D3D12DDI_HROOTSIGNATURE,
+static VOID APIENTRY CreateShader(D3D12DDI_HDEVICE device, const UINT *code, D3D12DDI_HROOTSIGNATURE,
                                   D3D12DDI_HSHADER handle, const D3D12DDIARG_STAGE_IO_SIGNATURES *,
                                   D3D12DDI_CREATE_SHADER_FLAGS) {
-    StoreShader(code, handle);
+    StoreShader(device, code, handle);
 }
-static VOID APIENTRY CreateComputeShader(D3D12DDI_HDEVICE, const UINT *code, D3D12DDI_HROOTSIGNATURE,
+static VOID APIENTRY CreateComputeShader(D3D12DDI_HDEVICE device, const UINT *code, D3D12DDI_HROOTSIGNATURE,
                                          D3D12DDI_HSHADER handle, D3D12DDI_CREATE_SHADER_FLAGS) {
-    StoreShader(code, handle);
+    StoreShader(device, code, handle);
 }
+/* C37 (D3D12-C37-tessellation.md): hull and domain shaders keep their
+ * program as the other stages do; a hull shader also keeps the registers of
+ * its output (control point) signature, what a pass-through control point
+ * phase copies (the D3D11 frontend's hs_passthrough), and which registers
+ * of its input signature hold the vertex shader's SV_Position. */
+static SIZE_T APIENTRY CalcPrivateTessellationShaderSize(D3D12DDI_HDEVICE device, const UINT *code,
+                                                         D3D12DDI_HROOTSIGNATURE root,
+                                                         const D3D12DDIARG_TESSELLATION_IO_SIGNATURES *) {
+    return CalcPrivateShaderSize(device, code, root, nullptr);
+}
+static VOID APIENTRY CreateTessellationShader(D3D12DDI_HDEVICE device, const UINT *code, D3D12DDI_HROOTSIGNATURE,
+                                              D3D12DDI_HSHADER handle, const D3D12DDIARG_TESSELLATION_IO_SIGNATURES *sig,
+                                              D3D12DDI_CREATE_SHADER_FLAGS) {
+    StoreShader(device, code, handle);
+    auto *shader = static_cast<AgxD3d12Shader *>(handle.pDrvPrivate);
+    if (!shader || !code || code[1] < 2 || shader->stage != D3D11_SB_HULL_SHADER || !sig) return;
+    for (UINT i = 0; sig->pOutputSignature && i < sig->NumOutputSignatureEntries; ++i)
+        if (sig->pOutputSignature[i].Register < 32) shader->hs_registers |= 1u << sig->pOutputSignature[i].Register;
+    for (UINT i = 0; sig->pInputSignature && i < sig->NumInputSignatureEntries; ++i)
+        if (sig->pInputSignature[i].Register < 32 && sig->pInputSignature[i].SystemValue == D3D10_SB_NAME_POSITION)
+            shader->hs_positions |= 1u << sig->pInputSignature[i].Register;
+}
+/* C39: a geometry shader with stream output -- or, with the vertex
+ * shader's program or none, the stream output of a pipeline without a
+ * geometry shader -- keeps its program and its declaration */
+static SIZE_T APIENTRY CalcPrivateGeometryShaderWithStreamOutput(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT *arg,
+    const D3D12DDIARG_STAGE_IO_SIGNATURES *) {
+    return CalcPrivateShaderSize(device, arg ? arg->pShaderCode : nullptr, {}, nullptr);
+}
+static VOID APIENTRY CreateGeometryShaderWithStreamOutput(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT *arg, D3D12DDI_HSHADER handle,
+    const D3D12DDIARG_STAGE_IO_SIGNATURES *signatures, D3D12DDI_CREATE_SHADER_FLAGS) {
+    auto *shader = static_cast<AgxD3d12Shader *>(handle.pDrvPrivate);
+    if (!arg || !shader) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    if (arg->pShaderCode) {
+        StoreShader(device, arg->pShaderCode, handle);
+    } else {
+        shader->stage = UINT_MAX;
+        shader->hs_registers = shader->hs_positions = 0;
+        shader->dwords = 0;
+    }
+    AgxD3d12StreamOutput &so = shader->so;
+    memset(&so, 0, sizeof(so));
+    so.declared = 1;
+    so.rasterized = arg->RasterizedStream;
+    const bool fits = arg->NumEntries <= kSoEntries && arg->NumStrides <= 4 && (!arg->NumEntries || arg->pOutputStreamDecl) &&
+                      (!arg->NumStrides || arg->BufferStridesInBytes);
+    so.entries = fits ? arg->NumEntries : UINT_MAX;
+    so.num_strides = fits ? arg->NumStrides : 0u;
+    for (UINT i = 0; fits && i < arg->NumEntries; ++i)
+        so.entry[i] = {arg->pOutputStreamDecl[i].Stream, arg->pOutputStreamDecl[i].OutputSlot,
+                       arg->pOutputStreamDecl[i].RegisterIndex, arg->pOutputStreamDecl[i].RegisterMask};
+    for (UINT i = 0; fits && i < arg->NumStrides; ++i) so.strides[i] = arg->BufferStridesInBytes[i];
+    /* the R1 runtime hands the shader over as DXIL, whose SV_Position output
+     * is a builtin rather than a signature row: the signature names it */
+    for (UINT i = 0; signatures && signatures->pOutputSignature && i < signatures->NumOutputSignatureEntries; ++i)
+        if (signatures->pOutputSignature[i].SystemValue == D3D10_SB_NAME_POSITION &&
+            signatures->pOutputSignature[i].Register < 32)
+            so.position_registers |= 1u << signatures->pOutputSignature[i].Register;
+    const UINT receipt[] = {arg->pShaderCode ? shader->stage : UINT_MAX, arg->NumEntries, arg->NumStrides,
+                            arg->RasterizedStream, fits ? 1u : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-so-shader", fits ? S_OK : E_NOTIMPL, receipt, 5);
+}
+/* C44 (R1, D3D12DDI_DEVICE_FUNCS_CORE_0010): every shader stage arrives as
+ * D3D12DDIARG_CREATE_SHADER_0010 (code, root signature, I/O signatures,
+ * flags, pipeline-library reference); the 0003 entries keep the work. A
+ * library reference names the zero-cache library, which holds nothing. */
+static bool R1ShaderReference(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_SHADER_0010 *arg) {
+    if (arg && SUCCEEDED(AgxD3d12ZeroCacheValidateLibraryReference(device, &arg->LibraryReference))) return true;
+    ReportRejectedDeviceError(device, E_INVALIDARG);
+    return false;
+}
+static SIZE_T APIENTRY CalcPrivateShaderSize0010(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_SHADER_0010 *arg) {
+    return CalcPrivateShaderSize(device, arg ? arg->pShaderCode : nullptr, {}, nullptr);
+}
+static VOID APIENTRY CreateShader0010(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_SHADER_0010 *arg,
+                                      D3D12DDI_HSHADER handle) {
+    if (R1ShaderReference(device, arg))
+        CreateShader(device, arg->pShaderCode, arg->hRootSignature, handle, arg->IOSignatures.Standard, arg->Flags);
+}
+static VOID APIENTRY CreateComputeShader0010(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_SHADER_0010 *arg,
+                                             D3D12DDI_HSHADER handle) {
+    if (R1ShaderReference(device, arg)) CreateComputeShader(device, arg->pShaderCode, arg->hRootSignature, handle, arg->Flags);
+}
+static VOID APIENTRY CreateTessellationShader0010(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_SHADER_0010 *arg,
+                                                  D3D12DDI_HSHADER handle) {
+    if (R1ShaderReference(device, arg))
+        CreateTessellationShader(device, arg->pShaderCode, arg->hRootSignature, handle, arg->IOSignatures.Tessellation,
+                                 arg->Flags);
+}
+static D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT ProjectR1StreamOutput(
+    const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0010 &arg) {
+    D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT legacy = {};
+    legacy.pShaderCode = arg.CreateShader.pShaderCode;
+    legacy.hRootSignature = arg.CreateShader.hRootSignature;
+    legacy.pOutputStreamDecl = arg.pOutputStreamDecl;
+    legacy.NumEntries = arg.NumEntries;
+    legacy.BufferStridesInBytes = arg.BufferStridesInBytes;
+    legacy.NumStrides = arg.NumStrides;
+    legacy.RasterizedStream = arg.RasterizedStream;
+    return legacy;
+}
+static SIZE_T APIENTRY CalcPrivateGeometryShaderWithStreamOutput0010(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0010 *arg) {
+    if (!arg) return CalcPrivateShaderSize(device, nullptr, {}, nullptr);
+    const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT legacy = ProjectR1StreamOutput(*arg);
+    return CalcPrivateGeometryShaderWithStreamOutput(device, &legacy, nullptr);
+}
+static VOID APIENTRY CreateGeometryShaderWithStreamOutput0010(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0010 *arg, D3D12DDI_HSHADER handle) {
+    if (!arg || !R1ShaderReference(device, &arg->CreateShader)) return;
+    const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT legacy = ProjectR1StreamOutput(*arg);
+    CreateGeometryShaderWithStreamOutput(device, &legacy, handle, arg->CreateShader.IOSignatures.Standard,
+                                         arg->CreateShader.Flags);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateShaderSize0010), PFND3D12DDI_CALC_PRIVATE_SHADER_SIZE_0010>);
+static_assert(std::is_same_v<decltype(&CreateShader0010), PFND3D12DDI_CREATE_SHADER_0010>);
+static_assert(std::is_same_v<decltype(&CalcPrivateGeometryShaderWithStreamOutput0010),
+                             PFND3D12DDI_CALC_PRIVATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0010>);
+static_assert(std::is_same_v<decltype(&CreateGeometryShaderWithStreamOutput0010),
+                             PFND3D12DDI_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0010>);
 static VOID APIENTRY DestroyShader(D3D12DDI_HDEVICE, D3D12DDI_HSHADER) {}
 /* C1h (EXP1352): after its internal vertex shader (VS 4.0, 15 DWORDs) the
  * runtime builds the state objects a graphics pipeline state references
@@ -415,9 +1335,9 @@ static VOID APIENTRY DestroyShader(D3D12DDI_HDEVICE, D3D12DDI_HSHADER) {}
  * pipeline state translates them to AGX state (C6). */
 template<class Desc, UINT Kind> struct AgxD3d12State {
     static SIZE_T APIENTRY size(D3D12DDI_HDEVICE, const Desc *) { return sizeof(Desc); }
-    template<class Handle> static VOID APIENTRY create(D3D12DDI_HDEVICE, const Desc *desc, Handle handle) {
+    template<class Handle> static VOID APIENTRY create(D3D12DDI_HDEVICE device, const Desc *desc, Handle handle) {
         if (!desc || !handle.pDrvPrivate) {
-            if (callbacks && callbacks->pfnSetErrorCb) callbacks->pfnSetErrorCb(runtime_device, E_INVALIDARG);
+            ReportRejectedDeviceError(device, E_INVALIDARG);
             return;
         }
         memcpy(handle.pDrvPrivate, desc, sizeof(Desc));
@@ -427,8 +1347,125 @@ template<class Desc, UINT Kind> struct AgxD3d12State {
     template<class Handle> static VOID APIENTRY destroy(D3D12DDI_HDEVICE, Handle) {}
 };
 using BlendState = AgxD3d12State<D3D12DDI_BLEND_DESC, 1>;
+/* CPU-only R1 blend adapter. The 0010 table is not advertised yet. */
+static SIZE_T APIENTRY CalcPrivateBlendStateSize0010(D3D12DDI_HDEVICE device,
+                                                     const D3D12DDI_BLEND_DESC_0010 *desc) {
+    if (!desc || FAILED(AgxD3d12ZeroCacheValidateLibraryReference(device, &desc->LibraryReference)))
+        return 0;
+    return sizeof(D3D12DDI_BLEND_DESC);
+}
+static VOID APIENTRY CreateBlendState0010(D3D12DDI_HDEVICE device,
+                                          const D3D12DDI_BLEND_DESC_0010 *desc,
+                                          D3D12DDI_HBLENDSTATE handle) {
+    if (!desc || !handle.pDrvPrivate) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    const HRESULT reference = AgxD3d12ZeroCacheValidateLibraryReference(device, &desc->LibraryReference);
+    if (FAILED(reference)) {
+        ReportRejectedDeviceError(device, reference);
+        return;
+    }
+    D3D12DDI_BLEND_DESC projected;
+    if (!AgxD3d12ProjectR1Blend(desc, &projected)) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    BlendState::create(device, &projected, handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateBlendStateSize0010),
+                             PFND3D12DDI_CALCPRIVATEBLENDSTATESIZE_0010>);
+static_assert(std::is_same_v<decltype(&CreateBlendState0010),
+                             PFND3D12DDI_CREATEBLENDSTATE_0010>);
 using DepthStencilState = AgxD3d12State<D3D12DDI_DEPTH_STENCIL_DESC, 2>;
 using RasterizerState = AgxD3d12State<D3D12DDI_RASTERIZER_DESC, 3>;
+/* CPU-only independent R1 state projections; CORE_0010 is not advertised. */
+static D3D12DDI_DEPTH_STENCIL_DESC ProjectR1Depth(const D3D12DDI_DEPTH_STENCIL_DESC_0010 *input) {
+    D3D12DDI_DEPTH_STENCIL_DESC state;
+    std::memset(&state, 0, sizeof(state));
+    state.DepthEnable = input->DepthEnable;
+    state.DepthWriteMask = input->DepthWriteMask;
+    state.DepthFunc = input->DepthFunc;
+    state.StencilEnable = input->StencilEnable;
+    state.FrontEnable = input->FrontEnable;
+    state.BackEnable = input->BackEnable;
+    state.StencilReadMask = input->StencilReadMask;
+    state.StencilWriteMask = input->StencilWriteMask;
+    state.FrontFace.StencilFailOp = input->FrontFace.StencilFailOp;
+    state.FrontFace.StencilDepthFailOp = input->FrontFace.StencilDepthFailOp;
+    state.FrontFace.StencilPassOp = input->FrontFace.StencilPassOp;
+    state.FrontFace.StencilFunc = input->FrontFace.StencilFunc;
+    state.BackFace.StencilFailOp = input->BackFace.StencilFailOp;
+    state.BackFace.StencilDepthFailOp = input->BackFace.StencilDepthFailOp;
+    state.BackFace.StencilPassOp = input->BackFace.StencilPassOp;
+    state.BackFace.StencilFunc = input->BackFace.StencilFunc;
+    return state;
+}
+static SIZE_T APIENTRY CalcPrivateDepthStencilStateSize0010(D3D12DDI_HDEVICE device,
+    const D3D12DDI_DEPTH_STENCIL_DESC_0010 *desc) {
+    if (!desc || FAILED(AgxD3d12ZeroCacheValidateLibraryReference(device, &desc->LibraryReference)))
+        return 0;
+    return sizeof(D3D12DDI_DEPTH_STENCIL_DESC);
+}
+static VOID APIENTRY CreateDepthStencilState0010(D3D12DDI_HDEVICE device,
+    const D3D12DDI_DEPTH_STENCIL_DESC_0010 *desc, D3D12DDI_HDEPTHSTENCILSTATE handle) {
+    if (!desc || !handle.pDrvPrivate) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    const HRESULT reference = AgxD3d12ZeroCacheValidateLibraryReference(device, &desc->LibraryReference);
+    if (FAILED(reference)) {
+        ReportRejectedDeviceError(device, reference);
+        return;
+    }
+    const D3D12DDI_DEPTH_STENCIL_DESC state = ProjectR1Depth(desc);
+    DepthStencilState::create(device, &state, handle);
+}
+static D3D12DDI_RASTERIZER_DESC ProjectR1Raster(const D3D12DDI_RASTERIZER_DESC_0010 *input) {
+    D3D12DDI_RASTERIZER_DESC state;
+    std::memset(&state, 0, sizeof(state));
+    state.FillMode = input->FillMode;
+    state.CullMode = input->CullMode;
+    state.FrontCounterClockwise = input->FrontCounterClockwise;
+    state.DepthBias = input->DepthBias;
+    state.DepthBiasClamp = input->DepthBiasClamp;
+    state.SlopeScaledDepthBias = input->SlopeScaledDepthBias;
+    state.DepthClipEnable = input->DepthClipEnable;
+    state.ScissorEnable = input->ScissorEnable;
+    state.MultisampleEnable = input->MultisampleEnable;
+    state.AntialiasedLineEnable = input->AntialiasedLineEnable;
+    state.ForcedSampleCount = input->ForcedSampleCount;
+    state.ConservativeRasterizationMode = input->ConservativeRasterizationMode;
+    return state;
+}
+static SIZE_T APIENTRY CalcPrivateRasterizerStateSize0010(D3D12DDI_HDEVICE device,
+    const D3D12DDI_RASTERIZER_DESC_0010 *desc) {
+    if (!desc || FAILED(AgxD3d12ZeroCacheValidateLibraryReference(device, &desc->LibraryReference)))
+        return 0;
+    return sizeof(D3D12DDI_RASTERIZER_DESC);
+}
+static VOID APIENTRY CreateRasterizerState0010(D3D12DDI_HDEVICE device,
+    const D3D12DDI_RASTERIZER_DESC_0010 *desc, D3D12DDI_HRASTERIZERSTATE handle) {
+    if (!desc || !handle.pDrvPrivate) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    const HRESULT reference = AgxD3d12ZeroCacheValidateLibraryReference(device, &desc->LibraryReference);
+    if (FAILED(reference)) {
+        ReportRejectedDeviceError(device, reference);
+        return;
+    }
+    const D3D12DDI_RASTERIZER_DESC state = ProjectR1Raster(desc);
+    RasterizerState::create(device, &state, handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateDepthStencilStateSize0010),
+                             PFND3D12DDI_CALCPRIVATEDEPTHSTENCILSTATESIZE_0010>);
+static_assert(std::is_same_v<decltype(&CreateDepthStencilState0010),
+                             PFND3D12DDI_CREATEDEPTHSTENCILSTATE_0010>);
+static_assert(std::is_same_v<decltype(&CalcPrivateRasterizerStateSize0010),
+                             PFND3D12DDI_CALCPRIVATERASTERIZERSTATESIZE_0010>);
+static_assert(std::is_same_v<decltype(&CreateRasterizerState0010),
+                             PFND3D12DDI_CREATERASTERIZERSTATE_0010>);
 struct AgxD3d12ElementLayout {
     UINT elements;
     D3D12DDIARG_INPUT_ELEMENT_DESC element[1];
@@ -437,11 +1474,11 @@ static SIZE_T APIENTRY CalcPrivateElementLayoutSize(D3D12DDI_HDEVICE, const D3D1
     const UINT count = arg ? arg->NumElements : 0;
     return offsetof(AgxD3d12ElementLayout, element) + (count ? count : 1) * sizeof(D3D12DDIARG_INPUT_ELEMENT_DESC);
 }
-static VOID APIENTRY CreateElementLayout(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATEELEMENTLAYOUT *arg,
+static VOID APIENTRY CreateElementLayout(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATEELEMENTLAYOUT *arg,
                                          D3D12DDI_HELEMENTLAYOUT handle) {
     auto *layout = static_cast<AgxD3d12ElementLayout *>(handle.pDrvPrivate);
     if (!arg || !layout || (arg->NumElements && !arg->pVertexElements)) {
-        if (callbacks && callbacks->pfnSetErrorCb) callbacks->pfnSetErrorCb(runtime_device, E_INVALIDARG);
+        ReportRejectedDeviceError(device, E_INVALIDARG);
         return;
     }
     layout->elements = arg->NumElements;
@@ -450,6 +1487,33 @@ static VOID APIENTRY CreateElementLayout(D3D12DDI_HDEVICE, const D3D12DDIARG_CRE
     const UINT receipt[] = {4u, arg->NumElements};
     AdmissionUmdDiagnostic("measure-d3d12-state", S_OK, receipt, 2);
 }
+/* CPU-only R1 element-layout adapter. The 0010 table is not advertised yet. */
+static SIZE_T APIENTRY CalcPrivateElementLayoutSize0010(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATEELEMENTLAYOUT_0010 *arg) {
+    if (!arg || (arg->NumElements && !arg->pVertexElements) ||
+        FAILED(AgxD3d12ZeroCacheValidateLibraryReference(device, &arg->LibraryReference)))
+        return 0;
+    const D3D12DDIARG_CREATEELEMENTLAYOUT legacy = {arg->pVertexElements, arg->NumElements};
+    return CalcPrivateElementLayoutSize(device, &legacy);
+}
+static VOID APIENTRY CreateElementLayout0010(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATEELEMENTLAYOUT_0010 *arg, D3D12DDI_HELEMENTLAYOUT handle) {
+    if (!arg || !handle.pDrvPrivate || (arg->NumElements && !arg->pVertexElements)) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    const HRESULT reference = AgxD3d12ZeroCacheValidateLibraryReference(device, &arg->LibraryReference);
+    if (FAILED(reference)) {
+        ReportRejectedDeviceError(device, reference);
+        return;
+    }
+    const D3D12DDIARG_CREATEELEMENTLAYOUT legacy = {arg->pVertexElements, arg->NumElements};
+    CreateElementLayout(device, &legacy, handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateElementLayoutSize0010),
+                             PFND3D12DDI_CALCPRIVATEELEMENTLAYOUTSIZE_0010>);
+static_assert(std::is_same_v<decltype(&CreateElementLayout0010),
+                             PFND3D12DDI_CREATEELEMENTLAYOUT_0010>);
 static VOID APIENTRY DestroyElementLayout(D3D12DDI_HDEVICE, D3D12DDI_HELEMENTLAYOUT) {}
 /* The pipeline state those objects feed (D3D12DDIARG_CREATE_PIPELINE_STATE_0001):
  * it keeps the creation arguments; graphics state translation is C6. C5: a
@@ -463,9 +1527,25 @@ static VOID APIENTRY DestroyElementLayout(D3D12DDI_HDEVICE, D3D12DDI_HELEMENTLAY
 static constexpr UINT kPipelineElements = 16;
 struct AgxD3d12PipelineState {
     D3D12DDIARG_CREATE_PIPELINE_STATE_0001 desc;
+    AgxD3d12Device *identity_owner;
+    AgxD3d12PipelineState *identity_next;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* Different recording threads may first use the same PSO concurrently. */
+    SRWLOCK compile_lock;
     AGX_D3D12_COMPUTE compute;
     AGX_D3D12_GRAPHICS graphics;
+    /* C65V: the owner description of the graphics compile, and the min/max
+     * variant a draw or dispatch uses while a MINIMUM/MAXIMUM heap sampler is
+     * bound (C65S: or a MINIMUM/MAXIMUM slot sampler). Variants are
+     * allocated on first use: an AGX_D3D12_GRAPHICS (five binding maps) is
+     * ~28 KB, which every PSO would otherwise carry. */
+    AGX_D3D12_GRAPHICS_DESC owner_desc;
+    AGX_D3D12_SO_DECL owner_so;
+    /* RC75: the root descriptors of the root signature the PSO is compiled
+     * for (its variants use the same) */
+    AGX_D3D12_ROOT_VIEWS root_views;
+    struct AgxD3d12MinmaxVariant *minmax; /* kMinmaxVariants entries */
+    UINT minmax_count;
 #endif
     HRESULT compiled; /* S_FALSE until the first compile */
     D3D12DDI_BLEND_DESC blend;
@@ -473,9 +1553,56 @@ struct AgxD3d12PipelineState {
     D3D12DDI_DEPTH_STENCIL_DESC depth_stencil;
     UINT elements;
     D3D12DDIARG_INPUT_ELEMENT_DESC element[kPipelineElements];
-    UINT cs_dwords, vs_dwords, ps_dwords;
-    UINT cs[1]; /* the CS program, then the VS, then the PS */
+    UINT cs_dwords, vs_dwords, ps_dwords, gs_dwords;
+    UINT hs_dwords, ds_dwords, hs_registers, hs_positions; /* C37 */
+    AgxD3d12StreamOutput so; /* C39: declared = the pipeline captures stream output */
+    /* RC74 receipt-only: low 32 bits of the CS tokens' FNV-1a 64 hash (the
+     * measure-d3d12-shader-stats HASH_LO of its compiled statistics), set by
+     * the first compile; 0 before */
+    UINT cs_tag;
+    /* rc119 receipt-only: the same tag of the PS tokens, set by the first
+     * graphics compile; the 7th measure-d3d12-draw value */
+    UINT ps_tag;
+    UINT cs[1]; /* the CS program, then the VS, the PS, the GS (C27), the HS and the DS (C37) */
 };
+static void PublishPsoIdentity(AgxD3d12PipelineState *pso, AgxD3d12Device *device) {
+    AcquireSRWLockExclusive(&identity_registry_lock);
+    for (auto *current = live_identity_psos; current; current = current->identity_next)
+        if (current == pso) {
+            ReleaseSRWLockExclusive(&identity_registry_lock);
+            return;
+        }
+    pso->identity_owner = device;
+    pso->identity_next = live_identity_psos;
+    live_identity_psos = pso;
+    ReleaseSRWLockExclusive(&identity_registry_lock);
+}
+static void RetirePsoIdentity(AgxD3d12PipelineState *pso) {
+    AcquireSRWLockExclusive(&identity_registry_lock);
+    auto **entry = &live_identity_psos;
+    while (*entry && *entry != pso) entry = &(*entry)->identity_next;
+    if (*entry) {
+        *entry = pso->identity_next;
+        pso->identity_owner = nullptr;
+        pso->identity_next = nullptr;
+    }
+    ReleaseSRWLockExclusive(&identity_registry_lock);
+}
+extern "C" const void *AgxD3d12ZeroCacheResolvePsoOwner(D3D12DDI_HPIPELINESTATE handle) {
+    const void *result = nullptr;
+    AcquireSRWLockShared(&identity_registry_lock);
+    for (auto *pso = live_identity_psos; pso; pso = pso->identity_next)
+        if (pso == handle.pDrvPrivate) {
+            for (auto *device = live_identity_devices; device; device = device->identity_next)
+                if (device == pso->identity_owner) {
+                    result = device;
+                    break;
+                }
+            break;
+        }
+    ReleaseSRWLockShared(&identity_registry_lock);
+    return result;
+}
 static const AgxD3d12Shader *ComputeShaderOf(const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *arg) {
     return arg ? static_cast<const AgxD3d12Shader *>(arg->hComputeShader.pDrvPrivate) : nullptr;
 }
@@ -486,13 +1613,24 @@ static SIZE_T APIENTRY CalcPrivatePipelineStateSize(D3D12DDI_HDEVICE, const D3D1
     const AgxD3d12Shader *cs = ComputeShaderOf(arg);
     const AgxD3d12Shader *vs = arg ? ShaderOf(arg->hVertexShader) : nullptr;
     const AgxD3d12Shader *ps = arg ? ShaderOf(arg->hPixelShader) : nullptr;
-    const SIZE_T dwords = (cs ? cs->dwords : 0) + (vs ? vs->dwords : 0) + (ps ? ps->dwords : 0);
+    const AgxD3d12Shader *gs = arg ? ShaderOf(arg->hGeometryShader) : nullptr;
+    const AgxD3d12Shader *hs = arg ? ShaderOf(arg->hHullShader) : nullptr;
+    const AgxD3d12Shader *ds = arg ? ShaderOf(arg->hDomainShader) : nullptr;
+    const SIZE_T dwords = (cs ? cs->dwords : 0) + (vs ? vs->dwords : 0) + (ps ? ps->dwords : 0) + (gs ? gs->dwords : 0) +
+                          (hs ? hs->dwords : 0) + (ds ? ds->dwords : 0);
     return offsetof(AgxD3d12PipelineState, cs) + (dwords ? dwords : 1) * sizeof(UINT);
 }
-static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *arg) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static void EagerCompilePipeline(AgxD3d12Device *device, AgxD3d12PipelineState *pso, const AgxD3d12RootSignature *root);
+#endif
+static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 *arg) {
+    auto *device = static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
     auto *pso = arg ? static_cast<AgxD3d12PipelineState *>(arg->hDrvPipelineState.pDrvPrivate) : nullptr;
-    if (!pso) return E_INVALIDARG;
+    if (!device || !pso) return E_INVALIDARG;
     memset(pso, 0, offsetof(AgxD3d12PipelineState, cs));
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    InitializeSRWLock(&pso->compile_lock);
+#endif
     pso->desc = *arg;
     pso->compiled = S_FALSE;
     if (const AgxD3d12Shader *cs = ComputeShaderOf(arg)) {
@@ -506,6 +1644,26 @@ static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE, const D3D12DDIARG_
     if (const AgxD3d12Shader *ps = ShaderOf(arg->hPixelShader)) {
         pso->ps_dwords = ps->dwords;
         memcpy(pso->cs + pso->cs_dwords + pso->vs_dwords, ps->tokens, ps->dwords * sizeof(UINT));
+    }
+    /* C27: a geometry shader; C39: with stream output, whose object holds
+     * the vertex shader's program or none when the pipeline has no GS */
+    if (const AgxD3d12Shader *gs = ShaderOf(arg->hGeometryShader)) {
+        if (gs->so.declared) pso->so = gs->so;
+        if (gs->dwords && gs->stage == D3D10_SB_GEOMETRY_SHADER) {
+            pso->gs_dwords = gs->dwords;
+            memcpy(pso->cs + pso->cs_dwords + pso->vs_dwords + pso->ps_dwords, gs->tokens, gs->dwords * sizeof(UINT));
+        }
+    }
+    UINT *tess = pso->cs + pso->cs_dwords + pso->vs_dwords + pso->ps_dwords + pso->gs_dwords;
+    if (const AgxD3d12Shader *hs = ShaderOf(arg->hHullShader)) { /* C37 */
+        pso->hs_dwords = hs->dwords;
+        pso->hs_registers = hs->hs_registers;
+        pso->hs_positions = hs->hs_positions;
+        memcpy(tess, hs->tokens, hs->dwords * sizeof(UINT));
+    }
+    if (const AgxD3d12Shader *ds = ShaderOf(arg->hDomainShader)) {
+        pso->ds_dwords = ds->dwords;
+        memcpy(tess + pso->hs_dwords, ds->tokens, ds->dwords * sizeof(UINT));
     }
     if (arg->hBlendState.pDrvPrivate) memcpy(&pso->blend, arg->hBlendState.pDrvPrivate, sizeof(pso->blend));
     if (arg->hRasterizerState.pDrvPrivate) memcpy(&pso->rasterizer, arg->hRasterizerState.pDrvPrivate, sizeof(pso->rasterizer));
@@ -521,8 +1679,58 @@ static HRESULT APIENTRY CreatePipelineState(D3D12DDI_HDEVICE, const D3D12DDIARG_
                             static_cast<UINT>(arg->RTVFormats[0]), static_cast<UINT>(arg->DSVFormat),
                             static_cast<UINT>(arg->PrimitiveTopologyType), arg->SampleDesc.Count};
     AdmissionUmdDiagnostic("measure-d3d12-pso", S_OK, receipt, 8);
+    PublishPsoIdentity(pso, device);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    EagerCompilePipeline(device, pso, static_cast<const AgxD3d12RootSignature *>(arg->hRootSignature.pDrvPrivate));
+#endif
     return S_OK;
 }
+/* CPU-only R1 PSO adapter. The 0010 table is not advertised yet. */
+static D3D12DDIARG_CREATE_PIPELINE_STATE_0001 ProjectR1PipelineState(
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0010 *input, D3D12DDI_HPIPELINESTATE destination) {
+    D3D12DDIARG_CREATE_PIPELINE_STATE_0001 result;
+    std::memset(&result, 0, sizeof(result));
+    result.hDrvPipelineState = destination;
+    result.hComputeShader = input->hComputeShader;
+    result.hVertexShader = input->hVertexShader;
+    result.hPixelShader = input->hPixelShader;
+    result.hDomainShader = input->hDomainShader;
+    result.hHullShader = input->hHullShader;
+    result.hGeometryShader = input->hGeometryShader;
+    result.hRootSignature = input->hRootSignature;
+    result.hBlendState = input->hBlendState;
+    result.SampleMask = input->SampleMask;
+    result.hRasterizerState = input->hRasterizerState;
+    result.hDepthStencilState = input->hDepthStencilState;
+    result.hElementLayout = input->hElementLayout;
+    result.IBStripCutValue = input->IBStripCutValue;
+    result.PrimitiveTopologyType = input->PrimitiveTopologyType;
+    result.NumRenderTargets = input->NumRenderTargets;
+    for (UINT i = 0; i < 8; ++i) result.RTVFormats[i] = input->RTVFormats[i];
+    result.DSVFormat = input->DSVFormat;
+    result.SampleDesc = input->SampleDesc;
+    result.NodeMask = input->NodeMask;
+    return result;
+}
+static SIZE_T APIENTRY CalcPrivatePipelineStateSize0010(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0010 *arg) {
+    if (!arg || FAILED(AgxD3d12ZeroCacheValidateLibraryReference(device, &arg->LibraryReference)))
+        return 0;
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 legacy = ProjectR1PipelineState(arg, {});
+    return CalcPrivatePipelineStateSize(device, &legacy);
+}
+static HRESULT APIENTRY CreatePipelineState0010(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0010 *arg, D3D12DDI_HPIPELINESTATE destination) {
+    if (!arg || !destination.pDrvPrivate) return E_INVALIDARG;
+    const HRESULT reference = AgxD3d12ZeroCacheValidateLibraryReference(device, &arg->LibraryReference);
+    if (FAILED(reference)) return reference;
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0001 legacy = ProjectR1PipelineState(arg, destination);
+    return CreatePipelineState(device, &legacy);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivatePipelineStateSize0010),
+                             PFND3D12DDI_CALC_PRIVATE_PIPELINE_STATE_SIZE_0010>);
+static_assert(std::is_same_v<decltype(&CreatePipelineState0010),
+                             PFND3D12DDI_CREATE_PIPELINE_STATE_0010>);
 static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE, D3D12DDI_HPIPELINESTATE);
 /* C1i (EXP1353): after its internal pipeline state the runtime calls
  * pfnMakeResident; refused, the device is removed. No object this stage
@@ -561,14 +1769,37 @@ static constexpr UINT64 kCpuVisibleMaximum = ADMISSION_WIN32_ALLOCATION_LEGACY_M
 struct AgxD3d12Heap {
     void *native; /* C4b: the owner's buffer resource (pipe_resource) */
     void *presentation; /* C7b: the owner presentation record of a shareable render target */
+    BOOL volume;  /* C21: DEFAULT volume heaps are never CPU mapped */
     BOOL alias;   /* C8c: a placed resource's view of its parent heap (owns nothing) */
     D3DKMT_HANDLE allocation;
     UINT64 gpuva;
     UINT64 bytes;
+    UINT64 descriptor_bytes; /* guarded heaps: logical extent, excluding backing tail */
     BOOL cpu_visible;
     UINT locks;
     void *cpu;
+    /* EXP1855: a shader-visible descriptor heap's cpu is a cached shadow of
+     * its descriptors (the replay reads them every draw; the GPU buffer is
+     * write-combined); mirror is the buffer's own mapping, which receives
+     * the heap forms the shaders read (MirrorHeapForms) */
+    unsigned char *mirror;
+    /* C53 B3: a reserved buffer (tiles != nullptr): tiles[t] is the heap and
+     * heap tile mapped at 64 KiB tile t (heap nullptr: NULL), the snapshot
+     * CopyTileMappings reads; the owner keeps the GPU mappings themselves */
+    struct AgxD3d12TileMapping { AgxD3d12Heap *heap; UINT tile; } *tiles;
+    UINT tile_count;
+    /* C53 T2D: a reserved Texture2D's tiling (tiles[] in its resource tile
+     * order); nullptr for buffers */
+    struct AGX_TILE_GEOMETRY *geometry;
+    /* rc87 (agx_d3d12_heap_backing.h): a texture-only heap's 64 KiB stub
+     * BO, whose kernel allocation the runtime receives; native stays nullptr
+     * (every user refuses such a heap) until EnsureHeapBacking gives it its
+     * full-size backing for a tile mapping. nullptr for other heaps. */
+    void *stub;
 };
+static UINT64 DescriptorHeapBytes(const AgxD3d12Heap *heap) {
+    return heap->descriptor_bytes ? heap->descriptor_bytes : heap->bytes;
+}
 struct AgxD3d12Resource {
     AgxD3d12Heap *heap;
     UINT64 gpuva;
@@ -578,28 +1809,105 @@ struct AgxD3d12Resource {
     UINT type;
     DXGI_FORMAT format;
     UINT width, height, layers, levels;
+    UINT64 volume_offsets[16]; /* immutable queried physical mip starts,3D only */
+    UINT64 volume_depth_stride;
+    D3D12DDI_TEXTURE_LAYOUT volume_layout;
+    UINT8 volume_transition;
+    UINT8 volume_transitions[5]; /* C21G: the 0022 transitions, [0] = volume_transition */
+    UINT64 volume_row_strides[16]; /* C21G: bytes per row of blocks, per level */
+    /* C36 (EXP1832): a placed texture's heap object -- the runtime passes a
+     * placed resource without one */
+    AgxD3d12Heap own_heap;
 };
 #ifndef APPLE_AGX_D3D12_NATIVE_OWNER
 static UINT AgxD3d12FormatBlockBytes(DXGI_FORMAT) { return 0; } /* textures need the native owner */
+static UINT AgxD3d12FormatBlock(DXGI_FORMAT, unsigned *, unsigned *) { return 0; }
 #endif
 /* C6a: the allocation size of a committed 2D texture: an upper bound of
  * the owner's layout (whole 16x16 tiles of each level, a 64 KiB granule);
  * 0 = not a texture this device creates (format, samples, dimension). */
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* every 1D mip uses the registry's 4-byte 1x1 pattern (C21G) */
+static bool LineLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *arg,AGX_D3D12_VOLUME_LAYOUT *layout,
+                           D3D12DDI_TEXTURE_LAYOUT *resolved) {
+ if(!arg || !layout || arg->ResourceType!=D3D12DDI_RT_TEXTURE1D || arg->Height!=1 || (!arg->DepthOrArraySize || arg->DepthOrArraySize>D3D12_REQ_TEXTURE1D_ARRAY_AXIS_DIMENSION) ||
+    arg->SampleDesc.Count!=1 || arg->SampleDesc.Quality ||
+    (arg->Flags&~D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE))return false;
+ const auto selected=static_cast<D3D12DDI_TEXTURE_LAYOUT>(0x100u+agx_volume_pattern_index(2,agx_volume_shape_count(2)-1));
+ if(arg->Layout!=D3D12DDI_TL_UNDEFINED && arg->Layout!=selected)return false;
+ const UINT bind=(arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE)?AGX_D3D12_BIND_SAMPLER:0u;
+ if(arg->Width>D3D12_REQ_TEXTURE1D_U_DIMENSION || !arg->MipLevels ||
+    arg->MipLevels>D3D12_REQ_SUBRESOURCES/arg->DepthOrArraySize ||
+    FAILED(AgxD3d12QueryTexture1DArrayLayout(arg->Format,static_cast<UINT>(arg->Width),arg->DepthOrArraySize,arg->MipLevels,bind,layout)))return false;
+ if(resolved)*resolved=selected;return true;
+}
+
+/* C21G: a Texture3D's native layout, its registry layout and transitions
+ * within `slots` pattern slots (2: the 0003 interface, 6: 0022), and each
+ * level's row stride */
+static bool VolumeLayoutInfo(const D3D12DDIARG_CREATERESOURCE_0003 *arg,AGX_D3D12_VOLUME_LAYOUT *layout,
+                             D3D12DDI_TEXTURE_LAYOUT *resolved,UINT8 *transitions /* [5] */,UINT slots,
+                             UINT64 *row_strides /* [16] */=nullptr,UINT *reason=nullptr,HRESULT *queryStatus=nullptr) {
+    /* Diagnostic-only: 0 success, 1 input domain, 2 incoming layout,
+     * 3 native query refusal, 4 the registry cannot describe it; HRESULT 1
+     * means query was not called. */
+    if(reason)*reason=1u;
+    if(queryStatus)*queryStatus=static_cast<HRESULT>(1);
+    if(!arg || !layout || arg->ResourceType!=D3D12DDI_RT_TEXTURE3D || arg->SampleDesc.Count!=1 ||
+       arg->SampleDesc.Quality || !arg->Width || arg->Width>2048 || !arg->Height || arg->Height>2048 ||
+       !arg->DepthOrArraySize || arg->DepthOrArraySize>2048 || !arg->MipLevels || arg->MipLevels>12 ||
+       (arg->Flags&~(D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET|D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE))) return false;
+    const UINT bind=((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET)?AGX_D3D12_BIND_RENDER_TARGET:0u)|
+                    ((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE)?AGX_D3D12_BIND_SAMPLER:0u);
+    if(reason)*reason=3u;
+    const HRESULT status=AgxD3d12QueryTexture3DLayout(arg->Format,static_cast<UINT>(arg->Width),arg->Height,
+        arg->DepthOrArraySize,arg->MipLevels,bind,layout);
+    if(queryStatus)*queryStatus=status;
+    if(FAILED(status)) return false;
+    AGX_VOLUME_LEVEL levels[AGX_VOLUME_MAX_LEVELS];
+    for(UINT m=0;m<arg->MipLevels;++m)
+        levels[m]={layout->TileWidth[m],layout->TileHeight[m],layout->StrideEl[m],layout->HeightEl[m]};
+    AGX_VOLUME_SELECTION selection={};
+    if(reason)*reason=4u;
+    if(!agx_volume_select(layout->ElementLog2,arg->MipLevels,levels,slots,&selection)) return false;
+    const auto selected=static_cast<D3D12DDI_TEXTURE_LAYOUT>(0x100u+selection.Layout);
+    if(reason)*reason=2u;
+    if(arg->Layout!=D3D12DDI_TL_UNDEFINED && arg->Layout!=selected) return false;
+    if(reason)*reason=0u;
+    if(resolved)*resolved=selected;
+    if(transitions) memcpy(transitions,selection.Transitions,sizeof(selection.Transitions));
+    if(row_strides)
+        for(UINT m=0;m<16;++m) row_strides[m]=m<arg->MipLevels ? agx_volume_row_stride(selection.Pattern[m],&levels[m]) : 0;
+    return true;
+}
+#endif
 static UINT64 TextureBytes(const D3D12DDIARG_CREATERESOURCE_0003 *arg) {
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
-    if (!arg || arg->ResourceType != D3D12DDI_RT_TEXTURE2D || arg->SampleDesc.Count != 1 || !arg->Width ||
+    if(arg && arg->ResourceType==D3D12DDI_RT_TEXTURE1D) {
+        AGX_D3D12_VOLUME_LAYOUT layout={};return LineLayoutInfo(arg,&layout,nullptr)?layout.Bytes:0;
+    }
+    if(arg && arg->ResourceType==D3D12DDI_RT_TEXTURE3D) {
+        AGX_D3D12_VOLUME_LAYOUT layout={};return VolumeLayoutInfo(arg,&layout,nullptr,nullptr,AGX_VOLUME_MAX_SLOTS)?layout.Bytes:0;
+    }
+    /* C32: 2x/4x multisampled textures have one level */
+    const UINT samples = arg ? arg->SampleDesc.Count : 0u;
+    if (!arg || arg->ResourceType != D3D12DDI_RT_TEXTURE2D || arg->SampleDesc.Quality ||
+        (samples != 1 && ((samples != 2 && samples != 4) || arg->MipLevels != 1 ||
+                          !AgxD3d12FormatMultisample(arg->Format, samples))) || !arg->Width ||
         arg->Width > 16384 || !arg->Height || arg->Height > 16384 || !arg->DepthOrArraySize || !arg->MipLevels ||
         arg->MipLevels > 15)
         return 0;
-    const UINT block = AgxD3d12FormatBlockBytes(arg->Format);
+    /* C29: BC1-BC7 count whole 4x4 blocks */
+    unsigned bw = 0, bh = 0;
+    const UINT block = AgxD3d12FormatBlock(arg->Format, &bw, &bh);
     if (!block) return 0;
     UINT64 bytes = 0;
     for (UINT level = 0; level < arg->MipLevels; ++level) {
-        const UINT64 w = ((arg->Width >> level ? arg->Width >> level : 1) + 15) & ~15ULL;
-        const UINT64 h = ((arg->Height >> level ? arg->Height >> level : 1) + 15) & ~15ULL;
+        const UINT64 w = (((arg->Width >> level ? arg->Width >> level : 1) + bw - 1) / bw + 15) & ~15ULL;
+        const UINT64 h = (((arg->Height >> level ? arg->Height >> level : 1) + bh - 1) / bh + 15) & ~15ULL;
         bytes += w * h * block;
     }
-    bytes *= arg->DepthOrArraySize;
+    bytes *= static_cast<UINT64>(arg->DepthOrArraySize) * samples;
     return (bytes + 0xffffULL) & ~0xffffULL;
 #else
     (void)arg;
@@ -609,13 +1917,62 @@ static UINT64 TextureBytes(const D3D12DDIARG_CREATERESOURCE_0003 *arg) {
 static AgxD3d12Device *DeviceOf(D3D12DDI_HDEVICE handle) {
     return static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C21G: a Texture3D allocation query within `slots` pattern slots (2: 0003,
+ * 6: 0022): the size (~0 when refused), the resolved layout (UNDEFINED when
+ * refused) and the transitions; receipts measure-d3d12-volume-query-* */
+static UINT64 VolumeAllocationQuery(const D3D12DDIARG_CREATERESOURCE_0003 *arg,UINT64 alignmentRestriction,UINT slots,
+                                    D3D12DDI_TEXTURE_LAYOUT *resolved,UINT8 *transitions /* [5] */) {
+    AGX_D3D12_VOLUME_LAYOUT layout={};
+    memset(transitions,AGX_VOLUME_NO_TRANSITION,AGX_VOLUME_MAX_SLOTS-1);
+    const UINT input[] = {static_cast<UINT>(arg->ResourceType),static_cast<UINT>(arg->Width),
+        static_cast<UINT>(arg->Width>>32),arg->Height,arg->DepthOrArraySize,arg->MipLevels,
+        static_cast<UINT>(arg->Format),arg->SampleDesc.Count,arg->SampleDesc.Quality,
+        static_cast<UINT>(arg->Layout),static_cast<UINT>(arg->Flags),
+        static_cast<UINT>(alignmentRestriction),static_cast<UINT>(alignmentRestriction>>32)};
+    AdmissionUmdDiagnostic("measure-d3d12-volume-query-input",S_OK,input,13);
+    UINT reason=5u; /* alignment restriction rejected, native query not called */
+    HRESULT queryStatus=static_cast<HRESULT>(1);
+    UINT64 size=~0ULL;
+    if((!alignmentRestriction || (!(alignmentRestriction&(alignmentRestriction-1)) && alignmentRestriction>=kHeapPage)) &&
+       VolumeLayoutInfo(arg,&layout,resolved,transitions,slots,nullptr,&reason,&queryStatus)) size=layout.Bytes;
+    else *resolved=D3D12DDI_TL_UNDEFINED;
+    const UINT output[] = {reason,static_cast<UINT>(size),static_cast<UINT>(size>>32),slots,
+        static_cast<UINT>(*resolved),transitions[0],transitions[1],static_cast<UINT>(layout.NativeBytes),
+        static_cast<UINT>(layout.NativeBytes>>32),static_cast<UINT>(layout.DepthStride),
+        static_cast<UINT>(layout.DepthStride>>32),static_cast<UINT>(layout.MipOffsets[0]),
+        static_cast<UINT>(layout.MipOffsets[1])};
+    AdmissionUmdDiagnostic("measure-d3d12-volume-query-output",queryStatus,output,13);
+    return size;
+}
+#endif
 static VOID APIENTRY CheckResourceAllocationInfo(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATERESOURCE_0003 *arg,
-                                                 D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS, UINT64, UINT,
+                                                 D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS, UINT64 alignmentRestriction, UINT,
                                                  D3D12DDI_RESOURCE_ALLOCATION_INFO *info) {
     if (!info) return;
     memset(info, 0, sizeof(*info));
     info->ResourceDataAlignment = kHeapPage;
+    /* Absent metadata has byte alignment, including zero-sized regions. */
+    info->AdditionalDataHeaderAlignment = 1;
+    info->AdditionalDataAlignment = 1;
     info->Layout = D3D12DDI_TL_ROW_MAJOR;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if(arg && arg->ResourceType==D3D12DDI_RT_TEXTURE1D) {
+        AGX_D3D12_VOLUME_LAYOUT layout={};
+        if((!alignmentRestriction || (!(alignmentRestriction&(alignmentRestriction-1)) && alignmentRestriction>=kHeapPage)) &&
+           LineLayoutInfo(arg,&layout,&info->Layout)) {info->ResourceDataSize=layout.Bytes;info->MipLevelSwizzleTransition=0xffu;}
+        else {info->Layout=D3D12DDI_TL_UNDEFINED;info->ResourceDataSize=~0ULL;}
+        return;
+    }
+    if(arg && arg->ResourceType==D3D12DDI_RT_TEXTURE3D) {
+        UINT8 transitions[AGX_VOLUME_MAX_SLOTS-1];
+        info->ResourceDataSize=VolumeAllocationQuery(arg,alignmentRestriction,2u,&info->Layout,transitions);
+        info->MipLevelSwizzleTransition=transitions[0];
+        return;
+    }
+#else
+    (void)alignmentRestriction;
+#endif
     if (arg && arg->ResourceType == D3D12DDI_RT_BUFFER && arg->Width && arg->Width <= kVaLimit - kVaMinimum) {
         info->ResourceDataSize = (arg->Width + kHeapPage - 1) & ~(kHeapPage - 1);
     } else if (const UINT64 texture = TextureBytes(arg)) {
@@ -679,11 +2036,20 @@ static AGX_D3D12_BUFFER HeapBuffer(const AgxD3d12Heap *heap) {
 }
 static void OwnerError(void *context, HRESULT error) {
     auto *device = static_cast<AgxD3d12Device *>(context);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (device) AgxD3d12OwnerRecordError(static_cast<AGX_D3D12_OWNER *>(device->owner), error);
+#endif
     if (device && device->callbacks && device->callbacks->pfnSetErrorCb)
         device->callbacks->pfnSetErrorCb(device->runtime, error);
 }
 static AGX_D3D12_OWNER *EnsureOwner(AgxD3d12Device *device) {
-    if (device->owner || device->owner_failed) return static_cast<AGX_D3D12_OWNER *>(device->owner);
+    auto *cached = static_cast<AGX_D3D12_OWNER *>(
+        InterlockedCompareExchangePointer(&device->owner, nullptr, nullptr));
+    if (cached || InterlockedCompareExchange(&device->owner_failed, 0, 0)) return cached;
+    /* CreateDevice performs this admission before publishing the device to
+     * callers. A synchronous callback reentry must not construct a second
+     * partially initialized owner or wait on its own constructor. */
+    if (InterlockedCompareExchange(&device->owner_initializing, 1, 0)) return nullptr;
     AGX_D3D12_OWNER_ARGS args = {};
     args.AdapterCallbacks = adapter_object.callbacks;
     args.RuntimeAdapter = adapter_object.runtime.handle;
@@ -694,31 +2060,60 @@ static AGX_D3D12_OWNER *EnsureOwner(AgxD3d12Device *device) {
     args.Generation = device->generation;
     AGX_D3D12_OWNER *owner = nullptr;
     const HRESULT hr = AgxD3d12OwnerCreate(&args, &owner);
-    device->owner = SUCCEEDED(hr) ? owner : nullptr;
-    device->owner_failed = FAILED(hr);
-    return static_cast<AGX_D3D12_OWNER *>(device->owner);
+    if (SUCCEEDED(hr) && owner)
+        (void)InterlockedExchangePointer(&device->owner, owner);
+    else
+        (void)InterlockedExchange(&device->owner_failed, 1);
+    (void)InterlockedExchange(&device->owner_initializing, 0);
+    return SUCCEEDED(hr) ? owner : nullptr;
 }
 #endif
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* Metadata only: never hold this lock across native/core callbacks. Returned
+ * heap pointers retain the caller's existing valid-resource lifetime contract. */
 static void RegisterHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
+    AcquireSRWLockExclusive(&device->heap_lock);
     if (device->heap_count < ARRAYSIZE(device->heaps)) device->heaps[device->heap_count++] = heap;
+    ReleaseSRWLockExclusive(&device->heap_lock);
 }
 static void UnregisterHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
+    AcquireSRWLockExclusive(&device->heap_lock);
     for (UINT i = 0; i < device->heap_count; ++i)
         if (device->heaps[i] == heap) {
             device->heaps[i] = device->heaps[--device->heap_count];
-            return;
+            break;
         }
+    ReleaseSRWLockExclusive(&device->heap_lock);
 }
 static AgxD3d12Heap *HeapAt(AgxD3d12Device *device, UINT64 va, UINT64 *offset) {
+    AgxD3d12Heap *result = nullptr;
+    AcquireSRWLockShared(&device->heap_lock);
     for (UINT i = 0; va && i < device->heap_count; ++i) {
         AgxD3d12Heap *heap = device->heaps[i];
-        if (va >= heap->gpuva && va - heap->gpuva < heap->bytes) {
+        if (va >= heap->gpuva && va - heap->gpuva < DescriptorHeapBytes(heap)) {
             *offset = va - heap->gpuva;
-            return heap;
+            result = heap;
+            break;
         }
     }
-    return nullptr;
+    ReleaseSRWLockShared(&device->heap_lock);
+    return result;
+}
+/* EXP1855: the mirrored descriptor heap whose shadow holds a CPU handle */
+static AgxD3d12Heap *MirroredHeapAt(AgxD3d12Device *device, const void *cpu) {
+    AgxD3d12Heap *result = nullptr;
+    if (!device || !cpu) return nullptr;
+    AcquireSRWLockShared(&device->heap_lock);
+    for (UINT i = 0; i < device->mirrored_count; ++i) {
+        AgxD3d12Heap *heap = device->mirrored[i];
+        const BYTE *base = static_cast<const BYTE *>(heap->cpu);
+        if (static_cast<const BYTE *>(cpu) >= base && static_cast<UINT64>(static_cast<const BYTE *>(cpu) - base) < DescriptorHeapBytes(heap)) {
+            result = heap;
+            break;
+        }
+    }
+    ReleaseSRWLockShared(&device->heap_lock);
+    return result;
 }
 #endif
 static void ReleaseHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
@@ -728,8 +2123,29 @@ static void ReleaseHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
         memset(heap, 0, sizeof(*heap));
         return;
     }
+    if (heap->stub) {
+        /* rc87: a deferred heap (never a presentation one); the stub owns the allocation it reported */
+        AGX_D3D12_BUFFER stub = {};
+        stub.Resource = heap->stub;
+        AgxD3d12OwnerDestroyBuffer(static_cast<AGX_D3D12_OWNER *>(device->owner), &stub);
+        heap->stub = nullptr;
+        heap->allocation = 0;
+        if (!heap->native) {
+            memset(heap, 0, sizeof(*heap));
+            return;
+        }
+    }
     if (heap->native) {
         UnregisterHeap(device, heap);
+        /* C53 B3: reserved buffers keep the GPU mapping (the owner holds the
+         * backing BO); their snapshot forgets this heap */
+        AcquireSRWLockExclusive(&device->heap_lock);
+        for (UINT i = 0; i < device->heap_count; ++i)
+            for (UINT t = 0; device->heaps[i]->tiles && t < device->heaps[i]->tile_count; ++t)
+                if (device->heaps[i]->tiles[t].heap == heap) device->heaps[i]->tiles[t] = {};
+        ReleaseSRWLockExclusive(&device->heap_lock);
+        free(heap->tiles);
+        free(heap->geometry);
         AGX_D3D12_BUFFER buffer = HeapBuffer(heap);
         AgxD3d12OwnerDestroyBuffer(static_cast<AGX_D3D12_OWNER *>(device->owner), &buffer);
         memset(heap, 0, sizeof(*heap));
@@ -768,12 +2184,23 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
      * kernel allocation below; copies refuse such heaps. */
     if (AGX_D3D12_OWNER *owner = arg.ByteSize && heap->bytes <= MAXUINT32 ? EnsureOwner(device) : nullptr) {
         AGX_D3D12_BUFFER buffer = {};
-        HRESULT native = AgxD3d12OwnerCreateBuffer(owner, heap->bytes, &buffer);
+        /* rc99 (EXP2031): a READBACK heap on private staging made every
+         * submission that writes it complete and download synchronously
+         * (4.1 ms of GPU idle per HD frame); it may take the native reserve. */
+        const BOOL readback = arg.CPUPageProperty == D3D12DDI_CPU_PAGE_PROPERTY_WRITE_BACK;
+        if (readback) {
+            AgxD3d12OwnerLock(owner);
+            AgxD3d12OwnerSetReadbackIntent(owner, TRUE);
+        }
+        HRESULT native = AgxD3d12OwnerCreateBuffer(owner, heap->bytes, heap->cpu_visible, &buffer);
+        if (readback) {
+            AgxD3d12OwnerSetReadbackIntent(owner, FALSE);
+            AgxD3d12OwnerUnlock(owner);
+        }
         if (SUCCEEDED(native)) {
             heap->native = buffer.Resource;
             heap->gpuva = buffer.GpuVa;
-            heap->cpu = buffer.Cpu;
-            heap->cpu_visible = TRUE; /* Asahi buffers are CPU mapped (UMA) */
+            heap->cpu = buffer.Cpu; /* NULL for a NOT_AVAILABLE heap: Map refuses it */
             heap->allocation = AgxD3d12OwnerBufferAllocation(owner, &buffer);
             RegisterHeap(device, heap);
         }
@@ -861,6 +2288,221 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
     if (FAILED(hr)) ReleaseHeap(device, heap);
     return hr;
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* rc87 (agx_d3d12_heap_backing.h): a texture-only DEFAULT heap. Placed
+ * textures own their BOs, so the heap gets a 64 KiB stub (the kernel
+ * allocation CheckExistingResourceAllocationInfo reports) instead of its
+ * full-size BO; heap->bytes keeps the size the tile walk bounds by.
+ * Receipt measure-d3d12-heap {3 deferred, bytes/64K, stub allocation?, 0, 0}. */
+static HRESULT CreateDeferredHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0001 &arg, AgxD3d12Heap *heap) {
+    memset(heap, 0, sizeof(*heap));
+    heap->bytes = arg.ByteSize > kVaLimit ? ~0ULL : (arg.ByteSize + kHeapPage - 1) & ~(kHeapPage - 1);
+    AGX_D3D12_OWNER *owner = arg.ByteSize && heap->bytes <= MAXUINT32 ? EnsureOwner(device) : nullptr;
+    AGX_D3D12_BUFFER stub = {};
+    HRESULT hr = owner ? AgxD3d12OwnerCreateBuffer(owner, kHeapPage, FALSE, &stub) : E_OUTOFMEMORY;
+    if (SUCCEEDED(hr)) {
+        heap->stub = stub.Resource;
+        heap->allocation = AgxD3d12OwnerBufferAllocation(owner, &stub);
+        if (!heap->allocation) hr = E_FAIL;
+    }
+    const UINT receipt[] = {3u, static_cast<UINT>(heap->bytes >> 16), heap->allocation != 0 ? 1u : 0u, 0u, 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-heap", hr, receipt, 5);
+    if (FAILED(hr)) ReleaseHeap(device, heap);
+    return hr;
+}
+/* rc87: APPLE_AGX_D3D12_DEFER_TEXTURE_HEAPS=0 restores full-size backing
+ * for comparison */
+static bool DeferTextureHeaps() {
+    static const bool enabled = [] {
+        char value[2] = {};
+        return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_DEFER_TEXTURE_HEAPS", value, sizeof(value)) == 1 &&
+                 value[0] == '0');
+    }();
+    return enabled;
+}
+/* rc87: the full-size backing of a deferred heap, made once when a tile
+ * mapping first names the heap. The lock orders concurrent queues; it is
+ * taken before (never inside) the owner lock. Receipt
+ * measure-d3d12-heap-backing {bytes/64K, VA/64K, VA >> 32}. */
+static SRWLOCK g_heap_backing_lock = SRWLOCK_INIT;
+static HRESULT EnsureHeapBacking(AgxD3d12Device *device, AgxD3d12Heap *heap) {
+    if (!heap || !heap->stub) return S_OK;
+    HRESULT hr = S_OK;
+    AcquireSRWLockExclusive(&g_heap_backing_lock);
+    if (!heap->native) {
+        AGX_D3D12_OWNER *owner = device ? EnsureOwner(device) : nullptr;
+        AGX_D3D12_BUFFER buffer = {};
+        hr = owner && heap->bytes <= MAXUINT32 ? AgxD3d12OwnerCreateBuffer(owner, heap->bytes, FALSE, &buffer)
+                                               : E_OUTOFMEMORY;
+        if (SUCCEEDED(hr)) {
+            heap->native = buffer.Resource;
+            heap->gpuva = buffer.GpuVa;
+            RegisterHeap(device, heap);
+        }
+        const UINT receipt[] = {static_cast<UINT>(heap->bytes >> 16), static_cast<UINT>(heap->gpuva >> 16),
+                                static_cast<UINT>(heap->gpuva >> 32)};
+        AdmissionUmdDiagnostic("measure-d3d12-heap-backing", hr, receipt, 3);
+    }
+    ReleaseSRWLockExclusive(&g_heap_backing_lock);
+    return hr;
+}
+static HRESULT CreateLineResource(AgxD3d12Device *device,const D3D12DDIARG_CREATEHEAP_0001 *heap_arg,
+                                   AgxD3d12Heap *heap,const D3D12DDIARG_CREATERESOURCE_0003 *arg,
+                                   AgxD3d12Resource *resource) {
+    if(!device || !heap_arg || !heap || !resource || !arg ||
+       heap_arg->CPUPageProperty!=D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE ||
+       (heap_arg->Flags && heap_arg->Flags!=((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET)?
+            D3D12DDI_HEAP_FLAG_RT_DS_TEXTURES:D3D12DDI_HEAP_FLAG_NON_RT_DS_TEXTURES)) ||
+       (heap_arg->Alignment && heap_arg->Alignment!=kHeapPage)) return E_NOTIMPL;
+    AGX_D3D12_VOLUME_LAYOUT layout={};D3D12DDI_TEXTURE_LAYOUT resolved={};const UINT8 transition=0xffu;
+    if(arg->Layout==D3D12DDI_TL_UNDEFINED || !LineLayoutInfo(arg,&layout,&resolved) ||
+       (heap_arg->ByteSize && heap_arg->ByteSize!=~0ULL && heap_arg->ByteSize<layout.Bytes)) return E_NOTIMPL;
+    AGX_D3D12_OWNER *owner=EnsureOwner(device);if(!owner)return E_FAIL;
+    const UINT bind=((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET)?AGX_D3D12_BIND_RENDER_TARGET:0u)|
+                    ((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE)?AGX_D3D12_BIND_SAMPLER:0u);
+    AGX_D3D12_BUFFER texture={};
+    HRESULT hr=AgxD3d12OwnerCreateTexture1DArray(owner,arg->Format,static_cast<UINT>(arg->Width),arg->DepthOrArraySize,arg->MipLevels,bind,layout.Bytes,&texture);
+    if(FAILED(hr))return hr;
+    memset(heap,0,sizeof(*heap));memset(resource,0,sizeof(*resource));
+    heap->native=texture.Resource;heap->gpuva=texture.GpuVa;heap->bytes=layout.Bytes;heap->volume=TRUE;
+    heap->allocation=AgxD3d12OwnerBufferAllocation(owner,&texture);
+    resource->heap=heap;resource->gpuva=heap->gpuva;resource->bytes=layout.Bytes;resource->type=D3D12DDI_RT_TEXTURE1D;
+    resource->format=arg->Format;resource->width=static_cast<UINT>(arg->Width);resource->height=arg->Height;
+    resource->layers=arg->DepthOrArraySize;resource->levels=arg->MipLevels;
+    memcpy(resource->volume_offsets,layout.MipOffsets,sizeof(resource->volume_offsets));
+    resource->volume_depth_stride=layout.DepthStride;resource->volume_layout=resolved;resource->volume_transition=transition;
+    return S_OK;
+}
+static HRESULT CreateVolumeResource(AgxD3d12Device *device,const D3D12DDIARG_CREATEHEAP_0001 *heap_arg,
+                                   AgxD3d12Heap *heap,const D3D12DDIARG_CREATERESOURCE_0003 *arg,
+                                   AgxD3d12Resource *resource) {
+    if(!device || !heap_arg || !heap || !resource || !arg ||
+       heap_arg->CPUPageProperty!=D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE ||
+       (heap_arg->Flags && heap_arg->Flags!=((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET)?
+            D3D12DDI_HEAP_FLAG_RT_DS_TEXTURES:D3D12DDI_HEAP_FLAG_NON_RT_DS_TEXTURES)) ||
+       (heap_arg->Alignment && heap_arg->Alignment!=kHeapPage)) return E_NOTIMPL;
+    AGX_D3D12_VOLUME_LAYOUT layout={};D3D12DDI_TEXTURE_LAYOUT resolved={};
+    UINT8 transitions[AGX_VOLUME_MAX_SLOTS-1];UINT64 row_strides[16]={};
+    if(arg->Layout==D3D12DDI_TL_UNDEFINED ||
+       !VolumeLayoutInfo(arg,&layout,&resolved,transitions,AGX_VOLUME_MAX_SLOTS,row_strides) ||
+       (heap_arg->ByteSize && heap_arg->ByteSize!=~0ULL && heap_arg->ByteSize<layout.Bytes)) return E_NOTIMPL;
+    AGX_D3D12_OWNER *owner=EnsureOwner(device);if(!owner)return E_FAIL;
+    const UINT bind=((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET)?AGX_D3D12_BIND_RENDER_TARGET:0u)|
+                    ((arg->Flags&D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE)?AGX_D3D12_BIND_SAMPLER:0u);
+    AGX_D3D12_BUFFER texture={};
+    HRESULT hr=AgxD3d12OwnerCreateTexture3D(owner,arg->Format,static_cast<UINT>(arg->Width),arg->Height,
+        arg->DepthOrArraySize,arg->MipLevels,bind,layout.Bytes,&texture);
+    if(FAILED(hr))return hr;
+    memset(heap,0,sizeof(*heap));memset(resource,0,sizeof(*resource));
+    heap->native=texture.Resource;heap->gpuva=texture.GpuVa;heap->bytes=layout.Bytes;heap->volume=TRUE;
+    heap->allocation=AgxD3d12OwnerBufferAllocation(owner,&texture);
+    resource->heap=heap;resource->gpuva=heap->gpuva;resource->bytes=layout.Bytes;resource->type=D3D12DDI_RT_TEXTURE3D;
+    resource->format=arg->Format;resource->width=static_cast<UINT>(arg->Width);resource->height=arg->Height;
+    resource->layers=arg->DepthOrArraySize;resource->levels=arg->MipLevels;
+    memcpy(resource->volume_offsets,layout.MipOffsets,sizeof(resource->volume_offsets));
+    resource->volume_depth_stride=layout.DepthStride;resource->volume_layout=resolved;resource->volume_transition=transitions[0];
+    memcpy(resource->volume_transitions,transitions,sizeof(resource->volume_transitions));
+    memcpy(resource->volume_row_strides,row_strides,sizeof(resource->volume_row_strides));
+    return S_OK;
+}
+#endif
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static HRESULT CreateReservedBuffer(AgxD3d12Device *device, AgxD3d12Heap *heap,
+                                    const D3D12DDIARG_CREATERESOURCE_0003 *arg, AgxD3d12Resource *resource) {
+    const UINT64 tile = 0x10000ull;
+    const UINT64 bytes = arg->Width > 0xffffffffull - (tile - 1) ? 0 : (arg->Width + tile - 1) & ~(tile - 1);
+    AGX_D3D12_OWNER *owner = bytes ? EnsureOwner(device) : nullptr;
+    AGX_D3D12_BUFFER buffer = {};
+    memset(heap, 0, sizeof(*heap));
+    memset(resource, 0, sizeof(*resource));
+    HRESULT hr = owner ? AgxD3d12OwnerCreateReservedBuffer(owner, bytes, &buffer) : E_INVALIDARG;
+    AgxD3d12Heap::AgxD3d12TileMapping *tiles = SUCCEEDED(hr) ? static_cast<AgxD3d12Heap::AgxD3d12TileMapping *>(
+        calloc(static_cast<size_t>(bytes / tile), sizeof(*tiles))) : nullptr;
+    if (SUCCEEDED(hr) && !tiles) {
+        AgxD3d12OwnerDestroyBuffer(owner, &buffer);
+        hr = E_OUTOFMEMORY;
+    }
+    if (SUCCEEDED(hr)) {
+        heap->native = buffer.Resource;
+        heap->gpuva = buffer.GpuVa;
+        heap->bytes = buffer.Bytes;
+        heap->allocation = AgxD3d12OwnerBufferAllocation(owner, &buffer);
+        heap->tiles = tiles;
+        heap->tile_count = static_cast<UINT>(bytes / tile);
+        RegisterHeap(device, heap);
+        resource->heap = heap;
+        resource->gpuva = heap->gpuva;
+        resource->bytes = arg->Width;
+        resource->type = D3D12DDI_RT_BUFFER;
+    }
+    const UINT receipt[] = {static_cast<UINT>(arg->Width), static_cast<UINT>(arg->Width >> 32), heap->tile_count};
+    AdmissionUmdDiagnostic("measure-d3d12-reserved", hr, receipt, 3);
+    return hr;
+}
+#endif
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C53 T2D (D3D12-C53-tiled-textures.md): a reserved Texture2D (array) of
+ * D3D12DDI_TL_64KB_TILE_UNDEFINED_SWIZZLE layout, every tile unmapped; its
+ * heap records the tiling (AGX_TILE_GEOMETRY) and a tile snapshot as
+ * reserved buffers do. */
+static HRESULT CreateReservedTexture(AgxD3d12Device *device, AgxD3d12Heap *heap,
+                                     const D3D12DDIARG_CREATERESOURCE_0003 *arg, AgxD3d12Resource *resource) {
+    AGX_D3D12_OWNER *owner = EnsureOwner(device);
+    AGX_D3D12_BUFFER texture = {};
+    AGX_D3D12_RESERVED_TILING tiling = {};
+    memset(heap, 0, sizeof(*heap));
+    memset(resource, 0, sizeof(*resource));
+    const UINT bind = ((arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET) ? AGX_D3D12_BIND_RENDER_TARGET : 0u) |
+                      ((arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE) ? AGX_D3D12_BIND_SAMPLER : 0u);
+    HRESULT hr = !owner || arg->SampleDesc.Count > 1 || !arg->MipLevels || arg->MipLevels > AGX_TILE_MAX_LEVELS ||
+                         (arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_DEPTH_STENCIL) || arg->Width > 0xffffffffull
+                     ? E_INVALIDARG
+                     : AgxD3d12OwnerCreateReservedTexture2D(owner, arg->Format, static_cast<UINT>(arg->Width), arg->Height,
+                                                            arg->DepthOrArraySize, arg->MipLevels, bind, &texture,
+                                                            &tiling);
+    AGX_TILE_GEOMETRY *geometry = SUCCEEDED(hr) ? static_cast<AGX_TILE_GEOMETRY *>(calloc(1, sizeof(AGX_TILE_GEOMETRY)))
+                                                : nullptr;
+    if (geometry) {
+        geometry->MipLevels = arg->MipLevels;
+        geometry->ArraySize = arg->DepthOrArraySize;
+        geometry->StandardMips = tiling.StandardMips;
+        geometry->PackedTiles = tiling.PackedTiles;
+        memcpy(geometry->TilesX, tiling.TilesX, sizeof(geometry->TilesX));
+        memcpy(geometry->TilesY, tiling.TilesY, sizeof(geometry->TilesY));
+    }
+    const UINT tiles = geometry ? AgxTileResourceTiles(geometry) : 0u;
+    AgxD3d12Heap::AgxD3d12TileMapping *snapshot = tiles ? static_cast<AgxD3d12Heap::AgxD3d12TileMapping *>(
+        calloc(tiles, sizeof(AgxD3d12Heap::AgxD3d12TileMapping))) : nullptr;
+    if (SUCCEEDED(hr) && !snapshot) {
+        AgxD3d12OwnerDestroyBuffer(owner, &texture);
+        free(geometry);
+        geometry = nullptr;
+        hr = tiles ? E_OUTOFMEMORY : E_INVALIDARG;
+    }
+    if (SUCCEEDED(hr)) {
+        heap->native = texture.Resource;
+        heap->gpuva = texture.GpuVa;
+        heap->bytes = static_cast<UINT64>(tiles) * 0x10000ull;
+        heap->allocation = AgxD3d12OwnerBufferAllocation(owner, &texture);
+        heap->tiles = snapshot;
+        heap->tile_count = tiles;
+        heap->geometry = geometry;
+        RegisterHeap(device, heap);
+        resource->heap = heap;
+        resource->bytes = heap->bytes;
+        resource->type = D3D12DDI_RT_TEXTURE2D;
+        resource->format = arg->Format;
+        resource->width = static_cast<UINT>(arg->Width);
+        resource->height = arg->Height;
+        resource->layers = arg->DepthOrArraySize;
+        resource->levels = arg->MipLevels;
+    }
+    const UINT receipt[] = {static_cast<UINT>(arg->Format), static_cast<UINT>(arg->Width), arg->Height,
+                            arg->DepthOrArraySize | (static_cast<UINT>(arg->MipLevels) << 16), tiles};
+    AdmissionUmdDiagnostic("measure-d3d12-reserved-texture2d", hr, receipt, 5);
+    return hr;
+}
+#endif
 static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATEHEAP_0001 *heap_arg,
                                               D3D12DDI_HHEAP heap_handle, D3D12DDI_HRTRESOURCE runtime_resource,
                                               const D3D12DDIARG_CREATERESOURCE_0003 *resource_arg,
@@ -871,17 +2513,39 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
     HeapAndResourceReceipt("measure-d3d12-create-heap-resource", heap_arg, resource_arg,
                            (heap ? 1u : 0u) | (resource ? 2u : 0u));
     if (!device) return E_INVALIDARG;
+    if (resource_arg && (resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_CROSS_ADAPTER))
+        return AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHeapAndResource)(
+            handle, heap_arg, heap_handle, runtime_resource, resource_arg, nullptr, resource_handle);
     (void)runtime_resource; /* C7b: used by the native owner's presentation textures */
     /* C8c: a placed buffer -- no heap description; ReuseBufferGPUVA names
      * the resource of an existing heap and the byte offset in it (the
      * encoding this assumes; receipt measure-d3d12-placed records it). */
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* C53 B3 [H]: a reserved buffer -- no heap description and no parent
+     * resource (receipt measure-d3d12-reserved). EXP1899: through
+     * CreateReservedResource the runtime passes no heap handle either, so the
+     * tile state lives in the resource's own heap, as for reserved textures. */
+    if (!heap_arg && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_BUFFER &&
+        !resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.hResource.pDrvPrivate)
+        return CreateReservedBuffer(device, heap ? heap : &resource->own_heap, resource_arg, resource);
+    /* C53 T2D: a reserved Texture2D, likewise */
+    if (!heap_arg && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D &&
+        resource_arg->Layout == D3D12DDI_TL_64KB_TILE_UNDEFINED_SWIZZLE &&
+        !resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.hResource.pDrvPrivate)
+        return CreateReservedTexture(device, heap ? heap : &resource->own_heap, resource_arg, resource);
+#endif
     if (!heap_arg && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_BUFFER) {
         const auto *base = static_cast<const AgxD3d12Resource *>(resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.hResource.pDrvPrivate);
         const UINT64 offset = resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.Offset;
         if (heap) memset(heap, 0, sizeof(*heap));
         memset(resource, 0, sizeof(*resource));
-        const UINT reason = !base || !base->heap ? 1u
-                          : offset > base->heap->bytes || resource_arg->Width > base->heap->bytes - offset ? 6u : 0u;
+        UINT reason = !base || !base->heap ? 1u
+                    : offset > base->heap->bytes || resource_arg->Width > base->heap->bytes - offset ? 6u : 0u;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        /* rc87: tier 1 never places a buffer in a texture-only heap; should
+         * one arrive, it gets the heap's real backing first */
+        if (!reason && FAILED(EnsureHeapBacking(device, base->heap))) reason = 7u;
+#endif
         if (!reason && heap) {
             /* the placed resource's heap object aliases the parent and
              * destroying it releases nothing. The runtime adds the placement
@@ -900,45 +2564,76 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
         }
         const UINT receipt[] = {reason, base ? 1u : 0u, static_cast<UINT>(offset), static_cast<UINT>(resource_arg->Width)};
         AdmissionUmdDiagnostic("measure-d3d12-placed", reason ? E_NOTIMPL : S_OK, receipt, 4);
+        if(!reason && AdmissionUmdWatchVa()) {
+            const UINT64 native=(UINT64)(uintptr_t)base->heap->native;
+            const UINT join[]={(UINT)native,(UINT)(native>>32),base->heap->allocation,
+                (UINT)resource->gpuva,(UINT)(resource->gpuva>>32),
+                (UINT)resource->bytes,(UINT)(resource->bytes>>32)};
+            AdmissionUmdDiagnostic("measure-watch-placed",S_OK,join,ARRAYSIZE(join));
+        }
         return reason ? E_NOTIMPL : S_OK;
     }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
-    /* C6a: a committed 2D texture is one owner texture */
-    if (heap_arg && heap && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D) {
+    if(resource_arg && resource_arg->ResourceType==D3D12DDI_RT_TEXTURE1D)
+        return CreateLineResource(device,heap_arg,heap,resource_arg,resource);
+    if(resource_arg && resource_arg->ResourceType==D3D12DDI_RT_TEXTURE3D)
+        return CreateVolumeResource(device,heap_arg,heap,resource_arg,resource);
+    /* C6a: a committed 2D texture is one owner texture. C36: so is a placed
+     * one (no heap description; ReuseBufferGPUVA names the parent heap):
+     * the owner keeps textures in their own twiddled BOs, so it does not
+     * share the parent's memory -- D3D12 leaves an aliased resource's
+     * content undefined until it is cleared, copied or discarded anyway.
+     * The placed resource's heap object owns that texture. */
+    const bool placed = !heap_arg && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D &&
+                        resource_arg->ReuseBufferGPUVA.BaseAddress.UMD.hResource.pDrvPrivate;
+    AgxD3d12Heap *const texture_heap = heap ? heap : placed && resource ? &resource->own_heap : nullptr;
+    if ((heap_arg || placed) && texture_heap && resource && resource_arg && resource_arg->ResourceType == D3D12DDI_RT_TEXTURE2D) {
         const UINT64 bytes = TextureBytes(resource_arg);
         AGX_D3D12_OWNER *owner = bytes ? EnsureOwner(device) : nullptr;
-        memset(heap, 0, sizeof(*heap));
+        memset(texture_heap, 0, sizeof(*texture_heap));
         memset(resource, 0, sizeof(*resource));
         AGX_D3D12_BUFFER texture = {};
         const UINT bind = ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_RENDER_TARGET) ? AGX_D3D12_BIND_RENDER_TARGET : 0u) |
                           ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_SHADER_RESOURCE) ? AGX_D3D12_BIND_SAMPLER : 0u) |
-                          ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_DEPTH_STENCIL) ? AGX_D3D12_BIND_DEPTH_STENCIL : 0u);
+                          ((resource_arg->Flags & D3D12DDI_RESOURCE_FLAG_0003_DEPTH_STENCIL) ? AGX_D3D12_BIND_DEPTH_STENCIL : 0u) |
+                          ((!placed && heap_arg->CPUPageProperty == D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE)
+                               ? AGX_D3D12_BIND_GPU_ONLY : 0u);
         /* C7b: a 2D render target the runtime can share (DXGI swapchain
          * buffers among them) gets a kernel allocation of the runtime
          * resource -- the D3D10/11 presentation-resource contract (BGRA8 or
-         * RGBA8, one mip, layer and sample, linear) */
-        const bool presentable = (bind & AGX_D3D12_BIND_RENDER_TARGET) && runtime_resource.handle &&
+         * RGBA8, one mip, layer and sample, linear). C66: a 2x/4x target
+         * (EXP1899 Portal 2: D3D9On12 presents its 4x back buffer) renders
+         * into its own multisampled texture, resolved at present (EXP1829
+         * C32A: never the single-sampled allocation itself). */
+        const bool presentable = !placed && (bind & AGX_D3D12_BIND_RENDER_TARGET) && runtime_resource.handle &&
                                  resource_arg->MipLevels == 1 && resource_arg->DepthOrArraySize == 1 &&
                                  (resource_arg->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
                                   resource_arg->Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB ||
-                                  resource_arg->Format == DXGI_FORMAT_R8G8B8A8_UNORM);
+                                  /* C66b: D3D9On12's X8R8G8B8 back buffers, converted at present */
+                                  resource_arg->Format == DXGI_FORMAT_B8G8R8X8_UNORM ||
+                                  resource_arg->Format == DXGI_FORMAT_B8G8R8X8_UNORM_SRGB ||
+                                  resource_arg->Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+                                  /* C40: an RGBA8 presentation allocation converted at present */
+                                  resource_arg->Format == DXGI_FORMAT_R10G10B10A2_UNORM);
         UINT presentation_allocation = 0;
         HRESULT hr = !owner ? E_NOTIMPL
                    : presentable
                          ? AgxD3d12OwnerCreatePresentationTexture(owner, resource_arg->Format,
                                                                   static_cast<UINT>(resource_arg->Width), resource_arg->Height,
                                                                   (bind & AGX_D3D12_BIND_SAMPLER) != 0,
-                                                                  runtime_resource.handle, &texture, &heap->presentation,
+                                                                  resource_arg->SampleDesc.Count, bytes,
+                                                                  runtime_resource.handle, &texture, &texture_heap->presentation,
                                                                   &presentation_allocation)
                          : AgxD3d12OwnerCreateTexture2D(owner, resource_arg->Format, static_cast<UINT>(resource_arg->Width),
                                                         resource_arg->Height, resource_arg->DepthOrArraySize,
-                                                        resource_arg->MipLevels, bind, bytes, &texture);
+                                                        resource_arg->MipLevels, bind, bytes, &texture,
+                                                        resource_arg->SampleDesc.Count);
         if (SUCCEEDED(hr)) {
-            heap->native = texture.Resource;
-            heap->gpuva = texture.GpuVa;
-            heap->bytes = bytes;
-            heap->allocation = presentable ? presentation_allocation : AgxD3d12OwnerBufferAllocation(owner, &texture);
-            resource->heap = heap;
+            texture_heap->native = texture.Resource;
+            texture_heap->gpuva = texture.GpuVa;
+            texture_heap->bytes = bytes;
+            texture_heap->allocation = presentable ? presentation_allocation : AgxD3d12OwnerBufferAllocation(owner, &texture);
+            resource->heap = texture_heap;
             resource->bytes = bytes;
             resource->type = D3D12DDI_RT_TEXTURE2D;
             resource->format = resource_arg->Format;
@@ -948,8 +2643,16 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
             resource->levels = resource_arg->MipLevels;
         }
         const UINT receipt[] = {static_cast<UINT>(resource_arg->Format), static_cast<UINT>(resource_arg->Width),
-                                resource_arg->Height, static_cast<UINT>(bytes >> 16), bind | (presentable ? 0x100u : 0u)};
+                                resource_arg->Height, static_cast<UINT>(bytes >> 16),
+                                bind | (presentable ? 0x100u : 0u) | (placed ? 0x200u : 0u)};
         AdmissionUmdDiagnostic("measure-d3d12-committed-texture", hr, receipt, 5);
+        if(SUCCEEDED(hr) && AdmissionUmdWatchVa()) {
+            const UINT64 native=(UINT64)(uintptr_t)texture_heap->native;
+            const UINT join[]={(UINT)placed,(UINT)native,(UINT)(native>>32),
+                texture_heap->allocation,(UINT)bytes,(UINT)(bytes>>32),
+                (UINT)resource_arg->Format,resource->width,resource->height};
+            AdmissionUmdDiagnostic("measure-watch-texture",S_OK,join,ARRAYSIZE(join));
+        }
         return hr;
     }
 #endif
@@ -968,7 +2671,14 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
     const UINT size_receipt[] = {static_cast<UINT>(heap_arg->ByteSize), static_cast<UINT>(heap_arg->ByteSize >> 32),
                                  static_cast<UINT>(sized.ByteSize >> 16)};
     AdmissionUmdDiagnostic("measure-d3d12-committed-size", S_OK, size_receipt, 3);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    HRESULT hr = AgxD3d12HeapDefersBacking(static_cast<unsigned>(sized.Flags), static_cast<unsigned>(sized.CPUPageProperty)) &&
+                         DeferTextureHeaps()
+                     ? CreateDeferredHeap(device, sized, heap)
+                     : CreateHeap(device, sized, heap);
+#else
     HRESULT hr = CreateHeap(device, sized, heap);
+#endif
     if (SUCCEEDED(hr) && resource_arg) {
         resource->heap = heap;
         resource->gpuva = heap->gpuva;
@@ -985,17 +2695,99 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
     }
     return hr;
 }
+/* C76: runtime-opened handles and the existing D3D11 linear wire format. */
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static bool DecodeOpenedTexture(const D3D12DDIARG_OPENHEAP_0003 *arg, AgxD3d12SharedDescription *description) {
+    return arg && arg->NumAllocations == 1 && arg->pOpenAllocationInfo && arg->hKMResource.handle &&
+           arg->pOpenAllocationInfo[0].hAllocation &&
+           AgxD3d12DecodeShared(arg->pPrivateDriverData, arg->PrivateDriverDataSize,
+               arg->pOpenAllocationInfo[0].pPrivateDriverData, arg->pOpenAllocationInfo[0].PrivateDriverDataSize,
+               description);
+}
+#endif
+static D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY CalcPrivateOpenedHeapAndResourceSizes(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_OPENHEAP_0003 *arg) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    AgxD3d12SharedDescription description = {};
+    if (DecodeOpenedTexture(arg, &description)) return {sizeof(AgxD3d12Heap), sizeof(AgxD3d12Resource)};
+#endif
+    return AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateOpenedHeapAndResourceSizes)(device, arg);
+}
+static HRESULT APIENTRY OpenHeapAndResource(D3D12DDI_HDEVICE handle, const D3D12DDIARG_OPENHEAP_0003 *arg,
+                                             D3D12DDI_HHEAP heap_handle, D3D12DDI_HRTRESOURCE runtime_resource,
+                                             D3D12DDI_HRESOURCE resource_handle) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    AgxD3d12SharedDescription description = {};
+    auto *device = DeviceOf(handle);
+    auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
+    auto *resource = static_cast<AgxD3d12Resource *>(resource_handle.pDrvPrivate);
+    if (device && resource && runtime_resource.handle && DecodeOpenedTexture(arg, &description)) {
+        memset(resource, 0, sizeof(*resource));
+        if (!heap) heap = &resource->own_heap;
+        memset(heap, 0, sizeof(*heap));
+        /* Preserve the creator's DDI accounting; the owner's imported BO
+         * still uses the smaller serialized linear storage extent. */
+        D3D12DDIARG_CREATERESOURCE_0003 created = {};
+        created.ResourceType = D3D12DDI_RT_TEXTURE2D;
+        created.Format = static_cast<DXGI_FORMAT>(description.Format);
+        created.Width = description.Width;
+        created.Height = description.Height;
+        created.DepthOrArraySize = created.MipLevels = 1;
+        created.SampleDesc.Count = 1;
+        const UINT64 bytes = TextureBytes(&created);
+        if (!bytes) return E_FAIL;
+        AGX_D3D12_OWNER *owner = EnsureOwner(device);
+        if (!owner) return E_FAIL;
+        const auto &info = arg->pOpenAllocationInfo[0];
+        AGX_D3D12_BUFFER texture = {};
+        HRESULT hr = AgxD3d12OwnerOpenSharedTexture(owner, arg->hKMResource.handle, info.hAllocation,
+            info.pPrivateDriverData, info.PrivateDriverDataSize, arg->pPrivateDriverData, arg->PrivateDriverDataSize,
+            runtime_resource.handle, &texture, &heap->presentation);
+        const UINT receipt[] = {info.hAllocation, description.Format, description.Width, description.Height,
+                                description.Pitch};
+        AdmissionUmdDiagnostic("d3d12-open-heap-resource", hr, receipt, 5);
+        if (FAILED(hr)) return hr;
+        heap->native = texture.Resource;
+        heap->gpuva = texture.GpuVa;
+        heap->bytes = bytes;
+        heap->allocation = info.hAllocation;
+        resource->heap = heap;
+        resource->gpuva = heap->gpuva;
+        resource->bytes = bytes;
+        resource->type = D3D12DDI_RT_TEXTURE2D;
+        resource->format = static_cast<DXGI_FORMAT>(description.Format);
+        resource->width = description.Width;
+        resource->height = description.Height;
+        resource->layers = resource->levels = 1;
+        return S_OK;
+    }
+#endif
+    return AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOpenHeapAndResource)(
+        handle, arg, heap_handle, runtime_resource, resource_handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateOpenedHeapAndResourceSizes), PFND3D12DDI_CALCPRIVATEOPENEDHEAPANDRESOURCESIZES_0003>);
+static_assert(std::is_same_v<decltype(&OpenHeapAndResource), PFND3D12DDI_OPENHEAPANDRESOURCE_0003>);
+
 static VOID APIENTRY DestroyHeapAndResource(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_handle,
                                             D3D12DDI_HRESOURCE resource_handle) {
     AgxD3d12Device *device = DeviceOf(handle);
     auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
-    if (resource_handle.pDrvPrivate) memset(resource_handle.pDrvPrivate, 0, sizeof(AgxD3d12Resource));
-    if (device && heap && heap->allocation && !heap->alias) ReleaseHeap(device, heap);
+    auto *resource = static_cast<AgxD3d12Resource *>(resource_handle.pDrvPrivate);
+    /* C36: a placed texture releases the heap object it holds itself */
+    if (device && !heap && resource && resource->heap == &resource->own_heap && resource->own_heap.allocation)
+        ReleaseHeap(device, &resource->own_heap);
+    if (resource) memset(resource, 0, sizeof(AgxD3d12Resource));
+    if (device && heap && (heap->allocation || heap->tiles) && !heap->alias) ReleaseHeap(device, heap);
 }
 static HRESULT APIENTRY MapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_handle, VOID **data) {
     AgxD3d12Device *device = DeviceOf(handle);
     auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
+    if(heap && heap->volume) {if(data)*data=nullptr;return E_INVALIDARG;}
     if (device && heap && data && heap->native && heap->cpu) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        AGX_D3D12_BUFFER buffer = HeapBuffer(heap);
+        AgxD3d12OwnerRecordHeapMap(static_cast<AGX_D3D12_OWNER *>(device->owner), &buffer, TRUE);
+#endif
         *data = heap->cpu; /* C4b: persistent mapping of the owner's buffer */
         return S_OK;
     }
@@ -1016,6 +2808,12 @@ static HRESULT APIENTRY MapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_han
 static VOID APIENTRY UnmapHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HHEAP heap_handle) {
     AgxD3d12Device *device = DeviceOf(handle);
     auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (device && heap && heap->native && heap->cpu) {
+        AGX_D3D12_BUFFER buffer = HeapBuffer(heap);
+        AgxD3d12OwnerRecordHeapMap(static_cast<AGX_D3D12_OWNER *>(device->owner), &buffer, FALSE);
+    }
+#endif
     if (!device || !heap || heap->native || !heap->locks || --heap->locks) return;
     D3DDDICB_UNLOCK unlock = {};
     unlock.NumAllocations = 1;
@@ -1034,8 +2832,12 @@ static VOID APIENTRY CheckExistingResourceAllocationInfo(D3D12DDI_HDEVICE, D3D12
     if (info) {
         memset(info, 0, sizeof(*info));
         info->ResourceDataAlignment = kHeapPage;
-        info->Layout = D3D12DDI_TL_ROW_MAJOR;
+    /* Absent metadata has byte alignment, including zero-sized regions. */
+    info->AdditionalDataHeaderAlignment = 1;
+    info->AdditionalDataAlignment = 1;
+        info->Layout = resource && (resource->type==D3D12DDI_RT_TEXTURE3D || resource->type==D3D12DDI_RT_TEXTURE1D) ? resource->volume_layout:D3D12DDI_TL_ROW_MAJOR;
         info->ResourceDataSize = resource && resource->heap ? resource->heap->bytes : ~0ULL;
+        if(resource && (resource->type==D3D12DDI_RT_TEXTURE3D || resource->type==D3D12DDI_RT_TEXTURE1D)) info->MipLevelSwizzleTransition=resource->volume_transition;
     }
     if (allocation) *allocation = resource && resource->heap ? resource->heap->allocation : 0;
     const UINT receipt[] = {resource && resource->heap ? 1u : 0u,
@@ -1050,7 +2852,21 @@ static VOID APIENTRY CheckSubresourceInfo(D3D12DDI_HDEVICE, D3D12DDI_HRESOURCE h
     auto *resource = static_cast<AgxD3d12Resource *>(handle.pDrvPrivate);
     if (!info) return;
     memset(info, 0, sizeof(*info));
-    if (resource && subresource == 0) info->RowStride = info->DepthStride = resource->bytes;
+    if(resource && resource->type==D3D12DDI_RT_TEXTURE1D) {
+        if(resource->levels && resource->layers && subresource<static_cast<UINT64>(resource->levels)*resource->layers) {
+            const UINT mip=subresource%resource->levels,slice=subresource/resource->levels;
+            info->Offset=static_cast<UINT64>(slice)*resource->volume_depth_stride+resource->volume_offsets[mip];
+            info->RowStride=4ull*(resource->width>>mip?resource->width>>mip:1u);info->DepthStride=resource->volume_depth_stride;
+        }
+    } else if(resource && resource->type==D3D12DDI_RT_TEXTURE3D) {
+        if(subresource<resource->levels && subresource<16) {
+            /* C21G: the row stride of the level's registry pattern */
+            info->Offset=resource->volume_offsets[subresource];
+            info->RowStride=resource->volume_row_strides[subresource];info->DepthStride=resource->volume_depth_stride;
+        }
+    } else {
+        if (resource && subresource == 0) info->RowStride = info->DepthStride = resource->bytes;
+    }
     const UINT receipt[] = {subresource, resource ? static_cast<UINT>(resource->bytes) : 0u};
     AdmissionUmdDiagnostic("measure-d3d12-subresource-info", S_OK, receipt, 2);
 }
@@ -1067,7 +2883,16 @@ static D3D12DDI_GPU_VIRTUAL_ADDRESS APIENTRY CheckResourceVirtualAddress(D3D12DD
  * one CPU-visible C2a heap (16 MiB class bound) kept locked, so a CPU
  * handle is its pointer and a GPU handle its VA; other heaps are process
  * memory. The views written into them are not implemented yet. */
-static UINT DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE) {
+/* C47: a CBV/SRV/UAV descriptor is its CPU record (64 bytes) followed by its
+ * heap form (AgxD3d12HeapForm), which shaders read through bindless handles */
+static constexpr UINT kCbvSrvUavDescriptorBytes = 160u;
+static constexpr UINT kSamplerDescriptorBytes = 128u;
+static constexpr UINT kHeapRanges = 64u; /* DXBC_HEAP_RANGE_MAX */
+static constexpr UINT kHeapFormOffset = 64u;
+static UINT DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
+    /* C47: sampler descriptors carry a heap form (AgxD3d12SamplerForm) too */
+    if (type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) return kCbvSrvUavDescriptorBytes;
+    if (type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER) return kSamplerDescriptorBytes;
     return 64u; /* C6e: a sampler record (kind + D3D12DDI_SAMPLER_DESC) needs 56 bytes */
 }
 static UINT APIENTRY GetDescriptorSizeInBytes(D3D12DDI_HDEVICE, D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
@@ -1091,14 +2916,81 @@ struct AgxD3d12Descriptor {
     UINT first_layer;
     UINT layers;
     UINT levels; /* C6e: texture SRVs */
+    UINT component_mapping; /* C18: encoded SRV fetch-result routing */
+    union {
+        UINT cube; /* C19: cube-class SRV; arrayness belongs to the shader */
+        UINT counter_offset; /* C33: a structured UAV's counter word (UavCounter) */
+    };
 };
+/* C33: a buffer UAV's counter heap lives in the bytes of the SRV-only levels
+ * and component_mapping, keeping descriptors 64 bytes */
+static_assert(offsetof(AgxD3d12Descriptor, component_mapping) == offsetof(AgxD3d12Descriptor, levels) + sizeof(UINT) &&
+                  sizeof(AgxD3d12Heap *) <= 2 * sizeof(UINT),
+              "the counter heap fits levels and component_mapping");
+static void SetUavCounter(AgxD3d12Descriptor *d, AgxD3d12Heap *heap, UINT offset) {
+    memcpy(reinterpret_cast<unsigned char *>(d) + offsetof(AgxD3d12Descriptor, levels), &heap, sizeof(heap));
+    d->counter_offset = offset;
+}
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static AgxD3d12Heap *UavCounter(const AgxD3d12Descriptor &d, UINT *offset) {
+    AgxD3d12Heap *heap = nullptr;
+    if (d.kind != kDescriptorUavBuffer) return nullptr;
+    memcpy(&heap, reinterpret_cast<const unsigned char *>(&d) + offsetof(AgxD3d12Descriptor, levels), sizeof(heap));
+    *offset = d.counter_offset;
+    return heap;
+}
+#endif
 /* C6e: a sampler descriptor */
 struct AgxD3d12SamplerDescriptor {
     UINT kind; /* kDescriptorSampler */
     D3D12DDI_SAMPLER_DESC desc;
 };
-static_assert(sizeof(AgxD3d12SamplerDescriptor) <= 64, "fits a sampler descriptor");
-static_assert(sizeof(AgxD3d12Descriptor) <= 64, "fits a CBV/SRV/UAV descriptor");
+static_assert(sizeof(AgxD3d12SamplerDescriptor) <= kHeapFormOffset, "fits a sampler descriptor");
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C47: a sampler descriptor's heap form behind its CPU record */
+static_assert(kHeapFormOffset + sizeof(AGX_D3D12_HEAP_SAMPLER) <= kSamplerDescriptorBytes, "the sampler heap form fits");
+static AGX_D3D12_HEAP_SAMPLER *SamplerFormOf(void *descriptor) {
+    return reinterpret_cast<AGX_D3D12_HEAP_SAMPLER *>(static_cast<BYTE *>(descriptor) + kHeapFormOffset);
+}
+#endif
+static_assert(sizeof(AgxD3d12Descriptor) <= kHeapFormOffset, "fits a CBV/SRV/UAV descriptor");
+/* C47: the heap form: Asahi's packed texture descriptor of the view (null
+ * for anything but a texture SRV), room for a PBE descriptor (typed UAVs),
+ * the layout key the texture had when packed and the view's shader dimension
+ * (DXBC_SRV_*) */
+struct AgxD3d12HeapForm {
+    BYTE texture[24];
+    BYTE pbe[24];
+    BYTE counter[24]; /* a structured UAV counter's PBE */
+    UINT64 key;
+    UINT dimension;
+    UINT reserved[3];
+};
+static_assert(kHeapFormOffset + sizeof(AgxD3d12HeapForm) == kCbvSrvUavDescriptorBytes, "the heap form ends the descriptor");
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static_assert(kCbvSrvUavDescriptorBytes == DXBC_HEAP_DESCRIPTOR_STRIDE && kHeapFormOffset == DXBC_HEAP_DESCRIPTOR_AGX_OFFSET &&
+                  kHeapRanges == DXBC_HEAP_RANGE_MAX && kHeapRanges == AGX_D3D12_HEAP_RANGES &&
+                  sizeof(AgxD3d12HeapForm::texture) == AGX_D3D12_HEAP_TEXTURE_BYTES,
+              "the translator's heap layout (dxbc_bindings.h)");
+#endif
+static AgxD3d12HeapForm *HeapFormOf(void *descriptor) {
+    return reinterpret_cast<AgxD3d12HeapForm *>(static_cast<BYTE *>(descriptor) + kHeapFormOffset);
+}
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* EXP1855: copies the heap forms of count descriptors from a heap's shadow
+ * (first is in it) to the GPU buffer the shaders read */
+static void MirrorHeapForms(const AgxD3d12Heap *heap, const void *first, UINT count) {
+    if (!heap || !heap->mirror || !heap->cpu || !first || !count) return;
+    const SIZE_T offset = static_cast<SIZE_T>(static_cast<const BYTE *>(first) - static_cast<const BYTE *>(heap->cpu));
+    if (static_cast<const BYTE *>(first) < static_cast<const BYTE *>(heap->cpu) || offset % kCbvSrvUavDescriptorBytes ||
+        offset + static_cast<UINT64>(count) * kCbvSrvUavDescriptorBytes > DescriptorHeapBytes(heap))
+        return;
+    for (UINT i = 0; i < count; ++i) {
+        const SIZE_T at = offset + static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes + kHeapFormOffset;
+        memcpy(heap->mirror + at, static_cast<const BYTE *>(heap->cpu) + at, sizeof(AgxD3d12HeapForm));
+    }
+}
+#endif
 static void ViewReceipt(PCSTR stage, UINT reason, UINT a, UINT b) {
     const UINT receipt[] = {reason, a, b};
     AdmissionUmdDiagnostic(stage, reason ? E_NOTIMPL : S_OK, receipt, 3);
@@ -1124,11 +3016,22 @@ static VOID APIENTRY CreateConstantBufferView(D3D12DDI_HDEVICE handle, const D3D
     (void)handle;
     if (!reason) reason = 3u;
 #endif
-    ViewReceipt("measure-d3d12-cbv", reason, desc ? desc->SizeInBytes : 0u, 0u);
+    /* a null CBV is a valid descriptor: its receipt keeps reason 2 but is
+     * not a failure (EXP1834 HDR: 8760 null CBVs, each failure record
+     * forcing a synchronous trace write) */
+    const UINT receipt[] = {reason, desc ? desc->SizeInBytes : 0u, 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-cbv", reason && reason != 2u ? E_NOTIMPL : S_OK, receipt, 3);
 }
 /* Raw and structured buffer UAVs (the dxbc_to_nir shader-buffer binding);
  * typed buffers, textures and append/consume counters write a null
  * descriptor with a receipt naming the reason. */
+static bool VolumeViewRange(const AgxD3d12Resource *r,UINT level,UINT first,UINT requested,UINT *count) {
+    if(level>=r->levels) return false;
+    const UINT depth=r->layers>>level ? r->layers>>level:1u;
+    if(first>=depth) return false;
+    *count=requested==UINT_MAX?depth-first:requested;
+    return *count && *count<=depth-first;
+}
 static VOID APIENTRY CreateUnorderedAccessView(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_UNORDERED_ACCESS_VIEW_0002 *arg,
                                                D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
     auto *out = reinterpret_cast<AgxD3d12Descriptor *>(dest.ptr);
@@ -1136,6 +3039,27 @@ static VOID APIENTRY CreateUnorderedAccessView(D3D12DDI_HDEVICE handle, const D3
     memset(out, 0, sizeof(*out));
     (void)handle;
     const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
+    if(arg && resource && resource->heap && resource->type==D3D12DDI_RT_TEXTURE1D) {
+        const auto &v=arg->Tex1D;
+        const UINT layers=v.ArraySize==UINT_MAX && resource->layers==1 && !v.FirstArraySlice?1u:v.ArraySize;
+        const UINT reason=arg->ResourceDimension!=D3D12DDI_RD_TEXTURE1D || v.MipSlice>=resource->levels ||
+            v.FirstArraySlice>=resource->layers || !layers || layers>resource->layers-v.FirstArraySlice ||
+            (arg->Format!=DXGI_FORMAT_UNKNOWN && arg->Format!=resource->format)?6u:0u;
+        if(!reason) {out->kind=kDescriptorUavTexture;out->heap=resource->heap;out->format=resource->format;
+            out->level=v.MipSlice;out->levels=1;out->first_layer=v.FirstArraySlice;out->layers=layers;}
+        ViewReceipt("measure-d3d12-uav",reason,static_cast<UINT>(arg->Format),v.MipSlice);return;
+    }
+    if(arg && resource && resource->heap && resource->type==D3D12DDI_RT_TEXTURE3D) {
+        UINT count=0;
+        const UINT depth=arg->Tex3D.MipSlice<resource->levels ? (resource->layers>>arg->Tex3D.MipSlice ? resource->layers>>arg->Tex3D.MipSlice:1u):0;
+        const UINT reason=arg->ResourceDimension!=D3D12DDI_RD_TEXTURE3D ||
+            !VolumeViewRange(resource,arg->Tex3D.MipSlice,arg->Tex3D.FirstW,arg->Tex3D.WSize,&count) ||
+            arg->Tex3D.FirstW || count!=depth ? 6u:0u;
+        if(!reason) {out->kind=kDescriptorUavTexture;out->heap=resource->heap;
+            out->format=arg->Format==DXGI_FORMAT_UNKNOWN?resource->format:arg->Format;
+            out->level=arg->Tex3D.MipSlice;out->levels=1;out->layers=count;}
+        ViewReceipt("measure-d3d12-uav",reason,static_cast<UINT>(arg->Format),count);return;
+    }
     /* C9: a typed UAV of a 2D (array) texture: one mip, a slice range */
     if (arg && resource && resource->heap && resource->type == D3D12DDI_RT_TEXTURE2D) {
         const D3D12DDIARG_TEX2D_UNORDERED_ACCESS_VIEW_0002 &v = arg->Tex2D;
@@ -1161,10 +3085,16 @@ static VOID APIENTRY CreateUnorderedAccessView(D3D12DDI_HDEVICE handle, const D3
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if (typed) stride = AgxD3d12FormatBlockBytes(arg->Format);
 #endif
+    /* C33: a counter belongs to a structured UAV and is one aligned word of
+     * a buffer */
+    const auto *counter = arg ? static_cast<const AgxD3d12Resource *>(arg->Buffer.hDrvCounterResource.pDrvPrivate) : nullptr;
     UINT reason = !arg || !resource || !resource->heap ? 1u
                 : arg->ResourceDimension != D3D12DDI_RD_BUFFER ? 4u
                 : !stride ? 5u /* a typed format the owner cannot address */
-                : arg->Buffer.hDrvCounterResource.pDrvPrivate ? 7u
+                : counter && (raw || typed || !counter->heap || counter->type != D3D12DDI_RT_BUFFER ||
+                              arg->Buffer.CounterOffsetInBytes % 4u || counter->bytes < 4u ||
+                              arg->Buffer.CounterOffsetInBytes > counter->bytes - 4u ||
+                              counter->gpuva < counter->heap->gpuva) ? 7u
                 : 0u;
     const UINT64 offset = reason ? 0 : arg->Buffer.FirstElement * stride;
     const UINT64 bytes = reason ? 0 : static_cast<UINT64>(arg->Buffer.NumElements) * stride;
@@ -1178,6 +3108,9 @@ static VOID APIENTRY CreateUnorderedAccessView(D3D12DDI_HDEVICE handle, const D3
         out->offset = resource->gpuva - resource->heap->gpuva + offset;
         out->bytes = bytes;
         out->format = typed ? arg->Format : DXGI_FORMAT_UNKNOWN;
+        if (counter)
+            SetUavCounter(out, counter->heap,
+                          static_cast<UINT>(counter->gpuva - counter->heap->gpuva + arg->Buffer.CounterOffsetInBytes));
     }
     ViewReceipt("measure-d3d12-uav", reason, stride, arg ? arg->Buffer.NumElements : 0u);
 }
@@ -1189,6 +3122,15 @@ static VOID APIENTRY CreateRenderTargetView(D3D12DDI_HDEVICE, const D3D12DDIARG_
     if (!out) return;
     memset(out, 0, sizeof(*out));
     const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
+    if(arg && resource && resource->heap && resource->type==D3D12DDI_RT_TEXTURE3D) {
+        UINT count=0;
+        const UINT reason=arg->ResourceDimension!=D3D12DDI_RD_TEXTURE3D ||
+            !VolumeViewRange(resource,arg->Tex3D.MipSlice,arg->Tex3D.FirstW,arg->Tex3D.WSize,&count) || count!=1 ? 6u:0u;
+        if(!reason) {out->kind=kDescriptorRtv;out->heap=resource->heap;
+            out->format=arg->Format==DXGI_FORMAT_UNKNOWN?resource->format:arg->Format;
+            out->level=arg->Tex3D.MipSlice;out->first_layer=arg->Tex3D.FirstW;out->layers=1;}
+        ViewReceipt("measure-d3d12-rtv",reason,static_cast<UINT>(arg->Format),count);return;
+    }
     UINT reason = !arg || !resource || !resource->heap ? 1u
                 : resource->type != D3D12DDI_RT_TEXTURE2D || arg->ResourceDimension != D3D12DDI_RD_TEXTURE2D ? 4u
                 : arg->Tex2D.PlaneSlice || arg->Tex2D.MipSlice >= resource->levels ||
@@ -1237,7 +3179,65 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
     auto *out = reinterpret_cast<AgxD3d12Descriptor *>(dest.ptr);
     if (!out) return;
     memset(out, 0, sizeof(*out));
+    /* C18: mapping is descriptor state, including typed buffer views. */
+    if (arg && !AgxD3d12ComponentMappingValid(arg->Shader4ComponentMapping)) {
+        ViewReceipt("measure-d3d12-srv", 8u, arg->Shader4ComponentMapping, 0u);
+        return;
+    }
     const auto *resource = arg ? static_cast<const AgxD3d12Resource *>(arg->hDrvResource.pDrvPrivate) : nullptr;
+    if(arg && resource && resource->heap && resource->type==D3D12DDI_RT_TEXTURE1D) {
+        const auto &v=arg->Tex1D;UINT levels=0;
+        const UINT layers=v.ArraySize==UINT_MAX && resource->layers==1 && !v.FirstArraySlice?1u:v.ArraySize;
+        UINT reason=arg->ResourceDimension!=D3D12DDI_RD_TEXTURE1D || v.ResourceMinLODClamp!=0.0f ||
+            v.MostDetailedMip>=resource->levels || v.FirstArraySlice>=resource->layers ||
+            !layers || layers>resource->layers-v.FirstArraySlice ||
+            (arg->Format!=DXGI_FORMAT_UNKNOWN && arg->Format!=resource->format)?6u:0u;
+        if(!reason) {levels=v.MipLevels==UINT_MAX?resource->levels-v.MostDetailedMip:v.MipLevels;
+            if(!levels || levels>resource->levels-v.MostDetailedMip)reason=6u;}
+        if(!reason) {out->kind=kDescriptorSrvTexture;out->heap=resource->heap;out->format=resource->format;
+            out->level=v.MostDetailedMip;out->levels=levels;out->first_layer=v.FirstArraySlice;out->layers=layers;out->component_mapping=arg->Shader4ComponentMapping;}
+        ViewReceipt("measure-d3d12-srv",reason,static_cast<UINT>(arg->Format),levels);return;
+    }
+    if(arg && resource && resource->heap && resource->type==D3D12DDI_RT_TEXTURE3D) {
+        const auto &v=arg->Tex3D;
+        UINT levels=0;
+        UINT reason=arg->ResourceDimension!=D3D12DDI_RD_TEXTURE3D || v.ResourceMinLODClamp!=0.0f ||
+            v.MostDetailedMip>=resource->levels ? 6u:0u;
+        if(!reason) {levels=v.MipLevels==UINT_MAX?resource->levels-v.MostDetailedMip:v.MipLevels;
+            if(!levels || levels>resource->levels-v.MostDetailedMip)reason=6u;}
+        if(!reason) {out->kind=kDescriptorSrvTexture;out->heap=resource->heap;
+            out->format=arg->Format==DXGI_FORMAT_UNKNOWN?resource->format:arg->Format;
+            out->level=v.MostDetailedMip;out->levels=levels;out->layers=1;
+            out->component_mapping=arg->Shader4ComponentMapping;}
+        ViewReceipt("measure-d3d12-srv",reason,static_cast<UINT>(arg->Format),levels);return;
+    }
+    /* C19: a cube view reuses an ordinary square 2D-array allocation.
+     * The shader distinguishes nonarray cubes from one-element cube arrays. */
+    if (arg && resource && resource->heap && resource->type == D3D12DDI_RT_TEXTURE2D &&
+        arg->ResourceDimension == D3D12DDI_RD_TEXTURECUBE) {
+        const D3D12DDIARG_TEXCUBE_SHADER_RESOURCE_VIEW &v = arg->TexCube;
+        UINT reason = resource->width != resource->height || v.ResourceMinLODClamp != 0.0f ? 4u
+                    : !v.NumCubes || v.First2DArrayFace >= resource->layers ||
+                      v.NumCubes > (resource->layers - v.First2DArrayFace) / 6u ||
+                      v.MostDetailedMip >= resource->levels ? 6u : 0u;
+        const UINT levels = reason ? 0u : v.MipLevels == UINT_MAX ? resource->levels - v.MostDetailedMip : v.MipLevels;
+        if (!reason && (!levels || levels > resource->levels - v.MostDetailedMip ||
+                        v.First2DArrayFace + v.NumCubes * 6u - 1u > 0xffffu ||
+                        v.MostDetailedMip + levels - 1u > 0xffu)) reason = 6u;
+        if (!reason) {
+            out->kind = kDescriptorSrvTexture;
+            out->component_mapping = arg->Shader4ComponentMapping;
+            out->cube = 1;
+            out->heap = resource->heap;
+            out->format = arg->Format == DXGI_FORMAT_UNKNOWN ? resource->format : arg->Format;
+            out->level = v.MostDetailedMip;
+            out->levels = levels;
+            out->first_layer = v.First2DArrayFace;
+            out->layers = v.NumCubes * 6u;
+        }
+        ViewReceipt("measure-d3d12-srv", reason, static_cast<UINT>(arg->Format), 0xc0000000u | levels);
+        return;
+    }
     /* C6e: 2D (array) texture SRVs of committed textures */
     if (arg && resource && resource->heap && resource->type == D3D12DDI_RT_TEXTURE2D) {
         const D3D12DDIARG_TEX2D_SHADER_RESOURCE_VIEW_0002 &v = arg->Tex2D;
@@ -1245,6 +3245,7 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
                     : v.MostDetailedMip >= resource->levels || v.FirstArraySlice >= resource->layers ? 6u : 0u;
         if (!reason) {
             out->kind = kDescriptorSrvTexture;
+            out->component_mapping = arg->Shader4ComponentMapping;
             out->heap = resource->heap;
             out->format = arg->Format == DXGI_FORMAT_UNKNOWN ? resource->format : arg->Format;
             out->level = v.MostDetailedMip;
@@ -1266,6 +3267,7 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
 #endif
     UINT reason = !arg || !resource || !resource->heap ? 1u
                 : arg->ResourceDimension != D3D12DDI_RD_BUFFER ? 4u
+                : !typed && arg->Shader4ComponentMapping != AGX_D3D12_COMPONENT_MAPPING_IDENTITY ? 8u
                 : !stride ? 5u /* a typed format the owner cannot address */
                 : 0u;
     const UINT64 offset = reason ? 0 : arg->Buffer.FirstElement * stride;
@@ -1276,6 +3278,7 @@ static VOID APIENTRY CreateShaderResourceView(D3D12DDI_HDEVICE, const D3D12DDIAR
 #endif
     if (!reason) {
         out->kind = kDescriptorSrvBuffer;
+        out->component_mapping = arg->Shader4ComponentMapping;
         out->heap = resource->heap;
         out->offset = resource->gpuva - resource->heap->gpuva + offset;
         out->bytes = bytes;
@@ -1292,15 +3295,127 @@ static VOID APIENTRY CreateSampler(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_SA
     out->kind = kDescriptorSampler;
     out->desc = *arg->pSamplerDesc;
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+static void PackHeapForm(AGX_D3D12_OWNER *owner, AgxD3d12Descriptor *view);
+static void PackUavHeapForm(AGX_D3D12_OWNER *owner, AgxD3d12Descriptor *view);
+static bool UavDescriptorKind(UINT kind) {
+    return kind == kDescriptorUavBuffer || kind == kDescriptorUavTypedBuffer || kind == kDescriptorUavTexture;
+}
+#endif
+/* C47: a view written into a CBV/SRV/UAV heap also gets its heap form; a
+ * texture SRV's shader dimension follows its D3D12 view (the DDI names no
+ * array dimension: more than one layer of a 1D view, or more than one cube,
+ * is an array) */
+static void PackViewHeapForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest, UINT resource_dimension);
+static void FillHeapForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest, UINT resource_dimension) {
+    PackViewHeapForm(handle, dest, resource_dimension);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    MirrorHeapForms(MirroredHeapAt(DeviceOf(handle), reinterpret_cast<const void *>(dest.ptr)),
+                    reinterpret_cast<const void *>(dest.ptr), 1u);
+#endif
+}
+static void PackViewHeapForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest, UINT resource_dimension) {
+    auto *view = reinterpret_cast<AgxD3d12Descriptor *>(dest.ptr);
+    if (!view) return;
+    AgxD3d12HeapForm *form = HeapFormOf(view);
+    memset(form, 0, sizeof(*form));
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    AgxD3d12NullTextureDescriptor(form->texture);
+    if (UavDescriptorKind(view->kind) && view->heap) {
+        /* C47: a UAV's texture and PBE descriptors */
+        AgxD3d12Device *device = DeviceOf(handle);
+        AGX_D3D12_OWNER *owner = device ? EnsureOwner(device) : nullptr;
+        if (owner) PackHeapForm(owner, view);
+        return;
+    }
+    if (view->kind == kDescriptorSrvBuffer && view->heap) {
+        /* C47: a buffer SRV's texture-buffer descriptor */
+        form->dimension = DXBC_SRV_OTHER;
+        AgxD3d12Device *device = DeviceOf(handle);
+        AGX_D3D12_OWNER *owner = device ? EnsureOwner(device) : nullptr;
+        if (owner) PackHeapForm(owner, view);
+        return;
+    }
+    if (view->kind != kDescriptorSrvTexture || !view->heap) return;
+    form->dimension = resource_dimension == D3D12DDI_RD_TEXTURE1D ? (view->layers > 1 ? DXBC_SRV_1D_ARRAY : DXBC_SRV_1D)
+                    : resource_dimension == D3D12DDI_RD_TEXTURE3D ? DXBC_SRV_3D
+                    : resource_dimension == D3D12DDI_RD_TEXTURECUBE ? (view->layers > 6u ? DXBC_SRV_CUBE_ARRAY : DXBC_SRV_CUBE)
+                    : DXBC_SRV_OTHER;
+    AgxD3d12Device *device = DeviceOf(handle);
+    AGX_D3D12_OWNER *owner = device ? EnsureOwner(device) : nullptr;
+    if (owner) PackHeapForm(owner, view);
+#else
+    (void)handle;
+    (void)resource_dimension;
+#endif
+}
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C47: packs a texture SRV's heap form for its recorded dimension (also when
+ * the replay finds its texture re-laid out) */
+static void PackHeapForm(AGX_D3D12_OWNER *owner, AgxD3d12Descriptor *view) {
+    AgxD3d12HeapForm *form = HeapFormOf(view);
+    if (UavDescriptorKind(view->kind)) {
+        PackUavHeapForm(owner, view);
+        return;
+    }
+    /* the SRV as OwnerBindings hands it to the owner */
+    AGX_D3D12_BUFFER buffer = HeapBuffer(view->heap);
+    AGX_D3D12_SRV srv = {};
+    srv.Buffer = &buffer;
+    if (view->kind == kDescriptorSrvBuffer) {
+        srv.Offset = view->offset;
+        srv.Bytes = view->bytes;
+        srv.ComponentMapping = view->component_mapping;
+        srv.Format = view->format;
+        unsigned long long key = 0;
+        form->key = SUCCEEDED(AgxD3d12OwnerSrvDescriptor(owner, &srv, DXBC_SRV_OTHER, form->texture, &key)) ? key : 0u;
+        return;
+    }
+    srv.Texture = 1;
+    srv.Cube = view->cube;
+    srv.ComponentMapping = view->component_mapping;
+    srv.Format = view->format;
+    srv.FirstLevel = view->level;
+    srv.Levels = view->levels;
+    srv.FirstLayer = view->first_layer;
+    srv.Layers = view->layers;
+    unsigned long long key = 0;
+    form->key = SUCCEEDED(AgxD3d12OwnerSrvDescriptor(owner, &srv, static_cast<uint8_t>(form->dimension), form->texture, &key))
+                    ? key : 0u;
+}
+#endif
+static VOID APIENTRY CreateShaderResourceViewInHeap(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SHADER_RESOURCE_VIEW_0002 *arg,
+                                                    D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
+    CreateShaderResourceView(handle, arg, dest);
+    FillHeapForm(handle, dest, arg ? static_cast<UINT>(arg->ResourceDimension) : 0u);
+}
+static VOID APIENTRY CreateConstantBufferViewInHeap(D3D12DDI_HDEVICE handle, const D3D12DDI_CONSTANT_BUFFER_VIEW_DESC *desc,
+                                                    D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
+    CreateConstantBufferView(handle, desc, dest);
+    FillHeapForm(handle, dest, 0u);
+}
+static VOID APIENTRY CreateUnorderedAccessViewInHeap(D3D12DDI_HDEVICE handle,
+                                                     const D3D12DDIARG_CREATE_UNORDERED_ACCESS_VIEW_0002 *arg,
+                                                     D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
+    CreateUnorderedAccessView(handle, arg, dest);
+    FillHeapForm(handle, dest, 0u);
+}
 /* Descriptors are CPU records, so copies are byte copies of whole
  * descriptors of the heap type's size. */
-static VOID APIENTRY CopyDescriptorsSimple(D3D12DDI_HDEVICE, UINT count, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest,
+static VOID APIENTRY CopyDescriptorsSimple(D3D12DDI_HDEVICE handle, UINT count, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest,
                                            D3D12DDI_CPU_DESCRIPTOR_HANDLE src, D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
     if (count && dest.ptr && src.ptr)
         memmove(reinterpret_cast<void *>(dest.ptr), reinterpret_cast<const void *>(src.ptr),
                 static_cast<SIZE_T>(count) * DescriptorBytes(type));
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (count && dest.ptr && src.ptr && type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)
+        MirrorHeapForms(MirroredHeapAt(DeviceOf(handle), reinterpret_cast<const void *>(dest.ptr)),
+                        reinterpret_cast<const void *>(dest.ptr), count);
+#else
+    (void)handle;
+#endif
 }
-static VOID APIENTRY CopyDescriptors(D3D12DDI_HDEVICE, UINT dest_ranges, const D3D12DDI_CPU_DESCRIPTOR_HANDLE *dest_starts,
+static VOID APIENTRY CopyDescriptors(D3D12DDI_HDEVICE handle, UINT dest_ranges, const D3D12DDI_CPU_DESCRIPTOR_HANDLE *dest_starts,
                                      const UINT *dest_sizes, UINT src_ranges,
                                      const D3D12DDI_CPU_DESCRIPTOR_HANDLE *src_starts, const UINT *src_sizes,
                                      D3D12DDI_DESCRIPTOR_HEAP_TYPE type) {
@@ -1315,6 +3430,15 @@ static VOID APIENTRY CopyDescriptors(D3D12DDI_HDEVICE, UINT dest_ranges, const D
         ++dpos;
         ++spos;
     }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* EXP1855: shader-visible destinations publish their heap forms */
+    AgxD3d12Device *device = DeviceOf(handle);
+    for (UINT r = 0; type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV && dest_starts && r < dest_ranges; ++r)
+        MirrorHeapForms(MirroredHeapAt(device, reinterpret_cast<const void *>(dest_starts[r].ptr)),
+                        reinterpret_cast<const void *>(dest_starts[r].ptr), dest_sizes ? dest_sizes[r] : 1u);
+#else
+    (void)handle;
+#endif
 }
 struct AgxD3d12DescriptorHeap {
     AgxD3d12Heap memory; /* shader-visible heaps */
@@ -1336,23 +3460,102 @@ static HRESULT APIENTRY CreateDescriptorHeap(D3D12DDI_HDEVICE handle, const D3D1
     heap->type = static_cast<UINT>(arg->Type);
     heap->descriptors = arg->NumDescriptors;
     const UINT64 bytes = static_cast<UINT64>(arg->NumDescriptors) * DescriptorBytes(arg->Type);
+    char guard_option[2] = {};
+    const bool guard = (arg->Flags & D3D12DDI_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE) &&
+        (arg->Type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV || arg->Type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER) &&
+        GetEnvironmentVariableA("APPLE_AGX_D3D12_DESCRIPTOR_HEAP_GUARD", guard_option, sizeof(guard_option)) == 1 &&
+        guard_option[0] == '1';
     HRESULT hr = S_OK;
     if (arg->Flags & D3D12DDI_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE) {
         D3D12DDIARG_CREATEHEAP_0001 memory = {};
-        memory.ByteSize = bytes;
+        /* One extra 64 KiB in the same BO: residency/retirement covers the
+         * guard with the heap. Keep logical walks and handle lookup unchanged. */
+        memory.ByteSize = bytes + (guard ? kHeapPage : 0);
         memory.Alignment = kHeapPage;
         memory.MemoryPool = D3D12DDI_MEMORY_POOL_L0;
         memory.CPUPageProperty = D3D12DDI_CPU_PAGE_PROPERTY_WRITE_COMBINE;
         hr = CreateHeap(device, memory, &heap->memory);
         if (SUCCEEDED(hr)) {
+            if (guard) heap->memory.descriptor_bytes = bytes;
             D3D12DDI_HHEAP memory_handle = {&heap->memory};
             hr = MapHeap(handle, memory_handle, &heap->cpu);
             if (FAILED(hr)) ReleaseHeap(device, &heap->memory);
         }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        /* EXP1855 (DynamicIndexing: 7 ms per frame walking descriptors in
+         * write-combined memory): CPU handles name a cached shadow; the GPU
+         * buffer receives the heap forms (MirrorHeapForms) */
+        /* T13 already exposes cached process memory with write-watch upload.
+         * Reuse that map; a second full heap adds commit without changing
+         * CPU access or GPU visibility. Keep the shadow for WC mappings. */
+        if (SUCCEEDED(hr) && heap->memory.native &&
+            !AgxD3d12OwnerCpuMapIsPrivate(static_cast<AGX_D3D12_OWNER *>(device->owner), heap->cpu)) {
+            void *shadow = VirtualAlloc(nullptr, static_cast<SIZE_T>(heap->memory.bytes), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+            if (!shadow) {
+                ReleaseHeap(device, &heap->memory);
+                heap->cpu = nullptr;
+                hr = E_OUTOFMEMORY;
+            } else {
+                heap->memory.mirror = static_cast<unsigned char *>(heap->cpu);
+                heap->memory.cpu = heap->cpu = shadow;
+            }
+        } else if (SUCCEEDED(hr) && heap->memory.native) {
+            /* A cached BO may contain its previous owner's descriptors.
+             * Match the zero-initialization of a fresh VirtualAlloc shadow;
+             * these stores also dirty the T13 write-watch for upload. */
+            memset(heap->cpu, 0, static_cast<SIZE_T>(heap->memory.bytes));
+        }
+#endif
         heap->gpuva = SUCCEEDED(hr) ? heap->memory.gpuva : 0;
     } else {
         heap->cpu = VirtualAlloc(nullptr, static_cast<SIZE_T>(bytes), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
         if (!heap->cpu) hr = E_OUTOFMEMORY;
+    }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* C47: unpopulated entries read as Asahi's null texture */
+    if (SUCCEEDED(hr) && heap->cpu && arg->Type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)
+        for (UINT i = 0; i < heap->descriptors; ++i)
+            AgxD3d12NullTextureDescriptor(HeapFormOf(static_cast<BYTE *>(heap->cpu) + static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes)->texture);
+    if (SUCCEEDED(hr) && guard && heap->cpu) {
+        BYTE *tail = static_cast<BYTE *>(heap->cpu) + static_cast<SIZE_T>(bytes);
+        memset(tail, 0, static_cast<SIZE_T>(heap->memory.bytes - bytes));
+        if (arg->Type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) {
+            for (UINT64 at = bytes; at + kCbvSrvUavDescriptorBytes <= heap->memory.bytes; at += kCbvSrvUavDescriptorBytes) {
+                AgxD3d12HeapForm *form = HeapFormOf(static_cast<BYTE *>(heap->cpu) + static_cast<SIZE_T>(at));
+                AgxD3d12NullTextureDescriptor(form->texture);
+                AgxD3d12NullPbeDescriptor(form->pbe);
+                AgxD3d12NullPbeDescriptor(form->counter);
+            }
+        }
+        /* Samplers are consumed through the batch sampler map, not this BO.
+         * Zero kind/Valid is their existing null representation. Copy their
+         * guard explicitly too; ordinary sampler writes need no GPU mirror. */
+        if (heap->memory.mirror)
+            memcpy(heap->memory.mirror + static_cast<SIZE_T>(bytes), tail, static_cast<SIZE_T>(heap->memory.bytes - bytes));
+    }
+    if (SUCCEEDED(hr) && heap->memory.mirror) {
+        if (arg->Type == D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) {
+            memcpy(heap->memory.mirror, heap->cpu, static_cast<SIZE_T>(heap->memory.bytes));
+            AcquireSRWLockExclusive(&device->heap_lock);
+            if (device->mirrored_count < ARRAYSIZE(device->mirrored)) device->mirrored[device->mirrored_count++] = &heap->memory;
+            else hr = E_OUTOFMEMORY;
+            ReleaseSRWLockExclusive(&device->heap_lock);
+        }
+        if (FAILED(hr)) {
+            VirtualFree(heap->memory.cpu, 0, MEM_RELEASE);
+            heap->memory.cpu = heap->memory.mirror;
+            heap->memory.mirror = nullptr;
+            ReleaseHeap(device, &heap->memory);
+            heap->cpu = nullptr;
+            heap->gpuva = 0;
+        }
+    }
+#endif
+    if (SUCCEEDED(hr) && guard) {
+        const UINT64 begin = heap->gpuva + bytes, end = heap->gpuva + heap->memory.bytes;
+        const UINT receipt[] = {heap->type, heap->descriptors, static_cast<UINT>(heap->gpuva), static_cast<UINT>(heap->gpuva >> 32),
+            static_cast<UINT>(begin), static_cast<UINT>(begin >> 32), static_cast<UINT>(end), static_cast<UINT>(end >> 32)};
+        AdmissionUmdDiagnostic("measure-d3d12-descriptor-guard", hr, receipt, ARRAYSIZE(receipt));
     }
     const UINT receipt[] = {heap->type, heap->descriptors, static_cast<UINT>(arg->Flags), heap->gpuva != 0};
     AdmissionUmdDiagnostic("measure-d3d12-descriptor-heap", hr, receipt, 4);
@@ -1362,6 +3565,20 @@ static VOID APIENTRY DestroyDescriptorHeap(D3D12DDI_HDEVICE handle, D3D12DDI_HDE
     AgxD3d12Device *device = DeviceOf(handle);
     auto *heap = static_cast<AgxD3d12DescriptorHeap *>(heap_handle.pDrvPrivate);
     if (!device || !heap) return;
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (heap->memory.mirror) {
+        AcquireSRWLockExclusive(&device->heap_lock);
+        for (UINT i = 0; i < device->mirrored_count; ++i)
+            if (device->mirrored[i] == &heap->memory) {
+                device->mirrored[i] = device->mirrored[--device->mirrored_count];
+                break;
+            }
+        ReleaseSRWLockExclusive(&device->heap_lock);
+        VirtualFree(heap->memory.cpu, 0, MEM_RELEASE);
+        heap->memory.cpu = heap->memory.mirror; /* the buffer's own mapping */
+        heap->memory.mirror = nullptr;
+    }
+#endif
     if (heap->memory.allocation) ReleaseHeap(device, &heap->memory);
     else if (heap->cpu) VirtualFree(heap->cpu, 0, MEM_RELEASE);
     memset(heap, 0, sizeof(*heap));
@@ -1394,10 +3611,187 @@ static D3D12DDI_GPU_DESCRIPTOR_HANDLE APIENTRY GetGPUDescriptorHandleForHeapStar
  * pfnCreateContextVirtualCb(hRTCommandQueue) with the KMD context contract
  * the D3D11 device uses (ADMISSION_WIN32_CONTEXT_CREATE). */
 struct AgxD3d12CommandQueue {
+    bool gpu_wait;
     D3D12DDI_HRTCOMMANDQUEUE runtime;
     UINT flags;
     HANDLE context;
+    AgxD3d12Device *device;
 };
+static void ReportRejectedQueueError(D3D12DDI_HCOMMANDQUEUE handle, HRESULT error) {
+    auto *queue = static_cast<AgxD3d12CommandQueue *>(handle.pDrvPrivate);
+    if (!queue) return;
+    D3D12DDI_HDEVICE device = {};
+    device.pDrvPrivate = queue->device;
+    ReportRejectedDeviceError(device, error);
+}
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C53 B3 (D3D12-C53-tiled-buffers-plan.md): tile mappings of reserved
+ * buffers, applied CPU-synchronously under the owner lock in call order (the
+ * owner submits recorded work and retires the submissions using the buffer
+ * before a remap). Unreachable until the tier flip. */
+struct AgxTileEmit {
+    AGX_D3D12_OWNER *owner;
+    AgxD3d12Heap *reserved, *heap;
+    HRESULT hr;
+};
+static int EmitTileRun(void *context, const AGX_TILE_RUN *run) {
+    auto *e = static_cast<AgxTileEmit *>(context);
+    const AGX_D3D12_BUFFER reserved = HeapBuffer(e->reserved);
+    const AGX_D3D12_BUFFER backing = e->heap ? HeapBuffer(e->heap) : AGX_D3D12_BUFFER{};
+    const bool null = run->Kind == AGX_TILE_RANGE_NULL, reuse = run->Kind == AGX_TILE_RANGE_REUSE;
+    if (e->reserved->geometry) {
+        /* C53 T2D: a texture tile at a time (its pages are not contiguous) */
+        for (UINT t = 0; t < run->Tiles; ++t) {
+            const UINT heap_tile = null ? 0u : reuse ? run->HeapTile : run->HeapTile + t;
+            unsigned slice = 0, mip = 0, x = 0, y = 0;
+            int packed = 0;
+            if (!AgxTileLocate(e->reserved->geometry, run->ResourceTile + t, &slice, &mip, &x, &y, &packed)) {
+                e->hr = E_INVALIDARG;
+                return 0;
+            }
+            e->hr = AgxD3d12OwnerMapReservedTextureTile(e->owner, &reserved, slice, packed ? TRUE : FALSE, mip, x, y,
+                                                        null ? nullptr : &backing, heap_tile);
+            if (FAILED(e->hr)) return 0;
+            e->reserved->tiles[run->ResourceTile + t] = null ? AgxD3d12Heap::AgxD3d12TileMapping{}
+                                                             : AgxD3d12Heap::AgxD3d12TileMapping{e->heap, heap_tile};
+        }
+        return 1;
+    }
+    for (UINT t = 0; t < run->Tiles;) {
+        const UINT n = reuse ? 1u : run->Tiles; /* a shared tile maps one resource tile at a time */
+        const UINT heap_tile = reuse ? run->HeapTile : run->HeapTile + t;
+        e->hr = AgxD3d12OwnerMapReservedTiles(e->owner, &reserved, run->ResourceTile + t, n, null ? nullptr : &backing,
+                                              null ? 0u : heap_tile);
+        if (FAILED(e->hr)) return 0;
+        for (UINT i = 0; i < n; ++i)
+            e->reserved->tiles[run->ResourceTile + t + i] = null ? AgxD3d12Heap::AgxD3d12TileMapping{}
+                                                                 : AgxD3d12Heap::AgxD3d12TileMapping{e->heap, heap_tile + i};
+        t += n;
+    }
+    return 1;
+}
+static VOID APIENTRY UpdateTileMappings(D3D12DDI_HCOMMANDQUEUE handle, D3D12DDI_HRESOURCE resource_handle, UINT regions,
+                                        const D3D12DDI_TILED_RESOURCE_COORDINATE *starts,
+                                        const D3D12DDI_TILE_REGION_SIZE *sizes, D3D12DDI_HHEAP heap_handle, UINT ranges,
+                                        const D3D12DDI_TILE_RANGE_FLAGS *flags, const UINT *heap_starts, const UINT *counts,
+                                        D3D12DDI_TILE_MAPPING_FLAGS) {
+    auto *queue = static_cast<AgxD3d12CommandQueue *>(handle.pDrvPrivate);
+    auto *resource = static_cast<AgxD3d12Resource *>(resource_handle.pDrvPrivate);
+    auto *heap = static_cast<AgxD3d12Heap *>(heap_handle.pDrvPrivate);
+    AgxD3d12Device *device = queue ? queue->device : nullptr;
+    AGX_D3D12_OWNER *owner = device ? static_cast<AGX_D3D12_OWNER *>(device->owner) : nullptr;
+    AgxD3d12Heap *reserved = resource ? resource->heap : nullptr;
+    /* rc87: a deferred texture-only heap gets its backing now */
+    const HRESULT backing = owner ? EnsureHeapBacking(device, heap) : S_OK;
+    HRESULT hr = FAILED(backing) ? backing
+               : owner && reserved && reserved->tiles && (!heap || heap->native) && regions && ranges &&
+                 regions <= 0x10000u && ranges <= 0x10000u ? S_OK : E_INVALIDARG;
+    AGX_TILE_COORD *coord = SUCCEEDED(hr) && starts ? static_cast<AGX_TILE_COORD *>(calloc(regions, sizeof(*coord))) : nullptr;
+    AGX_TILE_REGION *size = SUCCEEDED(hr) && sizes ? static_cast<AGX_TILE_REGION *>(calloc(regions, sizeof(*size))) : nullptr;
+    unsigned *kind = SUCCEEDED(hr) && flags ? static_cast<unsigned *>(calloc(ranges, sizeof(*kind))) : nullptr;
+    if (SUCCEEDED(hr) && ((starts && !coord) || (sizes && !size) || (flags && !kind))) hr = E_OUTOFMEMORY;
+    for (UINT i = 0; SUCCEEDED(hr) && i < regions; ++i) {
+        if (coord) coord[i] = {starts[i].X, starts[i].Y, starts[i].Z, starts[i].Subresource};
+        if (size) size[i] = {sizes[i].NumTiles, sizes[i].UseBox ? 1u : 0u, sizes[i].Width, sizes[i].Height, sizes[i].Depth};
+    }
+    for (UINT i = 0; SUCCEEDED(hr) && kind && i < ranges; ++i) kind[i] = static_cast<unsigned>(flags[i]);
+    if (SUCCEEDED(hr)) {
+        AgxTileEmit emit = {owner, reserved, heap, S_OK};
+        AgxD3d12OwnerLock(owner);
+        const unsigned heap_tiles = heap ? static_cast<unsigned>(heap->bytes / 0x10000ull) : 0u;
+        const int walked = reserved->geometry
+            ? AgxTileMappingWalkGeometry(reserved->geometry, regions, coord, size, ranges, kind, heap_starts, counts,
+                                         heap_tiles, EmitTileRun, &emit)
+            : AgxTileMappingWalk(reserved->tile_count, regions, coord, size, ranges, kind, heap_starts, counts, heap_tiles,
+                                 EmitTileRun, &emit);
+        AgxD3d12OwnerUnlock(owner);
+        hr = walked ? S_OK : FAILED(emit.hr) ? emit.hr : E_INVALIDARG;
+    }
+    free(coord);
+    free(size);
+    free(kind);
+    const UINT receipt[] = {regions, ranges, reserved ? reserved->tile_count : 0u, heap ? 1u : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-update-tiles", hr, receipt, 4);
+    if (FAILED(hr)) ReportRejectedQueueError(handle, hr);
+}
+/* The tiling of a reserved resource: its texture geometry, or one row of
+ * 64 KiB tiles for a buffer. */
+static AGX_TILE_GEOMETRY ReservedGeometry(const AgxD3d12Heap *heap) {
+    if (heap->geometry) return *heap->geometry;
+    AGX_TILE_GEOMETRY buffer = {1u, 1u, 1u, 0u, {heap->tile_count}, {1u}};
+    return buffer;
+}
+static VOID APIENTRY CopyTileMappings(D3D12DDI_HCOMMANDQUEUE handle, D3D12DDI_HRESOURCE dst_handle,
+                                      const D3D12DDI_TILED_RESOURCE_COORDINATE *dst_start, D3D12DDI_HRESOURCE src_handle,
+                                      const D3D12DDI_TILED_RESOURCE_COORDINATE *src_start,
+                                      const D3D12DDI_TILE_REGION_SIZE *size, D3D12DDI_TILE_MAPPING_FLAGS) {
+    auto *queue = static_cast<AgxD3d12CommandQueue *>(handle.pDrvPrivate);
+    auto *dst_resource = static_cast<AgxD3d12Resource *>(dst_handle.pDrvPrivate);
+    auto *src_resource = static_cast<AgxD3d12Resource *>(src_handle.pDrvPrivate);
+    AgxD3d12Device *device = queue ? queue->device : nullptr;
+    AGX_D3D12_OWNER *owner = device ? static_cast<AGX_D3D12_OWNER *>(device->owner) : nullptr;
+    AgxD3d12Heap *dst = dst_resource ? dst_resource->heap : nullptr, *src = src_resource ? src_resource->heap : nullptr;
+    const UINT tiles = size ? size->NumTiles : 0u;
+    HRESULT hr = owner && dst && src && dst->tiles && src->tiles && dst_start && src_start && tiles ? S_OK : E_INVALIDARG;
+    /* C53 T2D: both regions walk their own resource's tile order (a box is
+     * rows of its start's standard mip) */
+    const AGX_TILE_GEOMETRY dst_geometry = SUCCEEDED(hr) ? ReservedGeometry(dst) : AGX_TILE_GEOMETRY{};
+    const AGX_TILE_GEOMETRY src_geometry = SUCCEEDED(hr) ? ReservedGeometry(src) : AGX_TILE_GEOMETRY{};
+    const AGX_TILE_COORD dst_at = dst_start ? AGX_TILE_COORD{dst_start->X, dst_start->Y, dst_start->Z, dst_start->Subresource}
+                                            : AGX_TILE_COORD{};
+    const AGX_TILE_COORD src_at = src_start ? AGX_TILE_COORD{src_start->X, src_start->Y, src_start->Z, src_start->Subresource}
+                                            : AGX_TILE_COORD{};
+    const AGX_TILE_REGION region = size ? AGX_TILE_REGION{size->NumTiles, size->UseBox ? 1u : 0u, size->Width, size->Height,
+                                                          size->Depth}
+                                        : AGX_TILE_REGION{};
+    /* the source snapshot first, with the destination indices: the regions
+     * may overlap (one resource) */
+    AgxD3d12Heap::AgxD3d12TileMapping *snapshot = SUCCEEDED(hr) ? static_cast<AgxD3d12Heap::AgxD3d12TileMapping *>(
+        calloc(tiles, sizeof(AgxD3d12Heap::AgxD3d12TileMapping))) : nullptr;
+    UINT *targets = SUCCEEDED(hr) ? static_cast<UINT *>(calloc(tiles, sizeof(UINT))) : nullptr;
+    if (SUCCEEDED(hr) && (!snapshot || !targets)) hr = E_OUTOFMEMORY;
+    for (UINT k = 0; SUCCEEDED(hr) && k < tiles; ++k) {
+        unsigned long long s = 0, d = 0;
+        if (!AgxTileRegionTile(&src_geometry, &src_at, &region, k, &s) ||
+            !AgxTileRegionTile(&dst_geometry, &dst_at, &region, k, &d) || s >= src->tile_count || d >= dst->tile_count) {
+            hr = E_INVALIDARG;
+            break;
+        }
+        snapshot[k] = src->tiles[s];
+        targets[k] = static_cast<UINT>(d);
+    }
+    if (SUCCEEDED(hr)) {
+        AgxD3d12OwnerLock(owner);
+        for (UINT k = 0; SUCCEEDED(hr) && k < tiles;) {
+            /* runs of consecutive destination tiles onto consecutive heap tiles */
+            UINT n = 1;
+            while (k + n < tiles && targets[k + n] == targets[k] + n && snapshot[k + n].heap == snapshot[k].heap &&
+                   (!snapshot[k].heap || snapshot[k + n].tile == snapshot[k].tile + n)) ++n;
+            AgxTileEmit emit = {owner, dst, snapshot[k].heap, S_OK};
+            const AGX_TILE_RUN run = {targets[k], n,
+                                      static_cast<unsigned>(snapshot[k].heap ? AGX_TILE_RANGE_HEAP : AGX_TILE_RANGE_NULL),
+                                      snapshot[k].tile};
+            hr = EmitTileRun(&emit, &run) ? S_OK : emit.hr;
+            k += n;
+        }
+        AgxD3d12OwnerUnlock(owner);
+    }
+    free(snapshot);
+    free(targets);
+    const UINT receipt[] = {tiles, dst_start ? dst_start->X : 0u, src_start ? src_start->X : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-copy-tile-mappings", hr, receipt, 3);
+    if (FAILED(hr)) ReportRejectedQueueError(handle, hr);
+}
+/* C53 T2D: D3D12_PACKED_MIP_INFO's NumPackedMips and NumTilesForPackedMips
+ * (per array slice) of a reserved texture; 0 and 0 for anything else */
+static VOID APIENTRY GetMipPacking(D3D12DDI_HDEVICE, D3D12DDI_HRESOURCE resource_handle, UINT *packed_mips,
+                                   UINT *packed_tiles) {
+    const auto *resource = static_cast<const AgxD3d12Resource *>(resource_handle.pDrvPrivate);
+    const AGX_TILE_GEOMETRY *geometry = resource && resource->heap ? resource->heap->geometry : nullptr;
+    if (packed_mips) *packed_mips = geometry ? geometry->MipLevels - geometry->StandardMips : 0u;
+    if (packed_tiles) *packed_tiles = geometry ? geometry->PackedTiles : 0u;
+}
+#endif
 static SIZE_T APIENTRY CalcPrivateCommandQueueSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATECOMMANDQUEUE_0001 *) {
     return sizeof(AgxD3d12CommandQueue);
 }
@@ -1406,6 +3800,7 @@ static HRESULT APIENTRY CreateCommandQueue(D3D12DDI_HDEVICE handle, const D3D12D
     auto *queue = arg ? static_cast<AgxD3d12CommandQueue *>(arg->hDrvCommandQueue.pDrvPrivate) : nullptr;
     if (!device || !queue || !device->callbacks || !device->callbacks->pfnCreateContextVirtualCb) return E_INVALIDARG;
     memset(queue, 0, sizeof(*queue));
+    queue->device = device;
     queue->runtime = arg->hRTCommandQueue;
     queue->flags = static_cast<UINT>(arg->QueueFlags);
     ADMISSION_WIN32_CONTEXT_CREATE contract = {};
@@ -1421,6 +3816,16 @@ static HRESULT APIENTRY CreateCommandQueue(D3D12DDI_HDEVICE handle, const D3D12D
     HRESULT hr = device->callbacks->pfnCreateContextVirtualCb(arg->hRTCommandQueue, &context);
     if (SUCCEEDED(hr) && !context.hContext) hr = E_FAIL;
     queue->context = SUCCEEDED(hr) ? context.hContext : nullptr;
+#if defined(APPLE_AGX_D3D12_NATIVE_OWNER) && defined(APPLE_AGX_GPUVA_WINSYS)
+    if (SUCCEEDED(hr)) {
+        char option[2] = {};
+        const bool enabled = GetEnvironmentVariableA("APPLE_AGX_D3D12_GPU_WAIT", option, sizeof(option)) == 1 &&
+                             option[0] == '1';
+        queue->gpu_wait = enabled && device->kernel && device->kernel->pfnWaitForSynchronizationObjectFromGpuCb;
+        const UINT values[] = {enabled ? 1u : 0u, queue->gpu_wait ? 1u : 0u};
+        AdmissionUmdDiagnostic("measure-d3d12-queue-sync", queue->gpu_wait ? S_OK : S_FALSE, values, 2);
+    }
+#endif
     const UINT receipt[] = {queue->flags, arg->NodeMask, queue->context != nullptr ? 1u : 0u};
     AdmissionUmdDiagnostic("measure-d3d12-queue", hr, receipt, 3);
     return hr;
@@ -1509,6 +3914,9 @@ struct AgxD3d12Indirect {
     UINT64 count_offset;
 };
 struct AgxD3d12Dispatch {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    uint8_t ref_cb_root[kCbSlots], ref_srv_root[kSrvSlots], ref_uav_root[kUavSlots];
+#endif
     AgxD3d12PipelineState *pso;
     AgxD3d12Heap *uav_heap[kUavSlots];
     UINT64 uav_offset[kUavSlots];
@@ -1530,6 +3938,14 @@ struct AgxD3d12Dispatch {
     const struct AgxD3d12SamplerDescriptor *sampler[kSamplerSlots];
     const D3D12DDI_STATIC_SAMPLER *static_sampler[kSamplerSlots];
     AgxD3d12Indirect indirect; /* C14 (dispatch commands only) */
+    /* C47: heap ranges -- the shader-visible CBV/SRV/UAV heap memory and the
+     * heap index of each range's first register */
+    AgxD3d12Heap *descriptors;
+    UINT heap_first[kHeapRanges];
+    UINT heap_count[kHeapRanges];
+    UINT heap_ranges;
+    AgxD3d12Heap *sampler_descriptors; /* C47: the shader-visible sampler heap of heap sampler ranges */
+    UINT64 heap_sampler_mask;          /* the heap ranges that are sampler ranges */
 };
 /* C6a: a recorded ClearRenderTargetView (the RTV read at record time) */
 static constexpr UINT kClearRects = 8;
@@ -1557,6 +3973,12 @@ struct AgxD3d12VertexBuffer {
     UINT64 offset;
     UINT stride;
 };
+/* C39: a stream-output view: the target range and its filled-size location */
+static constexpr UINT kSoTargets = 4;
+struct AgxD3d12SoTarget {
+    AgxD3d12Heap *heap, *filled;
+    UINT64 offset, size, filled_offset;
+};
 struct AgxD3d12Draw {
     AgxD3d12PipelineState *pso;
     /* C6c: the VS and PS root bindings (AgxD3d12Dispatch slot records) */
@@ -1577,6 +3999,7 @@ struct AgxD3d12Draw {
     UINT index_size;
     INT base_vertex;
     AgxD3d12Indirect indirect; /* C14 */
+    AgxD3d12SoTarget so[kSoTargets]; /* C39 */
 };
 /* C6f: a recorded ClearDepthStencilView */
 struct AgxD3d12ClearDepth {
@@ -1617,10 +4040,26 @@ struct AgxD3d12TextureRegionCopy {
     UINT src_level, src_layer, src_x, src_y;
     UINT width, height, layers;
     UINT whole_levels; /* > 0: ResourceCopy of this many levels */
+    UINT volume; /* C21: minify depth per whole-resource mip */
 };
 enum : UINT { kCommandCopy = 1, kCommandDispatch = 2, kCommandClear = 3, kCommandTextureCopy = 4, kCommandDraw = 5,
               kCommandClearDepth = 6, kCommandTextureRegionCopy = 7, kCommandClearUav = 8,
-              kCommandQuery = 9 };
+              kCommandQuery = 9, kCommandGsBind = 10 /* C27: the GS bindings of the next draw */,
+              kCommandIndirectExpand = 11 /* C31: ExecuteIndirect with root or IA arguments */,
+              kCommandResolve = 12 /* C32: ResolveSubresource */,
+              kCommandHsBind = 13, kCommandDsBind = 14 /* C37: the HS and DS bindings of the next draw */ };
+/* C32: a recorded ResolveSubresource (subresources decoded at record time) */
+struct AgxD3d12Resolve {
+    AgxD3d12Heap *dst, *src;
+    UINT dst_level, dst_layer, src_layer;
+    DXGI_FORMAT format;
+};
+/* C31: list->indirect_states[state] holds the list state and the command
+ * signature at the ExecuteIndirect call */
+struct AgxD3d12IndirectExpand {
+    UINT state;
+    AgxD3d12Indirect indirect;
+};
 struct AgxD3d12Command {
     UINT kind;
     union {
@@ -1633,6 +4072,8 @@ struct AgxD3d12Command {
         AgxD3d12TextureRegionCopy region_copy;
         AgxD3d12ClearUav clear_uav;
         AgxD3d12QueryCommand query;
+        AgxD3d12IndirectExpand indirect_expand;
+        AgxD3d12Resolve resolve;
     };
 };
 /* C8a: commands live in a growing process-heap array owned by the list
@@ -1661,6 +4102,7 @@ struct AgxD3d12CommandList {
     RECT scissor;
     UINT topology;
     AgxD3d12VertexBuffer vb[kVertexBuffers];
+    AgxD3d12SoTarget so[kSoTargets]; /* C39 */
     FLOAT blend_factor[4];
     UINT stencil_ref;
     /* C6d: the index buffer view */
@@ -1669,6 +4111,25 @@ struct AgxD3d12CommandList {
     UINT index_size;
     AgxD3d12Command *command;
     UINT capacity;
+    /* C30: a bundle's call log (BundleAppend), replayed by ExecuteBundle */
+    unsigned char *bundle;
+    SIZE_T bundle_bytes, bundle_capacity;
+    /* C31: ExecuteIndirect state snapshots; replay = a scratch list of the
+     * queue's replay, which reports no runtime list errors */
+    struct AgxD3d12IndirectState *indirect_states;
+    UINT indirect_state_count, indirect_state_capacity;
+    UINT replay;
+    /* rc105 receipt-only: ResourceBarrier kinds since the last Reset
+     * (agx_d3d12_barrier_stats.h), summed into measure-d3d12-barriers */
+    UINT barriers[8]; /* AGX_D3D12_BARRIER_COUNTERS (struct extracted by host tests) */
+    /* OV1 receipt-only (agx_d3d12_job_barriers.h): the barriers in record
+     * order, each with the index of the command it precedes; kept only when
+     * AgxD3d12OwnerJobBarriersEnabled (capacity kept across Reset) */
+    struct AgxD3d12JobBarrierRecord *job_barriers;
+    UINT job_barrier_count, job_barrier_capacity;
+    /* OV2: a ResourceBarrier of this recording was not logged (logging off
+     * when recorded, or the log could not grow): its executions never pair */
+    UINT job_barriers_lost;
 };
 /* EXP1363: creating/resetting a list makes the runtime set its default
  * state (topology, viewports, scissors, blend factor, stencil ref, PSO,
@@ -1707,7 +4168,17 @@ static HRESULT APIENTRY CreateCommandList(D3D12DDI_HDEVICE handle, const D3D12DD
 }
 static VOID APIENTRY DestroyCommandList(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDLIST handle) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
-    if (!list || !list->command) return;
+    if (!list) return;
+    if (list->bundle) HeapFree(GetProcessHeap(), 0, list->bundle);
+    list->bundle = nullptr;
+    list->bundle_bytes = list->bundle_capacity = 0;
+    if (list->indirect_states) HeapFree(GetProcessHeap(), 0, list->indirect_states);
+    list->indirect_states = nullptr;
+    list->indirect_state_count = list->indirect_state_capacity = 0;
+    if (list->job_barriers) HeapFree(GetProcessHeap(), 0, list->job_barriers);
+    list->job_barriers = nullptr;
+    list->job_barrier_count = list->job_barrier_capacity = 0;
+    if (!list->command) return;
     HeapFree(GetProcessHeap(), 0, list->command);
     list->command = nullptr;
     list->capacity = list->commands = 0;
@@ -1720,6 +4191,11 @@ static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
     if (!list) return;
     list->closed = list->commands = 0;
+    list->bundle_bytes = 0;
+    list->indirect_state_count = 0;
+    memset(list->barriers, 0, sizeof(list->barriers));
+    list->job_barrier_count = 0;
+    list->job_barriers_lost = 0;
     list->state = 0;
     list->pso = nullptr;
     list->compute_root = nullptr;
@@ -1734,6 +4210,7 @@ static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     memset(&list->scissor, 0, sizeof(list->scissor));
     list->topology = 0;
     memset(list->vb, 0, sizeof(list->vb));
+    memset(list->so, 0, sizeof(list->so));
     memset(list->blend_factor, 0, sizeof(list->blend_factor));
     list->stencil_ref = 0;
     list->index_heap = nullptr;
@@ -1745,8 +4222,11 @@ static VOID APIENTRY ResetCommandList(D3D12DDI_HCOMMANDLIST handle, const D3D12D
  * device's native owner (libagx copy kernels) and waits for completion, so
  * the runtime's later queue signal follows finished work. */
 static void ListError(AgxD3d12CommandList *list, HRESULT error) {
-    if (list && list->device && list->device->callbacks && list->device->callbacks->pfnSetCommandListErrorCb)
+    if (list && !list->replay && list->device && list->device->callbacks && list->device->callbacks->pfnSetCommandListErrorCb)
         list->device->callbacks->pfnSetCommandListErrorCb(list->runtime, error);
+}
+static void ReportRejectedListError(D3D12DDI_HCOMMANDLIST handle, HRESULT error) {
+    ListError(static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate), error);
 }
 /* C8a: the next command slot, growing the array by doubling; NULL (and a
  * list error) when the heap refuses. */
@@ -1770,6 +4250,46 @@ static AgxD3d12Command *AppendCommand(AgxD3d12CommandList *list) {
     AgxD3d12Command *slot = &list->command[list->commands++];
     memset(slot, 0, sizeof(*slot));
     return slot;
+}
+/* C30 (EXP1825: HelloBundles and Bundles stop on ExecuteBundle): a bundle
+ * records its calls, not commands. ExecuteBundle replays them through the
+ * same DDIs into the calling list, so a bundle draw sees the caller's
+ * render targets, viewports, scissors, blend factor, stencil reference and
+ * root arguments, and the state the bundle sets stays set in the caller
+ * afterwards -- the D3D12 bundle inheritance contract. A record is the
+ * replay function and its arguments copied by value, 16-byte aligned. */
+typedef void (*AgxD3d12BundleReplay)(D3D12DDI_HCOMMANDLIST, const unsigned char *);
+struct AgxD3d12BundleCall {
+    AgxD3d12BundleReplay replay;
+    SIZE_T bytes; /* the whole record */
+};
+static constexpr SIZE_T kBundleHeader = (sizeof(AgxD3d12BundleCall) + 15u) & ~static_cast<SIZE_T>(15u);
+static bool IsBundle(const AgxD3d12CommandList *list) {
+    return list && list->type == static_cast<UINT>(D3D12DDI_COMMAND_LIST_TYPE_BUNDLE);
+}
+static unsigned char *BundleAppend(AgxD3d12CommandList *list, AgxD3d12BundleReplay replay, SIZE_T payload) {
+    if (payload > 0x10000u) {
+        ListError(list, E_INVALIDARG);
+        return nullptr;
+    }
+    const SIZE_T record = kBundleHeader + ((payload + 15u) & ~static_cast<SIZE_T>(15u));
+    if (list->bundle_capacity - list->bundle_bytes < record) {
+        SIZE_T capacity = list->bundle_capacity ? list->bundle_capacity : 4096u;
+        while (capacity - list->bundle_bytes < record) capacity *= 2u;
+        void *grown = list->bundle ? HeapReAlloc(GetProcessHeap(), 0, list->bundle, capacity)
+                                   : HeapAlloc(GetProcessHeap(), 0, capacity);
+        if (!grown) {
+            ListError(list, E_OUTOFMEMORY);
+            return nullptr;
+        }
+        list->bundle = static_cast<unsigned char *>(grown);
+        list->bundle_capacity = capacity;
+    }
+    unsigned char *at = list->bundle + list->bundle_bytes;
+    list->bundle_bytes += record;
+    AgxD3d12BundleCall call = {replay, record};
+    memcpy(at, &call, sizeof(call));
+    return at + kBundleHeader;
 }
 static VOID APIENTRY CopyBufferRegion(D3D12DDI_HCOMMANDLIST handle, D3D12DDIARG_BUFFER_PLACEMENT dst,
                                       D3D12DDIARG_BUFFER_PLACEMENT src, UINT64 bytes) {
@@ -1821,11 +4341,49 @@ static VOID APIENTRY ClearRenderTargetView(D3D12DDI_HCOMMANDLIST handle, D3D12DD
 }
 /* C8b: CopyResource -- whole buffers (the smaller size) or whole 2D
  * textures (every common mip and layer) */
+/* C32: ResolveSubresource of a multisampled 2D subresource into a
+ * single-sampled one of the same size; the owner checks sample counts. */
+static VOID APIENTRY ResolveSubresource(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE dst_handle, UINT dst_sub,
+                                        D3D12DDI_HRESOURCE src_handle, UINT src_sub, DXGI_FORMAT format) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!list) return;
+    auto *d = static_cast<AgxD3d12Resource *>(dst_handle.pDrvPrivate);
+    auto *s = static_cast<AgxD3d12Resource *>(src_handle.pDrvPrivate);
+    const UINT refusal = !d || !s || !d->heap || !s->heap || !d->heap->native || !s->heap->native ? 1u
+                       : d->type != D3D12DDI_RT_TEXTURE2D || s->type != D3D12DDI_RT_TEXTURE2D ? 4u
+                       : dst_sub >= d->levels * d->layers || src_sub >= s->levels * s->layers ? 5u
+                       : list->commands >= kListCommands ? 3u : 0u;
+    const UINT receipt[] = {refusal, dst_sub, src_sub, static_cast<UINT>(format)};
+    AdmissionUmdDiagnostic("measure-d3d12-resolve-record", refusal ? E_INVALIDARG : S_OK, receipt, 4);
+    if (refusal) {
+        ListError(list, E_INVALIDARG);
+        return;
+    }
+    AgxD3d12Command *slot = AppendCommand(list);
+    if (!slot) return;
+    slot->kind = kCommandResolve;
+    AgxD3d12Resolve &r = slot->resolve;
+    r.dst = d->heap;
+    r.src = s->heap;
+    r.dst_level = dst_sub % d->levels;
+    r.dst_layer = dst_sub / d->levels;
+    r.src_layer = src_sub / s->levels;
+    r.format = format;
+}
 static VOID APIENTRY ResourceCopy(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE dst_handle, D3D12DDI_HRESOURCE src_handle) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
     if (!list) return;
     auto *d = static_cast<AgxD3d12Resource *>(dst_handle.pDrvPrivate);
     auto *s = static_cast<AgxD3d12Resource *>(src_handle.pDrvPrivate);
+    if(d && s && (d->type==D3D12DDI_RT_TEXTURE3D || s->type==D3D12DDI_RT_TEXTURE3D || d->type==D3D12DDI_RT_TEXTURE1D || s->type==D3D12DDI_RT_TEXTURE1D)) {
+        if(!d->heap || !s->heap || !d->heap->native || !s->heap->native || d->type!=s->type || d->format!=s->format || d->width!=s->width ||
+            d->height!=s->height || d->layers!=s->layers || d->levels!=s->levels || list->commands>=kListCommands) {
+            ListError(list,E_INVALIDARG);return;
+        }
+        AgxD3d12Command *slot=AppendCommand(list);if(!slot)return;
+        slot->kind=kCommandTextureRegionCopy;auto &r=slot->region_copy;r.dst=d->heap;r.src=s->heap;
+        r.width=s->width;r.height=s->height;r.layers=s->layers;r.whole_levels=s->levels;r.volume=s->type==D3D12DDI_RT_TEXTURE3D;return;
+    }
     const UINT refusal = !d || !s || !d->heap || !s->heap || !d->heap->native || !s->heap->native ? 1u
                        : (d->type == D3D12DDI_RT_TEXTURE2D) != (s->type == D3D12DDI_RT_TEXTURE2D) ? 4u
                        : list->commands >= kListCommands ? 3u : 0u;
@@ -1855,9 +4413,9 @@ static VOID APIENTRY ResourceCopy(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOUR
 }
 /* C7c (D3D12-C7-present.md): DXGI presents a swapchain buffer through the
  * runtime's list; the runtime submits the kernel present with the returned
- * source allocation on the returned context. ExecuteCommandLists retires
- * the owner's work before it returns, so the buffer's rendering is complete
- * here; the owner flushes for present and publishes the buffer's direct map
+ * source allocation on the returned context. ExecuteCommandLists orders
+ * completion by CPU retirement or the C83 outgoing queue wait. The owner
+ * flushes for present and publishes the buffer's direct map
  * (the D3D11 present order). No GPU work is added and no private data is
  * needed (the D3D11 pfnPresentCb carries none). */
 static UINT APIENTRY GetPresentPrivateDriverDataSize(D3D12DDI_HDEVICE, const D3D12DDIARG_PRESENT_0001 *) {
@@ -1893,8 +4451,12 @@ static VOID APIENTRY Present(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDQUEU
     }
     const UINT receipt[] = {reason, arg ? arg->SurfacesToPresent : 0u, arg ? arg->Flags.Value : 0u,
                             arg ? static_cast<UINT>(arg->FlipInterval) : 0u, allocation,
-                            arg && arg->hDstResource.pDrvPrivate ? 1u : 0u};
-    AdmissionUmdDiagnostic("measure-d3d12-present", reason ? hr : S_OK, receipt, 6);
+                            arg && arg->hDstResource.pDrvPrivate ? 1u : 0u,
+                            /* C66: which surface a refused present named */
+                            source ? static_cast<UINT>(source->format) : 0u,
+                            source ? source->width | (source->height << 16) : 0u,
+                            source ? static_cast<UINT>(source->bytes >> 16) : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-present", reason ? hr : S_OK, receipt, 9);
     if (reason && list) ListError(list, hr);
 }
 /* C10 (D3D12-C10-uav-clears.md): UAV clears record the CPU descriptor
@@ -2062,9 +4624,129 @@ static bool CopySide(const D3D12DDIARG_BUFFER_PLACEMENT *placement, D3D12DDIARG_
     side->footprint = layout.Layout == D3D12DDI_RL_PLACED_PHYSICAL_SUBRESOURCE_PITCHED
                           ? static_cast<const D3D12DDIARG_PHYSICAL_SUBRESOURCE_PITCHED_LAYOUT *>(layout.pLayout) : nullptr;
     if (!side->resource || !side->resource->heap) return false;
-    if (layout.Layout == D3D12DDI_RL_SELECT_SUBRESOURCE) return side->resource->type == D3D12DDI_RT_TEXTURE2D;
-    return side->footprint && side->resource->type != D3D12DDI_RT_TEXTURE2D;
+    if (layout.Layout == D3D12DDI_RL_SELECT_SUBRESOURCE) return side->resource->type == D3D12DDI_RT_TEXTURE2D || side->resource->type == D3D12DDI_RT_TEXTURE3D || side->resource->type == D3D12DDI_RT_TEXTURE1D;
+    return side->footprint && side->resource->type != D3D12DDI_RT_TEXTURE2D && side->resource->type != D3D12DDI_RT_TEXTURE3D && side->resource->type != D3D12DDI_RT_TEXTURE1D;
 }
+/* An array subresource is (mip,slice), not a minified volume Z range. */
+static bool LineSubresource(const AgxD3d12Resource *resource,UINT64 index,UINT *level,UINT *layer) {
+  if(!resource || resource->type!=D3D12DDI_RT_TEXTURE1D || !resource->levels || !resource->layers ||
+     index>=static_cast<UINT64>(resource->levels)*resource->layers)return false;
+  *level=static_cast<UINT>(index%resource->levels);*layer=static_cast<UINT>(index/resource->levels);return true;
+}
+static void CopyLineTextureRegion(AgxD3d12CommandList *list,
+    const AgxD3d12CopySide &dst,const AgxD3d12CopySide &src,
+    UINT dst_x,UINT dst_y,UINT dst_z,const D3D12DDI_BOX *box) {
+  auto fail=[&](){ListError(list,E_INVALIDARG);};
+  auto width=[](const AgxD3d12Resource *r,UINT l){return r->width>>l?r->width>>l:1u;};
+  if(dst_y || dst_z || (box && (box->Left<0 || box->Right<=box->Left ||
+      box->Top || box->Bottom!=1 || box->Front || box->Back!=1))) {fail();return;}
+  if(!dst.footprint && !src.footprint) {
+    UINT dl=0,ds=0,sl=0,ss=0;
+    if(!LineSubresource(dst.resource,dst.offset,&dl,&ds) || !LineSubresource(src.resource,src.offset,&sl,&ss) ||
+       dst.resource->format!=src.resource->format) {fail();return;}
+    const UINT sx=box?static_cast<UINT>(box->Left):0u;
+    const UINT count=box?static_cast<UINT>(box->Right-box->Left):width(src.resource,sl);
+    const UINT sw=width(src.resource,sl),dw=width(dst.resource,dl);
+    if(sx>sw || count>sw-sx || dst_x>dw || count>dw-dst_x) {fail();return;}
+    AgxD3d12Command *slot=AppendCommand(list);if(!slot)return;
+    slot->kind=kCommandTextureRegionCopy;auto &r=slot->region_copy;
+    r.dst=dst.resource->heap;r.src=src.resource->heap;r.dst_level=dl;r.src_level=sl;
+    r.dst_layer=ds;r.src_layer=ss;r.dst_x=dst_x;r.src_x=sx;r.width=count;r.height=r.layers=1;return;
+  }
+  const bool to_buffer=dst.footprint!=nullptr;
+  const auto &t=to_buffer?src:dst;const auto &b=to_buffer?dst:src;UINT level=0,layer=0;
+  if(!LineSubresource(t.resource,t.offset,&level,&layer) || !b.footprint ||
+     b.resource->type!=D3D12DDI_RT_BUFFER || b.footprint->Format!=t.resource->format ||
+     !b.footprint->PhysicalWidth || b.footprint->PhysicalHeight!=1 || b.footprint->PhysicalDepth!=1) {fail();return;}
+  const UINT tw=width(t.resource,level),fw=b.footprint->PhysicalWidth,block=AgxD3d12FormatBlockBytes(t.resource->format);
+  const UINT sx=box?static_cast<UINT>(box->Left):0u;
+  const UINT count=box?static_cast<UINT>(box->Right-box->Left):(to_buffer?tw:fw);
+  const UINT tx=to_buffer?sx:dst_x,bx=to_buffer?dst_x:sx;
+  if(!block || !count || tx>tw || count>tw-tx || bx>fw || count>fw-bx ||
+     b.footprint->Pitch<static_cast<UINT64>(fw)*block || b.resource->gpuva<b.resource->heap->gpuva) {fail();return;}
+  const UINT64 base=b.resource->gpuva-b.resource->heap->gpuva;
+  const UINT64 point=static_cast<UINT64>(bx)*block,span=static_cast<UINT64>(count)*block;
+  if(b.offset>b.resource->bytes || point>b.resource->bytes-b.offset || span>b.resource->bytes-b.offset-point ||
+     base>b.resource->heap->bytes || b.offset>b.resource->heap->bytes-base ||
+     point>b.resource->heap->bytes-base-b.offset || span>b.resource->heap->bytes-base-b.offset-point) {fail();return;}
+  AgxD3d12Command *slot=AppendCommand(list);if(!slot)return;slot->kind=kCommandTextureCopy;auto &c=slot->texture_copy;
+  c.texture=t.resource->heap;c.buffer=b.resource->heap;c.level=level;c.layer=layer;c.x=tx;
+  c.width=count;c.height=c.depth=1;c.offset=base+b.offset+point;
+  c.pitch=b.footprint->Pitch;c.slice_pitch=b.footprint->SlicePitch;c.to_buffer=to_buffer;
+}
+
+/* C21 LIMITED volume copy: a volume subresource is one entire mip, never a
+ * modulo-decoded array slice. Buffer coordinates use real runtime pitches. */
+static void CopyVolumeTextureRegion(AgxD3d12CommandList *list,
+    const AgxD3d12CopySide &dst,const AgxD3d12CopySide &src,
+    UINT dst_x,UINT dst_y,UINT dst_z,const D3D12DDI_BOX *box) {
+  const bool to_buffer=dst.footprint!=nullptr;
+  const AgxD3d12CopySide &t=to_buffer?src:dst;
+  const AgxD3d12CopySide &b=to_buffer?dst:src;
+  auto extent=[](UINT base,UINT level){return base>>level ? base>>level:1u;};
+  auto fail=[&](){ListError(list,E_INVALIDARG);};
+  if(box && (box->Left<0 || box->Top<0 || box->Front<0 || box->Right<=box->Left ||
+      box->Bottom<=box->Top || box->Back<=box->Front)) {fail();return;}
+  if(!dst.footprint && !src.footprint) {
+    if((dst.resource->type!=D3D12DDI_RT_TEXTURE3D && dst.resource->type!=D3D12DDI_RT_TEXTURE1D) || src.resource->type!=dst.resource->type ||
+        dst.offset>=dst.resource->levels || src.offset>=src.resource->levels ||
+        dst.resource->format!=src.resource->format) {fail();return;}
+    const UINT dl=static_cast<UINT>(dst.offset),sl=static_cast<UINT>(src.offset);
+    const UINT sx=box?static_cast<UINT>(box->Left):0u,sy=box?static_cast<UINT>(box->Top):0u,sz=box?static_cast<UINT>(box->Front):0u;
+    const UINT w=box?static_cast<UINT>(box->Right-box->Left):extent(src.resource->width,sl);
+    const UINT h=box?static_cast<UINT>(box->Bottom-box->Top):extent(src.resource->height,sl);
+    const UINT d=box?static_cast<UINT>(box->Back-box->Front):extent(src.resource->layers,sl);
+    /* EXP1906: BC levels round up to whole blocks */
+    unsigned cbw=1,cbh=1;
+    if(!AgxD3d12FormatBlock(dst.resource->format,&cbw,&cbh) || !cbw || !cbh) cbw=cbh=1;
+    auto blocks=[](UINT v,UINT b){return (v+b-1)/b*b;};
+    const UINT sw=blocks(extent(src.resource->width,sl),cbw),sh=blocks(extent(src.resource->height,sl),cbh),sd=extent(src.resource->layers,sl);
+    const UINT dw=blocks(extent(dst.resource->width,dl),cbw),dh=blocks(extent(dst.resource->height,dl),cbh),dd=extent(dst.resource->layers,dl);
+    if(sx>sw || w>sw-sx || sy>sh || h>sh-sy || sz>sd || d>sd-sz ||
+        dst_x>dw || w>dw-dst_x || dst_y>dh || h>dh-dst_y || dst_z>dd || d>dd-dst_z) {fail();return;}
+    AgxD3d12Command *slot=AppendCommand(list);if(!slot)return;
+    slot->kind=kCommandTextureRegionCopy;
+    auto &r=slot->region_copy;r.dst=dst.resource->heap;r.src=src.resource->heap;
+    r.dst_level=dl;r.src_level=sl;r.dst_layer=dst_z;r.src_layer=sz;
+    r.dst_x=dst_x;r.dst_y=dst_y;r.src_x=sx;r.src_y=sy;r.width=w;r.height=h;r.layers=d;
+    return;
+  }
+  if((t.resource->type!=D3D12DDI_RT_TEXTURE3D && t.resource->type!=D3D12DDI_RT_TEXTURE1D) || !b.footprint ||
+      b.resource->type!=D3D12DDI_RT_BUFFER || t.offset>=t.resource->levels ||
+      b.footprint->Format!=t.resource->format || !b.footprint->PhysicalWidth ||
+      !b.footprint->PhysicalHeight || !b.footprint->PhysicalDepth) {fail();return;}
+  /* C21H: a 1x1 texel or a BC1-BC7 4x4 block; pitches count block rows */
+  unsigned bw=0,bh=0;
+  const UINT level=static_cast<UINT>(t.offset),block=AgxD3d12FormatBlock(t.resource->format,&bw,&bh);
+  /* EXP1906: a BC level's extent rounds up to whole blocks (D3D footprints
+   * of small mips are block-aligned; the owner copy clamps to the level) */
+  const UINT tw=bw?(extent(t.resource->width,level)+bw-1)/bw*bw:0u,th=bh?(extent(t.resource->height,level)+bh-1)/bh*bh:0u,
+             td=extent(t.resource->layers,level);
+  const UINT fw=b.footprint->PhysicalWidth,fh=b.footprint->PhysicalHeight,fd=b.footprint->PhysicalDepth;
+  const UINT sx=box?static_cast<UINT>(box->Left):0u,sy=box?static_cast<UINT>(box->Top):0u,sz=box?static_cast<UINT>(box->Front):0u;
+  const UINT w=box?static_cast<UINT>(box->Right-box->Left):to_buffer?tw:fw;
+  const UINT h=box?static_cast<UINT>(box->Bottom-box->Top):to_buffer?th:fh;
+  const UINT d=box?static_cast<UINT>(box->Back-box->Front):to_buffer?td:fd;
+  const UINT tx=to_buffer?sx:dst_x,ty=to_buffer?sy:dst_y,tz=to_buffer?sz:dst_z;
+  const UINT bx=to_buffer?dst_x:sx,by=to_buffer?dst_y:sy,bz=to_buffer?dst_z:sz;
+  const UINT pitch=b.footprint->Pitch,slice=b.footprint->SlicePitch;
+  if(!block || !bw || !bh || !w || !h || !d || tx>tw || w>tw-tx || ty>th || h>th-ty || tz>td || d>td-tz ||
+      bx>fw || w>fw-bx || by>fh || h>fh-by || bz>fd || d>fd-bz || tx%bw || ty%bh || bx%bw || by%bh ||
+      pitch<static_cast<UINT64>((fw+bw-1)/bw)*block || (fd>1 && slice<static_cast<UINT64>(pitch)*((fh+bh-1)/bh)) ||
+      b.resource->gpuva<b.resource->heap->gpuva) {fail();return;}
+  const UINT64 base=b.resource->gpuva-b.resource->heap->gpuva;
+  const UINT64 point=static_cast<UINT64>(bz)*slice+static_cast<UINT64>(by/bh)*pitch+static_cast<UINT64>(bx/bw)*block;
+  const UINT64 span=static_cast<UINT64>(d-1)*slice+static_cast<UINT64>((h+bh-1)/bh-1)*pitch+
+                    static_cast<UINT64>((w+bw-1)/bw)*block;
+  if(b.offset>b.resource->bytes || point>b.resource->bytes-b.offset || span>b.resource->bytes-b.offset-point ||
+      base>b.resource->heap->bytes || b.offset>b.resource->heap->bytes-base ||
+      point>b.resource->heap->bytes-base-b.offset || span>b.resource->heap->bytes-base-b.offset-point) {fail();return;}
+  AgxD3d12Command *slot=AppendCommand(list);if(!slot)return;slot->kind=kCommandTextureCopy;
+  auto &c=slot->texture_copy;c.texture=t.resource->heap;c.buffer=b.resource->heap;
+  c.level=level;c.layer=tz;c.x=tx;c.y=ty;c.width=w;c.height=h;c.depth=d;
+  c.offset=base+b.offset+point;c.pitch=pitch;c.slice_pitch=slice;c.to_buffer=to_buffer;
+}
+
 static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12DDIARG_BUFFER_PLACEMENT *dst_placement,
                                        D3D12DDIARG_PLACED_RESOURCE dst_layout, UINT dst_x, UINT dst_y, UINT dst_z,
                                        const D3D12DDIARG_BUFFER_PLACEMENT *src_placement,
@@ -2075,6 +4757,12 @@ static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12
     UINT refusal = !CopySide(dst_placement, dst_layout, &dst) || !CopySide(src_placement, src_layout, &src) ? 1u
                  : dst.footprint && src.footprint ? 4u /* buffer <-> buffer footprints */
                  : list->commands >= kListCommands ? 3u : 0u;
+    if(!refusal && (dst.resource->type==D3D12DDI_RT_TEXTURE1D || src.resource->type==D3D12DDI_RT_TEXTURE1D)) {
+        CopyLineTextureRegion(list,dst,src,dst_x,dst_y,dst_z,box);return;
+    }
+    if(!refusal && (dst.resource->type==D3D12DDI_RT_TEXTURE3D || src.resource->type==D3D12DDI_RT_TEXTURE3D)) {
+        CopyVolumeTextureRegion(list,dst,src,dst_x,dst_y,dst_z,box);return;
+    }
     if (!refusal && !dst.footprint && !src.footprint) {
         /* C8b: texture subresource to texture subresource */
         AgxD3d12TextureRegionCopy rc = {};
@@ -2106,7 +4794,10 @@ static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12
     if (!refusal) {
         const bool to_buffer = dst.footprint != nullptr;
         const AgxD3d12CopySide &texture = to_buffer ? src : dst, &buffer = to_buffer ? dst : src;
-        const UINT block = AgxD3d12FormatBlockBytes(texture.resource->format);
+        /* C29: buffer offsets count block rows and blocks (BC1-BC7) */
+        unsigned bw = 0, bh = 0;
+        const UINT block = AgxD3d12FormatBlock(texture.resource->format, &bw, &bh);
+        if (!bw) bw = bh = 1;
         const UINT sub = static_cast<UINT>(texture.offset);
         copy.texture = texture.resource->heap;
         copy.level = sub % texture.resource->levels;
@@ -2139,19 +4830,20 @@ static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12
             copy.x = bx;
             copy.y = by;
             copy.offset = buffer.resource->gpuva - buffer.resource->heap->gpuva + buffer.offset +
-                          static_cast<UINT64>(dst_z) * copy.slice_pitch + static_cast<UINT64>(dst_y) * copy.pitch +
-                          static_cast<UINT64>(dst_x) * block;
+                          static_cast<UINT64>(dst_z) * copy.slice_pitch + static_cast<UINT64>(dst_y / bh) * copy.pitch +
+                          static_cast<UINT64>(dst_x / bw) * block;
             copy.layer += bz;
         } else {
             copy.x = dst_x;
             copy.y = dst_y;
             copy.layer += dst_z;
             copy.offset = buffer.resource->gpuva - buffer.resource->heap->gpuva + buffer.offset +
-                          static_cast<UINT64>(bz) * copy.slice_pitch + static_cast<UINT64>(by) * copy.pitch +
-                          static_cast<UINT64>(bx) * block;
+                          static_cast<UINT64>(bz) * copy.slice_pitch + static_cast<UINT64>(by / bh) * copy.pitch +
+                          static_cast<UINT64>(bx / bw) * block;
         }
         if (!block || (buffer.footprint->Format != texture.resource->format &&
-                       AgxD3d12FormatBlockBytes(buffer.footprint->Format) != block) ||
+                       (bw > 1 || AgxD3d12FormatBlockBytes(buffer.footprint->Format) != block)) ||
+            dst_x % bw || dst_y % bh || bx % bw || by % bh ||
             copy.layer >= texture.resource->layers || !w || !h || !d)
             refusal = 5u;
     }
@@ -2167,13 +4859,116 @@ static VOID APIENTRY CopyTextureRegion(D3D12DDI_HCOMMANDLIST handle, const D3D12
     command.kind = kCommandTextureCopy;
     command.texture_copy = copy;
 }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C53 T2D: CopyTiles (Microsoft ID3D12GraphicsCommandList::CopyTiles): the
+ * region's 64 KiB tiles, in region order, to or from consecutive 64 KiB of
+ * the buffer -- a buffer tile's bytes as they are, a standard texture tile's
+ * texels row by row at the full tile's pitch (a partial tile leaves the
+ * rest of its 64 KiB alone). Recorded as one buffer or texture copy per
+ * tile (consecutive buffer tiles as one). Packed tiles are left out: copies
+ * of packed mips through CopyTiles are undefined. Exactly one direction
+ * flag is required (the documentation names no default). */
+static bool StandardTileElements(UINT block_bytes, UINT *w_el, UINT *h_el) {
+    switch (block_bytes) {
+    case 1: *w_el = 256; *h_el = 256; return true;
+    case 2: *w_el = 256; *h_el = 128; return true;
+    case 4: *w_el = 128; *h_el = 128; return true;
+    case 8: *w_el = 128; *h_el = 64; return true;
+    case 16: *w_el = 64; *h_el = 64; return true;
+    default: return false;
+    }
+}
+static VOID APIENTRY CopyTiles(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE tiled_handle,
+                               const D3D12DDI_TILED_RESOURCE_COORDINATE *start, const D3D12DDI_TILE_REGION_SIZE *size,
+                               D3D12DDI_HRESOURCE buffer_handle, UINT64 buffer_offset, D3D12DDI_TILE_COPY_FLAGS flags) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    auto *tiled = static_cast<AgxD3d12Resource *>(tiled_handle.pDrvPrivate);
+    auto *buffer = static_cast<AgxD3d12Resource *>(buffer_handle.pDrvPrivate);
+    if (!list) return;
+    const bool in = (flags & D3D12DDI_TILE_COPY_FLAG_LINEAR_BUFFER_TO_SWIZZLED_TILED_RESOURCE) != 0;
+    const bool out = (flags & D3D12DDI_TILE_COPY_FLAG_SWIZZLED_TILED_RESOURCE_TO_LINEAR_BUFFER) != 0;
+    const UINT tiles = size ? size->NumTiles : 0u;
+    AgxD3d12Heap *reserved = tiled ? tiled->heap : nullptr;
+    const UINT64 tile = 0x10000ull;
+    UINT refusal = !tiled || !reserved || !reserved->tiles || !reserved->native || !buffer || !buffer->heap ||
+                           !buffer->heap->native || buffer->type != D3D12DDI_RT_BUFFER || !start || !tiles ? 1u
+                 : in == out ? 2u
+                 : buffer_offset > buffer->bytes || static_cast<UINT64>(tiles) * tile > buffer->bytes - buffer_offset ? 3u
+                 : list->commands + tiles > kListCommands ? 4u : 0u;
+    UINT w_el = 0, h_el = 0, bw = 1, bh = 1, block = 0;
+    if (!refusal && reserved->geometry) {
+        block = AgxD3d12FormatBlock(tiled->format, &bw, &bh);
+        if (!bw) bw = bh = 1;
+        if (!StandardTileElements(block, &w_el, &h_el)) refusal = 5u;
+    }
+    const AGX_TILE_GEOMETRY geometry = !refusal ? ReservedGeometry(reserved) : AGX_TILE_GEOMETRY{};
+    const AGX_TILE_COORD at = start ? AGX_TILE_COORD{start->X, start->Y, start->Z, start->Subresource} : AGX_TILE_COORD{};
+    const AGX_TILE_REGION region = size ? AGX_TILE_REGION{size->NumTiles, size->UseBox ? 1u : 0u, size->Width,
+                                                          size->Height, size->Depth}
+                                        : AGX_TILE_REGION{};
+    const UINT64 buffer_base = buffer && buffer->heap ? buffer->gpuva - buffer->heap->gpuva + buffer_offset : 0u;
+    UINT recorded = 0;
+    for (UINT k = 0; !refusal && k < tiles;) {
+        unsigned long long index = 0;
+        if (!AgxTileRegionTile(&geometry, &at, &region, k, &index)) { refusal = 6u; break; }
+        if (!reserved->geometry) {
+            /* buffer tiles: runs of consecutive resource tiles in one copy */
+            UINT n = 1;
+            unsigned long long next = 0;
+            while (k + n < tiles && AgxTileRegionTile(&geometry, &at, &region, k + n, &next) && next == index + n) ++n;
+            AgxD3d12Command *slot = AppendCommand(list);
+            if (!slot) return;
+            slot->kind = kCommandCopy;
+            const UINT64 at_tile = index * tile, at_buffer = buffer_base + static_cast<UINT64>(k) * tile;
+            slot->copy = in ? AgxD3d12Copy{reserved, at_tile, buffer->heap, at_buffer, n * tile}
+                            : AgxD3d12Copy{buffer->heap, at_buffer, reserved, at_tile, n * tile};
+            ++recorded;
+            k += n;
+            continue;
+        }
+        unsigned slice = 0, mip = 0, x = 0, y = 0;
+        int packed = 0;
+        if (!AgxTileLocate(&geometry, index, &slice, &mip, &x, &y, &packed)) { refusal = 6u; break; }
+        if (!packed) {
+            const UINT level_w = tiled->width >> mip ? tiled->width >> mip : 1u;
+            const UINT level_h = tiled->height >> mip ? tiled->height >> mip : 1u;
+            const UINT px = x * w_el * bw, py = y * h_el * bh;
+            AgxD3d12TextureCopy copy = {};
+            copy.texture = reserved;
+            copy.level = mip;
+            copy.layer = slice;
+            copy.x = px;
+            copy.y = py;
+            copy.width = w_el * bw < level_w - px ? w_el * bw : level_w - px;
+            copy.height = h_el * bh < level_h - py ? h_el * bh : level_h - py;
+            copy.depth = 1;
+            copy.buffer = buffer->heap;
+            copy.offset = buffer_base + static_cast<UINT64>(k) * tile;
+            copy.pitch = w_el * block;
+            copy.slice_pitch = 0;
+            copy.to_buffer = out;
+            AgxD3d12Command *slot = AppendCommand(list);
+            if (!slot) return;
+            slot->kind = kCommandTextureCopy;
+            slot->texture_copy = copy;
+            ++recorded;
+        }
+        ++k;
+    }
+    const UINT receipt[] = {refusal, tiles, recorded, out ? 1u : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-copy-tiles", refusal ? E_INVALIDARG : S_OK, receipt, 4);
+    if (refusal) ListError(list, E_INVALIDARG);
+}
+#endif
 /* C6b: graphics state setters (each also records its default-state bit) */
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 #define AGX_VB_SETTER IASetVertexBuffers
 #define AGX_IB_SETTER IASetIndexBuffer
+#define AGX_SO_SETTER SoSetTargets
 #else
 #define AGX_VB_SETTER AGX_LIST_STATE(pfnIASetVertexBuffers)
 #define AGX_IB_SETTER AGX_LIST_STATE(pfnIASetIndexBuffer)
+#define AGX_SO_SETTER AGX_LIST_STATE(pfnSOSetTargets)
 #endif
 #define AGX_LIST_BIT(M) (1ULL << ((offsetof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, M) / sizeof(void *)) & 63u))
 static VOID APIENTRY OMSetRenderTargets(D3D12DDI_HCOMMANDLIST handle, UINT count, const D3D12DDI_CPU_DESCRIPTOR_HANDLE *rtvs,
@@ -2238,10 +5033,25 @@ static VOID APIENTRY OmSetStencilRef(D3D12DDI_HCOMMANDLIST handle, UINT ref) {
     list->state |= AGX_LIST_BIT(pfnOmSetStencilRef);
     list->stencil_ref = ref;
 }
+static void ReportRedundantRoot(const AgxD3d12CommandList *list, UINT bank) {
+    const auto *va = bank ? list->graphics_root_va : list->compute_root_va;
+    const UINT *dwords = bank ? list->graphics_root_dwords : list->compute_root_dwords;
+    UINT receipt[] = {bank, 0u, 0u};
+    for (UINT i = 0; i < kRootArguments; ++i) {
+        receipt[1] += va[i] != 0;
+        receipt[2] += dwords[i] != 0;
+    }
+    AdmissionUmdDiagnostic("measure-d3d12-root-redundant", S_OK, receipt, 3);
+}
 static VOID APIENTRY SetGraphicsRootSignature(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HROOTSIGNATURE root) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
     if (!list) return;
-    list->graphics_root = static_cast<const AgxD3d12RootSignature *>(root.pDrvPrivate);
+    const auto *signature = static_cast<const AgxD3d12RootSignature *>(root.pDrvPrivate);
+    if (signature && list->graphics_root == signature) {
+        ReportRedundantRoot(list, 1u);
+        return;
+    }
+    list->graphics_root = signature;
     memset(list->graphics_root_va, 0, sizeof(list->graphics_root_va));
     memset(list->graphics_root_dwords, 0, sizeof(list->graphics_root_dwords));
 }
@@ -2260,6 +5070,26 @@ static VOID APIENTRY IASetVertexBuffers(D3D12DDI_HCOMMANDLIST handle, UINT start
         if (!vb.heap) ListError(list, E_INVALIDARG);
     }
 }
+/* C39: stream-output views; a zero BufferLocation unbinds the slot */
+static VOID APIENTRY SoSetTargets(D3D12DDI_HCOMMANDLIST handle, UINT start, UINT count,
+                                  const D3D12DDI_STREAM_OUTPUT_BUFFER_VIEW *views) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!list) return;
+    list->state |= AGX_LIST_BIT(pfnSOSetTargets);
+    for (UINT i = 0; i < count && start + i < kSoTargets; ++i) {
+        AgxD3d12SoTarget &t = list->so[start + i];
+        t = {};
+        if (!views || !views[i].BufferLocation) continue;
+        t.heap = HeapAt(list->device, views[i].BufferLocation, &t.offset);
+        t.filled = views[i].BufferFilledSizeLocation
+                       ? HeapAt(list->device, views[i].BufferFilledSizeLocation, &t.filled_offset) : nullptr;
+        t.size = views[i].SizeInBytes;
+        if (!t.heap || !t.filled) {
+            t = {};
+            ListError(list, E_INVALIDARG);
+        }
+    }
+}
 /* C6d: R16_UINT/R32_UINT index buffers; a null view unbinds */
 static VOID APIENTRY IASetIndexBuffer(D3D12DDI_HCOMMANDLIST handle, const D3D12DDI_INDEX_BUFFER_VIEW *view) {
     auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
@@ -2274,12 +5104,71 @@ static VOID APIENTRY IASetIndexBuffer(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     list->index_size = list->index_heap ? size : 0u;
     if (!list->index_heap) ListError(list, E_INVALIDARG);
 }
-static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *pso) {
-    if (pso->compiled != S_FALSE) return pso->compiled;
+/* RC75: the root CBVs and UAVs of a root signature, with the stages that
+ * see them (compute sees every parameter, as ResolveRoot with kAnyStage).
+ * D3D12 requires the bound root signature to match the PSO's, so the one
+ * bound at a PSO's first dispatch or draw describes all of them. */
+static void RootViews(const AgxD3d12RootSignature *root, AGX_D3D12_ROOT_VIEWS *out) {
+    memset(out, 0, sizeof(*out));
+    for (UINT i = 0; root && i < root->parameters && out->Count < AGX_D3D12_ROOT_VIEWS_MAX; ++i) {
+        const AgxD3d12RootParameter &p = root->parameter[i];
+        const bool cbv = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_CBV, uav = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_UAV;
+        if (!cbv && !uav) continue;
+        unsigned stages = 1u << AGX_D3D12_HEAP_CS;
+        switch (p.visibility) {
+        case D3D12DDI_SHADER_VISIBILITY_ALL:
+            stages |= 1u << AGX_D3D12_HEAP_VS | 1u << AGX_D3D12_HEAP_PS | 1u << AGX_D3D12_HEAP_GS |
+                      1u << AGX_D3D12_HEAP_HS | 1u << AGX_D3D12_HEAP_DS;
+            break;
+        case D3D12DDI_SHADER_VISIBILITY_VERTEX: stages |= 1u << AGX_D3D12_HEAP_VS; break;
+        case D3D12DDI_SHADER_VISIBILITY_HULL: stages |= 1u << AGX_D3D12_HEAP_HS; break;
+        case D3D12DDI_SHADER_VISIBILITY_DOMAIN: stages |= 1u << AGX_D3D12_HEAP_DS; break;
+        case D3D12DDI_SHADER_VISIBILITY_GEOMETRY: stages |= 1u << AGX_D3D12_HEAP_GS; break;
+        case D3D12DDI_SHADER_VISIBILITY_PIXEL: stages |= 1u << AGX_D3D12_HEAP_PS; break;
+        default: break;
+        }
+        auto &v = out->View[out->Count++];
+        v.Kind = cbv ? DXBC_BINDING_CBV : DXBC_BINDING_UAV;
+        v.Space = p.space;
+        v.Register = p.shader_register;
+        v.Stages = stages;
+    }
+}
+static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *pso, const AgxD3d12RootSignature *root) {
+    AcquireSRWLockExclusive(&pso->compile_lock);
+    if (pso->compiled != S_FALSE) {
+        const HRESULT result = pso->compiled;
+        ReleaseSRWLockExclusive(&pso->compile_lock);
+        return result;
+    }
     AGX_D3D12_OWNER *owner = EnsureOwner(device);
-    AGX_D3D12_GRAPHICS_DESC desc = {};
+    if (pso->ps_dwords >= 2)
+        pso->ps_tag = static_cast<UINT>(agx_win32_shader_hash(pso->cs + pso->cs_dwords + pso->vs_dwords,
+                                                              static_cast<size_t>(pso->ps_dwords) * sizeof(UINT)));
+    AGX_D3D12_GRAPHICS_DESC &desc = pso->owner_desc; /* C65V: kept for the min/max variant */
+    memset(&desc, 0, sizeof(desc));
+    RootViews(root, &pso->root_views);
+    desc.Root = &pso->root_views;
     desc.Vs = pso->vs_dwords ? pso->cs + pso->cs_dwords : nullptr;
     desc.Ps = pso->ps_dwords ? pso->cs + pso->cs_dwords + pso->vs_dwords : nullptr;
+    desc.Gs = pso->gs_dwords ? pso->cs + pso->cs_dwords + pso->vs_dwords + pso->ps_dwords : nullptr;
+    const UINT *tess = pso->cs + pso->cs_dwords + pso->vs_dwords + pso->ps_dwords + pso->gs_dwords; /* C37 */
+    desc.Hs = pso->hs_dwords ? tess : nullptr;
+    desc.Ds = pso->ds_dwords ? tess + pso->hs_dwords : nullptr;
+    desc.HsPassthroughRegisters = pso->hs_registers;
+    desc.HsPassthroughPositions = pso->hs_positions;
+    AGX_D3D12_SO_DECL &so = pso->owner_so; /* C39 */
+    memset(&so, 0, sizeof(so));
+    if (pso->so.declared) {
+        so.Entries = pso->so.entries;
+        so.Rasterized = pso->so.rasterized;
+        so.NumStrides = pso->so.num_strides;
+        so.PositionRegisters = pso->so.position_registers;
+        for (UINT i = 0; i < 4; ++i) so.Strides[i] = pso->so.strides[i];
+        for (UINT i = 0; i < kSoEntries && i < pso->so.entries; ++i)
+            so.Entry[i] = {pso->so.entry[i].stream, pso->so.entry[i].slot, pso->so.entry[i].reg, pso->so.entry[i].mask};
+        desc.So = &so;
+    }
     desc.AlphaToCoverage = pso->blend.AlphaToCoverageEnable;
     desc.IndependentBlend = pso->blend.IndependentBlendEnable;
     for (UINT i = 0; i < 8; ++i) {
@@ -2293,9 +5182,31 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
         desc.Rt[i].OpAlpha = rt.BlendOpAlpha;
         desc.Rt[i].WriteMask = rt.RenderTargetWriteMask;
     }
+    /* C57: Gallium applies one logic op to every render target, so the PSO's
+     * render targets must agree (an independent mix is refused). */
+    bool logic_agrees = true;
+    for (UINT i = 0; i < pso->desc.NumRenderTargets && i < 8; ++i) {
+        const D3D12DDI_RENDER_TARGET_BLEND_DESC &rt = pso->blend.RenderTarget[pso->blend.IndependentBlendEnable ? i : 0];
+        if (!i) {
+            desc.LogicOpEnable = rt.LogicOpEnable;
+            desc.LogicOp = rt.LogicOp;
+        } else if (!rt.LogicOpEnable != !desc.LogicOpEnable || (rt.LogicOpEnable && static_cast<unsigned>(rt.LogicOp) != desc.LogicOp)) {
+            logic_agrees = false;
+        }
+    }
+    if (!logic_agrees) {
+        const UINT receipt[] = {pso->desc.NumRenderTargets, static_cast<UINT>(desc.LogicOpEnable), desc.LogicOp};
+        AdmissionUmdDiagnostic("measure-d3d12-logic-op", E_NOTIMPL, receipt, 3);
+        pso->compiled = E_NOTIMPL;
+        ReleaseSRWLockExclusive(&pso->compile_lock);
+        return E_NOTIMPL;
+    }
     desc.SampleMask = pso->desc.SampleMask;
+    desc.SampleCount = pso->desc.SampleDesc.Count; /* C32 */
     desc.FillMode = pso->rasterizer.FillMode;
     desc.CullMode = pso->rasterizer.CullMode;
+    desc.ForcedSampleCount = pso->rasterizer.ForcedSampleCount; /* FL 11_1: TIR */
+    desc.ConservativeRaster = pso->rasterizer.ConservativeRasterizationMode == D3D12DDI_CONSERVATIVE_RASTERIZATION_MODE_ON;
     desc.FrontCounterClockwise = pso->rasterizer.FrontCounterClockwise;
     desc.DepthBias = pso->rasterizer.DepthBias;
     desc.DepthBiasClamp = pso->rasterizer.DepthBiasClamp;
@@ -2325,11 +5236,14 @@ static HRESULT CompileGraphics(AgxD3d12Device *device, AgxD3d12PipelineState *ps
         desc.Element[i].Format = pso->element[i].Format;
     }
     pso->compiled = owner && pso->elements <= kPipelineElements ? AgxD3d12OwnerCreateGraphics(owner, &desc, &pso->graphics) : E_FAIL;
-    return pso->compiled;
+    const HRESULT result = pso->compiled;
+    ReleaseSRWLockExclusive(&pso->compile_lock);
+    return result;
 }
 #endif
 /* C5 (investigation/analysis/D3D12-C5-compute.md): compute state. Setting
- * a root signature resets the root arguments (D3D12 semantics). */
+ * a different root signature resets its arguments; redundant selection of
+ * the same live signature preserves them. Null retains the reset path. */
 static AgxD3d12CommandList *ListOf(D3D12DDI_HCOMMANDLIST handle) {
     return static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
 }
@@ -2342,7 +5256,12 @@ static VOID APIENTRY SetPipelineState(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HPI
 static VOID APIENTRY SetComputeRootSignature(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HROOTSIGNATURE root) {
     AgxD3d12CommandList *list = ListOf(handle);
     if (!list) return;
-    list->compute_root = static_cast<const AgxD3d12RootSignature *>(root.pDrvPrivate);
+    const auto *signature = static_cast<const AgxD3d12RootSignature *>(root.pDrvPrivate);
+    if (signature && list->compute_root == signature) {
+        ReportRedundantRoot(list, 0u);
+        return;
+    }
+    list->compute_root = signature;
     memset(list->compute_root_va, 0, sizeof(list->compute_root_va));
     memset(list->compute_root_dwords, 0, sizeof(list->compute_root_dwords));
 }
@@ -2436,25 +5355,336 @@ static VOID APIENTRY SetGraphicsRootUnorderedAccessView(D3D12DDI_HCOMMANDLIST ha
     if (AgxD3d12CommandList *list = ListOf(handle)) SetRootBufferView(list, index, va, D3D12DDI_ROOT_PARAMETER_TYPE_UAV, true);
 }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
-static HRESULT CompileCompute(AgxD3d12Device *device, AgxD3d12PipelineState *pso) {
-    if (pso->compiled != S_FALSE) return pso->compiled;
+static HRESULT CompileCompute(AgxD3d12Device *device, AgxD3d12PipelineState *pso, const AgxD3d12RootSignature *root) {
+    (void)root; /* unused by the prepared-NIR owner */
+    AcquireSRWLockExclusive(&pso->compile_lock);
+    if (pso->compiled != S_FALSE) {
+        const HRESULT result = pso->compiled;
+        ReleaseSRWLockExclusive(&pso->compile_lock);
+        return result;
+    }
     AGX_D3D12_OWNER *owner = EnsureOwner(device);
-    pso->compiled = owner ? AgxD3d12OwnerCreateCompute(owner, pso->cs, &pso->compute) : E_FAIL;
-    return pso->compiled;
+    if (pso->cs_dwords >= 2)
+        pso->cs_tag = static_cast<UINT>(agx_win32_shader_hash(pso->cs, static_cast<size_t>(pso->cs_dwords) * sizeof(UINT)));
+#if defined(APPLE_AGX_D3D12_PREPARED_NIR_OWNER) && APPLE_AGX_D3D12_PREPARED_NIR_OWNER
+    pso->compiled = E_FAIL;
+    if (owner) {
+        const SIZE_T bytes = static_cast<SIZE_T>(pso->cs_dwords) * sizeof(UINT);
+        if (pso->cs_dwords < 2 || bytes / sizeof(UINT) != pso->cs_dwords) {
+            pso->compiled = E_INVALIDARG;
+        } else {
+            const uint32_t limits[4] = {AGX_D3D12_CBV_SLOTS, AGX_D3D12_SRV_SLOTS,
+                                       AGX_D3D12_UAV_SLOTS, AGX_D3D12_SAMPLER_SLOTS};
+            AgxOwnedNir *prepared = nullptr;
+            const auto status = AgxOwnedNirPrepareLegacyCompute(pso->cs, bytes, limits, &prepared);
+            switch (status) {
+            case AGX_OWNED_NIR_OK:
+                pso->compiled = AgxD3d12OwnerCreateComputePrepared(owner, prepared, &pso->compute);
+                break;
+            case AGX_OWNED_NIR_INVALID: pso->compiled = E_INVALIDARG; break;
+            case AGX_OWNED_NIR_UNSUPPORTED: pso->compiled = E_NOTIMPL; break;
+            case AGX_OWNED_NIR_PROJECT_OOM: pso->compiled = E_OUTOFMEMORY; break;
+            default: pso->compiled = E_FAIL; break;
+            }
+            AgxOwnedNirDestroy(&prepared);
+        }
+    }
+#else
+    RootViews(root, &pso->root_views);
+    pso->compiled = owner ? AgxD3d12OwnerCreateComputeRoot(owner, pso->cs, 0u, NULL, &pso->root_views, &pso->compute)
+                          : E_FAIL;
+#endif
+    const HRESULT result = pso->compiled;
+    ReleaseSRWLockExclusive(&pso->compile_lock);
+    return result;
+}
+/* C65V/C65S: the PSO's min/max variants, translated from the same tokens on
+ * first use (replay, under the owner lock), keyed by what they emulate: the
+ * heap samplers' reduction (run-time map bits) and, per stage and slot, the
+ * bound slot or static sampler's dxbc_minmax_bits (compile-time constants).
+ * A variant's slots must be the plain compile's: root bindings were resolved
+ * against those. NULL = draw with the plain pipeline (standard filtering). */
+struct AgxD3d12MinmaxKey {
+    UINT heap;
+    unsigned char slot[AGX_D3D12_HEAP_STAGES][kSamplerSlots];
+};
+static constexpr UINT kMinmaxVariants = 4;
+struct AgxD3d12MinmaxVariant {
+    AgxD3d12MinmaxKey key;
+    UINT state; /* 1 ready, 2 refused */
+    AGX_D3D12_COMPUTE compute;
+    AGX_D3D12_GRAPHICS graphics;
+};
+template <typename T> static bool SameSlots(const T &a, const T &b) { return !memcmp(&a, &b, sizeof(a)); }
+static bool SameGraphicsSlots(const AGX_D3D12_GRAPHICS &a, const AGX_D3D12_GRAPHICS &b) {
+    return SameSlots(a.VsBindings, b.VsBindings) && SameSlots(a.PsBindings, b.PsBindings) &&
+           SameSlots(a.GsBindings, b.GsBindings) && SameSlots(a.HsBindings, b.HsBindings) &&
+           SameSlots(a.DsBindings, b.DsBindings) && SameSlots(a.VsSrvDimensions, b.VsSrvDimensions) &&
+           SameSlots(a.PsSrvDimensions, b.PsSrvDimensions) && SameSlots(a.GsSrvDimensions, b.GsSrvDimensions) &&
+           SameSlots(a.HsSrvDimensions, b.HsSrvDimensions) && SameSlots(a.DsSrvDimensions, b.DsSrvDimensions) &&
+           SameSlots(a.VsUavDimensions, b.VsUavDimensions) && SameSlots(a.PsUavDimensions, b.PsUavDimensions) &&
+           SameSlots(a.GsUavDimensions, b.GsUavDimensions) && SameSlots(a.HsUavDimensions, b.HsUavDimensions) &&
+           SameSlots(a.DsUavDimensions, b.DsUavDimensions);
+}
+static void *MinmaxVariant(AGX_D3D12_OWNER *owner, AgxD3d12PipelineState *pso, const AgxD3d12MinmaxKey &key, bool compute) {
+    AcquireSRWLockExclusive(&pso->compile_lock);
+    void *variant = nullptr;
+    if (pso->compiled == S_OK && !pso->minmax)
+        pso->minmax = static_cast<AgxD3d12MinmaxVariant *>(
+            HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, kMinmaxVariants * sizeof(AgxD3d12MinmaxVariant)));
+    AgxD3d12MinmaxVariant *v = nullptr;
+    for (UINT i = 0; pso->minmax && i < pso->minmax_count && !v; ++i)
+        if (SameSlots(pso->minmax[i].key, key)) v = &pso->minmax[i];
+    if (!v && pso->minmax && pso->minmax_count < kMinmaxVariants) {
+        v = &pso->minmax[pso->minmax_count++];
+        v->key = key;
+        HRESULT hr;
+        bool same;
+        const unsigned flags = key.heap ? AGX_D3D12_SHADER_MINMAX : 0u;
+        if (compute) {
+            hr = AgxD3d12OwnerCreateComputeRoot(owner, pso->cs, flags, key.slot[AGX_D3D12_HEAP_CS], &pso->root_views,
+                                                &v->compute);
+            same = SUCCEEDED(hr) && SameSlots(v->compute.Bindings, pso->compute.Bindings) &&
+                   SameSlots(v->compute.SrvDimensions, pso->compute.SrvDimensions) &&
+                   SameSlots(v->compute.UavDimensions, pso->compute.UavDimensions);
+            if (SUCCEEDED(hr) && !same) AgxD3d12OwnerDestroyCompute(owner, &v->compute);
+        } else {
+            AGX_D3D12_GRAPHICS_DESC desc = pso->owner_desc;
+            desc.Flags = flags;
+            static_assert(sizeof(desc.SlotMinmax) == AGX_D3D12_HEAP_CS * sizeof(key.slot[0]), "graphics stages");
+            memcpy(desc.SlotMinmax, key.slot, sizeof(desc.SlotMinmax));
+            hr = AgxD3d12OwnerCreateGraphics(owner, &desc, &v->graphics);
+            same = SUCCEEDED(hr) && SameGraphicsSlots(v->graphics, pso->graphics);
+            if (SUCCEEDED(hr) && !same) AgxD3d12OwnerDestroyGraphics(owner, &v->graphics);
+        }
+        v->state = same ? 1u : 2u;
+        const UINT receipt[] = {compute ? 1u : 0u, same ? 1u : 0u, key.heap, pso->minmax_count};
+        AdmissionUmdDiagnostic("measure-d3d12-minmax-variant", hr, receipt, 4);
+    } else if (!v) {
+        const UINT receipt[] = {compute ? 1u : 0u, pso->minmax_count};
+        AdmissionUmdDiagnostic("reject-d3d12-minmax-variants", E_OUTOFMEMORY, receipt, 2);
+    }
+    if (v && v->state == 1u) variant = compute ? static_cast<void *>(&v->compute) : static_cast<void *>(&v->graphics);
+    ReleaseSRWLockExclusive(&pso->compile_lock);
+    return variant;
+}
+/* RC85 (EXP2014b/EXP2015b GravityMark FHD): CreatePipelineState only kept
+ * the tokens, so each PSO was translated and compiled at its first
+ * Dispatch/Draw record -- 77 compute PSOs, 101 compiled parts, 1.4-1.9 s
+ * inside the scored first-frame stall, on the render thread. D3D12 compiles
+ * a PSO against its own root signature (D3D12DDIARG_CREATE_PIPELINE_STATE_0001
+ * hRootSignature; a command list may only use it with a matching one), so
+ * compile here, during the app's (unscored, often multi-threaded) load,
+ * through the same CompileCompute/CompileGraphics and compile_lock the first
+ * record would take; that record then finds the result. The PSO creation
+ * result is unchanged: a refused compile is reported at record time, as
+ * before. No root signature (a deserialized PSO) keeps the lazy compile.
+ * APPLE_AGX_D3D12_EAGER_PSO=0 restores the lazy compile for A/B; receipt
+ * measure-d3d12-pso-eager {compute, microseconds, CS tag} per compile. */
+static bool EagerPsoEnabled() {
+    static volatile LONG state; /* 0 unread, 1 on, 2 off */
+    LONG value = state;
+    if (!value) {
+        char flag[2] = {};
+        value = GetEnvironmentVariableA("APPLE_AGX_D3D12_EAGER_PSO", flag, sizeof(flag)) == 1 && flag[0] == '0' ? 2 : 1;
+        InterlockedExchange(&state, value);
+    }
+    return value == 1;
+}
+/* rc125 diagnostic: APPLE_AGX_D3D12_SPLIT_TAGS=hex[,hex...] (up to 8 CS
+ * tags, the 6th value of measure-d3d12-dispatch) ends the batch before each
+ * dispatch of those shaders, so each piece of a compute job becomes its own
+ * KMD job with its own firmware time (agx_gpu_frame_breakdown.py --jobs).
+ * Unset: no effect. Adds one job launch per split. */
+static bool SplitBeforeTag(UINT tag) {
+    static volatile LONG state; /* 0 unread, 1 read */
+    static UINT tags[8];
+    static UINT count;
+    if (!state) {
+        char text[128] = {};
+        const DWORD n = GetEnvironmentVariableA("APPLE_AGX_D3D12_SPLIT_TAGS", text, sizeof(text));
+        UINT c = 0;
+        if (n && n < sizeof(text)) {
+            const char *s = text;
+            while (*s && c < 8) {
+                char *end = nullptr;
+                const unsigned long v = strtoul(s, &end, 16);
+                if (end == s) break;
+                tags[c++] = static_cast<UINT>(v);
+                s = *end == ',' ? end + 1 : end;
+            }
+        }
+        count = c;
+        InterlockedExchange(&state, 1);
+    }
+    for (UINT i = 0; i < count; ++i)
+        if (tags[i] == tag) return true;
+    return false;
+}
+static void EagerCompilePipeline(AgxD3d12Device *device, AgxD3d12PipelineState *pso, const AgxD3d12RootSignature *root) {
+    if (!device || !pso || !root || !device->owner || !EagerPsoEnabled()) return;
+    const bool compute = pso->cs_dwords != 0;
+    if (!compute && !pso->vs_dwords) return;
+    LARGE_INTEGER frequency = {}, start = {}, end = {};
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&start);
+    const HRESULT hr = compute ? CompileCompute(device, pso, root) : CompileGraphics(device, pso, root);
+    QueryPerformanceCounter(&end);
+    const LONGLONG hz = frequency.QuadPart ? frequency.QuadPart : 1;
+    const UINT receipt[] = {compute ? 1u : 0u, static_cast<UINT>((end.QuadPart - start.QuadPart) * 1000000 / hz),
+                            pso->cs_tag};
+    AdmissionUmdDiagnostic("measure-d3d12-pso-eager", hr, receipt, 3);
 }
 #endif
 static VOID APIENTRY DestroyPipelineState(D3D12DDI_HDEVICE handle, D3D12DDI_HPIPELINESTATE pso_handle) {
+    auto *pso = static_cast<AgxD3d12PipelineState *>(pso_handle.pDrvPrivate);
+    RetirePsoIdentity(pso);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     AgxD3d12Device *device = DeviceOf(handle);
-    auto *pso = static_cast<AgxD3d12PipelineState *>(pso_handle.pDrvPrivate);
     if (device && device->owner && pso && pso->compiled == S_OK) {
         AgxD3d12OwnerDestroyCompute(static_cast<AGX_D3D12_OWNER *>(device->owner), &pso->compute);
         AgxD3d12OwnerDestroyGraphics(static_cast<AGX_D3D12_OWNER *>(device->owner), &pso->graphics);
+    }
+    if (pso && pso->minmax) {
+        for (UINT i = 0; device && device->owner && i < pso->minmax_count; ++i)
+            if (pso->minmax[i].state == 1u) {
+                AgxD3d12OwnerDestroyCompute(static_cast<AGX_D3D12_OWNER *>(device->owner), &pso->minmax[i].compute);
+                AgxD3d12OwnerDestroyGraphics(static_cast<AGX_D3D12_OWNER *>(device->owner), &pso->minmax[i].graphics);
+            }
+        HeapFree(GetProcessHeap(), 0, pso->minmax);
+        pso->minmax = nullptr;
     }
 #else
     (void)handle;
     (void)pso_handle;
 #endif
+}
+/* C38 (D3D12-C38-pso-serialization.md; EXP1834: D3D12PipelineStateCache's
+ * GetCachedBlob reached the refused pfnSerializeObject and the device was
+ * removed): a pipeline state serializes to a position-independent blob of
+ * what it keeps after creation -- the strip cut, sample mask and count,
+ * the state descriptions, the element layout, and its programs -- and a
+ * deserialized pipeline state is rebuilt from that blob alone and compiles
+ * at its first use, as a created one. The runtime wraps the blob with its
+ * own adapter and driver-version header. */
+static constexpr UINT kPsoBlobMagic = 0x50584741u; /* "AGXP" */
+static constexpr UINT kPsoBlobVersion = 2u; /* 2: C39 stream output */
+struct AgxD3d12PsoBlob {
+    UINT magic, version, bytes;
+    UINT ib_strip_cut, sample_mask, sample_count, sample_quality;
+    D3D12DDI_BLEND_DESC blend;
+    D3D12DDI_RASTERIZER_DESC rasterizer;
+    D3D12DDI_DEPTH_STENCIL_DESC depth_stencil;
+    UINT elements;
+    D3D12DDIARG_INPUT_ELEMENT_DESC element[kPipelineElements];
+    AgxD3d12StreamOutput so;
+    UINT cs_dwords, vs_dwords, ps_dwords, gs_dwords, hs_dwords, ds_dwords, hs_registers, hs_positions;
+    UINT tokens[1];
+};
+static UINT64 PsoDwords(const AgxD3d12PipelineState *pso) {
+    return static_cast<UINT64>(pso->cs_dwords) + pso->vs_dwords + pso->ps_dwords + pso->gs_dwords + pso->hs_dwords +
+           pso->ds_dwords;
+}
+static bool LivePso(const void *handle) {
+    bool live = false;
+    AcquireSRWLockShared(&identity_registry_lock);
+    for (auto *pso = live_identity_psos; pso && !live; pso = pso->identity_next) live = pso == handle;
+    ReleaseSRWLockShared(&identity_registry_lock);
+    return live;
+}
+/* the blob's own size when it is a well-formed blob of this version, else 0 */
+static SIZE_T PsoBlobBytes(SIZE_T size, const UINT *data) {
+    const auto *blob = reinterpret_cast<const AgxD3d12PsoBlob *>(data);
+    if (!blob || size < offsetof(AgxD3d12PsoBlob, tokens) || blob->magic != kPsoBlobMagic ||
+        blob->version != kPsoBlobVersion || blob->bytes != size || blob->elements > kPipelineElements + 1u)
+        return 0;
+    const UINT64 dwords = static_cast<UINT64>(blob->cs_dwords) + blob->vs_dwords + blob->ps_dwords + blob->gs_dwords +
+                          blob->hs_dwords + blob->ds_dwords;
+    return offsetof(AgxD3d12PsoBlob, tokens) + dwords * sizeof(UINT) == size ? size : 0;
+}
+static HRESULT APIENTRY SerializeObject(D3D12DDI_HDEVICE, D3D12DDI_HANDLETYPE type, HANDLE object, SIZE_T *size,
+                                        const UINT **data) {
+    auto *pso = static_cast<const AgxD3d12PipelineState *>(object);
+    const bool valid = type == D3D12DDI_HT_PIPELINE_STATE && pso && size && data && LivePso(pso);
+    const UINT64 bytes = valid ? offsetof(AgxD3d12PsoBlob, tokens) + PsoDwords(pso) * sizeof(UINT) : 0;
+    auto *blob = valid ? static_cast<AgxD3d12PsoBlob *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, static_cast<SIZE_T>(bytes)))
+                       : nullptr;
+    const HRESULT hr = !valid ? E_INVALIDARG : blob ? S_OK : E_OUTOFMEMORY;
+    const UINT receipt[] = {static_cast<UINT>(type), valid ? 1u : 0u, static_cast<UINT>(bytes)};
+    AdmissionUmdDiagnostic("measure-d3d12-serialize", hr, receipt, 3);
+    if (FAILED(hr)) return hr;
+    blob->magic = kPsoBlobMagic;
+    blob->version = kPsoBlobVersion;
+    blob->bytes = static_cast<UINT>(bytes);
+    blob->ib_strip_cut = static_cast<UINT>(pso->desc.IBStripCutValue);
+    blob->sample_mask = pso->desc.SampleMask;
+    blob->sample_count = pso->desc.SampleDesc.Count;
+    blob->sample_quality = pso->desc.SampleDesc.Quality;
+    blob->blend = pso->blend;
+    blob->rasterizer = pso->rasterizer;
+    blob->depth_stencil = pso->depth_stencil;
+    blob->elements = pso->elements;
+    memcpy(blob->element, pso->element, sizeof(blob->element));
+    blob->so = pso->so;
+    blob->cs_dwords = pso->cs_dwords;
+    blob->vs_dwords = pso->vs_dwords;
+    blob->ps_dwords = pso->ps_dwords;
+    blob->gs_dwords = pso->gs_dwords;
+    blob->hs_dwords = pso->hs_dwords;
+    blob->ds_dwords = pso->ds_dwords;
+    blob->hs_registers = pso->hs_registers;
+    blob->hs_positions = pso->hs_positions;
+    memcpy(blob->tokens, pso->cs, static_cast<SIZE_T>(PsoDwords(pso)) * sizeof(UINT));
+    *size = static_cast<SIZE_T>(bytes);
+    *data = reinterpret_cast<const UINT *>(blob);
+    return S_OK;
+}
+static VOID APIENTRY DestroyObjectSerialization(D3D12DDI_HDEVICE, SIZE_T, const UINT *data) {
+    if (data) HeapFree(GetProcessHeap(), 0, const_cast<UINT *>(data));
+}
+static SIZE_T APIENTRY CalcPrivateDeserializedObjectSize(D3D12DDI_HDEVICE, D3D12DDI_HANDLETYPE type, SIZE_T size,
+                                                         const UINT *data) {
+    const SIZE_T bytes = type == D3D12DDI_HT_PIPELINE_STATE ? PsoBlobBytes(size, data) : 0;
+    if (!bytes) return sizeof(AgxD3d12PipelineState); /* CreateDeserializedObject refuses the blob */
+    const SIZE_T dwords = (bytes - offsetof(AgxD3d12PsoBlob, tokens)) / sizeof(UINT);
+    return offsetof(AgxD3d12PipelineState, cs) + (dwords ? dwords : 1) * sizeof(UINT);
+}
+static HRESULT APIENTRY CreateDeserializedObject(D3D12DDI_HDEVICE handle, D3D12DDI_HANDLETYPE type, SIZE_T size,
+                                                 const UINT *data, VOID *object, VOID *) {
+    auto *device = static_cast<AgxD3d12Device *>(handle.pDrvPrivate);
+    auto *pso = static_cast<AgxD3d12PipelineState *>(object);
+    const bool valid = device && pso && type == D3D12DDI_HT_PIPELINE_STATE && PsoBlobBytes(size, data);
+    const UINT receipt[] = {static_cast<UINT>(type), valid ? 1u : 0u, static_cast<UINT>(size)};
+    AdmissionUmdDiagnostic("measure-d3d12-deserialize", valid ? S_OK : E_INVALIDARG, receipt, 3);
+    if (!valid) return E_INVALIDARG;
+    const auto *blob = reinterpret_cast<const AgxD3d12PsoBlob *>(data);
+    memset(pso, 0, offsetof(AgxD3d12PipelineState, cs));
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    InitializeSRWLock(&pso->compile_lock);
+#endif
+    pso->desc.hDrvPipelineState.pDrvPrivate = pso;
+    pso->desc.IBStripCutValue = static_cast<D3D12DDI_INDEX_BUFFER_STRIP_CUT_VALUE>(blob->ib_strip_cut);
+    pso->desc.SampleMask = blob->sample_mask;
+    pso->desc.SampleDesc.Count = blob->sample_count;
+    pso->desc.SampleDesc.Quality = blob->sample_quality;
+    pso->compiled = S_FALSE;
+    pso->blend = blob->blend;
+    pso->rasterizer = blob->rasterizer;
+    pso->depth_stencil = blob->depth_stencil;
+    pso->elements = blob->elements;
+    memcpy(pso->element, blob->element, sizeof(pso->element));
+    pso->so = blob->so;
+    pso->cs_dwords = blob->cs_dwords;
+    pso->vs_dwords = blob->vs_dwords;
+    pso->ps_dwords = blob->ps_dwords;
+    pso->gs_dwords = blob->gs_dwords;
+    pso->hs_dwords = blob->hs_dwords;
+    pso->ds_dwords = blob->ds_dwords;
+    pso->hs_registers = blob->hs_registers;
+    pso->hs_positions = blob->hs_positions;
+    memcpy(pso->cs, blob->tokens, static_cast<SIZE_T>(PsoDwords(pso)) * sizeof(UINT));
+    PublishPsoIdentity(pso, device);
+    return S_OK;
 }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 /* C5c: a table's CBV/UAV ranges become slots b#/u# pointing at their
@@ -2477,7 +5707,7 @@ static UINT BindTable(AgxD3d12CommandList *list, const AgxD3d12RootSignature *ro
                                    ? kSamplerSlots - range.base_register : range.count;
             for (UINT d = 0; d < count; ++d) {
                 const UINT64 at = offset + (static_cast<UINT64>(range.offset) + d) * DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER);
-                if (range.offset == UINT_MAX || at + sizeof(AgxD3d12SamplerDescriptor) > heap->bytes) {
+                if (range.offset == UINT_MAX || at + sizeof(AgxD3d12SamplerDescriptor) > DescriptorHeapBytes(heap)) {
                     if (range.count == UINT_MAX) break;
                     return 6u;
                 }
@@ -2495,7 +5725,7 @@ static UINT BindTable(AgxD3d12CommandList *list, const AgxD3d12RootSignature *ro
                                ? slots - range.base_register : range.count;
         for (UINT d = 0; d < count; ++d) {
             const UINT64 at = offset + (static_cast<UINT64>(range.offset) + d) * DescriptorBytes(D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-            if (range.offset == UINT_MAX || at + sizeof(AgxD3d12Descriptor) > heap->bytes) {
+            if (range.offset == UINT_MAX || at + sizeof(AgxD3d12Descriptor) > DescriptorHeapBytes(heap)) {
                 if (range.count == UINT_MAX) break; /* an unbounded range ends with its heap */
                 return 6u;
             }
@@ -2514,12 +5744,190 @@ static UINT BindTable(AgxD3d12CommandList *list, const AgxD3d12RootSignature *ro
  * root constants (a copy of the root DWORDs), CBV/SRV/UAV tables. Returns
  * the refusal reason (0 = bound). */
 static constexpr UINT kAnyStage = ~0u;
+/* C17: namespace-aware root resolution */
+static UINT MappedSlotLimit(UINT kind) {
+    switch (kind) {
+    case DXBC_BINDING_CBV: return kCbSlots;
+    case DXBC_BINDING_SRV: return kSrvSlots;
+    case DXBC_BINDING_UAV: return kUavSlots;
+    case DXBC_BINDING_SAMPLER: return kSamplerSlots;
+    default: return 0;
+    }
+}
+static UINT MappedRangeKind(UINT type) {
+    switch (type) {
+    case D3D12DDI_DESCRIPTOR_RANGE_TYPE_CBV: return DXBC_BINDING_CBV;
+    case D3D12DDI_DESCRIPTOR_RANGE_TYPE_SRV: return DXBC_BINDING_SRV;
+    case D3D12DDI_DESCRIPTOR_RANGE_TYPE_UAV: return DXBC_BINDING_UAV;
+    case D3D12DDI_DESCRIPTOR_RANGE_TYPE_SAMPLER: return DXBC_BINDING_SAMPLER;
+    default: return DXBC_BINDING_KIND_COUNT;
+    }
+}
+static UINT ResolveMappedRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *root,
+                              const UINT64 *va, const UINT *dwords, UINT stage,
+                              const struct dxbc_binding_map &map, AgxD3d12Dispatch *out) {
+    if (map.count > DXBC_BINDING_MAP_MAX) return 5u;
+    memcpy(out->root_dwords, dwords, kRootArguments * sizeof(UINT));
+    out->descriptors = nullptr;
+    out->sampler_descriptors = nullptr;
+    out->heap_ranges = 0;
+    out->heap_sampler_mask = 0;
+    memset(out->heap_count, 0, sizeof(out->heap_count));
+    for (UINT m = 0; m < map.count; ++m) {
+        const struct dxbc_binding &binding = map.bindings[m];
+        const UINT slot = binding.slot;
+        if (binding.flags & DXBC_BINDING_HEAP) {
+            /* C47: a heap range reads the shader-visible heap from the heap
+             * index of the table entry its first register names */
+            if (binding.kind == DXBC_BINDING_CBV || slot >= kHeapRanges) return 5u;
+            const bool sampler = binding.kind == DXBC_BINDING_SAMPLER;
+            const UINT stride = DescriptorBytes(sampler ? D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER
+                                                        : D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            bool found = false;
+            for (UINT i = 0; root && i < root->parameters; ++i) {
+                const AgxD3d12RootParameter &p = root->parameter[i];
+                if (stage != kAnyStage && p.visibility != D3D12DDI_SHADER_VISIBILITY_ALL && p.visibility != stage) continue;
+                if (i >= kRootArguments) return 5u;
+                if (p.type != D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE) continue;
+                const AgxD3d12Range *ranges = RangesOf(root) + p.first_range;
+                for (UINT r = 0; r < p.ranges; ++r) {
+                    const AgxD3d12Range &range = ranges[r];
+                    if (MappedRangeKind(range.type) != binding.kind || range.space != binding.space ||
+                        binding.reg < range.base_register) continue;
+                    const UINT delta = binding.reg - range.base_register;
+                    if (range.count != UINT_MAX && delta >= range.count) continue;
+                    if (found || range.offset == UINT_MAX) return 5u;
+                    UINT64 offset = 0;
+                    AgxD3d12Heap *heap = HeapAt(list->device, va[i], &offset);
+                    AgxD3d12Heap *&bound = sampler ? out->sampler_descriptors : out->descriptors;
+                    if (!heap || !heap->cpu || offset % stride || (bound && bound != heap)) return 6u;
+                    bound = heap;
+                    if (sampler) out->heap_sampler_mask |= 1ull << slot;
+                    const UINT64 first = offset / stride + range.offset + static_cast<UINT64>(delta);
+                    const UINT64 entries = DescriptorHeapBytes(heap) / stride;
+                    if (first >= entries || first > UINT_MAX) return 6u;
+                    const UINT64 available = entries - first;
+                    const UINT64 declared = range.count == UINT_MAX ? available : range.count - delta;
+                    out->heap_first[slot] = static_cast<UINT>(first);
+                    out->heap_count[slot] = static_cast<UINT>(declared < available ? declared : available);
+                    if (slot >= out->heap_ranges) out->heap_ranges = slot + 1;
+                    found = true;
+                }
+            }
+            if (!found) return 6u;
+            continue;
+        }
+        if (slot >= MappedSlotLimit(binding.kind)) return 5u;
+        for (UINT prev = 0; prev < m; ++prev) {
+            const struct dxbc_binding &other = map.bindings[prev];
+            if (other.flags & DXBC_BINDING_HEAP) continue;
+            if (other.kind == binding.kind && (other.slot == slot ||
+                (other.space == binding.space && other.reg == binding.reg))) return 5u;
+        }
+        bool matched = false;
+        for (UINT i = 0; root && i < root->parameters; ++i) {
+            const AgxD3d12RootParameter &p = root->parameter[i];
+            if (stage != kAnyStage && p.visibility != D3D12DDI_SHADER_VISIBILITY_ALL && p.visibility != stage) continue;
+            if (i >= kRootArguments) return 5u;
+            if (p.type == D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE) {
+                const AgxD3d12Range *ranges = RangesOf(root) + p.first_range;
+                for (UINT r = 0; r < p.ranges; ++r) {
+                    const AgxD3d12Range &range = ranges[r];
+                    if (MappedRangeKind(range.type) != binding.kind || range.space != binding.space ||
+                        binding.reg < range.base_register) continue;
+                    const UINT delta = binding.reg - range.base_register;
+                    if (range.count != UINT_MAX && delta >= range.count) continue;
+                    if (matched || range.offset == UINT_MAX) return 5u;
+                    UINT64 offset = 0;
+                    AgxD3d12Heap *heap = HeapAt(list->device, va[i], &offset);
+                    if (!heap || !heap->cpu) return 6u;
+                    const bool sampler = binding.kind == DXBC_BINDING_SAMPLER;
+                    const UINT stride = DescriptorBytes(sampler ? D3D12DDI_DESCRIPTOR_HEAP_TYPE_SAMPLER
+                                                                : D3D12DDI_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                    const UINT64 at = offset + (static_cast<UINT64>(range.offset) + delta) * stride;
+                    const UINT64 bytes = sampler ? sizeof(AgxD3d12SamplerDescriptor) : sizeof(AgxD3d12Descriptor);
+                    if (at > DescriptorHeapBytes(heap) || bytes > DescriptorHeapBytes(heap) - at) {
+                        /* C34: an unbounded range's tail past the heap stays unbound */
+                        if (!(binding.flags & DXBC_BINDING_OPTIONAL)) return 6u;
+                    matched = true;
+                        continue;
+                    }
+                    if (sampler) {
+                        out->sampler[slot] = reinterpret_cast<const AgxD3d12SamplerDescriptor *>(static_cast<const BYTE *>(heap->cpu) + at);
+                    } else {
+                        const auto *view = reinterpret_cast<const AgxD3d12Descriptor *>(static_cast<const BYTE *>(heap->cpu) + at);
+                        (binding.kind == DXBC_BINDING_UAV ? out->uav_descriptor :
+                         binding.kind == DXBC_BINDING_SRV ? out->srv_descriptor : out->cb_descriptor)[slot] = view;
+                    }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+                    if(binding.kind!=DXBC_BINDING_SAMPLER)
+                        (binding.kind==DXBC_BINDING_CBV ? out->ref_cb_root :
+                         binding.kind==DXBC_BINDING_SRV ? out->ref_srv_root : out->ref_uav_root)[slot]=(uint8_t)(i+1);
+#endif
+                    matched = true;
+                }
+                continue;
+            }
+            if (p.space != binding.space || p.shader_register != binding.reg) continue;
+            const bool uav = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_UAV && binding.kind == DXBC_BINDING_UAV;
+            const bool srv = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_SRV && binding.kind == DXBC_BINDING_SRV;
+            const bool cbv = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_CBV && binding.kind == DXBC_BINDING_CBV;
+            const bool constants = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS && binding.kind == DXBC_BINDING_CBV;
+            if (!uav && !srv && !cbv && !constants) continue;
+            if (matched) return 5u;
+            if (constants) {
+                if (p.offset > kRootArguments || p.dwords > kRootArguments - p.offset) return 5u;
+                out->cb_constants[slot] = p.offset + 1u;
+                out->cb_count[slot] = p.dwords;
+            } else {
+                UINT64 *offset = uav ? &out->uav_offset[slot] : srv ? &out->srv_offset[slot] : &out->cb_offset[slot];
+                AgxD3d12Heap **heap = uav ? &out->uav_heap[slot] : srv ? &out->srv_heap[slot] : &out->cb_heap[slot];
+                if (!(*heap = HeapAt(list->device, va[i], offset))) return 6u;
+            }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+            if(!constants) (cbv ? out->ref_cb_root : srv ? out->ref_srv_root : out->ref_uav_root)[slot]=(uint8_t)(i+1);
+#endif
+            matched = true;
+        }
+        if (binding.kind == DXBC_BINDING_SAMPLER) {
+            const D3D12DDI_STATIC_SAMPLER *samplers = root ? StaticSamplersOf(root) : nullptr;
+            for (UINT i = 0; root && i < root->static_samplers; ++i) {
+                const D3D12DDI_STATIC_SAMPLER &s = samplers[i];
+                if (stage != kAnyStage && s.ShaderVisibility != D3D12DDI_SHADER_VISIBILITY_ALL &&
+                    static_cast<UINT>(s.ShaderVisibility) != stage) continue;
+                if (s.RegisterSpace != binding.space || s.ShaderRegister != binding.reg) continue;
+                if (matched) return 5u;
+                out->static_sampler[slot] = &s;
+                matched = true;
+            }
+        }
+        if (!matched && !(binding.flags & DXBC_BINDING_OPTIONAL)) return 6u;
+    }
+    return 0u;
+}
 static UINT ResolveRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *root, const UINT64 *va, const UINT *dwords,
                         UINT stage, AgxD3d12Dispatch *out) {
+    if (list && list->pso) {
+        if (stage == D3D12DDI_SHADER_VISIBILITY_PIXEL && !list->pso->ps_dwords) return 0u;
+        if (stage == D3D12DDI_SHADER_VISIBILITY_GEOMETRY && !list->pso->gs_dwords) return 0u;
+        if (stage == D3D12DDI_SHADER_VISIBILITY_HULL && !list->pso->hs_dwords) return 0u; /* C37 */
+        if (stage == D3D12DDI_SHADER_VISIBILITY_DOMAIN && !list->pso->ds_dwords) return 0u;
+        const struct dxbc_binding_map *map = stage == kAnyStage ? &list->pso->compute.Bindings
+            : stage == D3D12DDI_SHADER_VISIBILITY_VERTEX ? &list->pso->graphics.VsBindings
+            : stage == D3D12DDI_SHADER_VISIBILITY_GEOMETRY ? &list->pso->graphics.GsBindings
+            : stage == D3D12DDI_SHADER_VISIBILITY_HULL ? &list->pso->graphics.HsBindings
+            : stage == D3D12DDI_SHADER_VISIBILITY_DOMAIN ? &list->pso->graphics.DsBindings
+                                                       : &list->pso->graphics.PsBindings;
+        if (map->active) return ResolveMappedRoot(list, root, va, dwords, stage, *map, out);
+    }
     for (UINT i = 0; root && i < root->parameters; ++i) {
         const AgxD3d12RootParameter &p = root->parameter[i];
         if (stage != kAnyStage && p.visibility != D3D12DDI_SHADER_VISIBILITY_ALL && p.visibility != stage) continue;
         if (p.space || i >= kRootArguments) return 5u;
+        /* EXP1835: a root descriptor or table the application never set
+         * leaves its slots unbound; D3D12 requires only the arguments the
+         * shader reads, which identity (SM5.0) bindings cannot tell */
+        if (p.type != D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS && !va[i]) continue;
         if (p.type == D3D12DDI_ROOT_PARAMETER_TYPE_UAV) {
             if (p.shader_register >= kUavSlots) return 5u;
             if (!(out->uav_heap[p.shader_register] = HeapAt(list->device, va[i], &out->uav_offset[p.shader_register])))
@@ -2541,6 +5949,11 @@ static UINT ResolveRoot(AgxD3d12CommandList *list, const AgxD3d12RootSignature *
         } else {
             return 4u;
         }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+        if(p.type==D3D12DDI_ROOT_PARAMETER_TYPE_CBV) out->ref_cb_root[p.shader_register]=(uint8_t)(i+1);
+        if(p.type==D3D12DDI_ROOT_PARAMETER_TYPE_SRV) out->ref_srv_root[p.shader_register]=(uint8_t)(i+1);
+        if(p.type==D3D12DDI_ROOT_PARAMETER_TYPE_UAV) out->ref_uav_root[p.shader_register]=(uint8_t)(i+1);
+#endif
     }
     /* C6e: static samplers visible to the stage (C9: compute sees all) */
     const D3D12DDI_STATIC_SAMPLER *statics = root ? StaticSamplersOf(root) : nullptr;
@@ -2567,10 +5980,12 @@ static void RecordDispatch(AgxD3d12CommandList *list, UINT x, UINT y, UINT z, co
     const AgxD3d12RootSignature *root = list->compute_root;
     AgxD3d12Dispatch dispatch = {};
     UINT refusal = !pso || !pso->cs_dwords ? 1u : !root ? 2u : list->commands >= kListCommands ? 3u : 0u;
+    /* C17: compilation produces the immutable namespace map used by ResolveRoot. */
+    if (!refusal && FAILED(CompileCompute(list->device, pso, root))) refusal = 7u;
     if (!refusal) refusal = ResolveRoot(list, root, list->compute_root_va, list->compute_root_dwords, kAnyStage, &dispatch);
-    if (!refusal && FAILED(CompileCompute(list->device, pso))) refusal = 7u;
-    const UINT receipt[] = {refusal, x, y, z, root ? root->parameters : 0u};
-    AdmissionUmdDiagnostic("measure-d3d12-dispatch", refusal ? E_NOTIMPL : S_OK, receipt, 5);
+    /* RC74: the 6th value names the compute shader (cs_tag) for a per-shader ranking */
+    const UINT receipt[] = {refusal, x, y, z, root ? root->parameters : 0u, pso ? pso->cs_tag : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-dispatch", refusal ? E_NOTIMPL : S_OK, receipt, 6);
     if (refusal) {
         ListError(list, refusal == 3u || refusal == 6u ? E_INVALIDARG : E_NOTIMPL);
         return;
@@ -2594,30 +6009,49 @@ static VOID APIENTRY Dispatch(D3D12DDI_HCOMMANDLIST handle, UINT x, UINT y, UINT
     RecordDispatch(ListOf(handle), x, y, z, nullptr);
 }
 /* C6b: DrawInstanced snapshots the graphics state; C6c resolves the
- * graphics root signature for the VS and the PS. Geometry/tessellation
- * stages, graphics UAVs, samplers and depth-stencil views refuse with
- * receipt measure-d3d12-draw {reason}. */
+ * graphics root signature for the VS and the PS (C27: and the GS, recorded
+ * as a kCommandGsBind slot just before the draw so draws without a GS keep
+ * their slot size; C37: the HS and DS likewise). A refusal names its
+ * reason in receipt measure-d3d12-draw {reason}. */
 static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances, UINT start_vertex, INT base_vertex,
                        UINT start_instance, bool indexed, const AgxD3d12Indirect *indirect = nullptr) {
     if (!list || (!indirect && (!vertices || !instances))) return;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     AgxD3d12PipelineState *pso = list->pso;
     UINT refusal = !pso || !pso->vs_dwords ? 1u
-                 : pso->desc.hGeometryShader.pDrvPrivate || pso->desc.hHullShader.pDrvPrivate ||
-                           pso->desc.hDomainShader.pDrvPrivate ? 4u
-                 : (!list->rtvs || !list->rtv[0].heap) && list->dsv.kind != kDescriptorDsv ? 5u
+                 : !pso->hs_dwords != !pso->ds_dwords ? 4u
+                 : (list->topology >= 33u && list->topology <= 64u) != (pso->hs_dwords != 0) ? 9u /* C37: patches <=> HS+DS */
+                 : pso->so.declared && pso->hs_dwords ? 10u /* C39: stream output after tessellation */
+                 : list->rtvs && !list->rtv[0].heap && list->dsv.kind != kDescriptorDsv ? 5u /* EXP1889: 0 RTVs = UAV-only */
                  : indexed && !list->index_heap ? 6u
-                 : indirect && indexed && list->index_offset ? 8u /* C14: Gallium takes the start index from the arguments */
-                 : list->commands >= kListCommands ? 3u : 0u;
+                 : list->commands + (pso->gs_dwords ? 1u : 0u) + (pso->hs_dwords ? 2u : 0u) >= kListCommands ? 3u : 0u;
     AgxD3d12Dispatch vs_bind = {}, ps_bind = {};
+    if (!refusal && FAILED(CompileGraphics(list->device, pso, list->graphics_root))) refusal = 7u;
     if (!refusal) refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
                                         D3D12DDI_SHADER_VISIBILITY_VERTEX, &vs_bind);
     if (!refusal) refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
                                         D3D12DDI_SHADER_VISIBILITY_PIXEL, &ps_bind);
-    if (!refusal && FAILED(CompileGraphics(list->device, pso))) refusal = 7u;
-    const UINT receipt[] = {refusal, vertices, instances, list->rtvs, list->topology, indexed ? list->index_size : 0u};
-    AdmissionUmdDiagnostic("measure-d3d12-draw", refusal ? E_NOTIMPL : S_OK, receipt, 6);
+    /* C27/C37: the optional stages resolve straight into their slots (five
+     * AgxD3d12Dispatch records would take the frame past STACK_FRAMES,
+     * EXP1834 build: 21552 bytes); a refusal drops the slots again */
+    const UINT first_slot = list->commands;
+    const struct { UINT dwords, kind, visibility; } optional[] = {
+        {pso ? pso->gs_dwords : 0u, kCommandGsBind, D3D12DDI_SHADER_VISIBILITY_GEOMETRY},
+        {pso ? pso->hs_dwords : 0u, kCommandHsBind, D3D12DDI_SHADER_VISIBILITY_HULL},
+        {pso ? pso->ds_dwords : 0u, kCommandDsBind, D3D12DDI_SHADER_VISIBILITY_DOMAIN}};
+    for (const auto &stage : optional) {
+        if (refusal || !stage.dwords) continue;
+        AgxD3d12Command *bind_slot = AppendCommand(list);
+        if (!bind_slot) return;
+        bind_slot->kind = stage.kind;
+        refusal = ResolveRoot(list, list->graphics_root, list->graphics_root_va, list->graphics_root_dwords,
+                              stage.visibility, &bind_slot->dispatch);
+    }
+    const UINT receipt[] = {refusal, vertices, instances, list->rtvs, list->topology, indexed ? list->index_size : 0u,
+                            pso ? pso->ps_tag : 0u};
+    AdmissionUmdDiagnostic("measure-d3d12-draw", refusal ? E_NOTIMPL : S_OK, receipt, 7);
     if (refusal) {
+        list->commands = first_slot;
         ListError(list, refusal == 3u ? E_INVALIDARG : E_NOTIMPL);
         return;
     }
@@ -2636,6 +6070,7 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
     draw.scissor = list->scissor;
     draw.topology = list->topology;
     memcpy(draw.vb, list->vb, sizeof(draw.vb));
+    if (pso->so.declared) memcpy(draw.so, list->so, sizeof(draw.so)); /* C39 */
     memcpy(draw.blend_factor, list->blend_factor, sizeof(draw.blend_factor));
     draw.stencil_ref = list->stencil_ref;
     draw.vertices = vertices;
@@ -2672,9 +6107,27 @@ static VOID APIENTRY DrawIndexedInstanced(D3D12DDI_HCOMMANDLIST handle, UINT ind
 /* C14 (D3D12-C14-execute-indirect.md): command signatures of one Draw,
  * DrawIndexed or Dispatch argument -- the D3D12 argument records are the
  * Gallium indirect layouts; other argument types refuse. */
+/* C31 (EXP1825: the ExecuteIndirect sample's root-CBV + draw signature):
+ * up to seven root-constant, root-view, vertex- or index-buffer arguments
+ * before the final draw/dispatch, tightly packed in declaration order (D3D12
+ * command signature layout). Such a signature replays on the CPU: the
+ * argument and count buffers are read through synchronised maps when the
+ * list executes, and each record applies its arguments to a copy of the
+ * list state through the ordinary setters, then records and replays one
+ * draw or dispatch. */
+static constexpr UINT kSignatureArguments = 8;
+struct AgxD3d12SignatureArgument {
+    UINT type, param, dest, count, offset;
+};
 struct AgxD3d12CommandSignature {
     UINT kind; /* 0 refused, 1 draw, 2 draw indexed, 3 dispatch */
     UINT stride;
+    UINT arguments, record_bytes; /* C31: the final draw/dispatch included */
+    AgxD3d12SignatureArgument argument[kSignatureArguments];
+};
+struct AgxD3d12IndirectState {
+    AgxD3d12CommandList list;
+    AgxD3d12CommandSignature signature;
 };
 static SIZE_T APIENTRY CalcPrivateCommandSignatureSize(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_SIGNATURE_0001 *) {
     return sizeof(AgxD3d12CommandSignature);
@@ -2684,18 +6137,54 @@ static HRESULT APIENTRY CreateCommandSignature(D3D12DDI_HDEVICE, const D3D12DDIA
     auto *signature = static_cast<AgxD3d12CommandSignature *>(handle.pDrvPrivate);
     if (!signature || !arg) return E_INVALIDARG;
     memset(signature, 0, sizeof(*signature));
-    const UINT type = arg->NumArgumentDescs == 1 && arg->pArgumentDescs ? static_cast<UINT>(arg->pArgumentDescs[0].Type) : ~0u;
+    const UINT n = arg->pArgumentDescs ? arg->NumArgumentDescs : 0u;
+    const UINT type = n ? static_cast<UINT>(arg->pArgumentDescs[n - 1].Type) : ~0u;
     const UINT kind = type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_DRAW ? 1u
                     : type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED ? 2u
                     : type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_DISPATCH ? 3u : 0u;
     static const UINT bytes[4] = {0u, 16u, 20u, 12u};
-    const HRESULT hr = kind && arg->ByteStride >= bytes[kind] ? S_OK : E_NOTIMPL;
+    UINT offset = 0, refusal = !kind || n > kSignatureArguments ? 1u : 0u;
+    for (UINT i = 0; !refusal && i < n; ++i) {
+        const D3D12DDI_INDIRECT_ARGUMENT_DESC &d = arg->pArgumentDescs[i];
+        AgxD3d12SignatureArgument &a = signature->argument[i];
+        a.type = static_cast<UINT>(d.Type);
+        a.offset = offset;
+        if (i == n - 1) {
+            offset += bytes[kind];
+        } else if (d.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_CONSTANT) {
+            a.param = d.Constant.RootParameterIndex;
+            a.dest = d.Constant.DestOffsetIn32BitValues;
+            a.count = d.Constant.Num32BitValuesToSet;
+            if (!a.count || a.count > kRootArguments) refusal = 2u;
+            offset += 4u * a.count;
+        } else if (d.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW ||
+                   d.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_SHADER_RESOURCE_VIEW ||
+                   d.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_UNORDERED_ACCESS_VIEW) {
+            a.param = d.ConstantBufferView.RootParameterIndex; /* the three views share the layout */
+            offset += 8u;
+        } else if (d.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_VERTEX_BUFFER_VIEW) {
+            a.param = d.VertexBuffer.Slot;
+            if (a.param >= kVertexBuffers || kind == 3u) refusal = 3u;
+            offset += 16u;
+        } else if (d.Type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_INDEX_BUFFER_VIEW) {
+            if (kind == 3u) refusal = 3u;
+            offset += 16u;
+        } else {
+            refusal = 4u; /* a second draw/dispatch, rays, mesh, incrementing constants */
+        }
+    }
+    if (!refusal && arg->ByteStride < offset) refusal = 5u;
+    const HRESULT hr = refusal ? E_NOTIMPL : S_OK;
     if (SUCCEEDED(hr)) {
         signature->kind = kind;
         signature->stride = arg->ByteStride;
+        signature->arguments = n;
+        signature->record_bytes = offset;
+    } else {
+        memset(signature, 0, sizeof(*signature));
     }
-    const UINT receipt[] = {arg->NumArgumentDescs, type, arg->ByteStride};
-    AdmissionUmdDiagnostic("measure-d3d12-command-signature", hr, receipt, 3);
+    const UINT receipt[] = {arg->NumArgumentDescs, type, arg->ByteStride, refusal};
+    AdmissionUmdDiagnostic("measure-d3d12-command-signature", hr, receipt, 4);
     return hr;
 }
 static VOID APIENTRY DestroyCommandSignature(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDSIGNATURE handle) {
@@ -2727,6 +6216,34 @@ static VOID APIENTRY ExecuteIndirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOM
         indirect.count = c->heap;
         indirect.count_offset = c->gpuva - c->heap->gpuva + count.BaseAddress.UMD.Offset;
     }
+    if (signature->arguments > 1) {
+        /* C31: the list state and signature at this call */
+        if (list->commands >= kListCommands) {
+            ListError(list, E_INVALIDARG);
+            return;
+        }
+        if (list->indirect_state_count == list->indirect_state_capacity) {
+            const UINT capacity = list->indirect_state_capacity ? list->indirect_state_capacity * 2u : 4u;
+            void *grown = list->indirect_states
+                              ? HeapReAlloc(GetProcessHeap(), 0, list->indirect_states, capacity * sizeof(AgxD3d12IndirectState))
+                              : HeapAlloc(GetProcessHeap(), 0, capacity * sizeof(AgxD3d12IndirectState));
+            if (!grown) {
+                ListError(list, E_OUTOFMEMORY);
+                return;
+            }
+            list->indirect_states = static_cast<AgxD3d12IndirectState *>(grown);
+            list->indirect_state_capacity = capacity;
+        }
+        AgxD3d12IndirectState &state = list->indirect_states[list->indirect_state_count];
+        memcpy(&state.list, list, sizeof(*list));
+        state.signature = *signature;
+        AgxD3d12Command *slot = AppendCommand(list);
+        if (!slot) return;
+        slot->kind = kCommandIndirectExpand;
+        slot->indirect_expand.state = list->indirect_state_count++;
+        slot->indirect_expand.indirect = indirect;
+        return;
+    }
     if (signature->kind == 3u)
         RecordDispatch(list, 0, 0, 0, &indirect);
     else
@@ -2734,17 +6251,112 @@ static VOID APIENTRY ExecuteIndirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOM
 }
 /* Between copies on one queue the owner's libagx copies already carry
  * AGX_BARRIER_ALL and execution completes before the next list; transitions
- * need no AGX work yet. */
-static VOID APIENTRY ResourceBarrier(D3D12DDI_HCOMMANDLIST, UINT, const D3D12DDIARG_RESOURCE_BARRIER_0003 *) {}
+ * need no AGX work yet: Asahi's hazard tracking orders batches, and rc105's
+ * submission order check (agx_win32_submit_order.h) submits a writer batch
+ * before any batch that uses its BO. rc105 receipt-only: the barrier kinds
+ * are counted (agx_d3d12_barrier_stats.h). */
+static_assert(sizeof(((AgxD3d12CommandList *)0)->barriers) == AGX_D3D12_BARRIER_COUNTERS * sizeof(UINT),
+              "rc105 barrier counters");
+/* OV1 receipt-only: one barrier of the list's job-barrier log (replay feeds
+ * it to the owner before the command at position; never replayed) */
+struct AgxD3d12JobBarrierRecord {
+    UINT position, type, flags, before, after, id;
+    const AgxD3d12Heap *heap; /* OV3: the barrier resource's heap (null: none or unknown) */
+    UINT64 lo, hi;            /* OV2 ranges: the resource's bytes in that heap */
+};
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* OV3: a barrier on a deferred resolve's destination copies it the native
+ * way first. A UAV barrier never names a COPY_DEST destination. */
+static void ReplayResolveBarrier(AGX_D3D12_OWNER *owner, const AgxD3d12JobBarrierRecord &r) {
+    if (!owner || r.type == 2u) return;
+    if (r.heap && r.heap->native) {
+        const AGX_D3D12_BUFFER heap = HeapBuffer(r.heap);
+        AgxD3d12OwnerResolveBarrier(owner, &heap);
+    } else {
+        AgxD3d12OwnerResolveBarrier(owner, nullptr);
+    }
+}
+#endif
+template<class Barrier> static void RecordJobBarriers(AgxD3d12CommandList *list, UINT count, const Barrier *barriers) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (!list || !barriers || !count) return;
+    if (!AgxD3d12OwnerJobBarriersEnabled()) {
+        list->job_barriers_lost = 1; /* OV2: unknown, never pairs */
+        return;
+    }
+    if (count > kListCommands || list->job_barrier_count > kListCommands - count) {
+        list->job_barriers_lost = 1;
+        return;
+    }
+    if (list->job_barrier_count + count > list->job_barrier_capacity) {
+        UINT capacity = list->job_barrier_capacity ? list->job_barrier_capacity : 64u;
+        while (capacity < list->job_barrier_count + count) capacity *= 2u;
+        void *grown = list->job_barriers
+                          ? HeapReAlloc(GetProcessHeap(), 0, list->job_barriers, capacity * sizeof(AgxD3d12JobBarrierRecord))
+                          : HeapAlloc(GetProcessHeap(), 0, capacity * sizeof(AgxD3d12JobBarrierRecord));
+        if (!grown) { /* the list records on; OV2 treats it as unknown */
+            list->job_barriers_lost = 1;
+            return;
+        }
+        list->job_barriers = static_cast<AgxD3d12JobBarrierRecord *>(grown);
+        list->job_barrier_capacity = capacity;
+    }
+    for (UINT i = 0; i < count; ++i) {
+        const Barrier &b = barriers[i];
+        AgxD3d12JobBarrierRecord &r = list->job_barriers[list->job_barrier_count++];
+        r = {};
+        r.position = list->commands;
+        r.type = static_cast<UINT>(b.Type);
+        r.flags = static_cast<UINT>(b.Flags);
+        const void *resource = nullptr;
+        if (b.Type == D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION) {
+            r.before = static_cast<UINT>(b.Transition.StateBefore);
+            r.after = static_cast<UINT>(b.Transition.StateAfter);
+            resource = b.Transition.hResource.pDrvPrivate;
+        } else if (b.Type == D3D12DDI_RESOURCE_BARRIER_TYPE_UAV) {
+            resource = b.UAV.hResource.pDrvPrivate;
+        } else if constexpr (std::is_same_v<Barrier, D3D12DDIARG_RESOURCE_BARRIER_0003>) {
+            if (b.Type == D3D12DDI_RESOURCE_BARRIER_TYPE_ALIASING)
+                resource = b.Aliasing.hResourceAfter.pDrvPrivate ? b.Aliasing.hResourceAfter.pDrvPrivate
+                                                                 : b.Aliasing.hResourceBefore.pDrvPrivate;
+        } else {
+            if (r.type == 3u) resource = b.Ranged.hResource.pDrvPrivate;
+        }
+        r.id = AgxD3d12JobBarrierId(static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(resource)));
+        r.heap = resource ? static_cast<const AgxD3d12Resource *>(resource)->heap : nullptr;
+        if (r.heap) {
+            const auto *res = static_cast<const AgxD3d12Resource *>(resource);
+            r.lo = res->gpuva - r.heap->gpuva;
+            r.hi = res->bytes ? r.lo + res->bytes : ~0ull;
+        }
+    }
+#else
+    (void)list;
+    (void)count;
+    (void)barriers;
+#endif
+}
+static VOID APIENTRY ResourceBarrier(D3D12DDI_HCOMMANDLIST handle, UINT count, const D3D12DDIARG_RESOURCE_BARRIER_0003 *barriers) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    for (UINT i = 0; list && barriers && i < count; ++i)
+        AgxD3d12BarrierCount(list->barriers, static_cast<unsigned>(barriers[i].Type), static_cast<unsigned>(barriers[i].Flags),
+                             barriers[i].Type == D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION
+                                 ? static_cast<unsigned>(barriers[i].Transition.StateBefore) : 0u,
+                             barriers[i].Type == D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION
+                                 ? static_cast<unsigned>(barriers[i].Transition.StateAfter) : 0u);
+    RecordJobBarriers(list, count, barriers);
+}
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
 /* The owner bindings of one stage's slot records: root views and table
  * descriptors (read now, at execution) of the right kind. */
 struct AgxD3d12OwnerBindings {
     AGX_D3D12_BUFFER uav_buffers[kUavSlots], cb_buffers[kCbSlots], srv_buffers[kSrvSlots];
+    AGX_D3D12_BUFFER counter_buffers[kUavSlots]; /* C33 */
     AGX_D3D12_UAV uavs[kUavSlots];
     AGX_D3D12_CBV cbvs[kCbSlots];
-    AGX_D3D12_SRV srvs[kSrvSlots];
+    AGX_D3D12_SRV srvs[kSrvSlots]; /* EXP1839: only srvs[0, srv_count) are written */
     AGX_D3D12_SAMPLER samplers[kSamplerSlots];
+    UINT srv_count;
 };
 /* C6e: the static border colours of D3D12DDI_STATIC_BORDER_COLOR */
 static void OwnerSampler(const D3D12DDI_SAMPLER_DESC &d, AGX_D3D12_SAMPLER *s) {
@@ -2759,6 +6371,20 @@ static void OwnerSampler(const D3D12DDI_SAMPLER_DESC &d, AGX_D3D12_SAMPLER *s) {
     s->MinLod = d.MinLOD;
     s->MaxLod = d.MaxLOD;
     memcpy(s->BorderColor, d.BorderColor, sizeof(s->BorderColor));
+}
+/* C47: a sampler written into a sampler heap also gets its heap form (the
+ * packed AGX sampler shaders take from the batch's sampler heap) */
+static void FillSamplerForm(D3D12DDI_HDEVICE handle, D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
+    auto *out = reinterpret_cast<AgxD3d12SamplerDescriptor *>(dest.ptr);
+    if (!out) return;
+    AGX_D3D12_HEAP_SAMPLER *form = SamplerFormOf(out);
+    memset(form, 0, sizeof(*form));
+    AgxD3d12Device *device = DeviceOf(handle);
+    AGX_D3D12_OWNER *owner = device && out->kind == kDescriptorSampler ? EnsureOwner(device) : nullptr;
+    if (!owner) return;
+    AGX_D3D12_SAMPLER sampler = {};
+    OwnerSampler(out->desc, &sampler);
+    if (FAILED(AgxD3d12OwnerSamplerDescriptor(owner, &sampler, form))) memset(form, 0, sizeof(*form));
 }
 /* C9/C10: the owner UAV of a UAV descriptor -- raw/structured or typed
  * buffer range, or (image u#) a texture level and slice range */
@@ -2782,11 +6408,49 @@ static bool DescriptorUav(const AgxD3d12Descriptor &view, AGX_D3D12_BUFFER *buff
     uav->Format = view.kind == kDescriptorUavTypedBuffer ? view.format : DXGI_FORMAT_UNKNOWN;
     return true;
 }
+/* C47: a UAV's heap form (texture and PBE descriptors of its image) */
+static void PackUavHeapForm(AGX_D3D12_OWNER *owner, AgxD3d12Descriptor *view) {
+    AgxD3d12HeapForm *form = HeapFormOf(view);
+    AGX_D3D12_BUFFER buffer = {};
+    AGX_D3D12_UAV uav = {};
+    unsigned long long key = 0;
+    if (!DescriptorUav(*view, &buffer, &uav)) {
+        form->key = 0;
+        return;
+    }
+    UINT counter_offset = 0;
+    AGX_D3D12_BUFFER counter = {};
+    if (AgxD3d12Heap *heap = UavCounter(*view, &counter_offset)) {
+        counter = HeapBuffer(heap);
+        uav.Counter = &counter;
+        uav.CounterOffset = counter_offset;
+    }
+    form->key = SUCCEEDED(AgxD3d12OwnerUavDescriptor(owner, &uav, form->texture, form->pbe, form->counter, &key)) ? key : 0u;
+}
 static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
-    memset(o, 0, sizeof(*o));
+    /* EXP1839: only the SRV slots up to the last bound one are cleared and
+     * handed on (EXP1838: two 14 KB clears per replayed draw, almost all
+     * of it the 128-slot SRV table); srv_buffers are read through srvs */
+    UINT srv_count = kSrvSlots;
+    while (srv_count && !b.srv_descriptor[srv_count - 1] && !b.srv_heap[srv_count - 1]) --srv_count;
+    memset(o->uav_buffers, 0, sizeof(o->uav_buffers));
+    memset(o->cb_buffers, 0, sizeof(o->cb_buffers));
+    memset(o->counter_buffers, 0, sizeof(o->counter_buffers));
+    memset(o->uavs, 0, sizeof(o->uavs));
+    memset(o->cbvs, 0, sizeof(o->cbvs));
+    memset(o->srvs, 0, srv_count * sizeof(o->srvs[0]));
+    memset(o->samplers, 0, sizeof(o->samplers));
+    o->srv_count = srv_count;
     for (UINT u = 0; u < kUavSlots; ++u) {
         const AgxD3d12Descriptor *view = b.uav_descriptor[u];
-        if (view) (void)DescriptorUav(*view, &o->uav_buffers[u], &o->uavs[u]);
+        if (view && DescriptorUav(*view, &o->uav_buffers[u], &o->uavs[u])) {
+            UINT counter_offset = 0;
+            if (AgxD3d12Heap *counter = UavCounter(*view, &counter_offset)) {
+                o->counter_buffers[u] = HeapBuffer(counter);
+                o->uavs[u].Counter = &o->counter_buffers[u];
+                o->uavs[u].CounterOffset = counter_offset;
+            }
+        }
         if (!b.uav_heap[u]) continue;
         o->uav_buffers[u] = HeapBuffer(b.uav_heap[u]);
         o->uavs[u] = {&o->uav_buffers[u], b.uav_offset[u], 0};
@@ -2807,16 +6471,19 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
             o->cbvs[c].Bytes = (b.cb_count[c] * sizeof(UINT) + 15u) & ~15u;
         }
     }
-    for (UINT s = 0; s < kSrvSlots; ++s) {
+    for (UINT s = 0; s < srv_count; ++s) {
         const AgxD3d12Descriptor *view = b.srv_descriptor[s];
         if (view && view->kind == kDescriptorSrvBuffer && view->heap) {
             o->srv_buffers[s] = HeapBuffer(view->heap);
             o->srvs[s] = {&o->srv_buffers[s], view->offset, view->bytes};
+            o->srvs[s].ComponentMapping = view->component_mapping;
             o->srvs[s].Format = view->format; /* C9: typed buffer SRVs; raw/structured UNKNOWN */
         } else if (view && view->kind == kDescriptorSrvTexture && view->heap) {
             o->srv_buffers[s] = HeapBuffer(view->heap);
             o->srvs[s].Buffer = &o->srv_buffers[s];
             o->srvs[s].Texture = 1;
+            o->srvs[s].Cube = view->cube;
+            o->srvs[s].ComponentMapping = view->component_mapping;
             o->srvs[s].Format = view->format;
             o->srvs[s].FirstLevel = view->level;
             o->srvs[s].Levels = view->levels;
@@ -2825,6 +6492,7 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
         } else if (b.srv_heap[s]) {
             o->srv_buffers[s] = HeapBuffer(b.srv_heap[s]);
             o->srvs[s] = {&o->srv_buffers[s], b.srv_offset[s], 0};
+            o->srvs[s].ComponentMapping = AGX_D3D12_COMPONENT_MAPPING_IDENTITY;
         }
     }
     for (UINT s = 0; s < kSamplerSlots; ++s) {
@@ -2848,6 +6516,17 @@ static void OwnerBindings(const AgxD3d12Dispatch &b, AgxD3d12OwnerBindings *o) {
         }
     }
 }
+/* C65S: a stage's slot samplers with reduction 2/3 (the rest 0), for the
+ * min/max variant key */
+static bool SlotMinmax(const AgxD3d12OwnerBindings &b, unsigned char out[kSamplerSlots]) {
+    bool any = false;
+    for (UINT s = 0; s < kSamplerSlots; ++s) {
+        const unsigned bits = b.samplers[s].Valid ? dxbc_minmax_bits(b.samplers[s].Filter) : 0u;
+        out[s] = static_cast<unsigned char>((bits & 3u) >= 2u ? bits : 0u);
+        any |= out[s] != 0;
+    }
+    return any;
+}
 /* Replay of the large commands in their own (non-inlined) frames, so the
  * owner-binding records of one command kind are live at a time
  * (STACK_FRAMES gate: EXP1369 build measured 12944 bytes before this). */
@@ -2866,28 +6545,344 @@ static void OwnerIndirect(const AgxD3d12Indirect &in, AGX_D3D12_BUFFER *args, AG
         out->CountOffset = in.count_offset;
     }
 }
+/* C47: the textures one stage's heap ranges can reach (from the lowest range
+ * start to the heap's end) join its batch; a heap reaching more is refused */
+static constexpr UINT kHeapTextures = 4096;
+struct AgxD3d12HeapScratch {
+    AGX_D3D12_BUFFER heap;
+    AGX_D3D12_BUFFER textures[kHeapTextures];
+    AGX_D3D12_BUFFER writes[kHeapTextures];
+    unsigned read_slots[kHeapTextures], write_slots[kHeapTextures];
+    AGX_D3D12_HEAP_SAMPLER samplers[DXBC_HEAP_SAMPLER_MAP_MAX];
+    AGX_D3D12_HEAP_BINDING binding;
+};
+/* EXP1854 receipt-only (measure-d3d12-heap-walk per execution): heap walks,
+ * descriptors walked, re-packed descriptors and their time (QPC ticks); the
+ * replay runs under the owner lock */
+static struct { UINT walks, walked, packs; LONGLONG ticks; } g_heap_walk;
+static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,
+                                bool *minmax);
+/* C65V: *minmax is set when the stage's sampler map holds a MINIMUM or
+ * MAXIMUM sampler (the draw then takes the PSO's min/max variant) */
+static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,
+                            bool *minmax) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    AgxD3d12OwnerRefRoots(owner,stage,b ? b->ref_cb_root : nullptr,
+        b ? b->ref_srv_root : nullptr,b ? b->ref_uav_root : nullptr);
+#endif
+    if (!b || (!b->descriptors && !b->sampler_descriptors) || !b->heap_ranges)
+        return AgxD3d12OwnerSetHeap(owner, stage, nullptr);
+    LARGE_INTEGER t0 = {}, t1 = {};
+    QueryPerformanceCounter(&t0);
+    const HRESULT hr = SetStageHeapWalk(owner, stage, b, scratch, minmax);
+    QueryPerformanceCounter(&t1);
+    ++g_heap_walk.walks;
+    g_heap_walk.ticks += t1.QuadPart - t0.QuadPart;
+    return hr;
+}
+/* Bindless indexing may reach every entry in its root range, but not
+ * unrelated tables or the rest of the heap. Holes in the stage map are empty.
+ * Keep unbounded ranges conservative through the logical heap end. */
+static bool HeapSlotReachable(const AgxD3d12Dispatch *b, UINT index) {
+    for (UINT r = 0; r < b->heap_ranges; ++r)
+        if (!(b->heap_sampler_mask & (1ull << r)) && index >= b->heap_first[r] &&
+            index - b->heap_first[r] < b->heap_count[r]) return true;
+    return false;
+}
+static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,
+                                bool *minmax) {
+    if (!*scratch) *scratch = static_cast<AgxD3d12HeapScratch *>(HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12HeapScratch)));
+    if (!*scratch) return E_OUTOFMEMORY;
+    AgxD3d12HeapScratch &h = **scratch;
+    memset(&h.binding, 0, sizeof(h.binding));
+    h.binding.Ranges = b->heap_ranges;
+    h.binding.Textures = h.textures;
+    h.binding.Writes = h.writes;
+    h.binding.ReadSlots = h.read_slots;
+    h.binding.WriteSlots = h.write_slots;
+    h.binding.Samplers = h.samplers;
+    UINT lowest = UINT_MAX, lowest_sampler = UINT_MAX;
+    for (UINT r = 0; r < b->heap_ranges; ++r) {
+        h.binding.First[r][0] = b->heap_first[r];
+        UINT &low = b->heap_sampler_mask & (1ull << r) ? lowest_sampler : lowest;
+        if (b->heap_first[r] < low) low = b->heap_first[r];
+    }
+    if (b->sampler_descriptors && lowest_sampler != UINT_MAX) {
+        /* C47: the sampler map covers the heap from the lowest sampler range */
+        const UINT samplers = static_cast<UINT>(DescriptorHeapBytes(b->sampler_descriptors) / kSamplerDescriptorBytes);
+        for (UINT r = 0; r < b->heap_ranges; ++r)
+            if (b->heap_sampler_mask & (1ull << r)) h.binding.First[r][1] = lowest_sampler;
+        for (UINT i = lowest_sampler; i < samplers && h.binding.SamplerCount < DXBC_HEAP_SAMPLER_MAP_MAX; ++i) {
+            void *d = static_cast<BYTE *>(b->sampler_descriptors->cpu) + static_cast<SIZE_T>(i) * kSamplerDescriptorBytes;
+            const bool valid = reinterpret_cast<const AgxD3d12SamplerDescriptor *>(d)->kind == kDescriptorSampler;
+            h.samplers[h.binding.SamplerCount] = *SamplerFormOf(d);
+            if (!valid) h.samplers[h.binding.SamplerCount].Valid = 0;
+            /* the reduction bits of the map word (dxbc_minmax_bits << 8) */
+            if (((h.samplers[h.binding.SamplerCount].Valid >> 8) & 3u) >= 2u) *minmax = true;
+            ++h.binding.SamplerCount;
+        }
+    }
+    if (!b->descriptors) return AgxD3d12OwnerSetHeap(owner, stage, &h.binding);
+    h.heap = HeapBuffer(b->descriptors);
+    h.binding.Heap = &h.heap;
+    h.binding.RefDescriptorData = b->descriptors->mirror ? b->descriptors->mirror : b->descriptors->cpu;
+    const UINT count = static_cast<UINT>(DescriptorHeapBytes(b->descriptors) / kCbvSrvUavDescriptorBytes);
+    for (UINT i = lowest; i < count; ++i) {
+        if (!HeapSlotReachable(b, i)) continue;
+        auto *view = reinterpret_cast<AgxD3d12Descriptor *>(static_cast<BYTE *>(b->descriptors->cpu) +
+                                                            static_cast<SIZE_T>(i) * kCbvSrvUavDescriptorBytes);
+        const bool uav = UavDescriptorKind(view->kind);
+        if ((view->kind != kDescriptorSrvTexture && view->kind != kDescriptorSrvBuffer && !uav) || !view->heap) continue;
+        const AGX_D3D12_BUFFER texture = HeapBuffer(view->heap);
+        ++g_heap_walk.walked;
+        /* Asahi re-laid the texture out since it was packed (agx_upload_textures re-packs bound views too) */
+        if (HeapFormOf(view)->key != AgxD3d12OwnerLayoutKey(owner, &texture)) {
+            PackHeapForm(owner, view);
+            MirrorHeapForms(b->descriptors, view, 1u);
+            ++g_heap_walk.packs;
+        }
+        if (uav) {
+            /* C47: what heap UAVs write joins the batch as written */
+            if (h.binding.WriteCount == kHeapTextures) {
+                const UINT receipt[] = {stage, i, count};
+                AdmissionUmdDiagnostic("reject-d3d12-heap-textures", E_OUTOFMEMORY, receipt, 3);
+                return E_OUTOFMEMORY;
+            }
+            h.write_slots[h.binding.WriteCount] = i;
+            h.writes[h.binding.WriteCount++] = texture;
+            UINT counter_offset = 0;
+            if (AgxD3d12Heap *counter = UavCounter(*view, &counter_offset)) {
+                if (h.binding.WriteCount == kHeapTextures) return E_OUTOFMEMORY;
+                h.write_slots[h.binding.WriteCount] = i;
+                h.writes[h.binding.WriteCount++] = HeapBuffer(counter);
+            }
+            continue;
+        }
+        if (h.binding.TextureCount == kHeapTextures) {
+            const UINT receipt[] = {stage, i, count};
+            AdmissionUmdDiagnostic("reject-d3d12-heap-textures", E_OUTOFMEMORY, receipt, 3);
+            return E_OUTOFMEMORY;
+        }
+        h.read_slots[h.binding.TextureCount] = i;
+        h.textures[h.binding.TextureCount++] = texture;
+    }
+    return AgxD3d12OwnerSetHeap(owner, stage, &h.binding);
+}
+/* sink: AgxD3d12OwnerJobDrawRange (a render) or AgxD3d12OwnerJobDispatchRange
+ * (OV5: a compute batch); flags bit 0 = may write (UAV), AGX_D3D12_JOB_VERTEX
+ * = a vertex-stage access */
+typedef void (*JobRangeSink)(const void *, unsigned long long, unsigned long long, unsigned);
+static void JobDescriptorRange(JobRangeSink sink, const AgxD3d12Descriptor *v, unsigned flags) {
+    if (!v || !v->heap) return;
+    sink(v->heap, v->bytes ? v->offset : 0ull, v->bytes ? v->offset + v->bytes : ~0ull, flags);
+}
+static void JobHeapRange(JobRangeSink sink, const AgxD3d12Heap *heap, UINT64 offset, UINT64 bytes, unsigned flags) {
+    if (!heap) return;
+    sink(heap, offset, bytes ? offset + bytes : ~0ull, flags);
+}
+static void JobStageRanges(JobRangeSink sink, const AgxD3d12Dispatch &b, unsigned stage) {
+    for (UINT u = 0; u < kUavSlots; ++u) {
+        JobDescriptorRange(sink, b.uav_descriptor[u], 1u | stage);
+        JobHeapRange(sink, b.uav_heap[u], b.uav_offset[u], 0, 1u | stage);
+    }
+    for (UINT t = 0; t < kSrvSlots; ++t) {
+        JobDescriptorRange(sink, b.srv_descriptor[t], stage);
+        JobHeapRange(sink, b.srv_heap[t], b.srv_offset[t], 0, stage);
+    }
+    for (UINT c = 0; c < kCbSlots; ++c) {
+        JobDescriptorRange(sink, b.cb_descriptor[c], stage);
+        JobHeapRange(sink, b.cb_heap[c], b.cb_offset[c], 0, stage);
+    }
+}
 static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch) {
+    if (AgxD3d12OwnerJobBarriersEnabled()) { /* OV5 receipt: the compute batch's accesses */
+        JobStageRanges(AgxD3d12OwnerJobDispatchRange, dispatch, 0u);
+        JobHeapRange(AgxD3d12OwnerJobDispatchRange, dispatch.indirect.args, dispatch.indirect.args_offset, 0, 0u);
+        JobHeapRange(AgxD3d12OwnerJobDispatchRange, dispatch.indirect.count, dispatch.indirect.count_offset, 0, 0u);
+    }
     AgxD3d12OwnerBindings bind;
     OwnerBindings(dispatch, &bind);
+    AgxD3d12HeapScratch *heap = nullptr;
+    bool minmax = false;
+    const HRESULT heap_hr = SetStageHeap(owner, AGX_D3D12_HEAP_CS, &dispatch, &heap, &minmax);
+    if (FAILED(heap_hr)) {
+        if (heap) HeapFree(GetProcessHeap(), 0, heap);
+        return heap_hr;
+    }
+    /* C65V/C65S: a MINIMUM/MAXIMUM heap or slot sampler dispatches with a min/max variant */
+    AgxD3d12MinmaxKey key = {};
+    key.heap = minmax;
+    const bool slots = SlotMinmax(bind, key.slot[AGX_D3D12_HEAP_CS]);
+    const void *variant = minmax || slots ? MinmaxVariant(owner, dispatch.pso, key, true) : nullptr;
+    const AGX_D3D12_COMPUTE *pipeline = variant ? static_cast<const AGX_D3D12_COMPUTE *>(variant) : &dispatch.pso->compute;
+    /* AgxD3d12OwnerDispatch reads every SRV slot */
+    memset(bind.srvs + bind.srv_count, 0, (kSrvSlots - bind.srv_count) * sizeof(bind.srvs[0]));
     AGX_D3D12_BUFFER args = {}, count = {};
     AGX_D3D12_INDIRECT indirect;
     OwnerIndirect(dispatch.indirect, &args, &count, &indirect);
-    return AgxD3d12OwnerDispatch(owner, &dispatch.pso->compute, bind.uavs, bind.cbvs, bind.srvs, bind.samplers,
-                                 dispatch.groups[0], dispatch.groups[1], dispatch.groups[2],
-                                 indirect.Buffer ? &indirect : nullptr);
+    if (dispatch.pso && SplitBeforeTag(dispatch.pso->cs_tag)) AgxD3d12OwnerSplitBatch(owner);
+    const HRESULT hr = AgxD3d12OwnerDispatch(owner, pipeline, bind.uavs, bind.cbvs, bind.srvs, bind.samplers,
+                                             dispatch.groups[0], dispatch.groups[1], dispatch.groups[2],
+                                             indirect.Buffer ? &indirect : nullptr);
+    if (heap) HeapFree(GetProcessHeap(), 0, heap);
+    return hr;
 }
+/* rc76: at most this many clears go to the draw that follows them */
+static constexpr UINT kDeferredClears = 16;
 struct AgxD3d12DrawScratch {
     AGX_D3D12_BUFFER rtv_textures[8], vb_buffers[kVertexBuffers], dsv_texture, index_buffer, indirect_args, indirect_count;
+    AGX_D3D12_BUFFER clear_textures[kDeferredClears]; /* rc76 */
+    AGX_D3D12_DRAW_CLEAR clears[kDeferredClears];
+    AGX_D3D12_BUFFER so_buffers[kSoTargets], so_filled[kSoTargets]; /* C39 */
     AGX_D3D12_DRAW draw;
-    AgxD3d12OwnerBindings vs_bind, ps_bind;
+    AgxD3d12OwnerBindings vs_bind, ps_bind, gs_bind, hs_bind, ds_bind;
+    AgxD3d12OwnerBindings none; /* zeroed: a pipeline stage without recorded bindings */
+    AgxD3d12HeapScratch *heaps[AGX_D3D12_HEAP_CS]; /* C47: allocated by the first heap range */
 };
-static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const AgxD3d12Draw &d) {
-    /* the draw's owner records (~10 KB) live on the process heap */
-    auto *scratch = static_cast<AgxD3d12DrawScratch *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AgxD3d12DrawScratch)));
+/* EXP1838: one scratch per execution (EXP1837: a ~120 KB allocation per
+ * replayed draw), zeroed once for its empty binding set */
+static AgxD3d12DrawScratch *NewDrawScratch() {
+    auto *scratch = static_cast<AgxD3d12DrawScratch *>(HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12DrawScratch)));
+    if (scratch) memset(&scratch->none, 0, sizeof(scratch->none));
+    if (scratch) memset(scratch->heaps, 0, sizeof(scratch->heaps));
+    return scratch;
+}
+static void FreeDrawScratch(AgxD3d12DrawScratch *scratch) {
+    if (!scratch) return;
+    for (AgxD3d12HeapScratch *heap : scratch->heaps)
+        if (heap) HeapFree(GetProcessHeap(), 0, heap);
+    HeapFree(GetProcessHeap(), 0, scratch);
+}
+/* C27/C37: the bindings of a draw's optional stages (recorded slots) */
+struct AgxD3d12OptionalBinds {
+    const AgxD3d12Dispatch *gs, *hs, *ds;
+};
+static void StageBindings(const AgxD3d12OwnerBindings &bind, decltype(AGX_D3D12_DRAW::Gs) *out) {
+    out->Cbvs = bind.cbvs;
+    out->Srvs = bind.srvs;
+    out->SrvCount = bind.srv_count;
+    out->Samplers = bind.samplers;
+    out->Uavs = bind.uavs;
+}
+static void OwnerStageBindings(const AgxD3d12Dispatch &recorded, AgxD3d12OwnerBindings *bind, decltype(AGX_D3D12_DRAW::Gs) *out) {
+    OwnerBindings(recorded, bind);
+    StageBindings(*bind, out);
+}
+/* a recorded optional-stage slot fills pending; true when it was one */
+static bool TakeOptionalBind(const AgxD3d12Command &command, AgxD3d12OptionalBinds *pending) {
+    const AgxD3d12Dispatch **slot = command.kind == kCommandGsBind ? &pending->gs
+                                  : command.kind == kCommandHsBind ? &pending->hs
+                                  : command.kind == kCommandDsBind ? &pending->ds : nullptr;
+    if (slot) *slot = &command.dispatch;
+    return slot != nullptr;
+}
+/* only the stages the draw's pipeline has (a stage bound once must not
+ * reach later draws) */
+static AgxD3d12OptionalBinds DrawOptionalBinds(const AgxD3d12Draw &draw, const AgxD3d12OptionalBinds &pending) {
+    return {draw.pso->gs_dwords ? pending.gs : nullptr, draw.pso->hs_dwords ? pending.hs : nullptr,
+            draw.pso->ds_dwords ? pending.ds : nullptr};
+}
+/* rc76 (EXP2000 GravityMark D3D12: 8 of 11 render jobs a frame were
+ * clear-only passes, ~0.6 ms of GPU span each, 5 of them back to back
+ * before one pass): the ClearRenderTargetView/ClearDepthStencilView
+ * commands directly before a draw -- nothing but clears and that draw's
+ * optional-stage binds between them -- go to the draw, which makes them its
+ * pass's load-op clears when that is exact (AgxD3d12OwnerDrawWithClears) and
+ * otherwise runs them first as before. APPLE_AGX_D3D12_CLEAR_ABSORB=0
+ * replays every clear on its own. */
+static bool ClearAbsorbEnabled() {
+    static const bool enabled = [] {
+        char value[2] = {};
+        return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_CLEAR_ABSORB", value, sizeof(value)) == 1 && value[0] == '0');
+    }();
+    return enabled;
+}
+/* rc76: the clears list->command[c, c + n) ending at the first non-clear,
+ * when that is (after optional binds) the draw *draw; n, or 0 when no draw
+ * follows or the run is longer than kDeferredClears */
+static UINT DeferredClearRun(const AgxD3d12CommandList *list, UINT c, UINT *draw) {
+    UINT end = c;
+    while (end < list->commands &&
+           (list->command[end].kind == kCommandClear || list->command[end].kind == kCommandClearDepth))
+        ++end;
+    UINT d = end;
+    while (d < list->commands && (list->command[d].kind == kCommandGsBind || list->command[d].kind == kCommandHsBind ||
+                                  list->command[d].kind == kCommandDsBind))
+        ++d;
+    if (end == c || end - c > kDeferredClears || d >= list->commands || list->command[d].kind != kCommandDraw) return 0;
+    *draw = d;
+    return end - c;
+}
+/* rc76 receipt-only (measure-d3d12-clear-absorb): per Execute */
+struct AgxD3d12ClearAbsorbStats {
+    UINT immediate, deferred, absorbed, absorbed_draws, fallback_draws, reasons;
+};
+/* OV2 ranges (agx_d3d12_job_barriers.h): every heap range the draw may
+ * access -- targets, absorbed clears, vertex/index/indirect/stream-output
+ * buffers, the VS/PS views (UAVs marked); root views and buffers without a
+ * size run to the heap's end; optional stages are not placed (unknown). */
+static void JobDrawRanges(const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional, const AgxD3d12Command *clears,
+                          UINT clear_count) {
+    const JobRangeSink sink = AgxD3d12OwnerJobDrawRange;
+    const unsigned vertex = AGX_D3D12_JOB_VERTEX;
+    if (optional.gs || optional.hs || optional.ds) sink(nullptr, 0, 0, 1u | vertex);
+    for (UINT r = 0; r < d.rtvs && r < 8u; ++r) JobDescriptorRange(sink, &d.rtv[r], 0u);
+    if (d.dsv.kind) JobDescriptorRange(sink, &d.dsv, 0u);
+    for (UINT k = 0; clears && k < clear_count; ++k) {
+        if (clears[k].kind == kCommandClearDepth) JobDescriptorRange(sink, &clears[k].clear_depth.dsv, 0u);
+        else if (clears[k].kind == kCommandClear) JobDescriptorRange(sink, &clears[k].clear.rtv, 0u);
+        else sink(nullptr, 0, 0, 0u);
+    }
+    for (UINT v = 0; v < kVertexBuffers; ++v) JobHeapRange(sink, d.vb[v].heap, d.vb[v].offset, 0, vertex);
+    if (d.index_size) JobHeapRange(sink, d.index_heap, d.index_offset, 0, vertex);
+    JobHeapRange(sink, d.indirect.args, d.indirect.args_offset, 0, vertex);
+    JobHeapRange(sink, d.indirect.count, d.indirect.count_offset, 0, vertex);
+    for (UINT t = 0; t < kSoTargets; ++t) {
+        JobHeapRange(sink, d.so[t].heap, d.so[t].offset, d.so[t].size, 1u | vertex);
+        JobHeapRange(sink, d.so[t].filled, d.so[t].filled_offset, 0, 1u | vertex);
+    }
+    JobStageRanges(sink, d.vs_bind, vertex);
+    JobStageRanges(sink, d.ps_bind, 0u);
+}
+static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional,
+                                                AgxD3d12DrawScratch *scratch, const AgxD3d12Command *clears = nullptr,
+                                                UINT clear_count = 0, AgxD3d12ClearAbsorbStats *stats = nullptr) {
+    /* the draw's owner records live in the caller's scratch (NewDrawScratch) */
     if (!scratch) return E_OUTOFMEMORY;
+    if (clear_count > kDeferredClears) return E_INVALIDARG;
+    for (UINT k = 0; k < clear_count; ++k) { /* rc76: the arguments the replay loop's clear branches pass */
+        AGX_D3D12_DRAW_CLEAR &out = scratch->clears[k];
+        memset(&out, 0, sizeof(out));
+        if (clears[k].kind == kCommandClearDepth) {
+            const AgxD3d12ClearDepth &clear = clears[k].clear_depth;
+            scratch->clear_textures[k] = HeapBuffer(clear.dsv.heap);
+            out.Depth = 1;
+            out.Format = clear.dsv.format;
+            out.Level = clear.dsv.level;
+            out.FirstLayer = clear.dsv.first_layer;
+            out.Layers = clear.dsv.layers;
+            out.Flags = clear.flags;
+            out.DepthValue = clear.depth;
+            out.Stencil = clear.stencil;
+            out.Rects = clear.rects ? clear.rect : nullptr;
+            out.RectCount = clear.rects;
+        } else {
+            const AgxD3d12Clear &clear = clears[k].clear;
+            scratch->clear_textures[k] = HeapBuffer(clear.rtv.heap);
+            out.Format = clear.rtv.format;
+            out.Level = clear.rtv.level;
+            out.FirstLayer = clear.rtv.first_layer;
+            out.Layers = clear.rtv.layers;
+            memcpy(out.Color, clear.color, sizeof(out.Color));
+            out.Rects = clear.rects ? clear.rect : nullptr;
+            out.RectCount = clear.rects;
+        }
+        out.Texture = &scratch->clear_textures[k];
+    }
     AGX_D3D12_BUFFER(&rtv_textures)[8] = scratch->rtv_textures;
     AGX_D3D12_BUFFER(&vb_buffers)[kVertexBuffers] = scratch->vb_buffers;
     AGX_D3D12_DRAW &draw = scratch->draw;
+    memset(&draw, 0, sizeof(draw));
     draw.Pipeline = &d.pso->graphics;
     draw.NumRtvs = d.rtvs;
     for (UINT r = 0; r < d.rtvs; ++r) {
@@ -2924,6 +6919,16 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
         draw.Vb[v].Stride = d.vb[v].stride;
     }
     memcpy(draw.BlendFactor, d.blend_factor, sizeof(draw.BlendFactor));
+    for (UINT t = 0; t < kSoTargets; ++t) { /* C39 */
+        if (!d.so[t].heap || !d.so[t].filled) continue;
+        scratch->so_buffers[t] = HeapBuffer(d.so[t].heap);
+        scratch->so_filled[t] = HeapBuffer(d.so[t].filled);
+        draw.So[t].Buffer = &scratch->so_buffers[t];
+        draw.So[t].Filled = &scratch->so_filled[t];
+        draw.So[t].Offset = d.so[t].offset;
+        draw.So[t].Size = d.so[t].size;
+        draw.So[t].FilledOffset = d.so[t].filled_offset;
+    }
     draw.StencilRef = d.stencil_ref;
     draw.VertexCount = d.vertices;
     draw.InstanceCount = d.instances;
@@ -2943,36 +6948,269 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     AgxD3d12OwnerBindings &vs_bind = scratch->vs_bind, &ps_bind = scratch->ps_bind;
     OwnerBindings(d.vs_bind, &vs_bind);
     OwnerBindings(d.ps_bind, &ps_bind);
-    memcpy(draw.Vs.Cbvs, vs_bind.cbvs, sizeof(draw.Vs.Cbvs));
-    memcpy(draw.Vs.Srvs, vs_bind.srvs, sizeof(draw.Vs.Srvs));
-    memcpy(draw.Ps.Cbvs, ps_bind.cbvs, sizeof(draw.Ps.Cbvs));
-    memcpy(draw.Ps.Srvs, ps_bind.srvs, sizeof(draw.Ps.Srvs));
-    memcpy(draw.Vs.Samplers, vs_bind.samplers, sizeof(draw.Vs.Samplers));
-    memcpy(draw.Ps.Samplers, ps_bind.samplers, sizeof(draw.Ps.Samplers));
-    memcpy(draw.Vs.Uavs, vs_bind.uavs, sizeof(draw.Vs.Uavs)); /* C13 */
-    memcpy(draw.Ps.Uavs, ps_bind.uavs, sizeof(draw.Ps.Uavs));
+    /* OV2: a draw that may write a UAV (any graphics UAV slot, or an optional
+     * stage) keeps the next compute job dependent on this render. */
+    if (AgxD3d12OwnerJobBarriersEnabled()) {
+        bool uav = optional.gs || optional.hs || optional.ds;
+        for (UINT u = 0; !uav && u < kUavSlots; ++u)
+            uav = d.vs_bind.uav_descriptor[u] || d.vs_bind.uav_heap[u] ||
+                  d.ps_bind.uav_descriptor[u] || d.ps_bind.uav_heap[u];
+        if (uav) AgxD3d12OwnerJobDrawUav();
+        JobDrawRanges(d, optional, clears, clear_count);
+    }
+    StageBindings(vs_bind, &draw.Vs);
+    StageBindings(ps_bind, &draw.Ps); /* C13: graphics UAVs bind per stage too */
+    if (optional.gs) OwnerStageBindings(*optional.gs, &scratch->gs_bind, &draw.Gs); /* C27 */
+    else StageBindings(scratch->none, &draw.Gs);
+    if (optional.hs) OwnerStageBindings(*optional.hs, &scratch->hs_bind, &draw.Hs); /* C37 */
+    else StageBindings(scratch->none, &draw.Hs);
+    if (optional.ds) OwnerStageBindings(*optional.ds, &scratch->ds_bind, &draw.Ds);
+    else StageBindings(scratch->none, &draw.Ds);
     OwnerIndirect(d.indirect, &scratch->indirect_args, &scratch->indirect_count, &draw.Indirect); /* C14 */
-    const HRESULT hr = AgxD3d12OwnerDraw(owner, &draw);
-    HeapFree(GetProcessHeap(), 0, scratch);
+    /* C47: every stage's heap binding (or none), consumed by the draw */
+    const AgxD3d12Dispatch *heaps[AGX_D3D12_HEAP_CS] = {&d.vs_bind, &d.ps_bind, optional.gs, optional.hs, optional.ds};
+    bool minmax = false;
+    for (unsigned s = 0; s < AGX_D3D12_HEAP_CS; ++s) {
+        const HRESULT hr = SetStageHeap(owner, s, heaps[s], &scratch->heaps[s], &minmax);
+        if (FAILED(hr)) {
+            /* rc76: the deferred clears still run, in order, before the failure */
+            if (clear_count) (void)AgxD3d12OwnerDrawWithClears(owner, nullptr, scratch->clears, clear_count, nullptr, nullptr);
+            return hr;
+        }
+    }
+    /* C65V/C65S: a MINIMUM/MAXIMUM heap or slot sampler draws with a min/max variant */
+    AgxD3d12MinmaxKey key = {};
+    key.heap = minmax;
+    bool slots = SlotMinmax(vs_bind, key.slot[AGX_D3D12_HEAP_VS]);
+    slots |= SlotMinmax(ps_bind, key.slot[AGX_D3D12_HEAP_PS]);
+    if (optional.gs) slots |= SlotMinmax(scratch->gs_bind, key.slot[AGX_D3D12_HEAP_GS]);
+    if (optional.hs) slots |= SlotMinmax(scratch->hs_bind, key.slot[AGX_D3D12_HEAP_HS]);
+    if (optional.ds) slots |= SlotMinmax(scratch->ds_bind, key.slot[AGX_D3D12_HEAP_DS]);
+    if (minmax || slots)
+        if (void *variant = MinmaxVariant(owner, d.pso, key, false)) draw.Pipeline = static_cast<AGX_D3D12_GRAPHICS *>(variant);
+    if (!clear_count) return AgxD3d12OwnerDraw(owner, &draw);
+    UINT absorbed = 0, reason = 0;
+    const HRESULT hr = AgxD3d12OwnerDrawWithClears(owner, &draw, scratch->clears, clear_count, &absorbed, &reason);
+    if (stats) {
+        stats->absorbed += absorbed;
+        if (absorbed) ++stats->absorbed_draws;
+        else {
+            ++stats->fallback_draws;
+            stats->reasons |= 1u << (reason & 31u);
+        }
+    }
     return hr;
 }
 #endif
-static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* C31: one CPU-expanded ExecuteIndirect. The scratch list starts as the
+ * recorded state; records apply their arguments in order and each one's
+ * draw or dispatch is recorded on the scratch list and replayed at once. */
+static HRESULT ReplayIndirectExpand(AGX_D3D12_OWNER *owner, const AgxD3d12CommandList *list,
+                                    const AgxD3d12IndirectExpand &expand) {
+    if (expand.state >= list->indirect_state_count) return E_INVALIDARG;
+    const AgxD3d12IndirectState &state = list->indirect_states[expand.state];
+    const AgxD3d12CommandSignature &signature = state.signature;
+    const AgxD3d12Indirect &in = expand.indirect;
+    const bool graphics = signature.kind != 3u;
+    HRESULT hr = S_OK;
+    UINT count = in.max_count;
+    if (in.count) {
+        UINT limit = 0;
+        AGX_D3D12_BUFFER buffer = HeapBuffer(in.count);
+        hr = AgxD3d12OwnerReadBuffer(owner, &buffer, in.count_offset, sizeof(limit), &limit);
+        if (FAILED(hr)) return hr;
+        if (limit < count) count = limit;
+    }
+    UINT drawn = 0, skipped = 0;
+    AgxD3d12DrawScratch *draw_scratch = nullptr; /* EXP1838: one per expansion */
+    if (count) {
+        const UINT64 bytes = static_cast<UINT64>(count - 1u) * signature.stride + signature.record_bytes;
+        if (bytes > (64ULL << 20)) return E_INVALIDARG;
+        auto *args = static_cast<unsigned char *>(HeapAlloc(GetProcessHeap(), 0, static_cast<SIZE_T>(bytes)));
+        auto *scratch = static_cast<AgxD3d12CommandList *>(HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12CommandList)));
+        if (!args || !scratch) hr = E_OUTOFMEMORY;
+        if (SUCCEEDED(hr)) {
+            AGX_D3D12_BUFFER buffer = HeapBuffer(in.args);
+            hr = AgxD3d12OwnerReadBuffer(owner, &buffer, in.args_offset, static_cast<UINT>(bytes), args);
+        }
+        if (SUCCEEDED(hr)) {
+            memcpy(scratch, &state.list, sizeof(*scratch));
+            scratch->type = static_cast<UINT>(D3D12DDI_COMMAND_LIST_TYPE_DIRECT);
+            scratch->command = nullptr;
+            scratch->capacity = scratch->commands = 0;
+            scratch->bundle = nullptr;
+            scratch->bundle_bytes = scratch->bundle_capacity = 0;
+            scratch->indirect_states = nullptr;
+            scratch->indirect_state_count = scratch->indirect_state_capacity = 0;
+            scratch->job_barriers = nullptr; /* OV1: the snapshot shares the list's log */
+            scratch->job_barrier_count = scratch->job_barrier_capacity = 0;
+            scratch->replay = 1;
+        }
+        const D3D12DDI_HCOMMANDLIST handle = {scratch};
+        for (UINT i = 0; SUCCEEDED(hr) && i < count; ++i) {
+            const unsigned char *record = args + static_cast<SIZE_T>(i) * signature.stride;
+            scratch->commands = 0;
+            for (UINT a = 0; a + 1u < signature.arguments; ++a) {
+                const AgxD3d12SignatureArgument &arg = signature.argument[a];
+                const unsigned char *at = record + arg.offset;
+                UINT64 va = 0;
+                if (arg.type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_CONSTANT) {
+                    SetRoot32BitConstants(scratch, graphics, arg.param, arg.count, at, arg.dest);
+                    continue;
+                }
+                if (arg.type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_VERTEX_BUFFER_VIEW) {
+                    D3D12DDI_VERTEX_BUFFER_VIEW view;
+                    memcpy(&view, at, sizeof(view));
+                    AGX_VB_SETTER(handle, arg.param, 1, &view);
+                    continue;
+                }
+                if (arg.type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_INDEX_BUFFER_VIEW) {
+                    D3D12DDI_INDEX_BUFFER_VIEW view;
+                    memcpy(&view, at, sizeof(view));
+                    AGX_IB_SETTER(handle, &view);
+                    continue;
+                }
+                memcpy(&va, at, sizeof(va));
+                const UINT root_type = arg.type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW ? D3D12DDI_ROOT_PARAMETER_TYPE_CBV
+                                     : arg.type == D3D12DDI_INDIRECT_ARGUMENT_TYPE_SHADER_RESOURCE_VIEW ? D3D12DDI_ROOT_PARAMETER_TYPE_SRV
+                                                                                                        : D3D12DDI_ROOT_PARAMETER_TYPE_UAV;
+                SetRootBufferView(scratch, arg.param, va, root_type, graphics);
+            }
+            const unsigned char *op = record + signature.argument[signature.arguments - 1u].offset;
+            UINT v[5] = {};
+            memcpy(v, op, signature.kind == 2u ? 20u : signature.kind == 1u ? 16u : 12u);
+            if (signature.kind == 3u) RecordDispatch(scratch, v[0], v[1], v[2], nullptr);
+            else if (signature.kind == 2u) RecordDraw(scratch, v[0], v[1], v[2], static_cast<INT>(v[3]), v[4], true);
+            else RecordDraw(scratch, v[0], v[1], v[2], 0, v[3], false);
+            if (!scratch->commands) ++skipped; /* an empty or refused record */
+            AgxD3d12OptionalBinds pending = {};
+            for (UINT c = 0; SUCCEEDED(hr) && c < scratch->commands; ++c) {
+                const AgxD3d12Command &command = scratch->command[c];
+                if (TakeOptionalBind(command, &pending)) {
+                } else if (command.kind == kCommandDraw) {
+                    if (!draw_scratch) draw_scratch = NewDrawScratch();
+                    hr = ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending), draw_scratch);
+                    pending = {};
+                    ++drawn;
+                } else if (command.kind == kCommandDispatch) {
+                    hr = ReplayDispatch(owner, command.dispatch);
+                    ++drawn;
+                }
+            }
+        }
+        if (scratch && scratch->command) HeapFree(GetProcessHeap(), 0, scratch->command);
+        if (scratch) HeapFree(GetProcessHeap(), 0, scratch);
+        if (args) HeapFree(GetProcessHeap(), 0, args);
+        FreeDrawScratch(draw_scratch);
+    }
+    const UINT receipt[] = {signature.kind, signature.arguments, count, drawn, skipped, static_cast<UINT>(hr)};
+    AdmissionUmdDiagnostic("measure-d3d12-indirect-expand", hr, receipt, 6);
+    return hr;
+}
+#endif
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+/* Mutually exclusive replay wall-time buckets. Owner timers nest inside these. */
+static unsigned ReplayTimingBucket(UINT kind) {
+    switch (kind) {
+    case kCommandDraw: return 0;
+    case kCommandDispatch: return 1;
+    case kCommandCopy: case kCommandTextureCopy: case kCommandTextureRegionCopy:
+    case kCommandResolve: return 2;
+    case kCommandQuery: return 3;
+    case kCommandIndirectExpand: return 4;
+    default: return 5;
+    }
+}
+#endif
+static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
+#ifndef APPLE_AGX_D3D12_NATIVE_OWNER
+    (void)queue;
+#endif
     UINT commands = 0;
     HRESULT hr = S_OK;
+    /* the receipt splits the execution into replay and submit+wait time
+     * (microseconds): the owner submits synchronously, so an application's
+     * ExecuteCommandLists time is both */
+    LARGE_INTEGER frequency = {}, start = {}, replayed = {}, submitted = {};
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&start);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    const bool measure = AdmissionUmdMeasureEnabled() != FALSE;
+    const bool job_receipt = AgxD3d12OwnerJobBarriersEnabled() != FALSE; /* OV1 receipt-only */
+    LONGLONG command_ticks[6] = {};
+    UINT command_counts[6] = {};
     AgxD3d12Device *device = nullptr;
+    AgxD3d12DrawScratch *draw_scratch = nullptr; /* EXP1838: one per execution */
+    AgxD3d12ClearAbsorbStats absorb = {}; /* rc76 */
+    AgxD3d12OwnerRefCommand(static_cast<AGX_D3D12_OWNER *>(queue->device->owner),0,0);
+    if (job_receipt) {
+        /* OV2: a new execution; it pairs only when every list's barriers
+         * were logged */
+        UINT known = 1;
+        for (UINT i = 0; lists && i < count; ++i) {
+            const auto *l = static_cast<const AgxD3d12CommandList *>(lists[i].pDrvPrivate);
+            if (l && l->job_barriers_lost) known = 0;
+        }
+        AgxD3d12OwnerJobExecution(known);
+        /* OV3: resolves defer only when every barrier is replayed */
+        if (queue && queue->device)
+            AgxD3d12OwnerResolveExecution(static_cast<AGX_D3D12_OWNER *>(queue->device->owner), 1, known);
+    }
 #endif
     for (UINT i = 0; lists && i < count; ++i) {
         auto *list = static_cast<AgxD3d12CommandList *>(lists[i].pDrvPrivate);
         if (!list) continue;
         commands += list->commands;
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        AgxD3d12OptionalBinds pending = {}; /* C27/C37 */
+        UINT deferred_first = 0, deferred_end = 0, deferred_draw = 0; /* rc76: clears the draw at deferred_draw runs */
+        UINT job_barrier = 0; /* OV1 receipt-only: the next list->job_barriers entry */
         for (UINT c = 0; SUCCEEDED(hr) && c < list->commands; ++c) {
             const AgxD3d12Command &command = list->command[c];
+            for (; job_barrier < list->job_barrier_count && list->job_barriers[job_barrier].position <= c; ++job_barrier) {
+                const AgxD3d12JobBarrierRecord &r = list->job_barriers[job_barrier];
+                AgxD3d12OwnerJobBarrier(r.type, r.flags, r.before, r.after, r.id);
+                AgxD3d12OwnerJobBarrierRange(r.type, r.id, r.heap, r.lo, r.hi);
+                ReplayResolveBarrier(static_cast<AGX_D3D12_OWNER *>(list->device->owner), r);
+                AgxD3d12OwnerJobSplit(static_cast<AGX_D3D12_OWNER *>(list->device->owner)); /* OV4 */
+            }
+            AdmissionUmdWaitSetPhase(command.kind == kCommandDraw ? AgxWaitPhaseDraw :
+                command.kind == kCommandDispatch || command.kind == kCommandIndirectExpand ?
+                    AgxWaitPhaseDispatch : AgxWaitPhaseOther);
+            LARGE_INTEGER command_start = {};
+            if (measure) QueryPerformanceCounter(&command_start);
             device = list->device;
             auto *owner = static_cast<AGX_D3D12_OWNER *>(device->owner);
-            if (command.kind == kCommandCopy) {
+            AgxD3d12OwnerRefCommand(owner,i,c+1);
+            /* rc94: deferred upload copies stay ahead of every other command */
+            AgxD3d12OwnerUploadBoundary(owner, command.kind == kCommandDispatch ? 1 : 0);
+            if ((command.kind == kCommandClear || command.kind == kCommandClearDepth) && c >= deferred_end) {
+                UINT draw_index = 0;
+                UINT run = ClearAbsorbEnabled() ? DeferredClearRun(list, c, &draw_index) : 0u;
+                /* the draw takes them through its scratch: no scratch, no deferral */
+                if (run && !draw_scratch) draw_scratch = NewDrawScratch();
+                if (!draw_scratch) run = 0;
+                if (run) {
+                    deferred_first = c;
+                    deferred_end = c + run;
+                    deferred_draw = draw_index;
+                    absorb.deferred += run;
+                } else {
+                    ++absorb.immediate;
+                }
+            }
+            /* OV1 receipt-only: a batch submitted inside this command's owner
+             * work ends the job before it (agx_d3d12_job_barriers.h); deferred
+             * clears, optional binds and query begin/end do no job work */
+            const bool job_command = job_receipt && !(c >= deferred_first && c < deferred_end) &&
+                                     command.kind != kCommandGsBind && command.kind != kCommandHsBind &&
+                                     command.kind != kCommandDsBind &&
+                                     !(command.kind == kCommandQuery && command.query.op != kQueryResolve);
+            if (job_command) AgxD3d12OwnerJobCommand(command.kind);
+            if (c >= deferred_first && c < deferred_end) {
+                /* rc76: replayed by the draw at deferred_draw (AgxD3d12OwnerDrawWithClears) */
+            } else if (command.kind == kCommandCopy) {
                 const AgxD3d12Copy &copy = command.copy;
                 AGX_D3D12_BUFFER dst = HeapBuffer(copy.dst), src = HeapBuffer(copy.src);
                 hr = AgxD3d12OwnerCopy(owner, &dst, copy.dst_offset, &src, copy.src_offset, copy.bytes);
@@ -2988,7 +7226,7 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
                 if (rc.whole_levels) {
                     for (UINT level = 0; SUCCEEDED(hr) && level < rc.whole_levels; ++level) {
                         const UINT w = rc.width >> level ? rc.width >> level : 1u, h = rc.height >> level ? rc.height >> level : 1u;
-                        hr = AgxD3d12OwnerCopyTextureRegion(owner, &dst, level, 0, 0, 0, &src, level, 0, 0, 0, w, h, rc.layers);
+                        hr = AgxD3d12OwnerCopyTextureRegion(owner, &dst, level, 0, 0, 0, &src, level, 0, 0, 0, w, h, rc.volume ? (rc.layers>>level ? rc.layers>>level:1u):rc.layers);
                     }
                 } else {
                     hr = AgxD3d12OwnerCopyTextureRegion(owner, &dst, rc.dst_level, rc.dst_layer, rc.dst_x, rc.dst_y, &src,
@@ -3001,13 +7239,32 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
                 hr = AgxD3d12OwnerClearDepthStencil(owner, &texture, clear.dsv.format, clear.dsv.level,
                                                     clear.dsv.first_layer, clear.dsv.layers, clear.flags, clear.depth,
                                                     clear.stencil, clear.rects ? clear.rect : nullptr, clear.rects);
+            } else if (command.kind == kCommandIndirectExpand) {
+                hr = ReplayIndirectExpand(owner, list, command.indirect_expand);
+            } else if (command.kind == kCommandResolve) {
+                const AgxD3d12Resolve &r = command.resolve;
+                AGX_D3D12_BUFFER dst = HeapBuffer(r.dst), src = HeapBuffer(r.src);
+                hr = AgxD3d12OwnerResolve(owner, &dst, r.dst_level, r.dst_layer, &src, r.src_layer, r.format);
+            } else if (TakeOptionalBind(command, &pending)) { /* C27/C37: consumed by the next draw */
             } else if (command.kind == kCommandDraw) {
-                hr = ReplayDraw(owner, command.draw);
+                if (!draw_scratch) draw_scratch = NewDrawScratch();
+                if (deferred_end > deferred_first && c == deferred_draw) {
+                    hr = ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending), draw_scratch,
+                                    &list->command[deferred_first], deferred_end - deferred_first, &absorb);
+                    deferred_first = deferred_end = 0;
+                } else {
+                    hr = ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending), draw_scratch);
+                }
+                pending = {};
             } else if (command.kind == kCommandQuery) {
                 const AgxD3d12QueryCommand &q = command.query;
+                AdmissionUmdWaitSetPhase(q.op == kQueryResolve ? AgxWaitPhaseQueryResolve :
+                    q.op == kQueryBegin ? AgxWaitPhaseQueryBegin : AgxWaitPhaseQueryEnd);
+                AgxUmdWaitScope query_timing(AgxWaitQueryCommand);
                 auto *queries = static_cast<AGX_D3D12_QUERY_HEAP *>(q.heap->owner);
                 if (q.op == kQueryResolve) {
                     AGX_D3D12_BUFFER dst = HeapBuffer(q.dst);
+                    if (job_receipt) AgxD3d12OwnerJobResolveRange(q.dst, q.dst_offset, ~0ull);
                     hr = AgxD3d12OwnerResolveQueries(owner, queries, q.type, q.index, q.count, &dst, q.dst_offset);
                 } else {
                     hr = AgxD3d12OwnerQuery(owner, queries, q.type, q.index, q.op == kQueryBegin);
@@ -3043,17 +7300,132 @@ static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE, UINT count, con
             } else {
                 hr = ReplayDispatch(owner, command.dispatch);
             }
+            if (job_command) AgxD3d12OwnerJobCommand(0);
+            /* OV3: the draw's render batch takes the deferred resolve copies */
+            if (SUCCEEDED(hr) && (command.kind == kCommandDraw || command.kind == kCommandIndirectExpand))
+                AgxD3d12OwnerResolveAfterDraw(owner);
+            if (measure) {
+                LARGE_INTEGER command_end;
+                QueryPerformanceCounter(&command_end);
+                command_ticks[ReplayTimingBucket(command.kind)] += command_end.QuadPart - command_start.QuadPart;
+                ++command_counts[ReplayTimingBucket(command.kind)];
+            }
+        }
+        /* OV1 receipt-only: barriers after the list's last command */
+        for (; SUCCEEDED(hr) && job_barrier < list->job_barrier_count; ++job_barrier) {
+            const AgxD3d12JobBarrierRecord &r = list->job_barriers[job_barrier];
+            AgxD3d12OwnerJobBarrier(r.type, r.flags, r.before, r.after, r.id);
+            AgxD3d12OwnerJobBarrierRange(r.type, r.id, r.heap, r.lo, r.hi);
+            ReplayResolveBarrier(static_cast<AGX_D3D12_OWNER *>(list->device->owner), r);
+            AgxD3d12OwnerJobSplit(static_cast<AGX_D3D12_OWNER *>(list->device->owner)); /* OV4 */
         }
 #endif
     }
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
-    if (SUCCEEDED(hr) && device && device->owner)
-        hr = AgxD3d12OwnerSubmitAndWait(static_cast<AGX_D3D12_OWNER *>(device->owner));
+    /* OV3: copies still deferred at the replay's end, the native way */
+    if (queue && queue->device)
+        AgxD3d12OwnerResolveExecution(static_cast<AGX_D3D12_OWNER *>(queue->device->owner), 0, 0);
+    /* rc94: the replay's end (or its failure) submits deferred upload copies */
+    if (queue && queue->device)
+        AgxD3d12OwnerUploadBoundary(static_cast<AGX_D3D12_OWNER *>(queue->device->owner), 0);
+#endif
+    QueryPerformanceCounter(&replayed);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    FreeDrawScratch(draw_scratch);
+    AdmissionUmdWaitSetPhase(AgxWaitPhaseSubmit);
+    if (SUCCEEDED(hr) && device && device->owner) {
+        auto *owner = static_cast<AGX_D3D12_OWNER *>(device->owner);
+        hr = queue && queue->gpu_wait
+                 ? AgxD3d12OwnerSubmitForQueue(owner, queue->context)
+                 : AgxD3d12OwnerSubmitAndWait(owner);
+    }
     if (FAILED(hr) && device && device->callbacks && device->callbacks->pfnSetErrorCb)
         device->callbacks->pfnSetErrorCb(device->runtime, hr);
 #endif
-    const UINT receipt[] = {count, commands};
-    AdmissionUmdDiagnostic("measure-d3d12-execute", hr, receipt, 2);
+    QueryPerformanceCounter(&submitted);
+    const LONGLONG hz = frequency.QuadPart ? frequency.QuadPart : 1;
+    const UINT receipt[] = {count, commands, static_cast<UINT>((replayed.QuadPart - start.QuadPart) * 1000000 / hz),
+                            static_cast<UINT>((submitted.QuadPart - replayed.QuadPart) * 1000000 / hz),
+                            AdmissionUmdWaitSerial()};
+    AdmissionUmdDiagnostic("measure-d3d12-execute", hr, receipt, 5);
+    {
+        /* rc105 receipt-only: the barrier kinds of the executed lists */
+        UINT barriers[AGX_D3D12_BARRIER_COUNTERS] = {};
+        UINT any = 0;
+        for (UINT i = 0; lists && i < count; ++i) {
+            const auto *list = static_cast<const AgxD3d12CommandList *>(lists[i].pDrvPrivate);
+            for (UINT k = 0; list && k < AGX_D3D12_BARRIER_COUNTERS; ++k) {
+                barriers[k] += list->barriers[k];
+                any |= list->barriers[k];
+            }
+        }
+        if (any) AdmissionUmdDiagnostic("measure-d3d12-barriers", S_OK, barriers, AGX_D3D12_BARRIER_COUNTERS);
+    }
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (measure) {
+        UINT phases[12];
+        for (unsigned bucket = 0; bucket < 6; ++bucket) {
+            phases[bucket] = static_cast<UINT>(command_ticks[bucket] * 1000000 / hz);
+            phases[6 + bucket] = command_counts[bucket];
+        }
+        AdmissionUmdDiagnostic("measure-d3d12-replay-time", hr, phases, 12);
+        const UINT window[] = {static_cast<UINT>(start.QuadPart), static_cast<UINT>(start.QuadPart >> 32),
+            static_cast<UINT>(replayed.QuadPart), static_cast<UINT>(replayed.QuadPart >> 32),
+            static_cast<UINT>(submitted.QuadPart), static_cast<UINT>(submitted.QuadPart >> 32),
+            static_cast<UINT>(hz), static_cast<UINT>(hz >> 32)};
+        AdmissionUmdDiagnostic("measure-d3d12-replay-window", hr, window, 8);
+        /* rc76: clears replayed on their own (no draw follows), deferred to
+         * the following draw, absorbed as its load-op clears, the draws that
+         * absorbed or ran them first, and the AGX_D3D12_ABSORB_* reasons
+         * (bit mask) of the latter */
+        if (absorb.immediate || absorb.deferred) {
+            const UINT clears[] = {absorb.immediate, absorb.deferred, absorb.absorbed, absorb.absorbed_draws,
+                                   absorb.fallback_draws, absorb.reasons};
+            AdmissionUmdDiagnostic("measure-d3d12-clear-absorb", hr, clears, 6);
+        }
+    }
+    if (g_heap_walk.walks) {
+        const UINT walk[] = {g_heap_walk.walks, g_heap_walk.walked, g_heap_walk.packs,
+                             static_cast<UINT>(g_heap_walk.ticks * 1000000 / hz)};
+        AdmissionUmdDiagnostic("measure-d3d12-heap-walk", S_OK, walk, 4);
+        memset(&g_heap_walk, 0, sizeof(g_heap_walk));
+    }
+#endif
+    return hr;
+}
+/* EXP1822: one replay and its submission run under the device owner's lock,
+ * so lists executed from several threads (the nBody async compute thread
+ * and its render thread) never interleave on the one pipe_context. */
+static VOID APIENTRY ExecuteCommandLists(D3D12DDI_HCOMMANDQUEUE handle, UINT count, const D3D12DDI_HCOMMANDLIST *lists) {
+    auto *queue = static_cast<AgxD3d12CommandQueue *>(handle.pDrvPrivate);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    if (!count) return;
+    if (!queue || !queue->device || !queue->context || !lists) {
+        ReportRejectedQueueError(handle, E_INVALIDARG);
+        return;
+    }
+    for (UINT i = 0; i < count; ++i) {
+        const auto *list = static_cast<const AgxD3d12CommandList *>(lists[i].pDrvPrivate);
+        if (!list || list->device != queue->device) {
+            ReportRejectedQueueError(handle, E_INVALIDARG);
+            return;
+        }
+    }
+    auto *owner = static_cast<AGX_D3D12_OWNER *>(queue->device->owner);
+    const int wait_profile = AdmissionUmdWaitExecuteBegin();
+    {
+        AgxUmdWaitScope lock_timing(AgxWaitOwnerLock);
+        AgxD3d12OwnerLock(owner);
+    }
+    AgxD3d12OwnerMeasureHeapStaging(owner, TRUE);
+    AgxD3d12OwnerStageUploads(owner);
+    const HRESULT replay_status = ReplayAndSubmit(queue, count, lists);
+    AgxD3d12OwnerMeasureHeapStaging(owner, FALSE);
+    AgxD3d12OwnerUnlock(owner);
+    if (wait_profile) AdmissionUmdWaitExecuteEnd(replay_status);
+#else
+    ReplayAndSubmit(queue, count, lists);
+#endif
 }
 static HRESULT APIENTRY CloseAdapter(D3D12DDI_HADAPTER) {
     AdmissionUmdDiagnostic("d3d12-close-adapter", S_OK, nullptr, 0);
@@ -3071,10 +7443,17 @@ static void FillD3D12DDI_ADAPTERFUNCS(D3D12DDI_ADAPTERFUNCS &f) {
     AGX_ASSIGN(D3D12DDI_ADAPTERFUNCS, pfnFillDDITable, FillDDITable);
     AGX_ASSIGN(D3D12DDI_ADAPTERFUNCS, pfnDestroyDevice, DestroyDevice);
 }
+static VOID APIENTRY CreateSamplerInHeap(D3D12DDI_HDEVICE handle, const D3D12DDIARG_CREATE_SAMPLER *arg,
+                                         D3D12DDI_CPU_DESCRIPTOR_HANDLE dest) {
+    CreateSampler(handle, arg, dest);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    FillSamplerForm(handle, dest); /* C47 */
+#endif
+}
 static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 &f) {
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckFormatSupport, CheckFormatSupport);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckMultisampleQualityLevels, CheckMultisampleQualityLevels);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetMipPacking, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetMipPacking));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetMipPacking, AGX_TILED_DEVICE(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetMipPacking, GetMipPacking));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateElementLayoutSize, CalcPrivateElementLayoutSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateElementLayout, CreateElementLayout);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyElementLayout, DestroyElementLayout);
@@ -3092,11 +7471,11 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreatePixelShader, CreateShader);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShader, CreateShader);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateComputeShader, CreateComputeShader);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateGeometryShaderWithStreamOutput, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateGeometryShaderWithStreamOutput));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShaderWithStreamOutput, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShaderWithStreamOutput));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateTessellationShaderSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateTessellationShaderSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHullShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHullShader));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDomainShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDomainShader));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateGeometryShaderWithStreamOutput, CalcPrivateGeometryShaderWithStreamOutput); /* C39 */
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateGeometryShaderWithStreamOutput, CreateGeometryShaderWithStreamOutput);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateTessellationShaderSize, CalcPrivateTessellationShaderSize); /* C37 */
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateHullShader, CreateTessellationShader);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDomainShader, CreateTessellationShader);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyShader, DestroyShader);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateCommandQueueSize, CalcPrivateCommandQueueSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateCommandQueue, CreateCommandQueue);
@@ -3120,19 +7499,19 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetDescriptorSizeInBytes, GetDescriptorSizeInBytes);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetCPUDescriptorHandleForHeapStart, GetCPUDescriptorHandleForHeapStart);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnGetGPUDescriptorHandleForHeapStart, GetGPUDescriptorHandleForHeapStart);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateShaderResourceView, CreateShaderResourceView);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateConstantBufferView, CreateConstantBufferView);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, CreateSampler);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateUnorderedAccessView, CreateUnorderedAccessView);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateShaderResourceView, CreateShaderResourceViewInHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateConstantBufferView, CreateConstantBufferViewInHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, CreateSamplerInHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateUnorderedAccessView, CreateUnorderedAccessViewInHeap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRenderTargetView, CreateRenderTargetView);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDepthStencilView, CreateDepthStencilView);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateRootSignatureSize, CalcPrivateRootSignatureSize);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateRootSignature, CreateRootSignature);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyRootSignature, DestroyRootSignature);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnSerializeObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnSerializeObject));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyObjectSerialization, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyObjectSerialization));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDeserializedObjectSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDeserializedObjectSize));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDeserializedObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDeserializedObject));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnSerializeObject, SerializeObject); /* C38 */
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyObjectSerialization, DestroyObjectSerialization);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateDeserializedObjectSize, CalcPrivateDeserializedObjectSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateDeserializedObject, CreateDeserializedObject);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnMapHeap, MapHeap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnUnmapHeap, UnmapHeap);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateHeapAndResourceSizes, CalcPrivateHeapAndResourceSizes);
@@ -3140,8 +7519,8 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnDestroyHeapAndResource, DestroyHeapAndResource);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnMakeResident, MakeResident);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnEvict, Evict);
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateOpenedHeapAndResourceSizes, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateOpenedHeapAndResourceSizes));
-    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOpenHeapAndResource, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOpenHeapAndResource));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateOpenedHeapAndResourceSizes, CalcPrivateOpenedHeapAndResourceSizes);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnOpenHeapAndResource, OpenHeapAndResource);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCopyDescriptors, CopyDescriptors);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCopyDescriptorsSimple, CopyDescriptorsSimple);
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCalcPrivateQueryHeapSize, CalcPrivateQueryHeapSize);
@@ -3162,12 +7541,704 @@ static void FillD3D12DDI_DEVICE_FUNCS_CORE_0003(D3D12DDI_DEVICE_FUNCS_CORE_0003 
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnRetrieveShaderComment, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnRetrieveShaderComment));
     AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationHandle, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCheckResourceAllocationHandle));
 }
+/* C44: the R1 device table (interface 0011): the 0003 table's entries with
+ * the 0010 state, shader and pipeline-state adapters, without the object
+ * serialization entries, plus the pipeline-library entries */
+/* Receipt-only (EXP1862/1863: a CachedPSO creation under R1 ends in a
+ * D3D12 heap_failure_invalid_argument freeing the runtime's temporary
+ * CLibrary): the runtime's pipeline-library calls, their initial-data size,
+ * the private storage address and the result, forwarded unchanged. */
+static UINT LibraryAddress(D3D12DDI_HPIPELINELIBRARY handle) {
+    return static_cast<UINT>(reinterpret_cast<UINT_PTR>(handle.pDrvPrivate));
+}
+static SIZE_T APIENTRY ReceiptCalcPrivatePipelineLibrarySize(D3D12DDI_HDEVICE device,
+                                                            const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 *args) {
+    const SIZE_T size = AgxD3d12ZeroCacheCalcPrivatePipelineLibrarySize(device, args);
+    const UINT receipt[] = {1u, args ? static_cast<UINT>(args->InitialDataSize) : ~0u, static_cast<UINT>(size)};
+    AdmissionUmdDiagnostic("measure-d3d12-library", S_OK, receipt, 3);
+    return size;
+}
+static HRESULT APIENTRY ReceiptCreatePipelineLibrary(D3D12DDI_HDEVICE device,
+                                                     const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 *args,
+                                                     D3D12DDI_HPIPELINELIBRARY handle) {
+    const HRESULT hr = AgxD3d12ZeroCacheCreatePipelineLibrary(device, args, handle);
+    const UINT receipt[] = {2u, args ? static_cast<UINT>(args->InitialDataSize) : ~0u, LibraryAddress(handle)};
+    AdmissionUmdDiagnostic("measure-d3d12-library", hr, receipt, 3);
+    return hr;
+}
+static VOID APIENTRY ReceiptDestroyPipelineLibrary(D3D12DDI_HDEVICE device, D3D12DDI_HPIPELINELIBRARY handle) {
+    const UINT receipt[] = {3u, 0u, LibraryAddress(handle)};
+    AdmissionUmdDiagnostic("measure-d3d12-library", S_OK, receipt, 3);
+    AgxD3d12ZeroCacheDestroyPipelineLibrary(device, handle);
+}
+static HRESULT APIENTRY ReceiptAddPipelineStateToLibrary(D3D12DDI_HDEVICE device, D3D12DDI_HPIPELINELIBRARY handle,
+                                                         D3D12DDI_HPIPELINESTATE pipeline, UINT index) {
+    const HRESULT hr = AgxD3d12ZeroCacheAddPipelineStateToLibrary(device, handle, pipeline, index);
+    const UINT receipt[] = {4u, index, LibraryAddress(handle)};
+    AdmissionUmdDiagnostic("measure-d3d12-library", hr, receipt, 3);
+    return hr;
+}
+static SIZE_T APIENTRY ReceiptCalcSerializedLibrarySize(D3D12DDI_HDEVICE device, D3D12DDI_HPIPELINELIBRARY handle) {
+    const SIZE_T size = AgxD3d12ZeroCacheCalcSerializedLibrarySize(device, handle);
+    const UINT receipt[] = {5u, static_cast<UINT>(size), LibraryAddress(handle)};
+    AdmissionUmdDiagnostic("measure-d3d12-library", S_OK, receipt, 3);
+    return size;
+}
+static HRESULT APIENTRY ReceiptSerializeLibrary(D3D12DDI_HDEVICE device, D3D12DDI_HPIPELINELIBRARY handle, VOID *output) {
+    const HRESULT hr = AgxD3d12ZeroCacheSerializeLibrary(device, handle, output);
+    const UINT receipt[] = {6u, 0u, LibraryAddress(handle)};
+    AdmissionUmdDiagnostic("measure-d3d12-library", hr, receipt, 3);
+    return hr;
+}
+/* C50 (R3 build 3, D3D12-C50-interface-0033.md): CORE_0033 has CORE_0012's
+ * members with newer argument types. Each adapter projects the 0033 argument
+ * onto the validated R1/0003 entry; a field without a 0003 equivalent is
+ * refused unless it holds the value the 0003 runtime implied. */
+static D3D12DDIARG_CREATE_SHADER_0010 ProjectR3Shader(const D3D12DDIARG_CREATE_SHADER_0026 &arg) {
+    /* _0026 adds a mesh-signature union member and ShaderCodeHash (the
+     * shader-cache hash; no cache session is offered) */
+    D3D12DDIARG_CREATE_SHADER_0010 legacy = {};
+    static_assert(sizeof(legacy.IOSignatures) == sizeof(arg.IOSignatures));
+    legacy.hRootSignature = arg.hRootSignature;
+    legacy.pShaderCode = arg.pShaderCode;
+    memcpy(&legacy.IOSignatures, &arg.IOSignatures, sizeof(legacy.IOSignatures));
+    legacy.Flags = arg.Flags;
+    legacy.LibraryReference = arg.LibraryReference;
+    return legacy;
+}
+static SIZE_T APIENTRY CalcPrivateShaderSize0026(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_SHADER_0026 *arg) {
+    if (!arg) return CalcPrivateShaderSize0010(device, nullptr);
+    const D3D12DDIARG_CREATE_SHADER_0010 legacy = ProjectR3Shader(*arg);
+    return CalcPrivateShaderSize0010(device, &legacy);
+}
+static VOID APIENTRY CreateShader0026(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_SHADER_0026 *arg,
+                                      D3D12DDI_HSHADER handle) {
+    if (!arg) return CreateShader0010(device, nullptr, handle);
+    const D3D12DDIARG_CREATE_SHADER_0010 legacy = ProjectR3Shader(*arg);
+    CreateShader0010(device, &legacy, handle);
+}
+static VOID APIENTRY CreateComputeShader0026(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_SHADER_0026 *arg,
+                                             D3D12DDI_HSHADER handle) {
+    if (!arg) return CreateComputeShader0010(device, nullptr, handle);
+    const D3D12DDIARG_CREATE_SHADER_0010 legacy = ProjectR3Shader(*arg);
+    CreateComputeShader0010(device, &legacy, handle);
+}
+static VOID APIENTRY CreateTessellationShader0026(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_SHADER_0026 *arg,
+                                                  D3D12DDI_HSHADER handle) {
+    if (!arg) return CreateTessellationShader0010(device, nullptr, handle);
+    const D3D12DDIARG_CREATE_SHADER_0010 legacy = ProjectR3Shader(*arg);
+    CreateTessellationShader0010(device, &legacy, handle);
+}
+/* the embedded _0026 shader moves every stream-output field: projected, not cast */
+static D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0010 ProjectR3StreamOutput(
+    const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 &arg) {
+    D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0010 legacy = {};
+    legacy.CreateShader = ProjectR3Shader(arg.CreateShader);
+    legacy.pOutputStreamDecl = arg.pOutputStreamDecl;
+    legacy.NumEntries = arg.NumEntries;
+    legacy.BufferStridesInBytes = arg.BufferStridesInBytes;
+    legacy.NumStrides = arg.NumStrides;
+    legacy.RasterizedStream = arg.RasterizedStream;
+    return legacy;
+}
+static SIZE_T APIENTRY CalcPrivateGeometryShaderWithStreamOutput0026(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 *arg) {
+    if (!arg) return CalcPrivateGeometryShaderWithStreamOutput0010(device, nullptr);
+    const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0010 legacy = ProjectR3StreamOutput(*arg);
+    return CalcPrivateGeometryShaderWithStreamOutput0010(device, &legacy);
+}
+static VOID APIENTRY CreateGeometryShaderWithStreamOutput0026(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026 *arg, D3D12DDI_HSHADER handle) {
+    if (!arg) return CreateGeometryShaderWithStreamOutput0010(device, nullptr, handle);
+    const D3D12DDIARG_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0010 legacy = ProjectR3StreamOutput(*arg);
+    CreateGeometryShaderWithStreamOutput0010(device, &legacy, handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateShaderSize0026), PFND3D12DDI_CALC_PRIVATE_SHADER_SIZE_0026>);
+static_assert(std::is_same_v<decltype(&CreateShader0026), PFND3D12DDI_CREATE_SHADER_0026>);
+static_assert(std::is_same_v<decltype(&CalcPrivateGeometryShaderWithStreamOutput0026),
+                             PFND3D12DDI_CALC_PRIVATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026>);
+static_assert(std::is_same_v<decltype(&CreateGeometryShaderWithStreamOutput0026),
+                             PFND3D12DDI_CREATE_GEOMETRY_SHADER_WITH_STREAM_OUTPUT_0026>);
+/* _0025 = _0010 + DepthBoundsTestEnable; DepthBoundsTestSupported is FALSE */
+static bool ProjectR3Depth(const D3D12DDI_DEPTH_STENCIL_DESC_0025 *desc, D3D12DDI_DEPTH_STENCIL_DESC_0010 *legacy) {
+    static_assert(offsetof(D3D12DDI_DEPTH_STENCIL_DESC_0025, LibraryReference) ==
+                  offsetof(D3D12DDI_DEPTH_STENCIL_DESC_0010, LibraryReference));
+    static_assert(offsetof(D3D12DDI_DEPTH_STENCIL_DESC_0025, DepthBoundsTestEnable) >=
+                  sizeof(D3D12DDI_DEPTH_STENCIL_DESC_0010));
+    if (!desc || desc->DepthBoundsTestEnable) return false;
+    memcpy(legacy, desc, sizeof(*legacy));
+    return true;
+}
+static SIZE_T APIENTRY CalcPrivateDepthStencilStateSize0025(D3D12DDI_HDEVICE device,
+    const D3D12DDI_DEPTH_STENCIL_DESC_0025 *desc) {
+    D3D12DDI_DEPTH_STENCIL_DESC_0010 legacy = {};
+    return ProjectR3Depth(desc, &legacy) ? CalcPrivateDepthStencilStateSize0010(device, &legacy) : 0;
+}
+static VOID APIENTRY CreateDepthStencilState0025(D3D12DDI_HDEVICE device,
+    const D3D12DDI_DEPTH_STENCIL_DESC_0025 *desc, D3D12DDI_HDEPTHSTENCILSTATE handle) {
+    D3D12DDI_DEPTH_STENCIL_DESC_0010 legacy = {};
+    if (!ProjectR3Depth(desc, &legacy)) {
+        ReportRejectedDeviceError(device, E_INVALIDARG);
+        return;
+    }
+    CreateDepthStencilState0010(device, &legacy, handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateDepthStencilStateSize0025),
+                             PFND3D12DDI_CALCPRIVATEDEPTHSTENCILSTATESIZE_0025>);
+static_assert(std::is_same_v<decltype(&CreateDepthStencilState0025), PFND3D12DDI_CREATEDEPTHSTENCILSTATE_0025>);
+/* _0033 = _0010 + ViewInstancingDesc. ViewInstancingTier is NOT_SUPPORTED:
+ * the View Instancing spec still requires PSOs declaring 0 or 1 instance
+ * (SV_ViewID reads 0); masking and other locations are refused. */
+static bool ProjectR3PipelineState(const D3D12DDIARG_CREATE_PIPELINE_STATE_0033 *arg,
+                                   D3D12DDIARG_CREATE_PIPELINE_STATE_0010 *legacy) {
+    static_assert(offsetof(D3D12DDIARG_CREATE_PIPELINE_STATE_0033, LibraryReference) ==
+                  offsetof(D3D12DDIARG_CREATE_PIPELINE_STATE_0010, LibraryReference));
+    static_assert(offsetof(D3D12DDIARG_CREATE_PIPELINE_STATE_0033, ViewInstancingDesc) >=
+                  sizeof(D3D12DDIARG_CREATE_PIPELINE_STATE_0010));
+    if (!arg) return false;
+    const D3D12DDI_VIEW_INSTANCING_DESC &view = arg->ViewInstancingDesc;
+    if (view.ViewInstanceCount > 1 || view.Flags != D3D12DDI_VIEW_INSTANCING_FLAG_NONE ||
+        (view.ViewInstanceCount == 1 && (!view.pViewInstanceLocations ||
+                                         view.pViewInstanceLocations[0].ViewportArrayIndex ||
+                                         view.pViewInstanceLocations[0].RenderTargetArrayIndex)))
+        return false;
+    memcpy(legacy, arg, sizeof(*legacy));
+    return true;
+}
+static SIZE_T APIENTRY CalcPrivatePipelineStateSize0033(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0033 *arg) {
+    D3D12DDIARG_CREATE_PIPELINE_STATE_0010 legacy = {};
+    return ProjectR3PipelineState(arg, &legacy) ? CalcPrivatePipelineStateSize0010(device, &legacy) : 0;
+}
+static HRESULT APIENTRY CreatePipelineState0033(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0033 *arg, D3D12DDI_HPIPELINESTATE destination,
+    D3D12DDI_HRTPIPELINESTATE) {
+    D3D12DDIARG_CREATE_PIPELINE_STATE_0010 legacy = {};
+    if (!ProjectR3PipelineState(arg, &legacy)) return E_INVALIDARG;
+    return CreatePipelineState0010(device, &legacy, destination);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivatePipelineStateSize0033),
+                             PFND3D12DDI_CALC_PRIVATE_PIPELINE_STATE_SIZE_0033>);
+static_assert(std::is_same_v<decltype(&CreatePipelineState0033), PFND3D12DDI_CREATE_PIPELINE_STATE_0033>);
+/* Root signature 1.1 (_0013): its range and root-descriptor flags only relax
+ * 1.0's rules (1.0: volatile descriptors, CBV/SRV data static while set at
+ * execute, UAV data volatile); this driver reads descriptors and data when
+ * ExecuteCommandLists replays the list, so the 1.0 projection keeps every
+ * 1.1 promise. The projection lives in one heap block freed after the call. */
+struct AgxD3d12RootProjection {
+    D3D12DDI_ROOT_SIGNATURE desc;
+    D3D12DDIARG_CREATE_ROOT_SIGNATURE_0001 arg;
+    void *storage;
+};
+static bool ProjectRoot11(const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0013 *in, AgxD3d12RootProjection *out) {
+    memset(out, 0, sizeof(*out));
+    if (!in || in->Version != D3D12DDI_ROOT_SIGNATURE_VERSION_1_1 || !in->pRootSignature_1_1) return false;
+    const D3D12DDI_ROOT_SIGNATURE_0013 &root = *in->pRootSignature_1_1;
+    if (root.NumParameters > kCurrentRootLayoutPolicy.max_parameters || (root.NumParameters && !root.pRootParameters))
+        return false;
+    UINT64 ranges = 0;
+    for (UINT i = 0; i < root.NumParameters; ++i) {
+        const D3D12DDI_ROOT_PARAMETER_0013 &p = root.pRootParameters[i];
+        if (p.ParameterType != D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE) continue;
+        if (p.DescriptorTable.NumDescriptorRanges && !p.DescriptorTable.pDescriptorRanges) return false;
+        ranges += p.DescriptorTable.NumDescriptorRanges;
+    }
+    const UINT64 parameter_bytes = UINT64{root.NumParameters} * sizeof(D3D12DDI_ROOT_PARAMETER);
+    if (ranges > (UINT64{UINT_MAX} - parameter_bytes) / sizeof(D3D12DDI_DESCRIPTOR_RANGE)) return false;
+    const SIZE_T bytes = static_cast<SIZE_T>(parameter_bytes + ranges * sizeof(D3D12DDI_DESCRIPTOR_RANGE));
+    auto *storage = bytes ? static_cast<unsigned char *>(HeapAlloc(GetProcessHeap(), 0, bytes)) : nullptr;
+    if (bytes && !storage) return false;
+    auto *parameters = reinterpret_cast<D3D12DDI_ROOT_PARAMETER *>(storage);
+    auto *range = reinterpret_cast<D3D12DDI_DESCRIPTOR_RANGE *>(storage + parameter_bytes);
+    static_assert(sizeof(D3D12DDI_ROOT_PARAMETER) % alignof(D3D12DDI_DESCRIPTOR_RANGE) == 0);
+    for (UINT i = 0; i < root.NumParameters; ++i) {
+        const D3D12DDI_ROOT_PARAMETER_0013 &p = root.pRootParameters[i];
+        D3D12DDI_ROOT_PARAMETER &q = parameters[i];
+        memset(&q, 0, sizeof(q));
+        q.ParameterType = p.ParameterType;
+        q.ShaderVisibility = p.ShaderVisibility;
+        switch (p.ParameterType) {
+        case D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE:
+            q.DescriptorTable.NumDescriptorRanges = p.DescriptorTable.NumDescriptorRanges;
+            q.DescriptorTable.pDescriptorRanges = range;
+            for (UINT r = 0; r < p.DescriptorTable.NumDescriptorRanges; ++r, ++range) {
+                const D3D12DDI_DESCRIPTOR_RANGE_0013 &d = p.DescriptorTable.pDescriptorRanges[r];
+                range->RangeType = d.RangeType;
+                range->NumDescriptors = d.NumDescriptors;
+                range->BaseShaderRegister = d.BaseShaderRegister;
+                range->RegisterSpace = d.RegisterSpace;
+                range->OffsetInDescriptorsFromTableStart = d.OffsetInDescriptorsFromTableStart;
+            }
+            break;
+        case D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS:
+            q.Constants = p.Constants;
+            break;
+        default:
+            q.Descriptor.ShaderRegister = p.Descriptor.ShaderRegister;
+            q.Descriptor.RegisterSpace = p.Descriptor.RegisterSpace;
+            break;
+        }
+    }
+    out->desc.NumParameters = root.NumParameters;
+    out->desc.pRootParameters = parameters;
+    out->desc.NumStaticSamplers = root.NumStaticSamplers;
+    out->desc.pStaticSamplers = root.pStaticSamplers;
+    out->desc.Flags = root.Flags;
+    out->arg.pRootSignature = &out->desc;
+    out->arg.NodeMask = in->NodeMask;
+    out->storage = storage;
+    return true;
+}
+static void ReleaseRoot11(AgxD3d12RootProjection *projection) {
+    if (projection->storage) HeapFree(GetProcessHeap(), 0, projection->storage);
+    projection->storage = nullptr;
+}
+static SIZE_T APIENTRY CalcPrivateRootSignatureSize0013(D3D12DDI_HDEVICE device,
+                                                        const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0013 *arg) {
+    AgxD3d12RootProjection projection = {};
+    if (!ProjectRoot11(arg, &projection)) return 0;
+    const SIZE_T bytes = CalcPrivateRootSignatureSize(device, &projection.arg);
+    ReleaseRoot11(&projection);
+    return bytes;
+}
+/* RC75 receipt-only: the 1.1 flags of a root signature's buffer views.
+ * Resource Binding spec: a descriptor range without DESCRIPTORS_VOLATILE
+ * (the 1.1 default) makes out-of-bounds buffer-view accesses invalid
+ * ("undefined results, including possible device reset"), unless it keeps
+ * DESCRIPTORS_STATIC_KEEPING_BUFFER_BOUNDS_CHECKS; root descriptors have no
+ * bounds at all. measure-d3d12-root-signature-1-1 {parameters, CBV/SRV/UAV
+ * ranges, static ranges without bounds checks, volatile ranges, ranges
+ * keeping bounds checks, root CBV/SRV/UAV descriptors}. */
+static void RootSignature11Receipt(const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0013 *arg) {
+    if (!arg || arg->Version != D3D12DDI_ROOT_SIGNATURE_VERSION_1_1 || !arg->pRootSignature_1_1) return;
+    const D3D12DDI_ROOT_SIGNATURE_0013 &root = *arg->pRootSignature_1_1;
+    UINT ranges = 0, unchecked = 0, volatile_ranges = 0, keep = 0, descriptors = 0;
+    for (UINT i = 0; i < root.NumParameters && root.pRootParameters; ++i) {
+        const D3D12DDI_ROOT_PARAMETER_0013 &p = root.pRootParameters[i];
+        if (p.ParameterType != D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE) {
+            if (p.ParameterType != D3D12DDI_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS) ++descriptors;
+            continue;
+        }
+        for (UINT r = 0; r < p.DescriptorTable.NumDescriptorRanges && p.DescriptorTable.pDescriptorRanges; ++r) {
+            const D3D12DDI_DESCRIPTOR_RANGE_0013 &d = p.DescriptorTable.pDescriptorRanges[r];
+            if (d.RangeType == D3D12DDI_DESCRIPTOR_RANGE_TYPE_SAMPLER) continue;
+            const UINT flags = static_cast<UINT>(d.Flags);
+            ++ranges;
+            if (flags & D3D12DDI_DESCRIPTOR_RANGE_FLAG_0013_DESCRIPTORS_VOLATILE) ++volatile_ranges;
+            else if (flags & D3D12DDI_DESCRIPTOR_RANGE_FLAG_0052_DESCRIPTORS_STATIC_KEEPING_BUFFER_BOUNDS_CHECKS) ++keep;
+            else ++unchecked;
+        }
+    }
+    const UINT receipt[] = {root.NumParameters, ranges, unchecked, volatile_ranges, keep, descriptors};
+    AdmissionUmdDiagnostic("measure-d3d12-root-signature-1-1", S_OK, receipt, 6);
+}
+static HRESULT APIENTRY CreateRootSignature0013(D3D12DDI_HDEVICE device,
+                                                const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0013 *arg,
+                                                D3D12DDI_HROOTSIGNATURE handle) {
+    AgxD3d12RootProjection projection = {};
+    if (!ProjectRoot11(arg, &projection)) return E_INVALIDARG;
+    const HRESULT hr = CreateRootSignature(device, &projection.arg, handle);
+    ReleaseRoot11(&projection);
+    if (SUCCEEDED(hr)) RootSignature11Receipt(arg);
+    return hr;
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateRootSignatureSize0013),
+                             PFND3D12DDI_CALC_PRIVATE_ROOT_SIGNATURE_SIZE_0013>);
+static_assert(std::is_same_v<decltype(&CreateRootSignature0013), PFND3D12DDI_CREATE_ROOT_SIGNATURE_0013>);
+/* _0023 moves the queue handles to parameters and adds QueueCreationFlags
+ * (global realtime priority is not offered: caps type 1062 unanswered) */
+static SIZE_T APIENTRY CalcPrivateCommandQueueSize0023(D3D12DDI_HDEVICE device,
+                                                       const D3D12DDIARG_CREATECOMMANDQUEUE_0023 *) {
+    return CalcPrivateCommandQueueSize(device, nullptr);
+}
+static HRESULT APIENTRY CreateCommandQueue0023(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATECOMMANDQUEUE_0023 *arg,
+                                               D3D12DDI_HCOMMANDQUEUE queue, D3D12DDI_HRTCOMMANDQUEUE runtime) {
+    if (!arg || arg->QueueCreationFlags != D3D12DDI_COMMAND_QUEUE_CREATION_FLAG_NONE) return E_INVALIDARG;
+    D3D12DDIARG_CREATECOMMANDQUEUE_0001 legacy = {};
+    legacy.hDrvCommandQueue = queue;
+    legacy.hRTCommandQueue = runtime;
+    legacy.QueueFlags = arg->QueueFlags;
+    legacy.NodeMask = arg->NodeMask;
+    return CreateCommandQueue(device, &legacy);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateCommandQueueSize0023), PFND3D12DDI_CALCPRIVATECOMMANDQUEUESIZE_0023>);
+static_assert(std::is_same_v<decltype(&CreateCommandQueue0023), PFND3D12DDI_CREATECOMMANDQUEUE_0023>);
+/* 0022+ runtimes name UAV resources (D3D12DDI_RESOURCE_FLAG_0022_UNORDERED_ACCESS);
+ * the 0003 runtime passed them without the bit, which is the contract these
+ * entries validated, so the projection clears it. No protected session is
+ * offered (caps type 1057 unanswered). */
+static D3D12DDIARG_CREATERESOURCE_0003 ProjectR3Resource(const D3D12DDIARG_CREATERESOURCE_0003 &arg) {
+    D3D12DDIARG_CREATERESOURCE_0003 legacy = arg;
+    legacy.Flags &= ~D3D12DDI_RESOURCE_FLAG_0022_UNORDERED_ACCESS;
+    return legacy;
+}
+static D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY CalcPrivateHeapAndResourceSizes0030(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATEHEAP_0001 *heap, const D3D12DDIARG_CREATERESOURCE_0003 *resource,
+    D3D12DDI_HPROTECTEDRESOURCESESSION_0030) {
+    if (!resource) return CalcPrivateHeapAndResourceSizes(device, heap, nullptr);
+    const D3D12DDIARG_CREATERESOURCE_0003 legacy = ProjectR3Resource(*resource);
+    return CalcPrivateHeapAndResourceSizes(device, heap, &legacy);
+}
+static HRESULT APIENTRY CreateHeapAndResource0030(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATEHEAP_0001 *heap,
+                                                  D3D12DDI_HHEAP heap_handle, D3D12DDI_HRTRESOURCE runtime_resource,
+                                                  const D3D12DDIARG_CREATERESOURCE_0003 *resource,
+                                                  const D3D12DDI_CLEAR_VALUES *clear,
+                                                  D3D12DDI_HPROTECTEDRESOURCESESSION_0030 session,
+                                                  D3D12DDI_HRESOURCE resource_handle) {
+    if (session.pDrvPrivate) return E_INVALIDARG;
+    if (!resource) return CreateHeapAndResource(device, heap, heap_handle, runtime_resource, nullptr, clear, resource_handle);
+    const D3D12DDIARG_CREATERESOURCE_0003 legacy = ProjectR3Resource(*resource);
+    return CreateHeapAndResource(device, heap, heap_handle, runtime_resource, &legacy, clear, resource_handle);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateHeapAndResourceSizes0030),
+                             PFND3D12DDI_CALCPRIVATEHEAPANDRESOURCESIZES_0030>);
+static_assert(std::is_same_v<decltype(&CreateHeapAndResource0030), PFND3D12DDI_CREATEHEAPANDRESOURCE_0030>);
+/* _0022 allocation info: 32-bit alignments and one swizzle transition per
+ * pattern slot. Every slot repeats the single 0003 transition (the C21
+ * registry has two patterns per layout; 0xff = no transition). */
+static void ProjectR3AllocationInfo(const D3D12DDI_RESOURCE_ALLOCATION_INFO &in, D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 *out) {
+    memset(out, 0, sizeof(*out));
+    out->ResourceDataSize = in.ResourceDataSize;
+    out->AdditionalDataHeaderSize = in.AdditionalDataHeaderSize;
+    out->AdditionalDataSize = in.AdditionalDataSize;
+    out->ResourceDataAlignment = static_cast<UINT32>(in.ResourceDataAlignment);
+    out->AdditionalDataHeaderAlignment = static_cast<UINT32>(in.AdditionalDataHeaderAlignment);
+    out->AdditionalDataAlignment = static_cast<UINT32>(in.AdditionalDataAlignment);
+    out->Layout = in.Layout;
+    for (UINT8 &transition : out->MipLevelSwizzleTransition) transition = in.MipLevelSwizzleTransition;
+}
+static VOID APIENTRY CheckResourceAllocationInfo0022(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATERESOURCE_0003 *arg,
+                                                     D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS flags, UINT32 alignment,
+                                                     UINT mask, D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 *info) {
+    if (!info) return;
+    D3D12DDI_RESOURCE_ALLOCATION_INFO legacy_info = {};
+    if (arg) {
+        const D3D12DDIARG_CREATERESOURCE_0003 legacy = ProjectR3Resource(*arg);
+        CheckResourceAllocationInfo(device, &legacy, flags, alignment, mask, &legacy_info);
+        ProjectR3AllocationInfo(legacy_info, info);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+        /* C21G: the 0022 interface's six pattern slots and five transitions */
+        if (legacy.ResourceType == D3D12DDI_RT_TEXTURE3D)
+            info->ResourceDataSize = VolumeAllocationQuery(&legacy, alignment, AGX_VOLUME_MAX_SLOTS, &info->Layout,
+                                                           info->MipLevelSwizzleTransition);
+#endif
+        return;
+    }
+    CheckResourceAllocationInfo(device, nullptr, flags, alignment, mask, &legacy_info);
+    ProjectR3AllocationInfo(legacy_info, info);
+}
+static VOID APIENTRY CheckExistingResourceAllocationInfo0022(D3D12DDI_HDEVICE device, D3D12DDI_HRESOURCE handle,
+                                                             D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 *info) {
+    if (!info) return;
+    D3D12DDI_RESOURCE_ALLOCATION_INFO legacy_info = {};
+    CheckExistingResourceAllocationInfo(device, handle, &legacy_info, nullptr);
+    ProjectR3AllocationInfo(legacy_info, info);
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* C21G: a volume's five transitions as its creation selected them */
+    const auto *resource = static_cast<const AgxD3d12Resource *>(handle.pDrvPrivate);
+    if (resource && resource->type == D3D12DDI_RT_TEXTURE3D)
+        memcpy(info->MipLevelSwizzleTransition, resource->volume_transitions, sizeof(resource->volume_transitions));
+#endif
+}
+static_assert(std::is_same_v<decltype(&CheckResourceAllocationInfo0022), PFND3D12DDI_CHECKRESOURCEALLOCATIONINFO_0022>);
+static_assert(std::is_same_v<decltype(&CheckExistingResourceAllocationInfo0022),
+                             PFND3D12DDI_CHECKEXISITINGRESOURCEALLOCATIONINFO_0022>);
+/* C50: the 0033 command-list entries. ResourceBarrier_0022 replaces the
+ * aliasing member with ranged barriers; like every barrier here it needs no
+ * AGX work. Present_0028 adds a sync-interval override, never requested. */
+static VOID APIENTRY ResourceBarrier0022(D3D12DDI_HCOMMANDLIST handle, UINT count, const D3D12DDIARG_RESOURCE_BARRIER_0022 *barriers) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    for (UINT i = 0; list && barriers && i < count; ++i)
+        AgxD3d12BarrierCount(list->barriers, static_cast<unsigned>(barriers[i].Type), static_cast<unsigned>(barriers[i].Flags),
+                             barriers[i].Type == D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION
+                                 ? static_cast<unsigned>(barriers[i].Transition.StateBefore) : 0u,
+                             barriers[i].Type == D3D12DDI_RESOURCE_BARRIER_TYPE_TRANSITION
+                                 ? static_cast<unsigned>(barriers[i].Transition.StateAfter) : 0u);
+    RecordJobBarriers(list, count, barriers);
+}
+static VOID APIENTRY Present0028(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDQUEUE queue,
+                                 const D3D12DDIARG_PRESENT_0001 *arg, D3D12DDI_PRESENT_0028 *out) {
+    D3D12DDI_PRESENT_0003 legacy = {};
+    Present(handle, queue, arg, out ? &legacy : nullptr);
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    out->hSrcAllocation = legacy.hSrcAllocation;
+    out->hDstAllocation = legacy.hDstAllocation;
+    out->hContext = legacy.hContext;
+    out->BroadcastContextCount = legacy.BroadcastContextCount;
+    memcpy(out->BroadcastContext, legacy.BroadcastContext, sizeof(out->BroadcastContext));
+    memcpy(out->BroadcastSrcAllocation, legacy.BroadcastSrcAllocation, sizeof(out->BroadcastSrcAllocation));
+    memcpy(out->BroadcastDstAllocation, legacy.BroadcastDstAllocation, sizeof(out->BroadcastDstAllocation));
+    out->AddedGpuWork = legacy.AddedGpuWork;
+    out->BackBufferMultiplicity = legacy.BackBufferMultiplicity;
+}
+/* The added list state DDIs accept only the value their absent capability
+ * implies (DepthBoundsTestSupported, ProgrammableSamplePositionsTier and
+ * protected sessions are 0): the defaults a list reset may set. */
+static VOID APIENTRY OMSetDepthBounds(D3D12DDI_HCOMMANDLIST handle, FLOAT min, FLOAT max) {
+    if (min != 0.0f || max != 1.0f) ReportRejectedListError(handle, E_INVALIDARG);
+}
+static VOID APIENTRY SetSamplePositions(D3D12DDI_HCOMMANDLIST handle, UINT samples, UINT pixels,
+                                        D3D12DDI_SAMPLE_POSITION *) {
+    if (samples || pixels) ReportRejectedListError(handle, E_INVALIDARG);
+}
+static VOID APIENTRY SetProtectedResourceSession(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 session) {
+    if (session.pDrvPrivate) ReportRejectedListError(handle, E_INVALIDARG);
+}
+/* the mask only applies to PSOs that enable view-instance masking, which
+ * CreatePipelineState0033 refuses */
+static VOID APIENTRY SetViewInstanceMask(D3D12DDI_HCOMMANDLIST, UINT) {}
+static_assert(std::is_same_v<decltype(&ResourceBarrier0022), PFND3D12DDI_RESOURCEBARRIER_0022>);
+static_assert(std::is_same_v<decltype(&Present0028), PFND3D12DDI_PRESENT_0028>);
+static_assert(std::is_same_v<decltype(&OMSetDepthBounds), PFND3D12DDI_OM_SETDEPTHBOUNDS_0025>);
+static_assert(std::is_same_v<decltype(&SetSamplePositions), PFND3D12DDI_SETSAMPLEPOSITIONS_0027>);
+static_assert(std::is_same_v<decltype(&SetProtectedResourceSession), PFND3D12DDI_SETPROTECTEDRESOURCESESSION_0030>);
+static_assert(std::is_same_v<decltype(&SetViewInstanceMask), PFND3D12DDI_SETVIEWINSTANCEMASK_0033>);
+static void FillD3D12DDI_DEVICE_FUNCS_CORE_0010(D3D12DDI_DEVICE_FUNCS_CORE_0010 &f) {
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckFormatSupport, CheckFormatSupport);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckMultisampleQualityLevels, CheckMultisampleQualityLevels);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnGetMipPacking, AGX_TILED_DEVICE(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnGetMipPacking, GetMipPacking));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateElementLayoutSize, CalcPrivateElementLayoutSize0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateElementLayout, CreateElementLayout0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyElementLayout, DestroyElementLayout);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateBlendStateSize, CalcPrivateBlendStateSize0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateBlendState, CreateBlendState0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyBlendState, BlendState::destroy<D3D12DDI_HBLENDSTATE>);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateDepthStencilStateSize, CalcPrivateDepthStencilStateSize0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateDepthStencilState, CreateDepthStencilState0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyDepthStencilState, DepthStencilState::destroy<D3D12DDI_HDEPTHSTENCILSTATE>);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateRasterizerStateSize, CalcPrivateRasterizerStateSize0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateRasterizerState, CreateRasterizerState0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyRasterizerState, RasterizerState::destroy<D3D12DDI_HRASTERIZERSTATE>);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateShaderSize, CalcPrivateShaderSize0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateVertexShader, CreateShader0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreatePixelShader, CreateShader0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateGeometryShader, CreateShader0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateComputeShader, CreateComputeShader0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateGeometryShaderWithStreamOutput, CalcPrivateGeometryShaderWithStreamOutput0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateGeometryShaderWithStreamOutput, CreateGeometryShaderWithStreamOutput0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateTessellationShaderSize, CalcPrivateShaderSize0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateHullShader, CreateTessellationShader0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateDomainShader, CreateTessellationShader0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyShader, DestroyShader);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateCommandQueueSize, CalcPrivateCommandQueueSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateCommandQueue, CreateCommandQueue);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyCommandQueue, DestroyCommandQueue);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateCommandAllocatorSize, CalcPrivateCommandAllocatorSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateCommandAllocator, CreateCommandAllocator);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyCommandAllocator, DestroyCommandAllocator);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnResetCommandAllocator, ResetCommandAllocator);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivatePipelineStateSize, CalcPrivatePipelineStateSize0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreatePipelineState, CreatePipelineState0010);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyPipelineState, DestroyPipelineState);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateCommandListSize, CalcPrivateCommandListSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateCommandList, CreateCommandList);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyCommandList, DestroyCommandList);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateFenceSize, CalcPrivateFenceSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateFence, CreateFence);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyFence, DestroyFence);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateDescriptorHeapSize, CalcPrivateDescriptorHeapSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateDescriptorHeap, CreateDescriptorHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyDescriptorHeap, DestroyDescriptorHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnGetDescriptorSizeInBytes, GetDescriptorSizeInBytes);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnGetCPUDescriptorHandleForHeapStart, GetCPUDescriptorHandleForHeapStart);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnGetGPUDescriptorHandleForHeapStart, GetGPUDescriptorHandleForHeapStart);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateShaderResourceView, CreateShaderResourceViewInHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateConstantBufferView, CreateConstantBufferViewInHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateSampler, CreateSamplerInHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateUnorderedAccessView, CreateUnorderedAccessViewInHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateRenderTargetView, CreateRenderTargetView);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateDepthStencilView, CreateDepthStencilView);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateRootSignatureSize, CalcPrivateRootSignatureSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateRootSignature, CreateRootSignature);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyRootSignature, DestroyRootSignature);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnMapHeap, MapHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnUnmapHeap, UnmapHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateHeapAndResourceSizes, CalcPrivateHeapAndResourceSizes);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateHeapAndResource, CreateHeapAndResource);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyHeapAndResource, DestroyHeapAndResource);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnMakeResident, MakeResident);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnEvict, Evict);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateOpenedHeapAndResourceSizes, CalcPrivateOpenedHeapAndResourceSizes);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnOpenHeapAndResource, OpenHeapAndResource);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCopyDescriptors, CopyDescriptors);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCopyDescriptorsSimple, CopyDescriptorsSimple);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateQueryHeapSize, CalcPrivateQueryHeapSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateQueryHeap, CreateQueryHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyQueryHeap, DestroyQueryHeap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivateCommandSignatureSize, CalcPrivateCommandSignatureSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreateCommandSignature, CreateCommandSignature);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyCommandSignature, DestroyCommandSignature);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckResourceVirtualAddress, CheckResourceVirtualAddress);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckResourceAllocationInfo, CheckResourceAllocationInfo);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckSubresourceInfo, CheckSubresourceInfo);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckExistingResourceAllocationInfo, CheckExistingResourceAllocationInfo);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnOfferResources, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnOfferResources));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnReclaimResources, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnReclaimResources));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnGetImplicitPhysicalAdapterMask, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnGetImplicitPhysicalAdapterMask));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnGetPresentPrivateDriverDataSize, GetPresentPrivateDriverDataSize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnQueryNodeMap, QueryNodeMap);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnRetrieveShaderComment, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnRetrieveShaderComment));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckResourceAllocationHandle, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCheckResourceAllocationHandle));
+    /* R1 pipeline libraries: the zero-cache library (agx_d3d12_zero_cache_library.cpp) */
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcPrivatePipelineLibrarySize, ReceiptCalcPrivatePipelineLibrarySize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCreatePipelineLibrary, ReceiptCreatePipelineLibrary);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnDestroyPipelineLibrary, ReceiptDestroyPipelineLibrary);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnAddPipelineStateToLibrary, ReceiptAddPipelineStateToLibrary);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnCalcSerializedLibrarySize, ReceiptCalcSerializedLibrarySize);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0010, pfnSerializeLibrary, ReceiptSerializeLibrary);
+}
+/* C30: the bundle-legal DDIs (ID3D12GraphicsCommandList bundle
+ * restrictions) record into a bundle and run directly on other lists. */
+template<auto Fn> struct Bundled;
+template<class... A, VOID (APIENTRY *Fn)(D3D12DDI_HCOMMANDLIST, A...)> struct Bundled<Fn> {
+    static_assert(((std::is_trivially_copyable_v<A> && !std::is_pointer_v<A>) && ...),
+                  "a bundled call copies its arguments by value");
+    using Args = std::tuple<A...>;
+    static void Replay(D3D12DDI_HCOMMANDLIST parent, const unsigned char *payload) {
+        std::apply([parent](A... a) { Fn(parent, a...); }, *reinterpret_cast<const Args *>(payload));
+    }
+    static VOID APIENTRY call(D3D12DDI_HCOMMANDLIST handle, A... a) {
+        auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+        if (!IsBundle(list)) {
+            Fn(handle, a...);
+            return;
+        }
+        if (unsigned char *payload = BundleAppend(list, Replay, sizeof(Args))) new (payload) Args(a...);
+    }
+};
+/* the pointer-argument DDIs copy what the pointer names */
+template<class T> static const T *BundleArray(const unsigned char *payload, UINT *count) {
+    memcpy(count, payload, sizeof(*count));
+    return reinterpret_cast<const T *>(payload + 16u);
+}
+template<class T> static unsigned char *BundleAppendArray(AgxD3d12CommandList *list, AgxD3d12BundleReplay replay,
+                                                          UINT head, UINT count, const T *items, SIZE_T extra = 0) {
+    unsigned char *payload = BundleAppend(list, replay, 16u + static_cast<SIZE_T>(count) * sizeof(T) + extra);
+    if (!payload) return nullptr;
+    memset(payload, 0, 16u);
+    memcpy(payload, &count, sizeof(count));
+    memcpy(payload + 4u, &head, sizeof(head));
+    if (count && items) memcpy(payload + 16u, items, static_cast<SIZE_T>(count) * sizeof(T));
+    return payload;
+}
+static VOID APIENTRY BundledVertexBuffers(D3D12DDI_HCOMMANDLIST handle, UINT start, UINT count,
+                                          const D3D12DDI_VERTEX_BUFFER_VIEW *views) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!IsBundle(list)) {
+        AGX_VB_SETTER(handle, start, count, views);
+        return;
+    }
+    if (count > kVertexBuffers) {
+        ListError(list, E_INVALIDARG);
+        return;
+    }
+    unsigned char *payload = BundleAppendArray(
+        list,
+        [](D3D12DDI_HCOMMANDLIST parent, const unsigned char *p) {
+            UINT n = 0, first = 0, present = 0;
+            const auto *v = BundleArray<D3D12DDI_VERTEX_BUFFER_VIEW>(p, &n);
+            memcpy(&first, p + 4u, sizeof(first));
+            memcpy(&present, p + 8u, sizeof(present));
+            AGX_VB_SETTER(parent, first, n, present ? v : nullptr);
+        },
+        start, count, views);
+    if (payload) {
+        const UINT present = views ? 1u : 0u;
+        memcpy(payload + 8u, &present, sizeof(present));
+    }
+}
+static VOID APIENTRY BundledIndexBuffer(D3D12DDI_HCOMMANDLIST handle, const D3D12DDI_INDEX_BUFFER_VIEW *view) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!IsBundle(list)) {
+        AGX_IB_SETTER(handle, view);
+        return;
+    }
+    BundleAppendArray(
+        list,
+        [](D3D12DDI_HCOMMANDLIST parent, const unsigned char *p) {
+            UINT n = 0;
+            const auto *v = BundleArray<D3D12DDI_INDEX_BUFFER_VIEW>(p, &n);
+            AGX_IB_SETTER(parent, n ? v : nullptr);
+        },
+        0u, view ? 1u : 0u, view);
+}
+static VOID APIENTRY BundledBlendFactor(D3D12DDI_HCOMMANDLIST handle, const FLOAT factor[4]) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!IsBundle(list)) {
+        OmSetBlendFactor(handle, factor);
+        return;
+    }
+    BundleAppendArray(
+        list,
+        [](D3D12DDI_HCOMMANDLIST parent, const unsigned char *p) {
+            UINT n = 0;
+            const FLOAT *v = BundleArray<FLOAT>(p, &n);
+            OmSetBlendFactor(parent, n ? v : nullptr);
+        },
+        0u, factor ? 4u : 0u, factor);
+}
+static VOID APIENTRY BundledDescriptorHeaps(D3D12DDI_HCOMMANDLIST handle, UINT count, D3D12DDI_HDESCRIPTORHEAP *heaps) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!IsBundle(list)) {
+        AGX_LIST_STATE(pfnSetDescriptorHeaps)(handle, count, heaps);
+        return;
+    }
+    BundleAppendArray(
+        list,
+        [](D3D12DDI_HCOMMANDLIST parent, const unsigned char *p) {
+            UINT n = 0;
+            const auto *v = BundleArray<D3D12DDI_HDESCRIPTORHEAP>(p, &n);
+            AGX_LIST_STATE(pfnSetDescriptorHeaps)(parent, n, const_cast<D3D12DDI_HDESCRIPTORHEAP *>(v));
+        },
+        0u, heaps ? count : 0u, heaps);
+}
+template<bool Graphics> static VOID APIENTRY BundledRootConstants(D3D12DDI_HCOMMANDLIST handle, UINT index, UINT count,
+                                                                  const void *data, UINT offset) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    if (!IsBundle(list)) {
+        (Graphics ? SetGraphicsRoot32BitConstants : SetComputeRoot32BitConstants)(handle, index, count, data, offset);
+        return;
+    }
+    if (count > 64u || (count && !data)) {
+        ListError(list, E_INVALIDARG);
+        return;
+    }
+    unsigned char *payload = BundleAppendArray(
+        list,
+        [](D3D12DDI_HCOMMANDLIST parent, const unsigned char *p) {
+            UINT n = 0, root = 0, at = 0;
+            const UINT *v = BundleArray<UINT>(p, &n);
+            memcpy(&root, p + 4u, sizeof(root));
+            memcpy(&at, p + 8u, sizeof(at));
+            (Graphics ? SetGraphicsRoot32BitConstants : SetComputeRoot32BitConstants)(parent, root, n, v, at);
+        },
+        index, count, static_cast<const UINT *>(data));
+    if (payload) memcpy(payload + 8u, &offset, sizeof(offset));
+}
+static VOID APIENTRY ExecuteBundle(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDLIST bundle_handle) {
+    auto *list = static_cast<AgxD3d12CommandList *>(handle.pDrvPrivate);
+    auto *bundle = static_cast<AgxD3d12CommandList *>(bundle_handle.pDrvPrivate);
+    if (!list) return;
+    const UINT refusal = !bundle || !IsBundle(bundle) ? 1u : IsBundle(list) ? 2u : !bundle->closed ? 3u : 0u;
+    UINT calls = 0;
+    for (SIZE_T at = 0; !refusal && at < bundle->bundle_bytes;) {
+        AgxD3d12BundleCall call;
+        memcpy(&call, bundle->bundle + at, sizeof(call));
+        call.replay(handle, bundle->bundle + at + kBundleHeader);
+        at += call.bytes;
+        ++calls;
+    }
+    const UINT receipt[] = {refusal, calls, list->commands};
+    AdmissionUmdDiagnostic("measure-d3d12-execute-bundle", refusal ? E_INVALIDARG : S_OK, receipt, 3);
+    if (refusal) ListError(list, E_INVALIDARG);
+}
 static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 &f) {
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCloseCommandList, CloseCommandList);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResetCommandList, ResetCommandList);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawInstanced, DrawInstanced);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawIndexedInstanced, DrawIndexedInstanced);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDispatch, Dispatch);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawInstanced, Bundled<DrawInstanced>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDrawIndexedInstanced, Bundled<DrawIndexedInstanced>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDispatch, Bundled<Dispatch>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewUint, ClearUnorderedAccessViewUint);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearUnorderedAccessViewFloat, ClearUnorderedAccessViewFloat);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRenderTargetView, ClearRenderTargetView);
@@ -3175,11 +8246,11 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnDiscardResource, DiscardResource);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTextureRegion, CopyTextureRegion);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceCopy, ResourceCopy);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles, AGX_TILED_DEVICE(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyTiles, CopyTiles));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnCopyBufferRegion, CopyBufferRegion);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteIndirect, ExecuteIndirect);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceResolveSubresource, ResolveSubresource);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteBundle, ExecuteBundle);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnExecuteIndirect, Bundled<ExecuteIndirect>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResourceBarrier, ResourceBarrier);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBlt, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnBlt));
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnPresent, Present);
@@ -3187,45 +8258,487 @@ static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(D3D12DDI_COMMAND_LIST_FUNCS_
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnEndQuery, EndQuery);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnResolveQueryData, ResolveQueryData);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPredication, AGX_LIST_STATE(pfnSetPredication));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIaSetTopology, IaSetTopology);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIaSetTopology, Bundled<IaSetTopology>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnRsSetViewports, RsSetViewports);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnRsSetScissorRects, RsSetScissorRects);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetBlendFactor, OmSetBlendFactor);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetStencilRef, OmSetStencilRef);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPipelineState, SetPipelineState);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetDescriptorHeaps, AGX_LIST_STATE(pfnSetDescriptorHeaps));
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootSignature, SetComputeRootSignature);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootSignature, SetGraphicsRootSignature);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootDescriptorTable, SetComputeRootDescriptorTable);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootDescriptorTable, SetGraphicsRootDescriptorTable);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRoot32BitConstant, SetComputeRoot32BitConstant);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRoot32BitConstant, SetGraphicsRoot32BitConstant);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRoot32BitConstants, SetComputeRoot32BitConstants);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRoot32BitConstants, SetGraphicsRoot32BitConstants);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootConstantBufferView, SetComputeRootConstantBufferView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootConstantBufferView, SetGraphicsRootConstantBufferView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootShaderResourceView, SetComputeRootShaderResourceView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootShaderResourceView, SetGraphicsRootShaderResourceView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootUnorderedAccessView, SetComputeRootUnorderedAccessView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView, SetGraphicsRootUnorderedAccessView);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetIndexBuffer, AGX_IB_SETTER);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetVertexBuffers, AGX_VB_SETTER);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSOSetTargets, AGX_LIST_STATE(pfnSOSetTargets));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetBlendFactor, BundledBlendFactor);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOmSetStencilRef, Bundled<OmSetStencilRef>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetPipelineState, Bundled<SetPipelineState>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetDescriptorHeaps, BundledDescriptorHeaps);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootSignature, Bundled<SetComputeRootSignature>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootSignature, Bundled<SetGraphicsRootSignature>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootDescriptorTable, Bundled<SetComputeRootDescriptorTable>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootDescriptorTable, Bundled<SetGraphicsRootDescriptorTable>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRoot32BitConstant, Bundled<SetComputeRoot32BitConstant>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRoot32BitConstant, Bundled<SetGraphicsRoot32BitConstant>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRoot32BitConstants, BundledRootConstants<false>);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRoot32BitConstants, BundledRootConstants<true>);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootConstantBufferView, Bundled<SetComputeRootConstantBufferView>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootConstantBufferView, Bundled<SetGraphicsRootConstantBufferView>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootShaderResourceView, Bundled<SetComputeRootShaderResourceView>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootShaderResourceView, Bundled<SetGraphicsRootShaderResourceView>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetComputeRootUnorderedAccessView, Bundled<SetComputeRootUnorderedAccessView>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetGraphicsRootUnorderedAccessView, Bundled<SetGraphicsRootUnorderedAccessView>::call);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetIndexBuffer, BundledIndexBuffer);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnIASetVertexBuffers, BundledVertexBuffers);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSOSetTargets, AGX_SO_SETTER); /* C39 */
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnOMSetRenderTargets, OMSetRenderTargets);
-    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetMarker, SetMarker);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnSetMarker, Bundled<SetMarker>::call);
     AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, pfnClearRootArguments, ClearRootArguments);
+}
+/* C51 (0042, CORE_0040/3D_0040): command allocators become pools and
+ * recorders, and lists are created without an allocator. A list records into
+ * its own heap buffers (C4), so pools and recorders hold nothing. */
+static SIZE_T APIENTRY CalcPrivateCommandPoolSize0040(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_POOL_0040 *) {
+    return sizeof(UINT);
+}
+static HRESULT APIENTRY CreateCommandPool0040(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_POOL_0040 *arg,
+                                              D3D12DDI_HCOMMANDPOOL_0040 pool) {
+    if (!arg || !pool.pDrvPrivate || arg->PoolFlags != D3D12DDI_COMMAND_POOL_FLAG_NONE) return E_INVALIDARG;
+    *static_cast<UINT *>(pool.pDrvPrivate) = 0;
+    return S_OK;
+}
+static VOID APIENTRY DestroyCommandPool0040(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDPOOL_0040) {}
+static VOID APIENTRY ResetCommandPool0040(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDPOOL_0040) {}
+static SIZE_T APIENTRY CalcPrivateCommandRecorderSize0040(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_RECORDER_0040 *) {
+    return sizeof(UINT);
+}
+static HRESULT APIENTRY CreateCommandRecorder0040(D3D12DDI_HDEVICE, const D3D12DDIARG_CREATE_COMMAND_RECORDER_0040 *arg,
+                                                  D3D12DDI_HCOMMANDRECORDER_0040 recorder) {
+    if (!arg || !recorder.pDrvPrivate || arg->RecorderFlags != D3D12DDI_COMMAND_RECORDER_FLAG_NONE) return E_INVALIDARG;
+    *static_cast<UINT *>(recorder.pDrvPrivate) = 0;
+    return S_OK;
+}
+static VOID APIENTRY DestroyCommandRecorder0040(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDRECORDER_0040) {}
+static VOID APIENTRY CommandRecorderSetCommandPoolAsTarget0040(D3D12DDI_HDEVICE, D3D12DDI_HCOMMANDRECORDER_0040,
+                                                              D3D12DDI_HCOMMANDPOOL_0040) {}
+static SIZE_T APIENTRY CalcPrivateCommandListSize0040(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_COMMAND_LIST_0040 *) {
+    return CalcPrivateCommandListSize(device, nullptr);
+}
+static HRESULT APIENTRY CreateCommandList0040(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATE_COMMAND_LIST_0040 *arg,
+                                              D3D12DDI_HCOMMANDLIST list, D3D12DDI_HRTCOMMANDLIST runtime) {
+    if (!arg) return E_INVALIDARG;
+    D3D12DDIARG_CREATE_COMMAND_LIST_0001 legacy = {};
+    legacy.hDrvCommandList = list;
+    legacy.hRTCommandList = runtime;
+    legacy.Type = arg->Type;
+    legacy.QueueFlags = arg->QueueFlags;
+    legacy.ID = arg->ID;
+    legacy.CommandListFlags = arg->CommandListFlags;
+    legacy.NodeMask = arg->NodeMask;
+    return CreateCommandList(device, &legacy);
+}
+/* the 0040 reset names a recorder instead of an allocator and slot; the
+ * reset reads neither */
+static VOID APIENTRY ResetCommandList0040(D3D12DDI_HCOMMANDLIST handle, const D3D12DDIARG_RESETCOMMANDLIST_0040 *) {
+    ResetCommandList(handle, nullptr);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateCommandPoolSize0040), PFND3D12DDI_CALC_PRIVATE_COMMAND_POOL_SIZE_0040>);
+static_assert(std::is_same_v<decltype(&CreateCommandPool0040), PFND3D12DDI_CREATE_COMMAND_POOL_0040>);
+static_assert(std::is_same_v<decltype(&DestroyCommandPool0040), PFND3D12DDI_DESTROY_COMMAND_POOL_0040>);
+static_assert(std::is_same_v<decltype(&ResetCommandPool0040), PFND3D12DDI_RESET_COMMAND_POOL_0040>);
+static_assert(std::is_same_v<decltype(&CalcPrivateCommandRecorderSize0040),
+                             PFND3D12DDI_CALC_PRIVATE_COMMAND_RECORDER_SIZE_0040>);
+static_assert(std::is_same_v<decltype(&CreateCommandRecorder0040), PFND3D12DDI_CREATE_COMMAND_RECORDER_0040>);
+static_assert(std::is_same_v<decltype(&DestroyCommandRecorder0040), PFND3D12DDI_DESTROY_COMMAND_RECORDER_0040>);
+static_assert(std::is_same_v<decltype(&CommandRecorderSetCommandPoolAsTarget0040),
+                             PFND3D12DDI_COMMAND_RECORDER_SET_COMMAND_POOL_AS_TARGET_0040>);
+static_assert(std::is_same_v<decltype(&CalcPrivateCommandListSize0040), PFND3D12DDI_CALC_PRIVATE_COMMAND_LIST_SIZE_0040>);
+static_assert(std::is_same_v<decltype(&CreateCommandList0040), PFND3D12DDI_CREATE_COMMAND_LIST_0040>);
+static_assert(std::is_same_v<decltype(&ResetCommandList0040), PFND3D12DDI_RESETCOMMANDLIST_0040>);
+/* C52 (0071, CORE_0070/3D_0062): queues gain a scheduling group, presents
+ * report allocations and contexts separately, and the meta-command,
+ * raytracing, background-processing and shading-rate entries appear. None
+ * of those features is offered (scheduling caps 0, RaytracingTier and
+ * VariableShadingRateTier 0, no meta commands), so they answer empty or
+ * accept only their defaults. */
+static SIZE_T APIENTRY CalcPrivateCommandQueueSize0050(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATECOMMANDQUEUE_0050 *) {
+    return CalcPrivateCommandQueueSize0023(device, nullptr);
+}
+static HRESULT APIENTRY CreateCommandQueue0050(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATECOMMANDQUEUE_0050 *arg,
+                                               D3D12DDI_HCOMMANDQUEUE queue, D3D12DDI_HRTCOMMANDQUEUE runtime) {
+    if (!arg || arg->SchedulingGroup.pDrvPrivate) return E_INVALIDARG;
+    D3D12DDIARG_CREATECOMMANDQUEUE_0023 legacy = {};
+    legacy.QueueFlags = arg->QueueFlags;
+    legacy.NodeMask = arg->NodeMask;
+    legacy.QueueCreationFlags = arg->QueueCreationFlags;
+    return CreateCommandQueue0023(device, &legacy, queue, runtime);
+}
+static HRESULT APIENTRY EnumerateMetaCommands0052(D3D12DDI_HDEVICE, UINT *count, D3D12DDIARG_META_COMMAND_DESC *) {
+    if (!count) return E_INVALIDARG;
+    *count = 0;
+    return S_OK;
+}
+static VOID APIENTRY GetMetaCommandRequiredParameterInfo0052(D3D12DDI_HMETACOMMAND_0052, D3D12DDI_META_COMMAND_PARAMETER_STAGE,
+                                                             UINT, D3D12DDIARG_META_COMMAND_REQUIRED_PARAMETER_INFO *info) {
+    if (info) memset(info, 0, sizeof(*info));
+}
+static void APIENTRY GetRaytracingAccelerationStructurePrebuildInfo0054(
+    D3D12DDI_HDEVICE, const D3D12DDI_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS_0054 *,
+    D3D12DDI_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO_0054 *info) {
+    if (info) memset(info, 0, sizeof(*info));
+}
+static D3D12DDI_DRIVER_MATCHING_IDENTIFIER_STATUS APIENTRY CheckDriverMatchingIdentifier0054(
+    D3D12DDI_HDEVICE, D3D12DDI_SERIALIZED_DATA_TYPE, const D3D12DDI_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER_0054 *) {
+    return D3D12DDI_DRIVER_MATCHING_IDENTIFIER_UNSUPPORTED_TYPE;
+}
+/* state objects are never created (CreateStateObject is fail-closed) */
+static void *APIENTRY GetShaderIdentifier0054(D3D12DDI_HSTATEOBJECT_0054, LPCWSTR) { return nullptr; }
+static UINT APIENTRY GetShaderStackSize0054(D3D12DDI_HSTATEOBJECT_0054, LPCWSTR) { return 0; }
+static UINT APIENTRY GetPipelineStackSize0054(D3D12DDI_HSTATEOBJECT_0054) { return 0; }
+static void APIENTRY SetPipelineStackSize0054(D3D12DDI_HSTATEOBJECT_0054, UINT) {}
+static void APIENTRY SetBackgroundProcessingMode0063(D3D12DDI_HDEVICE, D3D12DDI_BACKGROUND_PROCESSING_MODE_0062,
+                                                     D3D12DDI_MEASUREMENTS_ACTION_0062, BOOL *further) {
+    if (further) *further = FALSE;
+}
+/* _0051 keeps each allocation pair in slot 0 of the broadcast arrays and the
+ * context in a separate output; this driver presents through its queue's
+ * context, so a runtime asking only for hardware queues is refused */
+static VOID APIENTRY Present0051(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOMMANDQUEUE queue,
+                                 const D3D12DDIARG_PRESENT_0001 *arg, D3D12DDI_PRESENT_0051 *out,
+                                 D3D12DDI_PRESENT_CONTEXTS_0051 *contexts, D3D12DDI_PRESENT_HWQUEUES_0051 *queues) {
+    if (out) memset(out, 0, sizeof(*out));
+    if (contexts) memset(contexts, 0, sizeof(*contexts));
+    if (queues) memset(queues, 0, sizeof(*queues));
+    D3D12DDI_PRESENT_0003 legacy = {};
+    Present(handle, queue, arg, out && contexts ? &legacy : nullptr);
+    if (!out || !contexts) return;
+    out->BroadcastSrcAllocation[0] = legacy.hSrcAllocation;
+    out->BroadcastDstAllocation[0] = legacy.hDstAllocation;
+    for (UINT i = 0; i < legacy.BroadcastContextCount && i < D3DDDI_MAX_BROADCAST_CONTEXT; ++i) {
+        out->BroadcastSrcAllocation[i + 1] = legacy.BroadcastSrcAllocation[i];
+        out->BroadcastDstAllocation[i + 1] = legacy.BroadcastDstAllocation[i];
+        contexts->BroadcastContext[i] = legacy.BroadcastContext[i];
+    }
+    out->AddedGpuWork = legacy.AddedGpuWork;
+    out->BackBufferMultiplicity = legacy.BackBufferMultiplicity;
+    contexts->hContext = legacy.hContext;
+    contexts->BroadcastContextCount = legacy.BroadcastContextCount;
+}
+static VOID APIENTRY RSSetShadingRate0062(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_SHADING_RATE_0062 rate,
+                                          const D3D12DDI_SHADING_RATE_COMBINER_0062 *combiners) {
+    if (rate != D3D12DDI_SHADING_RATE_0062_1X1 ||
+        (combiners && (combiners[0] != D3D12DDI_SHADING_RATE_COMBINER_0062_PASSTHROUGH ||
+                       combiners[1] != D3D12DDI_SHADING_RATE_COMBINER_0062_PASSTHROUGH)))
+        ReportRejectedListError(handle, E_INVALIDARG);
+}
+static VOID APIENTRY RSSetShadingRateImage0062(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HRESOURCE image) {
+    if (image.pDrvPrivate) ReportRejectedListError(handle, E_INVALIDARG);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateCommandQueueSize0050), PFND3D12DDI_CALCPRIVATECOMMANDQUEUESIZE_0050>);
+static_assert(std::is_same_v<decltype(&CreateCommandQueue0050), PFND3D12DDI_CREATECOMMANDQUEUE_0050>);
+static_assert(std::is_same_v<decltype(&EnumerateMetaCommands0052), PFND3D12DDI_ENUMERATE_META_COMMANDS_0052>);
+static_assert(std::is_same_v<decltype(&GetMetaCommandRequiredParameterInfo0052),
+                             PFND3D12DDI_GET_META_COMMAND_REQUIRED_PARAMETER_INFO_0052>);
+static_assert(std::is_same_v<decltype(&GetRaytracingAccelerationStructurePrebuildInfo0054),
+                             PFND3D12DDI_GET_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO_0054>);
+static_assert(std::is_same_v<decltype(&CheckDriverMatchingIdentifier0054), PFND3D12DDI_CHECK_DRIVER_MATCHING_IDENTIFIER_0054>);
+static_assert(std::is_same_v<decltype(&GetShaderIdentifier0054), PFND3D12DDI_GET_SHADER_IDENTIFIER_0054>);
+static_assert(std::is_same_v<decltype(&GetShaderStackSize0054), PFND3D12DDI_GET_SHADER_STACK_SIZE_0054>);
+static_assert(std::is_same_v<decltype(&GetPipelineStackSize0054), PFND3D12DDI_GET_PIPELINE_STACK_SIZE_0054>);
+static_assert(std::is_same_v<decltype(&SetPipelineStackSize0054), PFND3D12DDI_SET_PIPELINE_STACK_SIZE_0054>);
+static_assert(std::is_same_v<decltype(&SetBackgroundProcessingMode0063), PFND3D12DDI_SET_BACKGROUND_PROCESSING_MODE_0063>);
+static_assert(std::is_same_v<decltype(&Present0051), PFND3D12DDI_PRESENT_0051>);
+static_assert(std::is_same_v<decltype(&RSSetShadingRate0062), PFND3D12DDI_RS_SET_SHADING_RATE_0062>);
+static_assert(std::is_same_v<decltype(&RSSetShadingRateImage0062), PFND3D12DDI_RS_SET_SHADING_RATE_IMAGE_0062>);
+/* C54 (0076, CORE_0075/3D_0074): pipeline states gain mesh and
+ * amplification shaders and resources a sampler-feedback mip region; both
+ * features are unsupported (MeshShaderTier, SamplerFeedbackTier 0), so the
+ * projections refuse them and otherwise reuse the 0033/0030/0022 entries. */
+static bool ProjectR7PipelineState(const D3D12DDIARG_CREATE_PIPELINE_STATE_0075 *arg,
+                                   D3D12DDIARG_CREATE_PIPELINE_STATE_0033 *legacy) {
+    static_assert(offsetof(D3D12DDIARG_CREATE_PIPELINE_STATE_0075, ViewInstancingDesc) ==
+                  offsetof(D3D12DDIARG_CREATE_PIPELINE_STATE_0033, ViewInstancingDesc));
+    static_assert(offsetof(D3D12DDIARG_CREATE_PIPELINE_STATE_0075, hMeshShader) >= sizeof(D3D12DDIARG_CREATE_PIPELINE_STATE_0033));
+    if (!arg || arg->hMeshShader.pDrvPrivate || arg->hAmplificationShader.pDrvPrivate) return false;
+    memcpy(legacy, arg, sizeof(*legacy));
+    return true;
+}
+static SIZE_T APIENTRY CalcPrivatePipelineStateSize0075(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0075 *arg) {
+    D3D12DDIARG_CREATE_PIPELINE_STATE_0033 legacy = {};
+    return ProjectR7PipelineState(arg, &legacy) ? CalcPrivatePipelineStateSize0033(device, &legacy) : 0;
+}
+static HRESULT APIENTRY CreatePipelineState0075(D3D12DDI_HDEVICE device,
+    const D3D12DDIARG_CREATE_PIPELINE_STATE_0075 *arg, D3D12DDI_HPIPELINESTATE destination,
+    D3D12DDI_HRTPIPELINESTATE runtime) {
+    D3D12DDIARG_CREATE_PIPELINE_STATE_0033 legacy = {};
+    if (!ProjectR7PipelineState(arg, &legacy)) return E_INVALIDARG;
+    return CreatePipelineState0033(device, &legacy, destination, runtime);
+}
+static bool ProjectR7Resource(const D3D12DDIARG_CREATERESOURCE_0075 &arg, D3D12DDIARG_CREATERESOURCE_0003 *legacy) {
+    static_assert(offsetof(D3D12DDIARG_CREATERESOURCE_0075, pRowMajorLayout) ==
+                  offsetof(D3D12DDIARG_CREATERESOURCE_0003, pRowMajorLayout));
+    /* x86: the mip region sits in _0003's tail padding, so only the members
+     * up to pRowMajorLayout are copied */
+    constexpr size_t members = offsetof(D3D12DDIARG_CREATERESOURCE_0003, pRowMajorLayout) + sizeof(arg.pRowMajorLayout);
+    static_assert(offsetof(D3D12DDIARG_CREATERESOURCE_0075, SamplerFeedbackMipRegion) >= members);
+    if (arg.SamplerFeedbackMipRegion.Width || arg.SamplerFeedbackMipRegion.Height || arg.SamplerFeedbackMipRegion.Depth)
+        return false;
+    *legacy = {};
+    memcpy(legacy, &arg, members);
+    return true;
+}
+static D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY CalcPrivateHeapAndResourceSizes0075(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATEHEAP_0001 *heap, const D3D12DDIARG_CREATERESOURCE_0075 *resource,
+    D3D12DDI_HPROTECTEDRESOURCESESSION_0030 session) {
+    D3D12DDIARG_CREATERESOURCE_0003 legacy = {};
+    if (resource && !ProjectR7Resource(*resource, &legacy)) return {};
+    return CalcPrivateHeapAndResourceSizes0030(device, heap, resource ? &legacy : nullptr, session);
+}
+static HRESULT APIENTRY CreateHeapAndResource0075(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATEHEAP_0001 *heap,
+                                                  D3D12DDI_HHEAP heap_handle, D3D12DDI_HRTRESOURCE runtime_resource,
+                                                  const D3D12DDIARG_CREATERESOURCE_0075 *resource,
+                                                  const D3D12DDI_CLEAR_VALUES *clear,
+                                                  D3D12DDI_HPROTECTEDRESOURCESESSION_0030 session,
+                                                  D3D12DDI_HRESOURCE resource_handle) {
+    D3D12DDIARG_CREATERESOURCE_0003 legacy = {};
+    if (resource && !ProjectR7Resource(*resource, &legacy)) return E_INVALIDARG;
+    return CreateHeapAndResource0030(device, heap, heap_handle, runtime_resource, resource ? &legacy : nullptr, clear,
+                                     session, resource_handle);
+}
+static VOID APIENTRY CheckResourceAllocationInfo0075(D3D12DDI_HDEVICE device, const D3D12DDIARG_CREATERESOURCE_0075 *arg,
+                                                     D3D12DDI_RESOURCE_OPTIMIZATION_FLAGS flags, UINT32 alignment,
+                                                     UINT mask, D3D12DDI_RESOURCE_ALLOCATION_INFO_0022 *info) {
+    D3D12DDIARG_CREATERESOURCE_0003 legacy = {};
+    if (arg && !ProjectR7Resource(*arg, &legacy)) {
+        if (info) {
+            memset(info, 0, sizeof(*info));
+            info->ResourceDataSize = ~0ULL;
+            info->Layout = D3D12DDI_TL_UNDEFINED;
+        }
+        return;
+    }
+    CheckResourceAllocationInfo0022(device, arg ? &legacy : nullptr, flags, alignment, mask, info);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivatePipelineStateSize0075), PFND3D12DDI_CALC_PRIVATE_PIPELINE_STATE_SIZE_0075>);
+static_assert(std::is_same_v<decltype(&CreatePipelineState0075), PFND3D12DDI_CREATE_PIPELINE_STATE_0075>);
+static_assert(std::is_same_v<decltype(&CalcPrivateHeapAndResourceSizes0075), PFND3D12DDI_CALCPRIVATEHEAPANDRESOURCESIZES_0075>);
+static_assert(std::is_same_v<decltype(&CreateHeapAndResource0075), PFND3D12DDI_CREATEHEAPANDRESOURCE_0075>);
+static_assert(std::is_same_v<decltype(&CheckResourceAllocationInfo0075), PFND3D12DDI_CHECKRESOURCEALLOCATIONINFO_0075>);
+/* C50: 3D_0033 = 3D_0003 with two retyped members and seven appended */
+static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0033(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033 &f) {
+    static_assert(offsetof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnAtomicCopyBufferRegion) ==
+                  sizeof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003));
+    FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003(reinterpret_cast<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003 &>(f));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnResourceBarrier, ResourceBarrier0022);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnPresent, Present0028);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnAtomicCopyBufferRegion, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnAtomicCopyBufferRegion));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnOMSetDepthBounds, OMSetDepthBounds);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnSetSamplePositions, SetSamplePositions);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnResourceResolveSubresourceRegion, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnResourceResolveSubresourceRegion));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnSetProtectedResourceSession, SetProtectedResourceSession);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnWriteBufferImmediate, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnWriteBufferImmediate));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033, pfnSetViewInstanceMask, SetViewInstanceMask);
+}
+/* C51: 3D_0040 = 3D_0033 with the recorder reset */
+static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0040(D3D12DDI_COMMAND_LIST_FUNCS_3D_0040 &f) {
+    static_assert(sizeof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0040) == sizeof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0033));
+    FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0033(reinterpret_cast<D3D12DDI_COMMAND_LIST_FUNCS_3D_0033 &>(f));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0040, pfnResetCommandList, ResetCommandList0040);
+}
+/* C52: 3D_0062 = 3D_0040 with the 0051 present and nine appended entries */
+static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0062(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062 &f) {
+    static_assert(offsetof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnInitializeMetaCommand) ==
+                  sizeof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0040));
+    FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0040(reinterpret_cast<D3D12DDI_COMMAND_LIST_FUNCS_3D_0040 &>(f));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnPresent, Present0051);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnInitializeMetaCommand, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnInitializeMetaCommand));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnExecuteMetaCommand, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnExecuteMetaCommand));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnBuildRaytracingAccelerationStructure, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnBuildRaytracingAccelerationStructure));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnEmitRaytracingAccelerationStructurePostbuildInfo, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnEmitRaytracingAccelerationStructurePostbuildInfo));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnCopyRaytracingAccelerationStructure, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnCopyRaytracingAccelerationStructure));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnSetPipelineState1, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnSetPipelineState1));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnDispatchRays, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnDispatchRays));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnRSSetShadingRate, RSSetShadingRate0062);
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062, pfnRSSetShadingRateImage, RSSetShadingRateImage0062);
+}
+/* C54: 3D_0074 = 3D_0062 with DispatchMesh (no mesh shaders) */
+static void FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0074(D3D12DDI_COMMAND_LIST_FUNCS_3D_0074 &f) {
+    static_assert(offsetof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0074, pfnDispatchMesh) == sizeof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0062));
+    FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0062(reinterpret_cast<D3D12DDI_COMMAND_LIST_FUNCS_3D_0062 &>(f));
+    AGX_ASSIGN(D3D12DDI_COMMAND_LIST_FUNCS_3D_0074, pfnDispatchMesh, AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0074, pfnDispatchMesh));
 }
 static void FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001 &f) {
     AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnExecuteCommandLists, ExecuteCommandLists);
     f.pfnUnused = nullptr;
     f.pfnUnused2 = nullptr;
-    AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnUpdateTileMappings, AGX_REJECT(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnUpdateTileMappings));
-    AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnCopyTileMappings, AGX_REJECT(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnCopyTileMappings));
+    /* C53 B3: wired with the native owner; the runtime calls them only for
+     * reserved resources */
+    AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnUpdateTileMappings, AGX_TILED_QUEUE(pfnUpdateTileMappings, UpdateTileMappings));
+    AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnCopyTileMappings, AGX_TILED_QUEUE(pfnCopyTileMappings, CopyTileMappings));
     AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnSignalFence, AGX_REJECT(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnSignalFence));
     AGX_ASSIGN(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnWaitForFence, AGX_REJECT(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001, pfnWaitForFence));
 }
 /* C1: the core tables the runtime requests for the negotiated 0003 device,
  * every entry fail-closed; other tables are refused. */
+/* C48: CORE_0012 is CORE_0010 plus pfnGetDebugAllocationInfo. The debug
+ * layer's object-to-allocation map: no allocation is described (resources
+ * are owner allocations without D3DKMT handles of their own). */
+static VOID APIENTRY GetDebugAllocationInfo(D3D12DDI_HDEVICE, D3D12DDI_HANDLE_AND_TYPE, UINT *num_va,
+                                            D3D12DDI_DEBUG_VIRTUAL_ADDRESS_ALLOCATION_INFO_0012 *,
+                                            UINT *num_kmt, D3D12DDI_DEBUG_KMT_ALLOCATION_INFO_0012 *) {
+    if (num_va) *num_va = 0;
+    if (num_kmt) *num_kmt = 0;
+}
+static void FillD3D12DDI_DEVICE_FUNCS_CORE_0012(D3D12DDI_DEVICE_FUNCS_CORE_0012 &f) {
+    static_assert(offsetof(D3D12DDI_DEVICE_FUNCS_CORE_0012, pfnGetDebugAllocationInfo) ==
+                  sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0010));
+    FillD3D12DDI_DEVICE_FUNCS_CORE_0010(reinterpret_cast<D3D12DDI_DEVICE_FUNCS_CORE_0010 &>(f));
+    f.pfnGetDebugAllocationInfo = GetDebugAllocationInfo;
+}
+/* C50: _0014 adds the allocation's offset and size; none is described */
+static VOID APIENTRY GetDebugAllocationInfo0014(D3D12DDI_HDEVICE, D3D12DDI_HANDLE_AND_TYPE, UINT *num_va,
+                                                D3D12DDI_DEBUG_VIRTUAL_ADDRESS_ALLOCATION_INFO_0012 *,
+                                                UINT *num_kmt, D3D12DDI_DEBUG_KMT_ALLOCATION_INFO_0014 *) {
+    if (num_va) *num_va = 0;
+    if (num_kmt) *num_kmt = 0;
+}
+static_assert(std::is_same_v<decltype(&GetDebugAllocationInfo0014), PFND3D12DDI_GET_DEBUG_ALLOCATION_INFO_0014>);
+/* C50: CORE_0033 has CORE_0012's members in the same order; the members whose
+ * PFN type changed are reassigned (test_d3d12_interface_0033 derives the set
+ * from the WDK header). */
+static void FillD3D12DDI_DEVICE_FUNCS_CORE_0033(D3D12DDI_DEVICE_FUNCS_CORE_0033 &f) {
+    static_assert(sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0033) == sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0012));
+    FillD3D12DDI_DEVICE_FUNCS_CORE_0012(reinterpret_cast<D3D12DDI_DEVICE_FUNCS_CORE_0012 &>(f));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateDepthStencilStateSize, CalcPrivateDepthStencilStateSize0025);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateDepthStencilState, CreateDepthStencilState0025);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateShaderSize, CalcPrivateShaderSize0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateVertexShader, CreateShader0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreatePixelShader, CreateShader0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateGeometryShader, CreateShader0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateComputeShader, CreateComputeShader0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateGeometryShaderWithStreamOutput, CalcPrivateGeometryShaderWithStreamOutput0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateGeometryShaderWithStreamOutput, CreateGeometryShaderWithStreamOutput0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateTessellationShaderSize, CalcPrivateShaderSize0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateHullShader, CreateTessellationShader0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateDomainShader, CreateTessellationShader0026);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateCommandQueueSize, CalcPrivateCommandQueueSize0023);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateCommandQueue, CreateCommandQueue0023);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivatePipelineStateSize, CalcPrivatePipelineStateSize0033);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreatePipelineState, CreatePipelineState0033);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateRootSignatureSize, CalcPrivateRootSignatureSize0013);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateRootSignature, CreateRootSignature0013);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCalcPrivateHeapAndResourceSizes, CalcPrivateHeapAndResourceSizes0030);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCreateHeapAndResource, CreateHeapAndResource0030);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCheckResourceAllocationInfo, CheckResourceAllocationInfo0022);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnCheckExistingResourceAllocationInfo, CheckExistingResourceAllocationInfo0022);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0033, pfnGetDebugAllocationInfo, GetDebugAllocationInfo0014);
+}
+/* C51: CORE_0040 = CORE_0033 with the pool and list creation retyped and
+ * the recorder appended */
+static void FillD3D12DDI_DEVICE_FUNCS_CORE_0040(D3D12DDI_DEVICE_FUNCS_CORE_0040 &f) {
+    static_assert(offsetof(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCalcPrivateCommandRecorderSize) ==
+                  sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0033));
+    FillD3D12DDI_DEVICE_FUNCS_CORE_0033(reinterpret_cast<D3D12DDI_DEVICE_FUNCS_CORE_0033 &>(f));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCalcPrivateCommandPoolSize, CalcPrivateCommandPoolSize0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCreateCommandPool, CreateCommandPool0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnDestroyCommandPool, DestroyCommandPool0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnResetCommandPool, ResetCommandPool0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCalcPrivateCommandListSize, CalcPrivateCommandListSize0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCreateCommandList, CreateCommandList0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCalcPrivateCommandRecorderSize, CalcPrivateCommandRecorderSize0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCreateCommandRecorder, CreateCommandRecorder0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnDestroyCommandRecorder, DestroyCommandRecorder0040);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0040, pfnCommandRecorderSetCommandPoolAsTarget, CommandRecorderSetCommandPoolAsTarget0040);
+}
+/* C52: CORE_0070 = CORE_0040 with the 0050 queue and 0043 opened-resource
+ * entries retyped and twenty entries appended */
+static D3D12DDI_HEAP_AND_RESOURCE_SIZES APIENTRY CalcPrivateOpenedHeapAndResourceSizes0043(
+    D3D12DDI_HDEVICE device, const D3D12DDIARG_OPENHEAP_0003 *arg, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 session) {
+    if (session.pDrvPrivate)
+        return AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateOpenedHeapAndResourceSizes)(device, arg, session);
+    return CalcPrivateOpenedHeapAndResourceSizes(device, arg);
+}
+static HRESULT APIENTRY OpenHeapAndResource0043(D3D12DDI_HDEVICE device, const D3D12DDIARG_OPENHEAP_0003 *arg,
+    D3D12DDI_HHEAP heap, D3D12DDI_HRTRESOURCE runtime, D3D12DDI_HPROTECTEDRESOURCESESSION_0030 session,
+    D3D12DDI_HRESOURCE resource) {
+    if (session.pDrvPrivate)
+        return AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnOpenHeapAndResource)(device, arg, heap, runtime, session, resource);
+    return OpenHeapAndResource(device, arg, heap, runtime, resource);
+}
+static_assert(std::is_same_v<decltype(&CalcPrivateOpenedHeapAndResourceSizes0043), PFND3D12DDI_CALCPRIVATEOPENEDHEAPANDRESOURCESIZES_0043>);
+static_assert(std::is_same_v<decltype(&OpenHeapAndResource0043), PFND3D12DDI_OPENHEAPANDRESOURCE_0043>);
+static void FillD3D12DDI_DEVICE_FUNCS_CORE_0070(D3D12DDI_DEVICE_FUNCS_CORE_0070 &f) {
+    static_assert(offsetof(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateSchedulingGroupSize) ==
+                  sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0040));
+    FillD3D12DDI_DEVICE_FUNCS_CORE_0040(reinterpret_cast<D3D12DDI_DEVICE_FUNCS_CORE_0040 &>(f));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateCommandQueueSize, CalcPrivateCommandQueueSize0050);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateCommandQueue, CreateCommandQueue0050);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateOpenedHeapAndResourceSizes, CalcPrivateOpenedHeapAndResourceSizes0043);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnOpenHeapAndResource, OpenHeapAndResource0043);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateSchedulingGroupSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateSchedulingGroupSize));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateSchedulingGroup, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateSchedulingGroup));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroySchedulingGroup, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroySchedulingGroup));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnEnumerateMetaCommands, EnumerateMetaCommands0052);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnEnumerateMetaCommandParameters, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnEnumerateMetaCommandParameters));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateMetaCommandSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateMetaCommandSize));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateMetaCommand, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateMetaCommand));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroyMetaCommand, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroyMetaCommand));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnGetMetaCommandRequiredParameterInfo, GetMetaCommandRequiredParameterInfo0052);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateStateObjectSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCalcPrivateStateObjectSize));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateStateObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCreateStateObject));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroyStateObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnDestroyStateObject));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnGetRaytracingAccelerationStructurePrebuildInfo, GetRaytracingAccelerationStructurePrebuildInfo0054);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnCheckDriverMatchingIdentifier, CheckDriverMatchingIdentifier0054);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnGetShaderIdentifier, GetShaderIdentifier0054);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnGetShaderStackSize, GetShaderStackSize0054);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnGetPipelineStackSize, GetPipelineStackSize0054);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnSetPipelineStackSize, SetPipelineStackSize0054);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnSetBackgroundProcessingMode, SetBackgroundProcessingMode0063);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnAddToStateObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnAddToStateObject));
+}
+/* C54: CORE_0075 = CORE_0070 up to index 114, then the add-to-state-object
+ * size entry before AddToStateObject_0072, and the sampler-feedback view and
+ * mesh/amplification shader entries; PSO, heap/resource and allocation
+ * info take the 0075 argument forms */
+static void FillD3D12DDI_DEVICE_FUNCS_CORE_0075(D3D12DDI_DEVICE_FUNCS_CORE_0075 &f) {
+    static_assert(offsetof(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCalcPrivateAddToStateObjectSize) ==
+                  offsetof(D3D12DDI_DEVICE_FUNCS_CORE_0070, pfnAddToStateObject));
+    FillD3D12DDI_DEVICE_FUNCS_CORE_0070(reinterpret_cast<D3D12DDI_DEVICE_FUNCS_CORE_0070 &>(f));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCalcPrivatePipelineStateSize, CalcPrivatePipelineStateSize0075);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCreatePipelineState, CreatePipelineState0075);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCalcPrivateHeapAndResourceSizes, CalcPrivateHeapAndResourceSizes0075);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCreateHeapAndResource, CreateHeapAndResource0075);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCheckResourceAllocationInfo, CheckResourceAllocationInfo0075);
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCalcPrivateAddToStateObjectSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCalcPrivateAddToStateObjectSize));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnAddToStateObject, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnAddToStateObject));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCreateSamplerFeedbackUnorderedAccessView, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCreateSamplerFeedbackUnorderedAccessView));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCreateAmplificationShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCreateAmplificationShader));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCreateMeshShader, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCreateMeshShader));
+    AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCalcPrivateMeshShaderSize, AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0075, pfnCalcPrivateMeshShaderSize));
+}
+/* EXP1868: after the 0033 core and list tables the runtime asked for
+ * D3D12DDI_TABLE_TYPE_0020_EXTENDED_FEATURES (0x20 bytes, the _0021 table)
+ * although GetOptionalDDITables lists nothing, and failed device creation
+ * when it was refused. No extended feature (video, shader caching, content
+ * protection, render passes, downlevel support) is offered. */
+static HRESULT APIENTRY GetSupportedExtendedFeatures0020(D3D12DDI_HDEVICE, UINT32 *count, D3D12DDI_FEATURE_0020 *) {
+    if (!count) return E_INVALIDARG;
+    *count = 0;
+    return S_OK;
+}
+static HRESULT APIENTRY GetSupportedExtendedFeatureVersions0020(D3D12DDI_HDEVICE, D3D12DDI_FEATURE_0020, UINT32 *count,
+                                                                UINT32 *) {
+    if (count) *count = 0;
+    return E_INVALIDARG;
+}
+static HRESULT APIENTRY EnableExtendedFeature0020(D3D12DDI_HDEVICE, D3D12DDI_FEATURE_0020, UINT32) { return E_INVALIDARG; }
+/* callbacks belong to enabled features; none is enabled, nothing is kept */
+static HRESULT APIENTRY SetExtendedFeatureCallbacks0021(D3D12DDI_HDEVICE, D3D12DDI_TABLE_TYPE, const void *, SIZE_T) {
+    return S_OK;
+}
+static void FillD3D12DDI_EXTENDED_FEATURES_FUNCS_0021(D3D12DDI_EXTENDED_FEATURES_FUNCS_0021 &f) {
+    f.pfnGetSupportedExtendedFeatures = GetSupportedExtendedFeatures0020;
+    f.pfnGetSupportedExtendedFeatureVersions = GetSupportedExtendedFeatureVersions0020;
+    f.pfnEnableExtendedFeature = EnableExtendedFeature0020;
+    f.pfnSetExtendedFeatureCallbacks = SetExtendedFeatureCallbacks0021;
+}
+static_assert(std::is_same_v<decltype(&GetSupportedExtendedFeatures0020), PFND3D12DDI_GET_SUPPORTED_EXTENDED_FEATURES_0020>);
+static_assert(std::is_same_v<decltype(&GetSupportedExtendedFeatureVersions0020),
+                             PFND3D12DDI_GET_SUPPORTED_EXTENDED_FEATURE_VERSIONS_0020>);
+static_assert(std::is_same_v<decltype(&EnableExtendedFeature0020), PFND3D12DDI_ENABLE_EXTENDED_FEATURE_0020>);
+static_assert(std::is_same_v<decltype(&SetExtendedFeatureCallbacks0021), PFND3D12DDI_SET_EXTENDED_FEATURE_CALLBACKS_0021>);
 template<class T> static HRESULT FillTable(void *table, SIZE_T size, void (*fill)(T &)) {
     if (!table || size < sizeof(T)) return E_INVALIDARG;
     memset(table, 0, size);
@@ -3233,33 +8746,69 @@ template<class T> static HRESULT FillTable(void *table, SIZE_T size, void (*fill
     return S_OK;
 }
 static HRESULT APIENTRY FillDDITable(D3D12DDI_HADAPTER, D3D12DDI_TABLE_TYPE type, void *table,
-                                     SIZE_T size, UINT version, D3D12DDI_HRTTABLE rt_table) {
+                                     SIZE_T size, UINT table_num, D3D12DDI_HRTTABLE rt_table) {
     HRESULT hr = E_NOTIMPL;
-    /* C4a: a command list must name the runtime table its DDIs come from
-     * (pfnSetCommandListDDITableCb at creation); keep the first one. */
-    if (type == D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D && !list_table.handle) list_table = rt_table;
-    switch (type) {
+    const bool tabled = !NegotiatedR2() || Negotiated0033() || Negotiated0042() || Negotiated0076();
+    /* C4a/0003: a command list names the first successful runtime list table.
+     * table_num is an instance index, not a DDI version; R1's second table
+     * instance needs a separate selection/lifetime contract before admission. */
+    switch (tabled ? type : static_cast<D3D12DDI_TABLE_TYPE>(~0u)) {
     case D3D12DDI_TABLE_TYPE_DEVICE_CORE:
-        hr = FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0003>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0003);
+        /* C44: the runtime sizes the table of the interface it negotiated
+         * (GetVersions): R1 (0011) takes CORE_0010, 0012 CORE_0012; C50:
+         * CORE_0033 has CORE_0012's size, the negotiated version decides */
+        hr = Negotiated0076()
+                 ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0075>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0075)
+             : Negotiated0042()
+                 ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0040>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0040)
+             : Negotiated0033()
+                 ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0033>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0033)
+             : size >= sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0012)
+                 ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0012>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0012)
+             : size >= sizeof(D3D12DDI_DEVICE_FUNCS_CORE_0010)
+                 ? FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0010>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0010)
+                 : FillTable<D3D12DDI_DEVICE_FUNCS_CORE_0003>(table, size, FillD3D12DDI_DEVICE_FUNCS_CORE_0003);
         break;
     case D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D:
-        hr = FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003);
+        hr = Negotiated0076()
+                 ? FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0074>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0074)
+             : Negotiated0042()
+                 ? FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0040>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0040)
+             : Negotiated0033()
+                 ? FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0033>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0033)
+                 : FillTable<D3D12DDI_COMMAND_LIST_FUNCS_3D_0003>(table, size, FillD3D12DDI_COMMAND_LIST_FUNCS_3D_0003);
         break;
     case D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D:
         hr = FillTable<D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001>(table, size, FillD3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001);
         break;
+    case D3D12DDI_TABLE_TYPE_0020_EXTENDED_FEATURES:
+        /* R2+ (0021 has the callbacks member); the R1 runtime never asks */
+        if (NegotiatedR2())
+            hr = FillTable<D3D12DDI_EXTENDED_FEATURES_FUNCS_0021>(table, size, FillD3D12DDI_EXTENDED_FEATURES_FUNCS_0021);
+        break;
     default:
         break;
     }
-    const UINT receipt[] = {static_cast<UINT>(type), static_cast<UINT>(size), version};
+    if (SUCCEEDED(hr) && type == D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D && !list_table.handle)
+        list_table = rt_table;
+    const UINT receipt[] = {static_cast<UINT>(type), static_cast<UINT>(size), table_num};
     AdmissionUmdDiagnostic("d3d12-fill-table", hr, receipt, 3);
     return hr;
 }
 } // namespace
 extern "C" HRESULT APIENTRY OpenAdapter12(D3D12DDIARG_OPENADAPTER *arg) {
     char enabled[2] = {};
+#ifdef APPLE_AGX_D3D12_NATIVE_OWNER
+    /* C56: validated on J313 (EXP1873: probes 107/107, the 19 samples and
+     * MiniEngine at interface 0076), D3D12 serves every process with the
+     * native owner; APPLE_AGX_D3D12=0 opts a process out */
+    if (GetEnvironmentVariableA("APPLE_AGX_D3D12", enabled, sizeof(enabled)) == 1 && enabled[0] == '0')
+        return E_NOTIMPL;
+#else
+    /* without the native owner nothing executes: only an opted-in process */
     if (GetEnvironmentVariableA("APPLE_AGX_D3D12", enabled, sizeof(enabled)) != 1 || enabled[0] != '1')
         return E_NOTIMPL;
+#endif
     const UINT receipt[] = {arg != nullptr, arg && arg->pAdapterFuncs != nullptr,
                             arg && arg->pAdapterCallbacks != nullptr};
     AdmissionUmdDiagnostic("d3d12-open-adapter", arg && arg->pAdapterFuncs ? S_OK : E_INVALIDARG, receipt, 3);
@@ -3267,6 +8816,7 @@ extern "C" HRESULT APIENTRY OpenAdapter12(D3D12DDIARG_OPENADAPTER *arg) {
     adapter_object.runtime = arg->hRTAdapter;
     adapter_object.callbacks = arg->pAdapterCallbacks;
     adapter_object.info_valid = FALSE;
+    adapter_object.negotiated = 0;
     if (arg->pAdapterCallbacks && arg->pAdapterCallbacks->pfnQueryAdapterInfoCb) {
         D3DDDICB_QUERYADAPTERINFO query = {};
         query.pPrivateDriverData = &adapter_object.info;
@@ -3274,6 +8824,15 @@ extern "C" HRESULT APIENTRY OpenAdapter12(D3D12DDIARG_OPENADAPTER *arg) {
         adapter_object.info_valid =
             SUCCEEDED(arg->pAdapterCallbacks->pfnQueryAdapterInfoCb(arg->hRTAdapter.handle, &query)) &&
             AgxWin32DeviceInfoValid(&adapter_object.info);
+    }
+    {
+        /* rc82: the KMD's soft-fault report (Wom1SoftFaults = 1 and RegionC
+         * fault_control 0xb); with bit 0 the winsys gives Mesa
+         * DRM_ASAHI_FEATURE_SOFT_FAULTS and shader memory loads speculate. */
+        const UINT soft[] = {static_cast<UINT>(adapter_object.info_valid),
+                             adapter_object.info_valid ? adapter_object.info.Version : 0u,
+                             adapter_object.info_valid ? adapter_object.info.Features : 0u};
+        AdmissionUmdDiagnostic("measure-soft-faults", S_OK, soft, 3);
     }
     arg->hAdapter.pDrvPrivate = &adapter_object;
     FillD3D12DDI_ADAPTERFUNCS(*arg->pAdapterFuncs);

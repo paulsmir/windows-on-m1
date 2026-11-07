@@ -29,15 +29,22 @@ typedef enum _APPLE_AGX_PREEMPTION_PHASE {
 
 typedef struct _APPLE_AGX_SCHEDULER {
   APPLE_AGX_U32 CompletedFence;
+  /* Error boundary since last success, never a successful DMA completion. */
+  APPLE_AGX_U32 LastAbortedFence;
   APPLE_AGX_U32 LastSubmittedFence;
   APPLE_AGX_U32 QueuedFence;
   APPLE_AGX_U32 QueueHead, QueueCount;
   APPLE_AGX_U32 FenceQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
+  /* Rejected virtual submissions complete only after their accepted
+   * predecessor retires. They need no packet or extra queue capacity. */
+  APPLE_AGX_U32 RejectedAfter[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   /* Fence IDs accepted before a preemption or engine reset but discarded from
    * the queue. Dxgkrnl may resubmit an old paging packet with its original ID. */
   APPLE_AGX_U32 PreemptedFenceQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
+  APPLE_AGX_U32 PreemptedRejectedAfter[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   APPLE_AGX_U32 PreemptedFenceCount;
   APPLE_AGX_U32 ActiveFence;
+  APPLE_AGX_U32 ActiveRejectedAfter;
   APPLE_AGX_U32 PendingPreemptionFence;
   APPLE_AGX_U32 PreemptionCutoffFence;
   APPLE_AGX_U32 PreemptionActiveFence;
@@ -46,6 +53,19 @@ typedef struct _APPLE_AGX_SCHEDULER {
   APPLE_AGX_BOOL PreemptionPending;
   APPLE_AGX_BOOL Responsive;
   APPLE_AGX_PREEMPTION_PHASE PreemptionPhase;
+  /* rc102 (depth-2 job window): the queue head the firmware already holds
+   * behind the active fence (kicked behind its leading Barrier), 0 = none.
+   * It stays the queued fence until it is activated, but no preemption or
+   * reset may hand it back to VidSch: it may already have run. */
+  APPLE_AGX_U32 KickedFence;
+  /* EXP2215: the claimed boundary whose DMA_PREEMPTED notification was
+   * handed to dxgkrnl (written in the interrupt-synchronized routine before
+   * DxgkCbNotifyInterrupt), and a claimed boundary that a later
+   * PreemptCommand already committed. VidSch may process the notification
+   * and issue the next PreemptCommand before the claiming caller re-takes
+   * the scheduler lock to commit; 0 = none. */
+  APPLE_AGX_U32 DeliveredPreemptionFence;
+  APPLE_AGX_U32 EarlyCommittedPreemptionFence;
 } APPLE_AGX_SCHEDULER;
 
 void AppleAgxSchedulerInitialize(APPLE_AGX_SCHEDULER *Scheduler);
@@ -74,13 +94,57 @@ APPLE_AGX_U32 AppleAgxSchedulerCurrentFence(
 APPLE_AGX_BOOL AppleAgxSchedulerQueueFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
+/* STATUS_INVALID_PARAMETER from SubmitCommandVirtual, not hardware work.
+ * The caller holds the same lock used for queueing and completion. */
+APPLE_AGX_BOOL AppleAgxSchedulerRejectFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
 APPLE_AGX_BOOL AppleAgxSchedulerQueueResubmittedPagingFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
+/* RC59: a paging packet that arrives while a boundary preemption is still
+ * unclaimed (WaitCurrentBoundary/ReadyToNotify) cannot be queued, and a
+ * paging SubmitCommandVirtual must not fail (dxgmms2 bugchecks 0x119/2).
+ * Admit it as already preempted: it joins the preempted fence list behind
+ * the cutoff, is never executed from this submission, and is resubmittable
+ * once after the DMA_PREEMPTED report (or after an engine reset). A paging
+ * resubmission of a fence still in that list is accepted unchanged. The
+ * caller holds the scheduler lock and stores no packet data. */
+APPLE_AGX_BOOL AppleAgxSchedulerAdmitPagingFenceAsPreempted(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence,
+    APPLE_AGX_BOOL Resubmission);
 APPLE_AGX_BOOL AppleAgxSchedulerActivateFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
+/* rc102: the queued fence was kicked to the firmware behind the active
+ * one. Only the queue head, with a fence active, no other kicked fence and
+ * dispatch not frozen. */
+APPLE_AGX_BOOL AppleAgxSchedulerKickQueuedFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
+APPLE_AGX_U32 AppleAgxSchedulerKickedFence(
+    const APPLE_AGX_SCHEDULER *Scheduler);
+/* Depth-2 kick fallback: undo the kick of Fence when the firmware never saw
+ * it. Only the kicked queue head with a fence active. Without a preemption
+ * the fence stays queued and runs at depth 1 after the active one; during a
+ * boundary preemption that waits for it, it is handed back to VidSch first
+ * among the preempted fences and the active fence becomes the boundary. */
+APPLE_AGX_BOOL AppleAgxSchedulerUnkickFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
 APPLE_AGX_BOOL AppleAgxSchedulerCompleteActiveFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
+/* Caller must prove firmware no longer owns the active submission's DMA. */
+APPLE_AGX_BOOL AppleAgxSchedulerAbortActiveFence(
+    APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
+    APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
+
+/* Retired hardware work reported with a known-fence DMA_PAGE_FAULTED.
+ * Unlike a reset abort, WDDM requires this to advance the completed boundary.
+ * The caller still reports an error, never DMA_COMPLETED. */
+APPLE_AGX_BOOL AppleAgxSchedulerFaultActiveFence(
     APPLE_AGX_SCHEDULER *Scheduler, APPLE_AGX_U32 NodeOrdinal,
     APPLE_AGX_U32 EngineOrdinal, APPLE_AGX_U32 Fence);
 APPLE_AGX_U32 AppleAgxSchedulerLastSubmittedFence(

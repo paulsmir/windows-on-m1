@@ -1,5 +1,8 @@
 #include <windows.h>
 #include <wingdi.h>
+#ifdef APPLE_AGX_GPUVA_WINSYS
+#include <psapi.h> /* K32GetProcessMemoryInfo, kernel32 on Windows 7+ */
+#endif
 
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 
@@ -10,6 +13,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 
 extern "C" {
 #include "umd_internal.h"
+#include "../../../mesa/winsys/agx_win32_wait.h"
 }
 
 static DECLSPEC_ALIGN(8) volatile LONG64 NextOwnerCookie;
@@ -17,6 +21,7 @@ static DECLSPEC_ALIGN(8) volatile LONG64 NextOwnerCookie;
 static D3DKMT_HANDLE AdmissionUmdScreenCpuAllocation(
     const ADMISSION_UMD_SCREEN_BUFFER *Buffer) {
 #ifdef APPLE_AGX_GPUVA_WINSYS
+  if (Buffer->FailedCpuLock) return Buffer->FailedCpuLock;
   return Buffer->SystemDirect ? Buffer->KernelAllocation : Buffer->StagingAllocation;
 #else
   return Buffer->KernelAllocation;
@@ -46,6 +51,69 @@ static ADMISSION_UMD_SCREEN_BUFFER *AdmissionUmdScreenFind(
     }
   }
   return NULL;
+}
+
+/* One fixed-size record per large slot. OwnerCookie + Token is a lifetime
+ * key, including across cached BO reuse; slot zeroing starts fresh counters.
+ * Canonical VA is the latest range, not a claim about every sparse alias. */
+static VOID AdmissionUmdScreenCpuAccessReceipt(ADMISSION_UMD_DEVICE *Device,
+    const ADMISSION_UMD_SCREEN_BUFFER *Buffer, HRESULT Status, UINT Reason) {
+  if (!Buffer->Active || Buffer->Bytes <= (16ULL << 20)) return;
+  const ADMISSION_UMD_CPU_ACCESS *facts = &Buffer->CpuAccess;
+  APPLE_AGX_U64 va = 0;
+  UINT flags = (Buffer->Mapped ? 1u : 0u) |
+      (Buffer->LockedBase ? 2u : 0u) | (facts->OwnerPointers ? 4u : 0u) |
+      (facts->ActiveLocks ? 8u : 0u) | (Buffer->Borrowed ? 64u : 0u) |
+      (Buffer->Transition ? 256u : 0u) | (Buffer->NativeBo ? 512u : 0u);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  va = Buffer->CanonicalGpuVa;
+  flags |= (Buffer->Direct ? 16u : 0u) | (Buffer->SystemDirect ? 32u : 0u) |
+      (Buffer->PrivateStaging ? 128u : 0u);
+#endif
+  if (facts->Maps == ~0u || facts->Locks == ~0u || facts->ActiveLocks == ~0u ||
+      facts->OwnerPointers == ~0u || facts->HeapMaps == ~0u || facts->HeapDepth == ~0u)
+    flags |= 1024u;
+  const UINT values[16] = {1u | (Reason << 8),
+      (UINT)Device->OwnerCookie, (UINT)(Device->OwnerCookie >> 32),
+      (UINT)Buffer->Token, (UINT)(Buffer->Token >> 32), Buffer->KernelAllocation,
+      (UINT)va, (UINT)(va >> 32), (UINT)Buffer->Bytes, (UINT)(Buffer->Bytes >> 32),
+      facts->Maps, facts->Locks, facts->OwnerPointers, facts->HeapMaps,
+      facts->HeapDepth, flags};
+  AdmissionUmdDiagnostic("measure-bo-cpu-access", Status, values, ARRAYSIZE(values));
+}
+
+VOID AdmissionUmdScreenCpuAccessEvent(ADMISSION_UMD_DEVICE *Device,
+                                     APPLE_AGX_U64 Token, UINT Event) {
+  if (!Device) return;
+  AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+  ADMISSION_UMD_SCREEN_BUFFER *buffer = AdmissionUmdScreenFind(Device, Token);
+  if (buffer && buffer->Bytes > (16ULL << 20)) {
+    AdmissionUmdCpuAccessEvent(&buffer->CpuAccess, Event);
+    /* EXP1918U3: GravityMark is killed at its timeout after the removal, so
+     * the snapshot (reason 2/3) and destruction rows never reach the trace.
+     * Reason 4: one live row per CPU-access event of a >64 MiB slot, bounded
+     * per process; the last row per token is the state at the failure. */
+    static unsigned live; /* updated under ScreenBufferLock (exclusive) */
+    if (buffer->Bytes > (64ULL << 20) && live < 512u && ++live)
+      AdmissionUmdScreenCpuAccessReceipt(Device, buffer, 0, 4u);
+  }
+  ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+}
+
+VOID AdmissionUmdScreenCpuAccessSnapshot(ADMISSION_UMD_DEVICE *Device,
+                                        HRESULT Status, UINT Reason) {
+  if (!Device || (Reason != 2u && Reason != 3u)) return;
+  UINT bit = Reason == 2u ? 1u : 2u;
+  AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+  if (!(Device->CpuAccessSnapshots & bit)) {
+    Device->CpuAccessSnapshots |= bit;
+    /* All >16 MiB slots includes ALL >64 MiB candidates, without a top-N
+     * cutoff. Work and output are bounded by the existing 4096-slot table. */
+    for (UINT i = 0; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++i)
+      AdmissionUmdScreenCpuAccessReceipt(Device, &Device->ScreenBuffers[i], Status, Reason);
+  }
+  ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+  AdmissionUmdDiagnosticFlush();
 }
 
 static ADMISSION_UMD_SCREEN_BUFFER *AdmissionUmdScreenFreeSlot(
@@ -377,6 +445,11 @@ HRESULT AdmissionUmdScreenPrepareSubmissionMaps(
       buffers[index]->Transition = FALSE;
     goto locked_done;
   }
+  /* UnlockCb succeeded for the entire list, including entries after a
+   * possible native-cache release failure below. */
+  for (index = 0u; index < count; ++index)
+    if (buffers[index]->Bytes > (16ULL << 20))
+      AdmissionUmdCpuAccessEvent(&buffers[index]->CpuAccess, AdmissionCpuUnlock);
   for (index = 0u; index < count; ++index) {
     ADMISSION_UMD_SCREEN_BUFFER *buffer = buffers[index];
     if (!buffer->Active || !buffer->Transition || !buffer->Mapped ||
@@ -520,6 +593,322 @@ static int AdmissionUmdScreenQueryDevice(void *Context,
   return 1;
 }
 
+#ifdef APPLE_AGX_GPUVA_WINSYS
+/* EXP1929: pool v8 identifies a headroom refusal, but cumulative transfer
+ * bytes cannot identify retained CPU copies. Sample ownership BEFORE rollback
+ * and the winsys cache retry. Logical spans only, not physical residency or
+ * working set; borrowed/aliased canonical spans may overlap. Skip transitions,
+ * copy-held slots and unknown sizes explicitly. Copy pointers are tested,
+ * never dereferenced. CopyHeld protects transfers which publish merge shadows
+ * outside ScreenBufferLock; do not sample those pointers during a transfer.
+ * Caller holds no ScreenBufferLock. Emit only after releasing it. */
+static VOID AdmissionUmdScreenMemoryRefusal(ADMISSION_UMD_DEVICE *Device,
+    HRESULT Status, APPLE_AGX_U64 Token, UINT ClassId, UINT Flags,
+    APPLE_AGX_U64 Bytes, UINT Stage, UINT Pending) {
+  UINT header[16] = {3u, (UINT)Device->OwnerCookie,
+      (UINT)(Device->OwnerCookie >> 32), (UINT)Token, (UINT)(Token >> 32),
+      0u, ClassId, Flags, (UINT)Bytes, (UINT)(Bytes >> 32), Stage, Pending};
+  UINT rows[3][16] = {};
+  APPLE_AGX_U64 totals[3][3] = {}; /* all, mapped, unmapped logical bytes */
+  UINT state[16] = {}, ownership[2][16] = {};
+  APPLE_AGX_U64 canonicalBytes = 0, submissionHolds = 0, sourceHolds = 0;
+  APPLE_AGX_U64 ownershipBytes[6] = {};
+  AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+  if (Device->MemoryRefusalSnapshots >= 4u) {
+    ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+    return;
+  }
+  header[5] = ++Device->MemoryRefusalSnapshots;
+  state[6] = (Device->DrawTerminal ? 1u : 0u) |
+      (Device->ScreenClosing ? 2u : 0u);
+  for (UINT i = 0u; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++i) {
+    const ADMISSION_UMD_SCREEN_BUFFER *slot = &Device->ScreenBuffers[i];
+    if (!slot->Active) continue;
+    ++header[12];
+    /* EXP1940: CopyHeld clears at queueing, SubmissionHolds at retirement.
+     * Count scalar ownership even during transitions/transfers; unlike the
+     * CPU-copy census below this never reads a staging pointer. Categories
+     * overlap, bytes count each canonical span once per category, and zero
+     * size remains explicitly unknown. These are not physical page counts. */
+    if (slot->KernelAllocation) {
+      ++state[7];
+      canonicalBytes += slot->Bytes;
+      submissionHolds += slot->SubmissionHolds;
+      sourceHolds += slot->SourceHolds;
+      if (slot->Transition) ++state[14];
+      if (!slot->Bytes) ++state[15];
+      const BOOL held[6] = {slot->Resident, slot->SubmissionHolds != 0u,
+          slot->CopyHeld, slot->SourceHolds != 0u, slot->KmtResidencyHeld,
+          slot->Resident && !slot->Transition && !slot->SubmissionHolds &&
+              !slot->CopyHeld && !slot->SourceHolds && !slot->KmtResidencyHeld};
+      for (UINT kind = 0u; kind < ARRAYSIZE(held); ++kind) {
+        if (!held[kind]) continue;
+        ++ownership[kind / 3u][7u + (kind % 3u) * 3u];
+        ownershipBytes[kind] += slot->Bytes;
+      }
+    }
+    if (slot->Transition) { ++header[13]; continue; }
+    if (slot->CopyHeld) { ++header[15]; continue; }
+    if (!slot->Bytes) { ++header[14]; continue; }
+    const BOOL present[3] = {slot->KernelAllocation != 0,
+        slot->PrivateStaging != NULL, slot->HeapStagingShadow != NULL};
+    for (UINT kind = 0u; kind < 3u; ++kind) {
+      if (!present[kind]) continue;
+      ++rows[kind][7];
+      totals[kind][0] += slot->Bytes;
+      const UINT subset = slot->Mapped ? 1u : 2u;
+      ++rows[kind][slot->Mapped ? 10u : 13u];
+      totals[kind][subset] += slot->Bytes;
+    }
+  }
+  ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+  const APPLE_AGX_U64 stateValues[3] = {canonicalBytes, submissionHolds, sourceHolds};
+  for (UINT i = 0u; i < 6u; ++i) state[i] = header[i];
+  for (UINT i = 0u; i < ARRAYSIZE(stateValues); ++i) {
+    state[8u + i * 2u] = (UINT)stateValues[i];
+    state[9u + i * 2u] = (UINT)(stateValues[i] >> 32);
+  }
+  /* EXP1930: logical copy spans alone cannot distinguish process commit
+   * from physical pressure outside those copies. Sample the OS before any
+   * diagnostic I/O/rollback/cache retry, without holding the slot lock.
+   * These are adjacent, best-effort observations, not an atomic residency
+   * snapshot. Failed queries must never be interpreted as zero headroom. */
+  const DWORD savedError = GetLastError();
+  MEMORYSTATUSEX memory = {};
+  PROCESS_MEMORY_COUNTERS_EX process = {};
+  UINT osRows[2][16] = {};
+  APPLE_AGX_U64 osValues[2][4] = {};
+  memory.dwLength = sizeof(memory);
+  process.cb = sizeof(process);
+  osRows[0][6] = GlobalMemoryStatusEx(&memory) != FALSE;
+  if (osRows[0][6]) {
+    osValues[0][0] = memory.ullAvailPhys;
+    osValues[0][1] = memory.ullTotalPhys;
+    osValues[0][2] = memory.ullAvailPageFile;
+    osValues[0][3] = memory.ullTotalPageFile;
+  } else osRows[0][7] = GetLastError();
+  osRows[1][6] = K32GetProcessMemoryInfo(GetCurrentProcess(),
+      (PROCESS_MEMORY_COUNTERS *)&process, sizeof(process)) != FALSE;
+  if (osRows[1][6]) {
+    osValues[1][0] = process.PrivateUsage;
+    osValues[1][1] = process.WorkingSetSize;
+    osValues[1][2] = process.PeakWorkingSetSize;
+    osValues[1][3] = process.PeakPagefileUsage;
+  } else osRows[1][7] = GetLastError();
+  AdmissionUmdDiagnostic("measure-memory-refusal", Status, header, ARRAYSIZE(header));
+  for (UINT kind = 0u; kind < 3u; ++kind) {
+    for (UINT i = 0u; i < 6u; ++i) rows[kind][i] = header[i];
+    rows[kind][6] = kind + 1u; /* canonical, private staging, merge baseline */
+    for (UINT subset = 0u; subset < 3u; ++subset) {
+      const UINT at = 8u + subset * 3u;
+      rows[kind][at] = (UINT)totals[kind][subset];
+      rows[kind][at + 1u] = (UINT)(totals[kind][subset] >> 32);
+    }
+    AdmissionUmdDiagnostic("measure-memory-storage", Status, rows[kind], 16u);
+  }
+  for (UINT kind = 0u; kind < 2u; ++kind) {
+    for (UINT i = 0u; i < 6u; ++i) osRows[kind][i] = header[i];
+    for (UINT i = 0u; i < 4u; ++i) {
+      osRows[kind][8u + i * 2u] = (UINT)osValues[kind][i];
+      osRows[kind][9u + i * 2u] = (UINT)(osValues[kind][i] >> 32);
+    }
+    AdmissionUmdDiagnostic(kind ? "measure-memory-process" : "measure-memory-system",
+        Status, osRows[kind], 16u);
+  }
+  AdmissionUmdDiagnostic("measure-memory-state", Status, state, ARRAYSIZE(state));
+  for (UINT group = 0u; group < ARRAYSIZE(ownership); ++group) {
+    for (UINT i = 0u; i < 6u; ++i) ownership[group][i] = header[i];
+    ownership[group][6] = group + 1u;
+    for (UINT i = 0u; i < 3u; ++i) {
+      const APPLE_AGX_U64 bytes = ownershipBytes[group * 3u + i];
+      ownership[group][8u + i * 3u] = (UINT)bytes;
+      ownership[group][9u + i * 3u] = (UINT)(bytes >> 32);
+    }
+    AdmissionUmdDiagnostic("measure-memory-residency", Status, ownership[group], 16u);
+  }
+  SetLastError(savedError);
+}
+#endif
+
+#ifdef APPLE_AGX_NATIVE_STAGING
+static VOID AdmissionUmdNativeStagingFallback(ADMISSION_UMD_DEVICE *Device,
+    UINT Reason, ULONGLONG Bytes, HRESULT Status) {
+  UINT values[5] = {Reason, (UINT)Bytes, (UINT)(Bytes >> 32), 0u, 0u};
+  AcquireSRWLockShared(&Device->ScreenBufferLock);
+  for (UINT i=0; i<ADMISSION_UMD_NATIVE_ARENAS; ++i)
+    if (Device->NativeStaging[i].Ring) {
+      values[3] += Device->NativeStaging[i].Ring->Used;
+      values[4] += Device->NativeStaging[i].Ring->Capacity;
+    }
+  ReleaseSRWLockShared(&Device->ScreenBufferLock);
+  AdmissionUmdDiagnostic("measure-native-ring-fallback", Status, values, ARRAYSIZE(values));
+}
+
+typedef char AdmissionUmdNativeShaderClassMatches[
+    ADMISSION_UMD_NATIVE_SHADER_CLASS == (UINT)AgxWin32BufferClassShader ? 1 : -1];
+
+/* RC66: which classes hold the native slices when a slice is refused
+ * because the arenas are full (reason 1 or 5). measure-native-arena-class
+ * {1, reason, refused class, 64 KiB-rounded native bytes of the General,
+ * Shader and Encoder classes, then their slot counts}. Live slots only; a BO
+ * kept in the winsys BO cache is a live slot. Refusals are rare (EXP1986:
+ * about 150 per run), so the slot scan is not on any per-submission path. */
+static VOID AdmissionUmdNativeStagingClassReceipt(ADMISSION_UMD_DEVICE *Device,
+    UINT Reason, UINT ClassId) {
+  UINT values[9] = {1u, Reason, ClassId, 0u, 0u, 0u, 0u, 0u, 0u};
+  AcquireSRWLockShared(&Device->ScreenBufferLock);
+  for (UINT i=0; i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device); ++i) {
+    const ADMISSION_UMD_SCREEN_BUFFER *slot = &Device->ScreenBuffers[i];
+    if (!slot->Active || !slot->NativeStagingAddress ||
+        slot->ClassId < (UINT)AgxWin32BufferClassGeneral ||
+        slot->ClassId > (UINT)AgxWin32BufferClassEncoder) continue;
+    const UINT index = slot->ClassId - (UINT)AgxWin32BufferClassGeneral;
+    values[3u + index] += (UINT)((slot->Bytes + 65535ULL) & ~65535ULL);
+    ++values[6u + index];
+  }
+  ReleaseSRWLockShared(&Device->ScreenBufferLock);
+  AdmissionUmdDiagnostic("measure-native-arena-class", S_OK, values, ARRAYSIZE(values));
+}
+
+static BOOL AdmissionUmdNativeStagingReserve(ADMISSION_UMD_DEVICE *Device,
+    ULONGLONG Bytes, ULONGLONG Alignment, ADMISSION_UMD_RING_SLICE *Slice,
+    BYTE **Address, ULONGLONG *Token) {
+  BOOL reserved = FALSE;
+  /* RC62: oversized BOs keep the ordinary path (fallback reason 4). */
+  if (!Bytes || Bytes > ADMISSION_UMD_NATIVE_SLICE_LIMIT ||
+      Alignment > ADMISSION_UMD_NATIVE_SLICE_LIMIT ||
+      Device->NativeStagingDisabled || !Device->KernelCallbacks ||
+      !Device->KernelCallbacks->pfnEscapeCb ||
+      !Device->Adapter || Device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
+      !Device->Adapter->RuntimeAdapter.handle || !Device->RuntimeDevice.handle ||
+      !Device->KernelContext)
+    return FALSE;
+  for (UINT index=0; index<ADMISSION_UMD_NATIVE_ARENAS; ++index) {
+    ADMISSION_UMD_NATIVE_ARENA *arena = &Device->NativeStaging[index];
+    BOOL initialize = FALSE;
+    /* RC62 (EXP1984): grow by demand. Skip an arena too small for this
+     * request without mapping it; a later smaller request may still use it. */
+    const UINT capacity = AdmissionUmdNativeArenaBytes(index, Bytes, Alignment);
+    if (!capacity) continue;
+    AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+    if (!arena->Attempted) { arena->Attempted = TRUE; initialize = TRUE; }
+    ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+    if (initialize) {
+      auto *ring = (ADMISSION_UMD_NATIVE_SPANS *)HeapAlloc(
+          GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(ADMISSION_UMD_NATIVE_SPANS));
+      if (ring) {
+        ADMISSION_NATIVE_STAGING_REQUEST q = {};
+        D3DDDICB_ESCAPE request = {};
+        q.Magic = ADMISSION_NATIVE_STAGING_MAGIC;
+        q.Version = 1u; q.Bytes = sizeof(q);
+        q.Capacity = capacity;
+        request.hDevice = Device->RuntimeDevice.handle;
+        request.hContext = Device->KernelContext;
+        request.pPrivateDriverData = &q;
+        request.PrivateDriverDataSize = sizeof(q);
+        HRESULT hr = Device->KernelCallbacks->pfnEscapeCb(
+            Device->Adapter->RuntimeAdapter.handle, &request);
+        BOOL valid = SUCCEEDED(hr) && q.Magic == ADMISSION_NATIVE_STAGING_MAGIC &&
+            q.Version == 1u && q.Bytes == sizeof(q) &&
+            q.Capacity == capacity && q.Token && q.UserVa &&
+            !(q.UserVa & 65535ULL) && q.UserVa <= (ULONGLONG)(ULONG_PTR)-1 &&
+            q.Capacity - 1ULL <= (ULONGLONG)(ULONG_PTR)-1 - q.UserVa &&
+            AdmissionUmdNativeSpansInit(ring, q.Capacity);
+        UINT values[4] = {q.Capacity, (UINT)q.Token, (UINT)(q.Token >> 32), (UINT)valid};
+        AdmissionUmdDiagnostic("measure-native-ring-map", hr, values, ARRAYSIZE(values));
+        AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+        if (valid && !Device->ScreenClosing && !Device->DrawTerminal) {
+          arena->Ring = ring;
+          arena->Token = q.Token;
+          arena->Address = (BYTE *)(ULONG_PTR)q.UserVa;
+          ring = NULL;
+        }
+        ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+        if (ring) {
+          /* A never-bound mapping can be canceled promptly. A failed cancel
+           * remains the KMD process owner's responsibility, never VirtualFree. */
+          if (SUCCEEDED(hr) && q.Token) {
+            q.Magic = ADMISSION_NATIVE_STAGING_MAGIC; q.Version = 1u;
+            q.Bytes = sizeof(q); q.Capacity = 0u; q.UserVa = 0ULL;
+            (void)Device->KernelCallbacks->pfnEscapeCb(
+                Device->Adapter->RuntimeAdapter.handle, &request);
+          }
+          HeapFree(GetProcessHeap(), 0, ring);
+          /* Mapping is optional: report its real failure without setting
+           * LastScreenError/DrawTerminal; the caller allocates ordinarily. */
+          if (!valid)
+            AdmissionUmdNativeStagingFallback(Device, 3u, Bytes,
+                FAILED(hr) ? hr : E_FAIL);
+        }
+      }
+    }
+    AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+    if (!Device->ScreenClosing && !Device->DrawTerminal && arena->Ring) {
+      /* rc99: ordinary placement never takes the readback reserve. */
+      reserved = AdmissionUmdNativeSpansReserveBelow(arena->Ring,
+          (UINT)Bytes, (UINT)Alignment,
+          AdmissionUmdNativeArenaLimit(index, arena->Ring->Capacity,
+              Device->NativeReadbackReserve, 0), Slice);
+      if (reserved) {
+        *Address = arena->Address + Slice->Offset;
+        *Token = arena->Token;
+      }
+    }
+    BOOL available = arena->Ring != NULL;
+    ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+    if (reserved) return TRUE;
+    if (initialize && !available) break;
+  }
+  /* rc99: a READBACK-heap slice the ordinary placement refused may use the
+   * reserve at the top of the first (already mapped) arena. Receipt
+   * measure-native-readback-reserve {1, placed, bytes, offset, first-arena
+   * used bytes after the attempt, reserve bytes}; rare (one per readback
+   * heap created while the arenas are full). */
+  if (Device->NativeReadbackIntent && Device->NativeReadbackReserve &&
+      AdmissionUmdNativeArenaBytes(0u, Bytes, Alignment)) {
+    ADMISSION_UMD_NATIVE_ARENA *arena = &Device->NativeStaging[0];
+    UINT values[6] = {1u, 0u, (UINT)Bytes, 0u, 0u, Device->NativeReadbackReserve};
+    AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+    if (!Device->ScreenClosing && !Device->DrawTerminal && arena->Ring) {
+      reserved = AdmissionUmdNativeSpansReserveBelow(arena->Ring,
+          (UINT)Bytes, (UINT)Alignment,
+          AdmissionUmdNativeArenaLimit(0u, arena->Ring->Capacity,
+              Device->NativeReadbackReserve, 1), Slice);
+      if (reserved) {
+        *Address = arena->Address + Slice->Offset;
+        *Token = arena->Token;
+        values[1] = 1u;
+        values[3] = Slice->Offset;
+      }
+      values[4] = arena->Ring->Used;
+    }
+    ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+    AdmissionUmdDiagnostic("measure-native-readback-reserve", reserved ? S_OK : E_OUTOFMEMORY,
+                           values, ARRAYSIZE(values));
+    if (reserved) return TRUE;
+  }
+  return FALSE;
+}
+
+/* Caller has completed the last-use fence, ended CPU ownership and destroyed
+ * its WDDM allocation. LastUse=0 is allowed for clean creation rollback. */
+static BOOL AdmissionUmdNativeStagingRelease(ADMISSION_UMD_DEVICE *Device,
+    ULONGLONG Token, ULONGLONG Ticket, ULONGLONG LastUse) {
+  BOOL released = FALSE;
+  AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+  for (UINT i=0; i<ADMISSION_UMD_NATIVE_ARENAS; ++i) {
+    ADMISSION_UMD_NATIVE_ARENA *arena = &Device->NativeStaging[i];
+    if (arena->Ring && arena->Token == Token) {
+      released = AdmissionUmdNativeSpansRelease(arena->Ring, Ticket, LastUse,
+          LastUse > arena->Ring->Completed ? LastUse : arena->Ring->Completed);
+      break;
+    }
+  }
+  ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+  return released;
+}
+#endif
+
 static int AdmissionUmdScreenCreateClassBufferImpl(
     void *Context, APPLE_AGX_U32 ClassId, APPLE_AGX_U64 Bytes,
     APPLE_AGX_U64 Alignment, APPLE_AGX_U32 Flags,
@@ -536,6 +925,13 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
 #ifdef APPLE_AGX_GPUVA_WINSYS
   BYTE *privateStaging = NULL;
   BOOL systemDirect = FALSE, writeWatch = FALSE;
+  UINT failureStage = 1u; /* AllocateCb / missing canonical handle */
+#ifdef APPLE_AGX_NATIVE_STAGING
+  ADMISSION_NATIVE_STAGING_ALLOCATION nativeDescription = {};
+  ADMISSION_UMD_RING_SLICE nativeSlice = {};
+  BYTE *nativeAddress = NULL;
+  ULONGLONG nativeToken = 0ULL;
+#endif
 #endif
   ADMISSION_ALLOCATION_DESCRIPTION stagingDescription;
   if (Token) *Token = 0;
@@ -567,10 +963,27 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   description.Version = ADMISSION_WIN32_ALLOCATION_VERSION;
   stagingDescription = description.Allocation;
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  /* EXP1025/EXP1027: small unshared buffers are one CPU-visible class
-   * allocation the GPU maps directly (the KMD keeps it in the local segment). */
-  systemDirect = !BorrowedStaging && Bytes <= ADMISSION_UMD_SYSTEM_DIRECT_BYTES;
-  if (!systemDirect) {
+  /* C75/T6b: one CPU/GPU allocation up to the reported class limit.
+   * Idle SystemDirect slots can now release their residency references;
+   * CPU maps restore residency and finish paging before taking the lock.
+   * Persistent maps remain pinned until their matching Unlock succeeds. */
+  systemDirect = !BorrowedStaging && Bytes <= classInfo->MaximumBytes;
+  /* T13: keep C75c for every other owner. The D3D12 owner's CPU-facing
+   * heaps AND internal CPU-written BOs use native canonical storage, with
+   * ordinary process memory for the CPU; no aperture-resident copy BO.
+   * RC25 instead keeps one canonical allocation; MapBuffer proves its full
+   * pool placement after Lock and retains the lock while the pointer lives. */
+  if (device->HeapStaging && !device->DirectCpuPool && !BorrowedStaging &&
+      (Flags & (AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite)) &&
+      !(Flags & AppleAgxWin32BufferShareable)) systemDirect = FALSE;
+  if (Flags & AppleAgxWin32BufferGpuOnly) {
+    if (ClassId != AgxWin32BufferClassGeneral || BorrowedStaging ||
+        (Flags & (AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
+                  AppleAgxWin32BufferShareable)) != 0u ||
+        !(Flags & (AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite)))
+      return 0;
+  }
+  if (!systemDirect || (Flags & AppleAgxWin32BufferGpuOnly)) {
     description.Version = ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL;
     description.Allocation.Type = ADMISSION_WIN32_ALLOCATION_GPU_LOCAL;
     description.Allocation.CpuVisible = 0u;
@@ -583,10 +996,12 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   description.ClassId = ClassId;
   description.Flags = Flags;
 
+
   ZeroMemory(&allocationInfo, sizeof(allocationInfo));
   allocationInfo.pPrivateDriverData = &description;
   allocationInfo.PrivateDriverDataSize = sizeof(description);
   allocationInfo.VidPnSourceId = 0u;
+
   ZeroMemory(&allocate, sizeof(allocate));
   allocate.hResource = NULL;
   allocate.NumAllocations = 1u;
@@ -600,6 +1015,10 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
 #endif
   if(!slot || device->ScreenClosing || device->DrawTerminal || device->NextScreenToken==~0ULL || device->NextScreenSerial==~0ULL) {
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+#ifdef APPLE_AGX_NATIVE_STAGING
+    if (nativeSlice.Ticket)
+      (void)AdmissionUmdNativeStagingRelease(device, nativeToken, nativeSlice.Ticket, 0ULL);
+#endif
     return 0;
   }
   token=++device->NextScreenToken;
@@ -611,8 +1030,53 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   slot->Borrowed=BorrowedStaging!=0;
 #endif
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  /* Transition pins the device/context while mapping drops the slot lock. */
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (device->HeapStaging && !BorrowedStaging &&
+      (Flags & (AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite)) &&
+      !(Flags & (AppleAgxWin32BufferShareable | AppleAgxWin32BufferGpuOnly))) {
+    /* VidMm exposes the whole 64-KiB-rounded allocation. Own and clear
+     * that complete span, even when the caller requests a shorter BO. */
+    ULONGLONG nativeBytes = (stagingDescription.Size + 65535ULL) & ~65535ULL;
+    ULONGLONG nativeAlignment = Alignment < 65536ULL ? 65536ULL : Alignment;
+    /* RC66: write-once shader binaries keep the ordinary path (reason 6). */
+    if (!AdmissionUmdNativeStagingClassEligible(ClassId))
+      AdmissionUmdNativeStagingFallback(device, 6u, Bytes, S_OK);
+    else if (AdmissionUmdNativeStagingReserve(device, nativeBytes, nativeAlignment,
+          &nativeSlice, &nativeAddress, &nativeToken)) {
+      nativeDescription.Create = description;
+      nativeDescription.Create.Version = ADMISSION_WIN32_ALLOCATION_VERSION_NATIVE;
+      nativeDescription.Create.Bytes = sizeof(nativeDescription);
+      nativeDescription.Create.Allocation = stagingDescription;
+      nativeDescription.Create.Allocation.Width = nativeSlice.Bytes;
+      nativeDescription.Create.Allocation.Pitch = nativeSlice.Bytes;
+      nativeDescription.Create.Allocation.Size = nativeSlice.Bytes;
+      nativeDescription.Token = nativeToken;
+      nativeDescription.Offset = nativeSlice.Offset;
+    } else {
+      const UINT reason = nativeBytes > ADMISSION_UMD_NATIVE_SLICE_LIMIT ? 4u :
+          nativeBytes > ADMISSION_UMD_NATIVE_SMALL_SLICE ? 5u : 1u;
+      AdmissionUmdNativeStagingFallback(device, reason, Bytes, S_OK);
+      if (reason != 4u) AdmissionUmdNativeStagingClassReceipt(device, reason, ClassId);
+    }
+  }
+#endif
+
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (nativeAddress) {
+    /* The slice is exclusively reserved and all former BO/fence owners have
+     * retired. ExistingSysMem preserves its input bytes, so zero on reuse. */
+    ZeroMemory(nativeAddress, (SIZE_T)nativeSlice.Bytes);
+    MemoryBarrier();
+    allocationInfo.pPrivateDriverData = &nativeDescription;
+    allocationInfo.PrivateDriverDataSize = sizeof(nativeDescription);
+    allocationInfo.pSystemMem = nativeAddress;
+  }
+#endif
+  unsigned wait_pfnAllocateCb_1=AdmissionUmdWaitBegin(AgxWaitAllocate);
   result = device->KernelCallbacks->pfnAllocateCb(
       device->RuntimeDevice.handle, &allocate);
+  AdmissionUmdWaitEnd(wait_pfnAllocateCb_1);
   {
     UINT values[4] = {ClassId, (UINT)Bytes, (UINT)Alignment,
                       allocationInfo.hAllocation != 0u};
@@ -620,8 +1084,34 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
                            ARRAYSIZE(values));
   }
   canonical = allocationInfo.hAllocation;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (nativeAddress && (FAILED(result) || !canonical)) {
+    /* An old/refusing kernel may have returned a handle. Only a proved
+     * rollback permits fallback or slice reuse. Otherwise normal cleanup
+     * below retains the ticket alongside the uncertain allocation. */
+    D3DDDICB_DEALLOCATE undo = {};
+    undo.NumAllocations = 1u; undo.HandleList = &canonical;
+    if (!canonical || (device->KernelCallbacks->pfnDeallocateCb &&
+        SUCCEEDED(device->KernelCallbacks->pfnDeallocateCb(
+            device->RuntimeDevice.handle, &undo)))) {
+      AdmissionUmdNativeStagingFallback(device, 2u, Bytes, result);
+      (void)AdmissionUmdNativeStagingRelease(device, nativeToken, nativeSlice.Ticket, 0ULL);
+      nativeSlice = {}; nativeAddress = NULL; canonical = 0;
+      allocationInfo.hAllocation = 0;
+      allocationInfo.pSystemMem = NULL;
+      allocationInfo.pPrivateDriverData = &description;
+      allocationInfo.PrivateDriverDataSize = sizeof(description);
+      unsigned waited = AdmissionUmdWaitBegin(AgxWaitAllocate);
+      result = device->KernelCallbacks->pfnAllocateCb(device->RuntimeDevice.handle, &allocate);
+      AdmissionUmdWaitEnd(waited);
+      canonical = allocationInfo.hAllocation;
+    }
+  }
+  if (nativeAddress && SUCCEEDED(result) && canonical) systemDirect = TRUE;
+#endif
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (SUCCEEDED(result) && canonical && !staging && !systemDirect) {
+    failureStage = 2u; /* CPU private staging after canonical allocation */
     /* EXP1022: unshared staging is read and written only by this process
      * (the KMD copy escape receives its bytes); keep it in ordinary memory. */
     UNREFERENCED_PARAMETER(stagingDescription);
@@ -647,6 +1137,9 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
     HRESULT failure = FAILED(result) ? result : E_FAIL;
     D3DKMT_HANDLE owned[2] = {canonical, staging == BorrowedStaging ? 0 : staging};
 #ifdef APPLE_AGX_GPUVA_WINSYS
+    AdmissionUmdScreenMemoryRefusal(device, failure, token, ClassId, Flags,
+        Bytes, failureStage, (canonical ? 1u : 0u) |
+        (privateStaging ? 2u : 0u) | (BorrowedStaging ? 4u : 0u));
     if (privateStaging) (void)VirtualFree(privateStaging, 0, MEM_RELEASE);
 #endif
     for (UINT i = 0; i < 2; ++i) {
@@ -657,7 +1150,18 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
               device->RuntimeDevice.handle, &rollback))) owned[i] = 0;
     }
     AcquireSRWLockExclusive(&device->ScreenBufferLock);
-    if (!owned[0] && !owned[1]) ZeroMemory(slot, sizeof(*slot));
+    if (!owned[0] && !owned[1]) {
+#ifdef APPLE_AGX_NATIVE_STAGING
+      if (nativeSlice.Ticket) {
+        /* Keep Active+Transition until the out-of-lock ring release is done:
+         * they prevent concurrent finalization from freeing this device. */
+        ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+        (void)AdmissionUmdNativeStagingRelease(device, nativeToken, nativeSlice.Ticket, 0ULL);
+        AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      }
+#endif
+      ZeroMemory(slot, sizeof(*slot));
+    }
     else {
       slot->KernelAllocation = owned[0];
 #ifdef APPLE_AGX_GPUVA_WINSYS
@@ -665,6 +1169,11 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
 #endif
       slot->Transition = FALSE;
       device->DrawTerminal = TRUE;
+#ifdef APPLE_AGX_NATIVE_STAGING
+      slot->NativeStagingAddress = nativeAddress;
+      slot->NativeStagingTicket = nativeSlice.Ticket;
+      slot->NativeStagingToken = nativeToken;
+#endif
     }
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     device->LastScreenError = failure;
@@ -676,7 +1185,13 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   slot->StagingAllocation = staging;
   slot->PrivateStaging = privateStaging;
   slot->WriteWatch = writeWatch;
+  slot->HeapStaging = device->HeapStaging && privateStaging != NULL && !BorrowedStaging;
   slot->SystemDirect = systemDirect;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  slot->NativeStagingAddress = nativeAddress;
+  slot->NativeStagingTicket = nativeSlice.Ticket;
+  slot->NativeStagingToken = nativeToken;
+#endif
   slot->Borrowed = BorrowedStaging != 0;
 #endif
   slot->Bytes = Bytes;
@@ -700,6 +1215,14 @@ static int AdmissionUmdScreenCreateClassBufferImpl(
   }
   device->LastScreenError = S_OK;
   *Token = token;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (nativeAddress) {
+    UINT values[6] = {(UINT)nativeToken, (UINT)(nativeToken >> 32),
+        (UINT)nativeSlice.Ticket, (UINT)(nativeSlice.Ticket >> 32),
+        nativeSlice.Offset, (UINT)Bytes};
+    AdmissionUmdDiagnostic("native-ring-allocation", S_OK, values, ARRAYSIZE(values));
+  }
+#endif
   return 1;
 }
 
@@ -737,8 +1260,10 @@ HRESULT AdmissionUmdScreenNewCanonical(ADMISSION_UMD_DEVICE *Device,
   ZeroMemory(&allocate, sizeof(allocate));
   allocate.NumAllocations = 1u;
   allocate.pAllocationInfo = &allocationInfo;
+  unsigned wait_pfnAllocateCb_2=AdmissionUmdWaitBegin(AgxWaitAllocateCanonical);
   result = Device->KernelCallbacks->pfnAllocateCb(
       Device->RuntimeDevice.handle, &allocate);
+  AdmissionUmdWaitEnd(wait_pfnAllocateCb_2);
   if (SUCCEEDED(result) && allocationInfo.hAllocation == 0u) result = E_FAIL;
   if (SUCCEEDED(result)) *Allocation = allocationInfo.hAllocation;
   return result;
@@ -931,6 +1456,7 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       AdmissionUmdScreenFind(device, Token);
   D3DDDICB_LOCK lock;
   HRESULT result;
+  if (Address) *Address = NULL;
   if (device == NULL || Address == NULL ||
       (Access & (AppleAgxWin32BufferCpuRead |
                  AppleAgxWin32BufferCpuWrite)) == 0u ||
@@ -940,6 +1466,18 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       device->KernelCallbacks->pfnLockCb == NULL)
     return 0;
 #ifdef APPLE_AGX_GPUVA_WINSYS
+  if (device->DirectCpuPool && !device->KernelCallbacks->pfnUnlockCb) return 0;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  buffer = AdmissionUmdScreenFind(device, Token);
+  BOOL gpuOnly = buffer && (buffer->Flags & AppleAgxWin32BufferGpuOnly);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if (gpuOnly) {
+    UINT values[3] = {(UINT)Token, (UINT)(Token >> 32), Access};
+    *Address = NULL;
+    device->LastScreenError = E_INVALIDARG;
+    AdmissionUmdDiagnostic("measure-gpu-only-map", E_INVALIDARG, values, ARRAYSIZE(values));
+    return 0;
+  }
   /* EXP995: a private slot defers its post-submission download until the
    * first CPU map; complete it before the staging becomes CPU-visible. */
   if (!AdmissionUmdGpuvaPrepareCpuMap(device, Token) ||
@@ -955,7 +1493,11 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
   }
   buffer = AdmissionUmdScreenFind(device, Token);
   if (buffer == NULL || !buffer->KernelAllocation || buffer->Mapped || buffer->Transition ||
-      buffer->SubmissionHolds || Bytes == 0ULL ||
+      buffer->SubmissionHolds || buffer->SourceHolds ||
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      buffer->CopyHeld ||
+#endif
+      Bytes == 0ULL ||
       Offset > buffer->Bytes || Bytes > buffer->Bytes - Offset ||
       (Access & buffer->Flags) != Access) {
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
@@ -966,8 +1508,24 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
     D3DKMT_HANDLE allocation = AdmissionUmdScreenCpuAllocation(buffer);
 #ifdef APPLE_AGX_GPUVA_WINSYS
     BYTE *privateStaging = buffer->PrivateStaging;
+    BOOL systemDirect = buffer->SystemDirect;
+#ifdef APPLE_AGX_NATIVE_STAGING
+    BYTE *nativeAddress = buffer->NativeStagingAddress;
+    ULONGLONG nativeFence = buffer->LastUseFence;
+#endif
 #endif
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    if (systemDirect && !AdmissionUmdGpuvaRestoreCpuMapResidency(device, Token)) {
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      buffer = AdmissionUmdScreenFind(device, Token);
+      if (buffer != NULL) buffer->Transition = FALSE;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      device->LastScreenError = !device->DrawTerminal && FAILED(device->GpuvaFailure)
+          ? device->GpuvaFailure : DXGI_ERROR_DEVICE_HUNG;
+      return 0;
+    }
+#endif
     ZeroMemory(&lock, sizeof(lock));
     lock.hAllocation = allocation;
     lock.Flags.LockEntire = 1u;
@@ -978,13 +1536,23 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       lock.Flags.WriteOnly = 1u;
 #endif
 #ifdef APPLE_AGX_GPUVA_WINSYS
+#ifdef APPLE_AGX_NATIVE_STAGING
+    if (nativeAddress) {
+      result = AdmissionUmdGpuvaWaitNativeStaging(device, nativeFence) ? S_OK : E_FAIL;
+      lock.pData = SUCCEEDED(result) ? nativeAddress : NULL;
+    } else
+#endif
     if (privateStaging) {
       lock.pData = privateStaging; /* EXP1022: no VidMm lock */
       result = S_OK;
     } else
 #endif
-    result = device->KernelCallbacks->pfnLockCb(
-        device->RuntimeDevice.handle, &lock);
+    {
+      unsigned wait_pfnLockCb_1=AdmissionUmdWaitBegin(AgxWaitLock);
+      result = device->KernelCallbacks->pfnLockCb(
+          device->RuntimeDevice.handle, &lock);
+      AdmissionUmdWaitEnd(wait_pfnLockCb_1);
+    }
     {
       UINT values[2] = {allocation != 0u, lock.pData != NULL};
       AdmissionUmdDiagnostic("g4-native-lock-cb", result, values,
@@ -998,6 +1566,59 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       return 0;
     }
   }
+  if (SUCCEEDED(result)
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      && !buffer->PrivateStaging
+#endif
+#ifdef APPLE_AGX_NATIVE_STAGING
+      && !buffer->NativeStagingAddress
+#endif
+      && buffer->Bytes > (16ULL << 20))
+    AdmissionUmdCpuAccessEvent(&buffer->CpuAccess, AdmissionCpuLock);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (SUCCEEDED(result) && device->DirectCpuPool && buffer->SystemDirect &&
+#ifdef APPLE_AGX_NATIVE_STAGING
+      !buffer->NativeStagingAddress &&
+#endif
+      !buffer->Borrowed && !(buffer->Flags & AppleAgxWin32BufferShareable)) {
+    /* Lock preserves the CPU pointer, not a permanent segment-3 placement.
+     * Transition excludes our trim/submit until the current full pool proof
+     * succeeds and Mapped takes over. Later submissions still require native
+     * proof: VidMm can republish this allocation outside the pool. */
+    BOOL sameAllocation = lock.hAllocation == buffer->KernelAllocation;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    BOOL ready = sameAllocation && lock.pData &&
+        AdmissionUmdGpuvaValidateCpuPoolMap(device, Token);
+    if (!ready) {
+      HRESULT failure = sameAllocation && lock.pData && FAILED(device->GpuvaFailure)
+          ? device->GpuvaFailure : E_FAIL;
+      D3DDDICB_UNLOCK undo = {};
+      undo.NumAllocations = 1u;
+      undo.phAllocations = &lock.hAllocation;
+      HRESULT undone = device->KernelCallbacks->pfnUnlockCb(
+          device->RuntimeDevice.handle, &undo);
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      /* Transition has retained this slot and its residency throughout. A
+       * failed cleanup must keep the real lock/owner even though no pointer
+       * was exposed. Terminal teardown may not reclaim uncertain ownership. */
+      if (FAILED(undone)) {
+        buffer->FailedCpuLock = lock.hAllocation;
+        buffer->LockedBase = lock.pData;
+        buffer->LockedAccess = 0u;
+        buffer->Mapped = TRUE;
+        device->DrawTerminal = TRUE;
+      } else if (buffer->Bytes > (16ULL << 20)) {
+        AdmissionUmdCpuAccessEvent(&buffer->CpuAccess, AdmissionCpuUnlock);
+      }
+      if (!sameAllocation) device->DrawTerminal = TRUE;
+      buffer->Transition = FALSE;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      device->LastScreenError = failure;
+      return 0;
+    }
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  }
+#endif
   if (FAILED(result) || lock.pData == NULL) {
     buffer->Transition = FALSE;
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
@@ -1010,6 +1631,8 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
   if (buffer->MapEpoch == 0u)
     ++buffer->MapEpoch;
   buffer->Mapped = TRUE;
+  if (buffer->Bytes > (16ULL << 20))
+    AdmissionUmdCpuAccessEvent(&buffer->CpuAccess, AdmissionCpuMap);
   buffer->Transition = FALSE;
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   device->LastScreenError = S_OK;
@@ -1042,7 +1665,11 @@ static int AdmissionUmdScreenUnmapBuffer(void *Context,
   unlock.NumAllocations = 1u;
   unlock.phAllocations = &allocation;
 #ifdef APPLE_AGX_GPUVA_WINSYS
-  if (buffer->PrivateStaging)
+  if (buffer->PrivateStaging
+#ifdef APPLE_AGX_NATIVE_STAGING
+      || buffer->NativeStagingAddress
+#endif
+      )
     result = S_OK; /* EXP1022: ordinary memory, nothing to unlock */
   else
 #endif
@@ -1064,6 +1691,17 @@ static int AdmissionUmdScreenUnmapBuffer(void *Context,
     device->LastScreenError = E_FAIL;
     return 0;
   }
+  if (buffer->Bytes > (16ULL << 20)
+#ifdef APPLE_AGX_GPUVA_WINSYS
+      && !buffer->PrivateStaging
+#endif
+#ifdef APPLE_AGX_NATIVE_STAGING
+      && !buffer->NativeStagingAddress
+#endif
+      ) AdmissionUmdCpuAccessEvent(&buffer->CpuAccess, AdmissionCpuUnlock);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  buffer->FailedCpuLock = 0;
+#endif
   buffer->LockedBase = NULL;
   buffer->LockedAccess = 0u;
   buffer->Mapped = FALSE;
@@ -1104,6 +1742,10 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     return 0;
   }
+  if (!buffer->CpuAccess.DestructionReported) {
+    AdmissionUmdScreenCpuAccessReceipt(device, buffer, S_OK, 1u);
+    buffer->CpuAccess.DestructionReported = 1u;
+  }
   allocation = buffer->KernelAllocation;
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (buffer->CopyHeld || device->DrawTerminal || !device->KernelCallbacks ||
@@ -1117,13 +1759,25 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
    * EXP1124: without EvictOnlyIfNecessary VidMm paged every released
    * application surface out to system memory just before its owner freed
    * it; only drop the reference and let VidMm evict under pressure. */
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (buffer->NativeStagingTicket &&
+      !AdmissionUmdGpuvaWaitNativeStaging(device, buffer->LastUseFence)) {
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    buffer->Transition = FALSE;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    device->LastScreenError = E_FAIL;
+    return 0;
+  }
+#endif
   if (buffer->Direct && buffer->Resident && buffer->KernelAllocation &&
       device->KernelCallbacks->pfnEvictCb) {
     D3DKMT_HANDLE resident = buffer->KernelAllocation;
     D3DDDICB_EVICT evict = {};
     evict.Flags.EvictOnlyIfNecessary = 1u;
     evict.NumAllocations = 1; evict.AllocationList = &resident;
+    unsigned wait_pfnEvictCb=AdmissionUmdWaitBegin(AgxWaitEvict);
     result = device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle, &evict);
+    AdmissionUmdWaitEnd(wait_pfnEvictCb);
     AcquireSRWLockExclusive(&device->ScreenBufferLock);
     if (FAILED(result)) {
       buffer->Transition = FALSE;
@@ -1152,7 +1806,20 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
     else buffer->StagingAllocation=0;
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   }
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (buffer->NativeStagingTicket && !AdmissionUmdNativeStagingRelease(device,
+        buffer->NativeStagingToken, buffer->NativeStagingTicket, buffer->LastUseFence)) {
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    buffer->Transition = FALSE;
+    device->DrawTerminal = TRUE;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    device->LastScreenError = E_FAIL;
+    return 0;
+  }
+#endif
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  if (buffer->HeapStagingShadow)
+    (void)VirtualFree(buffer->HeapStagingShadow, 0, MEM_RELEASE);
   if (buffer->PrivateStaging)
     (void)VirtualFree(buffer->PrivateStaging, 0, MEM_RELEASE);
   ZeroMemory(buffer,sizeof(*buffer));
@@ -1221,7 +1888,9 @@ static int AdmissionUmdScreenWaitFence(void *Context, APPLE_AGX_U32 Fence,
   }
   if (fence->Completed)
     return 1;
+  unsigned event_wait=TimeoutMs ? AdmissionUmdWaitBegin(AgxWaitEvent) : 0;
   waitResult = WaitForSingleObject(fence->Event, TimeoutMs);
+  AdmissionUmdWaitEnd(event_wait);
   if (waitResult == WAIT_OBJECT_0) {
     fence->Completed = TRUE;
     device->LastScreenError = S_OK;

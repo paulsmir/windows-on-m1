@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <stdlib.h>
 #include <wingdi.h>
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(push)
@@ -6,9 +7,14 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <d3d10umddi.h>
 #pragma warning(pop)
 #include "umd_internal.h"
+#include "../../../mesa/winsys/agx_win32_wait.h"
 #include "umd_residency_trim.h"
+#include "umd_cpu_pool_rehome.h"
 #include "apple_agx_g3_copy_abi.h"
+#include "apple_agx_g3_copy_gate.h"
+#include "apple_agx_g3_copy_query_receipt.h"
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_g4_preflight.h"
 #include "render_job_timing.h"
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
 #include "render_qualification.h"
@@ -101,8 +107,10 @@ ULONGLONG AdmissionUmdGpuvaFrameArm(ADMISSION_UMD_DEVICE *device,
   request.Flags.HardwareAccess = 0;
   request.pPrivateDriverData = &arm;
   request.PrivateDriverDataSize = sizeof(arm);
+  unsigned wait_pfnEscapeCb_1=AdmissionUmdWaitBegin(AgxWaitFrameArmEscape);
   status = device->KernelCallbacks->pfnEscapeCb(
       device->Adapter->RuntimeAdapter.handle, &request);
+  AdmissionUmdWaitEnd(wait_pfnEscapeCb_1);
   if (SUCCEEDED(status)) {
     device->DwmFrameArmAttempts = 0u;
     device->DwmFrameArmAttempted = TRUE;
@@ -120,6 +128,38 @@ ULONGLONG AdmissionUmdGpuvaFrameArm(ADMISSION_UMD_DEVICE *device,
 }
 #endif
 
+
+#define ADMISSION_UMD_WATCH_WINDOWS
+#include "umd_va_watch.h"
+
+/* Caller holds ScreenBufferLock. phase: 1 selection, 2 MakeResident result,
+ * 3 submit snapshot, 5 Evict result. Empty match is explicit.
+ * All pairs are low DWORD first. The token and allocation handle join BO
+ * identity to the existing KMD VA/process mapping history. */
+static void watch_slots(ADMISSION_UMD_DEVICE *device, UINT phase,
+    const uint64_t *tokens, unsigned count, const D3DKMT_HANDLE *requested,
+    unsigned pending, ULONGLONG fence, HRESULT hr) {
+  const ULONGLONG watch=AdmissionUmdWatchVa();
+  if(!watch) return;
+  UINT matches=0;
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);++i) {
+    const auto *slot=&device->ScreenBuffers[i];
+    if(!slot->Active || !AdmissionUmdWatchContains(watch,slot->CanonicalGpuVa,slot->Bytes)) continue;
+    UINT member=phase==3u && slot->CopyHeld ? 1u : 0u,called=0;
+    for(unsigned j=0;j<count;++j) if(tokens[j]==slot->Token) member=1;
+    for(unsigned j=0;j<pending;++j) if(requested[j]==slot->KernelAllocation) called=1;
+    UINT v[]={phase,(UINT)slot->Token,(UINT)(slot->Token>>32),slot->KernelAllocation,
+        (UINT)slot->CanonicalGpuVa,(UINT)(slot->CanonicalGpuVa>>32),
+        (UINT)slot->Bytes,(UINT)(slot->Bytes>>32),member,called,
+        (UINT)slot->Resident,(UINT)slot->SubmissionHolds,(UINT)fence,(UINT)(fence>>32),
+        (UINT)slot->LastUseFence,(UINT)(slot->LastUseFence>>32)};
+    AdmissionUmdDiagnostic("measure-watch-slot",hr,v,ARRAYSIZE(v));
+    ++matches;
+  }
+  UINT summary[]={phase,(UINT)watch,(UINT)(watch>>32),matches,count,pending,
+      (UINT)fence,(UINT)(fence>>32)};
+  AdmissionUmdDiagnostic("measure-watch-set",hr,summary,ARRAYSIZE(summary));
+}
 
 /* EXP981 receipt-only: process-wide ring of GPU VA lifecycle operations
  * (all devices of this process share one GPU VA space). A failed copy slot
@@ -235,8 +275,10 @@ static int reserve_va(void *context, uint64_t bytes, uint64_t minimum,
   request.MinimumAddress = minimum;
   request.MaximumAddress = maximum;
   request.Size = bytes;
+  unsigned wait_pfnReserveGpuVirtualAddressCb=AdmissionUmdWaitBegin(AgxWaitReserveGpuVa);
   HRESULT hr = device->KernelCallbacks->pfnReserveGpuVirtualAddressCb(
       device->RuntimeDevice.handle, &request);
+  AdmissionUmdWaitEnd(wait_pfnReserveGpuVirtualAddressCb);
   {
     UINT values[5] = {(UINT)(bytes >> 16), (UINT)(minimum >> 16),
                       (UINT)(maximum >> 32), request.hAdapter != 0u,
@@ -257,14 +299,32 @@ static int wait_paging_at(ADMISSION_UMD_DEVICE *device, uint64_t fence,
                           UINT site, uint64_t token);
 
 /* M2-f11 (EXP1271): drop the persistent residency reference (EXP978) of idle
- * GPU-local slots, least recently used first, until Want bytes are covered
- * (umd_residency_trim.h). Returns the bytes dropped and their slot count. */
-static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
-                                UINT *trimmed) {
+ * GPU-local (including private CPU staging) or unmapped SystemDirect slots,
+ * least recently used first, until Want bytes are covered
+ * (umd_residency_trim.h). Returns the bytes dropped and their slot count.
+ * rc107: Eager asks VidMm to page the slots out now (EvictOnlyIfNecessary=0,
+ * EXP1124) so the pool has room before a CPU-visible allocation is paged
+ * back in (umd_cpu_pool_rehome.h); budget trims stay lazy. */
+static ULONGLONG trim_residency_with(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
+                                     UINT *trimmed, bool eager) {
   UINT n=ADMISSION_UMD_SCREEN_BUFFER_SCAN(device), count=0u;
   ULONGLONG covered=0ull;
   HRESULT hr=E_FAIL;
   *trimmed=0u;
+  /* RC4 discriminator: D3D12 queue owners use this device storage. Keep
+   * every persistent reference, including internal BOs whose GPU reachability
+   * is not yet proven by the fault trace. Other APIs retain budget trimming.
+   * Set before launching the app; only the exact value 1 opts in. A budget
+   * refusal then propagates through residency_request without an eviction.
+   * This is not a replacement for application MakeResident/Evict DDIs. */
+  if(device->BorrowedContext) {
+    char disable[2]={};
+    if(GetEnvironmentVariableA("APPLE_AGX_D3D12_DISABLE_TRIM",disable,
+        sizeof(disable))==1u && disable[0]=='1') {
+      AdmissionUmdDiagnostic("measure-d3d12-trim-disabled",S_OK,NULL,0u);
+      return 0ull;
+    }
+  }
   if(!n || !device->KernelCallbacks->pfnEvictCb) return 0ull;
   auto *view=(ADMISSION_UMD_TRIM_SLOT *)HeapAlloc(GetProcessHeap(),
       HEAP_ZERO_MEMORY,(SIZE_T)n*sizeof(ADMISSION_UMD_TRIM_SLOT));
@@ -273,46 +333,68 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
       (SIZE_T)n*sizeof(D3DKMT_HANDLE));
   auto *tokens=(uint64_t *)HeapAlloc(GetProcessHeap(),0,(SIZE_T)n*sizeof(uint64_t));
   if(view && chosen && handles && tokens) {
-    AcquireSRWLockShared(&device->ScreenBufferLock);
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
     for(UINT i=0;i<n;++i) {
       const auto *slot=&device->ScreenBuffers[i];
       auto *v=&view[i];
       v->Active=slot->Active;v->Resident=slot->Resident;
       v->Transition=slot->Transition;v->CopyHeld=slot->CopyHeld;
       v->Mapped=slot->Mapped;v->Direct=slot->Direct;
+      /* T13 maps VirtualAlloc storage without locking the canonical BO.
+       * Its CPU pointer remains usable while VidMm evicts that BO. */
+      v->PrivateCpuMap=slot->HeapStaging && slot->PrivateStaging != NULL &&
+          !slot->StagingAllocation;
       v->SystemDirect=slot->SystemDirect;v->Borrowed=slot->Borrowed;
       v->KmtResidencyHeld=slot->KmtResidencyHeld;
       v->SubmissionHolds=slot->SubmissionHolds;v->SourceHolds=slot->SourceHolds;
       v->KernelAllocation=slot->KernelAllocation;
-      v->Bytes=slot->Bytes;v->LastUseFence=slot->LastUseFence;
+      v->Bytes=slot->Bytes;
+      v->LastUseFence=AdmissionUmdTrimRecency(slot->LastUseFence,slot->TrimRecency);
     }
     count=AdmissionUmdTrimChoose(view,n,want,chosen,&covered);
     for(UINT i=0;i<count;++i) {
       handles[i]=device->ScreenBuffers[chosen[i]].KernelAllocation;
       tokens[i]=device->ScreenBuffers[chosen[i]].Token;
+      /* Reserve under the selection lock: otherwise make_resident can take
+       * a submission hold and skip its callback while Resident is still
+       * TRUE, just before this trim drops that residency reference. */
+      device->ScreenBuffers[chosen[i]].Transition=TRUE;
+      if(AdmissionUmdWatchVa()) {
+        const auto *slot=&device->ScreenBuffers[chosen[i]];
+        UINT v[]={(UINT)slot->Token,(UINT)(slot->Token>>32),slot->KernelAllocation,
+            (UINT)slot->CanonicalGpuVa,(UINT)(slot->CanonicalGpuVa>>32),
+            (UINT)slot->Bytes,(UINT)(slot->Bytes>>32)};
+        AdmissionUmdDiagnostic("measure-watch-trim",S_OK,v,ARRAYSIZE(v));
+      }
     }
-    ReleaseSRWLockShared(&device->ScreenBufferLock);
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   }
   if(count) {
     D3DDDICB_EVICT evict={};
     /* EXP1124: drop the references only; VidMm pages out what it needs. */
-    evict.Flags.EvictOnlyIfNecessary=1u;
+    evict.Flags.EvictOnlyIfNecessary=eager ? 0u : 1u;
     evict.NumAllocations=count;evict.AllocationList=handles;
+    unsigned wait_pfnEvictCb=AdmissionUmdWaitBegin(AgxWaitEvict);
     hr=device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle,&evict);
-    if(SUCCEEDED(hr)) {
-      AcquireSRWLockExclusive(&device->ScreenBufferLock);
-      for(UINT i=0;i<count;++i) {
-        auto *slot=&device->ScreenBuffers[chosen[i]];
-        if(slot->Token==tokens[i] && slot->KernelAllocation==handles[i])
-          slot->Resident=FALSE;
+    AdmissionUmdWaitEnd(wait_pfnEvictCb);
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    for(UINT i=0;i<count;++i) {
+      auto *slot=&device->ScreenBuffers[chosen[i]];
+      if(slot->Token==tokens[i] && slot->KernelAllocation==handles[i]) {
+        if(SUCCEEDED(hr)) slot->Resident=FALSE;
+        slot->Transition=FALSE;
       }
-      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    }
+    watch_slots(device,5u,tokens,count,handles,count,0,hr);
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    if(SUCCEEDED(hr)) {
       for(UINT i=0;i<count;++i)
         va_record(device,8u,tokens[i],handles[i],0,view[chosen[i]].Bytes,hr);
     }
-    UINT values[7]={count,(UINT)covered,(UINT)(covered>>32),(UINT)want,
+    /* rc107 appends value 7: 1 for an eager (rehome) trim. */
+    UINT values[8]={count,(UINT)covered,(UINT)(covered>>32),(UINT)want,
         (UINT)(want>>32),(UINT)evict.NumBytesToTrim,
-        (UINT)(evict.NumBytesToTrim>>32)};
+        (UINT)(evict.NumBytesToTrim>>32),eager ? 1u : 0u};
     AdmissionUmdDiagnostic("measure-trim",hr,values,ARRAYSIZE(values));
   }
   if(view) HeapFree(GetProcessHeap(),0,view);
@@ -324,6 +406,11 @@ static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
   return covered;
 }
 
+static ULONGLONG trim_residency(ADMISSION_UMD_DEVICE *device, ULONGLONG want,
+                                UINT *trimmed) {
+  return trim_residency_with(device, want, trimmed, false);
+}
+
 /* M2-f11: pfnMakeResidentCb under the budget contract (Microsoft,
  * PFND3DDDI_MAKERESIDENTCB). E_OUTOFMEMORY changed no residency count; trim
  * NumBytesToTrim bytes of idle slots and retry, until the request succeeds or
@@ -333,20 +420,47 @@ static HRESULT residency_request(ADMISSION_UMD_DEVICE *device,
     UINT *priorities) {
   UINT rounds=0u, trimmed=0u;
   ULONGLONG trimmedBytes=0ull;
+  bool cantTrimFurther=false;
+  char cantTrimOption[2]={0};
+  const bool allowCantTrimFurther=
+      GetEnvironmentVariableA("APPLE_AGX_UMD_CANT_TRIM_FURTHER",
+          cantTrimOption,sizeof(cantTrimOption))!=1u || cantTrimOption[0]!='0';
   HRESULT hr;
   for(;;) {
     ZeroMemory(request,sizeof(*request));
     request->hPagingQueue=device->PagingQueue;
     request->NumAllocations=count;request->AllocationList=handles;
     request->PriorityList=priorities;
+    request->Flags.CantTrimFurther=cantTrimFurther;
+    unsigned wait_pfnMakeResidentCb_1=AdmissionUmdWaitBegin(AgxWaitMakeResident);
     hr=device->KernelCallbacks->pfnMakeResidentCb(
         device->RuntimeDevice.handle,request);
-    if(hr!=E_OUTOFMEMORY || rounds>=ADMISSION_UMD_TRIM_ROUNDS) break;
+    AdmissionUmdWaitEnd(wait_pfnMakeResidentCb_1);
+    if(cantTrimFurther || (!allowCantTrimFurther && hr==E_OUTOFMEMORY)) {
+      UINT values[3]={count,(UINT)cantTrimFurther,rounds};
+      AdmissionUmdDiagnostic("measure-make-resident-cant-trim",hr,values,
+                             ARRAYSIZE(values));
+    }
+    if(hr!=E_OUTOFMEMORY || cantTrimFurther ||
+       rounds>=ADMISSION_UMD_TRIM_ROUNDS) break;
     UINT slots=0u;
-    ULONGLONG freed=trim_residency(device,request->NumBytesToTrim,&slots);
+    /* Exhaust eligible idle references on the last bounded trim round;
+     * otherwise the round cap could prevent the final overbudget request. */
+    const bool lastRound=rounds+1u==ADMISSION_UMD_TRIM_ROUNDS;
+    ULONGLONG freed=trim_residency(device,
+        lastRound && allowCantTrimFurther ? ~0ull : request->NumBytesToTrim,&slots);
     ++rounds;
-    if(!slots) break;
+    if(!slots) {
+      /* The current process budget is not the maximum budget. WDK's
+       * CantTrimFurther lets VidMm arbitrate pressure across devices after
+       * our idle references are exhausted. Try once, preserve its paging
+       * fence, and propagate a maximum-budget refusal without MustSucceed. */
+      if(!allowCantTrimFurther) break;
+      cantTrimFurther=true;
+      continue;
+    }
     trimmed+=slots;trimmedBytes+=freed;
+    if(lastRound && allowCantTrimFurther) cantTrimFurther=true;
   }
   if(FAILED(hr) && hr!=E_PENDING) {
     UINT values[8]={count,rounds,trimmed,(UINT)trimmedBytes,
@@ -362,6 +476,26 @@ static HRESULT residency_request(ADMISSION_UMD_DEVICE *device,
   return hr;
 }
 
+/* RC85 receipt-only (EXP2000b/2006b/2008b/2015b: one 129 MiB BO bind took
+ * 25-31 s of GravityMark's first frame; measure-bo-create cannot say where):
+ * map_va emits measure-gpuva-map-time {MiB, residency us (resident_before_map:
+ * MakeResident, its trims and its paging-fence wait), MapGpuVirtualAddress
+ * us} when the two took at least 10 ms, and wait_paging, the bind's own
+ * paging-fence wait, measure-gpuva-paging-wait {us, site, fence}. The trims'
+ * receipts (measure-trim, measure-make-resident-trimmed) inside the
+ * residency part mark where MakeResident ended and its paging wait began. */
+static UINT qpc_us(LONGLONG ticks) {
+  LARGE_INTEGER frequency;
+  (void)QueryPerformanceFrequency(&frequency);
+  if (ticks <= 0 || frequency.QuadPart <= 0) return 0u;
+  const ULONGLONG us = (ULONGLONG)ticks * 1000000ull / (ULONGLONG)frequency.QuadPart;
+  return us > 0xffffffffull ? 0xffffffffu : (UINT)us;
+}
+static bool qpc_at_least_10ms(LONGLONG ticks) {
+  LARGE_INTEGER frequency;
+  (void)QueryPerformanceFrequency(&frequency);
+  return frequency.QuadPart > 0 && ticks >= frequency.QuadPart / 100;
+}
 /* EXP1004: VidMm writes invalid PTEs when it maps a non-resident allocation
  * and, for fresh BOs, did not re-send valid ones after the later persistent
  * MakeResident (EXP1001 leaf ring; EXP1003 touch did not repair them). Take
@@ -382,30 +516,53 @@ static void resident_before_map(ADMISSION_UMD_DEVICE *device, uint64_t token,
   if(FAILED(hr) && hr!=E_PENDING) return;
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   slot=find_slot(device,token);
-  if(slot && slot->KernelAllocation==handle) slot->Resident=TRUE;
+  if(slot && slot->KernelAllocation==handle) {
+    slot->Resident=TRUE;slot->TrimRecency=device->NextRenderFence+1u;
+  }
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
-  if(hr==E_PENDING && request.PagingFenceValue)
-    (void)wait_paging_at(device,request.PagingFenceValue,2u,token);
+  /* Resident owns the accepted reference, not proof that paging finished.
+   * Keep it for teardown, but never let a failed/missing fence turn into the
+   * Resident fast path on a later map or submission. The callback contract
+   * also requires waiting a nonzero fence returned with S_OK. */
+  if((hr==E_PENDING && !request.PagingFenceValue) ||
+     (request.PagingFenceValue &&
+      !wait_paging_at(device,request.PagingFenceValue,2u,token))) {
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    device->DrawTerminal=TRUE;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  }
 }
 
 static int map_va(void *context, uint64_t token, uint64_t va,
                   uint64_t pages, unsigned protection, uint64_t *fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
   D3DDDI_MAPGPUVIRTUALADDRESS request = {};
-  if (!device || !fence || !device->PagingQueue ||
+  if (!device || !fence || device->DrawTerminal || !device->PagingQueue ||
       !device->KernelCallbacks ||
       !device->KernelCallbacks->pfnMapGpuVirtualAddressCb) return 0;
   request.hAllocation = allocation_handle(device, token);
   if (!request.hAllocation) return 0;
+  LARGE_INTEGER bind_start = {}, map_start = {}, map_end = {};
+  (void)QueryPerformanceCounter(&bind_start);
   resident_before_map(device, token, request.hAllocation);
+  if (device->DrawTerminal) return 3; /* Accepted residency is uncertain. */
   request.hPagingQueue = device->PagingQueue;
   request.BaseAddress = va;
   request.OffsetInPages = 0;
   request.SizeInPages = pages;
   request.Protection.Write = (protection & AGX_GPUVA_MAP_WRITE) != 0;
   request.Protection.Execute = (protection & AGX_GPUVA_MAP_EXECUTE) != 0;
+  unsigned wait_pfnMapGpuVirtualAddressCb=AdmissionUmdWaitBegin(AgxWaitMapGpuVa);
+  (void)QueryPerformanceCounter(&map_start);
   HRESULT hr = device->KernelCallbacks->pfnMapGpuVirtualAddressCb(
       device->RuntimeDevice.handle, &request);
+  (void)QueryPerformanceCounter(&map_end);
+  AdmissionUmdWaitEnd(wait_pfnMapGpuVirtualAddressCb);
+  if (qpc_at_least_10ms(map_end.QuadPart - bind_start.QuadPart)) {
+    UINT values[3] = {(UINT)(pages >> 8), qpc_us(map_start.QuadPart - bind_start.QuadPart),
+                      qpc_us(map_end.QuadPart - map_start.QuadPart)};
+    AdmissionUmdDiagnostic("measure-gpuva-map-time", hr, values, ARRAYSIZE(values));
+  }
   {
     UINT values[5] = {request.hAllocation != 0u,
                       request.hPagingQueue != 0u, (UINT)pages,
@@ -429,6 +586,82 @@ static int map_va(void *context, uint64_t token, uint64_t va,
   return hr == E_PENDING ? 2 : 1;
 }
 
+/* C53 B4: grows the alias table (doubling) to at least need entries; under
+ * the exclusive ScreenBufferLock. 0 if it cannot grow. */
+static int alias_reserve(ADMISSION_UMD_DEVICE *device, unsigned need) {
+  unsigned capacity = device->VaAliasCapacity ? device->VaAliasCapacity
+                                              : ADMISSION_UMD_VA_ALIAS_INITIAL;
+  void *grown;
+  if (!need) return 0;
+  if (need <= device->VaAliasCapacity) return 1;
+  while (capacity < need) {
+    if (capacity > 0x7fffffffu ||
+        capacity > (((SIZE_T)-1) / sizeof(*device->VaAliases)) / 2u) return 0;
+    capacity *= 2u;
+  }
+  grown = device->VaAliases ?
+      HeapReAlloc(GetProcessHeap(), 0, device->VaAliases,
+                  (SIZE_T)capacity * sizeof(*device->VaAliases)) :
+      HeapAlloc(GetProcessHeap(), 0, (SIZE_T)capacity * sizeof(*device->VaAliases));
+  if (!grown) return 0;
+  device->VaAliases = (ADMISSION_UMD_VA_ALIAS *)grown;
+  device->VaAliasCapacity = capacity;
+  return 1;
+}
+
+/* C53 B0: a tile alias of a slot allocation at an allocation offset in a
+ * reserved range. The slot's canonical VA is not touched; the alias is
+ * recorded (room checked before the map) so that free_va drops it and
+ * replace_canonical maps it again onto the fresh allocation. */
+static int map_va_at(void *context, uint64_t token, uint64_t va,
+                     uint64_t offset_pages, uint64_t pages, unsigned protection,
+                     uint64_t *fence) {
+  ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
+  D3DDDI_MAPGPUVIRTUALADDRESS request = {};
+  if (!device || !fence || !pages || device->DrawTerminal || !device->PagingQueue ||
+      !device->KernelCallbacks ||
+      !device->KernelCallbacks->pfnMapGpuVirtualAddressCb) return 0;
+  request.hAllocation = allocation_handle(device, token);
+  if (!request.hAllocation) return 0;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  const int room = alias_reserve(device, AdmissionUmdVaAliasNeed(
+      device->VaAliases, device->VaAliasCount, va, pages * ADMISSION_UMD_VA_ALIAS_PAGE));
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  if (!room) return 0;
+  resident_before_map(device, token, request.hAllocation);
+  if (device->DrawTerminal) return 3; /* Accepted residency is uncertain. */
+  request.hPagingQueue = device->PagingQueue;
+  request.BaseAddress = va;
+  request.OffsetInPages = offset_pages;
+  request.SizeInPages = pages;
+  request.Protection.Write = (protection & AGX_GPUVA_MAP_WRITE) != 0;
+  request.Protection.Execute = (protection & AGX_GPUVA_MAP_EXECUTE) != 0;
+  unsigned wait_pfnMapGpuVirtualAddressCb=AdmissionUmdWaitBegin(AgxWaitMapGpuVa);
+  HRESULT hr = device->KernelCallbacks->pfnMapGpuVirtualAddressCb(
+      device->RuntimeDevice.handle, &request);
+  AdmissionUmdWaitEnd(wait_pfnMapGpuVirtualAddressCb);
+  {
+    UINT values[5] = {(UINT)offset_pages, (UINT)pages,
+                      request.VirtualAddress == va,
+                      request.PagingFenceValue != 0u, device->VaAliasCount};
+    AdmissionUmdDiagnostic("g4-native-map-va-at-cb", hr, values,
+                           ARRAYSIZE(values));
+  }
+  va_record(device,7u,token,request.hAllocation,va,pages<<12,hr);
+  device->PagingWaitToken = token;
+  if (FAILED(hr) && hr != E_PENDING) return 0;
+  if (request.VirtualAddress != va) return 3;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  ADMISSION_UMD_VA_ALIAS alias = {token, va, offset_pages, pages, protection};
+  const int recorded = AdmissionUmdVaAliasAdd(device->VaAliases, &device->VaAliasCount,
+                                              device->VaAliasCapacity, &alias);
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  /* checked above under the same single-threaded GPUVA serialization */
+  if (!recorded) return 3;
+  *fence = request.PagingFenceValue;
+  return hr == E_PENDING ? 2 : 1;
+}
+
 static int free_va(void *context, uint64_t va, uint64_t bytes) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
   D3DDDICB_FREEGPUVIRTUALADDRESS request = {};
@@ -436,9 +669,19 @@ static int free_va(void *context, uint64_t va, uint64_t bytes) {
       !device->KernelCallbacks->pfnFreeGpuVirtualAddressCb) return 0;
   request.BaseAddress = va;
   request.Size = bytes;
+  unsigned wait_pfnFreeGpuVirtualAddressCb=AdmissionUmdWaitBegin(AgxWaitFreeGpuVa);
   HRESULT hr = device->KernelCallbacks->pfnFreeGpuVirtualAddressCb(
       device->RuntimeDevice.handle, &request);
+  AdmissionUmdWaitEnd(wait_pfnFreeGpuVirtualAddressCb);
   va_record(device,3u,0,0,va,bytes,hr);
+  if (SUCCEEDED(hr) && device->VaAliasCount) {
+    /* C53 B0: a freed range keeps no alias (a cut never needs more room
+     * than the whole-range removal frees: the range starts at a mapping) */
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    (void)AdmissionUmdVaAliasCut(device->VaAliases, &device->VaAliasCount,
+                                 device->VaAliasCapacity, va, bytes);
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  }
   return SUCCEEDED(hr);
 }
 
@@ -448,7 +691,7 @@ static D3DKMT_HANDLE *translate_handles(ADMISSION_UMD_DEVICE *device,
     return NULL;
   D3DKMT_HANDLE *handles = (D3DKMT_HANDLE *)HeapAlloc(
       GetProcessHeap(), 0, (SIZE_T)count * sizeof(*handles));
-  if (!handles) return NULL;
+  if (!handles) { device->GpuvaFailure = E_OUTOFMEMORY; return NULL; }
   for (unsigned i = 0; i < count; ++i) {
     handles[i] = allocation_handle(device, tokens[i]);
     if (!handles[i]) {
@@ -470,6 +713,18 @@ static int evict(void *context, const uint64_t *tokens, unsigned count) {
   return 1;
 }
 
+/* Called after the winsys waited the MakeResident fence, before Submit.
+ * SubmissionHolds excludes trim until retirement; inspect under its lock. */
+int AdmissionUmdGpuvaValidateRefResident(void *context, uint64_t token) {
+  ADMISSION_UMD_DEVICE *device=(ADMISSION_UMD_DEVICE *)context;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  auto *slot=find_slot(device,token);
+  int valid=slot && slot->Resident && slot->CopyHeld && slot->SubmissionHolds &&
+      !slot->Transition && slot->CanonicalGpuVa && !device->DrawTerminal;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  return valid;
+}
+
 static int make_resident(void *context, const uint64_t *tokens,
                          unsigned count, uint64_t *fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
@@ -480,11 +735,13 @@ static int make_resident(void *context, const uint64_t *tokens,
   if (!device || !fence || !device->PagingQueue ||
       !device->KernelCallbacks ||
       !device->KernelCallbacks->pfnMakeResidentCb) return 0;
+  if (!device->DrawTerminal) device->GpuvaFailure = S_OK;
   D3DKMT_HANDLE *handles = translate_handles(device, tokens, count);
   if (!handles) return 0;
   UINT *priorities = (UINT *)HeapAlloc(GetProcessHeap(), 0,
                                       (SIZE_T)count * sizeof(*priorities));
   if (!priorities) {
+    device->GpuvaFailure = E_OUTOFMEMORY;
     HeapFree(GetProcessHeap(), 0, handles);
     return 0;
   }
@@ -497,11 +754,11 @@ static int make_resident(void *context, const uint64_t *tokens,
   for(unsigned i=0;valid && i<count;++i) {
     auto *slot=find_slot(device,tokens[i]);
     /* EXP1093: only the other submissions still in flight may hold it
-     * (EXP1203: at most ADMISSION_UMD_IN_FLIGHT_SETS - 1; the winsys
+     * (Q19: at most the selected window minus one; the winsys
      * retires the oldest one before a new submission). */
     valid=slot && !slot->Transition && !slot->CopyHeld &&
         !slot->SourceHolds &&
-        slot->SubmissionHolds<ADMISSION_UMD_IN_FLIGHT_SETS &&
+        slot->SubmissionHolds<AgxSubmissionWindowLimit(device->SubmissionWindow) &&
         (slot->StagingAllocation || slot->PrivateStaging || slot->Direct ||
          slot->SystemDirect) &&
         slot->CanonicalGpuVa &&
@@ -523,6 +780,7 @@ static int make_resident(void *context, const uint64_t *tokens,
     auto *slot=find_slot(device,tokens[i]);
     if(slot && !slot->Resident) handles[pending++]=handles[i];
   }
+  watch_slots(device,1u,tokens,count,handles,pending,0,S_OK);
   ReleaseSRWLockShared(&device->ScreenBufferLock);
   if(!pending) {
     HeapFree(GetProcessHeap(), 0, priorities);
@@ -551,12 +809,25 @@ static int make_resident(void *context, const uint64_t *tokens,
       auto *slot=&device->ScreenBuffers[j];
       if(slot->Active && !slot->Resident &&
          slot->KernelAllocation==handles[i])
-        {slot->Resident=TRUE;break;}
+        {slot->Resident=TRUE;slot->TrimRecency=device->NextRenderFence+1u;break;}
     }
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  watch_slots(device,2u,tokens,count,handles,pending,request.PagingFenceValue,hr);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
   HeapFree(GetProcessHeap(), 0, priorities);
   HeapFree(GetProcessHeap(), 0, handles);
   if ((FAILED(hr) && hr != E_PENDING) || request.NumAllocations != pending) {
+    device->GpuvaFailure = FAILED(hr) && hr != E_PENDING ? hr : E_FAIL;
+    if(accepted) {
+      /* Some references were accepted but their paging completion is not
+       * established. Tell the winsys to retain the whole set; otherwise a
+       * retry can see Resident and skip the uncompleted paging fence. */
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      device->DrawTerminal=TRUE;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      return 3;
+    }
     release_copies(device,tokens,count);return 0;
   }
   if(hr==E_PENDING && !request.PagingFenceValue) {
@@ -566,17 +837,63 @@ static int make_resident(void *context, const uint64_t *tokens,
   return hr == E_PENDING ? 2 : 1;
 }
 
+/* RC68: record that the render fence reached `fence` (monotonic max; a
+ * lost race only keeps a lower value, which weakens no proof). */
+static void render_fence_reached(ADMISSION_UMD_DEVICE *device, uint64_t fence) {
+  LONG64 seen = InterlockedCompareExchange64(&device->RenderCompletedFence, 0, 0);
+  while ((uint64_t)seen < fence) {
+    const LONG64 prior = InterlockedCompareExchange64(&device->RenderCompletedFence,
+                                                      (LONG64)fence, seen);
+    if (prior == seen) break;
+    seen = prior;
+  }
+}
+
 static int wait_object(ADMISSION_UMD_DEVICE *device,
                        D3DKMT_HANDLE object, uint64_t fence) {
   D3DDDICB_WAITFORSYNCHRONIZATIONOBJECTFROMCPU request = {};
   if (!device || !object || !fence || !device->KernelCallbacks ||
       !device->KernelCallbacks->pfnWaitForSynchronizationObjectFromCpuCb)
     return 0;
+#if defined(_WIN64)
+  /* Q18: CreatePagingQueue supplies a read-only monitored-fence mapping.
+   * Observing completion satisfies the same dependency as the callback;
+   * Resident alone does not. Never modify this page or the render cache.
+   * Keep the callback on x86 (a plain 64-bit load can tear), on removal,
+   * and whenever paging is still pending. */
+  if (device->PagingWaitCompleted && object == device->PagingSyncObject &&
+      device->PagingFenceAddress && !device->DrawTerminal &&
+      (((ULONG_PTR)device->PagingFenceAddress & 7u) == 0u)) {
+    uint64_t completed = (uint64_t)ReadAcquire64(
+        (const volatile LONG64 *)device->PagingFenceAddress);
+    if (completed != UINT64_MAX && completed >= fence)
+      return 1;
+  }
+  /* The monitored fence has a read-only CPU mapping. Acquire its completed
+   * value without entering Windows when the condition is already satisfied.
+   * Keep runtime waits on x86, where a plain 64-bit load can tear. */
+  if (object == device->RenderSyncObject && device->RenderFenceAddress &&
+      !device->DrawTerminal &&
+      (((ULONG_PTR)device->RenderFenceAddress & 7u) == 0u)) {
+    uint64_t completed = (uint64_t)ReadAcquire64(
+        (const volatile LONG64 *)device->RenderFenceAddress);
+    if (completed != UINT64_MAX && completed >= fence) {
+      render_fence_reached(device, fence);
+      return 1;
+    }
+  }
+#endif
   request.ObjectCount = 1;
   request.ObjectHandleArray = &object;
   request.FenceValueArray = &fence;
-  return SUCCEEDED(device->KernelCallbacks->pfnWaitForSynchronizationObjectFromCpuCb(
-      device->RuntimeDevice.handle, &request));
+  unsigned wait_token=AdmissionUmdWaitBegin(device && object==device->PagingSyncObject ?
+      AgxWaitPagingFence : AgxWaitRenderFence);
+  HRESULT status=device->KernelCallbacks->pfnWaitForSynchronizationObjectFromCpuCb(
+      device->RuntimeDevice.handle, &request);
+  AdmissionUmdWaitEnd(wait_token);
+  if (SUCCEEDED(status) && object == device->RenderSyncObject)
+    render_fence_reached(device, fence);
+  return SUCCEEDED(status);
 }
 
 static int wait_paging_at(ADMISSION_UMD_DEVICE *device, uint64_t fence,
@@ -611,7 +928,15 @@ static int wait_paging(void *context, uint64_t fence) {
   /* Called by the winsys after map_va (bind) or make_resident (submit). */
   uint64_t token = device ? device->PagingWaitToken : 0;
   if (device) device->PagingWaitToken = 0;
-  return wait_paging_at(device, fence, token ? 1u : 5u, token);
+  LARGE_INTEGER start = {}, end = {};
+  (void)QueryPerformanceCounter(&start);
+  const int ok = wait_paging_at(device, fence, token ? 1u : 5u, token);
+  (void)QueryPerformanceCounter(&end);
+  if (qpc_at_least_10ms(end.QuadPart - start.QuadPart)) { /* RC85, see qpc_us */
+    UINT values[3] = {qpc_us(end.QuadPart - start.QuadPart), token ? 1u : 5u, (UINT)fence};
+    AdmissionUmdDiagnostic("measure-gpuva-paging-wait", ok ? S_OK : E_FAIL, values, ARRAYSIZE(values));
+  }
+  return ok;
 }
 
 /* EXP1016 measurement only: DWM CPU read cost of staging inspection versus
@@ -645,6 +970,48 @@ static LONGLONG exp1016_now(void) {
 #define EXP1016_NOTE(kind,bytes,name) do {} while(0)
 #endif
 
+/* RC64 (EXP1985): which slots still pay copy escapes, per Execute. The
+ * wait profile gives only the site total (draw.copy_escape 29-37 ms). */
+static UINT copy_escape_size_class(ULONGLONG bytes) {
+  return bytes <= 65536ULL ? 0u : bytes <= ADMISSION_UMD_NATIVE_SMALL_SLICE ? 1u :
+         bytes <= ADMISSION_UMD_NATIVE_SLICE_LIMIT ? 2u : 3u;
+}
+static void copy_escape_account(ADMISSION_UMD_DEVICE *device, UINT operation,
+                                ULONGLONG ticks) {
+  static volatile LONG64 frequency;
+  LONG64 hz = frequency;
+  if (!hz) {
+    LARGE_INTEGER value = {};
+    (void)QueryPerformanceFrequency(&value);
+    hz = value.QuadPart > 0 ? value.QuadPart : 1;
+    frequency = hz;
+  }
+  const UINT index = device->CopyEscapeClass && device->CopyEscapeClass <= 4u &&
+      operation <= APPLE_AGX_G3_COPY_DOWNLOAD ?
+      operation * 4u + device->CopyEscapeClass - 1u : 12u;
+  if (device->CopyEscapeCount[index] != ~0u) ++device->CopyEscapeCount[index];
+  device->CopyEscapeMicros[index] += ticks / (ULONGLONG)hz * 1000000ULL +
+      ticks % (ULONGLONG)hz * 1000000ULL / (ULONGLONG)hz;
+}
+
+/* RC68 receipt: which escapes carried the no-reference proof, ran beside
+ * this device's own job, or waited for a job (and how long those took). */
+static void copy_escape_gate_account(ADMISSION_UMD_DEVICE *device, UINT operation,
+    UINT proof, UINT outcome, ULONGLONG ticks) {
+  if (operation > APPLE_AGX_G3_COPY_DOWNLOAD) return;
+  UINT *gate = device->CopyEscapeGate[operation];
+  if (proof && gate[0] != ~0u) ++gate[0];
+  if ((outcome & APPLE_AGX_G3_COPY_RESULT_OVERLAPPED) && gate[1] != ~0u) ++gate[1];
+  if (outcome & APPLE_AGX_G3_COPY_RESULT_WAITED) {
+    if (gate[2] != ~0u) ++gate[2];
+    LARGE_INTEGER value = {};
+    (void)QueryPerformanceFrequency(&value);
+    const ULONGLONG hz = value.QuadPart > 0 ? (ULONGLONG)value.QuadPart : 1ULL;
+    device->CopyEscapeGateWaitMicros[operation] += ticks / hz * 1000000ULL +
+        ticks % hz * 1000000ULL / hz;
+  }
+}
+
 static int copy_escape(ADMISSION_UMD_DEVICE *device,
                         APPLE_AGX_G3_COPY_REQUEST *payload) {
   D3DDDICB_ESCAPE request={};
@@ -658,9 +1025,25 @@ static int copy_escape(ADMISSION_UMD_DEVICE *device,
    * the whole GPU before each 64-KiB CPU transfer. */
   request.Flags.Value=0;
   request.pPrivateDriverData=payload;request.PrivateDriverDataSize=sizeof(*payload);
+  /* RC68: Reserved carries the no-reference proof in and the job-gate
+   * outcome out (success only); restore the proof for the next escape of
+   * this transfer, which reuses the request. */
+  const UINT proof = payload->Reserved & APPLE_AGX_G3_COPY_FLAG_UNREFERENCED;
+  payload->Reserved = proof;
   EXP1016_START(escape_start);
+  LARGE_INTEGER class_start = {}, class_end = {};
+  (void)QueryPerformanceCounter(&class_start);
+  unsigned wait_pfnEscapeCb_2=AdmissionUmdWaitBegin(AgxWaitCopyEscape);
   HRESULT status = device->KernelCallbacks->pfnEscapeCb(
       device->Adapter->RuntimeAdapter.handle,&request);
+  AdmissionUmdWaitEnd(wait_pfnEscapeCb_2);
+  (void)QueryPerformanceCounter(&class_end);
+  copy_escape_account(device, payload->Operation,
+                      (ULONGLONG)(class_end.QuadPart - class_start.QuadPart));
+  copy_escape_gate_account(device, payload->Operation, proof,
+                           SUCCEEDED(status) ? payload->Reserved : 0u,
+                           (ULONGLONG)(class_end.QuadPart - class_start.QuadPart));
+  payload->Reserved = proof;
   EXP1016_NOTE(1u,payload->TransferBytes,escape_start);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   if (FAILED(status) && frame_process_is_dwm()) {
@@ -676,6 +1059,7 @@ static int copy_escape(ADMISSION_UMD_DEVICE *device,
     }
   }
 #endif
+  device->GpuvaFailure = FAILED(status) ? status : S_OK;
   return SUCCEEDED(status);
 }
 
@@ -714,8 +1098,11 @@ static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
   if(temporary) {
     D3DDDICB_LOCK lock={};lock.hAllocation=slot->StagingAllocation;
     lock.Flags.LockEntire=1;lock.Flags.ReadOnly=1;
+    unsigned wait_pfnLockCb_1=AdmissionUmdWaitBegin(AgxWaitLockHash);
     HRESULT hr=device->KernelCallbacks->pfnLockCb(device->RuntimeDevice.handle,&lock);
+    AdmissionUmdWaitEnd(wait_pfnLockCb_1);
     locked=SUCCEEDED(hr);
+    if (locked) AdmissionUmdScreenCpuAccessEvent(device, slot->Token, AdmissionCpuLock);
     if(!locked) return 0;
     if(lock.hAllocation!=slot->StagingAllocation) {device->DrawTerminal=TRUE;address=NULL;}
     else address=(BYTE *)lock.pData;
@@ -735,6 +1122,7 @@ static int staging_unchanged(ADMISSION_UMD_DEVICE *device,
       ReleaseSRWLockExclusive(&device->ScreenBufferLock);
       device->DrawTerminal=TRUE;return -1;
     }
+    AdmissionUmdScreenCpuAccessEvent(device, slot->Token, AdmissionCpuUnlock);
   }
   return device->DrawTerminal ? -1 : unchanged;
 }
@@ -750,21 +1138,34 @@ static int signal_render(ADMISSION_UMD_DEVICE *device,uint64_t next);
 static int touch_device(ADMISSION_UMD_DEVICE *device,uint64_t va) {
   APPLE_AGX_G4_TOUCH touch={APPLE_AGX_G4_TOUCH_MAGIC,(unsigned)sizeof(touch)};
   D3DDDICB_SUBMITCOMMAND request={};
-  if(!va || !device->KernelContext || !device->RenderSyncObject ||
+  if(!device || device->DrawTerminal || !va ||
+     !device->KernelContext || !device->RenderSyncObject ||
+     !device->KernelCallbacks ||
      !device->KernelCallbacks->pfnSubmitCommandCb ||
+     !device->KernelCallbacks->pfnSignalSynchronizationObjectFromGpu2Cb ||
      device->NextRenderFence>UINT64_MAX-2) return 0;
   request.Commands=va;request.CommandLength=sizeof(uint32_t);
   request.BroadcastContextCount=1;request.BroadcastContext[0]=device->KernelContext;
   request.pPrivateDriverData=&touch;request.PrivateDriverDataSize=sizeof(touch);
   request.RenderCBSequence=(UINT)InterlockedIncrement(&device->RenderCbSequence);
+  unsigned wait_pfnSubmitCommandCb_1=AdmissionUmdWaitBegin(AgxWaitSubmit);
   HRESULT hr=device->KernelCallbacks->pfnSubmitCommandCb(
       device->RuntimeDevice.handle,&request);
+  AdmissionUmdWaitEnd(wait_pfnSubmitCommandCb_1);
   uint64_t next=device->NextRenderFence+1;
   int ok=SUCCEEDED(hr) && signal_render(device,next) &&
       wait_object(device,device->RenderSyncObject,next);
   if(ok) device->NextRenderFence=next;
+  else {
+    device->GpuvaFailure=FAILED(hr) ? hr : E_FAIL;
+    /* The CPU-only packet still owns scheduler work after acceptance. A
+     * failed signal/wait cannot authorize releasing its held allocations or
+     * reusing the fence sequence. Submit propagates this as retained work. */
+    if(SUCCEEDED(hr)) device->DrawTerminal=TRUE;
+  }
   UINT values[2]={(UINT)va,(UINT)ok};
-  AdmissionUmdDiagnostic("measure-touch",hr,values,ARRAYSIZE(values));
+  AdmissionUmdDiagnostic("measure-touch",ok ? hr : device->GpuvaFailure,
+      values,ARRAYSIZE(values));
   return ok;
 }
 
@@ -785,8 +1186,10 @@ static int map_canonical_as(ADMISSION_UMD_DEVICE *device,
   request.SizeInPages=((slot->Bytes+0xffffULL)&~0xffffULL)>>12;
   request.Protection.Write=(slot->Flags & AppleAgxWin32BufferGpuWrite)!=0;
   request.Protection.Execute=slot->ClassId==AgxWin32BufferClassShader;
+  unsigned wait_pfnMapGpuVirtualAddressCb=AdmissionUmdWaitBegin(AgxWaitMapGpuVa);
   HRESULT hr=device->KernelCallbacks->pfnMapGpuVirtualAddressCb(
       device->RuntimeDevice.handle,&request);
+  AdmissionUmdWaitEnd(wait_pfnMapGpuVirtualAddressCb);
   va_record(device,2u,slot->Token,request.hAllocation,request.BaseAddress,
             request.SizeInPages<<12,hr);
   int ok=(SUCCEEDED(hr) || hr==E_PENDING) &&
@@ -794,7 +1197,50 @@ static int map_canonical_as(ADMISSION_UMD_DEVICE *device,
       (hr!=E_PENDING || (request.PagingFenceValue &&
                          wait_paging_at(device,request.PagingFenceValue,3u,slot->Token)));
   UINT values[3]={(UINT)slot->CanonicalGpuVa,(UINT)(slot->CanonicalGpuVa>>32),(UINT)ok};
+  if (!ok) device->GpuvaFailure = FAILED(hr) && hr != E_PENDING ? hr : E_FAIL;
   AdmissionUmdDiagnostic("measure-remap",hr,values,ARRAYSIZE(values));
+  return ok;
+}
+
+/* C53 B0: the slot's tile aliases onto a fresh allocation at their offsets
+ * (replace_canonical); 0 if any remap failed. */
+static int map_aliases_as(ADMISSION_UMD_DEVICE *device,
+                          const ADMISSION_UMD_SCREEN_BUFFER *slot,
+                          D3DKMT_HANDLE allocation) {
+  ADMISSION_UMD_VA_ALIAS aliases[16];
+  UINT count=0, index, moved=0;
+  int ok=1;
+  for(;;) {
+    /* a snapshot in chunks: the table is only changed by this thread */
+    AcquireSRWLockShared(&device->ScreenBufferLock);
+    count=0;
+    for(index=moved;index<device->VaAliasCount && count<ARRAYSIZE(aliases);++index)
+      if(device->VaAliases[index].Token==slot->Token) aliases[count++]=device->VaAliases[index];
+    const UINT scanned=index;
+    ReleaseSRWLockShared(&device->ScreenBufferLock);
+    for(index=0;index<count;++index) {
+      D3DDDI_MAPGPUVIRTUALADDRESS request={};
+      request.hPagingQueue=device->PagingQueue;
+      request.BaseAddress=aliases[index].Va;
+      request.hAllocation=allocation;
+      request.OffsetInPages=aliases[index].OffsetPages;
+      request.SizeInPages=aliases[index].Pages;
+      request.Protection.Write=(aliases[index].Protection & AGX_GPUVA_MAP_WRITE)!=0;
+      request.Protection.Execute=(aliases[index].Protection & AGX_GPUVA_MAP_EXECUTE)!=0;
+      unsigned wait_pfnMapGpuVirtualAddressCb=AdmissionUmdWaitBegin(AgxWaitMapGpuVa);
+      HRESULT hr=device->KernelCallbacks->pfnMapGpuVirtualAddressCb(
+          device->RuntimeDevice.handle,&request);
+      AdmissionUmdWaitEnd(wait_pfnMapGpuVirtualAddressCb);
+      va_record(device,7u,slot->Token,allocation,request.BaseAddress,request.SizeInPages<<12,hr);
+      ok&=(SUCCEEDED(hr) || hr==E_PENDING) && request.VirtualAddress==aliases[index].Va &&
+          (hr!=E_PENDING || (request.PagingFenceValue &&
+                             wait_paging_at(device,request.PagingFenceValue,3u,slot->Token)));
+    }
+    if(scanned>=device->VaAliasCount) break;
+    moved=scanned;
+  }
+  UINT values[2]={(UINT)ok,device->VaAliasCount};
+  AdmissionUmdDiagnostic("measure-remap-aliases",ok?S_OK:E_FAIL,values,ARRAYSIZE(values));
   return ok;
 }
 
@@ -808,6 +1254,7 @@ static int replace_canonical(ADMISSION_UMD_DEVICE *device,
   D3DKMT_HANDLE fresh=0, old=slot->KernelAllocation;
   if(slot->Direct || slot->SystemDirect || slot->Borrowed || !old || !slot->CanonicalGpuVa ||
      !device->KernelCallbacks->pfnMakeResidentCb) return 0;
+  device->GpuvaFailure = S_OK;
   HRESULT hr=AdmissionUmdScreenNewCanonical(device,slot->ClassId,slot->Flags,
                                             slot->Bytes,&fresh);
   int ok=SUCCEEDED(hr) && fresh;
@@ -821,18 +1268,24 @@ static int replace_canonical(ADMISSION_UMD_DEVICE *device,
                            wait_paging_at(device,request.PagingFenceValue,4u,slot->Token)));
   }
   if(ok) ok=map_canonical_as(device,slot,fresh);
+  int aliases_moved=1;
+  if(ok) aliases_moved=map_aliases_as(device,slot,fresh);
   if(ok) {
     AcquireSRWLockExclusive(&device->ScreenBufferLock);
     slot->KernelAllocation=fresh;slot->Resident=TRUE;
+    slot->TrimRecency=device->NextRenderFence+1u;
     AdmissionUmdStagingInvalidate(&slot->Sync);
     AdmissionUmdStagingChunksInvalidate(&slot->Chunks);
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
-    HRESULT freed=AdmissionUmdScreenFreeAllocation(device,old);
+    /* C53 B0: an alias still on the old allocation keeps it alive */
+    HRESULT freed=aliases_moved ? AdmissionUmdScreenFreeAllocation(device,old) : S_FALSE;
     AdmissionUmdVaRecordDeallocate(device,slot->Token,old,slot->CanonicalGpuVa,freed);
   } else if(fresh) {
     (void)AdmissionUmdScreenFreeAllocation(device,fresh);
   }
   UINT values[3]={(UINT)old,(UINT)fresh,(UINT)ok};
+  if (!ok && !FAILED(device->GpuvaFailure))
+    device->GpuvaFailure = FAILED(hr) && hr != E_PENDING ? hr : E_FAIL;
   AdmissionUmdDiagnostic("measure-replace-canonical",hr,values,ARRAYSIZE(values));
   return ok;
 }
@@ -842,6 +1295,11 @@ static int query_canonical(ADMISSION_UMD_DEVICE *device,
                            APPLE_AGX_G3_COPY_REQUEST *payload) {
   int ok=copy_escape(device,payload) && payload->ProcessGeneration &&
       payload->MappingGeneration;
+  const HRESULT cause = device->GpuvaFailure;
+  if (!ok && (device->DrawTerminal || cause == D3DDDIERR_DEVICEREMOVED ||
+      cause == DXGI_ERROR_DEVICE_REMOVED || cause == DXGI_ERROR_DEVICE_HUNG ||
+      cause == DXGI_ERROR_DEVICE_RESET || cause == DXGI_ERROR_DRIVER_INTERNAL_ERROR))
+    return 0;
   if(!ok && replace_canonical(device,slot)) {
     payload->Allocation=slot->KernelAllocation;
     payload->Operation=APPLE_AGX_G3_COPY_QUERY;payload->Offset=0;
@@ -853,9 +1311,375 @@ static int query_canonical(ADMISSION_UMD_DEVICE *device,
   return ok;
 }
 
+/* T13: GetWriteWatch does not specify address ordering. Compare integer
+ * addresses, not pointers to unrelated C objects. */
+static int heap_staging_page_compare(const void *a, const void *b) {
+  const ULONG_PTR x = (ULONG_PTR)*(PVOID const *)a;
+  const ULONG_PTR y = (ULONG_PTR)*(PVOID const *)b;
+  return x < y ? -1 : x != y;
+}
+
+/* Query/residency/generation and the submission holds are owned by the caller.
+ * GetWriteWatch RESET snapshots writes atomically BEFORE copying. Stores to
+ * other data during the copy stay watched for the next submission. A failed
+ * partial upload invalidates Sync so a retry restores the entire allocation.
+ * No hash or scan of clean UPLOAD heaps is needed. */
+static int heap_staging_transfer(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_SCREEN_BUFFER *slot, APPLE_AGX_G3_COPY_REQUEST *payload,
+    bool download, UINT *transfer_count, ULONGLONG *transfer_bytes) {
+  BYTE *cpu = slot->PrivateStaging;
+  const SIZE_T bytes = (SIZE_T)slot->Bytes;
+  const bool full = !slot->Sync.Valid || !slot->WriteWatch;
+  bool fresh_shadow = false;
+  AdmissionUmdStagingInvalidate(&slot->Sync);
+  if (!cpu || !bytes || bytes != slot->Bytes) return 0;
+  /* Only GPU-written BOs with an exposed CPU map need a merge baseline.
+   * An unmapped private slot has no CPU writer (cpu_quiet); PrepareCpuMap
+   * downloads its pending GPU output before publishing the first pointer.
+   * Capture mapped baselines before the watch snapshot and submission,
+   * never after GPU writes. Keep existing baselines across later unmaps. */
+  if (slot->GpuWritten && slot->Mapped && !slot->HeapStagingShadow) {
+    slot->HeapStagingShadow = (BYTE *)VirtualAlloc(NULL, bytes,
+        MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!slot->HeapStagingShadow) return 0;
+    CopyMemory(slot->HeapStagingShadow, cpu, bytes);
+    fresh_shadow = true;
+  }
+  PVOID *pages = NULL;
+  ULONG_PTR page_count = 0;
+  DWORD granularity = 0;
+  if (!download && slot->WriteWatch) {
+    SYSTEM_INFO info = {};
+    GetSystemInfo(&info);
+    if (!info.dwPageSize) return 0;
+    const SIZE_T capacity = (bytes - 1) / info.dwPageSize + 1;
+    if (capacity > (SIZE_T)-1 / sizeof(PVOID)) return 0;
+    pages = (PVOID *)HeapAlloc(GetProcessHeap(), 0, capacity * sizeof(PVOID));
+    if (!pages) return 0;
+    page_count = capacity;
+    if (GetWriteWatch(WRITE_WATCH_FLAG_RESET, cpu, bytes, pages, &page_count, &granularity) ||
+        !granularity || granularity > APPLE_AGX_G3_COPY_CAPACITY || page_count > capacity) {
+      HeapFree(GetProcessHeap(), 0, pages);
+      return 0;
+    }
+    qsort(pages, (SIZE_T)page_count, sizeof(PVOID), heap_staging_page_compare);
+    for (ULONG_PTR i = 0; i < page_count; ++i) {
+      const ULONG_PTR at = (ULONG_PTR)pages[i] - (ULONG_PTR)cpu;
+      if ((ULONG_PTR)pages[i] < (ULONG_PTR)cpu || at >= bytes || at % granularity ||
+          (i && pages[i] == pages[i - 1])) {
+        HeapFree(GetProcessHeap(), 0, pages);
+        return 0;
+      }
+      device->HeapStagingDirtyBytes += bytes - at < granularity ? bytes - at : granularity;
+    }
+  }
+  bool ok = true;
+  SIZE_T cursor = 0;
+  ULONG_PTR page = 0;
+  while (download ? cursor < bytes : (full ? cursor < bytes : page < page_count)) {
+    SIZE_T offset, count;
+    if (download || full) {
+      offset = cursor;
+      count = bytes - cursor < APPLE_AGX_G3_COPY_CAPACITY ? bytes - cursor : APPLE_AGX_G3_COPY_CAPACITY;
+      cursor += count;
+    } else {
+      offset = (ULONG_PTR)pages[page++] - (ULONG_PTR)cpu;
+      count = bytes - offset < granularity ? bytes - offset : granularity;
+      /* Driver copy-out also dirties write-watch pages. Compare only those
+       * pages against the canonical baseline, never scan the clean heap. */
+      if (slot->HeapStagingShadow && !fresh_shadow &&
+          !memcmp(cpu + offset, slot->HeapStagingShadow + offset, count)) continue;
+      while (page < page_count && (ULONG_PTR)pages[page] - (ULONG_PTR)cpu == offset + count &&
+             count + granularity <= APPLE_AGX_G3_COPY_CAPACITY) {
+        SIZE_T next = bytes - offset - count < granularity ? bytes - offset - count : granularity;
+        if (slot->HeapStagingShadow && !fresh_shadow &&
+            !memcmp(cpu + offset + count, slot->HeapStagingShadow + offset + count, next)) break;
+        count += next;
+        ++page;
+      }
+    }
+    payload->Operation = download ? APPLE_AGX_G3_COPY_DOWNLOAD : APPLE_AGX_G3_COPY_UPLOAD;
+    payload->Offset = offset;
+    payload->TransferBytes = (UINT)count;
+    if (!download) CopyMemory(payload->Data, cpu + offset, count);
+    if (!copy_escape(device, payload)) { ok = false; break; }
+    if (download) {
+      if (slot->HeapStagingShadow) {
+        /* Byte stores preserve concurrent CPU changes to disjoint bytes,
+         * even inside a dirty page. A CPU/GPU race on the same byte is the
+         * application's synchronization violation, as with native mapping. */
+        volatile BYTE *mapped = cpu + offset;
+        const BYTE *before = slot->HeapStagingShadow + offset;
+        for (SIZE_T i = 0; i < count; ++i)
+          if (before[i] != payload->Data[i] && mapped[i] == before[i]) mapped[i] = payload->Data[i];
+      } else CopyMemory(cpu + offset, payload->Data, count);
+      device->HeapStagingDownloadBytes += count;
+    } else device->HeapStagingUploadBytes += count;
+    /* Baseline is what was actually transferred, not a later CPU snapshot. */
+    if (slot->HeapStagingShadow) CopyMemory(slot->HeapStagingShadow + offset, payload->Data, count);
+    if (transfer_count) ++*transfer_count;
+    if (transfer_bytes) *transfer_bytes += count;
+  }
+  if (pages) HeapFree(GetProcessHeap(), 0, pages);
+  if (ok) slot->Sync.Valid = TRUE;
+  /* Never reset after the copies: that would erase concurrent CPU stores. */
+  return ok ? 1 : 0;
+}
+
+/* RC68: APPLE_AGX_G3_COPY_FLAG_UNREFERENCED when no submission of this
+ * device that may still run holds the slot (AppleAgxG3CopySlotUnreferenced).
+ * Call after the LastUseFence wait of an upload; the KMD then lets this
+ * slot's copies run beside the device's own job instead of draining it. */
+static UINT copy_unreferenced(ADMISSION_UMD_DEVICE *device,
+                              const ADMISSION_UMD_SCREEN_BUFFER *slot) {
+  /* Control run: the exact value 0, set before the app starts, restores the
+   * R157 drain (no proof is sent). Read once per process. */
+  static volatile LONG proof_mode = -1;
+  if (proof_mode < 0) {
+    char value[2] = {};
+    (void)InterlockedExchange(&proof_mode,
+        GetEnvironmentVariableA("APPLE_AGX_COPY_ESCAPE_PROOF", value, sizeof(value)) == 1u &&
+        value[0] == '0' ? 0 : 1);
+  }
+  if (!proof_mode) return 0u;
+  const uint64_t completed = (uint64_t)InterlockedCompareExchange64(
+      &device->RenderCompletedFence, 0, 0);
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  const int unreferenced = AppleAgxG3CopySlotUnreferenced(slot->SubmissionHolds,
+      slot->CopyHeld, slot->SourceHolds, slot->Borrowed, slot->Direct,
+      device->DrawTerminal, slot->LastUseFence, completed);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  return unreferenced ? APPLE_AGX_G3_COPY_FLAG_UNREFERENCED : 0u;
+}
+
+static int transfer_heap_slot(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_SCREEN_BUFFER *slot, bool download,
+    UINT *transfer_count, ULONGLONG *transfer_bytes) {
+  /* Clean persistent UPLOAD maps pay one constant-size query, no heap-sized
+   * address array, copy escape, residency wait or CPU content scan. */
+  if (!download && slot->Sync.Valid && slot->WriteWatch &&
+      (!slot->GpuWritten || slot->HeapStagingShadow)) {
+    PVOID page = NULL;
+    ULONG_PTR count = 1;
+    DWORD granularity = 0;
+    if (!GetWriteWatch(0, slot->PrivateStaging, (SIZE_T)slot->Bytes,
+                       &page, &count, &granularity) && !count) return 1;
+  }
+  if (!download && slot->SubmissionHolds > 1u && slot->LastUseFence &&
+      !wait_object(device, device->RenderSyncObject, slot->LastUseFence)) return 0;
+  auto *payload = (APPLE_AGX_G3_COPY_REQUEST *)HeapAlloc(
+      GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(APPLE_AGX_G3_COPY_REQUEST));
+  if (!payload) return 0;
+  payload->Magic = APPLE_AGX_G3_COPY_MAGIC;
+  payload->Version = APPLE_AGX_G3_COPY_VERSION;
+  payload->Bytes = sizeof(*payload);
+  payload->Allocation = slot->KernelAllocation;
+  payload->GpuVa = slot->CanonicalGpuVa;
+  payload->Operation = APPLE_AGX_G3_COPY_QUERY;
+  payload->Reserved = copy_unreferenced(device, slot);
+  /* A download cannot reconstruct GPU output by replacing its allocation. */
+  int ok = download ? (copy_escape(device, payload) && payload->ProcessGeneration && payload->MappingGeneration)
+                    : query_canonical(device, slot, payload);
+  if (ok) ok = heap_staging_transfer(device, slot, payload, download, transfer_count, transfer_bytes);
+  if (!ok) AdmissionUmdStagingInvalidate(&slot->Sync);
+  HeapFree(GetProcessHeap(), 0, payload);
+  return ok;
+}
+
+/* RC65: a persistent CPU-written heap whose dirty pages may go through the
+ * upload ring. Sync.Valid: staging equals canonical except for watched
+ * pages, so the dirty set is the whole difference (a full restore keeps the
+ * escape path). Mapped: unmapped private slots have no CPU writer and are
+ * never uploaded per submission (cpu_quiet). No GPU writer: a GpuWritten or
+ * shadowed slot needs the copy-out merge of heap_staging_transfer. Native
+ * (SystemDirect) and borrowed/direct slots have no private staging. */
+static bool upload_ring_eligible(const ADMISSION_UMD_SCREEN_BUFFER *slot) {
+  return slot->Active && !slot->Transition && slot->HeapStaging && slot->WriteWatch &&
+      slot->PrivateStaging && slot->Mapped && slot->LockedBase == slot->PrivateStaging &&
+      slot->Sync.Valid && slot->Queried && !slot->GpuWritten && !slot->HeapStagingShadow &&
+      !slot->Borrowed && !slot->Direct && !slot->SystemDirect && !slot->UploadRingPending &&
+      slot->KernelAllocation && slot->CanonicalGpuVa && slot->Bytes;
+}
+
+/* Sorted, validated offsets of the watched pages, then the copy plan. */
+static unsigned int upload_ring_plan(PVOID *pages, ULONG_PTR count, const BYTE *cpu,
+    SIZE_T bytes, DWORD granularity, unsigned long long *offsets, unsigned int target,
+    ADMISSION_UMD_UPLOAD_COPY *runs, unsigned int capacity, unsigned long long *slice) {
+  *slice = 0ULL;
+  if (count > ADMISSION_UMD_UPLOAD_RING_PAGES) return ~0u;
+  qsort(pages, (SIZE_T)count, sizeof(PVOID), heap_staging_page_compare);
+  for (ULONG_PTR i = 0; i < count; ++i) {
+    if ((ULONG_PTR)pages[i] < (ULONG_PTR)cpu) return ~0u;
+    offsets[i] = (unsigned long long)((ULONG_PTR)pages[i] - (ULONG_PTR)cpu);
+  }
+  return AdmissionUmdUploadPlan(offsets, (unsigned int)count, (unsigned int)granularity,
+      (unsigned long long)bytes, ADMISSION_UMD_UPLOAD_RING_GAP, target, runs, capacity, slice);
+}
+
+static void upload_ring_invalidate(ADMISSION_UMD_DEVICE *device, uint64_t token) {
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  auto *slot = find_slot(device, token);
+  if (slot) AdmissionUmdStagingInvalidate(&slot->Sync);
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+}
+
+/* Caller holds the owner lock (no concurrent submission, map or release of
+ * this slot). The canonical BO is never written here: only the recorded GPU
+ * copy writes it, after every earlier reader in GPU order. The write watch
+ * is previewed without reset first, so a refused reservation consumes
+ * nothing; the reset snapshot is taken immediately before the CPU copy, and
+ * stores after it stay watched for the next Execute or submission. */
+static int upload_ring_stage_slot(ADMISSION_UMD_DEVICE *device, uint64_t token,
+    unsigned int target, ADMISSION_UMD_UPLOAD_RING *ring,
+    ADMISSION_UMD_UPLOAD_COPY *copies, unsigned int capacity, unsigned int *count) {
+  if (!device || !ring || ring->Disabled || !ring->Cpu || !copies || !count ||
+      *count > capacity) return 0;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  const ADMISSION_UMD_SCREEN_BUFFER *slot = find_slot(device, token);
+  const bool eligible = slot && upload_ring_eligible(slot);
+  BYTE *cpu = eligible ? slot->PrivateStaging : NULL;
+  const SIZE_T bytes = eligible ? (SIZE_T)slot->Bytes : 0u;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if (!cpu || !bytes) return 0;
+  if (!ring->Scratch) {
+    ring->Scratch = HeapAlloc(GetProcessHeap(), 0, (SIZE_T)ADMISSION_UMD_UPLOAD_RING_PAGES *
+                              (sizeof(unsigned long long) + sizeof(PVOID)));
+    if (!ring->Scratch) return 0;
+  }
+  auto *offsets = (unsigned long long *)ring->Scratch;
+  auto *pages = (PVOID *)(offsets + ADMISSION_UMD_UPLOAD_RING_PAGES);
+  ULONG_PTR found = ADMISSION_UMD_UPLOAD_RING_PAGES;
+  DWORD granularity = 0;
+  if (GetWriteWatch(0, cpu, bytes, pages, &found, &granularity) || !found ||
+      !granularity || found > ADMISSION_UMD_UPLOAD_RING_PAGES) return 0;
+  ADMISSION_UMD_UPLOAD_COPY *runs = copies + *count;
+  unsigned long long need = 0ULL;
+  unsigned int planned = found == ADMISSION_UMD_UPLOAD_RING_PAGES ? ~0u :
+      upload_ring_plan(pages, found, cpu, bytes, granularity, offsets, target, runs,
+                       capacity - *count, &need);
+  ADMISSION_UMD_RING_SLICE slice = {};
+  unsigned int reason = found == ADMISSION_UMD_UPLOAD_RING_PAGES ? ADMISSION_UMD_UPLOAD_FALLBACK_LARGE :
+      planned == ~0u || !planned ? ADMISSION_UMD_UPLOAD_FALLBACK_COPIES : 0u;
+  if (!reason && (need > ring->Ring.Capacity ||
+      !AdmissionUmdRingReserve(&ring->Ring, (unsigned int)need, ADMISSION_UMD_UPLOAD_RING_ALIGN,
+                               0u, &slice))) reason = ADMISSION_UMD_UPLOAD_FALLBACK_SPACE;
+  if (reason) {
+    ++ring->Fallbacks;
+    ring->FallbackBytes += (unsigned long long)found * granularity;
+    ring->FallbackReasons |= reason;
+    return 0;
+  }
+  found = ADMISSION_UMD_UPLOAD_RING_PAGES;
+  if (GetWriteWatch(WRITE_WATCH_FLAG_RESET, cpu, bytes, pages, &found, &granularity) ||
+      !granularity || !found || found >= ADMISSION_UMD_UPLOAD_RING_PAGES ||
+      (planned = upload_ring_plan(pages, found, cpu, bytes, granularity, offsets, target, runs,
+                                  capacity - *count, &need)) == ~0u ||
+      !planned || need > slice.Bytes) {
+    /* The reset may have consumed pages this slice cannot carry. */
+    (void)AdmissionUmdRingCancel(&ring->Ring, slice.Ticket);
+    upload_ring_invalidate(device, token);
+    ++ring->Invalidated;
+    return -1;
+  }
+  unsigned long long moved = 0ULL;
+  for (unsigned int i = 0; i < planned; ++i) {
+    CopyMemory(ring->Cpu + slice.Offset + runs[i].RingOffset, cpu + runs[i].Offset, runs[i].Bytes);
+    runs[i].RingOffset += slice.Offset;
+    moved += runs[i].Bytes;
+  }
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  auto *owned = find_slot(device, token);
+  const bool kept = owned && owned->PrivateStaging == cpu && upload_ring_eligible(owned);
+  if (kept) owned->UploadRingPending = TRUE;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  if (!kept) {
+    (void)AdmissionUmdRingCancel(&ring->Ring, slice.Ticket);
+    upload_ring_invalidate(device, token);
+    ++ring->Invalidated;
+    return -1;
+  }
+  *count += planned;
+  ++ring->Slots;
+  ring->Copies += planned;
+  ring->Bytes += moved;
+  return 1;
+}
+
+/* After the copy submission. Accepted: its fence owns every pending slice.
+ * Otherwise the copies may never run although their dirty bits are gone:
+ * restore those slots in full and keep the slices out of reuse for good. */
+static unsigned int upload_ring_finish(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_UPLOAD_RING *ring, int accepted, unsigned long long fence) {
+  unsigned int cleared = 0u;
+  if (!device || !ring) return 0u;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  for (UINT i = 0; i < ADMISSION_UMD_SCREEN_BUFFER_SCAN(device); ++i) {
+    auto *slot = &device->ScreenBuffers[i];
+    if (!slot->UploadRingPending) continue;
+    slot->UploadRingPending = FALSE;
+    if (!accepted) AdmissionUmdStagingInvalidate(&slot->Sync);
+    ++cleared;
+  }
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  if (ring->Ring.Pending &&
+      (!accepted || !AdmissionUmdRingCommitAll(&ring->Ring, fence))) {
+    AdmissionUmdRingPoison(&ring->Ring);
+    ring->Disabled = 1u;
+  }
+  return cleared;
+}
+
+/* The monitored render fence is the completion proof of the ring copies. */
+static void upload_ring_retire(ADMISSION_UMD_DEVICE *device, ADMISSION_UMD_UPLOAD_RING *ring) {
+  if (!device || !ring || !ring->Ring.Capacity || ring->Ring.Poisoned ||
+      !device->RenderFenceAddress) return;
+  const unsigned long long completed = *device->RenderFenceAddress;
+  if (completed > ring->Ring.Completed) (void)AdmissionUmdRingRetire(&ring->Ring, completed);
+}
+
+int AdmissionUmdGpuvaUploadRingStage(ADMISSION_UMD_DEVICE *device, uint64_t token,
+    unsigned int target, ADMISSION_UMD_UPLOAD_RING *ring,
+    ADMISSION_UMD_UPLOAD_COPY *copies, unsigned int capacity, unsigned int *count) {
+  return upload_ring_stage_slot(device, token, target, ring, copies, capacity, count);
+}
+unsigned int AdmissionUmdGpuvaUploadRingFinish(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_UPLOAD_RING *ring, int accepted, unsigned long long fence) {
+  return upload_ring_finish(device, ring, accepted, fence);
+}
+void AdmissionUmdGpuvaUploadRingRetire(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_UPLOAD_RING *ring) {
+  upload_ring_retire(device, ring);
+}
+int AdmissionUmdGpuvaNativeStagingSlot(ADMISSION_UMD_DEVICE *device, uint64_t token,
+                                       const void *cpu) {
+  if (!device || !cpu) return 0;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  const ADMISSION_UMD_SCREEN_BUFFER *slot = find_slot(device, token);
+  const int native = slot && slot->Active && slot->SystemDirect && !slot->PrivateStaging &&
+      slot->NativeStagingAddress && slot->NativeStagingAddress == (const BYTE *)cpu;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  return native;
+}
+
+/* RC64: attributes every copy escape of one slot transfer to its size. */
+struct copy_escape_scope {
+  ADMISSION_UMD_DEVICE *Device;
+  UINT Outer;
+  copy_escape_scope(ADMISSION_UMD_DEVICE *device, ULONGLONG bytes)
+      : Device(device), Outer(device->CopyEscapeClass) {
+    device->CopyEscapeClass = 1u + copy_escape_size_class(bytes);
+  }
+  ~copy_escape_scope() { Device->CopyEscapeClass = Outer; }
+  copy_escape_scope(const copy_escape_scope &) = delete;
+  copy_escape_scope &operator=(const copy_escape_scope &) = delete;
+};
+
 static int transfer_slot(ADMISSION_UMD_DEVICE *device,
                           ADMISSION_UMD_SCREEN_BUFFER *slot,bool download,
                           UINT *transfer_count,ULONGLONG *transfer_bytes) {
+  const copy_escape_scope escape_class(device, slot->Bytes);
+  if (slot->HeapStaging)
+    return transfer_heap_slot(device, slot, download, transfer_count, transfer_bytes);
   int unchanged=0;
   if(!download) {
     unchanged=staging_unchanged(device,slot);
@@ -880,6 +1704,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   payload->Magic=APPLE_AGX_G3_COPY_MAGIC;payload->Version=APPLE_AGX_G3_COPY_VERSION;
   payload->Bytes=sizeof(*payload);payload->Allocation=slot->KernelAllocation;
   payload->GpuVa=slot->CanonicalGpuVa;payload->Operation=APPLE_AGX_G3_COPY_QUERY;
+  payload->Reserved=copy_unreferenced(device,slot);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   (void)AdmissionUmdGpuvaFrameArm(device, slot->KernelAllocation,
                                    slot->CanonicalGpuVa);
@@ -894,9 +1719,12 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   if(success && temporary) {
     D3DDDICB_LOCK lock={};lock.hAllocation=slot->StagingAllocation;
     lock.Flags.LockEntire=1;
+    unsigned wait_pfnLockCb_2=AdmissionUmdWaitBegin(AgxWaitLockTransfer);
     lock_hr=device->KernelCallbacks->pfnLockCb(
         device->RuntimeDevice.handle,&lock);
+    AdmissionUmdWaitEnd(wait_pfnLockCb_2);
     locked=SUCCEEDED(lock_hr);
+    if (locked) AdmissionUmdScreenCpuAccessEvent(device, slot->Token, AdmissionCpuLock);
     if(locked) address=(BYTE *)lock.pData;
     success=locked && address && lock.hAllocation==slot->StagingAllocation;
     if(locked && lock.hAllocation!=slot->StagingAllocation) {
@@ -908,6 +1736,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
   if(success) step=3u;
   /* EXP999: skip chunks whose content equals the canonical copy. */
   bool chunked=AdmissionUmdStagingChunked(slot->Bytes,APPLE_AGX_G3_COPY_CAPACITY)!=0;
+  ULONGLONG moved=0u;
   if(success) for(uint64_t offset=0;offset<slot->Bytes;) {
     UINT count=(UINT)((slot->Bytes-offset)>APPLE_AGX_G3_COPY_CAPACITY ?
         APPLE_AGX_G3_COPY_CAPACITY : slot->Bytes-offset);
@@ -929,6 +1758,7 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
           AdmissionUmdStagingHash(address+offset,count) : chunk_hash);
     if(transfer_count) ++*transfer_count;
     if(transfer_bytes) *transfer_bytes+=count;
+    moved+=count;
     offset+=count;
   }
   if(success && chunked) AdmissionUmdStagingChunksValidate(&slot->Chunks);
@@ -946,9 +1776,11 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
       UINT word; CopyMemory(&word,address+at,sizeof(word));
       ++samples; if(word) ++nonzero;
     }
-    UINT values[8]={(UINT)download,(UINT)slot->Token,(UINT)slot->Bytes,nonzero,samples,
+    /* the last value: bytes that crossed (current chunks are skipped) */
+    UINT values[9]={(UINT)download,(UINT)slot->Token,(UINT)slot->Bytes,nonzero,samples,
         slot->ClassId,(UINT)temporary | ((UINT)slot->Mapped<<1) |
-        ((UINT)slot->Borrowed<<2) | ((UINT)slot->Direct<<3),(UINT)slot->KernelAllocation};
+        ((UINT)slot->Borrowed<<2) | ((UINT)slot->Direct<<3),(UINT)slot->KernelAllocation,
+        (UINT)moved};
     AdmissionUmdDiagnostic("measure-xfer",S_OK,values,ARRAYSIZE(values));
   }
   /* Borrowed/imported storage must be unlocked before publication. Native
@@ -972,13 +1804,16 @@ static int transfer_slot(ADMISSION_UMD_DEVICE *device,
         ReleaseSRWLockExclusive(&device->ScreenBufferLock);
       }
       device->DrawTerminal=TRUE;success=0;
-    } else if(uncache) {
-      if(!slot->NativeMapRelease(slot->NativeBo,address,TRUE)) {
-        device->DrawTerminal=TRUE;success=0;
+    } else {
+      if (!shadow) AdmissionUmdScreenCpuAccessEvent(device, slot->Token, AdmissionCpuUnlock);
+      if(uncache) {
+        if(!slot->NativeMapRelease(slot->NativeBo,address,TRUE)) {
+          device->DrawTerminal=TRUE;success=0;
+        }
+        AcquireSRWLockExclusive(&device->ScreenBufferLock);
+        slot->LockedBase=NULL;slot->Mapped=FALSE;slot->LockedAccess=0;
+        ReleaseSRWLockExclusive(&device->ScreenBufferLock);
       }
-      AcquireSRWLockExclusive(&device->ScreenBufferLock);
-      slot->LockedBase=NULL;slot->Mapped=FALSE;slot->LockedAccess=0;
-      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     }
   }
   if(!success) {
@@ -1023,6 +1858,13 @@ static bool download_due(const ADMISSION_UMD_SCREEN_BUFFER *slot) {
 }
 
 static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
+#ifdef APPLE_AGX_NATIVE_STAGING
+  /* Publish persistent WC CPU writes before any native consumer, and order
+   * CPU reads after completion on the return path. No per-copy syscall. */
+  MemoryBarrier();
+  UINT nativeCount = 0u;
+  ULONGLONG nativeBytes = 0ULL;
+#endif
   UINT measured_count=0u;
   ULONGLONG measured_bytes=0u;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
@@ -1039,17 +1881,26 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
       if(slot->CopyHeld && !slot->Direct && !slot->SystemDirect && !slot->Queried &&
          !(cpu_quiet(slot) && slot->Sync.Valid)) fresh=slot->CanonicalGpuVa;
     }
-    if(fresh) (void)touch_device(device,fresh);
+    if(fresh && !touch_device(device,fresh)) return 0;
   }
   for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);++i) {
     auto *slot=&device->ScreenBuffers[i];
+#ifdef APPLE_AGX_NATIVE_STAGING
+    if (slot->CopyHeld && slot->NativeStagingAddress) {
+      ++nativeCount;
+      nativeBytes += slot->Bytes;
+    }
+#endif
     /* EXP1059: upload a CPU-mapped Direct shadow before the GPU uses the
      * surface and drop the map; the next map downloads the GPU result. */
     bool shadow=!download && direct_shadow_slot(slot) && slot->PrivateStaging &&
         slot->Mapped && slot->NativeBo && slot->NativeMapRelease;
+    /* RC65: an upload-ring slot's snapshot reaches canonical storage by the
+     * GPU copy this submission carries. Its later stores stay watched and
+     * upload with the next submission, after that copy in GPU order. */
     if(download ? !download_due(slot) :
        (!slot->CopyHeld || (slot->Direct && !shadow) || slot->SystemDirect ||
-        (cpu_quiet(slot) && slot->Sync.Valid))) {
+        slot->UploadRingPending || (cpu_quiet(slot) && slot->Sync.Valid))) {
       if(slot->CopyHeld && !download) {
         UINT values[4]={(UINT)slot->Token,(UINT)(slot->Token>>32),
             (UINT)slot->Direct|((UINT)slot->SystemDirect<<1)|
@@ -1072,6 +1923,14 @@ static int transfer_held(ADMISSION_UMD_DEVICE *device,bool download) {
       ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     }
   }
+#ifdef APPLE_AGX_NATIVE_STAGING
+  if (nativeCount && AdmissionUmdMeasureEnabled()) {
+    /* Referenced capacity, not a claim about dirty/copied byte counts. */
+    UINT values[4] = {(UINT)download, nativeCount, (UINT)nativeBytes,
+        (UINT)(nativeBytes >> 32)};
+    AdmissionUmdDiagnostic("native-ring-use", S_OK, values, ARRAYSIZE(values));
+  }
+#endif
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   measure_g4_phase(download ? 6u : 3u,phase_start,measured_count,
       measured_bytes,S_OK);
@@ -1133,23 +1992,324 @@ int AdmissionUmdGpuvaPublishDirectMap(ADMISSION_UMD_DEVICE *device,
  * canonical allocation; the copy escape needs its valid PTEs. */
 static int restore_residency(ADMISSION_UMD_DEVICE *device, uint64_t token) {
   AcquireSRWLockShared(&device->ScreenBufferLock);
+  const bool terminal=device->DrawTerminal!=FALSE;
   auto *slot=find_slot(device,token);
   D3DKMT_HANDLE handle=slot && !slot->Resident ? slot->KernelAllocation : 0;
   ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if(terminal) return 0;
+  device->GpuvaFailure = S_OK;
   if(!handle) return 1;
   if(!device->KernelCallbacks->pfnMakeResidentCb) return 0;
   UINT priority=D3DDDI_ALLOCATIONPRIORITY_NORMAL;
   D3DDDI_MAKERESIDENT request={};
   HRESULT hr=residency_request(device,&request,&handle,1u,&priority);
   va_record(device,6u,token,handle,0,request.PagingFenceValue,hr);
-  if((FAILED(hr) && hr!=E_PENDING) || (hr==E_PENDING && !request.PagingFenceValue))
+  if((FAILED(hr) && hr!=E_PENDING) || request.NumAllocations!=1u) {
+    device->GpuvaFailure = FAILED(hr) && hr!=E_PENDING ? hr : E_FAIL;
+    /* A hard refusal without accepted paging work is retryable. A malformed
+     * success or a returned fence remains uncertain and must retain ownership. */
+    if(SUCCEEDED(hr) || hr==E_PENDING || request.PagingFenceValue) {
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      device->DrawTerminal=TRUE;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    }
     return 0;
+  }
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   slot=find_slot(device,token);
-  if(slot && slot->KernelAllocation==handle) slot->Resident=TRUE;
+  if(slot && slot->KernelAllocation==handle) {
+    slot->Resident=TRUE;slot->TrimRecency=device->NextRenderFence+1u;
+  }
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
-  return hr!=E_PENDING ||
-      wait_paging_at(device,request.PagingFenceValue,6u,token);
+  if((hr==E_PENDING && !request.PagingFenceValue) ||
+      (request.PagingFenceValue &&
+       !wait_paging_at(device,request.PagingFenceValue,6u,token))) {
+    /* Every caller, including private-staging downloads, must retain the
+     * uncertainty. Resident records an accepted reference, not a completed
+     * fence; a later retry may not use it to bypass this failed wait. */
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    device->DrawTerminal=TRUE;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    return 0;
+  }
+  return 1;
+}
+
+/* rc107: the KMD's read-only census of where VidMm currently maps this
+ * allocation (APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION). It is never a
+ * native-readiness proof; the batch refuses it. 0 on transport failure or an
+ * older KMD, which refuses the version. */
+static int placement_query(ADMISSION_UMD_DEVICE *device, D3DKMT_HANDLE allocation,
+                           uint64_t va, uint64_t bytes,
+                           APPLE_AGX_G3_NATIVE_QUERY *out) {
+  APPLE_AGX_G3_NATIVE_QUERY q = {};
+  *out = q;
+  if (!device->Adapter || device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
+      !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
+      !device->KernelContext || !device->KernelCallbacks->pfnEscapeCb ||
+      !allocation || !va || !bytes) return 0;
+  q.Magic = APPLE_AGX_G3_NATIVE_QUERY_MAGIC;
+  q.Version = APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION;
+  q.Bytes = sizeof(q);
+  q.Allocation = allocation;
+  q.GpuVa = va;
+  q.AllocationBytes = bytes;
+  D3DDDICB_ESCAPE request = {};
+  request.hDevice = device->RuntimeDevice.handle;
+  request.hContext = device->KernelContext;
+  request.pPrivateDriverData = &q;
+  request.PrivateDriverDataSize = sizeof(q);
+  unsigned wait = AdmissionUmdWaitBegin(AgxWaitPoolMapEscape);
+  HRESULT hr = device->KernelCallbacks->pfnEscapeCb(
+      device->Adapter->RuntimeAdapter.handle, &request);
+  AdmissionUmdWaitEnd(wait);
+  const bool known = q.Ready == 1u ? q.Reason == 0u :
+      q.Ready == 0u && (q.Reason == APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL ||
+                        q.Reason == APPLE_AGX_G3_NATIVE_QUERY_NOT_RESIDENT ||
+                        q.Reason == APPLE_AGX_G3_NATIVE_QUERY_IDENTITY);
+  if (FAILED(hr) || q.Magic != APPLE_AGX_G3_NATIVE_QUERY_MAGIC ||
+      q.Version != APPLE_AGX_G3_NATIVE_QUERY_PLACEMENT_VERSION ||
+      q.Allocation != allocation || q.GpuVa != va || !known) return 0;
+  *out = q;
+  return 1;
+}
+
+/* rc107: drop this slot's residency reference and ask VidMm to page it out
+ * now. EXP1124: EvictOnlyIfNecessary=0 is "finished, evict at the first
+ * opportunity" (a LOCAL_TO_SYSTEM transfer followed within ~35 ms). */
+static HRESULT evict_now(ADMISSION_UMD_DEVICE *device, D3DKMT_HANDLE handle) {
+  if (!handle || !device->KernelCallbacks->pfnEvictCb) return E_FAIL;
+  D3DDDICB_EVICT evict = {};
+  evict.Flags.EvictOnlyIfNecessary = 0u;
+  evict.NumAllocations = 1u;
+  evict.AllocationList = &handle;
+  unsigned wait = AdmissionUmdWaitBegin(AgxWaitEvict);
+  HRESULT hr = device->KernelCallbacks->pfnEvictCb(device->RuntimeDevice.handle, &evict);
+  AdmissionUmdWaitEnd(wait);
+  return hr;
+}
+
+/* rc107 (EXP1974, umd_cpu_pool_rehome.h): the slot is a CPU-visible pool
+ * canonical allocation that VidMm republished outside the pool while it is
+ * still resident (segment-0 system pages; no native leaf can exist there).
+ * Page it back in while the pool has room. Returns 1 when the census then
+ * finds every page in the pool, 2 when the page-in ran but VidMm placed it
+ * outside the pool again (a later round frees more), 0 when the repair does
+ * not apply or failed. The caller still runs the complete native proof. A
+ * clean MakeResident refusal leaves Resident=FALSE, the ordinary state a
+ * later submission or map restores. Accepted work whose completion is
+ * unknown sets DrawTerminal, as everywhere else.
+ * Receipt measure-cpu-pool-rehome: mode, pass, census reason, pool pages,
+ * non-pool pages before; eager-trim slots and MiB; polls | gone << 8;
+ * census reason, pool pages, non-pool pages after. */
+static int rehome_cpu_pool(ADMISSION_UMD_DEVICE *device, uint64_t token,
+                           uint64_t touch_va, UINT mode, UINT pass) {
+  ADMISSION_UMD_REHOME_SLOT view = {};
+  APPLE_AGX_G3_NATIVE_QUERY q = {};
+  D3DKMT_HANDLE handle = 0;
+  uint64_t va = 0, bytes = 0, last = 0;
+  UINT holds = 0u, trimmed = 0u, polls = 0u;
+  bool gone = false;
+  UINT values[11] = {mode, pass, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u};
+  char option[2] = {};
+  /* Exact 0 restores the pre-rc107 refusal for comparison. */
+  if (GetEnvironmentVariableA("APPLE_AGX_CPU_POOL_REHOME", option,
+                              sizeof(option)) == 1u && option[0] == '0')
+    return 0;
+  if (!touch_va || !device->KernelCallbacks->pfnMakeResidentCb) return 0;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  auto *slot = find_slot(device, token);
+  if (slot) {
+    view.Active = slot->Active; view.Resident = slot->Resident;
+    view.Transition = slot->Transition; view.CopyHeld = slot->CopyHeld;
+    view.Mapped = slot->Mapped; view.SystemDirect = slot->SystemDirect;
+    view.Borrowed = slot->Borrowed; view.Direct = slot->Direct;
+    view.PrivateStaging = slot->PrivateStaging != NULL;
+#ifdef APPLE_AGX_NATIVE_STAGING
+    view.NativeStaging = slot->NativeStagingAddress != NULL;
+#endif
+    view.KmtResidencyHeld = slot->KmtResidencyHeld;
+    view.SubmissionHolds = slot->SubmissionHolds;
+    view.SourceHolds = slot->SourceHolds;
+    view.KernelAllocation = slot->KernelAllocation;
+    view.CanonicalGpuVa = slot->CanonicalGpuVa;
+    view.Bytes = slot->Bytes;
+    handle = slot->KernelAllocation; va = slot->CanonicalGpuVa;
+    bytes = slot->Bytes; last = slot->LastUseFence; holds = slot->SubmissionHolds;
+  }
+  const bool eligible = slot && !device->DrawTerminal && !device->ScreenClosing &&
+      AdmissionUmdRehomeEligible(&view, mode);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if (!eligible || !placement_query(device, handle, va, bytes, &q)) return 0;
+  values[2] = q.Reason; values[3] = (UINT)q.Reserved2;
+  values[4] = (UINT)(q.Reserved2 >> 32);
+  /* Pool-resident pages with a missing leaf, or a foreign page, are not a
+   * placement this repair can change. */
+  if (q.Ready == 1u || q.Reason == APPLE_AGX_G3_NATIVE_QUERY_IDENTITY) {
+    AdmissionUmdDiagnostic("measure-cpu-pool-rehome", E_FAIL, values, ARRAYSIZE(values));
+    return 0;
+  }
+  /* Another in-flight submission may still read this allocation. */
+  if (mode == ADMISSION_UMD_REHOME_SUBMIT && holds > 1u && last &&
+      !wait_object(device, device->RenderSyncObject, last)) return 0;
+  const ULONGLONG freed = trim_residency_with(
+      device, AdmissionUmdRehomeWant(bytes, pass), &trimmed, true);
+  values[5] = trimmed; values[6] = (UINT)(freed >> 20);
+  HRESULT hr = evict_now(device, handle);
+  if (FAILED(hr)) {
+    AdmissionUmdDiagnostic("measure-cpu-pool-rehome", hr, values, ARRAYSIZE(values));
+    return 0;
+  }
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  slot = find_slot(device, token);
+  if (slot && slot->KernelAllocation == handle) slot->Resident = FALSE;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  /* VidMm processes the eviction asynchronously. A MakeResident that
+   * arrives first would find the allocation still resident outside the
+   * pool and change nothing. A touch lets VidSch schedule the device. */
+  for (; polls < ADMISSION_UMD_REHOME_POLLS && !gone; ++polls) {
+    if (polls) Sleep(1u);
+    if (!touch_device(device, touch_va)) {
+      AdmissionUmdDiagnostic("measure-cpu-pool-rehome", device->GpuvaFailure,
+                             values, ARRAYSIZE(values));
+      return 0;
+    }
+    if (placement_query(device, handle, va, bytes, &q) && !(q.Reserved2 >> 32))
+      gone = true;
+  }
+  values[7] = polls | (gone ? 0x100u : 0u);
+  UINT priority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
+  D3DDDI_MAKERESIDENT request = {};
+  hr = residency_request(device, &request, &handle, 1u, &priority);
+  va_record(device, 6u, token, handle, 0, request.PagingFenceValue, hr);
+  if ((FAILED(hr) && hr != E_PENDING) || request.NumAllocations != 1u) {
+    device->GpuvaFailure = FAILED(hr) && hr != E_PENDING ? hr : E_FAIL;
+    if (SUCCEEDED(hr) || hr == E_PENDING || request.PagingFenceValue) {
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      device->DrawTerminal = TRUE;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    }
+    AdmissionUmdDiagnostic("measure-cpu-pool-rehome", device->GpuvaFailure,
+                           values, ARRAYSIZE(values));
+    return 0;
+  }
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  slot = find_slot(device, token);
+  if (slot && slot->KernelAllocation == handle) {
+    slot->Resident=TRUE;slot->TrimRecency=device->NextRenderFence+1u;
+  }
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+  if ((hr == E_PENDING && !request.PagingFenceValue) ||
+      (request.PagingFenceValue &&
+       !wait_paging_at(device, request.PagingFenceValue, 7u, token))) {
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    device->DrawTerminal = TRUE;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    return 0;
+  }
+  /* Deferred PTE publication (EXP1003) needs one scheduled touch. */
+  if (!touch_device(device, touch_va)) return 0;
+  const bool counted = placement_query(device, handle, va, bytes, &q) != 0;
+  const bool home = counted && q.Ready == 1u;
+  values[8] = q.Reason; values[9] = (UINT)q.Reserved2;
+  values[10] = (UINT)(q.Reserved2 >> 32);
+  AdmissionUmdDiagnostic("measure-cpu-pool-rehome", home ? S_OK : E_OUTOFMEMORY,
+                         values, ARRAYSIZE(values));
+  if (home) return 1;
+  return counted && q.Reason == APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL ? 2 : 0;
+}
+
+/* T6b: called only after ScreenMapBuffer reserves Transition, and before
+ * LockCb. Keep that reservation through paging and pointer publication so
+ * trim cannot drop the new reference between MakeResident and Mapped. */
+int AdmissionUmdGpuvaRestoreCpuMapResidency(ADMISSION_UMD_DEVICE *device,
+                                           uint64_t token) {
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  auto *slot=find_slot(device,token);
+  bool valid=slot && slot->SystemDirect && slot->Transition && !slot->Mapped &&
+      !slot->CopyHeld && !slot->SubmissionHolds && !slot->SourceHolds &&
+      !device->DrawTerminal && !device->ScreenClosing;
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if(!valid) return 0;
+  /* restore_residency owns accepted-work uncertainty. A clean budget
+   * refusal has no paging reference to retain and must not poison the device. */
+  return restore_residency(device,token);
+}
+
+/* RC25: called with a successful canonical CPU lock, before publishing its
+ * pointer. A residency reference alone does not establish native placement.
+ * v2 proves every original/native page is in the pool; old KMDs refuse v2.
+ * No GPU access or physical mapping is performed by this query. */
+int AdmissionUmdGpuvaValidateCpuPoolMap(ADMISSION_UMD_DEVICE *device,
+                                      uint64_t token) {
+  APPLE_AGX_G3_NATIVE_QUERY identity = {};
+  device->GpuvaFailure = E_FAIL;
+  if (!device->Adapter || device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
+      !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
+      !device->KernelContext || !device->KernelCallbacks->pfnEscapeCb) return 0;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  const auto *slot = find_slot(device, token);
+  bool valid = device->DirectCpuPool && slot && slot->Active && slot->SystemDirect &&
+      slot->Transition && slot->Resident && !slot->Mapped && !slot->PrivateStaging &&
+      !slot->Borrowed && !slot->CopyHeld && !slot->SubmissionHolds && !slot->SourceHolds &&
+      slot->KernelAllocation && slot->CanonicalGpuVa && slot->Bytes &&
+      !device->DrawTerminal && !device->ScreenClosing;
+  if (valid) {
+    identity.Magic = APPLE_AGX_G3_NATIVE_QUERY_MAGIC;
+    identity.Version = APPLE_AGX_G3_NATIVE_QUERY_POOL_VERSION;
+    identity.Reserved = APPLE_AGX_G3_NATIVE_QUERY_POOL_ONLY;
+    identity.Bytes = sizeof(identity);
+    identity.Allocation = slot->KernelAllocation;
+    identity.GpuVa = slot->CanonicalGpuVa;
+    identity.AllocationBytes = slot->Bytes;
+    identity.Write = (slot->Flags & AppleAgxWin32BufferGpuWrite) != 0u;
+  }
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if (!valid) return 0;
+  /* Lock can rotate placement. Flush deferred paging once even if the old
+   * graph still looks valid: a pre-Lock pool proof must not authenticate the
+   * new CPU mapping. The existing touch is CPU-only and its fence is waited. */
+  /* touch_device distinguishes clean refusal from accepted-work uncertainty.
+   * A clean refusal can unlock and retry the map without losing the device. */
+  if (!touch_device(device, identity.GpuVa)) return 0;
+  APPLE_AGX_G3_NATIVE_QUERY q = identity;
+  HRESULT hr = E_FAIL;
+  for (UINT pass = 0u;; ++pass) {
+    q = identity;
+    D3DDDICB_ESCAPE request = {};
+    request.hDevice = device->RuntimeDevice.handle;
+    request.hContext = device->KernelContext;
+    request.pPrivateDriverData = &q;
+    request.PrivateDriverDataSize = sizeof(q);
+    unsigned wait_pfnEscapeCb_3=AdmissionUmdWaitBegin(AgxWaitPoolMapEscape);
+    hr = device->KernelCallbacks->pfnEscapeCb(
+        device->Adapter->RuntimeAdapter.handle, &request);
+    AdmissionUmdWaitEnd(wait_pfnEscapeCb_3);
+    if (SUCCEEDED(hr) && q.Ready == 1u) {
+      device->GpuvaFailure = S_OK;
+      return 1;
+    }
+    /* rc107 (EXP1974): VidMm placed this CPU-visible allocation outside the
+     * pool, typically at creation into a full segment 3. Page it back in
+     * under the same lock and Transition, then repeat the full pool proof. */
+    if (!SUCCEEDED(hr) || pass >= ADMISSION_UMD_REHOME_ROUNDS ||
+        (q.Reason != APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL &&
+         q.Reason != AppleAgxG3WalkLeafAbsent &&
+         q.Reason != AppleAgxG3WalkLeafNotPublished) ||
+        !rehome_cpu_pool(device, token, identity.GpuVa,
+                         ADMISSION_UMD_REHOME_MAP, pass))
+      break;
+  }
+  if (device->DrawTerminal) return 0;
+  device->GpuvaFailure = FAILED(hr) ? hr :
+      (q.Reason == APPLE_AGX_G3_NATIVE_QUERY_NOT_POOL ||
+       q.Reason == AppleAgxG3WalkLeafAbsent ||
+       q.Reason == AppleAgxG3WalkLeafNotPublished) ? E_OUTOFMEMORY : E_FAIL;
+  UINT values[4] = {q.Allocation, q.Reason, (UINT)q.FailedVa,
+      (UINT)(q.FailedVa >> 32)};
+  AdmissionUmdDiagnostic("reject-cpu-pool-map", device->GpuvaFailure,
+      values, ARRAYSIZE(values));
+  return 0;
 }
 
 int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,uint64_t token) {
@@ -1193,7 +2353,9 @@ static int mark_written(ADMISSION_UMD_DEVICE *device, const uint64_t *written,
         slot=&device->ScreenBuffers[j];break;
       }
     if(!slot || slot->Transition || !slot->CopyHeld) ok=0;
-    else slot->GpuWritten=TRUE;
+    /* RC65: the upload-ring copy stores bytes the staging already holds;
+     * downloading them could only erase newer CPU stores. */
+    else if(!slot->UploadRingPending) slot->GpuWritten=TRUE;
   }
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   return ok;
@@ -1281,6 +2443,240 @@ static int finish_submission(ADMISSION_UMD_DEVICE *device,uint64_t internal,
   return 1;
 }
 
+/* The CopyHeld set is exactly the current batch's residency set, including
+ * descriptor resources and pool BOs. Its SubmissionHolds keep trim from
+ * releasing residency between this read-only KMD proof and submit/retirement.
+ * Run after uploads, which may replace a canonical allocation. The DMA
+ * envelope is read by the CPU parser, so it needs logical, not native, backing.
+ * Its own logical checks remain in the KMD submit path. */
+static int native_held_ready(ADMISSION_UMD_DEVICE *device, uint64_t command_va) {
+  if (device->DrawTerminal || !device->Adapter ||
+      device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
+      !device->Adapter->RuntimeAdapter.handle || !device->RuntimeDevice.handle ||
+      !device->KernelCallbacks->pfnEscapeCb) return 0;
+  device->GpuvaFailure = E_FAIL;
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  const UINT capacity = ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+  if (capacity > APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAX) return 0;
+  const UINT bytes = (UINT)(sizeof(APPLE_AGX_G3_NATIVE_QUERY_BATCH) +
+      capacity * sizeof(APPLE_AGX_G3_NATIVE_QUERY));
+  auto *batch = (APPLE_AGX_G3_NATIVE_QUERY_BATCH *)HeapAlloc(
+      GetProcessHeap(), HEAP_ZERO_MEMORY, bytes + capacity * sizeof(UINT));
+  if (!batch) { device->GpuvaFailure = E_OUTOFMEMORY; return 0; }
+  auto *entries = (APPLE_AGX_G3_NATIVE_QUERY *)(batch + 1);
+  auto *indices = (UINT *)((unsigned char *)batch + bytes);
+  int ready = 0;
+  unsigned rehomes = 0u, read_only_marks = 0u;
+  for (unsigned attempt = 0u; attempt < 2u + ADMISSION_UMD_REHOME_ROUNDS; ++attempt) {
+    *batch = {};
+    bool valid = true;
+    AcquireSRWLockShared(&device->ScreenBufferLock);
+    const UINT limit = ADMISSION_UMD_SCREEN_BUFFER_SCAN(device);
+    if (limit > capacity) valid = false;
+    for (UINT i = 0u; valid && i < limit; ++i) {
+      const auto *slot = &device->ScreenBuffers[i];
+      if (!slot->CopyHeld || slot->CanonicalGpuVa == command_va) continue;
+      if (!slot->Active || slot->Transition || !slot->SubmissionHolds ||
+          !slot->KernelAllocation || !slot->CanonicalGpuVa || !slot->Bytes) {
+        valid = false;
+        break;
+      }
+      indices[batch->Count] = i;
+      auto *q = &entries[batch->Count++];
+      *q = {};
+      q->Magic = APPLE_AGX_G3_NATIVE_QUERY_MAGIC;
+      q->Version = APPLE_AGX_G3_NATIVE_QUERY_CACHED_VERSION;
+      q->Bytes = sizeof(*q);
+      q->Allocation = slot->KernelAllocation;
+      q->GpuVa = slot->CanonicalGpuVa;
+      q->AllocationBytes = slot->Bytes;
+      q->Write = (slot->Flags & AppleAgxWin32BufferGpuWrite) != 0u;
+      q->Reserved2 = slot->NativeReadyToken;
+    }
+    ReleaseSRWLockShared(&device->ScreenBufferLock);
+    if (!valid) break;
+    if (!batch->Count) { ready = 1; break; }
+    batch->Magic = APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC;
+    batch->Version = APPLE_AGX_G3_NATIVE_QUERY_BATCH_CACHED_VERSION;
+    batch->Bytes = (UINT)(sizeof(*batch) + batch->Count * sizeof(*entries));
+    D3DDDICB_ESCAPE request = {};
+    request.hDevice = device->RuntimeDevice.handle;
+    request.hContext = device->KernelContext;
+    request.pPrivateDriverData = batch;
+    request.PrivateDriverDataSize = batch->Bytes;
+    unsigned wait = AdmissionUmdWaitBegin(AgxWaitNativeReadyEscape);
+    HRESULT hr = device->KernelCallbacks->pfnEscapeCb(
+        device->Adapter->RuntimeAdapter.handle, &request);
+    AdmissionUmdWaitEnd(wait);
+    if (SUCCEEDED(hr) && batch->Ready == 1u) {
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      for (UINT i = 0u; i < batch->Count; ++i) {
+        auto *slot = &device->ScreenBuffers[indices[i]];
+        const auto *q = &entries[i];
+        if (slot->Active && !slot->Transition && slot->CopyHeld &&
+            slot->SubmissionHolds && slot->KernelAllocation == q->Allocation &&
+            slot->CanonicalGpuVa == q->GpuVa)
+          slot->NativeReadyToken = q->Reserved2;
+      }
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      if (AdmissionUmdMeasureEnabled()) {
+        UINT values[3] = {batch->Count, batch->Reserved[0], batch->Reserved[1]};
+        AdmissionUmdDiagnostic("measure-native-ready-cache", S_OK, values, ARRAYSIZE(values));
+      }
+      ready = 1; break;
+    }
+    const bool valid_failure = batch->Ready == 0u &&
+        batch->FailedIndex < batch->Count && batch->FailedIndex < capacity;
+    const auto *q = &entries[valid_failure ? batch->FailedIndex : 0u];
+    /* EXP2208: the device opened this allocation read-only
+     * (DxgkDdiOpenAllocation Flags.ReadOnly, e.g. DWM's view of a GDI
+     * redirection surface), so the D3D runtime never lets it be written; the
+     * write capability came from the adoption flags. Drop it for this slot
+     * (its maps, proofs and downloads stay read-only) and prove the whole
+     * held set again, at most once per slot and without using an attempt. */
+    if (SUCCEEDED(hr) && valid_failure && q->Ready == 0u && q->Write &&
+        q->Reason == APPLE_AGX_G3_NATIVE_QUERY_READ_ONLY &&
+        read_only_marks < batch->Count) {
+      AcquireSRWLockExclusive(&device->ScreenBufferLock);
+      auto *slot = &device->ScreenBuffers[indices[batch->FailedIndex]];
+      const bool same = slot->Active && !slot->Transition && slot->CopyHeld &&
+          slot->KernelAllocation == q->Allocation && slot->CanonicalGpuVa == q->GpuVa;
+      if (same) slot->Flags &= ~(UINT)AppleAgxWin32BufferGpuWrite;
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      if (!same) break;
+      ++read_only_marks;
+      --attempt;
+      continue;
+    }
+    const bool missing = valid_failure && q->Ready == 0u &&
+        q->FailedVa >= q->GpuVa && q->FailedVa - q->GpuVa < q->AllocationBytes &&
+        (q->Reason == AppleAgxG3WalkNoRoot || q->Reason == AppleAgxG3WalkNoTable ||
+         q->Reason == AppleAgxG3WalkLeafAbsent ||
+         q->Reason == AppleAgxG3WalkLeafNotPublished ||
+         q->Reason == AppleAgxG3WalkTailShort);
+    if (SUCCEEDED(hr) && missing && attempt == 0u) {
+      /* Deferred paging is not necessarily published at MakeResident's
+       * fence. Schedule at most one CPU-only touch, then rebuild and prove
+       * the ENTIRE held set, including entries preceding the failed entry.
+       * Holds stay owned throughout; KMD must validate every hint again.
+       * This cannot repair incompatible physical backing. Identity, transport
+       * and malformed-response failures are not deferred publication. */
+      if (!touch_device(device, command_va)) break;
+      continue;
+    }
+    if (SUCCEEDED(hr) && missing && attempt != 0u &&
+        rehomes < ADMISSION_UMD_REHOME_ROUNDS) {
+      /* rc107 (EXP1974): still missing after the scheduling touch. A held
+       * CPU-visible pool allocation that VidMm republished outside the pool
+       * is paged back in (bounded); then the whole set is proved again. */
+      uint64_t token = 0u;
+      AcquireSRWLockShared(&device->ScreenBufferLock);
+      const auto *failed = &device->ScreenBuffers[indices[batch->FailedIndex]];
+      if (failed->KernelAllocation == q->Allocation &&
+          failed->CanonicalGpuVa == q->GpuVa) token = failed->Token;
+      ReleaseSRWLockShared(&device->ScreenBufferLock);
+      /* 1: back in the pool; 2: placed outside again, the next round
+       * frees more idle residency. Either way prove everything again. */
+      if (token && rehome_cpu_pool(device, token, command_va,
+                                   ADMISSION_UMD_REHOME_SUBMIT, rehomes++))
+        continue;
+      if (device->DrawTerminal) break;
+    }
+    UINT values[9] = {q->Allocation, (UINT)q->GpuVa, (UINT)(q->GpuVa >> 32),
+        (UINT)q->AllocationBytes, (UINT)(q->AllocationBytes >> 32), q->Write,
+        q->Reason, (UINT)q->FailedVa, (UINT)(q->FailedVa >> 32)};
+    /* Callback/identity/translation failure is not memory pressure. */
+    device->GpuvaFailure = FAILED(hr) ? hr :
+        (missing && (q->Reason == AppleAgxG3WalkLeafAbsent ||
+                     q->Reason == AppleAgxG3WalkLeafNotPublished)) ? E_OUTOFMEMORY : E_FAIL;
+    AdmissionUmdDiagnostic("reject-native-allocation", device->GpuvaFailure,
+        values, ARRAYSIZE(values));
+    break;
+  }
+  HeapFree(GetProcessHeap(), 0, batch);
+  if (ready) device->GpuvaFailure = S_OK;
+  return ready;
+}
+
+/* A malformed AGX4 envelope is an application-device failure, not a
+ * scheduled DMA. Prove it through a fallible escape after residency/upload;
+ * keep the ordinary submit/BeginJob validation for changes after this check. */
+static int g4_preflight(ADMISSION_UMD_DEVICE *device, uint64_t va,
+    uint32_t bytes, const void *private_data, uint32_t private_bytes) {
+  if (!private_data || !private_bytes ||
+      private_bytes > APPLE_AGX_G4_PREFLIGHT_PRIVATE_MAX ||
+      !device->KernelCallbacks->pfnEscapeCb) {
+    device->GpuvaFailure = E_FAIL;
+    return 0;
+  }
+  auto *q = (APPLE_AGX_G4_PREFLIGHT *)HeapAlloc(GetProcessHeap(),
+      HEAP_ZERO_MEMORY, sizeof(APPLE_AGX_G4_PREFLIGHT));
+  if (!q) { device->GpuvaFailure = E_OUTOFMEMORY; return 0; }
+  q->Magic = APPLE_AGX_G4_PREFLIGHT_MAGIC;
+  q->Version = APPLE_AGX_G4_PREFLIGHT_VERSION;
+  q->Bytes = sizeof(*q);
+  q->CommandVa = va; q->CommandBytes = bytes; q->PrivateBytes = private_bytes;
+  memcpy(q->Private, private_data, private_bytes);
+  D3DDDICB_ESCAPE request = {};
+  request.hDevice = device->RuntimeDevice.handle;
+  request.hContext = device->KernelContext;
+  request.pPrivateDriverData = q;
+  request.PrivateDriverDataSize = sizeof(*q);
+  HRESULT hr = device->KernelCallbacks->pfnEscapeCb(
+      device->Adapter->RuntimeAdapter.handle, &request);
+  const int ready = SUCCEEDED(hr) && q->Ready == 1u && q->Status == 0u &&
+      q->ParseResult == AppleAgxG4ParseOk;
+  if (!ready) {
+    device->GpuvaFailure = FAILED(hr) ? hr : E_FAIL;
+    UINT values[] = {q->Status, q->ParseResult, q->Failure.Subsite,
+        q->Failure.Kind, q->Failure.Ordinal, (UINT)q->Failure.Va,
+        (UINT)(q->Failure.Va >> 32), q->Failure.Bytes, q->Failure.Write};
+    AdmissionUmdDiagnostic("reject-native-envelope", device->GpuvaFailure,
+        values, ARRAYSIZE(values));
+  }
+  HeapFree(GetProcessHeap(), 0, q);
+  return ready;
+}
+
+/* Every GPU-written slot of a submission (mark_written); only the direct
+ * displayable ones become WrittenPrimaries, which D3DDDI_MAX_WRITTEN_PRIMARIES
+ * bounds below. Matches the winsys AGX_G4_WRITTEN_LIMIT (EXP1851, EXP1994). */
+#define ADMISSION_UMD_WRITTEN_LIMIT 1024u
+/* EXP2210 receipt-only: measure-umd-submit, one row per SubmitCommandCb.
+ * Host replays that compile submit() alone leave it out. */
+#define ADMISSION_UMD_SUBMIT_RECEIPT_ON 1
+#if defined(ADMISSION_UMD_SUBMIT_RECEIPT_ON)
+/* {version, RenderCBSequence, command VA lo/hi, DMA bytes, private bytes,
+ *  private header words 0 (magic) and 1 (version | header bytes << 16),
+ *  written count, SubmitCommandCb result, QPC before lo/hi, QPC after
+ *  lo/hi, render fence this submission will signal lo/hi, wait serial,
+ *  wait us since the previous submission on this thread (InflightSlot,
+ *  QueryWriters, Flush, BatchPoll, RenderFence, NativeReadyEscape;
+ *  inclusive), wait flags}. The KMD completion stream joins it by command
+ *  VA (measure-gpu-completion). Only with diagnostics measuring. */
+static void submit_receipt(ADMISSION_UMD_DEVICE *device, uint64_t va,
+    uint32_t bytes, const void *private_data, uint32_t private_bytes,
+    unsigned written_count, UINT sequence, HRESULT result,
+    LONGLONG before, LONGLONG after) {
+  UINT values[24] = {};
+  UINT header[2] = {};
+  if (private_data && private_bytes >= sizeof(header))
+    memcpy(header, private_data, sizeof(header));
+  const uint64_t internal = device->NextRenderFence + 1u;
+  values[0] = 1u; values[1] = sequence;
+  values[2] = (UINT)va; values[3] = (UINT)(va >> 32);
+  values[4] = bytes; values[5] = private_bytes;
+  values[6] = header[0]; values[7] = header[1];
+  values[8] = written_count; values[9] = (UINT)result;
+  values[10] = (UINT)before; values[11] = (UINT)((ULONGLONG)before >> 32);
+  values[12] = (UINT)after; values[13] = (UINT)((ULONGLONG)after >> 32);
+  values[14] = (UINT)internal; values[15] = (UINT)(internal >> 32);
+  values[23] = AdmissionUmdWaitSubmitDelta(&values[16], &values[17]);
+  AdmissionUmdDiagnostic("measure-umd-submit", result, values, ARRAYSIZE(values));
+}
+#endif
+
 static int submit(void *context, const uint64_t *written,
                   unsigned written_count, uint64_t va, uint32_t bytes,
                   const void *private_data, uint32_t private_bytes,
@@ -1296,7 +2692,7 @@ static int submit(void *context, const uint64_t *written,
       !device->KernelCallbacks->pfnSubmitCommandCb ||
       !device->KernelCallbacks->pfnSignalSynchronizationObjectFromGpu2Cb ||
       device->NextRenderFence > UINT64_MAX - 2 ||
-      written_count > D3DDDI_MAX_WRITTEN_PRIMARIES ||
+      written_count > ADMISSION_UMD_WRITTEN_LIMIT ||
       (written_count && !written)) return 0;
   AcquireSRWLockShared(&device->ScreenBufferLock);
   for (unsigned i = 0; i < written_count; ++i) {
@@ -1351,6 +2747,9 @@ static int submit(void *context, const uint64_t *written,
 #endif
     return device->DrawTerminal ? 2 : 0;
   }
+  if (!native_held_ready(device, va)) return device->DrawTerminal ? 2 : 0;
+  /* Return 0, never the accepted/uncertain result 2: no DMA was scheduled. */
+  if (!g4_preflight(device, va, bytes, private_data, private_bytes)) return 0;
   request.Commands = va;
   request.CommandLength = bytes;
   request.BroadcastContextCount = 1;
@@ -1362,8 +2761,26 @@ static int submit(void *context, const uint64_t *written,
   LARGE_INTEGER submit_start;
   (void)QueryPerformanceCounter(&submit_start);
 #endif
+  AcquireSRWLockShared(&device->ScreenBufferLock);
+  watch_slots(device,3u,NULL,0,NULL,0,request.RenderCBSequence,S_OK);
+  ReleaseSRWLockShared(&device->ScreenBufferLock);
+#if defined(ADMISSION_UMD_SUBMIT_RECEIPT_ON)
+  const bool submit_measured = AdmissionUmdMeasureEnabled() != 0;
+  LARGE_INTEGER submit_before = {}, submit_after = {};
+  if (submit_measured) (void)QueryPerformanceCounter(&submit_before);
+#endif
+  unsigned wait_pfnSubmitCommandCb_2=AdmissionUmdWaitBegin(AgxWaitSubmit);
   HRESULT submit_result = device->KernelCallbacks->pfnSubmitCommandCb(
       device->RuntimeDevice.handle, &request);
+  AdmissionUmdWaitEnd(wait_pfnSubmitCommandCb_2);
+#if defined(ADMISSION_UMD_SUBMIT_RECEIPT_ON)
+  if (submit_measured) {
+    (void)QueryPerformanceCounter(&submit_after);
+    submit_receipt(device, va, bytes, private_data, private_bytes, written_count,
+                   request.RenderCBSequence, submit_result,
+                   submit_before.QuadPart, submit_after.QuadPart);
+  }
+#endif
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   measure_g4_phase(4u,submit_start,request.RenderCBSequence,bytes,submit_result);
 #endif
@@ -1388,7 +2805,11 @@ static int submit(void *context, const uint64_t *written,
   }
   device->FrameSubmitStatus = submit_result;
 #endif
-  if (FAILED(submit_result)) return 0;
+  if (FAILED(submit_result)) {
+    device->GpuvaFailure = submit_result;
+    AdmissionUmdScreenCpuAccessSnapshot(device, submit_result, 2u);
+    return 0;
+  }
   uint64_t internal = device->NextRenderFence + 1;
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   device->FrameSubmittedFence = internal;
@@ -1440,6 +2861,16 @@ static int wait_render(void *context, uint64_t fence) {
   return waited;
 }
 
+#ifdef APPLE_AGX_NATIVE_STAGING
+int AdmissionUmdGpuvaWaitNativeStaging(ADMISSION_UMD_DEVICE *device,
+                                      unsigned long long fence) {
+  if (!device || device->DrawTerminal || (fence && !wait_render(device, fence)))
+    return 0;
+  MemoryBarrier();
+  return 1;
+}
+#endif
+
 /* EXP1082: non-blocking: whether the GPU has signalled this render fence. */
 static int query_render(void *context, uint64_t fence) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)context;
@@ -1467,14 +2898,101 @@ static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *payload) 
   UINT operation=payload->Operation,width=payload->Width,height=payload->Height,
       utile=(payload->UtileWidth<<8)|payload->UtileHeight,layers=payload->Layers,
       samples=payload->Samples;
+  LARGE_INTEGER scene_start={}, scene_end={};
+  (void)QueryPerformanceCounter(&scene_start);
+  unsigned wait_pfnEscapeCb_5=AdmissionUmdWaitBegin(AgxWaitSceneEscape);
   HRESULT hr=device->KernelCallbacks->pfnEscapeCb(
       device->Adapter->RuntimeAdapter.handle,&request);
+  AdmissionUmdWaitEnd(wait_pfnEscapeCb_5);
+  (void)QueryPerformanceCounter(&scene_end);
+  /* rc103 receipt-only (EXP2037a: 4 scene escapes took 1.29 s of the scored
+   * frame 1->2 and, without a receipt, were charged to the next one,
+   * measure-touch): a private scene request of at least 10 ms, as
+   * measure-scene-escape {operation, us, width, height, utile w << 8 | h,
+   * layers | samples << 8, result}. Cached ACQUIRE/RELEASE pairs (about
+   * 50 us) stay silent. */
+  if(qpc_at_least_10ms(scene_end.QuadPart-scene_start.QuadPart)) {
+    UINT values[7]={operation,qpc_us(scene_end.QuadPart-scene_start.QuadPart),
+        width,height,utile,layers|(samples<<8),(UINT)hr};
+    AdmissionUmdDiagnostic("measure-scene-escape",hr,values,ARRAYSIZE(values));
+  }
   if(FAILED(hr)) {
     /* EXP873 diagnostic: which private scene request the KMD refused. */
     UINT values[7]={operation,(UINT)hr,width,height,utile,layers,samples};
     AdmissionUmdDiagnostic("reject-private-escape",hr,values,ARRAYSIZE(values));
   }
   return SUCCEEDED(hr);
+}
+
+/* RC35: collect already-completed records only. The adapter ring is always
+ * cheap to fill; escapes and text formatting run only when capture is enabled.
+ * Four bounded pages avoid turning diagnostics into an unbounded work loop. */
+VOID AdmissionUmdGpuCompletionDrain(ADMISSION_UMD_DEVICE *device,
+    unsigned long long *cursor) {
+  unsigned page;
+  if (!AdmissionUmdMeasureEnabled() || !device || !cursor ||
+      device->Magic != ADMISSION_UMD_DEVICE_MAGIC || !device->Adapter ||
+      device->Adapter->Magic != ADMISSION_UMD_ADAPTER_MAGIC ||
+      !device->KernelCallbacks || !device->KernelCallbacks->pfnEscapeCb ||
+      !device->RuntimeDevice.handle || !device->KernelContext || device->ScreenClosing)
+    return;
+  for (page = 0; page < 4u; ++page) {
+    ADMISSION_GPU_COMPLETION_QUERY query = {0};
+    D3DDDICB_ESCAPE request = {0};
+    HRESULT hr;
+    unsigned i;
+    query.Magic = ADMISSION_GPU_TIMESTAMP_QUERY_MAGIC;
+    query.Version = ADMISSION_GPU_COMPLETION_VERSION;
+    query.Bytes = sizeof(query);
+    query.Cursor = *cursor;
+    request.hDevice = device->RuntimeDevice.handle;
+    request.hContext = device->KernelContext;
+    request.pPrivateDriverData = &query;
+    request.PrivateDriverDataSize = sizeof(query);
+    unsigned wait_pfnEscapeCb_6=AdmissionUmdWaitBegin(AgxWaitCompletionEscape);
+    hr = device->KernelCallbacks->pfnEscapeCb(device->Adapter->RuntimeAdapter.handle, &request);
+    AdmissionUmdWaitEnd(wait_pfnEscapeCb_6);
+    if (FAILED(hr) || query.Count > ADMISSION_GPU_COMPLETION_PAGE || !query.Frequency) {
+      AdmissionUmdDiagnostic("measure-gpu-collection-error", FAILED(hr) ? hr : E_FAIL, NULL, 0);
+      return;
+    }
+    for (i = 0; i < query.Count; ++i) {
+      const ADMISSION_GPU_COMPLETION *r = &query.Record[i];
+      const UINT completion[] = {(UINT)r->Sequence, (UINT)(r->Sequence >> 32),
+          (UINT)r->CommandVa, (UINT)(r->CommandVa >> 32), r->Fence, r->Kind, r->Status,
+          (UINT)r->SubmitQpc, (UINT)(r->SubmitQpc >> 32),
+          (UINT)r->CompleteQpc, (UINT)(r->CompleteQpc >> 32),
+          (UINT)query.Frequency, (UINT)(query.Frequency >> 32)};
+      const UINT stages[] = {(UINT)r->Sequence, (UINT)(r->Sequence >> 32),
+          (UINT)r->Start, (UINT)(r->Start >> 32), (UINT)r->End, (UINT)(r->End >> 32),
+          (UINT)r->TaStart, (UINT)(r->TaStart >> 32), (UINT)r->TaEnd, (UINT)(r->TaEnd >> 32)};
+      AdmissionUmdDiagnostic("measure-gpu-completion", S_OK, completion, ARRAYSIZE(completion));
+      AdmissionUmdDiagnostic("measure-gpu-stages", S_OK, stages, ARRAYSIZE(stages));
+      /* rc79: only renders with a timed compute prelude add a row. */
+      if (r->PreludeEnd) {
+        const UINT prelude[] = {(UINT)r->Sequence, (UINT)(r->Sequence >> 32),
+            (UINT)r->PreludeStart, (UINT)(r->PreludeStart >> 32),
+            (UINT)r->PreludeEnd, (UINT)(r->PreludeEnd >> 32)};
+        AdmissionUmdDiagnostic("measure-gpu-prelude", S_OK, prelude, ARRAYSIZE(prelude));
+      }
+      /* rc79: cumulative TVB overflows (partial renders) of the manager. */
+      if (r->Kind == ADMISSION_GPU_TIMESTAMP_RENDER && !r->Status) {
+        const UINT tvb[] = {(UINT)r->Sequence, (UINT)(r->Sequence >> 32),
+            r->TvbOverflows, r->TvbMaxPages};
+        AdmissionUmdDiagnostic("measure-gpu-tvb", S_OK, tvb, ARRAYSIZE(tvb));
+      }
+    }
+    {
+      const UINT coverage[] = {(UINT)query.Cursor, (UINT)(query.Cursor >> 32),
+          (UINT)query.Newest, (UINT)(query.Newest >> 32),
+          (UINT)query.Lost, (UINT)(query.Lost >> 32), query.Reset,
+          (UINT)query.MissingTiming, (UINT)(query.MissingTiming >> 32),
+          (UINT)*cursor, (UINT)(*cursor >> 32)};
+      AdmissionUmdDiagnostic("measure-gpu-coverage", S_OK, coverage, ARRAYSIZE(coverage));
+    }
+    *cursor = query.Cursor;
+    if (query.Cursor == query.Newest) break;
+  }
 }
 
 /* GPU timestamps: the KMD's firmware start/end of this process's completed
@@ -1499,8 +3017,10 @@ static int gpu_timestamps(void *context, uint64_t command_va, uint64_t *start,
   request.hContext=device->KernelContext;
   request.Flags.HardwareAccess=0u;
   request.pPrivateDriverData=&query;request.PrivateDriverDataSize=sizeof(query);
+  unsigned wait_pfnEscapeCb_7=AdmissionUmdWaitBegin(AgxWaitTimestampEscape);
   HRESULT hr=device->KernelCallbacks->pfnEscapeCb(
       device->Adapter->RuntimeAdapter.handle,&request);
+  AdmissionUmdWaitEnd(wait_pfnEscapeCb_7);
   {
     /* EXP1341 receipt-only: each answer and the KMD's newest compute
      * capture (first 64 per process; measure- lines are outside the
@@ -1527,7 +3047,7 @@ const AGX_WIN32_GPUVA_OPS *AdmissionUmdGpuvaOperations(void) {
   static const AGX_WIN32_GPUVA_OPS operations = {
       reserve_va, map_va, free_va, make_resident, wait_paging,
       submit, wait_render, evict, private_escape, query_render,
-      gpu_timestamps};
+      gpu_timestamps, map_va_at};
   return &operations;
 }
 #endif

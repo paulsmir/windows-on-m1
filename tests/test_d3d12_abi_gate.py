@@ -6,6 +6,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = Path('/Volumes/pwdev/public_windows/.local/reference/wdk26100/d3d12umddi.h')
 SOURCE = ROOT / 'drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp'
+ROOT_LAYOUT = ROOT / 'drivers/apple-agx/d3d12/agx_d3d12_r1_root_layout.h'
 TABLES = ('D3D12DDI_ADAPTERFUNCS', 'D3D12DDI_DEVICE_FUNCS_CORE_0003',
           'D3D12DDI_COMMAND_LIST_FUNCS_3D_0003',
           'D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001')
@@ -47,6 +48,22 @@ class D3d12AbiGate(unittest.TestCase):
         # OpenAdapter12) answers only the 3D pipeline caps with FL 11_0.
         self.assertEqual(source.count('D3D12DDI_3DPIPELINELEVEL_11_0'), 1)
         self.assertIn('static const D3D12DDI_3DPIPELINELEVEL kProfileLevel = D3D12DDI_3DPIPELINELEVEL_11_0;', source)
+        # FL 11_1 by default since EXP1890/1891 (C62A, C57A, C60A at 11_1);
+        # APPLE_AGX_D3D12_FL111=0 keeps a process at 11_0
+        level = source[source.index('static D3D12DDI_3DPIPELINELEVEL ProfileLevel() {'):]
+        level = level[:level.index('\n}\n')]
+        self.assertIn('GetEnvironmentVariableA("APPLE_AGX_D3D12_FL111", value, sizeof(value)) == 1', level)
+        self.assertIn("value[0] == '0'", level)
+        self.assertIn('return kProfileLevel;', level)
+        # C68: a level is claimed only with its features -- 12_0 needs Tiled
+        # Tier 2 (min/max with it), 12_1 also ROVs and CR Tier 1; an opt-out
+        # of any of them (or APPLE_AGX_D3D12_FL12=0) lowers the level, never
+        # an unsupported feature behind a higher one
+        self.assertIn('if (fl12 && TiledTier2())', level)
+        self.assertIn('RovEnabled() && ConservativeRasterEnabled() ? D3D12DDI_3DPIPELINELEVEL_12_1', level)
+        self.assertLess(level.index('APPLE_AGX_D3D12_FL111'), level.index('D3D12DDI_3DPIPELINELEVEL_12_0'))
+        self.assertTrue(level.rstrip().endswith('return D3D12DDI_3DPIPELINELEVEL_11_1;'))
+        self.assertNotIn('= kProfileLevel;', source[source.index('static HRESULT APIENTRY GetCaps('):])
         caps = source[source.index('static HRESULT APIENTRY GetCaps('):]
         caps = caps[:caps.index('\n}\n')]
         self.assertEqual(set(re.findall(r'case (D3D12DDICAPS_TYPE_\w+)', caps)),
@@ -54,12 +71,90 @@ class D3d12AbiGate(unittest.TestCase):
                           'D3D12DDICAPS_TYPE_D3D12_OPTIONS', 'D3D12DDICAPS_TYPE_MEMORY_ARCHITECTURE',
                           'D3D12DDICAPS_TYPE_SHADER', 'D3D12DDICAPS_TYPE_ARCHITECTURE_INFO',
                           'D3D12DDICAPS_TYPE_GPUVA_CAPS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT',
-                          'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT_SETS'})
-        # nothing optional is claimed (plan minimum: tier 1, no optional features)
-        for claim in ('D3D12DDI_RESOURCE_BINDING_TIER_2', 'D3D12DDI_RESOURCE_HEAP_TIER_2',
-                      'Doubles = TRUE', 'ROVs = TRUE', 'OutputMergerLogicOp = TRUE',
-                      'D3D12DDI_TILED_RESOURCES_TIER_1', 'D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1'):
+                          'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT_SETS', 'D3D12DDICAPS_TYPE_TEXTURE_LAYOUT1',
+                          'D3D12DDICAPS_TYPE_SWIZZLE_PATTERN', 'D3D12DDICAPS_TYPE_0011_SHADER_MODELS',
+                      'D3D12DDICAPS_TYPE_0050_HARDWARE_SCHEDULING_CAPS',
+                      # EXP1869: R2+ caps answered with their "not supported" values
+                      'D3D12DDICAPS_TYPE_0023_UMD_BASED_COMMAND_QUEUE_PRIORITY',
+                      'D3D12DDICAPS_TYPE_0022_CPU_PAGE_TABLE_FALSE_POSITIVES',
+                      'D3D12DDICAPS_TYPE_0030_PROTECTED_RESOURCE_SESSION_SUPPORT',
+                      'D3D12DDICAPS_TYPE_EXECUTECOMMANDLISTS_PARALLELISM',
+                      'D3D12DDICAPS_TYPE_0073_SUPPORT_BATCHED_MARKERS',
+                      # EXP1870: the R2+ forms of the C21 layout registry
+                      'D3D12DDICAPS_TYPE_0022_TEXTURE_LAYOUT', 'D3D12DDICAPS_TYPE_0022_SWIZZLE_PATTERN',
+                      'D3D12DDICAPS_TYPE_0074_PROTECTED_RESOURCE_SESSION_TYPE_COUNT'})
+        # C44: SM 6.0 and the R1 interface by default since EXP1865;
+        # APPLE_AGX_D3D12_SM6=0 is the only way back to 0003/SM 5.1
+        gate = source[source.index('static bool ShaderModel6Enabled() {'):]
+        gate = gate[:gate.index('\n}\n')]
+        self.assertIn("return !(GetEnvironmentVariableA(\"APPLE_AGX_D3D12_SM6\", value, sizeof(value)) == 1 && value[0] == '0');", gate)
+        models = caps[caps.index('case D3D12DDICAPS_TYPE_0011_SHADER_MODELS:'):]
+        models = models[:models.index('break;')]
+        self.assertIn('if (ShaderModel6Enabled() &&', models)
+        versions = source[source.index('static HRESULT APIENTRY GetVersions('):]
+        versions = versions[:versions.index('\n}\n')]
+        self.assertIn(': InterfaceOptIn() == D3D12DDI_SUPPORTED_0076 ? 6u', versions)
+        self.assertIn('versions[n++] = D3D12DDI_SUPPORTED_0012;', versions)
+        # C48: the wave caps (0012) only in the same SM6 processes
+        shader = caps[caps.index('case D3D12DDICAPS_TYPE_SHADER:'):]
+        shader = shader[:shader.index('Answer<D3D12DDI_SHADER_CAPS_0003>')]
+        self.assertIn('if (ShaderModel6Enabled() && arg->DataSize >= sizeof(D3D12DDI_SHADER_CAPS_0012))', shader)
+        self.assertEqual(caps.count('WaveOps = TRUE'), 1)
+        # C49: TypedUAVLoadAdditionalFormats obliges UAV_READS on the whole
+        # required set (D3D12 typed UAV loads); CheckFormatSupport must cover it
+        self.assertIn('static constexpr BOOL kTypedUavLoads = TRUE; /* C49 */', source)
+        typed = source[source.index('static bool TypedUavLoadFormat('):]
+        typed = typed[:typed.index('/* optional */')]
+        for fmt in ('R32G32B32A32_FLOAT', 'R32G32B32A32_UINT', 'R32G32B32A32_SINT', 'R16G16B16A16_FLOAT',
+                    'R16G16B16A16_UINT', 'R16G16B16A16_SINT', 'R8G8B8A8_UNORM', 'R8G8B8A8_UINT', 'R8G8B8A8_SINT',
+                    'R16_FLOAT', 'R16_UINT', 'R16_SINT', 'R8_UNORM', 'R8_UINT', 'R8_SINT'):
+            self.assertIn(f'case DXGI_FORMAT_{fmt}:', typed, fmt)
+        self.assertIn('if (TypedUavLoadFormat(format)) *support |= D3D12DDI_FORMAT_SUPPORT_UAV_READS;', source)
+        # nothing optional is claimed beyond resource binding tier 2 (C47: heap
+        # ranges for SRVs, UAVs and samplers)
+        self.assertIn('d.ResourceBindingTier = D3D12DDI_RESOURCE_BINDING_TIER_2;', caps)
+        for claim in ('D3D12DDI_RESOURCE_BINDING_TIER_3', 'D3D12DDI_RESOURCE_HEAP_TIER_2',
+                      'Doubles = TRUE', 'ROVs = TRUE', 'D3D12DDI_TILED_RESOURCES_TIER_3',
+                      'D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_2'):
             self.assertNotIn(claim, caps)
+        # 12_1: ROVs and conservative rasterization Tier 1 only behind their
+        # opt-ins until the hardware probes (C59A, C61A) pass
+        # EXP1889: both shader-caps answers (0003 and the SM 6 0012 one)
+        self.assertEqual(caps.count('d.ROVs = RovEnabled();'), 2)
+        self.assertEqual(caps.count('D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1'), 1)
+        self.assertIn('d.ConservativeRasterizationTier = ConservativeRasterEnabled() ? D3D12DDI_CONSERVATIVE_RASTERIZATION_TIER_1',
+                      caps)
+        # ROVs by default since EXP1893 (C59A/C59B) and conservative
+        # rasterization since EXP1895/1896 (C61A-C61C; every pipeline with
+        # triangles: VS, tessellation, application GS); =0 opts a process out
+        for name, env, value in (('RovEnabled', 'APPLE_AGX_D3D12_ROV', '0'), ('ConservativeRasterEnabled', 'APPLE_AGX_D3D12_CR', '0')):
+            body = source[source.index('static BOOL %s() {' % name):]
+            body = body[:body.index('\n}\n')]
+            self.assertIn('GetEnvironmentVariableA("%s", value, sizeof(value)) == 1 && value[0] == \'%s\'' % (env, value), body)
+        for name in ('RovEnabled', 'ConservativeRasterEnabled'):
+            body = source[source.index('static BOOL %s() {' % name):]
+            self.assertIn("return !(GetEnvironmentVariableA", body[:body.index('\n}\n')])
+        # C53: Tier 1 and the TILED format bit only behind APPLE_AGX_D3D12_TILED=1
+        self.assertEqual(caps.count('D3D12DDI_TILED_RESOURCES_TIER_1'), 1)
+        self.assertIn(': TiledEnabled() ? D3D12DDI_TILED_RESOURCES_TIER_1', caps)
+        tiled = source[source.index('static BOOL TiledEnabled() {'):]
+        tiled = tiled[:tiled.index('\n}\n')]
+        self.assertIn('return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && value[0] == \'0\');', tiled)
+        # C53T: Tier 2 by default; TILED=1 keeps Tier 1, TILED=0 none
+        self.assertEqual(caps.count('D3D12DDI_TILED_RESOURCES_TIER_2'), 1)
+        self.assertIn('d.TiledResourcesTier = TiledTier2()     ? D3D12DDI_TILED_RESOURCES_TIER_2', caps)
+        tier2 = source[source.index('static BOOL TiledTier2() {'):]
+        self.assertIn('return !(GetEnvironmentVariableA("APPLE_AGX_D3D12_TILED", value, sizeof(value)) == 1 && (value[0] == \'0\' || value[0] == \'1\'));', tier2[:tier2.index('\n}\n')])
+        self.assertEqual(source.count('D3D12DDI_FORMAT_SUPPORT_TILED'), 1)
+        self.assertIn('if (TiledEnabled() && TiledFormat(format)) *support |= D3D12DDI_FORMAT_SUPPORT_TILED;', source)
+        # C57: OutputMergerLogicOp only with the logic op carried to Gallium
+        # (one op for every render target; a disagreeing PSO is refused)
+        self.assertIn('d.OutputMergerLogicOp = TRUE; /* C57 */', caps)
+        self.assertIn('desc.LogicOp = rt.LogicOp;', source)
+        self.assertIn('AdmissionUmdDiagnostic("measure-d3d12-logic-op", E_NOTIMPL', source)
+        winsys = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        self.assertIn('blend.logicop_func = logic_ops[desc->LogicOp];', winsys)
+
         opener = source[source.index('extern "C" HRESULT APIENTRY OpenAdapter12('):]
         self.assertLess(opener.index('APPLE_AGX_D3D12'), opener.index('FillD3D12DDI_ADAPTERFUNCS'))
         self.assertIn('return E_NOTIMPL;', source)
@@ -70,12 +165,14 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertEqual(source.count('Rejected<decltype'), 1)  # only AGX_REJECT
         stub = source[source.index('struct Rejected<R (APIENTRY *)(A...), Table, Offset>'):]
         self.assertLess(stub.index('AdmissionUmdDiagnostic("measure-d3d12-rejected"'),
-                        stub.index('pfnSetErrorCb(runtime_device'))
+                        stub.index('ReportRejectedDeviceError(std::get<0>'))
         # C1d (EXP1348): device initialisation calls these; they answer
         # without SetErrorCb and claim no optional capability.
         for member in ('pfnCheckFormatSupport', 'pfnCheckMultisampleQualityLevels', 'pfnQueryNodeMap'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
-        self.assertIn('if (support) *support = 0;', source)
+        # C32: only the multisample bits of the multisampled cast sets
+        # (test_d3d12_multisample_caps checks the D3D12Core cast-set rule)
+        self.assertIn('*support = D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET | D3D12DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD;', source)
         self.assertIn('*levels = samples == 1 ? 1u : 0u;', source)
         self.assertIn('map[i] = 0;', source)
         # C1e (EXP1349 + d3d12core 26100 row-major validation): SubCaps[0]
@@ -105,16 +202,23 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('default: return 2;', cost)
         size = source[source.index('static SIZE_T APIENTRY CalcPrivateRootSignatureSize('):]
         size = size[:size.index('\n}\n')]
-        self.assertIn('NumParameters', size)
+        self.assertIn('AgxD3d12MeasureR1RootPrivate', size)
+        self.assertIn('root->NumParameters', ROOT_LAYOUT.read_text())
         # C1g (EXP1351): shader objects keep the tokenized program (length in
-        # pShaderCode[1]); hull/domain and GS stream output stay refused.
+        # pShaderCode[1]); GS stream output stays refused (C37: hull and
+        # domain shaders are stored, a hull shader with its pass-through
+        # registers).
         for member, fn in (('pfnCalcPrivateShaderSize', 'CalcPrivateShaderSize'),
                            ('pfnCreateVertexShader', 'CreateShader'), ('pfnCreatePixelShader', 'CreateShader'),
                            ('pfnCreateGeometryShader', 'CreateShader'),
+                           ('pfnCalcPrivateTessellationShaderSize', 'CalcPrivateTessellationShaderSize'),
+                           ('pfnCreateHullShader', 'CreateTessellationShader'), ('pfnCreateDomainShader', 'CreateTessellationShader'),
                            ('pfnCreateComputeShader', 'CreateComputeShader'), ('pfnDestroyShader', 'DestroyShader')):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, fn), source)
-        for member in ('pfnCreateHullShader', 'pfnCreateDomainShader', 'pfnCreateGeometryShaderWithStreamOutput'):
-            self.assertIn('AGX_REJECT(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s)' % member, source)
+        # C39: stream output keeps its declaration with the program
+        for member, fn in (('pfnCalcPrivateGeometryShaderWithStreamOutput', 'CalcPrivateGeometryShaderWithStreamOutput'),
+                           ('pfnCreateGeometryShaderWithStreamOutput', 'CreateGeometryShaderWithStreamOutput')):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, fn), source)
         self.assertIn('memcpy(shader->tokens, code, code[1] * sizeof(UINT));', source)
         self.assertIn('(dwords ? dwords : 1) * sizeof(UINT)', source)
         # C1h (EXP1352): the four state objects a graphics pipeline state
@@ -232,18 +336,18 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('bytes > d->bytes - dst_offset', copy)
         self.assertIn('bytes > r->bytes - src_offset', copy)
         self.assertIn('list->commands >= kListCommands', copy)
-        execute = source[source.index('static VOID APIENTRY ExecuteCommandLists('):]
+        execute = source[source.index('static HRESULT ReplayAndSubmit('):]
         execute = execute[:execute.index('\n}\n')]
         self.assertLess(execute.index('AgxD3d12OwnerCopy('), execute.index('AgxD3d12OwnerSubmitAndWait('))
         # C5: copies and dispatches replay in recording order through one loop
         self.assertLess(execute.index('ReplayDispatch(owner, command.dispatch)'), execute.index('AgxD3d12OwnerSubmitAndWait('))
-        self.assertLess(execute.index('ReplayDraw(owner, command.draw)'), execute.index('AgxD3d12OwnerSubmitAndWait('))
+        self.assertLess(execute.index('ReplayDraw(owner, command.draw,'), execute.index('AgxD3d12OwnerSubmitAndWait('))
         self.assertIn('command.kind == kCommandCopy', execute)
         # nothing can bind it yet: every command-list DDI stays fail-closed
         implemented = set(re.findall(r'AGX_ASSIGN\(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, (\w+), (?!AGX_REJECT)', source))
         # EXP1363: the runtime's default-state setters are accepted (recorded
         # as received state); every state consumer stays fail-closed.
-        setters = {'pfnSetPredication', 'pfnSetDescriptorHeaps', 'pfnSOSetTargets'}
+        setters = {'pfnSetPredication', 'pfnSetDescriptorHeaps'}
         compute = {'pfnSetPipelineState', 'pfnSetComputeRootSignature', 'pfnSetComputeRootUnorderedAccessView',
                    'pfnDispatch', 'pfnClearRootArguments', 'pfnSetComputeRoot32BitConstant',
                    'pfnSetComputeRoot32BitConstants', 'pfnSetComputeRootConstantBufferView',
@@ -264,13 +368,40 @@ class D3d12AbiGate(unittest.TestCase):
         compute |= {'pfnClearUnorderedAccessViewUint', 'pfnClearUnorderedAccessViewFloat', 'pfnDiscardResource', 'pfnSetMarker'}  # C10
         compute |= {'pfnBeginQuery', 'pfnEndQuery', 'pfnResolveQueryData'}  # C11
         compute |= {'pfnExecuteIndirect'}  # C14
+        compute |= {'pfnExecuteBundle'}  # C30: the bundle call log (test_d3d12_bundles)
+        compute |= {'pfnResourceResolveSubresource'}  # C32: multisample resolve
         compute |= {'pfnSetGraphicsRootUnorderedAccessView'}  # C13 (EXP1375)
+        compute |= {'pfnSOSetTargets'}  # C39: stream-output views
+        compute |= {'pfnCopyTiles'}  # C53 T2D (AGX_TILED_DEVICE: rejected without the native owner)
         self.assertEqual(implemented, {'pfnCloseCommandList', 'pfnResetCommandList', 'pfnCopyBufferRegion',
                                        'pfnResourceBarrier'} | setters | compute)
         for member in setters:
             self.assertIn('AGX_LIST_STATE(%s)' % member, source)
-        for consumer in ('pfnExecuteBundle',):
-            self.assertIn('AGX_REJECT(D3D12DDI_COMMAND_LIST_FUNCS_3D_0003, %s)' % consumer, source)
+
+    def test_logic_op_table_matches_the_wdk_truth_tables(self):
+        # C57: logic_ops[] maps D3D12DDI_LOGIC_OP (WDK order, formula in its
+        # comment) to enum pipe_logicop, whose value is the truth table with
+        # bit (s << 1 | d). A swapped entry draws wrong pixels silently.
+        wdk = HEADER.read_text(encoding='utf-8-sig')
+        body = wdk[wdk.index('D3D12DDI_LOGIC_OP_CLEAR = 0'):wdk.index('} D3D12DDI_LOGIC_OP;')]
+        formulas = re.findall(r'D3D12DDI_LOGIC_OP_(\w+)(?: = 0)?,\s*// (.+)', body)
+        self.assertEqual(len(formulas), 16)
+        blend = HEADER.parents[1] / 'mesa/src/util/blend.h'
+        if not blend.exists():
+            self.skipTest('Mesa reference not available')
+        text = blend.read_text()
+        pipe = re.findall(r'PIPE_LOGICOP_(\w+),', text[text.index('enum pipe_logicop {'):])[:16]
+        winsys = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        table = winsys[winsys.index('logic_ops[16] = {'):]
+        table = re.findall(r'PIPE_LOGICOP_(\w+)', table[:table.index('};')])
+        self.assertEqual(len(table), 16)
+        for (name, formula), mapped in zip(formulas, table):
+            truth = 0
+            for s_bit in (0, 1):
+                for d_bit in (0, 1):
+                    expr = formula.strip().replace('s', str(s_bit)).replace('d', str(d_bit))
+                    truth |= (eval(expr) & 1) << (s_bit << 1 | d_bit)
+            self.assertEqual(pipe.index(mapped), truth, f'{name} ({formula}) -> {mapped}')
 
     def test_c5_compute_dispatch(self):
         # C5 (D3D12-C5-compute.md). Invariants: the pipeline keeps its own
@@ -336,7 +467,8 @@ class D3d12AbiGate(unittest.TestCase):
             start = source.index(name)
             return source[start:source.index('\n}\n', start)]
         size = fn('static SIZE_T APIENTRY CalcPrivateRootSignatureSize(')
-        self.assertIn('ranges * sizeof(AgxD3d12Range)', size)
+        self.assertIn('AgxD3d12MeasureR1RootPrivate', size)
+        self.assertIn('add(ranges, sizeof(AgxD3d12Range))', ROOT_LAYOUT.read_text())
         create = fn('static HRESULT APIENTRY CreateRootSignature(')
         self.assertIn('D3D12DDI_DESCRIPTOR_RANGE_OFFSET_APPEND', create)
         self.assertIn('? next : in.OffsetInDescriptorsFromTableStart', create)
@@ -344,13 +476,13 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('range.type != D3D12DDI_DESCRIPTOR_RANGE_TYPE_CBV) return 4u;', table)
         self.assertIn('uav ? kUavSlots : srv ? kSrvSlots : kCbSlots', table)
         self.assertIn('range.space || range.base_register >= slots', table)
-        self.assertIn('at + sizeof(AgxD3d12Descriptor) > heap->bytes', table)
+        self.assertIn('at + sizeof(AgxD3d12Descriptor) > DescriptorHeapBytes(heap)', table)
         execute = fn('static void OwnerBindings(')
         self.assertIn('DescriptorUav(*view, &o->uav_buffers[u], &o->uavs[u])', execute)
         self.assertIn('view.kind != kDescriptorUavBuffer', source[source.index('static bool DescriptorUav('):])
         self.assertIn('view->kind == kDescriptorCbv', execute)
         uav = fn('static VOID APIENTRY CreateUnorderedAccessView(')
-        for reason in ('!= D3D12DDI_RD_BUFFER ? 4u', '!stride ? 5u', 'hDrvCounterResource.pDrvPrivate ? 7u',
+        for reason in ('!= D3D12DDI_RD_BUFFER ? 4u', '!stride ? 5u', 'arg->Buffer.CounterOffsetInBytes % 4u',  # C33: counters of structured UAVs
                        'bytes > resource->bytes - offset'):
             self.assertIn(reason, uav)
         self.assertIn('"measure-d3d12-uav"', uav)
@@ -364,9 +496,13 @@ class D3d12AbiGate(unittest.TestCase):
             self.assertIn(reason, srv)
         self.assertIn('"measure-d3d12-srv"', srv)
         self.assertIn('view->kind == kDescriptorSrvBuffer', execute)
-        for member in ('pfnCreateConstantBufferView', 'pfnCreateUnorderedAccessView', 'pfnCopyDescriptors',
-                       'pfnCopyDescriptorsSimple', 'pfnCreateShaderResourceView'):
+        for member in ('pfnCopyDescriptors', 'pfnCopyDescriptorsSimple'):
             self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %s);' % (member, member[3:]), source)
+        # C47: views written into CBV/SRV/UAV heaps also carry their heap form
+        for member in ('pfnCreateConstantBufferView', 'pfnCreateUnorderedAccessView', 'pfnCreateShaderResourceView'):
+            self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, %s, %sInHeap);' % (member, member[3:]), source)
+            wrapper = fn('static VOID APIENTRY %sInHeap(' % member[3:])
+            self.assertLess(wrapper.index('%s(handle, ' % member[3:]), wrapper.index('FillHeapForm(handle, dest, '))
 
     def test_c6a_textures(self):
         # C6a invariants (D3D12-C6-graphics.md): only single-sample 2D
@@ -381,8 +517,8 @@ class D3d12AbiGate(unittest.TestCase):
             start = source.index(name)
             return source[start:source.index('\n}\n', start)]
         size = fn('static UINT64 TextureBytes(')
-        for guard in ('arg->ResourceType != D3D12DDI_RT_TEXTURE2D', 'arg->SampleDesc.Count != 1',
-                      'AgxD3d12FormatBlockBytes(arg->Format)'):
+        for guard in ('arg->ResourceType != D3D12DDI_RT_TEXTURE2D', '(samples != 1 && ((samples != 2 && samples != 4) || arg->MipLevels != 1',
+                      'AgxD3d12FormatBlock(arg->Format, &bw, &bh)'):
             self.assertIn(guard, size)
         info = fn('static VOID APIENTRY CheckResourceAllocationInfo(')
         self.assertIn('info->ResourceDataSize = ~0ULL;', info)
@@ -390,6 +526,21 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('AgxD3d12OwnerCreateTexture2D(', create)
         texture_path = create[create.index('AgxD3d12OwnerCreateTexture2D('):create.index('return hr;')]
         self.assertNotIn('RegisterHeap', texture_path)
+        # EXP1829: a multisampled render target is never a single-sampled
+        # presentation texture; C66 (EXP1899 Portal 2) gives it its own
+        # multisampled texture of the full size, resolved at present
+        self.assertIn('resource_arg->SampleDesc.Count, bytes,', create[create.index('AgxD3d12OwnerCreatePresentationTexture('):])
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        p = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture('):]
+        p = p[:p.index('\n}\n')]
+        self.assertIn('if (format == DXGI_FORMAT_R10G10B10A2_UNORM || bgrx || samples > 1u) {', p)
+        # C66b (EXP1901): a B8G8R8X8 back buffer (D3D9On12 X8R8G8B8) is
+        # presentable but stored as BGRA8, the only 8-bit BGR storage the
+        # presentation contract (umd.c AdmissionUmdDescribePrimary) accepts
+        self.assertIn('resource_arg->Format == DXGI_FORMAT_B8G8R8X8_UNORM ||', create)
+        self.assertLess(p.index('else if (format == DXGI_FORMAT_B8G8R8X8_UNORM) format = DXGI_FORMAT_B8G8R8A8_UNORM;'),
+                        p.index('create.Format = format;'))
+        self.assertIn('bytes, &converted, samples);', p)
         clear = fn('static VOID APIENTRY ClearRenderTargetView(')
         self.assertIn('command.clear.rtv = *rtv;', clear)
         self.assertIn('rtv->kind != kDescriptorRtv', clear)
@@ -403,11 +554,58 @@ class D3d12AbiGate(unittest.TestCase):
         side = fn('static bool CopySide(')
         self.assertIn('D3D12DDI_RL_SELECT_SUBRESOURCE', side)
         self.assertIn('D3D12DDI_RL_PLACED_PHYSICAL_SUBRESOURCE_PITCHED', side)
-        execute = fn('static VOID APIENTRY ExecuteCommandLists(')
+        execute = fn('static HRESULT ReplayAndSubmit(')
         self.assertIn('AgxD3d12OwnerClearRenderTarget(', execute)
         self.assertIn('AgxD3d12OwnerCopyTexture(', execute)
         # buffers carry their type so a footprint side is never a texture
         self.assertIn('resource->type = D3D12DDI_RT_BUFFER;', create)
+
+    def test_replay_holds_the_owner_lock(self):
+        # EXP1822: nBody executes lists from an async compute thread and its
+        # render thread at once; the owner's pipe_context is not thread-safe
+        source = SOURCE.read_text()
+        execute = source[source.index('static VOID APIENTRY ExecuteCommandLists('):]
+        execute = execute[:execute.index('\n}\n')]
+        self.assertLess(execute.index('AgxD3d12OwnerLock(owner);'), execute.index('ReplayAndSubmit(queue, count, lists);'))
+        self.assertLess(execute.index('ReplayAndSubmit(queue, count, lists);'), execute.index('AgxD3d12OwnerUnlock(owner);'))
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        import re
+        for m in re.finditer(r'extern "C" [^\n(]*\bAgxD3d12Owner(\w+)\(AGX_D3D12_OWNER \*owner[^{;]*\{\n(.*)\n', owner):
+            if m.group(1) in ('Destroy', 'Lock', 'Unlock'):
+                continue
+            self.assertEqual(m.group(2).strip(), 'OwnerLock lock(owner);', m.group(1))
+
+    def test_heaps_the_cpu_cannot_map_stay_unmapped(self):
+        # EXP1847 ModelViewer: every heap got a persistent CPU map, so the
+        # UMD treated each GPU-written DEFAULT buffer as CPU-visible and
+        # downloaded it after every submission (the 64 MB light grid, ~163 ms
+        # a frame). Only a heap whose CPU page property is not NOT_AVAILABLE
+        # is mapped, and Map refuses the others.
+        source = SOURCE.read_text()
+        create = source[source.index('static HRESULT CreateHeap('):]
+        create = create[:create.index('\n}\n')]
+        self.assertIn('heap->cpu_visible = arg.CPUPageProperty != D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE;', create)
+        self.assertIn('AgxD3d12OwnerCreateBuffer(owner, heap->bytes, heap->cpu_visible, &buffer)', create)
+        self.assertNotIn('heap->cpu_visible = TRUE', create)
+        map_heap = source[source.index('static HRESULT APIENTRY MapHeap('):]
+        map_heap = map_heap[:map_heap.index('\n}\n')]
+        self.assertLess(map_heap.index('heap->native && heap->cpu'), map_heap.index('!heap->cpu_visible'))
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        buffer = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCreateBuffer('):]
+        buffer = buffer[:buffer.index('\n}\n')]
+        self.assertIn('cpu_visible ? AgxWin32AsahiBufferWriteMap(owner->Context, resource) : NULL', buffer)
+        self.assertIn('AgxWin32AsahiBufferMarkValid(owner->Context, resource)', buffer)
+
+    def test_a_dispatch_does_not_force_a_submission(self):
+        # EXP1850 ModelViewer: memory_barrier(PIPE_BARRIER_ALL) after every
+        # launch flushed each UAV-writing dispatch into its own kernel
+        # submission (~70 a frame, ~40 ms of replay). Asahi's CDM barrier
+        # orders launches in a batch and its writer tracking orders batches.
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        dispatch = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerDispatch'):]
+        dispatch = dispatch[:dispatch.index('\n}\n')]
+        self.assertEqual(dispatch.count('pipe->launch_grid(pipe, &info);'), 2)
+        self.assertNotIn('pipe->memory_barrier(', dispatch)
 
     def test_c6b_draw(self):
         # C6b invariants: a pipeline keeps copies of its VS/PS programs and
@@ -440,7 +638,7 @@ class D3d12AbiGate(unittest.TestCase):
         resolve = fn('static UINT ResolveRoot(')
         self.assertIn('p.visibility != D3D12DDI_SHADER_VISIBILITY_ALL && p.visibility != stage) continue;', resolve)
         self.assertNotIn('graphics UAVs: not yet', resolve)  # C13: graphics UAVs bind per stage
-        self.assertIn('memcpy(draw.Ps.Uavs, ps_bind.uavs, sizeof(draw.Ps.Uavs));', source)
+        self.assertIn('StageBindings(ps_bind, &draw.Ps); /* C13: graphics UAVs bind per stage too */', source)
         sig = fn('static VOID APIENTRY SetGraphicsRootSignature(')
         self.assertIn('memset(list->graphics_root_va, 0', sig)
         replay = fn('static __declspec(noinline) HRESULT ReplayDraw(')
@@ -448,8 +646,39 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('OwnerBindings(d.ps_bind, &ps_bind);', replay)
         # the draw's owner records live on the heap, not in the replay frame
         # (STACK_FRAMES gate, EXP1369 build: 12944 bytes before)
-        self.assertIn('HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AgxD3d12DrawScratch))', replay)
-        self.assertIn('pso->desc.hGeometryShader.pDrvPrivate', draw)
+        # EXP1838: one scratch per execution, the stage blocks reference the
+        # binding sets; a pipeline stage without recorded bindings gets the
+        # zeroed set (the owner reads every stage the pipeline has)
+        self.assertIn('HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12DrawScratch))', source)
+        self.assertIn('memset(&scratch->none, 0, sizeof(scratch->none));', source)
+        self.assertNotIn('HeapAlloc', replay)
+        self.assertIn('memset(&draw, 0, sizeof(draw));', replay)
+        for stage in ('Gs', 'Hs', 'Ds'):
+            self.assertIn('else StageBindings(scratch->none, &draw.%s);' % stage, replay)
+        for stage in ('vs', 'ps'):
+            self.assertIn('StageBindings(%s_bind, &draw.%s);' % (stage, stage.capitalize()), replay)
+        # C27/C37: a GS, HS or DS draw records the stage's bindings in the
+        # slots just before the draw, and replay hands them only to a draw
+        # whose pipeline has the stage (a stage bound once must not reach
+        # later draws); HS and DS come together, and patch topologies draw
+        # exactly with them
+        self.assertIn('!pso->hs_dwords != !pso->ds_dwords ? 4u', draw)
+        self.assertIn('(list->topology >= 33u && list->topology <= 64u) != (pso->hs_dwords != 0) ? 9u', draw)
+        for stage in ('{pso ? pso->gs_dwords : 0u, kCommandGsBind, D3D12DDI_SHADER_VISIBILITY_GEOMETRY}',
+                      '{pso ? pso->hs_dwords : 0u, kCommandHsBind, D3D12DDI_SHADER_VISIBILITY_HULL}',
+                      '{pso ? pso->ds_dwords : 0u, kCommandDsBind, D3D12DDI_SHADER_VISIBILITY_DOMAIN}'):
+            self.assertIn(stage, draw)
+        self.assertLess(draw.index('bind_slot->kind = stage.kind;'), draw.index('command.kind = kCommandDraw;'))
+        # the stages resolve into their slots (STACK_FRAMES, EXP1834 build);
+        # a refused draw leaves no binding slots behind
+        self.assertIn('stage.visibility, &bind_slot->dispatch);', draw)
+        self.assertLess(draw.index('list->commands = first_slot;'), draw.index('command.kind = kCommandDraw;'))
+        optional = fn('static AgxD3d12OptionalBinds DrawOptionalBinds(')
+        for stage in ('gs', 'hs', 'ds'):
+            self.assertIn('draw.pso->%s_dwords ? pending.%s : nullptr' % (stage, stage), optional)
+        replay_loop = fn('static HRESULT ReplayAndSubmit(')
+        self.assertIn('ReplayDraw(owner, command.draw, DrawOptionalBinds(command.draw, pending), draw_scratch);', replay_loop)
+        self.assertIn('pending = {};', replay_loop)
         self.assertIn('"measure-d3d12-draw"', draw)
         self.assertIn('memcpy(draw.vb, list->vb, sizeof(draw.vb));', draw)
         self.assertIn('AgxD3d12OwnerDraw(', fn('static __declspec(noinline) HRESULT ReplayDraw('))
@@ -493,7 +722,8 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('out->kind = kDescriptorSrvTexture;', srv)
         self.assertIn('resource->levels - v.MostDetailedMip', srv)
         self.assertIn('out->desc = *arg->pSamplerDesc;', fn('static VOID APIENTRY CreateSampler('))
-        self.assertIn('samplers * sizeof(D3D12DDI_STATIC_SAMPLER)', fn('static SIZE_T APIENTRY CalcPrivateRootSignatureSize('))
+        self.assertIn('AgxD3d12MeasureR1RootPrivate', fn('static SIZE_T APIENTRY CalcPrivateRootSignatureSize('))
+        self.assertIn('add(root->NumStaticSamplers, sizeof(D3D12DDI_STATIC_SAMPLER))', ROOT_LAYOUT.read_text())
         self.assertIn('memcpy(StaticSamplersOf(root), desc.pStaticSamplers', fn('static HRESULT APIENTRY CreateRootSignature('))
         resolve = fn('static UINT ResolveRoot(')
         self.assertIn('out->static_sampler[s.ShaderRegister] = &s;', resolve)
@@ -520,7 +750,7 @@ class D3d12AbiGate(unittest.TestCase):
         bindings = fn('static void OwnerBindings(')
         self.assertIn('view->kind == kDescriptorSrvTexture', bindings)
         self.assertIn('{0, 0, 0, 0}, {0, 0, 0, 1}, {1, 1, 1, 1}, {0, 0, 0, 1}, {1, 1, 1, 1}', bindings)
-        self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, CreateSampler);', source)
+        self.assertIn('AGX_ASSIGN(D3D12DDI_DEVICE_FUNCS_CORE_0003, pfnCreateSampler, CreateSamplerInHeap);', source) # C47
 
     def test_c6f_depth(self):
         # C6f invariants: depth textures carry the depth-stencil bind (typeless
@@ -556,12 +786,12 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('(d->type == D3D12DDI_RT_TEXTURE2D) != (s->type == D3D12DDI_RT_TEXTURE2D) ? 4u', rc)
         self.assertIn('rc.whole_levels = s->levels < d->levels ? s->levels : d->levels;', rc)
         self.assertIn('d->bytes < s->bytes ? d->bytes : s->bytes', rc)
-        self.assertIn('AgxD3d12OwnerCopyTextureRegion(', fn('static VOID APIENTRY ExecuteCommandLists('))
+        self.assertIn('AgxD3d12OwnerCopyTextureRegion(', fn('static HRESULT ReplayAndSubmit('))
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         region = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCopyTextureRegion('):]
         region = region[:region.index('\n}\n')]
         self.assertIn('->resource_copy_region(', region)
-        self.assertIn('block_bytes(d->format) != block_bytes(s->format)', region)
+        self.assertIn('texture_region_copy_valid(d, dst_level, dst_layer, dst_x, dst_y, s, src_level', region)  # element-aware (test_d3d12_texture_region_copy)
 
     def test_c8c_placed_buffers(self):
         # C8c invariants: a placed buffer (no heap description) resolves
@@ -587,7 +817,7 @@ class D3d12AbiGate(unittest.TestCase):
         self.assertIn('d->type != D3D12DDI_RT_BUFFER', copy)
         self.assertIn('"measure-d3d12-placed"', create)
         self.assertIn('resource->bytes = heap->bytes;', create)
-        self.assertIn('heap->allocation && !heap->alias', fn('static VOID APIENTRY DestroyHeapAndResource('))
+        self.assertIn('(heap->allocation || heap->tiles) && !heap->alias', fn('static VOID APIENTRY DestroyHeapAndResource('))
 
     def test_c7b_presentation_textures(self):
         # C7b invariants (EXP1370: dxgi.dll CreateProxiesAndActivateFlip
@@ -698,8 +928,10 @@ class D3d12AbiGate(unittest.TestCase):
         source = SOURCE.read_text()
         for kind in ('32BitConstant', '32BitConstants', 'ConstantBufferView', 'ShaderResourceView',
                      'UnorderedAccessView', 'DescriptorTable'):
-            self.assertIn('pfnSetComputeRoot%s, SetComputeRoot%s);' % (kind, kind), source)
-            self.assertIn('pfnSetGraphicsRoot%s, SetGraphicsRoot%s);' % (kind, kind), source)
+            # C30: through the bundle call log (Bundled<> or the constants copy)
+            for bank, tail in (('Compute', 'false'), ('Graphics', 'true')):
+                self.assertRegex(source, r'pfnSet%sRoot%s, (Bundled<Set%sRoot%s>::call|BundledRootConstants<%s>)\);'
+                                 % (bank, kind, bank, kind, tail))
 
     def test_command_slots_start_zeroed(self):
         # EXP1374: AppendCommand handed out reused/realloc'd slots unzeroed;
@@ -714,7 +946,8 @@ class D3d12AbiGate(unittest.TestCase):
         # C14 invariants: only single Draw/DrawIndexed/Dispatch signatures
         # (the Gallium indirect layouts) with a stride covering the record;
         # argument/count placements are resource-relative (+ resource base);
-        # indexed indirect draws need index offset 0; the owner reads the
+        # indexed indirect view bases are covered by the executable replay;
+        # the owner reads the
         # count buffer on the GPU for draws and refuses it for dispatches.
         source = SOURCE.read_text()
         def fn(name):
@@ -722,11 +955,10 @@ class D3d12AbiGate(unittest.TestCase):
             return source[start:source.index('\n}\n', start)]
         create = fn('static HRESULT APIENTRY CreateCommandSignature(')
         self.assertIn('static const UINT bytes[4] = {0u, 16u, 20u, 12u};', create)
-        self.assertIn('arg->NumArgumentDescs == 1', create)
+        self.assertIn('if (!refusal && arg->ByteStride < offset) refusal = 5u;', create)  # C31: test_d3d12_command_signature
         ei = fn('static VOID APIENTRY ExecuteIndirect(')
         self.assertIn('a->gpuva - a->heap->gpuva + args.BaseAddress.UMD.Offset', ei)
         self.assertIn('c->gpuva - c->heap->gpuva + count.BaseAddress.UMD.Offset', ei)
-        self.assertIn('indirect && indexed && list->index_offset ? 8u', fn('static void RecordDraw('))
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         d = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerDraw('):]
         d = d[:d.index('\n}\n')]

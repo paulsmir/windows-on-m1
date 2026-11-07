@@ -1,6 +1,8 @@
-param([string]$Root = 'C:\Users\pauls\AD04-agxindex-corpus')
+param([string]$Root = '')
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
+if (!$Root) { $Root = "$builderRoot\AD04-agxindex-corpus" }
 $ErrorActionPreference = 'Continue'
-$clang = 'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin\clang-cl.exe'
+$clang = "$builderRoot\AD04-asahi-windows-compiler\llvm20\bin\clang-cl.exe"
 $source = Join-Path $Root 'agxindex_unsigned_corpus.c'
 $exe = Join-Path $Root 'candidate.exe'
 $raw = Join-Path $Root 'candidate.raw.txt'

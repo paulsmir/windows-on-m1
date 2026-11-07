@@ -21,6 +21,11 @@ BOOL AgxD3d11ComputeEnabled(void);
  * keeps a process on 10_0. */
 BOOL AgxD3d11Fl11Enabled(void);
 
+/* FL 11_1 (D3D12-FL-program.md, D3D11-FL111-TIR.md): report feature level
+ * 11_1 (logic ops, 64 UAV registers, forced sample counts; validated by
+ * EXP1888) unless APPLE_AGX_D3D11_FL111=0. */
+BOOL AgxD3d11Fl111Enabled(void);
+
 /* D3D-H2b: the compute stage's common-shader setters (Shader.cpp). */
 void APIENTRY CsSetShaderResources(D3D10DDI_HDEVICE, UINT, UINT,
                                    const D3D10DDI_HSHADERRESOURCEVIEW *);
@@ -68,5 +73,9 @@ HRESULT APIENTRY AgxWddm2_0RetrieveSubObject(D3D10DDI_HDEVICE, UINT32, SIZE_T, v
 void AgxSetConstantBuffersRange(mesa_shader_stage stage, D3D10DDI_HDEVICE hDevice, UINT start,
                                 UINT count, const D3D10DDI_HRESOURCE *buffers,
                                 const UINT *firstConstant, const UINT *numConstants);
+
+/* Typed UAV ClearView, including rectangles, independent of predication. */
+bool AgxD3d11ClearUavView(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW,
+                         const FLOAT color[4], const D3D10_DDI_RECT *, UINT);
 
 #endif /* AGX_D3D11_DDI_H */

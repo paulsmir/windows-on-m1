@@ -1,4 +1,5 @@
 #include "render_admission.h"
+#include "render_preempt_trace.h"
 
 /* Fault diagnostics: first nonzero transition stores file tag 1 and
  * source line. Consumers retain zero/nonzero semantics; reset clears it. */
@@ -15,6 +16,7 @@
 typedef struct _ADMISSION_PREEMPTION_NOTIFICATION {
   ADMISSION_CONTEXT *Context;
   APPLE_AGX_PREEMPTION Preemption;
+  ULONG Node;
 } ADMISSION_PREEMPTION_NOTIFICATION;
 
 typedef struct _ADMISSION_SCHEDULER_DEBUG_SNAPSHOT {
@@ -59,10 +61,24 @@ static BOOLEAN AdmissionNotifyPreemptionAtInterrupt(_In_ PVOID Opaque) {
       notification->Preemption.PreemptionFence;
   data.DmaPreempted.LastCompletedFenceId =
       notification->Preemption.LastCompletedFence;
-  data.DmaPreempted.NodeOrdinal = ADMISSION_SCHEDULER_NODE;
+  data.DmaPreempted.NodeOrdinal = notification->Node;
   data.DmaPreempted.EngineOrdinal = ADMISSION_SCHEDULER_ENGINE;
+  /* EXP2215: before dxgkrnl can see the notification, mark the claimed
+   * boundary delivered, so the next PreemptCommand (possible as soon as
+   * VidSch processed it, before this caller's commit) commits it instead of
+   * refusing. Interlocked: the reader holds SchedulerLock on another CPU. */
+  if (notification->Preemption.PreemptionFence != 0u)
+    (void)InterlockedExchange((volatile LONG *)(notification->Node
+        ? &context->PagingScheduler.DeliveredPreemptionFence
+        : &context->Scheduler.DeliveredPreemptionFence),
+        (LONG)notification->Preemption.PreemptionFence);
   context->Interface.DxgkCbNotifyInterrupt(
       context->Interface.DeviceHandle, &data);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceNotified(context, notification->Node,
+      notification->Preemption.PreemptionFence,
+      notification->Preemption.LastCompletedFence);
+#endif
   InterlockedExchange(&context->SchedulerDpcPending, 1);
   (void)context->Interface.DxgkCbQueueDpc(
       context->Interface.DeviceHandle);
@@ -70,13 +86,14 @@ static BOOLEAN AdmissionNotifyPreemptionAtInterrupt(_In_ PVOID Opaque) {
 }
 
 static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
-    _Inout_ ADMISSION_CONTEXT *Context) {
+    _Inout_ ADMISSION_CONTEXT *Context, ULONG Node) {
   ADMISSION_PREEMPTION_NOTIFICATION notification;
   BOOLEAN synchronized = FALSE;
   BOOLEAN claimed;
   APPLE_AGX_PREEMPTION_PHASE phase;
   NTSTATUS status;
   KIRQL oldIrql;
+  APPLE_AGX_SCHEDULER *scheduler;
 
   if (Context == NULL || !Context->InterfaceValid ||
       Context->Interface.DxgkCbSynchronizeExecution == NULL ||
@@ -85,10 +102,19 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
     return FALSE;
   RtlZeroMemory(&notification, sizeof(notification));
   notification.Context = Context;
+  notification.Node = Node;
+  scheduler = Node ? &Context->PagingScheduler : &Context->Scheduler;
   KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
   /* A discarded queued render can still own a delayed IO work item.
    * Do not offer its slot back to Windows until that callback has retired. */
-  if (AdmissionPlatformRenderWorkerScheduled(Context)) {
+  if ((!Node && AdmissionPlatformRenderWorkerScheduled(Context)) ||
+      (Context->PagingActiveNode == Node &&
+       (InterlockedCompareExchange(&Context->PagingWorkersActive, 0, 0) != 0 ||
+        (InterlockedCompareExchange(&Context->PagingPending, 0, 0) != 0 &&
+         InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) == 0)))) {
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+    AdmissionPreemptTraceDefer(Context, Node, ADMISSION_PREEMPT_WHY_BUSY);
+#endif
     KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
     return TRUE; /* Accepted and deferred; WorkerFinished retries. */
   }
@@ -96,20 +122,49 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
    * here. Another caller may already own or have completed that notification;
    * a new boundary may even be waiting. These are accepted no-op/deferred
    * attempts, not evidence that the scheduler failed. */
-  phase = AppleAgxSchedulerPreemptionPhase(&Context->Scheduler);
+  phase = AppleAgxSchedulerPreemptionPhase(scheduler);
   if (phase == AppleAgxPreemptionIdle ||
       phase == AppleAgxPreemptionNotificationClaimed ||
       phase == AppleAgxPreemptionWaitCurrentBoundary) {
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+    AdmissionPreemptTraceDefer(Context, Node, ADMISSION_PREEMPT_WHY_PHASE(phase));
+#endif
     KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
     return TRUE;
   }
+  /* RC63 (EXP1982b): a faulted scheduler never dispatches again before an
+   * engine reset (AdmissionDispatchQueuedWork), and since rc59 it still
+   * accepts and holds every paging packet. Reporting DMA_PREEMPTED here tells
+   * VidSch the engine stopped at a boundary and can take the resubmission;
+   * VidSch then resubmits into the frozen queue, every later preemption
+   * succeeds again, its TDR timer never expires, and nothing ever calls
+   * DxgkDdiResetEngine (EXP1982b: no Wom1GpuReset in 300 s, paging waits and
+   * the ordered reboot hung). Microsoft TDR: the timeout is a preemption
+   * that does not complete within TdrDelay. Leave the boundary ready and
+   * unreported, so that timeout fires; AppleAgxSchedulerResetEngine clears
+   * it, the reset clears SchedulerFaulted, and VidSch resubmits. */
+  if (InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) != 0) {
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+    AdmissionPreemptTraceDefer(Context, Node, ADMISSION_PREEMPT_DEFER_FAULTED);
+#endif
+    KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+    return TRUE; /* Deferred to the TDR engine reset; not a new fault. */
+  }
   claimed = AppleAgxSchedulerClaimBoundaryPreemption(
-                &Context->Scheduler, &notification.Preemption)
+                scheduler, &notification.Preemption)
                 ? TRUE
                 : FALSE;
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  if (!claimed)
+    AdmissionPreemptTraceDefer(Context, Node, ADMISSION_PREEMPT_DEFER_NO_CLAIM);
+#endif
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
   if (!claimed)
     return FALSE;
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceClaim(Context, Node,
+      notification.Preemption.PreemptionFence);
+#endif
 
   status = Context->Interface.DxgkCbSynchronizeExecution(
       Context->Interface.DeviceHandle, AdmissionNotifyPreemptionAtInterrupt,
@@ -121,11 +176,16 @@ static BOOLEAN AdmissionSchedulerTryNotifyPreemption(
 
   KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
   claimed = AppleAgxSchedulerCommitBoundaryPreemption(
-                &Context->Scheduler,
+                scheduler,
                 notification.Preemption.PreemptionFence)
                 ? TRUE
                 : FALSE;
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  if (claimed)
+    AdmissionPreemptTraceCommitted(Context, Node,
+        notification.Preemption.PreemptionFence);
+#endif
   if (!claimed)
     InterlockedCompareExchange(&Context->SchedulerFaulted, 0x10000L | __LINE__, 0);
   else
@@ -150,8 +210,13 @@ _Use_decl_annotations_ VOID AdmissionSchedulerWorkerFinished(
        InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) != 0 ||
        InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) != 0);
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  if (retry) AdmissionPreemptTraceRetry(Context, ADMISSION_PREEMPT_RETRY_WORKER);
+#endif
   if (retry)
-    (void)AdmissionSchedulerTryNotifyPreemption(Context);
+    (void)AdmissionSchedulerTryNotifyPreemption(Context, 0u);
+  if (Context->LiveAdditivePaging)
+    (void)AdmissionSchedulerTryNotifyPreemption(Context, 1u);
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStart(
@@ -174,8 +239,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStart(
   (void)AdmissionRenderCorrelationStartWindows(Context);
 #endif
   AppleAgxSchedulerInitialize(&Context->Scheduler);
+  AppleAgxSchedulerInitialize(&Context->PagingScheduler);
   AdmissionRenderPacketInitialize(&Context->RenderPacket);
   InterlockedExchange(&Context->SchedulerFaulted, 0);
+  InterlockedExchange(&Context->PagingAdapterResetting, 0);
   InterlockedExchange(&Context->SchedulerDpcPending, 0);
   InterlockedExchange(&Context->RenderDpcFence, 0);
   InterlockedExchange(&Context->SchedulerInitialized, 1);
@@ -190,7 +257,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStop(
     return STATUS_INVALID_PARAMETER;
   if (InterlockedCompareExchange(&Context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_SUCCESS;
-  if (Context->Scheduler.ContextCount != 0u ||
+  if (Context->PagingScheduler.ContextCount != 0u ||
+      Context->PagingNodeCount != 0u ||
+      AppleAgxSchedulerHasOutstandingFence(&Context->PagingScheduler, 0u, 0u) ||
+      Context->Scheduler.ContextCount != 0u ||
       AdmissionRenderPacketState(&Context->RenderPacket) !=
           AdmissionRenderPacketEmpty ||
       Context->G4PendingCount != 0u ||
@@ -198,6 +268,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStop(
           &Context->Scheduler, ADMISSION_SCHEDULER_NODE,
           ADMISSION_SCHEDULER_ENGINE) ||
       Context->CpuQueueCount != 0u ||
+      InterlockedCompareExchange(&Context->PagingCallbacksActive, 0, 0) != 0 ||
       InterlockedCompareExchange(&Context->PagingPending, 0, 0) != 0 ||
       InterlockedCompareExchange(&Context->PagingWorkersActive, 0, 0) != 0 ||
       InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) != 0 ||
@@ -211,6 +282,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStop(
                        ~((LONG)APPLE_AGX_WDDM_READY_ONE_NODE_TOPOLOGY));
   InterlockedExchange(&Context->SchedulerInitialized, 0);
   RtlZeroMemory(&Context->Scheduler, sizeof(Context->Scheduler));
+  RtlZeroMemory(&Context->PagingScheduler, sizeof(Context->PagingScheduler));
   return STATUS_SUCCESS;
 }
 
@@ -285,9 +357,16 @@ _Use_decl_annotations_ VOID AdmissionSchedulerDpc(
   cpuUnreported = InterlockedCompareExchange(&Context->PagingPending, 0, 0) != 0 &&
       InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) == 0 &&
       InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) == 0;
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
   if (phase == AppleAgxPreemptionReadyToNotify && !cpuUnreported &&
       (reservedFence == 0u || renderFence == reservedFence))
-    (void)AdmissionSchedulerTryNotifyPreemption(Context);
+    AdmissionPreemptTraceRetry(Context, ADMISSION_PREEMPT_RETRY_DPC);
+#endif
+  if (phase == AppleAgxPreemptionReadyToNotify && !cpuUnreported &&
+      (reservedFence == 0u || renderFence == reservedFence))
+    (void)AdmissionSchedulerTryNotifyPreemption(Context, 0u);
+  if (Context->LiveAdditivePaging)
+    (void)AdmissionSchedulerTryNotifyPreemption(Context, 1u);
   notified = InterlockedExchange(&Context->SchedulerDpcPending, 0) != 0;
   if (notified && renderFence != 0u)
     AdmissionGdiReceiptDpcWindows(Context, renderFence);
@@ -310,13 +389,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryCurrentFence(
   KIRQL oldIrql;
 
   if (context == NULL || CurrentFence == NULL ||
-      CurrentFence->NodeOrdinal != ADMISSION_SCHEDULER_NODE ||
+      CurrentFence->NodeOrdinal > context->LiveAdditivePaging ||
       CurrentFence->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
   KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
   CurrentFence->CurrentFence = AppleAgxSchedulerCurrentFence(
-      &context->Scheduler, CurrentFence->NodeOrdinal,
+      CurrentFence->NodeOrdinal ? &context->PagingScheduler : &context->Scheduler, 0u,
       CurrentFence->EngineOrdinal);
   KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
   AdmissionRenderCorrelationQueryFenceWindows(
@@ -335,6 +414,52 @@ static VOID AdmissionCpuQueueReleaseContextsLocked(ADMISSION_CONTEXT *Context) {
   }
 }
 
+/* EXP1899N receipt-only: the first refused boundary preemption (VidSch then
+ * waits for a preemption that never completes and resets the engine). Under
+ * the scheduler lock; AdmissionRecordGpuReset publishes it. */
+static VOID AdmissionSchedulerRecordPreemptRefusalLocked(
+    ADMISSION_CONTEXT *Context, const DXGKARG_PREEMPTCOMMAND *PreemptCommand,
+    UINT CutoffFence, UINT ActiveFence, UINT QueuedFence) {
+  struct _ADMISSION_PREEMPT_REFUSAL *r = &Context->PreemptRefusal;
+  const APPLE_AGX_SCHEDULER *s = &Context->Scheduler;
+  LONG refusals = InterlockedIncrement(&Context->PreemptRefusals);
+  if (InterlockedCompareExchange(&Context->PreemptRefusalClaim, 1, 0) != 0) {
+    r->Refusals = (ULONG)refusals;
+    return;
+  }
+  RtlZeroMemory(r, sizeof(*r));
+  r->Version = 1u;
+  r->Bytes = sizeof(*r);
+  r->Refusals = (ULONG)refusals;
+  r->EntryMs = (ULONG)(KeQueryInterruptTime() / 10000ull);
+  r->PreemptionFence = PreemptCommand->PreemptionFenceId;
+  r->CutoffFence = CutoffFence;
+  r->ActiveFence = ActiveFence;
+  r->QueuedFence = QueuedFence;
+  r->CompletedFence = s->CompletedFence;
+  r->LastSubmittedFence = s->LastSubmittedFence;
+  r->SchedulerQueuedFence = s->QueuedFence;
+  r->QueueCount = s->QueueCount;
+  r->SchedulerActiveFence = s->ActiveFence;
+  r->PendingPreemptionFence = s->PendingPreemptionFence;
+  r->PreemptionCutoffFence = s->PreemptionCutoffFence;
+  r->PreemptionActiveFence = s->PreemptionActiveFence;
+  r->PreemptionLastCompletedFence = s->PreemptionLastCompletedFence;
+  r->PreemptionPending = (ULONG)s->PreemptionPending;
+  r->Phase = (ULONG)s->PreemptionPhase;
+  r->Responsive = (ULONG)s->Responsive;
+  r->DispatchedFence = Context->DispatchedFence;
+  r->PacketState = (ULONG)AdmissionRenderPacketState(&Context->RenderPacket);
+  r->PagingPending = (ULONG)InterlockedCompareExchange(&Context->PagingPending, 0, 0);
+  r->PagingDpcPending = (ULONG)InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0);
+  r->PagingDpcsActive = (ULONG)InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0);
+  r->SchedulerDpcPending = (ULONG)InterlockedCompareExchange(&Context->SchedulerDpcPending, 0, 0);
+  r->RenderWorkerScheduled = AdmissionPlatformRenderWorkerScheduled(Context) ? 1u : 0u;
+  r->BeganMs = Context->PreemptBeganMs;
+  r->BeganFence = Context->PreemptBeganFence;
+  InterlockedExchange(&Context->PreemptRefusalClaim, 2);
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
     HANDLE Adapter, const DXGKARG_PREEMPTCOMMAND *PreemptCommand) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
@@ -346,10 +471,32 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
 
   if (context == NULL || PreemptCommand == NULL ||
       PreemptCommand->Flags.Value != 0u ||
-      PreemptCommand->NodeOrdinal != ADMISSION_SCHEDULER_NODE ||
+      PreemptCommand->NodeOrdinal > context->LiveAdditivePaging ||
       PreemptCommand->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
+  if (PreemptCommand->NodeOrdinal == 1u) {
+    BOOLEAN began;
+    KeAcquireSpinLockAtDpcLevel(&context->PagingLock);
+    KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
+    cutoffFence = AppleAgxSchedulerLastSubmittedFence(&context->PagingScheduler, 0u, 0u);
+    activeFence = AppleAgxSchedulerActiveFence(&context->PagingScheduler, 0u, 0u);
+    began = AppleAgxSchedulerBeginBoundaryPreemption(&context->PagingScheduler,
+        0u, 0u, PreemptCommand->PreemptionFenceId, cutoffFence, activeFence) ? TRUE : FALSE;
+    if (began) {
+      context->PagingNodeHead = context->PagingNodeCount = 0u;
+      AdmissionPagingUpdateIdleLocked(context);
+    } else {
+      InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
+    }
+    KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
+    KeReleaseSpinLockFromDpcLevel(&context->PagingLock);
+    if (began) (void)AdmissionSchedulerTryNotifyPreemption(context, 1u);
+    return STATUS_SUCCESS;
+  }
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceEnter(context, PreemptCommand->PreemptionFenceId);
+#endif
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   /* EXP1210 receipt-only: does a preemption request arrive while a
    * DxgkDdiSubmitCommandVirtual call is still inside the driver? */
@@ -397,10 +544,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
           PreemptCommand->EngineOrdinal, PreemptCommand->PreemptionFenceId,
           cutoffFence, activeFence)) {
     InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
+    AdmissionSchedulerRecordPreemptRefusalLocked(context, PreemptCommand,
+        cutoffFence, activeFence, queuedFence);
     KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
     KeReleaseSpinLockFromDpcLevel(&context->PagingLock);
     return STATUS_SUCCESS;
   }
+  context->PreemptBeganMs = (ULONG)(KeQueryInterruptTime() / 10000ull);
+  context->PreemptBeganFence = PreemptCommand->PreemptionFenceId;
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceBeginLocked(context, PreemptCommand->PreemptionFenceId,
+      cutoffFence, activeFence, queuedFence);
+#endif
   AdmissionCpuQueueReleaseContextsLocked(context);
   context->CpuQueueHead = context->CpuQueueCount = 0u;
   if (activeFence == 0u && queuedFence != 0u && context->DispatchedFence == queuedFence)
@@ -429,10 +584,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
       (InterlockedCompareExchange(&context->PagingPending, 0, 0) == 0 ||
        InterlockedCompareExchange(&context->PagingDpcPending, 0, 0) != 0 ||
        InterlockedCompareExchange(&context->PagingDpcsActive, 0, 0) != 0);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceDecideLocked(context, notifyNow);
+#endif
   KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
   KeReleaseSpinLockFromDpcLevel(&context->PagingLock);
-  if (notifyNow && !AdmissionSchedulerTryNotifyPreemption(context))
+  if (notifyNow && !AdmissionSchedulerTryNotifyPreemption(context, 0u))
     InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
+#if defined(ADMISSION_PREEMPT_TRACE_ON)
+  AdmissionPreemptTraceExit(context, PreemptCommand->PreemptionFenceId);
+#endif
   return STATUS_SUCCESS;
 }
 
@@ -441,11 +602,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryDependentEngineGroup(
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   PAGED_CODE();
   if (context == NULL || DependentGroup == NULL ||
-      DependentGroup->NodeOrdinal != ADMISSION_SCHEDULER_NODE ||
+      DependentGroup->NodeOrdinal > context->LiveAdditivePaging ||
       DependentGroup->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
-  DependentGroup->DependentNodeOrdinalMask = 1ULL;
+  DependentGroup->DependentNodeOrdinalMask = context->LiveAdditivePaging ? 3ULL : 1ULL;
   return STATUS_SUCCESS;
 }
 
@@ -454,7 +615,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryEngineStatus(
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   PAGED_CODE();
   if (context == NULL || EngineStatus == NULL ||
-      EngineStatus->NodeOrdinal != ADMISSION_SCHEDULER_NODE ||
+      EngineStatus->NodeOrdinal > context->LiveAdditivePaging ||
       EngineStatus->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
@@ -476,28 +637,46 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryEngineStatus(
  * later, packet completed before the engine reset). The owning context is
  * faulted first; dispatch stays frozen (SchedulerFaulted) until the reset
  * succeeds. */
-static NTSTATUS AdmissionResetQuiesceActive(ADMISSION_CONTEXT *Context) {
-  ULONG fence;
+static NTSTATUS AdmissionResetQuiesceActive(ADMISSION_CONTEXT *Context,
+                                            ULONG *Unsubmitted) {
+  ULONG fence, kicked;
+  NTSTATUS status;
   KIRQL oldIrql;
+  *Unsubmitted = 0u;
   KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+  /* rc102: a successor kicked behind the active job (or left running
+   * after the active job was reported) is with the firmware too. */
+  kicked = AppleAgxSchedulerKickedFence(&Context->Scheduler);
   if (AdmissionRenderPacketState(&Context->RenderPacket) !=
-      AdmissionRenderPacketActive) {
+          AdmissionRenderPacketActive && kicked == 0u) {
     KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
     return STATUS_SUCCESS;
   }
-  fence = Context->RenderPacket.Description.Fence;
+  fence = AdmissionRenderPacketState(&Context->RenderPacket) ==
+          AdmissionRenderPacketActive
+      ? Context->RenderPacket.Description.Fence : kicked;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
-  {
+  if (AdmissionRenderPacketState(&Context->RenderPacket) ==
+      AdmissionRenderPacketActive) {
     ADMISSION_RENDER_CONTEXT *owner = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
         Context->RenderPacket.Description.ContextToken;
     if (owner != NULL && owner->Object.FenceOutstanding == fence)
       owner->GpuvaG3Poisoned = TRUE;
   }
+  if (kicked != 0u && Context->G4PendingCount != 0u &&
+      Context->G4Pending[Context->G4PendingHead].Fence == kicked &&
+      Context->G4Pending[Context->G4PendingHead].Context != NULL)
+    Context->G4Pending[Context->G4PendingHead].Context->GpuvaG3Poisoned = TRUE;
 #endif
   InterlockedCompareExchange(&Context->SchedulerFaulted, 0x10000L | __LINE__, 0);
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
-  return AdmissionPlatformRuntimeQuiesceActive(
+  status = AdmissionPlatformRuntimeQuiesceActive(
       Context, fence, ADMISSION_RESET_QUIESCE_TIMEOUT_MS, &Context->GpuReset);
+  /* rc102 (EXP2039): the active job never reached the firmware. */
+  if (NT_SUCCESS(status) &&
+      Context->GpuReset.Quiesce == (ULONG)AdmissionGpuResetQuiesceUnsubmitted)
+    *Unsubmitted = fence;
+  return status;
 }
 
 /* Lock-bearing code stays in .text even when the PASSIVE wrapper is pageable.
@@ -509,25 +688,69 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   ADMISSION_RENDER_CONTEXT *packetContext = NULL;
   ADMISSION_RENDER_PACKET_STATE packetState;
   APPLE_AGX_U32 packetFence = 0u;
+  ULONG unsubmitted = 0u;
+  ADMISSION_RENDER_CONTEXT *unsubmittedContext = NULL;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  APPLE_AGX_U32 kickedAborted = 0u;
+#endif
   BOOLEAN reset;
   KIRQL oldIrql;
 
+  if (context != NULL)
+    context->GpuReset.Stage = AdmissionGpuResetStageValidate;
   if (context == NULL || ResetEngine == NULL ||
-      ResetEngine->NodeOrdinal != ADMISSION_SCHEDULER_NODE ||
+      ResetEngine->NodeOrdinal > context->LiveAdditivePaging ||
       ResetEngine->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
-  if (!NT_SUCCESS(AdmissionResetQuiesceActive(context)))
+  if (ResetEngine->NodeOrdinal == 1u) {
+    KeAcquireSpinLock(&context->PagingLock, &oldIrql);
+    if (context->PagingActiveNode == 1u &&
+        (InterlockedCompareExchange(&context->PagingPending, 0, 0) != 0 ||
+         InterlockedCompareExchange(&context->PagingWorkersActive, 0, 0) != 0 ||
+         InterlockedCompareExchange(&context->PagingDpcsActive, 0, 0) != 0)) {
+      KeReleaseSpinLock(&context->PagingLock, oldIrql);
+      return STATUS_DEVICE_BUSY;
+    }
+    KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
+    reset = AppleAgxSchedulerResetEngine(&context->PagingScheduler, 0u, 0u,
+                                         &lastAborted) ? TRUE : FALSE;
+    if (reset) {
+      context->PagingNodeHead = context->PagingNodeCount = context->PagingNodeDispatchedFence = 0u;
+      AdmissionPagingUpdateIdleLocked(context);
+    }
+    KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
+    KeReleaseSpinLock(&context->PagingLock, oldIrql);
+    ResetEngine->LastAbortedFenceId = lastAborted;
+    return reset ? STATUS_SUCCESS : STATUS_INVALID_DEVICE_STATE;
+  }
+  context->GpuReset.Stage = AdmissionGpuResetStageQuiesce;
+  if (!NT_SUCCESS(AdmissionResetQuiesceActive(context, &unsubmitted)))
     return STATUS_DEVICE_HARDWARE_ERROR;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* rc102: the unsubmitted job's graph job ends unrun and its scene was
+   * never touched by the GPU, so the private reset need not quarantine it. */
+  if (unsubmitted != 0u) AdmissionGpuvaG3AbortJob(context, unsubmitted);
+  /* rc102 (EXP2045): so does a kicked successor whose SubmitSuccessor was
+   * refused (BeginSuccessorJob had joined it to the running job's lease
+   * and started its scene; nothing handed it to the firmware). */
   {
-    BOOLEAN privateReset = AdmissionGpuvaG3PrivateReset(context);
+    ULONG unheld = AdmissionPlatformRuntimeUnheldKicked(context);
+    if (unheld != 0u) AdmissionGpuvaG3AbortJob(context, unheld);
+  }
+#endif
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  {
+    BOOLEAN privateReset;
+    context->GpuReset.Stage = AdmissionGpuResetStagePrivate;
+    privateReset = AdmissionGpuvaG3PrivateReset(context);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
     AdmissionDwmFrameRecordPrivateReset(context, privateReset);
 #endif
     if (!privateReset) return STATUS_DEVICE_HARDWARE_ERROR;
   }
 #endif
+  context->GpuReset.Stage = AdmissionGpuResetStagePaging;
   KeAcquireSpinLock(&context->PagingLock, &oldIrql);
   if (InterlockedCompareExchange(&context->PagingPending, 0, 0) != 0 ||
       InterlockedCompareExchange(&context->PagingWorkersActive, 0, 0) != 0 ||
@@ -537,6 +760,27 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   }
   KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
   packetState = AdmissionRenderPacketState(&context->RenderPacket);
+  context->GpuReset.Stage = AdmissionGpuResetStagePacketActive;
+  /* rc102 (EXP2039): the quiescence proved that the active job never
+   * reached the firmware (its backend submit failed): its packet ends here
+   * and the engine reset aborts its fence (LastAbortedFenceId); it is not
+   * resubmitted (its context is faulted, its submit may fail again). */
+  if (packetState == AdmissionRenderPacketActive && unsubmitted != 0u &&
+      context->RenderPacket.Description.Fence == unsubmitted &&
+      AppleAgxSchedulerActiveFence(&context->Scheduler, 0u, 0u) == unsubmitted) {
+    unsubmittedContext = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
+        context->RenderPacket.Description.ContextToken;
+    context->GpuReset.Stage = AdmissionGpuResetStageBackendRelease;
+    if (!AdmissionBackendImageReleaseSubmission(&context->BackendImage,
+                                               unsubmitted) ||
+        !AdmissionRenderPacketReset(&context->RenderPacket, unsubmitted, 1u)) {
+      InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
+      KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
+      KeReleaseSpinLock(&context->PagingLock, oldIrql);
+      return STATUS_INVALID_DEVICE_STATE;
+    }
+    packetState = AdmissionRenderPacketState(&context->RenderPacket);
+  }
   if (packetState == AdmissionRenderPacketActive) {
     /* Activated after the quiescence proof above: nothing proves its end. */
     InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
@@ -548,12 +792,14 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
     packetFence = context->RenderPacket.Description.Fence;
     packetContext = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
         context->RenderPacket.Description.ContextToken;
+    context->GpuReset.Stage = AdmissionGpuResetStagePacketReset;
     if (!AdmissionRenderPacketReset(
             &context->RenderPacket, packetFence, 0u)) {
       KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
       KeReleaseSpinLock(&context->PagingLock, oldIrql);
       return STATUS_INVALID_DEVICE_STATE;
     }
+    context->GpuReset.Stage = AdmissionGpuResetStageBackendRelease;
     if (!AdmissionBackendImageReleaseSubmission(
             &context->BackendImage, packetFence)) {
       InterlockedCompareExchange(&context->SchedulerFaulted, 0x10000L | __LINE__, 0);
@@ -562,6 +808,13 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
       return STATUS_INVALID_DEVICE_STATE;
     }
   }
+  context->GpuReset.Stage = AdmissionGpuResetStageScheduler;
+  /* rc102: a kicked fence still not adopted (the backend never handed it
+   * to the firmware, or the quiescence proved its end without one) is
+   * aborted with the engine: newest, never resubmitted. */
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  kickedAborted = AppleAgxSchedulerKickedFence(&context->Scheduler);
+#endif
   reset = AppleAgxSchedulerResetEngine(
               &context->Scheduler, ResetEngine->NodeOrdinal,
               ResetEngine->EngineOrdinal, &lastAborted)
@@ -576,6 +829,7 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
      * that resubmission fail). */
     AdmissionCpuQueueReleaseContextsLocked(context);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    if (kickedAborted != 0u) AdmissionG4PendingAbortKickedLocked(context);
     AdmissionG4PendingDropLocked(context, TRUE);
 #endif
     context->CpuQueueHead = context->CpuQueueCount = context->DispatchedFence = 0u;
@@ -586,6 +840,18 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
   KeReleaseSpinLock(&context->PagingLock, oldIrql);
   if (!reset)
     return STATUS_INVALID_DEVICE_STATE;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  if (kickedAborted != 0u) AdmissionGpuvaG3AbortJob(context, kickedAborted);
+#endif
+  if (unsubmittedContext != NULL &&
+      unsubmittedContext->Object.FenceOutstanding == unsubmitted) {
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+    AdmissionGpuvaG3PrivateCancel(unsubmittedContext, unsubmitted, FALSE);
+#endif
+    KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
+    AdmissionContextRetireFence(unsubmittedContext, unsubmitted);
+    KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+  }
   ResetEngine->LastAbortedFenceId = lastAborted;
   if (packetContext != NULL &&
       packetContext->Object.FenceOutstanding == packetFence) {
@@ -597,6 +863,7 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
     KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
   }
   InterlockedExchange(&context->SchedulerFaulted, 0);
+  context->GpuReset.Stage = AdmissionGpuResetStageComplete;
   return STATUS_SUCCESS;
 }
 
@@ -629,6 +896,10 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineRecorded(
   KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
   receipt->Quiesce = (ULONG)AdmissionGpuResetQuiesceNone;
   receipt->WaitMs = 0u;
+  receipt->Stage = AdmissionGpuResetStageNone;
+  receipt->ReservedV3 = 0u;
+  RtlZeroMemory(&receipt->RetirementBefore, sizeof(receipt->RetirementBefore));
+  RtlZeroMemory(&receipt->RetirementAfter, sizeof(receipt->RetirementAfter));
   receipt->EntryMs = receipt->JobAgeMs = 0u;
   receipt->PollAgeMs = MAXULONG;
   AdmissionPlatformRuntimeResetState(context, receipt);
@@ -641,6 +912,8 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineRecorded(
   {
     ADMISSION_GPU_RESET_ENTRY *entry = &receipt->History[
         (receipt->Resets - 1u) % ADMISSION_GPU_RESET_HISTORY];
+    receipt->HistoryStage[(receipt->Resets - 1u) % ADMISSION_GPU_RESET_HISTORY] =
+        receipt->Stage;
     entry->EntryMs = receipt->EntryMs;
     entry->Entry = Entry;
     entry->Status = receipt->Status;
@@ -687,6 +960,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetFromTimeout(HANDLE Adapter) {
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
   RtlZeroMemory(&reset, sizeof(reset));
+  if (context->LiveAdditivePaging) InterlockedExchange(&context->PagingAdapterResetting, 1);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   AdmissionDwmFrameRecordTdr(context, STATUS_PENDING, FALSE);
 #endif
@@ -696,13 +970,23 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetFromTimeout(HANDLE Adapter) {
   if (NT_SUCCESS(status))
     status = AdmissionResetEngineEntry(context, &reset,
                                        ADMISSION_GPU_RESET_ADAPTER);
+  if (NT_SUCCESS(status) && context->LiveAdditivePaging) {
+    reset.NodeOrdinal = 1u;
+    status = AdmissionResetEngineEntry(context, &reset, ADMISSION_GPU_RESET_ADAPTER);
+  }
   if (NT_SUCCESS(status)) {
     KIRQL oldIrql;
     /* Microsoft (TDR in Windows 8 and later): an adapter-wide reset advances
      * the last completed fence to the last submitted fence at the reset. */
     KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
     context->Scheduler.CompletedFence = context->Scheduler.LastSubmittedFence;
+    context->Scheduler.LastAbortedFence = 0u;
+    if (context->LiveAdditivePaging) {
+      context->PagingScheduler.CompletedFence = context->PagingScheduler.LastSubmittedFence;
+      context->PagingScheduler.LastAbortedFence = 0u;
+    }
     KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+    InterlockedExchange(&context->PagingAdapterResetting, 0);
   }
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
   AdmissionDwmFrameRecordTdr(context, status, TRUE);

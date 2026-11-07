@@ -43,7 +43,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c"
 SPACE = ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva.c"
 
-PROGRAM = r'''
+PROGRAM = '#include "'+str(ROOT/'tests/d3d12_wait_disabled_fixture.h')+'"\n'+r'''
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -56,10 +56,10 @@ PROGRAM = r'''
 #define BITSET_CLEAR(set, i) ((set)[(i) / 32u] &= ~(1u << ((i) % 32u)))
 #define BITSET_SET(set, i) ((set)[(i) / 32u] |= (1u << ((i) % 32u)))
 typedef unsigned APPLE_AGX_U32;
-static unsigned live_leases, evicts, waits;
+static unsigned live_leases, evicts, waits, private_fail;
 static uint64_t completed_fence = ~0ull;
 static int private_escape(void *context, APPLE_AGX_G3_PRIVATE_REQUEST *r) {
-  (void)context; if (r->Operation != APPLE_AGX_G3_PRIVATE_RELEASE || !live_leases) return 0;
+  (void)context; if (private_fail || r->Operation != APPLE_AGX_G3_PRIVATE_RELEASE || !live_leases) return 0;
   --live_leases; return 1;
 }
 /* The GPU completes in order: waiting for a fence completes every earlier one. */
@@ -73,9 +73,25 @@ static int evict(void *context, const uint64_t *handles, unsigned count) {
 typedef struct {
   AGX_WIN32_GPUVA_SPACE Gpuva;
   int GpuvaReady, Failed;
+  void *Native;
 } AGX_WIN32_ASAHI_BACKEND;
-struct agx_bo { int unused; };
+struct agx_bo { unsigned refs; };
 struct agx_device { void *windows_private; };
+#define AGX_WIN32_BO_GPU_ONLY (1u << 29)
+static unsigned timestamp_allocations, timestamp_live, fail_timestamp;
+static struct agx_bo *agx_bo_create(struct agx_device *dev, size_t bytes,
+                                  unsigned align, unsigned flags, const char *name) {
+  assert(dev && bytes == 8 && !align && flags == AGX_WIN32_BO_GPU_ONLY);
+  assert(!strcmp(name, "Batch timestamp"));
+  ++timestamp_allocations;
+  if(fail_timestamp) return NULL;
+  struct agx_bo *bo=calloc(1,sizeof(*bo));assert(bo);
+  bo->refs=1;++timestamp_live;return bo;
+}
+static void agx_bo_unreference(void *dev, struct agx_bo *bo) {
+  (void)dev;assert(bo && bo->refs);
+  if(!--bo->refs) { --timestamp_live;free(bo); }
+}
 struct pipe_screen { struct agx_device dev; };
 struct agx_batch;
 struct agx_context {
@@ -92,10 +108,15 @@ struct agx_batch {
 static int agx_batch_is_compute(const struct agx_batch *batch) { return batch->compute; }
 typedef struct {
   struct agx_bo *Command;
+  struct agx_bo *Timestamp, *Preemption;
   APPLE_AGX_G4_PRIVATE_LEASE Lease;
   uint64_t Fence;
-  unsigned Entered, Submitted, Retired, Rejected;
+  AGX_WIN32_REF_LIST Expected;
+  unsigned Entered, ComputeEntered, Submitted, Retired, Rejected;
 } AGX_G4_BATCH;
+static void cleanup_expected(AGX_WIN32_REF_LIST *l) {assert(!l->Items && !l->Count);}
+#define AgxWin32RefCleanup cleanup_expected
+int AgxWin32AsahiBatchRelease(struct agx_batch *batch);
 static struct agx_device *agx_device(struct pipe_screen *s) { return &s->dev; }
 static void AgxWin32AsahiPublishPages(struct agx_device *d) { (void)d; }
 static void AgxWin32PerfNote(const char *fmt, ...) { (void)fmt; }
@@ -106,7 +127,7 @@ static void agx_flush_batch(struct agx_context *ctx, struct agx_batch *batch) {
 }
 static void agx_sync_batch(struct agx_context *ctx, struct agx_batch *batch) {
   unsigned i = (unsigned)(batch - ctx->batches.slots);
-  free(batch->windows_batch); batch->windows_batch = NULL;
+  assert(AgxWin32AsahiBatchRelease(batch));
   BITSET_CLEAR(ctx->batches.submitted, i);
 }
 @@SPACE@@
@@ -170,7 +191,8 @@ int main(void) {
   assert(open_batch(&ctx, DEPTH + 1u));
   assert(evicts == DEPTH + 1u && !backend.Gpuva.Held && !backend.Gpuva.OlderCount && live_leases == 0);
   for (unsigned i = 0; i <= DEPTH; ++i) assert(!slots[i].windows_batch);
-  free(slots[DEPTH + 1u].windows_batch); slots[DEPTH + 1u].windows_batch = NULL;
+  assert(AgxWin32AsahiBatchAbort(&slots[DEPTH + 1u]));
+  assert(AgxWin32AsahiBatchRelease(&slots[DEPTH + 1u]));
   BITSET_CLEAR(ctx.batches.active, DEPTH + 1u);
   /* D and E submitted, the GPU on neither. */
   completed_fence = 19;
@@ -221,8 +243,14 @@ int main(void) {
   for (unsigned i = 0; i + 1u < DEPTH; ++i) assert(!slots[i].windows_batch);
   assert(!slots[DEPTH].windows_batch);
   assert(!backend.Gpuva.Held && !backend.Gpuva.OlderCount && live_leases == 0);
-  free(other_slots[0].windows_batch);
-  free(slots[DEPTH + 1u].windows_batch);
+  /* the still-open batches (slot 3 stays open across EXP1161) */
+  for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i) {
+    assert(AgxWin32AsahiBatchAbort(&other_slots[i]));
+    assert(AgxWin32AsahiBatchRelease(&other_slots[i]));
+    assert(AgxWin32AsahiBatchAbort(&slots[i]));
+    assert(AgxWin32AsahiBatchRelease(&slots[i]));
+  }
+  assert(!timestamp_live);
   puts("PASS");
   return 0;
 }
@@ -230,15 +258,19 @@ int main(void) {
 
 
 class BatchBeginKeepsActive(unittest.TestCase):
-    def test_new_batch_keeps_other_active_batches_open(self):
+    def replay(self, main=None):
         source = SRC.read_text()
         space = SPACE.read_text()
         functions = "\n".join(body(source, name) for name in (
             "backend", "capsule", "batch_refuse", "release_lease", "AgxWin32AsahiBatchPoll",
-            "submitted_at", "retire_held", "AgxWin32AsahiBatchBegin"))
+            "submitted_at", "retire_held", "AgxWin32AsahiBatchBegin",
+            "AgxWin32AsahiBatchTimestampBo", "AgxWin32AsahiBatchAbort",
+            "AgxWin32AsahiBatchRelease"))
         space_functions = "\n".join(body(space, name) for name in (
             "AgxWin32GpuvaRetire", "AgxWin32GpuvaComplete", "AgxWin32GpuvaFenceHeld"))
         program = PROGRAM.replace("@@SPACE@@", space_functions).replace("@@FUNCTIONS@@", functions)
+        if main is not None:
+            program = program[:program.index('int main(void) {')] + main
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "begin.c"
             exe = Path(directory) / "begin"
@@ -252,6 +284,53 @@ class BatchBeginKeepsActive(unittest.TestCase):
             ran = subprocess.run([str(exe)], capture_output=True, text=True)
             self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
 
+    def test_new_batch_keeps_other_active_batches_open(self):
+        self.replay()
+
+    def test_timestamp_output_is_immutable_gpu_only_and_retained_until_release(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        Missing GPU-only allocation, sharing batch outputs, releasing a pending
+        output, and leaking it on rejection or failed lease release break End
+        snapshots. Exercise actual Begin, accessor, Poll, Abort and Release.
+        """
+        self.replay(r'''
+int main(void) {
+ AGX_WIN32_ASAHI_BACKEND b={0};b.GpuvaReady=1;
+ b.Gpuva.Ops.QueryRender=query_render;b.Gpuva.Ops.WaitRender=wait_render;
+ b.Gpuva.Ops.PrivateEscape=private_escape;
+ struct pipe_screen screen={{&b}};struct agx_bo encoder={0};
+ struct agx_batch slots[AGX_MAX_BATCHES]={0};
+ struct agx_context ctx={{&screen},0,{slots,{0},{0}}};
+ for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
+   slots[i].ctx=&ctx;slots[i].vdm.bo=&encoder;
+ }
+ fail_timestamp=1;
+ assert(!open_batch(&ctx,0) && !slots[0].windows_batch && !timestamp_live);
+ assert(timestamp_allocations==1 && !AgxWin32AsahiBatchTimestampBo(&slots[0]));
+ fail_timestamp=0;
+ assert(open_batch(&ctx,0) && open_batch(&ctx,1));
+ struct agx_bo *saved=AgxWin32AsahiBatchTimestampBo(&slots[0]);
+ assert(saved && saved!=AgxWin32AsahiBatchTimestampBo(&slots[1]) && timestamp_live==2);
+ ++saved->refs; /* immutable End snapshot outlives the producer capsule */
+ AGX_G4_BATCH *g=capsule(&slots[0]);g->Submitted=1;g->Fence=7;
+ completed_fence=6;
+ assert(!AgxWin32AsahiBatchPoll(&slots[0],0) && !waits);
+ assert(!AgxWin32AsahiBatchRelease(&slots[0]) && saved->refs==2);
+ completed_fence=7;
+ assert(AgxWin32AsahiBatchPoll(&slots[0],0));
+ assert(AgxWin32AsahiBatchRelease(&slots[0]) && saved->refs==1 && timestamp_live==2);
+ assert(!AgxWin32AsahiBatchTimestampBo(&slots[0]));
+ agx_bo_unreference(NULL,saved);assert(timestamp_live==1);
+ assert(AgxWin32AsahiBatchAbort(&slots[1]));
+ capsule(&slots[1])->Lease=(APPLE_AGX_G4_PRIVATE_LEASE){1,1,1,1};live_leases=1;
+ private_fail=1;
+ assert(!AgxWin32AsahiBatchRelease(&slots[1]) && timestamp_live==1);
+ private_fail=0;
+ assert(AgxWin32AsahiBatchRelease(&slots[1]) && !timestamp_live && !live_leases);
+ puts("Timestamp GPU-only allocation, lifetime and failure cleanup: PASS");return 0;
+}
+''')
+
     def test_finish_retires_the_completed_holder_before_its_lease(self):
         source = SRC.read_text()
         finish = body(source, "AgxWin32AsahiBatchFinish")
@@ -262,7 +341,7 @@ class BatchBeginKeepsActive(unittest.TestCase):
         submit = body(space, "AgxWin32GpuvaSubmit")
         # A submission without a free older slot is refused; the newest set
         # becomes an older one on every path that installs a new Held.
-        self.assertIn("space->OlderCount == AGX_GPUVA_IN_FLIGHT - 1u)", submit)
+        self.assertIn("space->OlderCount >= AgxSubmissionWindowLimit(space->SubmissionWindow) - 1u)", submit)
         self.assertEqual(submit.count("gpuva_shift(space);"), submit.count("space->Held = handles;"))
         self.assertIn("space->OlderCount ||", body(space, "AgxWin32GpuvaUnbind"))
         # The UMD lets a slot join a submission while fewer than the depth

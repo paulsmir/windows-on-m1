@@ -11,6 +11,7 @@
 
 #include "dxbc_parse.h"
 #include "dxbc_to_nir.h"
+#include "dxbc_tir_gs.h"
 
 #include "nir.h"
 #include "nir_builder.h"
@@ -22,6 +23,29 @@ type_size_vec4(const struct glsl_type *type, bool bindless)
 {
    (void)bindless;
    return (unsigned)glsl_count_attribute_slots(type, false);
+}
+
+static void
+hull_passthrough(const void *bytes, size_t size, uint32_t *regs, uint32_t *positions)
+{
+   const void *sig;
+   uint32_t sig_bytes;
+   if (dxbc_container_find_chunk(bytes, size, DXBC_FOURCC('O', 'S', 'G', 'N'), &sig,
+                                 &sig_bytes) && sig_bytes >= 8) {
+      const uint8_t *s = sig;
+      uint32_t count;
+      memcpy(&count, s, 4);
+      for (uint32_t i = 0; i < count && 8 + 24 * (i + 1) <= sig_bytes; ++i) {
+         uint32_t sv, reg;
+         memcpy(&sv, s + 8 + 24 * i + 8, 4);
+         memcpy(&reg, s + 8 + 24 * i + 16, 4);
+         if (reg < 32) {
+            *regs |= 1u << reg;
+            if (sv == 1)
+               *positions |= 1u << reg;
+         }
+      }
+   }
 }
 
 int
@@ -36,7 +60,38 @@ main(int argc, char **argv)
    struct dxbc_error perr;
    struct dxbc_nir_error terr;
    nir_shader *nir;
-   bool print = argc > 2 && !strcmp(argv[2], "--print");
+   bool print = false, print_final = false, d3d12 = false, heap = false, uav64 = false, minmax = false;
+   unsigned tir = 0, tir_pass = 0;
+   const char *tir_gs = NULL;
+   bool tir_wrap = false, tir_wrap_heap = false;
+   for (int a = 2; a < argc; ++a) {
+      print |= !strcmp(argv[a], "--print");
+      print_final |= !strcmp(argv[a], "--print-final");
+      d3d12 |= !strcmp(argv[a], "--d3d12");
+      heap |= !strcmp(argv[a], "--d3d12-heap");
+      minmax |= !strcmp(argv[a], "--d3d12-minmax"); /* C65: with --d3d12-heap */
+      uav64 |= !strcmp(argv[a], "--d3d11-uav64");
+      if (!strcmp(argv[a], "--tir") && a + 1 < argc)
+         tir = (unsigned)atoi(argv[a + 1]);
+      if (!strcmp(argv[a], "--tir-pass") && a + 1 < argc)
+         tir_pass = (unsigned)atoi(argv[a + 1]);
+      if (!strcmp(argv[a], "--tir-gs") && a + 1 < argc)
+         tir_gs = argv[a + 1];
+      if (!strcmp(argv[a], "--tir-wrap-heap"))
+         tir_wrap_heap = true; /* the GS reads heap ranges: viewport from the heap table */
+      if (!strcmp(argv[a], "--tir-wrap-gs") && a + 1 < argc) {
+         /* C61C: the given application GS wraps itself */
+         tir_gs = argv[a + 1];
+         tir_wrap = true;
+      }
+   }
+   /* the D3D12 owner's entry: SM5.1 register spaces through a binding map
+    * with the owner's per-kind capacities (agx_d3d12_windows.cpp) */
+   static const uint32_t d3d12_limits[DXBC_BINDING_KIND_COUNT] = {14, 128, 8, 16};
+   /* C47: Tier 2 heap ranges for SRVs, UAVs and samplers */
+   static const uint32_t heap_limits[DXBC_BINDING_KIND_COUNT] = {14, 128 | DXBC_BINDING_HEAP_RANGES, 8 | DXBC_BINDING_HEAP_RANGES, 16 | DXBC_BINDING_HEAP_RANGES};
+   static const uint32_t minmax_limits[DXBC_BINDING_KIND_COUNT] = {14, 128 | DXBC_BINDING_HEAP_RANGES, 8 | DXBC_BINDING_HEAP_RANGES, 16 | DXBC_BINDING_HEAP_RANGES | DXBC_BINDING_MINMAX};
+   struct dxbc_binding_map d3d12_map;
 
    if (argc < 2 || !(f = fopen(argv[1], "rb")))
       return 2;
@@ -51,7 +106,7 @@ main(int argc, char **argv)
        !dxbc_container_find_chunk(bytes, (size_t)size, DXBC_FOURCC('S', 'H', 'D', 'R'), &chunk, &chunk_bytes))
       return 2;
    if (dxbc_parse_program(chunk, chunk_bytes / 4, &program, &perr) != DXBC_OK) {
-      printf("PARSE_ERROR %d\n", perr.status);
+      printf("PARSE_ERROR %d offset %u opcode %u\n", perr.status, perr.offset, perr.opcode);
       return 1;
    }
 
@@ -107,29 +162,101 @@ main(int argc, char **argv)
       ralloc_free(nir);
       return 0;
    }
-   if (program.type == DXBC_PROGRAM_HULL) {
+   if (tir_pass) {
+      /* the generic pass (the D3D12 path's DXIL shaders) on a plain shader */
+      struct dxbc_nir_uav_slots slots;
+      nir = dxbc_translate_tokens_uav64(chunk, &agx_nir_options, 0, 0, &slots, &terr);
+      if (nir && !(tir_pass == 1 ? dxbc_cr_lower_fs(nir) : dxbc_tir_lower_fs(nir, tir_pass))) {
+         printf("TIR_PASS_REFUSED\n");
+         return 1;
+      }
+   } else if (tir) {
+      /* the D3D10/11 UMD's FL 11_1 forced-sample-count pixel shader variant */
+      struct dxbc_nir_uav_slots slots;
+      nir = dxbc_translate_tokens_tir(chunk, &agx_nir_options, &slots, tir, &terr);
+      if (nir && tir_gs) {
+         /* the expansion GS between a vertex shader and this variant */
+         FILE *vf = fopen(tir_gs, "rb");
+         long vsize;
+         void *vbytes;
+         const void *vchunk;
+         uint32_t vchunk_bytes;
+         struct dxbc_nir_uav_slots vslots;
+         struct dxbc_tir_gs_key key;
+         if (!vf)
+            return 2;
+         fseek(vf, 0, SEEK_END);
+         vsize = ftell(vf);
+         fseek(vf, 0, SEEK_SET);
+         vbytes = malloc((size_t)vsize);
+         if (!vbytes || fread(vbytes, 1, (size_t)vsize, vf) != (size_t)vsize)
+            return 2;
+         fclose(vf);
+         if (!dxbc_container_find_chunk(vbytes, (size_t)vsize, DXBC_FOURCC('S', 'H', 'E', 'X'), &vchunk,
+                                        &vchunk_bytes) &&
+             !dxbc_container_find_chunk(vbytes, (size_t)vsize, DXBC_FOURCC('S', 'H', 'D', 'R'), &vchunk,
+                                        &vchunk_bytes))
+            return 2;
+         nir_shader *vs = dxbc_translate_tokens_uav64(vchunk, &agx_nir_options, 0, 0, &vslots, &terr);
+         if (!vs || !dxbc_tir_gs_key_from(vs, nir, &key)) {
+            printf("TIR_GS_KEY_REFUSED\n");
+            return 1;
+         }
+         nir_shader *gs = tir_wrap ? (dxbc_tir_wrap_gs(vs, &key, tir_wrap_heap) ? vs : NULL)
+                                   : dxbc_tir_gs(&agx_nir_options, &key);
+         if (!gs) {
+            printf(tir_wrap ? "TIR_WRAP_GS_REFUSED\n" : "TIR_GS_REFUSED\n");
+            return 1;
+         }
+         if (print)
+            nir_print_shader(gs, stdout);
+         dxbc_nir_finalize(gs);
+         NIR_PASS(_, gs, nir_lower_io, nir_var_shader_in | nir_var_shader_out, type_size_vec4,
+                  nir_lower_io_lower_64bit_to_32);
+         nir_shader_gather_info(gs, nir_shader_get_entrypoint(gs));
+         agx_preprocess_nir(gs);
+         nir_validate_shader(gs, "tir gs agx_preprocess_nir");
+         printf("%s varyings %u primitive-id %u vertices-out %u\n", tir_wrap ? "TIR_WRAP_GS" : "TIR_GS", key.count,
+                key.primitive_id, gs->info.gs.vertices_out);
+         if (gs != vs)
+            ralloc_free(gs);
+         ralloc_free(vs);
+      }
+   } else if (uav64) {
+      /* the D3D10/11 UMD's D3D11.1 entry: 64 UAV registers, compacted
+       * shader buffers (agx_d3d11_ddi.cpp) */
+      struct dxbc_nir_uav_slots slots;
+      uint32_t regs = 0, positions = 0;
+      if (program.type == DXBC_PROGRAM_HULL)
+         hull_passthrough(bytes, (size_t)size, &regs, &positions);
+      nir = dxbc_translate_tokens_uav64(chunk, &agx_nir_options, regs, positions, &slots, &terr);
+      for (unsigned u = 0; nir && u < DXBC_NIR_UAV11_SLOTS; ++u) {
+         if (slots.buffer[u] != DXBC_NIR_UAV_UNUSED)
+            printf("UAV64 u%u buffer %u\n", u, slots.buffer[u]);
+         if (slots.counter[u] != DXBC_NIR_UAV_UNUSED)
+            printf("UAV64 u%u counter %u\n", u, slots.counter[u]);
+         if (slots.typed >> u & 1)
+            printf("UAV64 u%u image %u\n", u, slots.image[u]);
+      }
+      if (nir)
+         printf("UAV64 buffers %u\n", slots.buffers);
+   } else if (d3d12 || heap) {
+      uint32_t regs = 0, positions = 0;
+      if (program.type == DXBC_PROGRAM_HULL)
+         hull_passthrough(bytes, (size_t)size, &regs, &positions);
+      nir = dxbc_translate_tokens_bindings_hs(chunk, &agx_nir_options, heap ? (minmax ? minmax_limits : heap_limits) : d3d12_limits,
+                                              &d3d12_map, regs, positions, &terr);
+      for (uint32_t i = 0; nir && heap && i < d3d12_map.count; ++i)
+         printf("BINDING kind %u id %u space %u reg %u slot %u flags %u\n", d3d12_map.bindings[i].kind,
+                d3d12_map.bindings[i].id, d3d12_map.bindings[i].space, d3d12_map.bindings[i].reg,
+                d3d12_map.bindings[i].slot, d3d12_map.bindings[i].flags);
+   } else if (program.type == DXBC_PROGRAM_HULL) {
       /* the output signature (OSGN: count, 8, then 24-byte entries with
        * the system value at +8 and the register at +16) names the control
        * point registers a pass-through phase copies, as the runtime's
        * D3D11DDIARG_TESSELLATION_IO_SIGNATURES do for the UMD */
-      const void *sig;
-      uint32_t sig_bytes, regs = 0, positions = 0;
-      if (dxbc_container_find_chunk(bytes, (size_t)size, DXBC_FOURCC('O', 'S', 'G', 'N'), &sig,
-                                    &sig_bytes) && sig_bytes >= 8) {
-         const uint8_t *s = sig;
-         uint32_t count;
-         memcpy(&count, s, 4);
-         for (uint32_t i = 0; i < count && 8 + 24 * (i + 1) <= sig_bytes; ++i) {
-            uint32_t sv, reg;
-            memcpy(&sv, s + 8 + 24 * i + 8, 4);
-            memcpy(&reg, s + 8 + 24 * i + 16, 4);
-            if (reg < 32) {
-               regs |= 1u << reg;
-               if (sv == 1)
-                  positions |= 1u << reg;
-            }
-         }
-      }
+      uint32_t regs = 0, positions = 0;
+      hull_passthrough(bytes, (size_t)size, &regs, &positions);
       nir = dxbc_to_nir_hs(&program, &agx_nir_options, regs, positions, &terr);
    } else {
       nir = dxbc_to_nir(&program, &agx_nir_options, &terr);
@@ -150,6 +277,11 @@ main(int argc, char **argv)
    /* the frontend's finalization (tgsi_to_nir's sequence) */
    dxbc_nir_finalize(nir);
    nir_validate_shader(nir, "finalize");
+   /* agx_nir_lower_bindings (before agx_preprocess_nir) clamps bindless image
+    * indices to info.num_images - 1, which nir_shader_gather_info recounts
+    * from the image variables */
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+   unsigned gathered_images = nir->info.num_images, image_span = BITSET_LAST_BIT(nir->info.images_used);
 
    /* agx_shader_initialize: I/O lowering, then agx_preprocess_nir */
    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
@@ -158,6 +290,8 @@ main(int argc, char **argv)
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
    agx_preprocess_nir(nir);
    nir_validate_shader(nir, "agx_preprocess_nir");
+   if (print_final)
+      nir_print_shader(nir, stdout);
 
    /* the block size Dispatch launches, the groupshared bytes the AGX
     * backend allocates, and groupshared accesses left as derefs (the
@@ -172,11 +306,18 @@ main(int argc, char **argv)
     * which Asahi's agx_nir_lower_vs_input_to_prolog turns into the
     * prolog export), bit per base */
    unsigned vs_input_bases = 0;
+   /* EXP1821: ALU ops the AGX backend neither lowers nor emits */
+   unsigned agx_unlowered_bitfield = 0;
    nir_foreach_function_impl(impl, nir) {
       nir_block *last = nir_impl_last_block(impl);
       nir_foreach_block(blk, impl)
          nir_foreach_instr(instr, blk) {
             ++instrs;
+            if (instr->type == nir_instr_type_alu) {
+               const nir_op op = nir_instr_as_alu(instr)->op;
+               if (op == nir_op_bfi || op == nir_op_bfm || op == nir_op_ubfe || op == nir_op_ibfe)
+                  ++agx_unlowered_bitfield;
+            }
             if (instr->type == nir_instr_type_deref &&
                 nir_deref_mode_is(nir_instr_as_deref(instr), nir_var_mem_shared))
                ++shared_derefs;
@@ -192,12 +333,12 @@ main(int argc, char **argv)
    }
    printf("TRANSLATED stage %s instructions %u inputs 0x%llx outputs 0x%llx textures %u "
           "ssbos %u images %u block %ux%ux%u shared %u shared-derefs %u early-output-stores %u "
-          "vs-input-bases 0x%x\n",
+          "vs-input-bases 0x%x agx-unlowered-bitfield %u gathered-images %u image-span %u\n",
           mesa_shader_stage_name(nir->info.stage), instrs,
           (unsigned long long)nir->info.inputs_read,
           (unsigned long long)nir->info.outputs_written, BITSET_LAST_BIT(nir->info.textures_used),
           ssbos, images, block[0], block[1], block[2], shared, shared_derefs, early_stores,
-          vs_input_bases);
+          vs_input_bases, agx_unlowered_bitfield, gathered_images, image_span);
    ralloc_free(nir);
    glsl_type_singleton_decref();
    dxbc_program_free(&program);

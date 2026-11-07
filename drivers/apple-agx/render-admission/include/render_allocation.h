@@ -27,8 +27,14 @@ typedef struct _ADMISSION_ALLOCATION_DESCRIPTION {
  * share one storage format (A8_UNORM is stored as RGBA8); the KMD treats it
  * as opaque. */
 #define ADMISSION_PRESENT_RESOURCE_MAGIC 0x52505241u
-#define ADMISSION_PRESENT_RESOURCE_VERSION 3u
+/* Version 4 marks converted presentation storage. The D3D11 consumer still
+ * accepts v3; D3D12 open requires v4 because v3 cannot distinguish a resolved
+ * display allocation from the original multisampled or converted texture. */
+#define ADMISSION_PRESENT_RESOURCE_VERSION 4u
 #define ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY 1u
+/* Auxiliary presentation storage is not the original D3D12 resource.
+ * D3D11/DWM can still consume it as the described linear display surface. */
+#define ADMISSION_PRESENT_RESOURCE_CONVERTED 2u
 typedef struct _ADMISSION_PRESENT_RESOURCE_DATA {
   unsigned int Magic, Version, Bytes, Flags, Format;
   /* DXGI_DDI_PRIMARY_DESC.ModeDesc.RefreshRate of a primary; 0/0 otherwise. */

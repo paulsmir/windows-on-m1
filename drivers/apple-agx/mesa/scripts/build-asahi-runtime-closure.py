@@ -8,20 +8,23 @@ can establish executable closure; a successful archive alone does not do so.
 import argparse
 import ctypes
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
+# Builder root (APPLE AGX\active as its 8.3 alias, no space); override with APPLE_AGX_BUILDER_ROOT.
+BUILDER = Path(os.environ.get('APPLE_AGX_BUILDER_ROOT', r'C:\Users\pauls\APB12E~1\active'))
 import re
 import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
-ROOT = Path(r'C:\Users\pauls\AD04-fullcompiler-001')
-MESA = Path(r'C:\Users\pauls\AD04-d3d10-frontend-build\mesa')
-CLANG = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin')
-GENERATED = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated')
-OWNER_GENERATED = Path(r'C:\Users\pauls\AD04-umd-owner-004-generated')
+ROOT = (BUILDER / r'AD04-fullcompiler-001')
+MESA = (BUILDER / r'AD04-d3d10-frontend-build\mesa')
+CLANG = (BUILDER / r'AD04-asahi-windows-compiler\llvm20\bin')
+GENERATED = (BUILDER / r'AD04-asahi-windows-compiler\b5\generated')
+OWNER_GENERATED = (BUILDER / r'AD04-umd-owner-004-generated')
 COMPILER_EVIDENCE = {
     'x64': ROOT / 'asahi-x64-4aac999030764fef813f32b1e0dcc7fd',
     'arm64': ROOT / 'asahi-arm64-37c472b7142e4e52a35fccf1b41da45a',
@@ -44,14 +47,31 @@ BRIDGES = ('agx_win32_asahi_bo.c', 'agx_win32_asahi_capture.c',
            'agx_win32_asahi_runtime_test.c')
 GPUVA_BRIDGES = tuple(name for name in BRIDGES if name not in (
     'agx_win32_asahi_batch.c', 'agx_win32_asahi_runtime_test.c')) + (
-    'agx_win32_gpuva.c', 'agx_win32_gpuva_batch.c')
+    'agx_win32_gpuva.c', 'agx_win32_gpuva_batch.c',
+    'agx_win32_sparse.c')  # C53 T2D: reserved-texture pages (agx_win32_asahi_bo.c)
 FRONTEND_CPP = ('Adapter.cpp','Debug.cpp','Device.cpp','Draw.cpp','DxgiFns.cpp',
                 'Format.cpp','InputAssembly.cpp','OutputMerger.cpp','Query.cpp',
                 'Rasterizer.cpp','Resource.cpp','Shader.cpp','ShaderDump.cpp')
 FRONTEND_C = ('ShaderParse.c','ShaderTGSI.c')
 # D3D-H3: the DXBC parser and DXBC -> NIR translator (drivers/apple-agx/mesa/dxbc)
 # the frontend uses behind APPLE_AGX_D3D_SHADER_NIR.
-DXBC_C = ('dxbc_parse.c','dxbc_to_nir.c')
+DXBC_C = ('dxbc_parse.c','dxbc_to_nir.c','dxbc_tir_gs.c','dxbc_minmax.c')  # C65: min/max filtering
+# D3D12 C44: the DXIL frontend (drivers/apple-agx/mesa/dxil) of the 64-bit D3D12
+# UMDs, Mesa's spirv_to_nir (libvtn of the --mesa-build that provides libnir) and
+# the dxil-spirv C library (8434b063, D3D12-C15-dxil-license-review.md; built
+# /MD with the EXP1388 configuration, c44-build-dxspv.ps1). EXP1858: the source
+# carries drivers/apple-agx/mesa/dxil/patches/dxil-spirv-0001-dxbc-udiv-operand-type
+# (c49-dxspv-source, dxil_arithmetic.cpp SHA f90631e4...; c49-build-dxspv.ps1).
+# (agx_dxil_program.c is compiled by the UMD project itself)
+DXIL_UNITS = ('agx_dxil_to_nir.c', 'agx_dxil_checked.cpp')
+DXIL_SPIRV_SOURCE = (BUILDER / r'c49-dxspv-source')
+DXIL_SPIRV_BUILD = {'x64': (BUILDER / r'c49-dxspv-x64\build'),
+                    'arm64': (BUILDER / r'c49-dxspv-arm64\build'),
+                    # EXP1874B: the WOW64 D3D12 UMD (D3D9On12), the same c49 source
+                    'x86': (BUILDER / r'c49-dxspv-x86\build')}
+DXIL_SPIRV_LIBRARIES = ('dxil-spirv-c-static.lib', 'dxil-converter.lib', 'spirv-module.lib',
+                        'bc/llvm-bc.lib', 'third_party/bc-decoder.lib', 'third_party/dxbc-spirv.lib',
+                        'third_party/glslang-spirv-builder.lib', 'dxil-utils.lib', 'dxil-debug.lib')
 # D3D-H2a: the D3D11 DDI table over the D3D10 frontend (drivers/apple-agx/mesa/d3d11).
 D3D11_CPP = ('agx_d3d11_ddi.cpp', 'agx_wddm2_ddi.cpp')
 # Actual Gallium helpers required by native context/resource/state construction.
@@ -189,6 +209,91 @@ def prepare_parallel_copy_source(source, out):
                          'selected': str(destination), 'after_sha256': sha256(destination)}
 
 
+# EXP1848: enum bit-fields of agx_compiler.h whose enumerators exceed the
+# signed range of the field width (enum, field, width). The pinned compiler
+# evidence already declares size and type unsigned (EXP1466 core353); dim,
+# gather and interpolation remained enums.
+SIGNED_ENUM_BITFIELDS = (
+    ('agx_size', 'size', 2),
+    ('agx_index_type', 'type', 3),
+    ('agx_dim', 'dim', 4),
+    ('agx_gather', 'gather', 3),
+    ('agx_interpolation', 'interpolation', 2),
+)
+
+
+def prepare_unsigned_bitfield_header(units, out):
+    """EXP1848: clang-cl follows the MSVC ABI, where an enum bit-field is a
+    signed int: AGX_GATHER_B (0b101) in agx_instr's 3-bit gather field reads
+    back as -3, so agx_pack's (I->gather << 23) also set bits 26-31 and every
+    GatherBlue/GatherAlpha returned zero (C42J/C42M/C42N on RGB10/RGBA8/
+    RGBA16F); AGX_SIZE_64, AGX_INDEX_REGISTER/UNDEF and AGX_DIM_2D_MS_ARRAY
+    are truncated the same way. Project agx_compiler.h with unsigned bit-fields
+    (same width and storage unit, so the struct layout is unchanged) and
+    compile every compiler unit beside the projection."""
+    homes = {p.parent for p in units if (p.parent / 'agx_compiler.h').exists()}
+    originals = sorted({(home / 'agx_compiler.h') for home in homes})
+    if not originals:
+        raise RuntimeError('agx_compiler.h not found beside the compiler units')
+    baseline = originals[0]
+    if any(o.read_bytes() != baseline.read_bytes() for o in originals[1:]):
+        raise RuntimeError('Diverging agx_compiler.h copies: ' + ', '.join(map(str, originals)))
+    text = baseline.read_bytes().decode()
+    replaced = []
+    for enum, field, width in SIGNED_ENUM_BITFIELDS:
+        pattern = re.compile(r'enum %s(\s+)%s(\s*):(\s*)%d;' % (enum, field, width))
+        matches = pattern.findall(text)
+        if len(matches) > 1:
+            raise RuntimeError('Ambiguous enum bit-field anchor: enum %s %s' % (enum, field))
+        if matches:
+            text = pattern.sub(lambda m: 'unsigned %s%s:%s%d; /* enum %s */' % (
+                field, m.group(2), m.group(3), width, enum), text)
+            replaced.append(field)
+    leftover = [f for e, f, w in SIGNED_ENUM_BITFIELDS
+                if re.search(r'enum %s\s+%s\s*:\s*%d;' % (e, f, w), text)]
+    if leftover or not re.search(r'unsigned gather\s*:\s*3;', text):
+        raise RuntimeError('Signed enum bit-fields remain: ' + ', '.join(leftover or ['gather']))
+    destination = out / 'compiler-evidence'
+    destination.mkdir(parents=True, exist_ok=True)
+    for header in sorted(baseline.parent.glob('*.h')):
+        target = destination / header.name
+        if not target.exists():
+            shutil.copy2(header, target)
+    projected = destination / 'agx_compiler.h'
+    projected.write_bytes(text.encode())
+    relocated = []
+    for unit in units:
+        if unit.parent in homes and unit.parent != destination:
+            target = destination / unit.name
+            if not target.exists():
+                shutil.copy2(unit, target)
+            relocated.append(target)
+        else:
+            relocated.append(unit)
+    provenance = {'baseline': str(baseline), 'before_sha256': sha256(baseline),
+                  'after_sha256': sha256(projected), 'fields': replaced,
+                  'relocated': sorted(str(p) for p, q in zip(relocated, units) if p != q)}
+    return relocated, destination, provenance
+
+
+def prepare_latency_schedule(units, include):
+    """RC96: project agx_compiler.h, agx_pressure_schedule.c and agx_compile.c
+    in the compiler-evidence directory (APPLE_AGX_LATENCY_SCHED=0 restores the
+    pinned compiler at run time). Both units must be ones the closure
+    compiles from that directory."""
+    script = Path(__file__).with_name('native-asahi-latency-schedule.py')
+    spec = importlib.util.spec_from_file_location('native_latency_schedule', script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    names = {p.name: p for p in units}
+    for name in ('agx_pressure_schedule.c', 'agx_compile.c', 'agx_register_allocate.c', 'agx_insert_waits.c'):
+        if names.get(name) != include / name:
+            raise RuntimeError('RC96 latency schedule: ' + name + ' is not compiled beside the projected header')
+    hashes = module.project_directory(include)
+    return {'script': str(script), 'script_sha256': sha256(script),
+            'files': {name: {'before_sha256': b, 'after_sha256': a} for name, (b, a) in hashes.items()}}
+
+
 def compile_command(compiler, flags, includes, source, obj):
     command = [compiler, *flags, *('/I' + str(p) for p in includes),
                '/c', source, '/Fo' + str(obj)]
@@ -199,7 +304,7 @@ def archive_response(objects):
     return '\n'.join(subprocess.list2cmdline([str(p)]) for p in objects) + '\n'
 
 
-def write_props(path, architecture, native, library, dependencies, gpuva, provenance=None):
+def write_props(path, architecture, native, library, dependencies, gpuva, provenance=None, dxil=False):
     namespace = 'http://schemas.microsoft.com/developer/msbuild/2003'
     ET.register_namespace('', namespace)
     tag = lambda name: '{' + namespace + '}' + name
@@ -211,7 +316,12 @@ def write_props(path, architecture, native, library, dependencies, gpuva, proven
                        'NativeRuntimeLibrary': str(library),
                        **(provenance or {})}.items():
         ET.SubElement(group, tag(key)).text = value
-    link = ET.SubElement(ET.SubElement(project, tag('ItemDefinitionGroup')), tag('Link'))
+    definitions = ET.SubElement(project, tag('ItemDefinitionGroup'))
+    if dxil:
+        # C44: the runtime carries the DXIL frontend (agx_dxil_to_nir)
+        ET.SubElement(ET.SubElement(definitions, tag('ClCompile')), tag('PreprocessorDefinitions')).text = \
+            'APPLE_AGX_D3D12_DXIL=1;%(PreprocessorDefinitions)'
+    link = ET.SubElement(definitions, tag('Link'))
     ET.SubElement(link, tag('AdditionalDependencies')).text = ';'.join(
         [str(library), *map(str, dependencies), 'synchronization.lib',
          'advapi32.lib', 'user32.lib', '%(AdditionalDependencies)'])
@@ -229,6 +339,7 @@ def write_props(path, architecture, native, library, dependencies, gpuva, proven
 
 
 def main():
+    global MESA
     parser = argparse.ArgumentParser()
     parser.add_argument('--project', required=True, type=Path)
     parser.add_argument('--architecture', choices=('x64', 'arm64', 'x86'), default='x64')
@@ -238,9 +349,13 @@ def main():
     parser.add_argument('--source-manifest', type=Path)
     # EXP1182: a Mesa build other than nir-<architecture> (e.g. b_ndebug=true).
     parser.add_argument('--mesa-build', type=Path)
+    parser.add_argument('--mesa-source', type=Path, help='One complete pristine-derived Mesa source projection')
     # The build-full-asahi.py evidence of that Mesa build (pinned library hashes).
     parser.add_argument('--compiler-evidence', type=Path)
     args = parser.parse_args()
+    MESA = args.mesa_source or MESA
+    if args.mesa_source and (args.mesa_build is None or args.compiler_evidence is None):
+        parser.error('--mesa-source requires explicit fresh --mesa-build and --compiler-evidence')
     if args.gpuva and args.source_manifest is None:
         parser.error('--gpuva requires --source-manifest')
     out = args.output
@@ -248,6 +363,19 @@ def main():
     native = args.native_source
     build = args.mesa_build or ROOT / ('nir-' + args.architecture)
     evidence = args.compiler_evidence or COMPILER_EVIDENCE[args.architecture]
+    if args.mesa_source:
+        source_identity = {
+            'mesa_source': str(MESA.resolve()), 'mesa_build': str(build.resolve()),
+            'shader_info_sha256': sha256(MESA / 'src/compiler/shader_info.h')}
+        for receipt in (build / 'source-root.json', native / 'source-root.json', evidence / 'source-root.json'):
+            # roots compare resolved: a receipt may name them by an alias (the builder root's 8.3 form)
+            received = json.loads(receipt.read_text(encoding='utf-8-sig'))
+            for root in ('mesa_source', 'mesa_build'):
+                if root in received:
+                    received[root] = str(Path(received[root]).resolve())
+            if received != source_identity:
+                raise RuntimeError('Mesa source/build/header identity mismatch: ' + str(receipt))
+        (out / 'source-root.json').write_text(json.dumps(source_identity, indent=2) + '\n')
     manifest = {'architecture': args.architecture, 'project': str(args.project),
                 'native_source': str(native), 'compiler_evidence': str(evidence),
                 'scope': 'Real native runtime/compiler archive; executable link and execution required',
@@ -364,6 +492,13 @@ def main():
             table_matches[0], out)
         manifest['compiler_opcode_flags_transform'] = opcode_transform
         compiler_units = [selected_table if p == table_matches[0] else p for p in compiler_units]
+        compiler_units, bitfield_include, bitfield_transform = prepare_unsigned_bitfield_header(
+            compiler_units, out)
+        manifest['compiler_unsigned_bitfield_transform'] = bitfield_transform
+        # RC96: latency-aware scheduling, on the units and header just placed
+        # side by side (native-asahi-latency-schedule.py)
+        manifest['compiler_latency_schedule_transform'] = prepare_latency_schedule(
+            compiler_units, bitfield_include)
         libraries = []
         for relative in LIBRARIES:
             library = build / relative
@@ -373,6 +508,16 @@ def main():
             actual = record(library, expected, 'compiler-library')
             manifest['libraries'].append({'path': str(library), 'sha256': actual})
             libraries.append(library)
+        dxil = args.architecture in DXIL_SPIRV_BUILD
+        if dxil:
+            # libvtn of the same Mesa build as libnir (EXP1857: the nir-arm64
+            # cache's assertion-enabled libvtn left nir_validate_* unresolved
+            # against the NDEBUG libnir)
+            for library in ([build / 'src/compiler/spirv/libvtn.a'] +
+                            [DXIL_SPIRV_BUILD[args.architecture] / name for name in DXIL_SPIRV_LIBRARIES]):
+                actual = record(library, kind='c44-dxil-library')
+                manifest['libraries'].append({'path': str(library), 'sha256': actual})
+                libraries.append(library)
 
         command_file = build / 'compile_commands.json'
         record(command_file, kind='pinned-build-commands')
@@ -416,7 +561,7 @@ def main():
                     args.project / 'drivers/apple-agx/mesa/dxbc',
                     args.project / 'drivers/apple-agx/mesa/d3d11',
                     args.project / 'drivers/apple-agx/shared/include',
-                    Path(r'C:\Users\pauls\AD04-uatomic\include'),
+                    (BUILDER / r'AD04-uatomic\include'),
                     evidence / 'src', evidence / 'src/asahi/compiler',
                     build / 'src', build / 'include', build / 'src/compiler',
                     build / 'src/compiler/nir', MESA / 'include', MESA / 'src',
@@ -430,6 +575,9 @@ def main():
                     OWNER_GENERATED / 'src/asahi/lib', MESA / 'src/asahi/isa',
                     MESA / 'src/poly', MESA / 'src/poly/nir']
         includes.insert(0, opcode_include)
+        # the compiler units include the projected agx_compiler.h beside them; native
+        # units keep their own projected headers (no global include, EXP1849)
+        del bitfield_include
         manifest['compiler'] = {'path': str(CLANG / 'clang-cl.exe'),
                                 'sha256': record(CLANG / 'clang-cl.exe', kind='toolchain'),
                                 'c_flags': c_flags, 'cpp_flags': cpp_flags,
@@ -481,6 +629,8 @@ def main():
         runtime += [native / 'src/gallium/frontends/d3d10umd' / name
                     for name in FRONTEND_CPP + FRONTEND_C]
         runtime += [args.project / 'drivers/apple-agx/mesa/dxbc' / name for name in DXBC_C]
+        if dxil:
+            runtime += [args.project / 'drivers/apple-agx/mesa/dxil' / name for name in DXIL_UNITS]
         runtime += [args.project / 'drivers/apple-agx/mesa/d3d11' / name for name in D3D11_CPP]
         generated_c = OWNER_GENERATED / 'src/asahi/lib/libagx_shaders.c'
         record(generated_c, kind='native-generated-source')
@@ -488,6 +638,22 @@ def main():
         # not beside the unprojected generated Windows input.
         projected_c = native / 'src/asahi/lib/libagx_shaders.c'
         shutil.copy2(generated_c, projected_c)
+        if args.gpuva:
+            stream_script = args.project / 'drivers/apple-agx/mesa/scripts/native-asahi-indirect-stream.py'
+            stream_spec = importlib.util.spec_from_file_location('native_indirect_stream', stream_script)
+            stream_module = importlib.util.module_from_spec(stream_spec)
+            stream_spec.loader.exec_module(stream_module)
+            projected_c.write_text(stream_module.project_library_c(projected_c.read_text(), args.project))
+            timestamp_script = args.project / 'drivers/apple-agx/mesa/scripts/native-asahi-query-timestamp.py'
+            timestamp_spec = importlib.util.spec_from_file_location('native_query_timestamp', timestamp_script)
+            timestamp_module = importlib.util.module_from_spec(timestamp_spec)
+            timestamp_spec.loader.exec_module(timestamp_module)
+            projected_c.write_text(timestamp_module.project_library_c(projected_c.read_text(), args.project))
+            query_ia_script = args.project / 'drivers/apple-agx/mesa/scripts/native-asahi-query-ia.py'
+            query_ia_spec = importlib.util.spec_from_file_location('native_query_ia', query_ia_script)
+            query_ia_module = importlib.util.module_from_spec(query_ia_spec)
+            query_ia_spec.loader.exec_module(query_ia_module)
+            projected_c.write_text(query_ia_module.project_library_c(projected_c.read_text(), args.project))
         runtime.append(projected_c)
         runtime += [MESA / 'src/gallium/auxiliary' / name for name in AUX_UNITS]
         # Actual executable link, run native-lifecycle-20260913g, names these
@@ -543,8 +709,13 @@ def main():
             # the D3D11 table shares the frontend's headers and must see them alike
             if 'frontends/d3d10umd' in source.as_posix() or 'mesa/d3d11/' in source.as_posix():
                 exports.append('/DADMISSION_UMD_PIPE_FACTORY_TEST=1')
+            unit_includes = includes
+            if 'mesa/dxil/' in source.as_posix():
+                # dxil_spirv_c.h, the frontend's own headers and nir_spirv.h's directory
+                unit_includes = includes + [args.project / 'drivers/apple-agx/mesa/dxil', DXIL_SPIRV_SOURCE,
+                                            MESA / 'src/compiler/spirv']
             command, command_hash = compile_command(CLANG / 'clang-cl.exe',
-                [*flags, *exports], includes, source, obj)
+                [*flags, *exports], unit_includes, source, obj)
             if command_hash != source_hash:
                 raise RuntimeError('Compiler source changed during command construction: ' + str(source))
             run(name, command)
@@ -560,7 +731,7 @@ def main():
             provenance = {'NativeRuntimeSourceCommit': manifest['source_commit'],
                           'NativeRuntimeSourceManifestSha256': manifest['source_manifest_sha256'],
                           'NativeRuntimeLibrarySha256': manifest['library']['sha256']}
-        write_props(out / 'NativeRuntime.props', args.architecture, native, library, libraries, args.gpuva, provenance)
+        write_props(out / 'NativeRuntime.props', args.architecture, native, library, libraries, args.gpuva, provenance, dxil)
         manifest['props'] = {'path': str(out / 'NativeRuntime.props'), 'sha256': sha256(out / 'NativeRuntime.props')}
         manifest['executable_link'] = 'NOT_RUN'
         manifest['exit'] = 0

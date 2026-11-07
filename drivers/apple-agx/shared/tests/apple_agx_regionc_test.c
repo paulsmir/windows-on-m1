@@ -69,12 +69,19 @@ static void test_exact_physical_j313_regionc(void) {
   assert(destination[0x11178u] == 0x84u && destination[0x11179u] == 0x03u &&
          destination[0x1117au] == 0u && destination[0x1117bu] == 0u);
   assert(destination[0x1117cu] == 10u && destination[0x11180u] == 250u);
+  /* rc77 (EXP2005 0x116 after an MMU fault): fault_control is Asahi's
+   * production 0xb ("macOS default"), not m1n1's hard-fault 0; it is the
+   * word before do_init (0x10fdc = 1). */
+  assert(destination[0x10fd8u] == 0x0bu && destination[0x10fd9u] == 0u &&
+         destination[0x10fdau] == 0u && destination[0x10fdbu] == 0u);
   destination[0x1119cu] = 2u;
   destination[0x11178u] = 40u; destination[0x11179u] = 0u;
+  destination[0x10fd8u] = 0u;
   assert(fnv1a64(destination, sizeof(destination)) ==
          0xc3bc91a9acf61290ULL);
   destination[0x1119cu] = 20u;
   destination[0x11178u] = 0x84u; destination[0x11179u] = 0x03u;
+  destination[0x10fd8u] = 0x0bu;
   assert(destination[0x24u] == 0xb8u);
   assert(destination[0x10fdcu] == 1u);
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run exactly the reviewed Phase 3 math validation; no caller shell text."""
 import hashlib
+import os
 import json
 import pathlib
 import shutil
@@ -14,7 +15,9 @@ APPROVED = pathlib.Path("/Users/pavel/public_windows/.worktrees/task-AD04-MATH-C
 LOCAL_ROOT = pathlib.Path("/Users/pavel/public_windows/.worktrees/phase3-normalize")
 KEY = "/Users/pavel/.ssh/windows_builder"
 HOST = "pauls@192.168.1.24"
-INPUT_ROOT = "C:/Users/pauls/AD04-phase3-normalize-20260912T000001Z/input"
+# Builder root (APPLE AGX\active as its 8.3 alias, no space); override with APPLE_AGX_BUILDER_ROOT.
+BUILDER = os.environ.get("APPLE_AGX_BUILDER_ROOT", r"C:\Users\pauls\APB12E~1\active").replace("\\", "/")
+INPUT_ROOT = f"{BUILDER}/AD04-phase3-normalize-20260912T000001Z/input"
 
 
 def call(arguments):
@@ -28,7 +31,7 @@ def main():
     if actual != EXPECTED_SHA256:
         raise SystemExit(f"approved script hash mismatch: {actual}")
     token = uuid.uuid4().hex
-    remote = f"C:/Users/pauls/AD04-phase3-math-{token}"
+    remote = f"{BUILDER}/AD04-phase3-math-{token}"
     local = LOCAL_ROOT / "investigation/evidence/PHASE3-math" / token
     local.mkdir(parents=True, exist_ok=False)
     ssh = ["ssh", "-i", KEY, "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", HOST]
@@ -36,8 +39,8 @@ def main():
     preparer = LOCAL_ROOT / "drivers/apple-agx/mesa/scripts/prepare-phase3-normalized.ps1"
     probe = LOCAL_ROOT / "drivers/apple-agx/mesa/scripts/run-math-constants-probe.ps1"
     probe_c = LOCAL_ROOT / "drivers/apple-agx/mesa/windows-overlay/math_constants_probe.c"
-    call(scp + [str(preparer), f"{HOST}:C:/Users/pauls/phase3-math-preparer-{token}.ps1"])
-    call(ssh + [f"powershell -NoProfile -ExecutionPolicy Bypass -File C:/Users/pauls/phase3-math-preparer-{token}.ps1 -Root {remote}"])
+    call(scp + [str(preparer), f"{HOST}:{BUILDER}/phase3-math-preparer-{token}.ps1"])
+    call(ssh + [f"powershell -NoProfile -ExecutionPolicy Bypass -File {BUILDER}/phase3-math-preparer-{token}.ps1 -Root {remote}"])
     call(scp + [str(APPROVED), str(probe), str(probe_c), f"{HOST}:{remote}/"])
     probe_result = call(ssh + [f"powershell -NoProfile -ExecutionPolicy Bypass -File {remote}/run-math-constants-probe.ps1 -Root {remote}/probe"])
     compile_result = subprocess.run(ssh + [f"powershell -NoProfile -ExecutionPolicy Bypass -File {remote}/run-phase3-normalized.ps1 -InputRoot {INPUT_ROOT} -ResultRoot {remote}/compile"], text=True, capture_output=True)

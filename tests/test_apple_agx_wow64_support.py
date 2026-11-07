@@ -50,6 +50,16 @@ int main(void) {
   assert(AdmissionWow64UmdNamed(ADMISSION_REG_MULTI_SZ, NULL, sizeof(name)) == 0);
   assert(AdmissionWow64UmdNamed(3u /* REG_BINARY */, name, sizeof(name)) == 0);
   assert(AdmissionWow64UmdNamed(4u /* REG_DWORD */, name, 4u) == 0);
+  /* EXP1889: slot 0 is the "<>" no-D3D9 marker; the UMD follows it. */
+  {
+    unsigned short marked[] = {'<','>',0,'U','m','d','3','2','.','d','l','l',0,0};
+    unsigned short only[] = {'<','>',0,0};
+    unsigned short open_after[] = {'<','>',0,'U','m','d'};
+    assert(AdmissionWow64UmdNamed(ADMISSION_REG_MULTI_SZ, marked, sizeof(marked)) == 1);
+    assert(AdmissionWow64UmdNamed(ADMISSION_REG_MULTI_SZ, only, sizeof(only)) == 0);
+    assert(AdmissionWow64UmdNamed(ADMISSION_REG_MULTI_SZ, open_after, sizeof(open_after)) == 0);
+    assert(AdmissionWow64UmdNamed(ADMISSION_REG_SZ, only, sizeof(only)) == 0);
+  }
   assert(AdmissionWow64Only64Bit(1) == 0u);
   assert(AdmissionWow64Only64Bit(0) == 1u);
   puts("PASS");
@@ -86,7 +96,7 @@ class Wow64SupportTest(unittest.TestCase):
 
     def test_inf_registers_the_value_the_kmd_reads(self):
         inf = INF.read_text()
-        self.assertIn("HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,AppleAgxRenderAdmissionUmd32.dll", inf)
+        self.assertIn('HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,"<>",AppleAgxRenderAdmissionUmd32.dll', inf)
 
 
 if __name__ == "__main__":

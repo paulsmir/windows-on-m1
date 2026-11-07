@@ -52,6 +52,34 @@ class StackFrameScanTest(unittest.TestCase):
         self.assertEqual(pe_stack_frames.scan_x86(bytes(code), 0x400),
                          [(0x400, 0x15ca0), (0x410, 0x2000)])
 
+    def test_amd64_image_is_scanned(self):
+        # EXP1875: the x64 UMD (an AMD64 image) was never gated -- frames()
+        # exited with "unsupported machine 0x8664". x64 compilers emit the
+        # x86 prologue (mov eax, n; call __chkstk; sub rsp, rax).
+        def call(at, value, target):
+            return b"\xb8" + struct.pack("<I", value) + b"\xe8" + struct.pack("<i", target - (at + 10))
+        code = bytearray(b"\x90" * 0x200)
+        code[0:10] = call(0, 0x7820, 0x100)
+        code[16:26] = call(16, 0x3000, 0x100)
+        pe = 0x40
+        optional_size = 0xF0
+        header = bytearray(0x200)
+        struct.pack_into("<I", header, 0x3C, pe)
+        header[pe:pe + 4] = b"PE\0\0"
+        struct.pack_into("<HH", header, pe + 4, 0x8664, 1)
+        struct.pack_into("<H", header, pe + 20, optional_size)
+        table = pe + 24 + optional_size
+        header[table:table + 8] = b".text\0\0\0"
+        struct.pack_into("<IIII", header, table + 8, len(code), 0x1000, len(code), 0x200)
+        struct.pack_into("<I", header, table + 36, 0x60000020)
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / "x64.dll"
+            image.write_bytes(bytes(header) + bytes(code))
+            machine, found = pe_stack_frames.frames(image)
+        self.assertEqual(machine, 0x8664)
+        self.assertEqual(found, [(0x1000, 0x7820), (0x1010, 0x3000)])
+
 
 if __name__ == "__main__":
     unittest.main()

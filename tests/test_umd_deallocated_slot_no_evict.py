@@ -39,6 +39,7 @@ BODY = r'''
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include "umd_cpu_access.h"
 typedef int HRESULT; typedef unsigned UINT; typedef unsigned D3DKMT_HANDLE; typedef int BOOL;
 typedef unsigned long long ULONGLONG, APPLE_AGX_U64; typedef void *HANDLE; typedef void VOID;
 typedef uintptr_t ULONG_PTR;
@@ -57,10 +58,11 @@ typedef int SRWLOCK;
 static int locked;
 static void AcquireSRWLockExclusive(SRWLOCK*){assert(!locked);locked=1;}
 static void ReleaseSRWLockExclusive(SRWLOCK*){assert(locked);locked=0;}
-static int VirtualFree(void*,size_t,unsigned){return 1;}
-struct ADMISSION_UMD_SCREEN_BUFFER { BOOL Active,Mapped,Transition,CopyHeld,Direct,Resident,Borrowed,SystemDirect;
+static unsigned staging_frees;
+static int VirtualFree(void*,size_t,unsigned){++staging_frees;return 1;}
+struct ADMISSION_UMD_SCREEN_BUFFER { ADMISSION_UMD_CPU_ACCESS CpuAccess; ULONGLONG Bytes; void *LockedBase; BOOL Active,Mapped,Transition,CopyHeld,Direct,Resident,Borrowed,SystemDirect;
   APPLE_AGX_U64 Token; void *NativeBo; UINT SourceHolds,SubmissionHolds;
-  D3DKMT_HANDLE KernelAllocation,StagingAllocation; ULONGLONG CanonicalGpuVa; unsigned char *PrivateStaging; };
+  D3DKMT_HANDLE KernelAllocation,StagingAllocation; ULONGLONG CanonicalGpuVa; unsigned char *PrivateStaging, *HeapStagingShadow; };
 struct D3DDDI_EVICT_FLAGS { union { struct { UINT EvictOnlyIfNecessary:1; UINT NotWrittenTo:1; UINT Reserved:30; }; UINT Value; }; };
 struct D3DDDICB_EVICT { D3DDDI_EVICT_FLAGS Flags; UINT NumAllocations; const D3DKMT_HANDLE *AllocationList; ULONGLONG NumBytesToTrim; };
 struct D3DDDICB_DEALLOCATE { HANDLE hResource; UINT NumAllocations; const D3DKMT_HANDLE *HandleList; };
@@ -70,14 +72,16 @@ static D3DKMT_HANDLE dead; static unsigned evicts, dead_evicts, deallocations;
 static HRESULT ev(HANDLE,const D3DDDICB_EVICT*e){++evicts;
   for(UINT i=0;i<e->NumAllocations;++i) if(e->AllocationList[i]==dead) ++dead_evicts;
   return dead_evicts ? (HRESULT)0x887a0005u : S_OK;}
-static HRESULT de(HANDLE,const D3DDDICB_DEALLOCATE*d){++deallocations;
+static bool deallocate_fails;
+static HRESULT de(HANDLE,const D3DDDICB_DEALLOCATE*d){++deallocations; if(deallocate_fails)return (HRESULT)0x80004005u;
   if(d->hResource==(HANDLE)0x5000) dead=0x40; return S_OK;}
 struct CB { HRESULT(*pfnEvictCb)(HANDLE,const D3DDDICB_EVICT*); HRESULT(*pfnDeallocateCb)(HANDLE,const D3DDDICB_DEALLOCATE*); };
-struct ADMISSION_UMD_DEVICE { ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[4]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal;
+struct ADMISSION_UMD_DEVICE { ULONGLONG OwnerCookie; ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[4]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal;
   CB *KernelCallbacks; struct { HANDLE handle; } RuntimeDevice; HRESULT LastScreenError; };
 struct ADMISSION_UMD_RETIREMENT { UINT Origin; BOOL Primary,Shared; D3DKMT_HANDLE KernelResource,KernelAllocation; HANDLE RuntimeResource; };
 static void AdmissionUmdVaRecordDeallocate(const void*,ULONGLONG,D3DKMT_HANDLE,ULONGLONG,HRESULT){}
-static void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*,UINT){}
+static unsigned cpu_receipts;
+static void AdmissionUmdDiagnostic(const char*name,HRESULT,const UINT*v,UINT n){if(strcmp(name,"measure-bo-cpu-access")==0){++cpu_receipts;assert(n==16 && v[0]==0x101 && v[8]==(65u<<20));}}
 @@SCREEN@@
 @@RUNTIME@@
 int main(){
@@ -85,18 +89,27 @@ int main(){
   /* EXP1130 order: the presentation resource is deallocated first, the
    * native BO's Direct slot (persistently resident) is destroyed after. */
   ADMISSION_UMD_SCREEN_BUFFER &b=d.ScreenBuffers[0];
-  b.Active=1;b.Token=7;b.Direct=1;b.Resident=1;b.KernelAllocation=0x40;
+  b.Bytes=65ull<<20;b.Active=1;b.Token=7;b.Direct=1;b.Resident=1;b.KernelAllocation=0x40;
   ADMISSION_UMD_RETIREMENT r={}; r.Origin=2u;r.Primary=1;r.KernelAllocation=0x40;
   r.RuntimeResource=(HANDLE)0x5000;
   assert(AdmissionUmdDeallocateResource(&d,&r)==S_OK && dead==0x40);
   assert(AdmissionUmdScreenDestroyBuffer(&d,7)==1);
-  assert(dead_evicts==0 && evicts==0);
+  assert(dead_evicts==0 && evicts==0 && cpu_receipts==1);
   assert(!d.ScreenBuffers[0].Active && d.LastScreenError==S_OK);
   /* The usual order is unchanged: a live slot drops its own reference once. */
   ADMISSION_UMD_SCREEN_BUFFER &c=d.ScreenBuffers[1];
   c.Active=1;c.Token=9;c.Direct=1;c.Borrowed=1;c.Resident=1;c.KernelAllocation=0x80;
   assert(AdmissionUmdScreenDestroyBuffer(&d,9)==1);
   assert(evicts==1 && dead_evicts==0 && deallocations==1);
+  /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? T13 private CPU and
+   * merge storage must survive failed deallocation, then free exactly once. */
+  auto &staged=d.ScreenBuffers[2];staged.Active=1;staged.Token=10;staged.KernelAllocation=0x90;
+  staged.PrivateStaging=(unsigned char*)0x1000;staged.HeapStagingShadow=(unsigned char*)0x2000;
+  deallocate_fails=true;
+  assert(!AdmissionUmdScreenDestroyBuffer(&d,10) && !staging_frees && staged.Active);
+  assert(staged.PrivateStaging && staged.HeapStagingShadow);
+  deallocate_fails=false;
+  assert(AdmissionUmdScreenDestroyBuffer(&d,10) && staging_frees==2 && !staged.Active);
   return 0;
 }
 '''
@@ -107,6 +120,7 @@ class DeallocatedSlotNoEvictTests(unittest.TestCase):
         screen = SCREEN.read_text()
         runtime = RUNTIME.read_text()
         screen_funcs = "\n".join([
+            function(screen, "AdmissionUmdScreenCpuAccessReceipt"),
             function(screen, "AdmissionUmdScreenFind"),
             function(screen, "AdmissionUmdScreenForgetAllocation", False),
             function(screen, "AdmissionUmdScreenDestroyBuffer")])
@@ -115,7 +129,7 @@ class DeallocatedSlotNoEvictTests(unittest.TestCase):
             source = Path(tmp) / "t.cpp"; binary = Path(tmp) / "t"
             source.write_text(BODY.replace("@@SCREEN@@", screen_funcs)
                               .replace("@@RUNTIME@@", runtime_funcs))
-            subprocess.run(["clang++", "-std=c++17", "-w", str(source), "-o", str(binary)],
+            subprocess.run(["clang++", "-std=c++17", '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), "-w", "-I", str(ROOT / "drivers/apple-agx/render-admission/umd/include"), str(source), "-o", str(binary)],
                            check=True)
             subprocess.run([str(binary)], check=True)
 

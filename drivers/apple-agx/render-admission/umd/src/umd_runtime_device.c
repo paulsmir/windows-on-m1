@@ -34,6 +34,10 @@ static ULONG AdmissionUmdNextGeneration(VOID) {
 static INIT_ONCE AdmissionUmdTraceOnce = INIT_ONCE_STATIC_INIT;
 static WCHAR AdmissionUmdTracePath[MAX_PATH];
 static BOOL AdmissionUmdTraceRefusalsOnly;
+/* EXP1920: a hung GravityMark thread never appended again, so the buffered
+ * tail (the hang point) was lost when the process was killed. Opt-in
+ * APPLE_AGX_UMD_TRACE_SYNC=1 writes every line at once (diagnostic runs). */
+static BOOL AdmissionUmdTraceSync;
 
 static BOOL CALLBACK AdmissionUmdTraceLoad(PINIT_ONCE Once, PVOID Parameter,
                                            PVOID *Context) {
@@ -44,6 +48,9 @@ static BOOL CALLBACK AdmissionUmdTraceLoad(PINIT_ONCE Once, PVOID Parameter,
   UNREFERENCED_PARAMETER(Context);
   AdmissionUmdTraceRefusalsOnly =
       GetEnvironmentVariableW(L"APPLE_AGX_UMD_REFUSALS_ONLY", only, 2) == 1u &&
+      only[0] == L'1';
+  AdmissionUmdTraceSync =
+      GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_SYNC", only, 2) == 1u &&
       only[0] == L'1';
   length = GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE",
       AdmissionUmdTracePath, ARRAYSIZE(AdmissionUmdTracePath));
@@ -68,6 +75,17 @@ BOOL AdmissionUmdDiagnosticEnabled(VOID) {
   PCWSTR path = AdmissionUmdTraceConfig(&refusalsOnly);
   SetLastError(saved);
   return path != NULL && !refusalsOnly;
+}
+
+/* EXP1967: "measure-" receipts pass the refusals-only filter (see
+ * AdmissionUmdDiagnosticPermit), so measurement timers follow the trace
+ * path alone; AdmissionUmdDiagnosticEnabled stays false in that mode. */
+BOOL AdmissionUmdMeasureEnabled(VOID) {
+  DWORD saved = GetLastError();
+  BOOL refusalsOnly;
+  PCWSTR path = AdmissionUmdTraceConfig(&refusalsOnly);
+  SetLastError(saved);
+  return path != NULL;
 }
 
 /* EXP959 exhausted the normal startup budget before DWM's first failed
@@ -192,7 +210,7 @@ static VOID AdmissionUmdTraceAppend(const char *Line, DWORD Bytes,
   if (AdmissionUmdTraceUsed == 0u) AdmissionUmdTraceOldestQpc = Qpc;
   memcpy(AdmissionUmdTraceBuffer + AdmissionUmdTraceUsed, Line, Bytes);
   AdmissionUmdTraceUsed += Bytes;
-  if (Urgent || Qpc - AdmissionUmdTraceOldestQpc >=
+  if (Urgent || AdmissionUmdTraceSync || Qpc - AdmissionUmdTraceOldestQpc >=
                     frequency.QuadPart * ADMISSION_UMD_TRACE_FLUSH_MS / 1000)
     AdmissionUmdTraceWriteLocked();
   ReleaseSRWLockExclusive(&AdmissionUmdTraceLock);
@@ -211,7 +229,9 @@ VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
   UINT i;
   LARGE_INTEGER diagnosticQpc = {0};
   DWORD diagnosticSession = MAXDWORD;
-  if (Stage == NULL || Count > 16u || (Count != 0u && Values == NULL))
+  /* EXP2202: 16 silently dropped the 24- and 26-value OV2 refusal receipt;
+   * 32 values fit the 512-byte line (test_umd_diagnostic_value_cap). */
+  if (Stage == NULL || Count > 32u || (Count != 0u && Values == NULL))
     goto done;
   path = AdmissionUmdTraceConfig(&refusalsOnly);
   if (path == NULL) goto done;
@@ -426,6 +446,14 @@ AdmissionUmdRuntimeErrorCallback(const D3D10DDIARG_CREATEDEVICE *Args,
  * to the D3D12 command queue and is never destroyed here: BorrowedContext). */
 static HRESULT AdmissionUmdRuntimeDeviceAttach(ADMISSION_UMD_DEVICE *device) {
   HRESULT result;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  {
+    char option[2] = {0};
+    device->PagingWaitCompleted =
+        GetEnvironmentVariableA("APPLE_AGX_PAGING_WAIT_COMPLETED", option,
+                                sizeof(option)) == 1u && option[0] == '1';
+  }
+#endif
   {
     D3DDDICB_CREATEPAGINGQUEUE pagingQueue;
     ZeroMemory(&pagingQueue, sizeof(pagingQueue));
@@ -768,7 +796,70 @@ HRESULT AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *device,
   device->KernelContextQuiesced=FALSE;
   if (FAILED(terminalError))
     AdmissionUmdSetError(device, terminalError);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if (device->VaAliases) HeapFree(GetProcessHeap(), 0, device->VaAliases);
+#endif
+#ifdef APPLE_AGX_NATIVE_STAGING
+  for (UINT i = 0u; i < ADMISSION_UMD_NATIVE_ARENAS; ++i)
+    if (device->NativeStaging[i].Ring)
+      HeapFree(GetProcessHeap(), 0, device->NativeStaging[i].Ring);
+#endif
   ZeroMemory(device, sizeof(*device));
   *consumed = TRUE;
   return terminalError;
 }
+
+/* RC42: no allocation, global lock, environment lookup or clock read at
+ * inactive sites. Each Execute thread owns its accumulator and nesting stack. */
+#include "umd_wait_profile.h"
+static __declspec(thread) AgxWaitProfile AdmissionWait;
+static volatile LONG AdmissionWaitSerial;
+int AdmissionUmdWaitExecuteBegin(void) {
+  LARGE_INTEGER hz;
+  if (AdmissionWait.Active || !AdmissionUmdMeasureEnabled()) return 0;
+  QueryPerformanceFrequency(&hz);
+  AgxWaitReset(&AdmissionWait,(unsigned)InterlockedIncrement(&AdmissionWaitSerial),
+               (unsigned long long)hz.QuadPart);
+  return 1;
+}
+unsigned AdmissionUmdWaitSerial(void) {
+  return AdmissionWait.Active ? AdmissionWait.Serial : 0;
+}
+/* EXP2210 receipt-only: wait time completed since this thread's previous
+ * submission (umd_wait_profile.h AgxWaitSubmitDelta); no clock read. */
+static __declspec(thread) unsigned long long AdmissionWaitSubmitPrevious[AGX_WAIT_SUBMIT_CLASSES];
+static __declspec(thread) unsigned AdmissionWaitSubmitSerial;
+unsigned AdmissionUmdWaitSubmitDelta(unsigned *serial, unsigned out_us[6]) {
+  unsigned flags = AgxWaitSubmitDelta(&AdmissionWait, AdmissionWaitSubmitPrevious,
+                                      &AdmissionWaitSubmitSerial, out_us);
+  *serial = AdmissionWait.Active ? AdmissionWait.Serial : 0u;
+  return flags;
+}
+void AdmissionUmdWaitSetPhase(unsigned phase) {
+  if (AdmissionWait.Active && phase<AgxWaitPhaseCount) AdmissionWait.Phase=phase;
+}
+unsigned AdmissionUmdWaitBegin(unsigned site) {
+  LARGE_INTEGER now;
+  if (!AdmissionWait.Active) return 0;
+  QueryPerformanceCounter(&now);
+  return AgxWaitPush(&AdmissionWait,site,(unsigned long long)now.QuadPart);
+}
+void AdmissionUmdWaitEnd(unsigned token) {
+  LARGE_INTEGER now;
+  if (!token || !AdmissionWait.Active) return;
+  QueryPerformanceCounter(&now);
+  AgxWaitPop(&AdmissionWait,token,(unsigned long long)now.QuadPart);
+}
+void AdmissionUmdWaitExecuteEnd(long status) {
+  unsigned words[16],paths[16],queries[8];
+  if (!AdmissionWait.Active) return;
+  AgxWaitPackSites(&AdmissionWait,paths,1);
+  AgxWaitPack(&AdmissionWait,words,queries);
+  paths[3]|=AdmissionWait.Flags;
+  AdmissionWait.Active=0;
+  AdmissionUmdDiagnostic("measure-d3d12-wait",status,words,16);
+  AdmissionUmdDiagnostic("measure-d3d12-query-time",status,queries,8);
+  AdmissionUmdDiagnostic("measure-d3d12-wait-path",status,paths,16);
+}
+
+/* End RC42 wait collector. */

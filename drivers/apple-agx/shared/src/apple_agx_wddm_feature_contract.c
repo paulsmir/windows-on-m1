@@ -12,7 +12,7 @@ APPLE_AGX_WDDM_FEATURE_CONTRACT_RESULT AppleAgxWddmFeatureContractEvaluate(
       Output == APPLE_AGX_WDDM_FEATURE_NULL ||
       Input->Version != APPLE_AGX_WDDM_FEATURE_CONTRACT_VERSION ||
       Input->Size != sizeof(*Input) || Input->WddmMajor != 3u ||
-      Input->WddmMinor != 0u || Input->NodeCount != 1u ||
+      Input->WddmMinor != 0u || (Input->NodeCount != 1u && Input->NodeCount != 2u) ||
       Input->Reserved != 0u)
     return AppleAgxWddmFeatureContractInvalid;
 

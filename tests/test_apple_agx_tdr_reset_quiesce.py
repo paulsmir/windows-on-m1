@@ -1,5 +1,12 @@
 """Replay the KMD engine/adapter reset with an active AGX render job.
 
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+A reset failure must retain its exact gate in the current receipt and history;
+a later success must not inherit that failure stage. EXP1938 additionally
+requires RTKit notification errors to preserve DMA ownership: a firmware
+crash, rejected mailbox message, and read failure must not fabricate an
+aborted fence or free the active private scene.
+
 WHAT REAL BUG: EXP1296 bugcheck 0x116 (TdrReason 9, engine reset promoted to
 adapter reset): with a G4 render active, DxgkDdiResetEngine and
 DxgkDdiResetFromTimeout returned STATUS_DEVICE_HARDWARE_ERROR even when the
@@ -58,7 +65,29 @@ def optional_body(source, name):
 
 class TdrResetQuiesce(unittest.TestCase):
     def test_reset_succeeds_only_after_firmware_ends_the_active_job(self):
+        self.run_replay(CASES, FIRMWARE_REPLAY)
+
+    def test_refused_successor_does_not_block_the_private_reset(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP2045: the
+        kicked successor's SubmitSuccessor was refused after
+        BeginSuccessorJob had joined it to the running job's graph lease and
+        started its private scene. The running job then ended and was
+        reported; the reset found no active packet and nothing with the
+        firmware, but its private stage quarantined the successor's started
+        scene and refused every retry (3 resets, 0 succeeded, 0x116). The
+        reset must end the never-handed-over job's G3 job before that stage.
+        Without that step (the pre-fix reset) the replay must fail."""
         scheduler = (RENDER / 'src/scheduler_windows.c').read_text()
+        step = re.search(r'\n  /\* rc102 \(EXP2045\): so does a kicked successor.*?\n  }\n',
+                         scheduler, re.S)
+        self.assertIsNotNone(step)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.run_replay(CASES, FIRMWARE_REPLAY,
+                            scheduler=scheduler.replace(step.group(0), '\n'), quiet=True)
+
+    def run_replay(self, cases, firmware_replay, queue_runtime=None, scheduler=None,
+                   quiet=False):
+        scheduler = scheduler or (RENDER / 'src/scheduler_windows.c').read_text()
         backend = (RENDER / 'src/backend_platform_windows.c').read_text()
         queue = (RENDER / 'src/work_queue_windows.c').read_text()
         gpuva = (RENDER / 'src/gpuva_g3_windows.c').read_text()
@@ -69,7 +98,10 @@ class TdrResetQuiesce(unittest.TestCase):
         pending = (re.search(r'#define ADMISSION_G4_PENDING_CAPACITY \d+u', header).group(0) +
                    '\n' + re.search(r'typedef enum _ADMISSION_G4_PENDING_STATE.*?'
                                     r'} ADMISSION_G4_PENDING_STATE;', header, re.S).group(0))
-        body = (SHIM.replace('/*TIMEOUT*/', timeout.group(1) if timeout else '1000')
+        force = re.search(r'#define ADMISSION_FORCE_CHANNEL_AFTER_MS (\d+)u', backend)
+        body = ('#define ADMISSION_FORCE_CHANNEL_AFTER_MS ' +
+                (force.group(1) if force else '100') + 'u\n' +
+                SHIM.replace('/*TIMEOUT*/', timeout.group(1) if timeout else '1000')
                     .replace('/*PACKET*/', packet).replace('/*PENDING*/', pending) +
                 '\n'.join(function_body(gpuva, n) for n in (
                     'AdmissionGpuvaG3PrivateCancel', 'AdmissionGpuvaG3PrivatePreempt',
@@ -78,25 +110,39 @@ class TdrResetQuiesce(unittest.TestCase):
                     'AdmissionG4PendingDropLocked')) + '\n' +
                 function_body(queue, 'AdmissionCpuQueueSubmit') + '\n' +
                 function_body(scheduler, 'AdmissionCpuQueueReleaseContextsLocked') + '\n' +
+                optional_body(backend, 'AdmissionPostResumePollByte') + '\n' +
+                optional_body(backend, 'AdmissionPostResumePollFailure') + '\n' +
                 optional_body(backend, 'AdmissionPlatformRuntimeQuiesceActive') + '\n' +
+                optional_body(backend, 'AdmissionPlatformRuntimeUnheldKicked') + '\n' +
                 optional_body(scheduler, 'AdmissionResetQuiesceActive') + '\n' +
                 noinline_body(scheduler, 'AdmissionResetEngineInternal') + '\n' +
                 noinline_body(scheduler, 'AdmissionResetEngineRecorded') + '\n' +
                 '\n'.join(function_body(scheduler, n) for n in (
                     'AdmissionResetEngineEntry', 'AdmissionDdiResetEngine',
                     'AdmissionDdiResetFromTimeout',
-                    'AdmissionDdiRestartFromTimeout')) + CASES)
+                    'AdmissionDdiRestartFromTimeout')) + cases)
         with tempfile.TemporaryDirectory() as tmp:
             program = Path(tmp) / 'reset.c'
             program.write_text(body)
+            firmware = Path(tmp) / 'firmware.c'
+            firmware.write_text(firmware_replay)
             binary = Path(tmp) / 'reset'
             subprocess.run([os.environ.get('CC', 'clang'), '-std=c11', '-Wall', '-Wextra',
                             '-Werror', '-Wno-unused-function', '-fsanitize=address,undefined',
                             '-I', str(RENDER / 'include'), '-I', str(SHARED / 'include'),
-                            str(program), str(SHARED / 'src/apple_agx_scheduler.c'),
+                            '-I', str(SHARED / 'tests'), str(firmware),
+                            str(queue_runtime or SHARED / 'src/apple_agx_g13_queue_runtime.c'),
+                            str(SHARED / 'src/apple_agx_g13_codec.c'),
+                            str(program),
+                            *[str(SHARED / 'src' / (name + '.c')) for name in (
+                                'apple_agx_rtkit_session', 'apple_agx_rtkit_boot',
+                                'apple_agx_rtkit', 'apple_agx_asc_transport',
+                                'apple_agx_gfx_handoff')],
+                            str(SHARED / 'src/apple_agx_scheduler.c'),
                             str(RENDER / 'src/render_submission.c'), '-o', str(binary)],
                            check=True)
-            subprocess.run([str(binary)], check=True, timeout=20)
+            subprocess.run([str(binary)], check=True, timeout=20,
+                           stderr=subprocess.DEVNULL if quiet else None)
 
 
 SHIM = r'''
@@ -110,6 +156,8 @@ SHIM = r'''
 #include "render_paging.h"
 #include "render_present.h"
 #include "apple_agx_g4_submit.h"
+#include "apple_agx_g13_queue_provider.h"
+#include "apple_agx_rtkit_session.h"
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define _Use_decl_annotations_
 #define _ReturnAddress() ((void *)0)
@@ -134,8 +182,6 @@ SHIM = r'''
 #define ADMISSION_RESET_QUIESCE_TIMEOUT_MS /*TIMEOUT*/u
 #define ADMISSION_SCHEDULER_NODE 0u
 #define ADMISSION_SCHEDULER_ENGINE 0u
-#define APPLE_AGX_RTKIT_RUNTIME_DRAIN_LIMIT 64u
-#define AppleAgxRtkitSessionResultOk 0
 #define AppleAgxBackendRuntimeReady 2
 #define AppleAgxBackendRuntimeSubmitted 3
 #define AppleAgxBackendRuntimeFailed 6
@@ -155,7 +201,6 @@ typedef uintptr_t ULONG_PTR;
 typedef int BOOLEAN, KIRQL;
 typedef unsigned char UCHAR;
 typedef uint32_t APPLE_AGX_BACKEND_U32, APPLE_AGX_RTKIT_U32;
-typedef int APPLE_AGX_RTKIT_SESSION_RESULT;
 typedef union { LONGLONG QuadPart; } LARGE_INTEGER;
 typedef struct { int Signaled; } KEVENT;
 typedef struct _ADMISSION_RENDER_CONTEXT {
@@ -187,8 +232,11 @@ typedef struct {
   ULONG Fence;
   ADMISSION_RENDER_CONTEXT *Context;
 } ADMISSION_G4_PENDING;
-typedef struct { int Provider; } APPLE_AGX_PLATFORM_PROVIDER;
-typedef struct { int Phase; } APPLE_AGX_BACKEND_RUNTIME;
+typedef struct { int Provider; APPLE_AGX_BACKEND_U32 LastPollGuard, LastDrainGuard;
+  struct { APPLE_AGX_G13_QUEUE_RUNTIME Runtime; APPLE_AGX_BACKEND_U32 LastIngestGuard;
+           APPLE_AGX_G13_QUEUE_PROVIDER_PHASE Phase; APPLE_AGX_BACKEND_U32 PendingFence;
+           APPLE_AGX_BACKEND_U32 SuccessorFence; } QueueProvider;
+} APPLE_AGX_PLATFORM_PROVIDER;
 typedef struct _ADMISSION_CONTEXT ADMISSION_CONTEXT;
 typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_CONTEXT *Adapter;
@@ -197,8 +245,12 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN BackendStarted;
   APPLE_AGX_BACKEND_RUNTIME Backend;
   APPLE_AGX_PLATFORM_PROVIDER Provider;
-  int Rtkit, AscIo;
+  APPLE_AGX_RTKIT_SESSION Rtkit;
+  APPLE_AGX_ASC_IO AscIo;
   volatile LONG FirmwareRecoveries;
+  BOOLEAN RecoverChannelOnStall;
+  ADMISSION_GPU_POST_RESUME_RECEIPT PostResume;
+  ULONG Depth2KickedFence; /* rc102: the successor kicked behind the job */
 } ADMISSION_PLATFORM_RUNTIME;
 struct _ADMISSION_CONTEXT {
   int SchedulerLock, PagingLock, BackendImage;
@@ -209,7 +261,10 @@ struct _ADMISSION_CONTEXT {
   KEVENT PagingIdle;
   ULONG CpuQueueHead, CpuQueueCount, DispatchedFence;
   ADMISSION_CPU_PACKET CpuQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
-  APPLE_AGX_SCHEDULER Scheduler;
+  APPLE_AGX_SCHEDULER Scheduler, PagingScheduler;
+  ULONG LiveAdditivePaging, PagingActiveNode, PagingNodeHead, PagingNodeCount, PagingNodeDispatchedFence;
+  LONG PagingAdapterResetting;
+  ADMISSION_CPU_PACKET PagingNodeQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   ADMISSION_RENDER_PACKET RenderPacket;
   ADMISSION_G4_PENDING G4Pending[ADMISSION_G4_PENDING_CAPACITY];
   ULONG G4PendingHead, G4PendingCount;
@@ -218,17 +273,31 @@ struct _ADMISSION_CONTEXT {
 };
 typedef struct { UINT NodeOrdinal, EngineOrdinal, LastAbortedFenceId; } DXGKARG_RESETENGINE;
 typedef struct {
-  HANDLE hContext; UINT SubmissionFenceId;
+  HANDLE hContext; UINT SubmissionFenceId; UINT NodeOrdinal;
   struct { UINT Paging : 1, Resubmission : 1; } Flags;
 } DXGKARG_SUBMITCOMMAND;
 
 static int lock_depth, rtkit_stops, polls, drop_at_poll, fail_poll, worker_busy,
     worker_completes, paused, private_resets, scene_queued, scene_started,
-    scene_quarantined;
+    scene_quarantined, reactivate_after_quiesce;
+static int use_firmware_runtime;
+void ReplayQueueSetup(unsigned int fence);
+int ReplayQueuePoll(int poll);
 static ULONGLONG now_ms;
 static ADMISSION_CONTEXT *model_adapter;
 static ADMISSION_PLATFORM_RUNTIME *model_runtime;
 static ADMISSION_G3_PRIVATE_SCENE *model_active_scene;
+static unsigned captures;
+#define AdmissionGpuRecoverySnapshot CaptureRaw
+#include "render_gpu_recovery_snapshot.h"
+#undef AdmissionGpuRecoverySnapshot
+static void AdmissionGpuRecoverySnapshot(const APPLE_AGX_G13_QUEUE_RUNTIME *r,
+    ADMISSION_GPU_RECOVERY_SNAPSHOT *s) {
+  assert(model_runtime->Resetting && model_runtime->WorkIdle.Signaled);
+  assert(!lock_depth);
+  ++captures;
+  CaptureRaw(r, s);
+}
 
 static LONG InterlockedCompareExchange(volatile LONG *p, LONG v, LONG e) {
   LONG o = *p; if (o == e) *p = v; return o; }
@@ -252,6 +321,30 @@ static void AdmissionContextRetireFence(ADMISSION_RENDER_CONTEXT *c, ULONG f) {
   } else if (c->GpuvaG3SecondFence == f) c->GpuvaG3SecondFence = 0u;
 }
 
+/* rc102: the kicked head the engine reset aborts (the real one also
+ * releases the image binding, which this replay does not model). Only the
+ * EXP2045 replay kicks a successor. */
+static ULONG kicked_aborted_locked;
+VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *context, ULONG fence,
+                                   BOOLEAN uncertain);
+static void AdmissionG4PendingAbortKickedLocked(ADMISSION_CONTEXT *c) {
+  ADMISSION_G4_PENDING *e;
+  assert(lock_depth && c->G4PendingCount != 0u);
+  e = &c->G4Pending[c->G4PendingHead];
+  assert(e->State == AdmissionG4PendingKicked && e->Context != NULL);
+  kicked_aborted_locked = e->Fence;
+  AdmissionGpuvaG3PrivateCancel(e->Context, e->Fence, FALSE);
+  AdmissionContextRetireFence(e->Context, e->Fence);
+  e->State = AdmissionG4PendingFree; e->Context = NULL;
+  c->G4PendingHead = (c->G4PendingHead + 1u) % ADMISSION_G4_PENDING_CAPACITY;
+  --c->G4PendingCount;
+}
+static ULONG g3_aborted_job;
+static void AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *c, ULONG f) {
+  (void)c; assert(!lock_depth && f != 0u); g3_aborted_job = f;
+  /* the real one unstarts the unrun job's scene */
+  if (model_active_scene != NULL && model_active_scene->Fence == f) scene_started = 0; }
+
 /* What AdmissionBackendComplete does when the firmware ends the job
  * (natural completion, or a drop after Timeout/Fault and resume). */
 static void model_job_ends(void) {
@@ -260,7 +353,7 @@ static void model_job_ends(void) {
   ADMISSION_RENDER_CONTEXT *owner =
       (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)c->RenderPacket.Description.ContextToken;
   assert(!lock_depth);
-  assert(AppleAgxSchedulerCompleteActiveFence(&c->Scheduler, 0, 0, fence));
+  assert(AppleAgxSchedulerAbortActiveFence(&c->Scheduler, 0, 0, fence));
   if (AppleAgxSchedulerPreemptionPhase(&c->Scheduler) == AppleAgxPreemptionWaitCurrentBoundary)
     assert(AppleAgxSchedulerObserveBoundaryCompletion(&c->Scheduler, 0, 0, fence));
   assert(AdmissionRenderPacketComplete(&c->RenderPacket, fence));
@@ -284,22 +377,74 @@ static NTSTATUS KeWaitForSingleObject(KEVENT *e, int r, int m, BOOLEAN a, LARGE_
   now_ms += (ULONGLONG)(-t->QuadPart / 10000LL);
   return STATUS_TIMEOUT;
 }
-static APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionDrainRuntime(
-    int *s, int *io, APPLE_AGX_RTKIT_U32 limit, APPLE_AGX_RTKIT_U32 *n) {
-  (void)s; (void)io; (void)limit; assert(!lock_depth); *n = 0u; return AppleAgxRtkitSessionResultOk; }
+/* Only MMIO is simulated; the RTKit drain and sticky crash state are real. */
+static unsigned mailbox_mode, mailbox_consumed;
+static APPLE_AGX_ASC_BOOL mailbox_read32(void *ctx, unsigned offset, unsigned *v) {
+  (void)ctx;
+  assert(!lock_depth);
+  if (mailbox_mode == 2) return APPLE_AGX_ASC_FALSE;
+  assert(offset == J313_AGX_G2_ASC_OUTBOX_CTRL_OFFSET ||
+         offset == J313_AGX_G2_ASC_INBOX_CTRL_OFFSET);
+  *v = mailbox_mode && !mailbox_consumed ? 0 : APPLE_AGX_ASC_MAILBOX_EMPTY;
+  return APPLE_AGX_ASC_TRUE;
+}
+static APPLE_AGX_ASC_BOOL mailbox_read64(void *ctx, unsigned offset,
+                                       unsigned long long *v) {
+  (void)ctx;
+  assert(!lock_depth);
+  if (offset == J313_AGX_G2_ASC_OUTBOX0_OFFSET)
+    *v = mailbox_mode == 3 ? (1ULL << 52) : 0x0043000000000000ULL;
+  else {
+    assert(offset == J313_AGX_G2_ASC_OUTBOX1_OFFSET);
+    *v = mailbox_mode == 3 ? 1u : 0x20u;
+    ++mailbox_consumed;
+  }
+  return APPLE_AGX_ASC_TRUE;
+}
+/* rc77: a firmware replay may expose its real queue runtime; the backend's
+ * view of it (provider runtime fields) is synchronized after every poll and
+ * its forced RecoverChannel is redirected to that real runtime. */
+__attribute__((weak)) APPLE_AGX_G13_QUEUE_RUNTIME *ReplayQueueRuntime(void) { return NULL; }
+static void sync_queue_runtime(APPLE_AGX_PLATFORM_PROVIDER *p) {
+  APPLE_AGX_G13_QUEUE_RUNTIME *real = ReplayQueueRuntime();
+  if (real == NULL) return;
+  p->QueueProvider.Runtime.Phase = real->Phase;
+  p->QueueProvider.Runtime.PendingFence = real->PendingFence;
+  p->QueueProvider.Runtime.RecoveryPending = real->RecoveryPending;
+  p->QueueProvider.Runtime.PostRecoveryEvents = real->PostRecoveryEvents;
+  p->QueueProvider.Runtime.PostRecoveryKindMask = real->PostRecoveryKindMask;
+  p->QueueProvider.Runtime.LastPostRecoveryKind = real->LastPostRecoveryKind;
+}
+static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT ReplayForceChannelRecovery(
+    APPLE_AGX_G13_QUEUE_RUNTIME *r, APPLE_AGX_BACKEND_U32 *issued) {
+  APPLE_AGX_G13_QUEUE_RUNTIME *real = ReplayQueueRuntime();
+  assert(!lock_depth);
+  return AppleAgxG13QueueRuntimeForceChannelRecovery(real ? real : r, issued);
+}
+#define AppleAgxG13QueueRuntimeForceChannelRecovery ReplayForceChannelRecovery
 static BOOLEAN AppleAgxPlatformProviderPoll(APPLE_AGX_PLATFORM_PROVIDER *p,
     APPLE_AGX_BACKEND_U32 max, APPLE_AGX_BACKEND_U32 *drained, APPLE_AGX_BACKEND_U32 *completed) {
   (void)p; (void)max; assert(!lock_depth); assert(!worker_busy);
   *drained = *completed = 0u; ++polls;
-  if (fail_poll) return FALSE;
-  if (polls == drop_at_poll) model_job_ends();
+  if (fail_poll) {
+    p->LastPollGuard = 2u; p->LastDrainGuard = 3u; p->QueueProvider.LastIngestGuard = 0x1234u;
+    return FALSE;
+  }
+  if (use_firmware_runtime) {
+    if (ReplayQueuePoll(polls)) model_job_ends();
+    sync_queue_runtime(p);
+  } else if (polls == drop_at_poll) model_job_ends();
   return TRUE;
 }
 /* The pre-fix reset path: RTKit stop of the retained firmware, then refusal. */
 static NTSTATUS AdmissionPlatformRuntimeReset(ADMISSION_CONTEXT *c, ULONG *aborted) {
   (void)c; *aborted = 0u; ++rtkit_stops; return STATUS_DEVICE_HARDWARE_ERROR; }
 static BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *c) {
-  (void)c; assert(!lock_depth); ++private_resets;
+  assert(!lock_depth); ++private_resets;
+  if (reactivate_after_quiesce) {
+    /* Model a worker activating after the first packet-state check. */
+    c->RenderPacket.State = AdmissionRenderPacketActive;
+  }
   if (scene_queued && scene_started) { scene_quarantined = 1; return FALSE; }
   return TRUE;
 }
@@ -311,6 +456,20 @@ static int published, recorded;
 static ADMISSION_GPU_RESET_RECEIPT last_recorded;
 static void AdmissionPublishFirmwareRecovery(ADMISSION_PLATFORM_RUNTIME *r) {
   (void)r; assert(!lock_depth); ++published; }
+/* rc77: model of the post-resume receipt (no shared memory or MMIO here). */
+static int post_resume_published;
+static ADMISSION_GPU_POST_RESUME_RECEIPT last_post_resume;
+static void AdmissionCapturePostResume(ADMISSION_PLATFORM_RUNTIME *r, ULONG fence,
+    ULONG wait_ms, ADMISSION_GPU_POST_RESUME_RECEIPT *receipt) {
+  receipt->Version = ADMISSION_GPU_POST_RESUME_VERSION;
+  receipt->Bytes = sizeof(*receipt);
+  receipt->Fence = fence; receipt->WaitMs = wait_ms;
+  receipt->PostEvents = r->Provider.QueueProvider.Runtime.PostRecoveryEvents;
+  receipt->PostEventKindMask = r->Provider.QueueProvider.Runtime.PostRecoveryKindMask;
+  receipt->LastPostEventKind = r->Provider.QueueProvider.Runtime.LastPostRecoveryKind;
+}
+static void AdmissionPublishPostResume(ADMISSION_PLATFORM_RUNTIME *r) {
+  assert(!lock_depth); ++post_resume_published; last_post_resume = r->PostResume; }
 static void AdmissionPlatformRuntimeResetState(ADMISSION_CONTEXT *c, ADMISSION_GPU_RESET_RECEIPT *r) {
   ADMISSION_PLATFORM_RUNTIME *p = c->PlatformRuntime;
   r->BackendPhase = (ULONG)p->Backend.Phase; r->WorkerBusy = p->WorkScheduled ? 1u : 0u;
@@ -392,8 +551,16 @@ static void setup(int worker, int queued) {
   memset(&owner, 0, sizeof(owner)); memset(&other, 0, sizeof(other));
   memset(&cancelled, 0, sizeof(cancelled)); memset(&process, 0, sizeof(process));
   rtkit_stops = polls = drop_at_poll = fail_poll = worker_completes = 0;
+  captures = 0;
+  mailbox_mode = mailbox_consumed = 0;
+  AppleAgxRtkitSessionInitialize(&runtime.Rtkit);
+  runtime.Rtkit.Running = runtime.Rtkit.CpuReady = APPLE_AGX_RTKIT_TRUE;
+  runtime.Rtkit.Boot.Phase = AppleAgxRtkitBootReady;
+  runtime.Rtkit.CrashlogReplySent = APPLE_AGX_RTKIT_TRUE;
+  runtime.AscIo.Read32 = mailbox_read32;
+  runtime.AscIo.Read64 = mailbox_read64;
   published = recorded = 0; memset(&last_recorded, 0, sizeof(last_recorded));
-  private_resets = scene_quarantined = paused = 0;
+  private_resets = scene_quarantined = paused = reactivate_after_quiesce = 0;
   scene_queued = scene_started = 1; now_ms = 1000u;
   model_adapter = &adapter; model_runtime = &runtime;
   adapter.SchedulerInitialized = 1; adapter.PlatformRuntime = &runtime;
@@ -447,7 +614,8 @@ static void setup(int worker, int queued) {
 
 static void expect_aborted(const DXGKARG_RESETENGINE *reset) {
   assert(reset->LastAbortedFenceId == 0xce71cu);
-  assert(adapter.Scheduler.ActiveFence == 0u && adapter.Scheduler.CompletedFence == 0xce71cu);
+  assert(adapter.Scheduler.ActiveFence == 0u && adapter.Scheduler.CompletedFence == 0xce71bu &&
+         adapter.Scheduler.LastAbortedFence == 0xce71cu);
   assert(adapter.Scheduler.PreemptionPhase == AppleAgxPreemptionIdle);
   assert(AdmissionRenderPacketState(&adapter.RenderPacket) == AdmissionRenderPacketEmpty);
   assert(owner.GpuvaG3Poisoned && owner.Object.FenceOutstanding == 0u);
@@ -457,6 +625,115 @@ static void expect_aborted(const DXGKARG_RESETENGINE *reset) {
 
 int main(void) {
   DXGKARG_RESETENGINE reset;
+  unsigned mode;
+
+  /* EXP1938: all three failures enter the same immediate quiesce/poll
+   * result. Neither this receipt nor pending queue operands identify the
+   * rejected message. The unretired scene must survive every failure. */
+  for (mode = 1; mode <= 3; ++mode) {
+    unsigned retry;
+    setup(0, 0); mailbox_mode = mode;
+    for (retry = 0; retry < 3; ++retry) {
+      /* A protocol error consumes its message, unlike sticky crash or
+       * transport failure. Supply another message for each such attempt. */
+      if (mode == 1) mailbox_consumed = 0;
+      memset(&reset, 0, sizeof(reset));
+      assert((retry < 2 ? AdmissionDdiResetEngine(&adapter, &reset) :
+              AdmissionDdiResetFromTimeout(&adapter)) == STATUS_DEVICE_HARDWARE_ERROR);
+      assert(last_recorded.Quiesce == AdmissionGpuResetQuiescePoll &&
+             last_recorded.Stage == AdmissionGpuResetStageQuiesce &&
+             last_recorded.WaitMs == 0 && last_recorded.Succeeded == 0);
+      /* rc92: the published post-resume receipt names the RTKit drain. */
+      assert((last_post_resume.PollFailure >> 24) == ADMISSION_GPU_POST_RESUME_POLL_RTKIT &&
+             (last_post_resume.PollFailure & 0xffu) != AppleAgxRtkitSessionResultOk &&
+             (last_post_resume.PollFailure & 0xffff00u) == 0u);
+      assert(last_recorded.Resets == retry + 1 && polls == 0 &&
+             private_resets == 0 && rtkit_stops == 0);
+      assert(adapter.Scheduler.ActiveFence == 0xce71cu &&
+             adapter.Scheduler.CompletedFence == 0xce71bu &&
+             AdmissionRenderPacketState(&adapter.RenderPacket) == AdmissionRenderPacketActive);
+      assert(owner.Object.FenceOutstanding == 0xce71cu &&
+             owner.GpuvaG3PrivateFence == (LONG)0xce71cu &&
+             scene_owner.Started && scene_owner.Queued);
+      assert(reset.LastAbortedFenceId == 0 && last_recorded.LastAbortedFence == 0 &&
+             runtime.Resetting == 0 && captures == 2 * (retry + 1));
+    }
+    assert(runtime.Rtkit.CrashlogCrashed == (mode == 3));
+    if (mode == 3) assert(mailbox_consumed == 1); /* crash remains sticky */
+    if (mode == 2) assert(mailbox_consumed == 0); /* no invented message */
+  }
+
+  /* Real queue runtime: fault -> resume -> partial retirement -> dropped
+   * completion -> genuine quiescence -> successful Windows engine reset. */
+  setup(0, 0); use_firmware_runtime = 1;
+  ReplayQueueSetup(0xce71cu);
+  memset(&reset, 0, sizeof(reset));
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  expect_aborted(&reset);
+  assert(polls == 4 && last_recorded.Quiesce == AdmissionGpuResetQuiesceEnded);
+  assert(last_recorded.Stage == AdmissionGpuResetStageComplete);
+  /* Adapter TDR uses the same retirement proof and can restart scheduling. */
+  setup(0, 0); ReplayQueueSetup(0xce71cu);
+  assert(AdmissionDdiResetFromTimeout(&adapter) == STATUS_SUCCESS);
+  assert(last_recorded.LastAbortedFence == 0xce71cu && paused);
+  assert(AdmissionDdiRestartFromTimeout(&adapter) == STATUS_SUCCESS && !paused);
+  use_firmware_runtime = 0;
+
+  /* rc102 (EXP2039): the worker activated the job, then its backend submit
+   * failed before the firmware saw anything (backend Ready, provider
+   * Created: SchedulerFaulted at the submit line). Nothing can end the
+   * active packet; the reset must prove the firmware holds no job, abort
+   * the fence (it never ran) and recover, not fail every retry (0x116). */
+  setup(0, 0); adapter.SchedulerFaulted = 0x40000 | 5499;
+  runtime.Backend.Phase = AppleAgxBackendRuntimeReady;
+  runtime.Provider.QueueProvider.Phase = AppleAgxG13QueueProviderCreated;
+  g3_aborted_job = 0u;
+  memset(&reset, 0, sizeof(reset));
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  expect_aborted(&reset);
+  assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceUnsubmitted &&
+         last_recorded.Stage == AdmissionGpuResetStageComplete && polls == 0);
+  assert(g3_aborted_job == 0xce71cu && owner.GpuvaG3CancelFence == (LONG)0xce71cu &&
+         !scene_quarantined);
+  /* rc102 (EXP2045): job 0xce71c ran with the successor 0xce71d (context
+   * other) kicked behind it; BeginSuccessorJob started its scene, then
+   * SubmitSuccessor was refused (SchedulerFaulted at that line): nothing
+   * reached the firmware. 0xce71c ended and was reported; the kicked fence
+   * stays (no adoption once faulted). The reset must end the successor's
+   * G3 job unrun before its private stage, abort the fence and recover. */
+  setup(0, 3);
+  assert(AppleAgxSchedulerKickQueuedFence(&adapter.Scheduler, 0, 0, 0xce71du));
+  assert(adapter.G4Pending[adapter.G4PendingHead].Fence == 0xce71du);
+  adapter.G4Pending[adapter.G4PendingHead].State = AdmissionG4PendingKicked;
+  runtime.Depth2KickedFence = 0xce71du;
+  scene_first.Started = 1u;
+  assert(AppleAgxSchedulerCompleteActiveFence(&adapter.Scheduler, 0, 0, 0xce71cu));
+  assert(AdmissionRenderPacketComplete(&adapter.RenderPacket, 0xce71cu));
+  AdmissionContextRetireFence(&owner, 0xce71cu);
+  owner.GpuvaG3PrivateFence = 0; scene_owner.Queued = 0u;
+  adapter.DispatchedFence = 0u;
+  adapter.SchedulerFaulted = 0x40000 | 5148;
+  runtime.Backend.Phase = AppleAgxBackendRuntimeReady;
+  runtime.Provider.QueueProvider.Phase = AppleAgxG13QueueProviderCreated;
+  model_active_scene = &scene_first; scene_queued = scene_started = 1;
+  g3_aborted_job = kicked_aborted_locked = 0u;
+  memset(&reset, 0, sizeof(reset));
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceEnded &&
+         last_recorded.Stage == AdmissionGpuResetStageComplete && polls == 0);
+  assert(g3_aborted_job == 0xce71du && !scene_started && !scene_quarantined);
+  assert(kicked_aborted_locked == 0xce71du && reset.LastAbortedFenceId == 0xce71du);
+  assert(AppleAgxSchedulerKickedFence(&adapter.Scheduler) == 0u &&
+         adapter.SchedulerFaulted == 0 && other.GpuvaG3Poisoned);
+  model_active_scene = &scene_owner;
+  /* A backend that still holds work (provider not idle) is not that case. */
+  setup(0, 0); adapter.SchedulerFaulted = 0x40000 | 5499;
+  runtime.Backend.Phase = AppleAgxBackendRuntimeReady;
+  runtime.Provider.QueueProvider.Phase = AppleAgxG13QueueProviderSubmitted;
+  runtime.Provider.QueueProvider.PendingFence = 0xce71cu;
+  memset(&reset, 0, sizeof(reset));
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_DEVICE_HARDWARE_ERROR);
+  assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceBackend);
 
   /* 1. EXP1296: the worker already left (SchedulerFaulted set before the
    * TDR); the firmware drops the job when the reset polls the provider. */
@@ -464,6 +741,8 @@ int main(void) {
   memset(&reset, 0, sizeof(reset));
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
   expect_aborted(&reset); assert(polls == 3);
+  assert(captures == 2u && last_recorded.RetirementBefore.Captured &&
+         last_recorded.RetirementAfter.Captured);
   /* Wom1GpuReset names the setter of SchedulerFaulted and the end of the job. */
   assert(recorded == 1 && published == 1);
   assert(last_recorded.Version == ADMISSION_GPU_RESET_RECEIPT_VERSION &&
@@ -481,7 +760,7 @@ int main(void) {
          last_recorded.BackendPhase == AppleAgxBackendRuntimeSubmitted &&
          last_recorded.FirmwareRecoveries == 1u);
   /* Version 2: the timed history entry mirrors the attempt. */
-  assert(last_recorded.Version == 2u && last_recorded.HistoryCount == 1u &&
+  assert(last_recorded.Version == 4u && last_recorded.HistoryCount == 1u &&
          last_recorded.EntryMs == 1000u && last_recorded.JobAgeMs == 2100u &&
          last_recorded.PollAgeMs == 7u);
   assert(last_recorded.History[0].EntryMs == 1000u &&
@@ -490,6 +769,9 @@ int main(void) {
          last_recorded.History[0].LastAbortedFence == 0xce71cu &&
          last_recorded.History[0].SchedulerFaulted == (0x40000u | 3930u) &&
          last_recorded.History[0].JobAgeMs == 2100u);
+
+  assert(last_recorded.Stage == AdmissionGpuResetStageComplete &&
+         last_recorded.HistoryStage[0] == AdmissionGpuResetStageComplete);
 
   /* 2. The same storm promoted to an adapter reset: success, the last
    * completed fence advances to the last submitted one, restart resumes. */
@@ -500,6 +782,12 @@ int main(void) {
   assert(owner.GpuvaG3Poisoned && rtkit_stops == 0 && adapter.SchedulerFaulted == 0);
   assert(AdmissionDdiRestartFromTimeout(&adapter) == STATUS_SUCCESS && !paused);
   assert(last_recorded.Entry == ADMISSION_GPU_RESET_ADAPTER && last_recorded.Succeeded == 1u);
+  /* The adapter reset's OS fence convention supersedes the prior abort.
+   * A later engine reset must not regress to that older executed boundary. */
+  assert(adapter.Scheduler.LastAbortedFence == 0u);
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  assert(reset.LastAbortedFenceId == 0xce71eu);
+  assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&adapter.Scheduler,0,0,0xce71eu));
 
   /* 3. The worker is still polling and the job ends naturally on its way out:
    * no RTKit stop, success (a non-private job reaches the runtime path). */
@@ -534,20 +822,60 @@ int main(void) {
          last_recorded.History[1].Quiesce == AdmissionGpuResetQuiesceTimeout &&
          last_recorded.History[1].EntryMs > last_recorded.History[0].EntryMs);
 
+  assert(last_recorded.Stage == AdmissionGpuResetStageQuiesce &&
+         last_recorded.HistoryStage[0] == AdmissionGpuResetStageQuiesce &&
+         last_recorded.HistoryStage[1] == AdmissionGpuResetStageQuiesce);
+
+  /* An old started scene remains after local packet retirement. Distinguish
+   * its private-reset refusal from the identical c0000483 quiesce status. */
+  setup(0, 0);
+  model_job_ends();
+  scene_queued = scene_started = 1;
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_DEVICE_HARDWARE_ERROR);
+  assert(last_recorded.Stage == AdmissionGpuResetStagePrivate &&
+         last_recorded.Quiesce == AdmissionGpuResetQuiesceNone &&
+         last_recorded.HistoryStage[0] == AdmissionGpuResetStagePrivate);
+  /* A successful retry must overwrite the last stage, preserving history. */
+  scene_queued = 0;
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  assert(last_recorded.Stage == AdmissionGpuResetStageComplete &&
+         last_recorded.HistoryStage[0] == AdmissionGpuResetStagePrivate &&
+         last_recorded.HistoryStage[1] == AdmissionGpuResetStageComplete);
+
+  setup(0, 0);
+  model_job_ends();
+  reactivate_after_quiesce = 1;
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_DEVICE_HARDWARE_ERROR);
+  assert(last_recorded.Stage == AdmissionGpuResetStagePacketActive &&
+         last_recorded.Quiesce == AdmissionGpuResetQuiesceNone &&
+         last_recorded.HistoryStage[0] == AdmissionGpuResetStagePacketActive);
+
   /* 5. A provider that cannot be polled proves nothing. */
   setup(0, 0); fail_poll = 1;
   memset(&reset, 0, sizeof(reset));
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_DEVICE_HARDWARE_ERROR);
   assert(adapter.Scheduler.ActiveFence == 0xce71cu && rtkit_stops == 0 && runtime.Resetting == 0);
   assert(last_recorded.Quiesce == AdmissionGpuResetQuiescePoll);
+  /* rc92: ... and the provider's guards, saturated per byte. */
+  assert(last_post_resume.PollFailure ==
+         ((ADMISSION_GPU_POST_RESUME_POLL_PROVIDER << 24) | (0xffu << 16) | (3u << 8) | 2u));
+  /* The next wait on the same fence starts without the old failure. */
+  fail_poll = 0; drop_at_poll = polls + 1;
+  memset(&reset, 0, sizeof(reset));
+  assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_SUCCESS);
+  assert(last_post_resume.PollFailure == 0u);
 
   /* 6. A worker that never leaves: no exclusive poll ownership, no success. */
   setup(1, 0); runtime.Resetting = 0;
   worker_busy = 0; runtime.WorkIdle.Signaled = 0; /* stuck worker */
+  memset(&adapter.GpuReset.RetirementBefore, 0xff, sizeof(adapter.GpuReset.RetirementBefore));
+  memset(&adapter.GpuReset.RetirementAfter, 0xff, sizeof(adapter.GpuReset.RetirementAfter));
   memset(&reset, 0, sizeof(reset));
   assert(AdmissionDdiResetEngine(&adapter, &reset) == STATUS_DEVICE_HARDWARE_ERROR);
   assert(polls == 0 && adapter.Scheduler.ActiveFence == 0xce71cu && runtime.Resetting == 0);
   assert(last_recorded.Quiesce == AdmissionGpuResetQuiesceWorker && published == 0);
+  assert(captures == 0u && !last_recorded.RetirementBefore.Captured &&
+         !last_recorded.RetirementAfter.Captured);
 
   /* 7. Nothing active (a queued render): unchanged engine reset. */
   setup(0, 0); drop_at_poll = 1;
@@ -632,6 +960,50 @@ int main(void) {
   assert(lock_depth == 0);
   puts("reset quiesce replay ok");
   return 0;
+}
+'''
+
+
+FIRMWARE_REPLAY = r'''
+#include "apple_agx_g13_queue_runtime_test.c"
+#undef assert
+#include <assert.h>
+static TEST_FIXTURE recovery_fixture;
+static APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION recovery_submission;
+void ReplayQueueSetup(unsigned int fence) {
+  TestInitialize(&recovery_fixture);
+  recovery_fixture.Runtime.Io.Recover = TestRecover;
+  recovery_submission = TestSubmission(&recovery_fixture, fence);
+  assert(AppleAgxG13QueueRuntimeSubmit(&recovery_fixture.Runtime,
+                                      &recovery_submission) == 0);
+}
+int ReplayQueuePoll(int poll) {
+  APPLE_AGX_G13_QUEUE_RUNTIME_COMPLETION completion;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE] = {0};
+  if (poll == 1) {
+    PutU32(event, AppleAgxG13EventTimeout);
+    assert(AppleAgxG13QueueRuntimeHandleEvent(&recovery_fixture.Runtime,
+                                              event, sizeof(event)) == 0);
+  }
+  if (poll == 2) {
+    recovery_fixture.TaDone = recovery_fixture.TaWrite;
+  }
+  /* Killed commands leave both stamps unchanged. Only done pointers advance. */
+  if (poll == 4) recovery_fixture.D3Done = recovery_fixture.D3Write;
+  assert(AppleAgxG13QueueRuntimeCheckTimeout(&recovery_fixture.Runtime,
+                                             1000ULL + poll) == 0);
+  if (poll < 4) {
+    assert(!AppleAgxG13QueueRuntimeTakeCompletion(&recovery_fixture.Runtime,
+                                                  &completion));
+    return 0;
+  }
+  assert(AppleAgxG13QueueRuntimeTakeCompletion(&recovery_fixture.Runtime,
+                                               &completion));
+  assert(completion.Fence == recovery_submission.Fence &&
+         completion.Status == AppleAgxG13QueueCompletionRecovered);
+  assert(recovery_fixture.IoState.Quiesces == 0);
+  assert(recovery_fixture.TaStamp == 0 && recovery_fixture.D3Stamp == 0);
+  return 1;
 }
 '''
 
