@@ -70474,3 +70474,15 @@ EXP2228 HARDWARE ACTUAL (2026-11-07T14:02:04Z): **PARTIAL / hypothesis REDUCED: 
 - Verdict: the attribute explains part of the large-footprint cost (consistent with uncached walks/lines beyond L2) but not the 64-256 KiB misses, which hit L2 on macOS (~120-130 ns) and miss on ours (~280-480 ns). Measurement-only build; not for production (no invalidation on unmap).
 - WHAT IS STILL UNKNOWN / next: (c) GPU-side cache and TLB configuration -- firmware initdata / hardware-config fields (cache, SLC, TLB, page-walk attributes in the UAT TTBR/TCR setup) vs Asahi and macOS; compare offline first.
 - Evidence evidence/EXP2228. Recovery rec2228h.
+
+EXP2229 HARDWARE BEFORE 2026-11-07T14:28:35Z:
+Steps: MEMBW twice (regions as before + MEMBW_PAGES_NS: cycles of 4/64/256/1024 pages, one 64-byte line per 16 KiB page, 32 threads); D3D12 suite; d HD PERF GravityMark 100k -temporal 0.
+- WHY THIS HYPOTHESIS: (1) EXP2226-2228: the 32-thread chase is 1.4-1.8x macOS on one 16 KiB page but 2-4x from 64 KiB up and grows with footprint, while macOS stays ~120-180 ns to 16 MiB; (2) MEMATTR 0 (EXP2228) only trimmed the large-footprint part, so cache attribute is not the main factor; (3) offline: page-table format, initdata and hwdata equal Asahi, but our GPU ASIDs share VMID 0 with Windows and we flush whole ASIDs -- TLB entry loss is the strongest untested mechanism.
+- WINDOWS/AGX CONTRACT: unchanged (diagnostic probe only). ATOMIC CONTRACT: none.
+- WHAT IS STILL UNKNOWN: whether latency depends on the number of pages touched when the data itself is tiny (256 B..64 KiB).
+- Expected: TLB-bound -> MEMBW_PAGES_NS rises clearly from 4 to 1024 pages (e.g. ~170 -> >400 ns); cache/clock-bound -> flat near the 16 KiB value. Same cases are then run on macOS (tools/macos/membw_metal.m) for the reference curve. Suite 119/0; HD PERF ~40.8.
+- Failure criteria: suite failure, reset, hang -> rec2229h.
+- Recovery: rec2229h (run directly).
+- Probe: agx_d3d12_probe_e2229_arm64.exe (builder clang-cl, sha a6b44daa137606b1); probe2229.sh = probe2227.sh + MEMBW_PAGES_NS in the summary (PROBE_LINT_OK).
+- Hashes: sys c528be790f3b, UmdArm64 4a70ca080149, UmdX64 0b51c6950b88, Umd32 ad0b956c1d4b; manifest 60afef6bf7f3, hardware-manifest 40a1fce8c2e3; probe2229.sh c86abd6794ae (PROBE_LINT_OK); visible recovery rec2229h 672526b91b507f72; m1n1 0d3a75b3.
+- Recovery rec2229h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2229-tlb-spread/run2229.sh.
