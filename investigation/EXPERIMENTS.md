@@ -46554,3 +46554,40 @@ Verdict: CONFIRMED.
 Next:
 1. Production integration: put the direct handoff and the Mu direct/installed profile into the m1n1/Mu that the GPU work boots, so display fixes and ANS-DIRECT are in one image, plus an ordinary (non-qualification) launch.
 2. Resolve the black desktop against that integrated image.
+
+### ANS012-R1 — production integration: GPU daily boot with the native SSD (preregistered 2026-11-07T13:18:36Z)
+
+WHY THIS HYPOTHESIS:
+1. ANS011-R1 proved the ANS-DIRECT runtime on hardware with ANS-branch m1n1/Mu.
+2. The GPU daily boot (EXP2225 full-owner) differs only in its m1n1 (brokerlock 550c7f23), its Mu (HVS2ISO004 4ce521db) and the expanded RAM profile.
+   - Merged sources: m1n1 e3f7c623+5369d963, Mu e499d881.
+   - The driver DMA range covers 0x818000000 (ANSBUILD007-E).
+3. The ANS011 black desktop happened only with ANS-branch images. The GPU daily images have a working desktop, so this run also decides whether the black desktop was ANS-related.
+
+Steps, by `.local/ans-native/ANS012-R1-run/run.sh` (sha 3fb87215b6fb84ff…):
+
+- **A.** Recovery guest: `prep-gpu-ans.ps1` stages ANSBUILD007-E (sys dfa848b2…), sets ImagePath, and installs the AppleAnsDualBoot task (AppleAns Start=0).
+- **B.** Recovery reboot (launch-normal2). Expect:
+  - healthy bridge boot with AppleAns Start=0;
+  - the task clears StartOverride within 70 s.
+- **C.** `production/launch-gpu-ans.sh` (m1n1 00f105e2…, FD 967d14f2…, expanded RAM, WOM1_STORAGE_MODE=ANS_NATIVE WOM1_ANS_DIRECT=1). Expect:
+  - HV ANS direct handoff, native SSH;
+  - APPL0003 OK with controller/mailbox resources, PCI_PRESENT=0;
+  - explorer/dwm running, and the operator sees the desktop;
+  - APPL0002 state as in the GPU daily boot;
+  - bench comparable to ANS011.
+- **D.** Recovery (launch-normal2) with no manual switch. Expect:
+  - probe match, chkdsk 0, not dirty;
+  - StartOverride cleared by the task.
+
+Single variable per step:
+- B: AppleAns Start=0 plus the task in a bridge boot.
+- C: the GPU daily images with ANS-DIRECT. This is an indivisible contract: the merged m1n1, the Mu ACPI, the driver and the env must all be present together.
+
+Failure handling:
+- 0x7B in B or D: reset to proxy; launch-normal2 recovery with `ans-dual-boot.ps1 uninstall` via the AT_PROXY recovery.
+- No SSH in C: kill the runner and recover.
+
+Rollback:
+- `ans-dual-boot.ps1 uninstall`;
+- ImagePath back to 68a73bcd (`C:\ANS011\rollback-direct.ps1`).
