@@ -46437,3 +46437,63 @@ Action: `.local/ans-native/ans011/prep.sh`:
 oem6 records and the devnode are unchanged. Single variable vs ANS010-R7: the driver binary.
 Expected: PREP_DIRECT_DONE, ImagePath binary hash f723843c….
 Recovery boots are unaffected (Start=3). Rollback: rollback-direct.ps1.
+
+### ANS011-R1 — ANS-DIRECT installed native boot (preregistered 2026-11-07T12:57:09Z)
+
+WHY THIS HYPOTHESIS:
+1. ANS010-R7 proved the installed-boot chain:
+   - Mu installed gate, then EBS handoff;
+   - AppleAns boot-start with oem6 records and the devnode;
+   - StartOverride handling.
+   Only the storage ownership after EBS changes here.
+2. The direct runtime follows the Asahi post-boot sequence and t8103 TCB/linear-SQ protocol. Offline it matches a simulated controller (test_direct). The m1n1 hand-off state is exactly the proven nvme_init_common prefix up to BOOT_STATUS.
+3. The WDK build is clean (12/0), and the Mu receipt proves the APPL0003 direct resources.
+
+WINDOWS CONTRACT: StorPort miniport, full duplex. Two ACPI memory ranges and one level IRQ. Uncached extension DMA uses IPA addresses (_CCA=1). HwTimer in full duplex may take InterruptLock.
+
+AGX/ASAHI CONTRACT (ANS here): the firmware is running and the NVMe controller is disabled at hand-off. The driver then:
+- writes linear SQ / MAX_PEND / NVMMU_NUM / AQA / ASQ / ACQ / TCB bases;
+- sets CC enable;
+- runs Identify;
+- creates IOCQ (PC|IEN) and IOSQ;
+- fills TCB[tag] and writes the doorbell with the tag;
+- on completion: CQ phase check, TCB_INVAL, head doorbell.
+
+TRANSLATION: StorPort SG IPA → PA. The low window 0x100000+0x3ff00000 maps to 0x8a0100000; the rest of guest RAM is identity.
+
+WHAT IS STILL UNKNOWN:
+- whether mailbox servicing (ISR + 50 ms timer) is sufficient;
+- whether the EBS→Initialize gap is harmless;
+- real throughput.
+
+Single variable vs ANS010-R7: storage ownership after EBS. It is changed as one indivisible contract:
+- m1n1 --ans-direct;
+- the Mu direct ACPI;
+- the AppleAns direct binary.
+These three are only valid together; with any one missing, the device has no driver. The rest of the chain is unchanged.
+
+Artifacts:
+- packet , seal 948e815242526c9c283f4811965be5a6b3275700fad6707a7bd28c3638c1d217;
+- m1n1 ANSBUILD022 db18a837…;
+- Mu ANSBUILD023-D1 FD e321b5c4…;
+- AppleAns ANSBUILD006-D2 (sys f723843c…, staged by ANS011-PREP as oem7, ImagePath);
+- offline gate receipt f6653745…;
+- root 07b220201;
+- run.sh ac8766944b81b79a….
+
+Launch: `bash .local/ans-native/ANS011-R1-run/run.sh` (commands in ANS011-R1-COMMANDS.json, `--ans-direct --confirm-experiment ANS011`).
+
+Expected:
+- hv.log shows "HV ANS direct handoff" and no HV ANS op/data/perf lines after it;
+- NATIVE_SSH_UP, APPL0003 started;
+- probe written natively, and the probe matches over the bridge in recovery;
+- BENCH lines for native and bridge;
+- clean reboot;
+- chkdsk exit 0, not dirty;
+- APPL0002 gate unchanged.
+
+Failure criteria:
+- 0x7B, or no SSH within 600 s: the runner SIGINT snapshot collects PCs, KiBugCheckData, devnodes and modules;
+- any chkdsk error.
+
+Recovery: launch-normal2.sh (unchanged). AppleAns Start=3 via ans-boot-mode recovery. Driver rollback: rollback-direct.ps1.
