@@ -46,3 +46,17 @@ Related memory-side fix: T8103 SLC was disabled on this path (EXP2242); EXP2243 
 - Consequence for us: DRAMCFG FAST belongs to the CPU P-state policy (m1n1/HV CPPC owner): apply dramcfg-data[0] whenever
   the P-cluster is at/above mcx-fast-pcpu-frequency, restore boot values below. Needs the live ADT values (mcc_status.py
   now prints dramcfg-data, config-data, pmgr mcx-*).
+
+## Windows ARM64 processor driver = FxPPM, which parses ACPI _CPC (2026-11-07 ~23:25Z, guest binaries, read-only)
+- Processor devices bind service FxPPM (C:\Windows\system32\drivers\fxppm.sys, sha256 7fd6d9f63394f944bf301ad6246503fdcc3cbe85346d7c4502548972acc77f06); no PEP present.
+- fxppm.sys strings: "_CPC", "_CPC.ResourcePriorityRegisters[]", "_PSD" with "ACPI Software All/Any", "ACPI Hardware All",
+  "_OSC", "_LPI", HighestPerformance, NominalPerformance, LowestNonlinearPerformance, LowestPerformance,
+  GuaranteedPerformance, DesiredPerformance, Minimum/MaximumPerformance, EnergyPerformancePreference,
+  PerformanceReductionTolerance, ReferencePerformance, NominalFrequency, LowestFrequency, PerformanceLimited, "~MHz".
+  -> Windows ARM64 consumes firmware _CPC/_PSD directly through FxPPM; a PEP is NOT required (Microsoft docs do not
+  say this explicitly; evidence = the inbox binary). Microsoft-documented alternative remains the PEP PPM interface.
+- Design consequence (owner: Mu ACPI + m1n1 HV): per-CPU _CPC (rev 3) with Highest/Nominal/Lowest(Nonlinear)
+  performance + Nominal/Lowest Frequency, Desired Performance register + Reference/Delivered feedback counters in a
+  SystemMemory page emulated by the HV; _PSD per cluster; platform _OSC must grant CPPC (and CPPC2 if autonomous).
+  HV maps desired perf -> cluster P-state (max over the cluster's vCPUs, P1..P12, turbo excluded) and applies the
+  DRAMCFG rule (FAST >= 2184 MHz). Feedback: reference = constant-rate counter, delivered = reference x current/nominal.
