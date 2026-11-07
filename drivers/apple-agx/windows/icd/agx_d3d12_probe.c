@@ -9148,11 +9148,14 @@ static HRESULT membw_run(ID3D12CommandQueue *queue, ID3D12Fence *fence, HANDLE e
 
 static int mem_bw(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
     enum { BYTES = 128u << 20, LINES = BYTES / 64u, STREAM_THREADS = 65536u, CHASE_THREADS = 1024u, CHASE_STEPS = 512u,
-           REGIONS = 7, CASES = 1 + 2 * REGIONS };
+           REGIONS = 7, SPREADS = 4, CHASES = 1 + 2 * REGIONS, CASES = CHASES + SPREADS };
     /* cases 1..7: 1024 chasing threads; 8..14: 32 (one SIMD group), so
      * queueing of concurrent misses can be told from the miss cost itself */
     static const UINT region_kib[REGIONS] = {16u, 64u, 256u, 1024u, 4096u, 16384u, 65536u};
-    UINT region_first[REGIONS];
+    /* EXP2229 page-spread cases (32 threads): a cycle of N 64-byte lines, one per 16 KiB page, so the data
+     * (N x 64 B) always fits the caches while the chase needs N TLB entries; latency rising with N = TLB. */
+    static const UINT spread_pages[SPREADS] = {4u, 64u, 256u, 1024u};
+    UINT region_first[REGIONS], spread_first[SPREADS];
     D3D12_ROOT_PARAMETER params[3] = {{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}, {D3D12_ROOT_PARAMETER_TYPE_SRV},
                                       {D3D12_ROOT_PARAMETER_TYPE_UAV}};
     D3D12_ROOT_SIGNATURE_DESC root_desc = {3, params, 0, NULL, D3D12_ROOT_SIGNATURE_FLAG_NONE};
@@ -9196,6 +9199,25 @@ static int mem_bw(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *
             first += count;
         }
         for (UINT i = first; next && i < LINES; ++i) next[i] = i;
+        {   /* page-spread cycles in the tail: line = base + page * 256 + s (disjoint per case) */
+            const UINT base = (first + 255u) & ~255u;
+            for (UINT sp = 0; next && sp < SPREADS; ++sp) {
+                const UINT n = spread_pages[sp];
+                UINT *order = (UINT *)malloc(n * sizeof(UINT));
+                if (!order) { hr = E_OUTOFMEMORY; break; }
+                for (UINT i = 0; i < n; ++i) order[i] = i;
+                for (UINT i = n - 1u; i > 0u; --i) {
+                    UINT j, v;
+                    seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+                    j = seed % i; v = order[i]; order[i] = order[j]; order[j] = v;
+                }
+                /* Sattolo permutation -> one cycle: page order[i] points to page order[i+1] */
+                for (UINT i = 0; i < n; ++i)
+                    next[base + order[i] * 256u + sp] = base + order[(i + 1u) % n] * 256u + sp;
+                spread_first[sp] = base + order[0] * 256u + sp;
+                free(order);
+            }
+        }
         for (UINT i = 0; next && i < LINES; ++i) {
             words[i * 16u] = next[i];
             for (UINT k = 1; k < 16u; ++k) words[i * 16u + k] = i ^ (k * 0x9e3779b9u);
@@ -9229,12 +9251,15 @@ static int mem_bw(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *
     for (UINT rep = 0; rep < 3u && SUCCEEDED(hr); ++rep) {
         for (UINT m = 0; m < CASES && SUCCEEDED(hr); ++m) {
             const UINT mode = m ? 1u : 0u;
-            const UINT region = m ? (m - 1u) % REGIONS : 0u;
+            const UINT region = m && m < CHASES ? (m - 1u) % REGIONS : 0u;
+            const BOOL spread = m >= CHASES;
             for (UINT k = 0; k < 2u && SUCCEEDED(hr); ++k) {
                 const UINT dispatches = k ? 11u : 1u;
                 const UINT threads = !mode ? STREAM_THREADS : m > REGIONS ? 32u : CHASE_THREADS;
-                const UINT constants[6] = {BYTES / 16u, mode, CHASE_STEPS, threads, m ? region_first[region] : 0u,
-                                           m ? region_kib[region] * 1024u / 64u : 1u};
+                /* spread: every thread starts on the cycle's first line (lines = 1 keeps the start a member) */
+                const UINT constants[6] = {BYTES / 16u, mode, CHASE_STEPS, threads,
+                                           spread ? spread_first[m - CHASES] : m ? region_first[region] : 0u,
+                                           spread ? 1u : m ? region_kib[region] * 1024u / 64u : 1u};
                 double ms = 0.0;
                 hr = ID3D12CommandAllocator_Reset(allocator);
                 if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(list, allocator, pso);
@@ -9254,11 +9279,16 @@ static int mem_bw(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *
         const double stream_ms = (best[0][1] - best[0][0]) / 10.0;
         printf("MEMBW_STREAM_GBPS %.2f (%.3f ms per 128 MiB pass)\n",
                stream_ms > 0.0 ? (double)BYTES / (stream_ms * 1e6) : 0.0, stream_ms);
-        for (UINT m = 1; m < CASES; ++m) {
+        for (UINT m = 1; m < CHASES; ++m) {
             const double chase_ms = (best[m][1] - best[m][0]) / 10.0;
             printf("MEMBW_CHASE_NS %u KiB %.1f (%u threads x %u dependent loads, %.3f ms per dispatch)\n",
                    region_kib[(m - 1u) % REGIONS], chase_ms > 0.0 ? chase_ms * 1e6 / CHASE_STEPS : 0.0,
                    m > REGIONS ? 32u : (UINT)CHASE_THREADS, CHASE_STEPS, chase_ms);
+        }
+        for (UINT m = CHASES; m < CASES; ++m) {
+            const double chase_ms = (best[m][1] - best[m][0]) / 10.0;
+            printf("MEMBW_PAGES_NS %u pages %.1f (32 threads x %u dependent loads, one 64 B line per 16 KiB page)\n",
+                   spread_pages[m - CHASES], chase_ms > 0.0 ? chase_ms * 1e6 / CHASE_STEPS : 0.0, CHASE_STEPS);
         }
     }
     printf("AGX_D3D12_MEMBW: %s\n", SUCCEEDED(hr) ? "PASS" : "FAIL");

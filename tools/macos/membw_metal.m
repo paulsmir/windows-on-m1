@@ -16,9 +16,10 @@ static NSString *src = @"#include <metal_stdlib>\nusing namespace metal;\n"
   "  if (acc.x == 0xdeadbeefu && acc.y == 0x01234567u) o[0] = acc.z ^ acc.w;\n"
   "  if (p.mode == 1 && acc.x == 0xffffffffu) o[1] = acc.x; }\n";
 int main(void) { @autoreleasepool {
-  enum { BYTES = 128u << 20, LINES = BYTES / 64u, STEPS = 512u, REGIONS = 7, CASES = 1 + 2 * REGIONS };
+  enum { BYTES = 128u << 20, LINES = BYTES / 64u, STEPS = 512u, REGIONS = 7, SPREADS = 4, CHASES = 1 + 2 * REGIONS, CASES = CHASES + SPREADS };
   static const unsigned kib[REGIONS] = {16, 64, 256, 1024, 4096, 16384, 65536};
-  unsigned rfirst[REGIONS];
+  static const unsigned spages[SPREADS] = {4, 64, 256, 1024};
+  unsigned rfirst[REGIONS], sfirst[SPREADS];
   id<MTLDevice> d = MTLCreateSystemDefaultDevice(); NSError *e = nil;
   id<MTLLibrary> l = [d newLibraryWithSource:src options:nil error:&e]; if (!l) { NSLog(@"%@", e); return 1; }
   id<MTLComputePipelineState> ps = [d newComputePipelineStateWithFunction:[l newFunctionWithName:@"k"] error:&e];
@@ -34,6 +35,13 @@ int main(void) { @autoreleasepool {
       unsigned j = seed % i, v = next[first + i]; next[first + i] = next[first + j]; next[first + j] = v; }
     first += count; }
   for (unsigned i = first; i < LINES; ++i) next[i] = i;
+  { unsigned base = (first + 255u) & ~255u;  // page-spread cycles, same layout as the D3D12 probe (EXP2229)
+    for (unsigned sp = 0; sp < SPREADS; ++sp) { unsigned n = spages[sp], *o = malloc(n * 4);
+      for (unsigned i = 0; i < n; ++i) o[i] = i;
+      for (unsigned i = n - 1u; i > 0u; --i) { seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+        unsigned j = seed % i, v = o[i]; o[i] = o[j]; o[j] = v; }
+      for (unsigned i = 0; i < n; ++i) next[base + o[i] * 256u + sp] = base + o[(i + 1u) % n] * 256u + sp;
+      sfirst[sp] = base + o[0] * 256u + sp; free(o); } }
   for (unsigned i = 0; i < LINES; ++i) { w[i * 16u] = next[i]; for (unsigned k = 1; k < 16u; ++k) w[i * 16u + k] = i ^ (k * 0x9e3779b9u); }
   id<MTLCommandQueue> q = [d newCommandQueue];
   { id<MTLCommandBuffer> cb = [q commandBuffer]; id<MTLBlitCommandEncoder> b = [cb blitCommandEncoder];
@@ -41,9 +49,10 @@ int main(void) { @autoreleasepool {
   double best[CASES][2];
   for (int m = 0; m < CASES; ++m) best[m][0] = best[m][1] = 1e30;
   for (int rep = 0; rep < 3; ++rep) for (unsigned m = 0; m < CASES; ++m) for (int k = 0; k < 2; ++k) {
-    unsigned mode = m ? 1 : 0, region = m ? (m - 1) % REGIONS : 0, n = k ? 11 : 1;
+    unsigned mode = m ? 1 : 0, region = m && m < CHASES ? (m - 1) % REGIONS : 0, n = k ? 11 : 1, spread = m >= CHASES;
     unsigned threads = !mode ? 65536u : m > REGIONS ? 32u : 1024u;
-    unsigned p[6] = {BYTES / 16u, mode, STEPS, threads, m ? rfirst[region] : 0u, m ? kib[region] * 1024u / 64u : 1u};
+    unsigned p[6] = {BYTES / 16u, mode, STEPS, threads, spread ? sfirst[m - CHASES] : m ? rfirst[region] : 0u,
+                     spread ? 1u : m ? kib[region] * 1024u / 64u : 1u};
     id<MTLCommandBuffer> cb = [q commandBuffer]; id<MTLComputeCommandEncoder> c = [cb computeCommandEncoder];
     [c setComputePipelineState:ps]; [c setBuffer:buf offset:0 atIndex:0]; [c setBuffer:out offset:0 atIndex:1];
     [c setBytes:p length:sizeof p atIndex:2];
@@ -55,8 +64,12 @@ int main(void) { @autoreleasepool {
     if (ms < best[m][k]) best[m][k] = ms; }
   double sms = (best[0][1] - best[0][0]) / 10.0;
   printf("MEMBW_STREAM_GBPS %.2f (%.3f ms per 128 MiB pass)\n", (double)BYTES / (sms * 1e6), sms);
-  for (unsigned m = 1; m < CASES; ++m) {
+  for (unsigned m = 1; m < CHASES; ++m) {
     double cms = (best[m][1] - best[m][0]) / 10.0;
     printf("MEMBW_CHASE_NS %u KiB %.1f (%u threads x %u dependent loads, %.3f ms per dispatch)\n", kib[(m - 1) % REGIONS],
            cms * 1e6 / STEPS, m > REGIONS ? 32u : 1024u, STEPS, cms); }
+  for (unsigned m = CHASES; m < CASES; ++m) {
+    double cms = (best[m][1] - best[m][0]) / 10.0;
+    printf("MEMBW_PAGES_NS %u pages %.1f (32 threads x %u dependent loads, one 64 B line per 16 KiB page)\n",
+           spages[m - CHASES], cms * 1e6 / STEPS, STEPS); }
   return 0; } }
