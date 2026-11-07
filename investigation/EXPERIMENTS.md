@@ -70375,3 +70375,16 @@ EXP2223 HARDWARE ACTUAL (2026-11-07T03:00:20Z): **CONFIRMED: the default package
 - Package 30.0.2223.0 = HEAD 78bded14 (KMD code 675486d7), no device switches; pipeline rc 0; D3D12 suite 119/0; GravityMark d completed (wer 0, warm-up 40.377); guest alive throughout.
 - post-exp-gate: CS warm-up 46.202 (not gated), r2 50.266, r3 49.451 -> PASS worst 49.451 vs 49.943 (-0.99 %); GM repeats r2/r3 PASS worst 41.016 vs 40.770 (+0.60 %). PERF_GATE_PASS.
 - Expected vs actual: expected PASS and no reset; actual PASS, no hang. Verdict: confirmed; the fallback bookkeeping costs nothing measurable on the default path. Recovery rec2223h. Next: EXP2224 = S4a drill (Wom1Depth2FallbackDrillBuilt=16) on 20e34f05.
+
+EXP2224 HARDWARE BEFORE 2026-11-07T03:06:11Z:
+Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0; KMD receipts after d.
+- WHY THIS HYPOTHESIS: (1) EXP2213: a post-build backend refusal (ImageFailed, BuildStep RELOCATED) reset the engine although RunSuccessor was never called; (2) source proof (DEPTH2-KICK-FALLBACK.md, S4a table): flight cancel restores notifier counts/stamps/word set/sidecar, manager cancel, G3 abort, unstage and overlay release give every built piece back; test_notifier_flight proves cancel -> rebuild of the same fence; (3) EXP2222: the scheduler/G4 unkick path is hardware-proven (1415/1415).
+- WINDOWS CONTRACT: a packet whose successor kick is refused before the firmware sees it completes exactly once, in order, after its predecessor. AGX/ASAHI CONTRACT: no queue write pointer, Run message or notifier threshold for the refused build. TRANSLATION: undo the build, unkick, run at depth one. ATOMIC CONTRACT: none -- one KMD drill switch on the S4 path.
+- WHAT IS STILL UNKNOWN: whether any build-side state not covered by the source table (arena/QueueObjects bytes, VM-slot retarget) is read by the firmware for the running job; hardware only.
+- Expected: suite 119/0; kick_fallbacks == kick_failures, failures flagged build_undone; Wom1GpuReset resets 0; GravityMark completes.
+- Failure criteria: any reset/TDR/firmware fault, hang, kick_fallbacks < kick_failures, wrong images (suite) -> rec2224h; revert 20e34f05 S4 branch.
+- Recovery: rec2224h (run directly).
+- Probe: agx_d3d12_probe_e2224_arm64.exe = byte copy of e2222 (sha 5dbe904643ea842c).
+- Hashes: sys c011d81a6cf8, UmdArm64 92ac8d53aeb2, UmdX64 7d897f832228, Umd32 8af56a93b17e; manifest 4ce3913920ca, hardware-manifest 3630ceeee3d3; probe2224.sh ae597ba5c6ca (PROBE_LINT_OK); visible recovery rec2224h 2b29c84771d64202; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Depth2FallbackDrillBuilt=16 Wom1JobDiagnostics=1.
+- Recovery rec2224h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2224-s4a-drill/run2224.sh.
