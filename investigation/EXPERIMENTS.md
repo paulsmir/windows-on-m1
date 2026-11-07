@@ -70466,3 +70466,11 @@ Steps: MEMBW probe step twice; D3D12 suite; d HD PERF GravityMark 100k -temporal
 - Hashes: sys 93c564a5f8f2, UmdArm64 4bc929315f12, UmdX64 01f64b6a3868, Umd32 22edb7d773a3; manifest 672f50591eaf, hardware-manifest 59181d8b0653; probe2228.sh ddb8a8b815ee (PROBE_LINT_OK); visible recovery rec2228h 54fe54990d4cb0e1; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1GpuPrivateCached=1.
 - Recovery rec2228h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2228-memlat-gc/run2228.sh.
+
+EXP2228 HARDWARE ACTUAL (2026-11-07T14:02:04Z): **PARTIAL / hypothesis REDUCED: MEMATTR 0 on GPU-only leaves lowers the 32-thread chase 15-35 % from 1 MiB up but leaves a ~3x gap to macOS; 64-256 KiB barely move; GM +1 % (noise). The leaf attribute is a minor factor, not the cause of the GPU-cache miss behaviour.**
+- EXP2228_PIPELINE_RC 0; SWITCHES_SET Wom1GpuPrivateCached=1; m1n1 "GPUVA-GC: private cached leaves 1" (receipt prints the first and every 65536th cached publication -> 1..65536, coverage not counted); suite 119/0; no GPU fault/reset; WER 0; guest alive throughout.
+- MEMBW 32 threads (run1/run2) vs EXP2227 control vs macOS: 16K 165/212 vs 211/209 vs ~120; 64K 279/294 vs 298/324 vs ~132; 256K 417/479 vs 460/546 vs ~120; 1M 493/491 vs 608/570 vs ~135; 4M 551/598 vs 698/842 vs 176; 16M 611/698 vs 1017/945 vs 181; 64M 980/1045 vs 1269/1239 vs ~455. 1024 threads essentially unchanged (256K 368/291, 4M 1188/1056, 64M 5178/5132). Stream 49.1/55.3 GB/s.
+- HD PERF d (cold first run): 40.954 fps (2456 frames) vs control 40.536.
+- Verdict: the attribute explains part of the large-footprint cost (consistent with uncached walks/lines beyond L2) but not the 64-256 KiB misses, which hit L2 on macOS (~120-130 ns) and miss on ours (~280-480 ns). Measurement-only build; not for production (no invalidation on unmap).
+- WHAT IS STILL UNKNOWN / next: (c) GPU-side cache and TLB configuration -- firmware initdata / hardware-config fields (cache, SLC, TLB, page-walk attributes in the UAT TTBR/TCR setup) vs Asahi and macOS; compare offline first.
+- Evidence evidence/EXP2228. Recovery rec2228h.
