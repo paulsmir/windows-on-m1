@@ -165,9 +165,31 @@ typedef struct {
  * Mesa's buffer and offsets and copies the values back (GPU timestamps
  * design, docs/superpowers/plans/2026-10-16-gpu-timestamps.md). */
 #define APPLE_AGX_G4_TIMESTAMP_REQUEST 1u
+/* RC40: publish the firmware end in nanoseconds into a process allocation
+ * before completing this job. This is a KMD completion operation, never a
+ * firmware pointer. StartHandle selects the mode; EndHandle/EndOffset are
+ * the low/high halves of an aligned eight-byte destination GPUVA. */
+#define APPLE_AGX_G4_TIMESTAMP_PUBLISH 2u
 typedef struct {
   unsigned int StartHandle, StartOffset, EndHandle, EndOffset;
 } APPLE_AGX_G4_TIMESTAMPS;
+
+static inline unsigned long long AppleAgxG4TimestampPublishVa(
+    const APPLE_AGX_G4_TIMESTAMPS *ts) {
+  unsigned long long va;
+  if (!ts || ts->StartHandle != APPLE_AGX_G4_TIMESTAMP_PUBLISH ||
+      ts->StartOffset) return 0ULL;
+  va = ((unsigned long long)ts->EndOffset << 32) | ts->EndHandle;
+  return va >= 0x10000ULL && va < (1ULL << 39) && !(va & 7ULL) ? va : 0ULL;
+}
+
+static inline void AppleAgxG4TimestampPublish(APPLE_AGX_G4_TIMESTAMPS *ts,
+    unsigned long long va) {
+  ts->StartHandle = APPLE_AGX_G4_TIMESTAMP_PUBLISH;
+  ts->StartOffset = 0u;
+  ts->EndHandle = (unsigned int)va;
+  ts->EndOffset = (unsigned int)(va >> 32);
+}
 
 /* G2: the MIT Asahi UAPI compute payload (drm_asahi_cmd_compute). The KMD
  * builds the firmware RunCompute work item around it; the CDM control
@@ -236,15 +258,27 @@ typedef struct {
  * whose tile count asks for more than the window gets the window, instead
  * of a refused scene (2048x8192 asked 128 blocks). */
 #define APPLE_AGX_G4_TVB_WINDOW_BLOCKS 32u
+/* rc80 (apple_agx_g3_tvb.h): the most blocks a buffer manager may name: the
+ * 32-block floor (the process heap range) continued VA-contiguously by the
+ * KMD's 256 MiB TVB window, backed on demand from firmware Stats. The KMD
+ * names to the firmware, and maps, only the blocks it backed. */
+#define APPLE_AGX_G4_TVB_HEAP_BLOCKS 2080u
 
-static inline unsigned int AppleAgxG4MinTvbBlocks(unsigned int width,
+/* Asahi get_tiling_params min_tvb_blocks, uncapped (0 for an invalid size). */
+static inline unsigned int AppleAgxG4TvbBlocksForSize(unsigned int width,
     unsigned int height) {
   unsigned long long tiles = ((width + 31ULL) / 32ULL) * ((height + 31ULL) / 32ULL);
-  unsigned long long blocks;
   if (!width || !height || width > 16384u || height > 16384u) return 0u;
-  blocks = (((tiles + 127ULL) / 128ULL + 7ULL) / 8ULL) * 8ULL;
+  return (unsigned int)((((tiles + 127ULL) / 128ULL + 7ULL) / 8ULL) * 8ULL);
+}
+
+/* The blocks a render must have backed before it is admitted: the uncapped
+ * minimum clamped to the private-pool floor. Larger sizes grow best effort. */
+static inline unsigned int AppleAgxG4MinTvbBlocks(unsigned int width,
+    unsigned int height) {
+  unsigned int blocks = AppleAgxG4TvbBlocksForSize(width, height);
   return blocks > APPLE_AGX_G4_TVB_WINDOW_BLOCKS
-             ? APPLE_AGX_G4_TVB_WINDOW_BLOCKS : (unsigned int)blocks;
+             ? APPLE_AGX_G4_TVB_WINDOW_BLOCKS : blocks;
 }
 
 /* The TVB and per-scene capacities follow Asahi buffer.rs/render.rs.  The
@@ -255,8 +289,12 @@ static inline unsigned int AppleAgxG4MinTvbBlocks(unsigned int width,
  * agx_tilebuffer.c aligns a sample to 8 bytes and picks the largest utile
  * whose samples fit MAX_BYTES_PER_TILE (32767 bytes). EXP1287: a
  * single-sampled render without colour buffers has a zero-byte sample
- * (Asahi render.rs: no tile-buffer blocks); multisampling always allocates. */
-#define APPLE_AGX_G4_TILE_BUFFER_BYTES 32767u
+ * (Asahi render.rs: no tile-buffer blocks); multisampling always allocates.
+ * rc110: the limit is the 32 KiB of tile memory a compute threadgroup may
+ * allocate, so a 32 B/px single-sampled 32x32 utile (exactly 32768 bytes,
+ * UMD switch APPLE_AGX_TILE_BUFFER_BYTES=32768, winsys/agx_win32_tile_limit.h)
+ * passes; the UMD keeps Asahi's 32767 unless that switch is set. */
+#define APPLE_AGX_G4_TILE_BUFFER_BYTES 32768u
 static inline int AppleAgxG4TileBufferValid(unsigned int sample_bytes,
     unsigned int samples, unsigned int utile_width, unsigned int utile_height) {
   return (sample_bytes || samples == 1u) && (sample_bytes & 7u) == 0u && samples &&
@@ -287,7 +325,9 @@ static inline int AppleAgxG4ProcessRequiredBytes(
            (32ULL / render->UtileHeightPx);
   /* One queue-lifetime G13 buffer manager owns 32 blocks. The recorded
    * image names the first 16; the UMD page/block lists name all 32. A larger
-   * render uses the same window (M2-f9a: firmware partial renders). */
+   * render uses the same window (M2-f9a: firmware partial renders). rc80:
+   * the range stays the 32-block floor; the KMD continues the heap into its
+   * own TVB window (APPLE_AGX_G4_TVB_HEAP_BLOCKS), which no UMD names. */
   blocks = APPLE_AGX_G4_TVB_WINDOW_BLOCKS;
   tilemap_words = (5ULL * per_mtile * utiles + 3ULL) / 4ULL;
   tilemap = 4ULL * tilemap_words * 16ULL * render->Layers;
@@ -437,7 +477,8 @@ typedef enum {
    * USC helper program, compute preemption buffer. */
   AppleAgxG4AccessComputeStream = 5,
   AppleAgxG4AccessSamplerHeap = 6,
-  AppleAgxG4AccessComputePreemption = 7
+  AppleAgxG4AccessComputePreemption = 7,
+  AppleAgxG4AccessTimestamp = 8
 } APPLE_AGX_G4_ACCESS_KIND;
 typedef enum {
   AppleAgxG4FailureNone = 0,
@@ -474,6 +515,10 @@ typedef struct {
   int HasCompute;
   APPLE_AGX_G4_NATIVE_COMPUTE Compute;
   APPLE_AGX_G4_PROCESS_RANGE Preemption;
+  /* OV5: the render header named no compute-subqueue wait (CdmBarrier
+   * NONE, VdmBarrier 0, no compute command), admitted only under
+   * APPLE_AGX_G4_PARSE_RENDER_TA_INDEPENDENT. */
+  int TaIndependent;
 } APPLE_AGX_G4_SUBMIT_VIEW;
 
 /* G2: a validated compute envelope. */
@@ -483,6 +528,9 @@ typedef struct {
   APPLE_AGX_G4_PROCESS_RANGE Preemption;
   unsigned int CommandBytes;
   unsigned long long CommandVa;
+  /* OV2: the command named no render-subqueue wait (VdmBarrier NONE),
+   * admitted only under APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE. */
+  int Independent;
 } APPLE_AGX_G4_COMPUTE_VIEW;
 
 /* G2: validate a compute envelope: header, the native compute command
@@ -494,6 +542,27 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
     const void *PrivateData, unsigned int PrivateCapacity,
     unsigned int UmdPrivateBytes, unsigned long long DmaVa,
     unsigned int DmaBytes, unsigned int PreemptBytes,
+    APPLE_AGX_G4_ACCESS_EX Access, void *AccessContext,
+    APPLE_AGX_G4_COMPUTE_VIEW *View, APPLE_AGX_G4_FAILURE *Failure);
+
+/* OV2 (AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE): Asahi
+ * DRM_ASAHI_BARRIER_NONE, a per-command barrier field naming no wait. */
+#define APPLE_AGX_G4_BARRIER_NONE 0xffffu
+/* OV2: AppleAgxG4ParseComputeFlagsEx flags. INDEPENDENT_SUBQUEUE (the KMD
+ * passes it only while it reports the device feature) admits VdmBarrier =
+ * APPLE_AGX_G4_BARRIER_NONE on the envelope's compute command (its first
+ * and only one; CdmBarrier stays 0) and sets View->Independent. Unknown
+ * flags are invalid. AppleAgxG4ParseComputeEx is this with Flags 0. */
+#define APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE 0x1u
+/* The KMD maps this to its device-feature state (render_ov2.h); elsewhere
+ * (host replays of single KMD functions) no flag is passed. */
+#ifndef ADMISSION_G4_COMPUTE_PARSE_FLAGS
+#define ADMISSION_G4_COMPUTE_PARSE_FLAGS(adapter) 0u
+#endif
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeFlagsEx(
+    const void *PrivateData, unsigned int PrivateCapacity,
+    unsigned int UmdPrivateBytes, unsigned long long DmaVa,
+    unsigned int DmaBytes, unsigned int PreemptBytes, unsigned int Flags,
     APPLE_AGX_G4_ACCESS_EX Access, void *AccessContext,
     APPLE_AGX_G4_COMPUTE_VIEW *View, APPLE_AGX_G4_FAILURE *Failure);
 
@@ -520,5 +589,31 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitEx(
     unsigned int DmaBytes, APPLE_AGX_G4_ACCESS_EX Access,
     void *AccessContext, APPLE_AGX_G4_SUBMIT_VIEW *View,
     APPLE_AGX_G4_FAILURE *Failure);
+
+/* OV5 (AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT): render parse flags.
+ * RENDER_TA_INDEPENDENT (the KMD passes it only while it reports the device
+ * feature) admits a render header with CdmBarrier =
+ * APPLE_AGX_G4_BARRIER_NONE and VdmBarrier 0 in a packet without a compute
+ * command, and sets View->TaIndependent. Without it that header is
+ * AppleAgxG4ParseInvalid, as is CdmBarrier NONE after a compute command.
+ * Unknown flags are invalid. The *Ex entry points are these with Flags 0. */
+#define APPLE_AGX_G4_PARSE_RENDER_TA_INDEPENDENT 0x2u
+/* The KMD maps this to its device-feature state (render_ov5.h); elsewhere
+ * (host replays of single KMD functions) no flag is passed. */
+#ifndef ADMISSION_G4_RENDER_PARSE_FLAGS
+#define ADMISSION_G4_RENDER_PARSE_FLAGS(adapter) 0u
+#endif
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitFlagsEx(
+    const void *PrivateData, unsigned int PrivateCapacity,
+    unsigned int UmdPrivateBytes, unsigned long long DmaVa,
+    unsigned int DmaBytes, unsigned int Flags, APPLE_AGX_G4_ACCESS_EX Access,
+    void *AccessContext, APPLE_AGX_G4_SUBMIT_VIEW *View,
+    APPLE_AGX_G4_FAILURE *Failure);
+APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseSubmitComputeFlagsEx(
+    const void *PrivateData, unsigned int PrivateCapacity,
+    unsigned int UmdPrivateBytes, unsigned long long DmaVa,
+    unsigned int DmaBytes, unsigned int PreemptBytes, unsigned int Flags,
+    APPLE_AGX_G4_ACCESS_EX Access, void *AccessContext,
+    APPLE_AGX_G4_SUBMIT_VIEW *View, APPLE_AGX_G4_FAILURE *Failure);
 
 #endif

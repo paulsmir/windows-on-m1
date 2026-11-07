@@ -150,6 +150,7 @@ int main(void) {
                 os.environ.get('CC', 'clang'), '-std=c11', '-Wall', '-Wextra',
                 '-Werror', '-fsanitize=address,undefined',
                 '-I', str(RENDER / 'include'), '-I', str(RENDER / 'umd/include'),
+                '-I', str(RENDER.parent / 'shared' / 'include'),
                 str(p / 'replay.c'), str(RENDER / 'src/render_allocation.c'),
                 '-o', str(p / 'replay')], check=True)
             subprocess.run([str(p / 'replay')], check=True)

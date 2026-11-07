@@ -47,18 +47,32 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
    * clears it; only Prepare sets it. A G4 bind of a pristine image skips
    * rematerializing the 6 MiB arena. */
   APPLE_AGX_BOOL Pristine;
+  /* EXP1902N: why the last G4 render bind was refused (1 Prepare,
+   * 20 + AppleAgxG4BuildTa3dEx step -- 320 + predicate for the native
+   * objects step (AppleAgxG4BindNativeObjectsEx) --, 3 scene relocations,
+   * 4 header); 0 after a bind. */
+  APPLE_AGX_U32 BindFailure;
   APPLE_AGX_G4_PRIVATE_HEADER_V2 G4Header;
   unsigned char G4Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
   APPLE_AGX_U32 G4CommandBytes;
+  APPLE_AGX_U64 TimestampPublishVa;
   APPLE_AGX_G4_PRIVATE_LEASE G4Lease;
   /* D3D-G1: a v5 render's compute prelude. G4Command keeps the whole
    * stream (compute, attachments, render); the job builder adds the compute
    * as the queue provider's compute-before-render work item. */
   APPLE_AGX_BOOL G4WithCompute;
+  /* OV5 (Wom1Ov5TaWaiver): the parser admitted the render header with
+   * CdmBarrier NONE (TA independent of the compute job before it; only
+   * without a compute command and under the device feature). */
+  APPLE_AGX_BOOL G4TaIndependent;
   APPLE_AGX_G4_NATIVE_COMPUTE G4PreludeCompute;
   APPLE_AGX_G4_PROCESS_RANGE G4PreludePreemption;
   APPLE_AGX_RENDER_MANAGER_STATE *G4Manager;
   APPLE_AGX_RENDER_MANAGER_KEY G4ManagerKey;
+  /* V1 (Wom1G3RetainedSlots): the VM slot BeginJob leased for the bound
+   * job, set under the G3 lock; 0 (the baseline, every bind clears it):
+   * the builders use ADMISSION_GPUVA_G3_JOB_VM_SLOT. */
+  APPLE_AGX_U32 JobVmSlot;
   APPLE_AGX_U32 NativeWidth, NativeHeight, NativePitch;
   APPLE_AGX_EXP208_RELOCATION_OBJECT NativeOriginalOutput;
   /* G2: a standalone compute job keeps only its validated envelope; the
@@ -167,6 +181,12 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
  * is an arena write outside any submission, so it clears Pristine. */
 APPLE_AGX_BOOL AdmissionBackendImageSelectVmSlot(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Slot);
+/* V1: before a bound render job is staged, rewrite the arena's context_id
+ * fields to JobVmSlot, or to DefaultSlot when JobVmSlot is 0 (the job ran
+ * without a retained lease). DefaultSlot 0 (switch off): nothing written. */
+APPLE_AGX_BOOL AdmissionBackendImageRetargetVmSlot(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 DefaultSlot);
 /* Objects a G4 job can change: the CPU writes the command objects (< 36)
  * and the relocation fields of 41, 42 and 63; the GPU reaches only the
  * arena-backed GBM objects 36..40. Every other relocation target is rebound
@@ -180,6 +200,12 @@ APPLE_AGX_BOOL AdmissionBackendImageCaptureSnapshot(
 APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmissionRestore(
     ADMISSION_BACKEND_IMAGE *Image,
     const ADMISSION_BACKEND_IMAGE_SNAPSHOT *Snapshot, APPLE_AGX_U32 Fence);
+/* rc90: TRUE when that release of Fence's binding cannot fail and does not
+ * re-Prepare the arena: a G4 compute or present binding (fields only), or a
+ * G4 render whose snapshot matches (64 KiB restore). */
+APPLE_AGX_BOOL AdmissionBackendImageReleasesWithoutPrepare(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_BACKEND_IMAGE_SNAPSHOT *Snapshot, APPLE_AGX_U32 Fence);
 
 APPLE_AGX_BOOL AdmissionBackendImageRestartQueueLifetime(
     ADMISSION_BACKEND_IMAGE *Image);
@@ -191,6 +217,17 @@ APPLE_AGX_BOOL AdmissionBackendImageStageJob(
     APPLE_AGX_U32 D3ExpectedDonePointer,
     APPLE_AGX_BOOL IncludeInitBm,
     APPLE_AGX_BACKEND_JOB_IMAGE *Job);
+
+/* rc102 (EXP2047): a staged job that never reached the firmware (its
+ * build failed after StageJob) gives its stamp sequence back: Sequence and
+ * Dynamic return to Previous*, the job is unstaged, the binding stays. The
+ * queues' stamp epoch then matches what the firmware ran (ReleaseSubmission
+ * keeps Sequence). FALSE when the image does not hold exactly that staged
+ * job one sequence ahead. */
+APPLE_AGX_BOOL AdmissionBackendImageUnstageJob(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 PreviousSequence,
+    const APPLE_AGX_EXP208_DYNAMIC_RESULT *PreviousDynamic);
 
 void AdmissionBackendImageReset(ADMISSION_BACKEND_IMAGE *Image);
 

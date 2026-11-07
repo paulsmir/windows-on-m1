@@ -23,7 +23,10 @@ SOURCES = ("umd.c", "umd_runtime_device.c", "umd_win32_screen.c",
 
 
 def without_gpuva(text):
-    result = subprocess.run(["unifdef", "-UAPPLE_AGX_GPUVA_WINSYS"],
+    # Native staging is defined only inside the GPUVA guard in umd_internal.h;
+    # unifdef does not expand that include or infer dependent definitions.
+    result = subprocess.run(["unifdef", "-UAPPLE_AGX_GPUVA_WINSYS",
+                             "-UAPPLE_AGX_NATIVE_STAGING"],
                             input=text, capture_output=True, text=True)
     if result.returncode not in (0, 1):  # 1: output differs from input
         raise AssertionError(result.stderr)

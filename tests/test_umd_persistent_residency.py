@@ -56,16 +56,27 @@ typedef unsigned long long ULONGLONG; typedef size_t SIZE_T; typedef void* HANDL
 #define ADMISSION_UMD_IN_FLIGHT_SETS 4u  /* umd_internal.h (EXP1203) */
 #define ADMISSION_UMD_SCREEN_BUFFER_SCAN(d) ADMISSION_UMD_SCREEN_BUFFER_LIMIT
 #define ADMISSION_UMD_DEVICE_MAGIC 0x55u
+static unsigned GetEnvironmentVariableA(const char *name,char *out,unsigned size){
+  const char *v=getenv(name);if(!v)return 0;
+  unsigned n=(unsigned)strlen(v);if(n>=size)return n+1;
+  memcpy(out,v,n+1);return n;
+}
+static unsigned GetLastError(){return 0;}
+static void SetLastError(unsigned){}
 static void* GetProcessHeap(){return nullptr;}
-static void* HeapAlloc(void*,unsigned,size_t n){return calloc(1,n);}
+static unsigned alloc_calls,fail_alloc;
+static void* HeapAlloc(void*,unsigned,size_t n){return ++alloc_calls==fail_alloc?nullptr:calloc(1,n);}
 static void HeapFree(void*,unsigned,void*p){free(p);}
 typedef int SRWLOCK;
-static void AcquireSRWLockExclusive(SRWLOCK*){} static void ReleaseSRWLockExclusive(SRWLOCK*){}
-static void AcquireSRWLockShared(SRWLOCK*){} static void ReleaseSRWLockShared(SRWLOCK*){}
+static void AcquireSRWLockExclusive(SRWLOCK*l){assert(*l==0);*l=-1;}
+static void ReleaseSRWLockExclusive(SRWLOCK*l){assert(*l==-1);*l=0;}
+static void AcquireSRWLockShared(SRWLOCK*l){assert(*l>=0);++*l;}
+static void ReleaseSRWLockShared(SRWLOCK*l){assert(*l>0);--*l;}
 #include "umd_residency_trim.h"
-struct D3DDDI_MAKERESIDENT { HANDLE hPagingQueue; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; const UINT*PriorityList; ULONGLONG PagingFenceValue; ULONGLONG NumBytesToTrim; };
-struct SLOT { uint64_t Token; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,Mapped,Resident,Borrowed,KmtResidencyHeld; UINT SourceHolds,SubmissionHolds;
-  D3DKMT_HANDLE KernelAllocation,StagingAllocation; unsigned char *PrivateStaging; uint64_t CanonicalGpuVa,Bytes,LastUseFence; void*NativeBo; void*NativeMapRelease; };
+#include "../../../mesa/winsys/agx_win32_submission_window.h"
+struct D3DDDI_MAKERESIDENT { struct { UINT CantTrimFurther, MustSucceed; } Flags; HANDLE hPagingQueue; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; const UINT*PriorityList; ULONGLONG PagingFenceValue; ULONGLONG NumBytesToTrim; };
+struct SLOT { uint64_t Token; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,Mapped,Resident,Borrowed,KmtResidencyHeld,HeapStaging; UINT SourceHolds,SubmissionHolds;
+  D3DKMT_HANDLE KernelAllocation,StagingAllocation; unsigned char *PrivateStaging; uint64_t CanonicalGpuVa,Bytes,LastUseFence; uint64_t TrimRecency; void*NativeBo; void*NativeMapRelease; };
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 static unsigned made, evicted, made_handles, refusals;  /* refusals: next mk calls refused for budget */
 static D3DKMT_HANDLE last_evicted[16]; static unsigned last_evicted_count;
@@ -73,12 +84,16 @@ static HRESULT mk(HANDLE,D3DDDI_MAKERESIDENT*r){++made;
   if(refusals){--refusals;r->NumBytesToTrim=16u<<20;return E_OUTOFMEMORY;}
   made_handles+=r->NumAllocations;r->PagingFenceValue=7;return E_PENDING;}
 struct D3DDDICB_EVICT { struct { UINT EvictOnlyIfNecessary; } Flags; UINT NumAllocations; const D3DKMT_HANDLE*AllocationList; ULONGLONG NumBytesToTrim; };
-static HRESULT ev(HANDLE,const D3DDDICB_EVICT*e){++evicted;assert(e->Flags.EvictOnlyIfNecessary);
-  last_evicted_count=e->NumAllocations;for(UINT i=0;i<e->NumAllocations;++i)last_evicted[i]=e->AllocationList[i];return S_OK;}
+static void (*before_evict)();
+static HRESULT evict_result=S_OK;
+static HRESULT ev(HANDLE,const D3DDDICB_EVICT*e){if(before_evict)before_evict();++evicted;assert(e->Flags.EvictOnlyIfNecessary);
+  last_evicted_count=e->NumAllocations;for(UINT i=0;i<e->NumAllocations;++i)last_evicted[i]=e->AllocationList[i];return evict_result;}
 static void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*,UINT){}
 struct CB { HRESULT(*pfnMakeResidentCb)(HANDLE,D3DDDI_MAKERESIDENT*); HRESULT(*pfnEvictCb)(HANDLE,const D3DDDICB_EVICT*); };
-struct ADMISSION_UMD_DEVICE { UINT Magic; SLOT ScreenBuffers[16]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal,ScreenClosing; HANDLE PagingQueue; CB*KernelCallbacks; struct{HANDLE handle;}RuntimeDevice; };
+struct ADMISSION_UMD_DEVICE { UINT SubmissionWindow; HRESULT GpuvaFailure; UINT Magic; SLOT ScreenBuffers[16]; uint64_t NextRenderFence; SRWLOCK ScreenBufferLock; BOOL DrawTerminal,ScreenClosing,BorrowedContext; HANDLE PagingQueue; CB*KernelCallbacks; struct{HANDLE handle;}RuntimeDevice; };
 static void va_record(const void*,UINT,unsigned long long,D3DKMT_HANDLE,unsigned long long,unsigned long long,HRESULT){}
+#define ADMISSION_UMD_WATCH_WINDOWS
+#include "umd_va_watch.h"
 @@FUNCS@@
 int main(){
  CB cb={mk,ev}; ADMISSION_UMD_DEVICE d={}; d.Magic=ADMISSION_UMD_DEVICE_MAGIC; d.PagingQueue=(HANDLE)1; d.KernelCallbacks=&cb;
@@ -116,27 +131,183 @@ int main(){
  refusals=100; made=0; evicted=0;
  uint64_t t5[1]={15};
  assert(make_resident(&d,t5,1,&fence)==0);
+ assert(d.GpuvaFailure==E_OUTOFMEMORY);
  assert(!d.ScreenBuffers[5].Resident && !d.ScreenBuffers[5].CopyHeld && !d.ScreenBuffers[5].SubmissionHolds);
  assert(d.ScreenBuffers[0].Resident);   /* still held in flight */
  assert(made<=ADMISSION_UMD_TRIM_ROUNDS+1u && evicted>=1);
+ for(unsigned fail=1;fail<=2;++fail) {
+  alloc_calls=0;fail_alloc=fail;
+  assert(!make_resident(&d,t5,1,&fence) && d.GpuvaFailure==E_OUTOFMEMORY);
+  assert(!d.DrawTerminal && !d.ScreenBuffers[5].CopyHeld);
+ }
+ fail_alloc=0;uint64_t invalid=999;
+ assert(!make_resident(&d,&invalid,1,&fence) && d.GpuvaFailure==S_OK);
  puts("EXP978 persistent residency: PASS");
 }
 '''
 
 
+TRIM_RACE = r"""
+static ADMISSION_UMD_DEVICE *racing_device;
+static void submit_during_evict() {
+  uint64_t token=10, fence=0;
+  assert(racing_device->ScreenBufferLock==0);
+  /* Schedule a second caller after trim's selection lock is released but
+   * before EvictCb returns. Execute the production submission admission. */
+  assert(make_resident(racing_device,&token,1,&fence)==0 &&
+         "trim selected a slot that a concurrent submission can still hold");
+  assert(!racing_device->ScreenBuffers[0].SubmissionHolds);
+  UINT count=99;
+  assert(trim_residency(racing_device,1,&count)==0 && count==0);
+}
+int main() {
+  CB cb={mk,ev}; ADMISSION_UMD_DEVICE d={};
+  d.Magic=ADMISSION_UMD_DEVICE_MAGIC; d.PagingQueue=(HANDLE)1;
+  d.KernelCallbacks=&cb; racing_device=&d;
+  SLOT &s=d.ScreenBuffers[0];
+  s.Active=TRUE; s.Resident=TRUE; s.Token=10; s.KernelAllocation=0x100;
+  s.StagingAllocation=0x200; s.CanonicalGpuVa=0x10000; s.Bytes=32u<<20;
+  uint64_t token=10, fence=0;
+  UINT count=0;
+  /* The other ordering: a submission holds the slot before selection. */
+  assert(make_resident(&d,&token,1,&fence)==1);
+  assert(trim_residency(&d,1,&count)==0 && count==0);
+  assert(evict(&d,&token,1));
+  before_evict=submit_during_evict;
+  /* A refused eviction releases the reservation without losing residency. */
+  evict_result=E_FAIL;
+  assert(trim_residency(&d,1,&count)==0 && count==0);
+  assert(s.Resident && !s.Transition && !s.SubmissionHolds);
+  assert(make_resident(&d,&token,1,&fence)==1 && made==0);
+  assert(evict(&d,&token,1));
+  /* A successful eviction releases the reservation with Resident cleared. */
+  evict_result=S_OK;
+  assert(trim_residency(&d,1,&count)==(32ull<<20) && count==1);
+  assert(!s.Resident && !s.Transition && !s.SubmissionHolds);
+  assert(make_resident(&d,&token,1,&fence)==2 && fence==7 && made==1);
+  assert(s.Resident && s.SubmissionHolds==1 && s.CopyHeld);
+  assert(evict(&d,&token,1));
+  assert(evicted==2);
+  puts("trim reservation interleaving: PASS");
+}
+"""
+
+
 class PersistentResidency(unittest.TestCase):
+    def test_trim_avoids_large_terminal_overshoot(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        Strict LRU drops a large heap for a small shortfall even when a smaller
+        idle allocation covers it. Execute production selection and EvictCb;
+        preserve holds, LRU ties, zero-shortfall progress and exhaustion.
+        """
+        main = r'''int main() {
+          CB cb={mk,ev}; ADMISSION_UMD_DEVICE d={}; d.KernelCallbacks=&cb;
+          const uint64_t sizes[]={4,128,16,16,8,1};
+          for(unsigned i=0;i<6;++i){
+            auto &s=d.ScreenBuffers[i];s.Active=s.Resident=TRUE;
+            s.Token=10+i;s.KernelAllocation=0x100+i;
+            s.Bytes=sizes[i]<<20;s.LastUseFence=i+1;
+          }
+          // A perfect-sized allocation held by a submission is unavailable.
+          d.ScreenBuffers[4].SubmissionHolds=1;
+          d.ScreenBuffers[5].Mapped=1;
+          UINT count=0;
+          assert(trim_residency(&d,12ull<<20,&count)==(20ull<<20));
+          assert(count==2 && last_evicted[0]==0x100 && last_evicted[1]==0x102);
+          assert(d.ScreenBuffers[1].Resident && d.ScreenBuffers[3].Resident);
+          assert(d.ScreenBuffers[4].Resident && d.ScreenBuffers[5].Resident);
+          // Equal sized candidates retain the oldest fence ordering.
+          assert(trim_residency(&d,8ull<<20,&count)==(16ull<<20));
+          assert(count==1 && last_evicted[0]==0x103);
+          // No fitting smaller alternative: the heap must still be trimmable.
+          assert(trim_residency(&d,1,&count)==(128ull<<20) && count==1);
+          assert(last_evicted[0]==0x101);
+          assert(trim_residency(&d,~0ull,&count)==0 && count==0);
+          // Exact-fit replacement is eligible this time (>=, not >).
+          for(unsigned i=0;i<3;++i) d.ScreenBuffers[i].Resident=TRUE;
+          d.ScreenBuffers[2].Bytes=8ull<<20;
+          assert(trim_residency(&d,12ull<<20,&count)==(12ull<<20));
+          assert(count==2 && last_evicted[1]==0x102);
+          // A zero shortfall must progress with the smallest idle slot.
+          d.ScreenBuffers[0].Resident=TRUE;
+          assert(trim_residency(&d,0,&count)==(4ull<<20));
+          assert(count==1 && last_evicted[0]==0x100);
+          assert(d.ScreenBuffers[1].Resident);
+          puts("bounded trim overshoot: PASS");
+        }
+'''
+        self.run_replay(BODY[:BODY.index('int main(){')] + main,
+                        'bounded trim overshoot: PASS')
+
+    def test_trim_reserves_slots_until_evict_finishes(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        A trim candidate must not acquire a submission hold between selection
+        and EvictCb completion; failure must release the reservation, and a
+        later submission must restore a successfully trimmed slot.
+        """
+        self.run_replay(BODY[:BODY.index('int main(){')] + TRIM_RACE,
+                        'trim reservation interleaving: PASS')
+
+    def test_d3d12_no_trim_preserves_idle_residency(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        The D3D12 opt-in must prevent autonomous eviction even of idle internal
+        BOs, allow VidMm budget arbitration, and leave other APIs/default intact.
+        Executes production trim and MakeResident retry code with fake VidMm.
+        """
+        main = r'''int main() {
+          CB cb={mk,ev}; ADMISSION_UMD_DEVICE d={};
+          d.Magic=ADMISSION_UMD_DEVICE_MAGIC; d.PagingQueue=(HANDLE)1;
+          d.KernelCallbacks=&cb;
+          for(unsigned api=0;api<2;++api) {
+            d.BorrowedContext=api;
+            const char *values[]={nullptr,"0","1","yes","10",""};
+            for(const char *value:values) {
+              if(value) setenv("APPLE_AGX_D3D12_DISABLE_TRIM",value,1);
+              else unsetenv("APPLE_AGX_D3D12_DISABLE_TRIM");
+              memset(d.ScreenBuffers,0,sizeof(d.ScreenBuffers));
+              for(unsigned i=0;i<2;++i) {
+                SLOT &s=d.ScreenBuffers[i];s.Active=TRUE;s.Token=10+i;
+                s.KernelAllocation=0x100+i;s.StagingAllocation=0x200+i;
+                s.CanonicalGpuVa=0x10000*(i+1);s.Bytes=65536;
+              }
+              SLOT &idle=d.ScreenBuffers[0];idle.Resident=TRUE;
+              made=evicted=0;refusals=1;
+              uint64_t token=11,fence=0;
+              const bool disabled=api && value && !strcmp(value,"1");
+              int result=make_resident(&d,&token,1,&fence);
+              if(disabled) {
+                assert(result==2 && made==2 && evicted==0);
+                assert(idle.Resident && !idle.Transition);
+                assert(d.ScreenBuffers[1].Resident && d.ScreenBuffers[1].SubmissionHolds);
+                assert(evict(&d,&token,1));
+              } else {
+                assert(result==2 && made==2 && evicted==1);
+                assert(!idle.Resident);
+                assert(evict(&d,&token,1));
+              }
+            }
+          }
+          unsetenv("APPLE_AGX_D3D12_DISABLE_TRIM");
+          puts("D3D12 trim discriminator: PASS");
+        }'''
+        self.run_replay(BODY[:BODY.index('int main(){')] + main,
+                        'D3D12 trim discriminator: PASS')
+
     def test_slots_stay_resident_across_submits(self):
+        self.run_replay(BODY, 'EXP978 persistent residency: PASS')
+
+    def run_replay(self, template, success):
         text = SRC.read_text()
         funcs = '\n'.join(function(text, n) for n in
-                          ('find_slot', 'release_copies', 'allocation_handle',
-                           'translate_handles', 'evict', 'trim_residency',
+                          ('watch_slots', 'find_slot', 'release_copies', 'allocation_handle',
+                           'translate_handles', 'evict', 'trim_residency_with', 'trim_residency',
                            'residency_request', 'make_resident'))
         funcs = funcs.replace('auto *slot', 'SLOT *slot')
-        body = BODY.replace('@@FUNCS@@', funcs)
+        body = template.replace('@@FUNCS@@', '#define ADMISSION_UMD_WATCH_WINDOWS\n#include "umd_va_watch.h"\n' + funcs)
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / 'replay.cpp'; exe = Path(tmp) / 'replay'
             src.write_text(body)
-            built = subprocess.run(['clang++', '-std=c++17', '-Wall', '-Wno-unused-function',
+            built = subprocess.run(['clang++', '-std=c++17', '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), '-Wall', '-Wno-unused-function',
                                     '-fsanitize=address,undefined',
                                     '-I', str(ROOT / 'drivers/apple-agx/render-admission/umd/include'),
                                     str(src), '-o', str(exe)],
@@ -144,7 +315,7 @@ class PersistentResidency(unittest.TestCase):
             self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
             ran = subprocess.run([str(exe)], text=True, capture_output=True)
             self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
-            self.assertIn('EXP978 persistent residency: PASS', ran.stdout)
+            self.assertIn(success, ran.stdout)
 
 
 if __name__ == '__main__':

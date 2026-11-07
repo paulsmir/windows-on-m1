@@ -391,7 +391,168 @@ static void test_engine_reset_keeps_unexecuted_fences_resubmittable(void) {
   assert(AppleAgxSchedulerQueueResubmittedPagingFence(&scheduler,0u,0u,41u));
 }
 
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * A firmware-killed job is aborted, not successfully completed. Reset and
+ * preemption must retain that distinction, including fence wrap and retry. */
+static void test_killed_fence_is_aborted_without_success(void) {
+  APPLE_AGX_SCHEDULER s;
+  APPLE_AGX_PREEMPTION p;
+  APPLE_AGX_U32 aborted;
+  unsigned wrap;
+  for (wrap = 0; wrap < 2; ++wrap) {
+    APPLE_AGX_U32 before = wrap ? 0xfffffffeu : 17u;
+    APPLE_AGX_U32 killed = before + 1u;
+    APPLE_AGX_U32 next = wrap ? 1u : 19u;
+    AppleAgxSchedulerInitialize(&s);
+    s.CompletedFence = s.LastSubmittedFence = before;
+    assert(AppleAgxSchedulerQueueFence(&s,0,0,killed));
+    assert(AppleAgxSchedulerActivateFence(&s,0,0,killed));
+    assert(AppleAgxSchedulerQueueFence(&s,0,0,next));
+    assert(AppleAgxSchedulerBeginBoundaryPreemption(&s,0,0,42,next,killed));
+    assert(!AppleAgxSchedulerAbortActiveFence(&s,1,0,killed));
+    assert(!AppleAgxSchedulerAbortActiveFence(&s,0,0,next));
+    assert(s.ActiveFence == killed && s.CompletedFence == before);
+    assert(AppleAgxSchedulerAbortActiveFence(&s,0,0,killed));
+    assert(!AppleAgxSchedulerAbortActiveFence(&s,0,0,killed));
+    assert(!AppleAgxSchedulerCompleteFence(&s,0,0,killed));
+    assert(s.CompletedFence == before && s.LastAbortedFence == killed);
+    assert(AppleAgxSchedulerObserveBoundaryCompletion(&s,0,0,killed));
+    assert(AppleAgxSchedulerClaimBoundaryPreemption(&s,&p));
+    assert(p.LastCompletedFence == before);
+    assert(AppleAgxSchedulerResetEngine(&s,0,0,&aborted));
+    assert(aborted == killed && s.CompletedFence == before);
+    assert(AppleAgxSchedulerResetEngine(&s,0,0,&aborted));
+    assert(aborted == killed);
+    assert(!AppleAgxSchedulerQueueResubmittedPagingFence(&s,0,0,killed));
+    assert(AppleAgxSchedulerQueueResubmittedPagingFence(&s,0,0,next));
+    assert(AppleAgxSchedulerActivateFence(&s,0,0,next));
+    assert(AppleAgxSchedulerCompleteActiveFence(&s,0,0,next));
+    assert(s.CompletedFence == next && s.LastAbortedFence == 0u);
+    assert(AppleAgxSchedulerResetEngine(&s,0,0,&aborted));
+    assert(aborted == next); /* completed boundary when nothing was aborted */
+  }
+}
+
+/* EXP2215 Wom1PreemptRefusal: PreemptCommand 1104 arrived while boundary
+ * 1103 was NotificationClaimed (same millisecond). The claimer had already
+ * handed DMA_PREEMPTED to dxgkrnl (scheduler_windows.c records the fence in
+ * DeliveredPreemptionFence before DxgkCbNotifyInterrupt) but had not yet
+ * re-taken the lock to commit. */
+static void test_next_preemption_inside_claim_commit_window(void) {
+  APPLE_AGX_SCHEDULER scheduler;
+  APPLE_AGX_PREEMPTION preemption;
+
+  AppleAgxSchedulerInitialize(&scheduler);
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 18530u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 18530u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler, 0u, 0u, 18530u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 18532u));
+  assert(AppleAgxSchedulerBeginBoundaryPreemption(
+      &scheduler, 0u, 0u, 1103u, 18532u, 0u));
+  assert(AppleAgxSchedulerClaimBoundaryPreemption(&scheduler, &preemption));
+  assert(preemption.PreemptionFence == 1103u);
+  /* Claimed but not delivered: a new boundary is still refused. */
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 18533u));
+  assert(!AppleAgxSchedulerBeginBoundaryPreemption(
+      &scheduler, 0u, 0u, 1104u, 18533u, 0u));
+  assert(AppleAgxSchedulerPreemptionPhase(&scheduler) ==
+         AppleAgxPreemptionNotificationClaimed);
+  /* Delivered: VidSch processed 1103 and sends 1104 before the commit. */
+  scheduler.DeliveredPreemptionFence = 1103u;
+  assert(!AppleAgxSchedulerBeginBoundaryPreemption(
+      &scheduler, 0u, 0u, 1103u, 18533u, 0u)); /* not a new preemption */
+  assert(AppleAgxSchedulerBeginBoundaryPreemption(
+      &scheduler, 0u, 0u, 1104u, 18533u, 0u));
+  assert(scheduler.PendingPreemptionFence == 1104u &&
+         scheduler.PreemptionCutoffFence == 18533u);
+  /* The claimer's late commit of 1103 succeeds once, leaves 1104 alone. */
+  assert(AppleAgxSchedulerCommitBoundaryPreemption(&scheduler, 1103u));
+  assert(!AppleAgxSchedulerCommitBoundaryPreemption(&scheduler, 1103u));
+  assert(scheduler.PendingPreemptionFence == 1104u &&
+         AppleAgxSchedulerPreemptionPhase(&scheduler) ==
+             AppleAgxPreemptionReadyToNotify);
+  assert(AppleAgxSchedulerClaimBoundaryPreemption(&scheduler, &preemption));
+  assert(preemption.PreemptionFence == 1104u);
+  assert(AppleAgxSchedulerCommitBoundaryPreemption(&scheduler, 1104u));
+  assert(AppleAgxSchedulerPreemptionPhase(&scheduler) == AppleAgxPreemptionIdle);
+  assert(!scheduler.DeliveredPreemptionFence &&
+         !scheduler.EarlyCommittedPreemptionFence);
+}
+
+/* Depth-2 kick fallback: a kick refused before the firmware saw it is
+ * undone; the fence stays queued and runs at depth 1 after the active one. */
+static void test_unkicked_fence_runs_at_depth_one_after_the_active_fence(void) {
+  APPLE_AGX_SCHEDULER scheduler;
+
+  AppleAgxSchedulerInitialize(&scheduler);
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 6u));
+  assert(!AppleAgxSchedulerUnkickFence(&scheduler, 0u, 0u, 5u)); /* none active */
+  assert(AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 5u));
+  assert(!AppleAgxSchedulerUnkickFence(&scheduler, 0u, 0u, 6u)); /* not kicked */
+  assert(AppleAgxSchedulerKickQueuedFence(&scheduler, 0u, 0u, 6u));
+  assert(!AppleAgxSchedulerUnkickFence(&scheduler, 0u, 0u, 7u)); /* wrong fence */
+  assert(!AppleAgxSchedulerUnkickFence(&scheduler, 1u, 0u, 6u)); /* wrong engine */
+  assert(AppleAgxSchedulerUnkickFence(&scheduler, 0u, 0u, 6u));
+  assert(AppleAgxSchedulerKickedFence(&scheduler) == 0u);
+  assert(AppleAgxSchedulerQueuedFence(&scheduler, 0u, 0u) == 6u);
+  assert(!AppleAgxSchedulerUnkickFence(&scheduler, 0u, 0u, 6u)); /* only once */
+  assert(!AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 6u)); /* 5 still runs */
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 6u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler, 0u, 0u, 6u));
+  assert(AppleAgxSchedulerCurrentFence(&scheduler, 0u, 0u) == 6u);
+}
+
+/* EXP2221: the kick is refused after a boundary preemption began with it
+ * kicked (the preemption made it the boundary). The never-started fence is
+ * handed back first, ahead of the queued tail, and the active fence ends the
+ * preemption. */
+static void test_unkick_during_preemption_hands_the_fence_back(void) {
+  APPLE_AGX_SCHEDULER scheduler;
+  APPLE_AGX_PREEMPTION preemption;
+
+  AppleAgxSchedulerInitialize(&scheduler);
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 6u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerKickQueuedFence(&scheduler, 0u, 0u, 6u));
+  assert(AppleAgxSchedulerBeginBoundaryPreemption(&scheduler, 0u, 0u, 900u, 7u, 5u));
+  assert(!AppleAgxSchedulerCanCompleteFence(&scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerUnkickFence(&scheduler, 0u, 0u, 6u));
+  assert(AppleAgxSchedulerKickedFence(&scheduler) == 0u);
+  assert(scheduler.PreemptedFenceCount == 2u &&
+         scheduler.PreemptedFenceQueue[0] == 6u &&
+         scheduler.PreemptedFenceQueue[1] == 7u);
+  assert(AppleAgxSchedulerQueuedFence(&scheduler, 0u, 0u) == 0u);
+  assert(!AppleAgxSchedulerUnkickFence(&scheduler, 0u, 0u, 6u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerObserveBoundaryCompletion(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerPreemptionPhase(&scheduler) ==
+         AppleAgxPreemptionReadyToNotify);
+  assert(AppleAgxSchedulerClaimBoundaryPreemption(&scheduler, &preemption));
+  assert(preemption.PreemptionFence == 900u);
+  assert(AppleAgxSchedulerCommitBoundaryPreemption(&scheduler, 900u));
+  assert(AppleAgxSchedulerPreemptionPhase(&scheduler) == AppleAgxPreemptionIdle);
+}
+
+/* Without the boundary the preemption waits for, the undo is refused. */
+static void test_unkick_is_refused_in_a_foreign_preemption_phase(void) {
+  APPLE_AGX_SCHEDULER scheduler;
+
+  AppleAgxSchedulerInitialize(&scheduler);
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 6u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerKickQueuedFence(&scheduler, 0u, 0u, 6u));
+  scheduler.PreemptionPhase = AppleAgxPreemptionReadyToNotify;
+  assert(!AppleAgxSchedulerUnkickFence(&scheduler, 0u, 0u, 6u));
+  assert(AppleAgxSchedulerKickedFence(&scheduler) == 6u);
+}
+
 int main(void) {
+  test_killed_fence_is_aborted_without_success();
   test_one_engine_topology_rejects_invalid_coordinates();
   test_context_lifetime_is_owned_by_one_engine();
   test_completed_fence_is_monotonic_and_queryable();
@@ -410,5 +571,9 @@ int main(void) {
   test_preempted_paging_fence_replays_once_without_reordering();
   test_engine_reset_keeps_unexecuted_fences_resubmittable();
   test_aborted_preemption_cannot_replay_discarded_fence();
+  test_next_preemption_inside_claim_commit_window();
+  test_unkicked_fence_runs_at_depth_one_after_the_active_fence();
+  test_unkick_during_preemption_hands_the_fence_back();
+  test_unkick_is_refused_in_a_foreign_preemption_phase();
   return 0;
 }

@@ -1,3 +1,4 @@
+#include "apple_agx_g4_preflight.h"
 #include "render_admission.h"
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "apple_agx_gpuva_g3_caps.h"
@@ -271,11 +272,24 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     return STATUS_INVALID_HANDLE;
   }
   description = &source->Allocation->Description;
+  /* rc106: the flip source has the committed source-mode geometry.  rc110
+   * (EXP2049): a linear scanout-capable allocation in any broker format,
+   * not necessarily the committed source mode's pixel format. */
   if (!AdmissionAllocationDescriptionValid(description) ||
-      description->Width != 2560u || description->Height != 1600u ||
-      description->Pitch != 10240u || description->BytesPerPixel != 4u ||
-      description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
-      description->Format != (UINT)D3DDDIFMT_A8R8G8B8) {
+      adapter == NULL ||
+      !((const ADMISSION_ALLOCATION_HANDLE *)source->Allocation)
+           ->ScanoutCapable ||
+      description->Width != adapter->CommittedWidth ||
+      description->Height != adapter->CommittedHeight ||
+      description->Pitch != adapter->CommittedStride ||
+      description->BytesPerPixel != 4u ||
+      description->Size != (ULONGLONG)adapter->CommittedStride *
+                               adapter->CommittedHeight ||
+      !AdmissionScanoutSourceModeSupported(adapter, adapter->CommittedWidth,
+                                           adapter->CommittedHeight,
+                                           adapter->CommittedStride) ||
+      !AdmissionScanoutFormatSupported(adapter,
+                                       (D3DDDIFORMAT)description->Format)) {
     AdmissionRecordPresent(device, Present, 3u,
                             STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
@@ -324,12 +338,24 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
       Args->PrivateDriverDataSize >= sizeof(ULONG)) {
     ULONG private_magic;
     RtlCopyMemory(&private_magic, Args->pPrivateDriverData, sizeof(private_magic));
+#ifdef APPLE_AGX_NATIVE_STAGING
+    if (private_magic == ADMISSION_NATIVE_STAGING_MAGIC)
+      return AdmissionGpuvaG3NativeStagingEscape((ADMISSION_CONTEXT *)Adapter, Args);
+#endif
     if (private_magic == 0x33565041u)
       return AdmissionGpuvaG3PrivateEscape((ADMISSION_CONTEXT *)Adapter, Args);
+    if (private_magic == APPLE_AGX_G4_PREFLIGHT_MAGIC)
+      return AdmissionGpuvaG4PreflightEscape((ADMISSION_CONTEXT *)Adapter, Args);
+    if (private_magic == APPLE_AGX_G3_NATIVE_QUERY_MAGIC)
+      return AdmissionGpuvaG3NativeQueryEscape((ADMISSION_CONTEXT *)Adapter, Args);
+    if (private_magic == APPLE_AGX_G3_NATIVE_QUERY_BATCH_MAGIC)
+      return AdmissionGpuvaG3NativeQueryBatchEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == 0x43565041u)
       return AdmissionGpuvaG3CopyEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == ADMISSION_TDR_DRILL_MAGIC)
       return AdmissionPlatformTdrDrillEscape((ADMISSION_CONTEXT *)Adapter, Args);
+    if (private_magic == ADMISSION_GPU_FAULT_DRILL_MAGIC)
+      return AdmissionGpuvaG3FaultDrillEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == ADMISSION_GPU_TIMESTAMP_QUERY_MAGIC)
       return AdmissionPlatformGpuTimestampEscape((ADMISSION_CONTEXT *)Adapter, Args);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
@@ -486,8 +512,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
                               ObjectAdapter);
   KeAcquireSpinLock(&adapter->SchedulerLock, &oldIrql);
   if (!AppleAgxSchedulerCreateContext(
-          &adapter->Scheduler, &context->SchedulerContext,
-          Args->NodeOrdinal, Args->EngineAffinity)) {
+          Args->NodeOrdinal ? &adapter->PagingScheduler : &adapter->Scheduler,
+          &context->SchedulerContext, 0u, Args->EngineAffinity)) {
     KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
     (void)AdmissionObjectsDestroyContext(&context->Object);
     if (generationClaimed)
@@ -504,7 +530,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
     if (!NT_SUCCESS(status)) {
       KeAcquireSpinLock(&adapter->SchedulerLock, &oldIrql);
       (void)AppleAgxSchedulerDestroyContext(
-          &adapter->Scheduler, &context->SchedulerContext);
+          context->Object.NodeOrdinal ? &adapter->PagingScheduler : &adapter->Scheduler,
+          &context->SchedulerContext);
       KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
       (void)AdmissionObjectsDestroyContext(&context->Object);
       ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
@@ -518,6 +545,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
 #endif
 
   RtlZeroMemory(&Args->ContextInfo, sizeof(Args->ContextInfo));
+  Args->ContextInfo.PagingCompanionNodeId = adapter->LiveAdditivePaging;
   Args->ContextInfo.DmaBufferSize = ADMISSION_DMA_BUFFER_SIZE;
   Args->ContextInfo.DmaBufferSegmentSet = Args->Flags.VirtualAddressing
       ? (1u << (ADMISSION_MEMORY_APERTURE_SEGMENT - 1u))
@@ -566,7 +594,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyContext(HANDLE Context) {
     return STATUS_DEVICE_BUSY;
   }
   if (!AppleAgxSchedulerDestroyContext(
-          &adapter->Scheduler, &context->SchedulerContext)) {
+          context->Object.NodeOrdinal ? &adapter->PagingScheduler : &adapter->Scheduler,
+          &context->SchedulerContext)) {
     KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
     return STATUS_DEVICE_BUSY;
   }
@@ -611,11 +640,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetNodeMetadata(
 
   if (context == NULL || NodeMetadata == NULL)
     return STATUS_INVALID_PARAMETER;
-  if (NodeOrdinal != 0)
+  if (NodeOrdinal > context->LiveAdditivePaging)
     return STATUS_INVALID_PARAMETER;
 
   RtlZeroMemory(NodeMetadata, sizeof(*NodeMetadata));
-  NodeMetadata->EngineType = DXGK_ENGINE_TYPE_3D;
+  NodeMetadata->EngineType = NodeOrdinal ? DXGK_ENGINE_TYPE_COPY : DXGK_ENGINE_TYPE_3D;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (context->GpuvaG3State != NULL) {
     APPLE_AGX_GPUVA_G3_ADMISSION_CONTRACT model =
@@ -623,7 +652,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetNodeMetadata(
                                          ADMISSION_GPUVA_G1B_PAGE_PROFILE);
     if (!AdmissionGpuvaG3DeclarationReady(context))
       return STATUS_INVALID_DEVICE_STATE;
-    NodeMetadata->GpuMmuSupported =
+    NodeMetadata->GpuMmuSupported = NodeOrdinal ? 1u :
         (model.NodeGpuMmuMask & (1u << NodeOrdinal)) != 0u;
     NodeMetadata->IoMmuSupported =
         (model.NodeIoMmuMask & (1u << NodeOrdinal)) != 0u;
@@ -631,7 +660,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetNodeMetadata(
 #endif
   status = RtlStringCchCopyW(NodeMetadata->FriendlyName,
                              RTL_NUMBER_OF(NodeMetadata->FriendlyName),
-                             L"Apple AGX 3D node");
+                             NodeOrdinal ? L"Apple AGX CPU paging" : L"Apple AGX 3D node");
   AdmissionRecordDevice(context->PhysicalDeviceObject,
                         AdmissionReceiptNodeMetadata, status);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)

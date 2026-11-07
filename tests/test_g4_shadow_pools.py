@@ -65,14 +65,19 @@ MAP_PRELUDE = r'''
 #include <stdlib.h>
 #include <string.h>
 #define APPLE_AGX_GPUVA_WINSYS 1
+#define AGX_WIN32_BO_GPU_ONLY (1u << 29)
+static void (*AgxWin32GpuOnlyMapHook)(unsigned,unsigned);
 @@FLAG@@
 enum { AgxWin32NativeBoSuccess = 0, AppleAgxWin32BufferCpuWrite = 2 };
 struct agx_device { void *windows_private; };
-struct agx_bo { unsigned flags; size_t size; void *_map; int refcnt; };
-typedef struct { int Failed; struct { void *Screen; } Buffers; int Gpuva; } AGX_WIN32_ASAHI_BACKEND;
-typedef struct { void *CpuAddress; } AGX_WIN32_NATIVE_BO;
+struct agx_bo { unsigned flags,handle; size_t size; void *_map; int refcnt; };
+typedef struct { void *PrivateMap; uint64_t Bytes; } AGX_WIN32_ASAHI_CPU_STORAGE;
+typedef struct { int Failed; struct { void *Screen; } Buffers; int Gpuva;
+  void *Owner; struct { int (*CpuStorage)(void *,const void *,uint64_t,AGX_WIN32_ASAHI_CPU_STORAGE *); } Ops;
+} AGX_WIN32_ASAHI_BACKEND;
+typedef struct { void *CpuAddress; uint64_t ConstructionSerial; } AGX_WIN32_NATIVE_BO;
 struct windows_bo { struct agx_bo Base; AGX_WIN32_NATIVE_BO Backing; AGX_WIN32_ASAHI_BACKEND *Backend;
-  struct { uint64_t Allocation; } Gpuva; void *Shadow; };
+  struct { uint64_t Allocation; } Gpuva; void *Shadow; int Virtual; /* C53 B1 */ };
 #define AGX_WIN32_ASAHI_FAIL(b, site) ((b)->Failed = (int)(site))
 static unsigned char device_view[4][0x4000];
 static unsigned maps;
@@ -198,6 +203,39 @@ class ShadowPools(unittest.TestCase):
         self.assertIsNotNone(flag)
         program = MAP_PRELUDE.replace('@@FLAG@@', flag.group(0)) + funcs + MAP_MAIN
         build_and_run(self, program, 'EXP1207 shadow map: PASS')
+
+    def test_private_command_map_needs_no_second_shadow(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? T13 command pools must reuse their authenticated cached map rather than commit a second BO-sized shadow; unproven mappings retain the WC fallback."""
+        text = BO.read_text()
+        funcs = '\n'.join(function(text, n) for n in
+                          ('shadow_alloc', 'shadow_free', 'AgxWin32AsahiShadowPublish', 'native_map'))
+        flag = re.search(r'(?m)^#define AGX_WIN32_BO_SHADOW .*$', BO_H.read_text())
+        main = r'''
+static unsigned queries;
+static int storage(void *owner,const void *key,uint64_t serial,AGX_WIN32_ASAHI_CPU_STORAGE *out) {
+  const struct windows_bo *bo=key;assert(owner==(void*)42 && serial==7);++queries;
+  out->PrivateMap=bo->Backing.CpuAddress;out->Bytes=bo->Base.size;return 1;
+}
+int main(void) {
+  AGX_WIN32_ASAHI_BACKEND b={0};b.Owner=(void*)42;b.Ops.CpuStorage=storage;
+  struct agx_device dev={&b};struct windows_bo bo={0};
+  bo.Backend=&b;bo.Base.flags=AGX_WIN32_BO_SHADOW;bo.Base.refcnt=1;
+  bo.Base.size=0x4000;bo.Backing.ConstructionSerial=7;
+  native_map(&dev,&bo.Base,NULL);
+  assert(!b.Failed && !bo.Shadow && bo.Base._map==bo.Backing.CpuAddress && queries==1);
+  memset(bo.Base._map,0xa7,bo.Base.size);
+  assert(AgxWin32AsahiShadowPublish(&bo.Base,0x100) && device_view[0][0]==0xa7);
+  /* Cache reuse preserves the pointer and performs no allocation/query. */
+  if(!bo.Base._map) native_map(&dev,&bo.Base,NULL);assert(maps==1 && queries==1 && !bo.Shadow);
+  bo.Base._map=NULL;bo.Backing.CpuAddress=NULL;
+  native_map(&dev,&bo.Base,NULL);
+  assert(!bo.Shadow && maps==2 && queries==2 && bo.Base._map==device_view[1]);
+  bo.Base._map=device_view[0];assert(!AgxWin32AsahiShadowPublish(&bo.Base,16));
+  puts("private shadow reuse: PASS");
+}
+'''
+        build_and_run(self, MAP_PRELUDE.replace('@@FLAG@@', flag.group(0))+funcs+main,
+                      'private shadow reuse: PASS')
 
     def test_batch_publishes_before_submit(self):
         text = BATCH.read_text()

@@ -1,18 +1,19 @@
 # EXP1298: select a named ARM64 Mesa build with -NDebug to remove UCRT
 # assertion records while retaining debugoptimized /O2 and debug information.
 param([string]$Name='nir-arm64',[switch]$NDebug)
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
 $ErrorActionPreference='Stop'
-$root='C:\Users\pauls\AD04-fullcompiler-001'
+$root="$builderRoot\AD04-fullcompiler-001"
 $tool='C:\VS2022Community\VC\Tools\MSVC\14.44.35207'
 $kit='C:\Program Files (x86)\Windows Kits\10'
-$clang='C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin'
+$clang="$builderRoot\AD04-asahi-windows-compiler\llvm20\bin"
 $env:PATH="$root\winflex;$root\venv\Scripts;$clang;$tool\bin\HostX64\x64;"+$env:PATH
 $env:INCLUDE="$tool\include;$kit\Include\10.0.26100.0\ucrt;$kit\Include\10.0.26100.0\shared;$kit\Include\10.0.26100.0\um"
 $env:LIB="$tool\lib\arm64;$kit\Lib\10.0.26100.0\ucrt\arm64;$kit\Lib\10.0.26100.0\um\arm64"
 if(Test-Path "$root\$Name"){throw 'Preserve existing ARM64 configure'}
 $out=Join-Path $root ('arm64-config-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $out | Out-Null
-$args=@('setup',"$root\$Name",'C:\Users\pauls\AD04-d3d10-frontend-build\mesa',
+$args=@('setup',"$root\$Name","$builderRoot\AD04-d3d10-frontend-build\mesa",
  '--cross-file',"$root\compiler-arm64.ini",'--buildtype=debugoptimized','--wrap-mode=nofallback',
  '-Dplatforms=[]','-Dgallium-drivers=softpipe','-Dvulkan-drivers=[]','-Dopengl=true',
  '-Dgles1=disabled','-Dgles2=disabled','-Dglx=disabled','-Degl=disabled',

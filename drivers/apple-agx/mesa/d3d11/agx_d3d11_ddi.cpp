@@ -40,6 +40,7 @@
 
 #include "agx_d3d11_ddi.h"
 #include "dxbc_to_nir.h"
+#include "dxbc_tir_gs.h"
 
 /* Draw.cpp (projection): the frontend's draw-time state resolution */
 void AgxD3d11ResolveState(Device *pDevice);
@@ -100,6 +101,16 @@ AgxD3d11Fl11Enabled(void)
    return AgxD3d11DdiEnabled() && !(length == 1 && value[0] == '0');
 }
 
+BOOL
+AgxD3d11Fl111Enabled(void)
+{
+   char value[4];
+   DWORD length = GetEnvironmentVariableA("APPLE_AGX_D3D11_FL111", value, sizeof(value));
+   /* EXP1888: logic ops, the 64 UAV registers and TIR 16x/8x pass on J313;
+    * APPLE_AGX_D3D11_FL111=0 keeps a process at 11_0 */
+   return AgxD3d11Fl11Enabled() && !(length == 1 && value[0] == '0');
+}
+
 /* D3D-H7: the WDDM 2.0 table goes with the FL 11_0 switch (EXP1299: the
  * runtime refuses FL 11_0 without it); APPLE_AGX_D3D11_WDDM2=0 keeps such a
  * process on the 11.0 table. */
@@ -120,8 +131,8 @@ AgxWddm2_0DdiEnabled(void)
    (D3D11_DDI_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS | D3D11_DDI_RESOURCE_MISC_BUFFER_STRUCTURED)
 /* D3D11_REQ_MULTI_ELEMENT_STRUCTURE_SIZE_IN_BYTES */
 #define AGX_D3D11_MAX_STRUCTURE_STRIDE 2048u
-/* D3D11_PS_CS_UAV_REGISTER_COUNT (D3D11.0 DDI); the translator's u# range */
-#define AGX_D3D11_UAV_SLOTS DXBC_NIR_MAX_UAVS
+/* D3D11_1_UAV_SLOT_COUNT (FL 11_1): the translator's D3D11.1 u# range */
+#define AGX_D3D11_UAV_SLOTS DXBC_NIR_UAV11_SLOTS
 
 static void
 refuse(D3D10DDI_HDEVICE hDevice, const char *what, UINT a, UINT b)
@@ -287,6 +298,9 @@ srv_cube_family(D3D10DDI_HDEVICE hDevice, const D3D11DDIARG_CREATESHADERRESOURCE
    UINT level = cube ? args->TexCube.MostDetailedMip : args->Tex2D.MostDetailedMip;
    UINT levels = cube ? args->TexCube.MipLevels : args->Tex2D.MipLevels;
    UINT first = cube ? args->TexCube.First2DArrayFace : args->Tex2D.FirstArraySlice;
+   /* NumCubes is a UINT. Bound it before expanding into face coordinates. */
+   if (cube && args->TexCube.NumCubes > tex->array_size / 6u)
+      return false;
    UINT count = cube ? 6u * args->TexCube.NumCubes : args->Tex2D.ArraySize;
    if (levels == ~0u && level <= tex->last_level)
       levels = tex->last_level + 1u - level;
@@ -450,10 +464,10 @@ CreateGeometryShaderWithStreamOutput11(
 /* ------------------------------------------------------------------ */
 /* D3D-H2b: compute (cs_4_x) and buffer unordered-access views        */
 
-/* An unordered-access view (dxbc_to_nir.h binding conventions): a raw or
- * structured buffer view is shader buffer u#, a typed view (buffer or
- * texture) image u#, an append/consume or counter view's hidden counter
- * (one 32-bit word) shader buffer AGX_D3D11_UAV_SLOTS + u#. */
+/* An unordered-access view: a typed view (buffer or texture) is image u#; a
+ * raw or structured buffer view and an append/consume or counter view's
+ * hidden counter (one 32-bit word) are the shader buffers the bound shader's
+ * UAV map names (dxbc_nir_uav_slots; apply_uavs). */
 struct AgxUnorderedAccessView {
    Device *owner_device;
    Resource *owner_resource;
@@ -589,11 +603,17 @@ CreateUnorderedAccessView11(D3D10DDI_HDEVICE hDevice, const D3D11DDIARG_CREATEUN
 }
 
 static void APIENTRY
-DestroyUnorderedAccessView11(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW hView)
+DestroyUnorderedAccessView11(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACCESSVIEW hView)
 {
    AgxUnorderedAccessView *view = CastUnorderedAccessView(hView);
+   Device *device = CastDevice(hDevice);
    if (!view)
       return;
+   /* the runtime unbinds first; never keep a pointer to a dead view */
+   for (unsigned p = 0; device && p < 2; ++p)
+      for (unsigned u = 0; u < AGX_D3D11_UAV_SLOTS; ++u)
+         if (device->agx_uavs[p][u] == view)
+            device->agx_uavs[p][u] = NULL;
    pipe_resource_reference(&view->buffer.buffer, NULL);
    pipe_resource_reference(&view->image.resource, NULL);
    pipe_resource_reference(&view->counter, NULL);
@@ -601,48 +621,106 @@ DestroyUnorderedAccessView11(D3D10DDI_HDEVICE, D3D11DDI_HUNORDEREDACCESSVIEW hVi
    view->owner_resource = NULL;
 }
 
-/* Binds slots [first, first + count) of a stage: views[i - start] for the
+/* FL 11_1: binds a stage's UAVs from its pipeline's views (graphics: every
+ * graphics stage, D3D11.1; compute) through the bound shader's map -- typed
+ * views at the images, buffer views and counters at the shader buffers the
+ * map names. Asahi binds 32 images (its 32-bit image_mask: EXP1887 found
+ * slot u + 32 unbinding slot u). A shader without a map (the TGSI path) has
+ * u0..u7 at their own slots and counters at DXBC_NIR_UAV_COUNTER_SLOT + u#. */
+static void
+apply_uavs(Device *device, mesa_shader_stage stage)
+{
+   struct pipe_shader_buffer buffers[PIPE_MAX_SHADER_BUFFERS] = {};
+   struct pipe_image_view images[DXBC_NIR_UAV11_IMAGES] = {};
+   const Shader *shader = static_cast<const Shader *>(device->agx_stage_shader[stage]);
+   const struct dxbc_nir_uav_slots *map =
+      shader ? static_cast<const struct dxbc_nir_uav_slots *>(shader->agx_uav64) : NULL;
+   void *const *views = device->agx_uavs[stage == MESA_SHADER_COMPUTE];
+   bool any = false;
+   for (unsigned u = 0; u < AGX_D3D11_UAV_SLOTS && !any; ++u)
+      any = views[u] != NULL;
+   /* a shader bind without views on either side changes nothing (DWM) */
+   if (!any && !(device->agx_uav_stages & (1u << stage)))
+      return;
+   device->agx_uav_stages = any ? device->agx_uav_stages | (1u << stage) :
+                                  device->agx_uav_stages & ~(1u << stage);
+   for (unsigned u = 0; u < AGX_D3D11_UAV_SLOTS; ++u) {
+      const AgxUnorderedAccessView *view = static_cast<const AgxUnorderedAccessView *>(views[u]);
+      if (!view)
+         continue;
+      if (view->typed) {
+         const unsigned image = map ? map->image[u] : u < DXBC_NIR_MAX_UAVS ? u : DXBC_NIR_UAV_UNUSED;
+         if (image < DXBC_NIR_UAV11_IMAGES)
+            images[image] = view->image;
+         continue;
+      }
+      const unsigned buffer = map ? map->buffer[u] : u < DXBC_NIR_MAX_UAVS ? u : DXBC_NIR_UAV_UNUSED;
+      const unsigned counter = map ? map->counter[u] :
+         u < DXBC_NIR_MAX_UAVS ? DXBC_NIR_UAV_COUNTER_SLOT + u : DXBC_NIR_UAV_UNUSED;
+      if (buffer < PIPE_MAX_SHADER_BUFFERS)
+         buffers[buffer] = view->buffer;
+      if (counter < PIPE_MAX_SHADER_BUFFERS && view->counter) {
+         buffers[counter].buffer = view->counter;
+         buffers[counter].buffer_size = 4;
+      }
+   }
+   device->pipe->set_shader_buffers(device->pipe, stage, 0, PIPE_MAX_SHADER_BUFFERS, buffers,
+                                    BITFIELD_MASK(PIPE_MAX_SHADER_BUFFERS));
+   device->pipe->set_shader_images(device->pipe, stage, 0, DXBC_NIR_UAV11_IMAGES, 0, images);
+}
+
+/* The stages a pipeline's UAVs reach (D3D11.1: every graphics stage). */
+static void
+apply_pipeline_uavs(Device *device, bool compute)
+{
+   static const mesa_shader_stage graphics[] = {MESA_SHADER_VERTEX, MESA_SHADER_TESS_CTRL,
+                                                MESA_SHADER_TESS_EVAL, MESA_SHADER_GEOMETRY,
+                                                MESA_SHADER_FRAGMENT};
+   if (compute) {
+      apply_uavs(device, MESA_SHADER_COMPUTE);
+      return;
+   }
+   for (mesa_shader_stage stage : graphics)
+      apply_uavs(device, stage);
+}
+
+/* A stage's shader changed: its map places the pipeline's views. */
+static void
+note_stage_shader(Device *device, mesa_shader_stage stage, Shader *shader)
+{
+   device->agx_stage_shader[stage] = shader;
+   apply_uavs(device, stage);
+}
+
+/* Binds slots [first, first + count) of a pipeline: views[i - start] for the
  * slots in [start, start + n), nothing for the others; an initial count other
  * than ~0 sets a counter view's hidden counter. */
 static bool
-bind_uavs(Device *device, mesa_shader_stage stage, UINT first, UINT count, UINT start, UINT n,
+bind_uavs(Device *device, bool compute, UINT first, UINT count, UINT start, UINT n,
           const D3D11DDI_HUNORDEREDACCESSVIEW *views, const UINT *initial_counts)
 {
-   struct pipe_shader_buffer buffers[AGX_D3D11_UAV_SLOTS] = {};
-   struct pipe_shader_buffer counters[AGX_D3D11_UAV_SLOTS] = {};
-   struct pipe_image_view images[AGX_D3D11_UAV_SLOTS] = {};
    struct pipe_context *pipe = device->pipe;
    if (first > AGX_D3D11_UAV_SLOTS || count > AGX_D3D11_UAV_SLOTS - first ||
        start < first || n > count - (start - first) || (n && !views))
       return false;
    for (UINT i = 0; i < n; ++i) {
       AgxUnorderedAccessView *view = CastUnorderedAccessView(views[i]);
-      UINT slot = start - first + i;
-      if (!view)
-         continue;
-      if (view->owner_device != device || (!view->typed && !view->buffer.buffer))
+      if (view && (view->owner_device != device || (!view->typed && !view->buffer.buffer)))
          return false;
-      if (view->typed) {
-         images[slot] = view->image;
-      } else {
-         buffers[slot] = view->buffer;
-         if (view->counter) {
-            counters[slot].buffer = view->counter;
-            counters[slot].buffer_size = 4;
-            if (initial_counts && initial_counts[i] != ~0u) {
-               pipe->buffer_subdata(pipe, view->counter, PIPE_MAP_WRITE, 0, 4, &initial_counts[i]);
-               counter_trace("measure-uav-counter-initial", pipe, view->counter, slot,
-                             initial_counts[i]);
-            }
-         }
+   }
+   for (UINT slot = first; slot < first + count; ++slot)
+      device->agx_uavs[compute][slot] = NULL;
+   for (UINT i = 0; i < n; ++i) {
+      AgxUnorderedAccessView *view = CastUnorderedAccessView(views[i]);
+      device->agx_uavs[compute][start + i] = view;
+      if (view && view->counter && initial_counts && initial_counts[i] != ~0u) {
+         pipe->buffer_subdata(pipe, view->counter, PIPE_MAP_WRITE, 0, 4, &initial_counts[i]);
+         counter_trace("measure-uav-counter-initial", pipe, view->counter, start + i,
+                       initial_counts[i]);
       }
    }
-   if (!count)
-      return true;
-   pipe->set_shader_buffers(pipe, stage, first, count, buffers, BITFIELD_MASK(count));
-   pipe->set_shader_buffers(pipe, stage, AGX_D3D11_UAV_SLOTS + first, count, counters,
-                            BITFIELD_MASK(count));
-   pipe->set_shader_images(pipe, stage, first, count, 0, images);
+   if (count)
+      apply_pipeline_uavs(device, compute);
    return true;
 }
 
@@ -651,7 +729,7 @@ CsSetUnorderedAccessViews11(D3D10DDI_HDEVICE hDevice, UINT start, UINT n,
                             const D3D11DDI_HUNORDEREDACCESSVIEW *views, const UINT *initial_counts)
 {
    Device *device = CastDevice(hDevice);
-   if (!device || !bind_uavs(device, MESA_SHADER_COMPUTE, start, n, start, n, views, initial_counts))
+   if (!device || !bind_uavs(device, true, start, n, start, n, views, initial_counts))
       refuse(hDevice, "reject-d3d11-cs-uav", start, n);
 }
 
@@ -741,6 +819,93 @@ ClearUnorderedAccessViewFloat11(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACC
    clear_typed(device, view, pixel);
 }
 
+/* ClearView ignores predication and applies each XY rectangle to all slices
+ * selected by the typed view. No render-target bind is required for a UAV. */
+bool
+AgxD3d11ClearUavView(D3D10DDI_HDEVICE hDevice, D3D11DDI_HUNORDEREDACCESSVIEW hView,
+                    const FLOAT color[4], const D3D10_DDI_RECT *rects, UINT nRects)
+{
+   Device *device = CastDevice(hDevice);
+   AgxUnorderedAccessView *view = CastUnorderedAccessView(hView);
+   if (!device || !view || view->owner_device != device || !view->typed || !color ||
+       !view->image.resource || (nRects && !rects))
+      return false;
+   struct pipe_context *pipe = device->pipe;
+   struct pipe_resource *res = view->image.resource;
+   unsigned element = util_format_get_blocksize(view->image.format);
+   if (!element || element > 16)
+      return false;
+   union pipe_color_union value;
+   bool integer = util_format_is_pure_integer(view->image.format);
+   bool sint = util_format_is_pure_sint(view->image.format);
+   for (UINT i = 0; i < 4; ++i) {
+      float c = color[i];
+      if (!integer) value.f[i] = c;
+      else if (sint) value.i[i] = c != c ? 0 : c <= -2147483648.0f ? INT32_MIN :
+                                  c >= 2147483647.0f ? INT32_MAX : (int)c;
+      else value.ui[i] = !(c > 0.0f) ? 0u : c >= 4294967295.0f ? UINT32_MAX : (unsigned)c;
+   }
+   uint8_t pixel[16] = {};
+   util_format_pack_rgba(view->image.format, pixel, &value, 1);
+   bool buffer = res->target == PIPE_BUFFER;
+   unsigned level = buffer ? 0u : view->image.u.tex.level;
+   unsigned width = buffer ? view->image.u.buf.size / element : u_minify(res->width0, level);
+   unsigned height = buffer ? 1u : u_minify(res->height0, level);
+   if (buffer && !pipe->clear_buffer)
+      return false;
+   for (UINT i = 0; i < (nRects ? nRects : 1u); ++i) {
+      unsigned left = 0, top = 0, right = width, bottom = height;
+      if (nRects) {
+         const D3D10_DDI_RECT &r = rects[i];
+         if (r.right <= r.left || r.bottom <= r.top || r.right <= 0 || r.bottom <= 0)
+            continue;
+         left = r.left > 0 ? (unsigned)r.left : 0u;
+         top = r.top > 0 ? (unsigned)r.top : 0u;
+         right = (unsigned)r.right < width ? (unsigned)r.right : width;
+         bottom = (unsigned)r.bottom < height ? (unsigned)r.bottom : height;
+         if (left >= right || top >= bottom)
+            continue;
+      }
+      if (buffer) {
+         pipe->clear_buffer(pipe, res, view->image.u.buf.offset + left * element,
+                            (right - left) * element, pixel, element);
+      } else {
+         struct pipe_box box = {};
+         box.x = left; box.y = top; box.z = view->image.u.tex.first_layer;
+         box.width = right - left; box.height = bottom - top;
+         box.depth = view->image.u.tex.last_layer - view->image.u.tex.first_layer + 1;
+         if (pipe->clear_texture)
+            pipe->clear_texture(pipe, res, level, &box, pixel);
+         else {
+            /* The default clear unpacks/re-packs through res->format. A
+             * typeless resource may use UNORM32 storage with a FLOAT view;
+             * that round trip loses bits. Transfer the packed view bytes. */
+            if (util_format_get_blocksize(res->format) != element ||
+                util_format_get_blockwidth(res->format) != 1 ||
+                util_format_get_blockheight(res->format) != 1 ||
+                !pipe->texture_map || !pipe->texture_unmap)
+               return false;
+            struct pipe_transfer *transfer = NULL;
+            uint8_t *dst = (uint8_t *)pipe->texture_map(pipe, res, level, PIPE_MAP_WRITE,
+                                                        &box, &transfer);
+            if (!dst || !transfer) {
+               if (transfer) pipe->texture_unmap(pipe, transfer);
+               return false;
+            }
+            for (int z = 0; z < box.depth; ++z)
+               for (int y = 0; y < box.height; ++y) {
+                  uint8_t *row = dst + (size_t)z * transfer->layer_stride +
+                                 (size_t)y * transfer->stride;
+                  for (int x = 0; x < box.width; ++x)
+                     memcpy(row + (size_t)x * element, pixel, element);
+               }
+            pipe->texture_unmap(pipe, transfer);
+         }
+      }
+   }
+   return true;
+}
+
 /* The hidden counter of an append/consume or counter view, as 32 bits at
  * an aligned offset of a buffer. */
 static void APIENTRY
@@ -785,17 +950,35 @@ SetRenderTargets11(D3D10DDI_HDEVICE hDevice, const D3D10DDI_HRENDERTARGETVIEW *p
                    const D3D11DDI_HUNORDEREDACCESSVIEW *phUAVs, const UINT *pInitialCounts,
                    UINT UAVStartSlot, UINT NumUAVs, UINT UAVRangeStart, UINT UAVRangeSize)
 {
-   /* D3D-H5: pixel-stage UAVs share the slot space with the render targets
-    * (UAVStartSlot >= NumRTVs); the range updated includes unbinds */
+   /* D3D-H5: graphics UAVs share the slot space with the render targets
+    * (UAVStartSlot >= NumRTVs); the range updated includes unbinds. FL 11_1:
+    * every graphics stage sees them. */
    SetRenderTargets(hDevice, phRTVs, NumRTVs, ClearSlots, hDSV);
    Device *device = CastDevice(hDevice);
    UINT first = MIN2(UAVRangeStart, UAVStartSlot);
    UINT end = MAX2(UAVRangeStart + UAVRangeSize, UAVStartSlot + NumUAVs);
    if (!NumUAVs && !UAVRangeSize)
       return;
-   if (!device || !bind_uavs(device, MESA_SHADER_FRAGMENT, first, end - first, UAVStartSlot,
+   if (!device || !bind_uavs(device, false, first, end - first, UAVStartSlot,
                              NumUAVs, phUAVs, pInitialCounts))
       refuse(hDevice, "reject-d3d11-pixel-uav", UAVStartSlot, NumUAVs);
+}
+
+/* FL 11_1: translates with the D3D11.1 UAV registers and keeps the map in
+ * the shader (DestroyShader frees it). */
+static struct nir_shader *
+translate_uav64(Shader *shader, const UINT *code, const struct nir_shader_compiler_options *options,
+                uint32_t registers, uint32_t positions, struct dxbc_nir_error *error)
+{
+   struct dxbc_nir_uav_slots *slots =
+      static_cast<struct dxbc_nir_uav_slots *>(malloc(sizeof(struct dxbc_nir_uav_slots)));
+   struct nir_shader *nir =
+      slots ? dxbc_translate_tokens_uav64(code, options, registers, positions, slots, error) : NULL;
+   if (nir)
+      shader->agx_uav64 = slots;
+   else
+      free(slots);
+   return nir;
 }
 
 static void APIENTRY
@@ -812,8 +995,8 @@ CreateComputeShader11(D3D10DDI_HDEVICE hDevice, const UINT *code, D3D10DDI_HSHAD
    }
    struct pipe_context *pipe = device->pipe;
    struct dxbc_nir_error error = {};
-   struct nir_shader *nir = dxbc_translate_tokens(code, pipe->screen->nir_options[MESA_SHADER_COMPUTE],
-                                                  &error);
+   struct nir_shader *nir = translate_uav64(shader, code, pipe->screen->nir_options[MESA_SHADER_COMPUTE],
+                                            0, 0, &error);
    UINT values[4] = {(UINT)MESA_SHADER_COMPUTE, nir ? 1u : 0u, error.opcode, error.offset};
    AgxD3d10WindowsDiagnostic("measure-shader-nir", nir ? S_OK : E_NOTIMPL, values, 4u);
    if (!nir) {
@@ -847,6 +1030,7 @@ CsSetShader11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader)
    device->pipe->bind_compute_state(device->pipe, shader ? shader->handle : NULL);
    for (unsigned i = 0; i < 3; ++i)
       device->agx_cs_block[i] = shader ? shader->agx_block[i] : 0u;
+   note_stage_shader(device, MESA_SHADER_COMPUTE, shader);
 }
 
 /* D3D11 orders a Dispatch's unordered-access writes before every later
@@ -886,9 +1070,256 @@ indirect_args(Device *device, D3D10DDI_HRESOURCE hArgs, UINT offset, UINT bytes)
    return args;
 }
 
+/* ------------------------------------------------------------------ */
+/* FL 11_1 forced sample count (investigation/analysis/D3D11-FL111-TIR.md)
+ *
+ * A triangle draw whose rasterizer state forces 4, 8 or 16 samples (TIR and
+ * UAV-only rendering) runs in one pass with the bound pixel shader's
+ * variant (dxbc_translate_tokens_tir) behind the expansion GS (dxbc_tir_gs),
+ * made once per vertex shader (serial) and sample count from the stages'
+ * tokens. Not covered yet, drawn as plain 1x rasterization with a
+ * reject-d3d11-tir receipt: application geometry or tessellation shaders,
+ * stream output, non-triangle topologies, shaders without tokens. */
+#define AGX_TIR_VARIANTS 8u
+struct AgxTirVariant {
+   uint64_t vs_serial;
+   UINT samples;
+   void *fs, *gs;
+};
+struct AgxTirCache {
+   UINT count;
+   AgxTirVariant v[AGX_TIR_VARIANTS];
+};
+
+static void
+tir_release(struct pipe_context *pipe, Shader *ps)
+{
+   AgxTirCache *cache = static_cast<AgxTirCache *>(ps->agx_tir);
+   for (UINT i = 0; cache && i < cache->count; ++i) {
+      if (cache->v[i].fs)
+         pipe->delete_fs_state(pipe, cache->v[i].fs);
+      if (cache->v[i].gs)
+         pipe->delete_gs_state(pipe, cache->v[i].gs);
+   }
+   free(cache);
+   ps->agx_tir = NULL;
+}
+
+static void
+tir_refuse(D3D10DDI_HDEVICE hDevice, Device *device, UINT why, UINT detail)
+{
+   if (!device->agx_tir_refused)
+      refuse(hDevice, "reject-d3d11-tir", why, detail);
+   device->agx_tir_refused = TRUE;
+}
+
+static const AgxTirVariant *
+tir_variant(Device *device, Shader *vs, Shader *ps, UINT samples)
+{
+   AgxTirCache *cache = static_cast<AgxTirCache *>(ps->agx_tir);
+   for (UINT i = 0; cache && i < cache->count; ++i)
+      if (cache->v[i].vs_serial == vs->agx_serial && cache->v[i].samples == samples)
+         return &cache->v[i];
+   if (!cache && !(cache = static_cast<AgxTirCache *>(calloc(1, sizeof(AgxTirCache)))))
+      return NULL;
+   ps->agx_tir = cache;
+   struct pipe_context *pipe = device->pipe;
+   struct dxbc_nir_uav_slots slots, vs_slots;
+   struct dxbc_nir_error error = {};
+   struct dxbc_tir_gs_key key;
+   struct nir_shader *fs = dxbc_translate_tokens_tir(ps->agx_code, pipe->screen->nir_options[MESA_SHADER_FRAGMENT],
+                                                     &slots, samples, &error);
+   struct nir_shader *vsn = fs ? dxbc_translate_tokens_uav64(vs->agx_code,
+      pipe->screen->nir_options[MESA_SHADER_VERTEX], 0, 0, &vs_slots, &error) : NULL;
+   const bool keyed = vsn && dxbc_tir_gs_key_from(vsn, fs, &key);
+   ralloc_free(vsn);
+   struct nir_shader *gs = keyed ? dxbc_tir_gs(pipe->screen->nir_options[MESA_SHADER_GEOMETRY], &key) : NULL;
+   UINT values[4] = {samples, fs ? 1u : 0u, keyed ? key.count : 0u, gs ? 1u : 0u};
+   AgxD3d10WindowsDiagnostic("measure-d3d11-tir-variant", gs ? S_OK : E_NOTIMPL, values, 4u);
+   if (!gs) {
+      ralloc_free(fs);
+      return NULL;
+   }
+   dxbc_nir_finalize(gs);
+   struct pipe_shader_state state = {};
+   state.type = PIPE_SHADER_IR_NIR;
+   state.ir.nir = fs;
+   void *fs_handle = pipe->create_fs_state(pipe, &state);
+   state.ir.nir = gs;
+   void *gs_handle = pipe->create_gs_state(pipe, &state);
+   if (!fs_handle || !gs_handle) {
+      if (fs_handle)
+         pipe->delete_fs_state(pipe, fs_handle);
+      if (gs_handle)
+         pipe->delete_gs_state(pipe, gs_handle);
+      return NULL;
+   }
+   AgxTirVariant *v = &cache->v[cache->count < AGX_TIR_VARIANTS ? cache->count++ : AGX_TIR_VARIANTS - 1u];
+   if (v->fs)
+      pipe->delete_fs_state(pipe, v->fs);
+   if (v->gs)
+      pipe->delete_gs_state(pipe, v->gs);
+   *v = {vs->agx_serial, samples, fs_handle, gs_handle};
+   return v;
+}
+
+/* Binds a draw's TIR variant for the scope of the draw. */
+struct AgxTirScope {
+   Device *device = NULL;
+   Shader *ps = NULL;
+   explicit AgxTirScope(D3D10DDI_HDEVICE hDevice)
+   {
+      Device *d = CastDevice(hDevice);
+      if (!d || d->agx_forced_samples < 4u)
+         return;
+      Shader *vs = static_cast<Shader *>(d->agx_stage_shader[MESA_SHADER_VERTEX]);
+      Shader *fs = static_cast<Shader *>(d->agx_stage_shader[MESA_SHADER_FRAGMENT]);
+      if (d->primitive != MESA_PRIM_TRIANGLES && d->primitive != MESA_PRIM_TRIANGLE_STRIP) {
+         tir_refuse(hDevice, d, 1u, (UINT)d->primitive);
+         return;
+      }
+      if (d->agx_stage_shader[MESA_SHADER_GEOMETRY] || d->agx_stage_shader[MESA_SHADER_TESS_CTRL] ||
+          d->agx_stage_shader[MESA_SHADER_TESS_EVAL] || d->bound_empty_gs) {
+         tir_refuse(hDevice, d, 2u, 0u);
+         return;
+      }
+      if (!vs || !fs || !vs->agx_code || !fs->agx_code || !fs->handle) {
+         tir_refuse(hDevice, d, 3u, 0u);
+         return;
+      }
+      const AgxTirVariant *v = tir_variant(d, vs, fs, d->agx_forced_samples);
+      if (!v) {
+         tir_refuse(hDevice, d, 4u, d->agx_forced_samples);
+         return;
+      }
+      /* viewport 0: viewport = ndc * scale + offset (D3D: y down) */
+      const float vp[4] = {d->agx_viewport0[2] * 0.5f, d->agx_viewport0[3] * -0.5f,
+                           d->agx_viewport0[0] + d->agx_viewport0[2] * 0.5f,
+                           d->agx_viewport0[1] + d->agx_viewport0[3] * 0.5f};
+      struct pipe_constant_buffer cb = {};
+      cb.buffer_size = sizeof(vp);
+      cb.user_buffer = vp;
+      d->pipe->set_constant_buffer(d->pipe, MESA_SHADER_GEOMETRY, DXBC_TIR_GS_CB, &cb);
+      d->pipe->bind_gs_state(d->pipe, v->gs);
+      d->pipe->bind_fs_state(d->pipe, v->fs);
+      device = d;
+      ps = fs;
+   }
+   ~AgxTirScope()
+   {
+      if (!device)
+         return;
+      device->pipe->bind_fs_state(device->pipe, ps->handle);
+      device->pipe->bind_gs_state(device->pipe, NULL);
+      device->pipe->set_constant_buffer(device->pipe, MESA_SHADER_GEOMETRY, DXBC_TIR_GS_CB, NULL);
+   }
+};
+
+static PFND3D10DDI_DRAW draw_10;
+static PFND3D10DDI_DRAWINDEXED draw_indexed_10;
+static PFND3D10DDI_DRAWINSTANCED draw_instanced_10;
+static PFND3D10DDI_DRAWINDEXEDINSTANCED draw_indexed_instanced_10;
+static PFND3D10DDI_DRAWAUTO draw_auto_10;
+
+static void APIENTRY
+Draw11(D3D10DDI_HDEVICE hDevice, UINT count, UINT start)
+{
+   AgxTirScope tir(hDevice);
+   draw_10(hDevice, count, start);
+}
+
+static void APIENTRY
+DrawIndexed11(D3D10DDI_HDEVICE hDevice, UINT count, UINT start, INT base)
+{
+   AgxTirScope tir(hDevice);
+   draw_indexed_10(hDevice, count, start, base);
+}
+
+static void APIENTRY
+DrawInstanced11(D3D10DDI_HDEVICE hDevice, UINT count, UINT instances, UINT start, UINT first)
+{
+   AgxTirScope tir(hDevice);
+   draw_instanced_10(hDevice, count, instances, start, first);
+}
+
+static void APIENTRY
+DrawIndexedInstanced11(D3D10DDI_HDEVICE hDevice, UINT count, UINT instances, UINT start, INT base,
+                       UINT first)
+{
+   AgxTirScope tir(hDevice);
+   draw_indexed_instanced_10(hDevice, count, instances, start, base, first);
+}
+
+static void APIENTRY
+DrawAuto11(D3D10DDI_HDEVICE hDevice)
+{
+   AgxTirScope tir(hDevice);
+   draw_auto_10(hDevice);
+}
+
+static PFND3D10DDI_SETRASTERIZERSTATE set_rasterizer_state_10;
+static PFND3D10DDI_SETVIEWPORTS set_viewports_10;
+
+static void APIENTRY
+SetRasterizerState11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRASTERIZERSTATE hState)
+{
+   set_rasterizer_state_10(hDevice, hState);
+   if (Device *device = CastDevice(hDevice)) {
+      const RasterizerState *state = static_cast<const RasterizerState *>(hState.pDrvPrivate);
+      device->agx_forced_samples = state ? state->agx_forced_samples : 0u;
+   }
+}
+
+static void APIENTRY
+SetViewports11(D3D10DDI_HDEVICE hDevice, UINT count, UINT clear, const D3D10_DDI_VIEWPORT *viewports)
+{
+   set_viewports_10(hDevice, count, clear, viewports);
+   Device *device = CastDevice(hDevice);
+   if (device && count && viewports) {
+      device->agx_viewport0[0] = viewports[0].TopLeftX;
+      device->agx_viewport0[1] = viewports[0].TopLeftY;
+      device->agx_viewport0[2] = viewports[0].Width;
+      device->agx_viewport0[3] = viewports[0].Height;
+   }
+}
+
+/* FL 11_1: the tokens of a vertex or pixel shader, the source of its TIR
+ * variants (an SM 5 vertex shader keeps them already, D3D-H5) */
+static PFND3D10DDI_CREATEVERTEXSHADER create_vertex_shader_10;
+static PFND3D10DDI_CREATEPIXELSHADER create_pixel_shader_10;
+
+static UINT *
+copy_tokens(const UINT *code)
+{
+   UINT *copy = code ? static_cast<UINT *>(malloc((size_t)code[1] * sizeof(UINT))) : NULL;
+   if (copy)
+      memcpy(copy, code, (size_t)code[1] * sizeof(UINT));
+   return copy;
+}
+
+static void APIENTRY
+CreateVertexShader11(D3D10DDI_HDEVICE hDevice, const UINT *code, D3D10DDI_HSHADER hShader,
+                     D3D10DDI_HRTSHADER hRTShader, const D3D10DDIARG_STAGE_IO_SIGNATURES *sig)
+{
+   create_vertex_shader_10(hDevice, code, hShader, hRTShader, sig);
+   Shader *shader = CastShader(hShader);
+   if (shader && shader->handle && !shader->agx_code)
+      shader->agx_code = copy_tokens(code); /* the frontend frees a VS's tokens */
+}
+
+static void APIENTRY
+CreatePixelShader11(D3D10DDI_HDEVICE hDevice, const UINT *code, D3D10DDI_HSHADER hShader,
+                    D3D10DDI_HRTSHADER hRTShader, const D3D10DDIARG_STAGE_IO_SIGNATURES *sig)
+{
+   create_pixel_shader_10(hDevice, code, hShader, hRTShader, sig);
+   if (Shader *shader = CastShader(hShader))
+      shader->agx_code = shader->handle ? copy_tokens(code) : NULL; /* DestroyShader11 frees */
+}
+
 static void
 draw_indirect(D3D10DDI_HDEVICE hDevice, D3D10DDI_HRESOURCE hArgs, UINT offset, bool indexed)
 {
+   AgxTirScope tir(hDevice);
    Device *device = CastDevice(hDevice);
    Resource *args = indirect_args(device, hArgs, offset, indexed ? 20u : 16u);
    struct pipe_resource *indices = NULL;
@@ -1008,8 +1439,8 @@ create_tessellation_shader(D3D10DDI_HDEVICE hDevice, const UINT *code, D3D10DDI_
    struct dxbc_nir_error error = {};
    if (stage == MESA_SHADER_TESS_CTRL)
       hs_passthrough(sig, &registers, &positions);
-   struct nir_shader *nir = dxbc_translate_tokens_hs(code, pipe->screen->nir_options[stage],
-                                                     registers, positions, &error);
+   struct nir_shader *nir = translate_uav64(shader, code, pipe->screen->nir_options[stage],
+                                            registers, positions, &error);
    UINT values[4] = {(UINT)stage, nir ? 1u : 0u, error.opcode, error.offset};
    AgxD3d10WindowsDiagnostic("measure-shader-nir", nir ? S_OK : E_NOTIMPL, values, 4u);
    if (!nir) {
@@ -1052,6 +1483,7 @@ bind_tessellation_shader(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader, mes
       device->pipe->bind_tcs_state(device->pipe, shader ? shader->handle : NULL);
    else
       device->pipe->bind_tes_state(device->pipe, shader ? shader->handle : NULL);
+   note_stage_shader(device, stage, shader);
 }
 
 static void APIENTRY
@@ -1108,6 +1540,38 @@ SetShaderWithIfacesNone(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader, UINT
       refuse(hDevice, "reject-d3d11-stage-shader", n, 1);
 }
 
+/* FL 11_1: the frontend binds VS, GS and PS; their UAV maps follow. */
+#define AGX_D3D11_SET_SHADER(name, frontend, stage)                                \
+   static void APIENTRY name(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader)   \
+   {                                                                               \
+      frontend(hDevice, hShader);                                                  \
+      if (Device *device = CastDevice(hDevice))                                    \
+         note_stage_shader(device, stage, CastShader(hShader));                    \
+   }
+AGX_D3D11_SET_SHADER(VsSetShader11, VsSetShader, MESA_SHADER_VERTEX)
+AGX_D3D11_SET_SHADER(GsSetShader11, GsSetShader, MESA_SHADER_GEOMETRY)
+AGX_D3D11_SET_SHADER(PsSetShader11, PsSetShader, MESA_SHADER_FRAGMENT)
+
+static PFND3D10DDI_DESTROYSHADER destroy_shader_10;
+
+/* the runtime unbinds first; never keep a pointer to a dead shader */
+static void APIENTRY
+DestroyShader11(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader)
+{
+   Device *device = CastDevice(hDevice);
+   Shader *shader = CastShader(hShader);
+   if (device)
+      for (void *&bound : device->agx_stage_shader)
+         if (bound == hShader.pDrvPrivate)
+            bound = NULL;
+   if (device && shader && shader->type == MESA_SHADER_FRAGMENT) {
+      tir_release(device->pipe, shader);
+      free(shader->agx_code);
+      shader->agx_code = NULL;
+   }
+   destroy_shader_10(hDevice, hShader);
+}
+
 #define AGX_D3D11_WITH_IFACES(name, plain)                                         \
    static void APIENTRY name(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader,   \
                              UINT n, const UINT *ids, const D3D11DDIARG_POINTERDATA *data) \
@@ -1119,9 +1583,9 @@ SetShaderWithIfacesNone(D3D10DDI_HDEVICE hDevice, D3D10DDI_HSHADER hShader, UINT
       }                                                                            \
       plain(hDevice, hShader);                                                     \
    }
-AGX_D3D11_WITH_IFACES(VsSetShaderWithIfaces11, VsSetShader)
-AGX_D3D11_WITH_IFACES(GsSetShaderWithIfaces11, GsSetShader)
-AGX_D3D11_WITH_IFACES(PsSetShaderWithIfaces11, PsSetShader)
+AGX_D3D11_WITH_IFACES(VsSetShaderWithIfaces11, VsSetShader11)
+AGX_D3D11_WITH_IFACES(GsSetShaderWithIfaces11, GsSetShader11)
+AGX_D3D11_WITH_IFACES(PsSetShaderWithIfaces11, PsSetShader11)
 AGX_D3D11_WITH_IFACES(CsSetShaderWithIfaces11, CsSetShader11)
 AGX_D3D11_WITH_IFACES(HsSetShaderWithIfaces11, HsSetShader11)
 AGX_D3D11_WITH_IFACES(DsSetShaderWithIfaces11, DsSetShader11)
@@ -1177,11 +1641,13 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnDefaultConstantBufferUpdateSubresourceUP = base->pfnDefaultConstantBufferUpdateSubresourceUP;
    f->pfnVsSetConstantBuffers = base->pfnVsSetConstantBuffers;
    f->pfnPsSetShaderResources = base->pfnPsSetShaderResources;
-   f->pfnPsSetShader = base->pfnPsSetShader;
+   f->pfnPsSetShader = PsSetShader11; /* FL 11_1: UAV maps */
    f->pfnPsSetSamplers = base->pfnPsSetSamplers;
-   f->pfnVsSetShader = base->pfnVsSetShader;
-   f->pfnDrawIndexed = base->pfnDrawIndexed;
-   f->pfnDraw = base->pfnDraw;
+   f->pfnVsSetShader = VsSetShader11;
+   draw_indexed_10 = base->pfnDrawIndexed;
+   f->pfnDrawIndexed = DrawIndexed11; /* FL 11_1 TIR */
+   draw_10 = base->pfnDraw;
+   f->pfnDraw = Draw11;
    f->pfnDynamicIABufferMapNoOverwrite = base->pfnDynamicIABufferMapNoOverwrite;
    f->pfnDynamicIABufferUnmap = base->pfnDynamicIABufferUnmap;
    f->pfnDynamicConstantBufferMapDiscard = base->pfnDynamicConstantBufferMapDiscard;
@@ -1191,12 +1657,14 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnIaSetInputLayout = base->pfnIaSetInputLayout;
    f->pfnIaSetVertexBuffers = base->pfnIaSetVertexBuffers;
    f->pfnIaSetIndexBuffer = base->pfnIaSetIndexBuffer;
-   f->pfnDrawIndexedInstanced = base->pfnDrawIndexedInstanced;
-   f->pfnDrawInstanced = base->pfnDrawInstanced;
+   draw_indexed_instanced_10 = base->pfnDrawIndexedInstanced;
+   f->pfnDrawIndexedInstanced = DrawIndexedInstanced11;
+   draw_instanced_10 = base->pfnDrawInstanced;
+   f->pfnDrawInstanced = DrawInstanced11;
    f->pfnDynamicResourceMapDiscard = base->pfnDynamicResourceMapDiscard;
    f->pfnDynamicResourceUnmap = base->pfnDynamicResourceUnmap;
    f->pfnGsSetConstantBuffers = base->pfnGsSetConstantBuffers;
-   f->pfnGsSetShader = base->pfnGsSetShader;
+   f->pfnGsSetShader = GsSetShader11;
    ia_set_topology_10 = base->pfnIaSetTopology;
    f->pfnIaSetTopology = IaSetTopology11;
    f->pfnStagingResourceMap = base->pfnStagingResourceMap;
@@ -1209,14 +1677,17 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnResourceReadAfterWriteHazard = base->pfnResourceReadAfterWriteHazard;
    f->pfnSetBlendState = base->pfnSetBlendState;
    f->pfnSetDepthStencilState = base->pfnSetDepthStencilState;
-   f->pfnSetRasterizerState = base->pfnSetRasterizerState;
+   set_rasterizer_state_10 = base->pfnSetRasterizerState;
+   f->pfnSetRasterizerState = SetRasterizerState11;
    f->pfnQueryEnd = base->pfnQueryEnd;
    f->pfnQueryBegin = base->pfnQueryBegin;
    f->pfnResourceCopyRegion = base->pfnResourceCopyRegion;
    f->pfnResourceUpdateSubresourceUP = base->pfnResourceUpdateSubresourceUP;
    f->pfnSoSetTargets = base->pfnSoSetTargets;
-   f->pfnDrawAuto = base->pfnDrawAuto;
-   f->pfnSetViewports = base->pfnSetViewports;
+   draw_auto_10 = base->pfnDrawAuto;
+   f->pfnDrawAuto = DrawAuto11;
+   set_viewports_10 = base->pfnSetViewports;
+   f->pfnSetViewports = SetViewports11;
    f->pfnSetScissorRects = base->pfnSetScissorRects;
    f->pfnClearRenderTargetView = base->pfnClearRenderTargetView;
    f->pfnClearDepthStencilView = base->pfnClearDepthStencilView;
@@ -1248,10 +1719,13 @@ AgxD3d11FillDeviceFuncs(D3D11DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUNCS *bas
    f->pfnCreateRasterizerState = base->pfnCreateRasterizerState;
    f->pfnDestroyRasterizerState = base->pfnDestroyRasterizerState;
    f->pfnCalcPrivateShaderSize = base->pfnCalcPrivateShaderSize;
-   f->pfnCreateVertexShader = base->pfnCreateVertexShader;
+   create_vertex_shader_10 = base->pfnCreateVertexShader;
+   f->pfnCreateVertexShader = CreateVertexShader11;
    f->pfnCreateGeometryShader = base->pfnCreateGeometryShader;
-   f->pfnCreatePixelShader = base->pfnCreatePixelShader;
-   f->pfnDestroyShader = base->pfnDestroyShader;
+   create_pixel_shader_10 = base->pfnCreatePixelShader;
+   f->pfnCreatePixelShader = CreatePixelShader11;
+   destroy_shader_10 = base->pfnDestroyShader;
+   f->pfnDestroyShader = DestroyShader11;
    f->pfnCalcPrivateSamplerSize = base->pfnCalcPrivateSamplerSize;
    f->pfnCreateSampler = base->pfnCreateSampler;
    f->pfnDestroySampler = base->pfnDestroySampler;

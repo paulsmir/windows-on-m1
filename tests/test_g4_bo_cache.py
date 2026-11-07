@@ -50,17 +50,23 @@ struct agx_bo { size_t size; unsigned flags; int refcnt; };
 typedef struct { uint64_t Allocation, Va, Bytes; unsigned Bound; } AGX_WIN32_GPUVA_BO;
 typedef struct { uint64_t *Handles; unsigned Count; uint64_t Fence; } AGX_WIN32_GPUVA_SET;
 typedef struct { uint64_t *Held; unsigned HeldCount; AGX_WIN32_GPUVA_SET Older[3]; unsigned OlderCount; } AGX_WIN32_GPUVA_SPACE;
-typedef struct { int Failed, Closing; AGX_WIN32_GPUVA_SPACE Gpuva;
+typedef struct { void *PrivateMap; APPLE_AGX_U64 Bytes; } AGX_WIN32_ASAHI_CPU_STORAGE;
+typedef struct { int Failed, Closing; void *Owner;
+ struct { int (*CpuStorage)(void *,const void *,APPLE_AGX_U64,AGX_WIN32_ASAHI_CPU_STORAGE *); } Ops; AGX_WIN32_GPUVA_SPACE Gpuva;
   void *Cache[AGX_WIN32_BO_CACHE_LIMIT]; APPLE_AGX_U32 CacheCount; APPLE_AGX_U64 CacheBytes; } AGX_WIN32_ASAHI_BACKEND;
-struct windows_bo { struct agx_bo Base; struct { struct { unsigned ClassId; } Buffer; } Backing;
-  AGX_WIN32_ASAHI_BACKEND *Backend; AGX_WIN32_GPUVA_BO Gpuva; int Imported, Cached; };
+struct windows_bo { struct agx_bo Base; struct { struct { unsigned ClassId; } Buffer; APPLE_AGX_U64 ConstructionSerial; } Backing;
+  AGX_WIN32_ASAHI_BACKEND *Backend; AGX_WIN32_GPUVA_BO Gpuva; void *Shadow; int Imported, Cached, Virtual; APPLE_AGX_U64 CacheStorageBytes; /* C53 B1 */ };
 static int disposed, refuse;
 static void AgxWin32PerfNote(const char *fmt, ...) { (void)fmt; }
 static int dispose(struct windows_bo *bo) { (void)bo; if(refuse) return 0; ++disposed; return 1; }
 @@FUNCS@@
+/* dispose() keeps the BO readable for the asserts; every BO is freed at exit */
+static struct windows_bo **made; static unsigned made_count;
 static struct windows_bo *mk(AGX_WIN32_ASAHI_BACKEND *b,size_t size,unsigned flags,unsigned cls,uint64_t alloc) {
   struct windows_bo *bo=calloc(1,sizeof(*bo)); bo->Backend=b; bo->Base.size=size; bo->Base.flags=flags;
-  bo->Backing.Buffer.ClassId=cls; bo->Gpuva.Allocation=alloc; bo->Gpuva.Bound=1; return bo; }
+  bo->Backing.Buffer.ClassId=cls; bo->Gpuva.Allocation=alloc; bo->Gpuva.Bound=1;
+  made=realloc(made,(made_count+1)*sizeof(*made)); assert(made); made[made_count++]=bo; return bo; }
+static void free_made(void) { for(unsigned i=0;i<made_count;++i) free(made[i]); free(made); made=NULL; made_count=0; }
 int main(void) {
   AGX_WIN32_ASAHI_BACKEND b; memset(&b,0,sizeof b);
   struct windows_bo *a=mk(&b,0x40000,0,1,11), *e=mk(&b,0x80000,0,3,12), *imp=mk(&b,0x40000,0,1,13);
@@ -115,6 +121,7 @@ int main(void) {
   refuse=0;
   for(unsigned i=0;i<4;++i) assert(cache_put(mk(&b,0x10000,0,1,200+i)));
   cache_flush(&b); assert(disposed==before+4 && b.CacheCount==0);
+  free_made();
   puts("EXP996 bo cache: PASS");
   return 0;
 }
@@ -125,7 +132,7 @@ class BoCache(unittest.TestCase):
     def test_cache_reuse_and_limits(self):
         text = SRC.read_text()
         funcs = '\n'.join(function(text, n) for n in
-                          ('cache_in_flight', 'cache_evict_oldest', 'cache_put', 'cache_take', 'cache_flush'))
+                          ('cache_storage_bytes', 'cache_in_flight', 'cache_evict_oldest', 'cache_put', 'cache_take', 'cache_flush'))
         self.assertIn('cache_take', funcs, 'winsys BO cache is missing')
         limits = '\n'.join(l for l in HDR.read_text().splitlines()
                            if l.startswith('#define AGX_WIN32_BO_CACHE_'))

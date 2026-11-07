@@ -34,6 +34,9 @@ typedef struct _APPLE_AGX_GPUVA_V5_CLIENT {
     unsigned long long MaxTicks[APPLE_AGX_GPUVA_V5_TIMED_COMMANDS];
     unsigned long long FailureCount;
     APPLE_AGX_GPUVA_V5_FAILURE Failures[APPLE_AGX_GPUVA_V5_FAILURE_RING];
+    /* Q22c discovery receipt only; no extra query and no admission input. */
+    unsigned int LiveAdditiveQueried, LiveAdditiveAnswered;
+    AGX_GPUVA_V5_RESPONSE LiveAdditiveCaps;
 } APPLE_AGX_GPUVA_V5_CLIENT;
 
 bool AppleAgxGpuvaV5ClientInit(APPLE_AGX_GPUVA_V5_CLIENT *,
@@ -47,4 +50,9 @@ bool AppleAgxGpuvaV5ClientAttachMailbox(APPLE_AGX_GPUVA_V5_CLIENT *,
                                         unsigned long long page_ipa);
 /* True only when the broker released the page; otherwise keep it allocated. */
 bool AppleAgxGpuvaV5ClientDetachMailbox(APPLE_AGX_GPUVA_V5_CLIENT *);
+/* Optional extension, after epoch discovery; never treats a failed query as
+ * support. Does not allocate/register memory or change placement. */
+bool AppleAgxGpuvaV5ClientHasPrivateCached(APPLE_AGX_GPUVA_V5_CLIENT *client);
+bool AppleAgxGpuvaV5ClientHasLiveAdditive(APPLE_AGX_GPUVA_V5_CLIENT *);
+bool AppleAgxGpuvaV5ClientHasSysmem(APPLE_AGX_GPUVA_V5_CLIENT *);
 #endif

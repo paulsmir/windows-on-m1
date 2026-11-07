@@ -118,7 +118,31 @@ static const void *next_bo(void *context,APPLE_AGX_U32 *cursor) {
   ReleaseSRWLockShared(&d->ScreenBufferLock);
   return key;
 }
+static int cpu_storage(void *context,const void *key,APPLE_AGX_U64 serial,
+                       AGX_WIN32_ASAHI_CPU_STORAGE *out) {
+  ADMISSION_UMD_ASAHI_OWNER *c=(ADMISSION_UMD_ASAHI_OWNER *)context;
+  if(!out) return 0;
+  ZeroMemory(out,sizeof(*out));
+  if(!c || !c->Device || !c->Backend || !key || !serial) return 0;
+  ADMISSION_UMD_DEVICE *d=c->Device;
+  int found=0;
+  AcquireSRWLockShared(&d->ScreenBufferLock);
+  for(UINT i=0;!d->ScreenClosing && i<ADMISSION_UMD_SCREEN_BUFFER_SCAN(d);++i) {
+    const ADMISSION_UMD_SCREEN_BUFFER *b=&d->ScreenBuffers[i];
+    if(!identity_match(b,key,c->Backend,serial)) continue;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    out->Bytes=b->Bytes*((b->PrivateStaging?1ull:0ull)+(b->HeapStagingShadow?1ull:0ull));
+    if(b->HeapStaging && b->Mapped && !b->SystemDirect && !b->StagingAllocation &&
+       b->PrivateStaging && b->LockedBase==b->PrivateStaging)
+      out->PrivateMap=b->PrivateStaging;
+#endif
+    found=1; break;
+  }
+  ReleaseSRWLockShared(&d->ScreenBufferLock);
+  return found;
+}
 void AdmissionUmdAsahiOwnerOperations(AGX_WIN32_ASAHI_OWNER_OPS *ops) {
   ops->Enter=enter; ops->Leave=leave;
   ops->Associate=associate; ops->Detach=detach; ops->Identity=identity; ops->NextBo=next_bo;
+  ops->CpuStorage=cpu_storage;
 }

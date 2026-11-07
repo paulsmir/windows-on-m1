@@ -15,6 +15,7 @@
 #define DXBC_TO_NIR_H
 
 #include "dxbc_parse.h"
+#include "dxbc_resources.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,9 +32,26 @@ struct nir_shader_compiler_options;
  * dword per texel.
  * UAV registers are u0..u7 (D3D11_PS_CS_UAV_REGISTER_COUNT, the D3D11.0
  * DDI), so buffers and counters fill shader-buffer slots 0..15 of Gallium's
- * 32.  The 64 slots of the D3D11.1 DDI need per-shader slot compaction. */
+ * 32.  The 64 slots of the D3D11.1 DDI use dxbc_translate_tokens_uav64. */
 #define DXBC_NIR_MAX_UAVS 8
 #define DXBC_NIR_UAV_COUNTER_SLOT DXBC_NIR_MAX_UAVS
+
+/* D3D11.1 (feature level 11_1): UAV registers u0..u63
+ * (D3D11_1_UAV_SLOT_COUNT). Typed views move to consecutive images in
+ * register order (image[u#]; Asahi binds 32 images, EXP1887); buffer views
+ * and their counters move to consecutive shader buffers, buffer views in
+ * register order first: buffer[u#] and counter[u#] name the slot,
+ * DXBC_NIR_UAV_UNUSED where the shader has none. A shader needing more than
+ * 32 shader buffers or 32 images is refused. */
+#define DXBC_NIR_UAV11_SLOTS 64
+#define DXBC_NIR_UAV_UNUSED 0xffu
+struct dxbc_nir_uav_slots {
+   uint8_t buffer[DXBC_NIR_UAV11_SLOTS], counter[DXBC_NIR_UAV11_SLOTS], image[DXBC_NIR_UAV11_SLOTS];
+   uint64_t typed;     /* typed views: bit u# */
+   uint32_t buffers;   /* shader buffers used */
+   uint32_t images;    /* images used */
+};
+#define DXBC_NIR_UAV11_IMAGES 32u
 
 struct dxbc_nir_error {
    char message[160];
@@ -59,11 +77,32 @@ dxbc_to_nir_hs(const struct dxbc_program *program,
                uint32_t passthrough_registers, uint32_t passthrough_positions,
                struct dxbc_nir_error *error);
 
+/* RC74: a compute shader's run-time indexed temp arrays larger than this go
+ * to the AGX stack (dxbc_nir_finalize) */
+#define DXBC_NIR_SCRATCH_ARRAY_BYTES 64
+
 /* The finalization tgsi_to_nir applies before handing NIR to a driver
  * without screen->finalize_nir (Asahi): lower returns and continue
  * constructs, registers and variables to SSA, system values, then a
  * standard optimization loop; the shader info is gathered and validated. */
 void dxbc_nir_finalize(struct nir_shader *nir);
+
+/* RC75: D3D12 root descriptors carry no size (Microsoft "Resource Binding"
+ * spec, Using Descriptors Directly in the Root Arguments: "there is no size
+ * parameter in root descriptors defining where out of bounds behavior would
+ * kick in"; the application stays within the allocation, accesses past it
+ * are undefined). Marks the constant-buffer loads of the slots in
+ * cbv_slots and the shader-buffer loads and stores of the UAV slots in
+ * uav_slots (constant slot indices only) ACCESS_IN_BOUNDS, which the D3D
+ * buffer-robustness lowering (winsys/agx_win32_d3d_robustness.h) leaves
+ * unchecked and whole (vector). Descriptor-table views keep their checks.
+ * Returns whether anything was marked. */
+bool dxbc_nir_mark_root_views(struct nir_shader *nir, uint32_t cbv_slots, uint32_t uav_slots);
+
+/* Asahi's integer pixel-coordinate lowering requires frontend fragment-center
+ * normalization. Call exactly once on a fresh fragment shader, before handing
+ * it to Asahi. Kept explicit: other frontends may already normalize position. */
+void dxbc_nir_lower_fragment_position(struct nir_shader *nir);
 
 /* Parse a tokenized program (version and length tokens first), translate
  * and finalize it.  NULL when the program is malformed (error->opcode is
@@ -72,6 +111,43 @@ struct nir_shader *
 dxbc_translate_tokens(const uint32_t *tokens,
                       const struct nir_shader_compiler_options *options,
                       struct dxbc_nir_error *error);
+
+/* D3D12 static SM5.1 namespaces.  SM4/5.0 retains identity bindings and
+ * returns an inactive map; every failure clears the map. */
+struct nir_shader *
+dxbc_translate_tokens_bindings(const uint32_t *tokens,
+   const struct nir_shader_compiler_options *options,
+   const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
+   struct dxbc_nir_error *error);
+
+/* C37: dxbc_translate_tokens_bindings for a hull shader with the
+ * pass-through registers of its output signature (other stages pass 0). */
+struct nir_shader *
+dxbc_translate_tokens_bindings_hs(const uint32_t *tokens,
+   const struct nir_shader_compiler_options *options,
+   const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
+   uint32_t passthrough_registers, uint32_t passthrough_positions,
+   struct dxbc_nir_error *error);
+
+/* dxbc_translate_tokens with the D3D11.1 UAV registers (see
+ * dxbc_nir_uav_slots); hull shaders pass their pass-through registers,
+ * other stages 0. */
+struct nir_shader *
+dxbc_translate_tokens_uav64(const uint32_t *tokens,
+                            const struct nir_shader_compiler_options *options,
+                            uint32_t passthrough_registers, uint32_t passthrough_positions,
+                            struct dxbc_nir_uav_slots *slots, struct dxbc_nir_error *error);
+
+/* FL 11_1: the pixel shader variant for a forced sample count of 4, 8 or 16
+ * (dxbc_tir.h; investigation/analysis/D3D11-FL111-TIR.md), with the
+ * D3D11.1 UAV registers: coverage of the forced pattern from the expansion
+ * GS's edge varyings, SV_Coverage, sampleinfo/samplepos of the rasterizer,
+ * centroid and pull-model evaluation on that pattern. */
+struct nir_shader *
+dxbc_translate_tokens_tir(const uint32_t *tokens,
+                          const struct nir_shader_compiler_options *options,
+                          struct dxbc_nir_uav_slots *slots, unsigned forced_samples,
+                          struct dxbc_nir_error *error);
 
 /* dxbc_translate_tokens for a hull shader with the pass-through registers
  * of its output signature (see dxbc_to_nir_hs). */
@@ -95,6 +171,9 @@ struct dxbc_nir_xfb {
    uint32_t num_outputs;
    struct dxbc_nir_xfb_output outputs[DXBC_NIR_MAX_XFB_OUTPUTS];
    uint32_t stride[DXBC_NIR_MAX_XFB_BUFFERS];   /* dwords */
+   /* the output-signature registers holding SV_Position (DXIL capture,
+    * agx_dxil_nir_xfb; the DXBC translator reads its own declarations) */
+   uint32_t position_registers;
 };
 
 /* dxbc_translate_tokens for a vertex or geometry shader whose outputs are
@@ -107,6 +186,29 @@ dxbc_translate_tokens_xfb(const uint32_t *tokens,
                           const struct nir_shader_compiler_options *options,
                           const struct dxbc_nir_xfb *xfb,
                           struct dxbc_nir_error *error);
+
+/* C39: dxbc_translate_tokens_bindings_hs that also captures stream output as
+ * dxbc_translate_tokens_xfb does (xfb NULL captures nothing). */
+struct nir_shader *
+dxbc_translate_tokens_bindings_xfb(const uint32_t *tokens,
+   const struct nir_shader_compiler_options *options,
+   const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
+   uint32_t passthrough_registers, uint32_t passthrough_positions,
+   const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error);
+
+/* The tessellation info Asahi reads from a hull or domain shader:
+ * ccw | point_mode << 1 | domain << 8 | spacing << 16 (receipts). */
+uint32_t dxbc_nir_tess_info(const struct nir_shader *nir);
+
+/* Capture immutable direct-slot cube requirements before shader creation
+ * consumes NIR.  False for dynamic/ambiguous bindings; output is cleared. */
+bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,
+                             uint8_t dimensions[DXBC_RESOURCE_SLOTS]);
+
+/* Direct image and raw/structured UAV requirements before native consumes NIR.
+ * False for dynamic/ambiguous/unhandled image bindings; output is cleared. */
+bool dxbc_nir_uav_dimensions(const struct nir_shader *nir,
+                            uint8_t dimensions[DXBC_UAV_DIMENSION_SLOTS]);
 
 /* The thread-group size (dcl_thread_group) and groupshared bytes of a
  * translated compute shader: the block the frontend's Dispatch launches and

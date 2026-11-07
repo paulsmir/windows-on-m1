@@ -13,6 +13,13 @@ M1N1 = ROOT / "m1n1_windows"
 
 class G4RealBrokerBuilderReplay(unittest.TestCase):
     def test_dwm_sized_native_frame_uses_published_process_ranges(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        Replay must use the real broker's published ranges. An uninitialized
+        submodule supplies no broker to test; an initialized but broken tree
+        must still fail compilation (never replace the broker with a stub).
+        """
+        if not M1N1.exists() or not any(M1N1.iterdir()):
+            self.skipTest("m1n1_windows submodule is uninitialized; real broker replay not run")
         with tempfile.TemporaryDirectory(prefix="g4-broker-builder-") as tmp:
             tmp = Path(tmp)
             binary = tmp / "replay"

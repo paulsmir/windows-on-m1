@@ -52,15 +52,15 @@ static void test_pool_segment_runs(void) {
   r.SourceIpa = 0x980000000ULL;
   r.DestinationIpa = 0x980100000ULL;
   r.Bytes = 0x10000u;
-  assert(AdmissionPagingLocalRun(&r));
+  assert(AdmissionPagingContiguousRun(&r));
   assert(AdmissionPagingRecordsValid(&r, 1u, 64u, sizeof(ADMISSION_PAGING_MARKER)));
   /* Pool <-> local runs (both memory segments). */
   r.SourceSegment = ADMISSION_PAGING_LOCAL_SEGMENT;
-  assert(AdmissionPagingLocalRun(&r));
-  /* Pool <-> system memory stays page-sized. */
+  assert(AdmissionPagingContiguousRun(&r));
+  /* Pool <-> resolved contiguous system memory can span pages. */
   r.SourceSegment = 0u;
-  assert(!AdmissionPagingLocalRun(&r));
-  assert(!AdmissionPagingRecordsValid(&r, 1u, 64u, sizeof(ADMISSION_PAGING_MARKER)));
+  assert(AdmissionPagingContiguousRun(&r));
+  assert(AdmissionPagingRecordsValid(&r, 1u, 64u, sizeof(ADMISSION_PAGING_MARKER)));
   r.Bytes = 0x1000u;
   assert(AdmissionPagingRecordsValid(&r, 1u, 64u, sizeof(ADMISSION_PAGING_MARKER)));
   r.DestinationSegment = 4u;
@@ -68,7 +68,7 @@ static void test_pool_segment_runs(void) {
   r.Kind = AdmissionPagingVirtualFill;
   r.DestinationSegment = ADMISSION_PAGING_POOL_SEGMENT;
   r.Bytes = 0x40000u;
-  assert(AdmissionPagingLocalRun(&r));
+  assert(AdmissionPagingContiguousRun(&r));
   assert(AdmissionPagingRecordsValid(&r, 1u, 64u, sizeof(ADMISSION_PAGING_MARKER)));
 }
 

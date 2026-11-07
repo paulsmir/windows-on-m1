@@ -1,14 +1,25 @@
 #include "gallium/drivers/asahi/agx_state.h"
 #include "compiler/nir/nir_builder.h"
 #include "util/u_inlines.h"
+#include "util/u_helpers.h" /* rc76b: util_clamp_color, as agx_pipe.c */
 #include "util/format/u_format.h"
 #include "drm-uapi/drm_fourcc.h"
 #include "agx_win32_asahi_scene.h"
+#include "agx_win32_asahi_batch.h"
 #include "agx_win32_asahi_bo.h"
+#ifdef APPLE_AGX_GPUVA_WINSYS
+#include "agx_win32_sparse.h"
+#endif
+#include "agx_win32_sampler_border.h" /* RC108: after agx_pack.h */
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+/* OV2: AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE of the device the
+ * screen was created for (read by the D3D12 owner and the batch submit). */
+volatile unsigned AgxWin32Ov2Feature;
+/* OV5: AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT of that device */
+volatile unsigned AgxWin32Ov5Feature;
 
 struct pipe_screen *AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *,AGX_WIN32_SCREEN *,
     const AGX_WIN32_ASAHI_OWNER_OPS *,void *,const AGX_WIN32_ASAHI_BATCH_OPS *,
@@ -65,7 +76,19 @@ struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(AGX_WIN32_ASAHI_BACKEND 
    * (dwmcore.dll_003d8800 removed the device on both shader paths). */
   params.num_cores_per_cluster=windows->Info.CoresPerCluster;
   params.core_masks[0]=windows->Info.CoreMask;
-  params.features=0; /* Optional soft faults are deliberately not enabled. */
+  /* RC82: Asahi reports DRM_ASAHI_FEATURE_SOFT_FAULTS when the kernel runs
+   * the firmware with fault_control 0xb (file.rs:333-335). The KMD reports
+   * it only with the device value Wom1SoftFaults = 1 and the published
+   * RegionC word 0xb (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS); otherwise no
+   * optional feature is enabled. The projected agx_has_soft_fault stays
+   * false; the feature reaches the compiler as agx_win32_soft_faults
+   * (agx_win32_soft_fault.h: shader memory loads may speculate). */
+  params.features=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS) ?
+      DRM_ASAHI_FEATURE_SOFT_FAULTS : 0;
+  /* OV2: the KMD admits independent compute envelopes (VdmBarrier NONE) */
+  AgxWin32Ov2Feature=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE) ? 1u : 0u;
+  /* OV5: the KMD admits TA-independent renders (render CdmBarrier NONE) */
+  AgxWin32Ov5Feature=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT) ? 1u : 0u;
   if(windows->Info.PageBytes!=AIL_PAGESIZE) return NULL;
   struct pipe_screen *screen=AgxWin32AsahiScreenCreate(backend,windows,owners,owner,batches,&params);
   if(screen) {
@@ -212,15 +235,25 @@ void *AgxWin32AsahiBufferCurrentMap(struct pipe_context *ctx,
   struct agx_resource *rsrc=agx_resource(resource);
   return rsrc->bo ? rsrc->bo->_map : NULL;
 }
-void *AgxWin32AsahiBufferWriteMap(struct pipe_context *ctx,
+/* D3D12 heaps are zero-initialised and valid from creation: a later CPU
+ * write map of the range must synchronise with the GPU users. */
+int AgxWin32AsahiBufferMarkValid(struct pipe_context *ctx,
     struct pipe_resource *resource) {
   if(!ctx || !resource || resource->screen!=ctx->screen ||
-     resource->target!=PIPE_BUFFER || resource->width0>UINT32_MAX) return NULL;
+     resource->target!=PIPE_BUFFER || resource->width0>UINT32_MAX) return 0;
   struct agx_resource *rsrc=agx_resource(resource);
   if(!rsrc->bo) {
     fprintf(stderr,"NATIVE_BUFFER_WRITE_MAP: no-bo\n");
-    return NULL;
+    return 0;
   }
+  util_range_add(resource,&rsrc->valid_buffer_range,0,(unsigned)resource->width0);
+  BITSET_SET(rsrc->data_valid,0);
+  return 1;
+}
+void *AgxWin32AsahiBufferWriteMap(struct pipe_context *ctx,
+    struct pipe_resource *resource) {
+  if(!AgxWin32AsahiBufferMarkValid(ctx,resource)) return NULL;
+  struct agx_resource *rsrc=agx_resource(resource);
   void *map=agx_bo_map(rsrc->bo);
   if(!map) {
     AGX_WIN32_ASAHI_BACKEND *backend=agx_device(ctx->screen)->windows_private;
@@ -228,8 +261,6 @@ void *AgxWin32AsahiBufferWriteMap(struct pipe_context *ctx,
         backend?(unsigned)backend->Failed:~0u,rsrc->bo->refcnt,rsrc->bo->size);
     return NULL;
   }
-  util_range_add(resource,&rsrc->valid_buffer_range,0,(unsigned)resource->width0);
-  BITSET_SET(rsrc->data_valid,0);
   return map;
 }
 int AgxWin32AsahiBufferCopy(struct pipe_context *ctx,
@@ -241,13 +272,15 @@ int AgxWin32AsahiBufferCopy(struct pipe_context *ctx,
      dst_offset>dst->width0 || bytes>dst->width0-dst_offset ||
      src_offset>src->width0 || bytes>src->width0-src_offset) return 0;
   struct agx_resource *d=agx_resource(dst),*s=agx_resource(src);
-  if(!d->bo || !s->bo) return 0;
+  if(!d->bo || !s->bo || agx_context(ctx)->any_faults) return 0;
   /* EXP1312: a CPU copy syncs like a CPU transfer (Asahi
    * agx_prepare_for_map): the source's GPU writer, and every batch using
    * the destination. CopyStructureCount's compute copy had written the
    * count on the GPU while this memcpy read the stale CPU contents. */
   agx_sync_writer(agx_context(ctx),s,"Windows buffer copy source");
+  if(agx_context(ctx)->any_faults) return 0;
   agx_sync_readers(agx_context(ctx),d,"Windows buffer copy destination");
+  if(agx_context(ctx)->any_faults) return 0;
   unsigned char *dm=(unsigned char *)agx_bo_map(d->bo);
   unsigned char *sm=(unsigned char *)agx_bo_map(s->bo);
   if(!dm || !sm) return 0;
@@ -260,10 +293,115 @@ int AgxWin32AsahiBufferCopy(struct pipe_context *ctx,
 /* D3D12 C4b: the GPU virtual address of a buffer resource (Asahi's own
  * mapping, agx_map_gpu), which D3D12 reports as the resource's address and
  * records in copies; 0 for anything but a buffer with storage. */
+#ifdef APPLE_AGX_GPUVA_WINSYS
+/* C53 B1: a buffer resource whose BO is a virtual (reserved) BO of Bytes:
+ * created as a one-tile buffer, then given the virtual BO. Tiles map the
+ * device scratch BO until AgxWin32AsahiMapReservedTiles maps backing
+ * buffer tiles (64 KiB, from the backing resource's start). */
+struct pipe_resource *AgxWin32AsahiCreateReservedBuffer(struct pipe_screen *screen,
+                                                        APPLE_AGX_U64 bytes) {
+  struct pipe_resource templ;
+  if(!screen || !bytes || bytes>UINT32_MAX) return NULL;
+  memset(&templ,0,sizeof(templ));
+  templ.target=PIPE_BUFFER;
+  templ.format=PIPE_FORMAT_R8_UNORM;
+  templ.width0=0x10000u;
+  templ.height0=templ.depth0=templ.array_size=1;
+  templ.usage=PIPE_USAGE_DEFAULT;
+  templ.bind=PIPE_BIND_VERTEX_BUFFER|PIPE_BIND_INDEX_BUFFER|PIPE_BIND_CONSTANT_BUFFER|
+             PIPE_BIND_SHADER_BUFFER|PIPE_BIND_SAMPLER_VIEW;
+  struct pipe_resource *resource=screen->resource_create(screen,&templ);
+  if(!resource) return NULL;
+  struct agx_device *device=agx_device(screen);
+  struct agx_bo *virt=AgxWin32AsahiCreateVirtualBo(device,(size_t)bytes,"Reserved buffer");
+  if(!virt) { AgxWin32AsahiResourceRelease(&resource); return NULL; }
+  /* C53 Tier 2: reads through the read-only shadow return 0 for unmapped
+   * tiles (the shadow VA is what texel-buffer views read) */
+  if(!AgxWin32AsahiAttachReadShadow(virt)) {
+    agx_bo_unreference(device,virt);
+    AgxWin32AsahiResourceRelease(&resource);
+    return NULL;
+  }
+  struct agx_resource *rsrc=agx_resource(resource);
+  agx_bo_unreference(device,rsrc->bo);
+  rsrc->bo=virt;
+  resource->width0=(unsigned)bytes;
+  rsrc->layout.size_B=bytes;
+  return resource;
+}
+int AgxWin32AsahiMapReservedTiles(struct pipe_resource *reserved,unsigned first,unsigned count,
+                                  struct pipe_resource *backing,unsigned backing_tile) {
+  if(!reserved || reserved->target!=PIPE_BUFFER ||
+     (backing && (backing->target!=PIPE_BUFFER || backing->screen!=reserved->screen))) return 0;
+  return AgxWin32AsahiMapVirtualTiles(agx_resource(reserved)->bo,first,count,
+                                      backing?agx_resource(backing)->bo:NULL,backing_tile);
+}
+/* C53 T2D (D3D12-C53-tiled-textures.md): a reserved Texture2D (array),
+ * created by Asahi with the plain GPU-tiled modifier (no compression) while
+ * the winsys makes its image BO a virtual BO, then given its Sparse Block
+ * table. Refused where agx_win32_sparse cannot tile the layout. */
+struct pipe_resource *AgxWin32AsahiCreateReservedTexture(struct pipe_screen *screen,
+                                                         const struct pipe_resource *templ) {
+  static const uint64_t tiled=DRM_FORMAT_MOD_APPLE_GPU_TILED;
+  unsigned standard,packed,tiles_x[AIL_MAX_MIP_LEVELS],tiles_y[AIL_MAX_MIP_LEVELS];
+  if(!screen || !templ || !screen->resource_create_with_modifiers ||
+     (templ->target!=PIPE_TEXTURE_2D && templ->target!=PIPE_TEXTURE_2D_ARRAY) ||
+     templ->nr_samples>1 || templ->depth0!=1) return NULL;
+  struct agx_device *device=agx_device(screen);
+  if(!AgxWin32AsahiArmVirtual(device)) return NULL;
+  struct pipe_resource *resource=screen->resource_create_with_modifiers(screen,templ,&tiled,1);
+  AgxWin32AsahiDisarmVirtual(device);
+  if(!resource) return NULL;
+  struct agx_resource *rsrc=agx_resource(resource);
+  if(!AgxWin32AsahiIsVirtual(rsrc->bo) ||
+     !AgxWin32SparseTiling(&rsrc->layout,&standard,tiles_x,tiles_y,&packed) ||
+     rsrc->layout.sparse_table_size_B>SIZE_MAX ||
+     !AgxWin32AsahiAttachSparseTable(rsrc->bo,(size_t)rsrc->layout.sparse_table_size_B)) {
+    AgxWin32AsahiResourceRelease(&resource);
+    return NULL;
+  }
+  return resource;
+}
+int AgxWin32AsahiReservedTextureTiling(struct pipe_resource *reserved,unsigned *standard_mips,
+                                       unsigned *tiles_x,unsigned *tiles_y,unsigned *packed_tiles) {
+  if(!reserved || reserved->target==PIPE_BUFFER ||
+     !AgxWin32AsahiSparseTableVa(agx_resource(reserved)->bo)) return 0;
+  return AgxWin32SparseTiling(&agx_resource(reserved)->layout,standard_mips,tiles_x,tiles_y,
+                              packed_tiles);
+}
+int AgxWin32AsahiMapReservedTextureTile(struct pipe_resource *reserved,unsigned layer,int packed,
+                                        unsigned mip,unsigned x,unsigned y,
+                                        struct pipe_resource *heap,unsigned heap_tile) {
+  AGX_WIN32_SPARSE_PAGES pages;
+  if(!reserved || reserved->target==PIPE_BUFFER ||
+     !AgxWin32AsahiSparseTableVa(agx_resource(reserved)->bo) ||
+     (heap && (heap->target!=PIPE_BUFFER || heap->screen!=reserved->screen))) return 0;
+  const struct ail_layout *layout=&agx_resource(reserved)->layout;
+  if(!(packed ? AgxWin32SparsePackedTile(layout,layer,x,&pages) :
+                AgxWin32SparseStandardTile(layout,layer,mip,x,y,&pages))) return 0;
+  return AgxWin32AsahiMapVirtualTilePages(agx_resource(reserved)->bo,&pages,
+                                          heap?agx_resource(heap)->bo:NULL,heap_tile);
+}
+#endif
+
 APPLE_AGX_U64 AgxWin32AsahiBufferGpuAddress(struct pipe_resource *resource) {
   if(!resource || resource->target!=PIPE_BUFFER) return 0;
   struct agx_resource *native=agx_resource(resource);
   return native->bo ? agx_map_gpu(native) : 0;
+}
+/* rc110 receipt-only: {tiling (ail_tiling: 0 linear, 1 GPU tiled), bit 4 the
+ * layout is compressed (ail_layout.compressed), bit 5 the modifier is the
+ * compressed one, bits 8.. the layout size in KiB} of a created resource, so
+ * a log shows whether a render target took Asahi's default lossless
+ * compression (agx_select_best_modifier) without a hardware probe. */
+APPLE_AGX_U32 AgxWin32AsahiResourceLayoutFacts(struct pipe_resource *resource) {
+  if(!resource) return 0;
+  const struct agx_resource *native=agx_resource(resource);
+  const APPLE_AGX_U64 kib=native->layout.size_B>>10;
+  return ((APPLE_AGX_U32)native->layout.tiling & 0xfu) |
+         (native->layout.compressed ? 0x10u : 0u) |
+         (ail_is_drm_modifier_compressed(native->modifier) ? 0x20u : 0u) |
+         (APPLE_AGX_U32)((kib>0xffffffull ? 0xffffffull : kib)<<8);
 }
 int AgxWin32AsahiResourceBusy(struct pipe_context *ctx,struct pipe_resource *resource) {
   if(!ctx || !resource || resource->screen!=ctx->screen) return 1;
@@ -283,6 +421,259 @@ int AgxWin32AsahiResourceBusy(struct pipe_context *ctx,struct pipe_resource *res
     if(BITSET_TEST(native->batches.submitted,i)) return 1;
   }
   return 0;
+}
+/* D3D12 C47: the descriptor-heap form of a texture view: Asahi's packed
+ * texture descriptor (AGX_TEXTURE_LENGTH bytes, agx_win32_pack_sampler_view
+ * in the native state) and the resource's layout key, which changes when
+ * Asahi replaces the BO or changes its tiling/compression (a heap
+ * descriptor is re-packed then). */
+void agx_win32_pack_sampler_view(void *out, struct pipe_sampler_view *view);
+APPLE_AGX_U64 AgxWin32AsahiResourceLayoutKey(struct pipe_resource *resource) {
+  if(!resource) return 0u;
+  struct agx_resource *rsrc=agx_resource(resource);
+  if(!rsrc->bo || !rsrc->bo->va) return 0u;
+  return rsrc->bo->va->addr ^ ((APPLE_AGX_U64)rsrc->layout.tiling<<56) ^
+         ((APPLE_AGX_U64)rsrc->layout.compressed<<62);
+}
+int AgxWin32AsahiTextureDescriptor(struct pipe_context *ctx, struct pipe_resource *resource,
+    const struct pipe_sampler_view *templ, void *out, APPLE_AGX_U64 *key) {
+  if(!ctx || !resource || !templ || !out || !key || resource->screen!=ctx->screen) return 0;
+  struct pipe_sampler_view *view=ctx->create_sampler_view(ctx,resource,templ);
+  if(!view) return 0;
+  agx_win32_pack_sampler_view(out,view);
+  *key=AgxWin32AsahiResourceLayoutKey(resource);
+  pipe_sampler_view_reference(&view,NULL);
+  return 1;
+}
+void AgxWin32AsahiNullTextureDescriptor(void *out) {
+  if(out) agx_set_null_texture((struct agx_texture_packed *)out);
+}
+unsigned AgxWin32AsahiTextureDescriptorBytes(void) { return AGX_TEXTURE_LENGTH; }
+/* D3D12 C47: an image's texture and PBE descriptors for a descriptor heap.
+ * Binding it (spare compute image slot) applies Asahi's legalisation --
+ * decompressing a written image -- before the descriptors are packed. */
+void agx_win32_pack_image_view(void *texture, void *pbe, const struct pipe_image_view *view);
+int AgxWin32AsahiImageDescriptors(struct pipe_context *ctx, const struct pipe_image_view *view,
+    void *texture, void *pbe, APPLE_AGX_U64 *key) {
+  if(!ctx || !view || !view->resource || !texture || !pbe || !key || view->resource->screen!=ctx->screen) return 0;
+  if(agx_context(ctx)->any_faults) return 0;
+  const unsigned slot=PIPE_MAX_SHADER_IMAGES-1u;
+  ctx->set_shader_images(ctx,MESA_SHADER_COMPUTE,slot,1,0,view);
+  if(agx_context(ctx)->any_faults) {
+    ctx->set_shader_images(ctx,MESA_SHADER_COMPUTE,slot,0,1,NULL);
+    return 0;
+  }
+  agx_win32_pack_image_view(texture,pbe,view);
+  ctx->set_shader_images(ctx,MESA_SHADER_COMPUTE,slot,0,1,NULL);
+  *key=AgxWin32AsahiResourceLayoutKey(view->resource);
+  return 1;
+}
+unsigned AgxWin32AsahiPbeDescriptorBytes(void) { return AGX_PBE_LENGTH; }
+/* D3D12 C47: a sampler CSO's heap form: the AGX sampler without custom
+ * border (the form Asahi's sampler heap takes, agx_uniforms.c), its LOD
+ * bias as fp16 and whether it needs a custom border colour */
+unsigned AgxWin32AsahiSamplerDescriptorBytes(void) { return AGX_SAMPLER_LENGTH; }
+int AgxWin32AsahiSamplerDescriptor(void *cso, void *out, APPLE_AGX_U16 *bias, int *custom_border) {
+  struct agx_sampler_state *so=cso;
+  if(!so || !out || !bias || !custom_border) return 0;
+  memcpy(out,&so->desc_without_custom_border,AGX_SAMPLER_LENGTH);
+  *bias=so->lod_bias_as_fp16;
+  *custom_border=so->uses_custom_border;
+  return 1;
+}
+/* D3D12 RC108: a sampler CSO's built-in border colour
+ * (agx_win32_sampler_border.h), in the form slots bind and the form the
+ * sampler heap takes; a custom border keeps Asahi's own packing */
+void AgxWin32AsahiSamplerSetBorder(void *cso, unsigned colour) {
+  struct agx_sampler_state *so=cso;
+  if(!so || so->uses_custom_border || colour>AGX_WIN32_BORDER_OPAQUE_WHITE) return;
+  AgxWin32SamplerSetBorder(&so->desc,colour);
+  AgxWin32SamplerSetBorder(&so->desc_without_custom_border,colour);
+}
+void AgxWin32AsahiSetDrawBindings(struct pipe_context *pctx,
+    int (*bindings)(void *), void *data) {
+  struct agx_context *ctx=agx_context(pctx);
+  ctx->windows_draw_bindings=bindings;
+  ctx->windows_draw_bindings_data=data;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(bindings) {
+    ctx->windows_indirect_path=0;
+    ctx->windows_indirect_reason=0;
+    ctx->windows_indirect_encode_us=0;
+  }
+#endif
+}
+void AgxWin32AsahiSetIndirectIndexBuffer(struct pipe_context *pctx,
+    struct pipe_resource *resource, unsigned offset) {
+  struct agx_context *ctx=agx_context(pctx);
+  ctx->windows_indirect_index_resource=resource;
+  ctx->windows_indirect_index_offset=resource ? offset : 0;
+}
+void AgxWin32AsahiIndirectMetrics(struct pipe_context *pctx, unsigned out[3]) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  struct agx_context *ctx=agx_context(pctx);
+  out[0]=ctx->windows_indirect_path;
+  out[1]=ctx->windows_indirect_encode_us;
+  out[2]=ctx->windows_indirect_reason;
+#else
+  (void)pctx;
+  out[0]=2;out[1]=out[2]=0;
+#endif
+}
+/* rc76: whether pipe->clear(Buffers) on the bound framebuffer clears every
+ * buffer fast (load-op clear): agx_clear (agx_pipe.c) clears fast exactly
+ * the buffers its batch -- agx_get_batch, taken here as agx_clear takes it
+ * -- has neither drawn nor loaded, and draws a u_blitter quad for the rest. */
+int AgxWin32AsahiClearIsFast(struct pipe_context *pctx, unsigned buffers) {
+  struct agx_context *ctx=pctx?agx_context(pctx):NULL;
+  if(!ctx || ctx->any_faults) return 0;
+  struct agx_batch *batch=agx_get_batch(ctx);
+  return !ctx->any_faults && batch && !(buffers & (batch->draw | batch->load));
+}
+/* rc76b: right after a fast pipe->clear of the bound framebuffer, colour
+ * buffer Rt's own clear colour: agx_clear uploads one clamped colour per
+ * fast-cleared buffer into the batch pool (uploaded_clear_color), which only
+ * the background program reads when the batch is flushed, so replacing it
+ * before the batch draws Rt clears Rt with Color. A buffer the clear did not
+ * set (a render condition skipped it) is left alone. 0 on a fault. */
+int AgxWin32AsahiSetFastClearColor(struct pipe_context *pctx, unsigned rt,
+    const union pipe_color_union *color) {
+  struct agx_context *ctx=pctx?agx_context(pctx):NULL;
+  if(!ctx || ctx->any_faults || !color || rt>=PIPE_MAX_COLOR_BUFS) return 0;
+  struct agx_batch *batch=agx_get_batch(ctx);
+  if(ctx->any_faults || !batch) return 0;
+  const unsigned bit=PIPE_CLEAR_COLOR0<<rt;
+  if(!(batch->clear & bit)) return 1;
+  if((batch->draw & bit) || rt>=batch->key.nr_cbufs || !batch->key.cbufs[rt].texture) return 0;
+  if(!AgxWin32AsahiBatchEnter(batch)) { ctx->any_faults=true; return 0; }
+  union pipe_color_union clamped=util_clamp_color(batch->key.cbufs[rt].format,color);
+  batch->uploaded_clear_color[rt]=agx_pool_upload_aligned(&batch->pool,clamped.f,sizeof(clamped.f),16);
+  if(!AgxWin32AsahiBatchLeave(batch)) { ctx->any_faults=true; return 0; }
+  return batch->uploaded_clear_color[rt]!=0;
+}
+/* EXP1927: a residency failure can occur while acquiring a batch (or
+ * flushing a hazard in a prior heap chunk). Never initialize its encoder or
+ * grow its sampler heap after that failure. Kind 4 names this scene bridge. */
+static struct agx_batch *heap_batch(struct agx_context *ctx, int compute) {
+  if(ctx->any_faults) return NULL;
+  struct agx_batch *batch=compute ? agx_get_compute_batch(ctx) : agx_get_batch(ctx);
+  if(ctx->any_faults) return NULL;
+  if(!batch || !(compute ? batch->cdm.bo && batch->cdm.current :
+                           batch->vdm.bo && batch->vdm.current)) {
+    AgxWin32AsahiMarkContextFault(ctx,(4u<<16)|__LINE__);
+    return NULL;
+  }
+  return batch;
+}
+/* agx_set_sampler_uniforms can append each bound native sampler later in
+ * the draw/dispatch. Count all stages conservatively, including helper work;
+ * these entries do not deduplicate against the explicit heap union. */
+static unsigned heap_sampler_headroom(const struct agx_context *ctx) {
+  unsigned count = 0;
+  for (unsigned stage = 0; stage < MESA_SHADER_STAGES; ++stage) {
+    if (!ctx->stage[stage].shader || !ctx->stage[stage].shader->uses_bindless_samplers)
+      continue;
+    for (unsigned mask = ctx->stage[stage].valid_samplers; mask; mask &= mask - 1u)
+      ++count;
+  }
+  return count;
+}
+/* D3D12 C47: heap samplers enter the sampler heap of the batch the next draw
+ * (dispatch) uses, deduplicated; handles are 28 + heap index (agx_uniforms.c).
+ * A batch whose heap cannot take them all is flushed first. */
+int AgxWin32AsahiBatchSamplerHandles(struct pipe_context *pctx, int compute, const void *packed,
+    unsigned stride, unsigned count, APPLE_AGX_U16 *handles) {
+  if(!pctx || !count) return 1;
+  if(!packed || !handles || count>AGX_SAMPLER_HEAP_SIZE) return 0;
+  struct agx_context *ctx=agx_context(pctx);
+  struct agx_device *dev=agx_device(pctx->screen);
+  struct agx_batch *batch=heap_batch(ctx,compute);
+  if(!batch) return 0;
+  unsigned reserve=heap_sampler_headroom(ctx);
+  if(reserve>AGX_SAMPLER_HEAP_SIZE-count) return 0;
+  if(batch->sampler_heap.count>AGX_SAMPLER_HEAP_SIZE-count-reserve) {
+    agx_flush_batch_for_reason(ctx,batch,"D3D12 heap samplers");
+    batch=heap_batch(ctx,compute);
+    if(!batch) return 0;
+  }
+  for(unsigned i=0;i<count;++i) {
+    const struct agx_sampler_packed *sampler=(const struct agx_sampler_packed *)((const char *)packed+(size_t)i*stride);
+    const struct agx_sampler_packed *heap=batch->sampler_heap.bo ? agx_bo_map(batch->sampler_heap.bo) : NULL;
+    if(batch->sampler_heap.bo && !heap) {
+      AgxWin32AsahiMarkContextFault(ctx,(4u<<16)|__LINE__);
+      return 0;
+    }
+    unsigned index=batch->sampler_heap.count;
+    for(unsigned j=0;heap && j<batch->sampler_heap.count;++j)
+      if(!memcmp(&heap[j],sampler,sizeof(*sampler))) { index=j; break; }
+    if(index==batch->sampler_heap.count)
+      index=agx_sampler_heap_add(dev,&batch->sampler_heap,(struct agx_sampler_packed *)sampler);
+    if(index>=AGX_SAMPLER_HEAP_SIZE) {
+      AgxWin32AsahiMarkContextFault(ctx,(4u<<16)|__LINE__);
+      return 0;
+    }
+    handles[i]=(APPLE_AGX_U16)(28u+index);
+  }
+  return 1;
+}
+void AgxWin32AsahiNullPbeDescriptor(void *out) {
+  if(out) agx_set_null_pbe((struct agx_pbe_packed *)out);
+}
+/* D3D12 C47: resources a descriptor heap makes reachable become reads of
+ * the batch the next draw (or dispatch) uses, for residency and hazards */
+void AgxWin32AsahiBatchReadResources(struct pipe_context *pctx, struct pipe_resource *const *resources,
+    unsigned count, int compute) {
+  if(!pctx || !resources || !count) return;
+  struct agx_context *ctx=agx_context(pctx);
+  struct agx_batch *batch=heap_batch(ctx,compute);
+  if(!batch) return;
+  /* EXP1855: Asahi tracks a batch's resources only after its state is
+   * initialised (agx_batch_writes_internal asserts batch->initialized; the
+   * draw/launch paths call agx_batch_init_state first). It is idempotent. */
+  agx_batch_init_state(batch);
+  for(unsigned i=0;i<count && !ctx->any_faults;++i)
+    if(resources[i] && resources[i]->screen==pctx->screen) agx_batch_reads(batch,agx_resource(resources[i]));
+}
+/* D3D12 C47: resources a descriptor heap lets the draw (dispatch) write --
+ * invisible to Asahi's binding-based writer tracking -- are written by its
+ * batch, so later readers and writers flush it first */
+void AgxWin32AsahiBatchWriteResources(struct pipe_context *pctx, struct pipe_resource *const *resources,
+    unsigned count, int compute) {
+  if(!pctx || !resources || !count) return;
+  struct agx_context *ctx=agx_context(pctx);
+  struct agx_batch *batch=heap_batch(ctx,compute);
+  if(!batch) return;
+  agx_batch_init_state(batch); /* as AgxWin32AsahiBatchReadResources */
+  for(unsigned i=0;i<count && !ctx->any_faults;++i) {
+    if(!resources[i] || resources[i]->screen!=pctx->screen) continue;
+    struct agx_resource *rsrc=agx_resource(resources[i]);
+    if(resources[i]->target==PIPE_BUFFER)
+      agx_batch_writes_range(batch,rsrc,0,resources[i]->width0);
+    else
+      for(unsigned level=0;level<=resources[i]->last_level && !ctx->any_faults;++level) agx_batch_writes(batch,rsrc,level);
+    batch->incoherent_writes=true;
+  }
+}
+/* D3D12 C46 receipt-only: the completion fence of the context's newest
+ * accepted submission; fences increase with every submission. */
+APPLE_AGX_U64 AgxWin32AsahiContextNewestFence(struct pipe_context *ctx) {
+  return ctx ? AgxWin32AsahiNewestFence(agx_context(ctx)) : 0u;
+}
+/* rc101 receipt-only: the lean CDM barrier mode and word, and the barriers
+ * left lean and full since the last call (agx_win32_cdm_barrier.h). */
+void AgxWin32AsahiContextCdmBarriers(struct pipe_context *ctx, APPLE_AGX_U32 out[4]) {
+  memset(out,0,4*sizeof(*out));
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  if(!ctx) return;
+  struct agx_context *n=agx_context(ctx);
+  out[0]=n->windows_cdm_barriers[2];
+  out[1]=n->windows_cdm_barriers[3];
+  out[2]=n->windows_cdm_barriers[0];
+  out[3]=n->windows_cdm_barriers[1];
+  n->windows_cdm_barriers[0]=n->windows_cdm_barriers[1]=0;
+#else
+  (void)ctx;
+#endif
 }
 void AgxWin32AsahiContextRetireDiagnostic(struct pipe_context *ctx,
     APPLE_AGX_U32 state[12]) {
@@ -376,8 +767,19 @@ int AgxWin32AsahiSetStreamOutputTargetOffsetForTest(
   util_range_add(&offset->base,&offset->valid_buffer_range,0,sizeof(value));
   return 1;
 }
+struct pipe_resource *AgxWin32AsahiStreamOutputOffset(struct pipe_stream_output_target *base) {
+  return base?agx_so_target(base)->offset:NULL;
+}
 int AgxWin32AsahiContextFaulted(struct pipe_context *ctx) {
   return !ctx || agx_context(ctx)->any_faults;
+}
+/* OV4: submit the open compute batch now (a split at a barrier) */
+int AgxWin32AsahiFlushComputeBatch(struct pipe_context *ctx) {
+  struct agx_context *native=ctx ? agx_context(ctx) : NULL;
+  struct agx_batch *batch=native ? native->batch : NULL;
+  if(!batch || native->any_faults || !agx_batch_is_compute(batch) || !agx_batch_is_active(batch)) return 0;
+  agx_flush_batch_for_reason(native,batch,"OV4 compute split");
+  return !native->any_faults;
 }
 int AgxWin32AsahiContextFlushForPresent(struct pipe_context *ctx) {
   if(!ctx) return 0;

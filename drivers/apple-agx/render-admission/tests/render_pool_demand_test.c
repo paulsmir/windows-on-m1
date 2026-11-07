@@ -4,7 +4,7 @@
 #include <string.h>
 
 #define G ADMISSION_POOL_DEMAND_GRANULE
-#define COUNT 64u /* 4 MiB segment */
+#define COUNT 4096u /* 256 MiB segment, including multi-run placements */
 
 static unsigned char mapped[COUNT], busy[COUNT], broken[COUNT];
 static unsigned commits, commit_calls, releases, fail_commit_call;
@@ -97,6 +97,40 @@ static void test_invalid_placements(void)
     assert(a.Bytes == 0 && mapped_count() == 0);
     /* The last granule is placeable. */
     assert(AdmissionPoolDemandPlace(&pool, &a, (COUNT - 1) * G, G) == AdmissionPoolPlaced);
+}
+
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * C75b: a large placement must own and commit its entire range, including
+ * the tail past 16 MiB and past one bounded commit run. Reclaim must not
+ * remove that CPU-accessible tail while the allocation owns it. */
+static void test_large_placement_backs_the_tail(void)
+{
+    static const unsigned counts[] = {257u, 400u, 1024u, 1025u};
+    for (unsigned c = 0; c < sizeof(counts) / sizeof(counts[0]); ++c) {
+        ADMISSION_POOL_PLACEMENT a = {0, 0};
+        unsigned n = counts[c];
+        reset();
+        pool.MaxRun = 1024u;
+        assert(AdmissionPoolDemandPlace(&pool, &a, 7 * G, n * G) == AdmissionPoolPlaced);
+        assert(commits == n && commit_calls == (n == 1025u ? 2u : 1u));
+        for (unsigned i = 7; i < 7 + n; ++i)
+            assert(mapped[i] && granules[i].Owner == &a);
+        assert(!mapped[6] && !mapped[7 + n]);
+        assert(AdmissionPoolDemandReclaim(&pool) == 0);
+        assert(mapped[7 + n - 1]);
+        AdmissionPoolDemandUnplace(&pool, &a);
+        assert(AdmissionPoolDemandReclaim(&pool) == n && mapped_count() == 0);
+    }
+    /* A failure in the second run never advertises a partial placement. */
+    {
+        ADMISSION_POOL_PLACEMENT a = {0, 0};
+        reset();
+        pool.MaxRun = 1024u;
+        fail_commit_call = 2u;
+        assert(AdmissionPoolDemandPlace(&pool, &a, 7 * G, 1025 * G) == AdmissionPoolPlaceNoMemory);
+        assert(a.Bytes == 0 && mapped_count() == 1024 && !mapped[1031]);
+        assert(AdmissionPoolDemandReclaim(&pool) == 1024 && mapped_count() == 0);
+    }
 }
 
 static void test_commit_failure_owns_nothing(void)
@@ -219,10 +253,27 @@ static void test_busy_and_failed_releases(void)
     assert(AdmissionPoolDemandReclaim(&pool) == 1);
     assert(pool.Stats.BusyRetries == 1 && pool.Stats.ReleaseFailures == 1);
     assert(mapped[1] && mapped[2] && granules[2].Pinned);
-    /* The busy granule retries; the failed one is never retried. */
-    assert(AdmissionPoolDemandReclaim(&pool) == 0 && pool.Stats.BusyRetries == 2 &&
+    /* Busy cannot spin on the same completed paging epoch. */
+    assert(AdmissionPoolDemandReclaim(&pool) == 0 && pool.Stats.BusyRetries == 1 &&
            pool.Stats.ReleaseFailures == 1);
+    for (unsigned i = 0; i < 1000; ++i) {
+        assert(AdmissionPoolDemandReclaimAged(&pool, i) == 0);
+        assert(AdmissionPoolDemandReclaim(&pool) == 0);
+    }
+    assert(pool.Stats.BusyRetries == 1);
+    AdmissionPoolDemandExecuted(&pool, 0); /* first executed sequence */
+    assert(AdmissionPoolDemandReclaim(&pool) == 0);
+    assert(pool.Stats.BusyRetries == 2);
+    AdmissionPoolDemandExecuted(&pool, 0); /* same: no progress */
+    assert(AdmissionPoolDemandReclaim(&pool) == 0);
+    assert(pool.Stats.BusyRetries == 2);
+    AdmissionPoolDemandExecuted(&pool, 7);
+    assert(AdmissionPoolDemandReclaim(&pool) == 0);
+    assert(pool.Stats.BusyRetries == 3);
+    AdmissionPoolDemandExecuted(&pool, 6); /* stale: no progress */
     busy[1] = 0;
+    assert(AdmissionPoolDemandReclaim(&pool) == 0);
+    AdmissionPoolDemandExecuted(&pool, 8);
     assert(AdmissionPoolDemandReclaim(&pool) == 1 && !mapped[1] && mapped[2]);
     assert(pool.Candidates == 0);
 }
@@ -340,8 +391,122 @@ static void test_segment_size(void)
     assert(AdmissionPoolDemandSegmentBytes(0, 512 * MiB) == 512 * MiB);
 }
 
+/* rc109: an independent transcription of dxgmms2 0x74830 (system partition,
+ * feature path) after the 0xaa3c8 clamps, in bytes. */
+static unsigned long long vidmm_share(unsigned long long ram, unsigned p,
+                                      unsigned m, unsigned c_mib)
+{
+    unsigned long long x9, x8, x11, cpu = (unsigned long long)c_mib << 20;
+    unsigned g360;
+    if (p <= 5) p = 5;
+    if (p >= 100) p = 100;
+    g360 = (m < 100 ? m : 100) <= p ? p : (m < 100 ? m : 100);
+    x9 = p * ram / 100;
+    x8 = g360 * ram / 100;
+    x11 = ram > cpu && ram - cpu > x9 ? ram - cpu : x9;
+    return x8 < x11 ? x8 : x11;
+}
+
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * dxgmms2 refuses the adapter (STATUS_UNSUCCESSFUL, "system policy
+ * violated") when segment 3 exceeds VidMm's graphics share less 8 MiB, so a
+ * larger pool must never outrun the machine policy VidMm actually holds;
+ * Wom1PoolPercent=0 and Windows' default policy must keep the exact pre-rc109
+ * size; a key written after boot must not enlarge the segment. */
+static void test_graphics_policy(void)
+{
+    const unsigned long long MiB = 1ULL << 20, GiB = 1ULL << 30;
+    const unsigned long long win = 4 * GiB, broker = 4608 * MiB;
+    const unsigned long long j313 = 7218794496ULL; /* EXP2046 ram_bytes */
+    static const unsigned percents[] = {0, 3, 5, 30, 49, 50, 60, 75, 80, 99, 100, 150};
+    static const unsigned maxes[] = {0, 50, 80, 100, 150};
+    static const unsigned cpu[] = {0, 4096, 16384};
+    static const unsigned pool[] = {0, 1, 50, 67, 75, 100, 250};
+    ADMISSION_POOL_GRAPHICS_POLICY policy;
+    AdmissionPoolGraphicsPolicyDefault(&policy);
+    assert(policy.Percent == 50 && policy.MaxPercent == 80 &&
+           policy.CpuOnlyMiB == 16384 && policy.WrittenAfterBoot == 0);
+    /* The defaults are the documented formula the pre-rc109 code used. */
+    for (unsigned long long ram = 512 * MiB; ram <= 160 * GiB; ram += 333 * MiB) {
+        unsigned long long pre = AdmissionPoolDemandSegmentBytesReserve(
+            ram, win, broker, ADMISSION_POOL_DEMAND_APERTURE_RESERVE);
+        assert(AdmissionPoolGraphicsShareBytes(ram, 0) ==
+               vidmm_share(ram, 50, 80, 16384));
+        assert(AdmissionPoolGraphicsShareBytes(ram, &policy) ==
+               AdmissionPoolGraphicsShareBytes(ram, 0));
+        for (unsigned i = 0; i != sizeof(pool) / sizeof(pool[0]); ++i)
+            assert(AdmissionPoolDemandSegmentBytesShare(ram, win, broker,
+                       ADMISSION_POOL_DEMAND_APERTURE_RESERVE,
+                       AdmissionPoolDemandShareBytes(ram, &policy, pool[i])) == pre);
+    }
+    /* Never past VidMm's share less its margin, whatever the inputs. */
+    for (unsigned long long ram = GiB; ram <= 96 * GiB; ram += 1777 * MiB)
+    for (unsigned a = 0; a != sizeof(percents) / sizeof(percents[0]); ++a)
+    for (unsigned b = 0; b != sizeof(maxes) / sizeof(maxes[0]); ++b)
+    for (unsigned c = 0; c != sizeof(cpu) / sizeof(cpu[0]); ++c)
+    for (unsigned d = 0; d != sizeof(pool) / sizeof(pool[0]); ++d)
+    for (unsigned after = 0; after != 2; ++after) {
+        unsigned long long vidmm = vidmm_share(ram, percents[a], maxes[b], cpu[c]);
+        unsigned long long boot = vidmm_share(ram, 50, 80, 16384);
+        unsigned long long share, seg;
+        policy.Percent = percents[a]; policy.MaxPercent = maxes[b];
+        policy.CpuOnlyMiB = cpu[c]; policy.WrittenAfterBoot = after;
+        share = AdmissionPoolDemandShareBytes(ram, &policy, pool[d]);
+        assert(AdmissionPoolGraphicsShareBytes(ram, &policy) == vidmm);
+        seg = AdmissionPoolDemandSegmentBytesShare(ram, 1ULL << 40, 1ULL << 40,
+                  ADMISSION_POOL_DEMAND_APERTURE_RESERVE_HALF, share);
+        if (pool[d] == 0) {
+            assert(share == boot); /* kill switch: the pre-rc109 formula */
+            continue;
+        }
+        assert(share <= vidmm);
+        assert(seg == 0 || seg + ADMISSION_POOL_POLICY_SEGMENT_MARGIN <= vidmm);
+        if (after) assert(share <= boot);
+        /* Wom1PoolPercent only grows the segment. */
+        if (!after || vidmm >= boot)
+            assert(share >= (vidmm < boot ? vidmm : boot));
+    }
+    /* J313 (6884 MiB): Windows' default policy keeps 3136 MiB. */
+    AdmissionPoolGraphicsPolicyDefault(&policy);
+    assert(AdmissionPoolDemandSegmentBytesShare(j313, win, broker,
+               ADMISSION_POOL_DEMAND_APERTURE_RESERVE,
+               AdmissionPoolDemandShareBytes(j313, &policy,
+                                             ADMISSION_POOL_PERCENT_DEFAULT)) ==
+           3136 * MiB);
+    /* SystemPartitionCommitLimitPercentage=75: 5163 - 256 MiB, the 4 GiB
+     * window binds; 60: 4130 - 256 MiB in 64 MiB steps. */
+    policy.Percent = 75;
+    assert(AdmissionPoolDemandSegmentBytesShare(j313, win, broker,
+               ADMISSION_POOL_DEMAND_APERTURE_RESERVE,
+               AdmissionPoolDemandShareBytes(j313, &policy, 75)) == 4 * GiB);
+    assert(AdmissionPoolDemandSegmentBytesShare(j313, 8 * GiB, 8 * GiB,
+               ADMISSION_POOL_DEMAND_APERTURE_RESERVE,
+               AdmissionPoolDemandShareBytes(j313, &policy, 75)) == 4864 * MiB);
+    policy.Percent = 60;
+    assert(AdmissionPoolDemandSegmentBytesShare(j313, win, broker,
+               ADMISSION_POOL_DEMAND_APERTURE_RESERVE,
+               AdmissionPoolDemandShareBytes(j313, &policy, 75)) == 3840 * MiB);
+    /* Written after boot: VidMm still holds the boot value. */
+    policy.Percent = 75; policy.WrittenAfterBoot = 1;
+    assert(AdmissionPoolDemandSegmentBytesShare(j313, win, broker,
+               ADMISSION_POOL_DEMAND_APERTURE_RESERVE,
+               AdmissionPoolDemandShareBytes(j313, &policy, 75)) == 3136 * MiB);
+    /* A lowered policy is honoured (the pre-rc109 size would fail start). */
+    policy.Percent = 40; policy.WrittenAfterBoot = 0;
+    assert(AdmissionPoolDemandSegmentBytesShare(j313, win, broker,
+               ADMISSION_POOL_DEMAND_APERTURE_RESERVE,
+               AdmissionPoolDemandShareBytes(j313, &policy, 75)) == 2496 * MiB);
+    /* Even with no aperture reserve the 8 MiB margin holds. */
+    assert(AdmissionPoolDemandSegmentBytesShare(8 * GiB, win, 8 * GiB, 0,
+                                                GiB + 4 * MiB) == 960 * MiB);
+    /* Unknown RAM keeps the validated 1 GiB. */
+    assert(AdmissionPoolDemandSegmentBytesShare(0, win, broker,
+               ADMISSION_POOL_DEMAND_APERTURE_RESERVE, 0) == GiB);
+}
+
 int main(void)
 {
+    test_large_placement_backs_the_tail();
     test_place_commits_once_and_destroy_releases();
     test_invalid_placements();
     test_commit_failure_owns_nothing();
@@ -355,5 +520,6 @@ int main(void)
     test_aged_release();
     test_reuse_between_passes_restarts_the_clock();
     test_segment_size();
+    test_graphics_policy();
     return 0;
 }

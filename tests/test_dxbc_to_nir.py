@@ -26,6 +26,7 @@ import os
 from pathlib import Path
 import shlex
 import subprocess
+import sys
 import json
 import re
 import tempfile
@@ -54,7 +55,10 @@ TRANSLATED = {"vs40": "MESA_SHADER_VERTEX", "ps40": "MESA_SHADER_FRAGMENT",
               "hs50": "MESA_SHADER_TESS_CTRL",
               # SM 5 hull without a control-point phase (pass-through by
               # the output signature), isolines
-              "hs50p": "MESA_SHADER_TESS_CTRL"}
+              "hs50p": "MESA_SHADER_TESS_CTRL",
+              # C37: a pass-through hull shader and a domain shader whose
+              # control points carry SV_Position
+              "hs50pos": "MESA_SHADER_TESS_CTRL", "ds50pos": "MESA_SHADER_TESS_EVAL"}
 # tessellation stages, class linkage / doubles / evaluation, SM 5.1 ranges
 REFUSED = ["ps50", "ps51"]
 # the shaders the D3D smoke tools compile at run time (tools/dxbc/extract-smoke-shaders.py)
@@ -63,6 +67,14 @@ for line in (FIXTURES / "smoke/targets.txt").read_text().splitlines():
     if line.strip():
         name, target = line.split()
         TRANSLATED["smoke/" + name] = STAGES[target[:2]]
+
+
+# libSystem carries libm and libc++ on macOS; on Linux the fixtures name libm,
+# use libstdc++ (the host tree's C++ runtime) and Homebrew's prefix.
+HOST_LIBS = [] if sys.platform == "darwin" else ["-lm"]
+CXX_RUNTIME = "-lc++" if sys.platform == "darwin" else "-lstdc++"
+BREW_LIB = "/opt/homebrew/lib" if sys.platform == "darwin" else "/home/linuxbrew/.linuxbrew/lib"
+BREW_LINK = ["-L" + BREW_LIB] + ([] if sys.platform == "darwin" else ["-Wl,-rpath," + BREW_LIB])
 
 
 def local_tree(*parts):
@@ -83,7 +95,8 @@ def host_flags(build):
             directory = Path(entry["directory"])
             # macOS has no <endian.h>; util/u_endian.h falls back to the
             # compiler's byte-order macros without HAVE_ENDIAN_H
-            flags = [a for a in args if a.startswith("-D") and a != "-DHAVE_ENDIAN_H"]
+            flags = [a for a in args if a.startswith("-D") and
+                     (a != "-DHAVE_ENDIAN_H" or sys.platform != "darwin")]
             for a in args:
                 if a.startswith("-I"):
                     path = Path(a[2:])
@@ -110,9 +123,9 @@ class DxbcToNir(unittest.TestCase):
         subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Werror=implicit-function-declaration",
                         *host_flags(build), "-I", str(build / "src/asahi"), "-I", str(mesa / "src/asahi"),
                         "-I", str(DXBC), str(ROOT / "tests/dxbc_to_nir_fixture.c"),
-                        str(DXBC / "dxbc_to_nir.c"), str(DXBC / "dxbc_parse.c"),
+                        str(DXBC / "dxbc_to_nir.c"), str(DXBC / "dxbc_parse.c"), str(DXBC / "dxbc_tir_gs.c"), str(DXBC / "dxbc_minmax.c"),
                         "-o", str(cls.binary), *map(str, libs),
-                        "-L/opt/homebrew/opt/zstd/lib", "-lzstd", "-lz", "-lpthread"],
+                        "-L/opt/homebrew/opt/zstd/lib", "-lzstd", "-lz", "-lpthread", *HOST_LIBS],
                        check=True, capture_output=True)
 
     @classmethod
@@ -122,6 +135,417 @@ class DxbcToNir(unittest.TestCase):
     def run_fixture(self, name):
         return subprocess.run([str(self.binary), str(FIXTURES / f"{name}.dxbc")],
                               capture_output=True, text=True, timeout=60)
+
+    def test_hull_and_domain_control_points_link_by_register(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1834 C37A: a
+        # pass-through hull shader stored its SV_Position control point at
+        # VARYING_SLOT_POS while the domain shader read the same register
+        # ("dcl_input vicp[3][0]", no system value) at VAR0, so every patch
+        # collapsed to the origin. Control point outputs and domain inputs
+        # must name the same locations; only the vertex shader's position
+        # reaches the hull shader at VARYING_SLOT_POS.
+        def variables(name, mode):
+            result = subprocess.run([str(self.binary), str(FIXTURES / f"{name}.dxbc"), "--print"],
+                                    capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            return sorted(re.findall(r"^decl_var %s INTERP_MODE_\w+ none vec4\[3\] \w+#?\d* \((VARYING_SLOT_\w+)" % mode,
+                                     result.stdout, re.M))
+        hull_out, domain_in = variables("hs50pos", "shader_out"), variables("ds50pos", "shader_in")
+        self.assertEqual(hull_out, ["VARYING_SLOT_VAR0", "VARYING_SLOT_VAR1"])
+        self.assertEqual(hull_out, domain_in)
+        self.assertIn("VARYING_SLOT_POS", variables("hs50pos", "shader_in"))
+
+    def test_loop_continue_targets_a_continue_construct(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1839 MiniEngine
+        # ModelViewer: a compute shader with "continue" inside "loop" hit
+        # nir_handle_add_jump's assert(nir_loop_has_continue_construct):
+        # NIR's continue jumps to the loop's continue construct, which a
+        # plain nir_push_loop does not create (release builds link it to a
+        # bogus block). Every DXBC loop must carry one, as in tgsi_to_nir.
+        result = self.run_fixture("cs50continue")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr[-3000:])
+        self.assertIn("TRANSLATED stage MESA_SHADER_COMPUTE", result.stdout)
+
+    def test_typed_uav_resinfo_queries_the_view(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? MiniEngine's
+        # DebugDrawHistogramCS (GetDimensions on a RWTexture2D, resinfo on
+        # u#) was refused ("resource operand"), failing its pipeline. A UAV
+        # resinfo must query the bound view (image_size of its dimension,
+        # layers for arrays) and report one mip level.
+        result = subprocess.run([str(self.binary), str(FIXTURES / "cs50uavinfo.dxbc"), "--print"],
+                                capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr[-3000:])
+        self.assertIn("TRANSLATED stage MESA_SHADER_COMPUTE", result.stdout)
+        sizes = re.findall(r"32x(\d) +%\d+ = @image_size .*image_dim=2D, image_array=(\w+)", result.stdout)
+        self.assertEqual(sorted(sizes), [("2", "false"), ("2", "false"), ("3", "true")])
+
+    def test_miniengine_sm51_shaders_translate_through_the_d3d12_bindings(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1839: MiniEngine
+        # stopped on a translator assertion (loop continue) only on
+        # hardware. Every FXC SM5.1 shader of the pinned MiniEngine build
+        # (68907e31, extracted locally) must translate through the D3D12
+        # owner's binding path and Asahi's preprocessing without a crash
+        # or refusal.
+        corpus = local_tree("miniengine-dxbc")
+        if corpus is None:
+            self.skipTest("MiniEngine DXBC corpus not available")
+        files = sorted(corpus.glob("*.dxbc"))
+        self.assertTrue(files)
+        bad = []
+        for path in files:
+            result = subprocess.run([str(self.binary), str(path), "--d3d12"],
+                                    capture_output=True, text=True, timeout=60)
+            if result.returncode != 0 or not result.stdout.startswith("TRANSLATED "):
+                bad.append(f"{path.name}: rc {result.returncode} {result.stdout[:100]!r}")
+        self.assertFalse(bad, "\n".join(bad))
+
+    def test_sample_rate_inputs_mark_sample_shading(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1840 MiniEngine
+        # ModelViewerPS ("dcl_input_ps linear sample") stopped Asahi on
+        # agx_compile.c "Sample shading should have been lowered": Asahi
+        # lowers sample intrinsics only for shaders marked
+        # info.fs.uses_sample_shading, which tgsi_to_nir/spirv_to_nir/the GLSL
+        # linker set for sample-qualified inputs and the sample id. D3D runs
+        # such a pixel shader per sample; plain inputs must stay per pixel.
+        def flag(name):
+            result = subprocess.run([str(self.binary), str(FIXTURES / f"{name}.dxbc"), "--print"],
+                                    capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr[-3000:])
+            self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", result.stdout)
+            return "uses_sample_shading: true" in result.stdout
+        self.assertTrue(flag("ps50sample"))
+        self.assertTrue(flag("ps50sampleid"))
+        self.assertFalse(flag("ps40"))
+
+    def test_unbounded_srv_range_reads_the_descriptor_heap(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47 (Tier
+        # 2): an unbounded SM5.1 SRV range (T0[0:*], indexed up to 600 here)
+        # was squeezed into the 128 slots, where Asahi clamps the index. With
+        # heap ranges enabled it is one heap binding and every access reads
+        # its descriptor through a marked bindless handle: heap index =
+        # constant buffer 14 (vec4 per range).x + register, 48 bytes each;
+        # no texture slot is used. Without the flag the slot path is kept.
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "ps51heap.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        self.assertIn("BINDING kind 1 id 0 space 1 reg 0 slot 0 flags 2", heap.stdout)
+        self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", heap.stdout)
+        self.assertRegex(heap.stdout, r"textures 0 ")
+        self.assertEqual(heap.stdout.count("@bindless_image_agx"), 2)
+        self.assertEqual(heap.stdout.count("(desc_set=54034)"), 2)
+        self.assertEqual(heap.stdout.count("(texture_handle)"), 2)
+        self.assertRegex(heap.stdout, r"@load_ubo \(%\d+ \(0xe\)")
+        self.assertNotIn("texture_offset", heap.stdout)
+        slots = subprocess.run([str(self.binary), str(FIXTURES / "ps51heap.dxbc"), "--d3d12"],
+                               capture_output=True, text=True, timeout=60)
+        self.assertRegex(slots.stdout, r"TRANSLATED .* textures 128 ")
+
+    def test_uavs_past_the_slots_read_the_descriptor_heap(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47 (Tier
+        # 2 allows 64 UAVs): twelve UAVs exceed the eight slots. With heap
+        # ranges the first eight keep their image slots; u8 (typed texture),
+        # u9 (typed buffer) and the raw u10/u11 are heap bindings whose
+        # accesses use bindless handles -- the texture descriptor for reads
+        # and sizes, the PBE descriptor (+24) for writes and atomics -- and
+        # raw buffers become R32_UINT buffer images, so no SSBO slot is used.
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "cs51uavheap.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        for reg, slot in ((8, 0), (9, 1), (10, 2), (11, 3)):
+            self.assertIn("BINDING kind 2 id %d space 0 reg %d slot %d flags 2" % (reg, reg, slot), heap.stdout)
+        for reg in range(8):
+            self.assertIn("BINDING kind 2 id %d space 0 reg %d slot %d flags 0" % (reg, reg, reg), heap.stdout)
+        self.assertRegex(heap.stdout, r"TRANSLATED stage MESA_SHADER_COMPUTE .* ssbos 0 images 8 ")
+        self.assertNotRegex(heap.stdout, r"@(load|store)_ssbo|@ssbo_atomic|@get_ssbo_size")
+        self.assertIn("@bindless_image_atomic", heap.stdout)
+        self.assertIn("@bindless_image_size", heap.stdout)
+        self.assertRegex(heap.stdout, r"@bindless_image_store .*image_dim=Buf.*format=r32_uint")
+        slots = subprocess.run([str(self.binary), str(FIXTURES / "cs51uavheap.dxbc"), "--d3d12"],
+                               capture_output=True, text=True, timeout=60)
+        self.assertIn("REFUSED", slots.stdout)
+
+    def test_sampler_ranges_read_the_heap_sampler_map(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47 (Tier
+        # 2 allows 2048 samplers): an unbounded sampler range indexed to
+        # 1500 is a heap range. Each access takes its AGX sampler handle
+        # from the map in constant buffer 14 and applies the sampler's
+        # MipLODBias itself (Sample becomes txb, SampleBias adds it,
+        # SampleGrad scales the gradients, SampleLevel takes none) with
+        # sampler index 31 so Asahi's own bias lowering reads zero.
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "ps51samplerheap.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        self.assertIn("BINDING kind 3 id 0 space 1 reg 0 slot 0 flags 2", heap.stdout)
+        self.assertGreaterEqual(heap.stdout.count("(sampler_handle)"), 4)
+        self.assertGreaterEqual(heap.stdout.count("31 (sampler)"), 4)
+        self.assertEqual(len(re.findall(r"\btxb .*\(bias\)", heap.stdout)), 2)
+        self.assertIn("fexp2", heap.stdout)
+        txl = [line for line in heap.stdout.splitlines() if re.search(r"\btxl\b", line)]
+        self.assertTrue(txl and all("(bias)" not in line for line in txl))
+        # C65: each of the 4 heap samples masks its handle (bits 0-10); the
+        # min/max emulation branch (one level-count query each; its
+        # explicit-LOD texel samples are the other txl) only when the owner
+        # asks for it (DXBC_BINDING_MINMAX), so ordinary shaders carry none
+        self.assertEqual(len(re.findall(r"= iand .*\(0x7ff\)", heap.stdout)), 4)
+        self.assertEqual(len(re.findall(r"\bquery_levels\b", heap.stdout)), 0)
+        minmax = subprocess.run([str(self.binary), str(FIXTURES / "ps51samplerheap.dxbc"), "--d3d12-heap", "--d3d12-minmax",
+                                 "--print-final"], capture_output=True, text=True, timeout=60)
+        self.assertEqual(minmax.returncode, 0, minmax.stdout + minmax.stderr)
+        self.assertEqual(len(re.findall(r"\bquery_levels\b", minmax.stdout)), 4)
+
+    def test_feedback_opcodes_return_residency(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C53T (Tiled
+        # Resources Tier 2): every _s opcode is its base access plus a status
+        # operand, and fxc pads the sample forms with a DWORD that is not
+        # always zero (sample_d_cl_s: 0x2000) -- the parser must not read it
+        # as a ninth operand. Each texture access returns the residency code
+        # (sparse) that CheckAccessFullyMapped tests; a _cl clamp is the
+        # min_lod of implicit-LOD and gradient samples; a raw buffer load has
+        # no residency and reads as resident (code 0).
+        run = subprocess.run([str(self.binary), str(FIXTURES / "ps50feedback.dxbc"), "--d3d12", "--print-final"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        sparse = [line for line in run.stdout.splitlines() if re.search(r"= \(\w+\)(tex|txb|txd|txl|txf|tg4) .*\bsparse\b", line)]
+        self.assertEqual(len(sparse), 7, "\n".join(sparse))
+        self.assertEqual(sorted(re.search(r"\)(\w+) ", line).group(1) for line in sparse),
+                         ["tex", "tg4", "txb", "txd", "txf", "txl", "txl"])
+        self.assertEqual(sum("(min_lod)" in line for line in sparse), 3)
+        self.assertEqual(len(re.findall(r"@is_sparse_texels_resident", run.stdout)), 8)
+        self.assertRegex(run.stdout, r"@is_sparse_texels_resident \(%\d+ \(0x0\)\)")
+
+    def test_buffer_srv_ranges_read_the_descriptor_heap(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47: Tier
+        # 2 SRV tables span the heap for every SRV kind. Unbounded raw,
+        # structured and typed buffer SRV ranges are heap ranges; their
+        # loads and size queries are buffer txf/txs through heap handles at
+        # the right dword (raw Load(4) -> 1, structured [2].y of stride 8 ->
+        # 5, typed [3] -> 3) and use no texture slot.
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "cs51srvbufheap.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        for space, slot in ((1, 0), (2, 1), (3, 2)):
+            self.assertIn("BINDING kind 1 id %d space %d reg 0 slot %d flags 2" % (slot, space, slot), heap.stdout)
+        self.assertRegex(heap.stdout, r"TRANSLATED stage MESA_SHADER_COMPUTE .* textures 0 ")
+        self.assertEqual(len(re.findall(r"\btxs .*\(texture_handle\)", heap.stdout)), 2)
+        for dword in ("0x1", "0x5", "0x3"):
+            self.assertRegex(heap.stdout, r"\btxf %\d+ \(" + dword + r"\) \(coord\), %\d+ \(texture_handle\)")
+
+    def test_heap_append_buffer_counts_through_its_counter_descriptor(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 C47: an
+        # append buffer past the eight UAV slots (u8) is a heap UAV; its
+        # imm_atomic_alloc must hit the counter word through the counter's
+        # PBE descriptor in the heap form (handle = index * 160 + 64 + 48),
+        # not a counter SSBO slot.
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "cs51counterheap.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        self.assertIn("BINDING kind 2 id 8 space 0 reg 8 slot 0 flags 2", heap.stdout)
+        self.assertIn("load_const (0x00000070 = 112)", heap.stdout)
+        self.assertIn("load_const (0x000000a0 = 160)", heap.stdout)
+        self.assertRegex(heap.stdout, r"@bindless_image_atomic .*image_dim=Buf.*format=r32_uint.*atomic_op=iadd")
+        self.assertRegex(heap.stdout, r"TRANSLATED stage MESA_SHADER_COMPUTE .* ssbos 8 ")
+
+    def test_tier2_shader_with_64_separate_uavs_translates(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? C47 reports
+        # resource binding tier 2 (64 UAVs per pipeline). A shader may declare
+        # them one register at a time; past the 8 slots each declaration
+        # becomes its own heap range, so the heap ranges must cover 56 of them
+        # (DXBC_HEAP_RANGE_MAX was 8: u16+ refused, PSO creation failed).
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "cs51uav64.dxbc"), "--d3d12-heap"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        self.assertIn("BINDING kind 2 id 7 space 0 reg 7 slot 7 flags 0", heap.stdout)
+        self.assertIn("BINDING kind 2 id 63 space 0 reg 63 slot 55 flags 2", heap.stdout)
+        self.assertIn("TRANSLATED stage MESA_SHADER_COMPUTE", heap.stdout)
+
+    def test_dynamically_indexed_uav_ranges_read_the_heap(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Tier 2 lets SM 5.1
+        # shaders index UAV arrays (RWTexture2D u[] : register(u0, space1))
+        # dynamically; the binding parser refused every UAV declaration
+        # spanning several registers. Shader-buffer and image slots take no
+        # dynamic index, so such ranges become heap ranges (bindless image
+        # load/store/atomics through the heap form).
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "cs51uavrange.dxbc"), "--d3d12-heap", "--print-final"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout + heap.stderr)
+        self.assertIn("BINDING kind 2 id 0 space 1 reg 0 slot 0 flags 2", heap.stdout)
+        self.assertIn("BINDING kind 2 id 1 space 2 reg 0 slot 1 flags 2", heap.stdout)
+        self.assertIn("@bindless_image_store", heap.stdout)
+        self.assertIn("@bindless_image_atomic", heap.stdout)
+
+    def test_d3d11_1_uav_registers_compact_into_shader_buffers(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Feature level 11_1
+        # gives every stage UAV registers u0..u63, but Gallium has 32 shader
+        # buffers and Asahi binds 32 images (EXP1887: an image above slot 31
+        # aliases slot u - 32 in its 32-bit image_mask, so u5 read back 0):
+        # buffer views compact in register order, counters follow, typed
+        # views compact into images, and every SSBO and image index in the
+        # NIR is rewritten to the compact slot.
+        out = subprocess.run([str(self.binary), str(FIXTURES / "cs50uav64.dxbc"), "--d3d11-uav64", "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr[-3000:])
+        # EXP1887: Asahi binds 32 images (32-bit image_mask), so typed views compact too
+        for line in ("UAV64 u0 buffer 0", "UAV64 u9 image 0", "UAV64 u40 buffer 1", "UAV64 u40 counter 3",
+                     "UAV64 u62 image 1", "UAV64 u63 buffer 2", "UAV64 buffers 4"):
+            self.assertIn(line, out.stdout)
+        self.assertRegex(out.stdout, r"TRANSLATED stage MESA_SHADER_COMPUTE .* ssbos 4 images 2 .* gathered-images 2 image-span 2")
+        image_indices = {int(v, 16) for v in re.findall(
+            r"@image_(?:store|atomic|size|load)[^\n]*?\(%\d+ \(0x([0-9a-f]+)\)", out.stdout)}
+        self.assertTrue(image_indices and image_indices <= {0, 1}, sorted(image_indices))
+        indices = {int(v, 16) for v in re.findall(
+            r"(?:load_ssbo|store_ssbo|ssbo_atomic|get_ssbo_size)[^\n]*?\(%\d+ \(0x([0-9a-f]+)\)", out.stdout)}
+        self.assertTrue(indices and all(i < 4 for i in indices), sorted(indices))
+        # the D3D11.0 entry keeps u0..u7 and refuses the shader
+        legacy = self.run_fixture("cs50uav64")
+        self.assertTrue(legacy.stdout.startswith("REFUSED "), legacy.stdout)
+
+    def test_rasterizer_ordered_uavs_take_the_pixel_interlock(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 reports
+        # ROVsSupported for DXBC SM 5.1 too; a rasterizer-ordered UAV
+        # (D3D11_SB_RASTERIZER_ORDERED_ACCESS, bit 17 of dcl_uav_*) must enter
+        # the pixel interlock before its first access, or overlapping
+        # fragments race (the flag used to be ignored).
+        out = subprocess.run([str(self.binary), str(FIXTURES / "ps51rov.dxbc"), "--d3d12", "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr[-3000:])
+        self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", out.stdout)
+        self.assertEqual(out.stdout.count("begin_invocation_interlock"), 1, out.stdout[:4000])
+        self.assertNotIn("end_invocation_interlock", out.stdout)
+        first = min(i for i in (out.stdout.find("image_deref_load"), out.stdout.find("load_ssbo")) if i >= 0)
+        self.assertLess(out.stdout.index("begin_invocation_interlock"), first)
+        plain = subprocess.run([str(self.binary), str(FIXTURES / "ps51heap.dxbc"), "--d3d12", "--print"],
+                               capture_output=True, text=True, timeout=60)
+        self.assertNotIn("invocation_interlock", plain.stdout)
+
+    def test_forced_sample_count_variant_computes_its_own_coverage(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? FL 11_1 forced
+        # sample counts (TIR, UAV-only rendering) exceed AGX's 4 samples: the
+        # pixel shader variant must take the coverage of the forced pattern
+        # from the expansion GS's flat edge varyings (VARYING_SLOT_TEX0..3,
+        # dxbc_tir.h) and never the hardware sample mask, and answer the
+        # rasterizer's sample count and positions that the plain shader
+        # cannot (it refuses sampleinfo/samplepos of the rasterizer).
+        out = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr[-3000:])
+        self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", out.stdout)
+        self.assertEqual(len(re.findall(r"decl_var shader_in INTERP_MODE_FLAT none ivec4 tir_edge(?:#\d+)? \(VARYING_SLOT_TEX[0-3]",
+                                        out.stdout)), 4, out.stdout[:4000])
+        self.assertNotIn("load_sample_mask_in", out.stdout)
+        self.assertIn("demote_if", out.stdout)
+        self.assertNotIn("interp_deref_at_centroid", out.stdout)
+        self.assertNotIn("interp_deref_at_sample", out.stdout)
+        self.assertIn("load_const (0x00000010 = 16)", out.stdout)  # sampleinfo: 16
+        for n in ("4", "8"):
+            again = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", n],
+                                   capture_output=True, text=True, timeout=60)
+            self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", again.stdout, again.stdout + again.stderr[-2000:])
+        plain = self.run_fixture("ps50tir")
+        self.assertTrue(plain.stdout.startswith("REFUSED "), plain.stdout)
+
+    def test_generic_tir_pass_matches_the_translator_variant(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The D3D12 path's
+        # pixel shaders (DXIL) get the forced-sample-count variant from
+        # dxbc_tir_lower_fs instead of the translator: SV_Coverage, centroid
+        # inputs and EvaluateAttributeAtSample must leave the hardware sample
+        # mask, centroid and sample interpolation (AGX rasterizes 1x there).
+        out = subprocess.run([str(self.binary), str(FIXTURES / "ps50tirpass.dxbc"), "--tir-pass", "16", "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout[-3000:] + out.stderr[-3000:])
+        self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", out.stdout)
+        for gone in ("load_sample_mask_in", "interp_deref_at_sample", "interp_deref_at_centroid"):
+            self.assertNotIn(gone, out.stdout)
+        self.assertIn("interp_deref_at_offset", out.stdout)
+        self.assertEqual(len(re.findall(r"tir_edge(?:#\d+)? \(VARYING_SLOT_TEX", out.stdout)), 4)
+        self.assertNotRegex(out.stdout, r"decl_var shader_in INTERP_MODE_\w+ centroid")
+
+    def test_conservative_pass_tests_the_touched_square(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? D3D12 conservative
+        # rasterization Tier 1 runs every pixel the triangle touches and no
+        # pixel further than 1/2 px: the expansion GS overshoots at sharp
+        # angles, so the pixel shader must demote untouched pixels
+        # (dxbc_tir_touched); SV_Coverage stays the hardware's (the GS
+        # expands by a whole pixel, so every sample of a touched pixel is
+        # covered: all n bits on an n-sample target, SampleMask applied).
+        out = subprocess.run([str(self.binary), str(FIXTURES / "ps50tirpass.dxbc"), "--tir-pass", "1", "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout[-3000:] + out.stderr[-3000:])
+        self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", out.stdout)
+        self.assertIn("load_sample_mask_in", out.stdout)
+        self.assertIn("demote_if", out.stdout)
+        self.assertIn("iabs", out.stdout)
+        self.assertEqual(len(re.findall(r"tir_edge(?:#\d+)? \(VARYING_SLOT_TEX", out.stdout)), 4)
+
+    def test_tir_expansion_gs_links_the_vertex_shader_to_the_variant(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The expansion GS
+        # sits between the application's vertex shader and the pixel shader
+        # variant: it must consume every vertex output the variant reads
+        # (with the variant's interpolation), always the position, and pass
+        # the AGX lowering as a geometry shader emitting one triangle.
+        out = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--tir-gs",
+                              str(FIXTURES / "vs50tir.dxbc"), "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout[-3000:] + out.stderr[-3000:])
+        self.assertIn("TIR_GS varyings 2 primitive-id 0 vertices-out 3", out.stdout)
+        self.assertRegex(out.stdout, r"decl_var shader_out INTERP_MODE_SMOOTH none vec4 tir_out(#\d+)? \(VARYING_SLOT_VAR1")
+        self.assertEqual(len(re.findall(r"decl_var shader_out INTERP_MODE_FLAT none ivec4 tir_edge", out.stdout)), 4)
+        self.assertIn("TRANSLATED stage MESA_SHADER_FRAGMENT", out.stdout)
+
+    def test_tir_expansion_gs_takes_a_triangle_domain_shader_only(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? C61B: in a
+        # tessellated pipeline the expansion GS (triangles in, triangles out)
+        # follows the domain shader; an isoline domain emits lines, which the
+        # GS cannot take, so the key must refuse it (plain rasterization with
+        # a receipt) instead of building a GS for the wrong primitive.
+        tri = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--tir-gs",
+                              str(FIXTURES / "ds50pos.dxbc")], capture_output=True, text=True, timeout=60)
+        self.assertEqual(tri.returncode, 0, tri.stdout[-3000:] + tri.stderr[-3000:])
+        self.assertIn("TIR_GS varyings 2 primitive-id 0 vertices-out 3", tri.stdout)
+        iso = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--tir-gs",
+                              str(FIXTURES / "ds50iso.dxbc")], capture_output=True, text=True, timeout=60)
+        self.assertIn("TIR_GS_KEY_REFUSED", iso.stdout)
+
+    def test_application_gs_wraps_into_the_expansion(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? C61C: with an
+        # application GS (conservative voxelization's usual pipeline) the
+        # expansion runs inside that GS: every strip triangle it emits must
+        # leave as an expanded triangle with the four edge varyings (three
+        # vertices per emitted vertex at most), and a GS that does not output
+        # triangles (gs50: point streams) must be refused, not mis-expanded.
+        out = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--tir-wrap-gs",
+                              str(FIXTURES / "gs50strip.dxbc"), "--print"], capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout[-3000:] + out.stderr[-3000:])
+        self.assertIn("TIR_WRAP_GS varyings 2 primitive-id 0 vertices-out 12", out.stdout)
+        self.assertEqual(len(re.findall(r"decl_var shader_out INTERP_MODE_FLAT none ivec4 tir_edge", out.stdout)), 4)
+        points = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--tir-wrap-gs",
+                                 str(FIXTURES / "gs50.dxbc")], capture_output=True, text=True, timeout=60)
+        self.assertNotIn("TIR_WRAP_GS varyings", points.stdout)
+        # a GS reading heap ranges has constant buffer 15 as its heap mirror:
+        # the viewport then comes from the heap table (cb 14, byte 9216)
+        self.assertIn("load_ubo (%", out.stdout)
+        plain = re.findall(r"load_const \(0x0000000f = .*\)", out.stdout)
+        self.assertTrue(plain, "cb 15 for a GS without heap ranges")
+        heap = subprocess.run([str(self.binary), str(FIXTURES / "ps50tir.dxbc"), "--tir", "16", "--tir-wrap-heap",
+                               "--tir-wrap-gs", str(FIXTURES / "gs50strip.dxbc"), "--print"],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(heap.returncode, 0, heap.stdout[-3000:] + heap.stderr[-3000:])
+        self.assertIn("load_const (0x00002400 = 9216", heap.stdout)
+        self.assertRegex(heap.stdout, r"load_const \(0x0000000e = 14")
+
+    def test_image_count_spans_the_typed_uav_slots(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1841 C41B:
+        # GetDimensions on u2 (typed, after a raw u0 and a typed u1) returned
+        # u1's size on hardware. Asahi lowers image queries to bindless
+        # handles clamped to info.num_images - 1, and nir_shader_gather_info
+        # recounts num_images from the image variables (2 here), so the
+        # clamp sent u2 to u1. The image variables must span every slot up
+        # to the highest typed UAV.
+        result = self.run_fixture("cs50uavgap")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr[-3000:])
+        m = re.search(r"gathered-images (\d+) image-span (\d+)", result.stdout)
+        self.assertIsNotNone(m, result.stdout)
+        self.assertEqual(m.group(2), "3")
+        self.assertEqual(m.group(1), m.group(2))
 
     def test_windows_dxbc_corpus_does_not_crash(self):
         corpus = local_tree("dxbc-corpus")
@@ -235,6 +659,17 @@ class DxbcToNir(unittest.TestCase):
         result = self.run_xfb("vs40", "4.0.1.0.0", "1,0,0,0")
         self.assertTrue(result.stdout.startswith("REFUSED stream output 0 (register 4)"),
                         result.stdout + result.stderr[-3000:])
+
+    def test_sm5_bitfield_ops_reach_asahi_as_shifts_and_masks(self):
+        # EXP1821: nBody's cs_5_0 bfi reached agx_compile as nir_op_bfi/bfm
+        # ("Unhandled ALU op", illegal instruction in the UMD); Asahi lowers
+        # none of nir_op_ubfe/ibfe/bfm/bfi
+        asm = (FIXTURES / "cs50bits.asm").read_text()
+        for op in ("ubfe", "ibfe", "bfi"):
+            self.assertRegex(asm, rf"(?m)^{op} ")
+        result = self.run_fixture("cs50bits")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("agx-unlowered-bitfield 0", result.stdout)
 
     def test_vertex_inputs_read_their_own_attribute(self):
         # EXP1297: every translated vertex input reached Asahi with io base

@@ -8,9 +8,11 @@ int AdmissionPresentResourceDataValid(
     const ADMISSION_PRESENT_RESOURCE_DATA *Data) {
   return Data != ADMISSION_ALLOCATION_NULL &&
       Data->Magic == ADMISSION_PRESENT_RESOURCE_MAGIC &&
-      Data->Version == ADMISSION_PRESENT_RESOURCE_VERSION &&
+      (Data->Version == ADMISSION_PRESENT_RESOURCE_VERSION || Data->Version == 3u) &&
       Data->Bytes == sizeof(*Data) &&
-      (Data->Flags & ~ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) == 0u &&
+      (Data->Flags & ~(ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY |
+                       ADMISSION_PRESENT_RESOURCE_CONVERTED)) == 0u &&
+      (Data->Version != 3u || (Data->Flags & ADMISSION_PRESENT_RESOURCE_CONVERTED) == 0u) &&
       (Data->RefreshDenominator != 0u || Data->RefreshNumerator == 0u);
 }
 

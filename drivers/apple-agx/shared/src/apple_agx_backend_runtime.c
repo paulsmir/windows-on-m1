@@ -197,6 +197,20 @@ static APPLE_AGX_BOOL AppleAgxBackendSubmissionValid(
              Submission->Submission.DmaBytes;
 }
 
+/* rc102 / OV5 step 2: a successor waits on the running job either through its
+ * leading Barrier (LeadBarrierAddress) or, for an OV5-waived plain render
+ * (TaLeadWaived, no compute work, no TA prelude Barrier), only through its
+ * 3D-queue Barrier (D3LeadBarrierAddress). EXP2213: the waived shape was
+ * refused here as ImageFailed and every refused kick reset the engine. */
+static APPLE_AGX_BOOL
+AppleAgxBackendSuccessorLeadValid(const APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
+  if (Job->LeadBarrierAddress != 0ULL) return APPLE_AGX_TRUE;
+  return Job->TaLeadWaived != 0u && Job->D3LeadBarrierAddress != 0ULL &&
+                 Job->ComputeWorkAddressCount == 0u && Job->TaBarrierAddress == 0ULL
+             ? APPLE_AGX_TRUE
+             : APPLE_AGX_FALSE;
+}
+
 static APPLE_AGX_BOOL
 AppleAgxBackendJobValid(const APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
   APPLE_AGX_U32 index;
@@ -221,6 +235,75 @@ AppleAgxBackendJobValid(const APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
       return APPLE_AGX_FALSE;
   }
   return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeSubmitSuccessor(
+    APPLE_AGX_BACKEND_RUNTIME *Runtime,
+    const APPLE_AGX_BACKEND_SUBMISSION *Submission) {
+  const unsigned char *submissionBytes = APPLE_AGX_BACKEND_NULL;
+  APPLE_AGX_U32 submissionByteCount = 0u;
+
+  if (Runtime == APPLE_AGX_BACKEND_NULL)
+    return AppleAgxBackendRuntimeResultInvalidArgument;
+  if (Runtime->Phase != AppleAgxBackendRuntimeSubmitted ||
+      Runtime->Io.Queues.RunSuccessor == APPLE_AGX_BACKEND_NULL ||
+      Runtime->PendingSubmission.Submission.Fence == 0u)
+    return AppleAgxBackendRuntimeResultInvalidState;
+  if (Runtime->TerminalPending || Runtime->SuccessorPending)
+    return AppleAgxBackendRuntimeResultBusy;
+  if (!AppleAgxBackendSubmissionValid(Runtime, Submission) ||
+      Submission->Submission.Fence == Runtime->PendingSubmission.Submission.Fence)
+    return AppleAgxBackendRuntimeResultInvalidArgument;
+  if (!Runtime->Io.Memory.Resolve(Runtime->Io.Context, Submission,
+                                  &submissionBytes,
+                                  &submissionByteCount) ||
+      submissionBytes == APPLE_AGX_BACKEND_NULL ||
+      submissionByteCount !=
+          Submission->DmaSubmissionEnd - Submission->DmaSubmissionStart)
+    return AppleAgxBackendRuntimeResultMemoryFailed;
+  AppleAgxBackendZero(&Runtime->SuccessorJob,
+                      (APPLE_AGX_U32)sizeof(Runtime->SuccessorJob));
+  if (!Runtime->Io.Image.Relocate(
+          Runtime->Io.Context, Runtime->ArenaCpuAddress, Runtime->ArenaBytes,
+          &Runtime->Roots, submissionBytes, submissionByteCount, Submission,
+          &Runtime->SuccessorJob) ||
+      !AppleAgxBackendJobValid(&Runtime->SuccessorJob) ||
+      !AppleAgxBackendSuccessorLeadValid(&Runtime->SuccessorJob)) {
+    AppleAgxBackendZero(&Runtime->SuccessorJob,
+                        (APPLE_AGX_U32)sizeof(Runtime->SuccessorJob));
+    return AppleAgxBackendRuntimeResultImageFailed;
+  }
+  if (!Runtime->Io.Memory.FlushForDevice(Runtime->Io.Context,
+                                         Runtime->ArenaCpuAddress,
+                                         Runtime->ArenaBytes))
+    return AppleAgxBackendRuntimeResultMemoryFailed;
+  Runtime->SuccessorSubmission = *Submission;
+  if (!Runtime->Io.Queues.RunSuccessor(Runtime->Io.Context,
+                                       &Runtime->SuccessorJob,
+                                       Submission->Submission.Fence)) {
+    AppleAgxBackendZero(&Runtime->SuccessorSubmission,
+                        (APPLE_AGX_U32)sizeof(Runtime->SuccessorSubmission));
+    AppleAgxBackendZero(&Runtime->SuccessorJob,
+                        (APPLE_AGX_U32)sizeof(Runtime->SuccessorJob));
+    return AppleAgxBackendRuntimeResultQueueFailed;
+  }
+  Runtime->SuccessorPending = APPLE_AGX_TRUE;
+  ++Runtime->SuccessorKicks;
+  return AppleAgxBackendRuntimeResultOk;
+}
+
+/* rc102: the accepted completion made room: the successor is the pending
+ * job now, still submitted to the firmware. */
+static void AppleAgxBackendPromoteSuccessor(APPLE_AGX_BACKEND_RUNTIME *Runtime) {
+  Runtime->PendingSubmission = Runtime->SuccessorSubmission;
+  Runtime->PendingJob = Runtime->SuccessorJob;
+  AppleAgxBackendZero(&Runtime->SuccessorSubmission,
+                      (APPLE_AGX_U32)sizeof(Runtime->SuccessorSubmission));
+  AppleAgxBackendZero(&Runtime->SuccessorJob,
+                      (APPLE_AGX_U32)sizeof(Runtime->SuccessorJob));
+  Runtime->SuccessorPending = APPLE_AGX_FALSE;
+  ++Runtime->SuccessorPromotions;
+  Runtime->Phase = AppleAgxBackendRuntimeSubmitted;
 }
 
 APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeSubmit(
@@ -341,6 +424,8 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeAcknowledgeCompletion(
   }
   AppleAgxBackendClearPending(Runtime);
   Runtime->Phase = nextPhase;
+  if (Runtime->SuccessorPending && nextPhase == AppleAgxBackendRuntimeReady)
+    AppleAgxBackendPromoteSuccessor(Runtime);
   return result;
 }
 
@@ -522,6 +607,22 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStop(
       Runtime->Phase = AppleAgxBackendRuntimeFailed;
       return AppleAgxBackendRuntimeResultCleanupFailed;
     }
+  }
+  if (Runtime->SuccessorPending) {
+    /* rc102: the stopped queues hold the successor no more either; it is
+     * retired after the job it was kicked behind. */
+    if (!Runtime->Io.Retire(Runtime->Io.Context,
+                            Runtime->SuccessorSubmission.Submission.Fence,
+                            Runtime->SuccessorSubmission.Submission.NodeOrdinal,
+                            Runtime->SuccessorSubmission.Submission.EngineOrdinal)) {
+      Runtime->Phase = AppleAgxBackendRuntimeFailed;
+      return AppleAgxBackendRuntimeResultCleanupFailed;
+    }
+    AppleAgxBackendZero(&Runtime->SuccessorSubmission,
+                        (APPLE_AGX_U32)sizeof(Runtime->SuccessorSubmission));
+    AppleAgxBackendZero(&Runtime->SuccessorJob,
+                        (APPLE_AGX_U32)sizeof(Runtime->SuccessorJob));
+    Runtime->SuccessorPending = APPLE_AGX_FALSE;
   }
 
   if (Runtime->QueuesCreated) {

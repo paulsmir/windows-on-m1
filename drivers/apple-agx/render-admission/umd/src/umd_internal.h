@@ -1,6 +1,9 @@
 #ifndef APPLE_AGX_UMD_INTERNAL_H
 #define APPLE_AGX_UMD_INTERNAL_H
 
+#include "umd_va_alias.h"
+#include "umd_cpu_access.h"
+#define ADMISSION_UMD_VA_ALIAS_INITIAL 1024u
 #include "umd_staging_sync.h"
 #include "direct_flip_contract.h"
 #include "render_win32_transport.h"
@@ -10,6 +13,10 @@
 #include "agx_win32_construction_address.h"
 #include "umd_draw_composer.h"
 #ifdef APPLE_AGX_GPUVA_WINSYS
+#define APPLE_AGX_NATIVE_STAGING 1
+#include "umd_staging_ring.h"
+#include "umd_native_arena.h"
+#include "umd_upload_ring.h"
 #include "agx_win32_gpuva.h"
 #endif
 
@@ -24,8 +31,10 @@
  * equals AGX_GPUVA_IN_FLIGHT (agx_win32_gpuva.h). When a submission is
  * built at most ADMISSION_UMD_IN_FLIGHT_SETS - 1 others are in flight (the
  * winsys retires the oldest first), so a slot may join it while fewer than
- * ADMISSION_UMD_IN_FLIGHT_SETS sets hold it. */
+ * ADMISSION_UMD_IN_FLIGHT_SETS sets hold it. Q19 selects a matching larger
+ * bound in both owners with AgxSubmissionWindowLimit. */
 #define ADMISSION_UMD_IN_FLIGHT_SETS 4u
+#include "../../../mesa/winsys/agx_win32_submission_window.h"
 /* EXP1061: live slots stay below ScreenBufferHighWater (FreeSlot hands out
  * the lowest free index), so a scan costs the peak live count, not capacity. */
 #define ADMISSION_UMD_SCREEN_BUFFER_SCAN(Device) ((Device)->ScreenBufferHighWater)
@@ -39,12 +48,18 @@
 #define ADMISSION_UMD_SLOT_CACHE_SIZE 8192u
 #define ADMISSION_UMD_SLOT_HASH(Key) \
   ((UINT)((((APPLE_AGX_U64)(Key)) * 0x9E3779B97F4A7C15ULL) >> 51))
-/* EXP1025: unshared buffers up to this size are direct (no staging).
- * EXP1111: up to the KMD's 16 MiB class-allocation limit; larger mapped
- * buffers paid a copy escape per 64 KiB on every CPU/GPU hand-off (EXP1110). */
-#define ADMISSION_UMD_SYSTEM_DIRECT_BYTES 0x1000000ULL
 #define ADMISSION_UMD_SCREEN_FENCE_LIMIT 64u
 #define ADMISSION_UMD_SOURCE_HOLD_LIMIT 64u
+
+#ifdef APPLE_AGX_NATIVE_STAGING
+#define ADMISSION_UMD_NATIVE_ARENAS 4u
+typedef struct _ADMISSION_UMD_NATIVE_ARENA {
+  BOOL Attempted;
+  BYTE *Address;
+  ULONGLONG Token;
+  ADMISSION_UMD_NATIVE_SPANS *Ring;
+} ADMISSION_UMD_NATIVE_ARENA;
+#endif
 
 typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   APPLE_AGX_U64 Token;
@@ -64,6 +79,7 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   APPLE_AGX_U32 ClassId;
   APPLE_AGX_U32 Flags;
   APPLE_AGX_U32 LockedAccess;
+  ADMISSION_UMD_CPU_ACCESS CpuAccess;
   APPLE_AGX_U32 MapEpoch;
   APPLE_AGX_U32 SourceHolds;
   APPLE_AGX_U32 SubmissionHolds;
@@ -74,16 +90,28 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
 #ifdef APPLE_AGX_GPUVA_WINSYS
   BOOL WrittenPrimary;
   D3DKMT_HANDLE StagingAllocation;
+  D3DKMT_HANDLE FailedCpuLock; /* exact handle retained after refused-map Unlock failure */
   /* EXP1022: CPU-only staging of an unshared slot is ordinary process memory
    * (EXP1016-1021: VidMm CPU mappings read at ~80 MB/s vs 2.5 GB/s). */
   BYTE *PrivateStaging;
-  /* EXP1083: PrivateStaging was allocated with MEM_WRITE_WATCH; the watch is
-   * reset whenever the staging is proven equal to the canonical copy. */
+  /* EXP1083: PrivateStaging was allocated with MEM_WRITE_WATCH. Legacy
+   * hash sync resets after copying; T13 snapshots/resets before copying. */
   BOOL WriteWatch;
+  /* T13: D3D12 CPU staging, never a GPU mapping. Shadow is allocated only
+   * after a GPU writer needs byte-wise copy-out merging. */
+  BOOL HeapStaging;
+  BYTE *HeapStagingShadow;
   /* EXP1025/EXP1027: one CPU-visible class allocation (local segment) is both
    * the GPU and the CPU copy (no staging, no copy escapes). */
   BOOL SystemDirect;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  BYTE *NativeStagingAddress;
+  ULONGLONG NativeStagingTicket, NativeStagingToken;
+#endif
   APPLE_AGX_U64 CanonicalGpuVa;
+  /* Opaque hint only. KMD reauthenticates and checks invalidation under its
+   * graph lock; no UMD token ever skips the batch escape. */
+  APPLE_AGX_U64 NativeReadyToken;
   BOOL CopyHeld;
   /* R158: presentation allocation used directly as the GPU-local render
    * target (CpuVisible=0, local segment, 64 KiB aligned): no staging, no
@@ -104,6 +132,16 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   /* EXP1093: render fence of the latest submission that holds this slot; an
    * upload into it waits for that fence while another submission holds it. */
   UINT64 LastUseFence;
+  /* rc86: residency trim recency. Set to the next render fence when the
+   * slot takes its residency reference (creation map, submission, restore):
+   * a slot made resident after its last submission is about to be used and
+   * must not rank as the least recently used one (umd_residency_trim.h). */
+  UINT64 TrimRecency;
+  /* RC65: the upload-ring GPU copy of this slot's snapshot is recorded and
+   * its submission not yet accepted. That copy writes bytes the staging
+   * already holds: it neither marks the slot GpuWritten nor lets the same
+   * submission upload the slot again. Cleared by UploadRingFinish. */
+  BOOL UploadRingPending;
 #endif
 } ADMISSION_UMD_SCREEN_BUFFER;
 
@@ -181,9 +219,15 @@ typedef struct _ADMISSION_UMD_DEVICE {
   D3DKMT_HANDLE PagingSyncObject;
   volatile UINT64 *PagingFenceAddress;
 #ifdef APPLE_AGX_GPUVA_WINSYS
+  /* Q18: opt-in read-only proof before a paging CPU wait; pending work waits. */
+  BOOL PagingWaitCompleted;
+  UINT SubmissionWindow; /* Q19: same bound as Backend.Gpuva, set before replay */
   D3DKMT_HANDLE RenderSyncObject;
   volatile UINT64 *RenderFenceAddress;
   UINT64 NextRenderFence;
+  /* RC68: highest render fence a wait on RenderSyncObject saw reached;
+   * monotonic (CAS max), read for the copy-escape no-reference proof. */
+  volatile LONG64 RenderCompletedFence;
   /* EXP1082: the queued render job whose completion (wait for its fence,
    * download of held GPU-written slots) runs at its retirement. */
   UINT64 PendingRenderFence;
@@ -211,15 +255,55 @@ typedef struct _ADMISSION_UMD_DEVICE {
   APPLE_AGX_U64 LastDrawRequest;
   ADMISSION_UMD_DRAW_SUBMISSION *DrawSubmission;
   BOOL DrawTerminal;
+  UINT CpuAccessSnapshots; /* bit 0 failure, bit 1 device teardown */
+  UINT MemoryRefusalSnapshots; /* first four allocation refusals, under ScreenBufferLock */
   /* EXP1043 diagnostic: slot of the last map_va, for paging-wait attribution. */
   APPLE_AGX_U64 PagingWaitToken;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  /* C53 B0: tile aliases of slot allocations in reserved GPU VA ranges
+   * (umd_va_alias.h), under ScreenBufferLock. C53 B4: a process-heap array
+   * that grows on demand (a fixed 1024 entries capped reserved resources at
+   * about 1000 tiles); freed with the device. */
+  ADMISSION_UMD_VA_ALIAS *VaAliases;
+  UINT VaAliasCount;
+  UINT VaAliasCapacity;
+#endif
   volatile LONG RenderCbSequence;
   APPLE_AGX_U32 NativeBackendCount;
   void *NativeBatchTransaction;
   APPLE_AGX_U64 LastNativeRequest;
   BOOL ScreenClosing;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  BOOL HeapStaging;
+  BOOL DirectCpuPool; /* RC25: opt-in canonical WC maps with pool proof */
+#ifdef APPLE_AGX_NATIVE_STAGING
+  BOOL NativeStagingDisabled;
+  /* rc99: bytes at the top of the first arena kept for READBACK-heap
+   * slices (0: off), and the intent of the BO being created, set by the
+   * D3D12 owner under its lock around a READBACK heap creation. */
+  UINT NativeReadbackReserve;
+  BOOL NativeReadbackIntent;
+  ADMISSION_UMD_NATIVE_ARENA NativeStaging[ADMISSION_UMD_NATIVE_ARENAS];
+#endif
+  ULONGLONG HeapStagingDirtyBytes, HeapStagingUploadBytes, HeapStagingDownloadBytes;
+  /* RC64: per-Execute copy escapes by operation (query, upload, download) x
+   * the transferred slot's size class (<=64 KiB, <=1 MiB, <=16 MiB, larger);
+   * index 12 counts escapes outside transfer_slot. CopyEscapeClass is
+   * 1 + class while transfer_slot runs, else 0. Measurement only. */
+  UINT CopyEscapeClass;
+  UINT CopyEscapeCount[13];
+  ULONGLONG CopyEscapeMicros[13];
+  /* RC68: per-Execute job gate of the copy escapes, per operation (query,
+   * upload, download): [0] sent with the UNREFERENCED proof, [1] ran
+   * beside this device's own job (KMD OVERLAPPED), [2] waited for a job
+   * (KMD WAITED); GateWaitMicros is the time of the waited escapes. */
+  UINT CopyEscapeGate[3][3];
+  ULONGLONG CopyEscapeGateWaitMicros[3];
+#endif
   APPLE_AGX_U32 NextScreenFence;
   HRESULT LastScreenError;
+  /* Current GPUVA operation failure, separate from screen allocation scratch. */
+  HRESULT GpuvaFailure;
   ADMISSION_UMD_RETIREMENT_QUEUE Retirement;
   HRESULT LastRetirementError;
   ULONG RetirementErrorCount;
@@ -229,11 +313,33 @@ typedef struct _ADMISSION_UMD_DEVICE {
   ADMISSION_UMD_SOURCE_HOLD_RECORD SourceHolds[ADMISSION_UMD_SOURCE_HOLD_LIMIT];
 } ADMISSION_UMD_DEVICE;
 
+/* Receipt-only. Call without ScreenBufferLock held. Reasons: 2 failure,
+ * 3 teardown. Destruction uses reason 1 directly under the slot lock. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+VOID AdmissionUmdScreenCpuAccessSnapshot(ADMISSION_UMD_DEVICE *Device,
+                                        HRESULT Status, UINT Reason);
+VOID AdmissionUmdScreenCpuAccessEvent(ADMISSION_UMD_DEVICE *Device,
+                                     APPLE_AGX_U64 Token, UINT Event);
+#ifdef __cplusplus
+}
+#endif
+
 #ifdef APPLE_AGX_GPUVA_WINSYS
 #ifdef __cplusplus
 extern "C"
 #endif
 const AGX_WIN32_GPUVA_OPS *AdmissionUmdGpuvaOperations(void);
+#ifdef __cplusplus
+extern "C"
+#endif
+VOID AdmissionUmdGpuCompletionDrain(ADMISSION_UMD_DEVICE *Device,
+    unsigned long long *Cursor);
+#ifdef __cplusplus
+extern "C"
+#endif
+int AdmissionUmdGpuvaValidateRefResident(void *, uint64_t);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)
 #ifdef __cplusplus
 extern "C"
@@ -259,6 +365,11 @@ VOID APIENTRY AdmissionUmdOpenResource(
     const D3D10DDIARG_OPENRESOURCE *OpenResource,
     D3D10DDI_HRESOURCE ResourceHandle,
     D3D10DDI_HRTRESOURCE RuntimeResource);
+/* Internal creation variant: extra wire flags, never a runtime DDI. */
+VOID AdmissionUmdCreateResourceWithMetadata(
+    D3D10DDI_HDEVICE DeviceHandle, const D3D11DDIARG_CREATERESOURCE *CreateResource,
+    D3D10DDI_HRESOURCE ResourceHandle, D3D10DDI_HRTRESOURCE RuntimeResource,
+    UINT MetadataFlags);
 VOID APIENTRY AdmissionUmdCreateResource(
     D3D10DDI_HDEVICE DeviceHandle,
     const D3D11DDIARG_CREATERESOURCE *CreateResource,
@@ -281,8 +392,35 @@ extern "C" {
 void AdmissionUmdVaRecordDeallocate(const void *device, ULONGLONG token,
                                     D3DKMT_HANDLE allocation, ULONGLONG va,
                                     HRESULT hr);
+int AdmissionUmdGpuvaValidateCpuPoolMap(ADMISSION_UMD_DEVICE *device,
+                                       APPLE_AGX_U64 token);
+int AdmissionUmdGpuvaRestoreCpuMapResidency(ADMISSION_UMD_DEVICE *device,
+                                           uint64_t token);
+#ifdef APPLE_AGX_NATIVE_STAGING
+int AdmissionUmdGpuvaWaitNativeStaging(ADMISSION_UMD_DEVICE *device,
+                                      unsigned long long fence);
+#endif
 int AdmissionUmdGpuvaPrepareCpuMap(ADMISSION_UMD_DEVICE *device,
                                    uint64_t token);
+/* RC65 upload ring (umd_upload_ring.h). Stage: 1 when the slot's dirty runs
+ * were copied into a reserved ring slice and appended to Copies (dirty bits
+ * consumed, slot UploadRingPending); 0 when nothing was consumed (clean,
+ * ineligible, ring/copy capacity: the escape path keeps the bytes); -1 when
+ * the snapshot no longer fit after its reset (Sync invalidated: the next
+ * submission restores the whole slot). Finish clears UploadRingPending after
+ * the copy submission; without an accepted fence it invalidates those slots
+ * and disables the ring. Retire reclaims slices up to the completed fence. */
+int AdmissionUmdGpuvaUploadRingStage(ADMISSION_UMD_DEVICE *device,
+    uint64_t token, unsigned int target, ADMISSION_UMD_UPLOAD_RING *ring,
+    ADMISSION_UMD_UPLOAD_COPY *copies, unsigned int capacity,
+    unsigned int *count);
+unsigned int AdmissionUmdGpuvaUploadRingFinish(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_UPLOAD_RING *ring, int accepted, unsigned long long fence);
+void AdmissionUmdGpuvaUploadRingRetire(ADMISSION_UMD_DEVICE *device,
+    ADMISSION_UMD_UPLOAD_RING *ring);
+/* RC65: whether Cpu is the native staging map of the slot (no escapes). */
+int AdmissionUmdGpuvaNativeStagingSlot(ADMISSION_UMD_DEVICE *device,
+    uint64_t token, const void *cpu);
 int AdmissionUmdGpuvaPrepareDirectMap(ADMISSION_UMD_DEVICE *device,
                                       uint64_t token);
 int AdmissionUmdGpuvaFinishDirectMap(ADMISSION_UMD_DEVICE *device,
@@ -321,6 +459,7 @@ typedef enum ADMISSION_UMD_PRESENT_MEASURE_KIND {
 VOID AdmissionUmdPresentMeasure(UINT Kind, HRESULT Status,
                                 const UINT *Values, UINT Count);
 BOOL AdmissionUmdDiagnosticEnabled(VOID);
+BOOL AdmissionUmdMeasureEnabled(VOID);
 /* Write the buffered trace lines now (EXP1109). */
 VOID AdmissionUmdDiagnosticFlush(VOID);
 VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error);

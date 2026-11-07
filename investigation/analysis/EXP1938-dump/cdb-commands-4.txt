@@ -1,0 +1,33 @@
+.echo === 00 IDENTITY_FINAL_DUMP_PASS ===
+.expr /s masm
+.reload /f AppleAgxRenderAdmission.sys
+lmvm AppleAgxRenderAdmission
+.bugcheck
+kv 10
+.echo === 01 RESET_WRAPPER_CODE ===
+u dxgkrnl!ADAPTER_RENDER::DdiResetFromTimeout L100
+.echo === 02 TDR_TO_DXGADAPTER_LINK ===
+dps 0xffffd684d64e3030 L1
+.echo === 03 DXGADAPTER_TO_RENDER_LINK ===
+dps 0xffffd684d3ce0cb0 L1
+.echo === 04 RENDER_OBJECT_NOT_MINIPORT ===
+dps poi(0xffffd684d3ce0cb0) L200
+.echo === 05 APPL0002_DEVICE_AND_EXTENSION ===
+dt nt!_DEVICE_OBJECT 0xffffd684d3682030
+dps 0xffffd684d3682180 L80
+.echo === 06 VIDEO1_DEVICE_AND_EXTENSION ===
+dt nt!_DEVICE_OBJECT 0xffffd684d3d4d730
+dps 0xffffd684d3d4d880 L80
+.echo === 07 MONITOR_DEVICE_AND_EXTENSION ===
+dt nt!_DEVICE_OBJECT 0xffffd684d2ac36d0
+dps 0xffffd684d2ac3820 L80
+.echo === 08 ADAPTER_LAYOUT_REFERENCE_ONLY ===
+dt -v AppleAgxRenderAdmission!_ADMISSION_CONTEXT ObjectAdapter
+dt -v AppleAgxRenderAdmission!_ADMISSION_CONTEXT PhysicalDeviceObject
+dt -v AppleAgxRenderAdmission!_ADMISSION_CONTEXT PlatformRuntime
+.echo === 09 RUNTIME_LAYOUT_REFERENCE_ONLY ===
+dt -v AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME Adapter
+dt -v AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME Rtkit
+dt -v AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME Provider
+dt -v AppleAgxRenderAdmission!_APPLE_AGX_RTKIT_SESSION
+.echo === END_EXP1938_PASS_4_NO_FIFTH_DISCOVERY_PASS ===

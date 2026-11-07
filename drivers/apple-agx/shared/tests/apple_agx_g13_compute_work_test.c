@@ -162,6 +162,24 @@ unsigned AppleAgxG13ComputeWorkContractTests(void) {
     i.TimestampGpuAddress=0;
     assert(AppleAgxG13ComputeWorkBuild(&i,work) && get64(work+0x2b8)==0 && get64(work+0x2c8)==0);
   }
+  {
+    /* EXP1854 C47B: a heap sampler read zero because the batch's sampler
+     * heap never reached RunCompute EncoderParams (Asahi queue/compute.rs:
+     * sampler_array, sampler_count, sampler_max = count + 1). */
+    unsigned char before[sizeof(work)];
+    assert(get64(work+0x274)==0 && get32(work+0x27c)==0 && get32(work+0x280)==0);
+    i.SamplerHeap=0x1500900000ULL;i.SamplerCount=3;
+    assert(AppleAgxG13ComputeWorkBuild(&i,work));
+    assert(get64(work+0x274)==0x1500900000ULL && get32(work+0x27c)==3 && get32(work+0x280)==4);
+    assert(get32(work+0x270)==0 && get64(work+0x288)==i.StampGpuAddress);
+    memcpy(before,work,sizeof(work));
+    i.SamplerCount=0;assert(!AppleAgxG13ComputeWorkBuild(&i,work));
+    i.SamplerCount=3;i.SamplerHeap=0x1500900008ULL;assert(!AppleAgxG13ComputeWorkBuild(&i,work));
+    i.SamplerHeap=0;assert(!AppleAgxG13ComputeWorkBuild(&i,work));
+    i.SamplerHeap=0x1500900000ULL;i.SamplerCount=0x401u;assert(!AppleAgxG13ComputeWorkBuild(&i,work));
+    assert(!memcmp(work,before,sizeof(work)));
+    i.SamplerHeap=0;i.SamplerCount=0;
+  }
   return failures;
 }
 

@@ -2,13 +2,14 @@ param(
    [Parameter(Mandatory = $true)][string]$InputRoot,
    [Parameter(Mandatory = $true)][string]$ResultRoot
 )
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
 $ErrorActionPreference = 'Stop'
 if (Test-Path $ResultRoot) { throw "refusing to reuse existing result root: $ResultRoot" }
 
-$clang = 'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin\clang-cl.exe'
-$mesa = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa'
-$generated = 'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated'
-$fourcc = 'C:\Users\pauls\AD04-uatomic\include'
+$clang = "$builderRoot\AD04-asahi-windows-compiler\llvm20\bin\clang-cl.exe"
+$mesa = "$builderRoot\AD04-d3d10-frontend-build\mesa"
+$generated = "$builderRoot\AD04-asahi-windows-compiler\b5\generated"
+$fourcc = "$builderRoot\AD04-uatomic\include"
 $work = Join-Path $env:TEMP ('ad04-phase3-normalized-' + [guid]::NewGuid().ToString('N'))
 $compilerWork = Join-Path $work 'compiler'
 $include = @('/I', $fourcc, '/I', $InputRoot, '/I', $compilerWork, '/I', "$mesa\include", '/I', "$mesa\src", '/I', "$mesa\src\compiler", '/I', "$mesa\src\compiler\nir", '/I', "$mesa\src\asahi\compiler", '/I', "$mesa\src\asahi\libagx", '/I', "$generated\src", '/I', "$generated\src\compiler", '/I', "$generated\src\compiler\nir", '/I', "$generated\src\asahi\compiler", '/I', "$generated\src\asahi\libagx")

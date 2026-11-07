@@ -14,8 +14,9 @@
  * the 11.0 entries, and 18 are new.  The 11.1 runtime reports constant-buffer
  * offsets, ClearView, no-overwrite constant-buffer maps and copy flags to
  * applications without asking the driver, so those are implemented; tiled
- * resources, markers, hardware protection, texture layouts and logic ops
- * have caps the driver reports as absent, and their entries fail closed.
+ * resources, markers, hardware protection and texture layouts have caps
+ * the driver reports as absent, and their entries fail closed; logic ops are
+ * implemented (CreateBlendState1).
  *
  * SPDX-License-Identifier: MIT
  */
@@ -35,6 +36,10 @@
 
 extern "C" VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
                                           const UINT *Values, UINT Count);
+
+/* OutputMerger.cpp owns typed buffer RTV packing and element bounds. */
+bool AgxD3d11ClearBufferRtv(Device *, RenderTargetView *, const union pipe_color_union *,
+                          UINT first, UINT count);
 
 /* The WDDM 2.0 table starts with the D3D11 table's 152 entries. */
 #define AGX_SAME_SLOT(field)                                                    \
@@ -214,11 +219,7 @@ blend10_1(D3D10DDI_HDEVICE hDevice, const D3D11_1_DDI_BLEND_DESC *in, D3D10_1_DD
    out->IndependentBlendEnable = in->IndependentBlendEnable;
    for (UINT i = 0; i < D3D10_DDI_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) {
       const D3D11_1_DDI_RENDER_TARGET_BLEND_DESC &rt = in->RenderTarget[i];
-      /* D3D11_1DDICAPS_D3D11_OPTIONS reports no output-merger logic ops */
-      if (rt.LogicOpEnable) {
-         refuse(hDevice, "reject-wddm2-logicop", E_NOTIMPL, i);
-         return false;
-      }
+      /* logic ops are lowered by CreateBlendState1 (logic_op) */
       out->RenderTarget[i].BlendEnable = rt.BlendEnable;
       out->RenderTarget[i].SrcBlend = rt.SrcBlend;
       out->RenderTarget[i].DestBlend = rt.DestBlend;
@@ -239,26 +240,76 @@ CalcPrivateBlendStateSize1(D3D10DDI_HDEVICE hDevice, const D3D11_1_DDI_BLEND_DES
    return base11.pfnCalcPrivateBlendStateSize(hDevice, &blend);
 }
 
+/* D3D11.1 output-merger logic ops (D3D11_1DDICAPS_D3D11_OPTIONS
+ * OutputMergerLogicOp). D3D11_1_DDI_LOGIC_OP has the order of D3D12_LOGIC_OP
+ * (C57). Gallium has one logic op for every render target, so targets that
+ * disagree (independent blend) are refused, and a target may not blend and
+ * use a logic op at once (the runtime refuses that too). Returns the
+ * PIPE_LOGICOP, -1 without logic ops, -2 for a refused state. */
+static int
+logic_op(D3D10DDI_HDEVICE hDevice, const D3D11_1_DDI_BLEND_DESC *in)
+{
+   static const unsigned char logic_ops[16] = {
+      PIPE_LOGICOP_CLEAR, PIPE_LOGICOP_SET, PIPE_LOGICOP_COPY, PIPE_LOGICOP_COPY_INVERTED,
+      PIPE_LOGICOP_NOOP, PIPE_LOGICOP_INVERT, PIPE_LOGICOP_AND, PIPE_LOGICOP_NAND,
+      PIPE_LOGICOP_OR, PIPE_LOGICOP_NOR, PIPE_LOGICOP_XOR, PIPE_LOGICOP_EQUIV,
+      PIPE_LOGICOP_AND_REVERSE, PIPE_LOGICOP_AND_INVERTED, PIPE_LOGICOP_OR_REVERSE,
+      PIPE_LOGICOP_OR_INVERTED};
+   const UINT targets = in->IndependentBlendEnable ? D3D10_DDI_SIMULTANEOUS_RENDER_TARGET_COUNT : 1u;
+   int op = -1;
+   for (UINT i = 0; i < targets; ++i) {
+      const D3D11_1_DDI_RENDER_TARGET_BLEND_DESC &rt = in->RenderTarget[i];
+      const int mine = rt.LogicOpEnable ? (int)rt.LogicOp : -1;
+      if ((rt.LogicOpEnable && (rt.BlendEnable || (UINT)rt.LogicOp >= 16u)) ||
+          (i && mine != op)) {
+         refuse(hDevice, "reject-wddm2-logicop", E_INVALIDARG, i);
+         return -2;
+      }
+      op = mine;
+   }
+   return op < 0 ? -1 : logic_ops[op];
+}
+
 void APIENTRY
 CreateBlendState1(D3D10DDI_HDEVICE hDevice, const D3D11_1_DDI_BLEND_DESC *desc,
                   D3D10DDI_HBLENDSTATE hState, D3D10DDI_HRTBLENDSTATE hRTState)
 {
    D3D10_1_DDI_BLEND_DESC blend = {};
-   if (blend10_1(hDevice, desc, &blend))
+   if (!blend10_1(hDevice, desc, &blend))
+      return;
+   const int op = logic_op(hDevice, desc);
+   if (op == -2)
+      return;
+   if (op == -1) {
       base11.pfnCreateBlendState(hDevice, &blend, hState, hRTState);
+      return;
+   }
+   /* no target blends: only the write masks and alpha-to-coverage remain */
+   struct pipe_context *pipe = CastDevice(hDevice)->pipe;
+   struct pipe_blend_state state = {};
+   state.alpha_to_coverage = desc->AlphaToCoverageEnable;
+   state.independent_blend_enable = desc->IndependentBlendEnable;
+   state.logicop_enable = 1;
+   state.logicop_func = (unsigned)op;
+   for (UINT i = 0; i < MIN2(PIPE_MAX_COLOR_BUFS, D3D10_DDI_SIMULTANEOUS_RENDER_TARGET_COUNT); ++i)
+      state.rt[i].colormask =
+         desc->RenderTarget[desc->IndependentBlendEnable ? i : 0u].RenderTargetWriteMask;
+   CastBlendState(hState)->handle = pipe->create_blend_state(pipe, &state);
 }
 
 bool
 rasterizer10(D3D10DDI_HDEVICE hDevice, const D3DWDDM2_0DDI_RASTERIZER_DESC *in,
              D3D10_DDI_RASTERIZER_DESC *out)
 {
-   /* No target-independent rasterization (forced counts above 1) and no
-    * conservative rasterization tier are reported. EXP1324: a forced count
-    * of 1 rasterizes single-sampled without depth (D3D11_RASTERIZER_DESC1)
-    * -- what single-sampled and attachment-less renders do; the FL 11_0
-    * desktop creates such states and recreated its devices without end
-    * while they were refused. */
-   if (!in || in->ForcedSampleCount > 1u ||
+   /* No conservative rasterization tier is reported. EXP1324: a forced
+    * count of 1 rasterizes single-sampled without depth
+    * (D3D11_RASTERIZER_DESC1) -- what single-sampled and attachment-less
+    * renders do; the FL 11_0 desktop creates such states and recreated its
+    * devices without end while they were refused. FL 11_1: 4, 8 and 16 run
+    * the TIR variants (agx_d3d11_ddi.cpp AgxTirScope); the D3D11.3 spec
+    * allows 0, 1, 4, 8 and 16. */
+   if (!in || (in->ForcedSampleCount > 1u && in->ForcedSampleCount != 4u &&
+               in->ForcedSampleCount != 8u && in->ForcedSampleCount != 16u) ||
        in->ConservativeRasterizationMode != D3DWDDM2_0DDI_CONSERVATIVE_RASTERIZATION_OFF) {
       refuse(hDevice, "reject-wddm2-rasterizer", E_NOTIMPL, in ? in->ForcedSampleCount : 0u);
       return false;
@@ -290,8 +341,12 @@ CreateRasterizerStateWDDM2_0(D3D10DDI_HDEVICE hDevice, const D3DWDDM2_0DDI_RASTE
                              D3D10DDI_HRASTERIZERSTATE hState, D3D10DDI_HRTRASTERIZERSTATE hRTState)
 {
    D3D10_DDI_RASTERIZER_DESC rs = {};
-   if (rasterizer10(hDevice, desc, &rs))
-      base11.pfnCreateRasterizerState(hDevice, &rs, hState, hRTState);
+   if (!rasterizer10(hDevice, desc, &rs))
+      return;
+   base11.pfnCreateRasterizerState(hDevice, &rs, hState, hRTState);
+   /* FL 11_1: the forced count the draws' TIR variants use */
+   if (RasterizerState *state = static_cast<RasterizerState *>(hState.pDrvPrivate))
+      state->agx_forced_samples = desc->ForcedSampleCount > 1u ? desc->ForcedSampleCount : 0u;
 }
 
 /* ----- 11.1 shader signatures (entries gain component type, precision
@@ -638,12 +693,9 @@ ClearView(D3D10DDI_HDEVICE hDevice, D3D11DDI_HANDLETYPE type, VOID *hView, const
    }
    if (type == D3D10DDI_HT_RENDERTARGETVIEW) {
       D3D10DDI_HRENDERTARGETVIEW rtv = {hView};
-      if (!nRects) {
-         base11.pfnClearRenderTargetView(hDevice, rtv, (FLOAT *)color);
-         return;
-      }
       Device *device = CastDevice(hDevice);
       struct pipe_surface *surface = &CastRenderTargetView(rtv)->surface;
+      bool buffer = surface->texture && surface->texture->target == PIPE_BUFFER;
       union pipe_color_union value;
       const bool integer = util_format_is_pure_integer(surface->format);
       const bool sint = util_format_is_pure_sint(surface->format);
@@ -657,27 +709,64 @@ ClearView(D3D10DDI_HDEVICE hDevice, D3D11DDI_HANDLETYPE type, VOID *hView, const
          else
             value.ui[i] = !(c > 0.0f) ? 0u : c >= 4294967295.0f ? UINT32_MAX : (unsigned)c;
       }
+      if (buffer && !nRects) {
+         RenderTargetView *view = CastRenderTargetView(rtv);
+         /* ClearView is unconditional, unlike ClearRenderTargetView. */
+         if (!AgxD3d11ClearBufferRtv(device, view, &value, 0, view->buffer_num_elements))
+            refuse(hDevice, "reject-wddm2-clearview", E_FAIL, (UINT)type);
+         return;
+      }
+      D3D10_DDI_RECT full = {};
+      if (!nRects) {
+         full.right = (LONG)pipe_surface_width(surface);
+         full.bottom = (LONG)pipe_surface_height(surface);
+         rects = &full;
+         nRects = 1;
+      }
       for (UINT i = 0; rects && i < nRects; ++i) {
          const D3D10_DDI_RECT &r = rects[i];
          if (r.right <= r.left || r.bottom <= r.top)
             continue;
+         if (surface->texture && surface->texture->target == PIPE_BUFFER) {
+            RenderTargetView *view = CastRenderTargetView(rtv);
+            /* A buffer view is one row of typed elements. */
+            if (r.top >= 1 || r.bottom <= 0 || r.right <= 0)
+               continue;
+            UINT first = r.left > 0 ? (UINT)r.left : 0u;
+            UINT end = (UINT)r.right < view->buffer_num_elements ?
+                       (UINT)r.right : view->buffer_num_elements;
+            if (first >= end)
+               continue;
+            if (!AgxD3d11ClearBufferRtv(device, view, &value, first, end - first)) {
+               refuse(hDevice, "reject-wddm2-clearview", E_FAIL, (UINT)type);
+               return;
+            }
+            continue;
+         }
          /* EXP1330: Asahi has no clear_render_target (dwm and D2D called
           * address 0 here at FL 11_0) */
-         if (!AgxD3d10WindowsClearRenderTargetRect(device->pipe, surface, &value,
-                                                   r.left, r.top, r.right - r.left,
-                                                   r.bottom - r.top)) {
-            refuse(hDevice, "reject-wddm2-clearview", E_FAIL, (UINT)type);
-            return;
+         /* Whole and rectangular ClearView ignore predication. Explicit
+          * slices also work when the native blitter cannot layer a clear. */
+         for (unsigned layer = surface->first_layer; layer <= surface->last_layer; ++layer) {
+            struct pipe_surface slice = *surface;
+            slice.first_layer = slice.last_layer = layer;
+            if (!AgxD3d10WindowsClearRenderTargetRect(device->pipe, &slice, &value,
+                                                    r.left, r.top, r.right - r.left,
+                                                    r.bottom - r.top)) {
+               refuse(hDevice, "reject-wddm2-clearview", E_FAIL, (UINT)type);
+               return;
+            }
          }
       }
       return;
    }
-   if (type == D3D11DDI_HT_UNORDEREDACCESSVIEW && !nRects) {
+   if (type == D3D11DDI_HT_UNORDEREDACCESSVIEW) {
       D3D11DDI_HUNORDEREDACCESSVIEW uav = {hView};
-      base11.pfnClearUnorderedAccessViewFloat(hDevice, uav, color);
+      if (!AgxD3d11ClearUavView(hDevice, uav, color, rects, nRects))
+         refuse(hDevice, "reject-wddm2-clearview", E_NOTIMPL, (UINT)type);
       return;
    }
-   /* UAV rectangles and video views are not implemented */
+   /* Video and other unsupported view types remain fail closed. */
    refuse(hDevice, "reject-wddm2-clearview", E_NOTIMPL, (UINT)type);
 }
 

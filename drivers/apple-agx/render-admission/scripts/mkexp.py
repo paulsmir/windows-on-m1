@@ -7,6 +7,9 @@ Usage:
 """
 import hashlib, json, os, re, shutil, subprocess, sys, zipfile, datetime
 
+# Builder root (APPLE AGX\active as its 8.3 alias, no space); override with APPLE_AGX_BUILDER_ROOT.
+BUILDER = os.environ.get('APPLE_AGX_BUILDER_ROOT', r'C:\Users\pauls\APB12E~1\active')
+
 EXP = '/Users/pavel/public_windows/.local/experiments'
 WT = '/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler'
 GIT = '/opt/homebrew/bin/git'
@@ -113,7 +116,7 @@ def clone(old_id, old_dir, new_id, new_dir):
     m['experiment'] = new_id
     m['utc_before'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     m['source_manifest_sha256'] = h(os.path.join(dst, 'source-manifest.json'))
-    m['build_command'] = rf'C:\Users\pauls\{new_dir}\build-kmd.ps1 SHA256 ' + h(os.path.join(dst, 'build-kmd.ps1'))
+    m['build_command'] = rf'{BUILDER}\{new_dir}\build-kmd.ps1 SHA256 ' + h(os.path.join(dst, 'build-kmd.ps1'))
     m['build_result'] = json.load(open(os.path.join(dst, 'kmd-build-receipt.json'), encoding='utf-8-sig'))
     m['artifact_sha256'] = {n: h(os.path.join(dst, n)) for n in m['artifact_sha256']}
     m['inf_sha256'] = m['artifact_sha256']['package/AppleAgxRenderAdmission.inf']

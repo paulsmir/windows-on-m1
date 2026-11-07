@@ -57,9 +57,24 @@ corpus 64/4, DWM faults 0), `airssh 'shutdown /r /t 3'`,
 CHANGES verdicts. Guest hang: kill the experiment's run_uefi, run recover.sh,
 rerun under a new ID. Never edit old results; append corrections.
 
+## Throughput (bench is the bottleneck: ~30 min run + rollback)
+
+- Bundle INDEPENDENT changes into one experiment when each has its own
+  fresh-device probe step, its own `AGX_D3D12_<step>: PASS|FAIL` line and
+  its own receipts; state it in BEFORE as
+  `ATOMIC CONTRACT: none -- separate steps ...`. Dependent changes (one
+  needs the other's result, or they touch the same path) stay one per
+  experiment.
+- Overlap: while an experiment runs, implement and offline-verify the next
+  step (tests, builder compile gate, probe build) and pre-build its package
+  right after the snapshot rule allows, so the next run starts as soon as
+  the rollback reports RECOVERY_DONE.
+- A failed bundle step never blocks the others: record per-step verdicts,
+  fix the failed one in the next package.
+
 ## Habits
 
-- One variable per experiment; per-step PASS lines allow bundles.
+- One variable per experiment unless bundled as above.
 - When a whole class breaks, `git diff <good> <bad>` the failing path.
 - Separate probe bugs from driver bugs (D3D12 API rules).
 - Report to the user in Russian, one short report per experiment.

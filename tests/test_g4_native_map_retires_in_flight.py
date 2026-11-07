@@ -37,16 +37,19 @@ PROGRAM = r'''
 #include <stdio.h>
 #include <stdlib.h>
 #define APPLE_AGX_GPUVA_WINSYS 1
+#define AGX_WIN32_BO_GPU_ONLY (1u << 29)
+static void (*AgxWin32GpuOnlyMapHook)(unsigned,unsigned);
 typedef struct { uint64_t Allocation; unsigned Bound; } AGX_WIN32_GPUVA_BO;
 typedef struct { uint64_t *Handles; unsigned Count; uint64_t Fence; } AGX_WIN32_GPUVA_SET;
 typedef struct { uint64_t *Held; unsigned HeldCount; uint64_t RenderFence;
   AGX_WIN32_GPUVA_SET Older[3]; unsigned OlderCount; } AGX_WIN32_GPUVA_SPACE;
-typedef struct { int Failed; struct { void *Screen; } Buffers; AGX_WIN32_GPUVA_SPACE Gpuva; } AGX_WIN32_ASAHI_BACKEND;
-typedef struct { int unused; } AGX_WIN32_NATIVE_BO;
+typedef struct { void *PrivateMap; uint64_t Bytes; } AGX_WIN32_ASAHI_CPU_STORAGE;
+typedef struct { int Failed; void *Owner; struct { int (*CpuStorage)(void *,const void *,uint64_t,AGX_WIN32_ASAHI_CPU_STORAGE *); } Ops; struct { void *Screen; } Buffers; AGX_WIN32_GPUVA_SPACE Gpuva; } AGX_WIN32_ASAHI_BACKEND;
+typedef struct { int unused; uint64_t ConstructionSerial; } AGX_WIN32_NATIVE_BO;
 struct agx_device { void *windows_private; };
-struct agx_bo { int refcnt; void *_map; unsigned flags; size_t size; };
+struct agx_bo { int refcnt; void *_map; unsigned flags,handle; size_t size; };
 struct windows_bo { struct agx_bo Base; AGX_WIN32_NATIVE_BO Backing; AGX_WIN32_ASAHI_BACKEND *Backend;
-  AGX_WIN32_GPUVA_BO Gpuva; void *Shadow; };
+  AGX_WIN32_GPUVA_BO Gpuva; void *Shadow;  int Virtual; /* C53 B1 */ };
 /* EXP1207: these BOs carry no shadow flag. */
 #define AGX_WIN32_BO_SHADOW (1u << 30)
 static void *shadow_alloc(size_t bytes) { return malloc(bytes); }

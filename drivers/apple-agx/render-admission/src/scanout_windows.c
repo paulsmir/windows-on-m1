@@ -7,6 +7,7 @@
 
 static KDEFERRED_ROUTINE AdmissionScanoutTimerDpc;
 static KSYNCHRONIZE_ROUTINE AdmissionScanoutVsyncControl;
+static ULONGLONG AdmissionScanoutTime100ns(void);
 
 typedef struct _ADMISSION_SCANOUT_RUNTIME {
   ADMISSION_CONTEXT *Adapter;
@@ -18,6 +19,7 @@ typedef struct _ADMISSION_SCANOUT_RUNTIME {
   volatile LONG Faulted;
   volatile LONG64 PendingPhysicalAddress;
   volatile LONG64 PendingSequence;
+  volatile LONG64 PendingQueuedTime100ns;
   volatile LONG64 DeferredPrimaryAddress;
   /* MPO3 flip identity: tagged before the queue, carried with the pending
    * flip, and reported as CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2 on latch. */
@@ -25,6 +27,8 @@ typedef struct _ADMISSION_SCANOUT_RUNTIME {
   volatile LONG NextMpo;
   volatile LONG64 PendingMpoPresentId;
   volatile LONG PendingMpo;
+  /* rc110: broker format of the primary deferred while the source is hidden. */
+  volatile LONG DeferredFormat;
   volatile LONG64 PlaneOffPresentId;
   volatile LONG PlaneOffPending;
   volatile LONG64 LastNotifiedSequence;
@@ -188,6 +192,8 @@ static NTSTATUS AdmissionScanoutQualifyVisible(
     status = STATUS_DEVICE_BUSY;
     goto Exit;
   }
+  InterlockedExchange64(&Runtime->PendingQueuedTime100ns,
+                        (LONG64)AdmissionScanoutTime100ns());
   panel_result = AppleAgxFixedPanelQueuePresent(
       &Runtime->Panel, ADMISSION_MEMORY_LOCAL_SEGMENT, 0ULL, &sequence);
   if (panel_result != AppleAgxFixedPanelOk) {
@@ -399,6 +405,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
     status = STATUS_DEVICE_BUSY;
     goto Exit;
   }
+  InterlockedExchange64(&runtime->PendingQueuedTime100ns,
+                        (LONG64)AdmissionScanoutTime100ns());
   panel_result = AppleAgxFixedPanelQueuePresent(
       &runtime->Panel, ADMISSION_MEMORY_LOCAL_SEGMENT, destinationOffset,
       &sequence);
@@ -774,6 +782,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutRetireQualification(
     (void)AdmissionDisplayOutputLeaseRetire(&temporary);
     return STATUS_DEVICE_BUSY;
   }
+  InterlockedExchange64(&runtime->PendingQueuedTime100ns,
+                        (LONG64)AdmissionScanoutTime100ns());
   result = AppleAgxFixedPanelQueuePresent(
       &runtime->Panel, ADMISSION_MEMORY_LOCAL_SEGMENT, 0ULL, &sequence);
   if (result != AppleAgxFixedPanelOk) {
@@ -865,17 +875,142 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueryQualification(
 }
 #endif
 
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutFormatSupported(
+    ADMISSION_CONTEXT *Context, D3DDDIFORMAT Format) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  if (Format == D3DDDIFMT_A8R8G8B8)
+    return TRUE;
+  return Format == D3DDDIFMT_A8B8G8R8 && runtime != NULL &&
+         (runtime->Panel.Scanout.Capabilities &
+          APPLE_AGX_SCANOUT_CAP_RGBA8888) != 0u;
+}
+
+_Use_decl_annotations_ VOID AdmissionScanoutBrokerInfo(
+    ADMISSION_CONTEXT *Context, ULONG *AbiVersion, ULONG *Capabilities) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  *AbiVersion = runtime != NULL ? runtime->Panel.Scanout.AbiVersion : 0u;
+  *Capabilities = runtime != NULL ? runtime->Panel.Scanout.Capabilities : 0u;
+}
+
+_Use_decl_annotations_ ULONG AdmissionScanoutFormatCode(
+    ADMISSION_CONTEXT *Context, D3DDDIFORMAT Format) {
+  if (!AdmissionScanoutFormatSupported(Context, Format))
+    return 0u;
+  return Format == D3DDDIFMT_A8R8G8B8 ? APPLE_AGX_SCANOUT_FORMAT_BGRA8888
+                                      : APPLE_AGX_SCANOUT_FORMAT_RGBA8888;
+}
+
+/* The shared panel scaling values are the D3DKMDT_VPPS values. */
+C_ASSERT((ULONG)AppleAgxFixedPanelScalingIdentity ==
+         (ULONG)D3DKMDT_VPPS_IDENTITY);
+C_ASSERT((ULONG)AppleAgxFixedPanelScalingCentered ==
+         (ULONG)D3DKMDT_VPPS_CENTERED);
+C_ASSERT((ULONG)AppleAgxFixedPanelScalingStretched ==
+         (ULONG)D3DKMDT_VPPS_STRETCHED);
+C_ASSERT((ULONG)AppleAgxFixedPanelScalingAspectRatioCenteredMax ==
+         (ULONG)D3DKMDT_VPPS_ASPECTRATIOCENTEREDMAX);
+C_ASSERT((ULONG)D3DKMDT_VPPS_UNINITIALIZED == 0u &&
+         (ULONG)D3DKMDT_VPPS_UNPINNED == 254u &&
+         (ULONG)D3DKMDT_VPPS_NOTSPECIFIED == 255u);
+
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutScaledModes(
+    ADMISSION_CONTEXT *Context) {
+#if ADMISSION_DISPLAY_SCALED_MODES
+  /* EXP2053: dxgkrnl asks for monitor modes once, before the panel is
+   * Started (the first scanout), so the decision follows the broker's ABI
+   * and capabilities read at StartDevice (AdmissionScanoutStart), not the
+   * Started state. Commit and flip still require a started panel. */
+  ADMISSION_SCANOUT_RUNTIME *runtime;
+  if (Context == NULL || Context->ScanoutRuntime == NULL)
+    return FALSE;
+  runtime = (ADMISSION_SCANOUT_RUNTIME *)Context->ScanoutRuntime;
+  return runtime->Adapter == Context &&
+                 runtime->Panel.Scanout.AbiVersion ==
+                     APPLE_AGX_SCANOUT_ABI_VERSION_V2 &&
+                 (runtime->Panel.Scanout.Capabilities &
+                  APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE) != 0u
+             ? TRUE
+             : FALSE;
+#else
+  UNREFERENCED_PARAMETER(Context);
+  return FALSE;
+#endif
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutSourceModeAt(
+    ADMISSION_CONTEXT *Context, ULONG Index, ULONG *Width, ULONG *Height,
+    ULONG *Stride) {
+  APPLE_AGX_FIXED_PANEL_SOURCE_MODE mode;
+  *Width = 0u;
+  *Height = 0u;
+  *Stride = 0u;
+  RtlZeroMemory(&mode, sizeof(mode));
+  if (!AppleAgxFixedPanelSourceModeAt(
+          Index,
+          AdmissionScanoutScaledModes(Context) ? APPLE_AGX_SCANOUT_TRUE
+                                               : APPLE_AGX_SCANOUT_FALSE,
+          &mode))
+    return FALSE;
+  *Width = mode.Width;
+  *Height = mode.Height;
+  *Stride = mode.Stride;
+  return TRUE;
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutSourceModeSupported(
+    ADMISSION_CONTEXT *Context, ULONG Width, ULONG Height, ULONG Stride) {
+  return AppleAgxFixedPanelSourceModeFind(
+             Width, Height, Stride,
+             AdmissionScanoutScaledModes(Context) ? APPLE_AGX_SCANOUT_TRUE
+                                                  : APPLE_AGX_SCANOUT_FALSE,
+             NULL)
+             ? TRUE
+             : FALSE;
+}
+
+_Use_decl_annotations_ ULONG AdmissionScanoutScalingSupport(
+    ADMISSION_CONTEXT *Context, ULONG Width, ULONG Height) {
+  return AppleAgxFixedPanelScalingSupport(
+      Width, Height,
+      AdmissionScanoutScaledModes(Context) ? APPLE_AGX_SCANOUT_TRUE
+                                           : APPLE_AGX_SCANOUT_FALSE);
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutResolveScaling(
+    ADMISSION_CONTEXT *Context, ULONG Width, ULONG Height,
+    D3DKMDT_VIDPN_PRESENT_PATH_SCALING Requested,
+    D3DKMDT_VIDPN_PRESENT_PATH_SCALING *Resolved) {
+  APPLE_AGX_FIXED_PANEL_SCALING scaling = AppleAgxFixedPanelScalingIdentity;
+  *Resolved = D3DKMDT_VPPS_UNINITIALIZED;
+  if (!AppleAgxFixedPanelResolveScaling(
+          Width, Height,
+          AdmissionScanoutScaledModes(Context) ? APPLE_AGX_SCANOUT_TRUE
+                                               : APPLE_AGX_SCANOUT_FALSE,
+          (APPLE_AGX_SCANOUT_U32)Requested, &scaling))
+    return FALSE;
+  *Resolved = (D3DKMDT_VIDPN_PRESENT_PATH_SCALING)scaling;
+  return TRUE;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutCommit(
     ADMISSION_CONTEXT *Context, ULONG Width, ULONG Height, ULONG Stride,
-    D3DDDIFORMAT Format) {
+    D3DDDIFORMAT Format, D3DKMDT_VIDPN_PRESENT_PATH_SCALING Scaling) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
   if (runtime == NULL)
     return STATUS_DEVICE_NOT_READY;
-  return AppleAgxFixedPanelCommit(
+#if !ADMISSION_DISPLAY_SCALED_MODES
+  if (Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
+      Height != APPLE_AGX_SCANOUT_J313_HEIGHT)
+    return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+#endif
+  return AppleAgxFixedPanelCommitMode(
              &runtime->Panel, 0u, 0u, Width, Height, Stride,
              Format == D3DDDIFMT_A8R8G8B8
                  ? APPLE_AGX_SCANOUT_FORMAT_BGRA8888
-                 : 0u) == AppleAgxFixedPanelOk
+                 : Format == D3DDDIFMT_A8B8G8R8
+                       ? APPLE_AGX_SCANOUT_FORMAT_RGBA8888
+                       : 0u,
+             (APPLE_AGX_FIXED_PANEL_SCALING)Scaling) == AppleAgxFixedPanelOk
              ? STATUS_SUCCESS
              : STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
 }
@@ -943,6 +1078,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueueDeferred(
   }
   address = InterlockedExchange64(&runtime->DeferredPrimaryAddress, 0);
   InterlockedExchange64(&runtime->PendingPhysicalAddress, address);
+  InterlockedExchange64(&runtime->PendingQueuedTime100ns,
+                        (LONG64)AdmissionScanoutTime100ns());
+  /* rc110: the deferred primary keeps the format it was flipped with. */
+  if (AppleAgxFixedPanelSetPresentFormat(
+          &runtime->Panel,
+          (APPLE_AGX_SCANOUT_U32)InterlockedCompareExchange(
+              &runtime->DeferredFormat, 0, 0)) != AppleAgxFixedPanelOk) {
+    InterlockedExchange64(&runtime->PendingPhysicalAddress, 0);
+    InterlockedExchange(&runtime->PresentGate, 0);
+    return STATUS_DEVICE_HARDWARE_ERROR;
+  }
   result = AppleAgxFixedPanelQueuePresent(
       &runtime->Panel, ADMISSION_MEMORY_LOCAL_SEGMENT, offset, &sequence);
   if (result != AppleAgxFixedPanelOk) {
@@ -972,6 +1118,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   ADMISSION_SCANOUT_MEMORY_VIEW window;
   APPLE_AGX_U64 surface_offset = 0ULL;
   APPLE_AGX_U64 sequence = 0ULL;
+  ULONGLONG surface_bytes = 0ULL;
+  ULONG format_code = 0u;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   ADMISSION_DISPLAY_OUTPUT_LEASE fallbackCandidate;
   ADMISSION_BACKEND_OUTPUT_VIEW fallbackView;
@@ -995,23 +1143,60 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   if (allocation->Object.Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC)
     return STATUS_INVALID_HANDLE;
   description = &allocation->Object.Description;
-  if (!AdmissionAllocationDescriptionValid(description) ||
-      description->Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
-      description->Height != APPLE_AGX_SCANOUT_J313_HEIGHT ||
-      description->Pitch != APPLE_AGX_SCANOUT_J313_STRIDE ||
-      description->BytesPerPixel != 4u ||
-      description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
-      description->Format != (UINT)D3DDDIFMT_A8R8G8B8)
+  InterlockedExchange(&Context->DisplayModes.LastSourceAddressFormat,
+                      (LONG)description->Format);
+  InterlockedExchange(&Context->DisplayModes.LastSourceAddressWidth,
+                      (LONG)description->Width);
+  InterlockedExchange(&Context->DisplayModes.LastSourceAddressHeight,
+                      (LONG)description->Height);
+  /* rc110 (EXP2049): only a linear scanout-capable allocation; an R105
+   * native resource is never scanned out, whatever its description says. */
+  if (!allocation->ScanoutCapable) {
+    InterlockedIncrement(&Context->DisplayModes.LayoutRefusals);
     return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+  }
+  /* rc106: the flipped primary has exactly the committed source geometry
+   * (2560x1600 unless a scaled source mode is committed). */
+  surface_bytes = (ULONGLONG)Context->CommittedStride *
+                  Context->CommittedHeight;
+  if (!AdmissionAllocationDescriptionValid(description) ||
+      !AdmissionScanoutSourceModeSupported(Context, Context->CommittedWidth,
+                                           Context->CommittedHeight,
+                                           Context->CommittedStride) ||
+      description->Width != Context->CommittedWidth ||
+      description->Height != Context->CommittedHeight ||
+      description->Pitch != Context->CommittedStride ||
+      description->BytesPerPixel != 4u ||
+      description->Size != surface_bytes) {
+    InterlockedIncrement(&Context->DisplayModes.GeometryRefusals);
+    return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+  }
+  /* rc110 (EXP2049): the primary's format need not equal the committed
+   * source mode's pixel format (Context->CommittedFormat): dxgkrnl flips an
+   * exclusive fullscreen D3D12 primary in the swapchain's RGBA8 while the
+   * source mode is BGRA, and the broker scans either; the PRESENT carries
+   * the primary's own format. */
+  format_code = AdmissionScanoutFormatCode(Context,
+                                           (D3DDDIFORMAT)description->Format);
+  if (format_code == 0u) {
+    InterlockedIncrement(&Context->DisplayModes.FormatRefusals);
+    return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+  }
   if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &window)) ||
       window.GuestIpaAddress != runtime->Panel.PoolIpa)
     return STATUS_INVALID_ADDRESS;
+  /* EXP2055: a 1920x1080 primary is 7680*1080 = 0x7e9000 bytes, not a
+   * 64 KiB multiple, and the translation refuses unaligned spans
+   * (0xc0000141 on every flip, so the mode set rolled back).  The
+   * allocation itself is 64 KiB-aligned in size and placement. */
   address_result = AppleAgxLocalSegmentAddressToGpuVa(
       ADMISSION_MEMORY_LOCAL_SEGMENT, Args->PrimarySegment,
       Context->Memory.Topology.Local.Base,
       window.Bytes, 0ULL,
       (APPLE_AGX_U64)Args->PrimaryAddress.QuadPart,
-      APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 0ULL, &surface_offset);
+      (surface_bytes + (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) &
+          ~(APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL),
+      0ULL, &surface_offset);
   if (address_result != AppleAgxLocalSegmentAddressOk)
     return STATUS_INVALID_ADDRESS;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
@@ -1061,8 +1246,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
         &runtime->Panel, Args->PrimarySegment, surface_offset, &sequence);
     if (result != AppleAgxFixedPanelDeferred)
       return STATUS_INVALID_PARAMETER;
+    InterlockedExchange(&runtime->DeferredFormat, (LONG)format_code);
     InterlockedExchange64(&runtime->DeferredPrimaryAddress,
                           Args->PrimaryAddress.QuadPart);
+    InterlockedIncrement(&Context->DisplayModes.DeferredFlips);
     return STATUS_SUCCESS;
   }
   if (InterlockedCompareExchange(&runtime->PresentGate, 1, 0) != 0) {
@@ -1075,6 +1262,19 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   InterlockedExchange64(
       &runtime->PendingPhysicalAddress,
       Args->PrimaryAddress.QuadPart);
+  InterlockedExchange64(&runtime->PendingQueuedTime100ns,
+                        (LONG64)AdmissionScanoutTime100ns());
+  if (AppleAgxFixedPanelSetPresentFormat(&runtime->Panel, format_code) !=
+      AppleAgxFixedPanelOk) {
+    InterlockedExchange64(&runtime->PendingPhysicalAddress, 0);
+    InterlockedExchange(&runtime->PresentGate, 0);
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+    if (fallbackCandidateValid)
+      (void)AdmissionDisplayOutputLeaseRetire(&fallbackCandidate);
+#endif
+    InterlockedIncrement(&Context->DisplayModes.FormatRefusals);
+    return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+  }
   result = AppleAgxFixedPanelQueuePresent(
       &runtime->Panel, Args->PrimarySegment, surface_offset, &sequence);
   if (result != AppleAgxFixedPanelOk) {
@@ -1144,7 +1344,11 @@ static VOID AdmissionScanoutVsyncRecord(ADMISSION_SCANOUT_RUNTIME *Runtime,
   e = &q->Events[n < 32ULL ? (ULONG)n : 32u + (ULONG)((n - 32ULL) % 32ULL)];
   RtlZeroMemory(e, sizeof(*e));
   e->Sequence = n + 1ULL;
-  e->Time100ns = AdmissionScanoutTime100ns();
+  /* Kind 8 is emitted retrospectively at the matched latch, so all ring
+   * writes remain serialized at DIRQL. Its timestamp is queue entry, not
+   * event insertion time; PendingSequence/Address identify the same flip. */
+  e->Time100ns = Kind == 8u ? (ULONGLONG)InterlockedCompareExchange64(
+      &Runtime->PendingQueuedTime100ns, 0, 0) : AdmissionScanoutTime100ns();
   e->Period = Runtime->Timeline.LastPeriod;
   e->PendingSequence = (ULONGLONG)InterlockedCompareExchange64(
       &Runtime->PendingSequence, 0, 0);
@@ -1208,7 +1412,11 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
         mpo_flip = InterlockedExchange(&runtime->PendingMpo, 0) != 0;
         mpo_present_id = (ULONGLONG)InterlockedExchange64(
             &runtime->PendingMpoPresentId, 0);
+        if (InterlockedCompareExchange64(
+                &runtime->PendingQueuedTime100ns, 0, 0) != 0)
+          AdmissionScanoutVsyncRecord(runtime, 8u, STATUS_SUCCESS);
         AdmissionScanoutVsyncRecord(runtime, 3u, STATUS_SUCCESS);
+        InterlockedExchange64(&runtime->PendingQueuedTime100ns, 0);
         InterlockedExchange64(&runtime->LastNotifiedSequence,
                               (LONG64)latched_sequence);
         InterlockedExchange(&runtime->PendingValid, 0);

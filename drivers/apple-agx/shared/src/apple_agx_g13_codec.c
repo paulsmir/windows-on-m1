@@ -127,8 +127,15 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13DecodeEvent(
     candidate.GrowTvbVmId = AppleAgxG13GetU32(Message + 4);
     candidate.GrowTvbBufferManagerId = AppleAgxG13GetU32(Message + 8);
     candidate.GrowTvbCounter = AppleAgxG13GetU32(Message + 12);
-  } else if (kind == (APPLE_AGX_BACKEND_U32)AppleAgxG13EventFault ||
-             kind == (APPLE_AGX_BACKEND_U32)AppleAgxG13EventChannelError) {
+  } else if (kind == (APPLE_AGX_BACKEND_U32)AppleAgxG13EventChannelError) {
+    /* Asahi fw/channels.rs EventMsg::ChannelError, independent of the
+     * Timeout/Fault halt handshake. Preserve the firmware's operands. */
+    candidate.TerminalFault = APPLE_AGX_BACKEND_TRUE;
+    candidate.ChannelErrorType = AppleAgxG13GetU32(Message + 4);
+    candidate.ChannelPipeType = AppleAgxG13GetU32(Message + 8);
+    candidate.ChannelEventSlot = AppleAgxG13GetU32(Message + 12);
+    candidate.ChannelEventValue = AppleAgxG13GetU32(Message + 16);
+  } else if (kind == (APPLE_AGX_BACKEND_U32)AppleAgxG13EventFault) {
     candidate.TerminalFault = APPLE_AGX_BACKEND_TRUE;
   } else {
     return APPLE_AGX_BACKEND_FALSE;

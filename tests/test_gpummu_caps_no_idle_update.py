@@ -27,8 +27,11 @@ class GpuMmuCaps(unittest.TestCase):
     def test_kmd_serialises_updates_with_in_flight_jobs(self):
         paging = (SRC / 'gpuva_g3_paging_windows.c').read_text()
         # R155 (UpdatePageTable) and R165 (FlushTlb) both wait for JobInFlight.
+        # V1: a held but idle (retained) lease is not GPU work; the graph
+        # releases it before any translation change (rule R).
         self.assertGreaterEqual(len(re.findall(
-            r'!process->Graph\.JobInFlight && !process->Graph\.LeaseToken', paging)), 2)
+            r'\|\|\s*!process->Graph\.JobInFlight \|\|', paging)), 2)
+        self.assertNotRegex(paging, r'!process->Graph\.JobInFlight && !process->Graph\.LeaseToken')
 
 
 if __name__ == '__main__':

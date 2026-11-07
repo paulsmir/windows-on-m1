@@ -94,6 +94,21 @@ int main(void) {
   make(&e, &s); e.Native.Size = 48u; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
   make(&e, &s); e.Native.CdmBarrier = 0xffffu; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
   make(&e, &s); e.Native.VdmBarrier = 1u; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
+  /* OV2: VdmBarrier NONE (no render-subqueue wait) only with the
+   * independent-subqueue flag; it then marks the view independent */
+#define PARSE_FLAGS(flags) (s.Calls = 0, AppleAgxG4ParseComputeFlagsEx(&e, sizeof(e), sizeof(e), DMA_VA, \
+      sizeof(e.Native) + sizeof(e.Compute), PREEMPT, (flags), access_ex, &s, &v, &f))
+  make(&e, &s); e.Native.VdmBarrier = 0xffffu; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
+  make(&e, &s); e.Native.VdmBarrier = 0xffffu;
+  assert(PARSE_FLAGS(APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE) == AppleAgxG4ParseOk && v.Independent == 1);
+  make(&e, &s);
+  assert(PARSE_FLAGS(APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE) == AppleAgxG4ParseOk && v.Independent == 0);
+  make(&e, &s); e.Native.VdmBarrier = 1u;
+  assert(PARSE_FLAGS(APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE) == AppleAgxG4ParseInvalid);
+  make(&e, &s); e.Native.VdmBarrier = 0xffffu; e.Native.CdmBarrier = 0xffffu;
+  assert(PARSE_FLAGS(APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE) == AppleAgxG4ParseInvalid);
+  make(&e, &s); e.Native.VdmBarrier = 0xffffu; assert(PARSE_FLAGS(0x2u) == AppleAgxG4ParseInvalid);
+#undef PARSE_FLAGS
   /* payload */
   make(&e, &s); e.Compute.Flags = 1u; assert(parse(&e, &s, &v, &f) == AppleAgxG4ParseInvalid);
   /* EXP1339: a helper (compute scratch) is a mapped USC program with its

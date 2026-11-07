@@ -9,7 +9,8 @@
   ((APPLE_AGX_U32)AppleAgxWin32BufferCpuRead |                              \
    (APPLE_AGX_U32)AppleAgxWin32BufferCpuWrite |                             \
    (APPLE_AGX_U32)AppleAgxWin32BufferGpuRead |                              \
-   (APPLE_AGX_U32)AppleAgxWin32BufferGpuWrite)
+   (APPLE_AGX_U32)AppleAgxWin32BufferGpuWrite |                            \
+   (APPLE_AGX_U32)AppleAgxWin32BufferGpuOnly)
 
 APPLE_AGX_BOOL AdmissionWin32AllocationUsesGpuVa(APPLE_AGX_U32 ClassId) {
   return ClassId >= AgxWin32BufferClassGeneral &&
@@ -35,11 +36,29 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidateEx(
   const ADMISSION_WIN32_ALLOCATION_CREATE *create =
       (const ADMISSION_WIN32_ALLOCATION_CREATE *)PrivateData;
   const ADMISSION_ALLOCATION_DESCRIPTION *allocation;
+  ADMISSION_WIN32_ALLOCATION_CREATE normalized;
   APPLE_AGX_U32 classId = 0u;
   APPLE_AGX_U32 flags = 0u;
   if (PrivateData == ADMISSION_WIN32_NULL || Description == ADMISSION_WIN32_NULL ||
       ClassId == ADMISSION_WIN32_NULL || Flags == ADMISSION_WIN32_NULL)
     return AdmissionWin32TransportArgument;
+  if (PrivateDataBytes == sizeof(ADMISSION_NATIVE_STAGING_ALLOCATION)) {
+    const ADMISSION_NATIVE_STAGING_ALLOCATION *native =
+        (const ADMISSION_NATIVE_STAGING_ALLOCATION *)PrivateData;
+    if (create->Version != ADMISSION_WIN32_ALLOCATION_VERSION_NATIVE ||
+        create->Bytes != sizeof(*native) || !native->Token ||
+        (create->Flags & AppleAgxWin32BufferShareable) ||
+        (native->Offset & 65535ULL) ||
+        native->Offset >= ADMISSION_NATIVE_STAGING_MAX_BYTES ||
+        !create->Allocation.Size || (create->Allocation.Size & 65535ULL) ||
+        create->Allocation.Size > ADMISSION_NATIVE_STAGING_MAX_BYTES - native->Offset)
+      return AdmissionWin32TransportClass;
+    normalized = *create;
+    normalized.Version = ADMISSION_WIN32_ALLOCATION_VERSION;
+    normalized.Bytes = sizeof(normalized);
+    create = &normalized;
+    PrivateDataBytes = sizeof(normalized);
+  }
   if (PrivateDataBytes == sizeof(ADMISSION_ALLOCATION_DESCRIPTION)) {
     allocation = (const ADMISSION_ALLOCATION_DESCRIPTION *)PrivateData;
     if (!AdmissionAllocationDescriptionValid(allocation))
@@ -57,8 +76,13 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidateEx(
         (create->Flags & ~ADMISSION_WIN32_BUFFER_ACCESS_MASK) != 0u)
       return AdmissionWin32TransportClass;
     if (create->ClassId == AgxWin32BufferClassGeneral) {
-      if ((create->Flags & (AppleAgxWin32BufferCpuRead |
-                            AppleAgxWin32BufferCpuWrite)) == 0u ||
+      const APPLE_AGX_U32 cpu = create->Flags &
+          (AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite);
+      const APPLE_AGX_BOOL gpuOnly =
+          (create->Flags & AppleAgxWin32BufferGpuOnly) != 0u;
+      if ((gpuOnly && (cpu != 0u ||
+                       create->Version != ADMISSION_WIN32_ALLOCATION_VERSION_LOCAL)) ||
+          (!gpuOnly && cpu == 0u) ||
           (create->Flags & (AppleAgxWin32BufferGpuRead |
                             AppleAgxWin32BufferGpuWrite)) == 0u)
         return AdmissionWin32TransportAccess;

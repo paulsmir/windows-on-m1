@@ -1,4 +1,9 @@
-"""R148: production batch collection and GpuVA lifecycle, with KMD parser.
+"""WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+A graphics-only batch must hold and upload its sampler heap even when it is
+absent from bo_list and both pools; otherwise trim can invalidate a live
+sampler VA and the native-coverage guard never checks it (EXP1934).
+
+R148: production batch collection and GpuVA lifecycle, with KMD parser.
 
 The host models VidMm's explicit residency requirement: reserving/mapping a VA
 alone does not make its canonical allocation resident. Pool BOs deliberately do
@@ -17,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class G4MesaPoolResidencyReplay(unittest.TestCase):
     def test_all_pool_slabs_are_resident_uploaded_and_retired(self):
         source = (ROOT / "drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c").read_text()
-        names = ("batch_refuse", "batch_has_render_work", "submitted_at", "retire_held", "gpuva_color_format_supported", "gpuva_color_formats_supported", "gpuva_color_class", "render_compute", "add_bo", "append_native", "append_attachments",
+        names = ("batch_refuse", "batch_has_render_work", "submitted_at", "retire_held", "gpuva_color_format_supported", "gpuva_color_formats_supported", "gpuva_color_class", "render_compute", "add_bo", "add_written", "append_native", "append_attachments",
                  "prepare_process_buffers", "pool_extent", "publish_shadows", "strip_timestamps", "AgxWin32AsahiBatchFinish",
                  "release_lease", "AgxWin32AsahiBatchPoll", "AgxWin32AsahiBatchAbort",
                  "AgxWin32AsahiBatchRelease")
@@ -26,7 +31,7 @@ class G4MesaPoolResidencyReplay(unittest.TestCase):
             (tmp / "g4_mesa_pool_functions.inc").write_text("void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);\n#define AGX_WIN32_ASAHI_FAIL(b, f) ((b)->Failed = 1)\n" + "\n".join(
                 body(source, name) for name in names))
             binary = tmp / "replay"
-            subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Wall",
+            subprocess.run([os.environ.get("CC", "clang"), "-std=c11", '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), "-Wall",
                 "-Wextra", "-Werror", "-fsanitize=address,undefined",
                 "-I", str(tmp), "-I", str(ROOT / "tests"),
                 "-I", str(ROOT / "drivers/apple-agx/shared/include"),

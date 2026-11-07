@@ -16,6 +16,21 @@
 #define AGX_GPUVA_V5_MAILBOX_BYTES 0x4000u
 #define AGX_GPUVA_V5_MAILBOX_RESPONSE 0x80u
 
+/* Optional extension 1; wire ABI remains 6. Query failure means absent.
+ * Strict exclusive ordinary-RAM grants, one aligned 16-KiB leaf per call.
+ * Caller pins backing until jobs retire, leaf clear/TLBI and revoke succeed. */
+#define AGX_GPUVA_V5_SYSMEM_ABI 1u
+#define AGX_GPUVA_V5_CAP_SYSMEM 1ULL
+#define AGX_GPUVA_V5_SYSMEM_PAGE_BYTES 0x4000u
+
+/* Q22b: optional live additive publication, negotiated per process. The
+ * broker authenticates empty native descriptors and acknowledges table
+ * visibility plus ASID invalidation before reporting success. */
+#define AGX_GPUVA_V5_CAP_LIVE_ADDITIVE 2ULL
+/* GC (experiment): UPDATE_LEAF accepts AGX_GPUVA_V5_LEAF_PRIVATE_CACHED. */
+#define AGX_GPUVA_V5_CAP_PRIVATE_CACHED 4ULL
+#define AGX_GPUVA_V5_LIVE_ABI 1u
+
 enum {
     AGX_GPUVA_V5_CREATE = 1,
     AGX_GPUVA_V5_REGISTER_TABLE,
@@ -34,7 +49,23 @@ enum {
     AGX_GPUVA_V5_FLUSH_TLB,
     /* AuxIpa = mailbox page IPA, or 0 to detach. */
     AGX_GPUVA_V5_ATTACH_MAILBOX,
+    /* All payload fields zero. Reserved[0]=caps, Reserved[1]=extension ABI. */
+    AGX_GPUVA_V5_QUERY_CAPS,
+    /* Process/generation, AllocationGeneration, AuxIpa only; exclusive.
+     * UPDATE_LEAF and REVOKE_BACKING retain their existing semantics. */
+    AGX_GPUVA_V5_REGISTER_SYSMEM_BACKING,
+    /* ProcessId/ProcessGeneration identify the owner; Token is the requested
+     * capability (LIVE_ADDITIVE or zero), AllocationGeneration is LIVE_ABI.
+     * All other payload fields are zero. Negotiation requires no live jobs. */
+    AGX_GPUVA_V5_NEGOTIATE_LIVE,
 };
+
+/* GC (experiment, m1n1 AGX_GPUVA_PRIVATE_CACHED builds only): UPDATE_LEAF
+ * Flags bit 4 asks for a GPU-private cached (MEMATTR 0) leaf instead of the
+ * shared/coherent one; the low four bits stay the update mask. A broker
+ * without the capability rejects the bit (Flags > 15). Unmaps do not issue
+ * the Asahi FwCtl cache invalidation: measurement only, not production. */
+#define AGX_GPUVA_V5_LEAF_PRIVATE_CACHED 0x10u
 
 typedef struct _AGX_GPUVA_V5_REQUEST {
     unsigned int Version, Bytes, Command, Flags;

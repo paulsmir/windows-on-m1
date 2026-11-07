@@ -30,6 +30,7 @@ static void AgxD3d10WindowsPresentMeasure(unsigned kind,HRESULT status,const uns
   (void)kind;(void)status;(void)values;(void)count;
 }
 #define S_OK 0
+#define E_OUTOFMEMORY ((HRESULT)0x8007000eu)
 #define E_FAIL ((HRESULT)0x80004005u)
 #define E_INVALIDARG ((HRESULT)0x80070057u)
 #define FAILED(x) ((x)<0)
@@ -39,7 +40,7 @@ typedef struct { struct { HRESULT RenderStatus,PostStatus; } Submission; } ADMIS
 typedef struct {
   int Stage;
   AGX_WIN32_ASAHI_BACKEND Backend;
-  struct { void *NativeBatchTransaction; unsigned DrawTerminal; HRESULT LastScreenError; } Runtime;
+  struct { void *NativeBatchTransaction; unsigned DrawTerminal; HRESULT LastScreenError,GpuvaFailure; } Runtime;
 } AGX_D3D10_WINDOWS_DEVICE;
 static AGX_D3D10_WINDOWS_DEVICE device;
 #define owner device.Backend
@@ -70,6 +71,11 @@ static void FrontendFlush(Device *hDevice) {
         source = source.replace("int result=AgxWin32AsahiBatchFinish(&batch,&native,NULL);", """
   active_batch=&batch;active_render=&native;finish_result=0;
   device.Stage=AgxD3d10DeviceReady;
+  device.Runtime.DrawTerminal=1;
+  device.Runtime.GpuvaFailure=device.Runtime.LastScreenError=E_OUTOFMEMORY;
+  assert(AgxD3d10WindowsFlushStatus(&device)!=E_OUTOFMEMORY);
+  device.Runtime.DrawTerminal=0;
+  device.Runtime.GpuvaFailure=device.Runtime.LastScreenError=S_OK;
   frontend_errors=0;frontend_error=S_OK;
   struct Pipe pipe={native_flush};Device frontend={&device,&pipe};
   FrontendFlush(&frontend);
@@ -85,7 +91,7 @@ static void FrontendFlush(Device *hDevice) {
     assert(AgxWin32AsahiBatchPoll(&batch,0));
   } else { assert(!frontend_errors); }
 """)
-        names = ("batch_refuse", "batch_has_render_work", "submitted_at", "retire_held", "gpuva_color_format_supported", "gpuva_color_formats_supported", "gpuva_color_class", "render_compute", "add_bo", "append_native", "append_attachments", "prepare_process_buffers", "pool_extent", "publish_shadows", "strip_timestamps",
+        names = ("batch_refuse", "batch_has_render_work", "submitted_at", "retire_held", "gpuva_color_format_supported", "gpuva_color_formats_supported", "gpuva_color_class", "render_compute", "add_bo", "add_written", "append_native", "append_attachments", "prepare_process_buffers", "pool_extent", "publish_shadows", "strip_timestamps",
                  "AgxWin32AsahiBatchFinish", "release_lease", "AgxWin32AsahiBatchPoll",
                  "AgxWin32AsahiBatchAbort", "AgxWin32AsahiBatchRelease")
         with tempfile.TemporaryDirectory(prefix="r149-submit-error-") as directory:
@@ -93,7 +99,7 @@ static void FrontendFlush(Device *hDevice) {
             (tmp / "g4_mesa_pool_functions.inc").write_text("void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);\n#define AGX_WIN32_ASAHI_FAIL(b, f) ((b)->Failed = 1)\n" + "\n".join(body(batch, n) for n in names))
             (tmp / "replay.c").write_text(source)
             binary = tmp / "replay"
-            subprocess.run([os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
+            subprocess.run([os.environ.get("CC", "clang"), "-std=c11", '-include', str(ROOT/'tests/d3d12_wait_disabled_fixture.h'), "-Wall", "-Wextra",
                 "-Werror", "-fsanitize=address,undefined", "-I", str(tmp),
                 "-I", str(ROOT / "drivers/apple-agx/shared/include"),
                 "-I", str(ROOT / "drivers/apple-agx/mesa/winsys"), str(tmp / "replay.c"),

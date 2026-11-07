@@ -25,6 +25,21 @@
  * defaults. */
 #define APPLE_AGX_REGIONC_J313_PROGRESS_3D_OFFSET 0x11178u
 #define APPLE_AGX_REGIONC_J313_PROGRESS_3D_MS 900u
+/* rc77 (EXP1922/EXP1964/EXP1965/EXP2005): fault_control (Asahi
+ * fw/initdata.rs:1154-1156, "bit 0: sets sgx_reg 0x17620, bit 1: sets sgx_reg
+ * 0x17630"; G13 V13_5 offset 0x10fd8, the word before do_init at 0x10fdc).
+ * The pinned m1n1 builder writes 0, "hard faults" (initdata.py:2054-2055,
+ * with 0xb commented out), a bring-up/debug setting. Asahi's production
+ * default is 0xb, "macOS default" (asahi.rs:45-49, initdata.rs:780). Under
+ * hard faults every MMU fault seen on this KMD (DCMP and CDM, valid
+ * FAULT_INFO) left the faulting queue unretired after the firmware's
+ * halt/resume, so DxgkDdiResetEngine and DxgkDdiResetFromTimeout could never
+ * prove quiescence (0x116, P3 c0000483); the only Timeout without an MMU
+ * fault (EXP1987) retired after the same resume. Fault-free work is
+ * unaffected: the setting only changes how the GPU handles a translation
+ * fault. */
+#define APPLE_AGX_REGIONC_J313_FAULT_CONTROL_OFFSET 0x10fd8u
+#define APPLE_AGX_REGIONC_J313_FAULT_CONTROL 0xbu
 
 typedef struct _APPLE_AGX_REGIONC_WORD {
   unsigned int Offset;
@@ -166,6 +181,8 @@ APPLE_AGX_REGIONC_RESULT AppleAgxRegionCEncodeJ313G13V13_5(
                           APPLE_AGX_REGIONC_J313_IDLE_OFF_DELAY_MS);
   AppleAgxRegionCWriteU32(Destination + APPLE_AGX_REGIONC_J313_PROGRESS_3D_OFFSET,
                           APPLE_AGX_REGIONC_J313_PROGRESS_3D_MS);
+  AppleAgxRegionCWriteU32(Destination + APPLE_AGX_REGIONC_J313_FAULT_CONTROL_OFFSET,
+                          APPLE_AGX_REGIONC_J313_FAULT_CONTROL);
   Manifest->EncodedSize = DestinationSize;
   Manifest->NonzeroWordCount =
       (unsigned int)(sizeof(AppleAgxRegionCJ313Words) /

@@ -28,6 +28,11 @@ typedef enum _APPLE_AGX_UAT_PROTECTION {
   AppleAgxUatGpuSharedWriteOnly,
   AppleAgxUatGpuSharedReadWrite,
   AppleAgxUatGpuPipelineShared,
+  /* GC (experiment): GPU-only leaves cached non-coherent (Asahi MEMATTR_CACHED
+   * with AP_GPU); unmapping them needs a GPU cache invalidation (Asahi
+   * mmu.rs: FwCtl request), which the broker does not issue yet. */
+  AppleAgxUatGpuPrivateReadOnly,
+  AppleAgxUatGpuPrivateReadWrite,
 } APPLE_AGX_UAT_PROTECTION;
 
 typedef enum _APPLE_AGX_UAT_HALF {

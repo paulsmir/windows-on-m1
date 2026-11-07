@@ -5,6 +5,7 @@
 
 struct agx_batch;
 struct agx_context;
+struct agx_bo;
 struct pipe_draw_info;
 struct pipe_draw_start_count_bias;
 struct pipe_draw_indirect_info;
@@ -59,6 +60,12 @@ int AgxWin32AsahiBatchPoll(struct agx_batch *,APPLE_AGX_U32);
 /* GPU timestamps: after Poll, write the KMD's values where Mesa's timestamp
  * buffer takes them (always 1; a batch without values keeps Mesa's). */
 int AgxWin32AsahiBatchTimestamps(struct agx_batch *);
+#ifdef APPLE_AGX_GPUVA_WINSYS
+/* Immutable per-batch output; borrowed until capsule release. Timestamp
+ * snapshots and GPU consumers take their own BO references. */
+struct agx_bo *AgxWin32AsahiBatchTimestampBo(struct agx_batch *);
+void AgxWin32AsahiQueryCleanup(struct agx_context *);
+#endif
 void AgxWin32AsahiBatchDiagnostic(struct agx_batch *,APPLE_AGX_U32 out[2]);
 int AgxWin32AsahiBatchAbort(struct agx_batch *);
 int AgxWin32AsahiBatchRelease(struct agx_batch *);

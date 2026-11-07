@@ -1,0 +1,92 @@
+.echo === 00 SYMBOLS_AND_DUMP ===
+.expr /s masm
+lmvm AppleAgxRenderAdmission
+.bugcheck
+kv 10
+.echo === 01 RECEIPT_CONTEXT_TO_ADAPTER ===
+r @$t0 = 0xffffd684d8ff7cd0
+dt AppleAgxRenderAdmission!_ADMISSION_RENDER_CONTEXT @$t0 Object
+.if (@@c++(((AppleAgxRenderAdmission!_ADMISSION_RENDER_CONTEXT *)@$t0)->Object.Magic) != 0x434f4152) { .echo STOP_CONTEXT_MAGIC_MISMATCH; q }
+r @$t1 = 0
+r @$t1 = @@c++(((AppleAgxRenderAdmission!_ADMISSION_RENDER_CONTEXT *)@$t0)->Object.Device)
+.if (@$t1 == 0) { .echo STOP_DEVICE_UNAVAILABLE; q }
+dt AppleAgxRenderAdmission!_ADMISSION_OBJECT_DEVICE @$t1
+.if (@@c++(((AppleAgxRenderAdmission!_ADMISSION_OBJECT_DEVICE *)@$t1)->Magic) != 0x444f4152) { .echo STOP_DEVICE_MAGIC_MISMATCH; q }
+r @$t2 = 0
+r @$t2 = @@c++(((AppleAgxRenderAdmission!_ADMISSION_OBJECT_DEVICE *)@$t1)->Adapter)
+.if (@$t2 == 0) { .echo STOP_ADAPTER_UNAVAILABLE; q }
+dt AppleAgxRenderAdmission!_ADMISSION_CONTEXT @$t2 ObjectAdapter
+.if (@@c++(((AppleAgxRenderAdmission!_ADMISSION_CONTEXT *)@$t2)->ObjectAdapter.Magic) != 0x414f4152) { .echo STOP_ADAPTER_MAGIC_MISMATCH; q }
+dt AppleAgxRenderAdmission!_ADMISSION_CONTEXT @$t2 PlatformRuntime PhysicalDeviceObject Started SchedulerFaulted
+.echo === 02 PLATFORM_RUNTIME ===
+r @$t3 = 0
+r @$t3 = @@c++(((AppleAgxRenderAdmission!_ADMISSION_CONTEXT *)@$t2)->PlatformRuntime)
+.if (@$t3 == 0) { .echo STOP_RUNTIME_UNAVAILABLE; q }
+dt AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME @$t3 Adapter
+.if (@@c++(((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Adapter) != @$t2) { .echo STOP_RUNTIME_BACKPOINTER_MISMATCH; q }
+dt AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME @$t3 BackendStarted Powered ProviderReady WorkScheduled WorkersActive Stopping Resetting LastPollMs LastProgressMs
+dt -r1 AppleAgxRenderAdmission!_ADMISSION_GPU_FAULT_RECEIPT @@c++(&((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->GpuFault)
+.echo === 03 RTKIT_SESSION_AND_LAST_MESSAGE ===
+dt -r1 AppleAgxRenderAdmission!_APPLE_AGX_RTKIT_SESSION @@c++(&((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Rtkit)
+?? ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Rtkit.LastRxPayload >> 52
+?? (((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Rtkit.LastRxPayload >> 48) & 0xffff
+.echo === 04 DRAIN_RESULT_EVIDENCE_NOT_A_STORED_LAST_RESULT ===
+dt -r2 AppleAgxRenderAdmission!_ADMISSION_GPU_RESET_RECEIPT @@c++(&((AppleAgxRenderAdmission!_ADMISSION_CONTEXT *)@$t2)->GpuReset)
+dt -r2 AppleAgxRenderAdmission!_ADMISSION_RENDER_CORRELATION_STATE @@c++(&((AppleAgxRenderAdmission!_ADMISSION_CONTEXT *)@$t2)->RenderCorrelation)
+dt AppleAgxRenderAdmission!_ADMISSION_HEARTBEAT_RECEIPT @@c++(&((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->HeartbeatReceipt)
+.echo === 05 TRANSPORT_METADATA_ONLY ===
+dt AppleAgxRenderAdmission!_APPLE_AGX_ASC_IO @@c++(&((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->AscIo)
+dt AppleAgxRenderAdmission!_ADMISSION_ASC_TRANSPORT @@c++(&((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->AscTransport) Base Length TraceCount
+.echo === 06 CRASH_BUFFER_OWNER ===
+?? ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Initdata.BrokerOnly
+?? ((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Initdata.VirtualAddresses[7]
+dt AppleAgxRenderAdmission!_APPLE_AGX_MEMORY_OBJECT @@c++(&((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Initdata.DataObjects[7])
+r @$t4 = 0
+r @$t4 = @@c++(((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Initdata.DataObjects[7].CpuAddress)
+.if ((@$t4 != 0) && (@@c++(((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Initdata.DataObjects[7].Length) >= 0x4000)) { .echo CRASH_BUFFER_16K_CPU_VA; db @$t4 L4000 } .else { .echo CRASH_BUFFER_NOT_WINDOWS_MAPPED_NO_GPUVA_DEREFERENCE }
+.echo === 07 QUEUE_AND_OWNERSHIP ===
+dt -r1 AppleAgxRenderAdmission!_APPLE_AGX_SCHEDULER @@c++(&((AppleAgxRenderAdmission!_ADMISSION_CONTEXT *)@$t2)->Scheduler)
+dt -r1 AppleAgxRenderAdmission!_ADMISSION_RENDER_PACKET @@c++(&((AppleAgxRenderAdmission!_ADMISSION_CONTEXT *)@$t2)->RenderPacket)
+dt AppleAgxRenderAdmission!_ADMISSION_CONTEXT @$t2 G4PendingHead G4PendingCount
+dt -r1 AppleAgxRenderAdmission!_APPLE_AGX_BACKEND_RUNTIME @@c++(&((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Backend)
+dt AppleAgxRenderAdmission!_APPLE_AGX_PLATFORM_PROVIDER @@c++(&((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Provider) LastPollGuard LastDrainGuard LastEventReadPointer LastEventWritePointer LastEventMessageValid LastEventMessage EventBatchPending EventBatchAcknowledged PendingEventNextRead
+dt AppleAgxRenderAdmission!_APPLE_AGX_G13_QUEUE_PROVIDER @@c++(&((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Provider.QueueProvider) Phase PendingFence FailureQuiesced LastIngestGuard LastIngestRuntimeResult LastSubmitGuard LastSubmitRuntimeResult
+dt -r2 AppleAgxRenderAdmission!_APPLE_AGX_G13_QUEUE_RUNTIME @@c++(&((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Provider.QueueProvider.Runtime)
+.echo === 08 QUEUE_SHARED_WORDS ===
+.echo Ta_Stamp
+r @$t5 = 0
+r @$t5 = @@c++(((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Provider.QueueProvider.Runtime.Config.Ta.Stamp)
+.if (@$t5 != 0) { dd @$t5 L1 } .else { .echo WORD_NOT_BOUND }
+.echo Ta_CpuWritePointer
+r @$t5 = 0
+r @$t5 = @@c++(((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Provider.QueueProvider.Runtime.Config.Ta.CpuWritePointer)
+.if (@$t5 != 0) { dd @$t5 L1 } .else { .echo WORD_NOT_BOUND }
+.echo Ta_GpuDonePointer
+r @$t5 = 0
+r @$t5 = @@c++(((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Provider.QueueProvider.Runtime.Config.Ta.GpuDonePointer)
+.if (@$t5 != 0) { dd @$t5 L1 } .else { .echo WORD_NOT_BOUND }
+.echo D3_Stamp
+r @$t5 = 0
+r @$t5 = @@c++(((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Provider.QueueProvider.Runtime.Config.D3.Stamp)
+.if (@$t5 != 0) { dd @$t5 L1 } .else { .echo WORD_NOT_BOUND }
+.echo D3_CpuWritePointer
+r @$t5 = 0
+r @$t5 = @@c++(((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Provider.QueueProvider.Runtime.Config.D3.CpuWritePointer)
+.if (@$t5 != 0) { dd @$t5 L1 } .else { .echo WORD_NOT_BOUND }
+.echo D3_GpuDonePointer
+r @$t5 = 0
+r @$t5 = @@c++(((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Provider.QueueProvider.Runtime.Config.D3.GpuDonePointer)
+.if (@$t5 != 0) { dd @$t5 L1 } .else { .echo WORD_NOT_BOUND }
+.echo Compute_Stamp
+r @$t5 = 0
+r @$t5 = @@c++(((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Provider.QueueProvider.Runtime.Config.Compute.Stamp)
+.if (@$t5 != 0) { dd @$t5 L1 } .else { .echo WORD_NOT_BOUND }
+.echo Compute_CpuWritePointer
+r @$t5 = 0
+r @$t5 = @@c++(((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Provider.QueueProvider.Runtime.Config.Compute.CpuWritePointer)
+.if (@$t5 != 0) { dd @$t5 L1 } .else { .echo WORD_NOT_BOUND }
+.echo Compute_GpuDonePointer
+r @$t5 = 0
+r @$t5 = @@c++(((AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME *)@$t3)->Provider.QueueProvider.Runtime.Config.Compute.GpuDonePointer)
+.if (@$t5 != 0) { dd @$t5 L1 } .else { .echo WORD_NOT_BOUND }
+.echo === END_EXP1938_PASS_1 ===

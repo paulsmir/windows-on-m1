@@ -80,8 +80,13 @@ class RenderSharedCopy(unittest.TestCase):
     def test_hot_copies_use_it(self):
         text = SRC.read_text()
         bind = function(text, 'bind_relocation_objects')
-        self.assertIn('copy_shared_bytes(destination, source, layouts[index].Size);', bind)
+        # rc83: through copy_arena_object, whose direct and bounce paths both
+        # store with copy_shared_bytes
+        self.assertIn('copy_arena_object(Owner, destination, source,', bind)
         self.assertNotIn('destination[byte] = source[byte];', bind)
+        arena = function(text, 'copy_arena_object')
+        self.assertIn('copy_shared_bytes(Destination, Source, Bytes);', arena)
+        self.assertIn('copy_shared_bytes(Destination, bounce, Bytes);', arena)
         self.assertIn('copy_shared_bytes(Destination,Source,Bytes);', function(text, 'copy_bytes'))
 
 

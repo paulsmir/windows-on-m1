@@ -11,6 +11,11 @@ RENDER = ROOT / "drivers/apple-agx/render-admission"
 
 class RenderPoolSlabTest(unittest.TestCase):
     def test_slab_allocator(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+
+        Wrapped reservation totals must not release promised paging backing;
+        allocation failure and overflow must preserve the previous promise.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             binary = Path(tmp) / "render_pool_slab_test"
             subprocess.run([

@@ -130,25 +130,37 @@ static APPLE_AGX_BOOL g4_zls_valid(const APPLE_AGX_G4_NATIVE_RENDER *Render) {
     return APPLE_AGX_FALSE;
   if (!g4_has_zls(Render))
     return !Render->ZlsCtrl && !Render->IspZlsPixels;
-  /* ISP_ZLS_PIXELS = (width - 1) | ((height - 1) << 15). */
-  return Render->ZlsCtrl && Render->IspZlsPixels &&
-      (Render->IspZlsPixels >> 30) == 0u;
+  /* ISP_ZLS_PIXELS = (width - 1) | ((height - 1) << 15), the render size
+   * (Asahi agx_pipe.c CR_ISP_ZLS_PIXELS) -- zero for a 1x1 render. The ZLS
+   * control word may be zero too: a 32F depth buffer that is neither loaded
+   * nor stored (cleared, then discarded) packs to 0 (agx_pack_zls_control);
+   * EXP1904N, Night Raid GT2 (BindFailure 332). */
+  return Render->WidthPx && Render->HeightPx &&
+      Render->WidthPx <= 0x8000u && Render->HeightPx <= 0x8000u &&
+      Render->IspZlsPixels == ((APPLE_AGX_U64)(Render->WidthPx - 1u) |
+                               ((APPLE_AGX_U64)(Render->HeightPx - 1u) << 15));
 }
 
-APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
+/* EXP1903N: Night Raid GT2's scene failed here (BindFailure 23); *Refused
+ * names the first failing predicate, in the order checked below. */
+APPLE_AGX_BOOL AppleAgxG4BindNativeObjectsEx(
     const APPLE_AGX_G4_SUBMIT_VIEW *View,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
-    APPLE_AGX_U32 ObjectCount) {
+    APPLE_AGX_U32 ObjectCount, APPLE_AGX_U32 *Refused) {
   APPLE_AGX_G4_NATIVE_RENDER render;
   APPLE_AGX_G4_ATTACHMENT color;
   APPLE_AGX_U64 minimum;
+  APPLE_AGX_U32 refused = 0u;
+#define G4_REFUSE(n, expression) if (!refused && (expression)) refused = (n)
   if (View == 0 || Objects == 0 || View->Render == 0 ||
       View->RenderBytes != sizeof(render) || View->Attachments == 0 ||
       View->AttachmentCount == 0u ||
       View->AttachmentCount > APPLE_AGX_G4_MAX_ATTACHMENTS ||
       !AppleAgxG4ColorClassValid(View->ColorFormat) ||
-      ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)
+      ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT) {
+    if (Refused != 0) *Refused = 1u;
     return APPLE_AGX_FALSE;
+  }
   memcpy(&render, View->Render, sizeof(render));
   memcpy(&color, View->Attachments, sizeof(color));
   /* A multisampled colour target holds every sample. D3D-G7: a depth-only
@@ -160,33 +172,43 @@ APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
   minimum = View->ColorFormat == APPLE_AGX_G4_COLOR_NONE ? 1u :
       (APPLE_AGX_U64)render.WidthPx * render.HeightPx *
       AppleAgxG4ColorBytes(View->ColorFormat) * render.Samples;
-  if (View->ColorFormat == APPLE_AGX_G4_COLOR_NONE && g4_has_zls(&render) &&
+  G4_REFUSE(2u, View->ColorFormat == APPLE_AGX_G4_COLOR_NONE && g4_has_zls(&render) &&
       (!render.Depth.Base || render.Depth.Base < color.Pointer ||
-       render.Depth.Base - color.Pointer >= color.Size))
-    return APPLE_AGX_FALSE;
+       render.Depth.Base - color.Pointer >= color.Size));
   /* EXP1287: only a render without colour has a zero-byte sample. */
-  if (!render.SampleSizeBytes && View->ColorFormat != APPLE_AGX_G4_COLOR_NONE)
-    return APPLE_AGX_FALSE;
-  if (!render.WidthPx || !render.HeightPx || !minimum ||
-      render.Layers != 1u || !g4_samples_valid(render.Samples) ||
-      !AppleAgxG4TileBufferValid(render.SampleSizeBytes, render.Samples,
-          render.UtileWidthPx, render.UtileHeightPx) ||
-      (render.Flags & (1u << 2)) == 0u ||
-      (render.Flags & ~((1u << 0) | (1u << 1) | (1u << 2) | (1u << 18))) != 0u ||
-      /* A vertex-stage scratch render runs the vertex helper program. */
-      ((render.Flags & (1u << 0)) != 0u && render.VertexHelper.Binary == 0u) ||
-      !render.VdmCtrlStreamBase || !render.IspScissorBase ||
-      !render.IspDbiasBase || (render.IspOclQryBase & 7ULL) ||
-      !g4_zls_valid(&render) || color.Pad || color.Flags ||
-      color.Pointer < 0x10000ULL || color.Size < minimum ||
-      color.Size > 0xffffffffULL)
-    return APPLE_AGX_FALSE;
+  G4_REFUSE(3u, !render.SampleSizeBytes && View->ColorFormat != APPLE_AGX_G4_COLOR_NONE);
+  G4_REFUSE(4u, !render.WidthPx || !render.HeightPx || !minimum);
+  G4_REFUSE(5u, render.Layers != 1u);
+  G4_REFUSE(6u, !g4_samples_valid(render.Samples));
+  G4_REFUSE(7u, !AppleAgxG4TileBufferValid(render.SampleSizeBytes, render.Samples,
+          render.UtileWidthPx, render.UtileHeightPx));
+  G4_REFUSE(8u, (render.Flags & (1u << 2)) == 0u);
+  G4_REFUSE(9u, (render.Flags & ~((1u << 0) | (1u << 1) | (1u << 2) | (1u << 18))) != 0u);
+  /* A vertex-stage scratch render runs the vertex helper program. */
+  G4_REFUSE(10u, (render.Flags & (1u << 0)) != 0u && render.VertexHelper.Binary == 0u);
+  G4_REFUSE(11u, !render.VdmCtrlStreamBase || !render.IspScissorBase ||
+      !render.IspDbiasBase || (render.IspOclQryBase & 7ULL));
+  G4_REFUSE(12u, !g4_zls_valid(&render));
+  G4_REFUSE(13u, color.Pad || color.Flags);
+  G4_REFUSE(14u, color.Pointer < 0x10000ULL);
+  G4_REFUSE(15u, color.Size < minimum);
+  G4_REFUSE(16u, color.Size > 0xffffffffULL);
+#undef G4_REFUSE
+  if (Refused != 0) *Refused = refused;
+  if (refused) return APPLE_AGX_FALSE;
   Objects[37].GpuVa = render.VdmCtrlStreamBase;
   Objects[38].GpuVa = render.IspScissorBase;
   Objects[39].GpuVa = render.IspDbiasBase;
   Objects[40].GpuVa = color.Pointer;
   Objects[63].GpuVa = render.SamplerHeap;
   return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxG4BindNativeObjects(
+    const APPLE_AGX_G4_SUBMIT_VIEW *View,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount) {
+  return AppleAgxG4BindNativeObjectsEx(View, Objects, ObjectCount, 0);
 }
 
 static void g4_put16(unsigned char *p, APPLE_AGX_U32 value) {
@@ -212,15 +234,19 @@ static APPLE_AGX_BOOL g4_patch_buffer_manager(
   if (!info || objects[1].Size < 0x8cu ||
       !init || objects[16].Size < 20u ||
       !ctl || objects[20].Size < 8u ||
-      process[2].Bytes % G4_HEAP_BLOCK ||
-      process[0].Bytes < process[2].Bytes / G4_HEAP_BLOCK * 16u ||
-      process[1].Bytes < process[2].Bytes / G4_HEAP_BLOCK * 8u)
+      process[2].Bytes % G4_HEAP_BLOCK)
     return APPLE_AGX_FALSE;
   blocks = backed ? backed : (APPLE_AGX_U32)(process[2].Bytes / G4_HEAP_BLOCK);
   /* Asahi buffer.rs/queue/render.rs: every render gets at least its
-   * min_tvb_blocks; only blocks the KMD backed may be named. */
-  if (blocks > process[2].Bytes / G4_HEAP_BLOCK ||
-      blocks < AppleAgxG4MinTvbBlocks(render->WidthPx, render->HeightPx))
+   * min_tvb_blocks; only blocks the KMD backed may be named. rc80: beyond
+   * the 32-block range the KMD's TVB window continues the heap (the KMD
+   * proves those mappings), up to APPLE_AGX_G4_TVB_HEAP_BLOCKS; the page
+   * and block lists must hold every named block. */
+  if (blocks > (process[2].Bytes / G4_HEAP_BLOCK < APPLE_AGX_G4_TVB_WINDOW_BLOCKS ?
+                process[2].Bytes / G4_HEAP_BLOCK : APPLE_AGX_G4_TVB_HEAP_BLOCKS) ||
+      blocks < AppleAgxG4MinTvbBlocks(render->WidthPx, render->HeightPx) ||
+      process[0].Bytes < (APPLE_AGX_U64)blocks * 16u ||
+      process[1].Bytes < (APPLE_AGX_U64)blocks * 8u)
     return APPLE_AGX_FALSE;
   /* Asahi fw/buffer.rs Info (G13/V13_5), InitBuffer and BlockControl.
    * The page and block lists themselves are written by the KMD. */
@@ -469,28 +495,52 @@ static APPLE_AGX_BOOL g4_patch_fragment_attachments(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AppleAgxG4BuildTa3dEx(
+    const APPLE_AGX_G4_SUBMIT_VIEW *View,
+    void *Arena, APPLE_AGX_U32 ArenaBytes,
+    APPLE_AGX_U32 VmSlot,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount, APPLE_AGX_U32 *FailedStep) {
+  APPLE_AGX_G4_NATIVE_RENDER render;
+  APPLE_AGX_U32 step = 1u, predicate = 0u;
+  if (FailedStep != 0) *FailedStep = 0u;
+  if (View == 0 || View->Render == 0 ||
+      View->RenderBytes != sizeof(render) || Arena == 0 ||
+      Objects == 0 || VmSlot == 0u || VmSlot >= 63u) goto Refused;
+  memcpy(&render, View->Render, sizeof(render));
+  ++step;
+  if (!AppleAgxG4BindProcessObjects(&render, View->Process,
+          Objects, ObjectCount)) goto Refused;
+  ++step;
+  if (!AppleAgxG4BindNativeObjectsEx(View, Objects, ObjectCount, &predicate)) {
+    step = 300u + predicate;
+    goto Refused;
+  }
+  ++step;
+  if (!g4_patch_buffer_manager(&render, View->Process, View->HeapBlocks,
+          Objects)) goto Refused;
+  ++step;
+  if (!AppleAgxRenderTemplateSelectVmSlot(Arena, ArenaBytes, VmSlot)) goto Refused;
+  ++step;
+  if (!AppleAgxG4ApplySceneRelocations(Objects, ObjectCount)) goto Refused;
+  ++step;
+  if (!AppleAgxG4PatchRenderScalars(&render, Objects, ObjectCount)) goto Refused;
+  ++step;
+  if (!g4_patch_fragment_attachments(View, Objects)) goto Refused;
+  return APPLE_AGX_TRUE;
+Refused:
+  if (FailedStep != 0) *FailedStep = step;
+  return APPLE_AGX_FALSE;
+}
+
 APPLE_AGX_BOOL AppleAgxG4BuildTa3d(
     const APPLE_AGX_G4_SUBMIT_VIEW *View,
     void *Arena, APPLE_AGX_U32 ArenaBytes,
     APPLE_AGX_U32 VmSlot,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
     APPLE_AGX_U32 ObjectCount) {
-  APPLE_AGX_G4_NATIVE_RENDER render;
-  if (View == 0 || View->Render == 0 ||
-      View->RenderBytes != sizeof(render) || Arena == 0 ||
-      Objects == 0 || VmSlot == 0u || VmSlot >= 63u) return APPLE_AGX_FALSE;
-  memcpy(&render, View->Render, sizeof(render));
-  if (!AppleAgxG4BindProcessObjects(&render, View->Process,
-          Objects, ObjectCount) ||
-      !AppleAgxG4BindNativeObjects(View, Objects, ObjectCount) ||
-      !g4_patch_buffer_manager(&render, View->Process, View->HeapBlocks,
-          Objects) ||
-      !AppleAgxRenderTemplateSelectVmSlot(Arena, ArenaBytes, VmSlot) ||
-      !AppleAgxG4ApplySceneRelocations(Objects, ObjectCount) ||
-      !AppleAgxG4PatchRenderScalars(&render, Objects, ObjectCount) ||
-      !g4_patch_fragment_attachments(View, Objects))
-    return APPLE_AGX_FALSE;
-  return APPLE_AGX_TRUE;
+  return AppleAgxG4BuildTa3dEx(View, Arena, ArenaBytes, VmSlot, Objects,
+                               ObjectCount, 0);
 }
 
 APPLE_AGX_BOOL AppleAgxG4StageJob(

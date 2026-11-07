@@ -38,6 +38,8 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeWorkBuild(
       * preamble needs none (EXP1339); never set without a program. */
      (i->HelperProgram==0u&&i->HelperConfig!=0u)||
      (i->TimestampGpuAddress&7u)||
+     (i->SamplerHeap==0u)!=(i->SamplerCount==0u)||(i->SamplerHeap&0xfu)||
+     i->SamplerCount>0x400u||
      i->TimestampGpuAddress>~0ULL-APPLE_AGX_G13_TIMESTAMP_BLOCK_BYTES)
     return APPLE_AGX_BACKEND_FALSE;
   if(i->PreemptionGpuAddress>~0ULL-(APPLE_AGX_G13_COMPUTE_PREEMPT_BYTES-8u))
@@ -67,6 +69,13 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeWorkBuild(
   /* V13_5 JobParameters2 begins at 0x1fc. */
   put64(work+0x224u,i->PreemptionGpuAddress);
   put64(work+0x22cu,i->CdmStreamEnd);
+  /* EncoderParams begins at 0x25c: the sampler heap of bindless samplers
+   * (sampler-less jobs keep the zero words they always had). */
+  if(i->SamplerCount) {
+    put64(work+0x274u,i->SamplerHeap);
+    put32(work+0x27cu,i->SamplerCount);
+    put32(work+0x280u,i->SamplerCount+1u);
+  }
   /* JobMeta begins at 0x284 with packed firmware pointers. */
   put64(work+0x288u,i->StampGpuAddress);
   put64(work+0x290u,i->FirmwareStampGpuAddress);

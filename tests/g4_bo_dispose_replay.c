@@ -20,11 +20,13 @@ typedef struct {
   AGX_WIN32_GPUVA_SPACE Gpuva;
   AGX_WIN32_GPUVA_BO PendingVa[64];
   APPLE_AGX_U32 PendingVaCount;
+  APPLE_AGX_U64 PendingVaFence[64]; int RefusedRelease; /* RC71 */
 } AGX_WIN32_ASAHI_BACKEND;
 typedef struct { void *CpuAddress; struct { struct { APPLE_AGX_U64 Token; } Transport; } Buffer;
   APPLE_AGX_U64 ConstructionSerial; } BACKING;
 struct windows_bo { struct agx_bo Base; AGX_WIN32_ASAHI_BACKEND *Backend; BACKING Backing; AGX_WIN32_GPUVA_BO Gpuva;
-  void *Shadow; /* EXP1207 */ };
+  void *Shadow; /* EXP1207 */ int Virtual; /* C53 B1 */ };
+static void virtual_release(struct windows_bo *bo) { (void)bo; }
 static void shadow_free(void *p) { free(p); }
 #define AgxWin32NativeBoSuccess 0
 #define AgxWin32NativeDeviceSuccess 0

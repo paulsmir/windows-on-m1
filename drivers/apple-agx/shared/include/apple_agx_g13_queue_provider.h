@@ -3,7 +3,9 @@
 
 #include "apple_agx_g13_queue_runtime.h"
 
-#define APPLE_AGX_G13_QUEUE_PROVIDER_MAX_OBSERVATIONS 2u
+/* rc102: up to two jobs per batch (a running job and its successor whose
+ * ends one deferred notifier event reported, U4), two observations each. */
+#define APPLE_AGX_G13_QUEUE_PROVIDER_MAX_OBSERVATIONS 4u
 
 typedef enum _APPLE_AGX_G13_QUEUE_PROVIDER_PHASE {
   AppleAgxG13QueueProviderInitialized = 0,
@@ -41,6 +43,8 @@ typedef struct _APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH {
   /* Durable apply cursor; retries never replay an accepted observation. */
   APPLE_AGX_BACKEND_U32 AppliedObservationCount;
   APPLE_AGX_BACKEND_U32 CompletedFence;
+  /* rc102: jobs this batch ends, oldest first (2 = a batched pair). */
+  APPLE_AGX_BACKEND_U32 CompletedCount;
 } APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH;
 
 typedef struct _APPLE_AGX_G13_QUEUE_JOB_PLAN {
@@ -51,6 +55,18 @@ typedef struct _APPLE_AGX_G13_QUEUE_JOB_PLAN {
   APPLE_AGX_BACKEND_U32 TaBarrierExpectedDonePointer;
   APPLE_AGX_BACKEND_BOOL IncludeInitBm;
   APPLE_AGX_BACKEND_BOOL InitializeQueues;
+  /* rc102: a successor plan (AppleAgxG13QueueProviderPlanSuccessor): the
+   * first publication of each queue has one more entry, its leading
+   * Barrier (a render with compute work leads its compute queue; its TA
+   * entry count already includes the D3D-G1b Barrier). */
+  APPLE_AGX_BACKEND_BOOL Successor;
+  /* OV5 drill: a successor plan's 3D done pointer when the 3D queue leads
+   * with the drill's Barrier (one entry more); zero in a depth-1 plan. */
+  APPLE_AGX_BACKEND_U32 D3BarrierExpectedDonePointer;
+  /* OV5 step 2: a successor plan's TA done pointer when its TA lead
+   * Barrier is waived (the root alone, one entry less); zero in a depth-1
+   * plan. */
+  APPLE_AGX_BACKEND_U32 TaWaivedExpectedDonePointer;
 } APPLE_AGX_G13_QUEUE_JOB_PLAN;
 
 struct _APPLE_AGX_G13_QUEUE_PROVIDER;
@@ -143,6 +159,19 @@ typedef struct _APPLE_AGX_G13_QUEUE_PROVIDER {
   APPLE_AGX_BACKEND_U32 LastSubmitGuard;
   APPLE_AGX_BACKEND_U32 LastSubmitRuntimeResult;
   APPLE_AGX_G13_COMPUTE_IDENTITY_DIAGNOSTIC ComputeIdentityDiagnostic;
+  /* rc102: the successor kicked behind PendingFence (0 = none) and whether
+   * it is a standalone compute job; the running job's queues already
+   * reported as observations (bit = APPLE_AGX_BACKEND_QUEUE). */
+  APPLE_AGX_BACKEND_U32 SuccessorFence;
+  APPLE_AGX_BACKEND_BOOL SuccessorComputeOnly;
+  APPLE_AGX_BACKEND_U32 ObservedMask;
+  APPLE_AGX_BACKEND_U32 LastSuccessorGuard;
+  /* OV5 drill: successor renders accepted with a 3D lead Barrier
+   * (cumulative; the KMD's Wom1Ov5DrillReceipt Placed). */
+  APPLE_AGX_BACKEND_U32 D3LeadPlaced;
+  /* OV5 step 2: successor renders accepted with a waived TA lead (the 3D
+   * lead Barrier their only wait; cumulative, Wom1Ov5WaiverReceipt Placed). */
+  APPLE_AGX_BACKEND_U32 TaLeadWaivedPlaced;
 } APPLE_AGX_G13_QUEUE_PROVIDER;
 
 enum {
@@ -198,6 +227,14 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderCheckTimeout(
     APPLE_AGX_G13_QUEUE_PROVIDER *Provider,
     APPLE_AGX_BACKEND_U64 NowTicks,
     APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH *Batch);
+
+/* rc102: read-only plan for a successor publication behind the running
+ * job (Successor set; see APPLE_AGX_G13_QUEUE_JOB_PLAN). FALSE unless a
+ * job runs, no successor is kicked and the queues need no InitBM and no
+ * NewQueue for TA/3D. */
+APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanSuccessor(
+    APPLE_AGX_G13_QUEUE_PROVIDER *Provider,
+    APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan);
 
 /* Read-only plan for the next atomic D3+TA publication. */
 APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanJob(

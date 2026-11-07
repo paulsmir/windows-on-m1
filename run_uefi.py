@@ -11,7 +11,7 @@ firmware can be built to match it.
   ./run_uefi.py --dry-run          validate and print the virtual display contract
   ./run_uefi.py firmware.fd        load and run
 
-PHYS_BASE must sit above m1n1 + its 768 MB heap and below the top of RAM.
+PHYS_BASE anchors the fixed FD; --guest-ram-profile expanded lowers RAM independently.
 """
 import hashlib, os, sys, pathlib, argparse, signal
 
@@ -47,6 +47,9 @@ ap.add_argument("--display-mode", choices=("none", "physical", "virtual", "both"
 ap.add_argument("--debug-mode", choices=("off", "uart", "full", "monitor"), default="uart",
                 help="diagnostic work performed beside the guest")
 ap.add_argument("--phys-base", type=lambda x: int(x, 0))
+ap.add_argument("--guest-ram-profile", choices=("legacy", "expanded"), default="legacy",
+                help="expanded: keep the fixed Mu image, use a 64 MiB proxy heap, and "
+                     "expose RAM from 0x818000000 after live heap/ADT validation")
 ap.add_argument("--ramdisk", type=pathlib.Path,
                 help="disk image to preload into guest RAM at --ramdisk-base. Anything past a "
                      "few tens of MB cannot ride inside the firmware volume: FvMain is "
@@ -146,6 +149,12 @@ for name, value in defaults.items():
     if getattr(args, name) is None:
         setattr(args, name, value)
 
+expanded_ram = args.guest_ram_profile == "expanded"
+if expanded_ram and (args.no_pin or args.phys_base != layout.phys_base):
+    ap.error("expanded RAM requires the canonical pinned firmware layout")
+if expanded_ram and os.environ.get("M1N1HEAP"):
+    ap.error("expanded RAM does not support M1N1HEAP overrides")
+
 fb_stride = layout.virtual_fb_stride
 if args.fb_width != layout.virtual_fb_width:
     fb_stride = args.fb_width * 4
@@ -229,7 +238,8 @@ except BaseException:
     assisted_session.close()
     raise
 
-sys.path.insert(0, str(pathlib.Path(__file__).parent / "m1n1_windows" / "proxyclient"))
+# RC30: an experiment may run a proxyclient from another m1n1 tree (M1N1_PROXYCLIENT); default is the submodule.
+sys.path.insert(0, os.environ.get("M1N1_PROXYCLIENT") or str(pathlib.Path(__file__).parent / "m1n1_windows" / "proxyclient"))
 
 from m1n1.proxy import *
 from m1n1.proxyutils import *
@@ -256,7 +266,7 @@ if os.environ.get("WOM1_PCPU_PSTATE"):
     print(f"CPU frequency: P-cluster P-state {requested_pstate(_before)} -> "
           f"{requested_pstate(_after)} ({PCPU_MHZ[_requested]} MHz), "
           f"raw 0x{_before:x} -> 0x{_after:x}")
-u = ProxyUtils(p, heap_size=768 * 1024 * 1024)
+u = ProxyUtils(p, heap_size=(64 if expanded_ram else 768) * 1024 * 1024)
 hv = HV(iface, p, u)
 
 # Pin the guest's physical base so the load address stops moving between boots.
@@ -265,6 +275,15 @@ if args.no_pin:
     args.phys_base = natural
 else:
     u.heap_top = args.phys_base
+
+memory_base = args.phys_base
+if expanded_ram:
+    from m1n1.hv.guest_memory import expanded_ram_base
+    memory_base = expanded_ram_base(u, 0x818000000)
+    if p.heapblock_alloc(0) > u.heap.offset:
+        raise RuntimeError("native heap has crossed into the proxy heap")
+print(f"Guest RAM profile {args.guest_ram_profile}: base=0x{memory_base:x}; "
+      f"proxy heap=0x{u.heap.offset:x}..0x{natural:x}")
 
 # Mirror load_raw()'s arithmetic so we can predict the image base without loading.
 tc_start, tc_size = u.adt["chosen"]["memory-map"].TrustCache
@@ -298,10 +317,10 @@ if args.ramdisk:
         sys.exit(str(error))
     ramdisk_regions = (j313_ramdisk.descriptor_region(args.ramdisk_base, args.ramdisk_max_size),)
 descriptor = pack_descriptor(
-    boot=(args.phys_base, mem_top - args.phys_base, guest_base,
+    boot=(memory_base, mem_top - memory_base, guest_base,
           (bootargs_base, 0, 0, 0)),
     regions=(
-        (0, 0, args.phys_base, mem_top - args.phys_base),
+        (0, 0, memory_base, mem_top - memory_base),
         (1, 0, args.phys_base, 16 << 20),
         (2, 0, guest_base, align(len(payload_bytes))),
         (3, 0, args.phys_base + (16 << 20), align(u.ba.devtree_size)),
@@ -432,7 +451,8 @@ hv.tba.video.height = fb.height
 hv.tba.video.stride = fb.stride
 hv.tba.video.depth = 32
 hv.tba.video.display = 1
-hv.load_raw(payload_bytes, entryoffset=0)
+hv.load_raw(payload_bytes, entryoffset=0,
+            **({"memory_base": memory_base} if expanded_ram else {}))
 assert args.no_pin or hv.guest_base == guest_base, \
     f"predicted 0x{guest_base:x} but loader chose 0x{hv.guest_base:x}"
 print("Firmware address matches the prediction.")

@@ -11,6 +11,7 @@ no symbols: compilers emit a fixed prologue for frames past one page --
           (frame = n * 16)
   x86:    mov eax, #n                call __chkstk / _alloca_probe
           (frame = n; the call target that most such movs precede)
+  x64:    mov eax, #n                call __chkstk   sub rsp, rax (as x86)
 
 Usage: pe_stack_frames.py IMAGE [--limit BYTES]; exit 1 when a frame exceeds
 the limit (default 16 KiB). The pdata function start is printed for ARM64.
@@ -25,6 +26,7 @@ from pathlib import Path
 
 MACHINE_ARM64 = 0xAA64
 MACHINE_I386 = 0x14C
+MACHINE_AMD64 = 0x8664
 SUB_SP_X15_UXTX4 = 0xCB2F73FF
 
 
@@ -100,7 +102,7 @@ def frames(path: Path):
         code = data[raw:raw + min(virtual_size, raw_size)]
         if machine == MACHINE_ARM64:
             found += scan_arm64(code, rva)
-        elif machine == MACHINE_I386:
+        elif machine in (MACHINE_I386, MACHINE_AMD64):   # x64: the same mov eax / call prologue
             found += scan_x86(code, rva)
         else:
             raise SystemExit(f"unsupported machine 0x{machine:x}")

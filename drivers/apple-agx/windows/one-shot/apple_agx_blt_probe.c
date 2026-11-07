@@ -1,16 +1,85 @@
 #include <windows.h>
 #include <d3dkmthk.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <wchar.h>
 
 #include "render_qualification.h"
 #include "../../shared/include/apple_agx_vsync.h"
 
-int wmain(void) {
+/* RC49: read-only bounded capture. The KMD snapshots into nonpaged storage
+ * at DIRQL. Keep all event kinds so an offline consumer can detect ring loss;
+ * Sequence orders insertion, while kind 8 carries retrospective queue time. */
+static int follow_vsync(D3DKMT_HANDLE adapter, unsigned seconds) {
+  ULONGLONG end = GetTickCount64() + (ULONGLONG)seconds * 1000;
+  ULONGLONG last = 0;
+  UINT generation = 0;
+  int captured = 0;
+  LARGE_INTEGER frequency;
+  (void)QueryPerformanceFrequency(&frequency);
+  do {
+    APPLE_AGX_VSYNC_QUERY q = {0};
+    D3DKMT_ESCAPE e = {0};
+    LARGE_INTEGER before, after;
+    ULONGLONG interruptTime;
+    NTSTATUS status;
+    q.Magic = APPLE_AGX_VSYNC_QUERY_MAGIC;
+    q.Version = 1u;
+    q.Bytes = sizeof(q);
+    e.hAdapter = adapter;
+    e.Type = D3DKMT_ESCAPE_DRIVERPRIVATE;
+    e.pPrivateDriverData = &q;
+    e.PrivateDriverDataSize = sizeof(q);
+    (void)QueryPerformanceCounter(&before);
+    QueryInterruptTimePrecise(&interruptTime);
+    (void)QueryPerformanceCounter(&after);
+    status = D3DKMTEscape(&e);
+    if (status < 0 || q.Magic != APPLE_AGX_VSYNC_QUERY_MAGIC ||
+        q.Version != 1u || q.Bytes != sizeof(q)) {
+      wprintf(L"VSYNC_FOLLOW_ERROR status=0x%x captured=%d\n", (UINT)status, captured);
+      return captured ? 1 : 2;
+    }
+    captured = 1;
+    if (q.Generation != generation) {
+      generation = q.Generation;
+      last = 0;
+    }
+    wprintf(L"VSYNC_SAMPLE generation=%u events=%llu qpc_before=%llu qpc_after=%llu qpc_hz=%llu time100ns=%llu\n",
+            generation, q.EventCount, (ULONGLONG)before.QuadPart,
+            (ULONGLONG)after.QuadPart, (ULONGLONG)frequency.QuadPart, interruptTime);
+    for (UINT n = 0; n < APPLE_AGX_VSYNC_RECEIPT_CAPACITY; ++n) {
+      const APPLE_AGX_VSYNC_EVENT *v = &q.Events[n];
+      if (!v->Sequence || v->Sequence <= last) continue;
+      wprintf(L"VSYNC_EVENT generation=%u seq=%llu time100ns=%llu kind=%u enabled=%u status=0x%x irql=%u period=%llu notify_ordinal=%llu pending_seq=%llu pending=0x%llx active_seq=%llu active=0x%llx\n",
+              generation, v->Sequence, v->Time100ns, v->Kind, v->Enabled,
+              v->Status, v->Irql, v->Period, v->NotifyOrdinal, v->PendingSequence,
+              v->PendingAddress, v->ActiveSequence, v->ActiveAddress);
+    }
+    last = q.EventCount;
+    fflush(stdout);
+    if (GetTickCount64() >= end) break;
+    Sleep(50);
+  } while (GetTickCount64() < end);
+  return 0;
+}
+
+int wmain(int argc, wchar_t **argv) {
   D3DKMT_ENUMADAPTERS2 enumeration = {0};
   D3DKMT_ADAPTERINFO *adapters;
   NTSTATUS status;
   UINT index;
   BOOL found = FALSE;
+  unsigned followSeconds = 0;
+  if (argc != 1) {
+    wchar_t *end = NULL;
+    unsigned long value = argc == 3 ? wcstoul(argv[2], &end, 10) : 0;
+    if (argc != 3 || wcscmp(argv[1], L"--vsync-follow") ||
+        end == argv[2] || *end || value == 0 || value > 600) {
+      fprintf(stderr, "usage: apple_agx_blt_probe [--vsync-follow SECONDS(1..600)]\n");
+      return 1;
+    }
+    followSeconds = (unsigned)value;
+  }
   status = D3DKMTEnumAdapters2(&enumeration);
   if (status < 0 || enumeration.NumAdapters == 0u ||
       enumeration.NumAdapters > 64u) {
@@ -28,6 +97,18 @@ int wmain(void) {
     fprintf(stderr, "BLT_PROBE enumeration fill status=0x%08lx\n", (ULONG)status);
     HeapFree(GetProcessHeap(), 0, adapters);
     return 1;
+  }
+  if (followSeconds) {
+    int result = 2;
+    for (index = 0u; index < enumeration.NumAdapters && result == 2; ++index)
+      result = follow_vsync(adapters[index].hAdapter, followSeconds);
+    for (index = 0u; index < enumeration.NumAdapters; ++index) {
+      D3DKMT_CLOSEADAPTER close = {0};
+      close.hAdapter = adapters[index].hAdapter;
+      (void)D3DKMTCloseAdapter(&close);
+    }
+    HeapFree(GetProcessHeap(), 0, adapters);
+    return result == 0 ? 0 : 1;
   }
   for (index = 0u; index < enumeration.NumAdapters; ++index) {
     D3DKMT_CLOSEADAPTER close = {0};

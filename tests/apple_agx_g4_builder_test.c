@@ -225,9 +225,14 @@ int main(void) {
           bare.Render.Samples = 1u;
           {
             APPLE_AGX_G4_SUBMIT_VIEW colour = zview;
+            unsigned refused = 0u;
             colour.Render = (const unsigned char *)&bare.Render;
             assert(!AppleAgxG4BindNativeObjects(&colour, objects,
                 APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+            /* EXP1903N: the receipt names the predicate (3 zero sample) */
+            assert(!AppleAgxG4BindNativeObjectsEx(&colour, objects,
+                APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &refused) &&
+                refused == 3u);
           }
           bare = zls;
           depth_only.Render = zview.Render;
@@ -235,6 +240,12 @@ int main(void) {
           depth_only.Attachments = &zls.Attachment[0];
           assert(!AppleAgxG4BindNativeObjects(&depth_only, objects,
               APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+          {
+            unsigned refused = 0u;
+            assert(!AppleAgxG4BindNativeObjectsEx(&depth_only, objects,
+                APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &refused) &&
+                refused == 2u);
+          }
           /* D3D-G11: a render without colour and depth/stencil binds its
            * attachment 0 (the device scratch page) as the sink. */
           bare.Render.Depth.Base = 0ULL;
@@ -301,15 +312,20 @@ int main(void) {
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       /* D3D-G6: a sample is a multiple of 8 bytes and a utile's samples fit
-       * the 32767-byte tile buffer (Mesa agx_tilebuffer.c). */
+       * the tile buffer (Mesa agx_tilebuffer.c: 32767 bytes; rc110: the KMD
+       * accepts the full 32 KiB, so a 32 B/px 32x32 utile passes and 40 B/px
+       * does not). */
       packet.Render.SampleSizeBytes = 24u;
       assert(AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       packet.Render.SampleSizeBytes = 12u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
-      packet.Render.SampleSizeBytes = 32u;
+      packet.Render.SampleSizeBytes = 40u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.SampleSizeBytes = 32u;
+      assert(AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       packet.Render.UtileHeightPx = 16u;
       assert(AppleAgxG4BindNativeObjects(&view, objects,
@@ -345,13 +361,34 @@ int main(void) {
       packet.Render.Stencil.Base = 0x35000000ULL;
       assert(AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      /* EXP1904N (Night Raid GT2, BindFailure 332): a depth buffer that is
+       * neither loaded nor stored (cleared, then discarded) packs a zero
+       * ZLS control word in Asahi (agx_pack_zls_control: 32F, no load/store,
+       * no compression) -- a valid transient depth/stencil. */
       packet.Render.ZlsCtrl = 0ULL;
-      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+      assert(AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
       packet.Render.ZlsCtrl = 0x80080ULL;
+      /* ISP_ZLS_PIXELS is the render size (agx_pipe.c CR_ISP_ZLS_PIXELS):
+       * any other value refuses, zero included for 1280x720 ... */
       packet.Render.IspZlsPixels = 0u;
       assert(!AppleAgxG4BindNativeObjects(&view, objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      packet.Render.IspZlsPixels = (1279u - 1u) | ((720u - 1u) << 15);
+      assert(!AppleAgxG4BindNativeObjects(&view, objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      /* ... and zero is exactly a 1x1 render's value */
+      {
+        G4_PACKET one = packet;
+        APPLE_AGX_G4_SUBMIT_VIEW one_view = view;
+        one.Render.WidthPx = one.Render.HeightPx = 1u;
+        one.Render.IspZlsPixels = 0u;
+        one_view.Native = (const unsigned char *)&one;
+        one_view.Render = (const unsigned char *)&one.Render;
+        one_view.Attachments = &one.Attachment;
+        assert(AppleAgxG4BindNativeObjects(&one_view, objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+      }
       packet.Render.IspZlsPixels = (1280u - 1u) | ((720u - 1u) << 15);
       packet.Render.Depth.Base = 0ULL;
       packet.Render.Depth.CompBase = 0x36000000ULL;
@@ -475,11 +512,13 @@ int main(void) {
       assert(get64(objects[18].Data + 0x4c8u) == render.IspScissorBase);
       packet.Render.IspOclQryBase = 0ULL;
       /* Dynamic TVB (Asahi buffer.rs ensure_blocks): the KMD backs the first
-       * HeapBlocks of the 32-block window and the buffer manager, InitBM and
+       * HeapBlocks of the heap range and the buffer manager, InitBM and
        * BlockControl describe exactly those blocks. A 1280x720 render needs
-       * min_tvb_blocks = align(ceil(40 * 23 / 128), 8) = 8. */
+       * min_tvb_blocks = align(ceil(40 * 23 / 128), 8) = 8; rc80: past the
+       * 32-block range the KMD's TVB window continues the heap, up to
+       * 32 + 2048 blocks (apple_agx_g3_tvb.h). */
       {
-        static const unsigned int bad[] = {7u, 33u};
+        static const unsigned int bad[] = {7u, APPLE_AGX_G4_TVB_HEAP_BLOCKS + 1u};
         unsigned int i;
         for (i = 0u; i < 2u; ++i) {
           assert(AppleAgxRenderTemplateMaterialize(
@@ -517,6 +556,38 @@ int main(void) {
             (8u | ((unsigned long long)8u << 32)));
         /* The page list and blocks keep the full reserved window. */
         assert(objects[43].GpuVa == ranges[2].Va);
+        /* rc80: a grown heap (Asahi auto_grow to 3 x max_pages: 1104 pages
+         * -> 828 blocks; the whole window) is named exactly, past the floor,
+         * while the declared process range stays the 32-block floor. */
+        {
+          static const unsigned int grown[] = {33u, 828u, APPLE_AGX_G4_TVB_HEAP_BLOCKS};
+          unsigned int j;
+          for (j = 0u; j < 3u; ++j) {
+            unsigned int n = grown[j];
+            assert(AppleAgxRenderTemplateMaterialize(
+                arena, AppleAgxRenderTemplateBytes(), &roots));
+            assert(AppleAgxRenderTemplateBuildRelocationObjectsRebased(
+                arena, AppleAgxRenderTemplateBytes(), 0x800000000ULL,
+                0x1503800000ULL, 0x1503800000ULL,
+                AppleAgxRenderTemplateBytes(), objects,
+                APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &roots));
+            view.HeapBlocks = n;
+            assert(AppleAgxG4BuildTa3d(&view, arena,
+                AppleAgxRenderTemplateBytes(), 1u, objects,
+                APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+            assert(get64(objects[1].Data + 0x24u) ==
+                ((n * 16u) | ((unsigned long long)(n * 4u) << 32)));
+            assert(get64(objects[1].Data + 0x2cu) ==
+                (n | ((unsigned long long)n << 32)));
+            assert((get64(objects[1].Data + 0x48u) & 0xffffffffULL) == n * 4u - 1u);
+            assert(get64(objects[1].Data + 0x84u) ==
+                ((n * 4u) | ((unsigned long long)(n * 4u) << 32)));
+            assert((get64(objects[16].Data + 0x10u) & 0xffffffffULL) == n);
+            assert(get64(objects[20].Data) == (n | ((unsigned long long)n << 32)));
+            assert(objects[43].GpuVa == ranges[2].Va &&
+                   objects[58].GpuVa == ranges[2].Va + 15ULL * 0x20000ULL);
+          }
+        }
         view.HeapBlocks = 0u;
       }
     }

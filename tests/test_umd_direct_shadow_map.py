@@ -62,7 +62,7 @@ static int VirtualFree(void *p, SIZE_T, unsigned) { ++frees; free(p); return 1; 
 struct SYNC { BOOL Valid; };
 struct SLOT { uint64_t Token; uint64_t Bytes; BOOL SystemDirect,Active,Transition,CopyHeld,Direct,GpuWritten,Mapped,Borrowed,Queried;
   UINT Flags,SubmissionHolds,SourceHolds; D3DKMT_HANDLE KernelAllocation,StagingAllocation; SYNC Sync; uint64_t CanonicalGpuVa;
-  BYTE *PrivateStaging; const void *NativeBo; int (*NativeMapRelease)(const void*,const void*,int); };
+  BYTE *PrivateStaging; const void *NativeBo; int (*NativeMapRelease)(const void*,const void*,int); BOOL UploadRingPending; };
 typedef SLOT ADMISSION_UMD_SCREEN_BUFFER;
 struct CB { void *pfnLockCb, *pfnUnlockCb; };
 struct ADMISSION_UMD_DEVICE { SLOT ScreenBuffers[8]; SRWLOCK ScreenBufferLock; CB *KernelCallbacks; };

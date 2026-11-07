@@ -5,10 +5,11 @@ param(
     [ValidateSet('x64','arm64')][string]$Architecture='x64',
     [switch]$EnableNativeStateTest
 )
+$builderRoot = if ($env:APPLE_AGX_BUILDER_ROOT) { $env:APPLE_AGX_BUILDER_ROOT } else { 'C:\Users\pauls\APB12E~1\active' }  # builder root: APPLE AGX\active (8.3 alias, no space)
 $ErrorActionPreference='Stop'
 if ((Test-Path $NativeRoot) -or (Test-Path $ResultRoot)) { throw 'Use fresh result paths' }
 [void](New-Item -ItemType Directory $ResultRoot)
-$python='C:\Users\pauls\AD04-fullcompiler-001\venv\Scripts\python.exe'
+$python="$builderRoot\AD04-fullcompiler-001\venv\Scripts\python.exe"
 $nativeStateArgs=@()
 if($EnableNativeStateTest){$nativeStateArgs+= '--native-state-test'}
 & $python "$Project\drivers\apple-agx\mesa\scripts\build-native-asahi-state.py" --output $NativeRoot --windows-platform-declarations --project $Project --architecture $Architecture @nativeStateArgs *> "$ResultRoot\native.log"

@@ -12,10 +12,12 @@ repo_root=$(git rev-parse --show-toplevel)
 stage_dir=$(mktemp -d /tmp/ad04-runtime-stage.XXXXXX)
 archive="$stage_dir/source.tar.gz"
 evidence_dir="$repo_root/investigation/evidence/AD04-runtime-closure/$run_id"
-remote_source="C:/Users/pauls/AD04-runtime-src-${run_id}"
-remote_archive="C:/Users/pauls/AD04-runtime-${run_id}.tar.gz"
-remote_output="C:/Users/pauls/AD04-fullcompiler-001/asahi-runtime-${architecture}-${run_id}"
-remote_native="C:/Users/pauls/AD04-fullcompiler-001/asahi-native-${architecture}-${run_id}"
+# builder root (APPLE AGX\active, 8.3 alias without the space); override with APPLE_AGX_BUILDER_ROOT
+builder_root=$(printf '%s' "${APPLE_AGX_BUILDER_ROOT:-C:/Users/pauls/APB12E~1/active}" | tr '\\' /)
+remote_source="$builder_root/AD04-runtime-src-${run_id}"
+remote_archive="$builder_root/AD04-runtime-${run_id}.tar.gz"
+remote_output="$builder_root/AD04-fullcompiler-001/asahi-runtime-${architecture}-${run_id}"
+remote_native="$builder_root/AD04-fullcompiler-001/asahi-native-${architecture}-${run_id}"
 if [[ -e "$evidence_dir" ]]; then
   echo "Fresh local evidence path required: $evidence_dir" >&2
   exit 64

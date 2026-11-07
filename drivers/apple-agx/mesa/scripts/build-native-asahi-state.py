@@ -12,8 +12,64 @@ import json
 import os
 import re
 from pathlib import Path
+# Builder root (APPLE AGX\active as its 8.3 alias, no space); override with APPLE_AGX_BUILDER_ROOT.
+BUILDER = Path(os.environ.get('APPLE_AGX_BUILDER_ROOT', r'C:\Users\pauls\APB12E~1\active'))
 import shutil
 import subprocess
+
+
+def project_3d_pbe_base_depth(state):
+    """Encode true 3D PBE base depth; preserve normalized array/2D views."""
+    old = '         unsigned layers = view->u.tex.last_layer - layer + 1;'
+    if state.count(old) != 1:
+        raise ValueError('Ambiguous native 3D PBE layer anchor')
+    return state.replace(old, '         unsigned layers = target == PIPE_TEXTURE_3D\n'
+                              '                              ? tex->base.depth0\n'
+                              '                              : view->u.tex.last_layer - layer + 1;', 1)
+
+
+def project_constructor_nir_consumption(state):
+    """Consume admitted NIR even when the first shader allocation fails.
+
+    Graphics TGSI tokens and non-NIR compute payloads remain borrowed here.
+    Scoped constructor prefixes prevent changing unrelated allocation guards.
+    The caller already pins the pristine agx_state.c source before projection.
+    """
+    graphics = '''static void *
+agx_create_shader_state(struct pipe_context *pctx,
+                        const struct pipe_shader_state *cso)
+{
+   struct agx_context *ctx = agx_context(pctx);
+   struct agx_uncompiled_shader *so =
+      rzalloc(NULL, struct agx_uncompiled_shader);
+   struct agx_device *dev = agx_device(pctx->screen);
+
+   if (!so)
+      return NULL;'''
+    compute = '''static void *
+agx_create_compute_state(struct pipe_context *pctx,
+                         const struct pipe_compute_state *cso)
+{
+   struct agx_context *ctx = agx_context(pctx);
+   struct agx_device *dev = agx_device(pctx->screen);
+   struct agx_uncompiled_shader *so =
+      rzalloc(NULL, struct agx_uncompiled_shader);
+
+   if (!so)
+      return NULL;'''
+    for old, release in (
+        (graphics, '      if (cso->type == PIPE_SHADER_IR_NIR)\n'
+                   '         ralloc_free(cso->ir.nir);\n'),
+        (compute, '      if (cso->ir_type == PIPE_SHADER_IR_NIR)\n'
+                  '         ralloc_free((void *)cso->prog);\n'),
+    ):
+        if state.count(old) != 1:
+            raise ValueError('Ambiguous constructor NIR ownership anchor')
+        new = old.replace('   if (!so)\n      return NULL;',
+                          '   if (!so) {\n' + release +
+                          '      return NULL;\n   }', 1)
+        state = state.replace(old, new, 1)
+    return state
 
 
 def project_shader_failure(state, shader, device):
@@ -313,6 +369,355 @@ agx_update_shader(''')
    pipe->bind_vs_state''')
     return state, shader, device
 
+def project_gpu_only_resources(pipe):
+    """T7h: per-resource GPU-only storage, with ordinary GPU staging copies.
+
+    These are edits to the pinned, notice-bearing Mesa output, not a copied
+    implementation. Never propagate UNMAPPABLE into the staging resource.
+    """
+    changes = (
+        ('   switch (format) {\n   case PIPE_FORMAT_Z16_UNORM:', """   if (util_format_is_compressed(format)) {
+      unsigned bytes = util_format_get_blocksize(format);
+      assert(bytes == 8 || bytes == 16);
+      return bytes == 8 ? PIPE_FORMAT_R32G32_UINT : PIPE_FORMAT_R32G32B32A32_UINT;
+   }
+   switch (format) {
+   case PIPE_FORMAT_Z16_UNORM:"""),
+        ('   tmpl.format = agx_staging_format(rsc->layout.format);', """   tmpl.format = agx_staging_format(rsc->layout.format);
+   if (util_format_is_compressed(rsc->layout.format)) {
+      tmpl.width0 = util_format_get_nblocksx(rsc->layout.format, box->width);
+      tmpl.height0 = util_format_get_nblocksy(rsc->layout.format, box->height);
+   }"""),
+        ('   blit.src.box = trans->staging.box;\n   blit.mask', """   blit.src.box = trans->staging.box;
+   if (util_format_is_compressed(dst->format)) {
+      unsigned bw = util_format_get_blockwidth(dst->format);
+      unsigned bh = util_format_get_blockheight(dst->format);
+      blit.dst.box.x /= bw; blit.dst.box.y /= bh;
+      blit.src.box.width = blit.dst.box.width = DIV_ROUND_UP(blit.dst.box.width, bw);
+      blit.src.box.height = blit.dst.box.height = DIV_ROUND_UP(blit.dst.box.height, bh);
+   }
+   blit.mask"""),
+        ('   blit.dst.box = trans->staging.box;\n   blit.mask', """   blit.dst.box = trans->staging.box;
+   if (util_format_is_compressed(src->format)) {
+      unsigned bw = util_format_get_blockwidth(src->format);
+      unsigned bh = util_format_get_blockheight(src->format);
+      blit.src.box.x /= bw; blit.src.box.y /= bh;
+      blit.src.box.width = blit.dst.box.width = DIV_ROUND_UP(blit.src.box.width, bw);
+      blit.src.box.height = blit.dst.box.height = DIV_ROUND_UP(blit.src.box.height, bh);
+   }
+   blit.mask"""),
+        ('   uint32_t create_flags = 0;', '''   uint32_t create_flags = 0;
+   if (templ->flags & PIPE_RESOURCE_FLAG_UNMAPPABLE)
+      create_flags |= AGX_WIN32_BO_GPU_ONLY;'''),
+        ('   if (dev->debug & AGX_DBG_NOSHADOW)', '''   if ((flags & AGX_WIN32_BO_GPU_ONLY) || (dev->debug & AGX_DBG_NOSHADOW))'''),
+        ('   tmpl.usage = PIPE_USAGE_STAGING;', '''   tmpl.usage = PIPE_USAGE_STAGING;
+   tmpl.flags &= ~PIPE_RESOURCE_FLAG_UNMAPPABLE;'''),
+        ('   switch (tmpl.target) {\n   case PIPE_TEXTURE_2D_ARRAY:',
+         '   switch (tmpl.target) {\n   case PIPE_TEXTURE_1D_ARRAY:\n   case PIPE_TEXTURE_2D_ARRAY:'),
+        ('''   tmpl.bind =
+      PIPE_BIND_LINEAR | PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW;''', '''   tmpl.bind = tmpl.target == PIPE_BUFFER ? PIPE_BIND_SHADER_BUFFER :
+      PIPE_BIND_LINEAR | PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW;'''),
+        ('''   struct pipe_resource *dst = trans->base.resource;
+   struct pipe_blit_info blit = {0};''', '''   struct pipe_resource *dst = trans->base.resource;
+   if (dst->target == PIPE_BUFFER) {
+      pctx->resource_copy_region(pctx, dst, 0, trans->base.box.x, 0, 0,
+                                 trans->staging.rsrc, 0, &trans->staging.box);
+      return;
+   }
+   struct pipe_blit_info blit = {0};'''),
+        ('''   struct pipe_resource *src = trans->base.resource;
+   struct pipe_blit_info blit = {0};''', '''   struct pipe_resource *src = trans->base.resource;
+   if (src->target == PIPE_BUFFER) {
+      pctx->resource_copy_region(pctx, trans->staging.rsrc, 0, 0, 0, 0,
+                                 src, 0, &trans->base.box);
+      return;
+   }
+   struct pipe_blit_info blit = {0};'''),
+        ('''   /* Can't map tiled/compressed directly */''', '''   /* GPU-only storage can only be transferred through staging. */
+   if ((resource->flags & PIPE_RESOURCE_FLAG_UNMAPPABLE) &&
+       (usage & (PIPE_MAP_DIRECTLY | PIPE_MAP_PERSISTENT | PIPE_MAP_COHERENT))) {
+      *out_transfer = NULL;
+      return NULL;
+   }
+
+   /* Can't map tiled/compressed directly */'''),
+        ('''   bool staging_blit = ail_is_level_logically_compressed(&rsrc->layout, level);''', '''   bool staging_blit = (resource->flags & PIPE_RESOURCE_FLAG_UNMAPPABLE) ||
+                       ail_is_level_logically_compressed(&rsrc->layout, level);'''),
+        ('''   if (staging_blit) {
+      /* Should never happen for buffers, and it's not safe */
+      assert(resource->target != PIPE_BUFFER);
+''', '''   if (staging_blit) {
+      /* Buffers use resource_copy_region; textures use the existing blit. */
+'''),
+        ('''   if (trans->staging.rsrc && (transfer->usage & PIPE_MAP_WRITE)) {
+      assert(prsrc->target != PIPE_BUFFER);''', '''   if (trans->staging.rsrc && (transfer->usage & PIPE_MAP_WRITE)) {'''),
+    )
+    for old, new in changes:
+        if pipe.count(old) != 1:
+            raise ValueError('Ambiguous GPU-only resource anchor: ' + old)
+        pipe = pipe.replace(old, new, 1)
+    return pipe
+
+def project_bc_block_views(state, blit):
+    """T11b: raw BC block views on the existing compute blitter.
+
+    Follow the single-level/layer view contract in Honeykrisp hk_image_view.c.
+    All edits apply to notice-bearing pinned source; no upstream body is copied.
+    """
+    def once(text, old, new):
+        if text.count(old) != 1:
+            raise ValueError('Ambiguous BC block-view anchor: ' + old)
+        return text.replace(old, new, 1)
+    state = once(state, '      cfg.srgb = (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB);', """      /* A BC block viewed as UINT is one uncompressed texel. Rebase
+       * each mip/layer: dividing base dimensions misaddresses mip tails. */
+      if (util_format_is_compressed(rsrc->base.format) &&
+          !util_format_is_compressed(format)) {
+         unsigned level = state->u.tex.first_level;
+         assert(level == state->u.tex.last_level);
+         assert(first_layer == state->u.tex.last_layer);
+         cfg.width = util_format_get_nblocksx(rsrc->base.format, u_minify(rsrc->base.width0, level));
+         cfg.height = util_format_get_nblocksy(rsrc->base.format, u_minify(rsrc->base.height0, level));
+         cfg.first_level = 0;
+         cfg.last_level = 1;
+      }
+      cfg.srgb = (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB);""")
+    state = once(state, '      cfg.address = agx_map_texture_gpu(rsrc, first_layer);', """      cfg.address = agx_map_texture_gpu(rsrc, first_layer);
+      if (util_format_is_compressed(rsrc->base.format) && !util_format_is_compressed(format))
+         cfg.address += ail_get_level_offset_B(&rsrc->layout, state->u.tex.first_level);""")
+    state = once(state, '         cfg.level = level;\n\n         unsigned layers', """         cfg.level = level;
+         if (util_format_is_compressed(tex->base.format) && !util_format_is_compressed(view->format)) {
+            assert(layer == view->u.tex.last_layer);
+            cfg.buffer += ail_get_level_offset_B(&tex->layout, level);
+            cfg.width = util_format_get_nblocksx(tex->base.format, u_minify(tex->base.width0, level));
+            cfg.height = util_format_get_nblocksy(tex->base.format, u_minify(tex->base.height0, level));
+            cfg.level = 0;
+         }
+
+         unsigned layers""")
+    # Compute uses normalized sampler coordinates and clamps the dispatch to
+    # the destination. Both must use blocks, matching the raw descriptors.
+    blit = once(blit, '   float src_width = (float)u_minify(src->width0, info->src.level);\n   float src_height = (float)u_minify(src->height0, info->src.level);', """   bool src_blocks = util_format_is_compressed(src->format) && !util_format_is_compressed(info->src.format);
+   bool dst_blocks = util_format_is_compressed(dst->format) && !util_format_is_compressed(info->dst.format);
+   unsigned src_width_px = u_minify(src->width0, info->src.level);
+   unsigned src_height_px = u_minify(src->height0, info->src.level);
+   unsigned dst_width = u_minify(dst->width0, info->dst.level);
+   unsigned dst_height = u_minify(dst->height0, info->dst.level);
+   float src_width = src_blocks ? util_format_get_nblocksx(src->format, src_width_px) : src_width_px;
+   float src_height = src_blocks ? util_format_get_nblocksy(src->format, src_height_px) : src_height_px;
+   if (dst_blocks) {
+      dst_width = util_format_get_nblocksx(dst->format, dst_width);
+      dst_height = util_format_get_nblocksy(dst->format, dst_height);
+   }""")
+    blit = once(blit, 'MIN2(expanded_x1, u_minify(info->dst.resource->width0, info->dst.level))', 'MIN2(expanded_x1, dst_width)')
+    blit = once(blit, 'MIN2(expanded_y1, u_minify(info->dst.resource->height0, info->dst.level))', 'MIN2(expanded_y1, dst_height)')
+    # Keep all hazard/resource references in Asahi. Split arrays before creating
+    # raw views, so they never derive a layer stride from reduced dimensions.
+    blit = once(blit, '   /* Legalize compression /before/ calling into u_blitter', """   if ((util_format_is_compressed(info->src.resource->format) && !util_format_is_compressed(info->src.format)) ||
+       (util_format_is_compressed(info->dst.resource->format) && !util_format_is_compressed(info->dst.format))) {
+      assert(info->src.box.depth == info->dst.box.depth);
+      assert(asahi_compute_blit_supported(info));
+      if (info->src.box.depth > 1) {
+         for (int z = 0; z < info->src.box.depth; ++z) {
+            struct pipe_blit_info layer = *info;
+            layer.src.box.z += z; layer.dst.box.z += z;
+            layer.src.box.depth = layer.dst.box.depth = 1;
+            agx_blit(pipe, &layer);
+         }
+         return;
+      }
+   }
+
+   /* Legalize compression /before/ calling into u_blitter""")
+    return state, blit
+
+def project_resource_layout(pipe):
+    """Share the pinned native pre-BO prefix with an original no-BO query.
+
+    The reviewed MIT source stays in its original notice-bearing generated
+    file. Move its existing policy; never reimplement modifier/AIL arithmetic.
+    """
+    import hashlib
+
+    marker = 'static struct pipe_resource *\nagx_resource_create_with_modifiers('
+    if pipe.count(marker) != 1:
+        raise ValueError('Ambiguous native resource constructor')
+    constructor = pipe.index(marker)
+    start = pipe.index('   nresource->base = *templ;', constructor)
+    end = pipe.index('   if (templ->target == PIPE_BUFFER)', start)
+    prefix = pipe[start:end]
+    if hashlib.sha256(prefix.encode()).hexdigest() != '3160ca05ccc1be5f7119ba69dbffee7c28445e5206ceb424df524297802eabdb':
+        raise ValueError('Pinned native resource layout prefix changed')
+    refusal = '      free(nresource);\n      return NULL;'
+    reference = '   pipe_reference_init(&nresource->base.reference, 1);\n\n'
+    if prefix.count(refusal) != 2 or prefix.count(reference) != 1:
+        raise ValueError('Native resource layout ownership anchors changed')
+    # Screen-free queries pass NULL dev only to this exact reviewed setup,
+    # whose dev parameter is unused. Any future dependency requires review.
+    setup = pipe.index('static void\nagx_resource_setup(')
+    setup_end = pipe.index('\n}\n', setup) + 3
+    if hashlib.sha256(pipe[setup:setup_end].encode()).hexdigest() != 'bcbabce335f4e22331b94cf47db56faa0542e4c6835698fb41645e0bd90e2dfb':
+        raise ValueError('Pinned native resource setup changed')
+    selection = """   if (modifiers) {
+      nresource->modifier =
+         agx_select_modifier_from_list(nresource, modifiers, count);
+   } else {
+      nresource->modifier = agx_select_best_modifier(nresource);
+   }
+"""
+    if prefix.count(selection) != 1:
+        raise ValueError('Native resource modifier selection changed')
+    shared = prefix.replace(refusal, '      return false;').replace(reference, '')
+    shared = shared.replace(selection, """   if (uncompressed_query) {
+      nresource->modifier = agx_select_uncompressed_modifier(nresource);
+   } else {
+""" + selection + """   }
+""", 1)
+    uncompressed = """   if (agx_twiddled_allowed(pres) &&
+       drm_find_modifier(DRM_FORMAT_MOD_APPLE_GPU_TILED, modifiers, count))
+      return DRM_FORMAT_MOD_APPLE_GPU_TILED;
+"""
+    if pipe.count(uncompressed) != 1:
+        raise ValueError('Native uncompressed modifier branch changed')
+    # Keep the preceding compression/debug branch and its ordering intact.
+    pipe = pipe.replace(uncompressed, """   const uint64_t uncompressed = agx_select_uncompressed_modifier(pres);
+   if (uncompressed != DRM_FORMAT_MOD_INVALID &&
+       drm_find_modifier(uncompressed, modifiers, count))
+      return uncompressed;
+""", 1)
+    selector = """static uint64_t
+agx_select_uncompressed_modifier(const struct agx_resource *pres)
+{
+   return agx_twiddled_allowed(pres) ? DRM_FORMAT_MOD_APPLE_GPU_TILED
+                                   : DRM_FORMAT_MOD_INVALID;
+}
+
+"""
+    selector_at = pipe.index('static uint64_t\nagx_select_modifier_from_list(')
+    pipe = pipe[:selector_at] + selector + pipe[selector_at:]
+    # Selector insertion shifts the constructor/prefix positions.
+    constructor = pipe.index(marker)
+    start = pipe.index('   nresource->base = *templ;', constructor)
+    end = pipe.index('   if (templ->target == PIPE_BUFFER)', start)
+    helper = '''
+/* C21: both creation and the no-BO query execute the original layout policy.
+ * Called only with a validated native resource template. */
+static bool
+agx_resource_layout_init(struct pipe_screen *screen,
+                         const struct pipe_resource *templ,
+                         const uint64_t *modifiers, int count,
+                         struct agx_resource *nresource, bool uncompressed_query)
+{
+   struct agx_device *dev = screen ? agx_device(screen) : NULL;
+''' + shared + '''   return true;
+}
+
+static int
+agx_resource_layout_query(struct pipe_screen *screen,
+   const struct pipe_resource *templ, const uint64_t *modifiers, int count,
+   bool uncompressed_query, AGX_WIN32_ASAHI_RESOURCE_LAYOUT *result)
+{
+   if (!result)
+      return 0;
+   memset(result, 0, sizeof(*result));
+   if ((!screen && !uncompressed_query) || !templ || count < 0 || (count > 0 && !modifiers))
+      return 0;
+
+   struct agx_resource resource = {0};
+   if (!agx_resource_layout_init(screen, templ, modifiers, count, &resource, uncompressed_query))
+      return 0;
+   const struct ail_layout *layout = &resource.layout;
+   STATIC_ASSERT(AGX_WIN32_ASAHI_LAYOUT_LEVELS == AIL_MAX_MIP_LEVELS);
+   result->SizeBytes = layout->size_B;
+   result->Modifier = resource.modifier;
+   result->LayerStrideBytes = layout->layer_stride_B;
+   result->MetadataOffsetBytes = layout->metadata_offset_B;
+   result->CompressionLayerStrideBytes = layout->compression_layer_stride_B;
+   result->SparseTableSizeBytes = layout->sparse_table_size_B;
+   result->RequestedLevels = templ->last_level + 1;
+   result->AllocatedLevels = layout->levels;
+   result->Tiling = layout->tiling;
+   result->EffectiveBind = resource.base.bind;
+   result->Flags = (layout->mipmapped_z ? AGX_WIN32_ASAHI_LAYOUT_MIPMAPPED_Z : 0) |
+      (layout->compressed ? AGX_WIN32_ASAHI_LAYOUT_COMPRESSED : 0) |
+      (layout->page_aligned_layers ? AGX_WIN32_ASAHI_LAYOUT_PAGE_ALIGNED_LAYERS : 0) |
+      (layout->writeable_image ? AGX_WIN32_ASAHI_LAYOUT_WRITEABLE_IMAGE : 0) |
+      (layout->renderable ? AGX_WIN32_ASAHI_LAYOUT_RENDERABLE : 0);
+   memcpy(result->LevelOffsets, layout->level_offsets_B, sizeof(result->LevelOffsets));
+   memcpy(result->CompressedLevelOffsets, layout->level_offsets_compressed_B,
+          sizeof(result->CompressedLevelOffsets));
+   for (unsigned l = 0; l < AGX_WIN32_ASAHI_LAYOUT_LEVELS; ++l) {
+      result->TileWidthEl[l] = layout->tilesize_el[l].width_el;
+      result->TileHeightEl[l] = layout->tilesize_el[l].height_el;
+      result->StrideEl[l] = layout->stride_el[l];
+   }
+   return 1;
+}
+
+int
+AgxWin32AsahiQueryResourceLayout(struct pipe_screen *screen,
+   const struct pipe_resource *templ, const uint64_t *modifiers, int count,
+   AGX_WIN32_ASAHI_RESOURCE_LAYOUT *result)
+{
+   return agx_resource_layout_query(screen, templ, modifiers, count, false, result);
+}
+
+static bool agx_is_format_supported(struct pipe_screen *pscreen, enum pipe_format format,
+   enum pipe_texture_target target, unsigned sample_count, unsigned storage_sample_count, unsigned usage);
+
+static bool
+agx_uncompressed_query_format_valid(const struct pipe_resource *templ)
+{
+   if (!templ || templ->format == PIPE_FORMAT_NONE || (unsigned)templ->format >= PIPE_FORMAT_COUNT ||
+       (unsigned)templ->target >= PIPE_MAX_TEXTURE_TYPES || templ->nr_samples > 1 || templ->nr_storage_samples > 1)
+      return false;
+   const struct util_format_description *desc = util_format_description(templ->format);
+   /* C21H: block-compressed formats (BC1-BC7, 4x4 blocks) lay out GPU-tiled
+    * in blocks (ail_initialize_gpu_tiled's compressed rounding) */
+   if (!desc || desc->block.depth != 1 ||
+       ((desc->block.width != 1 || desc->block.height != 1) && !util_format_is_compressed(templ->format)) ||
+       desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS)
+      return false;
+   /* Execute the native target/format/usage policy. Single sampling avoids
+    * the only device/debug lookup; caller bind flags remain unchanged. */
+   return agx_is_format_supported(NULL, templ->format, templ->target, 1, 1,
+      templ->bind | PIPE_BIND_SAMPLER_VIEW);
+}
+
+static int
+agx_query_uncompressed_resource_layout(const struct pipe_resource *templ,
+   uint64_t modifier, AGX_WIN32_ASAHI_RESOURCE_LAYOUT *result)
+{
+   if (!agx_uncompressed_query_format_valid(templ) || modifier != DRM_FORMAT_MOD_APPLE_GPU_TILED) {
+      if (result) memset(result, 0, sizeof(*result));
+      return 0;
+   }
+   return agx_resource_layout_query(NULL, templ, &modifier, 1, true, result);
+}
+
+int
+AgxWin32AsahiQueryUncompressedResourceLayout(const struct pipe_resource *templ,
+   AGX_WIN32_ASAHI_RESOURCE_LAYOUT *result)
+{
+   return agx_query_uncompressed_resource_layout(templ,
+      DRM_FORMAT_MOD_APPLE_GPU_TILED, result);
+}
+
+'''
+    replacement = '''   if (!agx_resource_layout_init(screen, templ, modifiers, count, nresource, false)) {
+      free(nresource);
+      return NULL;
+   }
+   pipe_reference_init(&nresource->base.reference, 1);
+
+'''
+    pipe = pipe[:start] + replacement + pipe[end:]
+    pipe = pipe[:constructor] + helper + pipe[constructor:]
+    include = '#include "agx_state.h"'
+    if pipe.count(include) != 1:
+        raise ValueError('Ambiguous native layout header include')
+    return pipe.replace(include, include + '\n#include "agx_win32_asahi_layout.h"', 1)
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--output', required=True, type=Path)
 parser.add_argument('--windows-platform-declarations', action='store_true')
@@ -324,6 +729,7 @@ parser.add_argument('--architecture', choices=('x64','arm64','x86'), default='x6
 parser.add_argument('--project',type=Path)
 # EXP1182: a Mesa build other than nir-<architecture> (e.g. b_ndebug=true).
 parser.add_argument('--mesa-build', type=Path)
+parser.add_argument('--mesa-source', type=Path, help='One complete pristine-derived Mesa source projection')
 args = parser.parse_args()
 if (args.native_batch_lifecycle or args.prepare_only) and not (args.windows_platform_declarations and args.project):
     parser.error('Native lifecycle/prepare requires --windows-platform-declarations and --project')
@@ -331,12 +737,17 @@ if args.gpuva and not args.native_batch_lifecycle:
     parser.error('GPUVA requires native batch lifecycle projection')
 out = args.output
 out.mkdir(exist_ok=False)
-mesa = Path(r'C:\Users\pauls\AD04-d3d10-frontend-build\mesa')
-build = args.mesa_build or Path(r'C:\Users\pauls\AD04-fullcompiler-001') / ('nir-'+args.architecture)
-generated = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated')
+mesa = args.mesa_source or (BUILDER / r'AD04-d3d10-frontend-build\mesa')
+build = args.mesa_build or (BUILDER / r'AD04-fullcompiler-001') / ('nir-'+args.architecture)
+generated = (BUILDER / r'AD04-asahi-windows-compiler\b5\generated')
 sdk = Path(r'C:\Program Files (x86)\Windows Kits\10')
 vc = Path(r'C:\VS2022Community\VC\Tools\MSVC\14.44.35207')
-llvm = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin')
+llvm = (BUILDER / r'AD04-asahi-windows-compiler\llvm20\bin')
+if args.mesa_source:
+    (out / 'source-root.json').write_text(json.dumps({
+        'mesa_source': str(mesa.resolve()), 'mesa_build': str(build.resolve()),
+        'shader_info_sha256': hashlib.sha256((mesa / 'src/compiler/shader_info.h').read_bytes()).hexdigest()
+    }, indent=2) + '\n')
 source = mesa / 'src/gallium/drivers/asahi/agx_state.c'
 digest = hashlib.sha256(source.read_bytes()).hexdigest()
 if digest != '5015b75863202a170f8d6015eb82a76a70ecd4b92204894fa3d1886b1baa94ba':
@@ -866,14 +1277,18 @@ SupportedDDIInterfaceVersions[] = {
             D3D11DDI_3DPIPELINELEVEL_10_0) |
          (AgxD3d11Fl11Enabled() ?
           (D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11DDI_3DPIPELINELEVEL_10_1) |
-           D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11DDI_3DPIPELINELEVEL_11_0)) : 0u);
+           D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11DDI_3DPIPELINELEVEL_11_0)) : 0u) |
+         /* FL 11_1: logic ops, UAV registers u0..u63, forced sample counts */
+         (AgxD3d11Fl111Enabled() ?
+          D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11_1DDI_3DPIPELINELEVEL_11_1) : 0u);
       return S_OK;
    /* D3D-H7: the 11.1 to WDDM 2.0 caps (agx_wddm2_ddi.cpp implements or
     * fails closed each entry these caps leave reachable) */
    case D3D11_1DDICAPS_D3D11_OPTIONS:
       if (pData->DataSize != sizeof(D3D11_1DDI_D3D11_OPTIONS_DATA))
          return E_INVALIDARG;
-      ((D3D11_1DDI_D3D11_OPTIONS_DATA *)pData->pData)->OutputMergerLogicOp = FALSE;
+      /* logic ops: agx_wddm2_ddi.cpp CreateBlendState1 */
+      ((D3D11_1DDI_D3D11_OPTIONS_DATA *)pData->pData)->OutputMergerLogicOp = TRUE;
       ((D3D11_1DDI_D3D11_OPTIONS_DATA *)pData->pData)->AssignDebugBinarySupport = FALSE;
       return S_OK;
    case D3D11_1DDICAPS_ARCHITECTURE_INFO:
@@ -995,6 +1410,12 @@ struct AgxDdiTimer {
    /* D3D-H5: an SM 5 vertex shader's tokens (it has no TGSI record), the
     * source of its stream-output variant. */
    UINT *agx_code;
+   /* FL 11_1: a translated shader's UAV register map (struct
+    * dxbc_nir_uav_slots, malloc'd; NULL: u0..u7 at their own slots). */
+   void *agx_uav64;
+   /* FL 11_1 forced sample count (agx_d3d11_ddi.cpp): a pixel shader's
+    * variants behind the expansion GS, released by DestroyShader11. */
+   void *agx_tir;
 };
 
 /* D3D-H5: a vertex or geometry shader state with stream output from the
@@ -1002,6 +1423,15 @@ struct AgxDdiTimer {
 void *AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
                              const UINT *code,
                              const struct pipe_stream_output_info *so);'''),
+        ('''struct RasterizerState
+{
+   void *handle;
+};''','''struct RasterizerState
+{
+   void *handle;
+   /* FL 11_1: ForcedSampleCount 4, 8 or 16 (0: not forced) */
+   UINT agx_forced_samples;
+};'''),
         ('struct pipe_screen *screen;',
          'AGX_D3D10_WINDOWS_ADAPTER *windows;'),
         ('struct pipe_context *pipe;','''struct pipe_context *pipe;
@@ -1022,6 +1452,17 @@ void *AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
    uint64_t agx_shader_serial;
    /* D3D-H2b: the bound compute shader's thread-group size (0: none). */
    UINT agx_cs_block[3];
+   /* FL 11_1 (agx_d3d11_ddi.cpp apply_uavs): the bound UAVs of the graphics
+    * [0] and compute [1] pipelines, D3D11_1_UAV_SLOT_COUNT each, and the
+    * shader bound at each stage, whose UAV map places them. */
+   void *agx_uavs[2][64];
+   void *agx_stage_shader[6];
+   UINT agx_uav_stages;   /* stages whose UAV bindings are not empty */
+   /* FL 11_1 forced sample count: the bound rasterizer's count (0: off),
+    * viewport 0 {x, y, width, height}, a refusal receipt already sent */
+   UINT agx_forced_samples;
+   float agx_viewport0[4];
+   BOOL agx_tir_refused;
    /* D3D-G11: right/bottom pixel extent of the bound viewports. */
    UINT agx_viewport_extent[2];'''),
         ('''static inline void
@@ -1193,6 +1634,9 @@ struct Query
    D3D10DDI_HRTRENDERTARGETVIEW hRTRenderTargetView;
    Resource *owner_resource;
    RenderTargetView *next_presentation;
+   /* Gallium surfaces describe textures; keep buffer ranges in elements. */
+   UINT buffer_first_element;
+   UINT buffer_num_elements;
 };''')])
     change('src/gallium/frontends/d3d10umd/Device.cpp',
         'dcf950aec993d40743671e1f208655e151158a9b4647bc3581dcd134962086aa',[
@@ -1475,6 +1919,35 @@ void APIENTRY
    } else {
       *pFormatCaps = 0;
    }
+   /* C69 (EXP1905 GravityMark D3D11: CreateComputeShader E_INVALIDARG for a
+    * typed RG32F UAV load): typed UAV stores and loads. The frontend's
+    * typed UAVs take any translated format (uav_image) and its loads carry
+    * no format (dxbc_to_nir), which Asahi serves (image_load_formatted) --
+    * the D3D12 C49 set validated on J313 (C49A): the formats
+    * TypedUAVLoadAdditionalFormats requires plus Asahi's optional image
+    * formats. The runtime derives that cap from these per-format bits. */
+   {
+      static const DXGI_FORMAT typed_uav[] = {
+         DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32B32A32_UINT, DXGI_FORMAT_R32G32B32A32_SINT,
+         DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_UINT, DXGI_FORMAT_R16G16B16A16_SINT,
+         DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UINT, DXGI_FORMAT_R8G8B8A8_SINT,
+         DXGI_FORMAT_R16_FLOAT, DXGI_FORMAT_R16_UINT, DXGI_FORMAT_R16_SINT,
+         DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8_UINT, DXGI_FORMAT_R8_SINT,
+         DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32_SINT,
+         DXGI_FORMAT_R16G16B16A16_UNORM, DXGI_FORMAT_R16G16B16A16_SNORM,
+         DXGI_FORMAT_R32G32_FLOAT, DXGI_FORMAT_R32G32_UINT, DXGI_FORMAT_R32G32_SINT,
+         DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R10G10B10A2_UINT, DXGI_FORMAT_R11G11B10_FLOAT,
+         DXGI_FORMAT_R8G8B8A8_SNORM,
+         DXGI_FORMAT_R16G16_FLOAT, DXGI_FORMAT_R16G16_UNORM, DXGI_FORMAT_R16G16_UINT,
+         DXGI_FORMAT_R16G16_SNORM, DXGI_FORMAT_R16G16_SINT,
+         DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8G8_UINT, DXGI_FORMAT_R8G8_SNORM, DXGI_FORMAT_R8G8_SINT,
+         DXGI_FORMAT_R16_UNORM, DXGI_FORMAT_R16_SNORM, DXGI_FORMAT_R8_SNORM};
+      for (unsigned i = 0; i < sizeof(typed_uav) / sizeof(typed_uav[0]); ++i)
+         if (typed_uav[i] == Format) {
+            *pFormatCaps |= D3D11_1DDI_FORMAT_SUPPORT_UAV_WRITES | D3DWDDM2_0DDI_FORMAT_SUPPORT_UAV_READS;
+            break;
+         }
+   }
    /* EXP1289 probe: the APPLE_AGX_D3D_MSAA_CAPS policy selects the formats
     * answering MULTISAMPLE_RENDERTARGET (0: the EXP1284 answers, none); with
     * a mask set every answer is receipted. */
@@ -1624,6 +2097,7 @@ void APIENTRY
 }''')])
     change('src/gallium/frontends/d3d10umd/OutputMerger.cpp',
         'fefcbe8754fd1042b7bf091feab767844cc71a8fe4cbe9f0b41d76dc9dd4fd04',[
+        ('#include "Format.h"', '#include "Format.h"\n#include "Query.h"'),
         # EXP994: D3D10/11 disable depth and stencil tests while no depth-
         # stencil view is bound. Gallium leaves this to the frontend (st/mesa
         # does it for GL); without it the runtime default DepthEnable/LESS
@@ -1688,6 +2162,29 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
 
    Device *windowsDevice=CastDevice(hDevice);
    Resource *windowsResource=CastResource(pCreateRenderTargetView->hDrvResource);
+   if(pCreateRenderTargetView->ResourceDimension==D3D10DDIRESOURCE_BUFFER) {
+      struct pipe_resource *buffer=windowsResource?windowsResource->resource:NULL;
+      enum pipe_format format=FormatTranslate(pCreateRenderTargetView->Format,false);
+      unsigned element=util_format_get_blocksize(format);
+      UINT first=pCreateRenderTargetView->Buffer.FirstElement;
+      UINT count=pCreateRenderTargetView->Buffer.NumElements;
+      UINT64 offset=(UINT64)first*element,bytes=(UINT64)count*element;
+      if(!windowsDevice || !windowsResource || windowsResource->owner_device!=windowsDevice ||
+         !(windowsResource->bind_flags&D3D10_DDI_BIND_RENDER_TARGET) ||
+         windowsResource->Format!=DXGI_FORMAT_UNKNOWN || !buffer || buffer->target!=PIPE_BUFFER ||
+         format==PIPE_FORMAT_NONE || !element || element>16 || !count ||
+         offset>windowsResource->logical_bytes || bytes>windowsResource->logical_bytes-offset ||
+         !windowsDevice->pipe->screen->is_format_supported(windowsDevice->pipe->screen,
+            format,PIPE_BUFFER,1,1,PIPE_BIND_RENDER_TARGET)) {
+         SetError(hDevice,E_NOTIMPL);return;
+      }
+      RenderTargetView *view=CastRenderTargetView(hRenderTargetView);
+      memset(view,0,sizeof(*view));
+      view->surface.format=format;
+      pipe_resource_reference(&view->surface.texture,buffer);
+      view->buffer_first_element=first;view->buffer_num_elements=count;
+      return;
+   }
    if(!windowsDevice||!windowsResource||windowsResource->owner_device!=windowsDevice||
       (!windowsResource->presentation&&
        !(windowsResource->bind_flags&D3D10_DDI_BIND_RENDER_TARGET))||
@@ -1707,6 +2204,7 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
 }''','''   pRTView->surface = desc;
    pRTView->owner_resource=NULL;
    pRTView->next_presentation=NULL;
+   pRTView->buffer_first_element=pRTView->buffer_num_elements=0;
    if(windowsResource->presentation && desc.texture) {
       pRTView->owner_resource=windowsResource;
       pRTView->next_presentation=windowsResource->first_presentation_rtv;
@@ -1723,6 +2221,28 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
    }
    pipe_resource_reference(&pRTView->surface.texture, NULL);
 }'''),
+        ('''void APIENTRY
+ClearRenderTargetView(''','''/* Buffer RTV bounds are kept outside pipe_surface: its layer fields are
+ * 16-bit texture coordinates, not a buffer element address. */
+bool
+AgxD3d11ClearBufferRtv(Device *device, RenderTargetView *view,
+                     const union pipe_color_union *color, UINT first, UINT count)
+{
+   struct pipe_resource *buffer=view->surface.texture;
+   unsigned element=util_format_get_blocksize(view->surface.format);
+   if(!device || !buffer || buffer->target!=PIPE_BUFFER || !element || element>16 ||
+      first>view->buffer_num_elements || count>view->buffer_num_elements-first ||
+      !device->pipe->clear_buffer) return false;
+   if(!count) return true;
+   uint8_t pixel[16]={};
+   util_format_pack_rgba(view->surface.format,pixel,color,1);
+   device->pipe->clear_buffer(device->pipe,buffer,
+      (view->buffer_first_element+first)*element,count*element,pixel,element);
+   return true;
+}
+
+void APIENTRY
+ClearRenderTargetView('''),
         ('''   pipe->clear_render_target(pipe,
                              surface,
                              &clear_color,
@@ -1730,6 +2250,13 @@ SetRenderTargets(D3D10DDI_HDEVICE hDevice,'''),
                              pipe_surface_width(surface),
                              pipe_surface_height(surface),
                              true);''','''   Device *traceDevice = CastDevice(hDevice);
+   if(surface && surface->texture && surface->texture->target==PIPE_BUFFER) {
+      if(traceDevice && !CheckPredicate(traceDevice)) return;
+      RenderTargetView *view=CastRenderTargetView(hRenderTargetView);
+      if(!AgxD3d11ClearBufferRtv(traceDevice,view,&clear_color,0,view->buffer_num_elements))
+         SetError(hDevice,E_NOTIMPL);
+      return;
+   }
    if (traceDevice) AgxD3d10WindowsDiagnosticState(traceDevice->windows, "clear-before");
    if (pipe->clear_render_target) {
       pipe->clear_render_target(pipe,
@@ -2710,6 +3237,9 @@ UnsupportedDxgi''')
       free(pShader->agx_code);
       pShader->agx_code = NULL;
    }
+   /* FL 11_1: the UAV register map */
+   free(pShader->agx_uav64);
+   pShader->agx_uav64 = NULL;
    if (pShader->handle) {
       switch (pShader->type) {
       case MESA_SHADER_FRAGMENT:'''),
@@ -2755,6 +3285,7 @@ AgxSetConstantBuffersRange(mesa_shader_stage shader_type, D3D10DDI_HDEVICE hDevi
        shader_type == MESA_SHADER_TESS_CTRL || shader_type == MESA_SHADER_TESS_EVAL) &&
       (NumBuffers == 0 || phBuffers) && StartBuffer <= slots &&
       NumBuffers <= slots - StartBuffer &&
+      ((!firstConstant) == (!numConstants)) &&
       AgxD3d10WindowsIdentity(pDevice->windows, &owner, &generation);
    for (UINT i = 0; valid && i < NumBuffers; ++i) {
       Resource *resource = CastResource(phBuffers[i]);
@@ -2767,13 +3298,12 @@ AgxSetConstantBuffersRange(mesa_shader_stage shader_type, D3D10DDI_HDEVICE hDevi
          !(resource->resource->bind &
            ~(PIPE_BIND_CONSTANT_BUFFER | PIPE_BIND_SHADER_IMAGE)) &&
          resource->logical_bytes >= 16 &&
-         (firstConstant || resource->logical_bytes <= 65536) &&
          (resource->logical_bytes & 15) == 0 &&
          resource->resource->width0 == resource->logical_bytes;
    }
    for (UINT i = 0; valid && firstConstant && numConstants && i < NumBuffers; ++i)
       valid = (firstConstant[i] & 15u) == 0 && (numConstants[i] & 15u) == 0 &&
-              numConstants[i] >= 16u && numConstants[i] <= 4096u;
+              numConstants[i] <= 4096u;
    if (!valid) {
       SetError(hDevice, E_NOTIMPL);
       return;
@@ -2786,20 +3316,22 @@ AgxSetConstantBuffersRange(mesa_shader_stage shader_type, D3D10DDI_HDEVICE hDevi
          continue;
       }
       /* D3D11.1: the window starts at a multiple of 16 constants and
-       * holds 16..4096 of them (the runtime validates both); reads past
+       * holds 0..4096 of them (the runtime validates both); reads past
        * the buffer's end return 0 (robust context), so the bound size is
        * clipped to the buffer and an empty window unbinds the slot. */
-      UINT offset = firstConstant ? firstConstant[i] * 16u : 0u;
+      /* An out-of-buffer window returns zero even when its byte offset
+       * does not fit UINT. Compare before narrowing to Gallium's offset. */
+      uint64_t offset = firstConstant ? (uint64_t)firstConstant[i] * 16u : 0u;
       UINT window = numConstants ? numConstants[i] * 16u : 65536u;
-      if (offset >= resource->logical_bytes) {
+      if (!window || offset >= resource->logical_bytes) {
          pDevice->pipe->set_constant_buffer(pDevice->pipe, shader_type,
                                              StartBuffer + i, NULL);
          continue;
       }
       struct pipe_constant_buffer cb = {};
       cb.buffer = resource->resource;
-      cb.buffer_offset = offset;
-      cb.buffer_size = MIN2(window, resource->logical_bytes - offset);
+      cb.buffer_offset = (UINT)offset;
+      cb.buffer_size = MIN2(window, resource->logical_bytes - (UINT)offset);
       pDevice->pipe->set_constant_buffer(pDevice->pipe, shader_type,
                                           StartBuffer + i, &cb);
    }
@@ -3072,10 +3604,19 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
    }
    default:break;
    }
+   /* C40 (EXP1841/EXP1843): a D3D12 R10G10B10A2 swapchain buffer is presented
+    * from 8-bit RGBA storage; DWM opens it (bind flags SRV|RT, no PRESENT),
+    * keeps the swapchain's format and views it as R10G10B10A2, which reads
+    * the storage (reject-d3d10-srv {28, 24, 3, presentation, 0x28, 1}) */
+   const bool windowsPresentedStorage=windowsResource && windowsResource->presentation &&
+      pCreateSRView->ResourceDimension==D3D10DDIRESOURCE_TEXTURE2D &&
+      pCreateSRView->Format==DXGI_FORMAT_R10G10B10A2_UNORM &&
+      (windowsResource->Format==DXGI_FORMAT_R8G8B8A8_UNORM ||
+       windowsResource->Format==DXGI_FORMAT_B8G8R8A8_UNORM);
    if(!windowsDevice||!windowsResource||windowsResource->owner_device!=windowsDevice||
       (!windowsResource->presentation&&
        !(windowsResource->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE))||
-      (pCreateSRView->ResourceDimension!=D3D10DDIRESOURCE_BUFFER &&
+      (pCreateSRView->ResourceDimension!=D3D10DDIRESOURCE_BUFFER && !windowsPresentedStorage &&
        !AgxD3d10FormatViewCompatible(windowsResource->Format,
            pCreateSRView->Format,FALSE,
            windowsResource->presentation &&
@@ -3083,6 +3624,10 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
       !windowsDimOK || !windowsMipCount || windowsLevel>=windowsResource->MipLevels ||
       windowsMipCount>windowsResource->MipLevels-windowsLevel || !windowsLayers ||
       windowsFirstLayer>=windowsLayerLimit || windowsLayers>windowsLayerLimit-windowsFirstLayer) {
+      const UINT refused[6]={windowsResource?(UINT)windowsResource->Format:~0u,(UINT)pCreateSRView->Format,
+         (UINT)pCreateSRView->ResourceDimension,windowsResource?(UINT)windowsResource->presentation:~0u,
+         windowsResource?(UINT)windowsResource->bind_flags:~0u,(UINT)windowsDimOK};
+      AgxD3d10WindowsDiagnostic("reject-d3d10-srv",E_NOTIMPL,refused,6u);
       SetError(hDevice,E_NOTIMPL);return;
    }
    struct pipe_context *pipe = CastPipeContext(hDevice);
@@ -3096,6 +3641,7 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
    format = FormatTranslate(pCreateSRView->Format, false);
    enum pipe_format lowered=AgxD3d10LoweredTextureFormat(pCreateSRView->Format);
    if(lowered!=PIPE_FORMAT_NONE) format=lowered;
+   if(windowsPresentedStorage) format=resource->format;
    u_sampler_view_default_template(&desc, resource, format);
    if(pCreateSRView->ResourceDimension==D3D10DDIRESOURCE_BUFFER) {
       UINT element=util_format_get_blocksize(format);
@@ -3175,20 +3721,26 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
 ''','''   pShader->type = MESA_SHADER_VERTEX;
    pShader->output_resolved = true;
    /* EXP1291: the runtime hands over uninitialized private memory, and
-    * DestroyShader/ResolveState read these D3D-G10e fields of every shader. */
+    * DestroyShader/ResolveState read these D3D-G10e fields of every shader
+    * (and DestroyShader frees the FL 11_1 UAV map). */
    pShader->agx_serial = 0;
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
+   pShader->agx_uav64 = NULL;
+   pShader->agx_tir = NULL;
 '''),
         ('''   pShader->type = MESA_SHADER_GEOMETRY;
    pShader->output_resolved = true;
 ''','''   pShader->type = MESA_SHADER_GEOMETRY;
    pShader->output_resolved = true;
    /* EXP1291: the runtime hands over uninitialized private memory, and
-    * DestroyShader/ResolveState read these D3D-G10e fields of every shader. */
+    * DestroyShader/ResolveState read these D3D-G10e fields of every shader
+    * (and DestroyShader frees the FL 11_1 UAV map). */
    pShader->agx_serial = 0;
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
+   pShader->agx_uav64 = NULL;
+   pShader->agx_tir = NULL;
 '''),
         ('''   bool all_slot_zero = true;
 
@@ -3197,20 +3749,26 @@ AGX_D3D11_STAGE_SETTERS(Ds, MESA_SHADER_TESS_EVAL)
 
    pShader->type = MESA_SHADER_GEOMETRY;
    /* EXP1291: the runtime hands over uninitialized private memory, and
-    * DestroyShader/ResolveState read these D3D-G10e fields of every shader. */
+    * DestroyShader/ResolveState read these D3D-G10e fields of every shader
+    * (and DestroyShader frees the FL 11_1 UAV map). */
    pShader->agx_serial = 0;
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
+   pShader->agx_uav64 = NULL;
+   pShader->agx_tir = NULL;
 '''),
         ('''   pShader->type = MESA_SHADER_FRAGMENT;
    pShader->output_resolved = true;
 ''','''   pShader->type = MESA_SHADER_FRAGMENT;
    pShader->output_resolved = true;
    /* EXP1291: the runtime hands over uninitialized private memory, and
-    * DestroyShader/ResolveState read these D3D-G10e fields of every shader. */
+    * DestroyShader/ResolveState read these D3D-G10e fields of every shader
+    * (and DestroyShader frees the FL 11_1 UAV map). */
    pShader->agx_serial = 0;
    pShader->so_vs_handle = NULL;
    pShader->so_vs_serial = 0;
+   pShader->agx_uav64 = NULL;
+   pShader->agx_tir = NULL;
 '''),
         ('''#include "util/u_gen_mipmap.h"
 #include "drm-uapi/drm_fourcc.h"
@@ -3282,10 +3840,19 @@ AgxD3d10CreateShaderState(struct pipe_context *pipe, Shader *shader,
    if (code && !state.stream_output.num_outputs &&
        (translator || AgxD3d10WindowsDiagnosticSwitch("APPLE_AGX_D3D_SHADER_NIR"))) {
       struct dxbc_nir_error error = {};
-      struct nir_shader *nir = dxbc_translate_tokens(code,
-         pipe->screen->nir_options[shader->type], &error);
+      /* FL 11_1: UAV registers u0..u63, placed by the shader's map */
+      struct dxbc_nir_uav_slots *slots =
+         (struct dxbc_nir_uav_slots *)malloc(sizeof(struct dxbc_nir_uav_slots));
+      struct nir_shader *nir = slots ? dxbc_translate_tokens_uav64(code,
+         pipe->screen->nir_options[shader->type], 0, 0, slots, &error) : NULL;
       UINT values[4] = {(UINT)shader->type, nir ? 1u : 0u, error.opcode, error.offset};
       AgxD3d10WindowsDiagnostic("measure-shader-nir", nir ? S_OK : E_NOTIMPL, values, 4u);
+      if (nir) {
+         free(shader->agx_uav64);
+         shader->agx_uav64 = slots;
+      } else {
+         free(slots);
+      }
       if (nir) {
          state.type = PIPE_SHADER_IR_NIR;
          state.tokens = NULL;
@@ -3476,20 +4043,35 @@ AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
    struct pipe_resource *texture=srv->texture;
    unsigned first=srv->u.tex.first_level,last=srv->u.tex.last_level;
    if(first==last) return;
-   bool bgr=srv->format==PIPE_FORMAT_B8G8R8A8_UNORM ||
-      srv->format==PIPE_FORMAT_B8G8R8A8_SRGB || srv->format==PIPE_FORMAT_B8G8R8X8_UNORM ||
-      srv->format==PIPE_FORMAT_B8G8R8X8_SRGB;
    bool target=texture->target==PIPE_TEXTURE_1D || texture->target==PIPE_TEXTURE_1D_ARRAY ||
       texture->target==PIPE_TEXTURE_2D || texture->target==PIPE_TEXTURE_2D_ARRAY ||
-      texture->target==PIPE_TEXTURE_3D || texture->target==PIPE_TEXTURE_CUBE;
-   if(!bgr || !target ||
+      texture->target==PIPE_TEXTURE_3D || texture->target==PIPE_TEXTURE_CUBE ||
+      texture->target==PIPE_TEXTURE_CUBE_ARRAY;
+   /* Filter in the SRV's typed format (including sRGB), but stage bytes in
+    * the resource's storage format. Do not infer renderability from size. */
+   struct pipe_screen *screen=device->pipe->screen;
+   unsigned element=util_format_get_blocksize(texture->format);
+   if(!target || !element ||
+      util_format_is_pure_integer(srv->format) || util_format_is_depth_or_stencil(srv->format) ||
+      util_format_get_blockwidth(texture->format)!=1 ||
+      util_format_get_blockheight(texture->format)!=1 ||
       texture->nr_samples>1 || first>last || last>texture->last_level ||
+      (texture->target!=PIPE_TEXTURE_3D &&
+       (srv->u.tex.first_layer>srv->u.tex.last_layer || srv->u.tex.last_layer>=texture->array_size)) ||
       !(view->owner_resource->bind_flags&D3D10_DDI_BIND_RENDER_TARGET) ||
-      !device->pipe->screen->resource_create_with_modifiers) {
+      !screen->resource_create_with_modifiers || !screen->is_format_supported ||
+      !screen->is_format_supported(screen,srv->format,texture->target,
+         texture->nr_samples,texture->nr_storage_samples,
+         PIPE_BIND_SAMPLER_VIEW|PIPE_BIND_RENDER_TARGET)) {
+      const UINT refused[4]={(UINT)srv->format,(UINT)texture->target,first,last};
+      AgxD3d10WindowsDiagnostic("reject-d3d11-genmips",E_NOTIMPL,refused,4u);
       SetError(hDevice,E_NOTIMPL);return;
    }
    for(unsigned level=first+1;level<=last;++level) {
-      HRESULT status=AgxD3d10WindowsFlushRetire(device->windows);
+      /* The source texture_map below waits for the preceding mip writer;
+       * the newly allocated staging texture has no GPU users. Leave other
+       * resources in flight instead of retiring the context at every LOD. */
+      HRESULT status=AgxD3d10WindowsFlushStatus(device->windows);
       if(FAILED(status)) {SetError(hDevice,status);return;}
       struct pipe_resource info={};
       info.target=texture->target;info.format=texture->format;
@@ -3510,11 +4092,11 @@ AgxD3d10CreateXfbState(struct pipe_context *pipe, Shader *shader,
       struct pipe_transfer *read=NULL,*write=NULL;
       void *src=device->pipe->texture_map(device->pipe,texture,level-1,PIPE_MAP_READ,&box,&read);
       void *dst=device->pipe->texture_map(device->pipe,source,0,PIPE_MAP_WRITE,&box,&write);
-      bool mapped=src&&dst&&read&&write&&read->stride>=info.width0*4&&write->stride>=info.width0*4;
+      bool mapped=src&&dst&&read&&write&&read->stride>=info.width0*element&&write->stride>=info.width0*element;
       if(mapped) for(unsigned layer=0;layer<(unsigned)box.depth;++layer)
          for(unsigned row=0;row<info.height0;++row)
             memcpy((uint8_t *)dst+layer*write->layer_stride+row*write->stride,
-                   (const uint8_t *)src+layer*read->layer_stride+row*read->stride,info.width0*4);
+                   (const uint8_t *)src+layer*read->layer_stride+row*read->stride,info.width0*element);
       if(write) pipe_texture_unmap(device->pipe,write);
       if(read) pipe_texture_unmap(device->pipe,read);
       if(!mapped) {
@@ -3771,6 +4353,7 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    AgxD3d10NoTargetReceipt(pDevice, 2u, IndexCount);
    pDevice->pipe->draw_vbo(pDevice->pipe, &info, 0, NULL, &draw, 1);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexedInstanced','''   Device *pDevice=CastDevice(hDevice);
+   if(pDevice && (!InstanceCount || !IndexCountPerInstance)) return;
    if(!pDevice || !pDevice->index_buffer ||
       (pDevice->index_size!=2 && pDevice->index_size!=4) ||
       pDevice->primitive>=MESA_PRIM_COUNT) {
@@ -3779,7 +4362,6 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    /* D3D-G10c: adjacency topologies are drawn natively; Asahi feeds them
     * to the bound geometry shader or a passthrough one (agx_state.c
     * agx_needs_passthrough_gs). The graph-capture era refused them. */
-   if(!InstanceCount || !IndexCountPerInstance) return;
    if(AgxWin32AsahiContextDrawReceipt(pDevice->pipe)) {
       HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
       if(FAILED(status)) {SetError(hDevice,status);return;}
@@ -3795,13 +4377,13 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
    AgxD3d10NoTargetReceipt(pDevice,3u,IndexCountPerInstance);
    pDevice->pipe->draw_vbo(pDevice->pipe,&info,0,NULL,&draw,1);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawInstanced','''   Device *pDevice=CastDevice(hDevice);
+   if(pDevice && (!InstanceCount || !VertexCountPerInstance)) return;
    if(!pDevice || pDevice->primitive>=MESA_PRIM_COUNT) {
       SetError(hDevice,E_NOTIMPL);return;
    }
    /* D3D-G10c: adjacency topologies are drawn natively; Asahi feeds them
     * to the bound geometry shader or a passthrough one (agx_state.c
     * agx_needs_passthrough_gs). The graph-capture era refused them. */
-   if(!InstanceCount || !VertexCountPerInstance) return;
    if(AgxWin32AsahiContextDrawReceipt(pDevice->pipe)) {
       HRESULT status=AgxD3d10WindowsFlushRetire(pDevice->windows);
       if(FAILED(status)) {SetError(hDevice,status);return;}
@@ -4006,6 +4588,135 @@ AgxD3d10CopyTargetFamily(enum pipe_texture_target target)
    }
 }
 
+/* C72 (EXP1907, GravityMark D3D11): a block-compressed mip smaller than one
+ * block (a 2x2 BC7 level) is addressed in whole blocks. D3D validates a
+ * copy box against the block-aligned size, and the partial block is the
+ * level's storage. 1 for uncompressed formats. */
+static unsigned
+AgxD3d10CopyExtent(unsigned size, unsigned block)
+{
+   return block > 1u ? (size + block - 1u) / block * block : size;
+}
+
+/* D3D10.1 format conversion is a bit copy, not a colour conversion.
+ * Only the documented integer/block pairs are admitted, not arbitrary
+ * equal-byte-size formats. BC6H/BC7 extend the 128-bit group in D3D11. */
+static unsigned
+AgxD3d10BlockCopyClass(DXGI_FORMAT format)
+{
+   switch (format) {
+   case DXGI_FORMAT_R16G16B16A16_UINT:
+   case DXGI_FORMAT_R16G16B16A16_SINT:
+   case DXGI_FORMAT_R32G32_UINT:
+   case DXGI_FORMAT_R32G32_SINT: return 8;
+   case DXGI_FORMAT_R32G32B32A32_UINT:
+   case DXGI_FORMAT_R32G32B32A32_SINT: return 16;
+   case DXGI_FORMAT_BC1_UNORM:
+   case DXGI_FORMAT_BC1_UNORM_SRGB:
+   case DXGI_FORMAT_BC4_UNORM:
+   case DXGI_FORMAT_BC4_SNORM: return 0x100 | 8;
+   case DXGI_FORMAT_BC2_UNORM:
+   case DXGI_FORMAT_BC2_UNORM_SRGB:
+   case DXGI_FORMAT_BC3_UNORM:
+   case DXGI_FORMAT_BC3_UNORM_SRGB:
+   case DXGI_FORMAT_BC5_UNORM:
+   case DXGI_FORMAT_BC5_SNORM:
+   case DXGI_FORMAT_BC6H_UF16:
+   case DXGI_FORMAT_BC6H_SF16:
+   case DXGI_FORMAT_BC7_UNORM:
+   case DXGI_FORMAT_BC7_UNORM_SRGB: return 0x100 | 16;
+   default: return 0;
+   }
+}
+
+static bool
+AgxD3d10BlockCopyCompatible(DXGI_FORMAT source, DXGI_FORMAT destination)
+{
+   unsigned src = AgxD3d10BlockCopyClass(source);
+   unsigned dst = AgxD3d10BlockCopyClass(destination);
+   return src && dst && (src ^ dst) == 0x100;
+}
+
+/* Source coordinates are source texels, destination coordinates are destination
+ * pixels. Validate in blocks, then clip each mapped box to its own mip. This
+ * retains the storage of 1x1/2x2 BC tails without a zero-sized reverse copy. */
+static bool
+AgxD3d10CopyBlockAxis(unsigned srcSize, unsigned dstSize,
+                       unsigned srcBlock, unsigned dstBlock,
+                       unsigned first, unsigned last, unsigned dstOffset,
+                       unsigned *srcExtent, unsigned *dstExtent)
+{
+   if (!srcBlock || !dstBlock || first >= srcSize || first >= last ||
+       dstOffset >= dstSize || first % srcBlock || dstOffset % dstBlock)
+      return false;
+   uint64_t srcAligned = ((uint64_t)srcSize + srcBlock - 1) / srcBlock * srcBlock;
+   uint64_t dstBlocks = ((uint64_t)dstSize + dstBlock - 1) / dstBlock;
+   if (last > srcAligned || (last % srcBlock && last != srcSize))
+      return false;
+   uint64_t blocks = ((uint64_t)last - first + srcBlock - 1) / srcBlock;
+   if (blocks > dstBlocks - dstOffset / dstBlock)
+      return false;
+   *srcExtent = (last < srcSize ? last : srcSize) - first;
+   uint64_t pixels = blocks * dstBlock;
+   *dstExtent = pixels < dstSize - dstOffset ? (unsigned)pixels : dstSize - dstOffset;
+   return true;
+}
+
+/* Asahi resource_copy_region uses the CPU transfer fallback for differing
+ * formats. Its utility truncates compressed-source tail dimensions when
+ * shrinking them. Map the independently-sized boxes and copy block rows here;
+ * Asahi texture_map/unmap still own synchronization and tiling. */
+static HRESULT
+AgxD3d10CopyBlocks(struct pipe_context *pipe,
+                    struct pipe_resource *dst, unsigned dstLevel, const struct pipe_box *dstBox,
+                    struct pipe_resource *src, unsigned srcLevel, const struct pipe_box *srcBox)
+{
+   struct pipe_transfer *read = NULL, *write = NULL;
+   void *source = pipe->texture_map(pipe, src, srcLevel, PIPE_MAP_READ, srcBox, &read);
+   if (!source || !read) {
+      if (read) pipe_texture_unmap(pipe, read);
+      return E_OUTOFMEMORY;
+   }
+   void *destination = pipe->texture_map(pipe, dst, dstLevel,
+      PIPE_MAP_WRITE | PIPE_MAP_DISCARD_RANGE, dstBox, &write);
+   if (!destination || !write) {
+      if (write) pipe_texture_unmap(pipe, write);
+      pipe_texture_unmap(pipe, read);
+      return E_OUTOFMEMORY;
+   }
+   unsigned bw = util_format_get_blockwidth(src->format);
+   unsigned bh = util_format_get_blockheight(src->format);
+   unsigned rowBytes = ((srcBox->width + bw - 1) / bw) * util_format_get_blocksize(src->format);
+   unsigned rows = (srcBox->height + bh - 1) / bh;
+   for (int z = 0; z < srcBox->depth; ++z)
+      for (unsigned y = 0; y < rows; ++y)
+         memcpy((uint8_t *)destination + (size_t)z * write->layer_stride + (size_t)y * write->stride,
+                (const uint8_t *)source + (size_t)z * read->layer_stride + (size_t)y * read->stride,
+                rowBytes);
+   pipe_texture_unmap(pipe, write);
+   pipe_texture_unmap(pipe, read);
+   return S_OK;
+}
+
+/* Whole-resource reinterpretation preserves the block grid at every mip,
+ * including tails. Check all levels before starting any transfers. */
+static bool
+AgxD3d10WholeBlockCopy(const struct pipe_resource *src, const struct pipe_resource *dst)
+{
+   unsigned sw = util_format_get_blockwidth(src->format);
+   unsigned sh = util_format_get_blockheight(src->format);
+   unsigned dw = util_format_get_blockwidth(dst->format);
+   unsigned dh = util_format_get_blockheight(dst->format);
+   for (unsigned level = 0; level <= src->last_level; ++level) {
+      if ((u_minify(src->width0, level) + sw - 1) / sw !=
+          (u_minify(dst->width0, level) + dw - 1) / dw ||
+          (u_minify(src->height0, level) + sh - 1) / sh !=
+          (u_minify(dst->height0, level) + dh - 1) / dh)
+         return false;
+   }
+   return true;
+}
+
 static enum pipe_format
 AgxD3d10CopyRawFormat(const Resource *source, const Resource *destination,
                       const struct pipe_resource *src, const struct pipe_resource *dst)
@@ -4105,8 +4816,10 @@ AgxD3d10ResourceWithinRequiredLimits(
 
    switch (resource->ResourceDimension) {
    case D3D10DDIRESOURCE_BUFFER:
+      /* EXP1888G: a buffer's width is bytes, bounded by the resource size;
+       * the 2^27 limit of the D3D10 requirements counts the elements of a
+       * view (GravityMark's 210 MB storage buffer was refused) */
       return resource->MipLevels == 1 && array == 1 && height == 1 && depth == 1 &&
-         width <= (1ULL << D3D10_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP) &&
          width <= (uint64_t)AGX_D3D11_REQ_RESOURCE_SIZE_IN_MEGABYTES * 1024u * 1024u;
    case D3D10DDIRESOURCE_TEXTURE1D:
       if (width > AGX_D3D11_REQ_TEXTURE1D_U_DIMENSION || height != 1 || depth != 1 ||
@@ -4200,7 +4913,9 @@ AgxD3d10ResourceWithinRequiredLimits(
       pCreateResource->SampleDesc.Quality == 0 &&
       (!pCreateResource->pInitialDataUP || pCreateResource->pInitialDataUP[0].pSysMem) &&
       (!wantsConstant || (pCreateResource->BindFlags == D3D10_DDI_BIND_CONSTANT_BUFFER &&
-        resourceMip[0].TexelWidth <= 65536 && !(resourceMip[0].TexelWidth & 15))) &&
+        /* D3D11.1 allows storage larger than the 64-KiB shader window.
+         * The common resource-limit guard bounds the allocation. */
+        !(resourceMip[0].TexelWidth & 15))) &&
       AgxD3d10WindowsIdentity(pDevice->windows,&resourceOwner,&resourceGeneration);
    bool validBufferUsage = bufferShape &&
       ((pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT &&
@@ -4294,8 +5009,12 @@ AgxD3d10ResourceWithinRequiredLimits(
          (!(pCreateResource->BindFlags & D3D11_DDI_BIND_UNORDERED_ACCESS) ||
           pCreateResource->SampleDesc.Count == 1) &&
          (pCreateResource->MiscFlags == 0 ||
-          (autogen && pCreateResource->BindFlags == (D3D10_DDI_BIND_RENDER_TARGET |
-              D3D10_DDI_BIND_SHADER_RESOURCE))) &&
+          /* C71 (EXP1906 GravityMark D3D11 "RGf32 Target Surface Mipmaps"):
+           * GENERATE_MIPS needs render target and shader resource binds
+           * (Microsoft, D3D11_RESOURCE_MISC_GENERATE_MIPS); unordered
+           * access may come with them */
+          (autogen && (pCreateResource->BindFlags & ~D3D11_DDI_BIND_UNORDERED_ACCESS) ==
+              (D3D10_DDI_BIND_RENDER_TARGET | D3D10_DDI_BIND_SHADER_RESOURCE))) &&
          !pCreateResource->pPrimaryDesc &&
          /* EXP1284: D3D allows initial data for render targets; the
           * upstream texture-map upload below writes it. Multisampled
@@ -4303,6 +5022,16 @@ AgxD3d10ResourceWithinRequiredLimits(
          (!pCreateResource->pInitialDataUP || pCreateResource->SampleDesc.Count == 1);
       if (!private_rt || !screen->resource_create_with_modifiers) {
          LOG_UNSUPPORTED("A render target outside the D3D10 contract");
+         {
+            /* C71 receipt: which render-target predicate refused it */
+            UINT values[8] = {(UINT)pCreateResource->Format, pCreateResource->BindFlags,
+               pCreateResource->MiscFlags, pCreateResource->MipLevels, pCreateResource->ArraySize,
+               pCreateResource->SampleDesc.Count | (pCreateResource->SampleDesc.Quality << 8),
+               (UINT)pCreateResource->Usage | (pCreateResource->MapFlags << 8),
+               (UINT)pCreateResource->ResourceDimension | ((pCreateResource->pInitialDataUP != NULL) << 8) |
+                  ((pCreateResource->pPrimaryDesc != NULL) << 9)};
+            AgxD3d10WindowsDiagnostic("reject-d3d11-render-target", E_NOTIMPL, values, 8u);
+         }
          SetError(hDevice, E_NOTIMPL);
          return;
       }
@@ -4532,7 +5261,8 @@ AgxD3d10ResourceWithinRequiredLimits(
          SetError(hDevice,E_INVALIDARG);return;
       }
       HRESULT result=AgxD3d10WindowsFlushStatus(device->windows);
-      if(SUCCEEDED(result)) result=AgxD3d10WindowsFlushRetire(device->windows);
+      /* The copy helper synchronizes the source writer and destination users.
+       * Unrelated batches need not complete before this CPU copy. */
       if(SUCCEEDED(result) && !AgxWin32AsahiBufferCopy(
            device->pipe,dst,0,src,0,src->width0)) result=E_FAIL;
       if(FAILED(result)) SetError(hDevice,result);
@@ -4544,14 +5274,18 @@ AgxD3d10ResourceWithinRequiredLimits(
       AgxD3d10CopyRawFormat(source, destination, src, dst) : PIPE_FORMAT_NONE;
    bool compressed = dst && src && src->format == dst->format &&
       util_format_is_compressed(src->format);
-   if (!dst || !src || (raw==PIPE_FORMAT_NONE && !compressed) ||
+   bool blockCopy = dst && src &&
+      AgxD3d10BlockCopyCompatible(source->Format, destination->Format) &&
+      util_format_get_blocksize(src->format) == util_format_get_blocksize(dst->format);
+   if (!dst || !src || (raw==PIPE_FORMAT_NONE && !compressed && !blockCopy) ||
        dst->target!=src->target || dst->target==PIPE_BUFFER ||
-       dst->width0!=src->width0 || dst->height0!=src->height0 ||
+       (blockCopy ? !AgxD3d10WholeBlockCopy(src, dst) :
+        (dst->width0!=src->width0 || dst->height0!=src->height0)) ||
        dst->depth0!=src->depth0 || dst->array_size!=src->array_size ||
        dst->last_level!=src->last_level ||
        /* D3D-G10b: multisampled resources copy at their sample count. */
        MAX2(dst->nr_samples,1)!=MAX2(src->nr_samples,1) ||
-       (compressed && src->nr_samples>1)) {
+       ((compressed || blockCopy) && src->nr_samples>1)) {
       UINT values[14]={(UINT)source->Format,(UINT)destination->Format,
          src?(UINT)src->target:~0u,dst?(UINT)dst->target:~0u,
          src?src->width0:0u,src?src->height0:0u,dst?dst->width0:0u,dst?dst->height0:0u,
@@ -4571,6 +5305,19 @@ AgxD3d10ResourceWithinRequiredLimits(
       unsigned layers=dst->target==PIPE_TEXTURE_3D ? 1u : dst->array_size;
       for (unsigned layer=0; layer<layers; ++layer) {
          for (unsigned level=0; level<=dst->last_level; ++level) {
+            if (blockCopy) {
+               struct pipe_box srcBox, dstBox;
+               u_box_3d(0,0,src->target==PIPE_TEXTURE_3D ? 0 : (int)layer,
+                  u_minify(src->width0,level),u_minify(src->height0,level),
+                  src->target==PIPE_TEXTURE_3D ? u_minify(src->depth0,level) : 1,&srcBox);
+               u_box_3d(0,0,dst->target==PIPE_TEXTURE_3D ? 0 : (int)layer,
+                  u_minify(dst->width0,level),u_minify(dst->height0,level),
+                  dst->target==PIPE_TEXTURE_3D ? u_minify(dst->depth0,level) : 1,&dstBox);
+               HRESULT status = AgxD3d10CopyBlocks(device->pipe,dst,level,&dstBox,
+                                                  src,level,&srcBox);
+               if (FAILED(status)) { SetError(hDevice, status); return; }
+               continue;
+            }
             if (compressed) {
                struct pipe_box box;
                u_box_3d(0,0,dst->target==PIPE_TEXTURE_3D ? 0 : (int)layer,
@@ -4614,7 +5361,7 @@ AgxD3d10ResourceWithinRequiredLimits(
           pSrcBox->bottom==1 && pSrcBox->back==1));
       if(!valid){SetError(hDevice,E_INVALIDARG);return;}
       HRESULT result=AgxD3d10WindowsFlushStatus(device->windows);
-      if(SUCCEEDED(result)) result=AgxD3d10WindowsFlushRetire(device->windows);
+      /* AgxWin32AsahiBufferCopy owns source/destination synchronization. */
       UINT bytes=right-left;
       if(SUCCEEDED(result) && bytes && !AgxWin32AsahiBufferCopy(
            device->pipe,dst,DstX,src,left,bytes)) result=E_FAIL;
@@ -4642,6 +5389,8 @@ AgxD3d10ResourceWithinRequiredLimits(
    unsigned dstLayer = DstSubResource / destination->MipLevels;
    enum pipe_format raw = AgxD3d10CopyRawFormat(source, destination, src, dst);
    bool compressed = src->format == dst->format && util_format_is_compressed(src->format);
+   bool blockCopy = AgxD3d10BlockCopyCompatible(source->Format, destination->Format) &&
+      util_format_get_blocksize(src->format) == util_format_get_blocksize(dst->format);
    unsigned srcW = u_minify(src->width0, srcLevel), srcH = u_minify(src->height0, srcLevel);
    unsigned srcD = src->target == PIPE_TEXTURE_3D ? u_minify(src->depth0, srcLevel) : 1;
    unsigned dstW = u_minify(dst->width0, dstLevel), dstH = u_minify(dst->height0, dstLevel);
@@ -4651,15 +5400,30 @@ AgxD3d10ResourceWithinRequiredLimits(
    UINT front = pSrcBox ? pSrcBox->front : 0, back = pSrcBox ? pSrcBox->back : srcD;
    if (pSrcBox && (right <= left || bottom <= top || back <= front))
       return; /* empty box: D3D no-op */
-   bool valid = (raw != PIPE_FORMAT_NONE || compressed) &&
+   unsigned bw = compressed ? util_format_get_blockwidth(src->format) : 1u;
+   unsigned bh = compressed ? util_format_get_blockheight(src->format) : 1u;
+   unsigned srcWa = AgxD3d10CopyExtent(srcW, bw), srcHa = AgxD3d10CopyExtent(srcH, bh);
+   unsigned dstWa = AgxD3d10CopyExtent(dstW, bw), dstHa = AgxD3d10CopyExtent(dstH, bh);
+   unsigned copyW = 0, copyH = 0, dstCopyW = 0, dstCopyH = 0;
+   bool blockBox = blockCopy &&
+      AgxD3d10CopyBlockAxis(srcW, dstW,
+         util_format_get_blockwidth(src->format), util_format_get_blockwidth(dst->format),
+         left, right, DstX, &copyW, &dstCopyW) &&
+      AgxD3d10CopyBlockAxis(srcH, dstH,
+         util_format_get_blockheight(src->format), util_format_get_blockheight(dst->format),
+         top, bottom, DstY, &copyH, &dstCopyH);
+   bool valid = (raw != PIPE_FORMAT_NONE || compressed || blockCopy) &&
       AgxD3d10CopyTargetFamily(src->target) &&
       AgxD3d10CopyTargetFamily(src->target) == AgxD3d10CopyTargetFamily(dst->target) &&
       src->nr_samples <= 1 && dst->nr_samples <= 1 &&
-      right <= srcW && bottom <= srcH && back <= srcD &&
-      DstX <= dstW && right - left <= dstW - DstX &&
-      DstY <= dstH && bottom - top <= dstH - DstY &&
+      back <= srcD &&
+      (blockCopy ? blockBox :
+       (right <= srcWa && bottom <= srcHa &&
+        DstX <= dstWa && right - left <= dstWa - DstX &&
+        DstY <= dstHa && bottom - top <= dstHa - DstY)) &&
       DstZ <= dstD && back - front <= dstD - DstZ &&
-      srcLayer < src->array_size && dstLayer < dst->array_size;
+      srcLayer < src->array_size && dstLayer < dst->array_size &&
+      !(left % bw) && !(top % bh) && !(DstX % bw) && !(DstY % bh);
    if (!valid) {
       UINT values[14]={(UINT)source->Format,(UINT)destination->Format,
          (UINT)src->target,(UINT)dst->target,srcW,srcH,dstW,dstH,
@@ -4667,10 +5431,22 @@ AgxD3d10ResourceWithinRequiredLimits(
       AgxD3d10WindowsDiagnostic("reject-resource-copy-region",E_NOTIMPL,values,14u);
       SetError(hDevice, E_NOTIMPL); return;
    }
-   if (compressed) {
+   if (blockCopy) {
+      struct pipe_box srcBox, dstBox;
+      u_box_3d(left, top, src->target == PIPE_TEXTURE_3D ? front : srcLayer,
+         copyW, copyH, back - front, &srcBox);
+      u_box_3d(DstX, DstY, dst->target == PIPE_TEXTURE_3D ? DstZ : dstLayer,
+         dstCopyW, dstCopyH, back - front, &dstBox);
+      HRESULT status = AgxD3d10CopyBlocks(device->pipe, dst, dstLevel, &dstBox,
+                                         src, srcLevel, &srcBox);
+      if (FAILED(status)) { SetError(hDevice, status); return; }
+   } else if (compressed) {
+      /* The level's texels inside the block-aligned box (C72). */
+      UINT width = MIN2(right, srcW) - left, height = MIN2(bottom, srcH) - top;
+      width = MIN2(width, dstW - DstX); height = MIN2(height, dstH - DstY);
       struct pipe_box box;
       u_box_3d((int)left,(int)top,(int)(src->target==PIPE_TEXTURE_3D ? front : srcLayer),
-               (int)(right-left),(int)(bottom-top),(int)(back-front),&box);
+               (int)width,(int)height,(int)(back-front),&box);
       device->pipe->resource_copy_region(device->pipe,dst,dstLevel,DstX,DstY,
          dst->target==PIPE_TEXTURE_3D ? DstZ : dstLayer,src,srcLevel,&box);
    } else {
@@ -4812,7 +5588,14 @@ AgxD3d10ResourceWithinRequiredLimits(
    }
    pMappedSubResource->pData=NULL;
    pMappedSubResource->RowPitch=pMappedSubResource->DepthPitch=0;
+   /* DISCARD reaches Asahi's transfer map with its discard flags: it can
+    * rename storage still read by the GPU, or synchronize that resource
+    * when renaming is unavailable. Draining the whole context here defeats
+    * renaming and also waits for unrelated draws. NOOVERWRITE keeps its
+    * existing application-owned hazard contract. */
    HRESULT status = DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE ? S_OK :
+      DDIMap == D3D10_DDI_MAP_WRITE_DISCARD ?
+       AgxD3d10WindowsFlushStatus(device->windows) :
       (Flags & D3D10_DDI_MAP_FLAG_DONOTWAIT) ?
        AgxD3d10WindowsTryFlushRetire(device->windows) :
        AgxD3d10WindowsFlushRetire(device->windows);
@@ -4860,7 +5643,7 @@ AgxD3d10ResourceWithinRequiredLimits(
                                &box,&resource->transfers[SubResource]) :
       device->pipe->texture_map(device->pipe,resource->resource,level,usage,
                                 &box,&resource->transfers[SubResource]);
-   if (!map || !resource->transfers[SubResource]) { SetError(hDevice,E_FAIL); return; }
+   if (!map || !resource->transfers[SubResource]) { SetError(hDevice,DXGI_ERROR_DEVICE_HUNG); return; }
    pMappedSubResource->pData=map;
    if (dynamicBuffer) resource->active_buffer_map=map;
    pMappedSubResource->RowPitch=resource->transfers[SubResource]->stride;
@@ -5166,8 +5949,14 @@ AgxD3d10ResourceWithinRequiredLimits(
       resource->owner_device == pDevice && resource->resource &&
       resource->resource->target == PIPE_BUFFER &&
       (resource->resource->bind & PIPE_BIND_INDEX_BUFFER) &&
+      /* C74 (EXP1908, GravityMark D3D11): D3D11 index buffers may also be
+       * vertex, shader-resource, unordered-access (compute-written indices)
+       * or stream-output buffers; buffer UAVs are SHADER_BUFFER since
+       * EXP1297, so the old INDEX|SHADER_IMAGE mask refused them. */
       !(resource->resource->bind &
-        ~(PIPE_BIND_INDEX_BUFFER | PIPE_BIND_SHADER_IMAGE)) &&
+        ~(PIPE_BIND_INDEX_BUFFER | PIPE_BIND_VERTEX_BUFFER |
+          PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHADER_BUFFER |
+          PIPE_BIND_SHADER_IMAGE | PIPE_BIND_STREAM_OUTPUT)) &&
       resource->resource->width0 == resource->logical_bytes &&
       AgxD3d10WindowsIdentity(pDevice->windows,&owner,&generation) &&
       resource->owner_cookie == owner &&
@@ -5183,6 +5972,14 @@ AgxD3d10ResourceWithinRequiredLimits(
     * vertex 0: hardware probe DrawIndexed drew 240/1024 px, BaseVertex 0. */
    pDevice->restart_index = indexSize == 2u ? 0xffffu : 0xffffffffu;
    pipe_resource_reference(&pDevice->index_buffer, resource->resource);''')
+    # rc110: the tile-buffer byte limit behind APPLE_AGX_TILE_BUFFER_BYTES
+    # (winsys/agx_win32_tile_limit.h); unset, the limit is Asahi's 32767 and
+    # every layout is the unprojected one.
+    change('src/asahi/lib/agx_tilebuffer.c',
+        '573ea8a624dc0d9ab3b35166a2f3a0beb01a133e18d61fb5b22f1132175bcf7e',[
+        ('#define MAX_BYTES_PER_TILE (32768 - 1)',
+         '#include "agx_win32_tile_limit.h"\n'
+         '#define MAX_BYTES_PER_TILE agx_win32_max_bytes_per_tile()')])
     change('src/asahi/lib/agx_device.h',
         'e6ba76e16b2aace0ebf8b1ff2348cb800ad6cc254cef633d490de5bc203bfda3',[
         ('#include <xf86drm.h>', '#ifndef _WIN32\n#include <xf86drm.h>\n#else\n#include <stddef.h>\n#include "c11/threads.h"\ntypedef ptrdiff_t ssize_t;\n#endif'),
@@ -5208,17 +6005,50 @@ AgxD3d10ResourceWithinRequiredLimits(
     # Match that layout without weakening the native assertion or bool semantics.
     adapted=original.replace('struct agx_fs_epilog_link_info {',
         'struct __attribute__((aligned(4))) agx_fs_epilog_link_info {').replace('   unsigned ', '   uint8_t ')
+    # EXP1848: clang-cl reads enum bit-fields as signed ints (MSVC ABI), so
+    # PIPE_BLEND_MAX (4) in 3 bits, PIPE_BLENDFACTOR_ZERO and the INV_* factors
+    # (>= 0x10, the invert bit) in 5 bits
+    # and PIPE_BLEND_OVERLAP_CONJOINT (2) in 2 bits read back negative; the
+    # same widths as unsigned bit-fields keep the 4-byte layout.
+    blend_bitfields=[(old_field,new_field) for old_field,new_field in (
+        ('   enum pipe_blend_func rgb_func          : 3;','   unsigned rgb_func                      : 3; /* enum pipe_blend_func */'),
+        ('   enum pipe_blendfactor rgb_src_factor   : 5;','   unsigned rgb_src_factor                : 5; /* enum pipe_blendfactor */'),
+        ('   enum pipe_blendfactor rgb_dst_factor   : 5;','   unsigned rgb_dst_factor                : 5; /* enum pipe_blendfactor */'),
+        ('   enum pipe_blend_func alpha_func        : 3;','   unsigned alpha_func                    : 3; /* enum pipe_blend_func */'),
+        ('   enum pipe_blendfactor alpha_src_factor : 5;','   unsigned alpha_src_factor              : 5; /* enum pipe_blendfactor */'),
+        ('   enum pipe_blendfactor alpha_dst_factor : 5;','   unsigned alpha_dst_factor              : 5; /* enum pipe_blendfactor */'),
+        ('   enum pipe_blend_overlap_mode overlap : 2;','   unsigned overlap                     : 2; /* enum pipe_blend_overlap_mode */'))]
     change('src/asahi/lib/agx_linker.h',
-        'bd469422d642fdbd136c978446426446d85b80070378e16fece842287136c6ff',[(original,adapted)])
+        'bd469422d642fdbd136c978446426446d85b80070378e16fece842287136c6ff',[(original,adapted),*blend_bitfields])
     change('src/asahi/libagx/libagx_dgc.h',
         'ab8db337b1c95bec23aebcbf92521a98f862a4fb7b23a0f2828e20ffd336eecc',[
         ('   uint range_B = d.index_buffer_range_B;',
          '   uint32_t range_B = d.index_buffer_range_B;')])
+    # D3D12 C47 (dxbc_bindings.h DXBC_HEAP_HANDLE_MARK, DXBC_HEAP_MIRROR_CB):
+    # the DXBC translator marks descriptor-heap handles; pair each with the
+    # heap mirror's address (constant buffer 15) the way load_texture_handle
+    # pairs its handles with texture_base (step 4 fills the uniform of the
+    # bindless_image_agx that directly follows the marked sysval load).
+    change('src/gallium/drivers/asahi/agx_nir_lower_sysvals.c',
+        '9fdce3f3623e0a58b83debe7527ab621976f896ba6f68f9bf88653c8c86c4499',[
+        ('   case nir_intrinsic_load_texture_handle_agx:\n      return load_texture_handle(b, intr, &s->texture_base);\n',
+         '   case nir_intrinsic_load_texture_handle_agx:\n      return load_texture_handle(b, intr, &s->texture_base);\n'
+         '   case nir_intrinsic_bindless_image_agx:\n'
+         '      /* D3D12 C47: a descriptor-heap handle (DXBC_HEAP_HANDLE_MARK) */\n'
+         '      if (nir_intrinsic_desc_set(intr) != 0xd312u)\n'
+         '         return NULL;\n'
+         '      nir_load_sysval_agx(b, 1, 64, .desc_set = stage_table(b),\n'
+         '                          .binding = (uintptr_t)&s->ubo_base[15], .flags = ~0);\n'
+         '      return nir_bindless_image_agx(b, intr->src[0].ssa);\n')])
     if args.project:
         change('src/asahi/lib/pool.c',
             '1420e8cbc883bad80bc014a285a922fffe47da92597f1671c6ebe8f4df8ab4ed',[
             ('   util_dynarray_append(&pool->bos, bo);',
              '   if (!bo) return NULL;\n   util_dynarray_append(&pool->bos, bo);'),
+            # size_t is 32-bit on WOW64. Test remaining slab capacity before
+            # adding a near-4GiB scratch size to the existing slab offset.
+            ('   if (unlikely(bo == NULL || (offset + sz) >= POOL_SLAB_SIZE)) {',
+             '   if (unlikely(bo == NULL || offset >= POOL_SLAB_SIZE || sz >= POOL_SLAB_SIZE - offset)) {'),
             ('   assert(alignment == util_next_power_of_two(alignment));',
              '   assert(alignment == util_next_power_of_two(alignment));\n   if (out_bo) *out_bo = NULL;'),
             ('   pool->transient_offset = offset + sz;\n\n   struct agx_ptr ret = {\n      .cpu = agx_bo_map(bo) + offset,',
@@ -5254,7 +6084,7 @@ AgxD3d10ResourceWithinRequiredLimits(
     # zero-sized host record: keep an opaque host placeholder and explicitly
     # dispatch the source-declared zero byte payload. Other generated argument
     # layouts and assertions remain unchanged.
-    shutil.copy2(Path(r'C:\Users\pauls\AD04-umd-owner-004-generated\src\asahi\lib\libagx_shaders.h'),
+    shutil.copy2((BUILDER / r'AD04-umd-owner-004-generated\src\asahi\lib\libagx_shaders.h'),
                  out/'src/asahi/lib/libagx_shaders.h')
     change('src/asahi/lib/libagx_shaders.h',
         'b10e6ec36950ecd55878f4665f644969a93ba7bdbeb75f7c6584e8a1da11bc37',[
@@ -5415,6 +6245,7 @@ uint32_t AgxWin32NativeBuildPipelineTest(struct agx_batch *batch,
         # original no-capture path remains byte-for-byte behaviorally native.
         state_target=out/'src/gallium/drivers/asahi/agx_state.c'
         state_text=state_target.read_text()
+        state_text=project_3d_pbe_base_depth(state_text)
         shader_ir='''   nir_shader *nir = cso->type == PIPE_SHADER_IR_NIR
                         ? cso->ir.nir
                         : tgsi_to_nir(cso->tokens, pctx->screen, false);'''
@@ -5696,6 +6527,71 @@ agx_shader_initialize("""
                   ctx->stage[MESA_SHADER_TESS_CTRL].shader->tess.ccw));''')
         state_text=state_text.replace(winding_params,
             '''      params.ccw = !(tes->tess.ccw || tcs->tess.ccw);''')
+        # D3D12 C47: a descriptor heap holds the texture descriptor
+        # agx_upload_textures would emit for a view (agx_pack_texture is
+        # static); the owner packs it when a view enters a heap.
+        # C53 T2D (D3D12-C53-tiled-textures.md): a reserved Texture2D's
+        # descriptors sample through its Sparse Block table in Sparse mode
+        # (Honeykrisp hk_image_view.c); AgxWin32AsahiSparseTableVa is 0 for
+        # every other BO, so other textures are packed as before.
+        sparse_anchor='      cfg.address = agx_map_texture_gpu(rsrc, first_layer);\n'
+        if state_text.count(sparse_anchor)!=1:
+            raise SystemExit('Ambiguous texture address anchor')
+        state_text=state_text.replace(sparse_anchor,sparse_anchor+'''#ifdef APPLE_AGX_GPUVA_WINSYS
+      /* sampled through the table (validated by EXP1890 HW3: NULL tiles read
+       * 0); APPLE_AGX_D3D12_SPARSE_DESC=0 keeps the image VA */
+      static int sparse_desc = -1;
+      if (sparse_desc < 0) {
+         const char *value = getenv("APPLE_AGX_D3D12_SPARSE_DESC");
+         sparse_desc = !(value && value[0] == '0' && !value[1]);
+      }
+      if (sparse_desc && state->target != PIPE_BUFFER) {
+         const APPLE_AGX_U64 table = AgxWin32AsahiSparseTableVa(rsrc->bo);
+         if (table) {
+            cfg.mode = AGX_IMAGE_MODE_SPARSE;
+            cfg.address = table + ail_page_to_sparse_index_el(&rsrc->layout, first_layer, 0) *
+                                     AIL_SPARSE_ELSIZE_B;
+         }
+      }
+      /* C53 Tier 2: texel-buffer reads (SRVs, typed UAV loads) of a reserved
+       * buffer go through its read-only shadow, whose unmapped tiles read 0
+       * (Honeykrisp sparse_ro_offset; 0 for every other BO). The view
+       * offset below is added to the shadow, which mirrors the buffer. */
+      if (sparse_desc && state->target == PIPE_BUFFER) {
+         const APPLE_AGX_U64 shadow = AgxWin32AsahiReadShadowVa(rsrc->bo);
+         if (shadow) cfg.address = shadow;
+      }
+#endif
+''')
+        if '#include "agx_win32_asahi_bo.h"' not in state_text:
+            state_text=state_text.replace('#include "agx_state.h"','#include "agx_state.h"\n#include "agx_win32_asahi_bo.h"',1)
+        pack_anchor='\nvoid\nagx_init_state_functions(struct pipe_context *ctx)\n'
+        if state_text.count(pack_anchor)!=1:
+            raise SystemExit('Ambiguous texture packing anchor')
+        state_text=state_text.replace(pack_anchor,'''
+/* D3D12 C47: the texture descriptor agx_upload_textures emits for view */
+void
+agx_win32_pack_sampler_view(void *out, struct pipe_sampler_view *view)
+{
+   struct agx_sampler_view *so = (struct agx_sampler_view *)view;
+   agx_pack_texture(out, so->rsrc, so->format, &so->base);
+}
+/* D3D12 C47: the texture and PBE descriptors agx_upload_textures emits for
+ * an image (agx_batch_upload_pbe does not use its batch) */
+void
+agx_win32_pack_image_view(void *texture, void *pbe, const struct pipe_image_view *view)
+{
+   struct pipe_sampler_view sampler_view = util_image_to_sampler_view((struct pipe_image_view *)view);
+   if (target_is_cube(sampler_view.target))
+      sampler_view.target = PIPE_TEXTURE_2D_ARRAY;
+   agx_pack_texture(texture, agx_resource(view->resource), view->format, &sampler_view);
+   agx_batch_upload_pbe(NULL, pbe, (struct pipe_image_view *)view, false, false, false, false);
+}
+'''+pack_anchor)
+        blit_target = out/'src/gallium/drivers/asahi/agx_blit.c'
+        state_text, blit_text = project_bc_block_views(state_text, blit_target.read_text())
+        blit_target.write_text(blit_text)
+        overlays.setdefault('src/gallium/drivers/asahi/agx_blit.c', {})['after_bc_block_views'] = hashlib.sha256(blit_text.encode()).hexdigest()
         state_target.write_text(state_text)
         overlays['src/gallium/drivers/asahi/agx_state.c']['after_state_capture']=hashlib.sha256(state_target.read_bytes()).hexdigest()
         # EXP844/845: StartMenuExperienceHost and Explorer faulted in
@@ -5732,6 +6628,8 @@ agx_shader_initialize("""
                 'src/gallium/frontends/d3d10umd/Device.cpp')
             projected = project_shader_failure(*((out/path).read_text()
                                                 for path in shader_paths))
+            projected = (project_constructor_nir_consumption(projected[0]),
+                         projected[1], projected[2])
             for path, content in zip(shader_paths, projected):
                 target = out/path
                 target.write_text(content)
@@ -5793,6 +6691,192 @@ agx_shader_initialize("""
             overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
                 'after_staging_failure'] = hashlib.sha256(
                     pipe_target.read_bytes()).hexdigest()
+            # C75b: residency OOM latches the Windows backend failure, after
+            # which a fresh BO map can return NULL. Preserve that failure
+            # across mip/layer offset calculation and stop CPU writeback
+            # before ail_tile; transfer_unmap has no error return, so latch
+            # the context fault and run its ordinary cleanup instead.
+            state_target = out/'src/gallium/drivers/asahi/agx_state.h'
+            state_text = state_target.read_text()
+            texture_map = '''   return ((uint8_t *)agx_bo_map(rsrc->bo)) +
+          ail_get_layer_level_B(&rsrc->layout, z, level);'''
+            if state_text.count(texture_map) != 1:
+                raise SystemExit('Ambiguous texture CPU map anchor')
+            state_target.write_text(state_text.replace(texture_map, '''   uint8_t *map = agx_bo_map(rsrc->bo);
+   return map ? map + ail_get_layer_level_B(&rsrc->layout, z, level) : NULL;''', 1))
+            overlays.setdefault('src/gallium/drivers/asahi/agx_state.h', {})[
+                'after_texture_map_failure'] = hashlib.sha256(state_target.read_bytes()).hexdigest()
+            tile_map = '''            agx_map_texture_cpu(rsrc, transfer->level, transfer->box.z + z);
+         uint8_t *src'''
+            if pipe_text.count(tile_map) != 1:
+                raise SystemExit('Ambiguous texture writeback anchor')
+            pipe_text = pipe_text.replace(tile_map, '''            agx_map_texture_cpu(rsrc, transfer->level, transfer->box.z + z);
+         if (!map) {
+            AgxWin32AsahiMarkContextFault(agx_context(pctx), (2u << 16) | __LINE__);
+            goto cleanup;
+         }
+         uint8_t *src''', 1)
+            cleanup = '   /* Free the transfer */\n   free(trans->map);'
+            if pipe_text.count(cleanup) != 1:
+                raise SystemExit('Ambiguous texture transfer cleanup anchor')
+            pipe_target.write_text(pipe_text.replace(cleanup, 'cleanup:\n' + cleanup, 1))
+            overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
+                'after_texture_map_failure'] = hashlib.sha256(pipe_target.read_bytes()).hexdigest()
+            # T6b / EXP1910: util_draw_indirect trusts a non-NULL transfer.
+            # A failed map must publish neither a pointer nor a transfer, and
+            # must latch the context fault before any CPU reader can continue.
+            pipe_text = pipe_target.read_text()
+            map_start = pipe_text.index('\nagx_transfer_map(')
+            map_end = pipe_text.index('\nstatic void\nagx_transfer_unmap(', map_start)
+            map_text = pipe_text[map_start:map_end]
+            replacements = (
+                ('   /* Can\'t map tiled/compressed directly */',
+                 '   *out_transfer = NULL;\n\n   /* Can\'t map tiled/compressed directly */'),
+                ('   struct agx_transfer *transfer = CALLOC_STRUCT(agx_transfer);',
+                 '   struct agx_transfer *transfer = CALLOC_STRUCT(agx_transfer);\n'
+                 '   if (!transfer) {\n'
+                 '      AgxWin32AsahiMarkContextFault(ctx, (2u << 16) | __LINE__);\n'
+                 '      return NULL;\n   }'),
+                ('      if (!staging) {',
+                 '      if (!staging) {\n'
+                 '         AgxWin32AsahiMarkContextFault(ctx, (2u << 16) | __LINE__);'),
+                ('      return agx_bo_map(staging->bo);',
+                 '      void *map = agx_bo_map(staging->bo);\n'
+                 '      if (!map) goto map_failed;\n      return map;'),
+                ('      transfer->map = calloc(transfer->base.layer_stride, box->depth);',
+                 '      transfer->map = calloc(transfer->base.layer_stride, box->depth);\n'
+                 '      if (!transfer->map) goto map_failed;'),
+                ('            uint8_t *map = agx_map_texture_cpu(rsrc, level, box->z + z);',
+                 '            uint8_t *map = agx_map_texture_cpu(rsrc, level, box->z + z);\n'
+                 '            if (!map) goto map_failed;'),
+                ('      /* Be conservative for direct writes */',
+                 '      uint8_t *map = agx_bo_map(rsrc->bo);\n'
+                 '      if (!map) goto map_failed;\n\n'
+                 '      /* Be conservative for direct writes */'),
+                ('      return ((uint8_t *)agx_bo_map(rsrc->bo)) + offset;\n   }\n}',
+                 '      return map + offset;\n   }\n'
+                 'map_failed:\n'
+                 '   AgxWin32AsahiMarkContextFault(ctx, (2u << 16) | __LINE__);\n'
+                 '   *out_transfer = NULL;\n'
+                 '   free(transfer->map);\n'
+                 '   pipe_resource_reference(&transfer->staging.rsrc, NULL);\n'
+                 '   pipe_resource_reference(&transfer->base.resource, NULL);\n'
+                 '   FREE(transfer);\n'
+                 '   return NULL;\n}'),
+            )
+            for old, new in replacements:
+                if map_text.count(old) != 1:
+                    raise SystemExit('Ambiguous transfer map failure anchor: ' + old)
+                map_text = map_text.replace(old, new, 1)
+            pipe_target.write_text(pipe_text[:map_start] + map_text + pipe_text[map_end:])
+            overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
+                'after_buffer_map_failure'] = hashlib.sha256(pipe_target.read_bytes()).hexdigest()
+            if args.gpuva:
+                pipe_target.write_text(project_gpu_only_resources(pipe_target.read_text()))
+                overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
+                    'after_gpu_only_staging'] = hashlib.sha256(pipe_target.read_bytes()).hexdigest()
+            # C21: one reviewed native layout policy serves creation and a
+            # no-BO query. The query does not admit any resource dimension.
+            reviewed_layout_sources = {
+                'src/gallium/drivers/asahi/agx_pipe.c':
+                    'e29b0c206bdadfa14de83c439526fef5f8d8650a3f7ae223aa2e8e945386d86e',
+                'src/asahi/layout/layout.c':
+                    '2620c7369759a671e606e4720b70e5b4fefb94f103ac3c085fe4b61afcfd0457',
+                'src/asahi/layout/layout.h':
+                    'e4c55c1541406d384e5c67df6ff81e0b45b38d424e287cf5c4256a8de822f2a3',
+            }
+            for layout_path, reviewed_sha in reviewed_layout_sources.items():
+                if hashlib.sha256((mesa/layout_path).read_bytes()).hexdigest() != reviewed_sha:
+                    raise SystemExit('Reviewed native layout source changed: '+layout_path)
+            layout_header = 'src/gallium/drivers/asahi/agx_win32_asahi_layout.h'
+            shutil.copy2(args.project/'drivers/apple-agx/mesa/winsys/agx_win32_asahi_layout.h',
+                         out/layout_header)
+            overlays.setdefault(layout_header, {})['project_source_sha256'] = hashlib.sha256(
+                (out/layout_header).read_bytes()).hexdigest()
+            pipe_target.write_text(project_resource_layout(pipe_target.read_text()))
+            overlays.setdefault('src/gallium/drivers/asahi/agx_pipe.c', {})[
+                'after_resource_layout_query'] = hashlib.sha256(pipe_target.read_bytes()).hexdigest()
+            failure_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-allocation-failure.py'
+            failure_spec = importlib.util.spec_from_file_location('native_allocation_failure', failure_script)
+            failure_module = importlib.util.module_from_spec(failure_spec)
+            failure_spec.loader.exec_module(failure_module)
+            failure_module.project_sources(out, args.project, overlays)
+            library_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-library-failure.py'
+            library_spec = importlib.util.spec_from_file_location('native_library_failure', library_script)
+            library_module = importlib.util.module_from_spec(library_spec)
+            library_spec.loader.exec_module(library_module)
+            library_module.project_sources(out, args.project, overlays)
+            blit_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-blit-failure.py'
+            blit_spec = importlib.util.spec_from_file_location('native_blit_failure', blit_script)
+            blit_module = importlib.util.module_from_spec(blit_spec)
+            blit_spec.loader.exec_module(blit_module)
+            blit_module.project_sources(out, args.project, overlays)
+            if args.gpuva:
+                # Count lowering must precede graphics batch entry: it may
+                # submit the app's producers before recursively binding heaps.
+                path = 'src/gallium/drivers/asahi/agx_state.c'
+                text = (out/path).read_text()
+                signature = '''static void
+agx_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
+             unsigned drawid_offset,
+             const struct pipe_draw_indirect_info *indirect,
+             const struct pipe_draw_start_count_bias *draws, unsigned num_draws)
+{'''
+                if text.count(signature) != 1:
+                    raise SystemExit('Ambiguous counted draw wrapper')
+                text = text.replace(signature,
+                    '#include "agx_win32_counted_indirect.h"\n\n' + signature, 1)
+                anchor = '   /* EXP1189: as upstream, legalize feedback loops'
+                if text.count(anchor) != 1:
+                    raise SystemExit('Ambiguous counted draw entry')
+                text = text.replace(anchor, '''   if (indirect && indirect->indirect_draw_count) {
+      perf_debug_ctx(ctx, "CPU counted indirect: stream fallback");
+      agx_win32_draw_indirect_count(ctx, info, drawid_offset, indirect, draws);
+      return;
+   }
+''' + anchor, 1)
+                (out/path).write_text(text)
+                overlays.setdefault(path, {})['after_count_predicate'] = (
+                    hashlib.sha256(text.encode()).hexdigest())
+                stream_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-indirect-stream.py'
+                stream_spec = importlib.util.spec_from_file_location('native_indirect_stream', stream_script)
+                stream_module = importlib.util.module_from_spec(stream_spec)
+                stream_spec.loader.exec_module(stream_module)
+                stream_module.project_sources(out, args.project, overlays)
+                timestamp_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-query-timestamp.py'
+                timestamp_spec = importlib.util.spec_from_file_location('native_query_timestamp', timestamp_script)
+                timestamp_module = importlib.util.module_from_spec(timestamp_spec)
+                timestamp_spec.loader.exec_module(timestamp_module)
+                timestamp_module.project_sources(out, args.project, overlays)
+                query_ia_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-query-ia.py'
+                query_ia_spec = importlib.util.spec_from_file_location('native_query_ia', query_ia_script)
+                query_ia_module = importlib.util.module_from_spec(query_ia_spec)
+                query_ia_spec.loader.exec_module(query_ia_module)
+                query_ia_module.project_sources(out, args.project, overlays)
+                query_group_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-query-group.py'
+                query_group_spec = importlib.util.spec_from_file_location('native_query_group', query_group_script)
+                query_group_module = importlib.util.module_from_spec(query_group_spec)
+                query_group_spec.loader.exec_module(query_group_module)
+                query_group_module.project_sources(out, args.project, overlays)
+                # rc101: lean CDM barriers (APPLE_AGX_D3D12_LEAN_CDM_BARRIER)
+                lean_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-lean-cdm-barrier.py'
+                lean_spec = importlib.util.spec_from_file_location('native_lean_cdm_barrier', lean_script)
+                lean_module = importlib.util.module_from_spec(lean_spec)
+                lean_spec.loader.exec_module(lean_module)
+                lean_module.project_sources(out, args.project, overlays)
+                # rc103: whole-level texture uploads (APPLE_AGX_D3D12_LEVEL_UPLOAD)
+                level_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-level-upload.py'
+                level_spec = importlib.util.spec_from_file_location('native_level_upload', level_script)
+                level_module = importlib.util.module_from_spec(level_spec)
+                level_spec.loader.exec_module(level_module)
+                level_module.project_sources(out, args.project, overlays)
+                # rc105: writer batches submit before their users (APPLE_AGX_D3D12_SUBMIT_ORDER)
+                order_script = args.project/'drivers/apple-agx/mesa/scripts/native-asahi-submit-order.py'
+                order_spec = importlib.util.spec_from_file_location('native_submit_order', order_script)
+                order_module = importlib.util.module_from_spec(order_spec)
+                order_spec.loader.exec_module(order_module)
+                order_module.project_sources(out, args.project, overlays)
+
             # The last source transform is authoritative for runtime compilation.
             for key, record in overlays.items():
                 path = out/key
@@ -5838,9 +6922,9 @@ includes = [build/'src', build/'include', mesa/'include', mesa/'src',
     mesa/'src/compiler', mesa/'src/compiler/nir', build/'src/compiler',
     build/'src/compiler/nir', generated/'src/asahi/compiler',
     generated/'src/asahi/libagx', mesa/'src/asahi/libagx',
-    Path(r'C:\Users\pauls\AD04-umd-owner-004-generated\src'),
-    Path(r'C:\Users\pauls\AD04-umd-owner-004-generated\src\asahi\genxml'),
-    Path(r'C:\Users\pauls\AD04-umd-owner-004-generated\src\asahi\lib'),
+    (BUILDER / r'AD04-umd-owner-004-generated\src'),
+    (BUILDER / r'AD04-umd-owner-004-generated\src\asahi\genxml'),
+    (BUILDER / r'AD04-umd-owner-004-generated\src\asahi\lib'),
     mesa/'src/virtio/vdrm', mesa/'src/virtio/virtio-gpu']
 if args.windows_platform_declarations:
     includes=[out/'include',out/'src',out/'src/asahi/lib',out/'src/asahi/layout',

@@ -5,6 +5,9 @@
  * SPDX-License-Identifier: MIT
  */
 #include "dxbc_to_nir.h"
+#include "dxbc_tir.h"
+#include "dxbc_tir_gs.h"
+#include "dxbc_minmax.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -21,7 +24,11 @@
 #define MAX_RESOURCES 128
 #define MAX_SAMPLERS 16
 #define MAX_CF 64
-#define MAX_UAVS DXBC_NIR_MAX_UAVS
+/* UAV entries: the slots (c->uav_slots of them: 8, or 64 in D3D11.1 mode),
+ * then the C47 heap ranges from MAX_UAVS */
+#define MAX_UAVS DXBC_NIR_UAV11_SLOTS
+#define UAV11_SHADER_BUFFERS 32u /* Gallium PIPE_MAX_SHADER_BUFFERS */
+#define UAV11_IMAGES 32u         /* Asahi's 32-bit image_mask (EXP1887) */
 #define MAX_TGSM 32
 #define MAX_PHASES 64
 
@@ -96,11 +103,26 @@ struct ctx {
       bool declared;
       uint8_t dim;
       nir_alu_type type;
-   } res[MAX_RESOURCES];
+   } res[MAX_RESOURCES + DXBC_HEAP_RANGE_MAX]; /* C47: heap ranges follow the slots */
    struct {
       bool declared;
       bool comparison;
-   } samp[MAX_SAMPLERS];
+   } samp[MAX_SAMPLERS + DXBC_HEAP_RANGE_MAX]; /* C47: heap sampler ranges follow the slots */
+   /* C34: the register part of an SM5.1 resource/sampler range index, added
+    * to the texture instruction being built (texture_/sampler_offset) */
+   nir_def *dyn_texture, *dyn_sampler;
+   /* C47: the heap range and the register offset in it of the texture
+    * instruction being built (a bindless handle in tex_finish) */
+   nir_def *heap_offset;
+   unsigned heap_range;
+   /* C47: likewise for a heap sampler range */
+   nir_def *sampler_heap_offset;
+   unsigned sampler_heap_range;
+   /* C53T (Tier 2 feedback, the _s opcodes): the texture instruction being
+    * built returns its residency code (is_sparse) into feedback_code; a
+    * _cl opcode's clamp is its min_lod */
+   bool feedback;
+   nir_def *feedback_code, *min_lod;
 
    /* shader model 5 memory: u# views, g# groupshared, raw/structured t# */
    struct {
@@ -109,13 +131,13 @@ struct ctx {
       nir_variable *image;   /* MEM_TYPED */
       uint8_t dim;
       nir_alu_type type;
-   } uav[MAX_UAVS];
+   } uav[MAX_UAVS + DXBC_HEAP_RANGE_MAX]; /* C47: heap UAVs follow the slots */
    struct {
       nir_variable *var;     /* uint array */
       uint32_t stride;       /* 0: raw */
    } tgsm[MAX_TGSM];
-   uint8_t res_kind[MAX_RESOURCES];
-   uint32_t res_stride[MAX_RESOURCES];
+   uint8_t res_kind[MAX_RESOURCES + DXBC_HEAP_RANGE_MAX];
+   uint32_t res_stride[MAX_RESOURCES + DXBC_HEAP_RANGE_MAX];
    unsigned gs_stream;    /* the stream later output declarations belong to */
 
    /* tessellation: patch constants vpc# (inputs of the domain shader), each
@@ -141,6 +163,16 @@ struct ctx {
    uint8_t cp_out_mask[MAX_REGS];
    unsigned cp_in;                   /* input control point count */
    uint32_t passthrough_registers;   /* a pass-through phase copies these */
+   /* UAV registers u0..uav_slots-1; counters at shader buffer counter_base + u#
+    * (D3D11.1 mode: 64 and 64, compacted by compact_uav_buffers) */
+   unsigned uav_slots, counter_base;
+   /* FL 11_1 (dxbc_tir.h): a pixel shader variant's forced sample count (0:
+    * off), its covered-sample mask, the offset centroid inputs are evaluated
+    * at, and the registers declared centroid */
+   unsigned forced_samples;
+   bool rov_interlock;       /* the pixel interlock is taken (rasterizer-ordered UAVs) */
+   nir_def *forced_mask, *forced_centroid;
+   bool forced_centroid_reg[MAX_REGS];
    uint32_t passthrough_positions;   /* of which these hold SV_Position */
 
    struct cf_entry cf[MAX_CF];
@@ -238,6 +270,24 @@ index_direct(const struct dxbc_index *index)
    return !index->relative;
 }
 
+/* C47: an operand of a heap range (only a program whose bindings placed
+ * heap ranges has them; SM5.1 operands outside the binding path keep their
+ * two-dimensional form) */
+static bool
+heap_operand(const struct ctx *c, const struct dxbc_operand *o)
+{
+   return c->p->heap_ranges && o->index_dimension == 2;
+}
+
+/* C34: the slots an SRV or sampler declaration covers -- index[1] of a
+ * normalized SM5.1 range declaration, one otherwise */
+static unsigned
+range_slots(const struct ctx *c, const struct dxbc_operand *o)
+{
+   return c->p->major == 5 && c->p->minor == 1 && o->index_dimension == 1 && o->index[1].imm > 1
+             ? (unsigned)o->index[1].imm : 1u;
+}
+
 static nir_def *
 load_cb(struct ctx *c, const struct dxbc_instruction *insn,
         const struct dxbc_operand *o)
@@ -293,6 +343,10 @@ load_input(struct ctx *c, const struct dxbc_instruction *insn,
       fail(c, insn, "undeclared input v%u", reg);
       return zero4(c);
    }
+   /* FL 11_1: centroid of the forced pattern */
+   if (c->forced_centroid_reg[reg])
+      return nir_interp_deref_at_offset(&c->b, 4, 32, &nir_build_deref_var(&c->b, c->inputs[reg])->def,
+                                        c->forced_centroid);
    return nir_load_var(&c->b, c->inputs[reg]);
 }
 
@@ -356,7 +410,8 @@ load_file(struct ctx *c, const struct dxbc_instruction *insn,
    case DXBC_OPERAND_INPUT_THREAD_ID_IN_GROUP_FLATTENED:
       return replicate4(c, nir_load_local_invocation_index(b));
    case DXBC_OPERAND_INPUT_COVERAGE_MASK:
-      return replicate4(c, nir_load_sample_mask_in(b));
+      /* FL 11_1: the coverage of the forced sample pattern */
+      return replicate4(c, c->forced_mask ? c->forced_mask : nir_load_sample_mask_in(b));
    case DXBC_OPERAND_INPUT_GS_INSTANCE_ID:
       return replicate4(c, nir_load_invocation_id(b));
    case DXBC_OPERAND_INPUT_CONTROL_POINT:
@@ -498,6 +553,18 @@ make_var(struct ctx *c, nir_variable_mode mode, const struct glsl_type *type,
    nir_variable *var = nir_variable_create(c->b.shader, mode, type, name);
    var->data.location = location;
    return var;
+}
+
+/* Control points link hull to domain shader by register (C37, EXP1834: an
+ * SV_Position control point stored at VARYING_SLOT_POS was read by the
+ * domain shader's plain "dcl_input vicp[n][r]" at VAR0 + r, so the patch
+ * collapsed): hull outputs and domain inputs use VAR0 + register whatever
+ * their system value. Only the vertex shader feeding the hull shader
+ * writes SV_Position at VARYING_SLOT_POS. */
+static int
+hs_cp_slot(unsigned reg)
+{
+   return VARYING_SLOT_VAR0 + (int)reg;
 }
 
 static int
@@ -715,8 +782,14 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
       if (c->stage == MESA_SHADER_TESS_CTRL && !c->cp_in)
          c->cp_in = c->gs_vertices_in;
       if (!c->inputs[reg]) {
-         int slot = (insn->opcode == DXBC_OP_DCL_INPUT_SIV && name == 1) ?
-            VARYING_SLOT_POS : generic_slot(c, reg, true);
+         /* C37: a hull shader reads the vertex shader's SV_Position (named
+          * by the declaration or by the caller's signature mask) at
+          * VARYING_SLOT_POS; a domain shader reads control points by
+          * register (hs_cp_slot) */
+         const bool position = (insn->opcode == DXBC_OP_DCL_INPUT_SIV && name == 1) ||
+            (c->stage == MESA_SHADER_TESS_CTRL && (c->passthrough_positions & (1u << reg)));
+         int slot = c->stage == MESA_SHADER_TESS_EVAL ? hs_cp_slot(reg) :
+            position ? VARYING_SLOT_POS : generic_slot(c, reg, true);
          c->inputs[reg] = make_var(c, nir_var_shader_in,
             glsl_array_type(glsl_vec4_type(), c->gs_vertices_in, 0), slot, "vin");
       }
@@ -759,7 +832,12 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
          break;
       case 8: value = nir_load_instance_id(b); break;
       case 9: value = nir_ineg(b, nir_b2i32(b, nir_load_front_face(b, 1))); break;
-      case 10: value = nir_load_sample_id(b); break;
+      case 10:
+         /* SV_SampleIndex runs the pixel shader per sample (tgsi_to_nir's
+          * SAMPLEID); Asahi lowers sample intrinsics only then */
+         value = nir_load_sample_id(b);
+         b->shader->info.fs.uses_sample_shading = true;
+         break;
       default:
          fail(c, insn, "input system value %u", name);
          return;
@@ -789,8 +867,10 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
             bool centroid, sample;
             c->inputs[reg]->data.interpolation =
                interp_mode((insn->token0 >> 11) & 0xfu, &centroid, &sample);
-            c->inputs[reg]->data.centroid = centroid;
+            c->inputs[reg]->data.centroid = centroid && !c->forced_samples;
+            c->forced_centroid_reg[reg] = centroid && c->forced_samples;
             c->inputs[reg]->data.sample = sample;
+            b->shader->info.fs.uses_sample_shading |= sample;
          }
       }
       return;
@@ -811,8 +891,13 @@ declare_input(struct ctx *c, const struct dxbc_instruction *insn)
       bool centroid, sample;
       c->inputs[reg]->data.interpolation =
          interp_mode((insn->token0 >> 11) & 0xfu, &centroid, &sample);
-      c->inputs[reg]->data.centroid = centroid;
+      /* FL 11_1: a forced pattern's centroid is an offset (load_input) */
+      c->inputs[reg]->data.centroid = centroid && !c->forced_samples;
+      c->forced_centroid_reg[reg] = centroid && c->forced_samples;
       c->inputs[reg]->data.sample = sample;
+      /* a sample-interpolated input runs the shader per sample (as the
+       * GLSL linker and spirv_to_nir mark it) */
+      c->b.shader->info.fs.uses_sample_shading |= sample;
    }
 }
 
@@ -896,7 +981,7 @@ declare_output(struct ctx *c, const struct dxbc_instruction *insn)
    if (c->stage == MESA_SHADER_TESS_CTRL) {
       /* control points: gl_out[invocation] */
       if (!(insn->opcode == DXBC_OP_DCL_OUTPUT || name == 0 || name == 1) ||
-          !hs_cp_output(c, reg, name == 1 ? VARYING_SLOT_POS : VARYING_SLOT_VAR0 + (int)reg)) {
+          !hs_cp_output(c, reg, hs_cp_slot(reg))) {
          fail(c, insn, "control point output");
          return;
       }
@@ -959,6 +1044,21 @@ return_type(uint32_t token)
    }
 }
 
+/* ROV (D3D12 12_1, SM 5.1): a rasterizer-ordered UAV declaration
+ * (D3D11_SB_RASTERIZER_ORDERED_ACCESS) takes the pixel interlock once, ahead
+ * of the shader body -- every access follows its declarations. AGX orders
+ * from the interlock begin (wait_pix) to the end of the shader, so no end is
+ * emitted (as the DXIL path's drop_interlock_end). */
+static void
+rov_declaration(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   if (c->stage != MESA_SHADER_FRAGMENT || !(insn->token0 & (1u << 17)) || c->rov_interlock)
+      return;
+   nir_begin_invocation_interlock(&c->b);
+   c->b.shader->info.fs.pixel_interlock_ordered = true;
+   c->rov_interlock = true;
+}
+
 static void
 declare(struct ctx *c, const struct dxbc_instruction *insn)
 {
@@ -1011,23 +1111,59 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
       b->shader->info.num_ubos = MAX2(b->shader->info.num_ubos, (uint8_t)(o->index[0].imm + 1));
       return;
    case DXBC_OP_DCL_SAMPLER:
+      if (o && heap_operand(c, o)) {
+         /* C47: a heap sampler range */
+         if (o->index[0].imm >= DXBC_HEAP_RANGE_MAX) {
+            fail(c, insn, "heap sampler declaration");
+            return;
+         }
+         c->samp[MAX_SAMPLERS + o->index[0].imm].declared = true;
+         c->samp[MAX_SAMPLERS + o->index[0].imm].comparison = ((insn->token0 >> 11) & 0xfu) == 1;
+         return;
+      }
       if (!o || o->index[0].imm >= MAX_SAMPLERS) {
          fail(c, insn, "sampler declaration");
          return;
       }
-      c->samp[o->index[0].imm].declared = true;
-      BITSET_SET(b->shader->info.samplers_used, (unsigned)o->index[0].imm);
-      c->samp[o->index[0].imm].comparison = ((insn->token0 >> 11) & 0xfu) == 1;
+      /* C34: an SM5.1 range covers index[1] consecutive slots */
+      for (unsigned k = 0, n = range_slots(c, o); k < n; ++k) {
+         if (o->index[0].imm + k >= MAX_SAMPLERS) {
+            fail(c, insn, "sampler range declaration");
+            return;
+         }
+         c->samp[o->index[0].imm + k].declared = true;
+         BITSET_SET(b->shader->info.samplers_used, (unsigned)o->index[0].imm + k);
+         c->samp[o->index[0].imm + k].comparison = ((insn->token0 >> 11) & 0xfu) == 1;
+      }
       return;
    case DXBC_OP_DCL_RESOURCE:
+      if (o && heap_operand(c, o)) {
+         /* C47: a heap range (dxbc_prepare_static_bindings) */
+         if (o->index[0].imm >= DXBC_HEAP_RANGE_MAX || !insn->num_payload) {
+            fail(c, insn, "heap range declaration");
+            return;
+         }
+         const unsigned t = MAX_RESOURCES + (unsigned)o->index[0].imm;
+         c->res[t].declared = true;
+         c->res[t].dim = (uint8_t)((insn->token0 >> 11) & 0x1fu);
+         c->res[t].type = return_type(insn->payload[0]);
+         return;
+      }
       if (!o || o->index[0].imm >= MAX_RESOURCES || !insn->num_payload) {
          fail(c, insn, "resource declaration");
          return;
       }
-      c->res[o->index[0].imm].declared = true;
-      BITSET_SET(b->shader->info.textures_used, (unsigned)o->index[0].imm);
-      c->res[o->index[0].imm].dim = (uint8_t)((insn->token0 >> 11) & 0x1fu);
-      c->res[o->index[0].imm].type = return_type(insn->payload[0]);
+      for (unsigned k = 0, n = range_slots(c, o); k < n; ++k) {
+         const unsigned t = (unsigned)o->index[0].imm + k;
+         if (t >= MAX_RESOURCES) {
+            fail(c, insn, "resource range declaration");
+            return;
+         }
+         c->res[t].declared = true;
+         BITSET_SET(b->shader->info.textures_used, t);
+         c->res[t].dim = (uint8_t)((insn->token0 >> 11) & 0x1fu);
+         c->res[t].type = return_type(insn->payload[0]);
+      }
       return;
    case DXBC_OP_DCL_INPUT:
    case DXBC_OP_DCL_INPUT_SGV:
@@ -1126,7 +1262,11 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
          return;
       }
       b->shader->info.tess.point_mode = p == 1;
-      b->shader->info.tess.ccw = p == 4;
+      /* GL's tessellation domain has a lower-left origin, D3D's an upper-left
+       * one: a D3D triangle_cw (3) output is GL ccw (Mesa d3d12_compiler.cpp
+       * inverts the same way). EXP1858-1860: with ccw = triangle_ccw both
+       * windings culled opposite to WARP under back-face culling. */
+      b->shader->info.tess.ccw = p == 3;
       return;
    }
    case DXBC_OP_DCL_HS_MAX_TESSFACTOR:
@@ -1157,9 +1297,19 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
    }
    case DXBC_OP_DCL_UAV_TYPED: {
       unsigned u = o ? (unsigned)o->index[0].imm : MAX_UAVS;
+      rov_declaration(c, insn);
       struct tex_shape shape;
       nir_alu_type type;
-      if (u >= MAX_UAVS || !insn->num_payload ||
+      const bool heap = o && heap_operand(c, o); /* C47 */
+      if (heap && u < DXBC_HEAP_RANGE_MAX && insn->num_payload &&
+          tex_shape((insn->token0 >> 11) & 0x1fu, &shape) && shape.dim != GLSL_SAMPLER_DIM_MS &&
+          shape.dim != GLSL_SAMPLER_DIM_CUBE) {
+         c->uav[MAX_UAVS + u].kind = MEM_TYPED;
+         c->uav[MAX_UAVS + u].dim = (uint8_t)((insn->token0 >> 11) & 0x1fu);
+         c->uav[MAX_UAVS + u].type = return_type(insn->payload[0]);
+         return;
+      }
+      if (heap || u >= c->uav_slots || !insn->num_payload ||
           !tex_shape((insn->token0 >> 11) & 0x1fu, &shape) || shape.dim == GLSL_SAMPLER_DIM_MS ||
           shape.dim == GLSL_SAMPLER_DIM_CUBE) {
          fail(c, insn, "typed UAV declaration");
@@ -1181,33 +1331,54 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
    case DXBC_OP_DCL_UAV_STRUCTURED: {
       unsigned u = o ? (unsigned)o->index[0].imm : MAX_UAVS;
       bool structured = insn->opcode == DXBC_OP_DCL_UAV_STRUCTURED;
-      if (u >= MAX_UAVS || (structured && (!insn->num_payload || !insn->payload[0] ||
-                                           (insn->payload[0] & 3)))) {
+      const bool heap = o && heap_operand(c, o); /* C47: a buffer image in the heap */
+      rov_declaration(c, insn);
+      if (u >= (heap ? DXBC_HEAP_RANGE_MAX : c->uav_slots) ||
+          (structured && (!insn->num_payload || !insn->payload[0] || (insn->payload[0] & 3)))) {
          fail(c, insn, "buffer UAV declaration");
          return;
       }
+      if (heap)
+         u += MAX_UAVS;
       c->uav[u].kind = structured ? MEM_STRUCTURED : MEM_RAW;
       c->uav[u].stride = structured ? insn->payload[0] : 0;
-      b->shader->info.num_ssbos = MAX2(b->shader->info.num_ssbos, (uint8_t)(u + 1));
+      if (!heap)
+         b->shader->info.num_ssbos = MAX2(b->shader->info.num_ssbos, (uint8_t)(u + 1));
       return;
    }
    case DXBC_OP_DCL_RESOURCE_RAW:
    case DXBC_OP_DCL_RESOURCE_STRUCTURED: {
       unsigned t = o ? (unsigned)o->index[0].imm : MAX_RESOURCES;
       bool structured = insn->opcode == DXBC_OP_DCL_RESOURCE_STRUCTURED;
-      if (t >= MAX_RESOURCES || (structured && (!insn->num_payload || !insn->payload[0] ||
-                                                (insn->payload[0] & 3)))) {
+      const bool heap = o && heap_operand(c, o); /* C47: an R32_UINT buffer texture in the heap */
+      if (t >= (heap ? DXBC_HEAP_RANGE_MAX : MAX_RESOURCES) ||
+          (structured && (!insn->num_payload || !insn->payload[0] || (insn->payload[0] & 3)))) {
          fail(c, insn, "buffer SRV declaration");
          return;
       }
+      if (heap) {
+         t += MAX_RESOURCES;
+         c->res[t].declared = true;
+         c->res[t].dim = DXBC_DIM_BUFFER;
+         c->res[t].type = nir_type_uint32;
+         c->res_kind[t] = structured ? MEM_STRUCTURED : MEM_RAW;
+         c->res_stride[t] = structured ? insn->payload[0] : 0;
+         return;
+      }
       /* read as a 32-bit texel buffer view (one dword per texel) */
-      c->res[t].declared = true;
-      c->res[t].dim = DXBC_DIM_BUFFER;
-      c->res[t].type = nir_type_uint32;
-      c->res_kind[t] = structured ? MEM_STRUCTURED : MEM_RAW;
-      c->res_stride[t] = structured ? insn->payload[0] : 0;
-      BITSET_SET(b->shader->info.textures_used, t);
-      BITSET_SET(b->shader->info.textures_used_by_txf, t);
+      for (unsigned k = 0, n = range_slots(c, o); k < n; ++k, ++t) {
+         if (t >= MAX_RESOURCES) {
+            fail(c, insn, "buffer SRV range declaration");
+            return;
+         }
+         c->res[t].declared = true;
+         c->res[t].dim = DXBC_DIM_BUFFER;
+         c->res[t].type = nir_type_uint32;
+         c->res_kind[t] = structured ? MEM_STRUCTURED : MEM_RAW;
+         c->res_stride[t] = structured ? insn->payload[0] : 0;
+         BITSET_SET(b->shader->info.textures_used, t);
+         BITSET_SET(b->shader->info.textures_used_by_txf, t);
+      }
       return;
    }
    default:
@@ -1375,11 +1546,33 @@ emit_alu(struct ctx *c, const struct dxbc_instruction *insn)
       r = nir_bcsel(b, nir_ilt_imm(b, msb, 0), nir_imm_int(b, -1), nir_isub_imm(b, 31, msb));
       break;
    }
-   case DXBC_OP_UBFE: r = nir_ubfe(b, SRC(3, U), SRC(2, U), SRC(1, U)); break;
-   case DXBC_OP_IBFE: r = nir_ibfe(b, SRC(3, I), SRC(2, U), SRC(1, U)); break;
-   case DXBC_OP_BFI:
-      r = nir_bfi(b, nir_bfm(b, SRC(1, U), SRC(2, U)), SRC(3, U), SRC(4, U));
+   /* EXP1821: Asahi neither lowers nor emits nir_op_ubfe/ibfe/bfm/bfi (no
+    * has_bfe/has_bfm/has_bfi; agx_compile "Unhandled ALU op"). These are the
+    * D3D11 functional-spec definitions in shifts and masks: width and offset
+    * are the low five bits, width 0 extracts 0, an extract reaching bit 31
+    * is a plain shift, and the insert mask is truncated to 32 bits. */
+   case DXBC_OP_UBFE:
+   case DXBC_OP_IBFE: {
+      nir_def *width = nir_iand_imm(b, SRC(1, U), 31), *offset = nir_iand_imm(b, SRC(2, U), 31);
+      nir_def *value = SRC(3, U), *end = nir_iadd(b, width, offset);
+      const unsigned n = value->num_components;
+      const bool sign = insn->opcode == DXBC_OP_IBFE;
+      nir_def *left = nir_ishl(b, value, nir_isub_imm(b, 32, end));
+      nir_def *right = nir_isub_imm(b, 32, width);
+      nir_def *inside = sign ? nir_ishr(b, left, right) : nir_ushr(b, left, right);
+      nir_def *tail = sign ? nir_ishr(b, value, offset) : nir_ushr(b, value, offset);
+      r = nir_bcsel(b, nir_ieq(b, width, nir_imm_zero(b, n, 32)), nir_imm_zero(b, n, 32),
+                    nir_bcsel(b, nir_ult(b, end, nir_replicate(b, nir_imm_int(b, 32), n)), inside, tail));
       break;
+   }
+   case DXBC_OP_BFI: {
+      nir_def *width = nir_iand_imm(b, SRC(1, U), 31), *offset = nir_iand_imm(b, SRC(2, U), 31);
+      const unsigned n = width->num_components;
+      nir_def *ones = nir_iadd_imm(b, nir_ishl(b, nir_replicate(b, nir_imm_int(b, 1), n), width), -1);
+      nir_def *mask = nir_ishl(b, ones, offset);
+      r = nir_ior(b, nir_iand(b, nir_ishl(b, SRC(3, U), offset), mask), nir_iand(b, SRC(4, U), nir_inot(b, mask)));
+      break;
+   }
    case DXBC_OP_BFREV: r = nir_bitfield_reverse(b, SRC(1, U)); break;
    case DXBC_OP_F32TOF16: {
       nir_def *v = SRC(1, F), *comp[4];
@@ -1617,8 +1810,12 @@ emit_flow(struct ctx *c, unsigned index)
       }
       return true;
    case DXBC_OP_LOOP:
-      if ((e = cf_push(c, insn, CF_LOOP)))
+      /* a NIR continue jumps to the loop's continue construct (as in
+       * tgsi_to_nir); nir_lower_continue_constructs removes it later */
+      if ((e = cf_push(c, insn, CF_LOOP))) {
          e->loop = nir_push_loop(b);
+         nir_loop_add_continue_construct(e->loop);
+      }
       return true;
    case DXBC_OP_ENDLOOP:
       if ((e = cf_top(c, insn, CF_LOOP))) {
@@ -1729,16 +1926,39 @@ tex_shape(unsigned dim, struct tex_shape *s)
    }
 }
 
+/* C34: the register part of an SM5.1 range index (the slot's immediate
+ * part is the texture/sampler index) */
+static nir_def *
+range_register(struct ctx *c, const struct dxbc_instruction *insn, const struct dxbc_operand *o)
+{
+   if (index_direct(&o->index[0]))
+      return NULL;
+   return nir_channel(&c->b, read_src(c, insn, o->index[0].relative, nir_type_int32), 0);
+}
+
 static unsigned
 resource_index(struct ctx *c, const struct dxbc_instruction *insn,
                const struct dxbc_operand *o)
 {
+   if (o->type == DXBC_OPERAND_RESOURCE && heap_operand(c, o)) {
+      /* C47: [heap range][register offset] */
+      const unsigned t = MAX_RESOURCES + (unsigned)o->index[0].imm;
+      if (o->index[0].imm >= DXBC_HEAP_RANGE_MAX || !c->res[t].declared || c->heap_offset ||
+          c->dyn_texture) {
+         fail(c, insn, "heap resource operand");
+         return 0;
+      }
+      c->heap_offset = index_value(c, insn, &o->index[1]);
+      c->heap_range = (unsigned)o->index[0].imm;
+      return t;
+   }
    if (o->type != DXBC_OPERAND_RESOURCE || o->index_dimension != 1 ||
-       !index_direct(&o->index[0]) || o->index[0].imm >= MAX_RESOURCES ||
-       !c->res[o->index[0].imm].declared) {
+       o->index[0].imm >= MAX_RESOURCES || !c->res[o->index[0].imm].declared ||
+       (!index_direct(&o->index[0]) && c->dyn_texture)) {
       fail(c, insn, "resource operand");
       return 0;
    }
+   c->dyn_texture = range_register(c, insn, o);
    return (unsigned)o->index[0].imm;
 }
 
@@ -1746,19 +1966,92 @@ static unsigned
 sampler_index(struct ctx *c, const struct dxbc_instruction *insn,
               const struct dxbc_operand *o)
 {
+   if (o->type == DXBC_OPERAND_SAMPLER && heap_operand(c, o)) {
+      /* C47: [heap sampler range][register offset] */
+      const unsigned s = MAX_SAMPLERS + (unsigned)o->index[0].imm;
+      if (o->index[0].imm >= DXBC_HEAP_RANGE_MAX || !c->samp[s].declared || c->sampler_heap_offset || c->dyn_sampler) {
+         fail(c, insn, "heap sampler operand");
+         return 0;
+      }
+      c->sampler_heap_offset = index_value(c, insn, &o->index[1]);
+      c->sampler_heap_range = (unsigned)o->index[0].imm;
+      return s;
+   }
    if (o->type != DXBC_OPERAND_SAMPLER || o->index_dimension != 1 ||
-       !index_direct(&o->index[0]) || o->index[0].imm >= MAX_SAMPLERS) {
+       o->index[0].imm >= MAX_SAMPLERS || (!index_direct(&o->index[0]) && c->dyn_sampler)) {
       fail(c, insn, "sampler operand");
       return 0;
    }
+   c->dyn_sampler = range_register(c, insn, o);
    return (unsigned)o->index[0].imm;
+}
+
+/* C47: the heap index of heap range h's first register (constant buffer
+ * DXBC_HEAP_TABLE_CB, vec4 per range) */
+static nir_def *
+heap_first(struct ctx *c, unsigned h)
+{
+   return nir_channel(&c->b, nir_load_ubo(&c->b, 4, 32, nir_imm_int(&c->b, DXBC_HEAP_TABLE_CB),
+                                          nir_imm_int(&c->b, (int)(h * 16u)), .align_mul = 16,
+                                          .align_offset = 0, .range_base = 0, .range = ~0u), 0);
+}
+
+/* C47: the bindless handle of a heap descriptor's texture (or, pbe, its PBE)
+ * descriptor; the native state pairs the marked handle with the heap */
+static nir_def *
+heap_handle_at(struct ctx *c, nir_def *index, unsigned delta)
+{
+   nir_def *bytes = nir_iadd_imm(&c->b, nir_imul_imm(&c->b, index, DXBC_HEAP_DESCRIPTOR_STRIDE),
+                                 DXBC_HEAP_DESCRIPTOR_AGX_OFFSET + delta);
+   return nir_bindless_image_agx(&c->b, bytes, .desc_set = DXBC_HEAP_HANDLE_MARK);
+}
+
+static nir_def *
+heap_handle(struct ctx *c, nir_def *index, bool pbe)
+{
+   return heap_handle_at(c, index, pbe ? DXBC_HEAP_DESCRIPTOR_PBE_DELTA : 0);
+}
+
+/* C47: the counter of a heap structured UAV (its R32_UINT word's PBE) */
+static nir_def *
+uav_heap_counter(struct ctx *c, const struct dxbc_instruction *insn, const struct dxbc_operand *o)
+{
+   return heap_handle_at(c, nir_iadd(&c->b, heap_first(c, (unsigned)o->index[0].imm), index_value(c, insn, &o->index[1])),
+                         DXBC_HEAP_DESCRIPTOR_COUNTER_DELTA);
+}
+
+
+/* C47: a UAV operand's entry -- its slot, or MAX_UAVS + heap range for a heap
+ * UAV ([range][register offset], dxbc_prepare_static_bindings) -- without
+ * emitting code; MAX_UAVS + DXBC_HEAP_RANGE_MAX when malformed */
+static unsigned
+uav_entry(const struct ctx *c, const struct dxbc_operand *o)
+{
+   const unsigned none = MAX_UAVS + DXBC_HEAP_RANGE_MAX;
+   if (o->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || !index_direct(&o->index[0]))
+      return none;
+   if (heap_operand(c, o))
+      return o->index[0].imm < DXBC_HEAP_RANGE_MAX && c->uav[MAX_UAVS + o->index[0].imm].kind
+                ? MAX_UAVS + (unsigned)o->index[0].imm : none;
+   return o->index[0].imm < c->uav_slots ? (unsigned)o->index[0].imm : none;
+}
+
+/* C47: a heap UAV's descriptor handle (texture for reads and size queries,
+ * PBE for writes and atomics) */
+static nir_def *
+uav_heap_handle(struct ctx *c, const struct dxbc_instruction *insn, const struct dxbc_operand *o, bool pbe)
+{
+   return heap_handle(c, nir_iadd(&c->b, heap_first(c, (unsigned)o->index[0].imm), index_value(c, insn, &o->index[1])),
+                      pbe);
 }
 
 static nir_tex_instr *
 tex_begin(struct ctx *c, nir_texop op, unsigned t, unsigned s, bool sampler,
           unsigned num_srcs, const struct tex_shape *shape, nir_alu_type type)
 {
-   nir_tex_instr *tex = nir_tex_instr_create(c->b.shader, num_srcs);
+   /* C34: room for texture_offset/sampler_offset (tex_finish); C47: or
+    * texture/sampler handles and a sampler bias; C53T: and a min_lod */
+   nir_tex_instr *tex = nir_tex_instr_create(c->b.shader, num_srcs + 4);
    tex->op = op;
    tex->sampler_dim = shape->dim;
    tex->is_array = shape->array;
@@ -1770,13 +2063,90 @@ tex_begin(struct ctx *c, nir_texop op, unsigned t, unsigned s, bool sampler,
    return tex;
 }
 
+/* C47: a heap sampler: its AGX sampler handle and MipLODBias from the map
+ * in DXBC_HEAP_TABLE_CB; the bias applies to implicit-LOD sampling (tex
+ * becomes txb, txb adds it) and to gradients (scaled by 2^bias) */
+static unsigned
+heap_sampler(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs, nir_def **minmax)
+{
+   nir_builder *b = &c->b;
+   nir_def *range = nir_load_ubo(b, 4, 32, nir_imm_int(b, DXBC_HEAP_TABLE_CB),
+                                 nir_imm_int(b, (int)(c->sampler_heap_range * 16u)), .align_mul = 16,
+                                 .align_offset = 0, .range_base = 0, .range = ~0u);
+   nir_def *entry = nir_isub(b, nir_iadd(b, nir_channel(b, range, 0), c->sampler_heap_offset), nir_channel(b, range, 1));
+   nir_def *word = nir_load_ubo(b, 1, 32, nir_imm_int(b, DXBC_HEAP_TABLE_CB),
+                                nir_iadd_imm(b, nir_ishl_imm(b, entry, 2), DXBC_HEAP_SAMPLER_MAP_OFFSET),
+                                .align_mul = 4, .align_offset = 0, .range_base = 0, .range = ~0u);
+   nir_def *bias = nir_f2f32(b, nir_u2u16(b, nir_ushr_imm(b, word, 16))); /* fp16 bits */
+   /* C65: handle bits 0-10; the min/max bits 11-15 select the reduction
+    * emulation after the sample (dxbc_minmax.h) */
+   tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_sampler_handle,
+                                              nir_u2u16(b, nir_iand_imm(b, word, DXBC_SAMPLER_HANDLE_MASK)));
+   *minmax = nir_iand_imm(b, nir_ushr_imm(b, word, DXBC_SAMPLER_MINMAX_SHIFT), 31);
+   tex->sampler_index = DXBC_HEAP_SAMPLER_INDEX;
+   if (tex->op == nir_texop_tex) {
+      tex->op = nir_texop_txb;
+      tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_bias, bias);
+   } else if (tex->op == nir_texop_txb) {
+      const int i = nir_tex_instr_src_index(tex, nir_tex_src_bias);
+      if (i >= 0) {
+         nir_def *sum = nir_fadd(b, tex->src[i].src.ssa, bias);
+         tex->src[i] = nir_tex_src_for_ssa(nir_tex_src_bias, sum);
+      }
+   } else if (tex->op == nir_texop_txd) {
+      nir_def *scale = nir_fexp2(b, bias);
+      for (unsigned i = 0; i < num_srcs; ++i)
+         if (tex->src[i].src_type == nir_tex_src_ddx || tex->src[i].src_type == nir_tex_src_ddy)
+            tex->src[i] = nir_tex_src_for_ssa(tex->src[i].src_type, nir_fmul(b, tex->src[i].src.ssa, scale));
+   }
+   return num_srcs;
+}
+
 static nir_def *
 tex_finish(struct ctx *c, nir_tex_instr *tex, unsigned num_srcs, unsigned components)
 {
+   /* C34: dynamically indexed SM5.1 ranges, in the two slots tex_begin
+    * reserved */
+   if (c->dyn_texture)
+      tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_texture_offset, c->dyn_texture);
+   if (c->heap_offset) {
+      /* C47: heap index = the range's first heap index (constant buffer
+       * DXBC_HEAP_TABLE_CB, vec4 per range) + the register offset; the
+       * descriptor's byte offset in the heap mirror is a bindless handle
+       * the native state pairs with the mirror's address */
+      nir_def *handle = heap_handle(c, nir_iadd(&c->b, heap_first(c, c->heap_range), c->heap_offset), false);
+      tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_texture_handle, handle);
+      tex->texture_index = 0;
+   }
+   if (c->dyn_sampler)
+      tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_sampler_offset, c->dyn_sampler);
+   nir_def *minmax = NULL;
+   if (c->sampler_heap_offset)
+      num_srcs = heap_sampler(c, tex, num_srcs, &minmax);
+   if (c->min_lod) {
+      /* C53T: the _cl clamp. AGX takes a min_lod with implicit LOD and
+       * gradients; an explicit LOD is clamped here */
+      const int l = nir_tex_instr_src_index(tex, nir_tex_src_lod);
+      if (tex->op == nir_texop_txl && l >= 0)
+         tex->src[l] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_fmax(&c->b, tex->src[l].src.ssa, c->min_lod));
+      else if (tex->op == nir_texop_tex || tex->op == nir_texop_txb || tex->op == nir_texop_txd)
+         tex->src[num_srcs++] = nir_tex_src_for_ssa(nir_tex_src_min_lod, c->min_lod);
+   }
+   /* C53T: the residency code follows the result */
+   const bool sparse = c->feedback && tex->op != nir_texop_txs && tex->op != nir_texop_query_levels &&
+                       tex->op != nir_texop_lod;
+   tex->is_sparse = sparse;
+   c->dyn_texture = c->dyn_sampler = c->heap_offset = c->sampler_heap_offset = c->min_lod = NULL;
    tex->num_srcs = num_srcs;
-   nir_def_init(&tex->instr, &tex->def, components, 32);
+   nir_def_init(&tex->instr, &tex->def, components + (sparse ? 1 : 0), 32);
    nir_builder_instr_insert(&c->b, &tex->instr);
-   return &tex->def;
+   if (sparse) {
+      c->feedback_code = nir_channel(&c->b, &tex->def, components);
+      return nir_trim_vector(&c->b, &tex->def, components);
+   }
+   /* C65: a heap sampler's min/max reduction, when the caller asked for it */
+   nir_def *reduced = minmax && c->p->minmax ? dxbc_minmax_wrap(&c->b, tex, minmax) : NULL;
+   return reduced ? reduced : &tex->def;
 }
 
 static nir_def *
@@ -1896,17 +2266,72 @@ emit_ld(struct ctx *c, const struct dxbc_instruction *insn)
              insn->saturate);
 }
 
+static nir_def *uav_image(struct ctx *c, const struct dxbc_instruction *insn,
+                          const struct dxbc_operand *o, struct tex_shape *shape, bool pbe, bool *bindless);
+
+/* resinfo's return type: float, rcpfloat (dimensions only) or uint */
+static nir_def *
+resinfo_convert(struct ctx *c, nir_def *value, unsigned mode)
+{
+   nir_builder *b = &c->b;
+   if (mode != 2) {
+      nir_def *f = nir_u2f32(b, value);
+      if (mode == 1) {
+         nir_def *r[4];
+         for (unsigned i = 0; i < 4; ++i)
+            r[i] = i < 3 ? nir_frcp(b, nir_channel(b, f, i)) : nir_channel(b, f, i);
+         f = nir_vec(b, r, 4);
+      }
+      value = f;
+   }
+   return value;
+}
+
+/* resinfo on a typed UAV texture: the view's single mip level, so the
+ * mip count is 1 and any other srcMipLevel reads as unbound (zero sizes) */
+static void
+emit_resinfo_uav(struct ctx *c, const struct dxbc_instruction *insn, unsigned mode)
+{
+   nir_builder *b = &c->b;
+   const struct dxbc_operand *uav = &insn->operands[2];
+   struct tex_shape shape;
+   bool bindless;
+   nir_def *image = uav_image(c, insn, uav, &shape, false, &bindless), *size, *in_range, *comp[4];
+   if (!image)
+      return;
+   if (shape.dim == GLSL_SAMPLER_DIM_BUF) {
+      fail(c, insn, "resinfo on a buffer UAV");
+      return;
+   }
+   size = bindless ? nir_bindless_image_size(b, shape.coords, 32, image, nir_imm_int(b, 0),
+                                             .image_dim = shape.dim, .image_array = shape.array)
+                   : nir_image_size(b, shape.coords, 32, image, nir_imm_int(b, 0),
+                                    .image_dim = shape.dim, .image_array = shape.array);
+   in_range = nir_ieq_imm(b, nir_channel(b, SRC(1, U), 0), 0);
+   for (unsigned i = 0; i < 3; ++i)
+      comp[i] = i < shape.coords ? nir_bcsel(b, in_range, nir_channel(b, size, i), nir_imm_int(b, 0))
+                                 : nir_imm_int(b, 0);
+   comp[3] = nir_imm_int(b, 1);
+   write_dst(c, insn, &insn->operands[0],
+             swizzle4(c, resinfo_convert(c, nir_vec(b, comp, 4), mode), uav), insn->saturate);
+}
+
 static void
 emit_resinfo(struct ctx *c, const struct dxbc_instruction *insn)
 {
    nir_builder *b = &c->b;
    const struct dxbc_operand *res = &insn->operands[2];
-   unsigned t = resource_index(c, insn, res), mode = (insn->token0 >> 11) & 3u;
+   unsigned t, mode = (insn->token0 >> 11) & 3u;
    struct tex_shape shape;
    nir_tex_instr *tex;
    nir_def *lod, *size, *levels, *comp[4], *value;
    unsigned dims;
 
+   if (res->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW) {
+      emit_resinfo_uav(c, insn, mode);
+      return;
+   }
+   t = resource_index(c, insn, res);
    if (c->failed || !tex_shape(c->res[t].dim, &shape)) {
       fail(c, insn, "resinfo resource dimension");
       return;
@@ -1923,17 +2348,7 @@ emit_resinfo(struct ctx *c, const struct dxbc_instruction *insn)
    for (unsigned i = 0; i < 3; ++i)
       comp[i] = i < dims ? nir_channel(b, size, i) : nir_imm_int(b, 0);
    comp[3] = levels;
-   value = nir_vec(b, comp, 4);
-   if (mode != 2) { /* float or rcpfloat (dimensions only) */
-      nir_def *f = nir_u2f32(b, value);
-      if (mode == 1) {
-         nir_def *r[4];
-         for (unsigned i = 0; i < 4; ++i)
-            r[i] = i < 3 ? nir_frcp(b, nir_channel(b, f, i)) : nir_channel(b, f, i);
-         f = nir_vec(b, r, 4);
-      }
-      value = f;
-   }
+   value = resinfo_convert(c, nir_vec(b, comp, 4), mode);
    write_dst(c, insn, &insn->operands[0], resource_swizzle(c, value, res), insn->saturate);
 }
 
@@ -1969,6 +2384,83 @@ emit_gather(struct ctx *c, const struct dxbc_instruction *insn)
       tex->src[n++] = nir_tex_src_for_ssa(nir_tex_src_offset, offset_src(c, insn, 2));
    write_dst(c, insn, &insn->operands[0], resource_swizzle(c, tex_finish(c, tex, n, 4), res),
              insn->saturate);
+}
+
+static void emit_mem_load(struct ctx *c, const struct dxbc_instruction *insn);
+static void emit_typed_load(struct ctx *c, const struct dxbc_instruction *insn);
+
+/* C53T (Tier 2): the _s opcodes are their base opcode with a status
+ * operand (operands[1], after the result) and, for the _cl forms, a
+ * trailing LOD clamp. The status is the access's residency code (AGX: bit 0
+ * clear = resident), which only check_access_fully_mapped interprets.
+ * Buffer and typed UAV loads return no residency: their status is
+ * "resident" (Asahi's raw RGB32 loads do the same). */
+static void
+emit_feedback(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   static const struct { uint32_t op, base, clamp; } forms[] = {
+      {DXBC_OP_SAMPLE_L_FEEDBACK, DXBC_OP_SAMPLE_L, 0}, {DXBC_OP_SAMPLE_C_LZ_FEEDBACK, DXBC_OP_SAMPLE_C_LZ, 0},
+      {DXBC_OP_SAMPLE_CLAMP_FEEDBACK, DXBC_OP_SAMPLE, 4}, {DXBC_OP_SAMPLE_B_CLAMP_FEEDBACK, DXBC_OP_SAMPLE_B, 5},
+      {DXBC_OP_SAMPLE_D_CLAMP_FEEDBACK, DXBC_OP_SAMPLE_D, 6}, {DXBC_OP_SAMPLE_C_CLAMP_FEEDBACK, DXBC_OP_SAMPLE_C, 5},
+      {DXBC_OP_LD_FEEDBACK, DXBC_OP_LD, 0}, {DXBC_OP_LD_MS_FEEDBACK, DXBC_OP_LD_MS, 0},
+      {DXBC_OP_GATHER4_FEEDBACK, DXBC_OP_GATHER4, 0}, {DXBC_OP_GATHER4_C_FEEDBACK, DXBC_OP_GATHER4_C, 0},
+      {DXBC_OP_GATHER4_PO_FEEDBACK, DXBC_OP_GATHER4_PO, 0}, {DXBC_OP_GATHER4_PO_C_FEEDBACK, DXBC_OP_GATHER4_PO_C, 0},
+      {DXBC_OP_LD_UAV_TYPED_FEEDBACK, DXBC_OP_LD_UAV_TYPED, 0}, {DXBC_OP_LD_RAW_FEEDBACK, DXBC_OP_LD_RAW, 0},
+      {DXBC_OP_LD_STRUCTURED_FEEDBACK, DXBC_OP_LD_STRUCTURED, 0},
+   };
+   unsigned f = 0;
+   while (f < ARRAY_SIZE(forms) && forms[f].op != insn->opcode)
+      ++f;
+   if (f == ARRAY_SIZE(forms) || insn->num_operands < 3) {
+      fail(c, insn, "feedback opcode");
+      return;
+   }
+   struct dxbc_instruction base = *insn;
+   base.opcode = forms[f].base;
+   memmove(&base.operands[1], &base.operands[2], (base.num_operands - 2) * sizeof(base.operands[0]));
+   --base.num_operands;
+   if (forms[f].clamp && forms[f].clamp < base.num_operands) {
+      c->min_lod = nir_channel(&c->b, read_src(c, &base, &base.operands[forms[f].clamp], nir_type_float32), 0);
+      --base.num_operands;
+   }
+   c->feedback = true;
+   c->feedback_code = NULL;
+   switch (base.opcode) {
+   case DXBC_OP_SAMPLE: case DXBC_OP_SAMPLE_B: case DXBC_OP_SAMPLE_L:
+   case DXBC_OP_SAMPLE_D: case DXBC_OP_SAMPLE_C: case DXBC_OP_SAMPLE_C_LZ:
+      emit_sample(c, &base);
+      break;
+   case DXBC_OP_LD: case DXBC_OP_LD_MS:
+      emit_ld(c, &base);
+      break;
+   case DXBC_OP_GATHER4: case DXBC_OP_GATHER4_C: case DXBC_OP_GATHER4_PO: case DXBC_OP_GATHER4_PO_C:
+      emit_gather(c, &base);
+      break;
+   case DXBC_OP_LD_UAV_TYPED:
+      c->feedback = false;
+      emit_typed_load(c, &base);
+      break;
+   default:
+      c->feedback = false;
+      emit_mem_load(c, &base);
+      break;
+   }
+   c->feedback = false;
+   c->min_lod = NULL;
+   nir_def *code = c->feedback_code ? c->feedback_code : nir_imm_int(&c->b, 0);
+   c->feedback_code = NULL;
+   write_dst(c, insn, &insn->operands[1], replicate4(c, code), false);
+}
+
+/* C53T: check_access_fully_mapped dst, status: ~0 when the access the
+ * status came from touched only mapped tiles */
+static void
+emit_check_access(struct ctx *c, const struct dxbc_instruction *insn)
+{
+   nir_builder *b = &c->b;
+   nir_def *resident = nir_is_sparse_texels_resident(b, 1, nir_channel(b, SRC(1, U), 0));
+   write_dst(c, insn, &insn->operands[0], replicate4(c, nir_bcsel(b, resident, nir_imm_int(b, ~0), nir_imm_int(b, 0))),
+             false);
 }
 
 static void
@@ -2015,6 +2507,178 @@ resource_samples(struct ctx *c, const struct dxbc_instruction *insn,
    return tex_finish(c, tex, 0, 1);
 }
 
+/* FL 11_1 forced sample count, shared with the D3D12 path (dxbc_tir_gs.h) */
+nir_def *
+dxbc_tir_sample_offset(nir_builder *b, unsigned samples, nir_def *index)
+{
+   const int8_t (*pattern)[2] = dxbc_tir_pattern(samples);
+   nir_def *x = nir_imm_float(b, 0), *y = nir_imm_float(b, 0);
+   for (unsigned s = 0; pattern && s < samples; ++s) {
+      nir_def *hit = nir_ieq_imm(b, index, s);
+      x = nir_bcsel(b, hit, nir_imm_float(b, pattern[s][0] / 16.0f), x);
+      y = nir_bcsel(b, hit, nir_imm_float(b, pattern[s][1] / 16.0f), y);
+   }
+   return nir_vec2(b, x, y);
+}
+
+void
+dxbc_tir_coverage(nir_builder *b, unsigned samples, nir_def **mask_out, nir_def **centroid_out)
+{
+   const int8_t (*pattern)[2] = dxbc_tir_pattern(samples);
+   nir_def *edge[DXBC_TIR_EDGE_SLOTS], *a[3], *bb[3], *centre[3], *mask = nir_imm_int(b, 0);
+   for (unsigned i = 0; i < DXBC_TIR_EDGE_SLOTS; ++i) {
+      nir_variable *var = nir_variable_create(b->shader, nir_var_shader_in, glsl_ivec4_type(), "tir_edge");
+      var->data.location = VARYING_SLOT_TEX0 + i;
+      var->data.interpolation = INTERP_MODE_FLAT;
+      edge[i] = nir_load_var(b, var);
+   }
+   nir_def *fc = nir_load_frag_coord(b);
+   nir_def *cx = nir_iadd_imm(b, nir_imul_imm(b, nir_f2i32(b, nir_ffloor(b, nir_channel(b, fc, 0))),
+                                              DXBC_TIR_SUBPIXEL), DXBC_TIR_SUBPIXEL / 2);
+   nir_def *cy = nir_iadd_imm(b, nir_imul_imm(b, nir_f2i32(b, nir_ffloor(b, nir_channel(b, fc, 1))),
+                                              DXBC_TIR_SUBPIXEL), DXBC_TIR_SUBPIXEL / 2);
+   for (unsigned e = 0; e < 3; ++e) {
+      a[e] = nir_channel(b, edge[e], 2);
+      bb[e] = nir_channel(b, edge[e], 3);
+      centre[e] = nir_iadd(b,
+         nir_iadd(b, nir_imul(b, nir_i2i64(b, a[e]), nir_i2i64(b, nir_isub(b, cx, nir_channel(b, edge[e], 0)))),
+                     nir_imul(b, nir_i2i64(b, bb[e]), nir_i2i64(b, nir_isub(b, cy, nir_channel(b, edge[e], 1))))),
+         nir_i2i64(b, nir_channel(b, edge[3], e)));
+   }
+   for (unsigned s = 0; pattern && s < samples; ++s) {
+      nir_def *inside = nir_imm_true(b);
+      for (unsigned e = 0; e < 3; ++e) {
+         /* |A|, |B| < 2^23 and |offset| <= 128: the step fits 32 bits */
+         nir_def *step = nir_iadd(b, nir_imul_imm(b, a[e], pattern[s][0] * (DXBC_TIR_SUBPIXEL / 16)),
+                                  nir_imul_imm(b, bb[e], pattern[s][1] * (DXBC_TIR_SUBPIXEL / 16)));
+         inside = nir_iand(b, inside, nir_ige_imm(b, nir_iadd(b, centre[e], nir_i2i64(b, step)), 0));
+      }
+      mask = nir_ior(b, mask, nir_bcsel(b, inside, nir_imm_int(b, 1 << s), nir_imm_int(b, 0)));
+   }
+   nir_demote_if(b, nir_ieq_imm(b, mask, 0));
+   nir_def *full = nir_ieq_imm(b, mask, (int)((1u << samples) - 1u));
+   *mask_out = mask;
+   *centroid_out = nir_bcsel(b, full, nir_imm_vec2(b, 0, 0), dxbc_tir_sample_offset(b, samples, nir_find_lsb(b, mask)));
+}
+
+/* Conservative rasterization (D3D12 Tier 1) of any fragment shader behind
+ * the expansion GS: a pixel runs when the original triangle touches its
+ * square (dxbc_tir_touched: each edge at the outermost corner, bounding
+ * boxes), so the GS's vertex extension at sharp angles adds no pixel;
+ * SV_Coverage is the full single sample. */
+bool
+dxbc_cr_lower_fs(nir_shader *nir)
+{
+   if (nir->info.stage != MESA_SHADER_FRAGMENT)
+      return false;
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_builder bb = nir_builder_at(nir_before_impl(impl));
+   nir_builder *b = &bb;
+   nir_def *edge[DXBC_TIR_EDGE_SLOTS];
+   for (unsigned i = 0; i < DXBC_TIR_EDGE_SLOTS; ++i) {
+      nir_variable *var = nir_variable_create(nir, nir_var_shader_in, glsl_ivec4_type(), "tir_edge");
+      var->data.location = VARYING_SLOT_TEX0 + i;
+      var->data.interpolation = INTERP_MODE_FLAT;
+      edge[i] = nir_load_var(b, var);
+   }
+   nir_def *fc = nir_load_frag_coord(b);
+   const int half = DXBC_TIR_SUBPIXEL / 2;
+   nir_def *cx = nir_iadd_imm(b, nir_imul_imm(b, nir_f2i32(b, nir_ffloor(b, nir_channel(b, fc, 0))), DXBC_TIR_SUBPIXEL), half);
+   nir_def *cy = nir_iadd_imm(b, nir_imul_imm(b, nir_f2i32(b, nir_ffloor(b, nir_channel(b, fc, 1))), DXBC_TIR_SUBPIXEL), half);
+   nir_def *touched = nir_imm_true(b);
+   nir_def *minx = NULL, *maxx = NULL, *miny = NULL, *maxy = NULL;
+   for (unsigned e = 0; e < 3; ++e) {
+      nir_def *x = nir_channel(b, edge[e], 0), *y = nir_channel(b, edge[e], 1);
+      nir_def *a = nir_channel(b, edge[e], 2), *bv = nir_channel(b, edge[e], 3);
+      nir_def *centre = nir_iadd(b, nir_imul(b, nir_i2i64(b, a), nir_i2i64(b, nir_isub(b, cx, x))),
+                                 nir_imul(b, nir_i2i64(b, bv), nir_i2i64(b, nir_isub(b, cy, y))));
+      nir_def *reach = nir_imul_imm(b, nir_i2i64(b, nir_iadd(b, nir_iabs(b, a), nir_iabs(b, bv))), half);
+      touched = nir_iand(b, touched, nir_ige_imm(b, nir_iadd(b, centre, reach), 0));
+      minx = minx ? nir_imin(b, minx, x) : x;
+      maxx = maxx ? nir_imax(b, maxx, x) : x;
+      miny = miny ? nir_imin(b, miny, y) : y;
+      maxy = maxy ? nir_imax(b, maxy, y) : y;
+   }
+   touched = nir_iand(b, touched, nir_iand(b, nir_ilt(b, minx, nir_iadd_imm(b, cx, half)),
+                                               nir_ilt(b, nir_iadd_imm(b, cx, -half), maxx)));
+   touched = nir_iand(b, touched, nir_iand(b, nir_ilt(b, miny, nir_iadd_imm(b, cy, half)),
+                                               nir_ilt(b, nir_iadd_imm(b, cy, -half), maxy)));
+   nir_demote_if(b, nir_inot(b, touched));
+   /* SV_Coverage stays the hardware's: the GS expands by a whole pixel
+    * (dxbc_tir_gs_key.full_pixel), so a touched pixel has every sample
+    * covered, with the SampleMask applied as without conservative mode */
+   nir_progress(true, impl, nir_metadata_none);
+   return true;
+}
+
+/* The forced-sample-count variant of any fragment shader still holding its
+ * input variables (the DXIL path; dxbc_tir_gs.h): the coverage prologue,
+ * SV_Coverage from the forced pattern, centroid and pull-model evaluation on
+ * that pattern. */
+bool
+dxbc_tir_lower_fs(nir_shader *nir, unsigned samples)
+{
+   if (nir->info.stage != MESA_SHADER_FRAGMENT || !dxbc_tir_pattern(samples))
+      return false;
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_builder b = nir_builder_at(nir_before_impl(impl));
+   nir_def *mask, *centroid;
+   dxbc_tir_coverage(&b, samples, &mask, &centroid);
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+         nir_def *value = NULL;
+         b.cursor = nir_before_instr(instr);
+         switch (intr->intrinsic) {
+         case nir_intrinsic_load_sample_mask_in:
+            value = mask;
+            break;
+         case nir_intrinsic_interp_deref_at_sample:
+            value = nir_interp_deref_at_offset(&b, intr->def.num_components, intr->def.bit_size,
+                                               intr->src[0].ssa,
+                                               dxbc_tir_sample_offset(&b, samples, intr->src[1].ssa));
+            break;
+         case nir_intrinsic_interp_deref_at_centroid:
+            value = nir_interp_deref_at_offset(&b, intr->def.num_components, intr->def.bit_size,
+                                               intr->src[0].ssa, centroid);
+            break;
+         case nir_intrinsic_load_deref: {
+            nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+            nir_variable *var = nir_deref_instr_get_variable(deref);
+            if (!var || var->data.mode != nir_var_shader_in || !var->data.centroid)
+               continue;
+            value = nir_interp_deref_at_offset(&b, intr->def.num_components, intr->def.bit_size,
+                                               &deref->def, centroid);
+            break;
+         }
+         default:
+            continue;
+         }
+         nir_def_replace(&intr->def, value);
+      }
+   }
+   nir_foreach_variable_with_modes(var, nir, nir_var_shader_in)
+      var->data.centroid = false;
+   nir_progress(true, impl, nir_metadata_none);
+   return true;
+}
+
+/* FL 11_1: sample 'index' of the forced pattern */
+static nir_def *
+tir_sample_offset(struct ctx *c, nir_def *index)
+{
+   return dxbc_tir_sample_offset(&c->b, c->forced_samples, index);
+}
+
+/* FL 11_1 forced sample count: the coverage prologue (dxbc_tir_coverage) */
+static void
+tir_coverage(struct ctx *c)
+{
+   dxbc_tir_coverage(&c->b, c->forced_samples, &c->forced_mask, &c->forced_centroid);
+}
+
 /* sampleinfo: the sample count, as float or (_uint) integer, in x */
 static void
 emit_sampleinfo(struct ctx *c, const struct dxbc_instruction *insn)
@@ -2022,11 +2686,13 @@ emit_sampleinfo(struct ctx *c, const struct dxbc_instruction *insn)
    nir_builder *b = &c->b;
    const struct dxbc_operand *res = &insn->operands[1];
    nir_def *count, *comp[4];
-   if (res->type == DXBC_OPERAND_RASTERIZER) {
+   if (res->type == DXBC_OPERAND_RASTERIZER && !c->forced_samples) {
       fail(c, insn, "sampleinfo of the rasterizer");
       return;
    }
-   count = resource_samples(c, insn, res);
+   /* FL 11_1: the rasterizer's count is the forced one */
+   count = res->type == DXBC_OPERAND_RASTERIZER ? nir_imm_int(b, (int)c->forced_samples) :
+                                                  resource_samples(c, insn, res);
    if (((insn->token0 >> 11) & 3u) != 1)
       count = nir_u2f32(b, count);
    comp[0] = count;
@@ -2045,12 +2711,21 @@ emit_samplepos(struct ctx *c, const struct dxbc_instruction *insn)
    static const int8_t pos4[4][2] = { { -2, -6 }, { 6, -2 }, { -6, 2 }, { 2, 6 } };
    const struct dxbc_operand *res = &insn->operands[1];
    nir_def *count, *index, *x = nir_imm_float(b, 0), *y = nir_imm_float(b, 0), *comp[4];
-   if (res->type == DXBC_OPERAND_RASTERIZER) {
+   if (res->type == DXBC_OPERAND_RASTERIZER && !c->forced_samples) {
       fail(c, insn, "samplepos of the rasterizer");
       return;
    }
-   count = resource_samples(c, insn, res);
    index = nir_channel(b, SRC(2, U), 0);
+   if (res->type == DXBC_OPERAND_RASTERIZER) {
+      /* FL 11_1: the forced pattern */
+      nir_def *offset = tir_sample_offset(c, index);
+      comp[0] = nir_channel(b, offset, 0);
+      comp[1] = nir_channel(b, offset, 1);
+      comp[2] = comp[3] = nir_imm_float(b, 0);
+      write_dst(c, insn, &insn->operands[0], swizzle4(c, nir_vec(b, comp, 4), res), insn->saturate);
+      return;
+   }
+   count = resource_samples(c, insn, res);
    for (unsigned i = 0; i < 2; ++i) {
       nir_def *hit = nir_iand(b, nir_ieq_imm(b, count, 2), nir_ieq_imm(b, index, i));
       x = nir_bcsel(b, hit, nir_imm_float(b, pos2[i][0] / 16.0f), x);
@@ -2089,7 +2764,8 @@ mem_address(struct ctx *c, const struct dxbc_instruction *insn,
    unsigned index = (unsigned)target->index[0].imm;
    switch (target->type) {
    case DXBC_OPERAND_UNORDERED_ACCESS_VIEW:
-      if (index >= MAX_UAVS || c->uav[index].kind < MEM_RAW) {
+      index = uav_entry(c, target);
+      if (index >= MAX_UAVS + DXBC_HEAP_RANGE_MAX || c->uav[index].kind < MEM_RAW) {
          fail(c, insn, "buffer UAV u%u", index);
          return nir_imm_int(&c->b, 0);
       }
@@ -2103,7 +2779,10 @@ mem_address(struct ctx *c, const struct dxbc_instruction *insn,
       stride = c->tgsm[index].stride;
       break;
    case DXBC_OPERAND_RESOURCE:
-      if (index >= MAX_RESOURCES || c->res_kind[index] < MEM_RAW) {
+      if (heap_operand(c, target))
+         index = target->index[0].imm < DXBC_HEAP_RANGE_MAX ? MAX_RESOURCES + (unsigned)target->index[0].imm
+                                                              : MAX_RESOURCES + DXBC_HEAP_RANGE_MAX;
+      if (index >= MAX_RESOURCES + DXBC_HEAP_RANGE_MAX || c->res_kind[index] < MEM_RAW) {
          fail(c, insn, "buffer SRV t%u", index);
          return nir_imm_int(&c->b, 0);
       }
@@ -2128,11 +2807,30 @@ mem_load(struct ctx *c, const struct dxbc_instruction *insn,
    nir_def *comp[4];
    if (c->failed)
       return nir_imm_zero(b, n, 32);
+   if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && heap_operand(c, target)) {
+      /* C47: a heap buffer UAV is an R32_UINT buffer image */
+      nir_def *handle = uav_heap_handle(c, insn, target, false);
+      for (unsigned i = 0; i < n; ++i) {
+         nir_def *coord = nir_vec4(b, nir_iadd_imm(b, mem_dword_index(c, byte_address), i), nir_imm_int(b, 0),
+                                   nir_imm_int(b, 0), nir_imm_int(b, 0));
+         comp[i] = nir_channel(b, nir_bindless_image_load(b, 4, 32, handle, coord, nir_imm_int(b, 0), nir_imm_int(b, 0),
+                                                          .image_dim = GLSL_SAMPLER_DIM_BUF, .dest_type = nir_type_uint32,
+                                                          .format = PIPE_FORMAT_R32_UINT), 0);
+      }
+      return nir_vec(b, comp, n);
+   }
    if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW)
       return nir_load_ssbo(b, n, 32, nir_imm_int(b, (int)index), byte_address,
                            .align_mul = 4, .align_offset = 0);
+   const bool heap = target->type == DXBC_OPERAND_RESOURCE && heap_operand(c, target);
+   if (heap)
+      index = MAX_RESOURCES + (unsigned)target->index[0].imm; /* C47: mem_address validated it */
    for (unsigned i = 0; i < n; ++i) {
       nir_def *dword = nir_iadd_imm(b, mem_dword_index(c, byte_address), i);
+      if (heap) {
+         c->heap_offset = index_value(c, insn, &target->index[1]);
+         c->heap_range = (unsigned)target->index[0].imm;
+      }
       if (target->type == DXBC_OPERAND_THREAD_GROUP_SHARED_MEMORY) {
          comp[i] = nir_load_deref(b, nir_build_deref_array(b,
             nir_build_deref_var(b, c->tgsm[index].var), dword));
@@ -2158,6 +2856,19 @@ mem_store(struct ctx *c, const struct dxbc_instruction *insn,
    unsigned index = (unsigned)target->index[0].imm;
    if (c->failed)
       return;
+   if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && heap_operand(c, target)) {
+      /* C47: a heap buffer UAV is an R32_UINT buffer image */
+      nir_def *handle = uav_heap_handle(c, insn, target, true);
+      for (unsigned i = 0; i < n; ++i) {
+         nir_def *coord = nir_vec4(b, nir_iadd_imm(b, mem_dword_index(c, byte_address), i), nir_imm_int(b, 0),
+                                   nir_imm_int(b, 0), nir_imm_int(b, 0));
+         nir_def *texel = nir_vec4(b, nir_channel(b, value, i), nir_imm_int(b, 0), nir_imm_int(b, 0), nir_imm_int(b, 0));
+         nir_bindless_image_store(b, handle, coord, nir_imm_int(b, 0), texel, nir_imm_int(b, 0),
+                                  .image_dim = GLSL_SAMPLER_DIM_BUF, .src_type = nir_type_uint32,
+                                  .format = PIPE_FORMAT_R32_UINT);
+      }
+      return;
+   }
    if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW) {
       nir_store_ssbo(b, nir_trim_vector(b, value, n), nir_imm_int(b, (int)index), byte_address,
                      .write_mask = BITFIELD_MASK(n), .align_mul = 4, .align_offset = 0);
@@ -2216,17 +2927,23 @@ emit_mem_store(struct ctx *c, const struct dxbc_instruction *insn)
    mem_store(c, insn, dst, mem_address(c, insn, dst, address), value, n);
 }
 
+/* the image of a typed UAV operand: its slot, or (C47, *bindless) a heap
+ * descriptor handle -- the PBE one when pbe (writes and atomics) */
 static nir_def *
 uav_image(struct ctx *c, const struct dxbc_instruction *insn, const struct dxbc_operand *o,
-          struct tex_shape *shape)
+          struct tex_shape *shape, bool pbe, bool *bindless)
 {
-   unsigned u = (unsigned)o->index[0].imm;
-   if (o->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || o->index_dimension != 1 ||
-       !index_direct(&o->index[0]) || u >= MAX_UAVS || c->uav[u].kind != MEM_TYPED) {
+   unsigned u = uav_entry(c, o);
+   *bindless = false;
+   if (u >= MAX_UAVS + DXBC_HEAP_RANGE_MAX || c->uav[u].kind != MEM_TYPED) {
       fail(c, insn, "typed UAV operand");
       return NULL;
    }
    tex_shape(c->uav[u].dim, shape);
+   if (u >= MAX_UAVS) {
+      *bindless = true;
+      return uav_heap_handle(c, insn, o, pbe);
+   }
    /* EXP1304: the image's slot, not a deref: Asahi's binding lowering
     * (agx_nir_lower_bindings) takes the indexed image_* intrinsics only,
     * and an image_deref_* reached the backend ("Unhandled intrinsic"). */
@@ -2238,14 +2955,18 @@ emit_typed_load(struct ctx *c, const struct dxbc_instruction *insn)
 {
    struct tex_shape shape;
    const struct dxbc_operand *uav = &insn->operands[2];
-   nir_def *image = uav_image(c, insn, uav, &shape);
+   bool bindless;
+   nir_def *image = uav_image(c, insn, uav, &shape, false, &bindless);
    nir_def *v;
    if (!image)
       return;
-   v = nir_image_load(&c->b, 4, 32, image, SRC(1, U), nir_imm_int(&c->b, 0),
+   const nir_alu_type type = c->uav[uav_entry(c, uav)].type;
+   v = bindless ? nir_bindless_image_load(&c->b, 4, 32, image, SRC(1, U), nir_imm_int(&c->b, 0), nir_imm_int(&c->b, 0),
+                                          .image_dim = shape.dim, .image_array = shape.array, .dest_type = type)
+                : nir_image_load(&c->b, 4, 32, image, SRC(1, U), nir_imm_int(&c->b, 0),
                             nir_imm_int(&c->b, 0), .image_dim = shape.dim,
                             .image_array = shape.array,
-                            .dest_type = c->uav[uav->index[0].imm].type);
+                            .dest_type = type);
    write_dst(c, insn, &insn->operands[0], swizzle4(c, v, uav), insn->saturate);
 }
 
@@ -2254,13 +2975,19 @@ emit_typed_store(struct ctx *c, const struct dxbc_instruction *insn)
 {
    struct tex_shape shape;
    const struct dxbc_operand *uav = &insn->operands[0];
-   nir_def *image = uav_image(c, insn, uav, &shape);
+   bool bindless;
+   nir_def *image = uav_image(c, insn, uav, &shape, true, &bindless);
    if (!image)
       return;
-   nir_image_store(&c->b, image, SRC(1, U), nir_imm_int(&c->b, 0), SRC(2, U),
+   const nir_alu_type type = c->uav[uav_entry(c, uav)].type;
+   if (bindless)
+      nir_bindless_image_store(&c->b, image, SRC(1, U), nir_imm_int(&c->b, 0), SRC(2, U), nir_imm_int(&c->b, 0),
+                               .image_dim = shape.dim, .image_array = shape.array, .src_type = type);
+   else
+      nir_image_store(&c->b, image, SRC(1, U), nir_imm_int(&c->b, 0), SRC(2, U),
                          nir_imm_int(&c->b, 0), .image_dim = shape.dim,
                          .image_array = shape.array,
-                         .src_type = c->uav[uav->index[0].imm].type);
+                         .src_type = type);
 }
 
 static nir_atomic_op
@@ -2300,12 +3027,24 @@ emit_atomic(struct ctx *c, const struct dxbc_instruction *insn)
    } else {
       data = nir_channel(b, SRC(first + 2, U), 0);
    }
-   if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && index < MAX_UAVS &&
+   if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW)
+      index = uav_entry(c, target);
+   if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && index < MAX_UAVS + DXBC_HEAP_RANGE_MAX &&
        c->uav[index].kind == MEM_TYPED) {
       struct tex_shape shape;
-      nir_def *image = uav_image(c, insn, target, &shape);
+      bool bindless;
+      nir_def *image = uav_image(c, insn, target, &shape, true, &bindless);
       if (!image)
          return;
+      if (bindless)
+         result = swap ?
+            nir_bindless_image_atomic_swap(b, 32, image, address, nir_imm_int(b, 0), compare, data,
+                                           .image_dim = shape.dim, .image_array = shape.array,
+                                           .atomic_op = op, .format = PIPE_FORMAT_R32_UINT) :
+            nir_bindless_image_atomic(b, 32, image, address, nir_imm_int(b, 0), data,
+                                      .image_dim = shape.dim, .image_array = shape.array,
+                                      .atomic_op = op, .format = PIPE_FORMAT_R32_UINT);
+      else
       result = swap ?
          nir_image_atomic_swap(b, 32, image, address, nir_imm_int(b, 0), compare, data,
                                      .image_dim = shape.dim, .image_array = shape.array,
@@ -2317,7 +3056,19 @@ emit_atomic(struct ctx *c, const struct dxbc_instruction *insn)
       nir_def *byte_address = mem_address(c, insn, target, address);
       if (c->failed)
          return;
-      if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW) {
+      if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && heap_operand(c, target)) {
+         /* C47: a heap buffer UAV is an R32_UINT buffer image */
+         nir_def *image = uav_heap_handle(c, insn, target, true);
+         nir_def *coord = nir_vec4(b, mem_dword_index(c, byte_address), nir_imm_int(b, 0), nir_imm_int(b, 0),
+                                   nir_imm_int(b, 0));
+         result = swap ?
+            nir_bindless_image_atomic_swap(b, 32, image, coord, nir_imm_int(b, 0), compare, data,
+                                           .image_dim = GLSL_SAMPLER_DIM_BUF, .atomic_op = op,
+                                           .format = PIPE_FORMAT_R32_UINT) :
+            nir_bindless_image_atomic(b, 32, image, coord, nir_imm_int(b, 0), data,
+                                      .image_dim = GLSL_SAMPLER_DIM_BUF, .atomic_op = op,
+                                      .format = PIPE_FORMAT_R32_UINT);
+      } else if (target->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW) {
          nir_def *slot = nir_imm_int(b, (int)index);
          result = swap ? nir_ssbo_atomic_swap(b, 32, slot, byte_address, compare, data, .atomic_op = op) :
                          nir_ssbo_atomic(b, 32, slot, byte_address, data, .atomic_op = op);
@@ -2336,7 +3087,7 @@ emit_atomic(struct ctx *c, const struct dxbc_instruction *insn)
 }
 
 /* imm_atomic_alloc / imm_atomic_consume: the UAV's hidden counter
- * (DXBC_NIR_UAV_COUNTER_SLOT + u#); alloc returns the old count, consume the
+ * (shader buffer counter_base + u#); alloc returns the old count, consume the
  * new one */
 static void
 emit_counter(struct ctx *c, const struct dxbc_instruction *insn)
@@ -2346,14 +3097,27 @@ emit_counter(struct ctx *c, const struct dxbc_instruction *insn)
    unsigned u = (unsigned)uav->index[0].imm;
    bool alloc = insn->opcode == DXBC_OP_IMM_ATOMIC_ALLOC;
    nir_def *slot, *old;
-   if (uav->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || u >= MAX_UAVS ||
+   if (uav->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && heap_operand(c, uav)) {
+      /* C47: a heap UAV's counter word, an R32_UINT buffer image */
+      const unsigned entry = uav_entry(c, uav);
+      if (entry >= MAX_UAVS + DXBC_HEAP_RANGE_MAX || c->uav[entry].kind != MEM_STRUCTURED) {
+         fail(c, insn, "counter of a non-structured UAV");
+         return;
+      }
+      old = nir_bindless_image_atomic(b, 32, uav_heap_counter(c, insn, uav), nir_imm_ivec4(b, 0, 0, 0, 0),
+                                      nir_imm_int(b, 0), nir_imm_int(b, alloc ? 1 : -1),
+                                      .image_dim = GLSL_SAMPLER_DIM_BUF, .atomic_op = nir_atomic_op_iadd,
+                                      .format = PIPE_FORMAT_R32_UINT);
+      write_dst(c, insn, &insn->operands[0], replicate4(c, alloc ? old : nir_iadd_imm(b, old, -1)), false);
+      return;
+   }
+   if (uav->type != DXBC_OPERAND_UNORDERED_ACCESS_VIEW || u >= c->uav_slots ||
        c->uav[u].kind != MEM_STRUCTURED) {
       fail(c, insn, "counter of a non-structured UAV");
       return;
    }
-   slot = nir_imm_int(b, DXBC_NIR_UAV_COUNTER_SLOT + (int)u);
-   b->shader->info.num_ssbos = MAX2(b->shader->info.num_ssbos,
-                                    (uint8_t)(DXBC_NIR_UAV_COUNTER_SLOT + u + 1));
+   slot = nir_imm_int(b, (int)(c->counter_base + u));
+   b->shader->info.num_ssbos = MAX2(b->shader->info.num_ssbos, (uint8_t)(c->counter_base + u + 1));
    old = nir_ssbo_atomic(b, 32, slot, nir_imm_int(b, 0), nir_imm_int(b, alloc ? 1 : -1),
                          .atomic_op = nir_atomic_op_iadd);
    write_dst(c, insn, &insn->operands[0], replicate4(c, alloc ? old : nir_iadd_imm(b, old, -1)),
@@ -2382,15 +3146,29 @@ emit_bufinfo(struct ctx *c, const struct dxbc_instruction *insn)
    const struct dxbc_operand *o = &insn->operands[1];
    unsigned index = (unsigned)o->index[0].imm;
    nir_def *count = NULL;
-   if (o->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && index < MAX_UAVS &&
+   if (o->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW)
+      index = uav_entry(c, o);
+   if (o->type == DXBC_OPERAND_UNORDERED_ACCESS_VIEW && index < MAX_UAVS + DXBC_HEAP_RANGE_MAX &&
        c->uav[index].kind >= MEM_RAW) {
-      count = nir_get_ssbo_size(b, 32, nir_imm_int(b, (int)index));
+      /* C47: a heap buffer UAV's R32_UINT texels are its dwords */
+      count = index >= MAX_UAVS
+         ? nir_imul_imm(b, nir_bindless_image_size(b, 1, 32, uav_heap_handle(c, insn, o, false), nir_imm_int(b, 0),
+                                                   .image_dim = GLSL_SAMPLER_DIM_BUF), 4)
+         : nir_get_ssbo_size(b, 32, nir_imm_int(b, (int)index));
       if (c->uav[index].kind == MEM_STRUCTURED)
          count = nir_udiv_imm(b, count, c->uav[index].stride);
-   } else if (o->type == DXBC_OPERAND_RESOURCE && index < MAX_RESOURCES &&
-              c->res[index].declared && c->res[index].dim == DXBC_DIM_BUFFER) {
+   } else if (o->type == DXBC_OPERAND_RESOURCE &&
+              (heap_operand(c, o) ? o->index[0].imm < DXBC_HEAP_RANGE_MAX : index < MAX_RESOURCES) &&
+              c->res[heap_operand(c, o) ? MAX_RESOURCES + (unsigned)o->index[0].imm : index].declared &&
+              c->res[heap_operand(c, o) ? MAX_RESOURCES + (unsigned)o->index[0].imm : index].dim == DXBC_DIM_BUFFER) {
       struct tex_shape shape;
       nir_tex_instr *tex;
+      if (heap_operand(c, o)) {
+         /* C47: a heap buffer SRV */
+         index = MAX_RESOURCES + (unsigned)o->index[0].imm;
+         c->heap_offset = index_value(c, insn, &o->index[1]);
+         c->heap_range = (unsigned)o->index[0].imm;
+      }
       tex_shape(DXBC_DIM_BUFFER, &shape);
       tex = tex_begin(c, nir_texop_txs, index, 0, false, 1, &shape, nir_type_uint32);
       tex->src[0] = nir_tex_src_for_ssa(nir_tex_src_lod, nir_imm_int(b, 0));
@@ -2426,10 +3204,15 @@ emit_eval(struct ctx *c, const struct dxbc_instruction *insn)
    deref = nir_build_deref_var(b, c->inputs[reg]);
    switch (insn->opcode) {
    case DXBC_OP_EVAL_SAMPLE_INDEX:
-      v = nir_interp_deref_at_sample(b, 4, 32, &deref->def, nir_channel(b, SRC(2, U), 0));
+      /* FL 11_1: pull-model evaluation uses the forced pattern */
+      v = c->forced_samples ?
+          nir_interp_deref_at_offset(b, 4, 32, &deref->def,
+                                     tir_sample_offset(c, nir_channel(b, SRC(2, U), 0))) :
+          nir_interp_deref_at_sample(b, 4, 32, &deref->def, nir_channel(b, SRC(2, U), 0));
       break;
    case DXBC_OP_EVAL_CENTROID:
-      v = nir_interp_deref_at_centroid(b, 4, 32, &deref->def);
+      v = c->forced_samples ? nir_interp_deref_at_offset(b, 4, 32, &deref->def, c->forced_centroid) :
+                              nir_interp_deref_at_centroid(b, 4, 32, &deref->def);
       break;
    default: {
       nir_def *offset = nir_i2f32(b, nir_trim_vector(b, SRC(2, I), 2));
@@ -2475,6 +3258,16 @@ emit_instruction(struct ctx *c, unsigned index)
       return;
    case DXBC_OP_LOD:
       emit_lod(c, insn);
+      return;
+   case DXBC_OP_GATHER4_FEEDBACK: case DXBC_OP_GATHER4_C_FEEDBACK: case DXBC_OP_GATHER4_PO_FEEDBACK:
+   case DXBC_OP_GATHER4_PO_C_FEEDBACK: case DXBC_OP_LD_FEEDBACK: case DXBC_OP_LD_MS_FEEDBACK:
+   case DXBC_OP_LD_UAV_TYPED_FEEDBACK: case DXBC_OP_LD_RAW_FEEDBACK: case DXBC_OP_LD_STRUCTURED_FEEDBACK:
+   case DXBC_OP_SAMPLE_L_FEEDBACK: case DXBC_OP_SAMPLE_C_LZ_FEEDBACK: case DXBC_OP_SAMPLE_CLAMP_FEEDBACK:
+   case DXBC_OP_SAMPLE_B_CLAMP_FEEDBACK: case DXBC_OP_SAMPLE_D_CLAMP_FEEDBACK: case DXBC_OP_SAMPLE_C_CLAMP_FEEDBACK:
+      emit_feedback(c, insn);
+      return;
+   case DXBC_OP_CHECK_ACCESS_FULLY_MAPPED:
+      emit_check_access(c, insn);
       return;
    case DXBC_OP_SAMPLE_INFO:
       emit_sampleinfo(c, insn);
@@ -2556,9 +3349,8 @@ hs_passthrough_vars(struct ctx *c)
       int slot;
       if (!(c->passthrough_registers & (1u << reg)))
          continue;
-      slot = (c->passthrough_positions & (1u << reg)) ? VARYING_SLOT_POS :
-             VARYING_SLOT_VAR0 + (int)reg;
-      if (!hs_cp_input(c, reg, slot) || !hs_cp_output(c, reg, slot))
+      slot = (c->passthrough_positions & (1u << reg)) ? VARYING_SLOT_POS : hs_cp_slot(reg);
+      if (!hs_cp_input(c, reg, slot) || !hs_cp_output(c, reg, hs_cp_slot(reg)))
          fail(c, NULL, "pass-through control point register %u", reg);
       c->cp_out_mask[reg] = 0xfu;
    }
@@ -2741,10 +3533,117 @@ build_xfb(struct ctx *c, const struct dxbc_nir_xfb *xfb)
    return true;
 }
 
+uint32_t
+dxbc_nir_tess_info(const struct nir_shader *nir)
+{
+   return (nir->info.tess.ccw ? 1u : 0u) | (nir->info.tess.point_mode ? 2u : 0u) |
+          ((uint32_t)nir->info.tess._primitive_mode << 8) | ((uint32_t)nir->info.tess.spacing << 16);
+}
+
+/* D3D11.1 mode: buffer UAV u# (shader buffer u#) and its counter (shader
+ * buffer DXBC_NIR_UAV11_SLOTS + u#) move to consecutive shader buffers --
+ * the buffer views in register order, then the counters -- since Gallium has
+ * 32 (PIPE_MAX_SHADER_BUFFERS) for 64 registers; typed views (image u#) move
+ * to consecutive images likewise: Asahi binds 32 (its 32-bit image_mask,
+ * EXP1887, although it reports PIPE_MAX_SHADER_IMAGES). SM 5.0 indexes UAVs
+ * by immediates only, so every index is constant. */
+static bool
+compact_uav_buffers(const struct ctx *c, nir_shader *nir, struct dxbc_nir_uav_slots *slots)
+{
+   uint8_t remap[2 * DXBC_NIR_UAV11_SLOTS];
+   unsigned next = 0, images = 0;
+   memset(slots, 0, sizeof(*slots));
+   memset(slots->buffer, DXBC_NIR_UAV_UNUSED, sizeof(slots->buffer));
+   memset(slots->counter, DXBC_NIR_UAV_UNUSED, sizeof(slots->counter));
+   memset(slots->image, DXBC_NIR_UAV_UNUSED, sizeof(slots->image));
+   memset(remap, DXBC_NIR_UAV_UNUSED, sizeof(remap));
+   for (unsigned u = 0; u < DXBC_NIR_UAV11_SLOTS; ++u) {
+      if (c->uav[u].kind == MEM_TYPED) {
+         slots->typed |= 1ull << u;
+         slots->image[u] = (uint8_t)images++;
+      } else if (c->uav[u].kind >= MEM_RAW) {
+         remap[u] = slots->buffer[u] = (uint8_t)next++;
+      }
+   }
+   if (images > UAV11_IMAGES)
+      return false;
+   /* counters: the structured views an alloc/consume names */
+   nir_foreach_function_impl(impl, nir)
+      nir_foreach_block(block, impl)
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic ||
+                nir_instr_as_intrinsic(instr)->intrinsic != nir_intrinsic_ssbo_atomic)
+               continue;
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            if (!nir_src_is_const(intr->src[0]))
+               return false;
+            unsigned slot = nir_src_as_uint(intr->src[0]);
+            if (slot >= DXBC_NIR_UAV11_SLOTS && slot < 2 * DXBC_NIR_UAV11_SLOTS)
+               slots->counter[slot - DXBC_NIR_UAV11_SLOTS] = 0;
+         }
+   for (unsigned u = 0; u < DXBC_NIR_UAV11_SLOTS; ++u)
+      if (slots->counter[u] != DXBC_NIR_UAV_UNUSED)
+         remap[DXBC_NIR_UAV11_SLOTS + u] = slots->counter[u] = (uint8_t)next++;
+   if (next > UAV11_SHADER_BUFFERS)
+      return false;
+   nir_foreach_function_impl(impl, nir) {
+      nir_builder b = nir_builder_create(impl);
+      nir_foreach_block(block, impl)
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            unsigned source;
+            bool image = false;
+            switch (intr->intrinsic) {
+            case nir_intrinsic_store_ssbo: source = 1; break;
+            case nir_intrinsic_load_ssbo:
+            case nir_intrinsic_ssbo_atomic:
+            case nir_intrinsic_ssbo_atomic_swap:
+            case nir_intrinsic_get_ssbo_size: source = 0; break;
+            case nir_intrinsic_image_load:
+            case nir_intrinsic_image_sparse_load:
+            case nir_intrinsic_image_store:
+            case nir_intrinsic_image_atomic:
+            case nir_intrinsic_image_atomic_swap:
+            case nir_intrinsic_image_size:
+            case nir_intrinsic_image_levels:
+            case nir_intrinsic_image_samples: source = 0; image = true; break;
+            default: continue;
+            }
+            if (!nir_src_is_const(intr->src[source]))
+               return false;
+            const unsigned slot = nir_src_as_uint(intr->src[source]);
+            const unsigned to = image ? (slot < DXBC_NIR_UAV11_SLOTS ? slots->image[slot] : DXBC_NIR_UAV_UNUSED) :
+                                slot < ARRAY_SIZE(remap) ? remap[slot] : DXBC_NIR_UAV_UNUSED;
+            if (to == DXBC_NIR_UAV_UNUSED)
+               return false;
+            b.cursor = nir_before_instr(instr);
+            nir_src_rewrite(&intr->src[source], nir_imm_int(&b, (int)to));
+         }
+      nir_progress(true, impl, nir_metadata_control_flow);
+   }
+   /* the image variables (Asahi recounts num_images from them) */
+   BITSET_ZERO(nir->info.images_used);
+   nir_foreach_variable_with_modes(var, nir, nir_var_image) {
+      const unsigned u = var->data.binding;
+      if (u >= DXBC_NIR_UAV11_SLOTS || slots->image[u] == DXBC_NIR_UAV_UNUSED)
+         return false;
+      var->data.binding = slots->image[u];
+      BITSET_SET(nir->info.images_used, slots->image[u]);
+   }
+   nir->info.num_images = (uint8_t)images;
+   nir->info.num_ssbos = (uint8_t)next;
+   slots->buffers = next;
+   slots->images = images;
+   return true;
+}
+
 static struct nir_shader *
 translate(const struct dxbc_program *program, const struct nir_shader_compiler_options *options,
           uint32_t passthrough_registers, uint32_t passthrough_positions,
-          const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error)
+          const struct dxbc_nir_xfb *xfb, struct dxbc_nir_uav_slots *uav64,
+          unsigned forced_samples, struct dxbc_nir_error *error)
 {
    static struct dxbc_nir_error ignored;
    struct ctx *c;
@@ -2772,6 +3671,8 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
    c->error = error;
    c->passthrough_registers = passthrough_registers;
    c->passthrough_positions = passthrough_positions;
+   c->uav_slots = c->counter_base = uav64 ? DXBC_NIR_UAV11_SLOTS : DXBC_NIR_MAX_UAVS;
+   c->forced_samples = stage == MESA_SHADER_FRAGMENT && dxbc_tir_pattern(forced_samples) ? forced_samples : 0;
    c->stage = stage;
    c->b = nir_builder_init_simple_shader(stage, options, "dxbc");
    nir = c->b.shader;
@@ -2790,6 +3691,8 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
       nir->info.gs.invocations = 1;
       nir->info.gs.active_stream_mask = 1;
    }
+   if (c->forced_samples)
+      tir_coverage(c);
 
    if (stage == MESA_SHADER_TESS_CTRL)
       c->main_impl = c->b.impl;
@@ -2817,7 +3720,10 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
          fail(c, insn, "subroutines");
          break;
       }
+      c->dyn_texture = c->dyn_sampler = c->heap_offset = c->sampler_heap_offset = NULL;
       emit_instruction(c, i);
+      if (!c->failed && (c->dyn_texture || c->dyn_sampler || c->heap_offset || c->sampler_heap_offset))
+         fail(c, insn, "dynamically indexed resource outside a texture instruction");
    }
    if (!c->failed && c->cf_depth)
       fail(c, NULL, "unterminated control flow");
@@ -2840,6 +3746,25 @@ translate(const struct dxbc_program *program, const struct nir_shader_compiler_o
    for (unsigned i = 0; i < MAX_RESOURCES; ++i)
       if (c->res[i].declared)
          nir->info.num_textures = i + 1;
+   /* EXP1841: Asahi clamps bindless image indices (every image query) to
+    * info.num_images - 1, which nir_shader_gather_info recounts from the
+    * image variables; slots without a typed UAV (raw/structured UAVs, gaps)
+    * get placeholders so the count spans the highest typed slot */
+   for (unsigned u = 0; !uav64 && u < BITSET_LAST_BIT(nir->info.images_used) && u < c->uav_slots; ++u) {
+      if (c->uav[u].image)
+         continue;
+      nir_variable *gap = nir_variable_create(nir, nir_var_image,
+         glsl_image_type(GLSL_SAMPLER_DIM_2D, false, GLSL_TYPE_FLOAT), "u_unused");
+      gap->data.binding = u;
+      gap->data.image.format = PIPE_FORMAT_NONE;
+   }
+   if (uav64 && !compact_uav_buffers(c, nir, uav64)) {
+      snprintf(error->message, sizeof(error->message), "more than %u buffer UAVs and counters",
+               UAV11_SHADER_BUFFERS);
+      ralloc_free(nir);
+      free(c);
+      return NULL;
+   }
    free(c);
    return nir;
 }
@@ -2849,7 +3774,7 @@ dxbc_to_nir(const struct dxbc_program *program,
             const struct nir_shader_compiler_options *options,
             struct dxbc_nir_error *error)
 {
-   return translate(program, options, 0, 0, NULL, error);
+   return translate(program, options, 0, 0, NULL, NULL, 0, error);
 }
 
 struct nir_shader *
@@ -2858,7 +3783,13 @@ dxbc_to_nir_hs(const struct dxbc_program *program,
                uint32_t passthrough_registers, uint32_t passthrough_positions,
                struct dxbc_nir_error *error)
 {
-   return translate(program, options, passthrough_registers, passthrough_positions, NULL, error);
+   return translate(program, options, passthrough_registers, passthrough_positions, NULL, NULL, 0, error);
+}
+
+void
+dxbc_nir_lower_fragment_position(nir_shader *nir)
+{
+   NIR_PASS(_, nir, nir_lower_wpos_center);
 }
 
 void
@@ -2901,21 +3832,94 @@ dxbc_nir_finalize(nir_shader *nir)
       NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_shared,
                nir_address_format_32bit_offset);
    }
+   /* RC78: with Honeykrisp's control-flow passes (hk_shader.c nir_opts,
+    * which Asahi's agx_optimize_loop_nir lacks): nir_opt_loop folds the
+    * single-pass loops dxil-spirv and dxilconv emit for structured breaks
+    * and merges loop terminators, nir_opt_if simplifies conditions known
+    * inside their branches and phis of constant branches. GravityMark's
+    * lighting kernel 806ee7b1bdb1944a: 24 -> 21 loops, -3% instructions.
+    * APPLE_AGX_D3D_CF_OPT=0 leaves them out, for a hardware comparison. */
+   const char *cf_opt = getenv("APPLE_AGX_D3D_CF_OPT");
+   const bool control_flow = !cf_opt || strcmp(cf_opt, "0");
    do {
       progress = false;
       NIR_PASS(progress, nir, nir_lower_vars_to_ssa);
       NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
       NIR_PASS(progress, nir, nir_opt_dead_write_vars);
+      if (control_flow)
+         NIR_PASS(progress, nir, nir_opt_loop);
       NIR_PASS(progress, nir, nir_opt_copy_prop);
       NIR_PASS(progress, nir, nir_opt_remove_phis);
       NIR_PASS(progress, nir, nir_opt_dce);
+      if (control_flow)
+         NIR_PASS(progress, nir, nir_opt_if, nir_opt_if_optimize_phi_true_false);
       NIR_PASS(progress, nir, nir_opt_dead_cf);
       NIR_PASS(progress, nir, nir_opt_cse);
       NIR_PASS(progress, nir, nir_opt_algebraic);
       NIR_PASS(progress, nir, nir_opt_constant_folding);
    } while (progress);
+   /* RC74: in a compute shader, an indexable temp (DXBC x#, a DXIL alloca
+    * array) still indexed by a run-time value is the AGX stack (scratch)
+    * when it holds more than DXBC_NIR_SCRATCH_ARRAY_BYTES. agx_preprocess_nir
+    * moves only arrays of more than 256 bytes there and turns smaller ones
+    * into if/else trees, one leaf per element on every access, with the
+    * whole array in registers: GravityMark's uint[32] x3 and uint[64] kernels
+    * (EXP1969)
+    * compile to 255 GPRs (occupancy 384) and 2-4x the instructions. Same
+    * lowering and size rules as agx_preprocess_nir, a lower threshold.
+    * APPLE_AGX_D3D_SCRATCH_ARRAYS=0 keeps Asahi's rule alone, for a hardware
+    * comparison. */
+   const char *scratch_arrays = getenv("APPLE_AGX_D3D_SCRATCH_ARRAYS");
+   if (nir->info.stage == MESA_SHADER_COMPUTE && (!scratch_arrays || strcmp(scratch_arrays, "0")))
+      NIR_PASS(_, nir, nir_lower_vars_to_scratch, DXBC_NIR_SCRATCH_ARRAY_BYTES, glsl_get_natural_size_align_bytes,
+               glsl_get_word_size_align_bytes);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
    nir_validate_shader(nir, "dxbc_nir_finalize");
+}
+
+/* RC75: masks[0] constant-buffer slots, masks[1] UAV (shader-buffer) slots */
+static bool
+dxbc_nir_mark_root_view(nir_builder *b, nir_intrinsic_instr *intr, void *data)
+{
+   const uint32_t *masks = (const uint32_t *)data;
+   uint32_t mask;
+   unsigned src;
+   (void)b;
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_ubo:
+      mask = masks[0];
+      src = 0;
+      break;
+   case nir_intrinsic_load_ssbo:
+      mask = masks[1];
+      src = 0;
+      break;
+   case nir_intrinsic_store_ssbo:
+      mask = masks[1];
+      src = 1;
+      break;
+   default:
+      return false;
+   }
+   if (!nir_src_is_const(intr->src[src]))
+      return false;
+   const uint64_t slot = nir_src_as_uint(intr->src[src]);
+   if (slot >= 32u || !(mask & (1u << slot)) || (nir_intrinsic_access(intr) & ACCESS_IN_BOUNDS))
+      return false;
+   nir_intrinsic_set_access(intr, (enum gl_access_qualifier)(nir_intrinsic_access(intr) | ACCESS_IN_BOUNDS));
+   return true;
+}
+
+bool
+dxbc_nir_mark_root_views(nir_shader *nir, uint32_t cbv_slots, uint32_t uav_slots)
+{
+   /* root UAVs have no counter (their slots are below DXBC_NIR_UAV_COUNTER_SLOT) */
+   const uint32_t masks[2] = {cbv_slots, uav_slots & ((1u << DXBC_NIR_MAX_UAVS) - 1u)};
+   if (!nir || (!masks[0] && !masks[1]))
+      return false;
+   /* slot indices built as base + array index fold to constants */
+   NIR_PASS(_, nir, nir_opt_constant_folding);
+   return nir_shader_intrinsics_pass(nir, dxbc_nir_mark_root_view, nir_metadata_all, (void *)masks);
 }
 
 void
@@ -2937,7 +3941,8 @@ dxbc_translate_tokens(const uint32_t *tokens,
 static struct nir_shader *
 translate_tokens(const uint32_t *tokens, const struct nir_shader_compiler_options *options,
                  uint32_t passthrough_registers, uint32_t passthrough_positions,
-                 const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error);
+                 const struct dxbc_nir_xfb *xfb, struct dxbc_nir_uav_slots *uav64,
+                 unsigned forced_samples, struct dxbc_nir_error *error);
 
 struct nir_shader *
 dxbc_translate_tokens_hs(const uint32_t *tokens,
@@ -2946,7 +3951,48 @@ dxbc_translate_tokens_hs(const uint32_t *tokens,
                          struct dxbc_nir_error *error)
 {
    return translate_tokens(tokens, options, passthrough_registers, passthrough_positions,
-                           NULL, error);
+                           NULL, NULL, 0, error);
+}
+
+struct nir_shader *
+dxbc_translate_tokens_uav64(const uint32_t *tokens,
+                            const struct nir_shader_compiler_options *options,
+                            uint32_t passthrough_registers, uint32_t passthrough_positions,
+                            struct dxbc_nir_uav_slots *slots, struct dxbc_nir_error *error)
+{
+   static struct dxbc_nir_error ignored;
+   if (!slots) {
+      if (!error)
+         error = &ignored;
+      memset(error, 0, sizeof(*error));
+      snprintf(error->message, sizeof(error->message), "no UAV slot map");
+      return NULL;
+   }
+   return translate_tokens(tokens, options, passthrough_registers, passthrough_positions,
+                           NULL, slots, 0, error);
+}
+
+struct nir_shader *
+dxbc_translate_tokens_tir(const uint32_t *tokens,
+                          const struct nir_shader_compiler_options *options,
+                          struct dxbc_nir_uav_slots *slots, unsigned forced_samples,
+                          struct dxbc_nir_error *error)
+{
+   static struct dxbc_nir_error ignored;
+   if (!slots || !dxbc_tir_pattern(forced_samples)) {
+      if (!error)
+         error = &ignored;
+      memset(error, 0, sizeof(*error));
+      snprintf(error->message, sizeof(error->message), "forced sample count %u", forced_samples);
+      return NULL;
+   }
+   struct nir_shader *nir = translate_tokens(tokens, options, 0, 0, NULL, slots, forced_samples, error);
+   if (nir && nir->info.stage != MESA_SHADER_FRAGMENT) {
+      ralloc_free(nir);
+      snprintf(error->message, sizeof(error->message), "forced sample count outside a pixel shader");
+      return NULL;
+   }
+   return nir;
 }
 
 struct nir_shader *
@@ -2963,13 +4009,14 @@ dxbc_translate_tokens_xfb(const uint32_t *tokens,
       snprintf(error->message, sizeof(error->message), "no stream output");
       return NULL;
    }
-   return translate_tokens(tokens, options, 0, 0, xfb, error);
+   return translate_tokens(tokens, options, 0, 0, xfb, NULL, 0, error);
 }
 
 static struct nir_shader *
 translate_tokens(const uint32_t *tokens, const struct nir_shader_compiler_options *options,
                  uint32_t passthrough_registers, uint32_t passthrough_positions,
-                 const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error)
+                 const struct dxbc_nir_xfb *xfb, struct dxbc_nir_uav_slots *uav64,
+                 unsigned forced_samples, struct dxbc_nir_error *error)
 {
    static struct dxbc_nir_error ignored;
    struct dxbc_program program;
@@ -2991,9 +4038,196 @@ translate_tokens(const uint32_t *tokens, const struct nir_shader_compiler_option
       error->offset = perr.offset;
       return NULL;
    }
-   nir = translate(&program, options, passthrough_registers, passthrough_positions, xfb, error);
+   nir = translate(&program, options, passthrough_registers, passthrough_positions, xfb, uav64,
+                   forced_samples, error);
    dxbc_program_free(&program);
    if (nir)
       dxbc_nir_finalize(nir);
    return nir;
+}
+
+struct nir_shader *
+dxbc_translate_tokens_bindings(const uint32_t *tokens,
+   const struct nir_shader_compiler_options *options,
+   const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
+   struct dxbc_nir_error *error)
+{
+   return dxbc_translate_tokens_bindings_hs(tokens, options, limits, map, 0, 0, error);
+}
+
+struct nir_shader *
+dxbc_translate_tokens_bindings_hs(const uint32_t *tokens,
+   const struct nir_shader_compiler_options *options,
+   const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
+   uint32_t passthrough_registers, uint32_t passthrough_positions,
+   struct dxbc_nir_error *error)
+{
+   return dxbc_translate_tokens_bindings_xfb(tokens, options, limits, map, passthrough_registers,
+                                             passthrough_positions, NULL, error);
+}
+
+struct nir_shader *
+dxbc_translate_tokens_bindings_xfb(const uint32_t *tokens,
+   const struct nir_shader_compiler_options *options,
+   const uint32_t limits[DXBC_BINDING_KIND_COUNT], struct dxbc_binding_map *map,
+   uint32_t passthrough_registers, uint32_t passthrough_positions,
+   const struct dxbc_nir_xfb *xfb, struct dxbc_nir_error *error)
+{
+   struct dxbc_nir_error ignored;
+   struct dxbc_program program;
+   struct dxbc_error perr = {0};
+   enum dxbc_status status;
+   if (!error)
+      error = &ignored;
+   memset(error, 0, sizeof(*error));
+   if (map)
+      memset(map, 0, sizeof(*map));
+   if (!tokens || !options || !limits || !map) {
+      error->opcode = 0x10000u | DXBC_ERROR_OPERAND;
+      snprintf(error->message, sizeof(error->message), "invalid binding translation arguments");
+      return NULL;
+   }
+   status = dxbc_parse_program(tokens, tokens[1], &program, &perr);
+   if (status == DXBC_OK) {
+      status = dxbc_prepare_static_bindings(&program, limits, map, &perr);
+      if (status == DXBC_OK) {
+         nir_shader *nir = translate(&program, options, passthrough_registers,
+                                     passthrough_positions, xfb, NULL, 0, error);
+         dxbc_program_free(&program);
+         if (nir)
+            dxbc_nir_finalize(nir);
+         else
+            memset(map, 0, sizeof(*map));
+         return nir;
+      }
+      dxbc_program_free(&program);
+   }
+   snprintf(error->message, sizeof(error->message), "static binding parse status %d", status);
+   error->opcode = 0x10000u | (uint32_t)status;
+   error->offset = perr.offset;
+   return NULL;
+}
+
+/* C34: a dynamically indexed SM5.1 range (texture_offset) declares the
+ * consecutive used slots from its base; a static access of another
+ * dimension or the base of another dynamic range ends the run (static
+ * accesses and dynamic bases are gathered first). */
+static uint8_t
+srv_dimension(const nir_tex_instr *tex)
+{
+   return tex->sampler_dim == GLSL_SAMPLER_DIM_1D ? (tex->is_array ? DXBC_SRV_1D_ARRAY : DXBC_SRV_1D) :
+          tex->sampler_dim == GLSL_SAMPLER_DIM_3D ? DXBC_SRV_3D :
+          tex->sampler_dim != GLSL_SAMPLER_DIM_CUBE ? DXBC_SRV_OTHER :
+          tex->is_array ? DXBC_SRV_CUBE_ARRAY : DXBC_SRV_CUBE;
+}
+
+bool dxbc_nir_srv_dimensions(const struct nir_shader *nir,
+                             uint8_t dimensions[DXBC_RESOURCE_SLOTS])
+{
+   if (!dimensions) return false;
+   memset(dimensions, 0, DXBC_RESOURCE_SLOTS);
+   if (!nir) return false;
+   BITSET_DECLARE(dynamic_bases, DXBC_RESOURCE_SLOTS) = {0};
+   for (unsigned pass = 0; pass < 2; ++pass) {
+      nir_foreach_function_impl(impl, nir) {
+         nir_foreach_block(block, impl) {
+            nir_foreach_instr(instr, block) {
+               if (instr->type != nir_instr_type_tex) continue;
+               const nir_tex_instr *tex = nir_instr_as_tex(instr);
+               bool dynamic = false;
+               /* C47: heap-range accesses use no slot */
+               if (nir_tex_instr_src_index(tex, nir_tex_src_texture_handle) >= 0) continue;
+               if (tex->texture_index >= DXBC_RESOURCE_SLOTS) goto fail;
+               for (unsigned i = 0; i < tex->num_srcs; ++i) {
+                  switch (tex->src[i].src_type) {
+                  case nir_tex_src_texture_deref:
+                     goto fail;
+                  case nir_tex_src_texture_offset:
+                     dynamic = true;
+                     break;
+                  default: break;
+                  }
+               }
+               if (dynamic && pass == 0) BITSET_SET(dynamic_bases, tex->texture_index);
+               if (dynamic != (pass == 1)) continue;
+               const uint8_t dimension = srv_dimension(tex);
+               uint8_t *slot = &dimensions[tex->texture_index];
+               if (*slot != DXBC_SRV_UNUSED && *slot != dimension) goto fail;
+               *slot = dimension;
+               for (unsigned t = tex->texture_index + 1; dynamic && t < DXBC_RESOURCE_SLOTS &&
+                    BITSET_TEST(nir->info.textures_used, t) && !BITSET_TEST(dynamic_bases, t) &&
+                    (dimensions[t] == DXBC_SRV_UNUSED || dimensions[t] == dimension); ++t)
+                  dimensions[t] = dimension;
+            }
+         }
+      }
+   }
+   return true;
+fail:
+   memset(dimensions, 0, DXBC_RESOURCE_SLOTS);
+   return false;
+}
+
+/* C23: retain only the new 1D/non-1D distinction; existing other UAV
+ * dimensions keep their prior owner policy. Gather before native consumes NIR. */
+bool dxbc_nir_uav_dimensions(const struct nir_shader *nir,
+                            uint8_t dimensions[DXBC_UAV_DIMENSION_SLOTS])
+{
+   if (!dimensions) return false;
+   memset(dimensions, 0, DXBC_UAV_DIMENSION_SLOTS);
+   if (!nir) return false;
+   nir_foreach_function_impl(impl, nir) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic) continue;
+            const nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            unsigned source = 0;
+            bool image = false;
+            switch (intr->intrinsic) {
+            case nir_intrinsic_image_load:
+            case nir_intrinsic_image_sparse_load:
+            case nir_intrinsic_image_store:
+            case nir_intrinsic_image_atomic:
+            case nir_intrinsic_image_atomic_swap:
+            case nir_intrinsic_image_size:
+            case nir_intrinsic_image_levels:
+            case nir_intrinsic_image_samples:
+               image = true;
+               break;
+            case nir_intrinsic_store_ssbo: source = 1; break;
+            case nir_intrinsic_load_ssbo:
+            case nir_intrinsic_ssbo_atomic:
+            case nir_intrinsic_ssbo_atomic_swap:
+            case nir_intrinsic_get_ssbo_size:
+               break;
+            case nir_intrinsic_bindless_image_load:
+            case nir_intrinsic_bindless_image_sparse_load:
+            case nir_intrinsic_bindless_image_store:
+            case nir_intrinsic_bindless_image_atomic:
+            case nir_intrinsic_bindless_image_atomic_swap:
+            case nir_intrinsic_bindless_image_size:
+               continue; /* C47: heap UAVs use no slot */
+            default:
+               /* Deref/bindless/unhandled image forms cannot establish a
+                * direct slot; do not silently label them unused. */
+               if (nir_intrinsic_has_image_dim(intr)) goto fail;
+               continue;
+            }
+            if (!nir_src_is_const(intr->src[source])) goto fail;
+            unsigned slot = nir_src_as_uint(intr->src[source]);
+            if (!image && slot >= DXBC_NIR_UAV_COUNTER_SLOT &&
+                slot < DXBC_NIR_UAV_COUNTER_SLOT + DXBC_UAV_DIMENSION_SLOTS)
+               slot -= DXBC_NIR_UAV_COUNTER_SLOT;
+            if (slot >= DXBC_UAV_DIMENSION_SLOTS) goto fail;
+            uint8_t dimension = image && nir_intrinsic_image_dim(intr) == GLSL_SAMPLER_DIM_1D ?
+               (nir_intrinsic_image_array(intr) ? DXBC_UAV_1D_ARRAY : DXBC_UAV_1D) : DXBC_UAV_OTHER;
+            if (dimensions[slot] && dimensions[slot] != dimension) goto fail;
+            dimensions[slot] = dimension;
+         }
+      }
+   }
+   return true;
+fail:
+   memset(dimensions, 0, DXBC_UAV_DIMENSION_SLOTS);
+   return false;
 }

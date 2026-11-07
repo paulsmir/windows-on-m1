@@ -27,7 +27,10 @@ class BoDisposeOrder(unittest.TestCase):
             tmp = Path(directory)
             (tmp / "dispose_function.inc").write_text(
                 "#define AGX_WIN32_ASAHI_FAIL(b, f) ((b)->Failed = 1)\n"
-                "#define handle_map_remove(b, bo) ((void)0)\n" + body(source, "dispose"))
+                "#define handle_map_remove(b, bo) ((void)0)\n"
+                # RC71: dispose defers a VA to the fence of the newest submission
+                "#define AGX_WIN32_PENDING_VA_LIMIT 64u\n" + body(source, "pending_va_free_retired") +
+                "\n" + body(source, "pending_va_push") + "\n" + body(source, "dispose"))
             binary = tmp / "replay"
             subprocess.run([os.environ.get("CC", "clang"), "-std=c11",
                 "-DAPPLE_AGX_GPUVA_WINSYS", "-Wall", "-Wextra",

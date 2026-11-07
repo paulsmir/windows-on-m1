@@ -13,28 +13,53 @@
 typedef struct _ADMISSION_UMD_TRIM_SLOT {
   int Active, Resident, Transition, CopyHeld, Mapped;
   int Direct, SystemDirect, Borrowed, KmtResidencyHeld;
+  /* T13 CPU map lives in private process memory, not canonical backing. */
+  int PrivateCpuMap;
   unsigned SubmissionHolds, SourceHolds, KernelAllocation;
   unsigned long long Bytes, LastUseFence;
 } ADMISSION_UMD_TRIM_SLOT;
+
+/* rc86 (EXP2015b: 124 trims, 787 MiB, in GravityMark's first frame): the
+ * LRU key of a slot. LastUseFence is the last submission that held the slot;
+ * a slot created, mapped or restored since then has 0 or an old fence, yet
+ * it was made resident because it is about to be used (an upload or the
+ * next draw). ResidentFence is the next render fence at that moment, so
+ * such a slot ranks with the next submission, after every slot that has
+ * merely been idle. */
+static inline unsigned long long AdmissionUmdTrimRecency(
+    unsigned long long LastUseFence, unsigned long long ResidentFence) {
+  return LastUseFence > ResidentFence ? LastUseFence : ResidentFence;
+}
 
 /* Rounds of trim + retry for one residency request. */
 #define ADMISSION_UMD_TRIM_ROUNDS 16u
 
 /* A slot may lose its residency reference only when nothing can reach its
  * canonical allocation before the slot is made resident again: no submission
- * holds it (being built or in flight), no CPU map, shared owner or source
- * hold, no presentation use, and it is GPU-local. A CPU-visible class BO made
- * resident again under pressure can land in 4 KiB system pages the UAT
- * cannot map (M2-f8), so SystemDirect slots keep their reference. */
+ * holds it (being built or in flight), no canonical CPU map, shared owner or
+ * source hold, and no presentation use. A T13 private CPU map survives
+ * canonical eviction: VidMm preserves canonical contents, and submission
+ * restores residency under its holds before staging copies or GPU use. The
+ * private pointer and dirty tracking must remain intact. SystemDirect is
+ * eligible only between CPU locks:
+ * CPU map reserves Transition through MakeResident, the paging wait and Lock;
+ * Mapped then retains our residency reference until Unlock succeeds; it does
+ * not pin VidMm's physical placement to the native pool. GPU submissions
+ * restore residency under their submission holds. Placement still belongs to
+ * VidMm; the KMD must reject any unsupported aperture backing (M2-f8). */
 static inline int AdmissionUmdTrimEligible(const ADMISSION_UMD_TRIM_SLOT *s) {
   return s->Active && s->Resident && !s->Transition && !s->CopyHeld &&
-         !s->Mapped && !s->Direct && !s->SystemDirect && !s->Borrowed &&
+         (!s->Mapped || (s->PrivateCpuMap && !s->SystemDirect)) &&
+         !s->Direct && !s->Borrowed &&
          !s->KmtResidencyHeld && !s->SubmissionHolds && !s->SourceHolds &&
          s->KernelAllocation && s->Bytes;
 }
 
 /* Chooses eligible slots, least recently used first (lower slot index first
- * on equal fences), until their bytes cover Want. At least one slot is chosen
+ * on equal fences), until their bytes cover Want. If the terminal slot would
+ * overshoot, use the smallest remaining eligible slot covering the shortfall
+ * (oldest first on equal sizes). Avoid dropping a large heap reference for a
+ * small deficit when a smaller idle allocation suffices. At least one slot is chosen
  * when any is eligible, since VidMm may refuse with NumBytesToTrim 0. Writes
  * the slot indices to Chosen (capacity Count) and returns how many it chose;
  * *Covered receives their bytes. */
@@ -54,6 +79,21 @@ static inline unsigned AdmissionUmdTrimChoose(
     Chosen[j] = v;
   }
   while (picked < eligible) {
+    unsigned best = picked;
+    unsigned long long remaining = Want > bytes ? Want - bytes : 0ull;
+    if (Slots[Chosen[best]].Bytes > remaining) {
+      for (j = picked + 1u; j < eligible; ++j) {
+        unsigned long long candidate = Slots[Chosen[j]].Bytes;
+        if (candidate >= remaining && candidate < Slots[Chosen[best]].Bytes)
+          best = j;
+      }
+    }
+    /* Only the terminal choice can move; the earlier LRU prefix is intact. */
+    if (best != picked) {
+      unsigned swap = Chosen[picked];
+      Chosen[picked] = Chosen[best];
+      Chosen[best] = swap;
+    }
     bytes += Slots[Chosen[picked++]].Bytes;
     if (bytes >= Want) break;
   }

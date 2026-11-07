@@ -1,0 +1,1577 @@
+{
+  "schema_version": 1,
+  "scope": "isolated selected runtime only; no production linkage/caps or optional recursive import",
+  "review": {
+    "commits": [
+      "2673e5f6df9d2d3f77e083da2c830f72e44a5a6f",
+      "4587433f94128d35db51fdce63094290e78b3eba",
+      "7563253200b9ae6592e00dbfc7028f5e2c9962d5"
+    ],
+    "inventory": "investigation/analysis/D3D12-C15-runtime-license-inventory.md",
+    "license_decision": "investigation/analysis/D3D12-C15-dxil-license-review.md"
+  },
+  "components": [
+    {
+      "name": "dxil-spirv",
+      "repository": "https://github.com/HansKristian-Work/dxil-spirv",
+      "revision": "8434b0639fb2a48ce13aac08a420ecce5d23df0e",
+      "archive_url": "https://codeload.github.com/HansKristian-Work/dxil-spirv/tar.gz/8434b0639fb2a48ce13aac08a420ecce5d23df0e",
+      "archive_sha256": "5217a8bf0204cbc1d128dc3715eff23be640a088c1583e8a341adcd252fb1eb2",
+      "archive_root": "dxil-spirv-8434b0639fb2a48ce13aac08a420ecce5d23df0e",
+      "max_unpacked_bytes": 268435456,
+      "max_members": 50000
+    },
+    {
+      "name": "dxbc-spirv",
+      "repository": "https://github.com/doitsujin/dxbc-spirv",
+      "revision": "8dae2d8573af08378c6059aca3d5987da99d20b5",
+      "archive_url": "https://codeload.github.com/doitsujin/dxbc-spirv/tar.gz/8dae2d8573af08378c6059aca3d5987da99d20b5",
+      "archive_sha256": "9d423accde3fa56b3b56fc3778a2a4308ce13a2343cd9945fc4f41899de8fee4",
+      "archive_root": "dxbc-spirv-8dae2d8573af08378c6059aca3d5987da99d20b5",
+      "max_unpacked_bytes": 268435456,
+      "max_members": 50000
+    },
+    {
+      "name": "spirv-headers",
+      "repository": "https://github.com/KhronosGroup/SPIRV-Headers",
+      "revision": "c63848ecf2200425511319fd8bf2c17b751e501e",
+      "archive_url": "https://codeload.github.com/KhronosGroup/SPIRV-Headers/tar.gz/c63848ecf2200425511319fd8bf2c17b751e501e",
+      "archive_sha256": "e62af3ae847d3dd4b4cf87ee70a3180bd527594c9f18c20f7434224a2ab20139",
+      "archive_root": "SPIRV-Headers-c63848ecf2200425511319fd8bf2c17b751e501e",
+      "max_unpacked_bytes": 268435456,
+      "max_members": 50000
+    }
+  ],
+  "gitlinks": {
+    "dxil-spirv": {
+      "third_party/spirv-headers": "c63848ecf2200425511319fd8bf2c17b751e501e",
+      "third_party/SPIRV-Tools": "199cb207b911501ddd76dcddf100a6e21c15ef23",
+      "third_party/SPIRV-Cross": "be71ee8c12cd7dc5ca8fa9581f708c2e8561fe2a",
+      "subprojects/dxbc-spirv": "8dae2d8573af08378c6059aca3d5987da99d20b5"
+    },
+    "dxbc-spirv": {
+      "submodules/spirv_headers": "c8ad050fcb29e42a2f57d9f59e97488f465c436d"
+    },
+    "spirv-headers": {}
+  },
+  "files": [
+    {
+      "path": "dxbc-spirv/LICENSE",
+      "role": "metadata",
+      "notice": null,
+      "sha256": "0f8a5e687bea942a30a8e39b9915294fbe44eca866e71307a9b7083ee0e69ad8"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_api.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "715f72e5277fac5649a422a1acf180a5b1f25ea149ed3eb1c6d5fa3c1ee3cbc8"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_api.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "ab60f9804e2daa7fbfed0b3bfba36433902d9c3bb645101a443118370c21585d"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_container.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "1bdf62e6476962445bd399a31d793ba0b3b1ca2fa5489cde1cf48676818ac70b"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_container.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "eff73aa361365b5df97547ae0510763b763e4632e3472616e7a195e81e5929e6"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_control_flow.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "22eaa4793f54be2684f713a7a67a30d79ec55697d54587026e12fedbe7c54d44"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_converter.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "3d9597d36808d381b77f1b40bbe63578237846d8d116daeb695b59b1285f9a85"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_converter.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "4928b19e8b810f21c3b61fca6749289f0d873268e00a239b4a73347896120222"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_disasm.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "c5f5b24920f6069530c3d7d2c1399f464554bf27de61fef190ab42ee4566fa1f"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_disasm.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "c26e724814c8954510019b41389df69d60b3b3ede6acbacf8d402181e69244d2"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_interface.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "e65c8db621dfe1083476bca2a6c8844ea5163495c5806fe0ab5d19ac1651bf22"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_interface.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "8d4d22233a8e6191fc1f6e70329708ab1da099dfc92bf21e26b771b88f922a77"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_io_map.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "f24f3cc3bfe3303ae52367e9d6d725e01bd449543b1278cbacf61e40d0787eaf"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_io_map.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "464c1b5397b7dd9999154d61fd89ae41ae4a803b8c33b7e6a073b83e7038f7a3"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_parser.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "8f974db32db89336e695ea52140912fdddce5134f0a7f203084b17e0d888b165"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_parser.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "c5e890efeeb695f474bdda801dad8a1418f6ec15b927f3a56735eb6ddef3b2da"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_registers.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "27af5ccc39a2cfe9e47118d57d1a0e4f09e7755f368e904841589579941df9a0"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_registers.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "9db6ba0547a61813a74722f1b6b3a60d0c277e63568e4fa0be73600f5c971d4d"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_resources.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "250a0dcbc0025cbfa09defee203e49524551481f4efbb1d95be73784c688b4a8"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_resources.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "bf84d796901a35356f70c1e64999268acf22419b79875d69425189e1c8b6bc86"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_signature.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "9264749d3a1a1d842fb634be7cac2bac725373d6ccc71629f6cd2a548883d15c"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_signature.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "4eb1cd6a00b0bbd9faa59e747b98b7b4a8a0341d36b6c6b53ff2a8ebf3ec133f"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_types.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "4a378f1b1593680153cf74068229bec4ff27fdac7f3d2094e38ed1569d10f679"
+    },
+    {
+      "path": "dxbc-spirv/dxbc/dxbc_types.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "cc3ed5333197bcb0c98065d7fb1818b5a16e4327896ce31026803e4c6a2177bd"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "7f845481c4fbe81cfdbc27088aefd9fd4470383787ed0e386a9f8a5486a2818c"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "aa2f65ec784020669e1a5b9ead23ebf396e5a3b73dc9185bb4a7f39ca63e8690"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir_builder.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "a299910342c0d34c017b8020a848132b623378f4294de85419fb5a764ab5b367"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir_builder.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "94b150ec60e1baa505e9de6c0d48e134dbaa36bee2f920dd36be2af104fe89c7"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir_container.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "3dcf25c836ef11c7e89a24e112b4550508579283655ad9298910d44f81e19be9"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir_disasm.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "0a3363161da3ea92ca474661b45f85dff75269ce3cb451f9d9d3e61e71759e55"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir_disasm.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "c4aff21327527da21209bb2c6f38bdc4bb75beaad56ee7376f73a5a0bd1b435b"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir_divergence.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "c8d66f597c1aee682340c60db53df08a594b3c072cdf5a0d2271f44868564bbb"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir_divergence.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "1022ecc4033e5da54749184adf79d47957ef47c088b8c25f6989a2e786f70178"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir_dominance.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "ff47df5cb514dc91130c577a4da5ba490403e525661dbe0b72a5e7a65b4c7be5"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir_dominance.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "721ce871cb0b1b39320942f10a52d870f4caad5bbf290ea522840ee849dbc98c"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir_legalize.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "6abc7e17d17b14e3c9cc31676fc924a7549e05c4cf3de63a6a0c28623a149ae1"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir_legalize.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "956174f9e010b0f743c010d3f451ae436829d43800b590a682b67fc68d443536"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir_utils.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "31dadbef1bf589c566cf4a1dd9e2ca2532539848c70f309a5a8e40871cacff3c"
+    },
+    {
+      "path": "dxbc-spirv/ir/ir_utils.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "4d14b3db77ca3e8e1bd6f13439198f6dfd9e48d2d0d8c77fe862fa9e1049dc32"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_arithmetic.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "d7eb0260a2cc5c8a34221fcf125946715cfbb3b49625e2dcd7d3f698a99abe6c"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_arithmetic.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "51211ff0e1661bc9b7c8e9a042dcfc007c02cdb9263d2c8dc1bf93e26d499a53"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_buffer_kind.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "bf17f7e530ed5b525e567a203cd81d8da79bb2a0b6d0efc2e0c07c775f6d988b"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_buffer_kind.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "4337166b260e8e1f30e4b5ff2a3ac6a74a7d50b6fb7c0772e7fd17361179c50b"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_cfg_cleanup.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "5d8b2b44bd59e58a35ef75894aa909cfc103eaadc9d769483f0604bcc46d9f57"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_cfg_cleanup.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "3bfdcb2d57d564af26fa51611d77d8bd6864a70b492076b87d9ce5ee0da716c8"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_cfg_convert.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "d47467975e4696f2ee74916a484f938d975adb05b1ee15409886f3545b8b9e02"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_cfg_convert.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "6e8f675f23191a7c78e738b37ff4b37f594cec8b936e102bf75fc3e3421882da"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_cse.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "97db8ccd568d6087ec494eac5c3ce58c611882b98ae34922649a7241d79f0b4f"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_cse.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "d5546ef3e83ab96e8596833895464cf6242b0acde48b3b1c906cb4a927ace5b5"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_derivative.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "7708230576ca718c23d667d0c74453019c8ae84cc7fbc7c6e59dcd745df42173"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_derivative.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "e737c34f2a56002074cfe91aa3fcbbfb6888b9f6fce81358045374fd99cdad62"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_descriptor_indexing.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "4073a101946c769e974b6f5da0136d04e992a7465402793b30aa2db7e9002235"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_descriptor_indexing.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "54826a138801e0dfbbd703ed6a69478684965fe892a6ad176bb36b042c460ba0"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_function.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "29bb3fb0dc45998301d35160febbe754c3cd7406fe6e04485fd53f0fbbd607bb"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_function.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "d85711a37790b7cec47c8e979a60688621bc6296058c283881707ecd436166b8"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_lower_consume.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "2cd0751716164e684bf7cb472ee7328af54f8e9c0c9d4876764749e1881c0346"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_lower_consume.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "61f97cdca55ff639159a4beea9df2d64c7ebaf47462148adc9d8fe37defedb97"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_lower_io.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "0d4444c4ba8fd76c2ffab5bcfe30157e1a50c9f50741122772fa107f20ef34f3"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_lower_io.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "ed554ef182e5e51cdc2594e6cb1580316bdd7b24e84982173e2ab0536abaf605"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_lower_min16.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "4bc9589f308c33b3e651bd5b940f8e975d7c3f5fe635847b603e2de7ca5ed9a7"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_lower_min16.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "f892fd8d1957d9ade54a67f251373ccff96eabaa38811242310b5f062508680f"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_propagate_resource_types.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "1f61bc6501095a3bd84769ed8ab2fbac62cce08a0305482e47975f23ae3539d1"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_propagate_resource_types.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "93e253872fcda0b55617d044291bc22259d0c8af889c7e06c2cad82921aaec9b"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_propagate_types.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "62a6e2ec67e04cbf72aaf3e5c4cfe92b671b184dc7776b41139dd5c12ef5378e"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_propagate_types.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "f1e8cc68c13eab5dace50fcf8ef5bb728ac34d97712d2ed29e95945c609c6bed"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_remove_unused.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "02180cd51670ffc5aedb901279d73351fa122aab5ef773bbc53ce32519d306b9"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_remove_unused.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "b4113fcc9924ef30721358c11d6d6cc8a5dd12543682ff9332e507673be98f1c"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_scalarize.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "5545c5674dbb8c6a03b6974ada9c4ad329d7b08e1ae99850e043e40d8e44c5c1"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_scalarize.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "7763de90d6c547c4e763bfccf529bb20bf094ce22f5f72f3fa12e17aa17ffff3"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_scratch.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "f4f5003f8b297770327a32f1b229ab773276dea3eab3c839f4c83bbcbb2b1c13"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_scratch.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "8e131e244305d39f461e32c3c6188c03587ec87aff0dffc8c4fae4f25bb6960b"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_ssa.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "4c82a52fb9ea10ed4609f0982ab5fb0207b707def1e0432f5b78ec0920434a59"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_ssa.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "08d59a9f6184684e4f293e99958b65d48a3257aec936e073f8be488f1300f47f"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_ssa_utils.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "55548b1fe07ff3d56b6c386cbf4de0171ad95aa7bcce1c9435ed5fbfaebc263b"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_sync.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "46a047c824d45222292d6cdea2f728d22a1b3f27861fa5b56868fed6377c51af"
+    },
+    {
+      "path": "dxbc-spirv/ir/passes/ir_pass_sync.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "07eb851c35e4ae20abf38f8d5561bdd07b7809addd3696434052f177819baae9"
+    },
+    {
+      "path": "dxbc-spirv/util/util_bit.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "3aaf21f25b704c3f8dd08a05bcbd95a6b7e7f43e10c52756b457decac4982bed"
+    },
+    {
+      "path": "dxbc-spirv/util/util_byte_stream.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "437b24c94dedbe5704572d54705e6d78b58dadba5870be14f607b60e2a7996d9"
+    },
+    {
+      "path": "dxbc-spirv/util/util_console.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "4578463b8b50ef3c8a6200895c6f3c07e848ecd31120682c7297c8468738c878"
+    },
+    {
+      "path": "dxbc-spirv/util/util_debug.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "d0a450f403ab411170fa2372c811a6f7d9a09893613417841d83caf619939b77"
+    },
+    {
+      "path": "dxbc-spirv/util/util_flags.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "852b71ca0e5e32c1dc38b0c43e553325c0c08bcec68aae0d28d63d030db9d27a"
+    },
+    {
+      "path": "dxbc-spirv/util/util_float16.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "c51f6d8bbe6d161857c2cb243569f55dac25e9dd79d6b1450af912fc9ce5013f"
+    },
+    {
+      "path": "dxbc-spirv/util/util_float16.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "29c80dd76ef2ee84fe9746e5eb570f42be3ba4cfa5accf56f448d2da71939258"
+    },
+    {
+      "path": "dxbc-spirv/util/util_fourcc.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "a0b709f5509561b26099f6a514c78e104704d98a81f978a935f1ce44387c9726"
+    },
+    {
+      "path": "dxbc-spirv/util/util_hash.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "5d1d55668f2c41cfc080824ca47ed4b44c15c9258179604b53227e0483ad3017"
+    },
+    {
+      "path": "dxbc-spirv/util/util_log.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "29b14a85de4c806ed036a486e2f1dc89a31017512b08c6d5fa67ea519c34bc39"
+    },
+    {
+      "path": "dxbc-spirv/util/util_log.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "b0792fa0440a00acdb763e4bcb3a3989e4285469900fd70a54d4bd7564af01fc"
+    },
+    {
+      "path": "dxbc-spirv/util/util_md5.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "5298ab9cd1a59fc2089d0373eeefccda9a2bfe6022509d749acfc56ae10b6b46"
+    },
+    {
+      "path": "dxbc-spirv/util/util_md5.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "554e93482f05dcbc8bac6f6688db223ea85df78985500da84dd9200781df30d5"
+    },
+    {
+      "path": "dxbc-spirv/util/util_small_vector.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "82c0ff0c3cae8e1fe2a615a15971152d106b376ce4807e08c964f5fb2417c767"
+    },
+    {
+      "path": "dxbc-spirv/util/util_swizzle.cpp",
+      "role": "TU",
+      "notice": "N01",
+      "sha256": "be699f37a1e1bec587c440a50bc4eddd8e14794821a4d2c33c1dca832a213eb0"
+    },
+    {
+      "path": "dxbc-spirv/util/util_swizzle.h",
+      "role": "H",
+      "notice": "N01",
+      "sha256": "9788fbbb7858aa70fec00698c90fafb6b2606ae2a346c6e64425d12e18a953e4"
+    },
+    {
+      "path": "dxbc-spirv/util/util_vle.h",
+      "role": "IDE",
+      "notice": "N01",
+      "sha256": "c76b26df8ed5b4c7017494c36c5df28b4584426599e444cbee5d3157253b3e59"
+    },
+    {
+      "path": "dxil-spirv/.gitmodules",
+      "role": "metadata",
+      "notice": null,
+      "sha256": "e40d2cb11bb3da25e2310b064a8ec5fc25015651c635eafe5b788f51e39298a3"
+    },
+    {
+      "path": "dxil-spirv/CMakeLists.txt",
+      "role": "metadata",
+      "notice": null,
+      "sha256": "216f70f4be949fbc1f611bf97bcf96c9ea696416096e465dab36b0c197dbf953"
+    },
+    {
+      "path": "dxil-spirv/LICENSE.MIT",
+      "role": "metadata",
+      "notice": null,
+      "sha256": "b3ec61378a66f09835a73f53926d9b5cf79a09c9e2fe8bdd0e39aa5403325e1e"
+    },
+    {
+      "path": "dxil-spirv/bc/CMakeLists.txt",
+      "role": "metadata",
+      "notice": null,
+      "sha256": "99f7e71cceeab14ea660004179d850b739842aa117e18b5c1c7c4424f3c7cad2"
+    },
+    {
+      "path": "dxil-spirv/bc/cast.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "0bd20fb1602d240ed4fc0a65551b5e6d4d3b78d5147be7fa4f94e5d5bba9f4f6"
+    },
+    {
+      "path": "dxil-spirv/bc/context.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "e46b5375478bd40a2f295aec084e80237afcd0b382fd85c0bcd6ba6ba2143327"
+    },
+    {
+      "path": "dxil-spirv/bc/context.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "96d25327e17ffe88bdaba28347acbe97ada233fb5de3f3fda7eb743cf149f770"
+    },
+    {
+      "path": "dxil-spirv/bc/data_structures.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "bb5e0b9b555ff85b4a9b2d712f9af0712f865334154d276443032af9eec205cb"
+    },
+    {
+      "path": "dxil-spirv/bc/disassembler.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "222c6ab4b1ddefeea2b61eef4f715354d65bf96d188ca55e6ca9e0ff67b9fde4"
+    },
+    {
+      "path": "dxil-spirv/bc/function.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "8563d7b420fbcaaf33e162fcd0fc8928f9f1d4b768921a0e049fbef06cdefa11"
+    },
+    {
+      "path": "dxil-spirv/bc/function.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "4fa883cc7fe5086b13ac547ff1732046b9d39fbcb458e1c80a6e9197ae065f11"
+    },
+    {
+      "path": "dxil-spirv/bc/instruction.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "1a3b55fbf5bfee47aa7ef0848d7f388358af5a89609f54059934f4ea5b152630"
+    },
+    {
+      "path": "dxil-spirv/bc/instruction.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "6a1e004d4c4ce8735caed5c77c6588588e1729f59eda5752ffc3e9694666fcc9"
+    },
+    {
+      "path": "dxil-spirv/bc/iterator.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "6addd41f84745b04d52f1088bf1255bfd66dfcf1d03c34a9bb9f3358582e7b2c"
+    },
+    {
+      "path": "dxil-spirv/bc/metadata.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "bef88931d2c4986a638110db975e9f6eb883f0a42169b01671339e0c6a77df81"
+    },
+    {
+      "path": "dxil-spirv/bc/metadata.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "bb8a1c2e3f8b8f6e8a3e4785870e0de9a385bad683f3d41c9dad7e2699a90072"
+    },
+    {
+      "path": "dxil-spirv/bc/module.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "4be3df6d61cf5105935e4b1d4437508d617af3ff96fd8513e2fefa37520d2a9b"
+    },
+    {
+      "path": "dxil-spirv/bc/module.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "a251f7d56e785e1baaa04b264c89f5f223c123d7d7612b102d74c99e72e37368"
+    },
+    {
+      "path": "dxil-spirv/bc/module_dxbc_ir.cpp",
+      "role": "TU",
+      "notice": "N03",
+      "sha256": "8e42dfb02100f968b5332fd44819b640a7f1d0ad282192d94b585e08466c9ba1"
+    },
+    {
+      "path": "dxil-spirv/bc/type.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "3cb33302a537fa4246d205644b70dab2bc651cfc5f131d16c5dc83a8a3d44c98"
+    },
+    {
+      "path": "dxil-spirv/bc/type.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "fe3df228cbf04cd0b6b5e3ddf335f016e5cc47f9de227d16b41794c6f681d17d"
+    },
+    {
+      "path": "dxil-spirv/bc/value.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "a5abe00197138f9eedda283e512cda6e55cf9dabf1530cd8dd71e85f5d4ae47b"
+    },
+    {
+      "path": "dxil-spirv/bc/value.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "ab618fabe7fd4208fa29e878eba1ed94fe326d6d167be7322c808e657126a420"
+    },
+    {
+      "path": "dxil-spirv/cfg_structurizer.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "2dd1bf68d682695c40c1dfbbc0bc0344353a612b515412f19316b37a7226c3d7"
+    },
+    {
+      "path": "dxil-spirv/cfg_structurizer.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "f3ed503637efd1832a7983da3fd1ef8ef29a802a07283affeccf55393aa15611"
+    },
+    {
+      "path": "dxil-spirv/debug/logging.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "1960f79d56bf947ab9a997054424a9e0fc7b5d95393be05c8ecfb7d16f700d05"
+    },
+    {
+      "path": "dxil-spirv/debug/logging.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "184d7ab1820794d50748e1b3334e467ceffafe5ea591246cb478da8c4b09f389"
+    },
+    {
+      "path": "dxil-spirv/descriptor_qa.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "0dbe31a91df2a4bc5303499d6d6b277b69818ba84f5395b5beef2378426b21c7"
+    },
+    {
+      "path": "dxil-spirv/descriptor_qa.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "b00f4f72b34cdcc040f5244476231a06600d080dc1050517a9986db035e05294"
+    },
+    {
+      "path": "dxil-spirv/dxil.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "9ae06630ec9d0990dacb010a2b24ac26b736ce2e6c8baaa07fc81c92879a1d1c"
+    },
+    {
+      "path": "dxil-spirv/dxil_converter.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "ad434fbcd506759447b0220d498c03d5f1c34fbc0ca8d50e8994205c77843389"
+    },
+    {
+      "path": "dxil-spirv/dxil_converter.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "d60b1c5a6a380c34267fd8cb194bb4d4c9b3b49e1e4c3879253a5eb1d477d0a9"
+    },
+    {
+      "path": "dxil-spirv/dxil_parser.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "045c82aeb493875d46b16db1c5cd4dc7b6cc6a7ce0d63b5c6ffd719e49a21127"
+    },
+    {
+      "path": "dxil-spirv/dxil_parser.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "8767c4caf255376050d8fb05713f85a8b00f1e67689ee3f8c06405d33a622850"
+    },
+    {
+      "path": "dxil-spirv/dxil_spirv_c.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "0bf241fa36d2967fe6e06b9f5d446c8d7aed06b8484ed610d6ba8a48cb57d81d"
+    },
+    {
+      "path": "dxil-spirv/dxil_spirv_c.h",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "4fbca14fe1de04b463cd8d8f6f449fc4e57490c5c900eaff9e6d6d65ea55303c"
+    },
+    {
+      "path": "dxil-spirv/external/CMakeLists.txt",
+      "role": "metadata",
+      "notice": null,
+      "sha256": "cfa42f1f1123828fd3a7c2dc6174697985f49009cb7af676b64b126858e6843e"
+    },
+    {
+      "path": "dxil-spirv/ir.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "9da98032986daa729fa869a0fe682073352f152575160884bd9724ebe2d212f4"
+    },
+    {
+      "path": "dxil-spirv/llvm_bitcode_parser.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "33874e548f987adc15e21ff897ae74955e14199ab0a19f4c022593792683fcba"
+    },
+    {
+      "path": "dxil-spirv/llvm_bitcode_parser.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "a6bc525a29cef6284eefc46ad3a0dd725aea4a663368760bff74227d91f96e76"
+    },
+    {
+      "path": "dxil-spirv/memory_stream.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "26ad59d85b63d8c8b77721b92313d683e5df63ba43e1b5fd73cec705ea7ab8b4"
+    },
+    {
+      "path": "dxil-spirv/memory_stream.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "d6ebf9c897057def398fdce58942f0f90a107e62a2fda7f27234f288a7d2028f"
+    },
+    {
+      "path": "dxil-spirv/node.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "d77f15a6f0d5f47c5d49084d0fda8e6ac1b0a8891ea6973979a4fe798d3c5e86"
+    },
+    {
+      "path": "dxil-spirv/node.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "39b33257561d85e0c85d617d0eb3b68d792053e7a37cb48eeef52ffa9de40749"
+    },
+    {
+      "path": "dxil-spirv/node_pool.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "c94bc6eade7066504c7dfe794ccafcac65778869e5a6ce193d0f248701a9c2b5"
+    },
+    {
+      "path": "dxil-spirv/node_pool.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "010fe8c68fab38927acb222eb4e1c1133fd8480e8748c84f59579dd6fd4dd5f3"
+    },
+    {
+      "path": "dxil-spirv/opcodes/converter_impl.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "d2e6f16560e17c38801ffd2d87d3df75092332ba26b3c4818b794a28de6b405a"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_ags.cpp",
+      "role": "TU",
+      "notice": "N04",
+      "sha256": "5d6926177fd63cb16ea61de8c76db6a38d593261e7ce802bb6b11e81db93998f"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_ags.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "8533539867de496b56fea0b56afe3de7464b30fa108d3e47e72d3ac150057f64"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_arithmetic.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "2294484549b7d863bf96fd50183af787db1f0fbcd2f1abc7801f8ea6c00938e8"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_arithmetic.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "d09741d513b8c8f7129d96e3b5575fadea01bb81a421b7e9b04e4584e96f85bc"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_buffer.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "c8be22d4c1facf84ca00072e2dcc743821654851fb3dcd543c28a4291d02fc25"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_buffer.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "c55e1bc5a8196cea36d9e5cd1637beb711949d2215efb1df982311fab3c307b9"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_common.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "30f17520b62c3d27fd6076333a88f01c3ca6c934f73075adfa892445ebdbbe8a"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_common.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "20488cb678cd7b98ba05a38f58766983847c5f78cf073416cbf6192962ae159a"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_compute.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "88d2a96ed3fa7062de092770d54c5409d07d6b6d92526e8d846d4cad4b20fe19"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_compute.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "3012c78e8822969a9d4654494d70f1f837531b2a8f7fbf1ccf9c5ed50205918c"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_geometry.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "31b379cdc6e82839cfc95eff573e472f93cec1aca2f80f8559d118fe4fc72a5a"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_geometry.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "d2fea0e7139876e4ad6040114972ebce73d46c0af02bac1ac32925cd83ef79f9"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_mesh.cpp",
+      "role": "TU",
+      "notice": "N05",
+      "sha256": "6eefc435a62d0a4b1590c4132f12d1a7e79e7e93cb8ae0d083431161b7b94af6"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_mesh.hpp",
+      "role": "H",
+      "notice": "N05",
+      "sha256": "239fae5bff02c3844e0c6a38048a672ce45cf33c5988570be532d9182c9dc6dd"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_nvapi.cpp",
+      "role": "TU",
+      "notice": "N06",
+      "sha256": "5d0ceb7975616e23e06e008f4f31fa13b7d697ff2b40a0285ceaa6fc8109c78a"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_nvapi.hpp",
+      "role": "H",
+      "notice": "N06",
+      "sha256": "683af7fa847830bb47e6a7393896c577fdea99053f0f9c4265abddb791bf60eb"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_pixel_ops.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "a1a05168b18202503f3517cd27295db9dda39481fae2078ed497ac8697fe4eb1"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_pixel_ops.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "927333d196b37bb5fe10011e51729acb7b360e66e583c906eb76d466037f0657"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_ray_tracing.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "193e61fa0ed4027830f1abaa93742fb246704ae94d3b7d523ae30585f97aeca1"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_ray_tracing.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "e7da3479e9f071299b15692f12f7e1ab3902a1f80a0a42051e46f150c9e195b0"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_resources.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "981ccb1e1b6214c3cb657428c6ad58c83740b75f7342914862f59dd4275a3d86"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_resources.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "3bb2381c2d047666bc29cae481395638a66c200022ca68580aa3d10280fad94e"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_sampling.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "e0cc7cfaa296f0359971728226fd048166e2e827beb3d8eba8f11c5e97848431"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_sampling.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "1d465eb40c2fe57c032b41365ec2f27cd2c42eb0fc96cd681b5e5a676dd0ebb7"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_tessellation.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "0c4aff31042c16f07716f83efcf86503ad153c250c181e7f178828b1f4d9c911"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_tessellation.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "2dfc58d19440873034c60e450f003880a5388ea2f9836789a8304d265a702522"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_waveops.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "0a3ff86b8e19b8f27633006e02f65312fbf31fed30ed113a3b4179f7aabb92df"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_waveops.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "6abed7edc8b679b173e3021e3b67ee0812c5930e26a3a1b05581a7cdbf6c3d88"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_workgraph.cpp",
+      "role": "TU",
+      "notice": "N07",
+      "sha256": "f1915030eec50669938e6c6577e938547224698307132c606c5112e1ac10572f"
+    },
+    {
+      "path": "dxil-spirv/opcodes/dxil/dxil_workgraph.hpp",
+      "role": "H",
+      "notice": "N07",
+      "sha256": "a9f28934f36c56abb0575a433111482920f997e864d3b0086d0d1fe8a8e397a8"
+    },
+    {
+      "path": "dxil-spirv/opcodes/opcodes.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "c59a1d5b9d49cd7a43a5ccee34867340fa8890739f74bd8d53e7099605bec15b"
+    },
+    {
+      "path": "dxil-spirv/opcodes/opcodes_dxil_builtins.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "1f05555f3bd874ff661b4f7c8493cf86b9545c6aa90b3881a4a3ee0e3e501640"
+    },
+    {
+      "path": "dxil-spirv/opcodes/opcodes_dxil_builtins.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "16482d68680dd0bd2e8b41656c8fe189ebd57947a8ffe59a438fc26c8e6ecf14"
+    },
+    {
+      "path": "dxil-spirv/opcodes/opcodes_llvm_builtins.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "d0d11bb7173b556023154603ffcf31f7721124b685233619b39142eebf3f9609"
+    },
+    {
+      "path": "dxil-spirv/opcodes/opcodes_llvm_builtins.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "b1f473a31e7faab0b164afd6f8690358f72b60f6c33f808c23244e694c22ed44"
+    },
+    {
+      "path": "dxil-spirv/pkg-config/dxil-spirv-c-shared.pc.in",
+      "role": "metadata",
+      "notice": null,
+      "sha256": "de19c060a4cfcd082ed5671fcc6171bd8c34acbe76b1393a0f9942fddedf5954"
+    },
+    {
+      "path": "dxil-spirv/scratch_pool.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "659c9342f0035aa260cf7423a2898517f46461f67acb697975f6d0c203fa0a0a"
+    },
+    {
+      "path": "dxil-spirv/spirv_module.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "f39a3bc27b932fda38efbf5c25b2e3116860a773caae3ca871da8f9f67676275"
+    },
+    {
+      "path": "dxil-spirv/spirv_module.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "5c7a3e5bb7b016707afa72dd5c422a885708e7a8b1214e2f3771ae48179aaad4"
+    },
+    {
+      "path": "dxil-spirv/spirv_module_instrumentation.cpp",
+      "role": "TU",
+      "notice": "N03",
+      "sha256": "f897b0b93399b7c4b014dd37bd285d8efeb6c10c24313fe41d3c155b186f52ed"
+    },
+    {
+      "path": "dxil-spirv/spirv_module_instrumentation.hpp",
+      "role": "H",
+      "notice": "N03",
+      "sha256": "4362a35832053eb5e4cda1ca1f664762c1118aad16d41524361190d11906a44f"
+    },
+    {
+      "path": "dxil-spirv/third_party/CMakeLists.txt",
+      "role": "metadata",
+      "notice": null,
+      "sha256": "80067c584f59dd1b2e0520ffa8a84f1c9cbed23eb5c07e7c851ab9f85e86ea61"
+    },
+    {
+      "path": "dxil-spirv/third_party/bc-decoder/llvm_bitreader.h",
+      "role": "H",
+      "notice": "N08",
+      "sha256": "895416044355887f23ec0c448543420d223a3e65dfce27ff816989438c83724c"
+    },
+    {
+      "path": "dxil-spirv/third_party/bc-decoder/llvm_decoder.cpp",
+      "role": "TU",
+      "notice": "N08",
+      "sha256": "f9710da9bcf3af98f678979381adfe3a1e607bfaaf4503def8923acb429576f6"
+    },
+    {
+      "path": "dxil-spirv/third_party/bc-decoder/llvm_decoder.h",
+      "role": "H",
+      "notice": "N08",
+      "sha256": "b67f847159fd9fc77aec9d2455c72e0756437f8fa7c5e56ea948abc8b04bbeae"
+    },
+    {
+      "path": "dxil-spirv/third_party/glslang-spirv/InReadableOrder.cpp",
+      "role": "TU",
+      "notice": "N09",
+      "sha256": "b5f51c8326970d88a067e4d0414e0048c1c7c0f731fc3468597e5f9a377129a0"
+    },
+    {
+      "path": "dxil-spirv/third_party/glslang-spirv/Logger.cpp",
+      "role": "TU",
+      "notice": "N10",
+      "sha256": "494af1ff72ca90fff10d949dacee8e8ee19d0b9619505c6fab895c6f8c24a3bc"
+    },
+    {
+      "path": "dxil-spirv/third_party/glslang-spirv/Logger.h",
+      "role": "H",
+      "notice": "N10",
+      "sha256": "429a723b15daf0f73d525fd063a449bc5660fb2275c5aa24e8bff7414ff8fbf2"
+    },
+    {
+      "path": "dxil-spirv/third_party/glslang-spirv/SpvBuilder.cpp",
+      "role": "TU",
+      "notice": "N11",
+      "sha256": "90c0b0d19d322f8a8ca62d5f75347fef1f9bdf00b0dd30f7c922602c28e913a3"
+    },
+    {
+      "path": "dxil-spirv/third_party/glslang-spirv/SpvBuilder.h",
+      "role": "H",
+      "notice": "N11",
+      "sha256": "2a83e287dcaaf465f4e143ee9f74b65920cbaa4a22290d98dde86a6103c9192c"
+    },
+    {
+      "path": "dxil-spirv/third_party/glslang-spirv/spvIR.h",
+      "role": "H",
+      "notice": "N12",
+      "sha256": "77844d71efa0428e4b47b22a272de89297148603511c543ebb288c64cb8e4bae"
+    },
+    {
+      "path": "dxil-spirv/util/thread_local_allocator.cpp",
+      "role": "TU",
+      "notice": "N02",
+      "sha256": "fc618a8f577e45d377a357b3638e7f0c1b654868566ed3ee131e3f9e10ad35ce"
+    },
+    {
+      "path": "dxil-spirv/util/thread_local_allocator.hpp",
+      "role": "H",
+      "notice": "N02",
+      "sha256": "fb0589c5540afb662bebec08bf76301419ab1860b51716253b04897f63568079"
+    },
+    {
+      "path": "spirv-headers/CMakeLists.txt",
+      "role": "metadata",
+      "notice": null,
+      "sha256": "18202317ea71c2e01a7eafb325354cc45adbea9f7f65492128e2b38160550858"
+    },
+    {
+      "path": "spirv-headers/LICENSE",
+      "role": "metadata",
+      "notice": null,
+      "sha256": "ea43b1de38a6f90c488800d66dec1ed671e68cda530266bc96951fb5b6307613"
+    },
+    {
+      "path": "spirv-headers/include/spirv/unified1/GLSL.std.450.h",
+      "role": "H",
+      "notice": "N13",
+      "sha256": "d18a932ee97c268a57e33134651d554dbe71a5654b975e89e9e9487fa59ac9df"
+    },
+    {
+      "path": "spirv-headers/include/spirv/unified1/spirv.hpp",
+      "role": "H",
+      "notice": "N14",
+      "sha256": "d62c8b715c76d3cad9094f2b987f2c985b67b5db08ca82f01711acf8e3673df2"
+    }
+  ],
+  "expected_file_count": 197,
+  "targets": {
+    "dxil-debug": [
+      "dxil-spirv/debug/logging.hpp",
+      "dxil-spirv/debug/logging.cpp"
+    ],
+    "dxil-utils": [
+      "dxil-spirv/util/thread_local_allocator.hpp",
+      "dxil-spirv/util/thread_local_allocator.cpp"
+    ],
+    "spirv-module": [
+      "dxil-spirv/ir.hpp",
+      "dxil-spirv/descriptor_qa.cpp",
+      "dxil-spirv/descriptor_qa.hpp",
+      "dxil-spirv/spirv_module.hpp",
+      "dxil-spirv/spirv_module.cpp",
+      "dxil-spirv/spirv_module_instrumentation.hpp",
+      "dxil-spirv/spirv_module_instrumentation.cpp"
+    ],
+    "dxil-converter": [
+      "dxil-spirv/memory_stream.hpp",
+      "dxil-spirv/memory_stream.cpp",
+      "dxil-spirv/llvm_bitcode_parser.hpp",
+      "dxil-spirv/llvm_bitcode_parser.cpp",
+      "dxil-spirv/dxil.hpp",
+      "dxil-spirv/dxil_converter.hpp",
+      "dxil-spirv/dxil_converter.cpp",
+      "dxil-spirv/cfg_structurizer.hpp",
+      "dxil-spirv/cfg_structurizer.cpp",
+      "dxil-spirv/node_pool.hpp",
+      "dxil-spirv/node_pool.cpp",
+      "dxil-spirv/node.hpp",
+      "dxil-spirv/node.cpp",
+      "dxil-spirv/dxil_parser.hpp",
+      "dxil-spirv/dxil_parser.cpp",
+      "dxil-spirv/scratch_pool.hpp",
+      "dxil-spirv/opcodes/converter_impl.hpp",
+      "dxil-spirv/opcodes/opcodes.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_common.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_common.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_resources.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_resources.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_compute.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_compute.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_arithmetic.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_arithmetic.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_pixel_ops.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_pixel_ops.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_geometry.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_geometry.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_tessellation.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_tessellation.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_waveops.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_waveops.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_sampling.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_sampling.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_buffer.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_buffer.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_ray_tracing.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_ray_tracing.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_mesh.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_mesh.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_workgraph.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_workgraph.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_ags.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_ags.cpp",
+      "dxil-spirv/opcodes/dxil/dxil_nvapi.hpp",
+      "dxil-spirv/opcodes/dxil/dxil_nvapi.cpp",
+      "dxil-spirv/opcodes/opcodes_llvm_builtins.hpp",
+      "dxil-spirv/opcodes/opcodes_llvm_builtins.cpp",
+      "dxil-spirv/opcodes/opcodes_dxil_builtins.hpp",
+      "dxil-spirv/opcodes/opcodes_dxil_builtins.cpp"
+    ],
+    "dxil-spirv-c-static": [
+      "dxil-spirv/dxil_spirv_c.h",
+      "dxil-spirv/dxil_spirv_c.cpp"
+    ],
+    "llvm-bc": [
+      "dxil-spirv/bc/cast.hpp",
+      "dxil-spirv/bc/iterator.hpp",
+      "dxil-spirv/bc/data_structures.hpp",
+      "dxil-spirv/bc/value.hpp",
+      "dxil-spirv/bc/value.cpp",
+      "dxil-spirv/bc/instruction.hpp",
+      "dxil-spirv/bc/instruction.cpp",
+      "dxil-spirv/bc/function.hpp",
+      "dxil-spirv/bc/function.cpp",
+      "dxil-spirv/bc/context.hpp",
+      "dxil-spirv/bc/context.cpp",
+      "dxil-spirv/bc/type.hpp",
+      "dxil-spirv/bc/type.cpp",
+      "dxil-spirv/bc/module.hpp",
+      "dxil-spirv/bc/module.cpp",
+      "dxil-spirv/bc/module_dxbc_ir.cpp",
+      "dxil-spirv/bc/metadata.hpp",
+      "dxil-spirv/bc/metadata.cpp",
+      "dxil-spirv/bc/disassembler.cpp"
+    ],
+    "glslang-spirv-builder": [
+      "dxil-spirv/third_party/glslang-spirv/spvIR.h",
+      "dxil-spirv/third_party/glslang-spirv/Logger.cpp",
+      "dxil-spirv/third_party/glslang-spirv/Logger.h",
+      "dxil-spirv/third_party/glslang-spirv/InReadableOrder.cpp",
+      "dxil-spirv/third_party/glslang-spirv/SpvBuilder.h",
+      "dxil-spirv/third_party/glslang-spirv/SpvBuilder.cpp"
+    ],
+    "bc-decoder": [
+      "dxil-spirv/third_party/bc-decoder/llvm_bitreader.h",
+      "dxil-spirv/third_party/bc-decoder/llvm_decoder.cpp",
+      "dxil-spirv/third_party/bc-decoder/llvm_decoder.h"
+    ],
+    "dxbc-spirv": [
+      "dxbc-spirv/dxbc/dxbc_api.cpp",
+      "dxbc-spirv/dxbc/dxbc_api.h",
+      "dxbc-spirv/dxbc/dxbc_container.cpp",
+      "dxbc-spirv/dxbc/dxbc_container.h",
+      "dxbc-spirv/dxbc/dxbc_converter.cpp",
+      "dxbc-spirv/dxbc/dxbc_converter.h",
+      "dxbc-spirv/dxbc/dxbc_disasm.cpp",
+      "dxbc-spirv/dxbc/dxbc_disasm.h",
+      "dxbc-spirv/dxbc/dxbc_interface.cpp",
+      "dxbc-spirv/dxbc/dxbc_interface.h",
+      "dxbc-spirv/dxbc/dxbc_io_map.cpp",
+      "dxbc-spirv/dxbc/dxbc_io_map.h",
+      "dxbc-spirv/dxbc/dxbc_parser.cpp",
+      "dxbc-spirv/dxbc/dxbc_parser.h",
+      "dxbc-spirv/dxbc/dxbc_registers.cpp",
+      "dxbc-spirv/dxbc/dxbc_registers.h",
+      "dxbc-spirv/dxbc/dxbc_resources.cpp",
+      "dxbc-spirv/dxbc/dxbc_resources.h",
+      "dxbc-spirv/dxbc/dxbc_signature.cpp",
+      "dxbc-spirv/dxbc/dxbc_signature.h",
+      "dxbc-spirv/dxbc/dxbc_types.cpp",
+      "dxbc-spirv/dxbc/dxbc_types.h",
+      "dxbc-spirv/ir/ir.cpp",
+      "dxbc-spirv/ir/ir.h",
+      "dxbc-spirv/ir/ir_builder.cpp",
+      "dxbc-spirv/ir/ir_builder.h",
+      "dxbc-spirv/ir/ir_container.h",
+      "dxbc-spirv/ir/ir_disasm.cpp",
+      "dxbc-spirv/ir/ir_disasm.h",
+      "dxbc-spirv/ir/ir_divergence.cpp",
+      "dxbc-spirv/ir/ir_divergence.h",
+      "dxbc-spirv/ir/ir_dominance.cpp",
+      "dxbc-spirv/ir/ir_dominance.h",
+      "dxbc-spirv/ir/ir_legalize.cpp",
+      "dxbc-spirv/ir/ir_legalize.h",
+      "dxbc-spirv/ir/ir_utils.cpp",
+      "dxbc-spirv/ir/ir_utils.h",
+      "dxbc-spirv/ir/passes/ir_pass_arithmetic.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_arithmetic.h",
+      "dxbc-spirv/ir/passes/ir_pass_buffer_kind.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_buffer_kind.h",
+      "dxbc-spirv/ir/passes/ir_pass_cfg_cleanup.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_cfg_cleanup.h",
+      "dxbc-spirv/ir/passes/ir_pass_cfg_convert.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_cfg_convert.h",
+      "dxbc-spirv/ir/passes/ir_pass_cse.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_cse.h",
+      "dxbc-spirv/ir/passes/ir_pass_derivative.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_derivative.h",
+      "dxbc-spirv/ir/passes/ir_pass_descriptor_indexing.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_descriptor_indexing.h",
+      "dxbc-spirv/ir/passes/ir_pass_function.h",
+      "dxbc-spirv/ir/passes/ir_pass_function.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_lower_consume.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_lower_consume.h",
+      "dxbc-spirv/ir/passes/ir_pass_lower_io.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_lower_io.h",
+      "dxbc-spirv/ir/passes/ir_pass_lower_min16.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_lower_min16.h",
+      "dxbc-spirv/ir/passes/ir_pass_propagate_types.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_propagate_types.h",
+      "dxbc-spirv/ir/passes/ir_pass_propagate_resource_types.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_propagate_resource_types.h",
+      "dxbc-spirv/ir/passes/ir_pass_remove_unused.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_remove_unused.h",
+      "dxbc-spirv/ir/passes/ir_pass_scalarize.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_scalarize.h",
+      "dxbc-spirv/ir/passes/ir_pass_scratch.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_scratch.h",
+      "dxbc-spirv/ir/passes/ir_pass_ssa.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_ssa.h",
+      "dxbc-spirv/ir/passes/ir_pass_ssa_utils.h",
+      "dxbc-spirv/ir/passes/ir_pass_sync.cpp",
+      "dxbc-spirv/ir/passes/ir_pass_sync.h",
+      "dxbc-spirv/util/util_bit.h",
+      "dxbc-spirv/util/util_debug.h",
+      "dxbc-spirv/util/util_flags.h",
+      "dxbc-spirv/util/util_float16.cpp",
+      "dxbc-spirv/util/util_float16.h",
+      "dxbc-spirv/util/util_hash.h",
+      "dxbc-spirv/util/util_log.cpp",
+      "dxbc-spirv/util/util_log.h",
+      "dxbc-spirv/util/util_md5.cpp",
+      "dxbc-spirv/util/util_md5.h",
+      "dxbc-spirv/util/util_small_vector.h",
+      "dxbc-spirv/util/util_swizzle.cpp",
+      "dxbc-spirv/util/util_swizzle.h",
+      "dxbc-spirv/util/util_vle.h"
+    ]
+  },
+  "expected_tu_count": 83,
+  "build": {
+    "target": "dxil-spirv-c-static",
+    "options": {
+      "DXIL_SPIRV_CLI": "OFF",
+      "DXIL_SPIRV_NATIVE_LLVM": "OFF",
+      "DXIL_SPV_MISC_CLI": "OFF",
+      "SPIRV_HEADERS_ENABLE_TESTS": "OFF",
+      "SPIRV_HEADERS_ENABLE_INSTALL": "OFF"
+    },
+    "windows_archives": [
+      "dxil-spirv-c-static.lib",
+      "dxil-converter.lib",
+      "spirv-module.lib",
+      "bc/llvm-bc.lib",
+      "third_party/glslang-spirv-builder.lib",
+      "third_party/bc-decoder.lib",
+      "dxil-utils.lib",
+      "dxil-debug.lib",
+      "third_party/dxbc-spirv.lib"
+    ],
+    "toolchain": {
+      "msvc_tools_version": "14.44.35207",
+      "cl_file_version": "19.44.35228.0",
+      "sdk_version": "10.0.26100.0",
+      "cmake_version": "3.31.6",
+      "machine": "ARM64",
+      "crt": "MultiThreadedDLL",
+      "tool_sha256": {
+        "cl.exe": "603e49cb5bb11dc60929d8ebd892a195dd24172744238858fe79ab2a1a6a9e17",
+        "link.exe": "984ba7990bcecac78fe28a20a748077a1337c3d3cdd7d84e09501ef722b5a619",
+        "lib.exe": "8a687fa0af784302109f1a217ef4ce71c16acb36ae2ccc91e186e11bd622b869",
+        "dumpbin.exe": "06ccefd7211c7a1c13d240efe96ef61448181f2a2c8d85faf6891b7cc7ca09aa",
+        "cmake.exe": "3fe22eb02e1c6184ec207366ed21a6f2f9c3828c1e9f3324546befadfb362be3"
+      }
+    }
+  },
+  "notice_groups": {
+    "N01": {
+      "text_sha256": "471b98b9507d81d5bbabc7590dbc25289d4b6da7d50010667b8117dfd05af62f",
+      "review_heading": "### N01",
+      "file_count": 92
+    },
+    "N02": {
+      "text_sha256": "385491d016647185d8034a00b05952a7211bfc8b6db6d0609f4c5010ecba6bee",
+      "review_heading": "### N02",
+      "file_count": 74
+    },
+    "N03": {
+      "text_sha256": "d4b0a1dbb9027eeac0a2eacdc353f0df7be97f7252f289aa99d71841bb633b1c",
+      "review_heading": "### N03",
+      "file_count": 3
+    },
+    "N04": {
+      "text_sha256": "3539d4c710a51a6cf0bc8c3f0f153cf2c9f4a70e495178c687ca16d2157b6ad1",
+      "review_heading": "### N04",
+      "file_count": 1
+    },
+    "N05": {
+      "text_sha256": "6a8e9285a0084214c5b7af0a8b607de18ad35821bdb11f4f7e9213cdfc2a69af",
+      "review_heading": "### N05",
+      "file_count": 2
+    },
+    "N06": {
+      "text_sha256": "7e614d25c64ff6c94cde94fb6159b5b81649725e51082993b40942648e850bec",
+      "review_heading": "### N06",
+      "file_count": 2
+    },
+    "N07": {
+      "text_sha256": "d9efb7c46d3f571820fc6eb410e9d02fee94846f08559957b9c6c2b6245d4a77",
+      "review_heading": "### N07",
+      "file_count": 2
+    },
+    "N08": {
+      "text_sha256": "f33d466cadd55b39efaf0b1cf74cd932f0f8b470f36b6e301d49af1932943eb7",
+      "review_heading": "### N08",
+      "file_count": 3
+    },
+    "N09": {
+      "text_sha256": "c0d121a92c4617cf6d711bb7a6abc86b238e8ad6dec2294e83187e4abc0e14c2",
+      "review_heading": "### N09",
+      "file_count": 1
+    },
+    "N10": {
+      "text_sha256": "005d335e599305a3a7df5d4659aa5a92fedf88b5b23b2216e43c8a5cae6ee845",
+      "review_heading": "### N10",
+      "file_count": 2
+    },
+    "N11": {
+      "text_sha256": "7463791cfd71314db90b96de9bdd395362f70dd562f131b06add894a1f9c28f6",
+      "review_heading": "### N11",
+      "file_count": 2
+    },
+    "N12": {
+      "text_sha256": "3feeba564895702654b2a96e4142a7de79ef576f1bb76aef683520ae1ef01126",
+      "review_heading": "### N12",
+      "file_count": 1
+    },
+    "N13": {
+      "text_sha256": "ed3b42c7b7e443210993336a8cf920df338ac85a2d41054b4193b3e8a748dc30",
+      "review_heading": "### N13",
+      "file_count": 1
+    },
+    "N14": {
+      "text_sha256": "4f3761bd5aa95904b18c273e1dedac751cb0cc3c1e05d85b4cdcead7d7e723c5",
+      "review_heading": "### N14",
+      "file_count": 1
+    }
+  },
+  "packaging": {
+    "notices_required_before_catalog_signing": true,
+    "notice_groups_required": [
+      "N01",
+      "N02",
+      "N03",
+      "N04",
+      "N05",
+      "N06",
+      "N07",
+      "N08",
+      "N09",
+      "N10",
+      "N11",
+      "N12",
+      "N13",
+      "N14"
+    ],
+    "microsoft_tool_crt_redistribution_authorized": false,
+    "driver_shader_model_advertisement_authorized": false
+  },
+  "archive_adoption": {
+    "experiment": "EXP1393",
+    "gate": "primary immutable URLs + full commit/tree gitlinks + 197 reviewed file hashes + nine literal STATIC target lists/83 TUs; no code executed"
+  }
+}

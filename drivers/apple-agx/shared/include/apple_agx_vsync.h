@@ -79,6 +79,10 @@ static inline APPLE_AGX_SCANOUT_BOOL AppleAgxVsyncDeadline(
 
 #define APPLE_AGX_VSYNC_QUERY_MAGIC 0x53565041u
 #define APPLE_AGX_VSYNC_RECEIPT_CAPACITY 64u
+/* Kind 3: matched latch. Kind 8 (RC49): its queue-entry timestamp, emitted
+ * retrospectively immediately before kind 3 with the same PendingSequence
+ * and PendingAddress. Sequence orders insertion, not Time100ns. The layout
+ * remains version 1; older producers simply have no kind-8 events. */
 typedef struct _APPLE_AGX_VSYNC_EVENT {
   APPLE_AGX_SCANOUT_U64 Sequence, Time100ns, Period;
   APPLE_AGX_SCANOUT_U64 PendingSequence, PendingAddress, ActiveSequence, ActiveAddress;

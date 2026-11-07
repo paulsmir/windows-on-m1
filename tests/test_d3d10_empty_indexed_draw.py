@@ -1,5 +1,6 @@
 """EXP1064: DrawIndexed(IndexCount 0) is a D3D no-op, not an error.
 
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
 The projected d3d10umd DrawIndexed reported E_NOTIMPL through SetErrorCb for
 IndexCount 0 (the same contract as EXP1062's zero-vertex native draws, one
 layer up). The other draw entries already return silently for zero counts.
@@ -24,9 +25,9 @@ class EmptyIndexedDraw(unittest.TestCase):
         guard = draw.index('if (pDevice && !IndexCount) return;')
         self.assertLess(guard, draw.index('SetError('))
         self.assertNotIn('!IndexCount ||', draw)
-        for name, count in (('DrawIndexedInstanced', 'IndexCountPerInstance'),
-                            ('DrawInstanced', 'VertexCountPerInstance')):
-            self.assertIn('if(!InstanceCount || !%s) return;' % count, body(text, name))
+        # Instanced zero-count ordering is executed, including invalid unused
+        # state, by test_d3d11_zero_draw rather than matched as source text.
+
 
 
 if __name__ == '__main__':

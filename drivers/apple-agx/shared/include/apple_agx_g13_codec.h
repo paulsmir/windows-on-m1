@@ -61,6 +61,10 @@ typedef struct _APPLE_AGX_G13_EVENT {
   APPLE_AGX_BACKEND_U32 GrowTvbVmId;
   APPLE_AGX_BACKEND_U32 GrowTvbBufferManagerId;
   APPLE_AGX_BACKEND_U32 GrowTvbCounter;
+  APPLE_AGX_BACKEND_U32 ChannelErrorType;
+  APPLE_AGX_BACKEND_U32 ChannelPipeType;
+  APPLE_AGX_BACKEND_U32 ChannelEventSlot;
+  APPLE_AGX_BACKEND_U32 ChannelEventValue;
 } APPLE_AGX_G13_EVENT;
 
 APPLE_AGX_BACKEND_BOOL AppleAgxG13EncodeRunCommand(

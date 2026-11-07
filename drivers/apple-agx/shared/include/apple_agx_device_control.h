@@ -59,6 +59,19 @@ APPLE_AGX_DEVICE_CONTROL_RESULT
 AppleAgxDeviceControlEncodeDestroyContextG13V13_5(
     unsigned long long ContextGpuAddress, unsigned char *Destination,
     unsigned int DestinationSize);
+/* Only in response to ChannelError, using its pipe/value and the queue
+ * owning its event slot. This command's receipt is not work retirement. */
+APPLE_AGX_DEVICE_CONTROL_RESULT
+AppleAgxDeviceControlEncodeRecoverChannelG13V13_5(
+    unsigned int PipeType, unsigned long long QueueInfoGpuAddress,
+    unsigned int EventValue, unsigned char *Destination,
+    unsigned int DestinationSize);
+APPLE_AGX_DEVICE_CONTROL_RESULT
+AppleAgxDeviceControlPublishRecoverChannelG13V13_5(
+    const struct _APPLE_AGX_CHANNEL_MEMORY_OWNER *ChannelMemory,
+    const struct _APPLE_AGX_PLATFORM_TRANSPORT_IO *Transport,
+    unsigned int PipeType, unsigned long long QueueInfoGpuAddress,
+    unsigned int EventValue, APPLE_AGX_DEVICE_CONTROL_PUBLICATION *Publication);
 APPLE_AGX_DEVICE_CONTROL_RESULT
 AppleAgxDeviceControlPlanPublicationG13V13_5(
     unsigned int CurrentWritePointer,

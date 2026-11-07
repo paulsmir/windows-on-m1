@@ -1,0 +1,34 @@
+.echo === 00 IDENTITY ===
+.expr /s masm
+.reload /f AppleAgxRenderAdmission.sys
+lmvm AppleAgxRenderAdmission
+.bugcheck
+kv 10
+.echo === 01 INSTALLED_SERVICE_OBJECT ===
+!object \Driver\AppleAgxAdmission
+!drvobj \Driver\AppleAgxAdmission 7
+.echo === 02 RESET_CALLER_REGISTERS ===
+.frame /r 3
+.frame /r 4
+.frame /r 5
+.frame /r 0
+.echo === 03 RESET_CALLER_CODE ===
+u dxgkrnl!DXGADAPTER::PrepareToReset L100
+u dxgkrnl!DXGADAPTER::Reset L100
+u dxgkrnl!TdrResetFromTimeout L40
+u AppleAgxRenderAdmission!AdmissionDdiResetFromTimeout L40
+.echo === 04 FRAME3_X19_CANDIDATE_NOT_MINIPORT ===
+!pool 0xffffd684d3ce0000
+dps 0xffffd684d3ce0000 L200
+.echo === 05 BUGCHECK_ARG1_TDR_NOT_MINIPORT ===
+dps 0xffffd684d64e3010 L80
+.echo === 06 SAVED_RESET_STACK ===
+dps 0xfffffe819a435a30 L40
+.echo === 07 MINIPORT_LAYOUT_REFERENCE_ONLY ===
+dt AppleAgxRenderAdmission!_ADMISSION_CONTEXT ObjectAdapter
+dt AppleAgxRenderAdmission!_ADMISSION_CONTEXT PlatformRuntime
+dt AppleAgxRenderAdmission!_ADMISSION_CONTEXT PhysicalDeviceObject
+dt AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME Adapter
+dt AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME Rtkit
+dt AppleAgxRenderAdmission!_ADMISSION_PLATFORM_RUNTIME Provider
+.echo === END_EXP1938_PASS_3 ===

@@ -143,6 +143,17 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanJob(
   return APPLE_AGX_BACKEND_TRUE;
 }
 
+/* rc102: the platform plans a successor only while a job runs; the
+ * fixtures never run one, so this stub must never be called. */
+APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanSuccessor(
+    APPLE_AGX_G13_QUEUE_PROVIDER *Provider,
+    APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan) {
+  (void)Provider;
+  (void)Plan;
+  assert(!"unexpected successor plan");
+  return APPLE_AGX_BACKEND_FALSE;
+}
+
 APPLE_AGX_BACKEND_BOOL AppleAgxPlatformComposerInitialize(
     APPLE_AGX_PLATFORM_COMPOSER *Composer,
     const APPLE_AGX_PLATFORM_COMPOSER_CONFIG *Config,
@@ -840,6 +851,25 @@ static void test_external_rebased_image_mode_uses_exact_job_and_ranges(void) {
   assert(components.ExternalResolveCalls == 4u);
   assert(built.Ta.PreparedRanges[0].Address == external.Ranges[0]);
   assert(built.D3.PreparedRanges[0].Address == external.Ranges[2]);
+  {
+    /* Q2c: an externally built RunCompute names the render Queue's
+     * notifier, so the compute Queue of its own refuses it. */
+    APPLE_AGX_BACKEND_JOB_IMAGE compute_job;
+    memset(&compute_job, 0, sizeof(compute_job));
+    compute_job.Kind = AppleAgxBackendJobCompute;
+    compute_job.ComputeWorkAddressCount = 1u;
+    compute_job.ComputeWorkAddresses[0] = job.TaWorkAddresses[0];
+    compute_job.ComputeEvent = provider.QueueProvider.Config.Compute.EventNumber;
+    compute_job.ComputeExpectedStamp = 0x600u;
+    assert(provider.QueueProvider.Config.HasCompute);
+    memset(&built, 0, sizeof(built));
+    assert(components.CapturedProviderIo.BuildSubmission(
+        components.CapturedProviderIo.Context, &compute_job, 78u, &built));
+    provider.RenderSharedMemory->ComputeOwnQueue = APPLE_AGX_TRUE;
+    assert(!components.CapturedProviderIo.BuildSubmission(
+        components.CapturedProviderIo.Context, &compute_job, 78u, &built));
+    provider.RenderSharedMemory->ComputeOwnQueue = APPLE_AGX_FALSE;
+  }
   assert(AppleAgxPlatformProviderDestroy(&provider));
 }
 

@@ -411,8 +411,8 @@ static void TestIngestFailureNamesDecoderOwner(void) {
   assert(f.Provider.LastIngestRuntimeResult ==
          AppleAgxG13QueueRuntimeResultInvalidArgument);
 }
-/* EXP1075: a firmware Timeout event with a successful resume completes the
- * pending fence through a Recovered observation; the provider accepts the
+/* A firmware Timeout event followed by resume and observed retirement ends
+ * the pending fence through a Recovered observation; the provider accepts the
  * next submission and no queue Quiesce runs. */
 static unsigned int Recoveries;
 static APPLE_AGX_BACKEND_BOOL Recover(void *Context, APPLE_AGX_BACKEND_U32 Fence,
@@ -431,6 +431,26 @@ static void TestFirmwareTimeoutRecovers(void) {
   assert(AppleAgxG13QueueProviderIngestEvent(
       &f.Provider, event, sizeof(event), &batch));
   assert(Recoveries == 1u && f.Quiesces == 0u);
+  /* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? Resume must not
+   * release the job; ordinary polling must deliver its eventual abort even
+   * without another event notification. */
+  assert(batch.ObservationCount == 0u && batch.CompletedFence == 0u);
+  assert(f.Provider.Phase == AppleAgxG13QueueProviderSubmitted);
+  assert(AppleAgxG13QueueProviderIngestEvent(
+      &f.Provider, event, sizeof(event), &batch));
+  assert(Recoveries == 1u); /* duplicate while resuming */
+  f.TaDone = f.TaWrite;
+  assert(AppleAgxG13QueueProviderCheckTimeout(&f.Provider, 1050ULL, &batch));
+  assert(batch.ObservationCount == 0u); /* 3D still owns its bytes */
+  f.D3Done = f.D3Write; /* killed work leaves both success stamps unchanged */
+  /* A failed coherent read must be reported, not swallowed by event ingest. */
+  f.FailReads = 1u;
+  PutU32(event, (unsigned int)AppleAgxG13EventFlag);
+  assert(!AppleAgxG13QueueProviderIngestEvent(
+      &f.Provider, event, sizeof(event), &batch));
+  assert(batch.CompletedFence == 0u && batch.ObservationCount == 0u);
+  f.FailReads = 0u;
+  assert(AppleAgxG13QueueProviderCheckTimeout(&f.Provider, 1051ULL, &batch));
   assert(batch.ObservationCount == 1u &&
          batch.Observations[0].Status == AppleAgxBackendObservationRecovered);
   assert(batch.CompletedFence == 41u);
@@ -633,18 +653,28 @@ static void TestRenderWithComputeSubmitsTogether(void) {
          f.TaRing[0]==f.Job.TaBarrierAddress &&
          f.TaRing[1]==f.Job.TaWorkAddresses[0] &&
          f.TaRing[2]==f.Job.TaWorkAddresses[1]);
-  /* TA and 3D done, compute not yet: no completion. */
+  /* TA and 3D done, compute not yet: no completion, and no TA/3D
+   * observation either -- the backend ends a render fence on TA + 3D, so
+   * handing them over while the provider still runs the job's compute let
+   * the backend report the fence with the provider Submitted (EXP2184/
+   * 2186/2187: the next job refused at provider phase, then TDR). */
   f.D3Stamp=f.Job.D3ExpectedStamp; f.D3Done=f.D3Write; Event(event,9u);
   assert(AppleAgxG13QueueProviderIngestEvent(&f.Provider,event,sizeof(event),&batch) &&
-         batch.CompletedFence==0u);
+         batch.CompletedFence==0u && batch.ObservationCount==0u);
   f.TaStamp=f.Job.TaExpectedStamp; f.TaDone=f.TaWrite; Event(event,7u);
   assert(AppleAgxG13QueueProviderIngestEvent(&f.Provider,event,sizeof(event),&batch) &&
-         batch.CompletedFence==0u &&
+         batch.CompletedFence==0u && batch.ObservationCount==0u &&
          f.Provider.Phase==AppleAgxG13QueueProviderSubmitted);
   f.ComputeStamp=0x600u; f.ComputeDone=1u; Event(event,11u);
   assert(AppleAgxG13QueueProviderIngestEvent(&f.Provider,event,sizeof(event),&batch) &&
          batch.CompletedFence==41u &&
          f.Provider.Phase==AppleAgxG13QueueProviderCreated);
+  {
+    unsigned i, seen=0u;
+    for (i=0u;i<batch.ObservationCount;++i)
+      seen|=1u<<(unsigned)batch.Observations[i].Queue;
+    assert(seen==((1u<<(unsigned)AppleAgxBackendQueue3d)|(1u<<(unsigned)AppleAgxBackendQueueTa)));
+  }
 }
 /* G2: a standalone compute job runs alone on the compute queue and its
  * compute stamp completes the fence; the queues then take a render job. */

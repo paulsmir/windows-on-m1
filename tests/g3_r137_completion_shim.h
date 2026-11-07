@@ -2,13 +2,18 @@
 typedef struct {
   ADMISSION_CONTEXT *Adapter;
   struct { unsigned TaComplete,D3Complete,ComputeComplete;
-           struct { unsigned Kind; } PendingJob; } Backend;
+           struct { unsigned Kind; ULONGLONG TimestampPublishVa; } PendingJob; } Backend;
   APPLE_AGX_COMPLETION_TRANSACTION Completion;
   ADMISSION_RENDER_CONTEXT *CompletionContext;
 } ADMISSION_PLATFORM_RUNTIME;
 typedef struct { ADMISSION_PLATFORM_RUNTIME *Runtime; ULONG Fence,Node,Engine; } ADMISSION_COMPLETION_NOTIFICATION;
 enum { AdmissionRenderPacketActive=2, AppleAgxPreemptionWaitCurrentBoundary=1, DXGK_INTERRUPT_DMA_COMPLETED=1 };
 static unsigned replay_active_fence,replay_notify_count,replay_sync_fail;
+/* Legacy combined cases carry no timestamp request; actual publication is
+ * exercised by test_d3d12_query_timestamp_publication. */
+static int AdmissionGpuTimestampEndNanoseconds(ADMISSION_PLATFORM_RUNTIME *r, ULONGLONG *ns) {
+  (void)r; (void)ns; assert(0 && "unexpected timestamp in legacy combined fixture"); return 0;
+}
 static unsigned AdmissionRenderPacketState(const REPLAY_PACKET *p) {return p->State;}
 static unsigned AppleAgxSchedulerActiveFence(int *s,unsigned n,unsigned e) {(void)s;(void)n;(void)e;return replay_active_fence;}
 static int AppleAgxSchedulerCompleteActiveFence(int *s,unsigned n,unsigned e,unsigned f) {(void)s;(void)n;(void)e;if(f!=replay_active_fence)return 0;replay_active_fence=0;return 1;}

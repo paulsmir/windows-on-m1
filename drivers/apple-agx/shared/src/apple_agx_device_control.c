@@ -4,6 +4,7 @@
 #include "apple_agx_platform_provider.h"
 
 #define APPLE_AGX_DEVICE_CONTROL_DESTROY_CONTEXT_TYPE 0x18u
+#define APPLE_AGX_DEVICE_CONTROL_RECOVER_CHANNEL_TYPE 0x0fu
 #define APPLE_AGX_DEVICE_CONTROL_INIT_TYPE 0x1au
 #define APPLE_AGX_DEVICE_CONTROL_UPDATE_IDLE_TIMESTAMP_TYPE 0x23u
 #define APPLE_AGX_DEVICE_CONTROL_NULL ((void *)0)
@@ -76,6 +77,28 @@ AppleAgxDeviceControlEncodeUpdateIdleTimestampG13V13_5(
   return AppleAgxDeviceControlEncode(
       APPLE_AGX_DEVICE_CONTROL_UPDATE_IDLE_TIMESTAMP_TYPE, Destination,
       DestinationSize);
+}
+
+APPLE_AGX_DEVICE_CONTROL_RESULT
+AppleAgxDeviceControlEncodeRecoverChannelG13V13_5(
+    unsigned int PipeType, unsigned long long QueueInfoGpuAddress,
+    unsigned int EventValue, unsigned char *Destination,
+    unsigned int DestinationSize) {
+  APPLE_AGX_DEVICE_CONTROL_RESULT result;
+  if (PipeType > 2u || QueueInfoGpuAddress == 0ULL ||
+      (QueueInfoGpuAddress & 7ULL) != 0ULL)
+    return AppleAgxDeviceControlResultInvalidArgument;
+  result = AppleAgxDeviceControlEncode(
+      APPLE_AGX_DEVICE_CONTROL_RECOVER_CHANNEL_TYPE, Destination,
+      DestinationSize);
+  if (result != AppleAgxDeviceControlResultOk)
+    return result;
+  /* Asahi fw/channels.rs: repr(C,u32), G13/V13_5 payload 0x2c.
+   * GpuWeakPointer is repr(packed(1)); QueueInfo pointer starts at +8. */
+  AppleAgxDeviceControlWriteU32(Destination + 4u, PipeType);
+  AppleAgxDeviceControlWriteU64(Destination + 8u, QueueInfoGpuAddress);
+  AppleAgxDeviceControlWriteU32(Destination + 16u, EventValue);
+  return AppleAgxDeviceControlResultOk;
 }
 
 APPLE_AGX_DEVICE_CONTROL_RESULT
@@ -270,6 +293,22 @@ APPLE_AGX_DEVICE_CONTROL_RESULT AppleAgxDeviceControlPublishInitG13V13_5(
   unsigned char message[APPLE_AGX_DEVICE_CONTROL_MESSAGE_SIZE] = {0};
   APPLE_AGX_DEVICE_CONTROL_RESULT result =
       AppleAgxDeviceControlEncodeInitG13V13_5(message, sizeof(message));
+  return result == AppleAgxDeviceControlResultOk
+             ? AppleAgxDeviceControlPublishEncodedG13V13_5(
+                   ChannelMemory, Transport, message, Publication)
+             : result;
+}
+
+APPLE_AGX_DEVICE_CONTROL_RESULT
+AppleAgxDeviceControlPublishRecoverChannelG13V13_5(
+    const APPLE_AGX_CHANNEL_MEMORY_OWNER *ChannelMemory,
+    const APPLE_AGX_PLATFORM_TRANSPORT_IO *Transport,
+    unsigned int PipeType, unsigned long long QueueInfoGpuAddress,
+    unsigned int EventValue, APPLE_AGX_DEVICE_CONTROL_PUBLICATION *Publication) {
+  unsigned char message[APPLE_AGX_DEVICE_CONTROL_MESSAGE_SIZE] = {0};
+  APPLE_AGX_DEVICE_CONTROL_RESULT result =
+      AppleAgxDeviceControlEncodeRecoverChannelG13V13_5(
+          PipeType, QueueInfoGpuAddress, EventValue, message, sizeof(message));
   return result == AppleAgxDeviceControlResultOk
              ? AppleAgxDeviceControlPublishEncodedG13V13_5(
                    ChannelMemory, Transport, message, Publication)

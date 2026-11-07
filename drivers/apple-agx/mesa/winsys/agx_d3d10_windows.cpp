@@ -16,6 +16,20 @@ extern "C" {
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 
+#define ADMISSION_UMD_WATCH_WINDOWS
+#include "umd_va_watch.h"
+extern "C" void (*AgxWin32BoIdentityHook)(unsigned, unsigned,
+    unsigned long long, unsigned long long, unsigned, const char *);
+static void AgxD3d10BoIdentity(unsigned event, unsigned token,
+    unsigned long long va, unsigned long long bytes, unsigned flags, const char *label) {
+  if(!AdmissionUmdWatchVa()) return;
+  UINT v[16]={event,token,0u,(UINT)va,(UINT)(va>>32),(UINT)bytes,(UINT)(bytes>>32),flags};
+  /* Fixed 32-byte label, zero-filled, no borrowed pointer in the log. */
+  if(label) for(unsigned i=0;i<32u && label[i];++i)
+    reinterpret_cast<char *>(&v[8])[i]=label[i];
+  AdmissionUmdDiagnostic("measure-watch-bo",S_OK,v,ARRAYSIZE(v));
+}
+
 thread_local AgxD3d10RefusalScope *AgxD3d10RefusalScope::Current=nullptr;
 BOOL AgxD3d10WindowsDiagnosticRefusal(HRESULT status) {
   AgxD3d10RefusalScope *scope=AgxD3d10RefusalScope::Current;
@@ -508,6 +522,7 @@ HRESULT AgxD3d10WindowsCloseAdapter(AGX_D3D10_WINDOWS_ADAPTER **Adapter) {
 HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
                                    const D3D10DDIARG_CREATEDEVICE *Args,
                                    AGX_D3D10_WINDOWS_DEVICE **Device) {
+  AgxWin32BoIdentityHook=AgxD3d10BoIdentity;
   AdmissionUmdDiagnostic("g4-create-device-enter",S_OK,NULL,0u);
   if (Args) {
     UINT values[2] = {Args->Interface, Args->Version};
@@ -861,6 +876,11 @@ HRESULT AgxD3d10WindowsFlushStatus(AGX_D3D10_WINDOWS_DEVICE *Device) {
     return FAILED(batch->Submission.PostStatus)?batch->Submission.PostStatus:
         batch->Submission.RenderStatus;
   if(!Device->Backend.Failed && !Device->Runtime.DrawTerminal) return S_OK;
+  if (FAILED(Device->Runtime.GpuvaFailure) &&
+      !(Device->Runtime.DrawTerminal && Device->Runtime.GpuvaFailure == E_OUTOFMEMORY))
+    return Device->Runtime.GpuvaFailure;
+  if (Device->Runtime.DrawTerminal && Device->Runtime.LastScreenError == E_OUTOFMEMORY)
+    return E_FAIL;
   return FAILED(Device->Runtime.LastScreenError)?
       Device->Runtime.LastScreenError:E_FAIL;
 }

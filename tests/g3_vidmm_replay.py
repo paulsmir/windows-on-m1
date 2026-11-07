@@ -18,14 +18,14 @@ SHARED = ROOT / "drivers/apple-agx/shared"
 M1N1 = ROOT / "m1n1_windows/src"
 
 FUNCTIONS = {
-    "receipts.c": ["AdmissionRecordG3CopyQueryFailure", "AdmissionRecordG3LeafHistory", "AdmissionRecordG3CopyTransferFailure", "AdmissionRecordG3PrivateFailure", "AdmissionRecordG3PrivateProcesses"],
+    "receipts.c": ["AdmissionRecordG3CopyQueryFailure", "AdmissionRecordG3LeafHistory", "AdmissionRecordG3CopyTransferFailure", "AdmissionRecordG3PrivateFailure", "AdmissionRecordG3PrivateProcesses", "AdmissionRecordG3PrivatePressure"],
     "gpuva_g3_windows.c": [
         "AdmissionG3AllocateNode", "AdmissionG3FreeNode",
         "AdmissionGpuvaG3FindProcess", "AdmissionG3BootstrapRoot",
         "AdmissionGpuvaG3BrokerTable", "AdmissionGpuvaG3MirrorTable",
         "AdmissionG3Fnv", "AdmissionG3UscVa", "AdmissionG3TraceUpload", "AdmissionG3VerifyUploads",
-        "AdmissionG3CopyPte", "AdmissionG3CaptureCopyQueryFailure", "AdmissionGpuvaG3CopyEscape",
-        "AdmissionG3PreparePrivateStorageObserved","AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtentObserved","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateCacheScene","AdmissionG3PrivateTrimCache","AdmissionG3PrivateCachedScene","AdmissionG3PrivateReuseScene","AdmissionG3PrivateEvictCached","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateSlotClear","AdmissionG3PrivateSlotPreempted","AdmissionG3PrivateSlotCancelled","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionG3CapturePrivateFailure","AdmissionG3GrowPrivateHeap","AdmissionG3ManagerWord","AdmissionG3SnapshotProcesses","AdmissionGpuvaG3PrivateEscape",
+        "AdmissionG3CopyPte", "AdmissionG3NativeInvalidate", "AdmissionGpuvaG3NativeQueryEscape", "AdmissionG3CaptureCopyQueryFailure", "AdmissionGpuvaG3CopyEscape",
+        "AdmissionG3PreparePrivateStorageObserved","AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtentObserved","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateCacheScene","AdmissionG3PrivateTrimCache","AdmissionG3PrivateCachedScene","AdmissionG3PrivateReuseScene","AdmissionG3PrivateEvictCached","AdmissionG3PrivateEvictPressure","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateSlotClear","AdmissionG3PrivateSlotPreempted","AdmissionG3PrivateSlotCancelled","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionG3CapturePrivateFailure","AdmissionG3GrowPrivateHeap","AdmissionG3ManagerWord","AdmissionG3TvbUsedPages","AdmissionG3TvbTargetFor","AdmissionG3TvbNowMs","AdmissionG3TvbWantsIdle","AdmissionG3TvbUnmapPages","AdmissionG3TvbEnsureLeaf","AdmissionG3TvbMapBlock","AdmissionG3TvbGrow","AdmissionG3TvbRelease","AdmissionG3TvbReturnLeases","AdmissionG3SnapshotProcesses","AdmissionGpuvaG3PrivateEscape",
         "AdmissionDdiCreateProcess", "AdmissionDdiDestroyProcess",
         "AdmissionG3PresentArenaEnsure", "AdmissionGpuvaG3EnsurePresentArena",
         "AdmissionGpuvaG3AttachContext", "AdmissionGpuvaG3DetachContext",
@@ -33,19 +33,20 @@ FUNCTIONS = {
         "AdmissionGpuvaG3SubmitVirtualPaging",
         "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
         "AdmissionG4GraphAccessTyped", "AdmissionG3PresentSurfaceBytes", "AdmissionG3PresentAccessible", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy", "AdmissionGpuvaG3BeginJob",
+        "AdmissionG3PublishTimestampLocked", "AdmissionGpuvaG3CompleteJobTimestamp",
         "AdmissionGpuvaG3CompleteJob",
     ],
     "gpuva_g3_paging_windows.c": [
         "AdmissionG3RejectPaging", "AdmissionG3RecordTableEvent", "AdmissionG3PoolPagingRefs", "AdmissionG3RetireSystemSubtree",
         "AdmissionG3ActivateSystemSubtree", "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3PrepareTableReuse", "AdmissionG3UpdateParent",
-        "AdmissionG3CountLeaf64K", "AdmissionG3NoteSystemShape", "AdmissionG3PoolPlace", "AdmissionG3UpdateLeaf", "AdmissionG3RecordLeaf", "AdmissionG3RecordLeafEarly", "AdmissionG3FindPagingEdge",
+        "AdmissionG3CountLeaf64K", "AdmissionG3NoteSystemShape", "AdmissionG3PoolPlace", "AdmissionG3RecordUnmapOwners", "AdmissionG3UpdateLeaf", "AdmissionG3RecordLeaf", "AdmissionG3RecordLeafEarly", "AdmissionG3FindPagingEdge",
         "AdmissionG3ResolveLogicalVa", "AdmissionG3SnapshotAperture",
         "AdmissionG3EncodeVirtualPaging",
         "AdmissionG3MapPagingIpa", "AdmissionG3FillPattern", "AdmissionG3ExecuteVirtualPaging",
         "AdmissionG3NotePagingWait", "AdmissionG3SnapPagingWait", "AdmissionGpuvaG3NoteAllocationPaging", "AdmissionGpuvaG3BuildPagingBuffer",
     ],
     "callbacks.c": ["AdmissionDdiEscape", "AdmissionDdiCreateContext", "AdmissionDdiDestroyContext"],
-    "render_paging.c": ["AdmissionPagingLocalRun", "AdmissionPagingRecordsValid"],
+    "render_paging.c": ["AdmissionPagingContiguousRun", "AdmissionPagingRecordsValid"],
 }
 
 
@@ -77,7 +78,11 @@ def body(source, name):
 
 def generate(revision=None, function_revisions=None):
     function_revisions = function_revisions or {}
-    parts = ['#include "g3_vidmm_replay_shim.h"\n']
+    parts = ['#include "g3_vidmm_replay_shim.h"\n', body((SRC / 'gpuva_g3_private.h').read_text().replace('static inline ', 'static '), 'AdmissionG3NativeInvalidatePtes') + '\n']
+    for helper in ('AdmissionG3AttachPrivateLeaves', 'AdmissionG3PrivateLeafSet'):
+        private_h = (SRC / 'gpuva_g3_private.h').read_text().replace('static inline ', 'static ')
+        if f' {helper}(' in private_h:
+            parts.append(body(private_h, helper) + '\n')
     if os.environ.get("G3_REPLAY_R144"):
         parts.append(body((SRC / "memory_runtime_windows.c").read_text(),
                           "AdmissionMemoryRuntimeScanoutView") + "\n")
@@ -101,18 +106,19 @@ def generate(revision=None, function_revisions=None):
             function_source = source
             if revision is not None and name in (
                     "AdmissionG3PreparePrivateStorageObserved", "AdmissionG3PrivateMapExtentObserved", "AdmissionG3CapturePrivateFailure",
-                    "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateCacheScene","AdmissionG3PrivateTrimCache","AdmissionG3PrivateCachedScene","AdmissionG3PrivateReuseScene","AdmissionG3PrivateEvictCached","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateSlotClear","AdmissionG3PrivateSlotPreempted","AdmissionG3PrivateSlotCancelled","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape", "AdmissionDdiEscape",
+                    "AdmissionG3PreparePrivateStorage","AdmissionG3PrivateFreeExtent","AdmissionG3PrivateMapExtent","AdmissionG3PrivateTables","AdmissionG3PrivateReleaseScene","AdmissionG3PrivateCacheScene","AdmissionG3PrivateTrimCache","AdmissionG3PrivateCachedScene","AdmissionG3PrivateReuseScene","AdmissionG3PrivateEvictCached","AdmissionG3PrivateEvictPressure","AdmissionGpuvaG3PrivateCancel","AdmissionGpuvaG3PrivatePreempt","AdmissionG3PrivateSlotClear","AdmissionG3PrivateSlotPreempted","AdmissionG3PrivateSlotCancelled","AdmissionG3PrivateReap","AdmissionGpuvaG3PrivateReset","AdmissionGpuvaG3PrivateReported","AdmissionGpuvaG3PrivateRetireContext","AdmissionG3PrivateDestroyStorage","AdmissionGpuvaG3PrivateEscape", "AdmissionDdiEscape",
                     "AdmissionGpuvaG3BrokerTable",
-                    "AdmissionG3RecordTableEvent", "AdmissionG3PoolPagingRefs", "AdmissionG3PoolPlace",
+                    "AdmissionG3RecordTableEvent", "AdmissionG3RecordUnmapOwners", "AdmissionG3PoolPagingRefs", "AdmissionG3PoolPlace",
                     "AdmissionG3RetireSystemSubtree", "AdmissionG3ActivateSystemSubtree",
                     "AdmissionG3ResetTableShadow", "AdmissionG3RegisterTable", "AdmissionG3PrepareTableReuse",
                     "AdmissionGpuvaG3MirrorTable",
                     "AdmissionG3Fnv", "AdmissionG3UscVa", "AdmissionG3TraceUpload", "AdmissionG3VerifyUploads",
-                    "AdmissionG3CopyPte", "AdmissionG3CaptureCopyQueryFailure", "AdmissionGpuvaG3CopyEscape",
+                    "AdmissionG3CopyPte", "AdmissionG3NativeInvalidate", "AdmissionGpuvaG3NativeQueryEscape", "AdmissionG3CaptureCopyQueryFailure", "AdmissionGpuvaG3CopyEscape",
                     "AdmissionG3RecordSetRootSeen",
                     "AdmissionGpuvaG3SubmitVirtualPaging",
                     "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
                     "AdmissionG4GraphAccessTyped", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy", "AdmissionGpuvaG3BeginJob",
+                    "AdmissionG3PublishTimestampLocked", "AdmissionGpuvaG3CompleteJobTimestamp",
                     "AdmissionGpuvaG3CompleteJob",
                     "AdmissionG3FindPagingEdge",
                     "AdmissionG3ResolveLogicalVa",
@@ -131,6 +137,7 @@ def generate(revision=None, function_revisions=None):
     parts.append('typedef enum { AdmissionJobPhaseComplete, AdmissionJobPhaseJobEnd, AdmissionJobPhaseNotify } ADMISSION_JOB_PHASE;\n')
     parts.append('static void AdmissionJobTimingMarkWindows(void *, ULONG, ADMISSION_JOB_PHASE) {}\n')
     parts.append('static void AdmissionJobTimingFirmwareWindows(void *, ULONG) {}\n')
+    parts.append('static void AdmissionJobTimingCpuWindows(void *, ULONG, int) {}\n')
     parts.append('#line 1 "hv_agx_retained_platform.c:gpuva_execute"\n')
     parts.append(body(platform, "translate_guest") + "\n")
     parts.append(body(platform, "gpuva_execute") + "\n")

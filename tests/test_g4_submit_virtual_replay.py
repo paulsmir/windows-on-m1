@@ -30,6 +30,30 @@ def function_body(source, name):
     return source[source.rfind("\n", 0, match.start()) + 1:pos]
 
 
+def replay_functions(production):
+    branches = production.split("/* Branch IDs are a stable diagnostic ABI", 1)[1]
+    branches = "enum {" + branches.split("enum {", 1)[1].split("};", 1)[0] + "};"
+    functions = branches + "\n" + "\n".join(function_body(production, name) for name in (
+        "AdmissionG4SubmitReject", "AdmissionGpuvaG3PrivatePreempt",
+        "AdmissionG3PrivateSlotPreempted", "AdmissionG3PrivateSlotCancelled",
+        "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
+        "AdmissionG4GraphAccessTyped", "AdmissionG3PresentSurfaceBytes", "AdmissionG3PresentAccessible", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4ResubmissionRefusal","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy",
+        "AdmissionG4SnapshotFailure", "AdmissionG4OutputInLocal", "AdmissionG4ResolveOutput",
+        "AdmissionG4PreflightLocked", "AdmissionGpuvaG4PreflightEscape",
+        "AdmissionGpuvaG3PrivateCancel", "AdmissionG4PendingAdmissible",
+        "AdmissionG4CapturePrepareLocked", "AdmissionG4PendingQueue", "AdmissionG4PendingBindHead",
+        "AdmissionG4PendingDropLocked",
+        "AdmissionJobAheadFillLocked", "AdmissionG4PendingPrebindHead",
+        "AdmissionG4PendingAheadPromoteLocked", "AdmissionG4PendingAheadUnbind",
+        "AdmissionG4SubmitComputeLocked",
+        "AdmissionG4SubmitVirtualEnvelope",
+        "AdmissionG3OutputMatchesLocalFor", "AdmissionG3OutputAccessibleFor", "AdmissionGpuvaG3BeginJobAs", "AdmissionGpuvaG3BeginJob", "AdmissionGpuvaG3PendingManager", "AdmissionG4SubmitTouch",
+        "AdmissionDdiSubmitCommandVirtualInner",
+        "AdmissionDdiSubmitCommandVirtual"))
+    functions = function_body(production, "AdmissionG4SubmitRejectDetail") + "\n" + functions
+    return functions
+
+
 class G4SubmitVirtualReplay(unittest.TestCase):
     def test_64k_replacement_overwrites_old_cpu_shadow(self):
         # M2-a: 64K updates publish their 4K envelope over the old shadow
@@ -39,33 +63,23 @@ class G4SubmitVirtualReplay(unittest.TestCase):
         self.assertEqual(update.count("RtlCopyMemory(shadow->LogicalPtes + first"), 2)
 
     def test_native_submit_queues_only_after_graph_and_image_bind(self):
-        production = SOURCE.read_text()
-        branches = production.split("/* Branch IDs are a stable diagnostic ABI", 1)[1]
-        branches = "enum {" + branches.split("enum {", 1)[1].split("};", 1)[0] + "};"
-        functions = branches + "\n" + "\n".join(function_body(production, name) for name in (
-            "AdmissionG4SubmitReject", "AdmissionGpuvaG3PrivatePreempt",
-            "AdmissionG3PrivateSlotPreempted", "AdmissionG3PrivateSlotCancelled",
-            "AdmissionG4GraphAccess", "AdmissionG4LogicalEnvelopeAccess",
-            "AdmissionG4GraphAccessTyped", "AdmissionG3PresentSurfaceBytes", "AdmissionG3PresentAccessible", "AdmissionG4FindPrivateScene","AdmissionG4FindPrivateResubmission","AdmissionG4ResubmissionRefusal","AdmissionG4PrivateGraphAccess","AdmissionG4PrivateGeometry","AdmissionG4PrivateUnqueue","AdmissionGpuvaG3PrivateContextBusy",
-            "AdmissionG4SnapshotFailure", "AdmissionG4OutputInLocal", "AdmissionG4ResolveOutput",
-            "AdmissionGpuvaG3PrivateCancel", "AdmissionG4PendingAdmissible",
-            "AdmissionG4PendingQueue", "AdmissionG4PendingBindHead",
-            "AdmissionG4PendingDropLocked",
-            "AdmissionG4SubmitComputeLocked",
-            "AdmissionG4SubmitVirtualEnvelope",
-            "AdmissionG3OutputMatchesLocal", "AdmissionG3OutputAccessible", "AdmissionGpuvaG3BeginJob", "AdmissionG4SubmitTouch",
-            "AdmissionDdiSubmitCommandVirtualInner",
-            "AdmissionDdiSubmitCommandVirtual"))
-        functions = function_body(production, "AdmissionG4SubmitRejectDetail") + "\n" + functions
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        A refused graph access must identify its logical allocation and copied
+        paging metadata without borrowing a collided/foreign process record;
+        the submission must still fail before any GPU dispatch.
+        """
+        functions = replay_functions(SOURCE.read_text())
         with tempfile.TemporaryDirectory(prefix="g4-submit-virtual-") as tmp:
             tmp = Path(tmp)
             (tmp / "g4_submit_virtual_functions.inc").write_text(functions)
             binary = tmp / "replay"
             subprocess.run([
                 os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
-                "-Werror", "-fsanitize=address,undefined", "-I", str(tmp),
+                "-Werror", "-fsanitize=address,undefined", "-DREPLAY_JOB_AHEAD", "-I", str(tmp),
                 "-I", str(ROOT / "drivers/apple-agx/shared/include"),
+                "-I", str(ROOT / "drivers/apple-agx/render-admission/include"),
                 str(ROOT / "tests/g4_submit_virtual_replay.c"),
+                str(ROOT / "drivers/apple-agx/render-admission/src/render_job_ahead.c"),
                 str(ROOT / "drivers/apple-agx/shared/src/apple_agx_g4_submit.c"),
                 str(ROOT / "drivers/apple-agx/shared/src/apple_agx_scheduler.c"),
                 "-o", str(binary),

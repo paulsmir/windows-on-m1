@@ -68,7 +68,9 @@ class AppleAgxRenderPagingTests(unittest.TestCase):
         self.assertIn("AdmissionMemoryRuntimeExecutePaging", source)
         self.assertIn("DxgkCbSynchronizeExecution", source)
         self.assertIn("DXGK_INTERRUPT_DMA_COMPLETED", source)
-        self.assertIn("DXGK_INTERRUPT_DMA_FAULTED", source)
+        # Actual success/fault payloads are replayed by
+        # test_apple_agx_present_fault_notification (DMA_FAULTED is reserved).
+        self.assertIn("DXGK_INTERRUPT_DMA_PAGE_FAULTED", source)
         self.assertIn("DxgkCbQueueDpc", source)
         self.assertNotIn("DxgkCbNotifyDpc(", source)
         self.assertEqual(interrupt.count("DxgkCbNotifyDpc("), 1)

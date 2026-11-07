@@ -20,6 +20,7 @@ class AppleAgxRenderUmdDirectFlipTests(unittest.TestCase):
                 "-fsanitize=address,undefined",
                 "-I", str(UMD / "include"),
                 "-I", str(RENDER / "include"),
+                "-I", str(RENDER.parent / "shared" / "include"),
                 str(UMD / "tests" / "direct_flip_contract_test.c"),
                 str(UMD / "src" / "direct_flip_contract.c"),
                 str(RENDER / "src" / "render_allocation.c"),

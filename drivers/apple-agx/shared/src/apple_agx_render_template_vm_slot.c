@@ -46,3 +46,39 @@ APPLE_AGX_BOOL AppleAgxRenderTemplateSelectVmSlot(
   }
   return APPLE_AGX_TRUE;
 }
+
+APPLE_AGX_BOOL AppleAgxRenderTemplateRetargetVmSlot(
+    void *Arena, APPLE_AGX_U32 ArenaBytes, APPLE_AGX_U32 Slot,
+    APPLE_AGX_U32 *Previous)
+{
+  const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layout;
+  APPLE_AGX_U32 index, current = 0u;
+  unsigned char *bytes = Arena;
+  if (Previous != 0) *Previous = 0u;
+  if (bytes == 0 || Slot == 0u || Slot >= 63u ||
+      ArenaBytes < AppleAgxRenderTemplateBytes())
+    return APPLE_AGX_FALSE;
+  layout = AppleAgxRenderTemplateObjectLayouts();
+  if (layout == 0) return APPLE_AGX_FALSE;
+  /* Validate all seven fields (one value, 1..63) before changing any. */
+  for (index = 0u; index < sizeof(VmSlotFields)/sizeof(VmSlotFields[0]); ++index) {
+    const APPLE_AGX_VM_SLOT_FIELD *field = &VmSlotFields[index];
+    const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *object = &layout[field->Object];
+    APPLE_AGX_U32 offset = object->ArenaOffset + field->Offset;
+    if (object->OriginalIndex != field->Object ||
+        field->Offset > object->Size || object->Size - field->Offset < 4u ||
+        object->ArenaOffset > ArenaBytes || ArenaBytes - object->ArenaOffset < object->Size ||
+        bytes[offset] == 0u || bytes[offset] > 63u || bytes[offset+1u] != 0u ||
+        bytes[offset+2u] != 0u || bytes[offset+3u] != 0u ||
+        (index != 0u && bytes[offset] != current))
+      return APPLE_AGX_FALSE;
+    current = bytes[offset];
+  }
+  for (index = 0u; index < sizeof(VmSlotFields)/sizeof(VmSlotFields[0]); ++index) {
+    const APPLE_AGX_VM_SLOT_FIELD *field = &VmSlotFields[index];
+    APPLE_AGX_U32 offset = layout[field->Object].ArenaOffset + field->Offset;
+    bytes[offset] = (unsigned char)Slot;
+  }
+  if (Previous != 0) *Previous = current;
+  return APPLE_AGX_TRUE;
+}

@@ -218,7 +218,104 @@ static void uncertain_residency_never_submits_or_frees(void) {
   free(space.Held);
 }
 
+/* C53 B0: reserved ranges and tile maps at allocation offsets */
+typedef struct {
+  uint64_t reserve_va, reserved_bytes, freed_va, freed_bytes, map_va, map_allocation;
+  uint64_t map_offset_pages, map_pages, fence;
+  unsigned reserves, maps, frees, waits, result;
+  unsigned protection;
+} RANGE;
+static int range_reserve(void *ctx, uint64_t bytes, uint64_t minimum,
+                         uint64_t maximum, uint64_t *va) {
+  RANGE *r = ctx;
+  r->reserves++;
+  r->reserved_bytes = bytes;
+  (void)minimum; (void)maximum;
+  *va = r->reserve_va;
+  return 1;
+}
+static int range_free(void *ctx, uint64_t va, uint64_t bytes) {
+  RANGE *r = ctx;
+  r->frees++;
+  r->freed_va = va;
+  r->freed_bytes = bytes;
+  return 1;
+}
+static int range_wait(void *ctx, uint64_t fence) {
+  RANGE *r = ctx;
+  r->waits++;
+  return fence == r->fence;
+}
+static int range_map_at(void *ctx, uint64_t allocation, uint64_t va,
+                        uint64_t offset_pages, uint64_t pages,
+                        unsigned protection, uint64_t *fence) {
+  RANGE *r = ctx;
+  r->maps++;
+  r->map_allocation = allocation;
+  r->map_va = va;
+  r->map_offset_pages = offset_pages;
+  r->map_pages = pages;
+  r->protection = protection;
+  *fence = r->fence;
+  return (int)r->result;
+}
+static void reserved_ranges_map_tiles_at_offsets(void) {
+  RANGE r = {0};
+  AGX_WIN32_GPUVA_OPS range_ops = {range_reserve, map_va, range_free,
+                                   make_resident, range_wait, submit,
+                                   wait_render, evict, NULL, NULL, NULL, NULL};
+  AGX_WIN32_GPUVA_SPACE space;
+  uint64_t va = 0;
+  assert(AgxWin32GpuvaInit(&space, &range_ops, &r));
+  /* sizes are whole 64 KiB tiles */
+  assert(!AgxWin32GpuvaReserveRange(&space, 0x18000, &va) && !r.reserves);
+  /* a reservation the callback misaligns is given back */
+  r.reserve_va = 0x48000;
+  assert(!AgxWin32GpuvaReserveRange(&space, 0x40000, &va));
+  assert(r.frees == 1 && r.freed_va == 0x48000 && !space.Terminal);
+  r.reserve_va = 0x400000;
+  assert(AgxWin32GpuvaReserveRange(&space, 0x40000, &va) && va == 0x400000);
+  /* C53 B4: one guard tile follows the range */
+  assert(r.reserved_bytes == 0x50000);
+  /* without MapAt nothing is mapped */
+  assert(!AgxWin32GpuvaMapRange(&space, va + 0x10000, 17, 0x20000, 0x10000,
+                                AGX_GPUVA_MAP_WRITE) && !r.maps);
+  space.Ops.MapAt = range_map_at;
+  /* tile 1 of the range onto tile 2 of allocation 17: offset in 4 KiB pages */
+  r.result = 2;
+  r.fence = 9;
+  assert(AgxWin32GpuvaMapRange(&space, va + 0x10000, 17, 0x20000, 0x10000,
+                               AGX_GPUVA_MAP_WRITE));
+  assert(r.map_va == 0x410000 && r.map_allocation == 17 &&
+         r.map_offset_pages == 0x20 && r.map_pages == 0x10 &&
+         r.protection == AGX_GPUVA_MAP_WRITE && r.waits == 1);
+  /* unaligned offsets never reach the callback */
+  assert(!AgxWin32GpuvaMapRange(&space, va, 17, 0x1000, 0x10000, 0) && r.maps == 1);
+  assert(!AgxWin32GpuvaMapRange(&space, va + 0x2000, 17, 0, 0x4000, 0) && r.maps == 1);
+  /* C53 T2D: one 16 KiB page onto page 3 of the allocation */
+  r.result = 1;
+  assert(AgxWin32GpuvaMapRange(&space, va + 0x4000, 17, 0xc000, 0x4000, 0));
+  assert(r.maps == 2 && r.map_va == 0x404000 && r.map_offset_pages == 0xc && r.map_pages == 4);
+  /* refused map: not terminal */
+  r.result = 0;
+  assert(!AgxWin32GpuvaMapRange(&space, va, 17, 0, 0x10000, 0) && !space.Terminal);
+  /* free refuses while a submission is in flight */
+  space.OlderCount = 1;
+  assert(!AgxWin32GpuvaFreeRange(&space, va, 0x40000) && r.frees == 1);
+  space.OlderCount = 0;
+  assert(AgxWin32GpuvaFreeRange(&space, va, 0x40000) && r.freed_va == va &&
+         r.freed_bytes == 0x50000);
+  /* uncertain ownership or a pending map without a fence is terminal */
+  r.result = 3;
+  assert(!AgxWin32GpuvaMapRange(&space, va, 17, 0, 0x10000, 0) && space.Terminal);
+  space.Terminal = 0;
+  r.result = 2;
+  r.fence = 0;
+  assert(!AgxWin32GpuvaMapRange(&space, va, 17, 0, 0x10000, 0) && space.Terminal);
+}
+
 int main(void) {
+  reserved_ranges_map_tiles_at_offsets();
   minimal_draw_uses_stable_va_and_waits_for_residency();
   invalid_mapping_and_missing_residency_never_submit();
   written_bo_must_be_a_resident_reference();

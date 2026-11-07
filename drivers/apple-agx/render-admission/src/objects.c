@@ -8,6 +8,7 @@ void AdmissionObjectsInitializeAdapter(ADMISSION_OBJECT_ADAPTER *Adapter) {
   Adapter->Magic = ADMISSION_OBJECT_ADAPTER_MAGIC;
   Adapter->Started = 0u;
   Adapter->DeviceCount = 0u;
+  Adapter->PagingNode = 0u;
 }
 
 int AdmissionObjectsStartAdapter(ADMISSION_OBJECT_ADAPTER *Adapter) {
@@ -86,7 +87,9 @@ int AdmissionObjectsCreateContext(ADMISSION_OBJECT_DEVICE *Device,
       Device->Adapter->Started == 0u ||
       (RuntimeHandle == ADMISSION_OBJECT_NULL &&
        (Flags & ADMISSION_CONTEXT_SYSTEM) == 0u) ||
-      Context == ADMISSION_OBJECT_NULL || NodeOrdinal != 0u ||
+      Context == ADMISSION_OBJECT_NULL ||
+      (NodeOrdinal != 0u && (NodeOrdinal != 1u ||
+       Device->Adapter->PagingNode != 1u || !(Flags & ADMISSION_CONTEXT_SYSTEM))) ||
       EngineAffinity != 1u ||
       (Flags & ~ADMISSION_CONTEXT_VALID_FLAGS) != 0u ||
       Device->ContextCount >= ADMISSION_OBJECT_MAX_CONTEXTS_PER_DEVICE)

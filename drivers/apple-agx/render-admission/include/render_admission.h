@@ -13,6 +13,10 @@
 #include <d3dkmthk.h>
 #include <dispmprt.h>
 #include <ntstrsafe.h>
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+#define APPLE_AGX_NATIVE_STAGING 1
+#include "render_native_staging.h"
+#endif
 #include "render_objects.h"
 #include "render_memory.h"
 #include "render_allocation.h"
@@ -29,6 +33,8 @@
 #include "apple_agx_residency.h"
 #include "apple_agx_uat_publication.h"
 #include "render_paging.h"
+#include "render_omitted_leaves.h"
+#include "render_native_staging_receipt.h"
 #include "render_gdi.h"
 #include "render_umd_command.h"
 #include "render_win32_transport.h"
@@ -72,6 +78,9 @@
 #define ADMISSION_GDI_ALLOCATION_LIST_SIZE 256u
 #define ADMISSION_GDI_PATCH_LIST_SIZE 256u
 #define ADMISSION_MAX_PAGING_RECORDS 64u
+/* Match the private allocation to the existing scheduler record capacity.
+ * A single 4-KiB page holds only 32 records on the 64-bit ABI. */
+#define ADMISSION_PAGING_PRIVATE_BYTES (ADMISSION_MAX_PAGING_RECORDS * sizeof(ADMISSION_PAGING_RECORD))
 
 typedef enum _ADMISSION_RECEIPT {
   AdmissionReceiptAddEntered = 1,
@@ -106,6 +115,27 @@ typedef enum _ADMISSION_DISPLAY_DDI_TRACE_ID {
   AdmissionDisplayDdiQueryVidPnHWCapability = 11,
   AdmissionDisplayDdiUpdateMonitorLinkInfo = 12
 } ADMISSION_DISPLAY_DDI_TRACE_ID;
+
+/* rc110 receipt (Wom1DisplayModesReceipt): the display-mode path end to
+ * end, written after every traced display DDI.  Counters are updated at any
+ * IRQL with interlocked operations; the writer runs at PASSIVE_LEVEL. */
+#define ADMISSION_DISPLAY_MODES_RECEIPT_VERSION 1u
+typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT {
+  volatile LONG Version, Bytes;
+  volatile LONG BrokerAbi, BrokerCaps, ScaledModes, BuildSwitch;
+  volatile LONG EnumCalls, LastEnumStatus, LastEnumPivot, LastEnumSourceModes;
+  volatile LONG LastEnumTargetModes, LastCommitTargetWidth, LastCommitTargetHeight;
+  volatile LONG IsSupportedCalls, LastIsSupportedStatus, LastIsSupportedVerdict;
+  volatile LONG CommitCalls, LastCommitStatus, LastCommitWidth, LastCommitHeight;
+  volatile LONG LastCommitStride, LastCommitFormat, LastCommitScaling;
+  volatile LONG VisibilityCalls, LastVisible;
+  volatile LONG MonitorModeCalls, LastMonitorModesStatus, LastMonitorModesAdded;
+  volatile LONG SourceAddressCalls, LastSourceAddressStatus, LastSourceAddressFlags;
+  volatile LONG LastSourceAddressFormat, LastSourceAddressWidth, LastSourceAddressHeight;
+  volatile LONG GeometryRefusals, FormatRefusals, LayoutRefusals, DeferredFlips;
+  volatile LONG CommittedWidth, CommittedHeight, CommittedStride, CommittedFormat;
+  volatile LONG CommittedScaling, SourceVisible, DisplayActive;
+} ADMISSION_DISPLAY_MODES_RECEIPT;
 
 typedef enum _ADMISSION_START_STAGE {
   AdmissionStartNone = 0,
@@ -383,11 +413,16 @@ typedef struct _ADMISSION_POST_DPC_HEALTH_RECEIPT {
 
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #define ADMISSION_G3_LEAF_HISTORY_COUNT 256u
-/* EXP1001: the in-memory ring covers ~200 s; failure snapshots keep 256
- * records, matching events (same table, VA or allocation) first. */
+/* Bounded event history, with no guaranteed time coverage; failure snapshots
+ * keep 256 records, matching events (same table, VA or allocation) first. */
 #define ADMISSION_G3_LEAF_RING 8192u
 #define ADMISSION_G3_LEAF_EVENT_RESET 0x10u
 #define ADMISSION_G3_LEAF_EVENT_SYSTEM_RETIRE 0x20u
+/* Previous logical owner of pages invalidated at a leaf's logical commit.
+ * Count/ValidCount are old valid 4-KiB pages, not new/native mappings.
+ * Status=success names this commit, not the enclosing paging DDI result.
+ * Allocation is a historical token, never safe to dereference. */
+#define ADMISSION_G3_LEAF_EVENT_UNMAP_OWNER 0x40u
 /* Flags: 1 Use64KBPages, 2 Repeat, 4 NotifyEviction, 8 InitialUpdate. */
 typedef struct _ADMISSION_G3_LEAF_HISTORY {
   ULONGLONG Qpc, ProcessId, TableIpa, Allocation, FirstVa, MappingGeneration;
@@ -462,6 +497,8 @@ typedef struct _ADMISSION_ALLOCATION_LIFE {
 } ADMISSION_ALLOCATION_LIFE;
 /* EXP987 receipt-only: R155/R165 BuildPagingBuffer waits for a process's
  * in-flight job. Snapshot of the condition when the wait began. */
+#include "render_live_paging_wait.h"
+
 typedef struct _ADMISSION_G3_PAGING_WAIT_RECEIPT {
   ULONG Version, Bytes, Waits, Timeouts;
   ULONGLONG TotalIterations, TotalTicks, QpcFrequency;
@@ -520,6 +557,10 @@ typedef struct _ADMISSION_G3_ALLOC_TRACK {
   /* EXP983: physical/virtual FILL and TRANSFER paging operations. */
   ULONGLONG LastFillQpc, LastTransferQpc;
   ULONG Fills, Transfers, LastPagingSegment, LastPagingOperation;
+  /* T7: copy while UpdatePageTable owns hAllocation. A submit refusal may
+   * inspect this record later without dereferencing an expired handle. */
+  ULONGLONG AllocationBytes;
+  ULONG ClassId, Win32Flags, AllocationType, CpuVisible, MetadataValid, LastStatus;
 } ADMISSION_G3_ALLOC_TRACK;
 typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
   ULONG Version, Bytes, Next, Predicate;
@@ -557,7 +598,15 @@ typedef enum _ADMISSION_G4_PENDING_STATE {
   AdmissionG4PendingFilling, /* reserved by the submitter, not yet counted */
   AdmissionG4PendingQueued,
   AdmissionG4PendingBinding,
-  AdmissionG4PendingDropped,
+  AdmissionG4PendingDropped = 4,
+  /* rc90 build-ahead: bound into the backend image while the previous job
+   * runs; the worker that ran it promotes or unbinds it (G4PrebindFence). */
+  AdmissionG4PendingPrebound = 5,
+  /* rc102 depth-2 window: a Prebound entry kicked to the firmware behind
+   * the running job (scheduler KickedFence). Neither a preemption nor a
+   * reset hands it back to VidSch; it becomes the render packet when it
+   * is adopted (AdmissionG4PendingAdoptLocked). */
+  AdmissionG4PendingKicked = 6,
 } ADMISSION_G4_PENDING_STATE;
 struct _ADMISSION_RENDER_CONTEXT;
 typedef struct _ADMISSION_G4_PENDING {
@@ -599,6 +648,10 @@ typedef struct _ADMISSION_CONTEXT {
   /* M2-f3: segment 3 backed on demand (pool_windows.c); NULL for the fixed
    * pool or no pool. */
   PVOID PoolDemand;
+  /* RC13: boot-only opt-in; GPU-only General may spill to system backing. */
+  BOOLEAN SysmemSpill;
+  /* RC23: requested policy only; eligible creates refuse until bridge exists. */
+  BOOLEAN SysmemShadow;
   /* Sequence number of the last encoded paging record. */
   volatile LONG64 PagingRecordSeq;
   PVOID PlatformRuntime;
@@ -618,6 +671,9 @@ typedef struct _ADMISSION_CONTEXT {
   ULONG CommittedHeight;
   ULONG CommittedStride;
   D3DDDIFORMAT CommittedFormat;
+  /* rc106: D3DKMDT_VPPS_* transform of the committed source to the panel. */
+  ULONG CommittedScaling;
+  ADMISSION_DISPLAY_MODES_RECEIPT DisplayModes;
   volatile LONG SourceAddressStage;
   volatile LONG SourceAddressStatus;
   volatile LONG SourceAddressReceiptState;
@@ -672,6 +728,18 @@ typedef struct _ADMISSION_CONTEXT {
   APPLE_AGX_G3_PRIVATE_FAILURE G3PrivateFailure;
   volatile LONG G4SubmitFailureClaim;
   volatile LONG G4SubmitFailureCount;
+  /* EXP1901N receipt-only (Wom1G4BindRefusal, published with
+   * Wom1G4SubmitFailure): the backend image when a prepared job first could
+   * not bind it (1577 Bind refusals, then the desktop stayed black). */
+  volatile LONG G4BindRefusalClaim;
+  struct _ADMISSION_G4_BIND_REFUSAL {
+    ULONG Version, Bytes, Kind, Fence, EntryMs;
+    ULONG Ready, BoundFence, JobFence, JobReady, NativeBound, G4Native;
+    ULONG G4Compute, PresentCompute;
+    ULONG CompletedFence, LastSubmittedFence, ActiveFence, PreemptionPhase;
+    ULONG PacketState, PacketFence, DispatchedFence, RenderWorkerScheduled;
+    ULONG BindFailure; /* version 2: ADMISSION_BACKEND_IMAGE.BindFailure */
+  } G4BindRefusal;
   struct _ADMISSION_G4_SUBMIT_FAILURE {
     ULONG Version, Bytes, Branch, Status, DownstreamStatus;
     ULONGLONG DmaBufferVirtualAddress;
@@ -682,6 +750,20 @@ typedef struct _ADMISSION_CONTEXT {
         MappingGeneration;
     ULONGLONG LogicalIpa[4];
     ULONG LogicalSegment[4], LogicalFlags[4];
+    /* Version 3: identities of the four logical 4-KiB pages and the last
+     * paging record for the failing page. TrackFound=0 means unknown (the
+     * bounded track table can collide), never proof of non-residency. */
+    ULONGLONG LogicalAllocation[4], LogicalAllocationOffset[4];
+    ULONG TrackFound, OwnerOsProcessId;
+    ADMISSION_G3_ALLOC_TRACK Track;
+    /* Version 4: Prepare rejection snapshot; v3 prefix stays byte-identical.
+     * PrepareMask/Site are the stable ABI in gpuva_g3_windows.c. */
+    ULONG PrepareMask, PrepareSite, PrepareFence, PrepareFenceOutstanding;
+    ULONG PrepareSecondFence, PreparePendingCount, PreparePendingCapacity;
+    ULONG PrepareTail, PrepareTailState, PreparePacketState;
+    ULONG PrepareSchedulerFaulted, PreparePreemptionPhase;
+    ULONG PrepareSchedulerQueueCount, PrepareSchedulerQueueCapacity;
+    ULONG PrepareSchedulerLastSubmittedFence, PrepareEntryState;
   } G4SubmitFailure;
   /* EXP1210 receipt-only (Wom1G4PreemptOverlap): DxgkDdiPreemptCommand calls
    * and those that arrived while a DxgkDdiSubmitCommandVirtual call was still
@@ -761,18 +843,35 @@ typedef struct _ADMISSION_CONTEXT {
   NTSTATUS PagingCompletionStatus;
   volatile LONG PagingPending;
   volatile LONG PagingWorkersActive, PagingDpcsActive;
+  volatile LONG PagingCallbacksActive; /* includes final dispatch/retry tail */
   volatile LONG PagingStopping;
   volatile LONG PagingDpcPending;
   volatile LONG MemoryStartStage;
   volatile LONG MemoryStartStatus;
   KSPIN_LOCK SchedulerLock;
   APPLE_AGX_SCHEDULER Scheduler;
+  /* Q22b: independent external node1, local scheduler node0. */
+  APPLE_AGX_SCHEDULER PagingScheduler;
+  ULONG LiveAdditivePaging, PagingActiveNode;
+  /* GC (experiment): Wom1GpuPrivateCached = 1 and the broker capability. */
+  ULONG GpuPrivateCached;
+  /* V1 (experiment): Wom1G3RetainedSlots = 1 (REG_DWORD), read once at
+   * start: per-process VM slots kept between jobs (gpuva_g3_private.h). */
+  ULONG G3RetainedSlots;
+  volatile LONG PagingAdapterResetting;
+  ULONG PagingNodeHead, PagingNodeCount, PagingNodeDispatchedFence;
+  ADMISSION_CPU_PACKET PagingNodeQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   ADMISSION_RENDER_PACKET RenderPacket;
   /* Phase 5a: validated G4 submissions of other contexts waiting for the
    * render slot, oldest first, under SchedulerLock (see
    * ADMISSION_G4_PENDING). The worker binds the head into RenderPacket. */
   ADMISSION_G4_PENDING G4Pending[ADMISSION_G4_PENDING_CAPACITY];
   ULONG G4PendingHead, G4PendingCount;
+  /* rc90 build-ahead: fence of the head entry bound (Prebound, or Binding/
+   * Dropped while the worker binds or unbinds it) into BackendImage while
+   * RenderPacket still holds the running job; 0 = none. Worker-owned,
+   * under SchedulerLock. */
+  ULONG G4PrebindFence;
   ADMISSION_SUBMIT_PATH SubmitPath;
   ADMISSION_BACKEND_IMAGE BackendImage;
   /* EXP1105: Prepare image of the objects a G4 job changes. */
@@ -791,14 +890,45 @@ typedef struct _ADMISSION_CONTEXT {
   ULONG GpuIdRegisters[5];
   ULONG GpuCoresPerCluster;
   ULONG GpuCoreMask;
+  /* rc82: nonzero while the started runtime reports soft faults to the UMD
+   * (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS, receipt Wom1SoftFaultState). */
+  volatile LONG GpuSoftFaults;
+  /* OV2: nonzero while the started runtime runs Wom1Ov2NoHazardLead = 1 on
+   * Q2c (AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE): the compute parser
+   * then admits a VdmBarrier NONE envelope. */
+  volatile LONG GpuIndependentSubqueue;
+  /* OV5 step 2: nonzero while the started runtime runs Wom1Ov5TaWaiver = 1
+   * with the 3D-queue Barrier path available
+   * (AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT): the render parser
+   * then admits a CdmBarrier NONE render header. */
+  volatile LONG GpuRenderTaIndependent;
   volatile LONG FeatureReadyMask;
   /* EXP1321 receipt-only: broker failure count last staged (Wom1G3BrokerFailures). */
   volatile LONG64 G3BrokerFailuresStaged;
   /* G4-r3 (EXP1296): Wom1GpuReset; written by the reset thread only
    * (first-level synchronization). */
   ADMISSION_GPU_RESET_RECEIPT GpuReset;
+  /* EXP1899N receipt-only (Wom1PreemptRefusal, published with Wom1GpuReset):
+   * the scheduler at the first DxgkDdiPreemptCommand whose boundary
+   * preemption could not begin (scheduler_windows.c), and the last one that
+   * began. Written under the scheduler lock. */
+  volatile LONG PreemptRefusalClaim;
+  volatile LONG PreemptRefusals;
+  ULONG PreemptBeganMs, PreemptBeganFence;
+  struct _ADMISSION_PREEMPT_REFUSAL {
+    ULONG Version, Bytes, Refusals;
+    ULONG EntryMs, PreemptionFence, CutoffFence, ActiveFence, QueuedFence;
+    ULONG CompletedFence, LastSubmittedFence, SchedulerQueuedFence, QueueCount;
+    ULONG SchedulerActiveFence, PendingPreemptionFence, PreemptionCutoffFence;
+    ULONG PreemptionActiveFence, PreemptionLastCompletedFence;
+    ULONG PreemptionPending, Phase, Responsive;
+    ULONG DispatchedFence, PacketState, PagingPending, PagingDpcPending;
+    ULONG PagingDpcsActive, SchedulerDpcPending, RenderWorkerScheduled;
+    ULONG BeganMs, BeganFence;
+  } PreemptRefusal;
   /* G4-r3 TDR drill (ADMISSION_TDR_DRILL): armed by escape for one process. */
   BOOLEAN TdrDrillAllowed;
+  BOOLEAN GpuFaultDrillAllowed;
   volatile LONG TdrDrillPid, TdrDrillJobs, TdrDrillFence;
 } ADMISSION_CONTEXT;
 
@@ -873,6 +1003,13 @@ typedef struct _ADMISSION_ALLOCATION_HANDLE {
   /* EXP1060: a classless allocation created with presentation resource data
    * (a swapchain or primary surface); the copy escape may access it. */
   ULONG Presentation;
+  /* rc110 (EXP2049): the only allocations the scanout gates accept: a plain
+   * linear description (the D3D11 UMD's AIL-linear textures, the D3D12
+   * presentation storage and the standard allocations the KMD describes
+   * itself) of a GPU-only 32-bpp GDI-surface texture in a format the broker
+   * scans; never an R105 native resource, whose layout the Mesa layer owns
+   * (twiddled or compressed). */
+  ULONG ScanoutCapable;
   /* Created-with refresh rate reported by DxgkDdiDescribeAllocation. */
   UINT PrimaryRefreshNumerator;
   UINT PrimaryRefreshDenominator;
@@ -880,9 +1017,24 @@ typedef struct _ADMISSION_ALLOCATION_HANDLE {
   ADMISSION_POOL_PLACEMENT PoolPlacement;
   /* M2-f5: segment-3 pages reserved for this allocation at creation. */
   ULONGLONG PoolReserved;
+#ifdef APPLE_AGX_NATIVE_STAGING
+  PVOID NativeStagingBinding;
+#endif
 } ADMISSION_ALLOCATION_HANDLE;
 
 #define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
+NTSTATUS AdmissionGpuvaG3NativeQueryEscape(ADMISSION_CONTEXT *Adapter,
+    const DXGKARG_ESCAPE *Args);
+#ifdef APPLE_AGX_NATIVE_STAGING
+NTSTATUS AdmissionGpuvaG3NativeStagingEscape(ADMISSION_CONTEXT *Adapter,
+    const DXGKARG_ESCAPE *Args);
+#endif
+NTSTATUS AdmissionGpuvaG4PreflightEscape(ADMISSION_CONTEXT *Adapter,
+    const DXGKARG_ESCAPE *Args);
+NTSTATUS AdmissionGpuvaG3NativeQueryBatchEscape(ADMISSION_CONTEXT *Adapter,
+    const DXGKARG_ESCAPE *Args);
+void AdmissionGpuvaG3InvalidateAllocation(ADMISSION_CONTEXT *Adapter,
+    HANDLE Allocation);
 NTSTATUS AdmissionGpuvaG3CopyEscape(ADMISSION_CONTEXT *Adapter,
                                   const DXGKARG_ESCAPE *Args);
 typedef struct _ADMISSION_OPEN_ALLOCATION {
@@ -1255,6 +1407,8 @@ void AdmissionRecordG4PreemptOverlap(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3CopyQueryFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3LeafHistory(_In_opt_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordG3PagingWait(_In_opt_ ADMISSION_CONTEXT *Context);
+void AdmissionRecordG3LiveWait(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_G3_LIVE_WAIT_ENTRY *Entry);
 VOID AdmissionPagingProfileAdd(_Inout_ volatile LONG64 *Triplet, LONGLONG Ticks);
 /* Caller at PASSIVE_LEVEL outside the paging path; Client may be NULL. */
 void AdmissionRecordPagingProfile(_In_opt_ ADMISSION_CONTEXT *Context,
@@ -1301,9 +1455,16 @@ VOID AdmissionDwmFrameRecordPrivateReset(_In_ ADMISSION_CONTEXT *Adapter,
 #endif
 void AdmissionRecordG3PrivateFailure(_In_opt_ ADMISSION_CONTEXT *Context);
 /* EXP1114 receipt-only: per-process private storage snapshot. */
+void AdmissionRecordG3PrivatePressure(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_reads_bytes_(Bytes) const ULONG *Values, _In_ ULONG Bytes);
 void AdmissionRecordG3PrivateProcesses(_In_opt_ ADMISSION_CONTEXT *Context,
                                        _In_reads_bytes_(Bytes) const ULONG *Values,
                                        _In_ ULONG Bytes);
+/* EXP2206 receipt-only: Wom1G3NativeQueryRefusal, an
+ * APPLE_AGX_G3_NQ_REFUSAL_RECEIPT (apple_agx_g3_native_query_refusal.h);
+ * never flushed. */
+void AdmissionRecordG3NativeQueryRefusal(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_reads_bytes_(Bytes) const VOID *Receipt, _In_ ULONG Bytes);
 /* G2 HW2 receipt: the per-process private VA reservations (Wom1G3Reserve:
  * version, reserved, refused, last status, last VA low, last VA high). */
 #define ADMISSION_G3_RESERVE_RECEIPT_WORDS 6u
@@ -1383,7 +1544,10 @@ VOID AdmissionMemoryPoolForget(_In_opt_ ADMISSION_CONTEXT *Context,
                                _Inout_ ADMISSION_POOL_PLACEMENT *Placement);
 /* M2-f5: CreateAllocation reserves the pages a segment-3 allocation may be
  * placed in (FALSE: Windows has none, the caller returns STATUS_NO_MEMORY);
- * DestroyAllocation ends the reservation. TRUE without a demand pool. */
+ * DestroyAllocation ends the reservation. TRUE without a demand pool.
+ * rc104: a refusal at the LowMemoryCondition floor first waits, with no
+ * driver lock held, up to the Wom1PoolPressureWaitMs budget for the memory
+ * manager to clear it, so the call may block that long. */
 _IRQL_requires_(PASSIVE_LEVEL)
 BOOLEAN AdmissionMemoryPoolReserve(_In_opt_ ADMISSION_CONTEXT *Context,
                                    ULONGLONG Bytes);
@@ -1392,6 +1556,19 @@ VOID AdmissionMemoryPoolUnreserve(_In_opt_ ADMISSION_CONTEXT *Context,
                                   ULONGLONG Bytes);
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionMemoryPoolReclaim(_In_opt_ ADMISSION_CONTEXT *Context);
+/* rc80 (apple_agx_g3_tvb.h): one exclusive 64 KiB slab granule of Windows
+ * memory for a TVB window block, zeroed, outside the segment-3 promise and
+ * bounded by the slab PrivateCap; *GuestIpa is its 64 KiB-aligned IPA. Take
+ * refuses while Windows signals LowMemory (AdmissionPoolMayGrow). Give zeroes
+ * it again and returns it; call it only after the broker revoked every
+ * GPU mapping. A granule that cannot be zeroed is retained (PoolLeaks). */
+_IRQL_requires_max_(APC_LEVEL)
+BOOLEAN AdmissionMemoryPoolTvbTake(_In_opt_ ADMISSION_CONTEXT *Context,
+                                   _Inout_ ADMISSION_POOL_PRIVATE *Lease,
+                                   _Out_ ULONGLONG *GuestIpa);
+_IRQL_requires_max_(APC_LEVEL)
+BOOLEAN AdmissionMemoryPoolTvbGive(_In_opt_ ADMISSION_CONTEXT *Context,
+                                   _Inout_ ADMISSION_POOL_PRIVATE *Lease);
 _IRQL_requires_(PASSIVE_LEVEL)
 void AdmissionRecordM2PoolProbe(_In_opt_ ADMISSION_CONTEXT *Context,
                                 _In_ const ADMISSION_POOL_PROBE *Probe);
@@ -1403,6 +1580,10 @@ void AdmissionRecordGpuvaG3SystemShapes(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(ADMISSION_G3_SYSTEM_SHAPE_COUNT)
         const ADMISSION_G3_SYSTEM_SHAPE *Shapes);
+void AdmissionRecordG4OmittedLeaves(ADMISSION_CONTEXT *Context, const ADMISSION_OMITTED_LEAVES *Receipt);
+/* RC60 receipt Wom1G3NativePteRefusal (staged; written by a work item). */
+void AdmissionRecordG3NativePteRefusal(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_NATIVE_PTE_REFUSAL *Receipt);
 BOOLEAN AdmissionGpuvaG3DeclarationReady(_In_ const ADMISSION_CONTEXT *Context);
 _IRQL_requires_(PASSIVE_LEVEL)
 NTSTATUS AdmissionPagingReceiptsStart(_In_ ADMISSION_CONTEXT *Context);
@@ -1442,6 +1623,10 @@ NTSTATUS AdmissionPresentSubmitVirtual(_In_ ADMISSION_CONTEXT *Adapter,
     _In_ ADMISSION_RENDER_CONTEXT *Context,
     _In_ const DXGKARG_SUBMITCOMMANDVIRTUAL *Args);
 #endif
+/* Failure evidence is required in normal builds as well as qualification. */
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordEventDrain(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_EVENT_DRAIN_RECEIPT *Receipt);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 BOOLEAN AdmissionSubmitTraceBegin(_In_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_SUBMITCOMMAND *Args, ULONG PrivateStage,
@@ -1530,9 +1715,6 @@ VOID AdmissionRecordTaTemporal(_In_opt_ ADMISSION_CONTEXT *Context,
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordKTrace(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_KTRACE_RECEIPT *Receipt);
-_IRQL_requires_(PASSIVE_LEVEL)
-VOID AdmissionRecordEventDrain(_In_opt_ ADMISSION_CONTEXT *Context,
-    _In_ const ADMISSION_EVENT_DRAIN_RECEIPT *Receipt);
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordQueueFaultSnapshot(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_QUEUE_FAULT_SNAPSHOT *Snapshot);
@@ -1714,11 +1896,6 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(Context);                                                           \
     (void)(Receipt);                                                           \
   } while (0)
-#define AdmissionRecordEventDrain(Context, Receipt)                            \
-  do {                                                                         \
-    (void)(Context);                                                           \
-    (void)(Receipt);                                                           \
-  } while (0)
 #define AdmissionRecordQueueFaultSnapshot(Context, Snapshot)                   \
   do {                                                                         \
     (void)(Context);                                                           \
@@ -1760,6 +1937,7 @@ NTSTATUS AdmissionGpuvaG3ExecutePresentVirtual(_In_ ADMISSION_CONTEXT *Adapter,
     _In_reads_bytes_(Bytes) const VOID *Command, UINT Bytes,
     _Out_ ULONGLONG *BytesCopied);
 #endif
+void AdmissionRecordDisplayModes(_In_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordDisplayDdi(_In_opt_ PDEVICE_OBJECT DeviceObject,
                                _In_ ULONG DdiId, _In_ ULONG Phase,
                                _In_ NTSTATUS Status);
@@ -1877,6 +2055,8 @@ BOOLEAN AdmissionPlatformRuntimeReadyEx(
     _In_ ADMISSION_CONTEXT *Context, _Out_opt_ ULONG *FailedPredicate);
 BOOLEAN AdmissionPlatformRuntimeReady(
     _Inout_ ADMISSION_CONTEXT *Context);
+/* General depth two retains two packets per context, including kicked work. */
+BOOLEAN AdmissionPlatformRuntimeGeneralDepth2(_In_opt_ ADMISSION_CONTEXT *Context);
 /* EXP1014: bounded wait until the runtime is ready and the render slot is
  * empty; transient busy states are backpressure, not malformed input. */
 VOID AdmissionPlatformRuntimeSlotChanged(_In_opt_ ADMISSION_CONTEXT *Context);
@@ -1894,6 +2074,9 @@ BOOLEAN AdmissionPlatformRuntimeQueueable(_In_ ADMISSION_CONTEXT *Context,
 VOID AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *Adapter,
     ADMISSION_RENDER_CONTEXT *RenderContext, ULONG ProcessId,
     ULONG Fence, ULONG DmaBytes);
+/* rc81 receipt: ADMISSION_JOB_FLAG_* of the job's timing slot. */
+VOID AdmissionJobTimingNoteWindows(ADMISSION_CONTEXT *Adapter, ULONG Fence,
+    ULONG Flags);
 #endif
 /* G4-r3 (EXP1296): bound of the reset's wait for the firmware to end the
  * active job; DxgkDdiResetFromTimeout repeats it after a failed engine reset. */
@@ -1905,6 +2088,12 @@ VOID AdmissionJobTimingStartWindows(ADMISSION_CONTEXT *Adapter,
 NTSTATUS AdmissionPlatformRuntimeQuiesceActive(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence,
     _In_ ULONG TimeoutMs, _Inout_opt_ ADMISSION_GPU_RESET_RECEIPT *Receipt);
+/* rc102 (EXP2045): after that quiescence (worker idle, Resetting set),
+ * the scheduler's kicked fence when nothing holds it: the backend never
+ * accepted it (SubmitSuccessor refused, no queue work became visible) and
+ * no packet runs it. 0 otherwise. Its graph job must end unrun before the
+ * private reset (AdmissionGpuvaG3AbortJob). */
+ULONG AdmissionPlatformRuntimeUnheldKicked(_In_ ADMISSION_CONTEXT *Context);
 /* Any IRQL, no locks: the platform half of Wom1GpuReset (backend/provider
  * phases, worker, firmware halted flag, recoveries). */
 VOID AdmissionPlatformRuntimeResetState(_In_ ADMISSION_CONTEXT *Context,
@@ -1925,6 +2114,11 @@ NTSTATUS AdmissionPlatformCalibrateGpuClock(_In_ ADMISSION_CONTEXT *Context,
 /* G4-r3 TDR drill escape (ADMISSION_TDR_DRILL), in the caller's process. */
 NTSTATUS AdmissionPlatformTdrDrillEscape(_Inout_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_ESCAPE *Args);
+NTSTATUS AdmissionGpuvaG3FaultDrillEscape(_Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const DXGKARG_ESCAPE *Args);
+BOOLEAN AdmissionGpuvaG3FaultDrillApply(_Inout_ ADMISSION_CONTEXT *Context,
+    ULONG Fence, _Inout_ unsigned long long *StreamBase,
+    _Inout_ unsigned int *StreamBytes);
 BOOLEAN AdmissionPlatformRuntimeResponsive(
     _Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionWin32SnapshotRenderCommand(
@@ -1943,10 +2137,46 @@ NTSTATUS AdmissionDynamicRenderBuild(
     _Out_ ULONGLONG *AllocationBytes);
 NTSTATUS AdmissionScanoutStart(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutStop(_Inout_ ADMISSION_CONTEXT *Context);
+/* D3D-FS1: TRUE for A8R8G8B8, and for A8B8G8R8 when the hypervisor scans
+ * out RGBA8888 (APPLE_AGX_SCANOUT_CAP_RGBA8888). */
+/* rc110 receipt: the qualified broker's ABI version and capabilities. */
+VOID AdmissionScanoutBrokerInfo(_In_ ADMISSION_CONTEXT *Context,
+                                _Out_ ULONG *AbiVersion,
+                                _Out_ ULONG *Capabilities);
+/* The broker's format code for a scanout-capable D3DDDIFORMAT, else 0. */
+ULONG AdmissionScanoutFormatCode(_In_ ADMISSION_CONTEXT *Context,
+                                 _In_ D3DDDIFORMAT Format);
+BOOLEAN AdmissionScanoutFormatSupported(_In_ ADMISSION_CONTEXT *Context,
+                                        _In_ D3DDDIFORMAT Format);
+/* rc106: source modes beside the native one are offered only when the
+ * broker scales (APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE) and this build switch
+ * is on; otherwise the single native 2560x1600 mode is unchanged. */
+#ifndef ADMISSION_DISPLAY_SCALED_MODES
+#define ADMISSION_DISPLAY_SCALED_MODES 1
+#endif
+BOOLEAN AdmissionScanoutScaledModes(_In_ ADMISSION_CONTEXT *Context);
+/* Index 0 is the native mode; FALSE past the last offered mode. */
+BOOLEAN AdmissionScanoutSourceModeAt(_In_ ADMISSION_CONTEXT *Context,
+                                     _In_ ULONG Index, _Out_ ULONG *Width,
+                                     _Out_ ULONG *Height, _Out_ ULONG *Stride);
+BOOLEAN AdmissionScanoutSourceModeSupported(_In_ ADMISSION_CONTEXT *Context,
+                                            _In_ ULONG Width,
+                                            _In_ ULONG Height,
+                                            _In_ ULONG Stride);
+/* Bit (1u << D3DKMDT_VPPS_x) for every scaling cofunctional with a source of
+ * Width x Height; zero when the size is not an offered source mode. */
+ULONG AdmissionScanoutScalingSupport(_In_ ADMISSION_CONTEXT *Context,
+                                     _In_ ULONG Width, _In_ ULONG Height);
+/* The transform a commit applies for a requested D3DKMDT_VPPS value. */
+BOOLEAN AdmissionScanoutResolveScaling(
+    _In_ ADMISSION_CONTEXT *Context, _In_ ULONG Width, _In_ ULONG Height,
+    _In_ D3DKMDT_VIDPN_PRESENT_PATH_SCALING Requested,
+    _Out_ D3DKMDT_VIDPN_PRESENT_PATH_SCALING *Resolved);
 NTSTATUS AdmissionScanoutCommit(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ ULONG Width, _In_ ULONG Height, _In_ ULONG Stride,
-    _In_ D3DDDIFORMAT Format);
+    _In_ D3DDDIFORMAT Format,
+    _In_ D3DKMDT_VIDPN_PRESENT_PATH_SCALING Scaling);
 NTSTATUS AdmissionScanoutSetVisible(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Visible);
 NTSTATUS AdmissionScanoutQueuePresent(
@@ -2080,16 +2310,68 @@ DXGKDDI_ESCAPE AdmissionDdiEscape;
 BOOLEAN AdmissionGpuvaG3PrivateContextBusy(ADMISSION_RENDER_CONTEXT *);
 BOOLEAN AdmissionGpuvaG3PrivateRetireContext(ADMISSION_RENDER_CONTEXT *);
 BOOLEAN AdmissionGpuvaG3PrivateReset(ADMISSION_CONTEXT *);
+BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *,
+    ADMISSION_RENDER_CONTEXT *, ULONG Fence, ULONGLONG TimestampVa,
+    ULONGLONG TimestampEndNs);
+/* L1 receipt-only: enables the G3 lock profile on its first call and writes
+ * Wom1G3LockProfile (and Wom1G3LockProfileHot when Dense) into Key. */
+VOID AdmissionGpuvaG3LockProfileExport(ADMISSION_CONTEXT *, HANDLE Key,
+    BOOLEAN Dense);
 /* noinline: its _ReturnAddress names the cancelling path (receipt). */
 __declspec(noinline) VOID AdmissionGpuvaG3PrivateCancel(ADMISSION_RENDER_CONTEXT *, ULONG, BOOLEAN);
 VOID AdmissionGpuvaG3PrivatePreempt(ADMISSION_RENDER_CONTEXT *, ULONG);
 BOOLEAN AdmissionGpuvaG3PrivateReported(ADMISSION_CONTEXT *, ADMISSION_RENDER_CONTEXT *, ULONG);
+VOID AdmissionGpuvaG3CaptureFaultMapping(ADMISSION_CONTEXT *,
+    const ADMISSION_GPU_FAULT_EVENT *, ADMISSION_GPU_FAULT_MAPPING *);
 /* Phase 5a: bind the head pending submission into the empty render slot
  * (worker, PASSIVE_LEVEL); FALSE only when an accepted job cannot be bound. */
 BOOLEAN AdmissionG4PendingBindHead(ADMISSION_CONTEXT *);
 /* Phase 5a: drop every pending submission like a queued packet (SchedulerLock
  * held); Preempt selects preemption (resubmitted later) over cancel. */
 VOID AdmissionG4PendingDropLocked(ADMISSION_CONTEXT *, BOOLEAN Preempt);
+/* rc90 build-ahead (render_job_ahead.h). FillLocked: the adapter-side
+ * inputs of a decision (SchedulerLock held; CpuHeadFence needs PagingLock
+ * and is left to the caller). PrebindHead: while the running job whose
+ * image was released runs, bind the head pending submission into the image
+ * (PASSIVE_LEVEL, no lock held; State carries the runtime inputs and
+ * receives the rest; TRUE when an entry is now Prebound). PromoteLocked:
+ * move the Prebound head with this fence into the empty RenderPacket as
+ * Queued (SchedulerLock held). AheadUnbind: release a Prebound (or
+ * dropped) entry's image and return it to Queued or free it. */
+struct _ADMISSION_JOB_AHEAD_STATE;
+VOID AdmissionJobAheadFillLocked(ADMISSION_CONTEXT *,
+    struct _ADMISSION_JOB_AHEAD_STATE *);
+BOOLEAN AdmissionG4PendingPrebindHead(ADMISSION_CONTEXT *,
+    struct _ADMISSION_JOB_AHEAD_STATE *, ULONG *Refusal);
+BOOLEAN AdmissionG4PendingAheadPromoteLocked(ADMISSION_CONTEXT *, ULONG Fence);
+VOID AdmissionG4PendingAheadUnbind(ADMISSION_CONTEXT *);
+/* rc102 (render_job_window.h). KickLocked: the Prebound head with this
+ * fence is being kicked behind the running job: the scheduler's queued
+ * fence becomes its KickedFence, the context gets the entry's DMA range
+ * and mapping generation (its BeginJob reads them), the entry turns
+ * Kicked (PagingLock and SchedulerLock held). AdoptLocked: the kicked
+ * entry becomes the active render packet once the running job's
+ * completion was reported, as dispatch + activation would (SchedulerLock
+ * held). AbortKickedLocked: a reset aborted the kicked fence before it
+ * was adopted: its scene is cancelled, the context released and the
+ * entry freed (it may have run: never resubmitted). */
+BOOLEAN AdmissionG4PendingKickLocked(ADMISSION_CONTEXT *, ULONG Fence);
+BOOLEAN AdmissionG4PendingAdoptLocked(ADMISSION_CONTEXT *, ULONG Fence);
+VOID AdmissionG4PendingAbortKickedLocked(ADMISSION_CONTEXT *);
+/* Depth-2 kick fallback (investigation/analysis/DEPTH2-KICK-FALLBACK.md):
+ * the kick of the Kicked head with this fence was refused before the
+ * firmware saw it: the scheduler's kick is undone and the entry turns
+ * Prebound again, so the running job's ahead chain (or ordinary dispatch)
+ * submits it at depth 1; during a boundary preemption the scheduler hands
+ * the fence back to VidSch and the entry is dropped as
+ * AdmissionG4PendingDropLocked drops a Prebound one (PagingLock and
+ * SchedulerLock held). */
+BOOLEAN AdmissionG4PendingUnkickLocked(ADMISSION_CONTEXT *, ULONG Fence);
+/* rc102: a reset proved this fence's job never reached the firmware (a
+ * kicked successor never handed over, or an active job whose submit
+ * failed): end its graph job unrun (the lease stays with a job still
+ * running) and unstart its private scene. PASSIVE_LEVEL. */
+VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *, ULONG Fence);
 NTSTATUS AdmissionGpuvaG3PrivateEscape(ADMISSION_CONTEXT *, const DXGKARG_ESCAPE *);
 #endif
 DXGKDDI_COLLECTDBGINFO AdmissionDdiCollectDbgInfo;
@@ -2206,5 +2488,13 @@ void AdmissionRecordB1Qualification(_In_ ADMISSION_CONTEXT *Context,
                                     _In_ ULONG OutputPixelA,
                                     _In_ ULONG OutputPixelB);
 #endif
+
+/* RC10: no allocation, registry I/O or handle dereference in status capture. */
+BOOLEAN AdmissionRecordDdiStatus(ULONG Slot, NTSTATUS Status, ULONG Operation,
+    ULONGLONG Allocation, ULONGLONG Object);
+HANDLE AdmissionPagingStatusAllocation(const DXGKARG_BUILDPAGINGBUFFER *Args);
+void AdmissionQueueDdiStatus(ADMISSION_CONTEXT *Context);
+void AdmissionRecordPagingInternalStatus(ADMISSION_CONTEXT *Context,
+    const DXGKARG_BUILDPAGINGBUFFER *Args, NTSTATUS Status);
 
 #endif
