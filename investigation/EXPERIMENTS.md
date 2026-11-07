@@ -46680,3 +46680,37 @@ Expected:
 Revert:
 - `C:\Users\pavel\ans-revert-bootstart.ps1`;
 - ImagePath back to the 0.3 store dir 8aa920c3.
+
+### ANS012-R2 result — 2026-11-07T14:22Z: GSIV fix CONFIRMED; native boot INCOMPLETE (paging-read errors)
+
+- Pre-check: AppleAns 0.3, Start=0, guard present, no StartOverride.
+- C (launch-gpu-ans.sh with G2 images, diagnostic runner):
+  - handoff at 19 s; "IRQ route enabled vINTID=960 AIC=590" first, then xHCI 865 and 857;
+  - Windows reached NTFS mount (C: and T: healthy), LSASS and the EventLog service; events were written natively to C:;
+  - then 183 disk Event 51 (paging-operation errors on \Device\Harddisk0\DR0) in two bursts about 20 s apart (guest time);
+  - kernel PSCI SYSTEM_RESET at about 144 s (same HAL reset path as the clean ANS011 reboot); no SSH;
+  - the snapshot came too late (runner already exited); HV_ANS_OPS_TOTAL=0.
+- D: launch-normal2 SSH in 38 s, not dirty, chkdsk /scan exit 0, gate unchanged.
+
+Verdict: the APPL0003 resource conflict is resolved: AppleAns starts with the GPU daily images. Some read SRBs fail.
+Hypothesis: the fail-closed DMA translation rejects guest pages of a region specific to the GPU configuration (writes and most reads work).
+
+Next: instrumented driver.
+
+### ANS012-R3 — instrumented AppleAns 0.3.1 (preregistered 2026-11-07T14:24:05Z)
+
+WHY THIS HYPOTHESIS:
+1. R2 shows working native writes, NTFS and event log, but bursts of paging-read failures.
+2. The only driver paths that fail an SRB without the controller are the DMA translation reject, SG→PRP reject and resets. NVMe CQE errors are the alternative.
+3. The System log is written natively, so receipts survive.
+
+Single variable vs R2: AppleAns 0.3.1 (ANSBUILD009-G, sys fe48e344…, same E9BE15BD signer, staged with transient trust). It is 0.3 plus bounded StorPortLogError receipts:
+- 0xA1 = translate reject (value = IPA>>12);
+- 0xA2/0xA3 = SG→PRP reject;
+- 0xA4 = NVMe CQE error;
+- 0xA5 = reset.
+At most 96 per start.
+
+Run: `.local/ans-native/ANS012-R3-run/run.sh` (sha d74be0e3a1e86127…): prep-diag, R2 steps, then diag-events.ps1 in recovery.
+
+Expected: AppleAns events identifying the failing class/addresses. If there are none, the failures are elsewhere (disk class/partmgr), which is the next discriminator.
