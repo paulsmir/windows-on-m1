@@ -8,6 +8,19 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-07 20:15Z -- DEVICE-LOAD GAP IS INSIDE THE GPU MEMORY PATH (EXP2238-2241)
+- CORRECTION: MEMBW (EXP2226-2237) read its buffer via SRV ld_raw -> nir txf (texture path); Metal twin used device
+  loads. MEMBWUAV (34e9c89f3, UAV -> load_ssbo) is the like-for-like probe: ours 16K 132-134 / 256K 330-350 / 1M 365 /
+  4M 424-466 / 16M 479-514 ns vs macOS 118 / 120 / ~150 / 176 / 181; page-spread 214-611 vs 65-92; bandwidth equal 58 GB/s.
+  Exclusions done on the txf path only (PTE AP/PXN, VMID TLBI isolation) must be re-checked on device loads if revived.
+- EXP2240/2241 CPU chase (tools/memlat/cpu_memlat.c): Windows recovery P-core L1 1.54 ns vs macOS 0.94 (clock ~2.0 vs
+  3.2 GHz), DRAM 23 vs 15.6 ns (scales LESS than clock). SoC fabric/DRAM DVFS hypothesis NOT supported.
+- Remaining candidates (rank): (1) GPU L2/uncore configuration or clock (256K-1M = GPU L2 range already 2.7x, one
+  page 16K only 1.1x); (2) UAT walk/TLB (page-spread 3-8x). Next: kext RE + Asahi/m1n1 for GPU L2/SLC/uncore
+  configuration and per-pstate fabric/uncore requests the firmware receives (initdata perf states), offline first.
+- Side optimisation found: DXBC SRV raw loads via txf are slower than device loads -> lower SRV raw/structured loads
+  of buffers to device loads (production change, measured with MEMBW vs MEMBWUAV).
+
 ## UPDATE 2026-11-07 14:00Z -- COMPUTE GAP = MEMORY LATENCY (EXP2226, macOS on the J313)
 - mtlsplitd per-dispatch Apple times (run 2, valid): every large C3/C4 kernel is ~2x faster on Apple
   (C3 pieces 1.29/0.66/0.33/0.33/0.25 ms vs 0.605/0.235/0.184/0.150/0.139; 7aa43c6c 1.51 vs 1.13) with static
