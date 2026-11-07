@@ -120,13 +120,21 @@ static APPLE_AGX_BOOL AdmissionEvictG4Manager(void *c,const APPLE_AGX_RENDER_MAN
 typedef struct {
  unsigned char ManagerSlots,RcDepth2,RcReceiptEnabled,RcExportPending,Depth2General,Depth2Prelude;
  unsigned char JobAhead,JobDepth2,JobDepth2Kick,JobDiagnostics;
+ unsigned char FwRxDrain,PresentTsEnabled; /* 125bddd1, EXP2205 */
+ unsigned Depth2FallbackDrill,Depth2FallbackDrillCount; /* be8c6f7f */
  unsigned Depth2Capabilities,Depth2KickClasses;
  struct { APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory; } Initdata;
  struct { struct {APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG Config;} QueueProvider;} Provider;
 } Runtime;
-static void configure(Runtime *runtime,void *Context) {
+typedef struct { unsigned G3RetainedSlots; } Adapter; /* V1 Wom1G3RetainedSlots */
+static unsigned char AdmissionPlatformDwordValue(void *c,const wchar_t *n,unsigned *v) {
+ (void)c;(void)n;(void)v;return 0;
+}
+static void configure_on(Runtime *runtime,Adapter *Context) {
 '''+body+r'''
 }
+static Adapter adapter;
+static void configure(Runtime *runtime,void *unused) { (void)unused; configure_on(runtime,&adapter); }
 int main(void) {
  Runtime r={0}; r.Initdata.RenderSharedMemory.NotifierFlight=1;
  switches=15; configure(&r,0);

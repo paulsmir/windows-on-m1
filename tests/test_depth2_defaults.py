@@ -14,13 +14,14 @@ from test_render_job_depth2_exp2047 import WORKER, RENDER, SHARED, section
 # Independent expected policy, including the retained legacy selectors.
 ON = ('ManagerSlots', 'JobBuildAhead', 'JobDepth2', 'JobDepth2Caps',
       'NotifierFlight', 'RcDepth2', 'Depth2General', 'Depth2TaOn3d',
-      'Depth2TaOnCompute')
-OFF = ('Depth2Prelude', 'Depth2ComputeOnCompute', 'RcReceipt', 'JobDiagnostics',
+      'Depth2TaOnCompute', 'Depth2Prelude', 'Depth2ComputeOnCompute')
+# dbd498a80 (EXP2129-2133): prelude pairs and compute-on-compute default on.
+OFF = ('RcReceipt', 'JobDiagnostics',
        'JobDepth2Kick', 'JobDepth2KickOn3d', 'ManagerSaveOnEvict')
 FIELDS = ('slots', 'ahead', 'depth', 'caps', 'flight', 'rc', 'general',
           'classes', 'kick', 'prelude', 'receipt', 'diagnostics', 'save',
           'manager_depth', 'abort_suffix')
-ACCEPTED = (1, 1, 1, 15, 1, 1, 1, 14, 1, 0, 0, 0, 1, 1, 1)
+ACCEPTED = (1, 1, 1, 15, 1, 1, 1, 30, 1, 1, 0, 0, 1, 1, 1)
 
 
 def source():
@@ -56,7 +57,7 @@ typedef const wchar_t *PCWSTR;
 typedef const wchar_t *UNICODE_STRING;
 typedef struct { ULONG TitleIndex, Type, DataLength; UCHAR Data[4]; }
  KEY_VALUE_PARTIAL_INFORMATION, *PKEY_VALUE_PARTIAL_INFORMATION;
-typedef struct { void *PhysicalDeviceObject; } ADMISSION_CONTEXT;
+typedef struct { void *PhysicalDeviceObject; ULONG G3RetainedSlots; } ADMISSION_CONTEXT;
 static const wchar_t *selected;
 static int mode;
 static unsigned opened, closed;
@@ -83,10 +84,17 @@ static APPLE_AGX_BOOL AdmissionEvictG4Manager(void *c,const APPLE_AGX_RENDER_MAN
 typedef struct {
  BOOLEAN ManagerSlots,RcDepth2,RcReceiptEnabled,RcExportPending,Depth2General,Depth2Prelude;
  BOOLEAN JobAhead,JobDepth2,JobDepth2Kick,JobDiagnostics;
+ BOOLEAN FwRxDrain; /* 125bddd1: class C, default on */
+ BOOLEAN PresentTsEnabled;
+ ULONG Depth2FallbackDrill,Depth2FallbackDrillCount; /* be8c6f7f: diagnostic, default 0 */
  unsigned Depth2Capabilities,Depth2KickClasses;
  struct { APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory; } Initdata;
  struct { struct {APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG Config;} QueueProvider;} Provider;
 } Runtime;
+/* the Wom1Depth2FallbackDrill DWORD reader: absent in every default case */
+static BOOLEAN AdmissionPlatformDwordValue(ADMISSION_CONTEXT *c,PCWSTR n,ULONG *v) {
+ (void)c;(void)n;(void)v;return FALSE;
+}
 static void configure(Runtime *runtime,ADMISSION_CONTEXT *Context) {
 ''' + notifier + config + r'''
 }
@@ -94,7 +102,7 @@ int main(int argc,char **argv) {
  (void)AdmissionPlatformSwitchDisabled;
  assert(argc==3);wchar_t name[80];assert(mbstowcs(name,argv[1],80)<80);
  selected=name;mode=atoi(argv[2]);
- ADMISSION_CONTEXT context={(void *)1};if(mode==7)context.PhysicalDeviceObject=NULL;
+ ADMISSION_CONTEXT context={(void *)1,0u};if(mode==7)context.PhysicalDeviceObject=NULL;
  Runtime r={0};configure(&r,&context);
  assert(opened==closed);
  printf("%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n",
@@ -145,24 +153,24 @@ class Depth2Defaults(unittest.TestCase):
 
     def test_each_zero_preserves_its_opt_out_and_dependencies(self):
         cases = {
-            'ManagerSlots': dict(slots=0, general=0, caps=13, classes=8, save=0, manager_depth=0, abort_suffix=0),
-            'JobBuildAhead': dict(ahead=0, depth=0, caps=0, general=0, classes=8, kick=0, save=0, manager_depth=0, abort_suffix=0),
-            'JobDepth2': dict(depth=0, caps=0, general=0, classes=8, kick=0, save=0, manager_depth=0, abort_suffix=0),
-            'JobDepth2Caps': dict(caps=0, general=0, classes=8, kick=0, save=0, manager_depth=0, abort_suffix=0),
-            'NotifierFlight': dict(flight=0, caps=13, general=0, classes=8, kick=0, save=0, manager_depth=0, abort_suffix=0),
+            'ManagerSlots': dict(slots=0, general=0, prelude=0, caps=13, classes=8, save=0, manager_depth=0, abort_suffix=0),
+            'JobBuildAhead': dict(ahead=0, depth=0, caps=0, general=0, prelude=0, classes=8, kick=0, save=0, manager_depth=0, abort_suffix=0),
+            'JobDepth2': dict(depth=0, caps=0, general=0, prelude=0, classes=8, kick=0, save=0, manager_depth=0, abort_suffix=0),
+            'JobDepth2Caps': dict(caps=0, general=0, prelude=0, classes=8, kick=0, save=0, manager_depth=0, abort_suffix=0),
+            'NotifierFlight': dict(flight=0, caps=13, general=0, prelude=0, classes=8, kick=0, save=0, manager_depth=0, abort_suffix=0),
             'RcDepth2': dict(rc=0),  # General subsumes it only while General is effective.
-            'Depth2General': dict(general=0, caps=13, classes=8, save=0, manager_depth=0, abort_suffix=0),
-            'Depth2TaOn3d': dict(classes=10),
-            'Depth2TaOnCompute': dict(classes=12),
+            'Depth2General': dict(general=0, prelude=0, caps=13, classes=8, save=0, manager_depth=0, abort_suffix=0),
+            'Depth2TaOn3d': dict(classes=26),
+            'Depth2TaOnCompute': dict(classes=28),
+            'Depth2Prelude': dict(prelude=0),
+            'Depth2ComputeOnCompute': dict(classes=14),
         }
         for switch, changes in cases.items():
             with self.subTest(switch=switch):
                 self.assertEqual(self.resolve(switch, 0), self.expected(**changes))
 
     def test_unproven_classes_diagnostics_and_legacy_selectors_stay_opt_in(self):
-        enabled = {'Depth2Prelude': dict(prelude=1),
-                   'Depth2ComputeOnCompute': dict(classes=30),
-                   'RcReceipt': dict(receipt=1), 'JobDiagnostics': dict(diagnostics=1)}
+        enabled = {'RcReceipt': dict(receipt=1), 'JobDiagnostics': dict(diagnostics=1)}
         for switch in OFF:
             for mode in (2, 0, 1):
                 with self.subTest(switch=switch, mode=mode):
@@ -177,7 +185,7 @@ class Depth2Defaults(unittest.TestCase):
 
     def test_compile_time_disabled_build_ahead_never_enables_depth_two(self):
         self.assertEqual(self.resolve(ahead=0), self.expected(
-            ahead=0, depth=0, caps=0, rc=0, general=0, classes=0,
+            ahead=0, depth=0, caps=0, rc=0, general=0, prelude=0, classes=0,
             kick=0, save=0, manager_depth=0, abort_suffix=0))
 
 

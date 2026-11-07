@@ -3,7 +3,8 @@
 
 Usage: python3 run_against_baseline.py [module-or-glob ...]   (from tests/)
 Default modules: the D3D12, UMD, G2/G4 winsys, D3D-G1, R149, win32, C53, shader-frontend, D3D10/11 (WDDM 2.0),
-OV overlap and owner declaration-order suites.
+OV overlap and owner declaration-order suites, and the KMD render window,
+depth-2, scheduler, firmware-RX and notifier suites.
 
 tests/known_failures.txt lists one failing test id per line
 (module.Class.method, or the module name for an import error), each with a
@@ -20,7 +21,11 @@ HERE = Path(__file__).resolve().parent
 BASELINE = HERE / 'known_failures.txt'
 DEFAULT = ['test_d3d12_*', 'test_umd*', 'test_g4*', 'test_d3dg1*', 'test_r149*', 'test_g2*', 'test_apple_agx_win32*',
            'test_c53*', 'test_dxil_to_nir', 'test_dxbc_to_nir', 'test_wddm2*', 'test_d3d10*', 'test_d3d11*',
-           'test_ov*', 'test_owner_*']
+           'test_ov*', 'test_owner_*',
+           # 2026-11-07: the KMD window/scheduler/receipt suites had rotted unnoticed
+           # (4 slicer fixtures broken since 2026-11-03) because no gate ran them.
+           'test_render_*', 'test_depth2_*', 'test_apple_agx_scheduler', 'test_fw_rx_*',
+           'test_notifier_*']
 
 
 def modules(patterns):

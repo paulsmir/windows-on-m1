@@ -53,7 +53,14 @@ typedef struct {
     ADMISSION_GPU_COMPLETION_RING GpuCompletions;
     ULONG JobTimingLock, ComputeTsFence, ComputeTsRequested;
     ULONGLONG ComputeTsCommandVa, ComputeTsWords[4];
+    /* fields the sliced KMD functions read since EXP2205/T1 */
+    BOOLEAN JobDiagnostics, PresentTsEnabled;
+    struct {
+      ULONG Version, Bytes, Count, Head;
+      struct { ULONG ProcessId, Fence; ULONGLONG Start, End; } Ring[512];
+    } PresentTs;
 } ADMISSION_PLATFORM_RUNTIME;
+#define RTL_NUMBER_OF(a) (sizeof(a) / sizeof((a)[0]))
 /* Replace only the hardware pstate read; retain the actual timing writer. */
 static ULONGLONG AdmissionJobTimingPstateWord(ADMISSION_PLATFORM_RUNTIME *runtime) {
     (void)runtime;return 0x80010203ULL;
@@ -73,6 +80,8 @@ EXERCISE = r'''
     unsigned char *first_words[8];
     ULONGLONG end_ns = 0, word;
     unsigned n;
+    /* per-job firmware timing is recorded only with Wom1JobDiagnostics */
+    runtime.JobDiagnostics = TRUE;
     owner.NotifierFlight = FLIGHT_MODE;
     if (owner.NotifierFlight) assert(AppleAgxRenderFlightBegin(&owner,80));
 #define BUILD(init) AppleAgxRenderSharedMemoryBuildActiveG4Job(&owner,arena,APPLE_AGX_EXP208_ARENA_BYTES,source_objects,APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,0x1500800000ULL,init,&bindings,&staged_job,runtime.QueueObjects,&active_job)
