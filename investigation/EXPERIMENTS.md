@@ -74490,3 +74490,9 @@ Steps: CPU chase cpu 7/cpu 0; MEMBW twice (SRV txf); MEMBWUAV twice (device load
 - Probe: agx_d3d12_probe_e2243_arm64.exe = byte copy of e2239/e2238 (sha 432443c086cef563); probe2243.sh = probe2239.sh + cpu_memlat (cpu 7, cpu 0).
 - Hashes: sys 6b20bc3b2a42, UmdArm64 fd74c67828c1, UmdX64 e73e531ee122, Umd32 8cc00cd174e5; manifest 95d7d16e88d5, hardware-manifest 5aed303d3924; probe2243.sh 47e9f23cb0ce (PROBE_LINT_OK); visible recovery rec2243h 3f2568ac1254595a; m1n1 0d3a75b3.
 - Recovery rec2243h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2243-slc/run2243.sh.
+
+EXP2243 ACTUAL (2026-11-07T20:42:54Z): CONFIRMED (SLC enabled, measurable gain). m1n1 brokerlock-slc 2a80db3a (sha 83e5f207) booted; full-chainload.log "MCC: System level cache enabled". Pipeline RC 0, suite 119/0, guest alive throughout, GravityMark d closed normally (wer 0).
+- GravityMark D3D12 HD PERF (100k, -temporal 0): 44.434 fps (2665 frames) vs control EXP2238 41.073 and recent same-config runs EXP2233/2235/2237/2239 40.73-40.85 -> +8.5 % (well outside the 0.8 % spread).
+- CPU chase (GPU profile, P-cluster fixed P12 2988 MHz so L1 1.01 ns): cpu7 4-8M 5.5 ns, 16M 12.9 (EXP2240 22.4 at P7), DRAM 19.5-19.9; cpu0 (E) 4M 16.4 vs 34.9 in EXP2240 -> the SLC level is now present.
+- GPU MEMBWUAV 32-thread (2 runs): 16K 132-139, 64K 176-180, 256K 251-287, 1M 315-349, 4M 417-479, 16M 557, 64M 729; pages 223-432. vs EXP2238/2239: 256K-1M ~15-25 % lower, 4M+ unchanged; macOS 118-181 -> SLC is part of the cause, not the whole device-load gap.
+- Next: make the SLC enable unconditional in m1n1 for every profile (GPU, normal recovery, ANS-DIRECT) with a recovery-gate check (16/16 ways), then the next device-load candidates (DRAMCFG FAST as a separate variable; GPU-side config).
