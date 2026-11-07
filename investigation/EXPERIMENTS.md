@@ -46406,3 +46406,23 @@ No hardware.
 Verdict: build CONFIRMED (offline). Not hardware tested.
 
 Next: receipted m1n1 (280ce100) and Mu (J313_ANS_DIRECT + installed) builds, the ANS011 packet, C: package replacement, then preregister ANS011-R1 when the bench is free.
+
+### ANSBUILD022 (m1n1) and ANSBUILD023-D1 (Mu): ANS-DIRECT firmware builds (offline) — 2026-11-07T12:40Z
+
+- **m1n1 ANSBUILD022:** `m1n1_windows` 280ce100, clean tree.
+  - Command: `.local/ans-native/m1n1-build/build_receipted.py`, which runs `make clean` then `make LLDDIR=/tmp/agx-lld-dir/ -j8` with the rustup stable toolchain on PATH.
+  - First attempt failed in the build environment: `cargo` was not on PATH after `make clean`. Kept as ANSBUILD022-envfail-nocargo. Earlier builds had reused a stale build/librust.a.
+  - Result: exit 0, frozen inputs unchanged, m1n1.macho db18a837cfcb48b35cd8d6112434874e872a9b39b64fa4c6b1d5736a74489210, source manifest eea2ecca….
+- **Mu ANSBUILD023-D1:** APFS clone of snapshot native-I1, plus the 6 Mu files changed a33217e38..5bb92245ea, with a clean Build.
+  - Command: `build-in-container.sh build direct`, which sets J313_ANS_NATIVE_PROFILE, J313_ANS_INSTALLED_BOOT and J313_ANS_DIRECT to TRUE. Exit 0.
+  - Receipt `.local/ans-native/mu-build/ANSBUILD023-D1-receipt.json` 18fc92a7…, FD e321b5c4291aa34f7c434f8fd9162720420293bf778fe47fb6f54a1f42d7d533.
+  - Receipt checks:
+    - DxeCore links AppleAnsInstalledExitBootServicesGateLib;
+    - WindowsAutoBootAnsInstalled is the auto-boot module;
+    - DeviceAcpiTablesAnsDirect is the only ANS ACPI module;
+    - the DSDT carries APPL0003 with controller 0x27bcc0000+0x40000, mailbox 0x277408000+0x4000 and GSIV 889, and no broker page;
+    - the G2 SSDT is byte-identical to N1;
+    - the ESP PCDs are pinned;
+    - the warning set is identical to I1.
+
+Verdict: both builds CONFIRMED (offline). Not hardware tested.
