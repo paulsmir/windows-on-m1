@@ -46251,3 +46251,20 @@ WHY THIS HYPOTHESIS:
 Recorded offline difference: DriverPackages SignerScore is 0x0D000004 in the DISM WinPE hive and 0x0F000000 (Authenticode test signature) on C:.
 
 Expected: one SNAPSHOT_DEVNODE line for ACPI\APPL0003\0. If absent, ACPI never enumerated it (then compare the ACPI namespace).
+
+### ANS010-R4 result (recorded 2026-11-07T08:49:47Z) — APPL0003 configured but never attached in the boot-driver stage
+
+- Again 0x7B (P2 0xC0000034, P4 1). Kernel base 0xfffff802a8c00000.
+- Devnode snapshot (38 nodes; .local/ans-native/ANS010-R4-run/devnodes.txt):
+  - ACPI\APPL0003\0: svc=AppleAns, state 0x304 (DeviceNodeInitialized), problem 0. The R2 records do configure it.
+  - Started (0x30a): HTREE root, volmgr, vdrvroot, spaceport, ARM64_HAL, ACPI_HAL, PNP0A08 (pci, no children), ACPI0010.
+  - Every other devnode (USBXHCI, AppleInput, BasicDisplay, ...) is also Initialized, i.e. queued for processing after the boot device.
+- Recovery 7026 events list only FFA and uiomap, so AppleAns DriverEntry succeeds as a boot-start driver.
+- Recovery: chkdsk 0, not dirty, Start=3, APPL0002=1/28, 8 CPUs. Bench returned.
+
+Interpretation:
+- The devnode becomes configured only by the late in-kernel configuration, after the boot-driver AddDevice pass, so it is not a boot device when the kernel looks for C:.
+- A previously installed device carries a persisted Enum\ACPI\<id>\<inst> (Service, ClassGUID, Driver, ConfigFlags=0). That is how the PCI vNVMe/stornvme devnode serves C: in recovery.
+- WinPE never needed this because its boot device is the ramdisk.
+
+Next variable (ANS010-R5): persist a configured Enum\ACPI\APPL0003\0 (Service=AppleAns, class SCSIAdapter + class instance key, ConfigFlags=0), mirroring the C: AppleInput Enum\ACPI\APPL0001\0 layout. It is a phantom device in recovery.
