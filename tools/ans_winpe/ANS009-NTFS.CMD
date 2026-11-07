@@ -57,6 +57,17 @@ if /i "!LETTER!"=="%T%" set ISTEST=0
 >>"%R%\STATUS.TXT" echo t_is_anstest=!ISTEST! stick=!LETTER!
 call :live
 if not "!ISTEST!"=="1" goto protect
+rem ANS009-R3: a writable C: whose writes EL2 denies wedged the disk flush (diskpart set readonly hung).
+rem Take every other lettered volume on the native disk offline while the disk is still read-only.
+>"%R%\DD.TXT" echo select disk !NDISK!
+>>"%R%\DD.TXT" echo detail disk
+>>"%R%\DD.TXT" echo exit
+diskpart /s "%R%\DD.TXT" >"%R%\DD.LOG" 2>&1
+set OFFV=
+for /f "usebackq tokens=1,2,3" %%A in ("%R%\DD.LOG") do if /i "%%A"=="Volume" call :offvol "%%C"
+>>"%R%\STATUS.TXT" echo other_volumes_offlined=!OFFV!
+call :live
+mountvol >"%R%\MOUNTVOL-AFTER.TXT" 2>&1
 call :attr clear RW
 >>"%R%\STATUS.TXT" echo readonly_cleared=!RWOK!
 call :live
@@ -116,13 +127,23 @@ call :live
 endlocal
 exit /b 0
 
+:offvol
+set L=%~1
+if not "!L:~1!"=="" exit /b 0
+if /i "!L!"=="%T%" exit /b 0
+if /i "!L!"=="!LETTER!" exit /b 0
+if /i "!L!"=="X" exit /b 0
+mountvol !L!: /P >>"%R%\OFFVOL.LOG" 2>&1
+set OFFV=!OFFV!!L!(!errorlevel!)
+exit /b 0
+
 :live
 if defined LIVE copy /y "%R%\STATUS.TXT" "!LIVE!\STATUS.TXT" >nul 2>&1
 exit /b 0
 
 :cmp
 set /a N+=1
-fc /b "X:\Windows\System32\%~1" "%T%:\ANS009\SYS32\%~1" >nul 2>&1
+fc /b "X:\Windows\System32\%~1" "%T%:\ANS009\SYS32\%~1" >>"%R%\FC.LOG" 2>&1
 if errorlevel 1 (set /a BAD+=1& >>"%R%\MISMATCH.LOG" echo %~1)
 exit /b 0
 

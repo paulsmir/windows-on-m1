@@ -45990,3 +45990,15 @@ completing or is rejected; (3) the capped receipts never covered that phase.
 Expected discriminators: "HV ANS reject" lines (result + LBA) => a rejected write (e.g. window edge, BAD_COMMAND such as
 a CDB the planner refuses); "HV ANS stuck" lines => a device request that never completes; neither => the stall is
 inside the guest (driver/storport/NTFS), localized by the live robocopy log (last file) and STATUS.
+
+ANS009-R3 result (recorded 2026-11-07T02:17:44Z): CONFIRMED (diagnosis) — the native write path is correct; the hang is an
+experiment-design artifact (a writable C: whose writes EL2 correctly denies).
+Live stick log (ANS009-LIVE-32061): robocopy copied all 904 files, 588,764,352 B in 5 s (108.7 MB/s), rc=1 (success);
+dismount0/1/2 rc=0; chkdsk T: rc=0 in WinPE; then STATUS stops before "readonly_restored": WinPE hung in
+"diskpart attributes disk set readonly" until the 1500 s stop (in ANS008 the same step succeeded).
+EL2: 254 reject receipts (cap 256 not reached) — all ANS_RESULT_DENIED WRITEs to LBA 30975660..31704359 (inside C:,
+outside the window), 0 rejects inside the ANSTEST window; 0 "stuck" receipts (no device request ever >1 s).
+Recovery: same 133-file VDL tail as R1/R2, chkdsk T: clean. With no rejected or stuck in-window request, T:'s final
+metadata write-back never ran: Windows was wedged flushing C:, whose writes can never succeed under the window.
+Next: ANS009-R4 = same artifacts, WinPE stage takes every other lettered native volume offline (mountvol /P) while the
+disk is still read-only, so nothing outside the window is writable; fc output logged.
