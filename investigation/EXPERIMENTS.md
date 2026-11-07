@@ -46312,3 +46312,28 @@ ANS010-R6 (diagnostic only):
 - Expected:
   - AppleAns.sys absent: winload/boot-driver selection issue (Start/group/BootFlags/signature);
   - present: DriverEntry/AddDevice path.
+
+### ANS010-R6 result + ANS010-R7 preregistration (2026-11-07T09:21:56Z)
+
+ANS010-R6 result: root cause CONFIRMED.
+- The loaded-module list at the 0x7B (66 modules, .local/ans-native/ANS010-R6-run/modules.txt) contains storport.sys, stornvme.sys, disk.sys, partmgr.sys, Ntfs.sys and the rest, but **no AppleAns.sys**. winload did not load it.
+- Recovery registry: Services\AppleAns\StartOverride\0 = 3; storahci carries the same demotion; stornvme has none.
+- Windows demotes a boot-start storage driver that controls no device. It wrote the override during an intermediate recovery boot with AppleAns Start=0, almost certainly in R1, before any APPL0003 devnode existed. winload honours StartOverride, so AppleAns never loaded natively in R1..R6.
+- Recovery: chkdsk 0, not dirty, Start=3, APPL0002=1/28. Bench returned.
+
+ANS010-R7:
+- R5 packet (seal 6e4489e1...) plus the R6 diagnostics. Scripts changed:
+  - pre-native removes AppleAns\StartOverride after Start=0 and refuses to run if stornvme\StartOverride exists;
+  - native-evidence records any override and removes stornvme\StartOverride before reboot, so the recovery boot driver is never left demoted;
+  - recovery-verify reports both overrides.
+- run.sh 037c5082...
+
+WHY THIS HYPOTHESIS:
+1. R6 module list: AppleAns.sys absent, while the recovery ntbtlog with Start=0 shows winload loading it.
+2. StartOverride\0=3 is present exactly on AppleAns (and the unused storahci), and absent on stornvme, whose devnode exists.
+
+Single variable: StartOverride removed before the native boot.
+
+Open risk: the intermediate recovery reboot (Start=0, phantom devnode since PREP3) could rewrite the override before the SoC reset. Then R7 repeats R6 and its module list shows it.
+
+Expected: AppleAns.sys loaded; broker QUERY/CLAIM; native SSH; the R1 pass criteria.
