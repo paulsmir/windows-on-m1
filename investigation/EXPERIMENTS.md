@@ -46268,3 +46268,29 @@ Interpretation:
 - WinPE never needed this because its boot device is the ramdisk.
 
 Next variable (ANS010-R5): persist a configured Enum\ACPI\APPL0003\0 (Service=AppleAns, class SCSIAdapter + class instance key, ConfigFlags=0), mirroring the C: AppleInput Enum\ACPI\APPL0001\0 layout. It is a phantom device in recovery.
+
+### ANS010-PREP3 + ANS010-R5 — persisted APPL0003 devnode (preregistered 2026-11-07T08:51:56Z; waiting for the bench)
+
+ANS010-PREP3 (done; recovery guest, no reboot; imported as SYSTEM):
+- Enum\ACPI\APPL0003\0: HardwareID ACPI\VEN_APPL&DEV_0003 / ACPI\APPL0003 / *APPL0003; ClassGUID SCSIAdapter; Service=AppleAns; ConfigFlags=0; DeviceDesc/Mfg @oem6.inf; Driver={4d36e97b...}\0002.
+- Control\Class\{4d36e97b...}\0002: InfPath oem6.inf, InfSection AppleAnsInstall(.NT), MatchingDeviceId ACPI\APPL0003.
+- The layout mirrors C: AppleInput Enum\ACPI\APPL0001\0 (ans010/enum-appl0001.txt).
+- Rollback: ans010/appleans-devnode-rollback.reg.
+- Receipt installed-windows-prep.json 90fee91e...
+
+ANS010-R5 packet:
+- seal 6e4489e148e6a0b492a4608a9f3b986f25c7cd16ba5ccf03f35ba221475a7f0a; dry-run 0.
+- Same firmware, m1n1, driver, window and scripts. Snapshot diagnostics (KiBugCheckData + devnodes) stay on for the failure path.
+- run.sh 0a1d0620...
+
+WHY THIS HYPOTHESIS:
+1. R4 shows APPL0003 configured with svc=AppleAns but still DeviceNodeInitialized at the 0x7B, together with all non-boot devnodes. The boot-driver pass did not see it as an AppleAns device.
+2. Every working boot controller on C: (PCI vNVMe/stornvme) has a persisted configured Enum devnode. APPL0003 has never had one.
+
+Single variable: the persisted Enum devnode plus its class instance.
+
+Expected:
+- broker QUERY/CLAIM, then native SSH;
+- then the R1 pass criteria (probe, 0 rejects, chkdsk clean).
+
+If still 0x7B: the devnode snapshot shows the new state (DriversAdded/StartPending → driver start path; Initialized → the boot-driver association needs more than Enum).
