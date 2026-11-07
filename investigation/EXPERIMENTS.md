@@ -46156,3 +46156,39 @@ Leading hypothesis: INACCESSIBLE_BOOT_DEVICE.
 - pnputil online staging differs from the DISM offline injection that works in WinPE (ANS002..ANS009).
 
 Next: an offline comparison of the WinPE (DISM) SYSTEM hive with the C: registry for the AppleAns/APPL0003 configuration, and a way to capture the stop code before the next run.
+
+### ANS010-PREP2 + ANS010-R2 — kernel device-configuration records for APPL0003 (preregistered 2026-11-07T07:51:03Z)
+
+Offline root cause of ANS010-R1:
+- On C:, HKLM\SYSTEM\DriverDatabase\DriverPackages\appleans.inf_arm64_68a73bcd7b60fbb4 had 0 subkeys (read as SYSTEM).
+- The DISM-injected WinPE hive (prepared-ANS009-A, where APPL0003 was configured in-kernel on every ANS00x run) has:
+  - Configurations\AppleAnsInstall.NT {Service=AppleAns, ConfigScope=0xf7f, ConfigFlags=0};
+  - Descriptors\ACPI\APPL0003;
+  - Strings;
+  - plus Services\AppleAns Owners={oem0.inf}.
+- 26200 packages installed on a present device (appleinput oem2, inbox stornvme) carry the same records.
+- pnputil online staging without a present device omits them. `dism /Online /Add-Driver` is unsupported (error 50, offline images only).
+- So the native kernel found ACPI\APPL0003 with no configuration to bind AppleAns, which matches no broker operation followed by a halted bugcheck.
+
+ANS010-PREP2 (done; recovery guest, no reboot):
+- oem6.inf deleted and re-staged by pnputil (same store directory).
+- The three package records imported as SYSTEM (appleans-config.reg, mirroring the DISM hive).
+- Owners={oem6.inf} set on the service.
+- Receipt installed-windows-prep.json dc73cf4c... Logs: .local/ans-native/ans010/add-config.log, hive/winpe-system.txt, hive/c-system.txt.
+
+ANS010-R2 packet:
+- seal ee3dd66511140ca046841af28f315677ae6198f791af369288c46b17480ee5b0; dry-run exit 0.
+- Same firmware, m1n1, driver, window and scripts as R1.
+- run.sh bfe3ceb0... (R1 script with R2 paths).
+
+WHY THIS HYPOTHESIS:
+1. R1 had no broker operation at all, while the R4 WinPE with an identical driver, firmware ACPI and EL2 reached QUERY/CLAIM at the same point.
+2. The only configuration difference found between that WinPE and C: is these kernel device-configuration records (read as SYSTEM on both).
+
+Single variable: the presence of the AppleAns package's DriverDatabase configuration records on C:.
+
+Expected:
+- APPL0003 configured (Service AppleAns) and QUERY/CLAIM in hv.log;
+- then the R1 pass criteria.
+
+If no broker operation again: the configuration hypothesis is rejected; next is capturing the stop code (KiBugCheckData) before any other change.
