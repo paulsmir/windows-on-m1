@@ -46294,3 +46294,21 @@ Expected:
 - then the R1 pass criteria (probe, 0 rejects, chkdsk clean).
 
 If still 0x7B: the devnode snapshot shows the new state (DriversAdded/StartPending → driver start path; Initialized → the boot-driver association needs more than Enum).
+
+### ANS010-R5 result + ANS010-R6 preregistration (2026-11-07T09:06:21Z)
+
+ANS010-R5 result: REJECTED (persisted-devnode hypothesis).
+- Again 0x7B (P2 0xC0000034); base 0xfffff800e0400000.
+- APPL0003: svc AppleAns, DeviceNodeInitialized, problem 0. The 38-node devnode set is identical to R4.
+- HV_REJECTS=0, HV_STUCK=0.
+- Recovery: chkdsk 0, not dirty, Start=3, APPL0002=1/28, 8 CPUs. Bench returned.
+- The Enum devnode and class key stay on C: (inert in recovery).
+
+Remaining cause: the boot-driver pass never treats AppleAns as a loaded boot driver. Either winload did not load AppleAns.sys in the native boot, or its DriverEntry failed there.
+
+ANS010-R6 (diagnostic only):
+- R5 packet (seal 6e4489e1...) plus --snapshot-modules 0xd6ad90,88,104 (runner 8e53670c7: PsLoadedModuleList RVA; _KLDR_DATA_TABLE_ENTRY BaseDllName 88, Flags 104).
+- WHY: the loaded-module list at the 0x7B directly shows whether AppleAns.sys (and storport.sys) were loaded by winload.
+- Expected:
+  - AppleAns.sys absent: winload/boot-driver selection issue (Start/group/BootFlags/signature);
+  - present: DriverEntry/AddDevice path.
