@@ -45977,3 +45977,16 @@ media (R1 raw read), and the WinPE script never finishes. The capped early recei
 Next: ANS009-R3 with receipt-only diagnostics (m1n1 16b52e8c: every rejected I/O submit with LBA/len, and any I/O
 tag in flight >1 s per 5 s window) and live WinPE progress (STATUS + per-file robocopy log written to the stick
 as it runs, ANS009-LIVE-*), plus a guard that T: must be the ANSTEST volume. R2 files deleted first.
+
+### ANS009-R3 (preregistered 2026-11-07T01:47:07Z)
+
+Diagnostic rerun of the deterministic R1/R2 failure. Packet 17fdd54c0ec59f2759dd7a6ba9c54a8851fdca5cce92061b6c897f305c785f0b,
+m1n1 ANSBUILD020 (16b52e8c, e0489e10aac9e8c2cb44b434069bd588c1dc306c3efb7c488dbf44b0f5086e8c = ANSBUILD019 + receipt-only
+reject/stuck lines), same AppleAns W and Mu N3, WinPE 0a462004 (live stick progress + T: identity guard), gate a0b7fd40,
+run.sh d960cf01. Window 59706368:262144 unchanged. Launch: bash .local/ans-native/ANS009-R3-run/run.sh.
+WHY THIS HYPOTHESIS: (1) R1 and R2 fail identically at the same file after 476.6 MB, so the cause is deterministic;
+(2) R1 raw clusters show the data on media but NTFS VDL missing, so a later write (metadata/log) or a FLUSH is not
+completing or is rejected; (3) the capped receipts never covered that phase.
+Expected discriminators: "HV ANS reject" lines (result + LBA) => a rejected write (e.g. window edge, BAD_COMMAND such as
+a CDB the planner refuses); "HV ANS stuck" lines => a device request that never completes; neither => the stall is
+inside the guest (driver/storport/NTFS), localized by the live robocopy log (last file) and STATUS.
