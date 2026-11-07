@@ -104,10 +104,10 @@ class QualificationTests(unittest.TestCase):
         p=self.paths['winpe_collector'];a=json.loads(p.read_text());a['result']='pending';p.write_text(json.dumps(a));self.seal()
         with self.assertRaisesRegex(ValueError,'collector'):self.call()
     def make_ans002(self,profile='native-read-only-stop1',second_index_pkgs=(),testsigning=True,confirm_flag=True,
-                    experiment='ANS002',scope='ans1-claim-stop',audit_profile=None):
+                    experiment='ANS002',scope='ans1-claim-stop',audit_profile=None,winpe_profile=None):
         self.m['experiment']=experiment;self.m['scope']=scope;self.audit_profile=audit_profile or profile
         p=self.paths['winpe_audit'];a=json.loads(p.read_text())
-        a['appleans_profile']=profile;a['appleans_package_sha256']='c'*64;a['testsigning']=testsigning
+        a['appleans_profile']=winpe_profile or profile;a['appleans_package_sha256']='c'*64;a['testsigning']=testsigning
         a['indices'][0]['appleans_packages']=['oem0.inf'];a['indices'][1]['appleans_packages']=list(second_index_pkgs)
         p.write_text(json.dumps(a));self.ans002_flags=confirm_flag;self.seal()
     def test_ans002_claim_stop_profile_admitted_only_with_exact_package(self):
@@ -199,14 +199,15 @@ class QualificationTests(unittest.TestCase):
         b=json.loads(self.paths['mu_build'].read_text());b['builds'][0]['expected_autoboot']='WindowsAutoBootAnsInstalled'
         self.paths['mu_build'].write_text(json.dumps(b));self.seal()
         with self.assertRaises(ValueError):self.call()
-    def make_ans011(self,window=None,read_only=False,drop=(),audit_extra=None):
+    def make_ans011(self,window=None,read_only=False,drop=(),audit_extra=None,winpe_profile=None):
         self.m['read_only']=read_only
         if window is not None:self.m['write_window']=window
         b=json.loads(self.paths['mu_build'].read_text())
         b['builds'][0]['expected_core_gate']='AppleAnsInstalledExitBootServicesGateLib'
         b['builds'][0]['expected_autoboot']='WindowsAutoBootAnsInstalled'
         self.paths['mu_build'].write_text(json.dumps(b))
-        self.make_ans002(profile='native-direct-stop0',experiment='ANS011',scope='ans9-direct-installed-native-boot')
+        self.make_ans002(profile='native-direct-stop0',experiment='ANS011',scope='ans9-direct-installed-native-boot',
+                         winpe_profile=winpe_profile)
         a=json.loads(self.paths['qualification_audit'].read_text())
         for k in ('mu_ramdisk_only','no_installed_windows_boot'):a.pop(k,None)
         a.update({'mu_installed_esp_only':True,'installed_windows_prepared':True,
@@ -225,12 +226,19 @@ class QualificationTests(unittest.TestCase):
         self.assertFalse(direct_mode({'experiment':'ANS010'}))
         # Direct means no EL2 window: a manifest window, a read-only manifest or missing
         # direct-handoff evidence is refused.
+        # The preloaded (unbooted) WinPE may carry an older test-signed package profile.
+        self.setUp();self.make_ans011(winpe_profile='native-write-window-stop0')
+        self.assertEqual(self.call(execute=True,confirmation='ANS011')[0]['experiment'],'ANS011')
         for kw in ({'window':{'first_lba':30781184,'count':29187328}},{'read_only':True},
                    {'drop':('mu_ans_direct_acpi',)},{'drop':('m1n1_ans_direct_handoff',)},
                    {'drop':('installed_windows_prepared',)},
                    {'audit_extra':{'installed_package_sha256':'e'*64}}):
             self.setUp();self.make_ans011(**kw)
             with self.assertRaises(ValueError,msg=str(kw)):self.call()
+    def test_winpe_profiles_still_bind_exact_winpe_package(self):
+        self.make_ans002(profile='native-read-only-stop2',experiment='ANS003',scope='ans2-admin-ready-stop',
+                         winpe_profile='native-read-only-stop0')
+        with self.assertRaises(ValueError):self.call()
     def test_read_only_profiles_reject_a_write_window(self):
         self.m['write_window']={'first_lba':0,'count':8};self.seal()
         with self.assertRaises(ValueError):self.call()

@@ -123,12 +123,17 @@ def validate_manifest(path, expected_sha256, root):
     require(isinstance(indices, list) and len(indices) == 2 and
             {x.get('index') for x in indices if isinstance(x, dict)} == {1, 2}, 'both WinPE indices must be audited')
     stop_profile = profile['appleans_profile']
+    installed = profile.get('installed_boot', False)
+    # Installed-boot profiles never boot the preloaded WinPE: its package is bound only as an
+    # audited, test-signed image, not as the AppleAns profile under test (that is the C: package).
+    winpe_profile = audit.get('appleans_profile') if installed else stop_profile
     if stop_profile is None:
         for index in indices:
             require(all(index.get(field) == [] for field in ('appleans_packages', 'appleans_services', 'appleans_drivers')),
                     'AppleAns package/service/driver present or audit incomplete')
     else:
-        require(audit.get('appleans_profile') == stop_profile and audit.get('testsigning') is True and
+        require(audit.get('appleans_profile') == winpe_profile and isinstance(winpe_profile, str) and
+                audit.get('testsigning') is True and
                 isinstance(audit.get('appleans_package_sha256'), str) and
                 re.fullmatch('[0-9a-f]{64}', audit['appleans_package_sha256']),
                 'AppleAns claim-stop package/testsigning not proven by the WinPE audit')
@@ -141,7 +146,6 @@ def validate_manifest(path, expected_sha256, root):
     audit = read_json(paths['qualification_audit'])
     require(audit.get('schema') == 'apple-ans-qualification-audit/v1' and audit.get('result') == 'pass', 'qualification audit pending/failed')
     require(audit.get('bindings') == {r: hashes[r] for r in ROLES if r != 'qualification_audit'}, 'audit artifact/receipt bindings mismatch')
-    installed = profile.get('installed_boot', False)
     keys = ['offline_gates_passed', 'mu_native_gate_bound', 'mu_native_autoboot_bound',
             'agx_power_broker_disabled', 'collector_test_passed']
     keys += (['mu_installed_esp_only', 'installed_windows_prepared'] if installed
