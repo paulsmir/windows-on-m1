@@ -46215,3 +46215,20 @@ WHY THIS HYPOTHESIS:
 
 Expected: SNAPSHOT_KERNEL words = BugCheckCode P1 P2 P3 P4.
 Failure: no base found or an unmapped read (then use a KD capture).
+
+### ANS010-R3 result (recorded 2026-11-07T08:33:34Z) — stop code captured
+
+- Timeline: GUEST_STARTED at 77 s; NO_NATIVE_SSH_WITHIN_600s at 08:31:47Z.
+- SNAPSHOT_KERNEL: pc=0xfffff802ef0825e0 base=0xfffff802eec00000 rva=0xdbc9c0 words=0x7b 0xffffa28a11608920 0xffffffffc0000034 0x0 0x1
+  - **BugCheck 0x7B INACCESSIBLE_BOOT_DEVICE**, P2 = STATUS_OBJECT_NAME_NOT_FOUND, P4=1. The boot disk's device object never appeared.
+- No broker operation; HV_REJECTS=0, HV_STUCK=0.
+- Recovery: C: not dirty, chkdsk 0, Start=3, APPL0002=1/28, 8 CPUs. Bench returned to fork 6.
+
+Verdict: CONFIRMED that the native installed boot dies at INACCESSIBLE_BOOT_DEVICE because AppleAns never brings up APPL0003. The record fix (R2) was not sufficient.
+
+Remaining causes (not separable from the stop code):
+(a) APPL0003 not configured or not started in the boot-driver phase (problem 28/39);
+(b) AppleAns HwFindAdapter refuses before any broker access. The DumpMode guard is the only driver delta against the WinPE-proven ANSBUILD004-W.
+(c) StorPort start failure before HwInitialize.
+
+Next measurement: snapshot the ACPI\APPL0003 devnode (state, problem, ProblemStatus, service) from the kernel PnP tree via PDB offsets, plus the AppleAns adapter Stage. No other change.
