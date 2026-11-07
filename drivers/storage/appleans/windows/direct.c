@@ -1,0 +1,323 @@
+/* SPDX-License-Identifier: MIT */
+/* ANS-DIRECT runtime (investigation/ANS_DIRECT_PLAN.md): Windows owns the ANS2 NVMe queues,
+ * NVMMU TCBs, PRPs, IRQ and the post-boot IOP mailbox replies. No EL2 code in the data path. */
+#include "adapter.h"
+#include "request.h"
+
+HW_TIMER AppleAnsDirectTimer;
+#define DIRECT_TIMER_US 50000u
+#define DIRECT_ADMIN_POLLS 100000u /* x10 us = 1 s */
+
+static ans_u32 d_read32(void *ctx, unsigned bank, ans_u32 off)
+{
+    PAPPLE_ANS_ADAPTER a = ctx;
+    return StorPortReadRegisterUlong(a, (PULONG)((bank ? a->Mbox : a->Ctrl) + off));
+}
+static void d_write32(void *ctx, unsigned bank, ans_u32 off, ans_u32 value)
+{
+    PAPPLE_ANS_ADAPTER a = ctx;
+    StorPortWriteRegisterUlong(a, (PULONG)((bank ? a->Mbox : a->Ctrl) + off), value);
+}
+static ans_u64 d_read64(void *ctx, unsigned bank, ans_u32 off)
+{
+    PAPPLE_ANS_ADAPTER a = ctx;
+    return StorPortReadRegisterUlong64(a, (PULONG64)((bank ? a->Mbox : a->Ctrl) + off));
+}
+static void d_write64(void *ctx, unsigned bank, ans_u32 off, ans_u64 value)
+{
+    PAPPLE_ANS_ADAPTER a = ctx;
+    StorPortWriteRegisterUlong64(a, (PULONG64)((bank ? a->Mbox : a->Ctrl) + off), value);
+}
+static void d_barrier(void *ctx) { UNREFERENCED_PARAMETER(ctx); MemoryBarrier(); }
+static void d_stall(void *ctx, ans_u32 us) { UNREFERENCED_PARAMETER(ctx); StorPortStallExecution(us); }
+static const struct ansd_ops direct_ops = { d_read32, d_write32, d_read64, d_write64, d_barrier, d_stall };
+
+static VOID direct_fault(PAPPLE_ANS_ADAPTER a)
+{
+    a->Ready = FALSE;
+    a->Namespace.ready = 0;
+    a->Ansd.faulted = 1;
+    ans_order_fault(&a->Order);
+    a->Failure = ANS_RESULT_IO_ERROR;
+    a->Stage = AppleAnsStageQuarantined;
+}
+
+/* Translate one Storport common-buffer span (IPA) into a controller PA. */
+static BOOLEAN span_pa(PAPPLE_ANS_ADAPTER a, PUCHAR va, ULONG bytes, ULONGLONG *pa)
+{
+    ULONG length = 0;
+    STOR_PHYSICAL_ADDRESS ipa = StorPortGetPhysicalAddress(a, NULL, va, &length);
+    if (!ipa.QuadPart || length < bytes) return FALSE;
+    return ansd_translate((ans_u64)ipa.QuadPart, bytes, pa) != 0;
+}
+
+BOOLEAN AppleAnsDirectResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config)
+{
+    PACCESS_RANGE r = *config->AccessRanges;
+    a->Ctrl = StorPortGetDeviceBase(a, config->AdapterInterfaceType, config->SystemIoBusNumber,
+                                    r[0].RangeStart, r[0].RangeLength, FALSE);
+    a->Mbox = StorPortGetDeviceBase(a, config->AdapterInterfaceType, config->SystemIoBusNumber,
+                                    r[1].RangeStart, r[1].RangeLength, FALSE);
+    if (!a->Ctrl || !a->Mbox) goto failed;
+    config->Dma64BitAddresses = SCSI_DMA64_MINIPORT_FULL64BIT_SUPPORTED;
+    a->Common = StorPortGetUncachedExtension(a, config, APPLE_ANS_DIRECT_BYTES);
+    if (!a->Common) goto failed;
+    ULONG_PTR base = ((ULONG_PTR)a->Common + ANSD_QUEUE_ALIGN - 1) & ~(ULONG_PTR)(ANSD_QUEUE_ALIGN - 1);
+    RtlZeroMemory((PVOID)base, APPLE_ANS_DIRECT_BYTES - ANSD_QUEUE_ALIGN);
+    struct ansd_queue q[2] = {0};
+    PUCHAR chunk[6];
+    ULONGLONG chunk_pa[6];
+    for (unsigned i = 0; i < 6; i++) {
+        chunk[i] = (PUCHAR)(base + (ULONG_PTR)i * ANSD_QUEUE_ALIGN);
+        /* Each array is one physically contiguous 16 KiB chunk inside one DMA window. */
+        if (!span_pa(a, chunk[i], ANSD_QUEUE_ALIGN, &chunk_pa[i]) ||
+            (chunk_pa[i] & (ANSD_QUEUE_ALIGN - 1))) goto failed;
+    }
+    for (unsigned n = 0; n < 2; n++) {
+        q[n].sq = chunk[3*n]; q[n].cq = (volatile struct ansd_cqe *)chunk[3*n+1];
+        q[n].tcb = (struct ansd_tcb *)chunk[3*n+2];
+        q[n].sq_pa = chunk_pa[3*n]; q[n].cq_pa = chunk_pa[3*n+1]; q[n].tcb_pa = chunk_pa[3*n+2];
+        q[n].depth = n ? ANSD_IO_DEPTH : ANSD_ADMIN_DEPTH;
+    }
+    PUCHAR pages = (PUCHAR)(base + 6u * ANSD_QUEUE_ALIGN);
+    for (unsigned i = 0; i < APPLE_ANS_METADATA_PAGES; i++) {
+        a->Pages[i] = pages + (ULONG_PTR)i * ANS_PRP_PAGE_SIZE;
+        if (!span_pa(a, a->Pages[i], ANS_PRP_PAGE_SIZE, &a->PageDma[i]) ||
+            (a->PageDma[i] & (ANS_PRP_PAGE_SIZE - 1))) goto failed;
+    }
+    if (ansd_init(&a->Ansd, &direct_ops, a, q) != ANSD_OK) goto failed;
+    a->Direct = TRUE;
+    return TRUE;
+failed:
+    /* Nothing was published to the controller; Storport owns the common buffer. */
+    if (a->Ctrl) StorPortFreeDeviceBase(a, a->Ctrl);
+    if (a->Mbox) StorPortFreeDeviceBase(a, a->Mbox);
+    a->Ctrl = a->Mbox = NULL;
+    return FALSE;
+}
+
+static VOID put(ans_u8 *p, ans_u64 value, unsigned size)
+{
+    for (unsigned i = 0; i < size; i++) p[i] = (ans_u8)(value >> (8*i));
+}
+/* Initialization/reset only: one admin command, bounded polling, mailbox serviced. */
+static BOOLEAN direct_admin(PAPPLE_ANS_ADAPTER a, UCHAR opcode, ULONG nsid, ULONG cdw10,
+    ULONG cdw11, ULONGLONG prp1, ULONG *dw0)
+{
+    ans_u8 sqe[64] = {0};
+    struct ansd_cqe e;
+    sqe[0] = opcode;
+    put(sqe + 4, nsid, 4);
+    put(sqe + 24, prp1, 8);
+    put(sqe + 40, cdw10, 4);
+    put(sqe + 44, cdw11, 4);
+    /* Asahi TCB rule: no PRP -> none; NVMe opcode bit 0 (host-to-controller) -> TO_DEVICE. */
+    unsigned flags = !prp1 ? ANSD_DMA_NONE : (opcode & 1) ? ANSD_DMA_TO_DEVICE : ANSD_DMA_FROM_DEVICE;
+    if (ansd_submit(&a->Ansd, 0, 0, sqe, flags) != ANSD_OK) return FALSE;
+    ans_stats_submit(&a->Stats, 0, opcode);
+    for (unsigned i = 0; i < DIRECT_ADMIN_POLLS; i++) {
+        int ret = ansd_poll(&a->Ansd, 0, &e);
+        if (ret == ANSD_OK) {
+            BOOLEAN ok = ansd_cqe_status(&e) == 0;
+            ans_stats_add(&a->Stats, ANS_TELEM_CQES, 1);
+            ans_stats_complete(&a->Stats, 0, opcode, 0, ok);
+            if (dw0) *dw0 = e.result;
+            return ok;
+        }
+        if (ret != ANSD_EMPTY || ansd_mbox_service(&a->Ansd, 8) == ANSD_CRASHED) break;
+        StorPortStallExecution(10);
+    }
+    ans_stats_add(&a->Stats, ANS_TELEM_TIMEOUTS, 1);
+    direct_fault(a); /* A lost admin command keeps its DMA ownership: never reuse the tag. */
+    return FALSE;
+}
+
+BOOLEAN AppleAnsDirectInitialize(PAPPLE_ANS_ADAPTER a)
+{
+    ULONG dw0 = 0;
+    ans_stats_add(&a->Stats, ANS_TELEM_STARTS, 1);
+    a->Ready = FALSE;
+    a->Namespace.ready = 0;
+    a->ShuttingDown = FALSE; a->ShutdownTag = ANS_QUEUE_DEPTH;
+    if (!a->Direct || !a->Ctrl || !a->Mbox || a->Ansd.faulted || a->Order.faulted) return FALSE;
+    a->Stage = AppleAnsStageAdminReady;
+    a->MayOwn = TRUE;
+    if (ansd_enable(&a->Ansd) != ANSD_OK) goto failure;
+    a->LastCheckpoint = a->Stage;
+    a->Stage = AppleAnsStageIdentifyController;
+    RtlZeroMemory(a->Pages[ANS_QUEUE_DEPTH], 2 * ANS_PRP_PAGE_SIZE);
+    if (!direct_admin(a, 6, 0, 1, 0, a->PageDma[ANS_QUEUE_DEPTH], NULL)) goto failure;
+    a->Stage = AppleAnsStageIdentifyNamespace;
+    if (!direct_admin(a, 6, 1, 0, 0, a->PageDma[ANS_QUEUE_DEPTH + 1], NULL) ||
+        !ans_identify_namespace(a->Pages[ANS_QUEUE_DEPTH], a->Pages[ANS_QUEUE_DEPTH + 1], &a->Namespace))
+        goto failure;
+    a->Stage = AppleAnsStageCache;
+    if (a->Pages[ANS_QUEUE_DEPTH][525] & 1) {
+        if (!direct_admin(a, 0x0a, 0, 6, 0, 0, &dw0) || (dw0 & ~1u)) goto failure;
+        a->Namespace.write_cache_enabled = (ans_u8)(dw0 & 1);
+    }
+    a->Namespace.read_cache_disabled = 0;
+    a->Namespace.cache_known = 1;
+    a->Stage = AppleAnsStageCreateCq;
+    /* Asahi: Create IOCQ PC|IEN vector 0, then IOSQ bound to CQ 1. */
+    if (!direct_admin(a, 5, 0, ((ANSD_IO_DEPTH - 1) << 16) | 1, 3, a->Ansd.q[1].cq_pa, NULL)) goto failure;
+    a->Stage = AppleAnsStageCreateSq;
+    if (!direct_admin(a, 1, 0, ((ANSD_IO_DEPTH - 1) << 16) | 1, 0x10001, a->Ansd.q[1].sq_pa, NULL)) goto failure;
+    /* An ordinary storage driver: Windows decides which sectors it writes. */
+    a->Namespace.read_only = 0;
+    a->Namespace.tagged_queuing = 1;
+    a->Namespace.ready = 1;
+    a->Claimed = TRUE;
+    a->Ready = TRUE;
+    a->Stage = AppleAnsStageReady;
+    StorPortNotification(RequestTimerCall, a, AppleAnsDirectTimer, DIRECT_TIMER_US);
+    return TRUE;
+failure:
+    a->FailureStage = a->Stage;
+    a->Failure = ANS_RESULT_IO_ERROR;
+    if (!a->Ansd.crashed && a->Ansd.enabled) (void)ansd_disable(&a->Ansd);
+    direct_fault(a);
+    return FALSE;
+}
+
+/* StartIo/ISR under InterruptLock: publish the already validated SQE. */
+int AppleAnsDirectSubmit(PAPPLE_ANS_ADAPTER a, unsigned tag, const struct ans_broker_request *r)
+{
+    unsigned flags = r->direction == ANS_DMA_TO_DEVICE ? ANSD_DMA_TO_DEVICE :
+                     r->direction == ANS_DMA_FROM_DEVICE ? ANSD_DMA_FROM_DEVICE : ANSD_DMA_NONE;
+    return ansd_submit(&a->Ansd, 1, tag, r->sqe, flags);
+}
+
+static VOID complete_tag(PAPPLE_ANS_ADAPTER a, const struct ansd_cqe *e)
+{
+    unsigned tag = ansd_cqe_tag(e);
+    USHORT status = (USHORT)(e->tail >> 16); /* NVMe status with phase in bit 0 */
+    APPLE_ANS_SLOT *slot = &a->Slots[tag];
+    if (tag < ANS_ADMIN_TAGS || !slot->Busy || !slot->Srb ||
+        ans_order_complete(&a->Order, slot->Token) != ANS_ORDER_OK) {
+        ans_stats_add(&a->Stats, ANS_TELEM_INVALID_TAG, 1);
+        direct_fault(a);
+        return;
+    }
+    ans_stats_add(&a->Stats, ANS_TELEM_CQES, 1);
+    ans_stats_complete(&a->Stats, 1, slot->Request.sqe[0], slot->Length, (status >> 1) == 0);
+    if (status >> 1) AppleAnsDiag(a, slot->Srb, 0xA4, ((ULONG)(status >> 1) << 8) | slot->Request.sqe[0]);
+    if (slot->Shutdown) {
+        a->ShutdownTag = tag; a->ShutdownFlushOk = (status >> 1) == 0;
+        (void)StorPortIssueDpc(a, &a->ShutdownDpc, NULL, NULL);
+        return;
+    }
+    PSCSI_REQUEST_BLOCK srb = slot->Srb;
+    ULONG length = slot->Length;
+    *slot = (APPLE_ANS_SLOT){0};
+    MemoryBarrier();
+    AppleAnsFinish(a, srb, status, length);
+}
+
+BOOLEAN AppleAnsDirectInterrupt(PAPPLE_ANS_ADAPTER a)
+{
+    struct ansd_cqe e;
+    BOOLEAN claimed = FALSE;
+    ans_stats_add(&a->Stats, ANS_TELEM_ISR_ENTRIES, 1);
+    if (!a->Direct || !a->Ansd.enabled || a->Ansd.faulted) {
+        ans_stats_add(&a->Stats, ANS_TELEM_SPURIOUS_IRQS, 1);
+        return FALSE;
+    }
+    /* Level IRQ: drain the whole CQ (bounded by one ring) before returning. */
+    for (unsigned i = 0; i < ANSD_IO_DEPTH && !a->Ansd.faulted; i++) {
+        int ret = ansd_poll(&a->Ansd, 1, &e);
+        if (ret == ANSD_EMPTY) break;
+        claimed = TRUE;
+        if (ret != ANSD_OK) {
+            ans_stats_add(&a->Stats, ANS_TELEM_INVALID_CQE, 1);
+            direct_fault(a);
+            break;
+        }
+        complete_tag(a, &e);
+    }
+    if (ansd_mbox_service(&a->Ansd, 16) == ANSD_CRASHED) direct_fault(a);
+    if (!claimed) ans_stats_add(&a->Stats, ANS_TELEM_SPURIOUS_IRQS, 1);
+    a->Stats.tcb_inval_failures = a->Ansd.stats.tcb_stat_nonzero;
+    AppleAnsDispatch(a);
+    return claimed;
+}
+
+_Use_decl_annotations_
+VOID AppleAnsDirectTimer(PVOID DeviceExtension)
+{
+    PAPPLE_ANS_ADAPTER a = DeviceExtension;
+    STOR_LOCK_HANDLE lock = {0};
+    /* Full duplex: Storport holds no lock here; InterruptLock is allowed (AcquireSpinLock table). */
+    StorPortAcquireSpinLock(a, InterruptLock, NULL, &lock);
+    BOOLEAN rearm = a->Direct && a->Ansd.enabled && !a->Ansd.faulted;
+    if (rearm) {
+        if (ansd_mbox_service(&a->Ansd, 32) == ANSD_CRASHED) { direct_fault(a); rearm = FALSE; }
+    }
+    StorPortReleaseSpinLock(a, &lock);
+    if (rearm) StorPortNotification(RequestTimerCall, a, AppleAnsDirectTimer, DIRECT_TIMER_US);
+}
+
+static VOID direct_retire(PAPPLE_ANS_ADAPTER a, UCHAR status)
+{
+    (void)ans_order_reset(&a->Order, 1);
+    ans_stats_stopped(&a->Stats, 0);
+    for (unsigned tag = 0; tag < ANS_QUEUE_DEPTH; tag++) {
+        PSCSI_REQUEST_BLOCK srb = a->Slots[tag].Srb;
+        a->Slots[tag] = (APPLE_ANS_SLOT){0};
+        if (srb) AppleAnsComplete(a, srb, status, 0);
+    }
+    a->Claimed = FALSE;
+    a->ShuttingDown = FALSE; a->ShutdownTag = ANS_QUEUE_DEPTH;
+}
+
+/* Normal NVMe shutdown proves the controller stopped all DMA (CSTS.SHST complete, RDY=0). */
+BOOLEAN AppleAnsDirectStop(PAPPLE_ANS_ADAPTER a)
+{
+    ans_stats_add(&a->Stats, ANS_TELEM_STOPS, 1);
+    a->Ready = FALSE; a->Namespace.ready = 0;
+    if (!a->MayOwn) { a->Stage = AppleAnsStageStopped; return TRUE; }
+    if (a->Ansd.enabled && ansd_shutdown(&a->Ansd) != ANSD_OK) {
+        /* Without stop proof the controller may still DMA into our buffers: keep them. */
+        direct_fault(a);
+        return FALSE;
+    }
+    direct_retire(a, SRB_STATUS_NO_DEVICE);
+    a->MayOwn = FALSE;
+    a->Stage = AppleAnsStageStopped;
+    return TRUE;
+}
+
+BOOLEAN AppleAnsDirectReset(PAPPLE_ANS_ADAPTER a)
+{
+    ans_stats_add(&a->Stats, ANS_TELEM_RESETS, 1);
+    AppleAnsDiag(a, NULL, 0xA5, (ULONG)(a->Ansd.q[1].outstanding & 0xffffff));
+    a->Ready = FALSE; a->Namespace.ready = 0; a->Stage = AppleAnsStageReset;
+    if (!a->Direct || a->Ansd.crashed) return FALSE;
+    /* CC.EN=0 with RDY=0 is the controller's stop proof; only then are SRBs failed. */
+    if (ansd_disable(&a->Ansd) != ANSD_OK) { direct_fault(a); return FALSE; }
+    direct_retire(a, SRB_STATUS_BUS_RESET);
+    struct ansd_queue q[2] = { a->Ansd.q[0], a->Ansd.q[1] };
+    if (ansd_init(&a->Ansd, &direct_ops, a, q) != ANSD_OK) { direct_fault(a); return FALSE; }
+    (void)ans_order_init(&a->Order, 1);
+    a->MayOwn = FALSE;
+    return AppleAnsDirectInitialize(a);
+}
+
+VOID AppleAnsDirectPeer(PAPPLE_ANS_ADAPTER a, struct ans_telemetry *peer)
+{
+    /* Direct-runtime record in the second telemetry slot (TELEMETRY.md, source 3). */
+    ans_stats_init(peer);
+    peer->source = 3;
+    peer->generation = 0x544345524944ULL; /* "DIRECT" */
+    peer->valid_fields = ANS_TELEM_PHYSICAL_IRQS | ANS_TELEM_GUEST_IRQ_INJECTIONS |
+        ANS_TELEM_BROKER_REJECTIONS | ANS_TELEM_TCB_INVAL_FAILURES | ANS_TELEM_CQES |
+        ANS_TELEM_INVALID_CQE;
+    peer->physical_irqs = a->Ansd.stats.mbox_messages;
+    peer->guest_irq_injections = a->Ansd.stats.mbox_echoes;
+    peer->broker_rejections = a->Ansd.stats.mbox_unknown;
+    peer->tcb_inval_failures = a->Ansd.stats.tcb_stat_nonzero;
+    peer->cqes = a->Ansd.stats.cqes;
+    peer->invalid_cqe = a->Ansd.stats.invalid_cqes;
+    peer->last_stage = a->Ansd.stage;
+    peer->last_error = (ans_u32)((a->Ansd.crashed ? 2u : 0u) | (a->Ansd.faulted ? 1u : 0u));
+}

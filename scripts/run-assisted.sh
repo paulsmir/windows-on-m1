@@ -3,6 +3,30 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+# Hold one descriptor from bootstrap through the runner (also during chainload).
+# Dry-run deliberately acquires no hardware ownership.
+LOCK_DRY_RUN=0
+for LOCK_ARG in "$@"; do [ "$LOCK_ARG" != --dry-run ] || LOCK_DRY_RUN=1; done
+NOT_FRESH="$ROOT/.local/ans-proxy-not-fresh"
+if [ "$LOCK_DRY_RUN" -eq 0 ] && [ -e "$NOT_FRESH" ]; then
+    echo "Proxy is not fresh (previous launch: $(cat "$NOT_FRESH")). Power-cycle or P_REBOOT to a clean 'Running proxy', then remove $NOT_FRESH." >&2
+    exit 3
+fi
+if [ "$LOCK_DRY_RUN" -eq 0 ]; then
+    LOCK_PYTHON="$ROOT/proxyenv/bin/python"
+    [ -x "$LOCK_PYTHON" ] || LOCK_PYTHON=python3
+    if [ -z "${ANS_ASSISTED_LOCK_FD:-}" ]; then
+        exec "$LOCK_PYTHON" "$ROOT/tools/ans_launch_lock.py" "$ROOT" "$ROOT/scripts/run-assisted.sh" "$@"
+    fi
+    "$LOCK_PYTHON" "$ROOT/tools/ans_launch_lock.py" --check "$ROOT"
+    # ANS001-R3 attempt 4: chainloading over a hypervisor whose hv.init aborted lost the
+    # Air. Every hardware launch marks the proxy "not fresh" before it can chainload or
+    # initialize anything; only an observed full SoC reboot (power cycle or proxy
+    # P_REBOOT, see .local/ans-native/*-run/run.sh) may remove the marker.
+    mkdir -p "$ROOT/.local"
+    date -u +%FT%TZ > "$NOT_FRESH"
+fi
+
 PROXY=${M1N1DEVICE:-}
 VUART=${M1N1VUART:-}
 FIRMWARE=
@@ -16,6 +40,11 @@ M1N1=
 CONTRACT_OUTPUT=
 FOREGROUND=0
 AGX_POWER_BROKER=0
+STORAGE_MODE=VNVME_RECOVERY
+ANS_DIRECT=0
+QUALIFICATION_MANIFEST=
+QUALIFICATION_SHA256=
+CONFIRM_EXPERIMENT=
 BOOTSTRAP_TIMEOUT=${ASSISTED_BOOTSTRAP_TIMEOUT:-45}
 
 usage() {
@@ -23,8 +52,10 @@ usage() {
     echo "          [--display none|physical|virtual|both] [--debug off|uart|full|monitor]" >&2
     echo "          [--ramdisk FILE] [--chainload] [--m1n1 FILE]" >&2
     echo "          [--contract-output FILE]" >&2
+    echo "          [--storage-mode VNVME_RECOVERY|ANS_NATIVE] [--ans-direct]" >&2
+    echo "          [--qualification-manifest JSON --qualification-sha256 SHA256 --confirm-experiment ANS001]" >&2
     echo "          [--agx-power-broker]" >&2
-    echo "          [--no-low-mem] [--foreground] [--dry-run]" >&2
+    echo "          [--no-low-mem] [--foreground] [--dry-run] [--snapshot-kernel-read RVA:LEN]" >&2
     exit 2
 }
 
@@ -41,12 +72,23 @@ while [ "$#" -gt 0 ]; do
         --contract-output) [ "$#" -ge 2 ] || usage; CONTRACT_OUTPUT=$2; shift 2 ;;
         --no-low-mem) LOW_MEM=0; shift ;;
         --foreground) FOREGROUND=1; shift ;;
+        --qualification-manifest) [ "$#" -ge 2 ] || usage; QUALIFICATION_MANIFEST=$2; shift 2 ;;
+        --qualification-sha256) [ "$#" -ge 2 ] || usage; QUALIFICATION_SHA256=$2; shift 2 ;;
+        --confirm-experiment) [ "$#" -ge 2 ] || usage; CONFIRM_EXPERIMENT=$2; shift 2 ;;
+        --storage-mode) [ "$#" -ge 2 ] || usage; STORAGE_MODE=$2; shift 2 ;;
         --agx-power-broker) AGX_POWER_BROKER=1; shift ;;
+        --ans-direct) ANS_DIRECT=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
+        --snapshot-kernel-read) [ "$#" -ge 2 ] || usage; SNAPSHOT_KERNEL_READ=$2; shift 2 ;;
+        --snapshot-devnodes) [ "$#" -ge 2 ] || usage; SNAPSHOT_DEVNODES=$2; shift 2 ;;
+        --snapshot-modules) [ "$#" -ge 2 ] || usage; SNAPSHOT_MODULES=$2; shift 2 ;;
         -h|--help) usage ;;
         *) usage ;;
     esac
 done
+
+case "$STORAGE_MODE" in VNVME_RECOVERY|ANS_NATIVE) ;; *) usage ;; esac
+export WOM1_STORAGE_MODE="$STORAGE_MODE"
 
 case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
 case "$DEBUG" in off|uart|full|monitor) ;; *) usage ;; esac
@@ -82,6 +124,32 @@ discover_ports() {
 PYTHON="$ROOT/proxyenv/bin/python"
 [ -x "$PYTHON" ] || PYTHON=python3
 
+# Admission precedes port discovery, reader startup and chainload. Until the
+# final offline candidate is admitted this path exits without touching the Air.
+if [ "$STORAGE_MODE" = ANS_NATIVE ]; then
+    [ "$CHAINLOAD" -eq 1 ] && [ "$LOW_MEM" -eq 1 ] && [ "$AGX_POWER_BROKER" -eq 0 ] || {
+        echo "ANS001 requires chainload/low-memory and forbids AGX power broker" >&2; exit 2;
+    }
+    [ -n "$QUALIFICATION_MANIFEST" ] && [ -n "$QUALIFICATION_SHA256" ] && [ -n "$RAMDISK" ] || {
+        echo "ANS001 requires sealed qualification manifest and explicit WinPE RAM disk" >&2; exit 2;
+    }
+    set -- "$FIRMWARE" --storage-mode ANS_NATIVE --dry-run --low-mem \
+        --qualification-manifest "$QUALIFICATION_MANIFEST" --qualification-sha256 "$QUALIFICATION_SHA256" \
+        --qualified-m1n1 "$M1N1" --ramdisk "$RAMDISK" --display-mode "$DISPLAY" --debug-mode "$DEBUG"
+    [ -z "$CONTRACT_OUTPUT" ] || set -- "$@" --contract-output "$CONTRACT_OUTPUT"
+    [ -z "$CONFIRM_EXPERIMENT" ] || set -- "$@" --confirm-experiment "$CONFIRM_EXPERIMENT"
+    [ "$ANS_DIRECT" -eq 0 ] || set -- "$@" --ans-direct
+    [ "$DRY_RUN" -eq 1 ] || set -- "$@" --require-execution-confirmation
+    "$PYTHON" "$ROOT/run_uefi.py" "$@"
+    if [ "$DRY_RUN" -eq 0 ] && pgrep -f '[r]un_uefi.py' >/dev/null; then
+        echo "Another guest runner already owns the proxy" >&2; exit 1;
+    fi
+elif [ -n "$QUALIFICATION_MANIFEST$QUALIFICATION_SHA256$CONFIRM_EXPERIMENT" ]; then
+    echo "Qualification arguments require explicit ANS_NATIVE mode" >&2; exit 2
+elif [ "$ANS_DIRECT" -eq 1 ]; then
+    echo "--ans-direct requires explicit ANS_NATIVE mode" >&2; exit 2
+fi
+
 if [ "$DRY_RUN" -eq 0 ]; then
     discover_ports
 else
@@ -93,6 +161,8 @@ fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "mode: assisted development"
+    echo "storage: $STORAGE_MODE"
+    [ "$ANS_DIRECT" -eq 0 ] || echo "ANS ownership: direct"
     echo "display: $DISPLAY"
     echo "debug: $DEBUG"
     [ "$FOREGROUND" -eq 0 ] && echo "execution: detached" || echo "runner: foreground"
@@ -127,6 +197,7 @@ fi
     exit 1
 }
 
+if [ "$STORAGE_MODE" = VNVME_RECOVERY ]; then
 MANIFEST=$(dirname "$FIRMWARE")/MANIFEST.json
 [ -f "$MANIFEST" ] || { echo "Artifact manifest not found: $MANIFEST" >&2; exit 1; }
 set -- "$PYTHON" "$ROOT/tools/artifact_manifest.py" verify "$MANIFEST" \
@@ -143,6 +214,8 @@ if [ "$CHAINLOAD" -eq 1 ] && [ "$(dirname "$M1N1")" != "$(dirname "$FIRMWARE")" 
     exit 1
 fi
 
+fi
+
 if pgrep -f '[r]un_uefi.py' >/dev/null; then
     echo "A guest runner already owns the proxy. Use scripts/reset-assisted.sh." >&2
     exit 1
@@ -151,25 +224,32 @@ fi
 cd "$ROOT"
 rm -f assisted-runner.log guest-uart.log guest-uart.tlog guest-uart-reader.log hv.log guest.pid
 
-if [ "$CHAINLOAD" -eq 1 ]; then
+if [ "$CHAINLOAD" -eq 1 ] && [ "$STORAGE_MODE" = VNVME_RECOVERY ]; then
     echo "Chainloading matching m1n1: $M1N1"
     M1N1DEVICE="$PROXY" "$PYTHON" \
         "$ROOT/m1n1_windows/proxyclient/tools/chainload.py" "$M1N1"
 fi
 
+# The runner owns its reader and bounded cleanup, including foreground exec.
+# A detached shell reader could otherwise retain the inherited lock after failure.
 READER=
-if [ "$DEBUG" != off ]; then
-    # The reader must hold the virtual UART open before Mu emits its first byte.
-    nohup "$PYTHON" -u "$ROOT/extra/uart-reader.py" "$VUART" 2400 \
-        </dev/null >guest-uart-reader.log 2>&1 &
-    READER=$!
-    sleep 2
-fi
 
-set -- "$FIRMWARE" --device "$PROXY" --display-mode "$DISPLAY" --debug-mode "$DEBUG"
+set -- "$FIRMWARE" --storage-mode "$STORAGE_MODE" --device "$PROXY" --display-mode "$DISPLAY" --debug-mode "$DEBUG"
 [ -z "$RAMDISK" ] || set -- "$@" --ramdisk "$RAMDISK"
 [ -z "$CONTRACT_OUTPUT" ] || set -- "$@" --contract-output "$CONTRACT_OUTPUT"
 [ "$LOW_MEM" -eq 0 ] || set -- "$@" --low-mem
+[ -z "${SNAPSHOT_KERNEL_READ:-}" ] || set -- "$@" --snapshot-kernel-read "$SNAPSHOT_KERNEL_READ"
+[ -z "${SNAPSHOT_DEVNODES:-}" ] || set -- "$@" --snapshot-devnodes "$SNAPSHOT_DEVNODES"
+[ -z "${SNAPSHOT_MODULES:-}" ] || set -- "$@" --snapshot-modules "$SNAPSHOT_MODULES"
+if [ "$STORAGE_MODE" = VNVME_RECOVERY ] && [ "$DEBUG" != off ]; then
+    set -- "$@" --managed-vuart "$VUART"
+fi
+if [ "$STORAGE_MODE" = ANS_NATIVE ]; then
+    set -- "$@" --qualification-manifest "$QUALIFICATION_MANIFEST" \
+        --qualification-sha256 "$QUALIFICATION_SHA256" --qualified-m1n1 "$M1N1" \
+        --qualified-vuart "$VUART" --confirm-experiment "$CONFIRM_EXPERIMENT"
+    [ "$ANS_DIRECT" -eq 0 ] || set -- "$@" --ans-direct
+fi
 
 if [ "$FOREGROUND" -eq 1 ]; then
     echo "runner: foreground (Ctrl-C remains a diagnostic snapshot in debug modes)"

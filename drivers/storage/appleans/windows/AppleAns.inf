@@ -1,0 +1,47 @@
+; Offline qualification package. HwInitialize deliberately fails before transport.
+[Version]
+Signature="$WINDOWS NT$"
+Class=SCSIAdapter
+ClassGuid={4d36e97b-e325-11ce-bfc1-08002be10318}
+Provider=%Provider%
+DriverVer=11/07/2026,0.4.0.0
+CatalogFile=AppleAns.cat
+PnpLockdown=1
+
+[Manufacturer]
+%Provider%=AppleAnsModels,NTarm64.10.0...26100
+
+[AppleAnsModels.NTarm64.10.0...26100]
+%DeviceDesc%=AppleAnsInstall,ACPI\APPL0003
+
+[DestinationDirs]
+AppleAnsCopy=13
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+AppleAns.sys=1
+
+[AppleAnsInstall.NT]
+CopyFiles=AppleAnsCopy
+
+[AppleAnsCopy]
+AppleAns.sys
+
+[AppleAnsInstall.NT.Services]
+AddService=AppleAns,0x00000002,AppleAnsService
+
+[AppleAnsService]
+DisplayName=%ServiceDesc%
+ServiceType=1
+StartType=0
+ErrorControl=1
+ServiceBinary=%13%\AppleAns.sys
+LoadOrderGroup=SCSI Miniport
+
+[Strings]
+Provider="J313 Native ANS Project"
+DeviceDesc="Apple ANS physical storage qualification adapter"
+ServiceDesc="Apple ANS StorPort Miniport"
+DiskName="Apple ANS qualification package"

@@ -1,0 +1,65 @@
+{
+  "schema": "apple-ans-qualification/v1",
+  "experiment": "ANS001",
+  "platform": "J313",
+  "storage_mode": "ANS_NATIVE",
+  "scope": "ans0-unbound-no-driver",
+  "read_only": true,
+  "launch": {
+    "display": "physical",
+    "debug": "uart",
+    "low_mem": true,
+    "cpu_count": 8,
+    "no_pin": false,
+    "wdt_cpu": null,
+    "agx_power_broker": false,
+    "chainload": true,
+    "boot_source": "preloaded-ramdisk"
+  },
+  "artifacts": {
+    "m1n1": {
+      "path": ".local/ans-native/PENDING-m1n1",
+      "sha256": "PENDING"
+    },
+    "mu": {
+      "path": ".local/ans-native/PENDING-mu",
+      "sha256": "PENDING"
+    },
+    "winpe": {
+      "path": ".local/ans-native/PENDING-winpe",
+      "sha256": "PENDING"
+    },
+    "layout": {
+      "path": ".local/ans-native/PENDING-layout",
+      "sha256": "PENDING"
+    },
+    "broker_config": {
+      "path": ".local/ans-native/PENDING-broker_config",
+      "sha256": "PENDING"
+    },
+    "broker_abi": {
+      "path": ".local/ans-native/PENDING-broker_abi",
+      "sha256": "PENDING"
+    },
+    "m1n1_build": {
+      "path": ".local/ans-native/PENDING-m1n1_build",
+      "sha256": "PENDING"
+    },
+    "mu_build": {
+      "path": ".local/ans-native/PENDING-mu_build",
+      "sha256": "PENDING"
+    },
+    "winpe_audit": {
+      "path": ".local/ans-native/PENDING-winpe_audit",
+      "sha256": "PENDING"
+    },
+    "winpe_collector": {
+      "path": ".local/ans-native/PENDING-winpe_collector",
+      "sha256": "PENDING"
+    },
+    "qualification_audit": {
+      "path": ".local/ans-native/PENDING-qualification_audit",
+      "sha256": "PENDING"
+    }
+  }
+}

@@ -24,6 +24,21 @@ ap = argparse.ArgumentParser()
 ap.add_argument("payload", nargs="?", type=pathlib.Path)
 ap.add_argument("--dry-run", action="store_true",
                 help="validate and print the virtual framebuffer contract without USB")
+ap.add_argument("--storage-mode", choices=("VNVME_RECOVERY", "ANS_NATIVE"),
+                default="VNVME_RECOVERY", help="explicit storage ownership profile")
+ap.add_argument("--ans-direct", action="store_true",
+                help="ANS_NATIVE only: the EBS handoff cold-boots ANS to the Asahi hand-off state and "
+                     "passes the controller to the guest driver (no EL2 broker, no EL2 write window); "
+                     "exclusive with a manifest write window")
+ap.add_argument("--qualification-manifest", type=pathlib.Path)
+ap.add_argument("--qualification-sha256")
+ap.add_argument("--qualified-m1n1", type=pathlib.Path)
+ap.add_argument("--managed-vuart", help="runner-owned recovery UART reader endpoint")
+ap.add_argument("--qualified-vuart", help="native UART reader endpoint, started only after chainload")
+from tools.ans_qualification import PROFILES as ANS_PROFILES
+ap.add_argument("--confirm-experiment", choices=tuple(ANS_PROFILES))
+ap.add_argument("--require-execution-confirmation", action="store_true",
+                help="require execution confirmation during shell's hardware-free preflight")
 ap.add_argument("--layout", type=pathlib.Path, default=DEFAULT_LAYOUT_PATH,
                 help="canonical J313 guest-layout JSON")
 ap.add_argument("--device", default=os.environ.get("M1N1DEVICE"))
@@ -63,9 +78,58 @@ ap.add_argument("--no-pin", action="store_true",
 ap.add_argument("--wdt-cpu", type=int, choices=range(8), default=None,
                 help="reserve one physical CPU for the hypervisor watchdog (0..7). Omit this "
                      "for an eight-core guest; a reserved CPU must not also be enabled in MADT.")
+ap.add_argument("--snapshot-kernel-read", metavar="RVA:LEN",
+                help="read-only diagnostic: on each SIGINT snapshot, print LEN bytes at ntoskrnl+RVA "
+                     "(kernel base found from the interrupted guest PC), e.g. KiBugCheckData")
+ap.add_argument("--snapshot-devnodes", metavar="SPEC",
+                help="read-only diagnostic: on each SIGINT snapshot, walk the kernel PnP tree "
+                     "(ROOT_RVA,child,sibling,instance,service,state,problem,problem_status)")
+ap.add_argument("--snapshot-modules", metavar="SPEC",
+                help="read-only diagnostic: on each SIGINT snapshot, list kernel loaded modules "
+                     "(PsLoadedModuleList RVA,BaseDllName offset,Flags offset)")
 ap.add_argument("--contract-output", type=pathlib.Path,
                 help="write four CRC-framed launch-contract checkpoints")
 args = ap.parse_args()
+# Ambient environment cannot opt an ordinary launch into native ANS ownership.
+os.environ["WOM1_STORAGE_MODE"] = args.storage_mode
+os.environ.pop("WOM1_ANS_WRITE_WINDOW", None)
+os.environ.pop("WOM1_ANS_DIRECT", None)
+qualification_paths = None
+ans_write_window = None
+if args.storage_mode == "ANS_NATIVE":
+    from tools.ans_qualification import validate_launch, write_window_env, direct_mode, OVERRIDES
+    root = pathlib.Path(__file__).resolve().parent
+    try:
+        qualification_manifest, qualification_paths = validate_launch(
+            args.qualification_manifest, args.qualification_sha256, root,
+            firmware=args.payload, m1n1=args.qualified_m1n1, ramdisk=args.ramdisk,
+            layout=args.layout, display=args.display_mode, debug=args.debug_mode,
+            low_mem=args.low_mem, no_pin=args.no_pin, wdt_cpu=args.wdt_cpu,
+            overrides=[name for name in OVERRIDES if getattr(args, name) is not None],
+            confirmation=args.confirm_experiment, contract_output=args.contract_output,
+            execute=(not args.dry_run or args.require_execution_confirmation))
+        args.payload = qualification_paths['mu']
+        args.qualified_m1n1 = qualification_paths['m1n1']
+        args.ramdisk = qualification_paths['winpe']
+        # ANS008: only a sealed manifest can open the EL2 WRITE window.
+        ans_write_window = write_window_env(qualification_manifest)
+        if args.ans_direct and ans_write_window is not None:
+            raise ValueError("--ans-direct is exclusive with the manifest EL2 write window")
+        if args.ans_direct != direct_mode(qualification_manifest):
+            raise ValueError("--ans-direct must match the sealed manifest's direct profile")
+        if ans_write_window is not None:
+            os.environ["WOM1_ANS_WRITE_WINDOW"] = ans_write_window
+        # ANS-DIRECT: set only after admission, like the window (no ambient opt-in).
+        if args.ans_direct:
+            os.environ["WOM1_ANS_DIRECT"] = "1"
+    except (ValueError, OSError, TypeError) as error:
+        ap.error(str(error))
+elif args.ans_direct:
+    ap.error("--ans-direct requires explicit --storage-mode ANS_NATIVE")
+elif any((args.qualification_manifest, args.qualification_sha256, args.qualified_m1n1,
+          args.confirm_experiment, args.require_execution_confirmation, args.qualified_vuart)):
+    ap.error("qualification arguments require explicit --storage-mode ANS_NATIVE")
+
 profile = parse_profile("assisted", args.display_mode, args.debug_mode)
 
 layout = load_layout(args.layout)
@@ -113,6 +177,12 @@ fb.validate((args.phys_base, args.guest_ram_end), preflight_windows)
 print("=" * 60)
 print(f"virtual framebuffer       : 0x{fb.base:x}..0x{fb.end:x}")
 print(f"geometry / stride / size  : {fb.width}x{fb.height} / {fb.stride} / 0x{fb.size:x}")
+print(f"storage mode             : {args.storage_mode}")
+if args.storage_mode == "ANS_NATIVE":
+    if args.ans_direct:
+        print("ANS ownership            : direct (guest driver owns the controller after EBS)")
+    else:
+        print(f"ANS write window         : {ans_write_window or 'none (read-only)'}")
 print(f"display mode             : {profile.display.value}")
 print(f"debug mode               : {profile.debug.value}")
 print(f"physical DCP             : {'enabled' if profile.physical_display else 'disabled'}")
@@ -126,10 +196,48 @@ print("=" * 60)
 if args.dry_run or args.payload is None:
     sys.exit(0)
 
+if qualification_paths is not None and not args.qualified_vuart:
+    ap.error("native UART qualification requires --qualified-vuart before hardware access")
+
 if not args.device:
     ap.error("--device or M1N1DEVICE is required for a hardware run")
 
-os.environ.setdefault("M1N1DEVICE", args.device)
+if qualification_paths is None:
+    os.environ.setdefault("M1N1DEVICE", args.device)
+else:
+    os.environ["M1N1DEVICE"] = args.device
+# Shared lock covers direct recovery as well as native entry, and is inherited
+# from run-assisted.sh when that wrapper already owns bootstrap admission.
+from tools.ans_launch_lock import acquire as acquire_launch_lock
+from tools.ans_qualification import reject_running_launcher
+try:
+    assisted_lock_fd = acquire_launch_lock(pathlib.Path(__file__).resolve().parent)
+    reject_running_launcher()
+except ValueError as error:
+    ap.error(str(error))
+from tools.assisted_session import AssistedSession
+assisted_session = AssistedSession(assisted_lock_fd)
+try:
+    if qualification_paths is not None:
+        import subprocess
+        # subprocess.run reaps its exact chainload child before propagating failure.
+        subprocess.run([sys.executable, str(pathlib.Path(__file__).resolve().parent /
+                        "m1n1_windows/proxyclient/tools/chainload.py"),
+                        str(args.qualified_m1n1)], check=True, pass_fds=(assisted_lock_fd,))
+    reader_device = args.qualified_vuart if qualification_paths is not None else args.managed_vuart
+    if reader_device:
+        import time
+        reader_root = pathlib.Path(__file__).resolve().parent
+        owned_uart_reader = assisted_session.start_reader(
+            [sys.executable, "-u", str(reader_root / "extra/uart-reader.py"), reader_device, "2400"],
+            reader_root / "guest-uart-reader.log", reader_root)
+        time.sleep(2)
+        if owned_uart_reader.poll() is not None:
+            ap.error("owned UART reader exited before guest bootstrap")
+except BaseException:
+    assisted_session.close()
+    raise
+
 # RC30: an experiment may run a proxyclient from another m1n1 tree (M1N1_PROXYCLIENT); default is the submodule.
 sys.path.insert(0, os.environ.get("M1N1_PROXYCLIENT") or str(pathlib.Path(__file__).parent / "m1n1_windows" / "proxyclient"))
 
@@ -301,6 +409,31 @@ def unattended_control(*_args, **_kwargs):
         snapshot_reboot_requested = False
         print("HOST CONTROL: diagnostic snapshot captured; rebooting Air")
         return EXC_RET.UNHANDLED
+    if args.snapshot_kernel_read and hv.ctx is not None:
+        # Read-only EL2 translate + memory read on the CPU servicing the proxy.
+        from tools.ans_snapshot import parse as snapshot_parse, snapshot_kernel_read
+        try:
+            rva, length = snapshot_parse(args.snapshot_kernel_read)
+            print(snapshot_kernel_read(lambda va: hv.p.hv_translate(va, False, False),
+                                       hv.iface.readmem, hv.ctx.elr, rva, length))
+        except Exception as error:  # diagnostics must never change recovery policy
+            print(f"SNAPSHOT_KERNEL error: {error}")
+    if args.snapshot_devnodes and hv.ctx is not None:
+        from tools.ans_snapshot import parse_devnodes, snapshot_devnodes
+        try:
+            for line in snapshot_devnodes(lambda va: hv.p.hv_translate(va, False, False), hv.iface.readmem,
+                                          hv.ctx.elr, parse_devnodes(args.snapshot_devnodes)):
+                print(line)
+        except Exception as error:
+            print(f"SNAPSHOT_DEVNODE error: {error}")
+    if args.snapshot_modules and hv.ctx is not None:
+        from tools.ans_snapshot import parse_modules, snapshot_modules
+        try:
+            for line in snapshot_modules(lambda va: hv.p.hv_translate(va, False, False), hv.iface.readmem,
+                                         hv.ctx.elr, parse_modules(args.snapshot_modules)):
+                print(line)
+        except Exception as error:
+            print(f"SNAPSHOT_MODULE error: {error}")
     print("HOST CONTROL: diagnostic snapshot captured; continuing guest")
     return EXC_RET.HANDLED
 

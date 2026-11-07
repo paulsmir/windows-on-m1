@@ -1,0 +1,85 @@
+{
+  "source": "recovery Get-Partition disk 0 (4096-byte sectors) 2026-11-07; firmware path EXP2225 HD(5,GPT,F05B9952-...,0x1D5AF00,0x20000)",
+  "namespace_blocks": 61279344,
+  "partitions": [
+    {
+      "index": 1,
+      "offset": 24576,
+      "size": 524288000,
+      "gpt_type": "69646961-6700-11aa-aa11-00306543ecac",
+      "role": "iBoot System Container"
+    },
+    {
+      "index": 2,
+      "offset": 524312576,
+      "size": 122554417152,
+      "gpt_type": "7c3457ef-0000-11aa-aa11-00306543ecac",
+      "role": "macOS APFS container"
+    },
+    {
+      "index": 3,
+      "offset": 123078729728,
+      "size": 2499805184,
+      "gpt_type": "7c3457ef-0000-11aa-aa11-00306543ecac",
+      "role": "APFS container"
+    },
+    {
+      "index": 4,
+      "offset": 125578534912,
+      "size": 500170752,
+      "gpt_type": "c12a7328-f81f-11d2-ba4b-00a0c93ec93b",
+      "role": "ESP \"EFI - SECON\""
+    },
+    {
+      "index": 5,
+      "offset": 126079729664,
+      "size": 536870912,
+      "gpt_type": "c12a7328-f81f-11d2-ba4b-00a0c93ec93b",
+      "role": "ESP \"WINESP\" (Windows boot)"
+    },
+    {
+      "index": 6,
+      "offset": 126616600576,
+      "size": 16777216,
+      "gpt_type": "e3c9e316-0b5c-4db8-817d-f92df00215ae",
+      "role": "Microsoft Reserved"
+    },
+    {
+      "index": 7,
+      "offset": 126633377792,
+      "size": 117923905536,
+      "gpt_type": "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7",
+      "role": "Windows C:"
+    },
+    {
+      "index": 8,
+      "offset": 244557283328,
+      "size": 1073741824,
+      "gpt_type": "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7",
+      "role": "ANSTEST T:"
+    },
+    {
+      "index": 9,
+      "offset": 245631508480,
+      "size": 5368664064,
+      "gpt_type": "52637672-7900-11aa-aa11-00306543ecac",
+      "role": "Apple Silicon recovery"
+    }
+  ],
+  "esp": {
+    "index": 5,
+    "guid": "F05B9952-EE05-44E1-BCC4-B678A8501B2A",
+    "start_lba": 30781184,
+    "blocks": 131072
+  },
+  "write_window": {
+    "first_lba": 30781184,
+    "count": 29187328,
+    "covers_indices": [
+      5,
+      6,
+      7,
+      8
+    ]
+  }
+}

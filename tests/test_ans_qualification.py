@@ -1,0 +1,338 @@
+"""Exact qualification evidence and pre-hardware refusal; all artifacts synthetic."""
+import contextlib
+import copy
+import io
+import json
+import os
+from pathlib import Path
+import runpy
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+from tools.ans_qualification import CANONICAL,PINNED,ROLES,SCHEMA,digest,validate_launch,validate_manifest
+ROOT=Path(__file__).resolve().parents[1]
+
+class QualificationTests(unittest.TestCase):
+    def setUp(self):
+        parent=ROOT/'.local/ans-native';parent.mkdir(parents=True,exist_ok=True)
+        self.temp=tempfile.TemporaryDirectory(prefix='qualification-test-',dir=parent)
+        self.addCleanup(self.temp.cleanup);self.d=Path(self.temp.name);self.paths={}
+        for role in ROLES:
+            p=ROOT/CANONICAL[role] if role in CANONICAL else self.d/(role+'.json')
+            if role not in CANONICAL:p.write_text(role)
+            self.paths[role]=p
+        self.paths['m1n1_build'].write_text(json.dumps({'exit_code':0,'frozen_inputs_unchanged':True,
+            'build_tag':'2209942','artifacts':{'m1n1.macho':digest(self.paths['m1n1'])}}))
+        self.paths['mu_build'].write_text(json.dumps({'builds':[{'profile':'native','exit_code':0,
+            'unchanged_source_files':1,'expected_core_gate':'AppleAnsExitBootServicesGateLib',
+            'expected_autoboot':'WindowsAutoBootAnsNative','native_source_guard_cache_symbol':True,
+            'g2_inert_no_operationregion_or_power_methods':True,'acpi_ffs_hid_counts':{'APPL0002':1,'APPL0003':1},
+            'artifacts':[{'path':'fixture.fd','sha256':digest(self.paths['mu'])}]}]}))
+        audit={'schema':'apple-ans-winpe-audit/v1','result':'pass','image_sha256':digest(self.paths['winpe']),
+               'architecture':'ARM64','boot_index':1,'boot_source':'preloaded-ramdisk','installed_windows_boot':False,
+               'indices':[{'index':i,'appleans_packages':[],'appleans_services':[],'appleans_drivers':[]} for i in (1,2)]}
+        self.paths['winpe_audit'].write_text(json.dumps(audit))
+        self.paths['winpe_collector'].write_text(json.dumps({'schema':'apple-ans-winpe-collector-test/v1',
+            'result':'pass','image_sha256':digest(self.paths['winpe']),'hardware_access':False}))
+        self.m={'schema':SCHEMA,'experiment':'ANS001','platform':'J313','storage_mode':'ANS_NATIVE',
+            'scope':'ans0-unbound-no-driver','read_only':True,'launch':copy.deepcopy(PINNED),'artifacts':{}}
+        self.path=self.d/'manifest.json';self.seal()
+    def seal(self):
+        self.m['artifacts']={r:{'path':str(p.relative_to(ROOT)),'sha256':digest(p)} for r,p in self.paths.items()}
+        audit={'schema':'apple-ans-qualification-audit/v1','result':'pass',
+               'bindings':{r:self.m['artifacts'][r]['sha256'] for r in ROLES if r!='qualification_audit'}}
+        for k in ('offline_gates_passed','mu_ramdisk_only','mu_native_gate_bound','mu_native_autoboot_bound',
+                  'agx_power_broker_disabled','no_installed_windows_boot','collector_test_passed'):audit[k]=True
+        if self.m['experiment']!='ANS001':
+            audit['winpe_appleans_profile_bound']=True;audit['winpe_testsigning']=True
+            audit['appleans_package_sha256']='c'*64;audit['appleans_profile']=self.audit_profile
+        else:audit['winpe_no_appleans']=True
+        self.paths['qualification_audit'].write_text(json.dumps(audit))
+        self.m['artifacts']['qualification_audit']['sha256']=digest(self.paths['qualification_audit'])
+        self.path.write_text(json.dumps(self.m));self.sha=digest(self.path)
+    def call(self,**kw):return validate_launch(self.path,self.sha,ROOT,environment={},**kw)
+    def test_positive_dryrun_and_explicit_confirmation(self):
+        self.assertEqual(self.call()[0]['experiment'],'ANS001')
+        self.call(execute=True,confirmation='ANS001')
+        with self.assertRaisesRegex(ValueError,'confirm-experiment'):self.call(execute=True)
+    def test_every_artifact_tamper_or_missing_rejected(self):
+        for role in ROLES:
+            bad=copy.deepcopy(self.m);bad['artifacts'][role]['sha256']='0'*64
+            self.path.write_text(json.dumps(bad))
+            with self.assertRaises(ValueError):validate_manifest(self.path,digest(self.path),ROOT)
+        self.path.write_text(json.dumps(self.m));self.sha=digest(self.path)
+        self.paths['m1n1'].unlink()
+        with self.assertRaises(ValueError):self.call()
+    def test_output_aliases_cannot_truncate_sealed_input(self):
+        target=self.paths['winpe'];before=target.read_bytes()
+        symlink=self.d/'symlink-output';symlink.symlink_to(target)
+        hardlink=self.d/'hardlink-output';os.link(target,hardlink)
+        for output in (target,symlink,hardlink,self.path):
+            with self.assertRaisesRegex(ValueError,'output aliases'):self.call(contract_output=output)
+        self.assertEqual(target.read_bytes(),before)
+        from tools.ans_qualification import reject_output_aliases
+        with tempfile.TemporaryDirectory(dir=target.parent) as root:  # hardlink needs one device
+            log=Path(root)/'hv.log';os.link(target,log)
+            with self.assertRaisesRegex(ValueError,'output aliases'):
+                reject_output_aliases(root,self.paths,self.path)
+    def test_actual_runner_alias_refused_before_any_hardware(self):
+        before=self.paths['winpe'].read_bytes()
+        argv=self.argv()+['--device','synthetic-proxy','--qualified-vuart','synthetic-vuart',
+                          '--confirm-experiment','ANS001','--contract-output',str(self.paths['winpe'])]
+        with patch.dict(os.environ,{},clear=True),patch.object(sys,'argv',argv),patch('subprocess.run',side_effect=AssertionError('hardware before alias validation')):
+            with contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit) as stop:
+                runpy.run_path(str(ROOT/'run_uefi.py'),run_name='__main__')
+        self.assertNotEqual(stop.exception.code,0)
+        self.assertEqual(self.paths['winpe'].read_bytes(),before)
+    def test_bad_seal_profile_and_override(self):
+        with self.assertRaises(ValueError):validate_manifest(self.path,'0'*64,ROOT)
+        for args in [{'overrides':['phys_base']},{'no_pin':True},{'wdt_cpu':0},{'agx_power_broker':True},
+                     {'display':'virtual'},{'debug':'off'},{'low_mem':False},{'firmware':ROOT/'wrong.fd'}]:
+            with self.assertRaises(ValueError):self.call(**args)
+        for key,value in [('experiment','ANS002'),('scope','installed-windows'),('read_only',False)]:
+            bad=copy.deepcopy(self.m);bad[key]=value;self.path.write_text(json.dumps(bad))
+            with self.assertRaises(ValueError):validate_manifest(self.path,digest(self.path),ROOT)
+    def test_inherited_unsafe_environment(self):
+        for name in ('WOM1_ALLOW_LEGACY_LAUNCH_CONTRACT','WOM1_ALLOW_LEGACY_HV_INIT_ZERO','WOM1_AGX_G2_POWER_BROKER'):
+            with self.assertRaises(ValueError):validate_launch(self.path,self.sha,ROOT,environment={name:'1'})
+    def test_winpe_packages_and_unproven_collector_rejected(self):
+        p=self.paths['winpe_audit'];a=json.loads(p.read_text());a['indices'][1]['appleans_packages']=['oem1.inf'];p.write_text(json.dumps(a));self.seal()
+        with self.assertRaisesRegex(ValueError,'AppleAns'):self.call()
+        a['indices'][1]['appleans_packages']=[];p.write_text(json.dumps(a));self.seal()
+        p=self.paths['winpe_collector'];a=json.loads(p.read_text());a['result']='pending';p.write_text(json.dumps(a));self.seal()
+        with self.assertRaisesRegex(ValueError,'collector'):self.call()
+    def make_ans002(self,profile='native-read-only-stop1',second_index_pkgs=(),testsigning=True,confirm_flag=True,
+                    experiment='ANS002',scope='ans1-claim-stop',audit_profile=None,winpe_profile=None):
+        self.m['experiment']=experiment;self.m['scope']=scope;self.audit_profile=audit_profile or profile
+        p=self.paths['winpe_audit'];a=json.loads(p.read_text())
+        a['appleans_profile']=winpe_profile or profile;a['appleans_package_sha256']='c'*64;a['testsigning']=testsigning
+        a['indices'][0]['appleans_packages']=['oem0.inf'];a['indices'][1]['appleans_packages']=list(second_index_pkgs)
+        p.write_text(json.dumps(a));self.ans002_flags=confirm_flag;self.seal()
+    def test_ans002_claim_stop_profile_admitted_only_with_exact_package(self):
+        self.make_ans002()
+        self.assertEqual(self.call()[0]['experiment'],'ANS002')
+        self.call(execute=True,confirmation='ANS002')
+        with self.assertRaisesRegex(ValueError,'confirm'):self.call(execute=True,confirmation='ANS001')
+    def test_ans002_rejects_dma_capable_profiles_and_extra_packages(self):
+        for kw in ({'profile':'native-read-only-stop2'},{'profile':'native-read-only-stop0'},
+                   {'second_index_pkgs':('oem1.inf',)},{'testsigning':False}):
+            self.setUp();self.make_ans002(**kw)
+            with self.assertRaises(ValueError):self.call()
+    def test_ladder_profiles_bind_exact_stop_level(self):
+        for exp,scope,prof in (('ANS003','ans2-admin-ready-stop','native-read-only-stop2'),
+                               ('ANS004','ans3-identify-stop','native-read-only-stop3'),
+                               ('ANS005','ans4-read-only-full','native-read-only-stop0'),
+                               ('ANS006','ans5-read-only-volume','native-read-only-stop0')):
+            self.setUp();self.make_ans002(profile=prof,experiment=exp,scope=scope)
+            self.assertEqual(self.call(execute=True,confirmation=exp)[0]['experiment'],exp)
+            self.setUp();self.make_ans002(profile='native-read-only-stop1',experiment=exp,scope=scope)
+            with self.assertRaises(ValueError):self.call()
+            self.setUp();self.make_ans002(profile=prof,experiment=exp,scope=scope,audit_profile='native-read-only-stop1')
+            with self.assertRaises(ValueError):self.call()
+    def make_ans008(self,window={'first_lba':1000,'count':16384},read_only=False,**kw):
+        self.m['read_only']=read_only
+        if window is not None:self.m['write_window']=window
+        self.make_ans002(profile='native-write-window-stop0',experiment='ANS008',scope='ans6-write-window-raw',**kw)
+    def test_ans008_binds_exact_write_window(self):
+        self.make_ans008()
+        m=self.call(execute=True,confirmation='ANS008')[0]
+        self.assertEqual(m['write_window'],{'first_lba':1000,'count':16384})
+        from tools.ans_qualification import write_window_env
+        self.assertEqual(write_window_env(m),'1000:16384')
+        self.assertIsNone(write_window_env({'read_only':True}))
+    def test_ans008_rejects_missing_unbounded_or_readonly_window(self):
+        for kw in ({'window':None},{'read_only':True},{'window':{'first_lba':1000,'count':0}},
+                   {'window':{'first_lba':1000,'count':16385}},{'window':{'first_lba':-1,'count':8}},
+                   {'window':{'first_lba':True,'count':8}},{'window':{'first_lba':1000,'count':8,'extra':1}},
+                   {'window':{'first_lba':'1000','count':8}}):
+            self.setUp();self.make_ans008(**kw)
+            with self.assertRaises(ValueError,msg=str(kw)):self.call()
+        self.setUp();self.make_ans008(audit_profile='native-read-only-stop0')
+        with self.assertRaises(ValueError):self.call()
+    def test_ans009_volume_window_bounded_separately(self):
+        def make(window):
+            self.m['read_only']=False;self.m['write_window']=window
+            self.make_ans002(profile='native-write-window-stop0',experiment='ANS009',scope='ans7-write-window-ntfs-volume')
+        make({'first_lba':30000000,'count':262144})
+        self.assertEqual(self.call(execute=True,confirmation='ANS009')[0]['write_window']['count'],262144)
+        self.setUp();make({'first_lba':30000000,'count':262145})
+        with self.assertRaises(ValueError):self.call()
+        # ANS008 keeps its 16384-block bound.
+        self.setUp();self.make_ans008(window={'first_lba':1000,'count':262144})
+        with self.assertRaises(ValueError):self.call()
+    def make_ans010(self,window={'first_lba':30781184,'count':29187328},installed_build=True,audit_extra=None,drop=()):
+        self.m['read_only']=False;self.m['write_window']=window
+        b=json.loads(self.paths['mu_build'].read_text())
+        if installed_build:
+            b['builds'][0]['expected_core_gate']='AppleAnsInstalledExitBootServicesGateLib'
+            b['builds'][0]['expected_autoboot']='WindowsAutoBootAnsInstalled'
+        self.paths['mu_build'].write_text(json.dumps(b))
+        self.make_ans002(profile='native-write-window-stop0',experiment='ANS010',scope='ans8-installed-native-boot')
+        a=json.loads(self.paths['qualification_audit'].read_text())
+        for k in ('mu_ramdisk_only','no_installed_windows_boot'):a.pop(k,None)
+        a.update({'mu_installed_esp_only':True,'installed_windows_prepared':True,
+                  'appleans_package_sha256':'d'*64,'installed_package_sha256':'d'*64})
+        a.update(audit_extra or {})
+        for k in drop:a.pop(k,None)
+        self.paths['qualification_audit'].write_text(json.dumps(a))
+        self.m['artifacts']['qualification_audit']['sha256']=digest(self.paths['qualification_audit'])
+        self.path.write_text(json.dumps(self.m));self.sha=digest(self.path)
+    def test_ans010_installed_boot_binds_pinned_window_and_installed_mu(self):
+        self.make_ans010()
+        m=self.call(execute=True,confirmation='ANS010')[0]
+        from tools.ans_qualification import write_window_env
+        self.assertEqual(write_window_env(m),'30781184:29187328')
+        # Any other window, even a smaller one inside the Windows range, is refused: a writable
+        # volume outside the window wedges Windows (ANS009-R1..R3).
+        for w in ({'first_lba':30781184,'count':29187327},{'first_lba':30912256,'count':29056256},
+                  {'first_lba':0,'count':29187328}):
+            self.setUp();self.make_ans010(window=w)
+            with self.assertRaises(ValueError,msg=str(w)):self.call()
+        for kw in ({'installed_build':False},{'drop':('installed_windows_prepared',)},
+                   {'drop':('mu_installed_esp_only',)},{'audit_extra':{'installed_package_sha256':'e'*64}}):
+            self.setUp();self.make_ans010(**kw)
+            with self.assertRaises(ValueError,msg=str(kw)):self.call()
+        # The WinPE RAMDisk profile cannot pass with an installed-boot Mu build.
+        self.setUp();self.make_ans008()
+        b=json.loads(self.paths['mu_build'].read_text());b['builds'][0]['expected_autoboot']='WindowsAutoBootAnsInstalled'
+        self.paths['mu_build'].write_text(json.dumps(b));self.seal()
+        with self.assertRaises(ValueError):self.call()
+    def make_ans011(self,window=None,read_only=False,drop=(),audit_extra=None,winpe_profile=None):
+        self.m['read_only']=read_only
+        if window is not None:self.m['write_window']=window
+        b=json.loads(self.paths['mu_build'].read_text())
+        b['builds'][0]['expected_core_gate']='AppleAnsInstalledExitBootServicesGateLib'
+        b['builds'][0]['expected_autoboot']='WindowsAutoBootAnsInstalled'
+        self.paths['mu_build'].write_text(json.dumps(b))
+        self.make_ans002(profile='native-direct-stop0',experiment='ANS011',scope='ans9-direct-installed-native-boot',
+                         winpe_profile=winpe_profile)
+        a=json.loads(self.paths['qualification_audit'].read_text())
+        for k in ('mu_ramdisk_only','no_installed_windows_boot'):a.pop(k,None)
+        a.update({'mu_installed_esp_only':True,'installed_windows_prepared':True,
+                  'mu_ans_direct_acpi':True,'m1n1_ans_direct_handoff':True,
+                  'appleans_package_sha256':'d'*64,'installed_package_sha256':'d'*64})
+        a.update(audit_extra or {})
+        for k in drop:a.pop(k,None)
+        self.paths['qualification_audit'].write_text(json.dumps(a))
+        self.m['artifacts']['qualification_audit']['sha256']=digest(self.paths['qualification_audit'])
+        self.path.write_text(json.dumps(self.m));self.sha=digest(self.path)
+    def test_ans011_direct_profile_has_no_el2_window_and_binds_direct_evidence(self):
+        from tools.ans_qualification import direct_mode,write_window_env
+        self.make_ans011()
+        m=self.call(execute=True,confirmation='ANS011')[0]
+        self.assertTrue(direct_mode(m));self.assertIsNone(write_window_env(m))
+        self.assertFalse(direct_mode({'experiment':'ANS010'}))
+        # Direct means no EL2 window: a manifest window, a read-only manifest or missing
+        # direct-handoff evidence is refused.
+        # The preloaded (unbooted) WinPE may carry an older test-signed package profile.
+        self.setUp();self.make_ans011(winpe_profile='native-write-window-stop0')
+        self.assertEqual(self.call(execute=True,confirmation='ANS011')[0]['experiment'],'ANS011')
+        for kw in ({'window':{'first_lba':30781184,'count':29187328}},{'read_only':True},
+                   {'drop':('mu_ans_direct_acpi',)},{'drop':('m1n1_ans_direct_handoff',)},
+                   {'drop':('installed_windows_prepared',)},
+                   {'audit_extra':{'installed_package_sha256':'e'*64}}):
+            self.setUp();self.make_ans011(**kw)
+            with self.assertRaises(ValueError,msg=str(kw)):self.call()
+    def test_winpe_profiles_still_bind_exact_winpe_package(self):
+        self.make_ans002(profile='native-read-only-stop2',experiment='ANS003',scope='ans2-admin-ready-stop',
+                         winpe_profile='native-read-only-stop0')
+        with self.assertRaises(ValueError):self.call()
+    def test_read_only_profiles_reject_a_write_window(self):
+        self.m['write_window']={'first_lba':0,'count':8};self.seal()
+        with self.assertRaises(ValueError):self.call()
+        self.setUp();self.m['write_window']={'first_lba':0,'count':8}
+        self.make_ans002(profile='native-read-only-stop0',experiment='ANS006',scope='ans5-read-only-volume')
+        with self.assertRaises(ValueError):self.call()
+    def test_runner_dryrun_reports_sealed_window_only(self):
+        for make,expected in ((lambda:None,'none (read-only)'),(self.make_ans008,'1000:16384')):
+            self.setUp();make();out=io.StringIO()
+            with patch.dict(os.environ,{},clear=True),patch.object(sys,'argv',self.argv()+['--dry-run']),patch('subprocess.run',side_effect=AssertionError('hardware subprocess')):
+                with contextlib.redirect_stdout(out),self.assertRaises(SystemExit) as stop:runpy.run_path(str(ROOT/'run_uefi.py'),run_name='__main__')
+                env=os.environ.get('WOM1_ANS_WRITE_WINDOW')
+            self.assertEqual(stop.exception.code,0)
+            self.assertIn(f'ANS write window         : {expected}',out.getvalue())
+            self.assertEqual(env,None if expected.startswith('none') else expected)
+    def test_runner_accepts_every_profile_confirmation(self):
+        # ANS008-R1 never launched: argparse choices lagged PROFILES (ANS001..ANS006 only).
+        from tools.ans_qualification import PROFILES
+        src=(ROOT/'run_uefi.py').read_text()
+        self.assertNotIn('choices=("ANS001"',src)
+        for exp in PROFILES:
+            with patch.dict(os.environ,{},clear=True),patch.object(sys,'argv',self.argv()+['--dry-run','--confirm-experiment',exp]),patch('subprocess.run',side_effect=AssertionError('hardware subprocess')):
+                with contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()) as err,self.assertRaises(SystemExit):
+                    runpy.run_path(str(ROOT/'run_uefi.py'),run_name='__main__')
+            self.assertNotIn('invalid choice',err.getvalue(),exp)
+    def test_inherited_write_window_environment_forbidden(self):
+        with self.assertRaises(ValueError):
+            validate_launch(self.path,self.sha,ROOT,environment={'WOM1_ANS_WRITE_WINDOW':'0:8'})
+    def test_ans001_still_rejects_any_package(self):
+        p=self.paths['winpe_audit'];a=json.loads(p.read_text());a['indices'][0]['appleans_packages']=['oem0.inf']
+        a['appleans_profile']='native-read-only-stop1';p.write_text(json.dumps(a));self.seal()
+        with self.assertRaisesRegex(ValueError,'AppleAns'):self.call()
+    def argv(self):return ['run_uefi.py','--storage-mode','ANS_NATIVE','--qualification-manifest',str(self.path),
+        '--qualification-sha256',self.sha,'--display-mode','physical','--debug-mode','uart','--low-mem']
+    def test_failed_build_and_recovery_firmware_receipt_rejected(self):
+        p=self.paths['mu_build'];a=json.loads(p.read_text());a['builds'][0]['profile']='recovery';p.write_text(json.dumps(a));self.seal()
+        with self.assertRaisesRegex(ValueError,'native Mu'):self.call()
+        a['builds'][0]['profile']='native';a['builds'][0]['exit_code']=1;p.write_text(json.dumps(a));self.seal()
+        with self.assertRaisesRegex(ValueError,'Mu native'):self.call()
+    def test_actual_runner_dryrun_never_imports_uart_or_chainloads(self):
+        before=set(sys.modules)
+        with patch.dict(os.environ,{},clear=True),patch.object(sys,'argv',self.argv()+['--dry-run']),patch('subprocess.run',side_effect=AssertionError('hardware subprocess')):
+            with contextlib.redirect_stdout(io.StringIO()),self.assertRaises(SystemExit) as stop:runpy.run_path(str(ROOT/'run_uefi.py'),run_name='__main__')
+        self.assertEqual(stop.exception.code,0);self.assertNotIn('m1n1.proxy',set(sys.modules)-before)
+    def test_execution_without_confirmation_stops_before_hardware(self):
+        with patch.dict(os.environ,{},clear=True),patch.object(sys,'argv',self.argv()),patch('subprocess.run',side_effect=AssertionError('hardware subprocess')):
+            with contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit) as stop:runpy.run_path(str(ROOT/'run_uefi.py'),run_name='__main__')
+        self.assertNotEqual(stop.exception.code,0)
+    def test_exec_checks_conflict_then_exact_chainload_before_uart(self):
+        class StopBeforeHardware(Exception): pass
+        events=[]
+        def chainload(argv, **kwargs):
+            events.append('chainload')
+            self.assertTrue(argv[1].endswith('proxyclient/tools/chainload.py'))
+            self.assertEqual(argv[2],str(self.paths['m1n1']))
+            raise StopBeforeHardware()
+        with patch.dict(os.environ,{},clear=True),patch.object(sys,'argv',self.argv()+['--device','synthetic-port','--qualified-vuart','synthetic-vuart','--confirm-experiment','ANS001']),patch('fcntl.flock'),patch('tools.ans_qualification.reject_running_launcher',side_effect=lambda:events.append('conflict')),patch('subprocess.run',side_effect=chainload):
+            with contextlib.redirect_stdout(io.StringIO()),self.assertRaises(StopBeforeHardware):
+                runpy.run_path(str(ROOT/'run_uefi.py'),run_name='__main__')
+        self.assertEqual(events,['conflict','chainload'])
+    def test_native_uart_reader_starts_after_chainload_before_guest_uart(self):
+        class StopBeforeGuest(Exception): pass
+        events=[];real_open=Path.open
+        def opened(path,*args,**kwargs):
+            if path.name=='guest-uart-reader.log':return io.BytesIO()
+            return real_open(path,*args,**kwargs)
+        def reader(argv,**kwargs):
+            events.append('reader')
+            self.assertTrue(argv[2].endswith('extra/uart-reader.py'))
+            self.assertEqual(argv[3],'synthetic-vuart')
+            raise StopBeforeGuest()
+        argv=self.argv()+['--device','synthetic-proxy','--qualified-vuart','synthetic-vuart','--confirm-experiment','ANS001']
+        with patch.dict(os.environ,{},clear=True),patch.object(sys,'argv',argv),patch('fcntl.flock'),patch('builtins.open',side_effect=lambda *a,**k:tempfile.TemporaryFile()),patch('tools.ans_qualification.reject_running_launcher'),patch('subprocess.run',side_effect=lambda *a,**k:events.append('chainload')),patch('subprocess.Popen',side_effect=reader):
+            with contextlib.redirect_stdout(io.StringIO()),self.assertRaises(StopBeforeGuest):
+                runpy.run_path(str(ROOT/'run_uefi.py'),run_name='__main__')
+        self.assertEqual(events,['chainload','reader'])
+    def test_actual_shell_valid_dryrun_no_endpoint_discovery(self):
+        p=subprocess.run(['sh',str(ROOT/'scripts/run-assisted.sh'),'--storage-mode','ANS_NATIVE','--chainload',
+                          '--firmware',str(self.paths['mu']),'--m1n1',str(self.paths['m1n1']),
+                          '--ramdisk',str(self.paths['winpe']),'--display','physical','--debug','uart',
+                          '--qualification-manifest',str(self.path),'--qualification-sha256',self.sha,'--dry-run'],
+                         cwd=ROOT,capture_output=True,text=True,env={'PATH':os.environ['PATH']})
+        self.assertEqual(p.returncode,0,p.stderr);self.assertIn('proxy: <proxy-device>',p.stdout)
+    def test_failed_mu_guard_receipt_not_admitted(self):
+        p=self.paths['qualification_audit'];a=json.loads(p.read_text());a['mu_ramdisk_only']=False;p.write_text(json.dumps(a))
+        self.m['artifacts']['qualification_audit']['sha256']=digest(p);self.path.write_text(json.dumps(self.m));self.sha=digest(self.path)
+        with self.assertRaisesRegex(ValueError,'mu_ramdisk_only'):self.call()
+    def test_actual_shell_invalid_native_stops_before_discovery(self):
+        p=subprocess.run(['sh',str(ROOT/'scripts/run-assisted.sh'),'--storage-mode','ANS_NATIVE','--chainload',
+                          '--firmware',str(self.paths['mu']),'--m1n1',str(self.paths['m1n1']),
+                          '--ramdisk',str(self.paths['winpe']),'--display','physical','--debug','uart',
+                          '--qualification-manifest',str(self.path),'--qualification-sha256',self.sha],
+                         cwd=ROOT,capture_output=True,text=True,env={'PATH':os.environ['PATH']})
+        self.assertNotEqual(p.returncode,0);self.assertRegex(p.stderr,'confirm-experiment|launcher is active|proxy lock')
+        self.assertNotIn('Connect the Air',p.stderr)
+
+if __name__=='__main__':unittest.main()
