@@ -1,0 +1,4 @@
+*.CMD -text whitespace=cr-at-eol
+*.cmd -text whitespace=cr-at-eol
+*.ini -text whitespace=cr-at-eol
+*.CMD.in -text whitespace=cr-at-eol

@@ -1,0 +1,163 @@
+# ANS current state — installed Windows C: BOOTS NATIVELY through AppleAns (ANS010-R7 CONFIRMED)
+
+## ANS010 verdict (2026-11-07T09:30Z)
+
+- ANS010-R7: Mu installed profile (pinned WINESP) -> EBS handoff -> winload loads AppleAns (Start=0, no StartOverride)
+  -> C: on native ANS; SSH at 98 s; 64 MiB probe native == bridge; chkdsk clean; 0 EL2 rejects/stuck.
+- Windows contract (R1-R6 lessons): DriverDatabase records + persisted Enum\ACPI\APPL0003\0; Windows writes
+  Services\<drv>\StartOverride\0=3 for an unused boot-start storage driver (AppleAns in recovery, stornvme in native),
+  so every boot-mode switch must clear the other mode's override.
+- Next: idempotent boot-mode switch tool + tests, longer native workload, cold boot, evidence-script PnP fix.
+
+<!-- previous header: ANS current state — NTFS WRITE CONFIRMED (ANS009-R4); installed native boot of C: implemented offline, ANS010-R1 preregistered -->
+
+## ANS010 (2026-11-07)
+
+- Plan + contract: investigation/ANS_NATIVE_BOOT_PLAN.md. Mu a33217e38 installed-boot profile (pinned WINESP),
+  driver ANSBUILD005-W (DumpMode refusal), firmware ANSBUILD021-I1, window 30781184:29187328 (WINESP+MSR+C:+ANSTEST).
+- C: staged (ANS010-PREP): oem6.inf, service AppleAns Start=3 (0 only for a native boot). Packet seal dff2f3b7..., dry-run 0.
+- Next: ANS010-R1 on hardware (needs the bench from fork 6).
+
+<!-- previous header: ANS current state — native READ (~850 MB/s), raw WRITE (ANS008-R2) and NTFS WRITE (ANS009-R4) CONFIRMED; next: native Windows boot design -->
+
+## ANS009 verdict (2026-11-07T02:35Z)
+
+- ANSTEST: partition 9, 1 GiB NTFS directly after C: (LBA 59706368 + 262144), created by recovery (user-approved).
+- ANS009-R4 CONFIRMED: 904 DLLs (588.8 MB) written natively through NTFS; all exact over the bridge; chkdsk clean;
+  0 EL2 rejects/stuck. Requirement learned (R1-R3): no volume outside the write window may be writable in the guest,
+  or Windows wedges on writes EL2 must deny (hang + lost metadata write-back on the windowed volume).
+- Next causal target: native boot of Windows from the SSD (window = Windows volume, later full namespace minus
+  macOS; flush/FUA under boot; standalone path without the recovery bridge).
+
+
+## ANS008 verdict (2026-11-07T00:00Z)
+
+- ANS008-R2 CONFIRMED: AppleAns ANSBUILD004-W (write-window profile) + m1n1 ANSBUILD019 (EL2 LBA window, one-shot,
+  pre-guest, sealed in the qualification manifest) wrote a 16 MiB LBA-dependent pattern into the GPT MSR
+  (LBA 30912256, 4096 blocks) natively, read it back exact (8b29ad3f), and recovery read the same over the bridge.
+  EL2 DENIED every sampled Windows write outside the window. MSR restored to zeros (080acf35); neighbours unchanged.
+- Write window tooling: manifest field write_window (ANS008 profile, <=16384 blocks today) -> run_uefi env ->
+  proxy P_HV_ANS_WRITE_WINDOW (0xc21) -> ans_service_set_write_window. No window = read-only.
+- Next causal target: NTFS-level writes need a window covering one whole volume. Do it on a dedicated test
+  partition (create in recovery, e.g. shrink C: by 1 GiB), never the recovery guest's C:. Then flush/FUA ordering
+  under NTFS, then raise max_write_blocks / full-namespace window for native Windows boot.
+- Open: intermittent lost first completion (R3/R7, kick never fired since); ANS004-R1 single-op failure.
+
+<!-- previous header: ANS current state — native read path CONFIRMED and fast (ANS006-R10: ~850 MB/s copy, device ~200 us/128 KiB); next: write support -->
+
+Updated 2026-11-06T11:10Z (UTC). The user delegated all ANS driver dev/test decisions (2026-11-06).
+Older text below: No hardware was accessed in this phase. No
+Air permission has been given. The single J313 bench belongs to the GPU
+sessions; every ANS run needs explicit user approval and an agreed slot.
+
+
+
+## ANS007 verdict (2026-11-06T20:43Z)
+
+- ANS006-R10 perf receipts: the 16 MB/s of R9 was the `type` consumer (97% of wall time with no request in flight,
+  next READ ~7.7 ms after each REAP). Cold `copy /b` reached ~850 MB/s at queue depth up to 17+. The EL2-trap-cost
+  hypothesis is rejected; no read-path performance work is justified.
+- Active target: write support (driver V2 write admission, broker write authorization, flush/FUA ordering),
+  then native boot of Windows from the SSD.
+- Open: intermittent lost first completion (R3/R7) is unexplained; kick safety net retained (never fired since).
+
+## Current boundary (2026-11-06T14:05Z)
+
+- ANS001 CONFIRMED on hardware: R6 (operator export) and R9 (fully unattended). Native ANS
+  launch with m1n1 ANSBUILD007 (live ADT window pin), native Mu ANSBUILD009 (ReadyToBoot
+  loader start, broker window in stage-1 map) passes the EBS ownership handoff; WinPE boots
+  and enumerates ACPI\APPL0003 inert (Problem 28) with broker 0x300010000+0x4000, GSIV 889.
+- Unattended evidence channel works: WinPE I2 wrapper (SAN OnlineAll + rescan/list/online
+  retries + clear readonly + OfflineAll restore) exports to the user's stick, then reboots;
+  orchestrator .local/ans-native/ANS001-R9-run/run.sh recovers automatically.
+- Host safety: run-assisted refuses a non-fresh proxy (marker), P_REBOOT on pre-guest abort,
+  runner stop on hang (observed reboot required).
+- Bench: owned by ANS until the SSD driver is finished (user decision via fork 6).
+- ANS002 CONFIRMED (ANS002-R1): test-signed AppleAns stop1 in WinPE (DISM + testsigning BCD) binds
+  APPL0003; broker QUERY/CLAIM/QUIESCE/RELEASE all result=0; Problem 10 by design; no DMA.
+- ANS003-R1 (native controller boot+stop), ANS004-R2 (Identify DMA), ANS005-R1 (I/O queues + READ;
+  "NVMe APPLE SSD AP0256" 233 GB disk in WinPE, offline by SAN policy) all CONFIRMED.
+  Pipeline: .local/ans-native/ladder.py EXP RTAG M1N1BUILD. m1n1 ANSBUILD011 logs broker ops.
+- ANS006-R9 CONFIRMED: read-only NTFS mount, 5.6 GB read twice rc=0 at 16.4 MB/s (m1n1 ANSBUILD017:
+  launch-layout regions guest-owned after handoff). Lost first-completion hang seen 2x (R3/R7) - kick
+  safety net in place, root cause open.
+- Next: ANS007 performance (per-request EL2 trap cost, queue depth 1), then write support, native boot.
+- Follow-up: m1n1 tests/run_host_tests.sh full list fails on clang-21 -Werror (pre-existing).
+
+## Read first after a reset
+
+1. Original checkout `investigation/GPU_CURRENT_STATE.md` (GPU owns the bench).
+2. This file, then `investigation/ans/ANS_DMA_ADMISSION_CONTRACT.md` (sources,
+   DART/SART + ANS protocol contract, layer ownership, admission design).
+3. History before 2026-11: `git show 9c55b6c79:investigation/ANS_CURRENT_STATE.md`
+   (ANS001 packet, collector qualification, recovery baseline) — still valid
+   as record, not as fresh hardware state.
+
+## Branch
+
+`feature/j313-ans-native-offline` in `/Users/pavel/public_windows/.worktrees/ans-native`
+now contains `feature/j313-gpu-acceleration` 8786f51f7 (merge 803593d5e; GPU
+branches untouched). m1n1_windows ANS branch merged GPU m1n1 c6d10e04 → ba1cfa1
+(no overlapping files). mu ANS branch baea359242 (one clang-21 header fix).
+Offline gate `tools/test_ans_offline.py` GREEN after the merge, receipt
+`.local/ans-native/tests/receipts/89b20c294c0cf992db2763035ecf5917b89ff44fc171c6c79461e8f99054bf3c.json`
+(103 Python cases + ANS/common/Windows/Mu sanitizer suites + hypervisor checks).
+Fixes needed only for the new toolchain/volume: clang 21
+`-Wunterminated-string-initialization` (test fixture, Mu magic) and a hardlink
+test now creating its temp dir on the sealed input's filesystem.
+
+## Main blocker, re-stated from sources
+
+`DART_TABLES=UNOBSERVED` is **not** an unknown ANS IOMMU: t8103 ANS has no DART
+(m1n1 `nvme.c` PRP/TCB = physical addresses; only `sart-ans` filters RTKit
+buffers). It is the unbounded set of *other* DARTs' table pages that a
+mis-authorized ANS write could hit. Two populations:
+
+- m1n1-owned (heapblock/dlmalloc, incl. late xHCI/DCP DARTs): below the guest,
+  but heapblock has **no ceiling** → fix offline (ANS005A, design §3A).
+- iBoot-retained (TTBRs valid at m1n1 entry, `pt-region-N`): PAs only measurable
+  → read-only census ANSDART001 (`tools/ans_dart_census.py`, committed, tested).
+
+Admission rule (design §3): ANS DMA authority ⊆ guest CPU stage-2 write
+authority ∩ GUEST_RAM \ reservations, plus "no retained table guest-writable".
+No flag is cleared by assertion; the policy still rejects any flagged region.
+
+## Next steps (in order)
+
+1. ANSDART001-R3 (2026-11-06T00:52Z) CONFIRMED with census v2 (9fb711e30): all 26
+   L1/L2 pages of dart-dcp (iBoot-locked), dart-disp0, dart-usb0/1 lie outside both
+   GUEST_RAM windows (iBoot tables at 0x9fff04000-0x9fff40000 above mem_top; m1n1
+   tables in its heap). 18 other DART nodes remain unread (R2: blind reads abort).
+   Side finding: RAM-HIGH stage-2 maps [mem_top, 0xa00000000), so the guest CPU can
+   write those iBoot tables (m1n1 stage-2 follow-up, not an ANS DMA path).
+   Bench: handed to the ANS work by fork 6 at the user's request; guest left running the
+   inert recovery profile (launch-normal2.sh, run_uefi 47806).
+2. DONE offline: heapblock ceiling primitive (m1n1 94d6a1262) and carveout DMA
+   exclusion from the live ADT (m1n1 b89cce170; 13 iBoot carveouts lie inside
+   GUEST_RAM); assisted heap sealed at descriptor publish (m1n1 0beb7b552).
+   Open: standalone heap seal (its runtime allocates guest firmware from heapblock);
+   ANS005B (2026-11-06T02:34Z) CONFIRMED: ANS m1n1 line boots the recovery guest
+   with the heap seal, no ceiling panic. DART_TABLES lifted (root d8f6519ba, m1n1 470ef6872) under
+   HYP-ANS-CARVEOUT, user decision relayed by fork 6. Old ANS005A text — heapblock ceiling + exact DART_TABLES region publication
+   (assisted + standalone), `run_uefi.py` assertion `phys_base >= natural`,
+   RED/GREEN in `tests/hv_ans_handoff_memory_test.py` and an allocator test.
+3. Encode census result (§3C). If CONFLICT: m1n1 stage-2 unmap + Mu reserved
+   memory for those pages first.
+4. ANS001-R2 packet sealed offline (qualification 7a3ae8bb..., ANSBUILD006 = ANS005B
+   m1n1, dry-run exit 0). Unattended blocker: WinPE evidence lives only in X: and needs
+   an operator USB export. Next: host-observable evidence channel (guest NIC is a USB
+   Realtek RTL8153, rtucx22arm64.sys; kdcom PL011 is DBG2-only), rebuild/requalify WinPE.
+   Plan ANS001-PREP-E: WinPE has inbox RTL8153 + ftp.exe -> export results over FTP to a
+   one-shot Mac receiver, then wpeutil reboot; requalify in VM (ANSCOLLECT005).
+   Old text: ANS001 (sealed 2026-09 packet, WinPE-only handoff) is still a valid record
+   but its m1n1 is pre-merge 2d869eb and its rollback assumptions predate the
+   current GPU recovery (expanded RAM, broker-lock m1n1). Rebuild/reseal on the
+   merged line before running it; then ANS002 QUERY/CLAIM, ANS003 admin queue,
+   ANS004 Identify, READ — each needs the §3 admission GREEN first.
+5. Asahi apple.c/sart.c/t8103.dtsi cross-check done (contract §1, §4); re-pin before ANS003.
+6. macOS kext RE not completed (contract §6); not required by the current design.
+
+## Unchanged constraints
+
+Never edit/reset/stash the original GPU checkout; commit only with explicit
+paths; no push/PR without permission; ledgers use `date -u`; reports in Russian.

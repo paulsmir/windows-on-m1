@@ -10,25 +10,40 @@ Order matters at the call site. hv_vuart drops a byte when the host is not holdi
 secondary ACM device open, and the firmware prints during PrePi, so this has to be running
 before the guest starts.
 """
-import serial, sys, time
+import serial, sys, time, os, signal
 
 dev = sys.argv[1]
 limit = float(sys.argv[2]) if len(sys.argv) > 2 else 2400
 
+# A managed reader must not outlive its actual runner, even if that owner dies
+# without atexit. Legacy callers without this variable retain the time limit.
+owner_pid = int(os.environ.get("ANS_UART_OWNER_PID", "0"))
+if owner_pid and os.getppid() != owner_pid:
+    sys.exit(0)
+stop_requested = False
+def request_stop(signum, frame):
+    global stop_requested
+    stop_requested = True
+signal.signal(signal.SIGINT, request_stop)
+signal.signal(signal.SIGTERM, request_stop)
 s = serial.Serial(dev, 115200, timeout=0.5)
 
 # guest-uart.tlog carries a host timestamp per line. The guest's own clock is one of the
 # things under suspicion here, so its log cannot be used to measure itself.
-with open('guest-uart.log', 'wb', buffering=0) as f, \
-     open('guest-uart.tlog', 'w', buffering=1) as tf:
-    t0 = time.time()
-    pending = b''
-    while time.time() - t0 < limit:
-        c = s.read(8192)
-        if not c:
-            continue
-        f.write(c)
-        pending += c
-        while b'\n' in pending:
-            line, pending = pending.split(b'\n', 1)
-            tf.write(f"{time.time() - t0:9.3f}  {line.decode('utf-8', 'replace')}\n")
+try:
+    with open('guest-uart.log', 'wb', buffering=0) as f, \
+         open('guest-uart.tlog', 'w', buffering=1) as tf:
+        t0 = time.time()
+        pending = b''
+        while (not stop_requested and time.time() - t0 < limit and
+                   (not owner_pid or os.getppid() == owner_pid)):
+            c = s.read(8192)
+            if not c:
+                continue
+            f.write(c)
+            pending += c
+            while b'\n' in pending:
+                line, pending = pending.split(b'\n', 1)
+                tf.write(f"{time.time() - t0:9.3f}  {line.decode('utf-8', 'replace')}\n")
+finally:
+    s.close()

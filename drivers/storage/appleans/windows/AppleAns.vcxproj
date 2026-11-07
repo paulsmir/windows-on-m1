@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|ARM64"><Configuration>Release</Configuration><Platform>ARM64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{28E85AAA-55FA-4A45-A0CE-8257878341C6}</ProjectGuid>
+    <RootNamespace>AppleAns</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'" Label="Configuration">
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>WDM</DriverType>
+    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <TargetVersion>Windows10</TargetVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <TargetName>AppleAns</TargetName>
+    <AppleAnsQualificationStop Condition="'$(AppleAnsQualificationStop)'==''">0</AppleAnsQualificationStop>
+    <AppleAnsNativeReadOnly Condition="'$(AppleAnsNativeReadOnly)'==''">false</AppleAnsNativeReadOnly>
+    <AppleAnsNativeWrite Condition="'$(AppleAnsNativeWrite)'==''">0</AppleAnsNativeWrite>
+    <AppleAnsProfile Condition="'$(AppleAnsNativeReadOnly)'=='true' and '$(AppleAnsNativeWrite)'!='1'">native-read-only-stop$(AppleAnsQualificationStop)</AppleAnsProfile>
+    <AppleAnsProfile Condition="'$(AppleAnsNativeReadOnly)'=='true' and '$(AppleAnsNativeWrite)'=='1'">native-write-window-stop$(AppleAnsQualificationStop)</AppleAnsProfile>
+    <AppleAnsProfile Condition="'$(AppleAnsNativeReadOnly)'!='true'">qualification</AppleAnsProfile>
+    <OutDir>$(ProjectDir)out\$(AppleAnsProfile)\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)out\obj\$(AppleAnsProfile)\$(Platform)\$(Configuration)\</IntDir>
+    <RunCodeAnalysis>true</RunCodeAnalysis>
+    <SignMode>Off</SignMode>
+    <EnableInf2cat>true</EnableInf2cat>
+    <Inf2CatWindowsVersionList>10_GE_ARM64</Inf2CatWindowsVersionList>
+    <Inf2CatUseLocalTime>true</Inf2CatUseLocalTime>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile><LanguageStandard_C>stdc11</LanguageStandard_C><WarningLevel>Level4</WarningLevel><TreatWarningAsError>true</TreatWarningAsError><Optimization>MaxSpeed</Optimization><PreprocessorDefinitions>_ARM64_;ARM64;_WIN64;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <Link><AdditionalDependencies>storport.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+    <Inf><TimeStamp>0.4.0.0</TimeStamp></Inf>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAnsNativeReadOnly)'=='true'">
+    <ClCompile><PreprocessorDefinitions>APPLE_ANS_NATIVE_READ_ONLY=1;APPLE_ANS_NATIVE_WRITE=$(AppleAnsNativeWrite);APPLE_ANS_QUALIFICATION_STOP=$(AppleAnsQualificationStop);%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup><FilesToPackage Include="$(TargetPath)" /><ClCompile Include="driver.c" /><ClCompile Include="native.c" /><ClCompile Include="direct.c" /><ClCompile Include="transport.c" /><ClCompile Include="identify.c" /><ClCompile Include="request.c" /><ClCompile Include="resources.c" /><ClCompile Include="telemetry.c" /><ClCompile Include="..\common\ans_scsi.c" /><ClCompile Include="..\common\ans_prp.c" /><ClCompile Include="..\common\ans_order.c" /><ClCompile Include="..\common\ans_direct.c" /><ClInclude Include="..\include\apple_ans_broker_abi.h" /><Inf Include="AppleAns.inf" /></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

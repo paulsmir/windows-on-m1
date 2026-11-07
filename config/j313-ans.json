@@ -1,0 +1,82 @@
+{
+  "contract_version": 1,
+  "platform": "J313",
+  "hardware_generation": "T8103_ANS2",
+  "acpi_hid": "APPL0003",
+  "acpi_uid": 0,
+  "storage_modes": [
+    "VNVME_RECOVERY",
+    "ANS_NATIVE"
+  ],
+  "default_mode": "VNVME_RECOVERY",
+  "native_launch_enabled": false,
+  "qualification_read_only": true,
+  "broker": {
+    "guest_base": "0x300010000",
+    "size": 16384,
+    "abi_major": 1,
+    "abi_minor": 0,
+    "magic": "0x31534e41",
+    "allocation_kind": "synthetic_guest_resource",
+    "handoff_request_offset": 15872,
+    "handoff_receipt_offset": 16128,
+    "handoff_required_proofs": 127,
+    "request_offset": 256,
+    "response_offset": 512,
+    "doorbell_offset": 768,
+    "pending_offset": 2048,
+    "completion_offset": 4096,
+    "abort_offset": 776,
+    "telemetry_offset": 2304
+  },
+  "interrupt": {
+    "guest_gsiv": 960,
+    "physical_expected_from_pinned_dt": 590,
+    "trigger": "level",
+    "polarity": "active_high",
+    "live_adt_verified": false
+  },
+  "adt": {
+    "ans_path": "/arm-io/ans",
+    "sart_path": "/arm-io/sart-ans",
+    "controller_reg_index": 3,
+    "snapshot_sha256": null
+  },
+  "queues": {
+    "admin_queues": 1,
+    "io_queues": 1,
+    "depth": 64,
+    "reserved_admin_tags": 2
+  },
+  "dma": {
+    "prp_page_size": 4096,
+    "lba_size": 4096,
+    "maximum_transfer_length": 131072,
+    "max_data_pages": 33,
+    "payload_bounce": false
+  },
+  "source": {
+    "linux_commit": "77cb8f24c2381a8abb7272d7bbdec548d6426a8a",
+    "linux_driver": "drivers/nvme/host/apple.c",
+    "linux_dt": "arch/arm64/boot/dts/apple/t8103.dtsi",
+    "m1n1_commit": "9cf6c9d9fffdf191108d222411df025e5148fef5"
+  },
+  "physical_resources_expected_from_pinned_dt": {
+    "controller": {
+      "base": "0x27bcc0000",
+      "size": "0x40000"
+    },
+    "coprocessor": {
+      "base": "0x277400000",
+      "size": "0x4000"
+    },
+    "sart": {
+      "base": "0x27bc50000",
+      "size": "0x10000"
+    },
+    "mailbox": {
+      "base": "0x277408000",
+      "size": "0x4000"
+    }
+  }
+}
