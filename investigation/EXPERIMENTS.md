@@ -45936,3 +45936,21 @@ clean, neighbours c_tail 1cdca0e8 / p8_head 5d1b6dc6 / gap 792fb941 unchanged (c
 recovery-guest activity on C:).
 Failure criterion: any mismatch, chkdsk errors on T:, a neighbour change attributable to the native run, a hang,
 or recovery not reaching SSH. Evidence: .local/ans-native/ANS009-R1-run/, .local/ans-native/ans009/*.txt.
+
+ANS009-R1 result (recorded 2026-11-07T01:01:56Z): INCONCLUSIVE (NTFS durability) — native writes correct and confined; the run was
+cut by the orchestrator timeout before the evidence export.
+Phases: EL2 "HV ANS write window: lba 59706368 count 262144", guest started 00:32:20Z (t=78 s); no reboot within
+1500 s -> run.sh stopped the runner 00:57:20Z (hard stop of a live guest), recovery SSH 00:58:21Z, 8 CPUs, APPL0002
+unchanged. No WINPE-ANS009 export (the export runs only at the end), so STATUS/COPY/DISMOUNT logs are lost.
+Most likely cause of the overrun: the fc /b loop over 552 MB is a CPU-bound consumer (cf. ANS007 ).
+Recovery over the bridge: T: Healthy; chkdsk T: /scan "found no problems"; 904 DLLs present (robocopy *.dll is
+case-insensitive; the expected set is the case-insensitive WIM System32 *.dll list, 904 files). 771 files hash-exact;
+the alphabetical tail from uiautomationcore.dll (133 files, 112 MB) reads as zeros (132 all-zero, 1 partial).
+Raw cluster read of uiautomationcore.dll (LCN 0x254b9, contiguous after the good ufat.dll) returns the correct bytes
+(first 64 KiB SHA-256 b44790cb.. = WIM original): the data reached the media; only NTFS valid-data-length metadata for
+the tail is not on disk, consistent with the hard stop before metadata write-back.
+Neighbours c_tail/p8_head/gap unchanged. EL2 sampled receipts: 48 outside writes DENIED.
+Open question (decides next): did the post-copy dismount (flush) complete before the stop? If yes, missing metadata
+after a completed dismount is a FLUSH/ordering defect; if no, it is the expected hard-stop result.
+Next: ANS009-R2 = same artifacts except the WinPE stage: no fc loop (recovery hashes are authoritative), record
+dismount rc, fc only first/last file; finishes far inside the 1500 s budget. Files from R1 are deleted first.
