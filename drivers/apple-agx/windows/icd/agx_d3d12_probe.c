@@ -9212,9 +9212,12 @@ static int mem_bw(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *
                     j = seed % i; v = order[i]; order[i] = order[j]; order[j] = v;
                 }
                 /* Sattolo permutation -> one cycle: page order[i] points to page order[i+1] */
-                for (UINT i = 0; i < n; ++i)
-                    next[base + order[i] * 256u + sp] = base + order[(i + 1u) % n] * 256u + sp;
-                spread_first[sp] = base + order[0] * 256u + sp;
+                /* EXP2229 fix: vary the in-page line ((page * 17 + case) mod 256) so the lines fall into
+                 * different cache sets; a fixed offset aliased every line to one set */
+#define SPREAD_LINE(pg) (base + (pg) * 256u + (((pg) * 17u + sp) & 255u))
+                for (UINT i = 0; i < n; ++i) next[SPREAD_LINE(order[i])] = SPREAD_LINE(order[(i + 1u) % n]);
+                spread_first[sp] = SPREAD_LINE(order[0]);
+#undef SPREAD_LINE
                 free(order);
             }
         }

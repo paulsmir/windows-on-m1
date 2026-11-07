@@ -40,8 +40,10 @@ int main(void) { @autoreleasepool {
       for (unsigned i = 0; i < n; ++i) o[i] = i;
       for (unsigned i = n - 1u; i > 0u; --i) { seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
         unsigned j = seed % i, v = o[i]; o[i] = o[j]; o[j] = v; }
-      for (unsigned i = 0; i < n; ++i) next[base + o[i] * 256u + sp] = base + o[(i + 1u) % n] * 256u + sp;
-      sfirst[sp] = base + o[0] * 256u + sp; free(o); } }
+#define SL(pg) (base + (pg) * 256u + (((pg) * 17u + sp) & 255u))  /* varied in-page line: distinct cache sets */
+      for (unsigned i = 0; i < n; ++i) next[SL(o[i])] = SL(o[(i + 1u) % n]);
+      sfirst[sp] = SL(o[0]); free(o); } }
+#undef SL
   for (unsigned i = 0; i < LINES; ++i) { w[i * 16u] = next[i]; for (unsigned k = 1; k < 16u; ++k) w[i * 16u + k] = i ^ (k * 0x9e3779b9u); }
   id<MTLCommandQueue> q = [d newCommandQueue];
   { id<MTLCommandBuffer> cb = [q commandBuffer]; id<MTLBlitCommandEncoder> b = [cb blitCommandEncoder];
