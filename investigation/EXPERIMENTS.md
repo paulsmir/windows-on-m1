@@ -46002,3 +46002,13 @@ Recovery: same 133-file VDL tail as R1/R2, chkdsk T: clean. With no rejected or 
 metadata write-back never ran: Windows was wedged flushing C:, whose writes can never succeed under the window.
 Next: ANS009-R4 = same artifacts, WinPE stage takes every other lettered native volume offline (mountvol /P) while the
 disk is still read-only, so nothing outside the window is writable; fc output logged.
+
+### ANS009-R4 (preregistered 2026-11-07T02:23:23Z)
+
+Same artifacts as R3 (m1n1 ANSBUILD020, AppleAns W, Mu N3, window 59706368:262144). Single variable: WinPE stage
+offlines every other lettered native volume (mountvol /P) while the disk is read-only (outer 10b8447b).
+Packet 884ce0c53003691f9b056bc33b0e90de4c4489f865333a60cdb221e542f2a412, WinPE 47659d2b, gate cfd3bf47, run.sh 17a59cc8.
+WHY THIS HYPOTHESIS: R3 showed the hang at "set readonly" with only C:-range DENIED writes and no in-window reject or
+stuck request; removing every writable volume outside the window removes the only source of never-completable writes.
+Expected: STATUS reaches readonly_restored=1 and the run reboots before 1500 s (export present); 0 or few rejects;
+recovery: all 904 hashes exact, chkdsk T: clean, neighbours unchanged. Failure: hang again, or any tail mismatch.
