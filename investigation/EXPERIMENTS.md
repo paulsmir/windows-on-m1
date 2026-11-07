@@ -70370,3 +70370,8 @@ Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0 (warm-up); post-exp-g
 - Probe: agx_d3d12_probe_e2223_arm64.exe = byte copy of e2222 (sha 5dbe904643ea842c).
 - Hashes: sys 9a7eb731e22f, UmdArm64 9fb10a7e8332, UmdX64 4dea423f4a8d, Umd32 b42cf4452c4f; manifest c30d3d627ea9, hardware-manifest 655f6c81753c; probe2223.sh b9743f17de53 (PROBE_LINT_OK); visible recovery rec2223h d0ba431cb4cfbc6a; m1n1 0d3a75b3.
 - Recovery rec2223h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2223-default-gate/run2223.sh.
+
+EXP2223 HARDWARE ACTUAL (2026-11-07T03:00:20Z): **CONFIRMED: the default package with the depth-2 kick fallback (S1-S3) and receipt v3 passes the performance gate.**
+- Package 30.0.2223.0 = HEAD 78bded14 (KMD code 675486d7), no device switches; pipeline rc 0; D3D12 suite 119/0; GravityMark d completed (wer 0, warm-up 40.377); guest alive throughout.
+- post-exp-gate: CS warm-up 46.202 (not gated), r2 50.266, r3 49.451 -> PASS worst 49.451 vs 49.943 (-0.99 %); GM repeats r2/r3 PASS worst 41.016 vs 40.770 (+0.60 %). PERF_GATE_PASS.
+- Expected vs actual: expected PASS and no reset; actual PASS, no hang. Verdict: confirmed; the fallback bookkeeping costs nothing measurable on the default path. Recovery rec2223h. Next: EXP2224 = S4a drill (Wom1Depth2FallbackDrillBuilt=16) on 20e34f05.
