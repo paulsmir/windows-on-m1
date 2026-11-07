@@ -198,6 +198,10 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * BeginJob is refused to exercise the depth-2 kick fallback. */
   ULONG Depth2FallbackDrill;
   ULONG Depth2FallbackDrillCount;
+  /* Wom1Depth2FallbackDrillBuilt = N (diagnostic, default 0): every Nth
+   * built kicked successor is refused after Relocate (S4a drill). */
+  ULONG Depth2FallbackDrillBuilt;
+  ULONG Depth2FallbackDrillBuiltCount;
   PEX_TIMER JobPollTimer;
   KEVENT JobPollTimerEvent;
 #endif
@@ -4865,6 +4869,17 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendRelocate(
     Job->CommandVa = image->G4ComputeEnvelope.Header.Base.CommandVa;
   else if (image != NULL && image->G4Native)
     Job->CommandVa = image->G4Header.Base.CommandVa;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* Wom1Depth2FallbackDrillBuilt = N: refuse every Nth fully built kicked
+   * successor as SubmitSuccessor's post-build checks do (EXP2213,
+   * ImageFailed), to prove the S4a rollback on hardware. */
+  if (runtime->Depth2FallbackDrillBuilt != 0u && Submission != NULL &&
+      runtime->Depth2KickedFence != 0u &&
+      runtime->Depth2KickedFence == Submission->Submission.Fence &&
+      ++runtime->Depth2FallbackDrillBuiltCount %
+          runtime->Depth2FallbackDrillBuilt == 0u)
+    return APPLE_AGX_BACKEND_FALSE;
+#endif
   return APPLE_AGX_BACKEND_TRUE;
 }
 
@@ -6275,7 +6290,7 @@ static VOID AdmissionJobWindowKickFailedWindows(ADMISSION_CONTEXT *adapter,
  * one. FALSE when any precondition fails; the caller then fails closed. */
 static BOOLEAN AdmissionJobWindowKickFallbackWindows(ADMISSION_CONTEXT *adapter,
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG line, ULONG fence,
-    ULONG status, ULONG flags) {
+    ULONG status, ULONG result, ULONG flags) {
   BOOLEAN undone = FALSE, preempting = FALSE;
   KIRQL old_irql;
   if (runtime->Depth2KickedFence != fence || fence == 0u ||
@@ -6303,8 +6318,8 @@ static BOOLEAN AdmissionJobWindowKickFallbackWindows(ADMISSION_CONTEXT *adapter,
 #if defined(ADMISSION_OV5_ON)
   runtime->Ov5Waive = FALSE;
 #endif
-  AdmissionJobWindowKickFailureRecordWindows(runtime, line, fence, status, 0u,
-      flags | ADMISSION_KICK_FAIL_FELL_BACK |
+  AdmissionJobWindowKickFailureRecordWindows(runtime, line, fence, status,
+      result, flags | ADMISSION_KICK_FAIL_FELL_BACK |
       (preempting ? ADMISSION_KICK_FAIL_FELL_BACK_PREEMPT : 0u));
   if (preempting) ++runtime->Depth2Receipt.KickFallbacksPreempt;
   runtime->Depth2KickRunningKind = 0u;
@@ -6312,6 +6327,34 @@ static BOOLEAN AdmissionJobWindowKickFallbackWindows(ADMISSION_CONTEXT *adapter,
   ++runtime->Depth2Receipt.KickFallbacks;
   AdmissionJobWindowKickFailureExportWindows(adapter, runtime);
   return TRUE;
+}
+
+/* S4a (DEPTH2-KICK-FALLBACK.md): SubmitSuccessor refused before RunSuccessor
+ * (any result but QueueFailed), so the firmware never saw the successor.
+ * What Relocate built for it must be given back so the depth-one rebuild of
+ * the same fence starts from the state before the kick: the notifier flight
+ * (its FlightBegin snapshot restores counts, stamps, job-word set and
+ * sidecar), the manager transaction, the staged stamp sequence and a legacy
+ * dynamic overlay (left applied, it would refuse the running job's release).
+ * TRUE only when none of them is left for the fence. */
+static BOOLEAN AdmissionJobWindowKickBuildUndoneWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, const ADMISSION_BACKEND_IMAGE *image,
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *owner, ULONG fence) {
+  ULONG index;
+  if (!owner->NotifierFlight ||
+      owner->BuildingFlight > APPLE_AGX_NOTIFIER_FLIGHT_COUNT ||
+      owner->ManagerFence == fence || owner->ManagerSecondFence == fence ||
+      (image->JobReady && image->JobFence == fence))
+    return FALSE;
+  for (index = 0u; index < APPLE_AGX_NOTIFIER_FLIGHT_COUNT; ++index)
+    if (owner->Flights[index].Fence == fence) return FALSE;
+  if (runtime->DynamicOverlayState.Applied != 0u &&
+      runtime->DynamicOverlayState.Fence == fence &&
+      !AdmissionDynamicOverlayReleaseActive(runtime, fence))
+    return FALSE;
+  return runtime->DynamicOverlayState.Applied == 0u ||
+                 runtime->DynamicOverlayState.Fence != fence
+             ? TRUE : FALSE;
 }
 
 /* rc102 (EXP2051): the builder's manager predicate for a render successor
@@ -6577,7 +6620,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   runtime->Depth2BuildStep = 0u;
   if (context == NULL || context->GpuvaG3Process == NULL) {
     if (!AdmissionJobWindowKickFallbackWindows(adapter, runtime, __LINE__,
-                                               next, 0u, 0u))
+                                               next, 0u, 0u, 0u))
       AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next,
                                           0u, 0u, 0u);
     return TRUE;
@@ -6600,7 +6643,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
       /* rc102 receipt: which BeginJob check refused, and its status.
        * BeginJobAs changes nothing unless it succeeds: fall back. */
       if (!AdmissionJobWindowKickFallbackWindows(adapter, runtime,
-              __LINE__ | (beginRefusal << 16), next, (ULONG)begin, 0u))
+              __LINE__ | (beginRefusal << 16), next, (ULONG)begin, 0u, 0u))
         AdmissionJobWindowKickFailedWindows(adapter, runtime,
             __LINE__ | (beginRefusal << 16), next, (ULONG)begin, 0u, 0u);
       return TRUE;
@@ -6614,7 +6657,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
                                          image->G4Manager, &image->G4ManagerKey)) {
     AdmissionGpuvaG3AbortJob(adapter, next);
     if (!AdmissionJobWindowKickFallbackWindows(adapter, runtime, __LINE__,
-            next, 0u, ADMISSION_KICK_FAIL_G3_ABORTED))
+            next, 0u, 0u, ADMISSION_KICK_FAIL_G3_ABORTED))
       AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next, 0u,
                                           0u, ADMISSION_KICK_FAIL_G3_ABORTED);
     return TRUE;
@@ -6664,6 +6707,14 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
                                           stageSequence, &stageDynamic))
         flags |= ADMISSION_KICK_FAIL_UNSTAGED;
     }
+    /* S4a: refused before RunSuccessor and fully given back: run it at
+     * depth one. QueueFailed (S4b/S4c) may have reached the queue: reset. */
+    if (result != AppleAgxBackendRuntimeResultQueueFailed &&
+        (flags & ADMISSION_KICK_FAIL_G3_ABORTED) != 0u &&
+        AdmissionJobWindowKickBuildUndoneWindows(runtime, image, owner, next) &&
+        AdmissionJobWindowKickFallbackWindows(adapter, runtime, __LINE__, next,
+            0u, (ULONG)result, flags | ADMISSION_KICK_FAIL_BUILD_UNDONE))
+      return TRUE;
     AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next, 0u,
                                         (ULONG)result, flags);
     return TRUE;
@@ -8383,6 +8434,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->Depth2FallbackDrillCount = 0u;
   (void)AdmissionPlatformDwordValue(Context, L"Wom1Depth2FallbackDrill",
                                     &runtime->Depth2FallbackDrill);
+  runtime->Depth2FallbackDrillBuilt = 0u;
+  runtime->Depth2FallbackDrillBuiltCount = 0u;
+  (void)AdmissionPlatformDwordValue(Context, L"Wom1Depth2FallbackDrillBuilt",
+                                    &runtime->Depth2FallbackDrillBuilt);
 #endif
 #if defined(ADMISSION_PREEMPT_TRACE_ON)
   {

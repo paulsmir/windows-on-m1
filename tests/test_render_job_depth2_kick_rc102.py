@@ -141,7 +141,8 @@ class KickWiring(unittest.TestCase):
         reset side), and records the refusal before the fault."""
         kick = section(WORKER.read_text(), "static BOOLEAN AdmissionJobWindowKickWindows(")
         failed = kick[kick.index("if (result != AppleAgxBackendRuntimeResultOk) {"):]
-        failed = failed[:failed.index("return TRUE;")]
+        failed = failed[:failed.index("(ULONG)result, flags);\n    return TRUE;")
+                        + len("(ULONG)result, flags);")]
         abort = failed.index("AdmissionGpuvaG3AbortJob(adapter, next);")
         self.assertLess(failed.index("AppleAgxG13QueueProviderFaulted"), abort)
         self.assertLess(failed.index("AppleAgxG13QueueRuntimeFaulted"), abort)

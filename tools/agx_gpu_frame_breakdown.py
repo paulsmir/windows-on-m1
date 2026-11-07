@@ -680,7 +680,8 @@ KICK_FAIL_FLAGS = ((0x1, 'terminal_pending'), (0x2, 'successor_pending'),
                    (0x4, 'completion_ready'), (0x8, 'recovery_pending'),
                    (0x10, 'channel_failed'), (0x20, 'bm_initialized'),
                    (0x40, 'ta_first_run'), (0x80, 'd3_first_run'), (0x100, 'g3_aborted'),
-                   (0x200, 'unstaged'), (0x400, 'fell_back'), (0x800, 'fell_back_preempt'))
+                   (0x200, 'unstaged'), (0x400, 'fell_back'), (0x800, 'fell_back_preempt'),
+                   (0x1000, 'build_undone'))
 KICK_BUILD_STEPS = {0: 'not_entered', 1: 'render_entered', 2: 'render_overlay',
                     3: 'render_staged', 4: 'render_built', 5: 'render_compute',
                     6: 'render_lead', 7: 'render_flushed', 8: 'render_bindings',

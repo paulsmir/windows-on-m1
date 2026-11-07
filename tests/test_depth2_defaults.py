@@ -87,6 +87,7 @@ typedef struct {
  BOOLEAN FwRxDrain; /* 125bddd1: class C, default on */
  BOOLEAN PresentTsEnabled;
  ULONG Depth2FallbackDrill,Depth2FallbackDrillCount; /* be8c6f7f: diagnostic, default 0 */
+ ULONG Depth2FallbackDrillBuilt,Depth2FallbackDrillBuiltCount; /* S4a drill, default 0 */
  unsigned Depth2Capabilities,Depth2KickClasses;
  struct { APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory; } Initdata;
  struct { struct {APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG Config;} QueueProvider;} Provider;

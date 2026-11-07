@@ -122,6 +122,7 @@ typedef struct {
  unsigned char JobAhead,JobDepth2,JobDepth2Kick,JobDiagnostics;
  unsigned char FwRxDrain,PresentTsEnabled; /* 125bddd1, EXP2205 */
  unsigned Depth2FallbackDrill,Depth2FallbackDrillCount; /* be8c6f7f */
+ unsigned Depth2FallbackDrillBuilt,Depth2FallbackDrillBuiltCount; /* S4a drill */
  unsigned Depth2Capabilities,Depth2KickClasses;
  struct { APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory; } Initdata;
  struct { struct {APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG Config;} QueueProvider;} Provider;

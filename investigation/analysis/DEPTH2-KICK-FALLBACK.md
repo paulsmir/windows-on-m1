@@ -270,3 +270,43 @@ Smallest falsifiable run: one KMD-only drill switch (default off) that forces
 S2 (a BeginSuccessorJob refusal) once per N kicks; the only variable is the
 fallback itself (reverting 56772879 to reproduce EXP2213 would add a second). Expected: `KickFallbacks == drills`, zero ENGINE resets, all fences
 reported in order, perf within gate. Recovery: standard rec<id>h/recover.sh.
+
+---
+
+## S4a builder-rollback proof (2026-11-07)
+
+Sources read: `apple_agx_backend_runtime.c` (`AppleAgxBackendRuntimeSubmitSuccessor`),
+`apple_agx_platform_provider.c` (`AppleAgxPlatformRenderRelocate`),
+`apple_agx_g13_queue_provider.c` (`PlanSuccessor`),
+`apple_agx_render_shared_memory.c` (`FlightBegin/Cancel`, `reserve_sidecar`,
+`BuildCompute`, `NextJobWordSet`), `backend_platform_windows.c`
+(`AdmissionExternalBuildJob`, `AdmissionExternalBuildComputeJob`,
+`AdmissionDynamicOverlayReleaseActive`, completion release).
+
+Every S4a result (`InvalidArgument`, `InvalidState`, `Busy`, `MemoryFailed`,
+`ImageFailed`) returns before `RunSuccessor`; `PreparePublish`/notifier publish
+live inside it, so nothing is firmware-visible. What a successful `Relocate`
+(= `PlanSuccessor` + `FlightBegin` + `BuildJob`) leaves, and who gives it back:
+
+| State | Given back by | Proof |
+|---|---|---|
+| plan (done pointers) | nothing to undo | `PlanSuccessor` only reads write pointers |
+| notifier counts, compute/queue stamps, job-word set, sidecar reservation | `AppleAgxRenderFlightCancel` (FlightBegin snapshot; flight zeroed) | test_notifier_flight: cancel 78 -> begin 78 -> rebuild -> publish |
+| manager transaction | `AppleAgxRenderManagerCancelBuild` (existing S4 path) | state check `ManagerFence/SecondFence != fence` |
+| staged render stamp sequence | `AdmissionBackendImageUnstageJob` (EXP2047) | state check `!(JobReady && JobFence == fence)` |
+| legacy dynamic overlay | `AdmissionDynamicOverlayReleaseActive(fence)` (new) | left applied, the running job's completion release fails (`State->Fence != Fence`) |
+| present job in the process arena, relocated arena bytes, VM-slot retarget | rewritten by the depth-one rebuild | never firmware-visible |
+| G3 nested job | `AdmissionGpuvaG3AbortJob` (existing) | flag `G3_ABORTED` |
+
+UNKNOWN 1 (compute/present) and UNKNOWN 2 (dynamic overlay) are resolved by
+this table. Implementation: `AdmissionJobWindowKickBuildUndoneWindows` checks
+the state (not the path) and the S4 block falls back only for
+`result != QueueFailed` with `G3_ABORTED`; flag `BUILD_UNDONE` (0x1000).
+S4b (`QueueFailed`, provider guard before `PublishPreparedWork`) stays
+fail-closed until the provider/queue-runtime side is proved the same way.
+
+Hardware checkpoint: `Wom1Depth2FallbackDrillBuilt=N` refuses every Nth fully
+built kicked successor right after `Relocate` (the EXP2213 ImageFailed shape:
+flight live, manager open, render staged). Expected: `kick_fallbacks ==
+kick_failures`, every failure flagged `build_undone`, resets 0, suite 119/0,
+GravityMark completes.

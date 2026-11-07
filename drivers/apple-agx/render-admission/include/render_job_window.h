@@ -434,6 +434,7 @@ typedef struct _ADMISSION_JOB_WINDOW_RECEIPT {
 #define ADMISSION_KICK_FAIL_UNSTAGED           0x0200u /* render stamp sequence given back */
 #define ADMISSION_KICK_FAIL_FELL_BACK          0x0400u /* undone; runs at depth 1, no reset */
 #define ADMISSION_KICK_FAIL_FELL_BACK_PREEMPT  0x0800u /* undone in a boundary preemption: handed back to VidSch */
+#define ADMISSION_KICK_FAIL_BUILD_UNDONE       0x1000u /* S4a: the refused successor's build given back */
 /* BuildStep: how far the KMD build of the successor got (0: not entered,
  * the provider plan or the platform refused first). */
 #define ADMISSION_KICK_BUILD_RENDER_ENTERED    1u

@@ -41,13 +41,45 @@ class Depth2KickFallback(unittest.TestCase):
     def test_only_pre_visibility_refusals_fall_back(self):
         kick = section(WORKER.read_text(), "static BOOLEAN AdmissionJobWindowKickWindows(")
         submit = kick.index("result = AppleAgxBackendRuntimeSubmitSuccessor(")
-        self.assertEqual(kick.count("AdmissionJobWindowKickFallbackWindows("), 3)
-        self.assertLess(kick.rindex("AdmissionJobWindowKickFallbackWindows("), submit)
-        # S4: a refused SubmitSuccessor stays fail-closed until its builder
-        # rollback is proved (DEPTH2-KICK-FALLBACK.md S4a/S4b).
-        self.assertIn("AdmissionJobWindowKickFailedWindows(", kick[submit:])
+        self.assertEqual(kick.count("AdmissionJobWindowKickFallbackWindows("), 4)
+        # S4a: the only fallback after SubmitSuccessor; QueueFailed (RunSuccessor
+        # was called: S4b/S4c may be visible) and a build not given back reset.
+        after = kick[submit:]
+        self.assertEqual(after.count("AdmissionJobWindowKickFallbackWindows("), 1)
+        s4 = after[after.index("if (result != AppleAgxBackendRuntimeResultQueueFailed &&"):]
+        s4 = s4[:s4.index("return TRUE;")]
+        self.assertIn("(flags & ADMISSION_KICK_FAIL_G3_ABORTED) != 0u", s4)
+        self.assertLess(s4.index("AdmissionJobWindowKickBuildUndoneWindows(runtime, image, owner, next)"),
+                        s4.index("AdmissionJobWindowKickFallbackWindows("))
+        self.assertIn("ADMISSION_KICK_FAIL_BUILD_UNDONE", s4)
+        # The rollback (flight cancel, manager cancel, G3 abort, unstage) runs
+        # first; the fail-closed reset stays the default after it.
+        self.assertLess(after.index("AdmissionBackendImageUnstageJob("),
+                        after.index("AdmissionJobWindowKickBuildUndoneWindows("))
+        self.assertLess(after.index("AdmissionJobWindowKickBuildUndoneWindows("),
+                        after.index("AdmissionJobWindowKickFailedWindows("))
         adopt = section(WORKER.read_text(), "static BOOLEAN AdmissionJobWindowAdoptWindows(")
         self.assertNotIn("KickFallback", adopt)
+
+    def test_build_undone_requires_every_built_piece_given_back(self):
+        """S4a: a flight, manager transaction, staged sequence or overlay left
+        for the fence would make the depth-one rebuild count twice, be refused,
+        or refuse the running job's release (overlay state fence mismatch)."""
+        undone = section(WORKER.read_text(),
+                         "static BOOLEAN AdmissionJobWindowKickBuildUndoneWindows(")
+        for check in ("!owner->NotifierFlight",
+                      "owner->Flights[index].Fence == fence",
+                      "owner->ManagerFence == fence || owner->ManagerSecondFence == fence",
+                      "image->JobReady && image->JobFence == fence",
+                      "AdmissionDynamicOverlayReleaseActive(runtime, fence)"):
+            self.assertIn(check, undone)
+        self.assertNotIn("SchedulerFaulted", undone)
+
+    def test_built_drill_refuses_only_kicked_successors(self):
+        relocate = section(WORKER.read_text(), "static APPLE_AGX_BACKEND_BOOL AdmissionBackendRelocate(")
+        drill = relocate[relocate.index("runtime->Depth2FallbackDrillBuilt != 0u"):]
+        self.assertIn("runtime->Depth2KickedFence == Submission->Submission.Fence", drill)
+        self.assertIn('L"Wom1Depth2FallbackDrillBuilt"', WORKER.read_text())
 
     def test_unkick_returns_the_head_to_prebound(self):
         unkick = section(G3.read_text(), "_Use_decl_annotations_ BOOLEAN AdmissionG4PendingUnkickLocked(")

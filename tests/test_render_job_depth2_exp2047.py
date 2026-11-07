@@ -249,7 +249,8 @@ class Exp2047(unittest.TestCase):
         save = kick.index("stageSequence = image->Sequence;")
         self.assertLess(save, kick.index("result = AppleAgxBackendRuntimeSubmitSuccessor("))
         failed = kick[kick.index("if (result != AppleAgxBackendRuntimeResultOk) {"):]
-        failed = failed[:failed.index("return TRUE;")]
+        failed = failed[:failed.index("(ULONG)result, flags);\n    return TRUE;")
+                        + len("(ULONG)result, flags);")]
         abort = failed.index("AdmissionGpuvaG3AbortJob(adapter, next);")
         unstage = failed.index("AdmissionBackendImageUnstageJob(&adapter->BackendImage, next,")
         self.assertLess(abort, unstage)
