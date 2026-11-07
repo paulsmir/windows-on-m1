@@ -27,6 +27,17 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   Next: confirm macOS's attribute for private GPU memory (kext RE, allowed), rebuild brokerlock m1n1 + GC, then one
   MEMBW probe run with/without Wom1GpuPrivateCached (measurement only: no cache invalidation on unmap).
 
+## UPDATE 2026-11-07 15:30Z -- ACTIVE HYPOTHESIS: WINDOWS TLBIs DROP GPU TRANSLATIONS (VMID 0)
+- EXP2230 macOS: page-spread chase 65-92 ns for 4..1024 pages (both layouts); ours (EXP2229) 606-962 ns -> ~400 ns
+  per 16 KiB page change even among 4 pages: the GPU keeps almost no translations.
+- Mechanism (source): m1n1 invalidates GPU translations with TLBI ASIDE1OS at EL2 with TGE=0 = EL1&0 regime of the
+  current VMID 0 (hv_agx_retained_platform.c), and the GPU obeys it; the guest runs as VMID 0 (hv_vm.c VTTBR = table
+  only), so Windows' own broadcast TLBIs can hit GPU ASIDs. macOS/Asahi run the host at EL2 (VHE): no such overlap.
+- Test: m1n1 exp/m1n1-brokerlock-vmid1 c827d94c (AGX_GUEST_VMID1: guest VMID 1, broker GPU TLBI on VMID 0;
+  artifact .local/experiments/m1n1-brokerlock-vmid1, sha 3c4de85f). EXP2231 = control (fixed-offset probe e2230,
+  brokerlock-split), EXP2232 = same + vmid1 m1n1. Queued after ANS012-R4/ANS013.
+- If EXP2232 confirms: production path = keep the guest off VMID 0 (m1n1 change), then re-measure GM.
+
 ## UPDATE 2026-11-07 14:40Z -- LATENCY: ATTRIBUTE MINOR, NEXT = TLB DISCRIMINATOR
 - EXP2227 (control, GC m1n1, no switch) reproduces the gap; EXP2228 (Wom1GpuPrivateCached=1, MEMATTR 0 on GPU-only
   leaves) lowers the 32-thread chase 15-35 % from 1 MiB but 64-256 KiB barely move and 4 MiB stays 551-598 vs macOS
