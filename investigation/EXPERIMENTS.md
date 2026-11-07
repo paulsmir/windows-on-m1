@@ -46232,3 +46232,22 @@ Remaining causes (not separable from the stop code):
 (c) StorPort start failure before HwInitialize.
 
 Next measurement: snapshot the ACPI\APPL0003 devnode (state, problem, ProblemStatus, service) from the kernel PnP tree via PDB offsets, plus the AppleAns adapter Stage. No other change.
+
+### ANS010-R4 — PnP devnode snapshot at INACCESSIBLE_BOOT_DEVICE (preregistered 2026-11-07T08:35:32Z; waiting for the bench)
+
+- Same packet as R2/R3 (seal ee3dd665...); no Windows or firmware change.
+- Runner diagnostics:
+  - --snapshot-kernel-read 0xdbc9c0:40;
+  - --snapshot-devnodes 0xdd0da0,8,0,40,56,300,404,408 (268c4f099; IopRootDeviceNode and _DEVICE_NODE offsets from PDB 287D4F3D; State enum 768+ in .local/ans-native/ans010/sym/devnode-states.txt).
+- run.sh 977caaae...
+
+WHY THIS HYPOTHESIS:
+1. R3 proved 0x7B with P2=STATUS_OBJECT_NAME_NOT_FOUND and no broker operation.
+2. The ACPI\APPL0003 devnode's service, state, problem and status distinguish the remaining causes directly:
+   - (a) not configured: no service / problem 28;
+   - (b) AppleAns refused in HwFindAdapter: problem 10, failed start;
+   - (c) a StorPort start failure.
+
+Recorded offline difference: DriverPackages SignerScore is 0x0D000004 in the DISM WinPE hive and 0x0F000000 (Authenticode test signature) on C:.
+
+Expected: one SNAPSHOT_DEVNODE line for ACPI\APPL0003\0. If absent, ACPI never enumerated it (then compare the ACPI namespace).
