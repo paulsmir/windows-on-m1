@@ -70486,3 +70486,8 @@ Steps: MEMBW twice (regions as before + MEMBW_PAGES_NS: cycles of 4/64/256/1024 
 - Probe: agx_d3d12_probe_e2229_arm64.exe (builder clang-cl, sha a6b44daa137606b1); probe2229.sh = probe2227.sh + MEMBW_PAGES_NS in the summary (PROBE_LINT_OK).
 - Hashes: sys c528be790f3b, UmdArm64 4a70ca080149, UmdX64 0b51c6950b88, Umd32 ad0b956c1d4b; manifest 60afef6bf7f3, hardware-manifest 40a1fce8c2e3; probe2229.sh c86abd6794ae (PROBE_LINT_OK); visible recovery rec2229h 672526b91b507f72; m1n1 0d3a75b3.
 - Recovery rec2229h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2229-tlb-spread/run2229.sh.
+
+EXP2229 HARDWARE ACTUAL (2026-11-07T14:34:58Z): **INCONCLUSIVE for TLB (probe design flaw): page-spread chase 606/653/807/962 ns (run 2: 602/642/751/907) for 4/64/256/1024 pages, but every line sits at the same in-page offset (16 KiB stride), so all lines share one cache set -- cache-set conflicts and TLB entries are confounded.**
+- EXP2229_PIPELINE_RC 0; suite 119/0; no reset; WER 0; HD PERF d 40.634 fps (cold). Region rows reproduce EXP2227 (32 threads 16K 212/228, 256K 488/490, 4M 688/620, 16M 836/801 ns).
+- Note: 4 lines on 4 pages (256 B of data) cost 606 ns vs 212 ns for 256 lines inside one page -> same-set aliasing (or per-page TLB cost) dominates; the fix spreads the in-page offset ((k*17 + case) mod 256 lines) so lines map to different sets, and the same layout runs on macOS for the reference.
+- Evidence evidence/EXP2229. Recovery rec2229h.
