@@ -70499,3 +70499,15 @@ EXP2230 MACOS REFERENCE (2026-11-07T15:16:05Z; recorded after the run, macOS onl
 - Interpretation (hypothesis, to be tested): on our side every change of 16 KiB page costs ~400 ns even among 4 pages, i.e. the GPU keeps (almost) no translations -- continuous TLB invalidation (Windows broadcast TLBIs with VMID 0 / shared ASIDs, or our own flushes) or translations not being cached; set aliasing is excluded on this hardware by the macOS run.
 - Next: EXP2231 Windows run of the varied-offset probe (agx_d3d12_probe_e2230, sha edb222b7) to confirm the per-page cost, then a minimal m1n1 diagnostic counting guest TLBI instructions (HCR_EL2.TTLB trap, receipt only).
 - Evidence /Users/pavel/public_windows/.local/experiments/EXP2226-macos-splitd/membw-macos-pages*.txt.
+
+EXP2231 HARDWARE BEFORE 2026-11-07T15:42:59Z:
+Steps: MEMBW twice (regions + MEMBW_PAGES_NS 4/64/256/1024 pages, one 64 B line per page at varied in-page offsets); D3D12 suite; d HD PERF GravityMark 100k -temporal 0.
+- WHY THIS HYPOTHESIS: (1) EXP2229/EXP2230: identical page-spread pattern costs 606-962 ns on ours vs 65-92 ns on macOS (already 4 pages = 256 B of data); (2) macOS shows the same 65-92 ns with both layouts, so set aliasing does not matter on this hardware, but the varied layout has not run on ours yet; (3) EXP2232 changes the guest VMID only, so this run gives its same-package baseline.
+- WINDOWS/AGX CONTRACT: unchanged (diagnostic probe only). ATOMIC CONTRACT: none.
+- WHAT IS STILL UNKNOWN: our page-spread latency with distinct cache sets.
+- Expected: ~600-950 ns rising with pages (per-page translation cost) as in EXP2229; suite 119/0; HD PERF ~40.7.
+- Failure criteria: suite failure, reset, hang -> rec2231h.
+- Recovery: rec2231h (run directly).
+- Probe: agx_d3d12_probe_e2231_arm64.exe = byte copy of e2230 (builder clang-cl, sha edb222b713c2f802); probe2231.sh = probe2229.sh (PROBE_LINT_OK).
+- Hashes: sys 7a0f6e481867, UmdArm64 5dae52b1cd6b, UmdX64 d44b89b3ea79, Umd32 9be4836157fe; manifest 10c5873c76ed, hardware-manifest 340815feaa7f; probe2231.sh 683893a35fd5 (PROBE_LINT_OK); visible recovery rec2231h 856a1d3e21a1d86e; m1n1 0d3a75b3.
+- Recovery rec2231h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2231-tlb-ctl/run2231.sh.
