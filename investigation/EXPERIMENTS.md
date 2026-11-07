@@ -45954,3 +45954,15 @@ Open question (decides next): did the post-copy dismount (flush) complete before
 after a completed dismount is a FLUSH/ordering defect; if no, it is the expected hard-stop result.
 Next: ANS009-R2 = same artifacts except the WinPE stage: no fc loop (recovery hashes are authoritative), record
 dismount rc, fc only first/last file; finishes far inside the 1500 s budget. Files from R1 are deleted first.
+
+### ANS009-R2 (preregistered 2026-11-07T01:09:31Z)
+
+Same hypothesis, window (59706368:262144), m1n1 ANSBUILD019, AppleAns ANSBUILD004-W and Mu N3 as ANS009-R1.
+Single variable vs R1: WinPE stage only (outer 21c082bc): no fc loop; fc /b of the first and last DLL after a
+recorded dismount (dismount0/1/2 rc logged), then chkdsk. R1 files were deleted from T: (chkdsk T: clean before).
+Packet 57a86cba8a44d434a652a3aa0336480d4228a2ea01e464d9c2ec6877333da564, WinPE 18606095 (QEMU collector pass),
+gate aec0a9f8 GREEN, run.sh 909fbf43. Launch: bash .local/ans-native/ANS009-R2-run/run.sh.
+Expected: export present; STATUS copy_rc<8, dismount1_rc=0, compared=2 mismatches=0, chkdsk_rc=0; recovery: all 904
+hashes equal ans009/expected-dll-hashes-all.txt, chkdsk T: /scan clean, neighbours unchanged.
+Discriminator for R1's open question: if dismount1_rc=0 and the WinPE run ends cleanly, any zero-filled tail in
+recovery is a FLUSH/ordering defect; all 904 exact = NTFS durability through the native path confirmed.
