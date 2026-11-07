@@ -14,3 +14,4 @@ for name in transport identify request resources telemetry; do
 done
 
 python3 tests/reset_driver_test.py
+python3 tests/dump_mode_test.py

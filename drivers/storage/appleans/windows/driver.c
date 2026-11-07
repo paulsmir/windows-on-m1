@@ -62,6 +62,12 @@ ULONG AppleAnsFindAdapter(PVOID DeviceExtension, PVOID HwContext,
         ConfigInfo->NumberOfAccessRanges != 1 || ConfigInfo->AccessRanges == NULL) {
         a->Stage = AppleAnsStageResourcesRejected;return SP_RETURN_NOT_FOUND;
     }
+    /* Crash-dump/hibernation instance (dump_AppleAns.sys): the broker is owned by the live
+     * instance and dump I/O would have to run polled at HIGH_LEVEL. Unsupported: refuse
+     * before any broker access, so a native bugcheck reboots without touching the SSD. */
+    if (ConfigInfo->DumpMode != 0) {
+        a->Stage = AppleAnsStageResourcesRejected;return SP_RETURN_NOT_FOUND;
+    }
     PACCESS_RANGE range = &(*ConfigInfo->AccessRanges)[0];
     struct ans_resources resources={
         .base=(ULONGLONG)range->RangeStart.QuadPart,.length=range->RangeLength,
