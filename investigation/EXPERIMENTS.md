@@ -74496,3 +74496,17 @@ EXP2243 ACTUAL (2026-11-07T20:42:54Z): CONFIRMED (SLC enabled, measurable gain).
 - CPU chase (GPU profile, P-cluster fixed P12 2988 MHz so L1 1.01 ns): cpu7 4-8M 5.5 ns, 16M 12.9 (EXP2240 22.4 at P7), DRAM 19.5-19.9; cpu0 (E) 4M 16.4 vs 34.9 in EXP2240 -> the SLC level is now present.
 - GPU MEMBWUAV 32-thread (2 runs): 16K 132-139, 64K 176-180, 256K 251-287, 1M 315-349, 4M 417-479, 16M 557, 64M 729; pages 223-432. vs EXP2238/2239: 256K-1M ~15-25 % lower, 4M+ unchanged; macOS 118-181 -> SLC is part of the cause, not the whole device-load gap.
 - Next: make the SLC enable unconditional in m1n1 for every profile (GPU, normal recovery, ANS-DIRECT) with a recovery-gate check (16/16 ways), then the next device-load candidates (DRAMCFG FAST as a separate variable; GPU-side config).
+
+EXP2244 HARDWARE BEFORE 2026-11-07T21:09:15Z:
+Steps: CPU identity (registry CentralProcessor\0 + Win32_Processor); CPU chase; D3D12 suite; d HD PERF GravityMark.
+- WHY THIS HYPOTHESIS: (1) live guest: ProcessorNameString and Win32_Processor.Name = "Not Specified" = SMBIOS Type 4 Version string in SmbiosInfoDxe.c; (2) Type 4 hard-codes 6 cores / 3228 MHz / Family2 ARM / ProcessorId 0 while M1 has 8 cores and a 3204 MHz top OPP (Asahi t8103.dtsi).
+- WINDOWS CONTRACT: SMBIOS 3.x Type 4 (Version string, MaxSpeed, Core/Enabled/Thread count, Family2 ARMv8 0x101, ARM64 ProcessorId = MIDR_EL1 without SMCCC SoC ID).
+- AGX/ASAHI CONTRACT: none (firmware table only).
+- TRANSLATION: MIDR part 0x22/0x23 -> "Apple M1", 3204 MHz; counts from PcdCoreCount (8).
+- WHAT IS STILL UNKNOWN: whether Windows also changes ~MHz (22, hypothesis: PMU-cycle calibration, not SMBIOS) -- observed, not targeted.
+- Expected: ProcessorNameString "Apple M1"; Win32_Processor Name "Apple M1", MaxClockSpeed 3204 (or still 22 if ~MHz-derived), cores 8; suite 119/0; GM HD ~44.4 fps (no regression vs EXP2243).
+- Failure criteria: firmware boot failure, SMBIOS missing, suite failure, GPU fault, hang -> rec2244h (normal recovery firmware/m1n1 unchanged).
+- Recovery: rec2244h (run directly).
+- Probe: agx_d3d12_probe_e2244_arm64.exe = byte copy of e2243 (432443c0); probe2244.sh = probe2243.sh without MEMBW steps + CPU identity.
+- Hashes: sys 6d25c5ece150, UmdArm64 b799a2670eb5, UmdX64 4f27f4f8a105, Umd32 b08e2aebf14d; manifest da35c2cb6c34, hardware-manifest 4e17b0d2f771; probe2244.sh b52ad85d93b0 (PROBE_LINT_OK); visible recovery rec2244h 0044d2663fd1a2a1; m1n1 0d3a75b3.
+- Recovery rec2244h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2244-smbios/run2244.sh.
