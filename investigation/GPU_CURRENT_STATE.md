@@ -19,6 +19,10 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   S4b proof deferred (no natural occurrence observed).
 - Priorities (investigation/GPU_DRIVER_ARCHITECTURE.md): OV5 TA waiver hang (EXP2214), compute runtime gap
   (+4.5 ms/frame HD vs Apple), independent flip.
+- C4 offline levers closed (do not reopen): code parity with m187 (1159 vs 1177 instrs), dependent-load latency
+  (L4 EXP2183 neutral), wait placement (W1 EXP2124 neutral), occupancy (ours 79 halfregs / 1024 threads = max; Apple
+  m187 uses up to r72), memory bandwidth (MEMBW). The 2026-11-04 "Next: C4 wait placement" line below is superseded.
+  Remaining C4 question needs hardware counters (per-kernel GPU time vs Apple), not compiler guesses.
 - Gate: tests/run_against_baseline.py (1060 tests incl. render/depth2 suites) via scratchpad gated-commit.sh.
 
 ## CURRENT 2026-11-05 18:00Z -- OV2 IMPLEMENTED (default off), BLOCKED ON GRAVITYMARK BY QUERY RESOLVES; NEXT OV3
