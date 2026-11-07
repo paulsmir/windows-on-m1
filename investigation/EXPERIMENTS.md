@@ -70450,3 +70450,19 @@ EXP2227 HARDWARE ACTUAL (2026-11-07T13:29:43Z): **CONFIRMED (control): the laten
 - HD PERF d (first GravityMark run of the boot = cold): 40.536 fps, 2431 frames in 60 s (perf baseline 40.770).
 - Evidence evidence/EXP2227 (tool-membw*-std.txt, gm2227d-umd.log, full.log). Recovery rec2227h.
 - Next: EXP2228 = same package/m1n1 + Wom1GpuPrivateCached=1 (after ANS012 uses the bench).
+
+EXP2228 HARDWARE BEFORE 2026-11-07T13:55:28Z:
+Steps: MEMBW probe step twice; D3D12 suite; d HD PERF GravityMark 100k -temporal 0 (same probe2228.sh = probe2227.sh).
+- WHY THIS HYPOTHESIS: (1) EXP2227 control on the same package/m1n1 reproduces the gap: 32-thread chase 298/324 ns at 64K, 460/546 at 256K, 698/842 at 4M, 1017/945 at 16M vs macOS 130/120/176/181 ns (EXP2226); (2) every user leaf is MEMATTR 2 (uncached, Asahi PROT_GPU_SHARED) incl. the MEMBW DEFAULT-heap buffer; (3) device_load encoding equals Apple's, so the leaf attribute is the strongest remaining layer.
+- WINDOWS CONTRACT: unchanged (VidMm segments, residency and DDIs identical; only the UAT attribute of GPU-only leaves).
+- AGX/ASAHI CONTRACT: MEMATTR 0 = cached non-coherent; Asahi uses it only for firmware-private memory and flushes via FwCtl on unmap (mmu.rs remap_uncached_and_flush). This build issues NO invalidation -> stale-data risk, measurement only, never production (EXP2137 contract).
+- TRANSLATION: KMD marks GPU-only leaves (CpuVisible=0, not presentation, not written primary) with UPDATE_LEAF flag 0x10; m1n1 GC encodes MEMATTR 0; receipt "GPUVA-GC: private cached leaves N".
+- ATOMIC CONTRACT: m1n1 capability + KMD switch are one feature (EXP2137): either alone does nothing.
+- WHAT IS STILL UNKNOWN: whether MEMATTR 0 changes the GPU's cache/TLB behaviour for these leaves (the latency question), and the GM effect at confirmed coverage.
+- Expected if the hypothesis holds: GPUVA-GC count > 0; 32-thread chase at 256 KiB..16 MiB drops towards 120-180 ns; HD PERF up clearly (compute is ~55 % of the frame). If unchanged: leaf attribute rejected for latency -> next layer is firmware/m1n1 GPU cache configuration.
+- Failure criteria: corruption/suite failure, GPU fault, reset, hang -> rec2228h (m1n1 last-good brokerlock-split 550c7f23); GC count 0 -> inconclusive (switch not applied).
+- Recovery: rec2228h (run directly).
+- Probe: agx_d3d12_probe_e2228_arm64.exe = byte copy of e2227 (sha 5dbe904643ea842c).
+- Hashes: sys 93c564a5f8f2, UmdArm64 4bc929315f12, UmdX64 01f64b6a3868, Umd32 22edb7d773a3; manifest 672f50591eaf, hardware-manifest 59181d8b0653; probe2228.sh ddb8a8b815ee (PROBE_LINT_OK); visible recovery rec2228h 54fe54990d4cb0e1; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuPrivateCached=1.
+- Recovery rec2228h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2228-memlat-gc/run2228.sh.
