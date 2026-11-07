@@ -74382,3 +74382,15 @@ Steps: MEMBW twice (regions + MEMBW_PAGES_NS); D3D12 suite; d HD PERF GravityMar
 EXP2234 HARDWARE ACTUAL (2026-11-07T16:57:50Z): **REJECTED (with a coverage caveat): GPU-private cached leaves (MEMATTR 0, GC m1n1 + Wom1GpuPrivateCached=1) leave the per-page cost unchanged: page-spread 596/657/833/935 and 611/655/808/953 ns vs control 600/666/844/1032 / 483/647/816/972.**
 - EXP2234_PIPELINE_RC 0; "GPUVA-GC: private cached leaves 1" (count 1..65536, coverage of the MEMBW buffer not proven); suite 119/0; no reset; HD PERF d 40.766 fps (cold). Regions 32 threads 16K 211/211, 256K 444/494, 4M 715/611, 16M 856/808 ns.
 - Verdict: neither guest TLBI isolation (EXP2233) nor the data attribute (EXP2234) moves the ~400 ns per page change; PTE format, initdata/hwdata equal Asahi. Remaining layer: how the GPU MMU/TLB is configured and used -- compare with the macOS AGX kext (UAT setup, TTBR/context flags, GPU MMU control registers, block/large mappings) offline; Asahi Linux behaviour on this probe is unknown.
+
+EXP2235 HARDWARE BEFORE 2026-11-07T17:19:29Z:
+Steps: MEMBW twice (regions + MEMBW_PAGES_NS); D3D12 suite; d HD PERF GravityMark 100k -temporal 0.
+- WHY THIS HYPOTHESIS: (1) EXP2231-2234: every 16 KiB page change costs ~400 ns even among 4 pages; guest TLBI isolation (EXP2233) and data attribute (EXP2234) changed nothing; PTE, TTBR, TLBI and initdata equal Asahi and macOS; (2) macOS kext RE (2026-11-07, AGXSecureMonitorG13::setupMMUConfig): macOS programs a GPU MMU config block at SGX+0xd08000 ([0x24]=TTBAT>>14, [0xc]=[0x10]=0x80d8 TCR-like, [0x0]=1 enable last, only if [0x0] reads 0) and has invalidateGPUTTBACache at +0xd08028; neither Asahi nor m1n1 touches it; (3) if the block is 0 under our launch, page-table walks may be uncached / TTBAT uncached, matching ~210 ns per load + ~400 ns per page change.
+- WINDOWS/AGX CONTRACT: unchanged (read-only receipt). ATOMIC CONTRACT: none.
+- WHAT IS STILL UNKNOWN: the block's values under our launch (at activation and after firmware boot).
+- Expected: MMUCFG lines in full.log; if [0x0]=0 or [0xc]/[0x10] != 0x80d8 -> next experiment writes the macOS sequence before firmware boot; if already 1/0x80d8/TTBAT -> hypothesis rejected. MEMBW as EXP2231; suite 119/0; HD PERF ~40.5. Also validates that the main-merged run_uefi.py works in the pipeline.
+- Failure criteria: SError on the read (GPU not powered), suite failure, reset, hang -> rec2235h (m1n1 last-good brokerlock-split 550c7f23).
+- Recovery: rec2235h (run directly).
+- Probe: agx_d3d12_probe_e2235_arm64.exe = byte copy of e2230 (sha edb222b713c2f802); probe2235.sh = probe2231.sh.
+- Hashes: sys 927fa1f41d9a, UmdArm64 a51b766942d4, UmdX64 bccf992bbaa8, Umd32 3cb488f65e8d; manifest bfce5fb420ea, hardware-manifest 3349b4ee4701; probe2235.sh e01fadbe6b35 (PROBE_LINT_OK); visible recovery rec2235h 70bceebd72b6ed72; m1n1 0d3a75b3.
+- Recovery rec2235h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2235-mmucfg/run2235.sh.
