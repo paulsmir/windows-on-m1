@@ -46371,3 +46371,38 @@ Next:
 - Make the boot-mode switch a tested, idempotent tool (Start/StartOverride for both drivers).
 - Longer native workload and a cold-boot run.
 - Fix the evidence-script PnP queries.
+
+### ANSBUILD006-D — ANS-DIRECT AppleAns package build (offline, builder) — 2026-11-07T12:05Z
+
+Purpose:
+- First WDK build of the ANS-DIRECT driver (investigation/ANS_DIRECT_PLAN.md).
+- The driver owns the ANS2 NVMe runtime when APPL0003 carries controller+mailbox resources; it keeps the broker path otherwise.
+
+Source:
+- root b1904d1c1 (driver dfe3a7bff + INF DriverVer 0.2.0.0);
+- `git archive HEAD drivers/storage/appleans` → `.local/ans-native/build-host/appleans-native-source-11.tar`, sha256 920691d9….
+- m1n1 280ce100 and Mu 5bb92245 are not part of this build.
+
+Command:
+- ANSBUILD005-W command with paths ANS011-BUILD/D;
+- `/p:AppleAnsNativeReadOnly=true /p:AppleAnsNativeWrite=1 /p:AppleAnsQualificationStop=0`;
+- RunCodeAnalysis gate now expects 12 analysis files (direct.c, ans_direct.c added) and 0 defects;
+- InfVerif, test-certificate E9BE15BD signing, Inf2Cat, dumpbin.
+
+Expected: MSBuild exit 0, 12/0 analysis, InfVerif OK, a signed package.
+Failure criterion: any compiler warning (/W4 /WX), analysis defect or InfVerif error. Fix offline, rebuild as ANSBUILD006-D2.
+No hardware.
+
+### ANSBUILD006-D / D2 result — 2026-11-07T12:20Z
+
+- **D** (source-11, sha256 920691d9…):
+  - MSBuild exit 0, ANALYSIS_FILES=12 DEFECTS=0, InfVerif VALID, sys+cat signed.
+  - Stampinf stamped DriverVer 11/07/2026,0.1.0.0 (vcxproj TimeStamp), identical to ANSBUILD005. Superseded.
+- **D2** (root cacfe4768, TimeStamp 0.2.0.0; source-12 sha256 207d0ede…):
+  - MSBuild exit 0, ANALYSIS_FILES=12 DEFECTS=0, InfVerif VALID, signed.
+  - Package `.local/ans-native/build-host/ANSBUILD006-D2-package.zip` 73026b75f6a0454ab4e26a7eedd50bb9e87c0ed08894272eea34f49ef0278a7d; evidence zip 27f925fe….
+  - AppleAns.sys f723843c221180fd25792ad54375c353296b785be48f675cf483357da4106698; AppleAns.inf 946454062c3f5353d1bd724e55ee072b6ffc9ef12567ae33e5ce7105b09a85d8 (DriverVer 11/07/2026,0.2.0.0); appleans.cat 042c4633bca129e6b0b1a3a36e4eefaa8634a0706631b258f8580465075bb20c.
+
+Verdict: build CONFIRMED (offline). Not hardware tested.
+
+Next: receipted m1n1 (280ce100) and Mu (J313_ANS_DIRECT + installed) builds, the ANS011 packet, C: package replacement, then preregister ANS011-R1 when the bench is free.
