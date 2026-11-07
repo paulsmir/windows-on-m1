@@ -74527,3 +74527,9 @@ Steps: CPU chase; MEMBW twice; MEMBWUAV twice; D3D12 suite; d HD PERF GravityMar
 - Probe: agx_d3d12_probe_e2246_arm64.exe = byte copy of e2243 (432443c0); probe2246.sh = probe2243.sh.
 - Hashes: sys 166a1b6f6a4e, UmdArm64 7af725579a62, UmdX64 328e5c994210, Umd32 a2d2f0a92876; manifest 7be211dc36c6, hardware-manifest b79a75195e9e; probe2246.sh fd6945d1c607 (PROBE_LINT_OK); visible recovery rec2246h 0ae9d520570f0c12; m1n1 0d3a75b3.
 - Recovery rec2246h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2246-dramcfg/run2246.sh.
+
+EXP2246 ACTUAL (2026-11-07T21:47:32Z): CONFIRMED for the CPU memory path, NEUTRAL for the GPU. full.log "DRAMCFG: P-cluster 2988 MHz, fast threshold 2184 MHz -> FAST; ch0 0x813057f/0x1800180 -> 0x133/0x55555340 on 8 channels". Pipeline RC 0, suite 119/0, guest alive, GM d closed (wer 0).
+- CPU7 chase (P12): 32-128 MiB 17.8-18.5 ns vs EXP2243/2244 19.4-19.9 (-8 %); 16 MiB 12.2 vs 12.9; cache levels unchanged.
+- GPU MEMBWUAV 32-thread: 64K 171, 256K 272, 1M 308, 4M 422, 16M 556, 64M 724; pages 228-434 -> unchanged vs EXP2243 (DRAMCFG is not the GPU device-load cause).
+- GM HD PERF 44.311 fps vs EXP2243 44.434 / EXP2244 43.881 (noise band).
+- Verdict: keep (macOS-equivalent contract, CPU DRAM latency gain, no regression); make it the launcher default (writes nothing below 2184 MHz). GPU device-load gap remains open: next candidates on the GPU side (UAT/TLB walk, GPU-side cache config, firmware perf state).
