@@ -84,7 +84,8 @@ static NSString *pipe_name(id ps);
   MTLDispatchType dtype;
   unsigned seq, enc, ndisp;
   BOOL dispatchedInCur;
-  NSMutableDictionary<NSString *, NSInvocation *> *state;  // slot -> last setter
+  NSMutableDictionary<NSString *, NSInvocation *> *state;  // slot -> last setter (lookup only)
+  NSMutableArray<NSInvocation *> *history;  // every setter in call order (replayed in order)
   NSMutableArray<NSInvocation *> *uses;                     // useResource/useHeap
   NSString *pending;               // CSV fields of the dispatch in curCb
 }
@@ -203,7 +204,10 @@ static void deep_copy(NSInvocation *inv) {
   }];
   cur = make_real(self, curCb);
   for (NSInvocation *inv in uses) [inv invokeWithTarget:cur];
-  for (NSInvocation *inv in state.allValues) [inv invokeWithTarget:cur];
+  // Replay every setter in the app's call order: setBuffer/setBufferOffset/setBytes on one
+  // index have different selectors, so a per-selector "last value" replayed in dictionary
+  // order could let a stale buffer or offset win (EXP2226: BIF0 page faults at address 0).
+  for (NSInvocation *inv in history) [inv invokeWithTarget:cur];
   dispatchedInCur = NO;
 }
 
@@ -260,6 +264,7 @@ static void deep_copy(NSInvocation *inv) {
     [inv retainArguments];
     deep_copy(inv);
     state[slot_key(inv)] = inv;
+    [history addObject:inv];
   } else if ([name hasPrefix:@"use"] || [name hasPrefix:@"waitForFence"]) {
     // waitForFence must precede the first dispatch of every piece: replay it as state.
     [inv retainArguments];
@@ -284,6 +289,7 @@ static id compute_for(id<MTLCommandBuffer> app, int kind, id desc, MTLDispatchTy
     p->seq = seq;
     p->enc = k;
     p->state = [NSMutableDictionary new];
+    p->history = [NSMutableArray new];
     p->uses = [NSMutableArray new];
     [p openNew];
     return p;
