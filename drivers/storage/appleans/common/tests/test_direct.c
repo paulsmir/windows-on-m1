@@ -149,6 +149,8 @@ static void test_translate(void)
     assert(!ansd_translate(0x0, 4096, &pa));                        /* below the window */
     assert(!ansd_translate(0x40000000, 4096, &pa));                 /* gap */
     assert(ansd_translate(0x850000000ULL, 4096, &pa) && pa == 0x850000000ULL);
+    assert(ansd_translate(0x818000000ULL, 4096, &pa) && pa == 0x818000000ULL);  /* expanded RAM */
+    assert(!ansd_translate(0x817fff000ULL, 4096, &pa));                         /* m1n1 heap below */
     assert(ansd_translate(0x9fffff000ULL, 4096, &pa) && pa == 0x9fffff000ULL);
     assert(!ansd_translate(0x9fffff000ULL, 8192, &pa));             /* beyond DRAM */
     assert(!ansd_translate(0x8a0100000ULL, 4096, &pa));             /* alias backing */

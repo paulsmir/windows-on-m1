@@ -55,12 +55,15 @@
 #define ANSD_MBOX_I2A_RECV1 0x838u
 
 /* Guest DMA view (config/j313-guest-layout.json, m1n1 hv_autonomous_runtime map_stage2):
- * guest RAM [phys_base, DRAM end) is identity; the low window IPA is backed elsewhere.
- * The alias backing itself is never a valid Windows DMA address. */
+ * guest RAM is identity; the low window IPA is backed elsewhere and the alias backing itself
+ * is never a valid Windows DMA address. RAM starts at phys_base 0x850000000 (legacy) or at
+ * 0x818000000 with run_uefi --guest-ram-profile expanded (m1n1 guest_memory.expanded_ram_base,
+ * identity load_raw(memory_base)); the identity range covers both. Addresses Windows does not
+ * own can never appear in its SG lists, so the wider range adds no aliasing. */
 #define ANSD_LOW_IPA 0x100000ULL
 #define ANSD_LOW_PA 0x8a0100000ULL
 #define ANSD_LOW_SIZE 0x3ff00000ULL
-#define ANSD_RAM_BASE 0x850000000ULL
+#define ANSD_RAM_BASE 0x818000000ULL
 #define ANSD_RAM_END 0xa00000000ULL
 
 #define ANSD_ADMIN_DEPTH 2u   /* Asahi APPLE_NVME_AQ_DEPTH */

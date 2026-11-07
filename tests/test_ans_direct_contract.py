@@ -41,7 +41,10 @@ class AnsDirectContract(unittest.TestCase):
         self.assertEqual(self.h["ANSD_LOW_IPA"], int(L["low_mem_ipa"], 16))
         self.assertEqual(self.h["ANSD_LOW_PA"], int(L["low_mem_pa"], 16))
         self.assertEqual(self.h["ANSD_LOW_SIZE"], int(L["low_mem_size"], 16))
-        self.assertEqual(self.h["ANSD_RAM_BASE"], int(L["phys_base"], 16))
+        # Identity RAM starts at the expanded-profile base (run_uefi --guest-ram-profile expanded,
+        # expanded_ram_base(u, 0x818000000)); the legacy phys_base lies inside it.
+        self.assertEqual(self.h["ANSD_RAM_BASE"], 0x818000000)
+        self.assertLessEqual(self.h["ANSD_RAM_BASE"], int(L["phys_base"], 16))
         self.assertEqual(self.h["ANSD_RAM_END"], int(L["ram_end"], 16))
         # Window edges are 1 MiB aligned, so a 4 KiB PRP page never straddles one.
         for key in ("ANSD_LOW_IPA", "ANSD_LOW_PA", "ANSD_LOW_SIZE", "ANSD_RAM_BASE"):
