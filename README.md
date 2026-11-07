@@ -17,7 +17,7 @@ USB, and an **Apple GPU driver written for Windows from scratch**.
 |---|---|
 | Boot | Windows 11 ARM64 boots from the internal Apple SSD through Project Mu firmware and a small m1n1-based hypervisor |
 | CPU | all 8 cores (4 Firestorm performance + 4 Icestorm efficiency), with Windows efficiency classes |
-| Storage | Apple ANS SSD exposed to Windows as an NVMe controller by the hypervisor |
+| Storage | **native Apple SSD driver (AppleAns)**: 3.4 GB/s read, 2.4 GB/s write, 94k random 4K IOPS; the hypervisor NVMe bridge remains as emergency recovery |
 | Input | USB, built-in keyboard and Precision Touchpad (own SPI-HID driver) |
 | Display | internal panel through Apple's display coprocessor (DCP) |
 | **GPU** | own WDDM driver: **Direct3D 12 at feature level 12_1**, Direct3D 11, OpenGL 2.1 (also for x86 apps under emulation), desktop composition (DWM) on the GPU |
@@ -46,6 +46,20 @@ Counter-Strike 1.6 is a 32-bit x86 game; it runs under Windows' x86 emulation an
 x86 OpenGL driver (Mesa, OpenGL 2.1) on the Apple GPU. In a fixed recorded-demo benchmark
 (`timedemo`) it went from 40.5 FPS on its first measured run to about 47 FPS a few days later
 (3,771 frames, mid-October 2026); live play on a server measured 37–42 FPS (median).
+
+### Native SSD (AppleAns)
+
+Windows now drives the internal Apple SSD (ANS NVMe controller) itself, through our own storage
+driver `AppleAns`, instead of the NVMe bridge in the hypervisor. The hypervisor hands the controller
+over at boot (ANS-DIRECT) and no longer touches any disk operation afterwards. AppleAns is installed
+as a standard boot driver with its own permanent test certificate, like the keyboard and touchpad
+drivers, and the same Windows installation still boots through the bridge for recovery.
+
+| Measurement | Result |
+|---|---|
+| Sequential read | **3.4 GB/s** (CrystalDiskMark 2.5–3 GB/s) |
+| Sequential write | **2.4 GB/s** |
+| Random 4K | **94k IOPS** |
 
 <details>
 <summary>1280x720 result</summary>
@@ -80,15 +94,17 @@ ledgers on the development branches.
 
 ## Next steps
 
-**Main goal: the same GPU performance as macOS on the same machine.** Measurements on macOS show
-that Metal runs independent graphics and compute passes at the same time; Direct3D 12 allows the
-same when the application declares no dependency between them, so that comes next, followed by
-faster compute and shader code.
+**Main goal: the same GPU performance as macOS on the same machine.** Per-dispatch measurements on
+macOS (same MacBook Air) show that almost the whole gap is compute: every large compute kernel of
+GravityMark runs about 2x faster under Metal although the machine code is the same. A pointer-chase
+test on both systems narrows it down to GPU memory access: bandwidth is equal, but under Windows
+each load that moves to another 16 KiB page costs ~600 ns instead of ~65 ns, i.e. the GPU keeps
+almost none of its address translations. The current suspect is TLB invalidations of the Windows
+guest reaching the GPU (both run as VMID 0 under the hypervisor); the fix being tested gives the
+guest its own VMID.
 
 Then the rest of the laptop:
 
-- **Storage speed:** the SSD is reached through an NVMe bridge in the hypervisor, which limits disk
-  performance; rework it for much faster I/O.
 - **Wi-Fi.**
 - **External display.**
 - **Sound.**
