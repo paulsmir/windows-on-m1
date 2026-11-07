@@ -121,8 +121,10 @@ class KickWiring(unittest.TestCase):
         entry = section(sched, "static NTSTATUS AdmissionResetQuiesceActive(")
         self.assertIn("AppleAgxSchedulerKickedFence(&Context->Scheduler)", entry)
         reset = section(sched, "static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(")
+        # 99cf00cbd added the paging node's reset (PagingScheduler) earlier in
+        # the function; the order that matters is the render scheduler's.
         self.assertLess(reset.index("kickedAborted = AppleAgxSchedulerKickedFence"),
-                        reset.index("reset = AppleAgxSchedulerResetEngine("))
+                        reset.index("reset = AppleAgxSchedulerResetEngine(\n              &context->Scheduler,"))
         self.assertLess(reset.index("AdmissionG4PendingAbortKickedLocked(context)"),
                         reset.index("AdmissionG4PendingDropLocked(context, TRUE)"))
         self.assertIn("AdmissionGpuvaG3AbortJob(context, kickedAborted)", reset)
@@ -262,7 +264,7 @@ class KickReceipts(unittest.TestCase):
                                                compute_on_compute=0))
         self.assertEqual((out["adopted"], out["kick_failures"], out["last_kick_failure_line"],
                           out["reset_aborts"], out["last_kicked_fence"]), (3, 1, 5000, 1, 43))
-        self.assertEqual(out["kick_fallbacks"], 0)
+        self.assertEqual((out["kick_fallbacks"], out["kick_fallbacks_preempt"]), (0, 0))
         self.assertEqual((out["begin_successor_refusal"], out["last_kick_status"]), (7, "0xc0000184"))
 
     def test_kick_failure_record_decodes_the_c_struct(self):

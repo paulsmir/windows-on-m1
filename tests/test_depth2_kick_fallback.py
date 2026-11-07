@@ -32,6 +32,11 @@ class Depth2KickFallback(unittest.TestCase):
         self.assertLess(unkick, fb.index("KeReleaseSpinLockFromDpcLevel(&adapter->SchedulerLock)"))
         self.assertIn("runtime->Backend.SuccessorPending", fb)
         self.assertIn("ADMISSION_KICK_FAIL_FELL_BACK", fb)
+        # EXP2222: the preemption branch must be observable on hardware; the
+        # phase is read before the unkick changes it.
+        self.assertLess(fb.index("AppleAgxSchedulerPreemptionPhase(&adapter->Scheduler)"),
+                        fb.index("AdmissionG4PendingUnkickLocked(adapter, fence)"))
+        self.assertIn("++runtime->Depth2Receipt.KickFallbacksPreempt;", fb)
 
     def test_only_pre_visibility_refusals_fall_back(self):
         kick = section(WORKER.read_text(), "static BOOLEAN AdmissionJobWindowKickWindows(")

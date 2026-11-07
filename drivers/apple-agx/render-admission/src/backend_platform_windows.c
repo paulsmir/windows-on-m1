@@ -6276,7 +6276,7 @@ static VOID AdmissionJobWindowKickFailedWindows(ADMISSION_CONTEXT *adapter,
 static BOOLEAN AdmissionJobWindowKickFallbackWindows(ADMISSION_CONTEXT *adapter,
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG line, ULONG fence,
     ULONG status, ULONG flags) {
-  BOOLEAN undone = FALSE;
+  BOOLEAN undone = FALSE, preempting = FALSE;
   KIRQL old_irql;
   if (runtime->Depth2KickedFence != fence || fence == 0u ||
       runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted ||
@@ -6287,8 +6287,11 @@ static BOOLEAN AdmissionJobWindowKickFallbackWindows(ADMISSION_CONTEXT *adapter,
     return FALSE;
   KeAcquireSpinLock(&adapter->PagingLock, &old_irql);
   KeAcquireSpinLockAtDpcLevel(&adapter->SchedulerLock);
-  if (InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) == 0)
+  if (InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) == 0) {
+    preempting = AppleAgxSchedulerPreemptionPhase(&adapter->Scheduler) !=
+        AppleAgxPreemptionIdle ? TRUE : FALSE;
     undone = AdmissionG4PendingUnkickLocked(adapter, fence);
+  }
   KeReleaseSpinLockFromDpcLevel(&adapter->SchedulerLock);
   KeReleaseSpinLock(&adapter->PagingLock, old_irql);
   if (!undone) return FALSE;
@@ -6301,7 +6304,9 @@ static BOOLEAN AdmissionJobWindowKickFallbackWindows(ADMISSION_CONTEXT *adapter,
   runtime->Ov5Waive = FALSE;
 #endif
   AdmissionJobWindowKickFailureRecordWindows(runtime, line, fence, status, 0u,
-      flags | ADMISSION_KICK_FAIL_FELL_BACK);
+      flags | ADMISSION_KICK_FAIL_FELL_BACK |
+      (preempting ? ADMISSION_KICK_FAIL_FELL_BACK_PREEMPT : 0u));
+  if (preempting) ++runtime->Depth2Receipt.KickFallbacksPreempt;
   runtime->Depth2KickRunningKind = 0u;
   runtime->Depth2KickNextKind = 0u;
   ++runtime->Depth2Receipt.KickFallbacks;

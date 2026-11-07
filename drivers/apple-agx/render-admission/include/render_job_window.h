@@ -396,7 +396,7 @@ unsigned int AdmissionJobWindowResetAbort(ADMISSION_JOB_WINDOW *Window,
 /* rc102: cumulative receipt of the wired window (device value
  * Wom1JobWindow, exported with the job timing; decoded by
  * tools/agx_gpu_frame_breakdown.py --kmd-window). */
-#define ADMISSION_JOB_WINDOW_RECEIPT_VERSION 2u /* v2: KickFallbacks */
+#define ADMISSION_JOB_WINDOW_RECEIPT_VERSION 3u /* v2: KickFallbacks, v3: KickFallbacksPreempt */
 typedef struct _ADMISSION_JOB_WINDOW_RECEIPT {
   unsigned int Version, Bytes;
   unsigned int Kicks;          /* successors kicked while a job ran */
@@ -412,6 +412,7 @@ typedef struct _ADMISSION_JOB_WINDOW_RECEIPT {
   unsigned int LastKickedFence;
   unsigned int LastKickStatus; /* NTSTATUS of the failed step (was Reserved) */
   unsigned int KickFallbacks;  /* v2: failed kicks undone to depth 1 (no fault) */
+  unsigned int KickFallbacksPreempt; /* v3: of those, undone in a boundary preemption */
 } ADMISSION_JOB_WINDOW_RECEIPT;
 
 /* rc102 (EXP2045): the state at the last failed kick (device value
@@ -432,6 +433,7 @@ typedef struct _ADMISSION_JOB_WINDOW_RECEIPT {
 #define ADMISSION_KICK_FAIL_G3_ABORTED         0x0100u /* nested lease undone */
 #define ADMISSION_KICK_FAIL_UNSTAGED           0x0200u /* render stamp sequence given back */
 #define ADMISSION_KICK_FAIL_FELL_BACK          0x0400u /* undone; runs at depth 1, no reset */
+#define ADMISSION_KICK_FAIL_FELL_BACK_PREEMPT  0x0800u /* undone in a boundary preemption: handed back to VidSch */
 /* BuildStep: how far the KMD build of the successor got (0: not entered,
  * the provider plan or the platform refused first). */
 #define ADMISSION_KICK_BUILD_RENDER_ENTERED    1u

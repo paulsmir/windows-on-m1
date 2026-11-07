@@ -619,6 +619,7 @@ def kmd_job_poll(data, before=None):
 # rc102: Wom1JobWindow, ADMISSION_JOB_WINDOW_RECEIPT (render_job_window.h) v1.
 WINDOW_RECEIPT = struct.Struct('<IIII3I5IIIIIII')
 WINDOW_RECEIPT_V2 = struct.Struct('<IIII3I5IIIIIIII')  # + kick_fallbacks
+WINDOW_RECEIPT_V3 = struct.Struct('<IIII3I5IIIIIIIII')  # + kick_fallbacks_preempt
 
 
 def kmd_job_window(data):
@@ -626,11 +627,12 @@ def kmd_job_window(data):
     raw = _registry_value(data, 'Wom1JobWindow')
     fields = WINDOW_RECEIPT.unpack_from(raw, 0)
     version, size = fields[0], fields[1]
-    layout = {1: WINDOW_RECEIPT, 2: WINDOW_RECEIPT_V2}.get(version)
+    layout = {1: WINDOW_RECEIPT, 2: WINDOW_RECEIPT_V2, 3: WINDOW_RECEIPT_V3}.get(version)
     if layout is None or size != layout.size or len(raw) < size:
-        raise ValueError('not an ADMISSION_JOB_WINDOW_RECEIPT v1/v2 snapshot')
+        raise ValueError('not an ADMISSION_JOB_WINDOW_RECEIPT v1-v3 snapshot')
     fields = layout.unpack_from(raw, 0)
     fallbacks = fields[18] if version >= 2 else 0
+    fallbacks_preempt = fields[19] if version >= 3 else 0
     kicks, max_in_flight = fields[2], fields[3]
     reported = fields[4:7]
     barriers = fields[7:12]
@@ -646,7 +648,7 @@ def kmd_job_window(data):
                 begin_successor_refusal=last_failure >> 16 & 0xff,
                 last_kick_status='%#010x' % last_status,
                 reset_aborts=aborts, last_kicked_fence=last_kicked,
-                kick_fallbacks=fallbacks)
+                kick_fallbacks=fallbacks, kick_fallbacks_preempt=fallbacks_preempt)
 
 
 # rc102 (EXP2045): Wom1JobWindowKickFail, ADMISSION_JOB_WINDOW_KICK_FAILURE
@@ -678,7 +680,7 @@ KICK_FAIL_FLAGS = ((0x1, 'terminal_pending'), (0x2, 'successor_pending'),
                    (0x4, 'completion_ready'), (0x8, 'recovery_pending'),
                    (0x10, 'channel_failed'), (0x20, 'bm_initialized'),
                    (0x40, 'ta_first_run'), (0x80, 'd3_first_run'), (0x100, 'g3_aborted'),
-                   (0x200, 'unstaged'))
+                   (0x200, 'unstaged'), (0x400, 'fell_back'), (0x800, 'fell_back_preempt'))
 KICK_BUILD_STEPS = {0: 'not_entered', 1: 'render_entered', 2: 'render_overlay',
                     3: 'render_staged', 4: 'render_built', 5: 'render_compute',
                     6: 'render_lead', 7: 'render_flushed', 8: 'render_bindings',
