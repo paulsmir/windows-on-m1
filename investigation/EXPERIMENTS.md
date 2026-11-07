@@ -74451,3 +74451,17 @@ EXP2238 HARDWARE ACTUAL (2026-11-07T18:41:51Z): **CONFIRMED: device loads (MEMBW
 - EXP2238_PIPELINE_RC 0; suite 119/0; no reset; HD PERF d 41.073 fps (cold).
 - 32 threads, ns per dependent step, SRV(MEMBW run1/run2) | UAV(MEMBWUAV run1/run2) | macOS (EXP2226/2230): 16K 209/208 | 137/142 | 118; 64K 296/269 | 186/185 | 130; 256K 486/403 | 322/338 | 120; 1M 499/461 | 360/359 | 132; 4M 584/578 | 398/415 | 176; 16M 709/627 | 461/480 | 180; 64M 1069/806 | 727/770 | 450. Page-spread 4/64/256/1024: SRV 616/660/847/928, 320/554/775/901 | UAV 175/276/478/589, 228/278/439/632 | macOS 65/67/87-92/69-72. Stream SRV 53.5/51.3, UAV 57.8/57.9, macOS 55.7 GB/s.
 - Consequence: EXP2228-2237 tested hypotheses on the texture path only; the device path must be re-tested, starting with GPU-private cached leaves (EXP2239), since an uncached attribute would explain device-load L2 misses from 256 KiB.
+
+EXP2239 HARDWARE BEFORE 2026-11-07T18:55:27Z:
+Steps: MEMBW twice (SRV txf path); MEMBWUAV twice (device loads); D3D12 suite; d HD PERF GravityMark 100k -temporal 0.
+- WHY THIS HYPOTHESIS: (1) EXP2238: device loads are 2-3x macOS from 256 KiB (322-338 vs 120 ns) and 3-8x on page-spread, while 16 KiB is close (137 vs 118) -> L2/SLC misses on ours where macOS hits; (2) our user leaves are MEMATTR 2 (uncached) while macOS maps Metal buffers with memattr 0 (kext RE: encodePTEFlags option bit3 'uncached' only when not cached); (3) EXP2228/2234 tested MEMATTR 0 only on the texture path, which has its own cache.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: MEMATTR 0 = cached non-coherent; this build does not invalidate on unmap -> measurement only (EXP2137 contract); a production version needs Asahi/macOS-style cache handling on unmap.
+- ATOMIC CONTRACT: GC m1n1 capability + KMD switch (EXP2137).
+- WHAT IS STILL UNKNOWN: whether the device-load gap is the leaf memory attribute.
+- Expected if it holds: MEMBWUAV 256 KiB..16 MiB falls towards 120-180 ns and page-spread towards ~70-150 ns; HD PERF up. Unchanged -> attribute excluded for device loads too.
+- Failure criteria: suite failure, GPU fault, reset, hang -> rec2239h (m1n1 last-good brokerlock-split 550c7f23).
+- Recovery: rec2239h (run directly).
+- Probe: agx_d3d12_probe_e2239_arm64.exe = byte copy of e2238 (sha 432443c086cef563); probe2239.sh = probe2238.sh.
+- Hashes: sys e66e9cb3a974, UmdArm64 f99b52f56c54, UmdX64 8401cd50929c, Umd32 3c3d1231cf94; manifest 7c61e1768e2e, hardware-manifest 610a52b5219c; probe2239.sh 9d2094424aff (PROBE_LINT_OK); visible recovery rec2239h f68abdb250ec5311; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1GpuPrivateCached=1.
+- Recovery rec2239h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2239-uav-cached/run2239.sh.
