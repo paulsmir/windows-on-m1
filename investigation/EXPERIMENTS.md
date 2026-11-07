@@ -70358,3 +70358,15 @@ EXP2222 HARDWARE ACTUAL (2026-11-07T00:17:52Z): **CONFIRMED: with 55ea8d68 every
 - Limitation: the receipt does not say whether a refusal hit the boundary-preemption race in this boot (EXP2221 hit it twice in ~1354); the preemption branch is proved offline (scheduler unit test, model s_fallback_preempt). A FELL_BACK_PREEMPT receipt bit would make this observable.
 - Recovery rec2222h. Evidence: evidence/EXP2222.
 - Verdict: CONFIRMED for the fallback (S1-S3) on hardware; preemption branch offline-proved, not separately observed. Next: perf-gate boot of the default package (no drill) when the bench is free; S4a/S4b builder rollback design.
+
+EXP2223 HARDWARE BEFORE 2026-11-07T02:45:30Z:
+Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0 (warm-up); post-exp-gate.sh (GM repeats r2/r3, CS warm-up + r2/r3) vs perf-baseline.json (GM 40.770, CS 49.943, 2 %).
+- WHY THIS HYPOTHESIS: (1) EXP2222 validated the fallback only with Wom1Depth2FallbackDrill=16 + Wom1JobDiagnostics=1, which cost a few % and are excluded from the gate; (2) the fallback and receipt v3 changes are on the default path (C class) and every package must pass the perf gate before it is called default (GPU_DRIVER_ARCHITECTURE 1); (3) without the drill natural refusals are rare, so the default path should be the EXP2220 path plus untaken branches.
+- WINDOWS/AGX CONTRACT: unchanged from EXP2222. ATOMIC CONTRACT: none.
+- WHAT IS STILL UNKNOWN: whether the added fallback bookkeeping costs measurable time on the hot submit path (expected no).
+- Expected: suite 119/0; PERF_GATE_PASS; no reset/TDR.
+- Failure criteria: PERF_GATE_FAIL, suite failure, reset, hang -> rec2223h; bisect 675486d7 vs be8c6f7f.
+- Recovery: rec2223h (run directly).
+- Probe: agx_d3d12_probe_e2223_arm64.exe = byte copy of e2222 (sha 5dbe904643ea842c).
+- Hashes: sys 9a7eb731e22f, UmdArm64 9fb10a7e8332, UmdX64 4dea423f4a8d, Umd32 b42cf4452c4f; manifest c30d3d627ea9, hardware-manifest 655f6c81753c; probe2223.sh b9743f17de53 (PROBE_LINT_OK); visible recovery rec2223h d0ba431cb4cfbc6a; m1n1 0d3a75b3.
+- Recovery rec2223h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2223-default-gate/run2223.sh.
