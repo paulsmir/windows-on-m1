@@ -8,6 +8,18 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-07 14:00Z -- COMPUTE GAP = MEMORY LATENCY (EXP2226, macOS on the J313)
+- mtlsplitd per-dispatch Apple times (run 2, valid): every large C3/C4 kernel is ~2x faster on Apple
+  (C3 pieces 1.29/0.66/0.33/0.33/0.25 ms vs 0.605/0.235/0.184/0.150/0.139; 7aa43c6c 1.51 vs 1.13) with static
+  code at parity -> not one kernel, a uniform runtime factor.
+- Same pointer-chase probe (tools/macos/membw_metal.m = D3D12 MEMBW step) on the same machine: 32-thread dependent
+  load ours 364/537/1111/1078 ns at 64K/256K/4M/16M vs macOS 130/120/176/181 ns; bandwidth equal (58-63 vs 56 GB/s).
+  EXP2144/2145 "TLB-miss queueing = hardware" is SUPERSEDED.
+- WHY CONTINUE COMPARISON: none -- next target is the layer that sets GPU cache/TLB behaviour: (a) device_load cache
+  hints in our compiled code vs Apple's encoding, (b) UAT PTE attributes/shareability/page size of our GPU-only
+  allocations vs Asahi uat.rs, (c) firmware initdata / m1n1 GPU cache config vs macOS. Offline first; then one
+  Windows MEMBW probe run per candidate (32-thread 256 KiB chase ~120 ns = fixed).
+
 ## UPDATE 2026-11-07 07:27Z -- HD FRAME RE-RANKED (offline, existing evidence only)
 - Bench lent to the ANS session (ANS010-R1) at ~07:05Z from normal recovery, no AGX package staged.
 - EXP2225 default package, HD PERF (gm2225d, 2084 frames, `agx_gpu_frame_breakdown.py --jobs`), per frame 24.77 ms:
