@@ -100,6 +100,8 @@ call :stage S55_OPTIONAL_ANS006_READ
 if exist X:\Windows\System32\ANS006-READ.CMD call X:\Windows\System32\ANS006-READ.CMD
 call :stage S56_OPTIONAL_ANS008_WRITE
 if exist X:\Windows\System32\ANS008-WRITE.CMD call X:\Windows\System32\ANS008-WRITE.CMD
+call :stage S57_OPTIONAL_ANS009_NTFS
+if exist X:\Windows\System32\ANS009-NTFS.CMD call X:\Windows\System32\ANS009-NTFS.CMD
 call :stage S60_EXPORT
 if exist "!LETTER!:\@RUNDIR@\@TARGETSUB@" goto failed
 set TARGET=!LETTER!:\@RUNDIR@\@TARGETSUB@

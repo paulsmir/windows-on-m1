@@ -151,6 +151,17 @@ class QualificationTests(unittest.TestCase):
             with self.assertRaises(ValueError,msg=str(kw)):self.call()
         self.setUp();self.make_ans008(audit_profile='native-read-only-stop0')
         with self.assertRaises(ValueError):self.call()
+    def test_ans009_volume_window_bounded_separately(self):
+        def make(window):
+            self.m['read_only']=False;self.m['write_window']=window
+            self.make_ans002(profile='native-write-window-stop0',experiment='ANS009',scope='ans7-write-window-ntfs-volume')
+        make({'first_lba':30000000,'count':262144})
+        self.assertEqual(self.call(execute=True,confirmation='ANS009')[0]['write_window']['count'],262144)
+        self.setUp();make({'first_lba':30000000,'count':262145})
+        with self.assertRaises(ValueError):self.call()
+        # ANS008 keeps its 16384-block bound.
+        self.setUp();self.make_ans008(window={'first_lba':1000,'count':262144})
+        with self.assertRaises(ValueError):self.call()
     def test_read_only_profiles_reject_a_write_window(self):
         self.m['write_window']={'first_lba':0,'count':8};self.seal()
         with self.assertRaises(ValueError):self.call()

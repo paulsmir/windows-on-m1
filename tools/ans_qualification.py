@@ -33,7 +33,11 @@ PROFILES = {'ANS001': {'scope': 'ans0-unbound-no-driver', 'appleans_profile': No
             # ANS008: write-capable driver; EL2 admits NVMe WRITE only inside the sealed LBA
             # window (one preallocated scratch file, at most 64 MiB of 4 KiB blocks).
             'ANS008': {'scope': 'ans6-write-window-raw', 'appleans_profile': 'native-write-window-stop0',
-                       'max_write_blocks': 16384}}
+                       'max_write_blocks': 16384},
+            # ANS009: NTFS writes on one dedicated test volume (1 GiB = 262144 blocks); the window is
+            # that partition's exact LBA range, so every write to any other volume is DENIED by EL2.
+            'ANS009': {'scope': 'ans7-write-window-ntfs-volume', 'appleans_profile': 'native-write-window-stop0',
+                       'max_write_blocks': 262144}}
 OVERRIDES = ('phys_base', 'ramdisk_base', 'ramdisk_max_size', 'low_mem_base',
              'low_mem_size', 'low_mem_backing', 'fb_base', 'fb_width', 'fb_height', 'guest_ram_end')
 
