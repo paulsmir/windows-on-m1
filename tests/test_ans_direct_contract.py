@@ -67,6 +67,19 @@ class AnsDirectContract(unittest.TestCase):
         dsdt = DSDT.read_text()
         self.assertRegex(dsdt, r"#ifdef J313_ANS_DIRECT_ACPI\s+Include \(\"J313AppleAnsDirect.asl.inc\"\)")
 
+    def test_guest_interrupt_is_unique(self):
+        # ANS012-R1: APPL0002 (AGX ABI admission synthetic scanout) and APPL0003 both claimed
+        # exclusive GSIV 889 -> PnP resource conflict -> AppleAns never started -> 0x7B.
+        gsiv = self.ans["interrupt"]["guest_gsiv"]
+        taken = {int(self.layout["nvme_vintid"])}
+        admission = json.loads((ROOT / "config/j313-agx-abi-admission.json").read_text())
+        taken.add(admission["synthetic_scanout_interrupt"]["guest"])
+        taken.update(int(v) for v in re.findall(r'"guest": (\d+)', (ROOT / "config/j313-agx-g2.json").read_text()))
+        taken.update(int(v) for v in re.findall(r'"guest_vintid": (\d+)', (ROOT / "config/j313-apple-input.json").read_text()))
+        self.assertNotIn(gsiv, taken)
+        self.assertTrue(32 <= gsiv <= 1019)  # SPI range of the m1n1 vGIC (GICD_TYPER ITLines 31)
+        self.assertIn("{ %d }" % gsiv, ASL.read_text())
+
     def test_driver_build_includes_direct_sources(self):
         proj = (ROOT / "drivers/storage/appleans/windows/AppleAns.vcxproj").read_text()
         self.assertIn('<ClCompile Include="direct.c" />', proj)

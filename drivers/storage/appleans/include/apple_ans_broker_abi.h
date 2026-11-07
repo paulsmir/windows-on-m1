@@ -1,5 +1,5 @@
 /* Generated; edit config/j313-ans.json and apple-ans-broker-abi.json. */
-/* Source SHA-256: f3c155292f759d42d61c2e916d5a96da92800e46883135423ef333ec9deec22c */
+/* Source SHA-256: 97981550cd21af85a13c7400c82c0e876ab8b6d99fbb1d5535280db07b44a31c */
 #ifndef APPLE_ANS_BROKER_ABI_H
 #define APPLE_ANS_BROKER_ABI_H
 #if defined(ANS_BROKER_UEFI)
@@ -26,7 +26,7 @@ typedef uint8_t ans_u8; typedef uint16_t ans_u16; typedef uint32_t ans_u32; type
 #define ANS_MAX_DATA_PAGES 33
 #define ANS_BROKER_BASE 0x300010000ULL
 #define ANS_BROKER_SIZE 16384
-#define ANS_GUEST_GSIV 889
+#define ANS_GUEST_GSIV 960
 #define ANS_FEATURE_READ_ONLY 1
 #define ANS_TELEMETRY_OFFSET 2304
 #define ANS_TELEMETRY_MAGIC 0x31445441

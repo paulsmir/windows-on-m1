@@ -30,7 +30,7 @@
     "telemetry_offset": 2304
   },
   "interrupt": {
-    "guest_gsiv": 889,
+    "guest_gsiv": 960,
     "physical_expected_from_pinned_dt": 590,
     "trigger": "level",
     "polarity": "active_high",
