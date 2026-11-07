@@ -70515,3 +70515,17 @@ Steps: MEMBW twice (regions + MEMBW_PAGES_NS 4/64/256/1024 pages, one 64 B line 
 EXP2231 HARDWARE ACTUAL (2026-11-07T15:53:39Z): **CONFIRMED (control): with distinct cache sets the page-spread chase still costs 600/666/844/1032 ns (run 2: 483/647/816/972) for 4/64/256/1024 pages vs macOS 65/67/87-92/69-72 (EXP2230) -> per-page translation cost, not set aliasing.**
 - EXP2231_PIPELINE_RC 0; suite 119/0; no reset; WER 0; HD PERF d 40.43 fps (cold). Regions 32 threads: 16K 211/218, 64K 309/288, 256K 493/573, 1M 554/678, 4M 613/981, 16M 685/1059, 64M 1254/1266 ns.
 - Evidence evidence/EXP2231. Recovery rec2231h RECOVERY_DONE. Next: EXP2232 (guest VMID 1) on the same package.
+
+EXP2232 HARDWARE BEFORE 2026-11-07T15:54:58Z:
+Steps: MEMBW twice (regions + MEMBW_PAGES_NS); D3D12 suite; d HD PERF GravityMark 100k -temporal 0.
+- WHY THIS HYPOTHESIS: (1) EXP2229/2230: ~600 ns per 16 KiB page change on ours even among 4 pages vs 65 ns on macOS -> the GPU keeps almost no translations; (2) m1n1 invalidates GPU translations with TLBI ASIDE1OS from EL2 with TGE=0, which by the Arm ARM targets the EL1&0 regime of the current VMID (0) -- and the GPU obeys it, so it matches VMID-0 broadcast invalidations by ASID; (3) the Windows guest runs as VMID 0 (VTTBR_EL2 = table only) and issues its own broadcast TLBIs (ASIDE1IS/VAE1IS/VMALLE1IS) for its ASIDs, which can coincide with GPU ASIDs 1-63 or cover all ASIDs.
+- WINDOWS CONTRACT: unchanged (VMID is invisible to the guest). AGX/ASAHI CONTRACT: GPU translations stay invalidated by the broker exactly as before (VTTBR VMID switched to 0 only around the ASIDE1OS); Asahi/macOS run the host at EL2 (VHE), where guest-VMID TLBIs do not exist.
+- TRANSLATION: VTTBR_EL2.VMID = 1 for every CPU (secondaries copy the primary VTTBR); stage-2 maintenance (TLBI VMALLS12E1IS) acts on VMID 1 = the guest's entries; hv TLBI ALLE1IS covers all VMIDs.
+- ATOMIC CONTRACT: VMID 1 for the guest and VMID 0 around the broker's GPU TLBI are one invariant (VMID 1 alone would stop the broker's GPU invalidations from matching -> stale GPU translations).
+- WHAT IS STILL UNKNOWN: whether the GPU filters DVM invalidations by VMID (if not, nothing changes -> next: trap-count guest TLBIs).
+- Expected if the hypothesis holds: MEMBW_PAGES_NS drops from ~600-950 to ~65-90 ns; region chase 64K-16M drops towards macOS; HD PERF clearly up (compute ~55 % of the frame). No corruption: suite 119/0, GravityMark image normal, no GPU fault.
+- Failure criteria: GPU fault/stale-translation corruption, suite failure, reset, hang -> rec2232h (m1n1 last-good brokerlock-split 550c7f23).
+- Recovery: rec2232h (run directly).
+- Probe: agx_d3d12_probe_e2232_arm64.exe = byte copy of e2230 (sha edb222b713c2f802); probe2232.sh = probe2231.sh.
+- Hashes: sys b4673988f017, UmdArm64 fdcbc9668959, UmdX64 1328e85467f6, Umd32 1b4b94200086; manifest 8b4358faea47, hardware-manifest 43c32b9fc2b7; probe2232.sh b9cda06bb5db (PROBE_LINT_OK); visible recovery rec2232h 178e629f8c5f5217; m1n1 0d3a75b3.
+- Recovery rec2232h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2232-vmid1/run2232.sh.
