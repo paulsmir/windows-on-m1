@@ -70388,3 +70388,9 @@ Steps: D3D12 suite; d HD PERF GravityMark 100k -temporal 0; KMD receipts after d
 - Hashes: sys c011d81a6cf8, UmdArm64 92ac8d53aeb2, UmdX64 7d897f832228, Umd32 8af56a93b17e; manifest 4ce3913920ca, hardware-manifest 3630ceeee3d3; probe2224.sh ae597ba5c6ca (PROBE_LINT_OK); visible recovery rec2224h 2b29c84771d64202; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Depth2FallbackDrillBuilt=16 Wom1JobDiagnostics=1.
 - Recovery rec2224h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2224-s4a-drill/run2224.sh.
+
+EXP2224 HARDWARE ACTUAL (2026-11-07T03:17:14Z): **CONFIRMED: a SubmitSuccessor refused after a full successor build (S4a) is given back and runs at depth one; no engine reset.**
+- SWITCHES_SET Wom1Depth2FallbackDrillBuilt=16 Wom1JobDiagnostics=1; package 30.0.2224.0 = de493dac (KMD 20e34f05); pipeline rc 0; D3D12 suite 119/0; GravityMark d completed (wer 0), 40.19 fps with diagnostics + drill; guest alive throughout.
+- Wom1JobWindow v3: kicks 20701, adopted 20701, kick_failures 1380, kick_fallbacks 1380, kick_fallbacks_preempt 2, reset_aborts 0. No Wom1GpuReset receipt.
+- Last Wom1JobWindowKickFail: line 6715 (S4 block), fence 45018 behind 45017, backend_result image_failed, build_step relocated, render on render, flags bm_initialized|g3_aborted|unstaged|fell_back|build_undone.
+- Expected vs actual: expected fallbacks == failures, build_undone, 0 resets; actual 1380/1380, build_undone, 0 resets. The boundary-preemption fallback branch was observed on hardware for the first time (2). Verdict: confirmed. Recovery rec2224h RECOVERY_DONE (VISIBLE_INERT_PACKAGE_ABSENT_8CPU). Next: EXP2225 perf gate of the S4a default package.

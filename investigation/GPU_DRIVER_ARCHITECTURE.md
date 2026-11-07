@@ -38,7 +38,13 @@ Rules:
   resetting the engine for refusals before the firmware sees it (S1-S3,
   be8c6f7f + 55ea8d68 for the boundary-preemption race; EXP2222: 1415/1415
   fallbacks, no reset; investigation/analysis/DEPTH2-KICK-FALLBACK.md);
-  **BUILD** S4a/S4b (refused SubmitSuccessor) after the builder rollback proof.
+  **DONE (C)** S4a: a SubmitSuccessor refused before RunSuccessor gives the
+  built successor back and runs it at depth one (20e34f05; EXP2224: 1380/1380
+  build_undone fallbacks incl. 2 inside a boundary preemption, no reset;
+  perf gate of the S4a default package pending -- EXP2223 gated S1-S3 only
+  ); **OPEN** S4b (QueueFailed
+  with the provider guard before PublishPreparedWork) needs the same proof on
+  the provider/queue-runtime side; S4c/S5 stay reset (possibly visible).
 - **DONE** firmware->host rings (stats/ktrace/fwlog) drained like Asahi
   (gpu.rs) after every job, default on since 125bddd1 (EXP2217 drain proof,
   EXP2219 perf gate PASS; Wom1FwRxDrain = 0 disables).
@@ -93,3 +99,7 @@ driver-internal hazards -- the same per-resource model Apple's kext uses
 - Firmware RX drain: class C, perf gate PASS (EXP2219) -> default on.
 - Perf gate: first CS and first GravityMark run of a boot are cold; the gate
   uses a warm-up plus two same-boot repeats (EXP2218/EXP2219).
+
+## 4. Decisions log (2026-11-07)
+- Depth-2 kick fallback S4a: class C (a firmware-invisible refusal must not
+  reset the engine), default on; EXP2224 drill proof; perf gate next (EXP2225).
