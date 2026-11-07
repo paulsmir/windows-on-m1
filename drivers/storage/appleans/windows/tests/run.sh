@@ -16,3 +16,4 @@ done
 python3 tests/reset_driver_test.py
 python3 tests/dump_mode_test.py
 python3 tests/boot_mode_test.py
+python3 tests/dual_boot_test.py
