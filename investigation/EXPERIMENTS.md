@@ -74580,3 +74580,13 @@ EXP2249 HARDWARE BEFORE 2026-11-07T23:19:10Z:
 - Recovery rec2249h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2249-cppc2/run2249.sh.
 
 EXP2249 ACTUAL (2026-11-07T23:26:04Z): CONFIRMED -- Windows FxPPM accepts the ACPI CPPC interface. Mu MUCPPC002 61606b32 (element 12 as null register) + m1n1 brokerlock-cppc + WOM1_CPPC=1: no Event 54; Event 55 per CPU "Performance state type: ACPI Collaborative Processor Performance Control, Nominal Frequency (MHz): 2988 (P) / 2064 (E), Maximum performance 100 %, Minimum performance 20 %, Minimum throttle 20 %"; Processor Frequency counter CPU0 2064, CPU7 2988, _Total 2526 (was 22/0/2); Win32_Processor MaxClockSpeed 2988, CurrentClockSpeed 2064 (was 22/22); registry ~MHz still 22 (written earlier in boot). Pipeline RC 0, suite 119/0, GM HD 44.256 fps (EXP2248 44.318, no regression), CPU7 L1 1.01 ns. Power scheme Balanced. Open: % Processor Performance ~100 at idle and under load -> unknown whether FxPPM writes lower desired values (the HV has no receipt yet); idle states (_LPI) absent. Next: HV receipt of desired writes/P-state transitions, then the policy check (idle should drop the clusters like macOS).
+
+EXP2250 HARDWARE BEFORE 2026-11-07T23:40:26Z:
+- WHY THIS HYPOTHESIS: EXP2249 shows FxPPM accepted CPPC but % Processor Performance stays ~100 at idle and load; it is unknown whether FxPPM writes Desired Performance at all, which values, and whether the HV changes P-states (no receipt existed). Receipt-only instrumentation (AGENTS: RED/GREEN not required).
+- WINDOWS/AGX CONTRACT, TRANSLATION: unchanged from EXP2249.
+- WHAT IS STILL UNKNOWN: FxPPM's desired-performance stream on this platform (idle vs load), transition count.
+- Expected: periodic HV: CPPC lines in full.log; distinguishes (a) no writes (FxPPM leaves Desired untouched -> need autonomous/other policy), (b) writes always at max (policy keeps max: no idle states / Balanced boost), (c) varying writes with transitions (working DVFS; counters lag).
+- Failure criteria: receipt flood/hang, suite failure, GM drop > 2 % -> rec2250h.
+- Recovery: rec2250h. Probe: probe2250.sh = probe2249.sh.
+- Hashes: sys 2b47c4bd256b, UmdArm64 2c5bfdde7b8b, UmdX64 c6657a4c90e1, Umd32 b0f4e507b496; manifest 8f496d0e8b15, hardware-manifest 58ae2532b876; probe2250.sh 11ec9ce0c17f (PROBE_LINT_OK); visible recovery rec2250h 71b507b1f0104982; m1n1 0d3a75b3.
+- Recovery rec2250h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2250-cppcrcpt/run2250.sh.
