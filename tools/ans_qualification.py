@@ -37,7 +37,14 @@ PROFILES = {'ANS001': {'scope': 'ans0-unbound-no-driver', 'appleans_profile': No
             # ANS009: NTFS writes on one dedicated test volume (1 GiB = 262144 blocks); the window is
             # that partition's exact LBA range, so every write to any other volume is DENIED by EL2.
             'ANS009': {'scope': 'ans7-write-window-ntfs-volume', 'appleans_profile': 'native-write-window-stop0',
-                       'max_write_blocks': 262144}}
+                       'max_write_blocks': 262144},
+            # ANS010: boot the installed Windows (C:) natively. Mu boots only the pinned WINESP; the
+            # window is exactly WINESP+MSR+C:+ANSTEST (config/j313-ans-installed-boot.json), so no
+            # Windows-mounted volume is outside it and no macOS/APFS/recovery block is inside it.
+            # The preloaded WinPE stays a sealed but unbootable RAMDisk.
+            'ANS010': {'scope': 'ans8-installed-native-boot', 'appleans_profile': 'native-write-window-stop0',
+                       'max_write_blocks': 29187328, 'write_window': (30781184, 29187328),
+                       'installed_boot': True}}
 OVERRIDES = ('phys_base', 'ramdisk_base', 'ramdisk_max_size', 'low_mem_base',
              'low_mem_size', 'low_mem_backing', 'fb_base', 'fb_width', 'fb_height', 'guest_ram_end')
 
@@ -81,6 +88,8 @@ def validate_manifest(path, expected_sha256, root):
         require(isinstance(w, dict) and set(w) == {'first_lba', 'count'} and
                 all(type(w[k]) is int for k in w) and w['first_lba'] >= 0 and
                 0 < w['count'] <= profile['max_write_blocks'], 'invalid/unbounded write window')
+        if 'write_window' in profile:
+            require((w['first_lba'], w['count']) == profile['write_window'], 'write window differs from the pinned profile window')
     require(set(m['artifacts']) == set(ROLES), 'all exact artifact/evidence roles required')
     paths, hashes = {}, {}
     for role in ROLES:
@@ -125,15 +134,25 @@ def validate_manifest(path, expected_sha256, root):
     audit = read_json(paths['qualification_audit'])
     require(audit.get('schema') == 'apple-ans-qualification-audit/v1' and audit.get('result') == 'pass', 'qualification audit pending/failed')
     require(audit.get('bindings') == {r: hashes[r] for r in ROLES if r != 'qualification_audit'}, 'audit artifact/receipt bindings mismatch')
-    keys = ['offline_gates_passed', 'mu_ramdisk_only', 'mu_native_gate_bound', 'mu_native_autoboot_bound',
-            'agx_power_broker_disabled', 'no_installed_windows_boot', 'collector_test_passed']
+    installed = profile.get('installed_boot', False)
+    keys = ['offline_gates_passed', 'mu_native_gate_bound', 'mu_native_autoboot_bound',
+            'agx_power_broker_disabled', 'collector_test_passed']
+    keys += (['mu_installed_esp_only', 'installed_windows_prepared'] if installed
+             else ['mu_ramdisk_only', 'no_installed_windows_boot'])
     keys += ['winpe_no_appleans'] if stop_profile is None else ['winpe_appleans_profile_bound', 'winpe_testsigning']
     for key in keys:
         require(audit.get(key) is True, f'unproven qualification property: {key}')
     if stop_profile is not None:
         require(audit.get('appleans_profile') == stop_profile, 'qualification audit binds a different AppleAns profile')
-        require(audit.get('appleans_package_sha256') == winpe_audit['appleans_package_sha256'],
-                'qualification audit and WinPE audit bind different AppleAns packages')
+        if installed:
+            # The WinPE RAMDisk is not booted; the bound package is the one installed on C:.
+            require(isinstance(audit.get('appleans_package_sha256'), str) and
+                    re.fullmatch('[0-9a-f]{64}', audit['appleans_package_sha256']) and
+                    audit.get('installed_package_sha256') == audit['appleans_package_sha256'],
+                    'installed AppleAns package not bound by the qualification audit')
+        else:
+            require(audit.get('appleans_package_sha256') == winpe_audit['appleans_package_sha256'],
+                    'qualification audit and WinPE audit bind different AppleAns packages')
     collector = read_json(paths['winpe_collector'])
     require(collector.get('schema') == 'apple-ans-winpe-collector-test/v1' and
             collector.get('result') == 'pass' and collector.get('image_sha256') == hashes['winpe'] and
@@ -150,8 +169,10 @@ def validate_manifest(path, expected_sha256, root):
     require(len(builds) == 1, 'exactly one native Mu build receipt required')
     build = builds[0]
     require(type(build.get('exit_code')) is int and build.get('exit_code') == 0 and build.get('unchanged_source_files', 0) > 0 and
-            build.get('expected_core_gate') == 'AppleAnsExitBootServicesGateLib' and
-            build.get('expected_autoboot') == 'WindowsAutoBootAnsNative' and
+            build.get('expected_core_gate') == ('AppleAnsInstalledExitBootServicesGateLib' if installed
+                                                else 'AppleAnsExitBootServicesGateLib') and
+            build.get('expected_autoboot') == ('WindowsAutoBootAnsInstalled' if installed
+                                               else 'WindowsAutoBootAnsNative') and
             build.get('native_source_guard_cache_symbol') is True and
             build.get('g2_inert_no_operationregion_or_power_methods') is True and
             build.get('acpi_ffs_hid_counts') == {'APPL0002': 1, 'APPL0003': 1} and

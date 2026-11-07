@@ -162,6 +162,43 @@ class QualificationTests(unittest.TestCase):
         # ANS008 keeps its 16384-block bound.
         self.setUp();self.make_ans008(window={'first_lba':1000,'count':262144})
         with self.assertRaises(ValueError):self.call()
+    def make_ans010(self,window={'first_lba':30781184,'count':29187328},installed_build=True,audit_extra=None,drop=()):
+        self.m['read_only']=False;self.m['write_window']=window
+        b=json.loads(self.paths['mu_build'].read_text())
+        if installed_build:
+            b['builds'][0]['expected_core_gate']='AppleAnsInstalledExitBootServicesGateLib'
+            b['builds'][0]['expected_autoboot']='WindowsAutoBootAnsInstalled'
+        self.paths['mu_build'].write_text(json.dumps(b))
+        self.make_ans002(profile='native-write-window-stop0',experiment='ANS010',scope='ans8-installed-native-boot')
+        a=json.loads(self.paths['qualification_audit'].read_text())
+        for k in ('mu_ramdisk_only','no_installed_windows_boot'):a.pop(k,None)
+        a.update({'mu_installed_esp_only':True,'installed_windows_prepared':True,
+                  'appleans_package_sha256':'d'*64,'installed_package_sha256':'d'*64})
+        a.update(audit_extra or {})
+        for k in drop:a.pop(k,None)
+        self.paths['qualification_audit'].write_text(json.dumps(a))
+        self.m['artifacts']['qualification_audit']['sha256']=digest(self.paths['qualification_audit'])
+        self.path.write_text(json.dumps(self.m));self.sha=digest(self.path)
+    def test_ans010_installed_boot_binds_pinned_window_and_installed_mu(self):
+        self.make_ans010()
+        m=self.call(execute=True,confirmation='ANS010')[0]
+        from tools.ans_qualification import write_window_env
+        self.assertEqual(write_window_env(m),'30781184:29187328')
+        # Any other window, even a smaller one inside the Windows range, is refused: a writable
+        # volume outside the window wedges Windows (ANS009-R1..R3).
+        for w in ({'first_lba':30781184,'count':29187327},{'first_lba':30912256,'count':29056256},
+                  {'first_lba':0,'count':29187328}):
+            self.setUp();self.make_ans010(window=w)
+            with self.assertRaises(ValueError,msg=str(w)):self.call()
+        for kw in ({'installed_build':False},{'drop':('installed_windows_prepared',)},
+                   {'drop':('mu_installed_esp_only',)},{'audit_extra':{'installed_package_sha256':'e'*64}}):
+            self.setUp();self.make_ans010(**kw)
+            with self.assertRaises(ValueError,msg=str(kw)):self.call()
+        # The WinPE RAMDisk profile cannot pass with an installed-boot Mu build.
+        self.setUp();self.make_ans008()
+        b=json.loads(self.paths['mu_build'].read_text());b['builds'][0]['expected_autoboot']='WindowsAutoBootAnsInstalled'
+        self.paths['mu_build'].write_text(json.dumps(b));self.seal()
+        with self.assertRaises(ValueError):self.call()
     def test_read_only_profiles_reject_a_write_window(self):
         self.m['write_window']={'first_lba':0,'count':8};self.seal()
         with self.assertRaises(ValueError):self.call()
