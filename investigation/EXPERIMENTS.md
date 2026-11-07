@@ -74446,3 +74446,8 @@ Steps: MEMBW twice (SRV t0: DXBC raw loads -> buffer-texture fetches); MEMBWUAV 
 - Probe: agx_d3d12_probe_e2238_arm64.exe (builder clang-cl, sha 432443c086cef563); probe2238.sh = probe2231.sh + two MEMBWUAV steps (PROBE_LINT_OK).
 - Hashes: sys 9c0c4adb2468, UmdArm64 8429bac8fdc6, UmdX64 33122b039e34, Umd32 04872aeb8940; manifest f529d6e57831, hardware-manifest ee31ca4b4f4e; probe2238.sh 9501cbfb387c (PROBE_LINT_OK); visible recovery rec2238h f88a9dae65fcbe4c; m1n1 0d3a75b3.
 - Recovery rec2238h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2238-membw-uav/run2238.sh.
+
+EXP2238 HARDWARE ACTUAL (2026-11-07T18:41:51Z): **CONFIRMED: device loads (MEMBWUAV) are much faster than our SRV buffer-texture path but still 2-3x (regions) / 3-8x (page-spread) slower than macOS device loads -> a real device-path gap remains; separately, DXBC SRV raw loads via txf are an optimisation target.**
+- EXP2238_PIPELINE_RC 0; suite 119/0; no reset; HD PERF d 41.073 fps (cold).
+- 32 threads, ns per dependent step, SRV(MEMBW run1/run2) | UAV(MEMBWUAV run1/run2) | macOS (EXP2226/2230): 16K 209/208 | 137/142 | 118; 64K 296/269 | 186/185 | 130; 256K 486/403 | 322/338 | 120; 1M 499/461 | 360/359 | 132; 4M 584/578 | 398/415 | 176; 16M 709/627 | 461/480 | 180; 64M 1069/806 | 727/770 | 450. Page-spread 4/64/256/1024: SRV 616/660/847/928, 320/554/775/901 | UAV 175/276/478/589, 228/278/439/632 | macOS 65/67/87-92/69-72. Stream SRV 53.5/51.3, UAV 57.8/57.9, macOS 55.7 GB/s.
+- Consequence: EXP2228-2237 tested hypotheses on the texture path only; the device path must be re-tested, starting with GPU-private cached leaves (EXP2239), since an uncached attribute would explain device-load L2 misses from 256 KiB.
