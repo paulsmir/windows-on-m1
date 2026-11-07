@@ -74417,3 +74417,16 @@ EXP2236 HARDWARE ACTUAL (2026-11-07T17:54:18Z): **FAILED (no latency verdict): w
 - full.log: boot, DCP swaps, v5 publications (~19k/10 s), then "PSCI RESET FROM" with kernel return addresses -> a Windows bugcheck/reboot; consistent with cross-context aliasing of global GPU translations (DWM + other GPU processes share VAs), the predicted side effect. Bugcheck code to be read from the guest dump after recovery.
 - Verdict: global user leaves are not a usable discriminator on a multi-process desktop; the ASID question needs a single-context test (e.g. a receipt of the firmware context id per job vs the TTBAT slot, or a probe run with all other GPU clients stopped).
 - Recovery: lastgood launcher (full-owner2236.sh.lastgood + hardware-manifest.json.lastgood, originals kept as *.global-original), AT_PROXY rec2236h.
+
+EXP2237 HARDWARE BEFORE 2026-11-07T18:10:34Z:
+Steps: MEMBW twice (regions + MEMBW_PAGES_NS); D3D12 suite; d HD PERF GravityMark 100k -temporal 0.
+- WHY THIS HYPOTHESIS: (1) EXP2231-2236: every 16 KiB page change costs ~400 ns (a full walk) even among 4 pages; TLBI isolation, data attribute and MMU config block are excluded; (2) kext RE 2026-11-07 (AGXUnifiedAddressTranslator / AGXLegacyGartG13::encodePTEFlags, AGXSecureGart::getUATOptions): macOS GPU leaves never use AP=2 and always set PXN: user RW 0x00E0000000000C03, RO 0x00A0000000000C03 (| memattr); ours (= Asahi PROT_GPU_*) RW 0x00C0000000000C8B, RO 0x0080000000000C8B -> the only bit-level PTE difference (bit 7, bit 53); (3) AP+PXN/UXN select one entry of the GPU permission-remap table (kDPRRIndexLookup), so an index macOS never uses may carry translation-caching behaviour we do not get.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: AP=0+PXN+UXN is Asahi's FW_GPU RW code (firmware may also access the page); permissions for the GPU stay RW/RO.
+- ATOMIC CONTRACT: AP (bits 7:6) and PXN (bit 53) form one permission-table index (macOS looks them up as one kDPRRIndexLookup value); changing one without the other selects an index neither macOS nor Asahi uses.
+- WHAT IS STILL UNKNOWN: whether the permission index affects GPU TLB retention.
+- Expected: hypothesis holds -> MEMBW_PAGES_NS falls towards 65-150 ns and region latency towards macOS; GM HD PERF clearly up. Otherwise unchanged ~600-1000 ns. Possible side effect: permission fault -> GPU fault/reset.
+- Failure criteria: GPU fault/reset, suite failure, hang -> rec2237h (m1n1 last-good brokerlock-split 550c7f23).
+- Recovery: rec2237h (run directly).
+- Probe: agx_d3d12_probe_e2237_arm64.exe = byte copy of e2230 (sha edb222b713c2f802); probe2237.sh = probe2231.sh.
+- Hashes: sys f1e476550fe4, UmdArm64 0115fb41c4d4, UmdX64 9ed23cc3ee0f, Umd32 462ebfb8b274; manifest 1ece37cdc1b1, hardware-manifest 2a2ee17b34b8; probe2237.sh a5a2f6621dde (PROBE_LINT_OK); visible recovery rec2237h e1ac2638f2f6fe98; m1n1 0d3a75b3.
+- Recovery rec2237h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2237-macos-perm/run2237.sh.
