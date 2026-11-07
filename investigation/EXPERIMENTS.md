@@ -74412,3 +74412,8 @@ Steps: MEMBW twice (regions + MEMBW_PAGES_NS); D3D12 suite; d HD PERF GravityMar
 - Probe: agx_d3d12_probe_e2236_arm64.exe = byte copy of e2230 (sha edb222b713c2f802); probe2236.sh = probe2231.sh.
 - Hashes: sys f4402a2e2695, UmdArm64 50b688d5286e, UmdX64 bcd83bfc1f4a, Umd32 a76ca3541df8; manifest c42b6a9c512b, hardware-manifest ae15a27419b9; probe2236.sh ace96475f205 (PROBE_LINT_OK); visible recovery rec2236h 798406f81083f427; m1n1 0d3a75b3.
 - Recovery rec2236h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2236-global-leaves/run2236.sh.
+
+EXP2236 HARDWARE ACTUAL (2026-11-07T17:54:18Z): **FAILED (no latency verdict): with global user UAT leaves (AGX_UAT_USER_GLOBAL) Windows reset itself during desktop start-up (guest PSCI SYSTEM_RESET from kernel code, ELR 0xfffff800ac435138) before SSH; EXP2236_PIPELINE_RC 2, SSH_NEVER_UP.**
+- full.log: boot, DCP swaps, v5 publications (~19k/10 s), then "PSCI RESET FROM" with kernel return addresses -> a Windows bugcheck/reboot; consistent with cross-context aliasing of global GPU translations (DWM + other GPU processes share VAs), the predicted side effect. Bugcheck code to be read from the guest dump after recovery.
+- Verdict: global user leaves are not a usable discriminator on a multi-process desktop; the ASID question needs a single-context test (e.g. a receipt of the firmware context id per job vs the TTBAT slot, or a probe run with all other GPU clients stopped).
+- Recovery: lastgood launcher (full-owner2236.sh.lastgood + hardware-manifest.json.lastgood, originals kept as *.global-original), AT_PROXY rec2236h.
