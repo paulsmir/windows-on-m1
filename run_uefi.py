@@ -267,6 +267,20 @@ if os.environ.get("WOM1_PCPU_PSTATE"):
           f"{requested_pstate(_after)} ({PCPU_MHZ[_requested]} MHz), "
           f"raw 0x{_before:x} -> 0x{_after:x}")
 u = ProxyUtils(p, heap_size=(64 if expanded_ram else 768) * 1024 * 1024)
+# EXP2246: DRAM controller mode follows the P-cluster operating point like macOS
+# (tools/j313_cpufreq.py apply_dramcfg): mcc dramcfg-data[0] while the P-cluster
+# is at or above pmgr mcx-fast-pcpu-frequency.  Opt-in until hardware-validated.
+if os.environ.get("WOM1_DRAMCFG_FOLLOW_PSTATE") == "1":
+    from tools.j313_cpufreq import PCPU_MHZ, apply_dramcfg, dramcfg_fast_wanted
+    _mcc = u.adt["/arm-io/mcc"]
+    _pcpu_mhz = PCPU_MHZ[int(os.environ.get("WOM1_PCPU_PSTATE") or 7)]
+    _threshold = getattr(u.adt["/arm-io/pmgr"], "mcx_fast_pcpu_frequency", None)
+    _fast = dramcfg_fast_wanted(_pcpu_mhz, _threshold)
+    _rows = apply_dramcfg(p, _mcc.get_reg(2)[0], int(_mcc._properties["dcs_num_channels"]),
+                          list(_mcc.dramcfg_data), _fast)
+    print(f"DRAMCFG: P-cluster {_pcpu_mhz} MHz, fast threshold {_threshold} MHz -> "
+          f"{'FAST' if _fast else 'boot values'}; ch0 0x{_rows[0][1]:x}/0x{_rows[0][2]:x} -> "
+          f"0x{_rows[0][3]:x}/0x{_rows[0][4]:x} on {len(_rows)} channels")
 hv = HV(iface, p, u)
 
 # Pin the guest's physical base so the load address stops moving between boots.

@@ -50,3 +50,38 @@ def set_pcpu_pstate(proxy, pstate, polls=4000):
     if requested_pstate(after) != pstate:
         raise RuntimeError(f"P-cluster P-state request not retained: 0x{after:x}")
     return before, after
+
+
+# DRAM controller configuration that follows the P-cluster operating point.
+# macOS (AppleT8101PMGR::setPerfState -> AppleT8103MemCacheController::
+# _mccSelectDynamicDRAMCFGMode, kext RE 2026-11-07) writes the mcc node's
+# dramcfg-data[0] pair to DCS DRAMCFG0 (+0xdc4) and DRAMCFG1 (+0xdbc) of every
+# channel while the P-cluster runs at or above pmgr mcx-fast-pcpu-frequency, and
+# restores the per-channel values iBoot left otherwise.  EXP2245 J313 ADT:
+# dramcfg-data = [0x133, 0x55555340], mcx-fast-pcpu-frequency = 2184 MHz.
+DCS_CHANNEL_STRIDE = 0x40000
+DCS_DRAMCFG0 = 0xDC4
+DCS_DRAMCFG1 = 0xDBC
+
+
+def dramcfg_fast_wanted(pcpu_mhz, fast_threshold_mhz):
+    """macOS rule: FAST while the P-cluster frequency >= the ADT threshold."""
+    return fast_threshold_mhz is not None and pcpu_mhz >= fast_threshold_mhz
+
+
+def apply_dramcfg(proxy, dcs_base, channels, fast_pair, fast):
+    """Write the FAST pair to every channel (fast=True) or leave the boot values.
+    Returns [(channel, before0, before1, after0, after1)]."""
+    if fast and (len(fast_pair) != 2 or channels <= 0):
+        raise ValueError(f"bad dramcfg-data {fast_pair!r} / channels {channels}")
+    out = []
+    for ch in range(channels):
+        base = dcs_base + ch * DCS_CHANNEL_STRIDE
+        b0, b1 = proxy.read32(base + DCS_DRAMCFG0), proxy.read32(base + DCS_DRAMCFG1)
+        if fast:
+            proxy.write32(base + DCS_DRAMCFG0, fast_pair[0])
+            proxy.write32(base + DCS_DRAMCFG1, fast_pair[1])
+        out.append((ch, b0, b1, proxy.read32(base + DCS_DRAMCFG0), proxy.read32(base + DCS_DRAMCFG1)))
+    if fast and any(a0 != fast_pair[0] or a1 != fast_pair[1] for _, _, _, a0, a1 in out):
+        raise RuntimeError(f"DRAMCFG FAST not retained: {out}")
+    return out

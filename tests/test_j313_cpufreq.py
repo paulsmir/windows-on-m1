@@ -59,3 +59,47 @@ class J313Cpufreq(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FakeMmio:
+    def __init__(self):
+        self.mem, self.writes = {}, []
+
+    def read32(self, addr):
+        return self.mem.get(addr, 0x813057F if (addr & 0xFFF) == 0xDC4 else 0x1800180)
+
+    def write32(self, addr, value):
+        self.writes.append((addr, value))
+        self.mem[addr] = value
+
+
+class DramcfgTests(unittest.TestCase):
+    """Invariant (kext RE, EXP2245): FAST exactly when the P-cluster is at or above
+    mcx-fast-pcpu-frequency; DRAMCFG0 (+0xdc4) then DRAMCFG1 (+0xdbc) on every
+    channel at stride 0x40000; below the threshold nothing is written."""
+
+    def test_threshold_rule(self):
+        self.assertFalse(c.dramcfg_fast_wanted(1956, 2184))
+        self.assertTrue(c.dramcfg_fast_wanted(2184, 2184))
+        self.assertTrue(c.dramcfg_fast_wanted(2988, 2184))
+        self.assertFalse(c.dramcfg_fast_wanted(2988, None))
+
+    def test_fast_writes_every_channel_in_order(self):
+        m = FakeMmio()
+        out = c.apply_dramcfg(m, 0x200200000, 8, [0x133, 0x55555340], True)
+        self.assertEqual(len(out), 8)
+        expect = []
+        for ch in range(8):
+            base = 0x200200000 + ch * 0x40000
+            expect += [(base + 0xDC4, 0x133), (base + 0xDBC, 0x55555340)]
+        self.assertEqual(m.writes, expect)
+        self.assertEqual(out[0][1:3], (0x813057F, 0x1800180))
+
+    def test_not_fast_writes_nothing(self):
+        m = FakeMmio()
+        c.apply_dramcfg(m, 0x200200000, 8, [0x133, 0x55555340], False)
+        self.assertEqual(m.writes, [])
+
+    def test_bad_table_refused(self):
+        with self.assertRaises(ValueError):
+            c.apply_dramcfg(FakeMmio(), 0x200200000, 8, [0x133], True)
