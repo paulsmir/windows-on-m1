@@ -46598,3 +46598,55 @@ ANS012-R1 preregistration amendment (2026-11-07T13:21:13Z). Applies fork 6's con
 - If B or B2 fails: revert to Start=3 before returning the bench.
 - run.sh is now sha d1581396a2e83482….
 ANS012-R1 attempt 1 (13:35Z) stopped at step A before any C: change. pnputil reported "root certificate not trusted": the GPU rollback removes E9BE15BD from Root and TrustedPublisher by contract. Amendment agreed with fork 6: prep adds E9BE15BD transiently around pnputil and removes it in a finally block. Steps B, C and D therefore boot without the certificate in Root (testsigning on), which also tests whether native boots need it. recovery-check reports the certificate count.
+
+### ANS012-R1 result — 2026-11-07T13:50Z: A/B/B2 CONFIRMED, C FAILED (0x7B), D CONFIRMED
+
+- **A** (13:36:22Z): ANSBUILD007-E staged.
+  - Store dir appleans.inf_arm64_8aa920c3…; E9BE15BD trusted only transiently (count 0 afterwards).
+  - AnsStartOverrideGuard installed, AppleAns Start=0.
+  - Revert script C:\Users\pavel\ans-revert-bootstart.ps1.
+- **B** (launch-normal2): SSH 43 s (Start=3 baseline 48 s). AppleAns devnode absent, no StartOverride, APPL0002 Code 28, 8 CPUs, not dirty. 7026 lists only FFA and uiomap, as in every earlier boot.
+- **B2** (unmodified GPU experiment launcher, brokerlock-split + HVS2ISO004, bridge): SSH 36 s, same gate.
+- **C** (launch-gpu-ans.sh, m1n1 00f105e2, FD 967d14f2):
+  - "HV ANS direct handoff" at 19 s, then INACCESSIBLE_BOOT_DEVICE 0x7B (operator).
+  - The log after the handoff ends with early-kernel AGX receipt reads. No "IRQ route enabled" line at all, whereas ANS011-R1 enabled vINTID 889 (APPL0003) first.
+  - Code Integrity: no AppleAns rejection; it loaded in the B/B2 bridge boots with E9BE15BD absent.
+  - The operator power-cycled to proxy at about 13:46.
+- **D** (launch-normal2): SSH 43 s, not dirty, chkdsk /scan exit 0, gate unchanged.
+
+Root cause (offline, deterministic from the built AML):
+- J313AppleAgxAbiAdmissionSsdt.aml (GPU Mu ABI_ADMISSION) gives APPL0002 an exclusive Extended Interrupt 0x379 = GSIV 889, the AGX synthetic scanout interrupt (config/j313-agx-abi-admission.json).
+- DSDTAnsDirect.aml gives APPL0003 the same exclusive GSIV 889 (config/j313-ans.json since the broker ABI).
+- The two resources conflict, so APPL0003 cannot be started and the boot fails with 0x7B. In EL2 the ANS route 590->889 also aliases the AGX synthetic vINTID.
+- ANS011-R1 worked only because its Mu used the G2 inert SSDT, which has no APPL0002 interrupt.
+
+Fix:
+- ANS guest GSIV 960. Commits: root d43bf9028, m1n1 9d9fab93 / merged 882985fb, Mu ccf0f55a / merged 4ffc4744.
+- The contract test now enforces a unique ANS interrupt against the AGX G2 (880-888), admission (889), apple-input and NVMe assignments. RED on 889, GREEN on 960.
+
+Verdict:
+- B/B2/D (bridge boots with Start=0 + guard) CONFIRMED.
+- C REJECTED for images with GSIV 889.
+
+### ANS012-R2 — GPU daily boot + ANS-DIRECT with GSIV 960 (preregistered 2026-11-07T13:58:12Z)
+
+WHY THIS HYPOTHESIS:
+1. The R1 AML shows both APPL0002 and APPL0003 claiming exclusive GSIV 889.
+2. R1 never enabled any IRQ after the handoff, consistent with APPL0003 failing resource assignment before interrupt connect.
+3. ANS011-R1, with no APPL0002 interrupt, booted natively with the same driver path.
+
+Single variable vs R1 step C: the ANS GSIV (960) in m1n1 (c6f0c8cb…) and Mu (FD 7c283fb1…). This is one indivisible contract: the ACPI interrupt and the EL2 route must match. The driver (ANSBUILD007-E) and the C: state are unchanged.
+
+Run: `.local/ans-native/ANS012-R2-run/run.sh` (sha ad35d856cff74c13…).
+- Pre-check in recovery.
+- Restart, then launch-gpu-ans.sh with the diagnostic runner `production/diag/run_uefi_diag.py`. It is the integration run_uefi plus read-only SIGINT snapshots (KiBugCheckData, devnodes, modules) and is taken only if no SSH comes within 600 s.
+- Native evidence, then D.
+
+Expected:
+- IRQ route enabled for vINTID 960;
+- native SSH, APPL0003 OK;
+- operator sees the desktop;
+- bench like ANS011;
+- recovery probe match and chkdsk 0.
+
+Recovery: as R1, including the revert script.
