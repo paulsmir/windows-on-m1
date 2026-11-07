@@ -562,6 +562,12 @@ def configure_display_consumers():
         print(f"Asynchronous framebuffer stream enabled: {fb.size / (1 << 20):.2f} MiB/frame")
     capture_contract(2, 3)
     capture_contract(3, 4)
+    # EXP2248: ACPI CPPC register page (m1n1 hv_cppc.c, P_HV_MAP_CPPC 0xc30) that the
+    # Mu DSDT _CPC points to; Windows FxPPM then requests cluster P-states.
+    if os.environ.get("WOM1_CPPC") == "1":
+        if p.request(0xc30) != 1:
+            raise RuntimeError("m1n1 rejected the CPPC register page (P_HV_MAP_CPPC)")
+        print("CPPC: _CPC register page mapped at 0x300010000")
 
 hv.pre_guest_start = configure_display_consumers
 
