@@ -46426,3 +46426,14 @@ Next: receipted m1n1 (280ce100) and Mu (J313_ANS_DIRECT + installed) builds, the
     - the warning set is identical to I1.
 
 Verdict: both builds CONFIRMED (offline). Not hardware tested.
+
+### ANS011-PREP — stage ANSBUILD006-D2 on C: (recovery guest, no reboot) — preregistered 2026-11-07T12:54:24Z
+
+Bench granted by fork 6. State: recovery via launch-normal2.sh, APPL0002 gate pass, AppleAns Start=3, no StartOverride.
+Action: `.local/ans-native/ans011/prep.sh`:
+- copy package 73026b75… plus scripts to C:\ANS011;
+- `pnputil /add-driver`, i.e. stage next to oem6;
+- set AppleAns ImagePath to the new store dir.
+oem6 records and the devnode are unchanged. Single variable vs ANS010-R7: the driver binary.
+Expected: PREP_DIRECT_DONE, ImagePath binary hash f723843c….
+Recovery boots are unaffected (Start=3). Rollback: rollback-direct.ps1.
