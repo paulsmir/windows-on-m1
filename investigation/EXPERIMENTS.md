@@ -46012,3 +46012,17 @@ WHY THIS HYPOTHESIS: R3 showed the hang at "set readonly" with only C:-range DEN
 stuck request; removing every writable volume outside the window removes the only source of never-completable writes.
 Expected: STATUS reaches readonly_restored=1 and the run reboots before 1500 s (export present); 0 or few rejects;
 recovery: all 904 hashes exact, chkdsk T: clean, neighbours unchanged. Failure: hang again, or any tail mismatch.
+
+ANS009-R4 result (recorded 2026-11-07T02:31:30Z): CONFIRMED — first native NTFS writes: exact, durable, confined to the EL2 window.
+Phases: guest started, WinPE finished and rebooted at t=302 s (no stop, no timeout), recovery SSH 02:29:47Z, 8 CPUs.
+WinPE STATUS: other_volumes_offlined=D(0) (WinPE's letter for the recovery C:), readonly_cleared=1, robocopy of 904 DLLs
+(588,764,352 B) in 5.5 s rc=1, dismount0/1/2 rc=0, chkdsk T: rc=0, readonly_restored=1, offline_exit=0.
+("compared=2 mismatches=2" is an artifact: fc.exe does not exist in this WinPE, FC.LOG "'fc' is not recognized".)
+EL2: 0 reject receipts, 0 stuck receipts.
+Recovery over the bridge: all 904 file hashes equal the WIM originals (0 mismatches, VDL tail gone), chkdsk T: /scan
+"found no problems", C: and T: Healthy, neighbours c_tail 1cdca0e8 / p8_head 5d1b6dc6 / gap 792fb941 unchanged.
+Verdict: R1-R3's zero tail and hang were caused by a writable volume outside the window (C:), not by the driver or EL2;
+with only the windowed volume writable, native NTFS writes are correct and durable. Native path ~109 MB/s for this
+robocopy (single-threaded, QD1 cached writes; not a throughput test).
+Next: native Windows boot from the SSD requires the window to cover the whole Windows volume (and later the namespace
+minus macOS), with flush/FUA ordering under a real boot; design offline first.

@@ -1,4 +1,14 @@
-# ANS current state — native READ (~850 MB/s) and native WRITE CONFIRMED (ANS008-R2); next: NTFS writes on a dedicated volume
+# ANS current state — native READ (~850 MB/s), raw WRITE (ANS008-R2) and NTFS WRITE (ANS009-R4) CONFIRMED; next: native Windows boot design
+
+## ANS009 verdict (2026-11-07T02:35Z)
+
+- ANSTEST: partition 9, 1 GiB NTFS directly after C: (LBA 59706368 + 262144), created by recovery (user-approved).
+- ANS009-R4 CONFIRMED: 904 DLLs (588.8 MB) written natively through NTFS; all exact over the bridge; chkdsk clean;
+  0 EL2 rejects/stuck. Requirement learned (R1-R3): no volume outside the write window may be writable in the guest,
+  or Windows wedges on writes EL2 must deny (hang + lost metadata write-back on the windowed volume).
+- Next causal target: native boot of Windows from the SSD (window = Windows volume, later full namespace minus
+  macOS; flush/FUA under boot; standalone path without the recovery bridge).
+
 
 ## ANS008 verdict (2026-11-07T00:00Z)
 
