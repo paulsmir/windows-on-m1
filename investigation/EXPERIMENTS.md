@@ -46597,3 +46597,4 @@ ANS012-R1 preregistration amendment (2026-11-07T13:21:13Z). Applies fork 6's con
 - New step B2: one boot of the unmodified GPU experiment launcher (`production/launch-gpu-bridge.sh` = full-owner2225 files and flags: brokerlock-split 1c35a20b…, HVS2ISO004 a8ab868c…, bridge, no ANS env). It must reach SSH with APPL0002 Code 28, 8 CPUs, and no StartOverride.
 - If B or B2 fails: revert to Start=3 before returning the bench.
 - run.sh is now sha d1581396a2e83482….
+ANS012-R1 attempt 1 (13:35Z) stopped at step A before any C: change. pnputil reported "root certificate not trusted": the GPU rollback removes E9BE15BD from Root and TrustedPublisher by contract. Amendment agreed with fork 6: prep adds E9BE15BD transiently around pnputil and removes it in a finally block. Steps B, C and D therefore boot without the certificate in Root (testsigning on), which also tests whether native boots need it. recovery-check reports the certificate count.
