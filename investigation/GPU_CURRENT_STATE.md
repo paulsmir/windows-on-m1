@@ -19,6 +19,13 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   hints in our compiled code vs Apple's encoding, (b) UAT PTE attributes/shareability/page size of our GPU-only
   allocations vs Asahi uat.rs, (c) firmware initdata / m1n1 GPU cache config vs macOS. Offline first; then one
   Windows MEMBW probe run per candidate (32-thread 256 KiB chase ~120 ns = fixed).
+- 14:30Z offline: (a) EXCLUDED -- 178/184 loads of fc968f7a are access=none -> device_load u4=4, the same encoding as
+  Apple's m183 (0x00f2c8000d040105: bits 44-46 = 4). (b) STRONGEST: every user leaf is MEMATTR 2 (Asahi
+  PROT_GPU_SHARED, "uncached"), incl. D3D12 DEFAULT-heap (GPU-only) memory; the MEMBW buffer is one. EXP2137 tried
+  MEMATTR 0 for GPU-only leaves (KMD Wom1GpuPrivateCached + m1n1 AGX_GPUVA_PRIVATE_CACHED build) but measured only GM
+  fps, not latency, at doubtful coverage; the current m1n1 (brokerlock-split 550c7f23) lacks that build flag.
+  Next: confirm macOS's attribute for private GPU memory (kext RE, allowed), rebuild brokerlock m1n1 + GC, then one
+  MEMBW probe run with/without Wom1GpuPrivateCached (measurement only: no cache invalidation on unmap).
 
 ## UPDATE 2026-11-07 07:27Z -- HD FRAME RE-RANKED (offline, existing evidence only)
 - Bench lent to the ANS session (ANS010-R1) at ~07:05Z from normal recovery, no AGX package staged.
