@@ -46109,3 +46109,50 @@ Failure criteria:
 - dirty C: or a chkdsk error.
 
 Evidence: .local/ans-native/ANS010-R1-run/{full.log,hv.log,pre-native.txt,native-evidence.txt,recovery-verify.txt,normal-launch.log}.
+
+### ANS010-R1 result (recorded 2026-11-07T07:47:32Z) — REJECTED (native kernel bugchecked before AppleAns started; C: untouched)
+
+Timeline (UTC):
+- 07:20:51 pre-native: Start=0, bootlog on.
+- 07:21:28 at proxy.
+- 07:21:29 launch.
+- 07:22:47 GUEST_STARTED (78 s).
+- 07:42:53 NO_NATIVE_SSH_WITHIN_1200s; runner stopped; fresh proxy.
+- 07:43:46 recovery SSH up.
+- 07:44:24 verify done; RUN_EXIT=0.
+
+Confirmed on hardware:
+- The installed Mu profile works:
+  - NvmExpressDriverBindingStart at ReadyToBoot;
+  - "checking 3 filesystems";
+  - the gate admitted exactly PciRoot(0x0)/Pci(0x0,0x0)/NVMe(0x1,..)/HD(5,GPT,F05B9952-...,0x1D5AF00,0x20000)/\EFI\BOOT\BOOTAA64.EFI.
+- bootmgr read the BCD/CI policies from WINESP through the bridge.
+- ExitBootServices passed: the kernel ran and all 8 CPUs entered.
+- The EL2 window was applied (30781184:29187328).
+
+Failure:
+- After the CPUs came up, no broker operation at all (R4 had QUERY/CLAIM at the same point). hv.log was silent from 07:23:09.
+- Snapshot (SIGINT, 07:38:56): cpu0 pc fffff80240c825e0, cpu1-7 pc fffff80240d0bfb4, all with DAIF masked.
+- ntoskrnl 26200 (PDB 287D4F3D...) with base fffff80240800000 gives:
+  - cpu0 = xHalHaltSystem+0;
+  - cpu1-7 = KiCheckStall+0xa4.
+- So a bugcheck, halted (no reset). The code was not captured.
+- HV_REJECTS=0, HV_STUCK=0; no native write reached the disk.
+
+Recovery:
+- C: not dirty; chkdsk /scan exit 0.
+- No events from the native boot in the System log. The 07:21:09 boot events are the recovery guest's own restart before the SoC reset; it loaded AppleAns (Start=0, no device) harmlessly.
+- APPLEANS Start=3 restored, bootlog off.
+- APPL0002=1 problem 28, 8 CPUs (unchanged).
+
+Display/USB/SSH in native: SSH never came up; the display was not observed.
+
+Verdict:
+- REJECTED for "installed C: boots natively".
+- CONFIRMED for the installed firmware boot path and the EBS handoff with a live Mu NvmExpress frontend.
+
+Leading hypothesis: INACCESSIBLE_BOOT_DEVICE.
+- AppleAns.sys was loaded by winload (ntbtlog of the recovery boot shows it with Start=0), but ACPI\APPL0003 was never configured (no FindAdapter/QUERY).
+- pnputil online staging differs from the DISM offline injection that works in WinPE (ANS002..ANS009).
+
+Next: an offline comparison of the WinPE (DISM) SYSTEM hive with the C: registry for the AppleAns/APPL0003 configuration, and a way to capture the stop code before the next run.
