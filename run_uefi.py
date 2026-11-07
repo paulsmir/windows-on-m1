@@ -77,6 +77,9 @@ ap.add_argument("--snapshot-kernel-read", metavar="RVA:LEN",
 ap.add_argument("--snapshot-devnodes", metavar="SPEC",
                 help="read-only diagnostic: on each SIGINT snapshot, walk the kernel PnP tree "
                      "(ROOT_RVA,child,sibling,instance,service,state,problem,problem_status)")
+ap.add_argument("--snapshot-modules", metavar="SPEC",
+                help="read-only diagnostic: on each SIGINT snapshot, list kernel loaded modules "
+                     "(PsLoadedModuleList RVA,BaseDllName offset,Flags offset)")
 ap.add_argument("--contract-output", type=pathlib.Path,
                 help="write four CRC-framed launch-contract checkpoints")
 args = ap.parse_args()
@@ -366,6 +369,14 @@ def unattended_control(*_args, **_kwargs):
                 print(line)
         except Exception as error:
             print(f"SNAPSHOT_DEVNODE error: {error}")
+    if args.snapshot_modules and hv.ctx is not None:
+        from tools.ans_snapshot import parse_modules, snapshot_modules
+        try:
+            for line in snapshot_modules(lambda va: hv.p.hv_translate(va, False, False), hv.iface.readmem,
+                                         hv.ctx.elr, parse_modules(args.snapshot_modules)):
+                print(line)
+        except Exception as error:
+            print(f"SNAPSHOT_MODULE error: {error}")
     print("HOST CONTROL: diagnostic snapshot captured; continuing guest")
     return EXC_RET.HANDLED
 

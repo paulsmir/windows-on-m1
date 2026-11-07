@@ -79,6 +79,7 @@ while [ "$#" -gt 0 ]; do
         --dry-run) DRY_RUN=1; shift ;;
         --snapshot-kernel-read) [ "$#" -ge 2 ] || usage; SNAPSHOT_KERNEL_READ=$2; shift 2 ;;
         --snapshot-devnodes) [ "$#" -ge 2 ] || usage; SNAPSHOT_DEVNODES=$2; shift 2 ;;
+        --snapshot-modules) [ "$#" -ge 2 ] || usage; SNAPSHOT_MODULES=$2; shift 2 ;;
         -h|--help) usage ;;
         *) usage ;;
     esac
@@ -233,6 +234,7 @@ set -- "$FIRMWARE" --storage-mode "$STORAGE_MODE" --device "$PROXY" --display-mo
 [ "$LOW_MEM" -eq 0 ] || set -- "$@" --low-mem
 [ -z "${SNAPSHOT_KERNEL_READ:-}" ] || set -- "$@" --snapshot-kernel-read "$SNAPSHOT_KERNEL_READ"
 [ -z "${SNAPSHOT_DEVNODES:-}" ] || set -- "$@" --snapshot-devnodes "$SNAPSHOT_DEVNODES"
+[ -z "${SNAPSHOT_MODULES:-}" ] || set -- "$@" --snapshot-modules "$SNAPSHOT_MODULES"
 if [ "$STORAGE_MODE" = VNVME_RECOVERY ] && [ "$DEBUG" != off ]; then
     set -- "$@" --managed-vuart "$VUART"
 fi

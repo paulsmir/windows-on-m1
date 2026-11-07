@@ -95,3 +95,31 @@ def snapshot_devnodes(translate, readmem, pc, o, max_nodes=400):
             lines.append(f'SNAPSHOT_DEVNODE unreadable node=0x{node:x}: {error}')
     lines.append(f'SNAPSHOT_DEVNODE_COUNT {len(lines)}')
     return lines
+
+
+def parse_modules(spec):
+    """'LIST_RVA,base_dll_name_offset,flags_offset' for PsLoadedModuleList/_KLDR_DATA_TABLE_ENTRY."""
+    v = [int(x, 0) for x in spec.split(',')]
+    if len(v) != 3 or v[0] <= 0:
+        raise ValueError('snapshot modules needs LIST_RVA,name_offset,flags_offset')
+    return dict(zip(('list_rva', 'name', 'flags'), v))
+
+
+def snapshot_modules(translate, readmem, pc, o, max_entries=400):
+    """Walk the kernel loaded-module list (InLoadOrderLinks at offset 0); one line per module."""
+    base = find_kernel_base(translate, readmem, pc)
+    if base is None:
+        return [f'SNAPSHOT_MODULE no MZ base below pc=0x{pc:x}']
+    head = base + o['list_rva']
+    entry, lines = _u64(translate, readmem, head), []
+    while entry and entry != head and len(lines) < max_entries:
+        try:
+            name = _unicode(translate, readmem, entry + o['name'])
+            flags = int.from_bytes(read_virtual(translate, readmem, entry + o['flags'], 4), 'little')
+            lines.append(f'SNAPSHOT_MODULE flags=0x{flags:08x} name={name}')
+            entry = _u64(translate, readmem, entry)
+        except ValueError as error:
+            lines.append(f'SNAPSHOT_MODULE unreadable entry=0x{entry:x}: {error}')
+            break
+    lines.append(f'SNAPSHOT_MODULE_COUNT {len(lines)}')
+    return lines

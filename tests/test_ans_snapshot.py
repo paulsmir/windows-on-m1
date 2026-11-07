@@ -1,6 +1,6 @@
 """Kernel-base search and VA read used to capture a halted native bugcheck (ANS010)."""
 import unittest
-from tools.ans_snapshot import find_kernel_base, parse, parse_devnodes, read_virtual, snapshot_devnodes, snapshot_kernel_read
+from tools.ans_snapshot import find_kernel_base, parse, parse_devnodes, parse_modules, read_virtual, snapshot_modules, snapshot_devnodes, snapshot_kernel_read
 
 BASE = 0xfffff802bb800000
 OFF = 0x7f0000000000  # fake VA->PA offset
@@ -62,6 +62,23 @@ class SnapshotRead(unittest.TestCase):
         lines = snapshot_devnodes(f.translate, f.readmem, BASE + 0x50bfb4, o)
         self.assertIn('SNAPSHOT_DEVNODE state=0x304 problem=28 pstatus=0x00000000 svc= inst=ACPI\\APPL0003\\0', lines)
         self.assertEqual(lines[-1], 'SNAPSHOT_DEVNODE_COUNT 3')
+
+    def test_module_list_walk(self):
+        f = Fake()
+        o = parse_modules('0xd6ad90,88,104')
+        heap = BASE + 0x3000000; f.map(heap, 0x10000); head = BASE + o['list_rva']; f.map(head, 16)
+        names = ['ntoskrnl.exe', 'storport.sys', 'AppleAns.sys']
+        ents = [heap + i * 0x400 for i in range(3)]
+        for i, (e, n) in enumerate(zip(ents, names)):
+            nxt = ents[i + 1] if i + 1 < len(ents) else head
+            raw = n.encode('utf-16-le'); buf = e + 0x200
+            f.put(e, nxt.to_bytes(8, 'little'))
+            f.put(e + 88, len(raw).to_bytes(2, 'little') + b'\0' * 6 + buf.to_bytes(8, 'little')); f.put(buf, raw)
+            f.put(e + 104, (0x1000 + i).to_bytes(4, 'little'))
+        f.put(head, ents[0].to_bytes(8, 'little'))
+        lines = snapshot_modules(f.translate, f.readmem, BASE + 0x4825e0, o)
+        self.assertEqual(lines[2], 'SNAPSHOT_MODULE flags=0x00001002 name=AppleAns.sys')
+        self.assertEqual(lines[-1], 'SNAPSHOT_MODULE_COUNT 3')
 
     def test_spec_bounds(self):
         self.assertEqual(parse('0xdbc9c0:40'), (0xdbc9c0, 40))
