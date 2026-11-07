@@ -27,6 +27,18 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   Next: confirm macOS's attribute for private GPU memory (kext RE, allowed), rebuild brokerlock m1n1 + GC, then one
   MEMBW probe run with/without Wom1GpuPrivateCached (measurement only: no cache invalidation on unmap).
 
+## UPDATE 2026-11-07 14:40Z -- LATENCY: ATTRIBUTE MINOR, NEXT = TLB DISCRIMINATOR
+- EXP2227 (control, GC m1n1, no switch) reproduces the gap; EXP2228 (Wom1GpuPrivateCached=1, MEMATTR 0 on GPU-only
+  leaves) lowers the 32-thread chase 15-35 % from 1 MiB but 64-256 KiB barely move and 4 MiB stays 551-598 vs macOS
+  176 ns; GM +1 % (noise). Leaf attribute = minor factor (Asahi also uses MEMATTR 2).
+- Offline (subagent, file:line in chat 14:30Z): TTBR format, table descriptors, UatLevelInfo, initdata/hwdata and
+  firmware IO maps equal Asahi. Differences: we flush the whole ASID on every leaf publish/unmap (Asahi: none on map,
+  range on unmap) -- between jobs only. Guest runs VMID 0, GPU ASIDs 1-63 may coincide with Windows ASIDs: whether
+  the GPU honours Windows' broadcast TLBIs is unknown (hypothesis).
+- One page (16 KiB) is already 1.4-1.8x macOS; the gap grows with page count while macOS stays flat to 16 MiB.
+- NEXT: EXP2229 page-spread chase (probe a6b44daa, 4/64/256/1024 pages, one 64 B line each): rising with N on ours
+  but flat on macOS -> TLB entries lost (reach or external invalidation); flat -> cache allocation/clock.
+
 ## UPDATE 2026-11-07 07:27Z -- HD FRAME RE-RANKED (offline, existing evidence only)
 - Bench lent to the ANS session (ANS010-R1) at ~07:05Z from normal recovery, no AGX package staged.
 - EXP2225 default package, HD PERF (gm2225d, 2084 frames, `agx_gpu_frame_breakdown.py --jobs`), per frame 24.77 ms:
