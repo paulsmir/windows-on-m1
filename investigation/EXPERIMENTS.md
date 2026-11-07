@@ -46714,3 +46714,52 @@ At most 96 per start.
 Run: `.local/ans-native/ANS012-R3-run/run.sh` (sha d74be0e3a1e86127…): prep-diag, R2 steps, then diag-events.ps1 in recovery.
 
 Expected: AppleAns events identifying the failing class/addresses. If there are none, the failures are elsewhere (disk class/partmgr), which is the next discriminator.
+
+### ANS012-R3 result — 2026-11-07T14:52Z: ROOT CAUSE FOUND (SG repeated-page reject)
+
+- **Native session** (GPU daily images, AppleAns 0.3.1 diag):
+  - SSH at 38 s; probe f68f16ab… matched over the bridge.
+  - Bench:
+
+    | Case | MB/s | IOPS |
+    | --- | --- | --- |
+    | seq read 1M QD8 | 3177 | |
+    | seq write 1M QD1 | 2363 | |
+    | rnd read 4K QD32 | | 93393 |
+    | rnd write 4K QD32 | | 56224 |
+
+  - The session was degraded: WMI "Server execution failed", Get-PnpDevice empty, ScheduledTask query empty, no user session (LogonUI, no explorer). The operator saw a black screen.
+- **Receipts:** 96 AppleAns System-log records, all from the direct SG path:
+  - 48 × 0xA2 FRAGMENT;
+  - 48 × 0xA3 element count (16×32, 15×8, 8×3, 17×2, 29×2, 13×1);
+  - 0 translation rejects (0xA1), 0 NVMe CQE errors (0xA4), 0 resets (0xA5).
+- **Disk:** 3235 disk Event 51 in that session.
+- **Recovery:** chkdsk 0, not dirty, gate unchanged.
+
+Root cause:
+- ans_sg_to_prps rejected an SG list that names a physical page twice (an EL2-broker pin rule).
+- The Windows memory manager legitimately repeats its dummy page in clustered page-in MDLs, and NVMe PRP permits repeats.
+- The failing page-ins broke services and logon; the black screen is a consequence.
+- The expanded-RAM and RESERVE_V2 maps are not involved (no translation reject).
+
+Fix: commit 076103843. ans_sg_to_prps_ex(..., allow_repeated_pages) is used by direct mode; broker mode is unchanged. The test is RED with the old rule and GREEN with the flag; the other PRP shape rules still reject.
+
+Builds:
+- ANSBUILD010-H 0.3.2 (E9BE15BD, diag kept): package 0578aece…, sys 742f3f06…;
+- ANSBUILD011-I 0.4.1 (35F48BAE, fix + diag): package 9a3d4078…, sys 77fbc3e3…; 12/0, InfVerif VALID.
+
+### ANS012-R4 — AppleAns 0.3.2 (repeated-page fix) (preregistered 2026-11-07T14:55:48Z)
+
+WHY THIS HYPOTHESIS: all 96 R3 receipts are SG FRAGMENT rejects of clustered reads, and there is no other failure class. The fix changes exactly that predicate.
+
+Single variable vs R3: the fix (0.3.2 = 0.3.1 + allow_repeated_pages in direct mode, same signer, diag kept).
+
+Run: `.local/ans-native/ANS012-R4-run/run.sh` (sha b468b6ab12927f55…).
+
+Expected:
+- no 0xA2 receipts, few or no disk Event 51;
+- logon/explorer present, WMI working;
+- the operator sees the desktop;
+- recovery gate unchanged.
+
+ANS013-R1 amendment: the package is now ANSBUILD011-I 0.4.1 (own signer 35F48BAE + fix + diag); run.sh sha b3956bc71405c87a…. It still runs only after R4 passes.
