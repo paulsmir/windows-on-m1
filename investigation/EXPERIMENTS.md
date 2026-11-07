@@ -74565,3 +74565,16 @@ EXP2248 HARDWARE BEFORE 2026-11-07T22:51:11Z:
 - Recovery rec2248h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2248-cppc/run2248.sh.
 
 EXP2248 ACTUAL (2026-11-07T22:58:00Z): FxPPM PARSED AND REJECTED the _CPC ("firmware problem"); platform stable. m1n1 brokerlock-cppc booted ("HV CPPC: _CPC page at 0x300010000 ..."), launcher "CPPC: _CPC register page mapped", DRAMCFG FAST; pipeline RC 0, suite 119/0, GM d closed (wer 0), GM HD  "fps": 44.318,. Kernel-Processor-Power events per CPU: Id 54 "Collaborative processor power controls on processor N in group 0 are disabled due to a firmware problem"; Id 55 "Performance state type: None, Nominal Frequency (MHz): 22, Maximum/Minimum performance percentage 100, Idle state type None". Processor Frequency counter 22 (CPU0) / 0 (CPU7), % Processor Performance ~100 idle and loaded; ~MHz 22. Verdict: ACPI path reaches FxPPM (good: Windows evaluates our _CPC), but one of FxPPM's _CPC validation rules fails; 22 MHz is FxPPM's fallback nominal frequency, not ours. Next: find FxPPM's Event-54 validation conditions offline (fxppm.sys sha in CPU-DVFS-SMBIOS-PLAN.md) and fix the DSDT; no hardware until a specific violated rule is identified. Evidence evidence/EXP2248/cppc-counters.txt.
+
+EXP2249 HARDWARE BEFORE 2026-11-07T23:19:10Z:
+- WHY THIS HYPOTHESIS: (1) EXP2248: FxPPM logged Event 54 "CPPC disabled due to a firmware problem" on every CPU after evaluating our _CPC; (2) fxppm.sys disassembly with matching public PDB: AcpiParseCore accepts element 12 only as ACPI Buffer (type 2) and fails the whole _CPC on an Integer; InitAcpiCpc failure clears the usable bit -> ProcLibDeviceStart writes PPM_ETW_CPC_ERROR (Id 54); (3) the other 22 elements pass the parser type table and ValidateAcpiCPCRegister (SystemMemory non-null registers have width/offset within access size; nullable fields null).
+- WINDOWS CONTRACT: as EXP2248; element 12 nullable Buffer.
+- AGX/ASAHI CONTRACT: unchanged (T8103 cluster DVFS + DRAMCFG rule in m1n1 hv_cppc).
+- TRANSLATION: unchanged.
+- WHAT IS STILL UNKNOWN: whether CpcInitRegisterAddresses (MmMapIoSpaceEx uncached of 0x300010000) succeeds; FxPPM's desired-performance policy and the resulting GM effect.
+- Expected: no Event 54; Event 55 "Performance state type: ACPI Collaborative Processor Performance Control", Nominal Frequency 2064/2988; ~MHz 2064 (CPU0); Processor Frequency counter varies idle vs load; suite 119/0; GM HD within 2 % of EXP2248 44.32.
+- Failure criteria: Event 54 persists (next suspect: memory-map type of 0x300010000), guest abort/hang, suite failure, GM drop > 2 % -> rec2249h.
+- Recovery: rec2249h.
+- Probe: probe2249.sh = probe2248.sh.
+- Hashes: sys 135f07cca458, UmdArm64 507122621eaa, UmdX64 2cd8c5cac70e, Umd32 e8db6b40db0b; manifest d5d284ba4f5d, hardware-manifest 437643478fa9; probe2249.sh 193eb09ba889 (PROBE_LINT_OK); visible recovery rec2249h 8ff743120073d6b5; m1n1 0d3a75b3.
+- Recovery rec2249h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2249-cppc2/run2249.sh.
