@@ -74399,3 +74399,16 @@ EXP2235 HARDWARE ACTUAL (2026-11-07T17:26:32Z): **REJECTED: the GPU MMU config b
 - EXP2235_PIPELINE_RC 0 (first run from branch gpu/memory-latency incl. main's run_uefi launch lock: works); one MMUCFG line at activation, no change during v5 operations; suite 119/0; no reset. Page-spread 597/643/857/1041 and 496/643/803/932 ns (= control).
 - macOS kext RE (2026-11-07, scratchpad kext-re/uat-notes.md): page tables 16 KiB only, no block/contiguous descriptors; PTE bits, TTBR/TTBAT entry format and TLBI usage (VAE1OS/RVAE1OS by size, ASIDE1OS for large/zero) equal ours/Asahi; unused VA maps a dummy table (not perf-relevant).
 - Remaining explanation (hypothesis): translations are lost continuously, so every page change pays a full 3-level walk (~3 x 200 ns). External guest TLBIs are excluded (EXP2233); untested sources: the broker's own invalidations (sync_tables ASIDE1OS ASID 0 + per-slot ASIDE1OS on every v5 publication, 10-40k/s, if the GPU drops more than the named ASID) and firmware-side invalidations. Next: receipt-only m1n1 counter of broker TLBIs per 10 s window aligned with the MEMBW steps, then a variant without the ASID-0 sync TLBI on user-leaf publication (Asahi issues none on map).
+
+EXP2236 HARDWARE BEFORE 2026-11-07T17:42:34Z:
+Steps: MEMBW twice (regions + MEMBW_PAGES_NS); D3D12 suite; d HD PERF GravityMark 100k -temporal 0.
+- WHY THIS HYPOTHESIS: (1) EXP2231-2235: every 16 KiB page change costs ~400 ns (about one full 3-level walk) even among 4 pages; guest TLBIs (EXP2233), data attribute (EXP2234) and the MMU config block (EXP2235, already programmed) are excluded; (2) to miss on every ~0.6 us step, translations would have to be dropped >1.6 M times/s, far above the broker's 10-40 k invalidations/s, so entries are more likely never found than flushed; (3) user leaves are non-global (ASID-tagged); a tag that differs between fill and lookup (or per-ASID drops) would give exactly this, while a global entry hits regardless of ASID.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: Asahi and macOS mark user leaves non-global; global user leaves can alias across GPU contexts with equal VAs (other processes, DWM) -> possible wrong-data/fault; measurement only, never production.
+- ATOMIC CONTRACT: none (one m1n1 flag).
+- WHAT IS STILL UNKNOWN: whether the per-page cost depends on ASID tagging.
+- Expected: ASID-related -> MEMBW_PAGES_NS falls towards ~65-150 ns; unchanged ~600-1000 -> the TLB does not retain independent of ASID. Possible side effects: DWM/GravityMark corruption or GPU fault (then evidence + rec2236h).
+- Failure criteria: GPU fault/reset, suite failure, hang -> rec2236h (m1n1 last-good brokerlock-split 550c7f23).
+- Recovery: rec2236h (run directly).
+- Probe: agx_d3d12_probe_e2236_arm64.exe = byte copy of e2230 (sha edb222b713c2f802); probe2236.sh = probe2231.sh.
+- Hashes: sys f4402a2e2695, UmdArm64 50b688d5286e, UmdX64 bcd83bfc1f4a, Umd32 a76ca3541df8; manifest c42b6a9c512b, hardware-manifest ae15a27419b9; probe2236.sh ace96475f205 (PROBE_LINT_OK); visible recovery rec2236h 798406f81083f427; m1n1 0d3a75b3.
+- Recovery rec2236h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2236-global-leaves/run2236.sh.
