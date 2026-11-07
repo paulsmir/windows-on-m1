@@ -17,15 +17,21 @@ function Status {
         $p = Get-ItemProperty "$svc\$n" -EA SilentlyContinue
         "SERVICE $n Start=$($p.Start) StartOverride=$(Override $n)"
     }
-    $pkg = Get-ChildItem HKLM:\SYSTEM\DriverDatabase\DriverPackages | ? PSChildName -like 'appleans.inf_*'
-    "PACKAGE $($pkg.PSChildName) records=$($pkg.SubKeyCount)"
+    foreach ($pkg in @(Get-ChildItem HKLM:\SYSTEM\DriverDatabase\DriverPackages | ? PSChildName -like 'appleans.inf_*')) {
+        "PACKAGE $($pkg.PSChildName) records=$($pkg.SubKeyCount)"
+    }
+    "IMAGEPATH $((Get-ItemProperty "$svc\AppleAns" -EA SilentlyContinue).ImagePath)"
     "DEVNODE ACPI\APPL0003\0 service=$((Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Enum\ACPI\APPL0003\0' -EA SilentlyContinue).Service)"
 }
 if ($Mode -ne 'status') {
     foreach ($n in 'AppleAns', 'stornvme') { if (-not (Test-Path "$svc\$n")) { throw "service $n missing" } }
     if ($Mode -eq 'native') {
-        $pkg = Get-ChildItem HKLM:\SYSTEM\DriverDatabase\DriverPackages | ? PSChildName -like 'appleans.inf_*'
-        if (-not $pkg -or $pkg.SubKeyCount -lt 3) { throw 'AppleAns package records missing (ANS010-PREP2)' }
+        # Several staged AppleAns packages may coexist (ANS011 stages a newer binary next to the
+        # package that carries the device-configuration records); one must carry the records.
+        $pkg = @(Get-ChildItem HKLM:\SYSTEM\DriverDatabase\DriverPackages | ? PSChildName -like 'appleans.inf_*')
+        if (@($pkg | ? SubKeyCount -ge 3).Count -lt 1) { throw 'AppleAns package records missing (ANS010-PREP2)' }
+        $image = (Get-ItemProperty "$svc\AppleAns").ImagePath
+        if (-not (Test-Path ($image -replace '^\\SystemRoot', $env:SystemRoot))) { throw "AppleAns ImagePath missing: $image" }
         if ((Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Enum\ACPI\APPL0003\0' -EA SilentlyContinue).Service -ne 'AppleAns') {
             throw 'persisted APPL0003 devnode missing (ANS010-PREP3)' }
         Set-ItemProperty "$svc\AppleAns" -Name Start -Value 0
