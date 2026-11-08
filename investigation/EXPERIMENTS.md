@@ -75183,3 +75183,9 @@ EXP2288 HARDWARE BEFORE 2026-11-08T23:39:27Z:
 - Hashes: sys 541a8d0c199b, UmdArm64 83b345bbaa21, UmdX64 defac08c6fef, Umd32 77db10a8da00; manifest f5597f0405f5, hardware-manifest 4cb1fc614971; probe2288.sh 7f9f91bad7bb (PROBE_LINT_OK); visible recovery rec2288h c483bd8135a41218; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
 - Recovery rec2288h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2288-lead-only/run2288.sh.
+
+EXP2288 HARDWARE ACTUAL 2026-11-08T23:48:37Z:
+- Rerun of EXP2287 (which never booted). Wom1Ov2NoHazardLead only, waiver off, Wom1JobDiagnostics off, OV3B=1, m1n1 dfe621ea.
+- Result: no reset (0 PSCI RESET), device_removed false, wer 0 in all runs. GM HD PERF a 42.189, b 43.268, c 42.762 fps (mean of b, c 43.015); each run finished normally, 1.3-1.4 M UMD lines.
+- EXP2287 recovery note: AT_PROXY was refused because the failed boot never wrote contract.bin; the owner was booted once with ld.lld restored, then normal recovery ran.
+- Verdict: with the same diagnostics-off profile, removing Wom1Ov5TaWaiver removes the reset: 0 of 3 GM starts versus 3 of 3 boots with it. The waiver switch is needed for the 0x116 even though the receipts of those boots showed Waived 0, so the cause is on the waiver's enabled path before the first waived pair, or the receipt export lagged. Sample is small. Next: architect; candidates include what Wom1Ov5TaWaiver changes at owner creation.
