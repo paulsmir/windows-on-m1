@@ -3,6 +3,7 @@
 // 2463534242, regions 16 KiB..64 MiB), same kernel, 1024 and 32 chasing threads, time =
 // (11 dispatches - 1 dispatch) / 10, best of three, GPU time from the command buffer.
 // Build: clang -fobjc-arc -framework Metal -framework Foundation membw_metal.m -o membw_metal
+// Usage: membw_metal [steps=512] [atom]  (EXP2266/2267 twins: 65536 load steps; 8192 atomic steps with "atom")
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 static NSString *src = @"#include <metal_stdlib>\nusing namespace metal;\n"
@@ -14,15 +15,25 @@ static NSString *src = @"#include <metal_stdlib>\nusing namespace metal;\n"
   "  else { if (id >= p.threads) return; uint node = p.first + (id * 4099u) % p.lines;\n"
   "    for (uint t = 0; t < p.steps; ++t) node = s[node * 16u]; acc.x = node; }\n"
   "  if (acc.x == 0xdeadbeefu && acc.y == 0x01234567u) o[0] = acc.z ^ acc.w;\n"
+  "  if (p.mode == 1 && acc.x == 0xffffffffu) o[1] = acc.x; }\n"
+  "kernel void ka(device atomic_uint *s [[buffer(0)]], device uint *o [[buffer(1)]], constant P &p [[buffer(2)]],\n"
+  "  uint id [[thread_position_in_grid]]) {\n"
+  "  uint4 acc = 0;\n"
+  "  if (p.mode == 0) { for (uint i = id; i < p.count16; i += p.threads) acc.x ^= atomic_load_explicit(&s[i * 4u], memory_order_relaxed); }\n"
+  "  else { if (id >= p.threads) return; uint node = p.first + (id * 4099u) % p.lines;\n"
+  "    for (uint t = 0; t < p.steps; ++t) node = atomic_fetch_add_explicit(&s[node * 16u], 0u, memory_order_relaxed); acc.x = node; }\n"
+  "  if (acc.x == 0xdeadbeefu && acc.y == 0x01234567u) o[0] = acc.z ^ acc.w;\n"
   "  if (p.mode == 1 && acc.x == 0xffffffffu) o[1] = acc.x; }\n";
-int main(void) { @autoreleasepool {
-  enum { BYTES = 128u << 20, LINES = BYTES / 64u, STEPS = 512u, REGIONS = 7, SPREADS = 4, CHASES = 1 + 2 * REGIONS, CASES = CHASES + SPREADS };
+int main(int argc, char **argv) { @autoreleasepool {
+  enum { BYTES = 128u << 20, LINES = BYTES / 64u, REGIONS = 7, SPREADS = 8, CHASES = 1 + 2 * REGIONS, CASES = CHASES + SPREADS };
+  const unsigned STEPS = argc > 1 ? (unsigned)atoi(argv[1]) : 512u;
+  const int atom = argc > 2 && !strcmp(argv[2], "atom");
   static const unsigned kib[REGIONS] = {16, 64, 256, 1024, 4096, 16384, 65536};
-  static const unsigned spages[SPREADS] = {4, 64, 256, 1024};
+  static const unsigned spages[SPREADS] = {1, 2, 4, 8, 16, 64, 256, 1024};
   unsigned rfirst[REGIONS], sfirst[SPREADS];
   id<MTLDevice> d = MTLCreateSystemDefaultDevice(); NSError *e = nil;
   id<MTLLibrary> l = [d newLibraryWithSource:src options:nil error:&e]; if (!l) { NSLog(@"%@", e); return 1; }
-  id<MTLComputePipelineState> ps = [d newComputePipelineStateWithFunction:[l newFunctionWithName:@"k"] error:&e];
+  id<MTLComputePipelineState> ps = [d newComputePipelineStateWithFunction:[l newFunctionWithName:(atom ? @"ka" : @"k")] error:&e];
   id<MTLBuffer> up = [d newBufferWithLength:BYTES options:MTLResourceStorageModeShared];
   id<MTLBuffer> buf = [d newBufferWithLength:BYTES options:MTLResourceStorageModePrivate];
   id<MTLBuffer> out = [d newBufferWithLength:64 options:MTLResourceStorageModePrivate];
