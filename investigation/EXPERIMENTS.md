@@ -75102,3 +75102,7 @@ EXP2284 HARDWARE BEFORE 2026-11-08T21:59:04Z:
 - Hashes: sys 5b4337ae0654, UmdArm64 70fdf5b53053, UmdX64 1f0910558ef9, Umd32 b20e2c520683; manifest b25fa043b8e0, hardware-manifest 8a786d89c7f8; probe2284.sh 4d84cde6d294 (PROBE_LINT_OK); visible recovery rec2284h 193d5ece4e3f48c7; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2284h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2284-waiver-two-runs/run2284.sh.
+
+EXP2284 HARDWARE ACTUAL 2026-11-08T22:06:08Z:
+- Result: no reset (0 PSCI RESET), GPU_RESET not reported, device_removed false, wer 0 in both runs; SSH and native SSD alive. GM HD PERF run a 40.643 fps, run b 41.468 fps, both to timeout, in one boot. Receipt at snapshot gmt9 (Considered, Waived, Placed): (45166, 3829, 3829).
+- Verdict: the second GM run of a boot alone does not reset with the waiver on and Wom1JobDiagnostics=1. Compared with EXP2283 the difference is diagnostics off, which points at timing, but it rests on one reset and one non-reset run: not proven. Next: repeat the EXP2283 configuration (diagnostics off) to see whether the reset reproduces. Recovery rec2284h.
