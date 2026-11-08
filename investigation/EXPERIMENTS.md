@@ -75090,3 +75090,15 @@ EXP2283 HARDWARE ACTUAL 2026-11-08T21:42:57Z:
 - Registry from the crashed boot (rec2283h/kmd-receipts-pre-disable.txt): Wom1Ov5WaiverReceipt Considered 19008, Waived 1617, Placed 1617, Refused[CLASS] 17386, one other reason 5. No Wom1GpuReset value.
 - Differences from EXP2282 (no reset): no Wom1JobDiagnostics, and a second GM run in the same boot. Not attributed.
 - Verdict: inconclusive for the cause; the waiver is not stable in this profile. The 42.821 fps of run a has no off arm and supports no claim. Off arms were not run. Recovery: AT_PROXY rec2283h, RECOVERY_DONE, ANS, package absent. Next: EXP2284, waiver on with Wom1JobDiagnostics=1, GM a and b in one boot.
+
+EXP2284 HARDWARE BEFORE 2026-11-08T21:59:04Z:
+- WHY THIS HYPOTHESIS: (1) EXP2283 reset about 10 s into the second GM run with the waiver on and diagnostics off; (2) EXP2282 with diagnostics and one GM run had no reset; (3) this separates "state after the first run" from "timing without diagnostics".
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: as EXP2279. TRANSLATION: existing OV5 path.
+- ATOMIC CONTRACT: none -- one switch.
+- WHAT IS STILL UNKNOWN: the stop code (EXP2283 wrote no dump) and the ingredient.
+- Expected: a reset in run b -> the state after the first run is the ingredient; the last snapshot names it. No reset -> the timing without diagnostics is the ingredient.
+- Failure criteria: a reset is an accepted outcome here.
+- Recovery: rec2284h (ANS); on a reset save full.log first, then AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2284h/recover.sh.
+- Hashes: sys 5b4337ae0654, UmdArm64 70fdf5b53053, UmdX64 1f0910558ef9, Umd32 b20e2c520683; manifest b25fa043b8e0, hardware-manifest 8a786d89c7f8; probe2284.sh 4d84cde6d294 (PROBE_LINT_OK); visible recovery rec2284h 193d5ece4e3f48c7; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
+- Recovery rec2284h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2284-waiver-two-runs/run2284.sh.
