@@ -8,6 +8,21 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 19:53Z -- OVERLAP LINE: THE BASE OV5 CONTRACT DOES NOT HANG (EXP2279); EXP2214 IS GRAVITYMARK-SHAPE SPECIFIC
+- Architect/implementer split since this evening: this session analyses and specifies, fork 6 implements and runs.
+- EXP2275 (OV6 finite ranges): every GM render-after-compute is placeable; R2/R4/R6 = prelude (9) and a resource-level
+  vertex overlap with the preceding compute (10); R8 clean. EXP2276-2278: the OVPAIR reproducer needed one
+  ExecuteCommandLists and a compute-first submit hook (Mesa flushes open batches in slot order, not creation order).
+- EXP2279 (OV7 hook + OVPAIR, fork 6): 38/40 renders waived (TA root without the compute-stamp wait, 3D queue led by the
+  Barrier on the unfinished compute stamp), 40/40 pairs complete, pixels right, no GPU reset. VERDICT: the base OV5 firmware
+  contract is sound on a synthetic pair; the EXP2214 hang needs a GravityMark-specific ingredient: a long TA with TVB
+  growth/partial renders while the compute runs, prelude-bearing neighbours in the depth-2 window, DWM jobs between, or
+  the 3D queue blocked for milliseconds. Not measured yet: whether the TA actually overlapped the compute (timestamps).
+- Next (specs for fork 6): OV6b conflict provenance (queued); OVPAIR-H = the same pair with a GravityMark-like render
+  (1920x1080 RT, ~100k triangles, TVB in use, TA of several ms) and a 20-30 ms compute, 40 pairs, plus TA/compute
+  timestamps from the KMD receipts to prove the overlap; then add the GM ingredients one at a time (DWM, depth-2 prelude
+  neighbour) until EXP2214 reproduces or GM's R8 waiver is tried again with a bounded recovery.
+
 ## UPDATE 2026-11-08 16:39Z -- IRQ-COMPLETION STEP 2 ON HARDWARE (EXP2273): CORE FREED, FPS NEUTRAL, DETECT UNCHANGED
 - Wom1IrqCompletion=1 (+ Mu MUIRQ001): poll busy 47.6 % -> 2.5 % of job time (waits instead of spins), 57 % of waits
   ended by the doorbell wake, WorkerSyncPopHits 0.8 %. GM HD PERF 43.82 vs 43.99 (step 1) vs 44.4-44.6 (no-887 controls).
