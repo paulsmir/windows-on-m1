@@ -8,6 +8,14 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 08:30Z -- MEMBW LATENCY GAP = GPU DVFS ARTEFACT (EXP2265)
+- During the MEMBW probe the GPU ran P1 (396 MHz) 64.7 % / P6 11.5 % (Wom1GpuPerf delta); GravityMark runs P6 85 %.
+  The 2-3.5x "device-load latency" gaps vs the Metal twin (EXP2226-2264) are mostly clock: do not tune the memory path
+  from them. EXP2260-2263 hypotheses (VMID, map TLBI, addressing form) are moot as explanations.
+- GM per-dispatch gap (Apple ~2x, at P6) remains unexplained -> localise in-workload (per-pass GPU timestamps vs Apple).
+- Open: our firmware DVFS ramp for bursty work vs macOS (initdata perf/ramp parameters) -- may matter for frame-paced
+  workloads with idle gaps.
+
 ## UPDATE 2026-11-08 05:00Z -- NATIVE SSD EVERYWHERE; HV TRAPS CUT; GPU GAP NARROWED TO TRANSLATION
 - Experiments AND recovery boot the native SSD (AppleAns ANS-DIRECT): run_uefi --storage-mode ANS_NATIVE --ans-direct
   --ans-production-fd-sha256 (ef1707777); prepare.sh refuses bridge launchers; recovery default RECANS001 (broker ON).
