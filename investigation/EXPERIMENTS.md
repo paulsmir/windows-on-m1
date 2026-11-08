@@ -74706,3 +74706,5 @@ EXP2259 HARDWARE BEFORE 2026-11-08T03:38:52Z:
 - Failure criteria: hang, suite failure -> rec2259h. Recovery: rec2259h (ANS).
 - Hashes: sys 73c16e0e56fe, UmdArm64 39e71cc08f80, UmdX64 a05ddde9986a, Umd32 95cc16a39141; manifest 38bc3d31988a, hardware-manifest e565c8ea9d65; probe2259.sh 1d808fe7f823 (PROBE_LINT_OK); visible recovery rec2259h 34208bae9247a71c; m1n1 0d3a75b3.
 - Recovery rec2259h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2259-uavctl/run2259.sh.
+
+EXP2259 ACTUAL (2026-11-08T03:46:31Z): CONTROL recorded. Native SSD, m1n1 ansdirect-dsid, pipeline RC 0, suite 119/0, GM HD  "fps": 44.371,. MEMBWUAV 32-thread (2 runs): 16K 80-85, 64K 165-174, 256K 254-268, 1M 295-335, 4M 321-363, 16M 492-524, 64M 689-736 ns; pages 4/64/256/1024: 218-225 / 250-257 / 381 / 433-436 ns (macOS 118/120/176/181; pages 65-92). Gap remains 2-3x at >=256 KiB and 3-5x on page spread.
