@@ -8,6 +8,17 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 20:51Z -- OVERLAP PROVEN ON HARDWARE (EXP2281 OVPAIR-H): LONG TA RUNS DURING COMPUTE, 3D WAITS ON THE STAMP
+- fork 6: 40/40 pairs, 37 waived, measure-gpu-stages: compute end - TA end median +29.6 ms (positive in 37/40 = the waived
+  ones), render end 276 us after compute end. The G13 firmware runs a render's TA (~100k triangles, 1080p, D32) while an
+  unfinished compute job runs on the other queue and releases the 3D queue on the compute stamp Barrier: the OV5 contract
+  is sound including long TA. Not exercised: TVB growth/partial renders, prelude neighbours in the depth-2 window, DWM.
+- Decision: go to GravityMark directly in EXP2214's shape but bounded (EXP2282 spec in the handoff): HD PERF only, the R8
+  waiver (verdict 0 without OV3B since OV6), mid-run KMD receipt snapshots every 10 s, full.log saved before AT_PROXY.
+  No hang -> EXP2214 was tied to FHD/OV3B/the old base; measure R8's gain (<= 0.65 ms HD) vs a same-switch control.
+  Hang -> the last snapshot names the pair and the window state; then add the ingredient to OVPAIR-H.
+- OV6c (VB/IB sized by view, VS UAV write only with stores) stays queued behind EXP2282.
+
 ## UPDATE 2026-11-08 20:22Z -- OV6b READ: R2/R4/R6 "VERTEX CONFLICTS" ARE RESOURCE-GRANULARITY, NOT PROVEN DEPENDENCIES (EXP2280)
 - First conflicting pairs (fork 6 run, 3243 executions): R2/R4 = vertex-buffer read vs the compute's root UAV write in the
   same heap, overlap ~44.8 MB (62/63, 61/64 entries): the VB range is unsized (to the placed resource's end) and a root UAV
