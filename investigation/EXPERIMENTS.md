@@ -74762,3 +74762,5 @@ EXP2264 HARDWARE BEFORE 2026-11-08T05:53:42Z:
 - Failure criteria: hang, suite failure -> rec2264h. Recovery: rec2264h (ANS).
 - Hashes: sys 928cccf4f1b2, UmdArm64 09b95b012ac8, UmdX64 a98e86ab7ead, Umd32 7ce08468e684; manifest e166df814c9f, hardware-manifest 84dcf5aa22aa; probe2264.sh bd20ee407600 (PROBE_LINT_OK); visible recovery rec2264h 95b6a5c1fbcfaec2; m1n1 0d3a75b3.
 - Recovery rec2264h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2264-membwhot/run2264.sh.
+
+EXP2264 ACTUAL (2026-11-08T06:03:31Z): INCONCLUSIVE. Probe e2264 MEMBWHOT (40 stream passes ~90 ms per timed list): differential (11-1 dispatch) results are dominated by warm-up jitter (values 0.0/4.6/43-511 ns), so the method cannot resolve the chase; MEMBWUAV in the same boot reproduces EXP2259-2263 (pages 221-235 ns). Next: measure the GPU performance state directly during MEMBWUAV -- device switch Wom1JobDiagnostics=1 publishes Wom1GpuPerf (per-pstate ActualTicks histogram, render_gpu_perf.h); receipts snapshots before/after the MEMBWUAV step give the time-in-state of the latency probe.
