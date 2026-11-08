@@ -74719,3 +74719,5 @@ EXP2260 HARDWARE BEFORE 2026-11-08T03:59:46Z:
 - Recovery: rec2260h (ANS).
 - Hashes: sys 7139e0ffc771, UmdArm64 7c147d6e40d3, UmdX64 3ff4fc35280f, Umd32 c26cd9682646; manifest d5d88deb7a2e, hardware-manifest 572f426f2c99; probe2260.sh 606de22e3bd0 (PROBE_LINT_OK); visible recovery rec2260h 3057daea97a6ecaa; m1n1 0d3a75b3.
 - Recovery rec2260h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2260-vmid1/run2260.sh.
+
+EXP2260 ACTUAL (2026-11-08T04:06:52Z): REJECTED (guest VMID 1 does not change device-load latency). m1n1 ansdirect-vmid1 978270a1 booted (native SSD), pipeline RC 0, suite 119/0, GM HD 44.269. MEMBWUAV 32-thread: 16K 87-102, 256K 259-286, 1M 269-427, 4M 318-538, 16M 526-563, 64M 664-727; pages 230/253/370/436 (control EXP2259: 218-225/250-257/381/433-436). Windows' broadcast TLBIs are not what drops GPU translations. Next candidate (offline first): the GPUVA v5 broker's own TLB maintenance on every leaf publish (sync_tables ASIDE1OS ASID 0 + per-slot ASIDE1OS, up to ~38k/s in EXP2233) vs Asahi/macOS (no TLBI on map; range invalidate on unmap).
