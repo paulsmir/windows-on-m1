@@ -9377,8 +9377,17 @@ static int mem_bw_atom(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, U
  * switches the same pair runs serialized (control). PASS = every pair
  * completes within 8 s with the expected pixels; a timeout names the
  * iteration (the KMD's TDR would follow). */
-static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
-    enum { BYTES = 128u << 20, STREAM_THREADS = 65536u, CHASE_STEPS = 512u, PASSES = 8u, ITERATIONS = 40u };
+static int ov_pair_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, int heavy) {
+    /* OVPAIRH: a GravityMark-like render (1920x1080 + D32, GRID*GRID*2 ~100k
+     * triangles, TA in milliseconds) against a longer compute. */
+    enum { BYTES = 128u << 20, STREAM_THREADS = 65536u, CHASE_STEPS = 512u, ITERATIONS = 40u, GRID = 224u };
+    const UINT PASSES = heavy ? 14u : 8u;
+    const UINT target_width = heavy ? 1920u : 64u, target_height = heavy ? 1080u : 64u;
+    const UINT vertex_count = heavy ? GRID * GRID * 6u : 3u;
+    const D3D12_BOX heavy_box = {460, 250, 0, 524, 314, 1}; /* straddles the grid's top-left corner at 480,270 */
+    ID3D12Resource *depth = NULL;
+    ID3D12DescriptorHeap *dsv_heap = NULL;
+    D3D12_CPU_DESCRIPTOR_HANDLE dsv = {0};
     D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
     D3D12_RESOURCE_DESC desc = {0};
     D3D12_DESCRIPTOR_HEAP_DESC rtv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
@@ -9396,7 +9405,9 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
     ID3D12PipelineState *pso = NULL, *cs = NULL;
     ID3D12Resource *target = NULL;
     ID3D12DescriptorHeap *rtv_heap = NULL;
-    ID3D12Resource *vertices = committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+    ID3D12Resource *vertices = heavy ? c21_buffer(device, D3D12_HEAP_TYPE_UPLOAD, vertex_count * 28u, D3D12_RESOURCE_FLAG_NONE,
+                                                  D3D12_RESOURCE_STATE_GENERIC_READ)
+                                     : committed_buffer(device, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
     ID3D12Resource *readback = committed_buffer(device, D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST);
     ID3D12Resource *src = c21_buffer(device, D3D12_HEAP_TYPE_DEFAULT, BYTES, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -9417,8 +9428,8 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
     params[1].Descriptor.ShaderRegister = 1; /* RWByteAddressBuffer u1: the streamed buffer */
     params[2].Descriptor.ShaderRegister = 0; /* u0: per-thread results */
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    desc.Width = 64;
-    desc.Height = 64;
+    desc.Width = target_width;
+    desc.Height = target_height;
     desc.DepthOrArraySize = 1;
     desc.MipLevels = 1;
     desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -9428,7 +9439,24 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
     if (SUCCEEDED(hr)) {
         const float data[3][7] = {{-0.5f, -0.5f, 0.25f, 0, 1, 0, 1}, {0.0f, 0.5f, 0.25f, 0, 1, 0, 1},
                                   {0.5f, -0.5f, 0.25f, 0, 1, 0, 1}};
-        memcpy(bytes, data, sizeof(data));
+        if (heavy) { /* a grid over [-0.5, 0.5]^2: two triangles per cell */
+            float *v = (float *)bytes;
+            for (UINT y = 0; y < GRID; ++y)
+                for (UINT x = 0; x < GRID; ++x) {
+                    static const UINT corner[6][2] = {{0, 0}, {1, 0}, {0, 1}, {0, 1}, {1, 0}, {1, 1}};
+                    for (UINT c = 0; c < 6u; ++c) {
+                        *v++ = -0.5f + (float)(x + corner[c][0]) / GRID;
+                        *v++ = -0.5f + (float)(y + corner[c][1]) / GRID;
+                        *v++ = 0.25f;
+                        *v++ = 0.0f;
+                        *v++ = 1.0f;
+                        *v++ = 0.0f;
+                        *v++ = 1.0f;
+                    }
+                }
+        } else {
+            memcpy(bytes, data, sizeof(data));
+        }
         ID3D12Resource_Unmap(vertices, 0, NULL);
         hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &desc,
                                                   D3D12_RESOURCE_STATE_RENDER_TARGET, NULL, &IID_ID3D12Resource,
@@ -9438,7 +9466,25 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
     if (SUCCEEDED(hr)) {
         ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(rtv_heap, &rtv);
         ID3D12Device_CreateRenderTargetView(device, target, NULL, rtv);
-        hr = D3D12SerializeRootSignature(&graphics_root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+        if (heavy) {
+            D3D12_RESOURCE_DESC depth_desc = desc;
+            D3D12_DESCRIPTOR_HEAP_DESC dsv_desc = {D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE};
+            D3D12_CLEAR_VALUE depth_clear;
+            memset(&depth_clear, 0, sizeof(depth_clear));
+            depth_clear.Format = DXGI_FORMAT_D32_FLOAT;
+            depth_clear.DepthStencil.Depth = 1.0f;
+            depth_desc.Format = DXGI_FORMAT_D32_FLOAT;
+            depth_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+            hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_NONE, &depth_desc,
+                                                      D3D12_RESOURCE_STATE_DEPTH_WRITE, &depth_clear, &IID_ID3D12Resource,
+                                                      (void **)&depth);
+            if (SUCCEEDED(hr)) hr = ID3D12Device_CreateDescriptorHeap(device, &dsv_desc, &IID_ID3D12DescriptorHeap, (void **)&dsv_heap);
+            if (SUCCEEDED(hr)) {
+                ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(dsv_heap, &dsv);
+                ID3D12Device_CreateDepthStencilView(device, depth, NULL, dsv);
+            }
+        }
+        if (SUCCEEDED(hr)) hr = D3D12SerializeRootSignature(&graphics_root_desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
     }
     if (SUCCEEDED(hr))
         hr = ID3D12Device_CreateRootSignature(device, 0, ID3D10Blob_GetBufferPointer(blob), ID3D10Blob_GetBufferSize(blob),
@@ -9472,6 +9518,12 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
         pso_desc.NumRenderTargets = 1;
         pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         pso_desc.SampleDesc.Count = 1;
+        if (heavy) {
+            pso_desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+            pso_desc.DepthStencilState.DepthEnable = TRUE;
+            pso_desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+            pso_desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+        }
         hr = ID3D12Device_CreateGraphicsPipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
         printf("OVPAIR CreateGraphicsPipelineState hr=0x%08lx\n", (unsigned long)hr);
     }
@@ -9506,8 +9558,8 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
     for (UINT i = 0; SUCCEEDED(hr) && i < ITERATIONS; ++i) {
         const UINT constants[6] = {BYTES / 16u, 0u, CHASE_STEPS, STREAM_THREADS, 0u, 1u};
         const FLOAT red[4] = {1.0f, 0.0f, 0.0f, 1.0f};
-        D3D12_VIEWPORT viewport = {0.0f, 0.0f, 64.0f, 64.0f, 0.0f, 1.0f};
-        D3D12_RECT scissor = {0, 0, 64, 64};
+        D3D12_VIEWPORT viewport = {0.0f, 0.0f, (FLOAT)target_width, (FLOAT)target_height, 0.0f, 1.0f};
+        D3D12_RECT scissor = {0, 0, (LONG)target_width, (LONG)target_height};
         D3D12_VERTEX_BUFFER_VIEW vbv = {0};
         D3D12_TEXTURE_COPY_LOCATION target_loc = {0}, back = {0};
         ID3D12CommandList *lists[2];
@@ -9515,7 +9567,7 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
         double ms;
         UINT64 value = 0;
         vbv.BufferLocation = ID3D12Resource_GetGPUVirtualAddress(vertices);
-        vbv.SizeInBytes = sizeof(float) * 21;
+        vbv.SizeInBytes = vertex_count * (UINT)sizeof(float) * 7u;
         vbv.StrideInBytes = sizeof(float) * 7;
         target_loc.pResource = target;
         target_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
@@ -9544,12 +9596,13 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
         if (FAILED(hr)) break;
         ID3D12GraphicsCommandList_ClearRenderTargetView(render_list, rtv, red, 0, NULL);
         ID3D12GraphicsCommandList_SetGraphicsRootSignature(render_list, root);
-        ID3D12GraphicsCommandList_OMSetRenderTargets(render_list, 1, &rtv, FALSE, NULL);
+        if (heavy) ID3D12GraphicsCommandList_ClearDepthStencilView(render_list, dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, NULL);
+        ID3D12GraphicsCommandList_OMSetRenderTargets(render_list, 1, &rtv, FALSE, heavy ? &dsv : NULL);
         ID3D12GraphicsCommandList_RSSetViewports(render_list, 1, &viewport);
         ID3D12GraphicsCommandList_RSSetScissorRects(render_list, 1, &scissor);
         ID3D12GraphicsCommandList_IASetVertexBuffers(render_list, 0, 1, &vbv);
         ID3D12GraphicsCommandList_IASetPrimitiveTopology(render_list, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        ID3D12GraphicsCommandList_DrawInstanced(render_list, 3, 1, 0, 0);
+        ID3D12GraphicsCommandList_DrawInstanced(render_list, vertex_count, 1, 0, 0);
         /* EXP2277: a copy of the target here flushes the render batch while the
          * compute batch is still open, so the render is submitted first and the
          * waiver never applies. The read-back runs in its own execution below. */
@@ -9586,7 +9639,7 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
             if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(copy_list, copy_allocator, NULL);
             if (FAILED(hr)) break;
             transition(copy_list, target, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
-            ID3D12GraphicsCommandList_CopyTextureRegion(copy_list, &back, 0, 0, 0, &target_loc, NULL);
+            ID3D12GraphicsCommandList_CopyTextureRegion(copy_list, &back, 0, 0, 0, &target_loc, heavy ? &heavy_box : NULL);
             transition(copy_list, target, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
             hr = ID3D12GraphicsCommandList_Close(copy_list);
             if (FAILED(hr)) break;
@@ -9618,7 +9671,9 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
     }
     printf("OVPAIR_RESULT iterations %u/%u bad_pixels %u mean %.3f ms max %.3f ms hr=0x%08lx\n", done, (unsigned)ITERATIONS,
            bad_pixels, done ? total_ms / done : 0.0, max_ms, (unsigned long)hr);
-    printf("AGX_D3D12_OVPAIR: %s\n", SUCCEEDED(hr) && done == ITERATIONS && !bad_pixels ? "PASS" : "FAIL");
+    printf("AGX_D3D12_%s: %s\n", heavy ? "OVPAIRH" : "OVPAIR", SUCCEEDED(hr) && done == ITERATIONS && !bad_pixels ? "PASS" : "FAIL");
+    if (dsv_heap) ID3D12DescriptorHeap_Release(dsv_heap);
+    if (depth) ID3D12Resource_Release(depth);
     if (copy_list) ID3D12GraphicsCommandList_Release(copy_list);
     if (copy_allocator) ID3D12CommandAllocator_Release(copy_allocator);
     if (render_list) ID3D12GraphicsCommandList_Release(render_list);
@@ -9640,9 +9695,16 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
     if (event) CloseHandle(event);
     return !(SUCCEEDED(hr) && done == ITERATIONS && !bad_pixels);
 }
+static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    return ov_pair_run(device, queue, fence, base, 0);
+}
+static int ov_pair_heavy(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    return ov_pair_run(device, queue, fence, base, 1);
+}
 
 static const struct { const char *name; probe_step step; } named_steps[] = {
     {"OVPAIR", ov_pair},
+    {"OVPAIRH", ov_pair_heavy},
     {"MEMBW", mem_bw},
     {"MEMBWUAV", mem_bw_uav},
     {"MEMBWTBL", mem_bw_tbl},
