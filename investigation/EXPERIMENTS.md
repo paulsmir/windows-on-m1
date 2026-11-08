@@ -74806,3 +74806,5 @@ EXP2268 HARDWARE BEFORE 2026-11-08T12:00:05Z:
 - Recovery: rec2268h (ANS).
 - Hashes: sys 25865dab0ff6, UmdArm64 031ffe0357c2, UmdX64 8357f308083a, Umd32 7017b8a99a7d; manifest 2196bb52107f, hardware-manifest 5292e7c60216; probe2268.sh f239f3bebea9 (PROBE_LINT_OK); visible recovery rec2268h 5bd8fb2f3b418352; m1n1 0d3a75b3.
 - Recovery rec2268h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2268-nopmu/run2268.sh.
+
+EXP2268 ACTUAL (2026-11-08T12:07:52Z): REJECTED (Windows keeps reading PMCCNTR_EL0 with PMUVer=0). m1n1 ansdirect-nopmu b4ecee80 (HV_HIDE_PMU): boot normal (native SSD), suite 119/0, GM HD 44.571 fps, CPU7 L1 1.01 ns. EXITS impdef 0.36-1.79 M per 10 s (unchanged); EXITKEYS still IMPDEF afsr1 0x30e51b/0x30e57b/... (PMCCNTR_EL0 reads). Windows ARM64 does not gate cycle-counter use on ID_AA64DFR0.PMUVer. Flag stays off (opt-in only). Line closed per anti-loop rule: the remaining PMCCNTR cost is the trap round trip of an unlocked handler (no further cheap lever without guest changes).
