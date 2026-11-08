@@ -74814,3 +74814,15 @@ EXP2269 macOS TWINS (2026-11-08T12:21:46Z): macOS 15.7.8 on the J313 (operator b
 - long65536: 16K 116, 64K 131, 256K 127, 1M 179, 4M 214, 16M 335, 64M 394; pages 1-64 62.6, 256/1024 97.
 - atom8192: 16K-256K 137-139, 1M 196, 4M 203, 16M 451, 64M 866; same-address 148-150.
 VERDICT: (1) at equal (full) clock our GPU loads are at parity with macOS (ours EXP2266 long: same-line 64 vs 62.6, 64K 133 vs 131, 256K 130 vs 127, 1M 201 vs 179, 4M 220 vs 214, 16M 351 vs 335, 64M 417 vs 394); atomics ours ~1.0-1.3x (EXP2267, partly at P1); (2) macOS short and long runs are equal -> macOS runs bursty GPU work at full clock immediately, whereas our firmware DVFS leaves bursty work at P1 (EXP2265: 65 % P1). NEW PRIMARY HYPOTHESIS for the GravityMark gap: our GPU clock ramps slowly / drops within frames (frame has ~3.7 ms of CPU-side gaps at HD), so compute passes run below P6 part of the time; macOS's kext keeps the clock up. Next: RE how the macOS AGX kext raises/holds the GPU pstate (subagent, offline), then implement the same in our KMD and measure GM + short probe.
+
+EXP2270 HARDWARE BEFORE 2026-11-08T13:03:38Z:
+- WHY THIS HYPOTHESIS: (1) EXP2265/2269: our bursty GPU work runs ~65 % at P1 while macOS runs the same bursts at full clock; (2) macOS AGXArmFirmware::updateSubmitInProgress and Asahi gpu.rs start_op both increment Globals.pending_submissions and send the KICKFW doorbell (0x83<<48|0x10, endpoint 0x21) around every submission; our KMD does neither (only pipe doorbells 4/5/6); (3) without the host's "submission in progress" signal the firmware may idle-off between bursts and restart DVFS at the base pstate.
+- WINDOWS CONTRACT: unchanged.
+- AGX/ASAHI CONTRACT: Globals.pending_submissions (G13 V13_5 RegionC offset 0x8974: unk_8900=1 @0x8970, max_power @0x8978, max_pstate_scaled @0x897c per apple_agx_regionc.c and Asahi fw/initdata.rs field order), DOORBELL_KICKFW 0x10.
+- WHAT IS STILL UNKNOWN: whether the firmware's DVFS reacts to the bracket at all (it may only govern power-off), and the effect on GM.
+- Expected if it holds: MEMBWUAV-window P1 share falls well below 65 % and short-chase latency drops toward the P6 values (same-line ~64 ns); GM HD >= EXP2265 44.44 (gain if frames had low-clock gaps). Unchanged -> host signalling excluded; remaining = firmware-version policy.
+- Failure criteria: firmware errors/timeouts, GPU faults, suite failure, GM drop > 2 % -> rec2270h.
+- Recovery: rec2270h (ANS).
+- Hashes: sys 30f9022a86f4, UmdArm64 4e5368d15a5b, UmdX64 84167c84acba, Umd32 8eebb3eb8f87; manifest ff4d17297dae, hardware-manifest b3fd7402b042; probe2270.sh f69c73b4b6b9 (PROBE_LINT_OK); visible recovery rec2270h cf5f9978361182f6; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1SubmitBracket=1.
+- Recovery rec2270h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2270-submitbracket/run2270.sh.
