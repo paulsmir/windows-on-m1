@@ -123,7 +123,8 @@ static BOOLEAN AdmissionG3FirmwareResourcesPresent(
   PCM_FULL_RESOURCE_DESCRIPTOR full;
   ULONG index;
   ULONG seen = 0u;
-  ULONG interrupts = 0u;
+  ULONG edge_interrupts = 0u;
+  ULONG level_interrupts = 0u;
   if (context == NULL)
     return FALSE;
   resources = context->DeviceInformation.TranslatedResourceList;
@@ -163,12 +164,18 @@ static BOOLEAN AdmissionG3FirmwareResourcesPresent(
                descriptor->ShareDisposition == CmResourceShareDeviceExclusive &&
                descriptor->Flags == CM_RESOURCE_INTERRUPT_LATCHED &&
                descriptor->u.Interrupt.Vector != 0u) {
-      ++interrupts;
+      ++edge_interrupts;
+    } else if (descriptor->Type == CmResourceTypeInterrupt &&
+               descriptor->ShareDisposition == CmResourceShareDeviceExclusive &&
+               descriptor->Flags == CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE &&
+               descriptor->u.Interrupt.Vector != 0u) {
+      /* IRQ-completion step 1: the optional ASC mailbox recv-not-empty line. */
+      ++level_interrupts;
     } else {
       return FALSE;
     }
   }
-  return seen == 0x1fu && interrupts == 1u;
+  return seen == 0x1fu && edge_interrupts == 1u && level_interrupts <= 1u;
 }
 
 _Use_decl_annotations_ BOOLEAN AdmissionGpuvaG3DeclarationReady(

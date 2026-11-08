@@ -117,7 +117,12 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
     def test_bootstrap_profile_excludes_physical_agx_irq_routes(self):
         source = (RENDER / "src" / "backend_platform_windows.c").read_text()
         self.assertIn("memory_count == 5u", source)
-        self.assertIn("interrupt_count == 1u", source)
+        # IRQ-completion step 1: exactly one latched (synthetic scanout) line
+        # and at most one level line (the ASC mailbox recv-not-empty route,
+        # present only in the Mu AGX_MAILBOX_IRQ build); no GSIV literal.
+        self.assertIn("edge_count == 1u", source)
+        self.assertIn("level_count <= 1u", source)
+        self.assertIn("CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE", source)
         self.assertIn(
             "J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID", source)
         for irq in range(880, 889):

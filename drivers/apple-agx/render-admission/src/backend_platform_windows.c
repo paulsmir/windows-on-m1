@@ -186,6 +186,17 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * sleeps fall back to KeDelayExecutionThread). Wom1JobPoll receipt. */
   ADMISSION_JOB_POLL_STATE JobPoll;
   ADMISSION_JOB_POLL_STATE JobPollSnapshot;
+  /* IRQ-completion step 1 (KMD-IRQ-COMPLETION.md): while MailboxIrqArmed,
+   * the ISR is the only consumer of the ASC outbox FIFO; it moves messages
+   * into IrqRing (single producer at DIRQL, single consumer = the worker
+   * through the AscIo shim). The worker pops the hardware FIFO only inside
+   * DxgkCbSynchronizeExecution (ring empty), so the two 64-bit FIFO reads of
+   * one message are never interleaved between the two consumers. */
+  volatile LONG MailboxIrqArmed;
+  struct { ULONGLONG Payload; ULONGLONG Selector; } IrqRing[64];
+  volatile LONG IrqRingHead;
+  volatile LONG IrqRingTail;
+  ADMISSION_IRQ_RX_RECEIPT IrqRx;
   /* Wom1FwRx (receipt-only, with Wom1JobDiagnostics): the firmware->host
    * channels the KMD does not drain (stats, ktrace, fwlog), sampled
    * read-only at each export (apple_agx_fw_rx_receipt.h). */
@@ -1630,6 +1641,27 @@ static VOID AdmissionJobTimingExportWindows(
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
           &runtime->JobPollSnapshot, sizeof(runtime->JobPollSnapshot));
     }
+    /* IRQ-completion step 1 census (worker-owned copy of ISR counters). */
+    if (NT_SUCCESS(status) && runtime->Adapter->MailboxInterruptVector != 0u) {
+      ADMISSION_IRQ_RX_RECEIPT rx = runtime->IrqRx;
+      ULONG i;
+      rx.Version = ADMISSION_IRQ_RX_RECEIPT_VERSION;
+      rx.Bytes = sizeof(rx);
+      rx.ScanoutVector = runtime->Adapter->ScanoutInterruptVector;
+      rx.MailboxVector = runtime->Adapter->MailboxInterruptVector;
+      rx.Armed = (ULONG)InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0);
+      for (i = 0u; i < 4u; ++i)
+        rx.IsrByMessage[i] = (ULONG)InterlockedCompareExchange(
+            &runtime->Adapter->IrqIsrByMessage[i], 0, 0);
+      rx.MailboxHandled = (ULONG)InterlockedCompareExchange(
+          &runtime->Adapter->IrqMailboxHandled, 0, 0);
+      rx.MailboxMessageMask = (ULONG)InterlockedCompareExchange(
+          &runtime->Adapter->IrqMailboxMessageMask, 0, 0);
+      rx.ScanoutHandled = (ULONG)InterlockedCompareExchange(
+          &runtime->Adapter->IrqScanoutHandled, 0, 0);
+      RtlInitUnicodeString(&name, L"Wom1IrqRx");
+      status = ZwSetValueKey(key, &name, 0u, REG_BINARY, &rx, sizeof(rx));
+    }
     /* attempted on its own: a missing channel object never blocks the rest */
     if (runtime->FwRx.Samples != 0u) {
       APPLE_AGX_FW_RX_RECEIPT rx = runtime->FwRx;
@@ -2616,7 +2648,8 @@ static NTSTATUS AdmissionPlatformValidateResources(
     ADMISSION_CONTEXT *Context) {
   PCM_RESOURCE_LIST resources;
   ULONG memory_count = 0u;
-  ULONG interrupt_count = 0u;
+  ULONG edge_count = 0u;
+  ULONG level_count = 0u;
   ULONG seen = 0u;
   ULONG full_index;
   if (Context == NULL)
@@ -2661,17 +2694,25 @@ static NTSTATUS AdmissionPlatformValidateResources(
         /* PnP owns the reserved payload; only memory and IRQ are ours. */
         continue;
       } else if (descriptor->Type == CmResourceTypeInterrupt) {
+        /* The synthetic scanout edge, plus (IRQ-completion step 1, Mu
+         * AGX_MAILBOX_IRQ) at most one level line: the ASC mailbox
+         * recv-not-empty interrupt. Vectors are runtime vectors, not GSIVs. */
         if (descriptor->ShareDisposition != CmResourceShareDeviceExclusive ||
-            descriptor->Flags != CM_RESOURCE_INTERRUPT_LATCHED ||
             descriptor->u.Interrupt.Vector == 0u)
           return STATUS_DEVICE_CONFIGURATION_ERROR;
-        ++interrupt_count;
+        if (descriptor->Flags == CM_RESOURCE_INTERRUPT_LATCHED)
+          ++edge_count;
+        else if (descriptor->Flags == CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE)
+          ++level_count;
+        else
+          return STATUS_DEVICE_CONFIGURATION_ERROR;
       } else {
         return STATUS_DEVICE_CONFIGURATION_ERROR;
       }
     }
   }
-  return memory_count == 5u && seen == 0x1fu && interrupt_count == 1u
+  return memory_count == 5u && seen == 0x1fu && edge_count == 1u &&
+                 level_count <= 1u
              ? STATUS_SUCCESS
              : STATUS_DEVICE_CONFIGURATION_ERROR;
 }
@@ -2711,12 +2752,116 @@ static APPLE_AGX_ASC_U64 AdmissionAscNow(void *Context) {
   return AdmissionPlatformNowMs();
 }
 
+#define ADMISSION_IRQ_RING_SLOTS 64u
+
+/* DIRQL (ISR, or the worker inside DxgkCbSynchronizeExecution): move every
+ * message of the ASC outbox FIFO into the ring. Returns the count moved. */
+static ULONG AdmissionMailboxDrainFifoAtDirql(ADMISSION_PLATFORM_RUNTIME *runtime) {
+  volatile UCHAR *base = runtime->AscTransport.Base;
+  ULONG moved = 0u;
+  while (moved < ADMISSION_IRQ_RING_SLOTS) {
+    ULONG control = READ_REGISTER_ULONG(
+        (volatile ULONG *)(base + J313_AGX_G2_ASC_OUTBOX_CTRL_OFFSET));
+    LONG head, tail, depth;
+    if ((control & APPLE_AGX_ASC_MAILBOX_EMPTY) != 0u)
+      break;
+    head = runtime->IrqRingHead;
+    tail = runtime->IrqRingTail;
+    depth = head - tail;
+    if (depth >= (LONG)ADMISSION_IRQ_RING_SLOTS) {
+      /* Ring full: leave the message in the FIFO (the level line stays
+       * asserted; the next ISR or synchronized pop retries). */
+      runtime->IrqRx.RingDrops++;
+      break;
+    }
+    runtime->IrqRing[head % ADMISSION_IRQ_RING_SLOTS].Payload = READ_REGISTER_ULONG64(
+        (volatile ULONG64 *)(base + J313_AGX_G2_ASC_OUTBOX0_OFFSET));
+    runtime->IrqRing[head % ADMISSION_IRQ_RING_SLOTS].Selector = READ_REGISTER_ULONG64(
+        (volatile ULONG64 *)(base + J313_AGX_G2_ASC_OUTBOX1_OFFSET));
+    KeMemoryBarrier();
+    runtime->IrqRingHead = head + 1;
+    if ((ULONG)(depth + 1) > runtime->IrqRx.RingHighWater)
+      runtime->IrqRx.RingHighWater = (ULONG)(depth + 1);
+    ++moved;
+  }
+  return moved;
+}
+
+/* DIRQL (ISR): the mailbox line.  Not armed, or an empty FIFO -> not ours. */
+_Use_decl_annotations_ BOOLEAN AdmissionPlatformMailboxInterrupt(
+    ADMISSION_CONTEXT *Context, ULONG MessageNumber) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  ULONG moved;
+  UNREFERENCED_PARAMETER(MessageNumber);
+  if (Context == NULL)
+    return FALSE;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (runtime == NULL ||
+      InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0) == 0 ||
+      runtime->AscTransport.Base == NULL)
+    return FALSE;
+  moved = AdmissionMailboxDrainFifoAtDirql(runtime);
+  if (moved == 0u) {
+    runtime->IrqRx.IsrEmptyCalls++;
+    return FALSE;
+  }
+  runtime->IrqRx.IsrMessages += moved;
+  return TRUE;
+}
+
+/* DxgkCbSynchronizeExecution routine: observes the disarm under the lock. */
+static BOOLEAN AdmissionMailboxDisarmed(PVOID Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  return runtime != NULL &&
+                 InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0) == 0
+             ? TRUE
+             : FALSE;
+}
+
+/* DxgkCbSynchronizeExecution routine: the worker found the ring empty. */
+static BOOLEAN AdmissionMailboxSyncPop(PVOID Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  ULONG moved;
+  if (runtime == NULL || runtime->AscTransport.Base == NULL ||
+      InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0) == 0)
+    return FALSE;
+  moved = AdmissionMailboxDrainFifoAtDirql(runtime);
+  runtime->IrqRx.WorkerSyncPops++;
+  if (moved != 0u)
+    runtime->IrqRx.WorkerSyncPopHits++;
+  return moved != 0u ? TRUE : FALSE;
+}
+
+static BOOLEAN AdmissionIrqRingEmpty(const ADMISSION_PLATFORM_RUNTIME *runtime) {
+  return runtime->IrqRingHead == runtime->IrqRingTail ? TRUE : FALSE;
+}
+
+/* PASSIVE/DISPATCH (worker): with the mailbox line armed, the FIFO control
+ * read reports the ring, and an empty ring first pops the hardware FIFO
+ * under the interrupt lock (a missed or racing interrupt never strands a
+ * message; WorkerSyncPopHits counts how often that happened). */
 static APPLE_AGX_ASC_BOOL AdmissionAscRead32(
     void *Context, APPLE_AGX_ASC_U32 Offset, APPLE_AGX_ASC_U32 *Value) {
   ADMISSION_ASC_TRANSPORT *transport = Context;
+  ADMISSION_PLATFORM_RUNTIME *runtime;
   if (Value == NULL || (Offset & 3u) != 0u ||
       !AdmissionAscRange(transport, Offset, sizeof(ULONG)))
     return APPLE_AGX_ASC_FALSE;
+  runtime = CONTAINING_RECORD(transport, ADMISSION_PLATFORM_RUNTIME, AscTransport);
+  if (Offset == J313_AGX_G2_ASC_OUTBOX_CTRL_OFFSET &&
+      InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0) != 0 &&
+      KeGetCurrentIrql() <= DISPATCH_LEVEL) {
+    if (AdmissionIrqRingEmpty(runtime) && runtime->Adapter != NULL &&
+        runtime->Adapter->InterfaceValid &&
+        runtime->Adapter->Interface.DxgkCbSynchronizeExecution != NULL) {
+      BOOLEAN hit = FALSE;
+      (void)runtime->Adapter->Interface.DxgkCbSynchronizeExecution(
+          runtime->Adapter->Interface.DeviceHandle, AdmissionMailboxSyncPop,
+          runtime, 0u, &hit);
+    }
+    *Value = AdmissionIrqRingEmpty(runtime) ? APPLE_AGX_ASC_MAILBOX_EMPTY : 0u;
+    return APPLE_AGX_ASC_TRUE;
+  }
   *Value = READ_REGISTER_ULONG(
       (volatile ULONG *)(transport->Base + Offset));
   return APPLE_AGX_ASC_TRUE;
@@ -2725,11 +2870,29 @@ static APPLE_AGX_ASC_BOOL AdmissionAscRead32(
 static APPLE_AGX_ASC_BOOL AdmissionAscRead64(
     void *Context, APPLE_AGX_ASC_U32 Offset, APPLE_AGX_ASC_U64 *Value) {
   ADMISSION_ASC_TRANSPORT *transport = Context;
+  ADMISSION_PLATFORM_RUNTIME *runtime;
   if (Value == NULL || (Offset & 7u) != 0u ||
       !AdmissionAscRange(transport, Offset, sizeof(ULONG64)))
     return APPLE_AGX_ASC_FALSE;
-  *Value = READ_REGISTER_ULONG64(
-      (volatile ULONG64 *)(transport->Base + Offset));
+  runtime = CONTAINING_RECORD(transport, ADMISSION_PLATFORM_RUNTIME, AscTransport);
+  if ((Offset == J313_AGX_G2_ASC_OUTBOX0_OFFSET ||
+       Offset == J313_AGX_G2_ASC_OUTBOX1_OFFSET) &&
+      InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0) != 0 &&
+      !AdmissionIrqRingEmpty(runtime)) {
+    LONG tail = runtime->IrqRingTail;
+    KeMemoryBarrier();
+    if (Offset == J313_AGX_G2_ASC_OUTBOX0_OFFSET) {
+      *Value = runtime->IrqRing[tail % ADMISSION_IRQ_RING_SLOTS].Payload;
+    } else {
+      *Value = runtime->IrqRing[tail % ADMISSION_IRQ_RING_SLOTS].Selector;
+      KeMemoryBarrier();
+      runtime->IrqRingTail = tail + 1;
+      runtime->IrqRx.RingConsumed++;
+    }
+  } else {
+    *Value = READ_REGISTER_ULONG64(
+        (volatile ULONG64 *)(transport->Base + Offset));
+  }
   if (transport->TraceCount < RTL_NUMBER_OF(transport->Trace)) {
     transport->Trace[transport->TraceCount].Offset = Offset;
     transport->Trace[transport->TraceCount].Write = 0;
@@ -7825,6 +7988,20 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeSubmit(
 
 static NTSTATUS AdmissionPlatformDestroy(
     ADMISSION_PLATFORM_RUNTIME *Runtime) {
+  /* IRQ-completion step 1: disarm the mailbox line under both possible
+   * interrupt locks before the FIFO owner (this runtime) goes away. */
+  if (InterlockedCompareExchange(&Runtime->MailboxIrqArmed, 0, 0) != 0) {
+    ULONG message;
+    InterlockedExchange(&Runtime->MailboxIrqArmed, 0);
+    for (message = 0u; message < 2u; ++message) {
+      BOOLEAN quiet = FALSE;
+      if (Runtime->Adapter != NULL && Runtime->Adapter->InterfaceValid &&
+          Runtime->Adapter->Interface.DxgkCbSynchronizeExecution != NULL)
+        (void)Runtime->Adapter->Interface.DxgkCbSynchronizeExecution(
+            Runtime->Adapter->Interface.DeviceHandle,
+            AdmissionMailboxDisarmed, Runtime, message, &quiet);
+    }
+  }
   NTSTATUS status = STATUS_SUCCESS;
   KIRQL oldIrql;
   PIO_WORKITEM workItem;
@@ -8198,6 +8375,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->AscIo.Write32 = AdmissionAscWrite32;
   runtime->AscIo.Write64 = AdmissionAscWrite64;
   runtime->AscIo.Pause = AdmissionAscPause;
+  runtime->IrqRingHead = 0;
+  runtime->IrqRingTail = 0;
+  RtlZeroMemory(&runtime->IrqRx, sizeof(runtime->IrqRx));
+  /* IRQ-completion step 1: arm the mailbox line only when the ACPI device
+   * listed it; from here the ISR owns the outbox FIFO and the worker reads
+   * it through the ring (AdmissionAscRead32/64). */
+  InterlockedExchange(&runtime->MailboxIrqArmed,
+                      Context->MailboxInterruptVector != 0u ? 1 : 0);
   AppleAgxRtkitSessionInitialize(&runtime->Rtkit);
 
   address.QuadPart = J313_AGX_G2_HANDOFF_BASE;

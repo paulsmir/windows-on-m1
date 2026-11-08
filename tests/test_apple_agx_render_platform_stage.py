@@ -54,10 +54,17 @@ class AppleAgxRenderPlatformStageTests(unittest.TestCase):
             "descriptor->ShareDisposition != CmResourceShareDeviceExclusive",
             validate,
         )
+        # IRQ-completion step 1: latched = scanout edge, level-sensitive = the
+        # optional mailbox line; any other interrupt flag is refused.
         self.assertIn(
-            "descriptor->Flags != CM_RESOURCE_INTERRUPT_LATCHED",
+            "descriptor->Flags == CM_RESOURCE_INTERRUPT_LATCHED",
             validate,
         )
+        self.assertIn(
+            "descriptor->Flags == CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE",
+            validate,
+        )
+        self.assertIn("return STATUS_DEVICE_CONFIGURATION_ERROR;", validate)
         self.assertNotIn(
             "J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID", validate
         )

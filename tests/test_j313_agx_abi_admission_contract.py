@@ -1,5 +1,6 @@
 import csv
 from pathlib import Path
+import re
 import unittest
 
 from tools.generate_j313_agx_abi_admission import (
@@ -70,7 +71,13 @@ class J313AgxAbiAdmissionContractTests(unittest.TestCase):
             self.assertIn(f"{prefix}_SCANOUT_IRQ_STATUS_OFFSET 0x414u", rendered)
             self.assertIn(f"{prefix}_SCANOUT_IRQ_ENABLE_OFFSET 0x418u", rendered)
             self.assertIn(f"{prefix}_SCANOUT_IRQ_MASK 0x3u", rendered)
-            self.assertNotIn("PHYSICAL_INTID", rendered)
+            # IRQ-completion step 1: only the Windows header names the ASC
+            # mailbox recv-not-empty route (578 -> 887); m1n1 stays synthetic.
+            if prefix == "HV_AGX_ABI_ADMISSION":
+                self.assertNotIn("PHYSICAL_INTID", rendered)
+            else:
+                self.assertIn(f"{prefix}_MAILBOX_RECV_PHYSICAL_INTID 578u", rendered)
+                self.assertIn(f"{prefix}_MAILBOX_RECV_GUEST_INTID 887u", rendered)
 
     def test_admission_asl_has_one_edge_irq_and_no_physical_agx_irq(self):
         rendered = render_asl_include(load_admission_contract(CONTRACT, G2))
@@ -84,8 +91,12 @@ class J313AgxAbiAdmissionContractTests(unittest.TestCase):
             2,  # BAS0 and LOCR each return the same single interrupt.
         )
         self.assertIn("{ 889 }", rendered)
+        # IRQ-completion step 1: the mailbox level line (887) exists only
+        # inside the AGX_MAILBOX_IRQ preprocessor blocks (default Mu: absent).
+        outside = re.sub(r"#ifdef AGX_MAILBOX_IRQ\n.*?#endif", "", rendered, flags=re.S)
         for guest in range(880, 889):
-            self.assertNotIn(f"{{ {guest} }}", rendered)
+            self.assertNotIn(f"{{ {guest} }}", outside)
+        self.assertEqual(rendered.count("#ifdef AGX_MAILBOX_IRQ"), 2)
 
     def test_matrix_covers_every_compiled_wddm3_field_once(self):
         with MATRIX.open(newline="", encoding="utf-8") as stream:
@@ -145,8 +156,9 @@ class J313AgxAbiAdmissionContractTests(unittest.TestCase):
             generated,
         )
         self.assertIn("{ 889 }", generated)
+        outside = re.sub(r"#ifdef AGX_MAILBOX_IRQ\n.*?#endif", "", generated, flags=re.S)
         for guest in range(880, 889):
-            self.assertNotIn(f"{{ {guest} }}", generated)
+            self.assertNotIn(f"{{ {guest} }}", outside)
 
 
 if __name__ == "__main__":

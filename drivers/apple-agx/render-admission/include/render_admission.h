@@ -786,6 +786,19 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG InterruptAckCount;
   volatile LONG LastInterruptStatus;
   volatile LONG DpcCount;
+  /* IRQ-completion step 1 (investigation/analysis/KMD-IRQ-COMPLETION.md):
+   * translated vectors of the synthetic scanout edge and, when the ACPI
+   * device lists it (Mu AGX_MAILBOX_IRQ), of the ASC mailbox recv-not-empty
+   * level line. MailboxInterruptVector == 0 keeps today's single-line ISR. */
+  ULONG ScanoutInterruptVector;
+  ULONG MailboxInterruptVector;
+  /* Receipt-only ISR census: calls per MessageNumber (0..2, 3 = other),
+   * mailbox-handled calls, the MessageNumbers that carried mailbox work,
+   * scanout-handled calls. Learn how dxgkrnl numbers two line interrupts. */
+  volatile LONG IrqIsrByMessage[4];
+  volatile LONG IrqMailboxHandled;
+  volatile LONG IrqMailboxMessageMask;
+  volatile LONG IrqScanoutHandled;
   KSPIN_LOCK PagingLock;
   PIO_WORKITEM PagingWorkItem;
   KEVENT PagingIdle;
@@ -1950,6 +1963,27 @@ void AdmissionRecordMemoryQualification(
     _In_ const ADMISSION_MEMORY_QUALIFICATION *Qualification);
 NTSTATUS AdmissionInterruptStart(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionInterruptStop(_Inout_ ADMISSION_CONTEXT *Context);
+/* DIRQL: drain the ASC mailbox outbox FIFO into the platform runtime's ring
+ * when the mailbox line is armed; FALSE = not armed or FIFO empty. */
+BOOLEAN AdmissionPlatformMailboxInterrupt(_Inout_ ADMISSION_CONTEXT *Context,
+                                          ULONG MessageNumber);
+
+/* Wom1IrqRx receipt (REG_BINARY), version 1: the step-1 census. */
+typedef struct _ADMISSION_IRQ_RX_RECEIPT {
+  ULONG Version, Bytes;
+  ULONG ScanoutVector, MailboxVector;
+  ULONG Armed;
+  ULONG IsrByMessage[4];
+  ULONG MailboxHandled, MailboxMessageMask, ScanoutHandled;
+  ULONG IsrEmptyCalls;      /* mailbox line fired with an empty FIFO */
+  ULONG IsrMessages;        /* messages the ISR moved into the ring */
+  ULONG RingDrops;          /* ring full: message lost (must stay 0) */
+  ULONG RingConsumed;       /* ring entries the worker consumed */
+  ULONG WorkerSyncPops;     /* worker found the ring empty: synchronized FIFO pops */
+  ULONG WorkerSyncPopHits;  /* ... that found messages (interrupt missed or raced) */
+  ULONG RingHighWater;
+} ADMISSION_IRQ_RX_RECEIPT;
+#define ADMISSION_IRQ_RX_RECEIPT_VERSION 1u
 NTSTATUS AdmissionDdiQuerySegment4(
     _In_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo);

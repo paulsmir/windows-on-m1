@@ -8,5 +8,12 @@
     "trigger": "edge",
     "polarity": "active_high",
     "sharing": "exclusive"
+  },
+  "asc_mailbox_recv_interrupt": {
+    "physical": 578,
+    "trigger": "level",
+    "polarity": "active_high",
+    "sharing": "exclusive",
+    "build_flag": "AGX_MAILBOX_IRQ"
   }
 }

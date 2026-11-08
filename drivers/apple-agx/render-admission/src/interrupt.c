@@ -34,15 +34,23 @@ static ULONG AdmissionAcknowledgeInterrupt(ADMISSION_CONTEXT *Context) {
   return status;
 }
 
+/* One latched (edge) interrupt is the synthetic scanout line.  A second,
+ * level-sensitive interrupt is the ASC mailbox recv-not-empty line that the
+ * Mu AGX_MAILBOX_IRQ build adds (IRQ-completion step 1); it is optional. */
 static NTSTATUS AdmissionFindBrokerResource(
-    PCM_RESOURCE_LIST Resources, PPHYSICAL_ADDRESS BrokerAddress) {
-  ULONG interrupt_count = 0u;
+    PCM_RESOURCE_LIST Resources, PPHYSICAL_ADDRESS BrokerAddress,
+    PULONG EdgeVector, PULONG LevelVector) {
+  ULONG edge_count = 0u;
+  ULONG level_count = 0u;
   ULONG broker_count = 0u;
   ULONG full_index;
 
-  if (Resources == NULL || BrokerAddress == NULL || Resources->Count != 1u)
+  if (Resources == NULL || BrokerAddress == NULL || EdgeVector == NULL ||
+      LevelVector == NULL || Resources->Count != 1u)
     return STATUS_DEVICE_CONFIGURATION_ERROR;
   BrokerAddress->QuadPart = 0;
+  *EdgeVector = 0u;
+  *LevelVector = 0u;
   for (full_index = 0u; full_index < Resources->Count; ++full_index) {
     PCM_FULL_RESOURCE_DESCRIPTOR full = &Resources->List[full_index];
     ULONG partial_index;
@@ -57,12 +65,21 @@ static NTSTATUS AdmissionFindBrokerResource(
               J313_AGX_ABI_ADMISSION_POWER_BROKER_SIZE) {
         ++broker_count;
         *BrokerAddress = descriptor->u.Memory.Start;
+      } else if (descriptor->Type == CmResourceTypeInterrupt &&
+                 descriptor->Flags == CM_RESOURCE_INTERRUPT_LATCHED) {
+        ++edge_count;
+        *EdgeVector = descriptor->u.Interrupt.Vector;
+      } else if (descriptor->Type == CmResourceTypeInterrupt &&
+                 descriptor->Flags == CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE) {
+        ++level_count;
+        *LevelVector = descriptor->u.Interrupt.Vector;
       } else if (descriptor->Type == CmResourceTypeInterrupt) {
-        ++interrupt_count;
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
       }
     }
   }
-  return broker_count == 1u && interrupt_count == 1u
+  return broker_count == 1u && edge_count == 1u && level_count <= 1u &&
+                 (level_count == 0u || *LevelVector != 0u)
              ? STATUS_SUCCESS
              : STATUS_DEVICE_CONFIGURATION_ERROR;
 }
@@ -80,6 +97,7 @@ _Use_decl_annotations_ NTSTATUS
 AdmissionInterruptStart(ADMISSION_CONTEXT *Context) {
   PHYSICAL_ADDRESS broker_address;
   PVOID broker_base = NULL;
+  ULONG edge_vector = 0u, level_vector = 0u;
   NTSTATUS status;
 
   if (Context == NULL || !Context->InterfaceValid ||
@@ -88,9 +106,16 @@ AdmissionInterruptStart(ADMISSION_CONTEXT *Context) {
       Context->BrokerBase != NULL)
     return STATUS_INVALID_PARAMETER;
   status = AdmissionFindBrokerResource(
-      Context->DeviceInformation.TranslatedResourceList, &broker_address);
+      Context->DeviceInformation.TranslatedResourceList, &broker_address,
+      &edge_vector, &level_vector);
   if (!NT_SUCCESS(status))
     return status;
+  Context->ScanoutInterruptVector = edge_vector;
+  Context->MailboxInterruptVector = level_vector;
+  RtlZeroMemory((PVOID)Context->IrqIsrByMessage, sizeof(Context->IrqIsrByMessage));
+  InterlockedExchange(&Context->IrqMailboxHandled, 0);
+  InterlockedExchange(&Context->IrqMailboxMessageMask, 0);
+  InterlockedExchange(&Context->IrqScanoutHandled, 0);
   status = Context->Interface.DxgkCbMapMemory(
       Context->Interface.DeviceHandle, broker_address,
       J313_AGX_ABI_ADMISSION_POWER_BROKER_SIZE, FALSE, FALSE, MmNonCached,
@@ -144,20 +169,37 @@ AdmissionInterruptStop(ADMISSION_CONTEXT *Context) {
 _Use_decl_annotations_ BOOLEAN AdmissionDdiInterruptRoutine(
     PVOID MiniportDeviceContext, ULONG MessageNumber) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  BOOLEAN handled = FALSE;
   ULONG status;
 
-  if (context == NULL || MessageNumber != 0 ||
+  /* One line: dxgkrnl passes 0.  Two line interrupts (scanout edge + the
+   * mailbox level line): which MessageNumber each gets is undocumented, so
+   * both sources are checked on every call and the census records the pair. */
+  if (context == NULL || (MessageNumber != 0 && MessageNumber != 1) ||
       InterlockedCompareExchange(&context->InterruptReady, 0, 0) == 0 ||
       InterlockedCompareExchange(&context->InterruptIngressEnabled, 0, 0) == 0)
     return FALSE;
-  if (context->ScanoutRuntime != NULL)
-    return AdmissionScanoutInterrupt(context);
+  InterlockedIncrement(&context->IrqIsrByMessage[MessageNumber & 3u]);
+  if (context->MailboxInterruptVector != 0u &&
+      AdmissionPlatformMailboxInterrupt(context, MessageNumber)) {
+    handled = TRUE;
+    InterlockedIncrement(&context->IrqMailboxHandled);
+    InterlockedOr(&context->IrqMailboxMessageMask, 1L << (MessageNumber & 3u));
+  }
+  if (context->ScanoutRuntime != NULL) {
+    if (AdmissionScanoutInterrupt(context)) {
+      handled = TRUE;
+      InterlockedIncrement(&context->IrqScanoutHandled);
+    }
+    return handled;
+  }
   status = AdmissionAcknowledgeInterrupt(context);
   if (status == 0u)
-    return FALSE;
+    return handled;
   InterlockedExchange(&context->LastInterruptStatus, (LONG)status);
   InterlockedIncrement(&context->InterruptCount);
   InterlockedIncrement(&context->InterruptAckCount);
+  InterlockedIncrement(&context->IrqScanoutHandled);
   return TRUE;
 }
 
