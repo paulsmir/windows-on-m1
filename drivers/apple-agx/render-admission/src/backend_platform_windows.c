@@ -197,8 +197,15 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   /* EXP2270: device value Wom1SubmitBracket = 1 brackets every pipe doorbell like
    * Asahi gpu.rs start_op/end_op and macOS AGXArmFirmware::updateSubmitInProgress:
    * Globals.pending_submissions += 1, KICKFW doorbell (0x10), pipe doorbell,
-   * pending_submissions -= 1. */
+   * pending_submissions -= 1.
+   * EXP2270 bugchecked with InterlockedIncrement on the field: RegionC is borrowed
+   * firmware memory mapped write-combined (Normal non-cacheable), where ARM64
+   * exclusive/atomic instructions are not supported. The count therefore lives in
+   * SubmitPending (cacheable, under SubmitBracketLock) and every change is
+   * published to the firmware field with a plain store. */
   BOOLEAN SubmitBracket;
+  KSPIN_LOCK SubmitBracketLock;
+  LONG SubmitPending;
   /* Wom1Depth2FallbackDrill = N (diagnostic, default 0): every Nth successor
    * BeginJob is refused to exercise the depth-2 kick fallback. */
   ULONG Depth2FallbackDrill;
@@ -3592,13 +3599,23 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportDoorbell(
     volatile LONG *pending = (volatile LONG *)((PUCHAR)
         runtime->Initdata.DataObjects[AppleAgxInitdataMemoryRegionC].CpuAddress + 0x8974u);
     BOOLEAN sent;
-    (void)InterlockedIncrement(pending);
+    KIRQL irql;
+    /* No atomics on the non-cacheable firmware mapping (EXP2270): plain stores of
+     * the lock-protected count, ordered before the doorbells. */
+    KeAcquireSpinLock(&runtime->SubmitBracketLock, &irql);
+    *pending = ++runtime->SubmitPending;
+    KeMemoryBarrier();
+    KeReleaseSpinLock(&runtime->SubmitBracketLock, irql);
     (void)AppleAgxAscSend(&runtime->AscIo, AppleAgxRtkitDoorbell(0x10u),
                           J313_AGX_G2_DOORBELL_ENDPOINT, deadline);
     sent = message != APPLE_AGX_RTKIT_INVALID_MESSAGE &&
            AppleAgxAscSend(&runtime->AscIo, message, J313_AGX_G2_DOORBELL_ENDPOINT,
                            deadline) == AppleAgxAscResultOk;
-    (void)InterlockedDecrement(pending);
+    KeAcquireSpinLock(&runtime->SubmitBracketLock, &irql);
+    KeMemoryBarrier();
+    *pending = --runtime->SubmitPending;
+    KeMemoryBarrier();
+    KeReleaseSpinLock(&runtime->SubmitBracketLock, irql);
     return sent ? APPLE_AGX_BACKEND_TRUE : APPLE_AGX_BACKEND_FALSE;
   }
   return message != APPLE_AGX_RTKIT_INVALID_MESSAGE &&
@@ -8147,6 +8164,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   KeInitializeSpinLock(&runtime->OutputLock);
   AdmissionOutputQueueInitialize(&runtime->OutputQueue);
 #endif
+  KeInitializeSpinLock(&runtime->SubmitBracketLock);
+  runtime->SubmitPending = 0;
   Context->PlatformRuntime = runtime;
   status = AdmissionMemoryRuntimeBorrowIo(Context, &runtime->MemoryIo);
   AdmissionRecordPlatformStage(Context, AdmissionPlatformMemoryIo, status);
