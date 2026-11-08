@@ -74835,3 +74835,16 @@ EXP2270 HARDWARE ACTUAL 2026-11-08T13:27:00Z:
 - Recovery: legacy hidden recovery stopped at "one-shot arm remains". Then: cleared G3Armed; ran an exact staged-only hidden cleanup (oem12.inf, INF 5642beab, delete-driver, certs, DisableDDisplay, trace env); remove-phantom-and-commit (APPL0002 removed, durable commit). Then ANS recovery at proxy (AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2270h/recover.sh) -> Package Absent, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_STORAGE_APPLEANS_OK, RECOVERY_DONE.
 - Display/USB/SSH/RDP/storage/CPUs: guest reset; after recovery SSH is alive, ANS storage, 8 CPUs.
 - Verdict: rejected (implementation defect, not a firmware-contract verdict). Next: the same bracket with plain stores of a lock-protected cacheable count (no atomics on the WC mapping), same switches, as EXP2271.
+
+EXP2271 HARDWARE BEFORE 2026-11-08T13:43:57Z:
+- WHY THIS HYPOTHESIS: (1) EXP2270 reset Windows exactly at the first bracketed doorbell (log identical to EXP2267 through all 414 KMD maps and DCP swap 10), and the bracket used LDADD/LDXR atomics on PAGE_WRITECOMBINE (Normal-NC) firmware memory, where they are unsupported; (2) the DVFS hypothesis of EXP2270 is still untested: bursts run ~65 % at P1 on our stack, macOS/Asahi bracket every submission with pending_submissions + KICKFW and we do not.
+- WINDOWS CONTRACT: unchanged.
+- AGX/ASAHI CONTRACT: Globals.pending_submissions at RegionC+0x8974 (G13 V13_5), DOORBELL_KICKFW 0x10 on endpoint 0x21, before the pipe doorbell; firmware only reads the counter.
+- TRANSLATION: count++ under SubmitBracketLock, plain store, KeMemoryBarrier; KICKFW; pipe doorbell; count-- plain store.
+- WHAT IS STILL UNKNOWN: whether the firmware's DVFS reacts to the bracket at all, and the effect on GM.
+- Expected if it holds: MEMBWUAV-window P1 share well below 65 %, GM HD >= EXP2265 44.44. Unchanged -> host signalling excluded. A reset at the first doorbell again -> the fault is not the atomic (KICKFW itself or the RegionC write).
+- Failure criteria: guest reset, firmware errors/timeouts, GPU faults, suite failure, GM drop > 2 % -> rec2271h.
+- Recovery: rec2271h (ANS); on a reset: save full.log, AT_PROXY rec2271h/recover.sh.
+- Hashes: sys a2164af60ad6, UmdArm64 194aa2df8951, UmdX64 e0764649a534, Umd32 21a4f2c775e1; manifest 7734af5ed1dd, hardware-manifest 3a5c6b44ca05; probe2271.sh 202e2120ad86 (PROBE_LINT_OK); visible recovery rec2271h 7199ef8c6fec5958; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1SubmitBracket=1.
+- Recovery rec2271h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2271-bracketplain/run2271.sh.
