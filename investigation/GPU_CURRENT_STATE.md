@@ -8,6 +8,19 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 16:39Z -- IRQ-COMPLETION STEP 2 ON HARDWARE (EXP2273): CORE FREED, FPS NEUTRAL, DETECT UNCHANGED
+- Wom1IrqCompletion=1 (+ Mu MUIRQ001): poll busy 47.6 % -> 2.5 % of job time (waits instead of spins), 57 % of waits
+  ended by the doorbell wake, WorkerSyncPopHits 0.8 %. GM HD PERF 43.82 vs 43.99 (step 1) vs 44.4-44.6 (no-887 controls).
+- Per-job detect (firmware end -> KMD saw it) unchanged: 0.98 vs 1.02 ms/frame summed; the interrupt arrives when the
+  predictive poll would have looked anyway. The "detect" item of the structural budget is firmware/HV notification
+  latency, not the poll's wake timing -> not recoverable from the worker side. Only C0's launch improved (0.118 -> 0.057).
+- Both 887 runs are 1.3-1.7 % below the no-887 controls: ~40k mailbox interrupts/s through the HV (trap + LR inject +
+  EOI traps) is the likely tax. Decision: keep Wom1IrqCompletion opt-in (class C: correct event-driven completion, a
+  core saved for the UMD/app) and do not flip defaults until a same-boot ABBA gate (IRQ on/off) is run.
+- Structural gap re-ranked: R||C overlap ~2.0 (firmware contract, OV line) > DWM 0.85 (platform) > launch/broker 0.45
+  (fork 6: GPUVA in KMD) > idle 0.22; detect ~1.0 summed = firmware/HV path (HV inventory items 2/3: ICC trap count per
+  interrupt, route latency) -- measure the trap cost of an interrupt before touching it.
+
 ## UPDATE 2026-11-08 15:27Z -- IRQ-COMPLETION STEP 1 CONFIRMED ON HARDWARE (EXP2272)
 - Mu MUIRQ001 (95263b97: J313_AGX_MAILBOX_IRQ -> Interrupt 887 Level beside the 889 edge) + KMD 9b64ec9a (validators accept
   edge==1 && level<=1; ISR census; armed mailbox line -> ISR drains the outbox FIFO into a ring, worker pops hardware only

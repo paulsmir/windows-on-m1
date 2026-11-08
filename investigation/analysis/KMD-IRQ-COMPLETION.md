@@ -124,6 +124,13 @@ GM -1 % (no wake yet). Remaining: item 3 (latency of the routed level line), mea
   wait is accounted through `AdmissionJobPollNoteSleep`, so `Wom1JobPoll` late/busy stay comparable.
 - Without the switch or without the ACPI line: byte-for-byte the EXP2272 behaviour.
 
+## Step 2 result (EXP2273)
+
+Worker busy 47.6 % -> 2.5 %, 57 % of waits ended by the wake, 0.8 % worker self-pops; detect per job unchanged
+(0.98 vs 1.02 ms/frame summed) and GM neutral (43.82 vs 43.99; both 887 runs ~1.5 % under the no-887 controls, a
+plausible HV interrupt tax of ~40k traps/s). Class C: kept opt-in; not an FPS lever. Open: ABBA on/off in one
+boot; DPC wake only when the mailbox ISR requested it; HV trap count per interrupt (ICH_HCR TALL1).
+
 ## Checkpoint and recovery
 
 - Step 1 (receipt-only, one Mu build with the flag + KMD package): ISR/DPC counters, `Wom1TranslatedResources`
