@@ -74795,3 +74795,14 @@ EXP2267 HARDWARE BEFORE 2026-11-08T11:36:46Z:
 - Recovery rec2267h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2267-membwatom/run2267.sh.
 
 EXP2267 ACTUAL (2026-11-08T11:45:08Z): NO ANOMALY FOUND (atomics ~1.2-1.5x loads). Probe e2267, Wom1GpuPerf over MEMBWATOM: P6 47.9 % / P1 49.4 %. 32-thread distinct-lane chase, atomic (InterlockedAdd +0, 8192 steps) vs load (MEMBWLONG, 65536 steps): 64K 163/133, 256K 168/130, 1M 241/201, 4M 270/251, 16M 494/350, 64M 652/418 ns; same-address (32 lanes, contended) 173-182 vs 64; 1024-thread: atomics 403-5636 vs loads 158-2768 (bandwidth-bound at large footprints). Without a macOS atomic twin this does not show an atomic-path defect. Status of the GravityMark compute gap (13.7 vs 9.2 ms/frame HD at P6): memory latency (EXP2266) and atomics (EXP2267) do not explain it; core count (7, mask 0xfe) and occupancy (1024 threads, Apple parity) equal. Remaining: amount of work (indirect grids/culling) and in-kernel behaviour at P6 needing macOS twins at a verified pstate.
+
+EXP2268 HARDWARE BEFORE 2026-11-08T12:00:05Z:
+- WHY THIS HYPOTHESIS: (1) EXP2253/2256 exit census: IMPDEF PMCCNTR_EL0 reads 0.33-2.36 M per 10 s are now the dominant HV exit class (MSR class removed in EXP2256); (2) PMCCNTR is already served on the unlocked path, so only not being called removes the cost; (3) Windows ARM64 uses the cycle counter only when the PMU is advertised (hypothesis; guest CP 4028 = 0x10305f09, PMUVer 0xF).
+- WINDOWS CONTRACT: ID_AA64DFR0_EL1.PMUVer = 0 = PMUv3 not implemented (Arm ARM); Windows must not rely on PMU registers.
+- AGX CONTRACT: n/a.
+- WHAT IS STILL UNKNOWN: whether Windows boots/behaves normally without an advertised PMU and what it uses for cycle accounting instead.
+- Expected: boot OK; EXITS impdef drops from 0.3-2.4 M to near 0 per 10 s; registry CP 4028 PMUVer 0; suite 119/0; GM HD >= EXP2259 (44.3) within 2 % or better.
+- Failure criteria: no boot / bugcheck (operator present), suite failure, GM drop > 2 % -> rec2268h (lastgood = production ANS m1n1).
+- Recovery: rec2268h (ANS).
+- Hashes: sys 25865dab0ff6, UmdArm64 031ffe0357c2, UmdX64 8357f308083a, Umd32 7017b8a99a7d; manifest 2196bb52107f, hardware-manifest 5292e7c60216; probe2268.sh f239f3bebea9 (PROBE_LINT_OK); visible recovery rec2268h 5bd8fb2f3b418352; m1n1 0d3a75b3.
+- Recovery rec2268h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2268-nopmu/run2268.sh.
