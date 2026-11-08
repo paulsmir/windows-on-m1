@@ -53,6 +53,13 @@ Rules:
   worker) replacing the predictive sleep+spin poll on the critical path (Wom1JobPoll: 320 us mean late wake per
   sleep, 49 % CPU busy; ~0.3-0.5 ms/frame). Design: investigation/analysis/KMD-IRQ-COMPLETION.md.
 
+- **BUILD (C)** timeout-only TDR recovery: when the firmware never retires a job,
+  DxgkDdiResetFromTimeout's quiesce returns STATUS_DEVICE_HARDWARE_ERROR and
+  Windows bugchecks 0x116 (EXP1964/1965, EXP2214, EXP2283-2286). Production
+  needs an adapter reset that restarts the ASC firmware (Asahi gpu.rs full
+  reset / macOS AGX restart) and re-publishes the queues, so a stall ends in a
+  recoverable TDR. Open since 2026-10-26 ("timeout-only recovery is still open").
+
 ### 2.2 Dependencies (D3D12 -> AGX)
 Target: order work only by what D3D12 orders (ResourceBarrier) and by
 driver-internal hazards -- the same per-resource model Apple's kext uses
