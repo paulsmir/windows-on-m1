@@ -677,11 +677,24 @@ static BOOL owner_ov4(void) {
   return enabled;
 }
 static UINT owner_ov4_splits;
+/* OV7 (opt-in APPLE_AGX_D3D12_COMPUTE_FIRST=1, EXP2278): Mesa flushes the open
+ * batches at the end of an execution in slot order, so an independent compute
+ * batch recorded before a render could be submitted after it. Submit the open
+ * compute batch before the first draw of the render batch. */
+static BOOL owner_compute_first_enabled(void) {
+  static const BOOL enabled = [] {
+    char value[2] = {};
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_COMPUTE_FIRST", value, sizeof(value)) == 1 && value[0] == '1' ? TRUE
+                                                                                                                  : FALSE;
+  }();
+  return enabled;
+}
+static UINT owner_compute_first_flushes;
 static void owner_ov2_receipt_locked(void) {
   UINT any = 0;
   for (unsigned i = 0; i < 8u; ++i) any |= owner_ov2_reason[i];
   if (any && AdmissionUmdMeasureEnabled()) {
-    UINT values[28];
+    UINT values[29];
     for (unsigned i = 0; i < 8u; ++i) values[i] = owner_ov2_reason[i];
     values[8] = owner_ov2_sequence;
     values[9] = owner_ov2_pairs;
@@ -699,7 +712,8 @@ static void owner_ov2_receipt_locked(void) {
     values[25] = AgxWin32Ov5Feature ? 1u : 0u;
     values[26] = owner_ov5_noprelude_sequence;
     values[27] = owner_ov5_overflow_sequence;
-    AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 28u);
+    values[28] = owner_compute_first_flushes;
+    AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 29u);
   }
   for (unsigned i = 0; i < 8u; ++i) owner_ov2_reason[i] = 0;
   owner_ov2_sequence = owner_ov2_pairs = owner_ov2_range_sequence = 0;
@@ -707,6 +721,7 @@ static void owner_ov2_receipt_locked(void) {
   owner_ov4_splits = 0;
   owner_ov5_sequence = owner_ov5_renders = owner_ov5_flagged = owner_ov5_noprelude_sequence = 0;
   owner_ov5_overflow_sequence = 0;
+  owner_compute_first_flushes = 0;
 }
 extern "C" void AgxD3d12OwnerJobDrawRange(const void *heap, unsigned long long lo, unsigned long long hi,
                                           unsigned uav) {
@@ -4968,6 +4983,11 @@ static unsigned no_attachment_extent(float origin, float size) {
   return edge >= 16384.0f ? 16384u : edge >= 1.0f ? static_cast<unsigned>(edge) : 1u;
 }
 
+static void owner_compute_first(AGX_D3D12_OWNER *owner) {
+  if (!owner_compute_first_enabled() || !owner->PendingDispatches || owner->PendingDraws) return;
+  owner->Context->flush(owner->Context, NULL, 0);
+  ++owner_compute_first_flushes;
+}
 extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRAW *draw) {
   OwnerLock lock(owner);
   const LONGLONG entered = qpc_now();
@@ -4980,6 +5000,8 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   /* Indirect counts live in the argument buffer, not these direct fields. */
   if (!draw->Indirect.Buffer && (!draw->VertexCount || !draw->InstanceCount)) return S_OK;
   struct pipe_context *pipe = owner->Context;
+  /* OV7; AgxD3d12OwnerDrawWithClears has already done this for its draw */
+  if (!owner->DrawClears) owner_compute_first(owner);
   AGX_D3D12_GRAPHICS *graphics = draw->Pipeline;
   /* RC74: the variants Asahi compiles in draw_vbo report their statistics */
   const ShaderStatsDraw stats_draw(graphics);
@@ -5340,6 +5362,7 @@ extern "C" HRESULT AgxD3d12OwnerDrawWithClears(AGX_D3D12_OWNER *owner, const AGX
   if (reason) *reason = AGX_D3D12_ABSORB_OK;
   if (!count) return AgxD3d12OwnerDraw(owner, draw);
   if (!owner || !clears) return E_INVALIDARG;
+  if (owner->Context) owner_compute_first(owner); /* OV7: before the clears too */
   owner->DrawClears = clears;
   owner->DrawClearCount = count;
   owner->DrawClearsAbsorbed = 0;

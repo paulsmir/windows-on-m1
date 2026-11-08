@@ -124,7 +124,7 @@ class DdiRangeTests(unittest.TestCase):
 
     def test_receipt_carries_the_overflow_nibbles(self):
         self.assertIn('values[27] = owner_ov5_overflow_sequence;', OWNER)
-        self.assertIn('"measure-d3d12-ov2-refusal", S_OK, values, 28u', OWNER)
+        self.assertIn('"measure-d3d12-ov2-refusal", S_OK, values, 29u', OWNER)
         self.assertIn('owner_ov5_overflow_sequence = 0;', OWNER)
         self.assertIn('(owner_job_barriers.RangeLastCompute.Overflow & 3u) << 2u', OWNER)
 
