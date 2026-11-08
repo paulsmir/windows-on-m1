@@ -75051,3 +75051,17 @@ EXP2281 HARDWARE ACTUAL 2026-11-08T20:51:14Z:
 - Receipts: Waived 37, Placed 37 over the step (Considered 684, Refused[CLASS] 647); UMD 40/40 renders 1, verdict 0.
 - Overlap from measure-gpu-stages, 40 compute/render pairs (ticks taken as 24 MHz; the compute span median then reads 32.4 ms, the designed 25-35 ms): compute end minus TA end median +29.6 ms, positive in 37 of 40 pairs (equal to Waived), minimum -9.6 ms in the first pairs. Render end is 276 us after compute end (median), so the 3D stage waits for the stamp as designed.
 - Verdict: confirmed: a TA of about 100k triangles at 1080p ran and finished during an unfinished compute, 37 times, with no hang and correct pixels in the checked iterations. The EXP2214 hang needs a further GravityMark ingredient (preludes in the depth-2 window, indirect streams, DWM between, or TVB growth beyond this test's). Not shown: TVB partial renders. Recovery rec2281h.
+
+EXP2282 HARDWARE BEFORE 2026-11-08T21:09:20Z:
+- WHY THIS HYPOTHESIS: (1) EXP2279/2281: the waived TA path completed 38 and 37 times, including a 100k-triangle TA finished during an unfinished compute; (2) EXP2214 hung about 15 s into FHD GravityMark with no receipt of the last state; (3) only GravityMark itself holds the remaining candidates (preludes in the depth-2 window, indirect streams, DWM between jobs, TVB growth).
+- WINDOWS CONTRACT: unchanged.
+- AGX/ASAHI CONTRACT: as EXP2279; undocumented firmware behaviour.
+- TRANSLATION: existing OV5 path, unchanged.
+- ATOMIC CONTRACT: none -- the OV3B env and the switches are the EXP2214 profile.
+- WHAT IS STILL UNKNOWN: whether GM hangs on this base, and on which job if so.
+- Expected: no hang, Waived about 1 per frame, R8's TA before C7's end. Hang or 0x116 -> the last snapshot names the state. GM fps is not comparable to the default profile.
+- Failure criteria: guest reset, GPU reset -> rec2282h. A hang is an accepted possibility.
+- Recovery: rec2282h (ANS); on a reset save full.log first, then AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2282h/recover.sh; "one-shot arm remains" -> EXP2270 ACTUAL procedure.
+- Hashes: sys e96365a143a8, UmdArm64 688150c9798c, UmdX64 df419b6b32c1, Umd32 bd8f36ecdafe; manifest c4b0bec1d63c, hardware-manifest 5300dfbb4efa; probe2282.sh 14a622175c42 (PROBE_LINT_OK); visible recovery rec2282h 69dc958c22c8e104; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
+- Recovery rec2282h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2282-gm-waiver/run2282.sh.
