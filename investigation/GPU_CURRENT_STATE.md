@@ -2472,3 +2472,9 @@ diagnostics on, the last diagnostics-off GM boots (EXP2250-2264, 15, no switches
 hypothesis replaced: not a race in the waived path but a process-start fault under the faster worker, switch or base
 unknown. Discriminators queued after EXP2286 (stop code via m1n1 dfe621ea): EXP2287 diag off + Ov2 lead only, 3 GM starts;
 EXP2288 diag off, no switches, 3 starts. ABBA/default waiver still blocked. Details: EXPERIMENTS.md "EXP2285 OFFLINE READING".
+
+## UPDATE 2026-11-08T22:55:30Z -- EXP2286 stop code 0x116: firmware did not retire a job at GM start; TDR quiesce failed (0xC0000483)
+Not a KMD fault. Waived 0, Ov2 0 at the stall; receipts absent because the worker publishes them after completions.
+Three diag-off GM starts reset, one survived; diag on 0 of 3. EXP2214's verdict (waiver fault, Waived 3 + fault receipt)
+stands but shares the diag-off/GM-start profile. Next: EXP2287 (diag off, OV2 lead only, 3 starts), EXP2288 (no switches),
+D4 = m1n1 prints ASC RX pending at the PSCI trap (worker stuck vs firmware stall). Ledger: "EXP2286 ARCHITECT READING".
