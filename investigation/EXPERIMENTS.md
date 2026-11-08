@@ -74992,3 +74992,17 @@ EXP2278 HARDWARE ACTUAL 2026-11-08T19:28:57Z:
 - Wom1Ov5WaiverReceipt: Considered 1176, Waived 1, Placed 1, Refused[CLASS] 1175 (pre-step 504/0/0/504). UMD: 40 rows, 38 with OV5 renders 0, 2 with renders 1, verdict 0, flagged.
 - Reading: the submission order is compute-then-render in only 2 of 40 executions, so end-of-execution flush is not creation order. One waived render reached the firmware and completed with no hang; which iteration it was is not recorded, so the pixel checks (iterations 0 and 39) cannot be tied to it.
 - Verdict: inconclusive for the OV5 contract: one pair is not a sample of 40. Weak positive only: a waived TA with a 3D Barrier on a compute stamp did not hang once. Next: the owner must submit the open compute batch before the first draw (architect's owner-side hook) so that all 40 pairs are exercised. Recovery rec2278h.
+
+EXP2279 HARDWARE BEFORE 2026-11-08T19:49:37Z:
+- WHY THIS HYPOTHESIS: (1) EXP2278: compute before render in only 2 of 40 executions, so the waiver ran once; (2) that single waived render completed, so the path is reachable but unsampled; (3) EXP2214 hung with waived renders in GravityMark, and this probe separates the firmware contract from the GravityMark frame shape.
+- WINDOWS CONTRACT: unchanged; the flush only submits earlier work of the same execution, in list order.
+- AGX/ASAHI CONTRACT: as EXP2278; a cross-queue firmware Barrier is undocumented firmware behaviour.
+- TRANSLATION: AgxD3d12OwnerDraw flushes the open compute batch before the first draw when COMPUTE_FIRST is set.
+- ATOMIC CONTRACT: none -- one env value.
+- WHAT IS STILL UNKNOWN: whether a TA running during an unfinished compute, with the 3D queue waiting on its stamp, hangs when repeated.
+- Expected: value 28 about 40, OV5RX renders 1 verdict 0 in about 40 executions, Waived about 40, PASS 40/40 and 0 bad pixels -> contract sound, EXP2214 is GravityMark-shape specific. TIMEOUT or 0x116 -> this encoding is wrong; work-item RE before any GM run. Waived still near 0 -> KMD refusal, read Refused[].
+- Failure criteria: hang/reset (accepted possibility), bad pixels.
+- Recovery: rec2279h (ANS); on a reset save full.log first, then AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2279h/recover.sh; "one-shot arm remains" -> EXP2270 ACTUAL procedure.
+- Hashes: sys b09dbb701479, UmdArm64 71d7ab82d809, UmdX64 126e1554a666, Umd32 ab7f592714f9; manifest 11ffb642b0be, hardware-manifest fe4c75bca178; probe2279.sh 67e5778b09eb (PROBE_LINT_OK); visible recovery rec2279h 3a31780430aee1b8; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
+- Recovery rec2279h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2279-ovpair-computefirst/run2279.sh.
