@@ -95,6 +95,17 @@ typedef struct AGX_D3D12_JOB_BARRIERS {
   unsigned GlobalUavSinceDispatch;
 } AGX_D3D12_JOB_BARRIERS;
 #define AGX_D3D12_JOB_VERTEX 4u
+/* OV6b (receipt only): where a range came from; verdicts read bits 0 and 2 only */
+#define AGX_D3D12_JOB_SRC_VB 0x008u
+#define AGX_D3D12_JOB_SRC_IB 0x010u
+#define AGX_D3D12_JOB_SRC_IND_ARGS 0x020u
+#define AGX_D3D12_JOB_SRC_IND_CNT 0x040u
+#define AGX_D3D12_JOB_SRC_VIEW 0x080u
+#define AGX_D3D12_JOB_SRC_ROOT 0x100u
+#define AGX_D3D12_JOB_SRC_SO 0x200u
+#define AGX_D3D12_JOB_SRC_CLEAR 0x400u
+#define AGX_D3D12_JOB_SRC_TARGET 0x800u
+#define AGX_D3D12_JOB_SRC_MASK 0xff8u
 static inline void AgxD3d12JobRangeClear(AGX_D3D12_JOB_RANGE_SET *s) { s->Count = s->Overflow = s->Uav = 0u; }
 /* append [lo, hi) of heap (merged into an entry of the same heap and kind
  * it overlaps or touches); NULL heap or a full set -> Overflow */
@@ -264,7 +275,7 @@ static inline void AgxD3d12JobBarrierDrawRange(AGX_D3D12_JOB_BARRIERS *j, const 
 /* OV5: the active dispatch accesses [lo, hi) of heap (uav: may write) */
 static inline void AgxD3d12JobBarrierDispatchRange(AGX_D3D12_JOB_BARRIERS *j, const void *heap,
                                                    unsigned long long lo, unsigned long long hi, unsigned uav) {
-  AgxD3d12JobRangeAdd(&j->RangeDispatch, heap, lo, hi, uav ? 1u : 0u);
+  AgxD3d12JobRangeAdd(&j->RangeDispatch, heap, lo, hi, uav & (1u | AGX_D3D12_JOB_SRC_MASK));
 }
 /* OV2 ranges: a ResolveQueryData destination [lo, hi) of heap */
 static inline void AgxD3d12JobBarrierResolveRange(AGX_D3D12_JOB_BARRIERS *j, const void *heap,
@@ -504,6 +515,26 @@ static inline unsigned AgxD3d12JobRenderTaRefusal(const AGX_D3D12_JOB_BARRIERS *
       const AGX_D3D12_JOB_RANGE *y = &c->R[b];
       if (y->Heap != x->Heap || x->Lo >= y->Hi || y->Lo >= x->Hi) continue;
       if ((y->Uav & 1u) || (x->Uav & 1u)) return 10u;
+    }
+  }
+  return 0u;
+}
+/* OV6b: the first pair behind verdict 10 (the same loop): 1 and the pair, or 0 */
+static inline unsigned AgxD3d12JobRenderTaConflict(const AGX_D3D12_JOB_BARRIERS *j, AGX_D3D12_JOB_RANGE *render,
+                                                   AGX_D3D12_JOB_RANGE *compute) {
+  const AGX_D3D12_JOB_RANGE_SET *c = &j->RangeLastCompute, *r = &j->RangeRender;
+  unsigned a, b;
+  for (a = 0; a < r->Count; ++a) {
+    const AGX_D3D12_JOB_RANGE *x = &r->R[a];
+    if (!(x->Uav & AGX_D3D12_JOB_VERTEX)) continue;
+    for (b = 0; b < c->Count; ++b) {
+      const AGX_D3D12_JOB_RANGE *y = &c->R[b];
+      if (y->Heap != x->Heap || x->Lo >= y->Hi || y->Lo >= x->Hi) continue;
+      if ((y->Uav & 1u) || (x->Uav & 1u)) {
+        *render = *x;
+        *compute = *y;
+        return 1u;
+      }
     }
   }
   return 0u;

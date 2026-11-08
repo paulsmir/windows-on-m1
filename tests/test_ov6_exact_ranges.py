@@ -120,7 +120,7 @@ class DdiRangeTests(unittest.TestCase):
         self.assertLess(release.index('HeapFreeSpans(heap)'), release.index('memset(heap, 0'))
 
     def test_uav_clears_are_placeable(self):
-        self.assertIn('kCommandClearUav) JobDescriptorRange(sink, &clears[k].clear_uav.view, 1u)', DDI)
+        self.assertIn('kCommandClearUav) JobDescriptorRange(sink, &clears[k].clear_uav.view, 1u | AGX_D3D12_JOB_SRC_CLEAR)', DDI)
 
     def test_receipt_carries_the_overflow_nibbles(self):
         self.assertIn('values[27] = owner_ov5_overflow_sequence;', OWNER)

@@ -738,7 +738,7 @@ extern "C" void AgxD3d12OwnerJobBarrierRange(unsigned type, unsigned id, const v
 extern "C" void AgxD3d12OwnerJobDispatchRange(const void *heap, unsigned long long lo, unsigned long long hi,
                                               unsigned flags) {
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
-  AgxD3d12JobBarrierDispatchRange(&owner_job_barriers, heap, lo, hi, flags & 1u);
+  AgxD3d12JobBarrierDispatchRange(&owner_job_barriers, heap, lo, hi, flags);
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
 }
 extern "C" void AgxD3d12OwnerJobResolveRange(const void *heap, unsigned long long lo, unsigned long long hi) {
@@ -816,6 +816,24 @@ static unsigned owner_render_ta(unsigned prelude) {
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
   return ta;
 }
+/* OV6b receipt: the first conflicting pair behind verdict 10, for the first 64
+ * executions that have one (under owner_job_barriers_lock) */
+static UINT owner_ov6b_executions, owner_ov6b_seen_renders;
+static void owner_ov6b_conflict_receipt(void) {
+  AGX_D3D12_JOB_RANGE x, y;
+  if (!AdmissionUmdMeasureEnabled() || AgxD3d12JobRenderTaRefusal(&owner_job_barriers, 0u) != 10u) return;
+  if (!AgxD3d12JobRenderTaConflict(&owner_job_barriers, &x, &y)) return;
+  if (!owner_ov6b_seen_renders || owner_ov5_renders < owner_ov6b_seen_renders) ++owner_ov6b_executions;
+  owner_ov6b_seen_renders = owner_ov5_renders + 1u;
+  if (owner_ov6b_executions > 64u) return;
+  const UINT values[12] = {owner_ov5_renders,
+                           AgxD3d12JobBarrierId(reinterpret_cast<unsigned long long>(x.Heap)),
+                           static_cast<UINT>(x.Lo), static_cast<UINT>(x.Lo >> 32), static_cast<UINT>(x.Hi),
+                           static_cast<UINT>(x.Hi >> 32), x.Uav,
+                           AgxD3d12JobBarrierId(reinterpret_cast<unsigned long long>(y.Heap)),
+                           static_cast<UINT>(y.Lo), static_cast<UINT>(y.Hi), static_cast<UINT>(y.Hi >> 32), y.Uav};
+  AdmissionUmdDiagnostic("measure-d3d12-ov2-conflict", S_OK, values, 12u);
+}
 static unsigned owner_batch_kind(unsigned kind) {
   unsigned independent = 0u;
   /* winsys: kind | 0x100 for a render batch with a CDM prelude */
@@ -828,6 +846,7 @@ static unsigned owner_batch_kind(unsigned kind) {
     if (owner_ov5_renders < 8u) {
       owner_ov5_sequence |= (ta & 0xfu) << (4u * owner_ov5_renders);
       owner_ov5_noprelude_sequence |= (AgxD3d12JobRenderTaRefusal(&owner_job_barriers, 0u) & 0xfu) << (4u * owner_ov5_renders);
+      owner_ov6b_conflict_receipt();
       owner_ov5_overflow_sequence |= ((owner_job_barriers.RangeRender.Overflow & 3u) |
                                       ((owner_job_barriers.RangeLastCompute.Overflow & 3u) << 2u)) << (4u * owner_ov5_renders);
     }

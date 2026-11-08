@@ -6730,22 +6730,22 @@ static void JobHeapRange(JobRangeSink sink, const AgxD3d12Heap *heap, UINT64 off
 static void JobIndirectRanges(JobRangeSink sink, const AgxD3d12Indirect &indirect, unsigned flags) {
     if (indirect.args && indirect.max_count) {
         const UINT64 bytes = static_cast<UINT64>(indirect.max_count - 1u) * indirect.stride + indirect.record_bytes;
-        JobHeapRange(sink, indirect.args, indirect.args_offset, bytes ? bytes : 0, flags);
+        JobHeapRange(sink, indirect.args, indirect.args_offset, bytes ? bytes : 0, flags | AGX_D3D12_JOB_SRC_IND_ARGS);
     }
-    JobHeapRange(sink, indirect.count, indirect.count_offset, 4u, flags);
+    JobHeapRange(sink, indirect.count, indirect.count_offset, 4u, flags | AGX_D3D12_JOB_SRC_IND_CNT);
 }
 static void JobStageRanges(JobRangeSink sink, const AgxD3d12Dispatch &b, unsigned stage) {
     for (UINT u = 0; u < kUavSlots; ++u) {
-        JobDescriptorRange(sink, b.uav_descriptor[u], 1u | stage);
-        JobHeapRange(sink, b.uav_heap[u], b.uav_offset[u], 0, 1u | stage);
+        JobDescriptorRange(sink, b.uav_descriptor[u], 1u | stage | AGX_D3D12_JOB_SRC_VIEW);
+        JobHeapRange(sink, b.uav_heap[u], b.uav_offset[u], 0, 1u | stage | AGX_D3D12_JOB_SRC_ROOT);
     }
     for (UINT t = 0; t < kSrvSlots; ++t) {
-        JobDescriptorRange(sink, b.srv_descriptor[t], stage);
-        JobHeapRange(sink, b.srv_heap[t], b.srv_offset[t], 0, stage);
+        JobDescriptorRange(sink, b.srv_descriptor[t], stage | AGX_D3D12_JOB_SRC_VIEW);
+        JobHeapRange(sink, b.srv_heap[t], b.srv_offset[t], 0, stage | AGX_D3D12_JOB_SRC_ROOT);
     }
     for (UINT c = 0; c < kCbSlots; ++c) {
-        JobDescriptorRange(sink, b.cb_descriptor[c], stage);
-        JobHeapRange(sink, b.cb_heap[c], b.cb_offset[c], 0, stage);
+        JobDescriptorRange(sink, b.cb_descriptor[c], stage | AGX_D3D12_JOB_SRC_VIEW);
+        JobHeapRange(sink, b.cb_heap[c], b.cb_offset[c], 0, stage | AGX_D3D12_JOB_SRC_ROOT);
     }
 }
 static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch) {
@@ -6879,20 +6879,20 @@ static void JobDrawRanges(const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &op
     const JobRangeSink sink = AgxD3d12OwnerJobDrawRange;
     const unsigned vertex = AGX_D3D12_JOB_VERTEX;
     if (optional.gs || optional.hs || optional.ds) sink(nullptr, 0, 0, 1u | vertex);
-    for (UINT r = 0; r < d.rtvs && r < 8u; ++r) JobDescriptorRange(sink, &d.rtv[r], 0u);
-    if (d.dsv.kind) JobDescriptorRange(sink, &d.dsv, 0u);
+    for (UINT r = 0; r < d.rtvs && r < 8u; ++r) JobDescriptorRange(sink, &d.rtv[r], AGX_D3D12_JOB_SRC_TARGET);
+    if (d.dsv.kind) JobDescriptorRange(sink, &d.dsv, AGX_D3D12_JOB_SRC_TARGET);
     for (UINT k = 0; clears && k < clear_count; ++k) {
-        if (clears[k].kind == kCommandClearDepth) JobDescriptorRange(sink, &clears[k].clear_depth.dsv, 0u);
-        else if (clears[k].kind == kCommandClear) JobDescriptorRange(sink, &clears[k].clear.rtv, 0u);
-        else if (clears[k].kind == kCommandClearUav) JobDescriptorRange(sink, &clears[k].clear_uav.view, 1u); /* OV6 */
+        if (clears[k].kind == kCommandClearDepth) JobDescriptorRange(sink, &clears[k].clear_depth.dsv, AGX_D3D12_JOB_SRC_CLEAR);
+        else if (clears[k].kind == kCommandClear) JobDescriptorRange(sink, &clears[k].clear.rtv, AGX_D3D12_JOB_SRC_CLEAR);
+        else if (clears[k].kind == kCommandClearUav) JobDescriptorRange(sink, &clears[k].clear_uav.view, 1u | AGX_D3D12_JOB_SRC_CLEAR); /* OV6 */
         else sink(nullptr, 0, 0, 0u);
     }
-    for (UINT v = 0; v < kVertexBuffers; ++v) JobHeapRange(sink, d.vb[v].heap, d.vb[v].offset, 0, vertex);
-    if (d.index_size) JobHeapRange(sink, d.index_heap, d.index_offset, 0, vertex);
+    for (UINT v = 0; v < kVertexBuffers; ++v) JobHeapRange(sink, d.vb[v].heap, d.vb[v].offset, 0, vertex | AGX_D3D12_JOB_SRC_VB);
+    if (d.index_size) JobHeapRange(sink, d.index_heap, d.index_offset, 0, vertex | AGX_D3D12_JOB_SRC_IB);
     JobIndirectRanges(sink, d.indirect, vertex);
     for (UINT t = 0; t < kSoTargets; ++t) {
-        JobHeapRange(sink, d.so[t].heap, d.so[t].offset, d.so[t].size, 1u | vertex);
-        JobHeapRange(sink, d.so[t].filled, d.so[t].filled_offset, 0, 1u | vertex);
+        JobHeapRange(sink, d.so[t].heap, d.so[t].offset, d.so[t].size, 1u | vertex | AGX_D3D12_JOB_SRC_SO);
+        JobHeapRange(sink, d.so[t].filled, d.so[t].filled_offset, 0, 1u | vertex | AGX_D3D12_JOB_SRC_SO);
     }
     JobStageRanges(sink, d.vs_bind, vertex);
     JobStageRanges(sink, d.ps_bind, 0u);
