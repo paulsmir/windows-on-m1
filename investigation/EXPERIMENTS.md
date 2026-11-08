@@ -74699,3 +74699,10 @@ EXP2258 HARDWARE BEFORE 2026-11-08T03:16:58Z:
 - Recovery rec2258h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2258-dsid/run2258.sh.
 
 EXP2258 ACTUAL (2026-11-08T03:23:34Z): REJECTED (SLC per-DSID policy is not the GPU gap). m1n1 ansdirect-dsid bbfc7cc6; native SSD; pipeline RC 0, suite 119/0, GM HD  "fps": 44.476,. HV: MCCDSID (plane0, 10 s): quota registers already hold non-zero defaults equal to macOS' table (grp 0xd kGPU_Reads 0x40 = 8 MiB, grp 7 ParameterBufferWrite 0x10 = 2 MiB, grp 1 RenderTarget 0x20, grp 8 translation 0x08; HW limits in bits 22:16); during the suite/GravityMark grp 0xd usage reaches 0x2c83 (about 5.7 MB if the unit is 512 B, as grp 7 saturating at 0x1000 = its 2 MiB quota suggests), grp 7 saturates at 0x1000, grp 8 0x2b0. GPU reads DO allocate in the SLC on our stack; writing macOS quotas would change nothing. Remaining GPU-gap candidates: GPU-internal (UAT walk/TLB reach, GPU cache configuration, GPU firmware performance state). Next per plan: HV tick rate (item 4) and GPUVA broker into the KMD (item 5, largest measured HV cost: v5 0.32-0.90 s held per 10 s).
+
+EXP2259 HARDWARE BEFORE 2026-11-08T03:38:52Z:
+- WHY: control for EXP2260 (guest VMID 1); no device-load latency measurement exists on the ANS-line profile (last: EXP2243 bridge). Measurement only.
+- Expected: MEMBWUAV close to EXP2243/2246 (16K ~132, 256K ~250-290, 4M ~420-480, 64M ~730 ns; pages 4..1024: ~225-430 ns).
+- Failure criteria: hang, suite failure -> rec2259h. Recovery: rec2259h (ANS).
+- Hashes: sys 73c16e0e56fe, UmdArm64 39e71cc08f80, UmdX64 a05ddde9986a, Umd32 95cc16a39141; manifest 38bc3d31988a, hardware-manifest e565c8ea9d65; probe2259.sh 1d808fe7f823 (PROBE_LINT_OK); visible recovery rec2259h 34208bae9247a71c; m1n1 0d3a75b3.
+- Recovery rec2259h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2259-uavctl/run2259.sh.
