@@ -86,6 +86,7 @@ typedef struct {
  BOOLEAN JobAhead,JobDepth2,JobDepth2Kick,JobDiagnostics;
  BOOLEAN FwRxDrain; /* 125bddd1: class C, default on */
  BOOLEAN SubmitBracket; /* EXP2270: diagnostic, default off */
+ BOOLEAN IrqCompletion; /* IRQ-completion step 2, default off */
  BOOLEAN PresentTsEnabled;
  ULONG Depth2FallbackDrill,Depth2FallbackDrillCount; /* be8c6f7f: diagnostic, default 0 */
  ULONG Depth2FallbackDrillBuilt,Depth2FallbackDrillBuiltCount; /* S4a drill, default 0 */
