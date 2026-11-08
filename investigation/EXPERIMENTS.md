@@ -75045,3 +75045,9 @@ EXP2281 HARDWARE BEFORE 2026-11-08T20:47:48Z:
 - Hashes: sys 2fbdf62542bb, UmdArm64 b4512aed8043, UmdX64 81ba331fb532, Umd32 e145a2825967; manifest a9f8b7656bfb, hardware-manifest 56c410ff8eff; probe2281.sh 2e9f8874c59d (PROBE_LINT_OK); visible recovery rec2281h 62c8ed6499ab87ce; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2281h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2281-ovpairh/run2281.sh.
+
+EXP2281 HARDWARE ACTUAL 2026-11-08T20:51:14Z:
+- Result: no guest reset (0 PSCI RESET), GPU_RESET none, TOOL_OVPAIR OVPAIRH PASS 40/40, bad_pixels 0, mean 35.121 ms, max 82.198 ms. SSH and native SSD alive.
+- Receipts: Waived 37, Placed 37 over the step (Considered 684, Refused[CLASS] 647); UMD 40/40 renders 1, verdict 0.
+- Overlap from measure-gpu-stages, 40 compute/render pairs (ticks taken as 24 MHz; the compute span median then reads 32.4 ms, the designed 25-35 ms): compute end minus TA end median +29.6 ms, positive in 37 of 40 pairs (equal to Waived), minimum -9.6 ms in the first pairs. Render end is 276 us after compute end (median), so the 3D stage waits for the stamp as designed.
+- Verdict: confirmed: a TA of about 100k triangles at 1080p ran and finished during an unfinished compute, 37 times, with no hang and correct pixels in the checked iterations. The EXP2214 hang needs a further GravityMark ingredient (preludes in the depth-2 window, indirect streams, DWM between, or TVB growth beyond this test's). Not shown: TVB partial renders. Recovery rec2281h.
