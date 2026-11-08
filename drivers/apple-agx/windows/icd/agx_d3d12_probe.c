@@ -9503,7 +9503,7 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
         D3D12_RECT scissor = {0, 0, 64, 64};
         D3D12_VERTEX_BUFFER_VIEW vbv = {0};
         D3D12_TEXTURE_COPY_LOCATION target_loc = {0}, back = {0};
-        ID3D12CommandList *lists[1];
+        ID3D12CommandList *lists[2];
         LARGE_INTEGER t0, t1;
         double ms;
         UINT64 value = 0;
@@ -9549,10 +9549,13 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
         hr = ID3D12GraphicsCommandList_Close(render_list);
         if (FAILED(hr)) break;
         QueryPerformanceCounter(&t0);
+        /* EXP2276: two ExecuteCommandLists calls are two UMD executions and the
+         * OV5 verdict never pairs across executions (renders 0, Waived 0); one
+         * call with both lists is GravityMark's shape (one list set per frame)
+         * and lets the render follow the compute batch inside one execution. */
         lists[0] = (ID3D12CommandList *)compute_list;
-        ID3D12CommandQueue_ExecuteCommandLists(queue, 1, lists);
-        lists[0] = (ID3D12CommandList *)render_list;
-        ID3D12CommandQueue_ExecuteCommandLists(queue, 1, lists);
+        lists[1] = (ID3D12CommandList *)render_list;
+        ID3D12CommandQueue_ExecuteCommandLists(queue, 2, lists);
         hr = ID3D12CommandQueue_Signal(queue, fence, ++signal);
         if (SUCCEEDED(hr)) hr = ID3D12Fence_SetEventOnCompletion(fence, signal, event);
         if (SUCCEEDED(hr) && WaitForSingleObject(event, 8000) != WAIT_OBJECT_0) {
