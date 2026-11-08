@@ -74708,3 +74708,14 @@ EXP2259 HARDWARE BEFORE 2026-11-08T03:38:52Z:
 - Recovery rec2259h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2259-uavctl/run2259.sh.
 
 EXP2259 ACTUAL (2026-11-08T03:46:31Z): CONTROL recorded. Native SSD, m1n1 ansdirect-dsid, pipeline RC 0, suite 119/0, GM HD  "fps": 44.371,. MEMBWUAV 32-thread (2 runs): 16K 80-85, 64K 165-174, 256K 254-268, 1M 295-335, 4M 321-363, 16M 492-524, 64M 689-736 ns; pages 4/64/256/1024: 218-225 / 250-257 / 381 / 433-436 ns (macOS 118/120/176/181; pages 65-92). Gap remains 2-3x at >=256 KiB and 3-5x on page spread.
+
+EXP2260 HARDWARE BEFORE 2026-11-08T03:59:46Z:
+- WHY THIS HYPOTHESIS: (1) EXP2259: page-spread device loads 218-436 ns vs macOS 65-92 even for 4 pages -> GPU translations are not retained; (2) source: the guest runs as VMID 0 and m1n1 invalidates GPU ASIDs with TLBI ASIDE1OS in the EL1&0 regime of VMID 0, so Windows' broadcast TLBIs (TLBI VMALLE1IS / ASIDE1IS) can hit GPU ASIDs; macOS/Asahi run the host at EL2 (VHE) without that overlap; (3) EXP2233 tested VMID1 only on the texture (txf) path, which has its own cache.
+- WINDOWS CONTRACT: unchanged (guest stage-2 under VMID 1).
+- AGX/ASAHI CONTRACT: GPU UAT ASIDs keep their TLB entries unless the owner invalidates them.
+- WHAT IS STILL UNKNOWN: whether the GPU honours Windows' broadcast TLBIs at all.
+- Expected if it holds: MEMBWUAV pages 4..1024 fall towards 65-150 ns and 256K-16M towards 120-200 ns; GM HD up. Unchanged -> broadcast TLBIs excluded on the device-load path too.
+- Failure criteria: boot failure/hang, GPU faults, suite failure -> rec2260h (lastgood = production ANS m1n1 882985fb).
+- Recovery: rec2260h (ANS).
+- Hashes: sys 7139e0ffc771, UmdArm64 7c147d6e40d3, UmdX64 3ff4fc35280f, Umd32 c26cd9682646; manifest d5d88deb7a2e, hardware-manifest 572f426f2c99; probe2260.sh 606de22e3bd0 (PROBE_LINT_OK); visible recovery rec2260h 3057daea97a6ecaa; m1n1 0d3a75b3.
+- Recovery rec2260h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2260-vmid1/run2260.sh.
