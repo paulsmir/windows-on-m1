@@ -8,6 +8,18 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 05:00Z -- NATIVE SSD EVERYWHERE; HV TRAPS CUT; GPU GAP NARROWED TO TRANSLATION
+- Experiments AND recovery boot the native SSD (AppleAns ANS-DIRECT): run_uefi --storage-mode ANS_NATIVE --ans-direct
+  --ans-production-fd-sha256 (ef1707777); prepare.sh refuses bridge launchers; recovery default RECANS001 (broker ON).
+- Working GPU profile: m1n1 exp/m1n1-ans-direct-slc (SLC, DRAMCFG, CPPC at 0x300040000, guest-owned debug default,
+  scanout from HV tick default), Mu MUANSCPPC002 (G2 ANS gpu-direct + SMBIOS + _CPC), WOM1_CPPC=1. GM HD 44.3-44.7.
+- HV exits: MSR class 0 (EXP2256), scanout steps 16x fewer (EXP2257); PMCCNTR (0.8-2.3 M/10 s) already unlocked,
+  removing it needs hiding the PMU (daytime experiment).
+- GPU device-load gap (EXP2259-2261, macOS 118-181 ns, pages 65-92): ours 80 ns in one page, ~226 ns for 4 pages,
+  436 ns for 1024 pages. Rejected: GPU clock (P6 1278 MHz = macOS), SLC per-DSID policy (EXP2258, GPU allocates),
+  guest VMID 1 (EXP2260), map-without-TLBI (EXP2261), leaf MEMATTR (EXP2239). Next discriminator: page spread 1/2
+  pages (TLB reach); then compare GPU UAT context/TLB configuration (firmware/initdata/handoff) with macOS RE.
+
 ## UPDATE 2026-11-08 00:30Z -- WORKING PROFILE: SLC + DRAMCFG + SMBIOS + CPPC (EXP2243-2251)
 - GPU experiment profile now: m1n1 brokerlock-cppc3 0467d900 (sha e871092f; SLC on, PMU filter fix, hv_cppc),
   Mu MUCPPC003 3870dfa1 (FD 9571633c; SMBIOS "Apple M1" + _CPC/_PSD/_OSC), launcher env WOM1_CPPC=1 (AGX_LAUNCH_ENV),
