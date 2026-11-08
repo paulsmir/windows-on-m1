@@ -12,7 +12,9 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 - During the MEMBW probe the GPU ran P1 (396 MHz) 64.7 % / P6 11.5 % (Wom1GpuPerf delta); GravityMark runs P6 85 %.
   The 2-3.5x "device-load latency" gaps vs the Metal twin (EXP2226-2264) are mostly clock: do not tune the memory path
   from them. EXP2260-2263 hypotheses (VMID, map TLBI, addressing form) are moot as explanations.
-- GM per-dispatch gap (Apple ~2x, at P6) remains unexplained -> localise in-workload (per-pass GPU timestamps vs Apple).
+- EXP2266 (65536-step chase, P6 dominant): latency ~= macOS (same-line 64 vs 65-92 ns, 256K 130 vs 120, 64M 417 vs 452;
+  residual 16M 351 vs 181). Memory hierarchy is NOT the GM gap. Reliable gap: HD compute 13.7 vs Apple 9.2 ms/frame.
+- Next: verify pstate of our per-pass timing runs; compare indirect grids (amount of work) of traversal launches vs Apple.
 - Open: our firmware DVFS ramp for bursty work vs macOS (initdata perf/ramp parameters) -- may matter for frame-paced
   workloads with idle gaps.
 
