@@ -144,6 +144,10 @@ def is_owner(executable, argv, launcher, contract):
     grammar.add_argument('--guest-ram-profile', choices=('legacy', 'expanded'))
     for option in ('dry-run', 'low-mem', 'no-pin'):
         grammar.add_argument('--' + option, action='store_true')
+    # 2026-11-08: production ANS-DIRECT launches (run_uefi ef1707777): explicit native-SSD ownership.
+    grammar.add_argument('--storage-mode', choices=('VNVME_RECOVERY', 'ANS_NATIVE'))
+    grammar.add_argument('--ans-direct', action='store_true')
+    grammar.add_argument('--ans-production-fd-sha256')
     parsed = grammar.parse_args(args)
     if parsed.dry_run or '--' in args:
         raise SelectionError('dry-run/end-of-options cannot own recovery launcher')

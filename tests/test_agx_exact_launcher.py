@@ -40,6 +40,12 @@ class ExactLauncherTests(unittest.TestCase):
         self.assertTrue(self.owner())
         self.assertEqual(self.select({42: ('/usr/bin/python3', self.argv)}), 42)
 
+    def test_ans_production_launcher_is_owner(self):
+        # EXP2255 recovery: "unrecognized arguments: --storage-mode ANS_NATIVE --ans-direct --ans-production-fd-sha256"
+        argv = self.argv[:4] + ['--storage-mode', 'ANS_NATIVE', '--ans-direct', '--ans-production-fd-sha256', 'ab' * 32] + self.argv[4:]
+        self.assertTrue(self.owner(argv))
+        self.assertEqual(self.select({7: ('/usr/bin/python3', argv)}), 7)
+
     def test_option_equals_and_other_contract(self):
         self.assertTrue(self.owner(self.argv[:-2] + ['--contract-output=' + self.argv[-1]]))
         other = self.exp / 'other.bin'
