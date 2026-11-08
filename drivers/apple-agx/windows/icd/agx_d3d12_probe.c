@@ -9151,13 +9151,13 @@ static HRESULT membw_run(ID3D12CommandQueue *queue, ID3D12Fence *fence, HANDLE e
  * of the SRV t0, whose DXBC raw loads are lowered to buffer-texture fetches (dxbc_to_nir mem_load). */
 static int mem_bw_impl(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, BOOL uav) {
     enum { BYTES = 128u << 20, LINES = BYTES / 64u, STREAM_THREADS = 65536u, CHASE_THREADS = 1024u, CHASE_STEPS = 512u,
-           REGIONS = 7, SPREADS = 4, CHASES = 1 + 2 * REGIONS, CASES = CHASES + SPREADS };
+           REGIONS = 7, SPREADS = 8, CHASES = 1 + 2 * REGIONS, CASES = CHASES + SPREADS };
     /* cases 1..7: 1024 chasing threads; 8..14: 32 (one SIMD group), so
      * queueing of concurrent misses can be told from the miss cost itself */
     static const UINT region_kib[REGIONS] = {16u, 64u, 256u, 1024u, 4096u, 16384u, 65536u};
     /* EXP2229 page-spread cases (32 threads): a cycle of N 64-byte lines, one per 16 KiB page, so the data
      * (N x 64 B) always fits the caches while the chase needs N TLB entries; latency rising with N = TLB. */
-    static const UINT spread_pages[SPREADS] = {4u, 64u, 256u, 1024u};
+    static const UINT spread_pages[SPREADS] = {1u, 2u, 4u, 8u, 16u, 64u, 256u, 1024u};
     UINT region_first[REGIONS], spread_first[SPREADS];
     D3D12_ROOT_PARAMETER params[3] = {{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS}, {D3D12_ROOT_PARAMETER_TYPE_SRV},
                                       {D3D12_ROOT_PARAMETER_TYPE_UAV}};
