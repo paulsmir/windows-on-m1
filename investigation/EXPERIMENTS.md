@@ -74685,3 +74685,5 @@ EXP2257 HARDWARE BEFORE 2026-11-08T02:56:03Z:
 - Recovery: rec2257h (ANS). Probe: probe2257.sh = probe2256.sh.
 - Hashes: sys 6347dda01a18, UmdArm64 1acbbf7391c2, UmdX64 a209b78e6f26, Umd32 71a5e840e067; manifest c1ac296d3327, hardware-manifest 4621b7fd71b7; probe2257.sh 82293dc70a20 (PROBE_LINT_OK); visible recovery rec2257h 9ab5f1190a7a2753; m1n1 0d3a75b3.
 - Recovery rec2257h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2257-scantick/run2257.sh.
+
+EXP2257 ACTUAL (2026-11-08T03:02:54Z): CONFIRMED (overhead reduction, performance-neutral). m1n1 ansdirect-scantick e57e2bbc (HV_SCANOUT_SERVICE_TICK=1); native SSD OK; pipeline RC 0, suite 119/0, GM d closed (wer 0), DWM same pid start..end. BROKERLOCK service class: ~48-49k steps per 10 s (5 kHz tick) vs ~772k (EXP2256); held 2-95 ms per 10 s vs 196 ms. GM HD 44.304 fps vs 44.703 (-0.9 %, inside the 2 % gate and the run-to-run band 43.9-44.7). Verdict: keep, make default (HV_SCANOUT_SERVICE_EXIT=1 opt-out). v5 broker remains the largest HV service (128-241k calls, 0.32-0.90 s held per 10 s).
