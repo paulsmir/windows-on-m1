@@ -75012,3 +75012,15 @@ EXP2279 HARDWARE ACTUAL 2026-11-08T19:52:48Z:
 - Receipts: UMD 40 of 40 executions renders 1, verdict 0, flagged 1, compute-first flush 1. Wom1Ov5WaiverReceipt delta over the step: Considered 716, Waived 38, Placed 38, Refused[CLASS] 678 (the rest of the KMD's considered jobs); 2 of the 40 flagged renders were not waived, reason not separated.
 - Verdict: confirmed for the synthetic pair: a render whose TA is not held on the compute stamp, with its 3D queue led by the Barrier on that stamp, completed 38 times with no hang, fault or bad pixels in the checked iterations. The compute-first flush does what OV7 specified.
 - Limits: the render is a 64x64 triangle with no prelude, so this does not prove behaviour with a long TA, indirect streams or a tile-heavy frame, and timing overlap of TA and compute was not measured directly. EXP2214's hang is therefore not explained by this basic encoding alone: GravityMark-shape causes (preludes, indirect streams, shared TVB/heap, DWM) remain. Next: architect's verdict, then OV6b provenance. Recovery rec2279h.
+
+EXP2280 HARDWARE BEFORE 2026-11-08T20:16:08Z:
+- WHY THIS HYPOTHESIS: (1) EXP2275: with finite ranges R2/R4/R6 still report verdict 10, without naming the access; (2) EXP2201: Metal's automatic tracking still lets R16 start during c15, so at least R6 may be attribution rather than a real dependency; (3) the answer decides whether overlap work continues on R6 or is limited to R8 and prelude placement.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: unchanged. TRANSLATION: none (receipt).
+- ATOMIC CONTRACT: none.
+- WHAT IS STILL UNKNOWN: which binding kinds conflict.
+- Expected: conflict rows for renders 0-2 of each frame's compute-then-render pairs; verdict rules in investigation/analysis/OV6b-conflict-provenance.md. Suite 119/0. GM compared with EXP2275, not with the default profile.
+- Failure criteria: guest reset, GPU fault, suite failure -> rec2280h.
+- Recovery: rec2280h (ANS).
+- Hashes: sys a5547b02e2d9, UmdArm64 b06c133c6823, UmdX64 296dc6bb1b0c, Umd32 01541cc0f89d; manifest b2c9ee43b922, hardware-manifest 69d3cb1ae9db; probe2280.sh 66d401201e61 (PROBE_LINT_OK); visible recovery rec2280h 66b4f06a0cdd2bfe; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1.
+- Recovery rec2280h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2280-ov6b-provenance/run2280.sh.
