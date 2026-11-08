@@ -8,6 +8,19 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 22:29Z -- WAIVER RESET IS REPRODUCIBLE AND TIMING-DEPENDENT (EXP2283/2285 vs 2282/2284)
+- With the R8 TA waiver: Wom1JobDiagnostics off -> Windows reset 2 of 2 boots (EXP2283 second GM run, EXP2285 ~15 s into
+  the first); diagnostics on -> 0 of 2 boots (3 GM runs). Offline: JobDiagnostics gates only receipts/sampling (per-poll
+  firmware stamp reads, timing notes, exports), no scheduling or encoding branch -> the mechanism is a race that the
+  slower sampling loop hides. No stop code: ANS-DIRECT refuses the crash-dump instance, the HV prints only PSCI RESET
+  regs/stack.
+- Two readings to separate first: GPU hang (0x116 after a failed ResetFromTimeout: a firmware/TA contract defect in the
+  waived path at tight timing) vs a KMD fault (0x7E/0xD1/0x3B: a software race, e.g. completion ordering when the TA
+  ends before the compute and the worker is not slowed). Spec (handoff): a stop-code beacon -- KeRegisterBugCheckReasonCallback
+  in the KMD writes code + 4 params into a broker-page slot that m1n1 dumps at PSCI SYSTEM_RESET; or the runner's
+  KiBugCheckData read at reset. Then EXP2286 = EXP2285 config + beacon.
+- The waiver stays opt-in; the ABBA for the R8 gain is blocked until the race is understood.
+
 ## UPDATE 2026-11-08 21:43Z -- EXP2283: WINDOWS RESET IN THE SECOND GM RUN WITH THE WAIVER (ABBA PAUSED)
 - Arm on, no Wom1JobDiagnostics: GM a 42.8 fps, then ~10 s into GM b a PSCI SYSTEM_RESET (bugcheck path as EXP2270); no
   stop code or dump: on ANS-DIRECT the crash-dump storage instance is refused by design (1e7a690c4), so hangs leave only
