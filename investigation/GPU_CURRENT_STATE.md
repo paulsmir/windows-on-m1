@@ -8,6 +8,18 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 21:14Z -- GRAVITYMARK HD WITH THE R8 TA WAIVER DOES NOT HANG (EXP2282, fork 6)
+- Switches Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1 Wom1JobDiagnostics=1, OV3B=1, HD PERF: Waived 2043 / Placed 2043 of
+  3109 frames (R8 only; RUNNING_KIND 1), no reset, 9 receipt snapshots, 40.5 fps (receipt-class runs without the waiver:
+  39.5-39.8; no same-package control). Overlap on GM: 601 of 11261 C->R pairs ended their TA before the compute end,
+  median 0.54 ms, max 2.58 ms -- the waived R8s really overlap C7.
+- EXP2214's hang does not reproduce in HD on this base (OV6 ranges, backend successor fix 56772879, kick fallback S1-S4a).
+  FHD and the old base were not run: EXP2214 stays "not reproduced", not "explained".
+- Decision: (1) ABBA HD on this package, waiver on/off (boot-time switches: cross-boot A/B/B/A with identical arm order,
+  perf-gate protocol warm-up + 2 repeats, receipts OFF so the fps is production-class) -> the R8 gain in ms/frame decides
+  the default (class C/O: correct and measured); (2) then FHD with the waiver, bounded like EXP2282 (the EXP2214 shape and
+  the user's 7814 target); (3) OV6c after.
+
 ## UPDATE 2026-11-08 20:51Z -- OVERLAP PROVEN ON HARDWARE (EXP2281 OVPAIR-H): LONG TA RUNS DURING COMPUTE, 3D WAITS ON THE STAMP
 - fork 6: 40/40 pairs, 37 waived, measure-gpu-stages: compute end - TA end median +29.6 ms (positive in 37/40 = the waived
   ones), render end 276 us after compute end. The G13 firmware runs a render's TA (~100k triangles, 1080p, D32) while an
