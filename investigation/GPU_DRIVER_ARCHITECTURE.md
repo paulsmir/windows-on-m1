@@ -49,6 +49,9 @@ Rules:
   (gpu.rs) after every job, default on since 125bddd1 (EXP2217 drain proof,
   EXP2219 perf gate PASS; Wom1FwRxDrain = 0 disables).
 
+- **BUILD (C/O)** interrupt-driven job completion (firmware notify -> ISR/DPC -> worker) replacing the predictive
+  sleep+spin poll on the critical path (Wom1JobPoll: 320 us mean late wake per sleep, 49 % CPU busy; ~0.3-0.5 ms/frame).
+
 ### 2.2 Dependencies (D3D12 -> AGX)
 Target: order work only by what D3D12 orders (ResourceBarrier) and by
 driver-internal hazards -- the same per-resource model Apple's kext uses
@@ -80,7 +83,7 @@ driver-internal hazards -- the same per-resource model Apple's kext uses
 ### 2.5 Shader compiler
 - **DONE** compute, VS and FS code at Metal-oracle parity (instruction and load
   counts, EXP2070/2194, OV2 session 2026-11-06).
-- **CLOSED 2026-11-08** compute kernel runtime: at scene-aligned parity with Apple (agx_gm_scene_align.py; C4 lighting +13 % is the DXIL-heavier kernel, workload-owned). The earlier +4.5 ms was a scene-sampling artefact. Remaining GPU-timeline gap = 4.0 ms structure (2.1 overlap, 2.1/2.4 non-work).
+- **CLOSED 2026-11-08** compute kernel runtime: at scene-aligned parity with Apple (agx_gm_scene_align.py; C4 lighting +13 % is the DXIL-heavier kernel, workload-owned). The earlier +4.5 ms was a scene-sampling artefact. Remaining GPU-timeline gap = 4.0 ms structure: ~2.0 missing R||C overlap, 0.85 DWM composition (platform), 0.3-0.5 predictive completion poll (KMD), 0.45 launch/broker, 0.22 idle (state 2026-11-08 STRUCTURAL GAP DECOMPOSED).
 - (superseded text) runtime behaviour of compute kernels (+4.5 ms/frame HD vs Apple):
   needs counters -- Apple's via Instruments (Xcode on the J313 macOS) and ours via
   the firmware stats ring first; RDE perf-counter RE only if those do not

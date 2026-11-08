@@ -8,6 +8,36 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 14:08Z -- THE 4.0 ms STRUCTURAL GAP DECOMPOSED (offline, EXP2268 log + EXP2267/2193 receipts)
+- CORRECTION of the two sections below and of the EXP2225 text: `late` and `foreign` in agx_gpu_frame_breakdown --jobs are
+  per-position FRACTIONS of frames (mean of 0/1 flags), not ms. "late submit 1.20 / 1.40, foreign (DWM) 0.99" were summed
+  fractions (= ~1.4 late jobs and ~1 foreign DWM job per frame). Real non-work per frame (wall - GPU work) is ~2.0 ms, not 4.7.
+- HD frame, EXP2268 frames t>15 s (scratch struct-decomp over the tool's job model): wall 21.60, GPU work 19.41 (C exact + R
+  ta/3d/prelude), overhead 1.91 median / 2.05 mean = launch 1.39 + firmware idle gaps 0.22 + critical-path detect ~0.3-0.5.
+  Per position: launch C0 0.12, R1 0.06, C2 0.87, R3 0.06, C4 0.05, R5 0.06, C6 0.06, R7 0; detect C0 0.13, R1 0.04, C2 0.10,
+  R3 0.07, C4 0.17, R5 0.06, C6 0.14, R7 0.10 (sum 1.02, partly hidden by depth-2 pre-kicks).
+- Item 1, DWM composition inside GravityMark's GPU timeline: ~0.85 ms/frame. C2's launch is 0.90 ms when a foreign (DWM) job
+  completed ahead of it (57 % of frames) and 0.05 ms otherwise; R3 0.98 vs 0.06 (35 %); C4 0.88 vs 0.05 (4 %): one DWM job
+  per frame, ~0.85 ms including its own kick. Owner: Windows windowed presentation (EXP2212: no MPO -> no independent flip).
+  Apple's mtltime cb time EXCLUDES WindowServer, so the like-for-like GravityMark-only gap is ~3.2 ms, not 4.0.
+- Item 2, our own launch latency ~0.45 ms/frame (0.05-0.12 per job, 8 jobs): KMD worker_to_kick ~55 us + begin/build 5-50 us
+  (JobTiming971Hot) + broker JOB_BEGIN/LEASE (160-272 us per process switch, EXP2163) + firmware kick->start. Owner: KMD + HV
+  broker (migration item #11 of HV-RESPONSIBILITY-INVENTORY.md).
+- Item 3, completion detection ~0.3-0.5 ms/frame on the critical path (1.02 summed): the KMD detects completion by a PREDICTIVE
+  SLEEP + SPIN poll, not by a firmware interrupt. Wom1JobPoll over EXP2267's suite+GM window: 35454 jobs, 40141 sleeps,
+  sleep requested 24.8 s but slept 37.7 s -> the timer wakes 320 us late per sleep on average (late_max 3.5 ms), slack 492 us,
+  CPU busy 49 % of job time (1.6 M spins), 3.7 % of completions first seen after a sleep. Owner: KMD design + Windows timer
+  resolution. Lever: interrupt-driven completion (firmware notify -> ISR/DPC -> worker), as Asahi/macOS do.
+- Item 4, firmware-view idle between our own jobs 0.22 ms/frame (depth-2 works; residual boundary cost).
+- Item 5, no render||compute overlap: ~2 ms/frame net. Apple's unsplit frame is 3.2-4.5 ms below its split encoder sum
+  (minus ~0.8 ms split overhead -> ~2.5-3.5 ms of overlap), while our render work is ~1.2 ms below Apple's split render sum.
+  Owner: firmware work-item contract (OV2/OV3/OV5 line; OV5 TA waiver hang EXP2214 is the open blocker).
+- Ranking by recoverable size: overlap (~2.0) > DWM (0.85, platform-owned, also hidden on macOS) > detect (0.3-0.5) >
+  launch (0.45) > idle (0.22). Sum ~4.0 = measured wall - Apple unsplit in every aligned bin. Compute kernels: parity.
+- Next: (a) OV line: byte-for-byte work-item comparison with Apple's kext for one C->R pair (prerequisite for overlap);
+  (b) KMD interrupt-driven completion design note (WINDOWS/AGX/TRANSLATION/UNKNOWN) replacing the predictive poll on the
+  critical path; (c) the broker/LEASE cost belongs to fork 6's GPUVA-in-KMD migration. No hardware run needed yet.
+
 ## UPDATE 2026-11-08 13:55Z -- C2 vs APPLE c11: EQUAL WORK, EQUAL TIME; THE COMPUTE GAP WAS A SCENE-SAMPLING ARTEFACT
 - Work: our C2 records exactly Apple c11's 34 dispatches in the same order with the same direct grids and thread sizes
   (fc968f7a 2x1x1 + 4 indirect = Apple d0-d4 @128 threads; 1x1x1 singles; 256-thread indirect block d7-d28; 1024-thread
