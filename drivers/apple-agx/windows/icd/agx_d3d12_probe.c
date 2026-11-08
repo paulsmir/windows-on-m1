@@ -9156,6 +9156,10 @@ static int mem_bw_impl(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
     /* EXP2264: uav = 3 = root UAV + a GPU-busy warm-up (stream passes) at the head of every timed list; the
      * (11 - 1 dispatch) difference cancels the warm-up, so the chase is timed after DVFS had ~90 ms of load. */
     const BOOL hot = uav == 3;
+    /* EXP2266: uav = 4 = root UAV with 128x longer chase dispatches (65536 dependent steps, ~10-30 ms each) so
+     * the GPU stays busy long enough for DVFS to reach P6 (EXP2265: the 512-step probe ran ~65 % at P1). */
+    const BOOL longchase = uav == 4;
+    const UINT steps_used = longchase ? 65536u : 512u;
     D3D12_DESCRIPTOR_RANGE table_range = {D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1, 0, 0};
     ID3D12DescriptorHeap *table_heap = NULL;
     enum { BYTES = 128u << 20, LINES = BYTES / 64u, STREAM_THREADS = 65536u, CHASE_THREADS = 1024u, CHASE_STEPS = 512u,
@@ -9291,7 +9295,7 @@ static int mem_bw_impl(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
                 const UINT dispatches = k ? 11u : 1u;
                 const UINT threads = !mode ? STREAM_THREADS : m > REGIONS ? 32u : CHASE_THREADS;
                 /* spread: every thread starts on the cycle's first line (lines = 1 keeps the start a member) */
-                const UINT constants[6] = {BYTES / 16u, mode, CHASE_STEPS, threads,
+                const UINT constants[6] = {BYTES / 16u, mode, mode ? steps_used : CHASE_STEPS, threads,
                                            spread ? spread_first[m - CHASES] : m ? region_first[region] : 0u,
                                            spread ? 1u : m ? region_kib[region] * 1024u / 64u : 1u};
                 double ms = 0.0;
@@ -9328,16 +9332,16 @@ static int mem_bw_impl(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
         for (UINT m = 1; m < CHASES; ++m) {
             const double chase_ms = (best[m][1] - best[m][0]) / 10.0;
             printf("MEMBW_CHASE_NS %u KiB %.1f (%u threads x %u dependent loads, %.3f ms per dispatch)\n",
-                   region_kib[(m - 1u) % REGIONS], chase_ms > 0.0 ? chase_ms * 1e6 / CHASE_STEPS : 0.0,
-                   m > REGIONS ? 32u : (UINT)CHASE_THREADS, CHASE_STEPS, chase_ms);
+                   region_kib[(m - 1u) % REGIONS], chase_ms > 0.0 ? chase_ms * 1e6 / steps_used : 0.0,
+                   m > REGIONS ? 32u : (UINT)CHASE_THREADS, steps_used, chase_ms);
         }
         for (UINT m = CHASES; m < CASES; ++m) {
             const double chase_ms = (best[m][1] - best[m][0]) / 10.0;
             printf("MEMBW_PAGES_NS %u pages %.1f (32 threads x %u dependent loads, one 64 B line per 16 KiB page)\n",
-                   spread_pages[m - CHASES], chase_ms > 0.0 ? chase_ms * 1e6 / CHASE_STEPS : 0.0, CHASE_STEPS);
+                   spread_pages[m - CHASES], chase_ms > 0.0 ? chase_ms * 1e6 / steps_used : 0.0, steps_used);
         }
     }
-    printf("AGX_D3D12_MEMBW%s: %s\n", hot ? "HOT" : table ? "TBL" : uav ? "UAV" : "", SUCCEEDED(hr) ? "PASS" : "FAIL");
+    printf("AGX_D3D12_MEMBW%s: %s\n", longchase ? "LONG" : hot ? "HOT" : table ? "TBL" : uav ? "UAV" : "", SUCCEEDED(hr) ? "PASS" : "FAIL");
     if (table_heap) ID3D12DescriptorHeap_Release(table_heap);
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
@@ -9355,12 +9359,14 @@ static int mem_bw(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64
 static int mem_bw_uav(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return mem_bw_impl(d, q, f, b, TRUE); }
 static int mem_bw_tbl(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return mem_bw_impl(d, q, f, b, 2); }
 static int mem_bw_hot(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return mem_bw_impl(d, q, f, b, 3); }
+static int mem_bw_long(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return mem_bw_impl(d, q, f, b, 4); }
 
 static const struct { const char *name; probe_step step; } named_steps[] = {
     {"MEMBW", mem_bw},
     {"MEMBWUAV", mem_bw_uav},
     {"MEMBWTBL", mem_bw_tbl},
     {"MEMBWHOT", mem_bw_hot},
+    {"MEMBWLONG", mem_bw_long},
     {"Q3PC", q3_pc}, {"Q3CP", q3_cp},
     {"Q3CR", q3_cr}, {"Q3RC", q3_rc_pair}, {"Q3RCR", q3_rcr}, {"Q3RR", q3_rr},
     {"RC57C", step_rc57c}, {"RC57U", step_rc57u}, {"RC57M", step_rc57m}, {"RC59G", step_rc59g}, {"RC63G", rc63_gravitymark_stream}, {"RC89S", rc89_stream_capacity},
