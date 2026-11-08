@@ -74660,3 +74660,15 @@ EXP2255 HARDWARE BEFORE 2026-11-08T02:02:24Z:
 
 EXP2255 ACTUAL (2026-11-08T02:09:18Z): CONFIRMED -- GPU experiments now run on the native SSD. prepare: "STORAGE ANS_NATIVE ANS_DIRECT fd ce17dea8", proxyclient m1n1-wt-ans-direct-slc; full.log "storage mode: ANS_NATIVE", "HV ANS direct mode armed", "HV CPPC: _CPC page at 0x300040000, counters at 0x300044000". Guest: APPL0003 1 OK, AppleAns Running, 0 stornvme devices (storage-direct.txt; the probe's inline storage line was empty -> replaced by storage-check.ps1). Pipeline RC 0, suite 119/0, GM d closed (wer 0), GM HD 44.610 fps (bridge EXP2251 44.633: equal), CPPC: no Event 54, Processor Frequency 2064/2988. Exit census on ANS (10 s): impdef 0.79-2.36 M, msr 0.19-1.33 M, icc 75-427k, fiq 79-166k, dabt 2k-325k, irq 0.9-63k -> sysreg traps still dominate; NVMe-bridge exits gone. New baseline for all following GPU experiments (native SSD).
 EXP2255 RECOVERY (2026-11-08T02:20:08Z): attempt 1 refused before any action (agx-select-exact-launcher.py did not know --storage-mode/--ans-direct/--ans-production-fd-sha256; fixed 736a679df with regression test). Attempt 2: RECOVERY_STORAGE ans -> VISIBLE_INERT_PACKAGE_ABSENT_8CPU + RECOVERY_STORAGE_APPLEANS_OK -> RECOVERY_DONE. RECANS001 CONFIRMED through the full recover.sh path: experiments and normal recovery both run on the native SSD.
+
+EXP2256 HARDWARE BEFORE 2026-11-08T02:33:27Z:
+- WHY THIS HYPOTHESIS: (1) EXP2253 exit keys: MDSCR_EL1 reads (S2_0_C0_C2_2) 0.4-3.3 M per 10 s, trapped only because MDCR_EL2.TDA is set; (2) EXP2255 on ANS still shows msr 0.19-1.33 M per 10 s; (3) TDE/TDA exist only for HV-side guest debugging (Python HV breakpoints/single step), not needed in production.
+- WINDOWS CONTRACT: Arm debug architecture owned by EL1 (MDSCR_EL1, DBGB*/DBGW*, OS lock, debug exceptions to EL1).
+- AGX/ASAHI CONTRACT: n/a (CPU virtualization).
+- TRANSLATION: MDCR_EL2 = 0 on every CPU (hv_secondary_info snapshot).
+- WHAT IS STILL UNKNOWN: whether Windows/WinDbg-less boot relies on any debug trap; whether BRK handling changes behaviour.
+- Expected: msr class falls by ~0.4-1.3 M per 10 s (MDSCR keys disappear from EXITKEYS), brk ~0; suite 119/0; GM HD >= EXP2255 44.61 (CPU overhead reduction may raise it).
+- Failure criteria: boot failure/hang, bugcheck, suite failure, GM drop > 2 % -> rec2256h (ANS recovery).
+- Recovery: rec2256h. Probe: probe2256.sh = probe2255.sh (with storage-check.ps1).
+- Hashes: sys d59cb4be2093, UmdArm64 9e25976db2b5, UmdX64 d1fe503b3624, Umd32 c6cca8bcf412; manifest 7c488a39353b, hardware-manifest 6f297e48f629; probe2256.sh b4e85c8fcb6a (PROBE_LINT_OK); visible recovery rec2256h 4edd823297366a89; m1n1 0d3a75b3.
+- Recovery rec2256h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2256-gdbg/run2256.sh.
