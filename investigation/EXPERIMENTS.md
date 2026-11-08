@@ -75031,3 +75031,17 @@ EXP2280 HARDWARE ACTUAL 2026-11-08T20:22:09Z:
 - measure-d3d12-ov2-conflict, 188 rows, tools/agx_ov6_conflict_decode.py: render 0: VB read vs compute ROOT write, same heap, overlap 44761088 bytes (62 of 63); render 1: the same (61 of 64), else ROOT write vs ROOT write 221118464; render 2: vertex-stage ROOT write vs compute ROOT write, overlap 221118464 (61 of 61). No IND_ARGS, IND_CNT, TARGET or CLEAR conflict is the first pair.
 - Limits: the receipt is the first pair only, so later conflicting pairs of the same render are hidden. VB ranges are unsized here (to the end of the placed span), and a root UAV covers its whole resource, so byte overlap alone does not prove the VS reads bytes the compute wrote.
 - Verdict: receipt confirmed. Interpretation under the OV6b rules belongs to the architect. Recovery rec2280h.
+
+EXP2281 HARDWARE BEFORE 2026-11-08T20:47:48Z:
+- WHY THIS HYPOTHESIS: (1) EXP2279: the waived TA path completed 38 times, but only with a trivial 64x64 triangle; (2) EXP2214 hung in GravityMark, whose TA runs for milliseconds with TVB growth; (3) a long TA during an unfinished compute, with the 3D queue blocked on the stamp, is the remaining untested ingredient that needs no GravityMark.
+- WINDOWS CONTRACT: unchanged; the lists share no resources.
+- AGX/ASAHI CONTRACT: as EXP2279; undocumented firmware behaviour.
+- TRANSLATION: existing OV5 path and OV7 flush, unchanged.
+- ATOMIC CONTRACT: none -- one probe step.
+- WHAT IS STILL UNKNOWN: whether a long TA overlaps the compute without a hang; TA end vs compute end per pair.
+- Expected: PASS 40/40, 0 bad pixels, Waived about 38-40, and TA end before compute end in Wom1JobTiming971Hot. TIMEOUT or 0x116 -> the long-TA ingredient reproduces EXP2214.
+- Failure criteria: hang/reset (accepted possibility), bad pixels, no overlap shown (inconclusive).
+- Recovery: rec2281h (ANS); on a reset save full.log first, then AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2281h/recover.sh; "one-shot arm remains" -> EXP2270 ACTUAL procedure.
+- Hashes: sys 2fbdf62542bb, UmdArm64 b4512aed8043, UmdX64 81ba331fb532, Umd32 e145a2825967; manifest a9f8b7656bfb, hardware-manifest 56c410ff8eff; probe2281.sh 2e9f8874c59d (PROBE_LINT_OK); visible recovery rec2281h 62c8ed6499ab87ce; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
+- Recovery rec2281h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2281-ovpairh/run2281.sh.
