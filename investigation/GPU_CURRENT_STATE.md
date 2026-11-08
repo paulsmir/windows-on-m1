@@ -8,6 +8,20 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 20:22Z -- OV6b READ: R2/R4/R6 "VERTEX CONFLICTS" ARE RESOURCE-GRANULARITY, NOT PROVEN DEPENDENCIES (EXP2280)
+- First conflicting pairs (fork 6 run, 3243 executions): R2/R4 = vertex-buffer read vs the compute's root UAV write in the
+  same heap, overlap ~44.8 MB (62/63, 61/64 entries): the VB range is unsized (to the placed resource's end) and a root UAV
+  covers its whole resource; R6 = a vertex-stage root UAV *binding* (counted as a write) vs the compute's root UAV write,
+  overlap ~221 MB. No IND_ARGS/IND_CNT/TARGET/CLEAR pair comes first. Verdicts unchanged: 0x9999 (prelude), no-prelude 0x0aaa.
+- Reading: the 10s are what the tracker can see, not what the GPU does -- Tellusim suballocates from big placed buffers, so
+  resource-level ranges alias; Metal tracks per MTLBuffer and still overlaps c15||R16, so on Apple's side these are separate
+  buffers or byte-disjoint. Provable byte ranges exist for VB/IB (view SizeInBytes) but not for a root UAV's writes.
+- Decision (architect): park the R2/R4/R6 independence question -- their CDM prelude (9) blocks the TA regardless, so the
+  prelude placement is the real gate for ~1 ms of the overlap ceiling. OV6c (VB/IB sized by their views, VS UAV counted as a
+  write only when the shader stores) is cheap and correct (class C) but not on the critical path; queue it after OVPAIR-H.
+- Critical path now: OVPAIR-H (long TA + TVB while compute runs, with overlap proof) -> if it holds, a bounded GM run with
+  the R8 waiver (EXP2214 shape, recovery staged); if it hangs, the ingredient is found.
+
 ## UPDATE 2026-11-08 19:53Z -- OVERLAP LINE: THE BASE OV5 CONTRACT DOES NOT HANG (EXP2279); EXP2214 IS GRAVITYMARK-SHAPE SPECIFIC
 - Architect/implementer split since this evening: this session analyses and specifies, fork 6 implements and runs.
 - EXP2275 (OV6 finite ranges): every GM render-after-compute is placeable; R2/R4/R6 = prelude (9) and a resource-level
