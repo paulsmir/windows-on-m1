@@ -2478,3 +2478,9 @@ Not a KMD fault. Waived 0, Ov2 0 at the stall; receipts absent because the worke
 Three diag-off GM starts reset, one survived; diag on 0 of 3. EXP2214's verdict (waiver fault, Waived 3 + fault receipt)
 stands but shares the diag-off/GM-start profile. Next: EXP2287 (diag off, OV2 lead only, 3 starts), EXP2288 (no switches),
 D4 = m1n1 prints ASC RX pending at the PSCI trap (worker stuck vs firmware stall). Ledger: "EXP2286 ARCHITECT READING".
+
+## UPDATE 2026-11-08T23:54:14Z -- EXP2288: the waiver SWITCH is necessary for the 0x116 (3/3 on, 0/3 off), but no waiver fires before it
+Death at 10-15 s after launch = GravityMark scene creation, before "Ready" (13-17 s). In the healthy diag-on run no render
+is flagged TA-independent before Ready (first at 21.7 s), so Waived 0 at the reset is real. Switch effects left: KMD-internal
+(per-kick refusal, receipt notes -> worker registry exports) vs the UMD feature bit (hook call only). Next EXP2289: waiver on,
+diag off, feature bit withheld (Wom1Ov5TaWaiverNoFeature=1), 3 starts, with D4 in m1n1. ABBA/default waiver still blocked.
