@@ -75167,3 +75167,7 @@ EXP2287 HARDWARE BEFORE 2026-11-08T23:09:02Z:
 - Hashes: sys c21f564be996, UmdArm64 8dd11814247b, UmdX64 4419840ba8ea, Umd32 c93d8d61ece9; manifest 9104bdab9d36, hardware-manifest 0e42cd00908a; probe2287.sh be707a74f49f (PROBE_LINT_OK); visible recovery rec2287h 6ff0c23a119d6269; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
 - Recovery rec2287h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2287-lead-only/run2287.sh.
+
+EXP2287 HARDWARE ACTUAL 2026-11-08T23:19:52Z:
+- Result: not run. After stage and the ordered restart, chainload failed on the Mac: /tmp/agx-lld-dir/ld.lld was missing (the directory was emptied at 00:00 local, cause not determined), so m1n1 never loaded and SSH_NEVER_UP followed. No Windows boot with the package, no GPU data.
+- Verdict: inconclusive (host tooling). The ordered-restart package stays staged until recovery. Next: restore ld.lld, AT_PROXY rec2287h, rerun the same configuration as EXP2288.
