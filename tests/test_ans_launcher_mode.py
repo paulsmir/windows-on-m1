@@ -50,6 +50,48 @@ class AnsLauncherModeTests(unittest.TestCase):
         self.assertNotEqual(p.returncode, 0)
         self.assertIn('native qualification candidate is not yet admitted', p.stderr)
 
+    # 2026-11-08 production ANS-DIRECT: explicit flags + firmware hash pin, never ambient.
+    def _fw(self):
+        import tempfile, hashlib
+        f = tempfile.NamedTemporaryFile(delete=False, suffix='.fd'); f.write(b'J313-test-firmware'); f.close()
+        self.addCleanup(os.unlink, f.name)
+        return f.name, hashlib.sha256(b'J313-test-firmware').hexdigest()
+
+    def test_production_requires_direct(self):
+        fw, sha = self._fw()
+        p = subprocess.run([sys.executable, str(ROOT/'run_uefi.py'), fw, '--storage-mode', 'ANS_NATIVE',
+                            '--ans-production-fd-sha256', sha, '--dry-run'], cwd=ROOT, capture_output=True, text=True)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('requires --ans-direct', p.stderr)
+
+    def test_production_rejects_firmware_hash_mismatch(self):
+        fw, sha = self._fw()
+        p = subprocess.run([sys.executable, str(ROOT/'run_uefi.py'), fw, '--storage-mode', 'ANS_NATIVE',
+                            '--ans-direct', '--ans-production-fd-sha256', '0' * 64, '--dry-run'],
+                           cwd=ROOT, capture_output=True, text=True)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('ANS production firmware hash mismatch', p.stderr)
+
+    def test_production_requires_native_mode(self):
+        fw, sha = self._fw()
+        p = subprocess.run([sys.executable, str(ROOT/'run_uefi.py'), fw,
+                            '--ans-production-fd-sha256', sha, '--dry-run'], cwd=ROOT, capture_output=True, text=True)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('requires --storage-mode ANS_NATIVE', p.stderr)
+
+    def test_production_pinned_dry_run_arms_direct(self):
+        fw, sha = self._fw()
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('WOM1_ANS_DIRECT', None)
+            with patch.object(sys, 'argv', ['run_uefi.py', fw, '--storage-mode', 'ANS_NATIVE', '--ans-direct',
+                                            '--ans-production-fd-sha256', sha, '--dry-run']):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    with self.assertRaises(SystemExit) as stop:
+                        runpy.run_path(str(ROOT/'run_uefi.py'), run_name='__main__')
+            self.assertEqual(stop.exception.code, 0)
+            self.assertEqual(os.environ.get('WOM1_ANS_DIRECT'), '1')
+            self.assertEqual(os.environ['WOM1_STORAGE_MODE'], 'ANS_NATIVE')
+
     def test_assisted_script_rejects_direct_without_native(self):
         p = subprocess.run(['sh', str(ROOT/'scripts/run-assisted.sh'), '--ans-direct', '--dry-run'],
                            cwd=ROOT, capture_output=True, text=True)

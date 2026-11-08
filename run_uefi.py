@@ -30,6 +30,10 @@ ap.add_argument("--ans-direct", action="store_true",
                 help="ANS_NATIVE only: the EBS handoff cold-boots ANS to the Asahi hand-off state and "
                      "passes the controller to the guest driver (no EL2 broker, no EL2 write window); "
                      "exclusive with a manifest write window")
+ap.add_argument("--ans-production-fd-sha256",
+                help="ANS_NATIVE + --ans-direct only: ordinary production launch of the native SSD "
+                     "(no qualification manifest); the payload firmware must hash to this value. "
+                     "Explicit on the command line, never taken from the environment.")
 ap.add_argument("--qualification-manifest", type=pathlib.Path)
 ap.add_argument("--qualification-sha256")
 ap.add_argument("--qualified-m1n1", type=pathlib.Path)
@@ -96,7 +100,25 @@ os.environ.pop("WOM1_ANS_WRITE_WINDOW", None)
 os.environ.pop("WOM1_ANS_DIRECT", None)
 qualification_paths = None
 ans_write_window = None
-if args.storage_mode == "ANS_NATIVE":
+if args.storage_mode == "ANS_NATIVE" and args.ans_production_fd_sha256 is not None:
+    # 2026-11-08: production ANS-DIRECT (GPU experiments and normal recovery). Mirrors the ANS013-R1
+    # launch-gpu-ans.sh contract without the qualification manifest: explicit flags + pinned firmware.
+    import hashlib
+    if not args.ans_direct:
+        ap.error("--ans-production-fd-sha256 requires --ans-direct")
+    if any((args.qualification_manifest, args.qualification_sha256, args.qualified_m1n1,
+            args.confirm_experiment, args.require_execution_confirmation, args.qualified_vuart)):
+        ap.error("--ans-production-fd-sha256 is exclusive with qualification arguments")
+    if args.payload is None:
+        ap.error("--ans-production-fd-sha256 requires the firmware payload")
+    pinned = args.ans_production_fd_sha256.strip().lower()
+    actual = hashlib.sha256(pathlib.Path(args.payload).read_bytes()).hexdigest()
+    if len(pinned) != 64 or actual != pinned:
+        ap.error(f"ANS production firmware hash mismatch: {actual} != {pinned}")
+    os.environ["WOM1_ANS_DIRECT"] = "1"
+elif args.ans_production_fd_sha256 is not None:
+    ap.error("--ans-production-fd-sha256 requires --storage-mode ANS_NATIVE")
+elif args.storage_mode == "ANS_NATIVE":
     from tools.ans_qualification import validate_launch, write_window_env, direct_mode, OVERRIDES
     root = pathlib.Path(__file__).resolve().parent
     try:
