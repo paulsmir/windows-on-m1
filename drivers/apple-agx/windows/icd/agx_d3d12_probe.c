@@ -30,6 +30,7 @@
 #include "agx_d3d12_probe_cs_c49.h"
 #include "agx_d3d12_probe_cs_membw.h"
 #include "agx_d3d12_probe_cs_membw_uav.h"
+#include "agx_d3d12_probe_cs_membw_atom.h"
 #include "agx_d3d12_probe_vs_dxil.h"
 #include "agx_d3d12_probe_ps_dxil.h"
 #include "agx_d3d12_probe_ps_c57.h"
@@ -9158,7 +9159,9 @@ static int mem_bw_impl(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
     const BOOL hot = uav == 3;
     /* EXP2266: uav = 4 = root UAV with 128x longer chase dispatches (65536 dependent steps, ~10-30 ms each) so
      * the GPU stays busy long enough for DVFS to reach P6 (EXP2265: the 512-step probe ran ~65 % at P1). */
-    const BOOL longchase = uav == 4;
+    /* EXP2267: uav = 5 = same long chase, every step a global atomic (InterlockedAdd +0). */
+    const BOOL atom = uav == 5;
+    const BOOL longchase = uav == 4 || atom;
     const UINT steps_used = longchase ? 65536u : 512u;
     D3D12_DESCRIPTOR_RANGE table_range = {D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1, 0, 0};
     ID3D12DescriptorHeap *table_heap = NULL;
@@ -9268,8 +9271,10 @@ static int mem_bw_impl(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
                                               &IID_ID3D12RootSignature, (void **)&root);
     if (SUCCEEDED(hr)) {
         pso_desc.pRootSignature = root;
-        pso_desc.CS.pShaderBytecode = uav ? (const void *)g_agx_d3d12_probe_cs_membw_uav : (const void *)g_agx_d3d12_probe_cs_membw;
-        pso_desc.CS.BytecodeLength = uav ? sizeof(g_agx_d3d12_probe_cs_membw_uav) : sizeof(g_agx_d3d12_probe_cs_membw);
+        pso_desc.CS.pShaderBytecode = atom ? (const void *)g_agx_d3d12_probe_cs_membw_atom
+                                    : uav ? (const void *)g_agx_d3d12_probe_cs_membw_uav : (const void *)g_agx_d3d12_probe_cs_membw;
+        pso_desc.CS.BytecodeLength = atom ? sizeof(g_agx_d3d12_probe_cs_membw_atom)
+                                   : uav ? sizeof(g_agx_d3d12_probe_cs_membw_uav) : sizeof(g_agx_d3d12_probe_cs_membw);
         hr = ID3D12Device_CreateComputePipelineState(device, &pso_desc, &IID_ID3D12PipelineState, (void **)&pso);
     }
     if (SUCCEEDED(hr))
@@ -9341,7 +9346,7 @@ static int mem_bw_impl(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
                    spread_pages[m - CHASES], chase_ms > 0.0 ? chase_ms * 1e6 / steps_used : 0.0, steps_used);
         }
     }
-    printf("AGX_D3D12_MEMBW%s: %s\n", longchase ? "LONG" : hot ? "HOT" : table ? "TBL" : uav ? "UAV" : "", SUCCEEDED(hr) ? "PASS" : "FAIL");
+    printf("AGX_D3D12_MEMBW%s: %s\n", atom ? "ATOM" : longchase ? "LONG" : hot ? "HOT" : table ? "TBL" : uav ? "UAV" : "", SUCCEEDED(hr) ? "PASS" : "FAIL");
     if (table_heap) ID3D12DescriptorHeap_Release(table_heap);
     if (list) ID3D12GraphicsCommandList_Release(list);
     if (allocator) ID3D12CommandAllocator_Release(allocator);
@@ -9360,6 +9365,7 @@ static int mem_bw_uav(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UI
 static int mem_bw_tbl(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return mem_bw_impl(d, q, f, b, 2); }
 static int mem_bw_hot(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return mem_bw_impl(d, q, f, b, 3); }
 static int mem_bw_long(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return mem_bw_impl(d, q, f, b, 4); }
+static int mem_bw_atom(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return mem_bw_impl(d, q, f, b, 5); }
 
 static const struct { const char *name; probe_step step; } named_steps[] = {
     {"MEMBW", mem_bw},
@@ -9367,6 +9373,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"MEMBWTBL", mem_bw_tbl},
     {"MEMBWHOT", mem_bw_hot},
     {"MEMBWLONG", mem_bw_long},
+    {"MEMBWATOM", mem_bw_atom},
     {"Q3PC", q3_pc}, {"Q3CP", q3_cp},
     {"Q3CR", q3_cr}, {"Q3RC", q3_rc_pair}, {"Q3RCR", q3_rcr}, {"Q3RR", q3_rr},
     {"RC57C", step_rc57c}, {"RC57U", step_rc57u}, {"RC57M", step_rc57m}, {"RC59G", step_rc59g}, {"RC63G", rc63_gravitymark_stream}, {"RC89S", rc89_stream_capacity},
