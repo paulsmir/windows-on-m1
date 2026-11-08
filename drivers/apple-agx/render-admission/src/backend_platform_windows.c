@@ -197,6 +197,11 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   volatile LONG IrqRingHead;
   volatile LONG IrqRingTail;
   ADMISSION_IRQ_RX_RECEIPT IrqRx;
+  /* Step 2 (Wom1IrqCompletion, default off): the mailbox ISR queues the
+   * DPC, the DPC sets JobPollTimerEvent, and the worker's poll waits on that
+   * event (timer = bounded fallback) instead of spinning or sleeping. */
+  BOOLEAN IrqCompletion;
+  volatile LONG IrqWakePending;
   /* Wom1FwRx (receipt-only, with Wom1JobDiagnostics): the firmware->host
    * channels the KMD does not drain (stats, ktrace, fwlog), sampled
    * read-only at each export (apple_agx_fw_rx_receipt.h). */
@@ -1647,6 +1652,7 @@ static VOID AdmissionJobTimingExportWindows(
       ULONG i;
       rx.Version = ADMISSION_IRQ_RX_RECEIPT_VERSION;
       rx.Bytes = sizeof(rx);
+      rx.IrqCompletionOn = runtime->IrqCompletion ? 1u : 0u;
       rx.ScanoutVector = runtime->Adapter->ScanoutInterruptVector;
       rx.MailboxVector = runtime->Adapter->MailboxInterruptVector;
       rx.Armed = (ULONG)InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0);
@@ -1784,6 +1790,46 @@ static NTSTATUS AdmissionJobPollSleepWindows(
   } else {
     status = KeDelayExecutionThread(KernelMode, FALSE, &interval);
   }
+  after = KeQueryPerformanceCounter(NULL);
+  if (frequency.QuadPart > 0)
+    AdmissionJobPollNoteSleep(&runtime->JobPoll, us,
+        (ULONGLONG)(after.QuadPart - before.QuadPart) * 1000000ULL /
+            (ULONGLONG)frequency.QuadPart);
+  return status;
+}
+
+/* Step 2: wait up to Us microseconds for the mailbox DPC's wake (or the
+ * high-resolution timer as the bounded fallback). The timer is always
+ * cancelled afterwards so a late expiry cannot pre-set the next wait. */
+static NTSTATUS AdmissionJobPollWaitWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG us,
+    LARGE_INTEGER frequency) {
+  LARGE_INTEGER before, after, interval, timeout;
+  NTSTATUS status;
+  BOOLEAN early;
+  before = KeQueryPerformanceCounter(NULL);
+  interval.QuadPart = -(LONGLONG)us * 10LL;
+  if (runtime->JobPollTimer != NULL) {
+    (void)ExSetTimer(runtime->JobPollTimer, interval.QuadPart, 0LL, NULL);
+    timeout.QuadPart = interval.QuadPart - 20000LL;
+    status = KeWaitForSingleObject(&runtime->JobPollTimerEvent, Executive,
+                                   KernelMode, FALSE, &timeout);
+    /* TRUE: the timer had not fired, so the wake (or the bounded wait
+     * itself) ended the wait. */
+    early = ExCancelTimer(runtime->JobPollTimer, NULL) ? TRUE : FALSE;
+    if (status == STATUS_TIMEOUT)
+      status = STATUS_SUCCESS;
+  } else {
+    status = KeWaitForSingleObject(&runtime->JobPollTimerEvent, Executive,
+                                   KernelMode, FALSE, &interval);
+    early = status == STATUS_SUCCESS ? TRUE : FALSE;
+    if (status == STATUS_TIMEOUT)
+      status = STATUS_SUCCESS;
+  }
+  if (early)
+    runtime->IrqRx.WaitEarly++;
+  else
+    runtime->IrqRx.WaitTimeout++;
   after = KeQueryPerformanceCounter(NULL);
   if (frequency.QuadPart > 0)
     AdmissionJobPollNoteSleep(&runtime->JobPoll, us,
@@ -2753,6 +2799,8 @@ static APPLE_AGX_ASC_U64 AdmissionAscNow(void *Context) {
 }
 
 #define ADMISSION_IRQ_RING_SLOTS 64u
+/* Step 2: a planner spin step (20 us) waits this long for the wake instead. */
+#define ADMISSION_IRQ_SPIN_WAIT_US 500u
 
 /* DIRQL (ISR, or the worker inside DxgkCbSynchronizeExecution): move every
  * message of the ASC outbox FIFO into the ring. Returns the count moved. */
@@ -2806,7 +2854,35 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformMailboxInterrupt(
     return FALSE;
   }
   runtime->IrqRx.IsrMessages += moved;
+  if (runtime->IrqCompletion && Context->InterfaceValid &&
+      Context->Interface.DxgkCbQueueDpc != NULL) {
+    runtime->IrqRx.DpcQueued++;
+    (void)Context->Interface.DxgkCbQueueDpc(Context->Interface.DeviceHandle);
+  }
   return TRUE;
+}
+
+/* DISPATCH_LEVEL: the DPC half of the mailbox interrupt (step 2). */
+_Use_decl_annotations_ VOID AdmissionPlatformMailboxDpc(ADMISSION_CONTEXT *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  if (Context == NULL)
+    return;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (runtime == NULL || !runtime->IrqCompletion ||
+      InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0) == 0)
+    return;
+  runtime->IrqRx.DpcWakes++;
+  InterlockedExchange(&runtime->IrqWakePending, 1);
+  KeSetEvent(&runtime->JobPollTimerEvent, IO_NO_INCREMENT, FALSE);
+}
+
+/* The poll waits on the mailbox wake only with the switch on and the line
+ * armed (an ACPI device without the line keeps the predictive poll). */
+static BOOLEAN AdmissionIrqWaitActive(ADMISSION_PLATFORM_RUNTIME *runtime) {
+  return runtime->IrqCompletion &&
+                 InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0) != 0
+             ? TRUE
+             : FALSE;
 }
 
 /* DxgkCbSynchronizeExecution routine: observes the disarm under the lock. */
@@ -7673,6 +7749,26 @@ AdoptedKicked:
       pollLastUs = elapsedUs;
       action = AdmissionJobPollPlan(&runtime->JobPoll, elapsedUs,
                                     pollPredictedUs, sleepCapUs, &planUs);
+      /* Step 2 (Wom1IrqCompletion): the firmware's RX doorbell wakes the
+       * worker through the mailbox ISR/DPC, so a spin step becomes a bounded
+       * wait and a predicted sleep is cut short by the wake. */
+      if (action != ADMISSION_JOB_POLL_TICK && AdmissionIrqWaitActive(runtime)) {
+        ULONG waitUs = action == ADMISSION_JOB_POLL_SPIN
+                           ? ADMISSION_IRQ_SPIN_WAIT_US : planUs;
+        pollAfterSleep = TRUE;
+        if (InterlockedExchange(&runtime->IrqWakePending, 0) != 0) {
+          runtime->IrqRx.WaitSkipped++;
+          continue;
+        }
+        if (!NT_SUCCESS(AdmissionJobPollWaitWindows(runtime, waitUs,
+                                                    pollFrequency))) {
+          InterlockedCompareExchange(&adapter->SchedulerFaulted,
+              0x40000L | __LINE__, 0);
+          break;
+        }
+        (void)InterlockedExchange(&runtime->IrqWakePending, 0);
+        continue;
+      }
       if (action == ADMISSION_JOB_POLL_SPIN) {
         pollAfterSleep = FALSE;
         KeStallExecutionProcessor(planUs);
@@ -8381,6 +8477,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   /* IRQ-completion step 1: arm the mailbox line only when the ACPI device
    * listed it; from here the ISR owns the outbox FIFO and the worker reads
    * it through the ring (AdmissionAscRead32/64). */
+  InterlockedExchange(&runtime->IrqWakePending, 0);
   InterlockedExchange(&runtime->MailboxIrqArmed,
                       Context->MailboxInterruptVector != 0u ? 1 : 0);
   AppleAgxRtkitSessionInitialize(&runtime->Rtkit);
@@ -8655,6 +8752,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDiagnostics");
   runtime->SubmitBracket =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1SubmitBracket");
+  runtime->IrqCompletion =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1IrqCompletion");
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   runtime->FwRxDrain =
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1FwRxDrain");

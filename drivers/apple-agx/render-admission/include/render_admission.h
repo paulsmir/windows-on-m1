@@ -1982,8 +1982,20 @@ typedef struct _ADMISSION_IRQ_RX_RECEIPT {
   ULONG WorkerSyncPops;     /* worker found the ring empty: synchronized FIFO pops */
   ULONG WorkerSyncPopHits;  /* ... that found messages (interrupt missed or raced) */
   ULONG RingHighWater;
+  /* v2 (step 2, Wom1IrqCompletion): the ISR queues the DPC, the DPC sets the
+   * poll wait event; the worker waits instead of spinning/sleeping. */
+  ULONG IrqCompletionOn;
+  ULONG DpcQueued;          /* ISR -> DxgkCbQueueDpc requests */
+  ULONG DpcWakes;           /* DPC -> KeSetEvent(JobPollTimerEvent) */
+  ULONG WaitEarly;          /* poll waits ended by the wake before the timer */
+  ULONG WaitTimeout;        /* poll waits ended by the timer (fallback) */
+  ULONG WaitSkipped;        /* a wake was already pending: re-polled at once */
 } ADMISSION_IRQ_RX_RECEIPT;
-#define ADMISSION_IRQ_RX_RECEIPT_VERSION 1u
+#define ADMISSION_IRQ_RX_RECEIPT_VERSION 2u
+
+/* DISPATCH_LEVEL (DxgkDdiDpcRoutine): wake the job worker's poll wait when
+ * Wom1IrqCompletion is on and the mailbox ISR queued this DPC. */
+VOID AdmissionPlatformMailboxDpc(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionDdiQuerySegment4(
     _In_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo);

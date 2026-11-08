@@ -17,8 +17,12 @@ FIELDS = ("Version", "Bytes", "ScanoutVector", "MailboxVector", "Armed",
           "MailboxHandled", "MailboxMessageMask", "ScanoutHandled",
           "IsrEmptyCalls", "IsrMessages", "RingDrops", "RingConsumed",
           "WorkerSyncPops", "WorkerSyncPopHits", "RingHighWater")
+FIELDS_V2 = FIELDS + ("IrqCompletionOn", "DpcQueued", "DpcWakes", "WaitEarly",
+                      "WaitTimeout", "WaitSkipped")
 LAYOUT = struct.Struct("<" + "I" * len(FIELDS))
-COUNTERS = FIELDS[5:]
+LAYOUT_V2 = struct.Struct("<" + "I" * len(FIELDS_V2))
+COUNTERS = FIELDS_V2[5:]
+NON_COUNTERS = {"RingHighWater", "IrqCompletionOn"}
 
 
 def load(path):
@@ -36,9 +40,15 @@ def load(path):
 def decode(blob):
     if len(blob) < LAYOUT.size:
         raise SystemExit(f"Wom1IrqRx too short: {len(blob)} bytes")
-    values = dict(zip(FIELDS, LAYOUT.unpack_from(blob, 0)))
-    if values["Version"] != 1 or values["Bytes"] != LAYOUT.size:
-        raise SystemExit(f"unsupported Wom1IrqRx version {values['Version']} size {values['Bytes']}")
+    version = struct.unpack_from("<I", blob, 0)[0]
+    fields, layout = (FIELDS, LAYOUT) if version == 1 else (FIELDS_V2, LAYOUT_V2)
+    if len(blob) < layout.size:
+        raise SystemExit(f"Wom1IrqRx v{version} too short: {len(blob)} bytes")
+    values = dict(zip(fields, layout.unpack_from(blob, 0)))
+    if version not in (1, 2) or values["Bytes"] != layout.size:
+        raise SystemExit(f"unsupported Wom1IrqRx version {version} size {values['Bytes']}")
+    for key in FIELDS_V2:
+        values.setdefault(key, 0)
     return values
 
 
@@ -51,7 +61,7 @@ def main():
     if args.before:
         old = decode(load(args.before))
         for key in COUNTERS:
-            if key != "RingHighWater":
+            if key not in NON_COUNTERS:
                 now[key] -= old[key]
     for key, value in now.items():
         print(f"{key:20s} {value}")
@@ -60,6 +70,9 @@ def main():
     if now["IsrMessages"]:
         share = now["WorkerSyncPopHits"] / max(1, now["IsrMessages"] + now["WorkerSyncPopHits"])
         print(f"worker self-pop share: {share:.3%}")
+    waits = now["WaitEarly"] + now["WaitTimeout"]
+    if waits:
+        print(f"wait early share: {now['WaitEarly'] / waits:.3%} of {waits} waits, skipped {now['WaitSkipped']}")
     return 0
 
 

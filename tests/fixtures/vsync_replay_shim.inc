@@ -71,6 +71,7 @@ static void pending(ADMISSION_SCANOUT_RUNTIME*r,unsigned seq,LONG64 address){r->
 static APPLE_AGX_SCANOUT_U64 AdmissionScanoutNow(void*p){(void)p;return fakeNow/10000;}
 
 static void AdmissionPagingDpc(ADMISSION_CONTEXT*c){(void)c;}
+static VOID AdmissionPlatformMailboxDpc(ADMISSION_CONTEXT *Context) { (void)Context; } /* IRQ-completion step 2 */
 static void AdmissionSchedulerDpc(ADMISSION_CONTEXT*c){(void)c;}
 static void AdmissionRenderCorrelationDpcWindows(ADMISSION_CONTEXT*c,ULONG f,ULONGLONG t){(void)c;(void)f;(void)t;}
 static ULONGLONG KeQueryInterruptTime(void){return fakeNow;}

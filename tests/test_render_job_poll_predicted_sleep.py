@@ -317,7 +317,11 @@ class JobPollPredictedSleep(unittest.TestCase):
         loop = text.rindex("while (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&", 0, plan)
         self.assertIn("pollIteration = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;",
                       text[loop:plan])
-        body = text[plan:plan + 1500]
+        # IRQ-completion step 2 inserts the opt-in wait block (Wom1IrqCompletion)
+        # between the planner call and the spin/sleep branches; the planner's
+        # own schedule below it is unchanged.
+        body = text[plan:plan + 2600]
+        self.assertIn("AdmissionIrqWaitActive(runtime)", body)
         self.assertRegex(body, r"ADMISSION_JOB_POLL_SPIN\) \{\s*pollAfterSleep = FALSE;\s*"
                                r"KeStallExecutionProcessor\(planUs\);\s*continue;")
         self.assertIn("AdmissionJobPollSleepWindows(runtime, planUs", body)

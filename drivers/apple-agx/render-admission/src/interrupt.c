@@ -211,6 +211,7 @@ VOID AdmissionDdiDpcRoutine(
         &context->RenderDpcFence, 0, 0);
     UNREFERENCED_PARAMETER(renderFence);
     InterlockedIncrement(&context->DpcCount);
+    AdmissionPlatformMailboxDpc(context);
     AdmissionPagingDpc(context);
     if (context->InterfaceValid &&
         context->Interface.DxgkCbNotifyDpc != NULL)

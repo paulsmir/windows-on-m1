@@ -138,6 +138,32 @@ class KmdInterruptStepOneTests(unittest.TestCase):
         self.assertIn("message < 2u", destroy)
         self.assertLess(destroy.index("MailboxIrqArmed"), destroy.index("SgxBase"))
 
+    def test_step2_wake_is_opt_in_and_the_wait_replaces_spin_and_sleep(self):
+        isr = body(BACKEND, "AdmissionPlatformMailboxInterrupt")
+        dpc = body(BACKEND, "AdmissionPlatformMailboxDpc")
+        wait = body(BACKEND, "AdmissionJobPollWaitWindows")
+        worker = BACKEND[BACKEND.index("action = AdmissionJobPollPlan("):]
+        worker = worker[:worker.index("ADMISSION_JOB_POLL_SPIN) {")]
+        # the ISR queues the DPC only with the switch; the DPC wakes only with it
+        self.assertIn("runtime->IrqCompletion && Context->InterfaceValid", isr)
+        self.assertIn("DxgkCbQueueDpc", isr)
+        self.assertIn("!runtime->IrqCompletion", dpc)
+        self.assertIn("KeSetEvent(&runtime->JobPollTimerEvent", dpc)
+        self.assertIn("IrqWakePending, 1", dpc)
+        # the DPC routine of the KMD calls the mailbox half
+        self.assertIn("AdmissionPlatformMailboxDpc(context);", body(INTERRUPT, "AdmissionDdiDpcRoutine"))
+        # the worker waits before the planner's spin/sleep branches and never
+        # for a TICK; a pending wake skips the wait
+        self.assertIn("action != ADMISSION_JOB_POLL_TICK && AdmissionIrqWaitActive(runtime)", worker)
+        self.assertIn("IrqWakePending, 0) != 0", worker)
+        self.assertIn("AdmissionJobPollWaitWindows(runtime, waitUs", worker)
+        # the timer is always cancelled after the wait (a late expiry must not
+        # pre-set the next wait), and the wait is accounted like a sleep
+        self.assertIn("ExCancelTimer(runtime->JobPollTimer, NULL) ? TRUE : FALSE", wait)
+        self.assertIn("AdmissionJobPollNoteSleep(&runtime->JobPoll, us", wait)
+        self.assertIn('L"Wom1IrqCompletion"', BACKEND)
+        self.assertIn("ADMISSION_IRQ_RX_RECEIPT_VERSION 2u", HEADER)
+
     def test_census_receipt_is_exported_only_with_the_resource_present(self):
         self.assertIn("ADMISSION_IRQ_RX_RECEIPT", HEADER)
         export = body(BACKEND, "AdmissionJobTimingExportWindows")

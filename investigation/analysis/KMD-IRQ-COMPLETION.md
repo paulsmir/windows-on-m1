@@ -111,6 +111,19 @@ GM -1 % (no wake yet). Remaining: item 3 (latency of the routed level line), mea
 3. Latency of a routed level IRQ through m1n1 (mask, LR inject, guest ack, unmask = several traps) vs the
    320 us late wake it replaces. Measured by the detect column of `--jobs` in the step-2 run.
 
+## Step 2 as implemented (Wom1IrqCompletion, default off)
+
+- ISR (`AdmissionPlatformMailboxInterrupt`): after moving messages into the ring, `DxgkCbQueueDpc` when the
+  switch is on (`DpcQueued`).
+- DPC (`AdmissionDdiDpcRoutine` -> `AdmissionPlatformMailboxDpc`): `IrqWakePending = 1`,
+  `KeSetEvent(JobPollTimerEvent)` (`DpcWakes`). The same event the predictive timer signals.
+- Worker poll loop: for a planner SPIN or SLEEP action with the switch on and the line armed, a pending wake
+  re-polls at once (`WaitSkipped`); otherwise `AdmissionJobPollWaitWindows(waitUs)` with waitUs = 500 us for
+  a spin step or the planned sleep, on the high-resolution timer; `ExCancelTimer` always after the wait
+  (`WaitEarly` = the wake ended it, `WaitTimeout` = the fallback). TICK (> 50 ms) path unchanged. The
+  wait is accounted through `AdmissionJobPollNoteSleep`, so `Wom1JobPoll` late/busy stay comparable.
+- Without the switch or without the ACPI line: byte-for-byte the EXP2272 behaviour.
+
 ## Checkpoint and recovery
 
 - Step 1 (receipt-only, one Mu build with the flag + KMD package): ISR/DPC counters, `Wom1TranslatedResources`
