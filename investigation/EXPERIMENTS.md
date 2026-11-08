@@ -75083,3 +75083,10 @@ EXP2283 HARDWARE BEFORE 2026-11-08T21:32:03Z:
 - Hashes: sys 4d73ecb9c18e, UmdArm64 733a5644125f, UmdX64 0b35cec6a6da, Umd32 6d7ba5ad9f0a; manifest 7c1cb2da9d6a, hardware-manifest 688bad805871; probe2283.sh 31d516a5b289 (PROBE_LINT_OK); visible recovery rec2283h 47bfbff1cc86fac1; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2283h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2283-abba-on/run2283.sh.
+
+EXP2283 HARDWARE ACTUAL 2026-11-08T21:42:57Z:
+- Result: A/B/B/A stopped in the first arm (waiver on, no Wom1JobDiagnostics, OV3B=1). GM run a: 42.821 fps, wer 0. About 10 s into run b the guest reset: PSCI SYSTEM_RESET 0x84000009, ELR 0xfffff801a3e35138 (same bugcheck reset path as EXP2270), full.log saved as evidence/EXP2283/full-after.log. Pipeline reported GUEST_DOWN_DURING_GRAVITYMARK b; last HV window shows normal scanout swaps up to 3843.
+- Stop code unknown: no System event 1001 and no new MEMORY.DMP or minidump for this boot (latest 2026-11-07), as in EXP2270. Hypothesis, untested: bugcheck data is not written when the boot disk is the native AppleAns path.
+- Registry from the crashed boot (rec2283h/kmd-receipts-pre-disable.txt): Wom1Ov5WaiverReceipt Considered 19008, Waived 1617, Placed 1617, Refused[CLASS] 17386, one other reason 5. No Wom1GpuReset value.
+- Differences from EXP2282 (no reset): no Wom1JobDiagnostics, and a second GM run in the same boot. Not attributed.
+- Verdict: inconclusive for the cause; the waiver is not stable in this profile. The 42.821 fps of run a has no off arm and supports no claim. Off arms were not run. Recovery: AT_PROXY rec2283h, RECOVERY_DONE, ANS, package absent. Next: EXP2284, waiver on with Wom1JobDiagnostics=1, GM a and b in one boot.
