@@ -74965,3 +74965,10 @@ EXP2277 HARDWARE BEFORE 2026-11-08T18:59:02Z:
 - Hashes: sys 64836178e155, UmdArm64 9f2142451f6c, UmdX64 236c15978990, Umd32 ec3864ebbc27; manifest 91f41b7305d3, hardware-manifest e898670199ea; probe2277.sh 5db7ba2b12b3 (PROBE_LINT_OK); visible recovery rec2277h 7fda47d7895cfd56; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2277h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2277-ovpair-oneecl/run2277.sh.
+
+EXP2277 HARDWARE ACTUAL 2026-11-08T19:02:33Z:
+- Result: no guest reset (0 PSCI RESET), TOOL_OVPAIR 40/40, bad_pixels 0, mean 21.988 ms, max 69.200 ms, PASS. SSH and native SSD alive.
+- Wom1Ov5WaiverReceipt after the step: Considered 1655, Waived 0, Placed 0, Refused[CLASS]=1655 (pre-step 960, all CLASS).
+- UMD measure-d3d12-ov2-refusal, 39 rows: OV5 renders 0, value 26 0, OV2 pairs 1 with reason 6 (foreign) and value 16 = 0x10. So no render-after-compute was ever seen: in this execution a render batch precedes the compute batch.
+- Hypothesis for that order (not proven): the two batches are independent in Mesa, and the render list's CopyTextureRegion flushes the render batch while the compute batch is still open, so the submission order is R then C regardless of the list order.
+- Verdict: inconclusive for the OV5 contract (waiver not exercised, as EXP2276). The PASS says nothing about TA||CL. Note: the BEFORE text names rec2276h for recovery; the run used rec2277h. Next: the probe must force compute-then-render submission order before another hardware run.
