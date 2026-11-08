@@ -194,6 +194,11 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * turns it off): consume the stats, ktrace and fwlog channels as Asahi does
    * (AppleAgxFwRxDrain). */
   BOOLEAN FwRxDrain;
+  /* EXP2270: device value Wom1SubmitBracket = 1 brackets every pipe doorbell like
+   * Asahi gpu.rs start_op/end_op and macOS AGXArmFirmware::updateSubmitInProgress:
+   * Globals.pending_submissions += 1, KICKFW doorbell (0x10), pipe doorbell,
+   * pending_submissions -= 1. */
+  BOOLEAN SubmitBracket;
   /* Wom1Depth2FallbackDrill = N (diagnostic, default 0): every Nth successor
    * BeginJob is refused to exercise the depth-2 kick fallback. */
   ULONG Depth2FallbackDrill;
@@ -3579,6 +3584,23 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportDoorbell(
     return APPLE_AGX_BACKEND_FALSE;
   message = AppleAgxRtkitDoorbell(Doorbell);
   deadline = AdmissionPlatformNowMs() + J313_AGX_G2_INITDATA_TIMEOUT_MS;
+  if (runtime->SubmitBracket && Doorbell != APPLE_AGX_DEVICE_CONTROL_DOORBELL_CHANNEL &&
+      runtime->Initdata.DataObjects[AppleAgxInitdataMemoryRegionC].CpuAddress != NULL) {
+    /* Globals (RegionC) pending_submissions, G13 V13_5 offset 0x8974: unk_8900 = 1 at
+     * 0x8970, max_power 0x8978, max_pstate_scaled 0x897c (Asahi fw/initdata.rs order,
+     * values in apple_agx_regionc.c). */
+    volatile LONG *pending = (volatile LONG *)((PUCHAR)
+        runtime->Initdata.DataObjects[AppleAgxInitdataMemoryRegionC].CpuAddress + 0x8974u);
+    BOOLEAN sent;
+    (void)InterlockedIncrement(pending);
+    (void)AppleAgxAscSend(&runtime->AscIo, AppleAgxRtkitDoorbell(0x10u),
+                          J313_AGX_G2_DOORBELL_ENDPOINT, deadline);
+    sent = message != APPLE_AGX_RTKIT_INVALID_MESSAGE &&
+           AppleAgxAscSend(&runtime->AscIo, message, J313_AGX_G2_DOORBELL_ENDPOINT,
+                           deadline) == AppleAgxAscResultOk;
+    (void)InterlockedDecrement(pending);
+    return sent ? APPLE_AGX_BACKEND_TRUE : APPLE_AGX_BACKEND_FALSE;
+  }
   return message != APPLE_AGX_RTKIT_INVALID_MESSAGE &&
                  AppleAgxAscSend(
                      &runtime->AscIo, message,
@@ -8427,6 +8449,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1ManagerSlots");
   runtime->JobDiagnostics =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDiagnostics");
+  runtime->SubmitBracket =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1SubmitBracket");
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   runtime->FwRxDrain =
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1FwRxDrain");

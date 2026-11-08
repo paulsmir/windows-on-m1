@@ -121,6 +121,7 @@ typedef struct {
  unsigned char ManagerSlots,RcDepth2,RcReceiptEnabled,RcExportPending,Depth2General,Depth2Prelude;
  unsigned char JobAhead,JobDepth2,JobDepth2Kick,JobDiagnostics;
  unsigned char FwRxDrain,PresentTsEnabled; /* 125bddd1, EXP2205 */
+ unsigned char SubmitBracket; /* EXP2270 */
  unsigned Depth2FallbackDrill,Depth2FallbackDrillCount; /* be8c6f7f */
  unsigned Depth2FallbackDrillBuilt,Depth2FallbackDrillBuiltCount; /* S4a drill */
  unsigned Depth2Capabilities,Depth2KickClasses;
