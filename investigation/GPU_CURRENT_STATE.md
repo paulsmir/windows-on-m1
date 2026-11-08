@@ -8,6 +8,27 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 13:45Z -- HD FRAME BUDGET RE-MEASURED OFFLINE ON THE SLC+CPPC PROFILE (EXP2266/2268 logs)
+- Source: tools/agx_gpu_frame_breakdown.py --jobs on gm2266d/gm2268d-umd.log (profile SLC+DRAMCFG+CPPC, native SSD,
+  GM HD PERF 44.4-44.6) vs gm2225d (pre-SLC, 40.8). Wom1GpuPerf post-membw->after-d (EXP2266/2267): P6 86-87 %, P1 12-13 %
+  (the P1 share is suite/probe idle; GM itself ~98 % P6 per EXP2217), so the budget is at the macOS clock. No hardware run.
+- Median frame (ms), EXP2225 -> EXP2268: wall 24.77 -> 22.75; compute exact 13.70 -> 12.73; 3D 4.15 -> 3.72; TA 3.95 -> 3.31;
+  launch 1.40 -> 1.28; late 1.20 -> 1.40; foreign (DWM) 0.99 -> 0.99; detect 1.09 -> 0.81; idle 0.19 -> 0.18.
+  Positions CRCRCRCR (span; C exact / R ta+3d): C0 7.87 -> 6.93 (x 7.91 -> 6.90), R1 2.72 -> 2.38 (ta 1.98 -> 1.58),
+  C2 4.12 -> 4.09 (x 3.13 -> 3.22, launch 1.01 -> 0.88), R3 3.22 -> 2.70 (ta 1.74 -> 1.51, 3d 1.34 -> 1.07), C4 1.91 -> 1.84,
+  R5 1.88 -> 1.90, C6 0.49 -> 0.71, R7 0.59 -> 0.21. SLC took ~1.0 ms from the big compute block (C0) and ~1.0 ms from TA/3D.
+- Against Apple HD (EXP2192 encoders, span 17.4): compute 12.73 vs 9.2 (+3.5, was +4.5): big block C0 6.90 vs c0-c9 5.8 (+1.1),
+  C2 3.22 vs c11+c13 1.57 (+1.65, largest single item: traversal fc968f7a launch), C4 1.90 vs c15 1.19 (+0.7), C6 0.72 vs
+  c18+c19 0.63. Render 3D+TA 7.03 vs Apple render sum 8.3: ours is now FASTER than Apple (Apple's render encoders are stretched
+  by overlap). Non-work (launch+late+foreign+detect+idle) 4.66 ms = 20 % of the frame, unchanged by SLC; Apple has ~0 plus
+  2.3 ms of R||C overlap. The remaining HD gap (22.75 vs 17.2 = 5.5 ms) = compute +3.5 and structure (overhead 4.7, no
+  overlap) minus our render advantage (-1.3).
+- Consequence: the 13.7 vs 9.2 compute figure is superseded by 12.73 vs 9.2; the DXIL-heavier workload (C0 32 vs 12 sin/cos
+  etc.) sits inside the +1.1/+0.7 items and is not yet quantified in ms. Next causal targets in order: (1) C2 traversal
+  launch vs Apple c11 d2 (grid/work comparison, offline); (2) the 4.7 ms non-work budget (HV GPUVA broker/LEASE, late submit
+  behind DWM, DWM composition) per HV-RESPONSIBILITY-INVENTORY.md; (3) quantify the DXIL-vs-Metal work ceiling.
+- No EXP2272 hardware run: the existing logs answer the question; the bench stays with EXP2271 (fork 6).
+
 ## UPDATE 2026-11-08 08:30Z -- MEMBW LATENCY GAP = GPU DVFS ARTEFACT (EXP2265)
 - During the MEMBW probe the GPU ran P1 (396 MHz) 64.7 % / P6 11.5 % (Wom1GpuPerf delta); GravityMark runs P6 85 %.
   The 2-3.5x "device-load latency" gaps vs the Metal twin (EXP2226-2264) are mostly clock: do not tune the memory path
