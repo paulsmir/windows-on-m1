@@ -9401,8 +9401,8 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
     ID3D12Resource *src = c21_buffer(device, D3D12_HEAP_TYPE_DEFAULT, BYTES, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
                                      D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     ID3D12Resource *outv = uav_buffer(device);
-    ID3D12CommandAllocator *compute_allocator = NULL, *render_allocator = NULL;
-    ID3D12GraphicsCommandList *compute_list = NULL, *render_list = NULL;
+    ID3D12CommandAllocator *compute_allocator = NULL, *render_allocator = NULL, *copy_allocator = NULL;
+    ID3D12GraphicsCommandList *compute_list = NULL, *render_list = NULL, *copy_list = NULL;
     HANDLE event = CreateEventA(NULL, FALSE, FALSE, NULL);
     D3D12_CPU_DESCRIPTOR_HANDLE rtv = {0};
     unsigned char *bytes = NULL;
@@ -9496,6 +9496,13 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
         hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, render_allocator, pso,
                                             &IID_ID3D12GraphicsCommandList, (void **)&render_list);
     if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Close(render_list);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandAllocator(device, D3D12_COMMAND_LIST_TYPE_DIRECT, &IID_ID3D12CommandAllocator,
+                                                 (void **)&copy_allocator);
+    if (SUCCEEDED(hr))
+        hr = ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT, copy_allocator, NULL,
+                                            &IID_ID3D12GraphicsCommandList, (void **)&copy_list);
+    if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Close(copy_list);
     for (UINT i = 0; SUCCEEDED(hr) && i < ITERATIONS; ++i) {
         const UINT constants[6] = {BYTES / 16u, 0u, CHASE_STEPS, STREAM_THREADS, 0u, 1u};
         const FLOAT red[4] = {1.0f, 0.0f, 0.0f, 1.0f};
@@ -9543,9 +9550,9 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
         ID3D12GraphicsCommandList_IASetVertexBuffers(render_list, 0, 1, &vbv);
         ID3D12GraphicsCommandList_IASetPrimitiveTopology(render_list, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         ID3D12GraphicsCommandList_DrawInstanced(render_list, 3, 1, 0, 0);
-        transition(render_list, target, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
-        ID3D12GraphicsCommandList_CopyTextureRegion(render_list, &back, 0, 0, 0, &target_loc, NULL);
-        transition(render_list, target, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        /* EXP2277: a copy of the target here flushes the render batch while the
+         * compute batch is still open, so the render is submitted first and the
+         * waiver never applies. The read-back runs in its own execution below. */
         hr = ID3D12GraphicsCommandList_Close(render_list);
         if (FAILED(hr)) break;
         QueryPerformanceCounter(&t0);
@@ -9569,9 +9576,30 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
         ms = (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)freq.QuadPart;
         total_ms += ms;
         if (ms > max_ms) max_ms = ms;
-        if (SUCCEEDED(hr) && value >= signal) {
+        if (SUCCEEDED(hr) && value >= signal && i != 0u && i + 1u != ITERATIONS) {
+            ++done; /* pixels are read back after the first and the last pair */
+        } else if (SUCCEEDED(hr) && value >= signal) {
             D3D12_RANGE all = {0, 16384};
             unsigned char *pixels = NULL;
+            ID3D12CommandList *copy_lists[1] = {(ID3D12CommandList *)copy_list};
+            hr = ID3D12CommandAllocator_Reset(copy_allocator);
+            if (SUCCEEDED(hr)) hr = ID3D12GraphicsCommandList_Reset(copy_list, copy_allocator, NULL);
+            if (FAILED(hr)) break;
+            transition(copy_list, target, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+            ID3D12GraphicsCommandList_CopyTextureRegion(copy_list, &back, 0, 0, 0, &target_loc, NULL);
+            transition(copy_list, target, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            hr = ID3D12GraphicsCommandList_Close(copy_list);
+            if (FAILED(hr)) break;
+            ID3D12CommandQueue_ExecuteCommandLists(queue, 1, copy_lists);
+            hr = ID3D12CommandQueue_Signal(queue, fence, ++signal);
+            if (SUCCEEDED(hr)) hr = ID3D12Fence_SetEventOnCompletion(fence, signal, event);
+            if (SUCCEEDED(hr) && WaitForSingleObject(event, 8000) != WAIT_OBJECT_0) {
+                printf("OVPAIR iteration %u copy TIMEOUT (8 s) removed=0x%08lx\n", i,
+                       (unsigned long)ID3D12Device_GetDeviceRemovedReason(device));
+                hr = E_FAIL;
+                break;
+            }
+            if (FAILED(hr)) break;
             if (SUCCEEDED(ID3D12Resource_Map(readback, 0, &all, (void **)&pixels)) && pixels) {
                 const unsigned char *centre = pixels + 32 * 256 + 32 * 4, *corner = pixels + 4 * 256 + 4 * 4;
                 const int ok = centre[0] == 0 && centre[1] == 255 && centre[2] == 0 && corner[0] == 255 && corner[1] == 0;
@@ -9591,6 +9619,8 @@ static int ov_pair(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
     printf("OVPAIR_RESULT iterations %u/%u bad_pixels %u mean %.3f ms max %.3f ms hr=0x%08lx\n", done, (unsigned)ITERATIONS,
            bad_pixels, done ? total_ms / done : 0.0, max_ms, (unsigned long)hr);
     printf("AGX_D3D12_OVPAIR: %s\n", SUCCEEDED(hr) && done == ITERATIONS && !bad_pixels ? "PASS" : "FAIL");
+    if (copy_list) ID3D12GraphicsCommandList_Release(copy_list);
+    if (copy_allocator) ID3D12CommandAllocator_Release(copy_allocator);
     if (render_list) ID3D12GraphicsCommandList_Release(render_list);
     if (compute_list) ID3D12GraphicsCommandList_Release(compute_list);
     if (render_allocator) ID3D12CommandAllocator_Release(render_allocator);
