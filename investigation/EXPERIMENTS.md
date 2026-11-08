@@ -75155,3 +75155,15 @@ EXP2286 ARCHITECT READING (2026-11-08T22:55:30Z; fork 6's ACTUAL carries the run
 - Receipts at the stall: EXP2286 Considered 411 (pre-suite) -> 415 (gmt1) -> 419 (last), Waived 0, Ov2 counters all zero; only a handful of jobs after the suite. Three diag-off resets (2283b, 2285a, 2286a) all within the first second after GM's owner creation; one diag-off GM start survived (2283a). Jobs in that window: DWM composition plus GM's first (owner creation, native ring map, upload ring, manager rebind, InitBM / new queue lifetime for a new process).
 - Switch dependence still unknown (OV2 lead / OV5 waiver vs base with the fast worker): EXP2287 (minus waiver) then EXP2288 (no switches) as recorded above.
 - D4 (cheap, timing-neutral, for the next reset): at the PSCI SYSTEM_RESET trap m1n1 also reads the AGX ASC mailbox state (outbox/recv control: RX count or not-empty bit, last RX message if the FIFO is readable without side effects) and prints "ASC RX pending=N". RX pending > 0 -> the firmware completed and the KMD never drained (worker stuck or missed completion); RX empty -> the firmware never retired the job (GPU/firmware stall). Reads only; no guest timing change.
+
+EXP2287 HARDWARE BEFORE 2026-11-08T23:09:02Z:
+- WHY THIS HYPOTHESIS: (1) EXP2283/2285/2286: 0x116 at GM start in 3 of 3 boots with diagnostics off; (2) the receipts of those boots show Waived 0 before the reset, so the waived path is not shown to be involved; (3) removing the waiver separates it from the OV2 lead switch.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: unchanged. TRANSLATION: existing path.
+- ATOMIC CONTRACT: none -- one switch removed.
+- WHAT IS STILL UNKNOWN: which switch is needed for the TDR.
+- Expected: reset -> the waiver is not needed; next is diagnostics off with no switches. No reset in three GM starts -> the waiver is needed although no pair was waived at the reset.
+- Failure criteria: a reset is an accepted outcome here.
+- Recovery: rec2287h (ANS); on a reset save full.log first, then AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2287h/recover.sh.
+- Hashes: sys c21f564be996, UmdArm64 8dd11814247b, UmdX64 4419840ba8ea, Umd32 c93d8d61ece9; manifest 9104bdab9d36, hardware-manifest 0e42cd00908a; probe2287.sh be707a74f49f (PROBE_LINT_OK); visible recovery rec2287h 6ff0c23a119d6269; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
+- Recovery rec2287h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2287-lead-only/run2287.sh.
