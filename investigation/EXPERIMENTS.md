@@ -75171,3 +75171,15 @@ EXP2287 HARDWARE BEFORE 2026-11-08T23:09:02Z:
 EXP2287 HARDWARE ACTUAL 2026-11-08T23:19:52Z:
 - Result: not run. After stage and the ordered restart, chainload failed on the Mac: /tmp/agx-lld-dir/ld.lld was missing (the directory was emptied at 00:00 local, cause not determined), so m1n1 never loaded and SSH_NEVER_UP followed. No Windows boot with the package, no GPU data.
 - Verdict: inconclusive (host tooling). The ordered-restart package stays staged until recovery. Next: restore ld.lld, AT_PROXY rec2287h, rerun the same configuration as EXP2288.
+
+EXP2288 HARDWARE BEFORE 2026-11-08T23:39:27Z:
+- WHY THIS HYPOTHESIS: (1) EXP2283/2285/2286: 0x116 at GM start in 3 of 3 boots with diagnostics off; (2) the receipts of those boots show Waived 0 before the reset, so the waived path is not shown to be involved; (3) removing the waiver separates it from the OV2 lead switch.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: unchanged. TRANSLATION: existing path.
+- ATOMIC CONTRACT: none -- one switch removed.
+- WHAT IS STILL UNKNOWN: which switch is needed for the TDR.
+- Expected: reset -> the waiver is not needed; next is diagnostics off with no switches. No reset in three GM starts -> the waiver is needed although no pair was waived at the reset.
+- Failure criteria: a reset is an accepted outcome here.
+- Recovery: rec2288h (ANS); on a reset save full.log first, then AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2288h/recover.sh.
+- Hashes: sys 541a8d0c199b, UmdArm64 83b345bbaa21, UmdX64 defac08c6fef, Umd32 77db10a8da00; manifest f5597f0405f5, hardware-manifest 4cb1fc614971; probe2288.sh 7f9f91bad7bb (PROBE_LINT_OK); visible recovery rec2288h c483bd8135a41218; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
+- Recovery rec2288h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2288-lead-only/run2288.sh.
