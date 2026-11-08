@@ -9162,7 +9162,7 @@ static int mem_bw_impl(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fe
     /* EXP2267: uav = 5 = same long chase, every step a global atomic (InterlockedAdd +0). */
     const BOOL atom = uav == 5;
     const BOOL longchase = uav == 4 || atom;
-    const UINT steps_used = longchase ? 65536u : 512u;
+    const UINT steps_used = atom ? 8192u : longchase ? 65536u : 512u;
     D3D12_DESCRIPTOR_RANGE table_range = {D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1, 0, 0};
     ID3D12DescriptorHeap *table_heap = NULL;
     enum { BYTES = 128u << 20, LINES = BYTES / 64u, STREAM_THREADS = 65536u, CHASE_THREADS = 1024u, CHASE_STEPS = 512u,
