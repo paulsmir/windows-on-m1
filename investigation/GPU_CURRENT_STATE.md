@@ -14,8 +14,9 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 - Per-job detect (firmware end -> KMD saw it) unchanged: 0.98 vs 1.02 ms/frame summed; the interrupt arrives when the
   predictive poll would have looked anyway. The "detect" item of the structural budget is firmware/HV notification
   latency, not the poll's wake timing -> not recoverable from the worker side. Only C0's launch improved (0.118 -> 0.057).
-- Both 887 runs are 1.3-1.7 % below the no-887 controls: ~40k mailbox interrupts/s through the HV (trap + LR inject +
-  EOI traps) is the likely tax. Decision: keep Wom1IrqCompletion opt-in (class C: correct event-driven completion, a
+- Both 887 runs are 1.3-1.7 % below the no-887 controls. CORRECTION (fork 6 HV EXITS): the line adds ~4k ICC traps/s
+  and ~0.5k IRQ exits/s (~390 mailbox interrupts/s, not 40k), too few for -1.5 %; the difference is near the run spread
+  (EXP2266 44.08). HV tax = unsupported hypothesis. Decision: keep Wom1IrqCompletion opt-in (class C: correct event-driven completion, a
   core saved for the UMD/app) and do not flip defaults until a same-boot ABBA gate (IRQ on/off) is run.
 - Structural gap re-ranked: R||C overlap ~2.0 (firmware contract, OV line) > DWM 0.85 (platform) > launch/broker 0.45
   (fork 6: GPUVA in KMD) > idle 0.22; detect ~1.0 summed = firmware/HV path (HV inventory items 2/3: ICC trap count per
