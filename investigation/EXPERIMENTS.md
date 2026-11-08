@@ -74826,3 +74826,12 @@ EXP2270 HARDWARE BEFORE 2026-11-08T13:03:38Z:
 - Hashes: sys 30f9022a86f4, UmdArm64 4e5368d15a5b, UmdX64 84167c84acba, Umd32 8eebb3eb8f87; manifest ff4d17297dae, hardware-manifest b3fd7402b042; probe2270.sh f69c73b4b6b9 (PROBE_LINT_OK); visible recovery rec2270h cf5f9978361182f6; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1SubmitBracket=1.
 - Recovery rec2270h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2270-submitbracket/run2270.sh.
+
+EXP2270 HARDWARE ACTUAL 2026-11-08T13:27:00Z:
+- Result: Windows reset at the first GPU work. PSCI SYSTEM_RESET x0=0x84000009, ELR_EL2=0xfffff801e8235138 (kernel). The pipeline reported SSH_NEVER_UP. No 1001 event or dump was written for this boot.
+- Boot log: identical to the good EXP2267 boot through all 414 KMD retained GPUVA maps (op=5 seq=624) and DCP swap 10. EXP2267 continues with swaps 11..; EXP2270 resets immediately. This is the point of the first submission, i.e. the first bracketed pipe doorbell. Crash log: evidence/EXP2270/full-crash.log.
+- Root cause (code inspection, consistent with the log point): the bracket used InterlockedIncrement/Decrement on Globals.pending_submissions (RegionC + 0x8974). RegionC is borrowed firmware memory mapped PAGE_WRITECOMBINE (physical_memory_windows.c:431, Normal non-cacheable). ARM64 exclusive/LSE atomics there are an unsupported atomic access, so the data abort leads to a bugcheck.
+- Unexplained side observation: G3Armed=1 remained on the devnode even though StartDevice consumes and flushes it before any doorbell. Not causal for the verdict.
+- Recovery: legacy hidden recovery stopped at "one-shot arm remains". Then: cleared G3Armed; ran an exact staged-only hidden cleanup (oem12.inf, INF 5642beab, delete-driver, certs, DisableDDisplay, trace env); remove-phantom-and-commit (APPL0002 removed, durable commit). Then ANS recovery at proxy (AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2270h/recover.sh) -> Package Absent, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_STORAGE_APPLEANS_OK, RECOVERY_DONE.
+- Display/USB/SSH/RDP/storage/CPUs: guest reset; after recovery SSH is alive, ANS storage, 8 CPUs.
+- Verdict: rejected (implementation defect, not a firmware-contract verdict). Next: the same bracket with plain stores of a lock-protected cacheable count (no atomics on the WC mapping), same switches, as EXP2271.
