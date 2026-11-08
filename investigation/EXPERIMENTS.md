@@ -75118,3 +75118,9 @@ EXP2285 HARDWARE BEFORE 2026-11-08T22:22:49Z:
 - Hashes: sys 8c6f10b64169, UmdArm64 98b272c1a4d3, UmdX64 a7c5bb35d1c8, Umd32 6c19fb525e02; manifest cda5f9769396, hardware-manifest d0a0a1568dff; probe2285.sh 09b690bdcb2a (PROBE_LINT_OK); visible recovery rec2285h 0fb001842d0b5d9f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2285h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2285-waiver-nodiag/run2285.sh.
+
+EXP2285 HARDWARE ACTUAL 2026-11-08T22:31:57Z:
+- Result: guest reset in GM run a about 15 s in (GUEST_DOWN_DURING_GRAVITYMARK a 3): PSCI SYSTEM_RESET 0x84000009, same bugcheck reset path as EXP2283; x1..x3 are zero, so the bugcheck arguments are not in the trap registers. full.log saved as evidence/EXP2285/full-after.log. No dump by design (1e7a690c4).
+- Last registry export (rec2285h/kmd-receipts-pre-disable.txt): Considered 677, Waived 0, Placed 0; that export is throttled, so the waived count at the reset is unknown. One snapshot during GM (gmt1, Waived 0).
+- Tally with the waiver on: diagnostics off 2 resets in 2 boots (EXP2283, EXP2285), diagnostics on 0 resets in 2 boots and 3 GM runs (EXP2282, EXP2284).
+- Verdict: reset reproduced; the waiver is unstable without Wom1JobDiagnostics. The stop code is still unknown. Next: EXP2286 = this configuration on m1n1 dfe621ea, which prints KiBugCheckData at the reset trap.
