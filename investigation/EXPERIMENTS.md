@@ -75006,3 +75006,9 @@ EXP2279 HARDWARE BEFORE 2026-11-08T19:49:37Z:
 - Hashes: sys b09dbb701479, UmdArm64 71d7ab82d809, UmdX64 126e1554a666, Umd32 ab7f592714f9; manifest 11ffb642b0be, hardware-manifest fe4c75bca178; probe2279.sh 67e5778b09eb (PROBE_LINT_OK); visible recovery rec2279h 3a31780430aee1b8; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2279h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2279-ovpair-computefirst/run2279.sh.
+
+EXP2279 HARDWARE ACTUAL 2026-11-08T19:52:48Z:
+- Result: no guest reset (0 PSCI RESET), GPU_RESET none, TOOL_OVPAIR 40/40, bad_pixels 0, mean 20.980 ms, max 53.316 ms, PASS. SSH and native SSD alive.
+- Receipts: UMD 40 of 40 executions renders 1, verdict 0, flagged 1, compute-first flush 1. Wom1Ov5WaiverReceipt delta over the step: Considered 716, Waived 38, Placed 38, Refused[CLASS] 678 (the rest of the KMD's considered jobs); 2 of the 40 flagged renders were not waived, reason not separated.
+- Verdict: confirmed for the synthetic pair: a render whose TA is not held on the compute stamp, with its 3D queue led by the Barrier on that stamp, completed 38 times with no hang, fault or bad pixels in the checked iterations. The compute-first flush does what OV7 specified.
+- Limits: the render is a 64x64 triangle with no prelude, so this does not prove behaviour with a long TA, indirect streams or a tile-heavy frame, and timing overlap of TA and compute was not measured directly. EXP2214's hang is therefore not explained by this basic encoding alone: GravityMark-shape causes (preludes, indirect streams, shared TVB/heap, DWM) remain. Next: architect's verdict, then OV6b provenance. Recovery rec2279h.
