@@ -75024,3 +75024,10 @@ EXP2280 HARDWARE BEFORE 2026-11-08T20:16:08Z:
 - Hashes: sys a5547b02e2d9, UmdArm64 b06c133c6823, UmdX64 296dc6bb1b0c, Umd32 01541cc0f89d; manifest b2c9ee43b922, hardware-manifest 69d3cb1ae9db; probe2280.sh 66d401201e61 (PROBE_LINT_OK); visible recovery rec2280h 66b4f06a0cdd2bfe; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1.
 - Recovery rec2280h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2280-ov6b-provenance/run2280.sh.
+
+EXP2280 HARDWARE ACTUAL 2026-11-08T20:22:09Z:
+- Result: no guest reset (0 PSCI RESET), suite PASS=119 FAIL=0, GM ran, device_removed false. SSH and native SSD alive. GM HD PERF 39.53 fps with Wom1Ov2NoHazardLead=1 and receipts (EXP2275 same switches: 39.786).
+- Verdict sequence, 3243 executions with 4 renders: real 0x9999, no-prelude 0x0aaa, overflow 0 (without OV3B here).
+- measure-d3d12-ov2-conflict, 188 rows, tools/agx_ov6_conflict_decode.py: render 0: VB read vs compute ROOT write, same heap, overlap 44761088 bytes (62 of 63); render 1: the same (61 of 64), else ROOT write vs ROOT write 221118464; render 2: vertex-stage ROOT write vs compute ROOT write, overlap 221118464 (61 of 61). No IND_ARGS, IND_CNT, TARGET or CLEAR conflict is the first pair.
+- Limits: the receipt is the first pair only, so later conflicting pairs of the same render are hidden. VB ranges are unsized here (to the end of the placed span), and a root UAV covers its whole resource, so byte overlap alone does not prove the VS reads bytes the compute wrote.
+- Verdict: receipt confirmed. Interpretation under the OV6b rules belongs to the architect. Recovery rec2280h.
