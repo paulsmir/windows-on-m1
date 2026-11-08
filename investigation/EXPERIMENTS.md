@@ -74734,3 +74734,10 @@ EXP2261 HARDWARE BEFORE 2026-11-08T04:22:07Z:
 - Recovery rec2261h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2261-mapnotlbi/run2261.sh.
 
 EXP2261 ACTUAL (2026-11-08T04:30:51Z): REJECTED (broker map TLBIs are not the cause). m1n1 ansdirect-mapnotlbi afd2f8c7 (AGX_GPUVA_MAP_NO_TLBI): suite 119/0 (no GPU faults -> the AGX does not cache invalid entries), GM HD 44.260. MEMBWUAV 32-thread: 16K 83-131, 256K 217-238, 1M 279-327, 4M 317-327, 16M 445-450, 64M 646-704; pages 226-229 / 250-251 / 376-381 / 425-439 (= control). Key observation across EXP2259-2261: a dependent chase over only 4 lines in 4 different 16 KiB pages costs ~226 ns vs ~82 ns within one page -> ~145 ns per page change although 4 translations trivially fit any TLB; the leaf PTE format equals Asahi (AF, nG, AP, MEMATTR). Anti-loop stop: five GPU-gap hypotheses rejected in a row (GPU clock, SLC DSID policy, guest VMID, map TLBI, leaf attribute); next = one discriminator for TLB reach (page-spread 1 and 2 pages) before any further change.
+
+EXP2262 HARDWARE BEFORE 2026-11-08T04:51:18Z:
+- WHY: EXP2259-2261: 4 pages already cost ~226 ns vs ~82 ns inside one page although 4 translations fit any TLB; 1/2/8/16 pages locate the knee: if 2 pages ~ 220 ns, the GPU keeps ~1 translation per context (TLB not effective for our mappings); a knee at 8-16 marks the real TLB reach; flat-to-4 then rising marks reach ~4.
+- Expected: MEMBW_PAGES_NS for 8 counts; 1 page ~= L1 hit (~70-90 ns).
+- Failure criteria: hang, suite failure -> rec2262h. Recovery: rec2262h (ANS).
+- Hashes: sys 87fa424b205f, UmdArm64 9d4f95034f8b, UmdX64 267bcfe01b10, Umd32 7bcba56b61c6; manifest a44944eb2dc5, hardware-manifest 35c9be191867; probe2262.sh 85915f7992cb (PROBE_LINT_OK); visible recovery rec2262h 76360bc5cd8532df; m1n1 0d3a75b3.
+- Recovery rec2262h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2262-tlbreach/run2262.sh.
