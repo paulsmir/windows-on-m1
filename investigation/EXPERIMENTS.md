@@ -75072,3 +75072,14 @@ EXP2282 HARDWARE ACTUAL 2026-11-08T21:14:16Z:
 - Receipts: Waived 2043, Placed 2043 during GM (Considered 21826, Refused[CLASS] 19782, Refused[RUNNING_KIND] 1). UMD 3097 of 3109 rows: real [9, 9, 9, 0], no-prelude [10, 10, 10, 0], so only R8 is eligible.
 - Overlap from measure-gpu-stages (ticks taken as 24 MHz): 11261 compute-then-render pairs of adjacent jobs, TA ended before the compute end in 601, median 0.54 ms, max 2.58 ms among those.
 - Verdict: the EXP2214 hang does not reproduce on this base at HD: rejected as a property of the waiver in GravityMark HD. Not tested: FHD, the old base. Overlap is real but small, and no FPS gain is shown (40.5 vs 41.6 without a controlled pair). Waiver stays default off. Next: architect; a gain claim needs ABBA with the same package. Recovery rec2282h.
+
+EXP2283 HARDWARE BEFORE 2026-11-08T21:32:03Z:
+- WHY THIS HYPOTHESIS: (1) EXP2282: R8's TA waiver runs in GM without a hang and overlaps in 601 pairs (median 0.54 ms); (2) EXP2274/2282 fps differ in base and switches, so no gain is shown; (3) cross-boot switches need boot-level ABBA.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: as EXP2279. TRANSLATION: existing OV5 path.
+- ATOMIC CONTRACT: Wom1Ov2NoHazardLead and Wom1Ov5TaWaiver are one variable: the waiver needs the published OV2 feature.
+- WHAT IS STILL UNKNOWN: the frame-time effect.
+- Expected: on arms faster than off arms in both pairs by more than the run noise, else no default change. Failure criteria: hang, GPU reset.
+- Recovery: rec2283h (ANS).
+- Hashes: sys 4d73ecb9c18e, UmdArm64 733a5644125f, UmdX64 0b35cec6a6da, Umd32 6d7ba5ad9f0a; manifest 7c1cb2da9d6a, hardware-manifest 688bad805871; probe2283.sh 31d516a5b289 (PROBE_LINT_OK); visible recovery rec2283h 47bfbff1cc86fac1; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
+- Recovery rec2283h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2283-abba-on/run2283.sh.
