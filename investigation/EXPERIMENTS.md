@@ -74972,3 +74972,17 @@ EXP2277 HARDWARE ACTUAL 2026-11-08T19:02:33Z:
 - UMD measure-d3d12-ov2-refusal, 39 rows: OV5 renders 0, value 26 0, OV2 pairs 1 with reason 6 (foreign) and value 16 = 0x10. So no render-after-compute was ever seen: in this execution a render batch precedes the compute batch.
 - Hypothesis for that order (not proven): the two batches are independent in Mesa, and the render list's CopyTextureRegion flushes the render batch while the compute batch is still open, so the submission order is R then C regardless of the list order.
 - Verdict: inconclusive for the OV5 contract (waiver not exercised, as EXP2276). The PASS says nothing about TA||CL. Note: the BEFORE text names rec2276h for recovery; the run used rec2277h. Next: the probe must force compute-then-render submission order before another hardware run.
+
+EXP2278 HARDWARE BEFORE 2026-11-08T19:25:50Z:
+- WHY THIS HYPOTHESIS: (1) EXP2277: 0 render-after-compute batches, OV2 pair with foreign kind 0x10 = kCommandTextureCopy, so the render batch was submitted first; (2) source: the copy flushes the render's writer batch while the unrelated compute batch stays open until the end of the execution; (3) EXP2214 hung only once waived renders reached the firmware, so the waiver must actually run for this probe to mean anything.
+- WINDOWS CONTRACT: unchanged; the two lists share no resources.
+- AGX/ASAHI CONTRACT: waived render: TA root alone, 3D queue led by a Barrier on the compute stamp; undocumented firmware behaviour, as in EXP2277 BEFORE.
+- TRANSLATION: existing OV5 step-2 path, unchanged.
+- ATOMIC CONTRACT: none -- one probe change.
+- WHAT IS STILL UNKNOWN: whether end-of-execution flush submits compute before render; whether a real TA||CL pair hangs.
+- Expected: Waived ~40, Refused[CLASS] no longer all, OV5RX renders > 0, PASS 40/40 and 0 bad pixels -> contract sound, EXP2214 is GravityMark-shape specific. TIMEOUT or 0x116 -> encoding wrong, work-item RE before any GM run. Waived 0 / renders 0 -> flush order is not creation order, owner-side flush hook needed.
+- Failure criteria: hang/reset (accepted possibility), bad pixels.
+- Recovery: rec2278h (ANS); on a reset save full.log first, then AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2278h/recover.sh; "one-shot arm remains" -> EXP2270 ACTUAL procedure.
+- Hashes: sys 44f2142ffb4f, UmdArm64 77c00a129754, UmdX64 fdfcf26abd86, Umd32 a4aab3e541d0; manifest bf6ec9e7ebd2, hardware-manifest d51734afe041; probe2278.sh f784f115c834 (PROBE_LINT_OK); visible recovery rec2278h 89f373e6d4c44406; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
+- Recovery rec2278h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2278-ovpair-order/run2278.sh.
