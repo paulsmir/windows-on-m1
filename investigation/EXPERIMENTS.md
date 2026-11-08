@@ -74687,3 +74687,13 @@ EXP2257 HARDWARE BEFORE 2026-11-08T02:56:03Z:
 - Recovery rec2257h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2257-scantick/run2257.sh.
 
 EXP2257 ACTUAL (2026-11-08T03:02:54Z): CONFIRMED (overhead reduction, performance-neutral). m1n1 ansdirect-scantick e57e2bbc (HV_SCANOUT_SERVICE_TICK=1); native SSD OK; pipeline RC 0, suite 119/0, GM d closed (wer 0), DWM same pid start..end. BROKERLOCK service class: ~48-49k steps per 10 s (5 kHz tick) vs ~772k (EXP2256); held 2-95 ms per 10 s vs 196 ms. GM HD 44.304 fps vs 44.703 (-0.9 %, inside the 2 % gate and the run-to-run band 43.9-44.7). Verdict: keep, make default (HV_SCANOUT_SERVICE_EXIT=1 opt-out). v5 broker remains the largest HV service (128-241k calls, 0.32-0.90 s held per 10 s).
+
+EXP2258 HARDWARE BEFORE 2026-11-08T03:16:58Z:
+- WHY THIS HYPOTHESIS: (1) EXP2243: SLC enable cut CPU 8-16 MiB latency ~2.5x but GPU device-load latency only 15-25 % (GPU still 2.5-4x macOS at 4-64 MiB); (2) macOS RE (dsid-re/): T8103 per-DSID-group SLC quotas at plane+0xa000 (groups 1/7/0xd/0xe = GPU RenderTarget/ParameterBuffer/Reads/RenderTargetND) are written only at runtime when AGX enables kGPU_* data streams; our stack never writes them; reset values unknown. Receipt-only instrumentation.
+- WINDOWS/AGX CONTRACT, TRANSLATION: unchanged.
+- WHAT IS STILL UNKNOWN: reset quota values and whether GPU groups accumulate usage during the D3D12 suite / GravityMark on our stack.
+- Expected: MCCDSID lines. Decision: GPU groups quota 0 or usage/count 0 under GPU load -> next experiment programs macOS quotas (grp1 0x20, 0xd 0x40, 0xe 0x40, 7 0x10, keeping bits 22:16); non-zero growing usage -> DSID policy is not the GPU gap.
+- Failure criteria: hang, suite failure, GM drop > 2 % -> rec2258h.
+- Recovery: rec2258h. Probe: probe2258.sh = probe2257.sh.
+- Hashes: sys eeed1cc0b19d, UmdArm64 70b5037f4115, UmdX64 b602076e729f, Umd32 817feeb095dc; manifest 2a84df411252, hardware-manifest b628b28ea438; probe2258.sh 2539d6ed838a (PROBE_LINT_OK); visible recovery rec2258h 198a611d761c1690; m1n1 0d3a75b3.
+- Recovery rec2258h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2258-dsid/run2258.sh.
