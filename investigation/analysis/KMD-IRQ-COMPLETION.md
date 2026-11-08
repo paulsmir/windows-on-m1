@@ -94,7 +94,12 @@ Invariants kept: completion reporting still goes through `DxgkCbSynchronizeExecu
 the fence/transaction guard (`AppleAgxCompletionTransactionCanReport`) is untouched; event-ring parsing
 stays single-threaded in the worker; RX drain of stats/ktrace/fwlog (class C, EXP2219) unchanged.
 
-## What is still unknown
+## What is still unknown (EXP2272 answered 1 and 2; see the ledger)
+
+EXP2272 (2026-11-08): dxgkrnl connects both line interrupts and passes MessageNumber 0 for both; the
+firmware raises an RX doorbell per job completion (38905 messages / 33796 jobs); ring high water 3, 0 drops;
+GM -1 % (no wake yet). Remaining: item 3 (latency of the routed level line), measured in step 2.
+
 
 1. dxgkrnl and two line-based interrupt resources: which MessageNumber (0/1) each line gets, or whether
    only the first resource is connected. Microsoft documents MessageNumber for MSI; the line-based case

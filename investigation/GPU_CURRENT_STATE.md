@@ -8,6 +8,19 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 15:27Z -- IRQ-COMPLETION STEP 1 CONFIRMED ON HARDWARE (EXP2272)
+- Mu MUIRQ001 (95263b97: J313_AGX_MAILBOX_IRQ -> Interrupt 887 Level beside the 889 edge) + KMD 9b64ec9a (validators accept
+  edge==1 && level<=1; ISR census; armed mailbox line -> ISR drains the outbox FIFO into a ring, worker pops hardware only
+  under DxgkCbSynchronizeExecution): boot normal, suite 119/0, GM HD PERF 43.99 (control 44.4-44.6, -1 %).
+- Answered: (1) dxgkrnl connects both line-based Interrupt resources and calls the ISR with MessageNumber 0 for both
+  (IsrByMessage1 = 0, mask {0}): the ISR must identify the source itself. (2) The firmware raises an RX doorbell for
+  every job completion: 38905 messages for 33796 jobs in the suite+GM window. (3) The ring is enough (high water 3, 0 drops).
+- Observed: the spinning worker still won 14.5 % of the messages (WorkerSyncPopHits) -> the interrupt path (m1n1 route +
+  vGIC + ISR) is slower than a spinning poll for those; irrelevant once the worker sleeps on the wake instead of spinning.
+- Next (step 2, one variable): Wom1IrqCompletion=1 -> DPC from the mailbox ISR sets JobThreadWake; the worker waits on the
+  event with the predicted timeout instead of the predictive sleep+spin. Expected: Wom1JobPoll late_mean -> ~0, detect per
+  job 0.04-0.17 -> <0.05 ms, worker CPU busy << 47 %, GM +1-2 %. Bench returned to fork 6 after rec2272h.
+
 ## UPDATE 2026-11-08 14:08Z -- THE 4.0 ms STRUCTURAL GAP DECOMPOSED (offline, EXP2268 log + EXP2267/2193 receipts)
 - CORRECTION of the two sections below and of the EXP2225 text: `late` and `foreign` in agx_gpu_frame_breakdown --jobs are
   per-position FRACTIONS of frames (mean of 0/1 flags), not ms. "late submit 1.20 / 1.40, foreign (DWM) 0.99" were summed

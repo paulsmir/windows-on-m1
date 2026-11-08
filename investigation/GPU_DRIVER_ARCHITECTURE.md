@@ -49,7 +49,7 @@ Rules:
   (gpu.rs) after every job, default on since 125bddd1 (EXP2217 drain proof,
   EXP2219 perf gate PASS; Wom1FwRxDrain = 0 disables).
 
-- **BUILD (C/O)** interrupt-driven job completion (ASC mailbox recv-not-empty AIC 578 = vINTID 887 -> ISR/DPC ->
+- **BUILD (C/O), step 1 DONE (EXP2272)** interrupt-driven job completion (ASC mailbox recv-not-empty AIC 578 = vINTID 887 -> ISR/DPC ->
   worker) replacing the predictive sleep+spin poll on the critical path (Wom1JobPoll: 320 us mean late wake per
   sleep, 49 % CPU busy; ~0.3-0.5 ms/frame). Design: investigation/analysis/KMD-IRQ-COMPLETION.md.
 
