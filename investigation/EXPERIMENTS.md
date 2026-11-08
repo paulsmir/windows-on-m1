@@ -75106,3 +75106,15 @@ EXP2284 HARDWARE BEFORE 2026-11-08T21:59:04Z:
 EXP2284 HARDWARE ACTUAL 2026-11-08T22:06:08Z:
 - Result: no reset (0 PSCI RESET), GPU_RESET not reported, device_removed false, wer 0 in both runs; SSH and native SSD alive. GM HD PERF run a 40.643 fps, run b 41.468 fps, both to timeout, in one boot. Receipt at snapshot gmt9 (Considered, Waived, Placed): (45166, 3829, 3829).
 - Verdict: the second GM run of a boot alone does not reset with the waiver on and Wom1JobDiagnostics=1. Compared with EXP2283 the difference is diagnostics off, which points at timing, but it rests on one reset and one non-reset run: not proven. Next: repeat the EXP2283 configuration (diagnostics off) to see whether the reset reproduces. Recovery rec2284h.
+
+EXP2285 HARDWARE BEFORE 2026-11-08T22:22:49Z:
+- WHY THIS HYPOTHESIS: (1) EXP2283 reset about 10 s into run b with diagnostics off; (2) EXP2284, identical except for diagnostics on, ran two GM runs without a reset; (3) one reset is not a reproducible observation, so it must be repeated before reasoning about a race.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: as EXP2279. TRANSLATION: existing OV5 path.
+- ATOMIC CONTRACT: none -- repeat of EXP2283 with snapshots added.
+- WHAT IS STILL UNKNOWN: whether the reset reproduces, and its stop code (no dump on the native SSD, 1e7a690c4).
+- Expected: reset again -> diagnostics off is implicated; no reset in three runs -> the EXP2283 reset was rare or unrelated to this difference.
+- Failure criteria: a reset is an accepted outcome here.
+- Recovery: rec2285h (ANS); on a reset save full.log first, then AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2285h/recover.sh.
+- Hashes: sys 8c6f10b64169, UmdArm64 98b272c1a4d3, UmdX64 a7c5bb35d1c8, Umd32 6c19fb525e02; manifest cda5f9769396, hardware-manifest d0a0a1568dff; probe2285.sh 09b690bdcb2a (PROBE_LINT_OK); visible recovery rec2285h 0fb001842d0b5d9f; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
+- Recovery rec2285h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2285-waiver-nodiag/run2285.sh.
