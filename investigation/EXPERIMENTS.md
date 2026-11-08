@@ -74592,3 +74592,16 @@ EXP2250 HARDWARE BEFORE 2026-11-07T23:40:26Z:
 - Recovery rec2250h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2250-cppcrcpt/run2250.sh.
 
 EXP2250 ACTUAL (2026-11-07T23:46:54Z): CONFIRMED -- real runtime DVFS through CPPC. m1n1 brokerlock-cppc2 c17eebfd receipt lines (10 s windows): FxPPM writes Desired Performance 600..2064 (E) / 600..2988 (P) MHz; the HV changes cluster P-states (up to 52 E and 28 P transitions per 10 s); the P-cluster idles at P1 (600 MHz) and rises to P12 under load; DRAMCFG follows (dram_fast 0 at P1, 1 at P12). Counter reads 42k-299k per 10 s (4-30k traps/s, the dominant HV cost of this interface). Pipeline RC 0, suite 119/0, GM HD 43.874 fps (EXP2249 44.256, -0.9 %, within gate), CPU7 chase at load: L1 1.01 ns (P12), DRAM 17.5-17.9 ns. Verdict: CPPC DVFS works end to end (macOS-like idle downclock + DRAM rule). Next: remove the read traps (memory-backed feedback counters updated by the HV) before adopting CPPC as default; then idle states (_LPI) separately.
+
+EXP2251 HARDWARE BEFORE 2026-11-08T00:02:32Z:
+- ATOMIC CONTRACT: DSDT Reference/Delivered counter addresses (0x300014000+n*0x10) and the m1n1 memory-backed page at that IPA are one interface: the new DSDT without the page would make FxPPM read an unmapped IPA; the page without the DSDT is unused.
+- WHY THIS HYPOTHESIS: (1) EXP2250 receipt: 42k-299k counter reads per 10 s, every one a stage-2 trap into the HV; (2) FxPPM reads counters only as deltas over its evaluation windows (>= ms), so a 1 kHz HV-refreshed value preserves the ratio Delivered/Reference within 1 ms; (3) fxppm maps _CPC registers uncached (MmMapIoSpaceEx PAGE_NOCACHE), so the HV cleans the lines to PoC after each refresh.
+- WINDOWS CONTRACT: unchanged (SystemMemory counters, 64-bit, qword access).
+- AGX/ASAHI CONTRACT: unchanged.
+- TRANSLATION: counters = snapshot at the last 1 ms tick; Desired/PerfLimited stay trapped.
+- WHAT IS STILL UNKNOWN: whether stale-by-1 ms counters change FxPPM's policy; cache coherency of the uncached guest read (cleaned to PoC by design).
+- Expected: receipt rd drops from 40k-300k to ~0-few hundred per 10 s; writes/transitions pattern like EXP2250; no Event 54; frequencies reported; suite 119/0; GM HD within 2 % of EXP2250 (43.87) or better.
+- Failure criteria: Event 54 (mapping failure), counters frozen (Processor Frequency 0), guest hang, suite failure, GM drop > 2 % -> rec2251h.
+- Recovery: rec2251h. Probe: probe2251.sh = probe2250.sh.
+- Hashes: sys 7c59311d1d5f, UmdArm64 3ce77947eaf5, UmdX64 ca881e5048ae, Umd32 0816ea598d1e; manifest 6583a13ec6dd, hardware-manifest 01e6105300e6; probe2251.sh 1e8c6174eb9c (PROBE_LINT_OK); visible recovery rec2251h fd0df9abccef3778; m1n1 0d3a75b3.
+- Recovery rec2251h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2251-cppcmem/run2251.sh.
