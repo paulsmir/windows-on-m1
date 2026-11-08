@@ -74607,3 +74607,13 @@ EXP2251 HARDWARE BEFORE 2026-11-08T00:02:32Z:
 - Recovery rec2251h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2251-cppcmem/run2251.sh.
 
 EXP2251 ACTUAL (2026-11-08T00:08:50Z): CONFIRMED -- CPPC without counter traps. m1n1 brokerlock-cppc3 0467d900 ("HV CPPC: _CPC page at 0x300010000, counters at 0x300014000") + Mu MUCPPC003 3870dfa1 + WOM1_CPPC=1. Receipt: rd 8-284 per ~10 s (EXP2250: 42k-299k) -> ~1000x fewer HV exits; desired writes 600..2064/600..2988 MHz with P-state transitions continue (E up to 71, P up to 31 per window), DRAMCFG follows. No Event 54; Event 55 ACPI CPPC, Nominal 2988/2064; Processor Frequency 2064/2988. Pipeline RC 0, suite 119/0, GM HD 44.633 fps (EXP2250 43.874, EXP2249 44.256, EXP2243 44.434). Verdict: CPPC interface (m1n1 hv_cppc + Mu _CPC/_PSD/_OSC + launcher WOM1_CPPC=1) is the working CPU-frequency contract; adopt it in the GPU experiment profile (working m1n1 = brokerlock-cppc3, firmware = MUCPPC003). Normal recovery keeps its old m1n1/firmware (no 0xc30 op) until a separate adoption run.
+
+EXP2252 HARDWARE BEFORE 2026-11-08T00:28:13Z:
+- WHY THIS HYPOTHESIS: HV-RESPONSIBILITY-INVENTORY.md: ICC IAR/EOIR traps (ICH_HCR TC|TALL1), xHCI hooked page, the 5 kHz tick and data-abort hooks have never been measured; ranking the next HV-to-native migrations needs their rates under desktop, D3D12 suite and GravityMark. Receipt-only instrumentation.
+- WINDOWS/AGX CONTRACT, TRANSLATION: unchanged.
+- WHAT IS STILL UNKNOWN: per-class exit rates by workload.
+- Expected: periodic HV: EXITS lines; GM within 2 % of EXP2251 (44.63); suite 119/0.
+- Failure criteria: hang, suite failure, GM drop > 2 % -> rec2252h.
+- Recovery: rec2252h. Probe: probe2252.sh = probe2251.sh.
+- Hashes: sys d26619f1928d, UmdArm64 0ec07e444697, UmdX64 8c18046be1de, Umd32 d8ab33084df8; manifest e023dfd1dccc, hardware-manifest 7641241660e4; probe2252.sh c057cc5d7d74 (PROBE_LINT_OK); visible recovery rec2252h 3f6ae9b4e55f94a1; m1n1 0d3a75b3.
+- Recovery rec2252h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2252-census/run2252.sh.
