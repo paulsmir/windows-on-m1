@@ -75065,3 +75065,10 @@ EXP2282 HARDWARE BEFORE 2026-11-08T21:09:20Z:
 - Hashes: sys e96365a143a8, UmdArm64 688150c9798c, UmdX64 df419b6b32c1, Umd32 bd8f36ecdafe; manifest c4b0bec1d63c, hardware-manifest 5300dfbb4efa; probe2282.sh 14a622175c42 (PROBE_LINT_OK); visible recovery rec2282h 69dc958c22c8e104; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2282h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2282-gm-waiver/run2282.sh.
+
+EXP2282 HARDWARE ACTUAL 2026-11-08T21:14:16Z:
+- Result: no hang, no guest reset (0 PSCI RESET), GPU_RESET none, device_removed false, GM HD PERF ran to timeout, wer 0. SSH and native SSD alive. 9 receipt snapshots during GM.
+- GM: 40.506 fps (2429 frames in the window). Nearest same-profile reference EXP2274 41.600 (OV3B + Ov2 lead, no waiver, older base); not a controlled comparison.
+- Receipts: Waived 2043, Placed 2043 during GM (Considered 21826, Refused[CLASS] 19782, Refused[RUNNING_KIND] 1). UMD 3097 of 3109 rows: real [9, 9, 9, 0], no-prelude [10, 10, 10, 0], so only R8 is eligible.
+- Overlap from measure-gpu-stages (ticks taken as 24 MHz): 11261 compute-then-render pairs of adjacent jobs, TA ended before the compute end in 601, median 0.54 ms, max 2.58 ms among those.
+- Verdict: the EXP2214 hang does not reproduce on this base at HD: rejected as a property of the waiver in GravityMark HD. Not tested: FHD, the old base. Overlap is real but small, and no FPS gain is shown (40.5 vs 41.6 without a controlled pair). Waiver stays default off. Next: architect; a gain claim needs ABBA with the same package. Recovery rec2282h.
