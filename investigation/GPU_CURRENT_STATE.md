@@ -8,6 +8,14 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 00:30Z -- WORKING PROFILE: SLC + DRAMCFG + SMBIOS + CPPC (EXP2243-2251)
+- GPU experiment profile now: m1n1 brokerlock-cppc3 0467d900 (sha e871092f; SLC on, PMU filter fix, hv_cppc),
+  Mu MUCPPC003 3870dfa1 (FD 9571633c; SMBIOS "Apple M1" + _CPC/_PSD/_OSC), launcher env WOM1_CPPC=1 (AGX_LAUNCH_ENV),
+  DRAMCFG follows the P-cluster (launcher default + HV CPPC). Last-good m1n1 stays brokerlock-split 550c7f23.
+- CPPC: Windows FxPPM runs real DVFS 600-2988 MHz; counters memory-backed (8-284 HV reads/10 s). GM HD 44.63 (EXP2251).
+- HV cost map + migration plan: investigation/analysis/HV-RESPONSIBILITY-INVENTORY.md. CPU plan: CPU-DVFS-SMBIOS-PLAN.md.
+- GPU device-load gap at 4M+ still open (GPU-side: UAT/TLB, GPU cache config, firmware perf state).
+
 ## UPDATE 2026-11-07 21:50Z -- SLC WAS OFF; ENABLED IN m1n1 (EXP2242/2243) -- NEW WORKING m1n1
 - EXP2242: T8103 system-level cache (8 MiB) read 0/16 ways on all 4 MCC planes at the proxy: upstream m1n1 enables it
   only in kboot_boot(); our HV path never did. DRAMCFG on all 8 DCS channels = m1n1 "DEFAULT" (not FAST).
