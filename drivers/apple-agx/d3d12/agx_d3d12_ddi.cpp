@@ -1783,6 +1783,11 @@ struct AgxD3d12Heap {
      * write-combined); mirror is the buffer's own mapping, which receives
      * the heap forms the shaders read (MirrorHeapForms) */
     unsigned char *mirror;
+    /* OV6: the placed buffers of this heap ([offset, offset + bytes)), so a
+     * root descriptor or indirect-argument access with no size resolves to
+     * its resource's extent instead of an open range (never on an alias). */
+    struct AgxD3d12HeapSpan { UINT64 offset, bytes; } *spans;
+    UINT span_count, span_capacity;
     /* C53 B3: a reserved buffer (tiles != nullptr): tiles[t] is the heap and
      * heap tile mapped at 64 KiB tile t (heap nullptr: NULL), the snapshot
      * CopyTileMappings reads; the owner keeps the GPU mappings themselves */
@@ -1799,6 +1804,39 @@ struct AgxD3d12Heap {
 };
 static UINT64 DescriptorHeapBytes(const AgxD3d12Heap *heap) {
     return heap->descriptor_bytes ? heap->descriptor_bytes : heap->bytes;
+}
+/* OV6: remember a placed buffer's extent in its heap (at most kHeapSpans;
+ * beyond that, accesses resolve to the heap's extent). */
+static constexpr UINT kHeapSpans = 1024u;
+static void HeapAddSpan(AgxD3d12Heap *heap, UINT64 offset, UINT64 bytes) {
+    if (!heap || heap->alias || !bytes || heap->span_count >= kHeapSpans) return;
+    if (heap->span_count == heap->span_capacity) {
+        const UINT capacity = heap->span_capacity ? heap->span_capacity * 2u : 16u;
+        void *grown = heap->spans ? HeapReAlloc(GetProcessHeap(), 0, heap->spans, capacity * sizeof(*heap->spans))
+                                  : HeapAlloc(GetProcessHeap(), 0, capacity * sizeof(*heap->spans));
+        if (!grown) return;
+        heap->spans = static_cast<AgxD3d12Heap::AgxD3d12HeapSpan *>(grown);
+        heap->span_capacity = capacity;
+    }
+    heap->spans[heap->span_count].offset = offset;
+    heap->spans[heap->span_count++].bytes = bytes;
+}
+static void HeapFreeSpans(AgxD3d12Heap *heap) {
+    if (heap && !heap->alias && heap->spans) HeapFree(GetProcessHeap(), 0, heap->spans);
+    if (heap) { heap->spans = nullptr; heap->span_count = heap->span_capacity = 0; }
+}
+/* OV6: the end of the access that starts at offset: the largest end of the
+ * placed buffers containing it, else the heap's extent (aliasing placed
+ * resources overlap, so the largest end is the conservative bound). */
+static UINT64 HeapSpanEnd(const AgxD3d12Heap *heap, UINT64 offset) {
+    UINT64 end = 0;
+    for (UINT i = 0; i < heap->span_count; ++i) {
+        const AgxD3d12Heap::AgxD3d12HeapSpan &span = heap->spans[i];
+        if (offset >= span.offset && offset - span.offset < span.bytes && span.offset + span.bytes > end)
+            end = span.offset + span.bytes;
+    }
+    if (!end) end = DescriptorHeapBytes(heap);
+    return end > offset ? end : ~0ull;
 }
 struct AgxD3d12Resource {
     AgxD3d12Heap *heap;
@@ -2117,6 +2155,7 @@ static AgxD3d12Heap *MirroredHeapAt(AgxD3d12Device *device, const void *cpu) {
 }
 #endif
 static void ReleaseHeap(AgxD3d12Device *device, AgxD3d12Heap *heap) {
+    HeapFreeSpans(heap); /* OV6 */
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     if (heap->native && heap->presentation) {
         AgxD3d12OwnerDestroyPresentationTexture(static_cast<AGX_D3D12_OWNER *>(device->owner), heap->presentation);
@@ -2561,6 +2600,7 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
             resource->gpuva = base->heap->gpuva + offset;
             resource->bytes = resource_arg->Width;
             resource->type = D3D12DDI_RT_BUFFER;
+            HeapAddSpan(base->heap, offset, resource_arg->Width); /* OV6 */
         }
         const UINT receipt[] = {reason, base ? 1u : 0u, static_cast<UINT>(offset), static_cast<UINT>(resource_arg->Width)};
         AdmissionUmdDiagnostic("measure-d3d12-placed", reason ? E_NOTIMPL : S_OK, receipt, 4);
@@ -3910,6 +3950,7 @@ struct AgxD3d12Indirect {
     AgxD3d12Heap *args;
     UINT64 args_offset;
     UINT stride, max_count;
+    UINT record_bytes; /* OV6: the signature's record, so the argument access is bounded */
     AgxD3d12Heap *count;
     UINT64 count_offset;
 };
@@ -6212,6 +6253,7 @@ static VOID APIENTRY ExecuteIndirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOM
     indirect.args_offset = a->gpuva - a->heap->gpuva + args.BaseAddress.UMD.Offset;
     indirect.stride = signature->stride;
     indirect.max_count = max_count;
+    indirect.record_bytes = signature->record_bytes;
     if (c) {
         indirect.count = c->heap;
         indirect.count_offset = c->gpuva - c->heap->gpuva + count.BaseAddress.UMD.Offset;
@@ -6672,13 +6714,25 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
  * (OV5: a compute batch); flags bit 0 = may write (UAV), AGX_D3D12_JOB_VERTEX
  * = a vertex-stage access */
 typedef void (*JobRangeSink)(const void *, unsigned long long, unsigned long long, unsigned);
+/* OV6: a sized view is its own range; an unsized one (a root descriptor, a
+ * texture view) ends at its placed resource or at the heap (HeapSpanEnd),
+ * never at ~0: open ranges made every GravityMark render unprovable (EXP2274). */
 static void JobDescriptorRange(JobRangeSink sink, const AgxD3d12Descriptor *v, unsigned flags) {
     if (!v || !v->heap) return;
-    sink(v->heap, v->bytes ? v->offset : 0ull, v->bytes ? v->offset + v->bytes : ~0ull, flags);
+    sink(v->heap, v->offset, v->bytes ? v->offset + v->bytes : HeapSpanEnd(v->heap, v->offset), flags);
 }
 static void JobHeapRange(JobRangeSink sink, const AgxD3d12Heap *heap, UINT64 offset, UINT64 bytes, unsigned flags) {
     if (!heap) return;
-    sink(heap, offset, bytes ? offset + bytes : ~0ull, flags);
+    sink(heap, offset, bytes ? offset + bytes : HeapSpanEnd(heap, offset), flags);
+}
+/* OV6: ExecuteIndirect reads [args_offset, + (max_count - 1) * stride +
+ * record) and the count buffer's 4 bytes (D3D12 ExecuteIndirect). */
+static void JobIndirectRanges(JobRangeSink sink, const AgxD3d12Indirect &indirect, unsigned flags) {
+    if (indirect.args && indirect.max_count) {
+        const UINT64 bytes = static_cast<UINT64>(indirect.max_count - 1u) * indirect.stride + indirect.record_bytes;
+        JobHeapRange(sink, indirect.args, indirect.args_offset, bytes ? bytes : 0, flags);
+    }
+    JobHeapRange(sink, indirect.count, indirect.count_offset, 4u, flags);
 }
 static void JobStageRanges(JobRangeSink sink, const AgxD3d12Dispatch &b, unsigned stage) {
     for (UINT u = 0; u < kUavSlots; ++u) {
@@ -6697,8 +6751,7 @@ static void JobStageRanges(JobRangeSink sink, const AgxD3d12Dispatch &b, unsigne
 static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch) {
     if (AgxD3d12OwnerJobBarriersEnabled()) { /* OV5 receipt: the compute batch's accesses */
         JobStageRanges(AgxD3d12OwnerJobDispatchRange, dispatch, 0u);
-        JobHeapRange(AgxD3d12OwnerJobDispatchRange, dispatch.indirect.args, dispatch.indirect.args_offset, 0, 0u);
-        JobHeapRange(AgxD3d12OwnerJobDispatchRange, dispatch.indirect.count, dispatch.indirect.count_offset, 0, 0u);
+        JobIndirectRanges(AgxD3d12OwnerJobDispatchRange, dispatch.indirect, 0u);
     }
     AgxD3d12OwnerBindings bind;
     OwnerBindings(dispatch, &bind);
@@ -6831,12 +6884,12 @@ static void JobDrawRanges(const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &op
     for (UINT k = 0; clears && k < clear_count; ++k) {
         if (clears[k].kind == kCommandClearDepth) JobDescriptorRange(sink, &clears[k].clear_depth.dsv, 0u);
         else if (clears[k].kind == kCommandClear) JobDescriptorRange(sink, &clears[k].clear.rtv, 0u);
+        else if (clears[k].kind == kCommandClearUav) JobDescriptorRange(sink, &clears[k].clear_uav.view, 1u); /* OV6 */
         else sink(nullptr, 0, 0, 0u);
     }
     for (UINT v = 0; v < kVertexBuffers; ++v) JobHeapRange(sink, d.vb[v].heap, d.vb[v].offset, 0, vertex);
     if (d.index_size) JobHeapRange(sink, d.index_heap, d.index_offset, 0, vertex);
-    JobHeapRange(sink, d.indirect.args, d.indirect.args_offset, 0, vertex);
-    JobHeapRange(sink, d.indirect.count, d.indirect.count_offset, 0, vertex);
+    JobIndirectRanges(sink, d.indirect, vertex);
     for (UINT t = 0; t < kSoTargets; ++t) {
         JobHeapRange(sink, d.so[t].heap, d.so[t].offset, d.so[t].size, 1u | vertex);
         JobHeapRange(sink, d.so[t].filled, d.so[t].filled_offset, 0, 1u | vertex);

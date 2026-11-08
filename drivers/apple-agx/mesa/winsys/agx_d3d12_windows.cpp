@@ -662,6 +662,10 @@ static UINT owner_ov5_flagged; /* renders sent with the OV5 flag */
  * hides the range check behind it): do the vertex-stage accesses of a prelude
  * render, ExecuteIndirect arguments included, conflict with the compute batch. */
 static UINT owner_ov5_noprelude_sequence;
+/* OV6 receipt: per render-after-compute, why its ranges were unplaceable --
+ * nibble = render set Overflow bits | compute set Overflow bits << 2
+ * (AGX_D3D12_JOB_RANGE_FULL 1, _NULL 2), 0 = both sets placeable. */
+static UINT owner_ov5_overflow_sequence;
 extern "C" volatile unsigned AgxWin32Ov5Feature;
 /* OV4 (opt-in APPLE_AGX_D3D12_OV4=1, only with the OV2 feature) */
 static BOOL owner_ov4(void) {
@@ -677,7 +681,7 @@ static void owner_ov2_receipt_locked(void) {
   UINT any = 0;
   for (unsigned i = 0; i < 8u; ++i) any |= owner_ov2_reason[i];
   if (any && AdmissionUmdMeasureEnabled()) {
-    UINT values[27];
+    UINT values[28];
     for (unsigned i = 0; i < 8u; ++i) values[i] = owner_ov2_reason[i];
     values[8] = owner_ov2_sequence;
     values[9] = owner_ov2_pairs;
@@ -694,13 +698,15 @@ static void owner_ov2_receipt_locked(void) {
     values[24] = owner_ov5_flagged;
     values[25] = AgxWin32Ov5Feature ? 1u : 0u;
     values[26] = owner_ov5_noprelude_sequence;
-    AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 27u);
+    values[27] = owner_ov5_overflow_sequence;
+    AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 28u);
   }
   for (unsigned i = 0; i < 8u; ++i) owner_ov2_reason[i] = 0;
   owner_ov2_sequence = owner_ov2_pairs = owner_ov2_range_sequence = 0;
   for (unsigned i = 0; i < 4u; ++i) owner_ov2_prefix[i] = owner_ov2_kinds[i] = 0;
   owner_ov4_splits = 0;
   owner_ov5_sequence = owner_ov5_renders = owner_ov5_flagged = owner_ov5_noprelude_sequence = 0;
+  owner_ov5_overflow_sequence = 0;
 }
 extern "C" void AgxD3d12OwnerJobDrawRange(const void *heap, unsigned long long lo, unsigned long long hi,
                                           unsigned uav) {
@@ -807,6 +813,8 @@ static unsigned owner_batch_kind(unsigned kind) {
     if (owner_ov5_renders < 8u) {
       owner_ov5_sequence |= (ta & 0xfu) << (4u * owner_ov5_renders);
       owner_ov5_noprelude_sequence |= (AgxD3d12JobRenderTaRefusal(&owner_job_barriers, 0u) & 0xfu) << (4u * owner_ov5_renders);
+      owner_ov5_overflow_sequence |= ((owner_job_barriers.RangeRender.Overflow & 3u) |
+                                      ((owner_job_barriers.RangeLastCompute.Overflow & 3u) << 2u)) << (4u * owner_ov5_renders);
     }
     ++owner_ov5_renders;
   }

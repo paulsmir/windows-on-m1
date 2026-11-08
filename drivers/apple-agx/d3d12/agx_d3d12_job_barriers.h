@@ -34,7 +34,13 @@ typedef struct AGX_D3D12_JOB_BARRIER_SET {
  * UAV): a heap byte range [Lo, Hi) a render accessed (Uav: through a UAV
  * view) or a barrier named (Uav 1 UAV barrier, 2 global UAV barrier, 0 any
  * other barrier). Heap is an opaque AgxD3d12Heap identity; NULL = unknown. */
-#define AGX_D3D12_JOB_RANGES 48u
+/* OV6 (EXP2274: GravityMark renders refused with 11 = unplaceable): 128
+ * entries so a frame's draws with their views do not fill the set; Overflow
+ * is a bit set, 1 = the set was full, 2 = an access had no heap (GS/HS/DS,
+ * an unplaceable clear), so the receipt can tell them apart. */
+#define AGX_D3D12_JOB_RANGES 128u
+#define AGX_D3D12_JOB_RANGE_FULL 1u
+#define AGX_D3D12_JOB_RANGE_NULL 2u
 typedef struct AGX_D3D12_JOB_RANGE {
   const void *Heap;
   unsigned long long Lo, Hi;
@@ -97,7 +103,7 @@ static inline void AgxD3d12JobRangeAdd(AGX_D3D12_JOB_RANGE_SET *s, const void *h
   unsigned i;
   if (uav & 1u) s->Uav = 1u;
   if (!heap) {
-    s->Overflow = 1u;
+    s->Overflow |= AGX_D3D12_JOB_RANGE_NULL;
     return;
   }
   if (hi < lo) hi = ~0ull;
@@ -110,7 +116,7 @@ static inline void AgxD3d12JobRangeAdd(AGX_D3D12_JOB_RANGE_SET *s, const void *h
     }
   }
   if (s->Count >= AGX_D3D12_JOB_RANGES) {
-    s->Overflow = 1u;
+    s->Overflow |= AGX_D3D12_JOB_RANGE_FULL;
     return;
   }
   s->R[s->Count].Heap = heap;
@@ -121,7 +127,7 @@ static inline void AgxD3d12JobRangeAdd(AGX_D3D12_JOB_RANGE_SET *s, const void *h
 }
 static inline void AgxD3d12JobRangeMerge(AGX_D3D12_JOB_RANGE_SET *to, const AGX_D3D12_JOB_RANGE_SET *from) {
   unsigned i;
-  if (from->Overflow) to->Overflow = 1u;
+  to->Overflow |= from->Overflow;
   if (from->Uav) to->Uav = 1u;
   for (i = 0; i < from->Count; ++i)
     AgxD3d12JobRangeAdd(to, from->R[i].Heap, from->R[i].Lo, from->R[i].Hi, from->R[i].Uav);
@@ -302,7 +308,7 @@ static inline void AgxD3d12JobBarrierForeign(AGX_D3D12_JOB_BARRIERS *j) {
    * and says nothing about a render submitted before that batch */
   j->ComputeForeign = 1u;
   j->ForeignKinds |= 1u << 31;
-  j->RangeCompute.Overflow = 1u; /* OV5: its writes are not placed */
+  j->RangeCompute.Overflow |= AGX_D3D12_JOB_RANGE_NULL; /* OV5: its writes are not placed */
 }
 
 /* a batch of kind (1 render, 2 compute) is submitted: values {kind,
