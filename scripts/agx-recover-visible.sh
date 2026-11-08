@@ -6,7 +6,20 @@ N=${1:?experiment directory}; X=${2:?experiment number}
 W=/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler
 T=/Users/pavel/public_windows/.local/tandem
 R="$N/evidence/rec${X}h"
-NORMAL=/Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/launch-normal2.sh
+# 2026-11-08: normal recovery boots the native SSD (AppleAns ANS-DIRECT, RECANS001). The bridge launcher
+# EXP950 launch-normal2.sh stays the emergency fallback: AGX_RECOVERY_STORAGE=bridge.
+case "${AGX_RECOVERY_STORAGE:-ans}" in
+  ans)
+    NORMAL=/Users/pavel/public_windows/.local/experiments/RECANS001-normal-ans/launch-normal-ans.sh
+    NORMAL_LOG=/Users/pavel/public_windows/.local/experiments/RECANS001-normal-ans/normal-full.log
+    NORMAL_CONTRACT=/Users/pavel/public_windows/.local/experiments/RECANS001-normal-ans/normal-contract.bin ;;
+  bridge)
+    NORMAL=/Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/launch-normal2.sh
+    NORMAL_LOG=/Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/normal2-full.log
+    NORMAL_CONTRACT=/Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/normal2-contract.bin ;;
+  *) echo "AGX_RECOVERY_STORAGE must be ans or bridge"; exit 2 ;;
+esac
+echo "RECOVERY_STORAGE ${AGX_RECOVERY_STORAGE:-ans}"
 mkdir -p "$R" /tmp/agx-lld-dir
 [ -x /tmp/agx-lld-dir/ld.lld ] || cp /Volumes/pwdev/public_windows/.local/toolchain22/ld.lld /tmp/agx-lld-dir/ld.lld
 ssh_long() { perl -e 'alarm 120; exec @ARGV' "$T/airssh" -o ConnectTimeout=6 "$@"; }
@@ -91,8 +104,8 @@ launch_normal() {
     [ "$(date +%s)" -lt "$end" ] || { echo NORMAL_SSH_NOT_UP; return 1; }
     sleep 5
   done
-  cp /Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/normal2-full.log "$R/normal-$1-full.log"
-  cp /Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/normal2-contract.bin "$R/normal-$1-contract.bin"
+  cp "$NORMAL_LOG" "$R/normal-$1-full.log"
+  cp "$NORMAL_CONTRACT" "$R/normal-$1-contract.bin"
 }
 # Select only this experiment's contract owner. Never terminate other launchers.
 owners=$(select_recovery_owner) || { echo EXACT_OWNER_NOT_FOUND; exit 3; }
@@ -150,6 +163,10 @@ if [ "$absent" = RESUME_PACKAGE_ABSENT ] && [ "$owners" != NO_HOST_OWNER ]; then
   grep -Eq '"Verdict": *"PASS"' "$R/visible-preflight.txt"
   ssh_bounded 'powershell -NoProfile -Command "$ErrorActionPreference=\"Stop\"; $d=@(Get-PnpDevice -PresentOnly | Where-Object InstanceId -like \"*APPL0002*\"); if($d.Count -ne 1 -or [int]$d[0].Problem -ne 28 -or (Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\AppleAgxAdmission)){throw \"normal-inert gate\"}; $p=(Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors; if($p -ne 8){throw \"CPU count\"}; \"VISIBLE_INERT_PACKAGE_ABSENT_8CPU\""' | tee "$R/visible-inert-gate.txt"
   grep -q VISIBLE_INERT_PACKAGE_ABSENT_8CPU "$R/visible-inert-gate.txt"
+if [ "${AGX_RECOVERY_STORAGE:-ans}" = ans ]; then
+  ssh_bounded 'powershell -NoProfile -Command "$ErrorActionPreference=\"Stop\"; $a=@(Get-PnpDevice -PresentOnly | Where-Object InstanceId -like \"*APPL0003*\"); $s=Get-Service AppleAns; if($a.Count -ne 1 -or $a[0].Status -ne \"OK\" -or $s.Status -ne \"Running\"){throw \"ans storage gate\"}; \"RECOVERY_STORAGE_APPLEANS_OK\""' | tee "$R/storage-gate.txt"
+  grep -q RECOVERY_STORAGE_APPLEANS_OK "$R/storage-gate.txt"
+fi
   echo RECOVERY_DONE
   exit 0
 fi
@@ -189,4 +206,8 @@ ssh_long "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pavel\\
 grep -Eq '"Verdict": *"PASS"' "$R/visible-preflight.txt"
 ssh_bounded 'powershell -NoProfile -Command "$ErrorActionPreference=\"Stop\"; $d=@(Get-PnpDevice -PresentOnly | Where-Object InstanceId -like \"*APPL0002*\"); if($d.Count -ne 1 -or [int]$d[0].Problem -ne 28 -or (Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\AppleAgxAdmission)){throw \"normal-inert gate\"}; $p=(Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors; if($p -ne 8){throw \"CPU count\"}; \"VISIBLE_INERT_PACKAGE_ABSENT_8CPU\""' | tee "$R/visible-inert-gate.txt"
 grep -q VISIBLE_INERT_PACKAGE_ABSENT_8CPU "$R/visible-inert-gate.txt"
+if [ "${AGX_RECOVERY_STORAGE:-ans}" = ans ]; then
+  ssh_bounded 'powershell -NoProfile -Command "$ErrorActionPreference=\"Stop\"; $a=@(Get-PnpDevice -PresentOnly | Where-Object InstanceId -like \"*APPL0003*\"); $s=Get-Service AppleAns; if($a.Count -ne 1 -or $a[0].Status -ne \"OK\" -or $s.Status -ne \"Running\"){throw \"ans storage gate\"}; \"RECOVERY_STORAGE_APPLEANS_OK\""' | tee "$R/storage-gate.txt"
+  grep -q RECOVERY_STORAGE_APPLEANS_OK "$R/storage-gate.txt"
+fi
 echo RECOVERY_DONE
