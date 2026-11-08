@@ -74627,3 +74627,6 @@ EXP2253 HARDWARE BEFORE 2026-11-08T00:48:37Z:
 - Recovery: rec2253h. Probe: probe2253.sh = probe2252.sh.
 - Hashes: sys da3f3d33e9d0, UmdArm64 56d86bb079ef, UmdX64 1fd2a46de685, Umd32 7e146abae787; manifest af1b132550c8, hardware-manifest 88324e6c9a2e; probe2253.sh 1e806d737aeb (PROBE_LINT_OK); visible recovery rec2253h de58e9fc912ef38e; m1n1 0d3a75b3.
 - Recovery rec2253h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2253-exitkeys/run2253.sh.
+
+EXP2253 ACTUAL (2026-11-08T00:56:18Z): CONFIRMED -- hot trapped sysregs identified. m1n1 brokerlock-census2 9c850e9c; pipeline RC 0, suite 119/0, GM HD  "fps": 44.587,. Top keys per 10 s (decoder scratchpad exitkeys.py): IMPDEF afsr1 0x30e51b/0x30e57b/0x30e55b/0x30e41b/0x30e6fb = PMCCNTR_EL0 reads (S3_3_C9_C13_0, different Rt) via HACR_EL2 TRAP_PMUV3 (bit 56): 0.5-3.6 M; MSR read S2_0_C0_C2_2 = MDSCR_EL1 via MDCR_EL2.TDA: 0.4-3.3 M; ICC_IAR1/EOIR1 30-205k each; ICC_SGI1R 10-140k. Source: hv_guest_cpu_state.c sets MDCR_EL2 TDE|TDA|TDOSA|TDRA (and the assisted Python HV the same) only for HV-side guest debugging. Next: EXP2254 HV_GUEST_OWNS_DEBUG (MDCR_EL2=0), then the PMCCNTR path as a separate variable.
+EXP2254 BEFORE (2026-11-08T00:56:18Z): see before2254.txt (logged by launch-exp).
