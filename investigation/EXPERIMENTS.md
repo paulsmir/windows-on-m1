@@ -75143,3 +75143,8 @@ EXP2286 HARDWARE BEFORE 2026-11-08T22:46:13Z:
 - Hashes: sys 6aa01519106a, UmdArm64 8135a6c266ca, UmdX64 faaa6b04ecb8, Umd32 2ed04d720cd9; manifest 876ac01accc0, hardware-manifest 194c731a2f6e; probe2286.sh 23ae866e1a65 (PROBE_LINT_OK); visible recovery rec2286h f387ee1a740edd88; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2286h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2286-waiver-bugcheck/run2286.sh.
+
+EXP2286 HARDWARE ACTUAL 2026-11-08T22:50:40Z:
+- Result: first launch refused by the expanded-RAM metadata gate (build info lacked the guest_ram field; 075e3980 is an ancestor of dfe621ea, field added). Relaunched: guest reset in GM run a again (GUEST_DOWN_DURING_GRAVITYMARK a 3).
+- full.log: BUGCHECK ok base=0xfffff8005e800000 code=0x116 p1=0xffffdd8efb9f7050 p2=0xfffff8005ce01ec0 p3=0xffffffffc0000483 p4=0x3. VIDEO_TDR_FAILURE with the same p3/p4 as EXP2214 (0xc0000483, 3).
+- Verdict: confirmed: the m1n1 stop-code print works; this reset is a TDR that failed recovery, not a KMD fault of the 0x7E/0xD1 class. Reset count without diagnostics: 3 of 3 boots. Whether the waiver itself is needed is separated next by EXP2287 (same configuration minus Wom1Ov5TaWaiver). Recovery: AT_PROXY rec2286h.
