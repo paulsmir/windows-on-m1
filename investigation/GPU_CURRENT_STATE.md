@@ -8,6 +8,15 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 21:43Z -- EXP2283: WINDOWS RESET IN THE SECOND GM RUN WITH THE WAIVER (ABBA PAUSED)
+- Arm on, no Wom1JobDiagnostics: GM a 42.8 fps, then ~10 s into GM b a PSCI SYSTEM_RESET (bugcheck path as EXP2270); no
+  stop code or dump: on ANS-DIRECT the crash-dump storage instance is refused by design (1e7a690c4), so hangs leave only
+  the receipt snapshots, full.log and the crashed boot's registry (Waived 1617 / Placed 1617, no Wom1GpuReset).
+- Two differences vs the clean EXP2282 (no diagnostics; a second GM run in the boot). EXP2284 (fork 6, running) keeps the
+  waiver and the two runs but turns Wom1JobDiagnostics on: a reset names the second-run state as the ingredient
+  (TVB growth / retained slots / leftover depth-2 window) through the last snapshot; no reset names the diagnostics-off
+  timing (a race). The ABBA for the R8 gain waits on this.
+
 ## UPDATE 2026-11-08 21:14Z -- GRAVITYMARK HD WITH THE R8 TA WAIVER DOES NOT HANG (EXP2282, fork 6)
 - Switches Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1 Wom1JobDiagnostics=1, OV3B=1, HD PERF: Waived 2043 / Placed 2043 of
   3109 frames (R8 only; RUNNING_KIND 1), no reset, 9 receipt snapshots, 40.5 fps (receipt-class runs without the waiver:
