@@ -74674,3 +74674,14 @@ EXP2256 HARDWARE BEFORE 2026-11-08T02:33:27Z:
 - Recovery rec2256h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2256-gdbg/run2256.sh.
 
 EXP2256 ACTUAL (2026-11-08T02:41:23Z): CONFIRMED -- guest-owned debug removes all ordinary MSR traps. m1n1 ansdirect-gdbg2 (HV_GUEST_OWNS_DEBUG=1, sha 99220648); native SSD (STORAGE_NATIVE_ANS_OK); pipeline RC 0, suite 119/0, GM d closed (wer 0), GM HD 44.703 fps (EXP2255 44.610, +0.2 %, noise band). Exit census: msr 0-462 per 10 s (EXP2255 0.19-1.33 M); brk 0; impdef (PMCCNTR_EL0) 0.33-2.34 M, icc 87-742k, dabt 2k-390k remain. Verdict: keep; m1n1 f9712bb0 makes it the default (default build byte-identical to the tested binary 99220648; HV_DEBUG_GUEST=1 = diagnostic opt-out). Offline follow-up: PMCCNTR_EL0 is already served in hv_handle_msr_unlocked (no bhl), so its remaining cost is the trap itself; removing it needs hiding the PMU from Windows (ID_AA64DFR0 PMUVer=0xF today) -- deferred to a supervised daytime run (boot-risk unknown, no operator overnight).
+
+EXP2257 HARDWARE BEFORE 2026-11-08T02:56:03Z:
+- WHY THIS HYPOTHESIS: (1) EXP2256 BROKERLOCK: service class ~772k steps per 10 s, 196 ms held (~2 % of a CPU), max ~1 ms, mostly idle steps on the exit path of every vCPU; (2) HV-RESPONSIBILITY-INVENTORY item 3 (scanout off the exit path); (3) a 200 us worst-case service latency is <2 % of a 16.7 ms frame.
+- WINDOWS CONTRACT: unchanged (scanout vINTID delivery may be delayed by <=200 us).
+- AGX CONTRACT: unchanged scanout broker state machine; only the stepping site changes.
+- WHAT IS STILL UNKNOWN: whether any present path relied on per-exit stepping (EXP029/030 burst symptom history concerned the tick rate, not this hook).
+- Expected: BROKERLOCK service count ~5k/s (tick rate) instead of ~77k/s; GM HD >= EXP2256 44.70 within 2 %; desktop/present normal (DWM faults 0); suite 119/0.
+- Failure criteria: present stalls/black display, GM drop > 2 %, suite failure, hang -> rec2257h.
+- Recovery: rec2257h (ANS). Probe: probe2257.sh = probe2256.sh.
+- Hashes: sys 6347dda01a18, UmdArm64 1acbbf7391c2, UmdX64 a209b78e6f26, Umd32 71a5e840e067; manifest c1ac296d3327, hardware-manifest 4621b7fd71b7; probe2257.sh 82293dc70a20 (PROBE_LINT_OK); visible recovery rec2257h 9ab5f1190a7a2753; m1n1 0d3a75b3.
+- Recovery rec2257h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2257-scantick/run2257.sh.
