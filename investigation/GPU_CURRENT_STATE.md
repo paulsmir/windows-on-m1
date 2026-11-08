@@ -2463,3 +2463,12 @@ UPDATE 2026-11-08T17:16:03Z EXP2274 OV5 NO-PRELUDE RECEIPT: R2/R4 reason 11, R6 
 UPDATE 2026-11-08T17:20:29Z LINE 887 TRAP COUNT (offline, medians of HV: EXITS per 10 s in GM windows, no new run): EXP2271 (no 887) icc 190838 irq 830 fiq 117574 impdef 1049009; EXP2272 icc 226087 irq 6969; EXP2273 icc 233475 irq 5473. The line adds about 35-43k ICC traps and 5-6k IRQ exits per 10 s (about 4k ICC/s, 0.6k IRQ/s), not ~40k interrupts/s. Per-exit cost is not measured, but at this count ICC traps are an unlikely explanation for the ~1.5 % GM loss; that loss (44.0/43.8 vs 44.4-44.6) is also close to run noise (EXP2266 44.08). Largest exit class remains impdef (PMCCNTR), about 100k/s on the unlocked path.
 
 UPDATE 2026-11-08T21:43:33Z NO CRASH DUMPS ON NATIVE SSD: AppleAns refuses crash-dump and hibernation instances by design (1e7a690c4), so a bugcheck on the ANS-DIRECT profile leaves no MEMORY.DMP, minidump or event 1001 (seen in EXP2270, EXP2283). Evidence for such resets is full.log (PSCI RESET lines), receipts from the crashed boot (rec*/kmd-receipts-pre-disable.txt), and periodic receipt snapshots. This supersedes the "hypothesis" wording in EXP2283 ACTUAL.
+
+## UPDATE 2026-11-08T22:41:28Z -- the waiver-profile reset is at GravityMark process start, waiver not involved
+EXP2283 run b and EXP2285 run a both reset within ~1 s of GM's owner creation (UMD log 5 lines, stdout ends at "Using Fetch
+Mode"), with Waived 0 / Placed 0 and only CLASS refusals in the receipt (Considered 677). The reproducible fact is "diagnostics
+off + {Wom1Ov2NoHazardLead, Wom1Ov5TaWaiver} resets 2 of 3 GM starts on the current package"; every run EXP2265-EXP2284 had
+diagnostics on, the last diagnostics-off GM boots (EXP2250-2264, 15, no switches, older package) never reset. Active
+hypothesis replaced: not a race in the waived path but a process-start fault under the faster worker, switch or base
+unknown. Discriminators queued after EXP2286 (stop code via m1n1 dfe621ea): EXP2287 diag off + Ov2 lead only, 3 GM starts;
+EXP2288 diag off, no switches, 3 starts. ABBA/default waiver still blocked. Details: EXPERIMENTS.md "EXP2285 OFFLINE READING".
