@@ -589,7 +589,7 @@ def configure_display_consumers():
     if os.environ.get("WOM1_CPPC") == "1":
         if p.request(0xc30) != 1:
             raise RuntimeError("m1n1 rejected the CPPC register page (P_HV_MAP_CPPC)")
-        print("CPPC: _CPC register page mapped at 0x300010000")
+        print("CPPC: _CPC register page mapped (m1n1 hv_cppc.h HV_CPPC_BASE)")
 
 hv.pre_guest_start = configure_display_consumers
 
