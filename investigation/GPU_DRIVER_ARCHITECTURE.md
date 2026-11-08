@@ -80,7 +80,8 @@ driver-internal hazards -- the same per-resource model Apple's kext uses
 ### 2.5 Shader compiler
 - **DONE** compute, VS and FS code at Metal-oracle parity (instruction and load
   counts, EXP2070/2194, OV2 session 2026-11-06).
-- **OPEN** runtime behaviour of compute kernels (+4.5 ms/frame HD vs Apple):
+- **CLOSED 2026-11-08** compute kernel runtime: at scene-aligned parity with Apple (agx_gm_scene_align.py; C4 lighting +13 % is the DXIL-heavier kernel, workload-owned). The earlier +4.5 ms was a scene-sampling artefact. Remaining GPU-timeline gap = 4.0 ms structure (2.1 overlap, 2.1/2.4 non-work).
+- (superseded text) runtime behaviour of compute kernels (+4.5 ms/frame HD vs Apple):
   needs counters -- Apple's via Instruments (Xcode on the J313 macOS) and ours via
   the firmware stats ring first; RDE perf-counter RE only if those do not
   explain it.

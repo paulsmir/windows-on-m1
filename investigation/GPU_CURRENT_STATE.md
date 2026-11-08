@@ -8,6 +8,28 @@ No attribution/push/PR/new chats/goals/automations. CS enabled. Read agx-d3d12-l
 AGENTS.md/CLAUDE_WORKING_METHOD; only referenced ledger/evidence, no archaeology.
 Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
 
+## UPDATE 2026-11-08 13:55Z -- C2 vs APPLE c11: EQUAL WORK, EQUAL TIME; THE COMPUTE GAP WAS A SCENE-SAMPLING ARTEFACT
+- Work: our C2 records exactly Apple c11's 34 dispatches in the same order with the same direct grids and thread sizes
+  (fc968f7a 2x1x1 + 4 indirect = Apple d0-d4 @128 threads; 1x1x1 singles; 256-thread indirect block d7-d28; 1024-thread
+  d31; 64-thread d33). Indirect grids are app data (identical scene) -> equal work; the "amount of work" hypothesis is excluded.
+- Time: GravityMark's camera path advances per FRAME, so our 44-fps run reaches each scene segment later than Apple's
+  60-fps run, and Apple's c11 varies 0.8-4.6 ms with the scene. Aligning the per-frame series by C2 cross-correlation
+  (tools/agx_gm_scene_align.py; lag 13 s, corr 0.85) gives, per 10-s bin: C0 block 0.94-1.01x Apple, C2 0.90-0.97x (ours
+  FASTER), C4 lighting 1.13x (+0.25-0.3 ms; the DXIL 32-vs-12 sin/cos kernel), C6 0.97x; render sum <= Apple's split
+  encoders; our GPU-work sum == Apple's split sum (20.6-23.9 ms) in every bin.
+- Frame: our wall = Apple's UNSPLIT GPU frame (mtltime hd.csv) + 4.0 ms in every bin (20.94/16.83, 21.38/17.31,
+  23.87/20.20, 23.30/19.63, 18.93/14.95, 21.75/17.63, 23.29/19.28). Apple's unsplit frame is ~3 ms below its own split
+  sum: encoder overlap. So the whole HD gap is structure: our 4.7 ms non-work (launch/late/DWM/detect) and zero R||C
+  overlap vs Apple's ~0 overhead and ~3 ms overlap. Kernel runtime is at parity (except C4 +0.3 ms, workload-owned).
+- SUPERSEDED: "compute 12.73 vs 9.2 (+3.5)" above and the 2.5 OPEN "+4.5 ms compute runtime" item: run medians of our
+  100-s PERF window (heavy first half of the camera path) were compared with Apple's full-run medians. The EXP2226
+  per-dispatch ratios (2x) are the same artefact. Rule: compare GM jobs only after scene alignment.
+- Next causal target (only one left on the GPU timeline): the 4.0 ms structural gap = non-work overhead
+  (HV GPUVA broker/LEASE, late submit behind DWM, DWM composition, completion detect) and missing R||C overlap
+  (OV2/OV3/OV5 line). Compiler/kernel work on GravityMark is closed unless C4 lighting (+0.3 ms) is wanted.
+- Evidence: .local/experiments/EXP2268-nopmu/evidence/EXP2268/scene-align/ (ours-frames-2268.csv, apple-frames.csv,
+  bins), Apple sources EXP2226 run2 splitd-hd.csv and MACOS-20261105-metal-timing/hd.csv.
+
 ## UPDATE 2026-11-08 13:45Z -- HD FRAME BUDGET RE-MEASURED OFFLINE ON THE SLC+CPPC PROFILE (EXP2266/2268 logs)
 - Source: tools/agx_gpu_frame_breakdown.py --jobs on gm2266d/gm2268d-umd.log (profile SLC+DRAMCFG+CPPC, native SSD,
   GM HD PERF 44.4-44.6) vs gm2225d (pre-SLC, 40.8). Wom1GpuPerf post-membw->after-d (EXP2266/2267): P6 86-87 %, P1 12-13 %
