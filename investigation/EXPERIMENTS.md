@@ -74619,3 +74619,11 @@ EXP2252 HARDWARE BEFORE 2026-11-08T00:28:13Z:
 - Recovery rec2252h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2252-census/run2252.sh.
 
 EXP2252 ACTUAL (2026-11-08T00:35:16Z): CONFIRMED receipt; FIRST HV EXIT CENSUS. m1n1 brokerlock-census 2a79b5d2; pipeline RC 0, suite 119/0, GM d closed (wer 0), GM HD  "fps": 42.849,. 31 "HV: EXITS" 10 s windows (desktop, suite, GM): impdef 0.37-5.82 M, msr (non-ICC sysreg) 0.13-4.37 M, icc 58k-1.07 M, fiq 69k-462k, wfi 8k-122k, dabt 7k-368k, hvc 0-1.8k, irq 115-12.7k, brk ~0 per 10 s -> up to ~1 M HV exits/s, dominated by IMPDEF (HACR_EL2 bit 56 traps, handled as ESR_ISS_IMPDEF_MSR via afsr1) and ordinary MSR traps; ICC (interrupt ack/EOI) ~10x less. Hypothesis (unverified): PMUv3 cycle-counter / timer sysreg accesses on every context switch. Next: EXP2253 receipt of the top trapped sysreg encodings (MSR ISS / IMPDEF afsr1) to identify them before any change.
+
+EXP2253 HARDWARE BEFORE 2026-11-08T00:48:37Z:
+- WHY THIS HYPOTHESIS: EXP2252: up to ~1 M HV exits/s, IMPDEF (HACR bit 56) up to 580k/s and MSR up to 440k/s; the trapped registers must be identified before deciding whether to stop trapping them (each exit ~us of a CPU).
+- WINDOWS/AGX CONTRACT, TRANSLATION: unchanged. WHAT IS STILL UNKNOWN: identity of the hot trapped sysregs.
+- Expected: EXITKEYS lines naming 2-4 dominant encodings. Failure criteria: hang, suite failure, GM drop > 2 % -> rec2253h.
+- Recovery: rec2253h. Probe: probe2253.sh = probe2252.sh.
+- Hashes: sys da3f3d33e9d0, UmdArm64 56d86bb079ef, UmdX64 1fd2a46de685, Umd32 7e146abae787; manifest af1b132550c8, hardware-manifest 88324e6c9a2e; probe2253.sh 1e806d737aeb (PROBE_LINT_OK); visible recovery rec2253h de58e9fc912ef38e; m1n1 0d3a75b3.
+- Recovery rec2253h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2253-exitkeys/run2253.sh.
