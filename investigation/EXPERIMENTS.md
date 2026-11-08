@@ -74764,3 +74764,12 @@ EXP2264 HARDWARE BEFORE 2026-11-08T05:53:42Z:
 - Recovery rec2264h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2264-membwhot/run2264.sh.
 
 EXP2264 ACTUAL (2026-11-08T06:03:31Z): INCONCLUSIVE. Probe e2264 MEMBWHOT (40 stream passes ~90 ms per timed list): differential (11-1 dispatch) results are dominated by warm-up jitter (values 0.0/4.6/43-511 ns), so the method cannot resolve the chase; MEMBWUAV in the same boot reproduces EXP2259-2263 (pages 221-235 ns). Next: measure the GPU performance state directly during MEMBWUAV -- device switch Wom1JobDiagnostics=1 publishes Wom1GpuPerf (per-pstate ActualTicks histogram, render_gpu_perf.h); receipts snapshots before/after the MEMBWUAV step give the time-in-state of the latency probe.
+
+EXP2265 HARDWARE BEFORE 2026-11-08T06:16:46Z:
+- WHY: EXP2263 evidence for a DVFS confounder (same-line ratio ours/macOS ~3.2 = P6/P1 frequency ratio; 2 ALU ops ~67 ns; run-to-run variance); EXP2264's warm-up method was too noisy. A direct time-in-state reading decides whether MEMBW measures at P1-P2 or at P6.
+- WINDOWS/AGX CONTRACT: unchanged (receipt-only switch).
+- Expected: delta(ActualTicks) of the probe window dominated by low pstates -> latency gaps EXP2226-2264 are largely clock artefacts; dominated by P6 -> clock excluded for the probe as well.
+- Failure criteria: hang, suite failure -> rec2265h. Recovery: rec2265h (ANS).
+- Hashes: sys a1d7452daf73, UmdArm64 bb133d818d16, UmdX64 125b686f9ad7, Umd32 76e5f73aa1a9; manifest d2740db54882, hardware-manifest 8b682483d8b1; probe2265.sh f2735cc5ef0b (PROBE_LINT_OK); visible recovery rec2265h 656d36f3382ed890; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1.
+- Recovery rec2265h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2265-pstate/run2265.sh.
