@@ -17,8 +17,11 @@ Existing c18 security-blocked UBFE/C21E task MUST NOT be retried/routed around.
   removing it needs hiding the PMU (daytime experiment).
 - GPU device-load gap (EXP2259-2261, macOS 118-181 ns, pages 65-92): ours 80 ns in one page, ~226 ns for 4 pages,
   436 ns for 1024 pages. Rejected: GPU clock (P6 1278 MHz = macOS), SLC per-DSID policy (EXP2258, GPU allocates),
-  guest VMID 1 (EXP2260), map-without-TLBI (EXP2261), leaf MEMATTR (EXP2239). Next discriminator: page spread 1/2
-  pages (TLB reach); then compare GPU UAT context/TLB configuration (firmware/initdata/handoff) with macOS RE.
+  guest VMID 1 (EXP2260), map-without-TLBI (EXP2261), leaf MEMATTR (EXP2239).
+- EXP2262 REINTERPRETATION: one self-pointing line already costs ~228 ns -> the "page-spread" gap is NOT translation;
+  it is "same address in every lane" (probe and Metal twin both start all 32 threads on one line): ours ~228 ns vs
+  macOS 65-92; distinct-lane 16 KiB chase is at parity. NEXT: compare our compiled MEMBWUAV load vs Apple's twin
+  (codegen/coalescing) -> then codegen fix or GPU L1 config experiment; relevant to GM traversal kernels.
 
 ## UPDATE 2026-11-08 00:30Z -- WORKING PROFILE: SLC + DRAMCFG + SMBIOS + CPPC (EXP2243-2251)
 - GPU experiment profile now: m1n1 brokerlock-cppc3 0467d900 (sha e871092f; SLC on, PMU filter fix, hv_cppc),
