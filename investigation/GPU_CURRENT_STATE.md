@@ -2294,3 +2294,5 @@ c2eb9203ab6c75725e3d9754e9b4c8b6dd89116eb6e012c6231dbb82bc3f0744;
 ## 2026-11-06T03:34:24Z -- CS 1.6 / OpenGL regression CLOSED (EXP2209)
 - Root causes, both fixed: (1) stale packaged WOW64 ICD (software GL, ~5 fps) -> ICD built per package (EXP2205); (2) DWM refused batches on a read-only GDI redirection surface (NativeQuery READ_ONLY) -> device re-creation loop -> G3 page-table churn under the adapter lock (18.6 fps) -> 025ab1d6 (EXP2209: 45.457 fps, EXP1378 44.784).
 - Parked: G3 lock split design (not on the critical path now). Open: KMD preemption-refusal engine reset (proposed task), OV5 KMD drill on hardware, GravityMark FHD gap (5396 vs 7814).
+
+UPDATE 2026-11-08T13:52:10Z EXP2271 SUBMIT BRACKET VERDICT: the doorbell-only pending_submissions + KICKFW bracket without atomics is stable (suite 119/0) but gives no gain (GM HD 44.396 vs 44.435; short-burst P1 69.6 % vs 64.7 %). Wom1SubmitBracket stays default off. Never use atomics on the write-combined firmware mappings (EXP2270 reset). Next causal target for GM: compute cost at equal clock against .local/metal-oracle.
