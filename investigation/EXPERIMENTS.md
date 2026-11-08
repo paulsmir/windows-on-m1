@@ -74986,3 +74986,9 @@ EXP2278 HARDWARE BEFORE 2026-11-08T19:25:50Z:
 - Hashes: sys 44f2142ffb4f, UmdArm64 77c00a129754, UmdX64 fdfcf26abd86, Umd32 a4aab3e541d0; manifest bf6ec9e7ebd2, hardware-manifest d51734afe041; probe2278.sh f784f115c834 (PROBE_LINT_OK); visible recovery rec2278h 89f373e6d4c44406; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2278h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2278-ovpair-order/run2278.sh.
+
+EXP2278 HARDWARE ACTUAL 2026-11-08T19:28:57Z:
+- Result: no guest reset (0 PSCI RESET), TOOL_OVPAIR 40/40, bad_pixels 0, mean 21.488 ms, max 66.754 ms, PASS. SSH and native SSD alive.
+- Wom1Ov5WaiverReceipt: Considered 1176, Waived 1, Placed 1, Refused[CLASS] 1175 (pre-step 504/0/0/504). UMD: 40 rows, 38 with OV5 renders 0, 2 with renders 1, verdict 0, flagged.
+- Reading: the submission order is compute-then-render in only 2 of 40 executions, so end-of-execution flush is not creation order. One waived render reached the firmware and completed with no hang; which iteration it was is not recorded, so the pixel checks (iterations 0 and 39) cannot be tied to it.
+- Verdict: inconclusive for the OV5 contract: one pair is not a sample of 40. Weak positive only: a waived TA with a 3D Barrier on a compute stamp did not hang once. Next: the owner must submit the open compute batch before the first draw (architect's owner-side hook) so that all 40 pairs are exercised. Recovery rec2278h.
