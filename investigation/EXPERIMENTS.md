@@ -74909,3 +74909,10 @@ EXP2274 HARDWARE BEFORE 2026-11-08T17:08:14Z:
 - Hashes: sys 77921aab0abd, UmdArm64 8035b64bda4b, UmdX64 b1f17d98ada1, Umd32 7e978422f6b2; manifest 9f9a0a59579c, hardware-manifest c552d221e00e; probe2274.sh 085bbe425151 (PROBE_LINT_OK); visible recovery rec2274h a870693d71c76e73; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1.
 - Recovery rec2274h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2274-ov5noprelude/run2274.sh.
+
+EXP2274 HARDWARE ACTUAL 2026-11-08T17:16:03Z:
+- Result: no guest reset, pipeline done, suite PASS=119 FAIL=0, GM ran to timeout, wer 0, device_removed false. Native SSD and SSH alive.
+- Receipt, 3228 rows of measure-d3d12-ov2-refusal, 3216 with 4 renders: real sequence 0x0999 (R2/R4/R6 reason 9, R8 0), value 26 (prelude check skipped) 0x0abb: R2 11, R4 11, R6 10, R8 0.
+- Reading: R2/R4 have an unplaceable access (reason 11: NULL heap or full range set) on one side, so they cannot be classified. R6 reports a vertex-stage conflict (10), but root-bound views and ExecuteIndirect arguments enter the sets as open-ended ranges (JobHeapRange bytes 0 -> [offset, ~0)), so 10 is an upper bound, not a proven dependency.
+- GM HD PERF 41.600 fps with Wom1Ov2NoHazardLead=1 + OV3B=1 + receipts, versus EXP2271 44.396 without them (-6.3 %). Outside the 2 % expectation; the arm is not a default profile and the causes within it were not separated (EXP2198 measured only -1.7 % for this profile on an older base).
+- Verdict: inconclusive for the prelude dependency question: the receipt cannot separate a real conflict from range conservatism. R8 remains the only clean candidate. The receipt stays (no behaviour change). Next: overlap line parked; a further step needs exact byte ranges for the views, the arguments, and the EXP2214 hang explained, for a measured ceiling of 1.67 ms HD. Recovery rec2274h.
