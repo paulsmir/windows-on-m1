@@ -2520,3 +2520,8 @@ From splitd-hd.csv directly (sum 21.41 vs union 18.52 ms/frame; compute||render 
 Metal order C0 R5 C2 R7 C4 R1 C6 R3 vs our D3D12 order C0 R1 C2 R3 C4 R5 C6 R7. Next (offline): do our OV2 receipts judge
 C2-behind-R1 and C4-behind-R3 independent? If the tracker refuses them for a reason Apple's overlap disproves, that is the
 next lever (compute kicked behind a running independent render: COMPUTE_ON_3D + OV2 lead). Ledger: "APPLE OVERLAP STRUCTURE".
+
+## UPDATE 2026-11-09T04:54:07Z -- NEXT LEVER: OV8 full independence (render ahead of the compute on both stages), spec written
+Apple's pairs in our names: C4||R5 1.46 ms, C6||R7 0.75 ms (correction of the previous update's names). Our blockers are
+ours: R5's prelude rule + unsized-VB conflict, R7's 3D wait on C6. investigation/analysis/OV8-full-independence.md:
+step 1 = receipt-only GM run (full-range / barrier / prelude verdicts per render), step 2 = opt-in both-leads waiver + ABBA.
