@@ -79,6 +79,13 @@ driver-internal hazards -- the same per-resource model Apple's kext uses
   (R2/R4/R6 verdict 10: VB read vs UAV write, OV6b); the measured overlap
   (EXP2282: 601 of 11261 pairs, median 0.54 ms) is too small to show in fps.
 
+- **CLOSED 2026-11-09 (GravityMark)** OV8 full independence: Apple's 2.2 ms/frame
+  overlap is C4||R5 and C6||R7 with the whole render ahead (split HD capture),
+  but GravityMark-D3D12 orders both pairs itself (transition UAV->PS_SRV before
+  R7, UAV barrier before R5 on the same 7.4 MB surface; EXP2298/2299). Under the
+  D3D12 contract the overlap is not ours to take. OV2/OV5/OV8 stay KEEP-OFF
+  (C/I) for applications whose barriers permit them.
+
 ### 2.3 Memory and residency
 - **DONE** G3 private scenes, UAT, broker; read-only opens answered as data and
   proved for reading only (025ab1d6, EXP2209: CS 1.6 45.5 fps).

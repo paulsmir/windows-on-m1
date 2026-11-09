@@ -2525,3 +2525,9 @@ next lever (compute kicked behind a running independent render: COMPUTE_ON_3D + 
 Apple's pairs in our names: C4||R5 1.46 ms, C6||R7 0.75 ms (correction of the previous update's names). Our blockers are
 ours: R5's prelude rule + unsized-VB conflict, R7's 3D wait on C6. investigation/analysis/OV8-full-independence.md:
 step 1 = receipt-only GM run (full-range / barrier / prelude verdicts per render), step 2 = opt-in both-leads waiver + ABBA.
+
+## UPDATE 2026-11-09T05:46:18Z -- OVERLAP LINE CLOSED FOR GRAVITYMARK: the D3D12 port orders C4->R5 (UAV barrier) and C6->R7 (UAV->PS_SRV transition) itself
+EXP2298/2299 receipts. Apple's 2.2 ms is the Metal port's structure, not available under the D3D12 contract. Remaining
+recoverable HD gap ~1.5-2.0 ms of 21.6: DWM windowed composition 0.85 (independent flip/MPO, DISPLAY work), launch 0.45
+(HV LEASE / worker), detect 0.3-0.5 (Wom1IrqCompletion proven: FPS neutral, frees a core -> default-on candidate via the
+perf gate), idle 0.22, C4 kernel +0.3 (workload). Next causal targets in that order; no OV hardware runs.
