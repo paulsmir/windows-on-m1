@@ -949,6 +949,9 @@ typedef struct _ADMISSION_CONTEXT {
   BOOLEAN TdrDrillAllowed;
   BOOLEAN GpuFaultDrillAllowed;
   volatile LONG TdrDrillPid, TdrDrillJobs, TdrDrillFence;
+  /* Firmware restart drill (ADMISSION_FW_RESTART_DRILL): device value
+   * Wom1FwRestartDrillAllowed = 1, read once at runtime start. */
+  BOOLEAN FwRestartDrillAllowed;
 } ADMISSION_CONTEXT;
 
 typedef struct _ADMISSION_DEVICE {
@@ -2171,6 +2174,22 @@ NTSTATUS AdmissionPlatformCalibrateGpuClock(_In_ ADMISSION_CONTEXT *Context,
 /* G4-r3 TDR drill escape (ADMISSION_TDR_DRILL), in the caller's process. */
 NTSTATUS AdmissionPlatformTdrDrillEscape(_Inout_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_ESCAPE *Args);
+/* TDR stage 2b (TDR-FIRMWARE-RESTART-RECOVERY.md 8.3 with the section 9
+ * corrections). PASSIVE_LEVEL. One orderly warm restart of the firmware:
+ * ASC CPU and RTKit session stopped and booted again, initdata graph and
+ * queue provider rebuilt, power domains and the retained UAT root left as
+ * they are (no PREPARE, ACTIVATE, CLOSE or power command). Accepted only
+ * with nothing in flight (no job, packet, worker or reset); refused
+ * otherwise without touching anything. A failure after the runtime was
+ * taken leaves SchedulerFaulted set and the runtime stopped for the
+ * ordinary teardown. No reset DDI calls this yet: its only caller is the
+ * drill escape below. Wom1GpuReset v5 (Restart) records every call. */
+NTSTATUS AdmissionPlatformRuntimeRestart(_Inout_ ADMISSION_CONTEXT *Context);
+/* Firmware restart drill escape (ADMISSION_FW_RESTART_DRILL): refused with
+ * STATUS_NOT_SUPPORTED unless the device value Wom1FwRestartDrillAllowed
+ * was 1 at runtime start. */
+NTSTATUS AdmissionPlatformFwRestartDrillEscape(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ const DXGKARG_ESCAPE *Args);
 NTSTATUS AdmissionGpuvaG3FaultDrillEscape(_Inout_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_ESCAPE *Args);
 BOOLEAN AdmissionGpuvaG3FaultDrillApply(_Inout_ ADMISSION_CONTEXT *Context,

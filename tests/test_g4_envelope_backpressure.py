@@ -21,6 +21,12 @@ Invariants:
   Notify -> next Kick in EXP1118/EXP1119). No timer sleep remains;
 - a busy state that outlives the timeout is refused with its predicate;
 - stopping, resetting, failed or missing runtimes are refused without waiting;
+- TDR stage 2b: while a firmware restart owns the runtime (FwRestartActive)
+  its refusals (resetting, backend not started) are transient: a submission
+  that arrives during the restart is admitted when the restart ends, is
+  refused at once with the real predicate when the restart failed, and never
+  waits past the bound. Without this, DWM's submission during the H1 drill
+  fails and the run cannot tell that from a firmware that did not come back;
 - Phase 5a: queued (deferred-bind) submissions keep the slot busy;
 - the G4 envelope uses the bounded wait.
 """
@@ -63,7 +69,8 @@ static LONG InterlockedCompareExchange(volatile LONG *p, LONG, LONG){ return *p;
 struct BACKEND { int Phase; };
 struct KEVENT { int x; };
 struct ADMISSION_PLATFORM_RUNTIME { BOOLEAN ProviderReady, BackendStarted; BACKEND Backend; void *WorkItem;
-  volatile LONG Stopping, Resetting, WorkScheduled; KEVENT WorkIdle, SlotEvent; };
+  volatile LONG Stopping, Resetting, WorkScheduled; KEVENT WorkIdle, SlotEvent;
+  volatile LONG FwRestartActive; };
 struct PACKET { int State; };
 typedef long long LONG64, LONGLONG;
 struct SUBMIT_PATH { volatile LONG Waits[4]; volatile LONG64 WaitQpc[4]; volatile LONG64 MaxWaitQpc; };
@@ -71,7 +78,7 @@ struct ADMISSION_CONTEXT { void *PlatformRuntime; int SchedulerLock; PACKET Rend
 static LONG InterlockedIncrement(volatile LONG *p){ return ++*p; }
 static LONG64 InterlockedExchangeAdd64(volatile LONG64 *p, LONG64 v){ LONG64 o=*p; *p+=v; return o; }
 static LONG64 InterlockedCompareExchange64(volatile LONG64 *p, LONG64 x, LONG64 c){ LONG64 o=*p; if(o==c)*p=x; return o; }
-static ULONGLONG now; static int waits, delays, finish_after;
+static ULONGLONG now; static int waits, delays, finish_after, restart_after, restart_fails;
 static ADMISSION_PLATFORM_RUNTIME *rt; static ADMISSION_CONTEXT *ctx;
 static ULONGLONG KeQueryInterruptTime(void){ return now; }
 static LARGE_INTEGER KeQueryPerformanceCounter(void*){ LARGE_INTEGER q; q.QuadPart=(long long)now+1; return q; }
@@ -80,7 +87,10 @@ static void KeAcquireSpinLock(int*, KIRQL*){} static void KeReleaseSpinLock(int*
 static int AdmissionRenderPacketState(PACKET *p){ return p->State; }
 static void tick(){ now += 100000ULL; if(finish_after && --finish_after==0){ rt->WorkScheduled=0;
   rt->Backend.Phase=AppleAgxBackendRuntimeReady; ctx->RenderPacket.State=AdmissionRenderPacketEmpty;
-  ctx->G4PendingCount=0; } }
+  ctx->G4PendingCount=0; }
+  /* AdmissionPlatformRuntimeRestart's exit: ownership returned, backend back (or not). */
+  if(restart_after && --restart_after==0){ rt->FwRestartActive=0; rt->Resetting=0;
+    rt->BackendStarted=restart_fails?0:1; } }
 static int slot_waits, clears;
 static void KeClearEvent(KEVENT*){ ++clears; }
 static NTSTATUS KeWaitForSingleObject(KEVENT *e, int, int, BOOLEAN, LARGE_INTEGER*){
@@ -118,6 +128,18 @@ int main(){
   r.Backend.Phase=AppleAgxBackendRuntimeReady; r.ProviderReady=0; assert(!AdmissionPlatformRuntimeAwaitWork(&c,1000,NULL));
   c.PlatformRuntime=NULL; assert(!AdmissionPlatformRuntimeAwaitWork(&c,1000,&why) && why==1);
   assert(waits+delays==0);
+  c.PlatformRuntime=&r; r.ProviderReady=1;
+  /* A firmware restart owns the runtime: the submission waits it out. */
+  waits=0; r.Resetting=1; r.FwRestartActive=1; r.BackendStarted=0; restart_after=4; restart_fails=0;
+  if(!AdmissionPlatformRuntimeAwaitWork(&c,1000,&why)){printf("submission during a firmware restart refused (%lu)\n",why);return 1;}
+  assert(why==0 && waits==4);
+  /* The restart failed: refused with the real predicate as soon as it ends. */
+  waits=0; r.Resetting=1; r.FwRestartActive=1; r.BackendStarted=0; restart_after=2; restart_fails=1;
+  assert(!AdmissionPlatformRuntimeAwaitWork(&c,1000,&why) && why==3 && waits==2);
+  /* A restart outliving the bound is refused, not waited on for ever. */
+  r.Resetting=1; r.FwRestartActive=1; r.BackendStarted=1; restart_after=0; now=0;
+  assert(!AdmissionPlatformRuntimeAwaitWork(&c,50,&why) && why==7);
+  r.Resetting=0; r.FwRestartActive=0;
   /* EXP1135: every wait is counted under its first busy predicate. */
   assert(c.SubmitPath.Waits[1]>=1 && c.SubmitPath.Waits[0]>=1 && c.SubmitPath.Waits[2]>=1);
   assert(c.SubmitPath.WaitQpc[1]>0 && c.SubmitPath.MaxWaitQpc>0);

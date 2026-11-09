@@ -354,6 +354,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
       return AdmissionGpuvaG3CopyEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == ADMISSION_TDR_DRILL_MAGIC)
       return AdmissionPlatformTdrDrillEscape((ADMISSION_CONTEXT *)Adapter, Args);
+    if (private_magic == ADMISSION_FW_RESTART_DRILL_MAGIC)
+      return AdmissionPlatformFwRestartDrillEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == ADMISSION_GPU_FAULT_DRILL_MAGIC)
       return AdmissionGpuvaG3FaultDrillEscape((ADMISSION_CONTEXT *)Adapter, Args);
     if (private_magic == ADMISSION_GPU_TIMESTAMP_QUERY_MAGIC)

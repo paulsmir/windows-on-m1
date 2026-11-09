@@ -474,6 +474,18 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * has not yet returned from (0 = none). */
   volatile LONG PreemptTraceWakePending;
 #endif
+  /* TDR stage 2b (TDR-FIRMWARE-RESTART-RECOVERY.md sections 8-10): the warm
+   * firmware restart. RetainedActive: AGX_RR_ACTIVATE succeeded and no CLOSE
+   * followed, so the root is Active at the broker and must not be activated
+   * again. FwRestartActive: AdmissionPlatformRuntimeRestart owns the runtime
+   * (set and cleared under Resetting): StopAsc takes the read-back variant
+   * and a submitter waits instead of being refused. The rest is what the
+   * restart's own retained-root traffic looked like, for Wom1GpuReset v5. */
+  BOOLEAN RetainedActive;
+  BOOLEAN FwRestartWarmPublished;
+  volatile LONG FwRestartActive;
+  ULONG FwRestartRetainedMask, FwRestartRetainedFlags;
+  ULONGLONG FwRestartEpochSeen;
 } ADMISSION_PLATFORM_RUNTIME;
 
 /* rc90 build-ahead runs in the GPUVA G3 worker only (no SUBMIT receipts,
@@ -3352,6 +3364,8 @@ static BOOLEAN AdmissionRetainedExchange(ADMISSION_PLATFORM_RUNTIME *runtime,
   BOOLEAN exchanged;
   if (!runtime || !request || !response) return FALSE;
   exchanged = AgxRrExchange(&io,request,response) ? TRUE : FALSE;
+  if (InterlockedCompareExchange(&runtime->FwRestartActive, 0, 0) != 0)
+    runtime->FwRestartRetainedMask |= 1u << (request->Command & 31u);
   AdmissionRecordRetainedRoot(runtime->Adapter,request->Command,response);
   return exchanged &&
       response->Epoch != 0 && response->Root != 0 && !(response->Root & 0x3fff) &&
@@ -3445,16 +3459,16 @@ static unsigned char AdmissionContext0Ipa(void *ctx,const APPLE_AGX_MEMORY_OBJEC
   return (*ipa&0x3fff)==0;
 }
 
-static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runtime) {
-  AGX_RR_RESPONSE response={0};
+/* Everything the UAT-root publish does besides AGX_RR_ACTIVATE: command
+ * arena, relocation binding, crash-log buffer, hwdata, context-0 mappings
+ * of the current initdata graph. Shared by the first publish (after
+ * ACTIVATE) and the warm one (root already Active). */
+static unsigned char AdmissionRetainedPublishGraph(
+    ADMISSION_PLATFORM_RUNTIME *runtime, unsigned long long SystemVa,
+    unsigned long long SystemBytes) {
   AGX_RR_ARENA_DESCRIPTOR command={0};
   AGX_RR_IO io={runtime,AdmissionRetainedRead,AdmissionRetainedWrite64,AdmissionRetainedWrite32};
   int result;
-  if(!runtime->RetainedPrepared || !runtime->Handoff.Locked || !runtime->Initdata.BrokerOnly)
-    return 0;
-  if(!AdmissionRetainedCommand(runtime,AGX_RR_ACTIVATE,&response) ||
-      !(response.Flags&AGX_RR_FLAG_ACTIVE) || !(response.Flags&AGX_RR_FLAG_PREFIX_UNCHANGED) ||
-      response.SystemVa!=0xffffffa080000000ULL || response.SystemBytes!=0x4000) return 0;
   if (!AdmissionRetainedQueryArena(runtime,AGX_RR_ARENA_COMMAND,&command) ||
       command.Va > MAXULONGLONG-command.Bytes ||
       AppleAgxInitdataMemoryApplyCommandArena(
@@ -3471,8 +3485,8 @@ static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runti
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
           AppleAgxRenderTemplateRelocations(),
           AppleAgxRenderTemplateRelocationCount())) return 0;
-  runtime->Rtkit.CrashlogGpuAddress=response.SystemVa&((1ULL<<44)-1);
-  runtime->Rtkit.CrashlogCapacityBytes=(ULONG)response.SystemBytes;
+  runtime->Rtkit.CrashlogGpuAddress=SystemVa&((1ULL<<44)-1);
+  runtime->Rtkit.CrashlogCapacityBytes=(ULONG)SystemBytes;
   {
     APPLE_AGX_MEMORY_OBJECT *hwdata_a=
         &runtime->Initdata.RegionBMemory.Objects[AppleAgxRegionBMemoryHwdataA];
@@ -3498,6 +3512,45 @@ static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runti
       runtime->RetainedEpoch,runtime->RetainedRoot,AdmissionContext0Ipa,runtime);
   AdmissionRecordContext0Inventory(runtime->Adapter,1,result,&runtime->Context0Lease);
   return result==AppleAgxContext0Ok;
+}
+
+static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runtime) {
+  AGX_RR_RESPONSE response={0};
+  if(!runtime->RetainedPrepared || !runtime->Handoff.Locked || !runtime->Initdata.BrokerOnly)
+    return 0;
+  if(!AdmissionRetainedCommand(runtime,AGX_RR_ACTIVATE,&response) ||
+      !(response.Flags&AGX_RR_FLAG_ACTIVE) || !(response.Flags&AGX_RR_FLAG_PREFIX_UNCHANGED) ||
+      response.SystemVa!=0xffffffa080000000ULL || response.SystemBytes!=0x4000) return 0;
+  /* From here the broker holds the root Active until AGX_RR_CLOSE. */
+  runtime->RetainedActive = TRUE;
+  return AdmissionRetainedPublishGraph(runtime,response.SystemVa,response.SystemBytes);
+}
+
+/* Warm publish (design 9.1 U9, 9.2 T7): the root is already Active, and on an
+ * Active root the broker answers a second AGX_RR_ACTIVATE with STATE and
+ * does nothing; ACTIVATE is also the only command that re-initialises GPUVA
+ * v5 under a new epoch. So no ACTIVATE and no PREPARE here: one read-only
+ * AGX_RR_QUERY_ARENA, whose response carries what every retained-root
+ * response carries (flags, epoch, root, system page), proves the root is
+ * still Active with an unchanged firmware prefix under the epoch this
+ * driver holds; then the rest of the publish for the rebuilt graph. */
+static unsigned char AdmissionRetainedRepublishWarm(ADMISSION_PLATFORM_RUNTIME *runtime) {
+  AGX_RR_REQUEST request={0};
+  AGX_RR_RESPONSE response={0};
+  if(!runtime->RetainedPrepared || !runtime->RetainedActive ||
+      !runtime->Handoff.Locked || !runtime->Initdata.BrokerOnly)
+    return 0;
+  request.Command=AGX_RR_QUERY_ARENA;
+  request.Epoch=runtime->RetainedEpoch;
+  request.Va=AGX_RR_ARENA_COMMAND;
+  if(!AdmissionRetainedExchange(runtime,&request,&response)) return 0;
+  runtime->FwRestartRetainedFlags=response.Flags;
+  runtime->FwRestartEpochSeen=response.Epoch;
+  if(!(response.Flags&AGX_RR_FLAG_ACTIVE) || !(response.Flags&AGX_RR_FLAG_PREFIX_UNCHANGED) ||
+      response.SystemVa!=0xffffffa080000000ULL || response.SystemBytes!=0x4000) return 0;
+  if(!AdmissionRetainedPublishGraph(runtime,response.SystemVa,response.SystemBytes)) return 0;
+  runtime->FwRestartWarmPublished = TRUE;
+  return 1;
 }
 
 static unsigned char AdmissionFirmwareCreateUat(
@@ -3538,6 +3591,7 @@ static unsigned char AdmissionFirmwareDestroyUat(
   }
   if (!AdmissionRetainedCommand(runtime,AGX_RR_CLOSE,&response)) return 0;
   runtime->RetainedPrepared = FALSE;
+  runtime->RetainedActive = FALSE;
   return 1;
 }
 
@@ -3585,16 +3639,77 @@ static unsigned char AdmissionFirmwareCompleteManagement(
   return 0u;
 }
 
+/* Warm restart (design 8.2 item 3): the orderly stop with the RUN read-back.
+ * AppleAgxRtkitSessionStopForRestart never clears RUN on a firmware that did
+ * not acknowledge (a timeout leaves the CPU running and the stop resumable)
+ * and refuses a half-booted session; a forced stop is a separate, named
+ * primitive. Only after the stop is proven does the ISR lose the runtime
+ * (the stop conversation's replies still came through the ring). */
+static unsigned char AdmissionFirmwareStopAscForRestart(
+    ADMISSION_PLATFORM_RUNTIME *runtime, unsigned long long DeadlineMs) {
+  if (runtime->Rtkit.Running != APPLE_AGX_RTKIT_FALSE &&
+      AppleAgxRtkitSessionStopForRestart(
+          &runtime->Rtkit, &runtime->AscIo, DeadlineMs) !=
+          AppleAgxRtkitSessionResultOk)
+    return 0u;
+  AdmissionMailboxIsrClose(runtime);
+  AppleAgxRenderFlightStopped(&runtime->Initdata.RenderSharedMemory);
+  return 1u;
+}
+
 static unsigned char AdmissionFirmwareStopAsc(
     void *Context, unsigned long long DeadlineMs) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
   if (runtime == NULL)
     return 0u;
+  if (InterlockedCompareExchange(&runtime->FwRestartActive, 0, 0) != 0)
+    return AdmissionFirmwareStopAscForRestart(runtime, DeadlineMs);
   if (runtime->Rtkit.Running != APPLE_AGX_RTKIT_FALSE &&
       AppleAgxRtkitSessionStop(&runtime->Rtkit, &runtime->AscIo, DeadlineMs) !=
           AppleAgxRtkitSessionResultOk)
     return 0u;
   AppleAgxRenderFlightStopped(&runtime->Initdata.RenderSharedMemory);
+  return 1u;
+}
+
+/* Warm restart (design 8.2 item 1): stop an ASC CPU whose firmware does not
+ * answer. RUN off and read back, no RTKit message, no wait. The shared
+ * provider then drops its endpoint state and unpublishes the roots without
+ * the handoff lock. The ISR is closed only once the stop is proven. */
+static unsigned char AdmissionFirmwareForceStopAsc(
+    void *Context, unsigned long long DeadlineMs) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  UNREFERENCED_PARAMETER(DeadlineMs);
+  if (runtime == NULL ||
+      AppleAgxRtkitSessionForceStop(&runtime->Rtkit, &runtime->AscIo) !=
+          AppleAgxRtkitSessionResultOk)
+    return 0u;
+  AdmissionMailboxIsrClose(runtime);
+  AppleAgxRenderFlightStopped(&runtime->Initdata.RenderSharedMemory);
+  return 1u;
+}
+
+/* Warm restart (design 8.2 item 2): what AdmissionFirmwareCreateUat returned,
+ * for the graph rebuilt since the stop, without AGX_RR_PREPARE (a second
+ * PREPARE returns STATE) and without any other broker command. Refused
+ * unless the root is the one this driver prepared and activated. */
+static unsigned char AdmissionFirmwareRevalidateUat(
+    void *Context, unsigned long long DeadlineMs,
+    APPLE_AGX_UAT_TTBR_PAIR *Pair,
+    unsigned long long *InitdataAddress) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (runtime == NULL || Pair == NULL || InitdataAddress == NULL ||
+      AdmissionPlatformNowMs() >= DeadlineMs ||
+      !runtime->RetainedPrepared || !runtime->RetainedActive ||
+      runtime->RetainedRoot0 == 0ULL || runtime->RetainedRoot == 0ULL ||
+      runtime->Rtkit.Running != APPLE_AGX_RTKIT_FALSE ||
+      !runtime->Initdata.Built || !runtime->Initdata.BrokerOnly ||
+      runtime->Initdata.InitdataVirtualAddress == 0ULL)
+    return 0u;
+  Pair->Ttbr0 = runtime->RetainedRoot0 | 1ULL;
+  Pair->Ttbr1 = runtime->RetainedRoot | 1ULL;
+  *InitdataAddress = runtime->Initdata.InitdataVirtualAddress &
+      ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK;
   return 1u;
 }
 
@@ -3654,10 +3769,12 @@ static unsigned char AdmissionFirmwareStopEndpoint(
 static unsigned char AdmissionFirmwarePublishUat(
     void *Context, const APPLE_AGX_UAT_TTBR_PAIR *Pair) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  /* A root that is already Active (warm restart) is never activated again. */
   return runtime && Pair && runtime->RetainedRoot0 &&
       Pair->Ttbr0 == (runtime->RetainedRoot0 | 1ULL) &&
       Pair->Ttbr1 == (runtime->RetainedRoot | 1ULL) &&
-      AdmissionRetainedActivate(runtime);
+      (runtime->RetainedActive ? AdmissionRetainedRepublishWarm(runtime)
+                               : AdmissionRetainedActivate(runtime));
 }
 
 static unsigned char AdmissionFirmwareUnpublishUat(void *Context) {
@@ -8358,11 +8475,26 @@ static NTSTATUS AdmissionPlatformDestroy(
           &Runtime->CompletedOutput, Runtime->CompletedOutput.Fence))
     return STATUS_DEVICE_BUSY;
 #endif
+  /* A warm restart that failed leaves the backend Stopped with the firmware
+   * warm-stopped: the UAT and the power domain are still held (design 8.3,
+   * failure exits). The cold stop finishes that teardown; without the
+   * platform provider the backend's composed firmware IO is dead and the
+   * firmware provider's own IO is used. Both masks are 0 in every other
+   * Stopped state, so nothing changes for a runtime that never restarted. */
   if (Runtime->BackendStarted ||
-      Runtime->Backend.Phase != AppleAgxBackendRuntimeStopped) {
-    if (AppleAgxBackendRuntimeStop(&Runtime->Backend) !=
-        AppleAgxBackendRuntimeResultOk)
+      Runtime->Backend.Phase != AppleAgxBackendRuntimeStopped ||
+      Runtime->Backend.Firmware.CompletedMask != 0u ||
+      Runtime->Backend.Firmware.CleanupMask != 0u) {
+    if (!Runtime->ProviderReady &&
+        Runtime->Backend.Phase == AppleAgxBackendRuntimeStopped) {
+      if (AppleAgxFirmwareRollback(&Runtime->Backend.Firmware,
+                                   &Runtime->FirmwareIo) !=
+          AppleAgxFirmwareResultOk)
+        return STATUS_DEVICE_BUSY;
+    } else if (AppleAgxBackendRuntimeStop(&Runtime->Backend) !=
+               AppleAgxBackendRuntimeResultOk) {
       return STATUS_DEVICE_BUSY;
+    }
     Runtime->BackendStarted = FALSE;
   }
   if (Runtime->ProviderReady) {
@@ -8830,6 +8962,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionFirmwareDeviceControlInit;
   runtime->FirmwarePrimitives.UpdateIdleTimestamp =
       AdmissionFirmwareIdleTimestamp;
+  /* Warm restart only; no cold path reaches either one. */
+  runtime->FirmwarePrimitives.ForceStopAsc = AdmissionFirmwareForceStopAsc;
+  runtime->FirmwarePrimitives.RevalidateFirmwareUat =
+      AdmissionFirmwareRevalidateUat;
   if (AppleAgxFirmwareProviderInitialize(
           &runtime->FirmwareProvider, &runtime->FirmwarePrimitives,
           &runtime->Handoff, &runtime->FirmwareIo) !=
@@ -9134,6 +9270,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   InterlockedExchange(&Context->TdrDrillJobs, 0);
   Context->TdrDrillAllowed =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1TdrDrillAllowed");
+  /* H1 drill gate: absent or anything but REG_DWORD 1 refuses the escape. */
+  Context->FwRestartDrillAllowed =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1FwRestartDrillAllowed");
   RtlZeroMemory(&runtime->Depth2Drill, sizeof(runtime->Depth2Drill));
   runtime->Depth2Drill.Version = 1u;
   runtime->Depth2Drill.Bytes = (unsigned int)sizeof(runtime->Depth2Drill);
@@ -9291,9 +9430,470 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStop(
   return STATUS_SUCCESS;
 }
 
-/* G4-r3 (EXP1296): the retained firmware cannot be stopped and restarted
- * (EXP1241, EXP1278): the former reset stopped RTKit and then refused, a
- * 0x116 on every TDR with a job active. Resetting keeps a new worker from
+/* TDR stage 2b: the KMD half of the warm firmware restart
+ * (investigation/analysis/TDR-FIRMWARE-RESTART-RECOVERY.md 8.3, with the
+ * section 9 corrections and the section 10 notes). Untested on hardware
+ * until H1. */
+
+/* First 64 bytes of the firmware status block; FALSE when it is unmapped. */
+static BOOLEAN AdmissionFwRestartFirmwareStatus(
+    const ADMISSION_PLATFORM_RUNTIME *runtime, unsigned int *Words) {
+  const APPLE_AGX_MEMORY_OBJECT *status =
+      &runtime->Initdata.DataObjects[AppleAgxInitdataMemoryFirmwareStatus];
+  ULONG index;
+  if (status->CpuAddress == NULL || status->Length < 16u * sizeof(ULONG))
+    return FALSE;
+  KeMemoryBarrier();
+  for (index = 0u; index < 16u; ++index)
+    Words[index] = ((const volatile ULONG *)status->CpuAddress)[index];
+  return TRUE;
+}
+
+/* SchedulerLock held. Nothing is with the firmware and nothing is on its way
+ * there: no packet, no pending or dispatched fence, no worker, backend and
+ * queues at rest. AdmissionPlatformRuntimeSubmit tests Resetting under the
+ * same lock, so taking Resetting while this holds admits no later worker. */
+static BOOLEAN AdmissionFwRestartIdleLocked(
+    ADMISSION_CONTEXT *Context, ADMISSION_PLATFORM_RUNTIME *runtime) {
+  return AdmissionRenderPacketState(&Context->RenderPacket) ==
+                 AdmissionRenderPacketEmpty &&
+             Context->G4PendingCount == 0u &&
+             Context->DispatchedFence == 0u &&
+             AppleAgxSchedulerActiveFence(&Context->Scheduler, 0u, 0u) == 0u &&
+             AppleAgxSchedulerKickedFence(&Context->Scheduler) == 0u &&
+             InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0) == 0 &&
+             InterlockedCompareExchange(&runtime->WorkersActive, 0, 0) == 0 &&
+             runtime->Backend.Phase == AppleAgxBackendRuntimeReady &&
+             runtime->Backend.PendingSubmission.Submission.Fence == 0u &&
+             !runtime->Backend.SuccessorPending &&
+             runtime->Provider.QueueProvider.Phase ==
+                 AppleAgxG13QueueProviderCreated &&
+             runtime->Provider.QueueProvider.PendingFence == 0u &&
+             runtime->Provider.QueueProvider.Runtime.PendingFence == 0u &&
+             runtime->Provider.QueueProvider.Runtime.Successor.Fence == 0u
+             ? TRUE
+             : FALSE;
+}
+
+/* Design 8.3 step 4 and 8.4: every firmware-visible word of the stopped
+ * lifetime (stamps, channel and FW RX rings, RegionC, firmware status) goes
+ * with the old graph; the new one gets the queue image bound exactly as
+ * AdmissionPlatformRuntimeStart binds it. Caller: ASC stopped, no context-0
+ * lease, queue provider destroyed. */
+static BOOLEAN AdmissionFwRestartRebuildGraph(
+    ADMISSION_CONTEXT *Context, ADMISSION_PLATFORM_RUNTIME *runtime) {
+  if (AppleAgxInitdataMemoryDestroy(&runtime->Initdata) !=
+          AppleAgxInitdataMemoryResultOk ||
+      AppleAgxInitdataMemoryPrepareBroker(
+          &runtime->Initdata, &runtime->MemoryIo, &runtime->Snapshot) !=
+          AppleAgxInitdataMemoryResultOk)
+    return FALSE;
+  RtlCopyMemory(runtime->QueueObjects, Context->BackendImage.Objects,
+                sizeof(runtime->QueueObjects));
+  return AppleAgxRenderSharedMemoryBindRelocationObjects(
+             &runtime->Initdata.RenderSharedMemory,
+             Context->BackendImage.ArenaCpuAddress,
+             Context->BackendImage.ArenaBytes, runtime->QueueObjects,
+             APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT) &&
+         AppleAgxApplyRelocations(
+             runtime->QueueObjects,
+             APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+             AppleAgxRenderTemplateRelocations(),
+             AppleAgxRenderTemplateRelocationCount()) &&
+         AppleAgxRenderSharedMemoryInitializeComputeQueue(
+             &runtime->Initdata.RenderSharedMemory)
+             ? TRUE
+             : FALSE;
+}
+
+/* Design 8.4: per-firmware-lifetime state the shared layer does not own.
+ * Caller: worker idle, ISR closed (the mailbox ring has no producer). */
+static VOID AdmissionFwRestartResetKmdState(
+    ADMISSION_PLATFORM_RUNTIME *runtime) {
+  AppleAgxCompletionTransactionInitialize(&runtime->Completion);
+  AdmissionDynamicOverlayStateInitialize(&runtime->DynamicOverlayState);
+  RtlZeroMemory(&runtime->DynamicOverlayPlan,
+                sizeof(runtime->DynamicOverlayPlan));
+  runtime->DynamicJob = NULL;
+  runtime->DynamicStorage = NULL;
+  runtime->DynamicStorageBytes = 0u;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  runtime->NativeCommandHash = 0;
+  RtlZeroMemory(&runtime->NativeBindings, sizeof(runtime->NativeBindings));
+  RtlZeroMemory(&runtime->NativeGraphReceipt,
+                sizeof(runtime->NativeGraphReceipt));
+#endif
+  runtime->CompletionContext = NULL;
+  RtlZeroMemory(&runtime->Progress, sizeof(runtime->Progress));
+  runtime->ProgressValid = FALSE;
+  InterlockedExchange64(&runtime->LastProgressMs, 0);
+  InterlockedExchange64(&runtime->LastPollMs, 0);
+  runtime->JobSubmitMs = 0ULL;
+  /* The template buffer manager's InitBM named a slot to the old firmware. */
+  runtime->UnmanagedInitBmSlot = 0u;
+  runtime->AheadManager = NULL;
+  /* Replies of the stop conversation must not be read by the next boot. */
+  runtime->IrqRingHead = 0;
+  runtime->IrqRingTail = 0;
+  InterlockedExchange(&runtime->IrqWakePending, 0);
+  InterlockedExchange(&runtime->IrqOverflowLatch, 0);
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* AdmissionPlatformRuntimeStart sets these on the provider after its
+   * initialization; a re-initialized provider has the config defaults. */
+  runtime->Provider.QueueProvider.Config.AbortFaultSuffix =
+      runtime->Depth2General;
+  runtime->Provider.QueueProvider.Config.StampCompletion =
+      runtime->Initdata.RenderSharedMemory.StampCompletion;
+#endif
+}
+
+/* The restart proper. Caller owns the runtime: Resetting and FwRestartActive
+ * set, worker idle, nothing in flight (AdmissionFwRestartIdleLocked). */
+static NTSTATUS AdmissionPlatformRuntimeRestartOwned(
+    ADMISSION_CONTEXT *Context, ADMISSION_PLATFORM_RUNTIME *runtime,
+    ADMISSION_GPU_FW_RESTART_RECEIPT *Receipt) {
+  const ULONGLONG start = AdmissionPlatformNowMs();
+  const BOOLEAN listed = Context->MailboxInterruptVector != 0u ? TRUE : FALSE;
+  APPLE_AGX_BACKEND_RUNTIME_RESULT result;
+  APPLE_AGX_ASC_U32 control = 0u;
+  ULONGLONG mark;
+  NTSTATUS status;
+
+  {
+    const ULONG restarts = Receipt->Restarts, succeeded = Receipt->Succeeded;
+    const ULONG refused = Receipt->Refused, reason = Receipt->RefusedReason;
+    RtlZeroMemory(Receipt, sizeof(*Receipt));
+    Receipt->Restarts = restarts + 1u;
+    Receipt->Succeeded = succeeded;
+    Receipt->Refused = refused;
+    Receipt->RefusedReason = reason;
+  }
+  Receipt->Stage = (ULONG)AdmissionFwRestartStageOwned;
+  Receipt->Status = (ULONG)STATUS_PENDING;
+  Receipt->EpochBefore = runtime->RetainedEpoch;
+  Receipt->RtkitMailboxValid =
+      (runtime->Rtkit.InboxAtFailureValid ? 1u : 0u) |
+      (runtime->Rtkit.OutboxAtFailureValid ? 2u : 0u);
+  Receipt->RtkitCrashed = runtime->Rtkit.CrashlogCrashed ? 1u : 0u;
+  if (listed)
+    Receipt->Flags |= ADMISSION_FW_RESTART_FLAG_LINE_LISTED;
+  if (AdmissionFwRestartFirmwareStatus(runtime, Receipt->FirmwareStatusBefore))
+    Receipt->Flags |= ADMISSION_FW_RESTART_FLAG_STATUS_BEFORE;
+  runtime->FwRestartRetainedMask = 0u;
+  runtime->FwRestartRetainedFlags = 0u;
+  runtime->FwRestartEpochSeen = 0ULL;
+  runtime->FwRestartWarmPublished = FALSE;
+
+  /* 8.3 step 1: queues, render context and arena go as in an ordinary stop;
+   * the firmware stops orderly (AP 0x10, IOP 0x10, RUN off, read back) and
+   * keeps its UAT and its power. The StopAsc primitive closes the ISR once
+   * the stop is proven. Not Ok: the restart has failed; never forced here
+   * (a forced stop of an answering firmware is a different experiment). */
+  Receipt->Stage = (ULONG)AdmissionFwRestartStageStopWarm;
+  Receipt->StopKind = ADMISSION_FW_RESTART_STOP_ORDERLY;
+  result = AppleAgxBackendRuntimeStopWarm(&runtime->Backend);
+  Receipt->BackendStopResult = (ULONG)result;
+  Receipt->StopMs = (ULONG)(AdmissionPlatformNowMs() - start);
+  if (result != AppleAgxBackendRuntimeResultOk) {
+    status = STATUS_DEVICE_HARDWARE_ERROR;
+    goto Exit;
+  }
+
+  /* 8.3 step 4, checked before anything is destroyed: the stop proof. RUN
+   * reads 0, the session agrees, the ISR no longer has the runtime and the
+   * context-0 mappings of the old graph are retired. Raw mailbox control
+   * words are recorded as found (the ISR is closed: these reads bypass the
+   * ring and pop nothing). */
+  Receipt->Stage = (ULONG)AdmissionFwRestartStageStopProof;
+  if (AppleAgxAscReadCpuControl(&runtime->AscIo, &control) ==
+      AppleAgxAscResultOk) {
+    Receipt->CpuControlAfterStop = control;
+    Receipt->Flags |= ADMISSION_FW_RESTART_FLAG_CPU_CONTROL_READ;
+  }
+  if (Context->MailboxIsrRuntime != (PVOID)runtime)
+    Receipt->Flags |= ADMISSION_FW_RESTART_FLAG_ISR_CLOSED;
+  if (runtime->Rtkit.Running != APPLE_AGX_RTKIT_FALSE ||
+      (Receipt->Flags & ADMISSION_FW_RESTART_FLAG_CPU_CONTROL_READ) == 0u ||
+      (control & APPLE_AGX_ASC_CPU_RUN) != 0u ||
+      (Receipt->Flags & ADMISSION_FW_RESTART_FLAG_ISR_CLOSED) == 0u ||
+      runtime->Context0Lease.Count != 0u || runtime->Context0Lease.Uncertain) {
+    status = STATUS_DEVICE_HARDWARE_ERROR;
+    goto Exit;
+  }
+  {
+    APPLE_AGX_ASC_U32 word = 0u;
+    if (AppleAgxAscReadInboxControl(&runtime->AscIo, &word) ==
+        AppleAgxAscResultOk) {
+      Receipt->InboxControlAfterStop = word;
+      Receipt->Flags |= ADMISSION_FW_RESTART_FLAG_INBOX_READ;
+    }
+    word = 0u;
+    if (AppleAgxAscReadOutboxControl(&runtime->AscIo, &word) ==
+        AppleAgxAscResultOk) {
+      Receipt->OutboxControlAfterStop = word;
+      Receipt->Flags |= ADMISSION_FW_RESTART_FLAG_OUTBOX_READ;
+    }
+  }
+  /* A mailbox DPC queued before the close may still be on its way. */
+  if (listed)
+    KeFlushQueuedDpcs();
+
+  /* 8.3 step 2. */
+  Receipt->Stage = (ULONG)AdmissionFwRestartStageProviderDestroy;
+  mark = AdmissionPlatformNowMs();
+  runtime->BackendStarted = FALSE;
+  if (!AppleAgxPlatformProviderDestroy(&runtime->Provider)) {
+    status = STATUS_DEVICE_HARDWARE_ERROR;
+    goto Exit;
+  }
+  runtime->ProviderReady = FALSE;
+
+  /* 8.3 step 3: the first job of the new lifetime carries sequence 1. */
+  Receipt->Stage = (ULONG)AdmissionFwRestartStageQueueLifetime;
+  if (!AdmissionBackendImageRestartQueueLifetime(&Context->BackendImage)) {
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Exit;
+  }
+
+  /* 8.3 step 4. RetainedPrepared stays TRUE: the root is kept. */
+  Receipt->Stage = (ULONG)AdmissionFwRestartStageGraphRebuild;
+  if (!AdmissionFwRestartRebuildGraph(Context, runtime)) {
+    status = STATUS_INSUFFICIENT_RESOURCES;
+    goto Exit;
+  }
+
+  /* 8.3 step 5. AppleAgxBackendRuntimeInitialize is NOT called: it would
+   * forget the retained UAT and power the warm start needs. */
+  Receipt->Stage = (ULONG)AdmissionFwRestartStageProviderInitialize;
+  RtlZeroMemory(&runtime->PlatformIo, sizeof(runtime->PlatformIo));
+  if (!AppleAgxPlatformProviderInitialize(
+          &runtime->Provider, &runtime->ProviderConfig,
+          &runtime->PlatformIo)) {
+    status = STATUS_DEVICE_CONFIGURATION_ERROR;
+    goto Exit;
+  }
+  runtime->ProviderReady = TRUE;
+  runtime->RuntimeIo.Firmware = runtime->PlatformIo.Firmware;
+  AdmissionFwRestartResetKmdState(runtime);
+  Receipt->RebuildMs = (ULONG)(AdmissionPlatformNowMs() - mark);
+
+  /* Design 9.4: the ISR gets the runtime back (armed first, then published)
+   * before the CPU can send again. */
+  Receipt->Stage = (ULONG)AdmissionFwRestartStageIsrReopen;
+  AdmissionMailboxIsrReopen(runtime);
+  if (listed) {
+    if (Context->MailboxIsrRuntime != (PVOID)runtime) {
+      status = STATUS_INVALID_DEVICE_STATE;
+      goto Exit;
+    }
+    Receipt->Flags |= ADMISSION_FW_RESTART_FLAG_ISR_REOPENED;
+  }
+
+  /* 8.3 step 6: RevalidateFirmwareUat (no PREPARE), then the cold start's
+   * own phases from BootAsc on; the root publish inside is the warm one (no
+   * ACTIVATE). A failed step warm-stops again through the same StopAsc
+   * primitive, which closes the ISR again. */
+  Receipt->Stage = (ULONG)AdmissionFwRestartStageStartWarm;
+  mark = AdmissionPlatformNowMs();
+  result = AppleAgxBackendRuntimeStartWarm(&runtime->Backend,
+                                           &runtime->RuntimeIo);
+  Receipt->BackendStartResult = (ULONG)result;
+  Receipt->BootMs = (ULONG)(AdmissionPlatformNowMs() - mark);
+  AdmissionRecordBackendStartResult(Context, result);
+  if (result != AppleAgxBackendRuntimeResultOk) {
+    /* The orderly warm stop refuses a session whose management boot never
+     * became Ready, so a boot that died before HELLO leaves RUN on. The
+     * experiment is over by then; do not leave a half-booted CPU running
+     * (the cold path's StopAsc does the same on a failed first boot). */
+    if (runtime->Rtkit.Running != APPLE_AGX_RTKIT_FALSE &&
+        AppleAgxFirmwareForceStopWarm(&runtime->Backend.Firmware,
+                                      &runtime->Backend.Io.Firmware) ==
+            AppleAgxFirmwareResultOk) {
+      Receipt->StopKind = ADMISSION_FW_RESTART_STOP_FORCED;
+      Receipt->Flags |= ADMISSION_FW_RESTART_FLAG_FORCED_AFTER_BOOT;
+    }
+    if (runtime->Rtkit.Running == APPLE_AGX_RTKIT_FALSE)
+      AdmissionMailboxIsrClose(runtime);
+    status = STATUS_DEVICE_HARDWARE_ERROR;
+    goto Exit;
+  }
+
+  /* 8.3 step 7: no ring index, InitBM or NewQueue state of the old lifetime
+   * may reach the first submission. */
+  Receipt->Stage = (ULONG)AdmissionFwRestartStageLifetimeFresh;
+  if (!AppleAgxG13QueueRuntimeLifetimeIsFresh(
+          &runtime->Provider.QueueProvider.Runtime)) {
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Exit;
+  }
+  Receipt->Flags |= ADMISSION_FW_RESTART_FLAG_LIFETIME_FRESH;
+
+  /* 8.3 step 8. */
+  runtime->BackendStarted = TRUE;
+  if (AdmissionFwRestartFirmwareStatus(runtime, Receipt->FirmwareStatusAfter))
+    Receipt->Flags |= ADMISSION_FW_RESTART_FLAG_STATUS_AFTER;
+  Receipt->Stage = (ULONG)AdmissionFwRestartStageComplete;
+  ++Receipt->Succeeded;
+  status = STATUS_SUCCESS;
+
+Exit:
+  Receipt->Status = (ULONG)status;
+  Receipt->TotalMs = (ULONG)(AdmissionPlatformNowMs() - start);
+  Receipt->FirmwarePhase = (ULONG)runtime->Backend.Firmware.Phase;
+  Receipt->FirmwareCompletedMask = runtime->Backend.Firmware.CompletedMask;
+  Receipt->FirmwareCleanupMask = runtime->Backend.Firmware.CleanupMask;
+  Receipt->FirmwareLastResult = (ULONG)runtime->Backend.Firmware.LastResult;
+  Receipt->ProviderState = runtime->FirmwareProvider.State;
+  Receipt->RetainedCommandMask = runtime->FwRestartRetainedMask;
+  Receipt->RetainedFlags = runtime->FwRestartRetainedFlags;
+  Receipt->EpochAfter = runtime->FwRestartEpochSeen;
+  if (runtime->FwRestartWarmPublished)
+    Receipt->Flags |= ADMISSION_FW_RESTART_FLAG_WARM_PUBLISH;
+  return status;
+}
+
+/* Wom1GpuReset carries the restart record; a restart may be the first writer
+ * of the receipt in a boot. */
+static VOID AdmissionFwRestartPublish(ADMISSION_CONTEXT *Context) {
+  Context->GpuReset.Version = ADMISSION_GPU_RESET_RECEIPT_VERSION;
+  Context->GpuReset.Bytes = (ULONG)sizeof(Context->GpuReset);
+  AdmissionRecordGpuReset(Context);
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeRestart(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  ADMISSION_GPU_FW_RESTART_RECEIPT *receipt;
+  LARGE_INTEGER interval;
+  ULONG refused = 0u;
+  NTSTATUS status = STATUS_SUCCESS;
+  KIRQL oldIrql;
+
+  if (Context == NULL)
+    return STATUS_INVALID_PARAMETER;
+  receipt = &Context->GpuReset.Restart;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL || runtime == NULL ||
+      !runtime->BackendStarted || !runtime->ProviderReady ||
+      runtime->FirmwareIo.RevalidateFirmwareUat == NULL ||
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0) {
+    refused = ADMISSION_FW_RESTART_REFUSED_STATE;
+    status = STATUS_INVALID_DEVICE_STATE;
+  } else if (InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) !=
+             0) {
+    refused = ADMISSION_FW_RESTART_REFUSED_FAULTED;
+    status = STATUS_DEVICE_NOT_READY;
+  } else {
+    BOOLEAN owned = FALSE;
+    KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+    if (AdmissionFwRestartIdleLocked(Context, runtime) &&
+        InterlockedCompareExchange(&runtime->Resetting, 1, 0) == 0)
+      owned = TRUE;
+    KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+    if (!owned) {
+      refused = ADMISSION_FW_RESTART_REFUSED_BUSY;
+      status = STATUS_DEVICE_BUSY;
+    } else {
+      /* The worker's finished path may still be returning. */
+      interval.QuadPart =
+          -10000LL * (LONGLONG)ADMISSION_RESET_QUIESCE_TIMEOUT_MS;
+      if (KeWaitForSingleObject(&runtime->WorkIdle, Executive, KernelMode,
+                                FALSE, &interval) != STATUS_SUCCESS) {
+        InterlockedExchange(&runtime->Resetting, 0);
+        refused = ADMISSION_FW_RESTART_REFUSED_WORKER;
+        status = STATUS_DEVICE_BUSY;
+      }
+    }
+  }
+  if (refused != 0u) {
+    ++receipt->Refused;
+    receipt->RefusedReason = refused;
+    if (KeGetCurrentIrql() == PASSIVE_LEVEL)
+      AdmissionFwRestartPublish(Context);
+    return status;
+  }
+
+  InterlockedExchange(&runtime->FwRestartActive, 1);
+  status = AdmissionPlatformRuntimeRestartOwned(Context, runtime, receipt);
+  InterlockedExchange(&runtime->FwRestartActive, 0);
+  /* Fail closed: a runtime that did not come back takes no more work and
+   * DxgkDdiRestartFromTimeout / the engine status report it not ready. */
+  if (!NT_SUCCESS(status))
+    InterlockedCompareExchange(&Context->SchedulerFaulted,
+                               0x40000L | __LINE__, 0);
+  InterlockedExchange(&runtime->Resetting, 0);
+  KeSetEvent(&runtime->SlotEvent, IO_NO_INCREMENT, FALSE);
+  AdmissionFwRestartPublish(Context);
+  /* Work queued while the restart owned the runtime was refused a worker. */
+  if (NT_SUCCESS(status))
+    AdmissionDispatchQueuedWork(Context);
+  return status;
+}
+
+/* Hardware stage H1's only way in. The escape buffer is in and out. */
+_Use_decl_annotations_ NTSTATUS AdmissionPlatformFwRestartDrillEscape(
+    ADMISSION_CONTEXT *Context, const DXGKARG_ESCAPE *Args) {
+  ADMISSION_FW_RESTART_DRILL drill;
+  NTSTATUS status;
+  if (Context == NULL || Args == NULL || Args->pPrivateDriverData == NULL ||
+      Args->PrivateDriverDataSize != sizeof(drill))
+    return STATUS_INVALID_PARAMETER;
+  if (!Context->FwRestartDrillAllowed) {
+    ++Context->GpuReset.Restart.Refused;
+    Context->GpuReset.Restart.RefusedReason =
+        ADMISSION_FW_RESTART_REFUSED_NOT_ALLOWED;
+    return STATUS_NOT_SUPPORTED;
+  }
+  RtlCopyMemory(&drill, Args->pPrivateDriverData, sizeof(drill));
+  if (drill.Magic != ADMISSION_FW_RESTART_DRILL_MAGIC ||
+      drill.Version != ADMISSION_FW_RESTART_DRILL_VERSION ||
+      drill.Bytes != sizeof(drill) ||
+      drill.Operation != ADMISSION_FW_RESTART_DRILL_WARM_ORDERLY) {
+    ++Context->GpuReset.Restart.Refused;
+    Context->GpuReset.Restart.RefusedReason =
+        ADMISSION_FW_RESTART_REFUSED_PAYLOAD;
+    return STATUS_INVALID_PARAMETER;
+  }
+  status = AdmissionPlatformRuntimeRestart(Context);
+  drill.Status = (unsigned int)status;
+  drill.Stage = Context->GpuReset.Restart.Stage;
+  drill.Restarts = Context->GpuReset.Restart.Restarts;
+  drill.Succeeded = Context->GpuReset.Restart.Succeeded;
+  RtlCopyMemory(Args->pPrivateDriverData, &drill, sizeof(drill));
+  /* The verdict travels in the payload and in Wom1GpuReset. Whether dxgkrnl
+   * copies the escape buffer back on a failing NTSTATUS is not documented,
+   * so an attempted restart always returns success here. */
+  return STATUS_SUCCESS;
+}
+
+/* Wom1GpuReset v5: the failure class of a reset wait this thread ran, from
+ * CPU-owned state and firmware-shared words only (no ASC or SGX read). */
+static VOID AdmissionGpuResetCaptureClass(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG Outcome,
+    ADMISSION_GPU_RESET_RECEIPT *Receipt) {
+  const volatile ULONG *status = (const volatile ULONG *)runtime->Initdata
+      .DataObjects[AppleAgxInitdataMemoryFirmwareStatus].CpuAddress;
+  const ULONG halted = status != NULL ? status[0x20u / 4u] : MAXULONG;
+  Receipt->HaltCount = status != NULL ? status[0x10u / 4u] : 0u;
+  Receipt->RtkitCrashed = runtime->Rtkit.CrashlogCrashed ? 1u : 0u;
+  Receipt->MailboxValid = (runtime->Rtkit.InboxAtFailureValid ? 1u : 0u) |
+                          (runtime->Rtkit.OutboxAtFailureValid ? 2u : 0u);
+  Receipt->InboxControl = runtime->Rtkit.InboxAtFailureValid
+      ? runtime->Rtkit.InboxControlAtFailure : 0u;
+  Receipt->OutboxControl = runtime->Rtkit.OutboxAtFailureValid
+      ? runtime->Rtkit.OutboxControlAtFailure : 0u;
+  Receipt->FailureClass = AdmissionGpuResetFailureClass(
+      Outcome, Receipt->RtkitCrashed, halted,
+      runtime->Provider.QueueProvider.Runtime.RecoveryPending ? 1u : 0u);
+}
+
+/* G4-r3 (EXP1296): the former reset stopped RTKit and then refused, a 0x116
+ * on every TDR with a job active (EXP1241, EXP1278). Whether the retained
+ * firmware can be restarted in the same boot was not tested by those runs:
+ * the reset paths refused by design and the one restart candidate, EXP589,
+ * was built and never run (TDR-FIRMWARE-RESTART-RECOVERY.md 0.2). The warm
+ * restart below (AdmissionPlatformRuntimeRestart) is that test's mechanism
+ * and no reset DDI calls it yet. Resetting keeps a new worker from
  * starting and makes the running one leave its poll loop; this thread then
  * polls the provider itself, so a worker that left early (SchedulerFaulted)
  * cannot strand the job. The job leaves the active slot only through
@@ -9656,6 +10256,8 @@ Exit:
    * that did not leave still owns the provider and its receipts. */
   if (outcome != AdmissionGpuResetQuiesceWorker) {
     if (Receipt != NULL)
+      AdmissionGpuResetCaptureClass(runtime, (ULONG)outcome, Receipt);
+    if (Receipt != NULL)
       AdmissionGpuRecoverySnapshot(&runtime->Provider.QueueProvider.Runtime,
                                    &Receipt->RetirementAfter);
     AdmissionPublishFirmwareRecovery(runtime);
@@ -9859,7 +10461,12 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
       reason = 16u; /* render slot still owned by the previous job */
     } else if (!(reason == 8u ||
                  (reason == 4u &&
-                  runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted))) {
+                  runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted) ||
+                 /* A firmware restart ends by itself: its refusals are
+                  * transient for a submitter, like a busy worker. */
+                 (runtime != NULL &&
+                  InterlockedCompareExchange(&runtime->FwRestartActive, 0, 0) !=
+                      0))) {
       break;
     }
     if (KeGetCurrentIrql() != PASSIVE_LEVEL ||

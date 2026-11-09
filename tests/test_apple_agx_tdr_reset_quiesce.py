@@ -470,6 +470,9 @@ static void AdmissionCapturePostResume(ADMISSION_PLATFORM_RUNTIME *r, ULONG fenc
 }
 static void AdmissionPublishPostResume(ADMISSION_PLATFORM_RUNTIME *r) {
   assert(!lock_depth); ++post_resume_published; last_post_resume = r->PostResume; }
+/* Wom1GpuReset v5 class capture: covered by test_render_fw_restart. */
+static void AdmissionGpuResetCaptureClass(ADMISSION_PLATFORM_RUNTIME *r, ULONG outcome,
+    ADMISSION_GPU_RESET_RECEIPT *receipt) { (void)r; (void)outcome; (void)receipt; }
 static void AdmissionPlatformRuntimeResetState(ADMISSION_CONTEXT *c, ADMISSION_GPU_RESET_RECEIPT *r) {
   ADMISSION_PLATFORM_RUNTIME *p = c->PlatformRuntime;
   r->BackendPhase = (ULONG)p->Backend.Phase; r->WorkerBusy = p->WorkScheduled ? 1u : 0u;
@@ -760,7 +763,7 @@ int main(void) {
          last_recorded.BackendPhase == AppleAgxBackendRuntimeSubmitted &&
          last_recorded.FirmwareRecoveries == 1u);
   /* Version 2: the timed history entry mirrors the attempt. */
-  assert(last_recorded.Version == 4u && last_recorded.HistoryCount == 1u &&
+  assert(last_recorded.Version == ADMISSION_GPU_RESET_RECEIPT_VERSION && last_recorded.HistoryCount == 1u &&
          last_recorded.EntryMs == 1000u && last_recorded.JobAgeMs == 2100u &&
          last_recorded.PollAgeMs == 7u);
   assert(last_recorded.History[0].EntryMs == 1000u &&

@@ -98,8 +98,9 @@ typedef struct _ADMISSION_GPU_FAULT_MAPPING {
  * version 2 appends timing and the last ADMISSION_GPU_RESET_HISTORY resets
  * (EXP1303: LONGJOB jobs completed seconds late with four resets, and one
  * receipt could not tell a worker that stopped polling from a job still
- * running on the firmware). */
-#define ADMISSION_GPU_RESET_RECEIPT_VERSION 4u
+ * running on the firmware). Version 5 appends the failure class of the last
+ * reset and the firmware restart record. */
+#define ADMISSION_GPU_RESET_RECEIPT_VERSION 5u
 #define ADMISSION_GPU_RESET_HISTORY 8u
 #define ADMISSION_GPU_RESET_ENGINE 1u   /* DxgkDdiResetEngine */
 #define ADMISSION_GPU_RESET_ADAPTER 2u  /* DxgkDdiResetFromTimeout */
@@ -231,6 +232,92 @@ typedef struct _ADMISSION_GPU_SOFT_FAULTS_RECEIPT {
   unsigned int Reserved;
 } ADMISSION_GPU_SOFT_FAULTS_RECEIPT;
 
+/* v5 (TDR-FIRMWARE-RESTART-RECOVERY.md section 6, stage 1): why the last
+ * reset's quiescence failed. NONE: it did not fail (or the reset never owned
+ * the runtime). F2: the RTKit crash latch is set. F1: the firmware halted for
+ * the job or a Timeout/Fault recovery is still pending (halted, resumed,
+ * never retires). F3: neither; nothing separates it from a long job but
+ * time. F2 wins over F1: a crashed firmware answers no resume. */
+#define ADMISSION_GPU_RESET_CLASS_NONE 0u
+#define ADMISSION_GPU_RESET_CLASS_F1 1u
+#define ADMISSION_GPU_RESET_CLASS_F2 2u
+#define ADMISSION_GPU_RESET_CLASS_F3 3u
+/* Halted is the firmware status word (+0x20), 0xffffffff when unmapped. */
+unsigned int AdmissionGpuResetFailureClass(unsigned int Quiesce,
+    unsigned int RtkitCrashed, unsigned int Halted,
+    unsigned int RecoveryPending);
+
+/* v5: the warm firmware restart (stage 2, AdmissionPlatformRuntimeRestart).
+ * Until stage 3 its only caller is the drill escape below. Stage is the
+ * step the last attempt was in when it ended (COMPLETE on success); a
+ * refusal before the runtime was owned counts in Refused, sets
+ * RefusedReason and leaves the last attempt's fields alone. */
+typedef enum _ADMISSION_FW_RESTART_STAGE {
+  AdmissionFwRestartStageNone = 0,
+  AdmissionFwRestartStageOwned,           /* Resetting held, worker idle */
+  AdmissionFwRestartStageStopWarm,        /* AppleAgxBackendRuntimeStopWarm */
+  AdmissionFwRestartStageStopProof,       /* RUN reads 0, ISR closed, no context-0 lease */
+  AdmissionFwRestartStageProviderDestroy,
+  AdmissionFwRestartStageQueueLifetime,   /* job sequence back to 0 */
+  AdmissionFwRestartStageGraphRebuild,    /* initdata graph destroyed and prepared */
+  AdmissionFwRestartStageProviderInitialize,
+  AdmissionFwRestartStageIsrReopen,
+  AdmissionFwRestartStageStartWarm,       /* AppleAgxBackendRuntimeStartWarm */
+  AdmissionFwRestartStageLifetimeFresh,   /* AppleAgxG13QueueRuntimeLifetimeIsFresh */
+  AdmissionFwRestartStageComplete,
+} ADMISSION_FW_RESTART_STAGE;
+#define ADMISSION_FW_RESTART_STOP_NONE 0u
+#define ADMISSION_FW_RESTART_STOP_ORDERLY 1u /* AP 0x10, IOP 0x10, RUN off */
+#define ADMISSION_FW_RESTART_STOP_FORCED 2u  /* RUN off without the acks */
+#define ADMISSION_FW_RESTART_FLAG_CPU_CONTROL_READ 0x001u /* CpuControlAfterStop valid */
+#define ADMISSION_FW_RESTART_FLAG_ISR_CLOSED 0x002u       /* after the ASC stop */
+#define ADMISSION_FW_RESTART_FLAG_ISR_REOPENED 0x004u     /* before the CPU start */
+#define ADMISSION_FW_RESTART_FLAG_WARM_PUBLISH 0x008u     /* roots republished without ACTIVATE */
+#define ADMISSION_FW_RESTART_FLAG_LIFETIME_FRESH 0x010u
+#define ADMISSION_FW_RESTART_FLAG_FORCED_AFTER_BOOT 0x020u /* failed boot left RUN on */
+#define ADMISSION_FW_RESTART_FLAG_STATUS_BEFORE 0x040u    /* FirmwareStatusBefore valid */
+#define ADMISSION_FW_RESTART_FLAG_STATUS_AFTER 0x080u     /* FirmwareStatusAfter valid */
+#define ADMISSION_FW_RESTART_FLAG_LINE_LISTED 0x100u      /* ACPI lists the mailbox line */
+#define ADMISSION_FW_RESTART_FLAG_INBOX_READ 0x200u       /* InboxControlAfterStop valid */
+#define ADMISSION_FW_RESTART_FLAG_OUTBOX_READ 0x400u      /* OutboxControlAfterStop valid */
+#define ADMISSION_FW_RESTART_REFUSED_NOT_ALLOWED 1u /* Wom1FwRestartDrillAllowed != 1 */
+#define ADMISSION_FW_RESTART_REFUSED_PAYLOAD 2u
+#define ADMISSION_FW_RESTART_REFUSED_STATE 3u   /* no started runtime, stopping, IRQL */
+#define ADMISSION_FW_RESTART_REFUSED_FAULTED 4u /* SchedulerFaulted already set */
+#define ADMISSION_FW_RESTART_REFUSED_BUSY 5u    /* a job, packet or reset in flight */
+#define ADMISSION_FW_RESTART_REFUSED_WORKER 6u  /* the worker did not go idle */
+typedef struct _ADMISSION_GPU_FW_RESTART_RECEIPT {
+  unsigned int Restarts, Succeeded, Refused, RefusedReason;
+  unsigned int Stage;             /* ADMISSION_FW_RESTART_STAGE */
+  unsigned int Status;            /* NTSTATUS of the last attempt */
+  unsigned int StopKind;          /* ADMISSION_FW_RESTART_STOP_* */
+  unsigned int StopMs, RebuildMs, BootMs, TotalMs;
+  unsigned int BackendStopResult, BackendStartResult;
+  /* The firmware state machine and the firmware provider after the attempt. */
+  unsigned int FirmwarePhase, FirmwareCompletedMask, FirmwareCleanupMask;
+  unsigned int FirmwareLastResult, ProviderState;
+  unsigned int CpuControlAfterStop; /* raw ASC CPU_CONTROL, RUN = bit 4 */
+  unsigned int Flags;               /* ADMISSION_FW_RESTART_FLAG_* */
+  /* Bit n: retained-root command n (AGX_RR_*) went through the KMD's own
+   * command path during the attempt. PREPARE (1), ACTIVATE (2) and CLOSE
+   * (6) have no other sender, so their bits must stay clear. */
+  unsigned int RetainedCommandMask;
+  unsigned int RetainedFlags;       /* AGX_RR_FLAG_* at the warm publish */
+  /* RTKit session at entry: Inbox*Valid | Outbox*Valid << 1 (these survive
+   * a restart and can pair with a later failed read) and the crash latch. */
+  unsigned int RtkitMailboxValid, RtkitCrashed;
+  /* Raw ASC mailbox control words read once after the proven stop, with the
+   * ISR closed (FLAG_MAILBOX_READ bit per word). Recorded, not judged:
+   * whether a stopped ASC keeps messages in its outbox is not known. */
+  unsigned int InboxControlAfterStop, OutboxControlAfterStop;
+  unsigned long long EpochBefore; /* retained-root epoch held at entry */
+  unsigned long long EpochAfter;  /* epoch the broker returned at the warm publish */
+  /* First 64 bytes of the firmware status block (halt_count +0x10, halted
+   * +0x20, resume +0x30) before the stop and after the boot. No expected
+   * value: H1 records them (design 9.3). */
+  unsigned int FirmwareStatusBefore[16], FirmwareStatusAfter[16];
+} ADMISSION_GPU_FW_RESTART_RECEIPT;
+
 typedef struct _ADMISSION_GPU_RESET_RECEIPT {
   unsigned int Version, Bytes;
   unsigned int Resets, Succeeded;
@@ -263,7 +350,31 @@ typedef struct _ADMISSION_GPU_RESET_RECEIPT {
   /* v4 follows the complete 536-byte v3 prefix. Latest reset only; samples
    * are cleared even when this attempt never acquires the runtime. */
   ADMISSION_GPU_RECOVERY_SNAPSHOT RetirementBefore, RetirementAfter;
+  /* v5 follows the complete 792-byte v4 prefix. The first six words belong
+   * to the last reset (cleared at its entry); MailboxValid bit 0/1 says
+   * whether Inbox/OutboxControl hold the RTKit session's failure snapshot.
+   * Restart is the firmware restart's own record and is never cleared by a
+   * reset. */
+  unsigned int FailureClass;     /* ADMISSION_GPU_RESET_CLASS_* */
+  unsigned int HaltCount;        /* firmware status halt_count (+0x10) */
+  unsigned int RtkitCrashed;
+  unsigned int MailboxValid, InboxControl, OutboxControl;
+  ADMISSION_GPU_FW_RESTART_RECEIPT Restart;
 } ADMISSION_GPU_RESET_RECEIPT;
+
+/* Firmware restart drill (DxgkDdiEscape payload, in and out): one orderly
+ * warm restart of a healthy, idle firmware (hardware stage H1 of
+ * TDR-FIRMWARE-RESTART-RECOVERY.md). Refused unless the device value
+ * Wom1FwRestartDrillAllowed = 1 (absent = refused) and no job, packet or
+ * reset is in flight. On return Status/Stage/Restarts/Succeeded repeat the
+ * Wom1GpuReset v5 restart record. */
+#define ADMISSION_FW_RESTART_DRILL_MAGIC 0x52525746u /* "FWRR" */
+#define ADMISSION_FW_RESTART_DRILL_VERSION 1u
+#define ADMISSION_FW_RESTART_DRILL_WARM_ORDERLY 1u
+typedef struct _ADMISSION_FW_RESTART_DRILL {
+  unsigned int Magic, Version, Bytes, Operation;
+  unsigned int Status, Stage, Restarts, Succeeded;
+} ADMISSION_FW_RESTART_DRILL;
 
 /* TDR drill (DxgkDdiEscape payload): the KMD strands the next Jobs render
  * jobs of the calling process in the worker, as a worker that left its poll

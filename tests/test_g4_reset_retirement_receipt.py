@@ -66,6 +66,7 @@ PROGRAM = r'''
 #include "apple_agx_g13_queue_runtime_test.c"
 #undef assert
 #include <assert.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include "render_gpu_recovery_snapshot.h"
@@ -141,7 +142,7 @@ int main(void) {
     if (mode) assert(snapshot.Queues[2].ReadMask==6u);
   }
   receipt.Version=ADMISSION_GPU_RESET_RECEIPT_VERSION; receipt.Bytes=sizeof(receipt);
-  assert(sizeof(receipt)==792);
+  assert(offsetof(ADMISSION_GPU_RESET_RECEIPT,FailureClass)==792); /* v4 prefix */
   assert(fwrite(&receipt,1,sizeof(receipt),stdout)==sizeof(receipt));
   return 0;
 }
