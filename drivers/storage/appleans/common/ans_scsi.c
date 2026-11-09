@@ -20,6 +20,10 @@ static void put_be(ans_u8 *p, ans_u64 v, size_t n)
 {
     while (n) { p[--n] = (ans_u8)v; v >>= 8; }
 }
+static void put_le(ans_u8 *p, ans_u64 v, size_t n)
+{
+    while (n--) { *p++ = (ans_u8)v; v >>= 8; }
+}
 static int zero(const ans_u8 *p, size_t n)
 {
     while (n--) if (*p++) return 0;
@@ -68,6 +72,10 @@ struct ans_scsi_plan ans_scsi_prepare(const struct ans_namespace *ns,
     case 0x25: case 0x28: case 0x2a: case 0x35: case 0x5a:
         if (len != 10) return invalid();
         break;
+    case 0x42: /* UNMAP exists only with Dataset Management (Identify ONCS). */
+        if (!ns->deallocate) return check(5, 0x20, 0);
+        if (len != 10) return invalid();
+        break;
     case 0xa0:
         if (len != 12) return invalid();
         break;
@@ -78,7 +86,7 @@ struct ans_scsi_plan ans_scsi_prepare(const struct ans_namespace *ns,
     }
     if (c[len - 1]) return invalid(); /* No linked command/NACA/vendor control. */
     switch (c[0]) {
-    case 0x12: /* Standard inquiry and VPD pages 00h/B1h, no identities invented. */
+    case 0x12: /* Standard inquiry and VPD pages 00h/B0h/B1h/B2h, no identities invented. */
         if ((c[1] & ~1u) || (!(c[1] & 1) && c[2])) return invalid();
         alloc = (ans_u32)be(c + 3, 2);
         if (c[1] & 1) {
@@ -93,8 +101,37 @@ struct ans_scsi_plan ans_scsi_prepare(const struct ans_namespace *ns,
                 p.metadata[5] = 1;
                 return data(p, 64, alloc, buffer);
             }
+            if (c[2] == 0xb0 && ns->deallocate) {
+                /* Block Limits (SBC-3; SNT 1.5 6.1.6): only the UNMAP limits that
+                 * ans_scsi_unmap_resolve enforces. MAXIMUM UNMAP BLOCK DESCRIPTOR
+                 * COUNT 0100h is the NVMe range limit; granularity is one logical
+                 * block, alignment not reported (UGAVALID 0). Transfer lengths and
+                 * WRITE SAME stay "not reported". */
+                p.metadata[1] = 0xb0;
+                p.metadata[3] = 0x3c;
+                put_be(p.metadata + 20, ANS_UNMAP_MAX_LBA_COUNT, 4);
+                put_be(p.metadata + 24, ANS_UNMAP_MAX_DESCRIPTORS, 4);
+                put_be(p.metadata + 28, 1, 4);
+                return data(p, 64, alloc, buffer);
+            }
+            if (c[2] == 0xb2 && ns->deallocate) {
+                /* Logical Block Provisioning: LBPU only. No WRITE SAME unmap, no
+                 * ANCHOR, no thresholds, no provisioning type, and no LBPRZ: reads
+                 * of deallocated blocks are not proven to return zeros. */
+                p.metadata[1] = 0xb2;
+                p.metadata[3] = 4;
+                p.metadata[5] = 0x80;
+                return data(p, 8, alloc, buffer);
+            }
             if (c[2]) return invalid();
-            /* Supported pages 00h and B1h. No B0h/B2h: UNMAP is not translated. */
+            /* Supported pages, ascending. B0h/B2h only with a translated UNMAP. */
+            if (ns->deallocate) {
+                p.metadata[3] = 4;
+                p.metadata[5] = 0xb0;
+                p.metadata[6] = 0xb1;
+                p.metadata[7] = 0xb2;
+                return data(p, 8, alloc, buffer);
+            }
             p.metadata[3] = 2;
             p.metadata[5] = 0xb1;
             return data(p, 6, alloc, buffer);
@@ -198,6 +235,21 @@ struct ans_scsi_plan ans_scsi_prepare(const struct ans_namespace *ns,
         p.nvme_cdw12 = p.nvme_nlb;
         p.transfer_bytes = blocks * ANS_PRP_PAGE_SIZE;
         return p;
+    case 0x42:
+        /* ANCHOR and GROUP NUMBER are not supported. */
+        if (c[1] || !zero(c + 2, 5)) return invalid();
+        alloc = (ans_u32)be(c + 7, 2);
+        if (buffer != alloc) return invalid();
+        if (!alloc) return p; /* No parameter list: nothing to unmap, not an error. */
+        if (alloc < 8) return check(5, 0x1a, 0); /* PARAMETER LIST LENGTH ERROR */
+        if (alloc > ANS_UNMAP_MAX_LIST) return invalid();
+        if (ns->read_only) return check(7, 0x27, 0);
+        /* Descriptors are validated by ans_scsi_unmap_resolve. */
+        p.action = ANS_SCSI_SUBMIT;
+        p.nvme_opcode = ANS_NVME_DSM;
+        p.direction = ANS_DMA_TO_DEVICE;
+        p.transfer_bytes = alloc;
+        return p;
     case 0x35: case 0x91:
         long_cdb = len == 16;
         if (c[1] || c[long_cdb ? 14 : 6] || buffer) return invalid();
@@ -211,6 +263,58 @@ struct ans_scsi_plan ans_scsi_prepare(const struct ans_namespace *ns,
         return p;
     default: return check(5, 0x20, 0);
     }
+}
+static struct ans_sense unmap_ranges(const struct ans_namespace *ns,
+    const struct ans_scsi_plan *plan, const ans_u8 *list, ans_u8 *dsm, ans_u32 *ranges)
+{
+    const struct ans_sense unsupported = {5, 0x20, 0}, length_error = {5, 0x1a, 0};
+    const struct ans_sense list_error = {5, 0x26, 0}, range_error = {5, 0x21, 0};
+    const struct ans_sense protect = {7, 0x27, 0}, good = {0, 0, 0};
+    ans_u32 length, bytes, i, n = 0;
+    ans_u64 total = 0;
+    if (!ns->deallocate || !list || plan->action != ANS_SCSI_SUBMIT ||
+        plan->nvme_opcode != ANS_NVME_DSM) return unsupported;
+    if (ns->read_only) return protect;
+    length = plan->transfer_bytes;
+    if (length < 8 || length > ANS_UNMAP_MAX_LIST) return length_error;
+    bytes = (ans_u32)be(list + 2, 2); /* UNMAP BLOCK DESCRIPTOR DATA LENGTH */
+    if (bytes > length - 8) return length_error; /* List shorter than its header says. */
+    if ((bytes & 15) || be(list, 2) != (ans_u64)bytes + 6 || !zero(list + 4, 4))
+        return list_error;
+    for (i = 0; i < bytes / 16; i++) {
+        const ans_u8 *d = list + 8 + (size_t)i * 16;
+        ans_u64 lba = be(d, 8);
+        ans_u32 count = (ans_u32)be(d + 8, 4);
+        if (!zero(d + 12, 4)) return list_error;
+        if (lba > ns->blocks || count > ns->blocks - lba) return range_error;
+        if (!count) continue; /* Unmaps nothing; never sent as a zero-length range. */
+        total += count;
+        if (total > ANS_UNMAP_MAX_LBA_COUNT) return list_error;
+        /* NVMe range: context attributes 0, length in blocks, starting LBA. */
+        put_le(dsm + (size_t)n * 16 + 4, count, 4);
+        put_le(dsm + (size_t)n * 16 + 8, lba, 8);
+        n++;
+    }
+    *ranges = n;
+    return good;
+}
+void ans_scsi_unmap_resolve(const struct ans_namespace *ns, struct ans_scsi_plan *plan,
+    const ans_u8 *list, ans_u8 *dsm)
+{
+    struct ans_sense sense = {5, 0x20, 0};
+    ans_u32 ranges = 0;
+    if (!plan) return;
+    if (dsm) ans_zero_memory(dsm, ANS_PRP_PAGE_SIZE);
+    if (ns && dsm) sense = unmap_ranges(ns, plan, list, dsm, &ranges);
+    if (sense.key) {
+        if (dsm) ans_zero_memory(dsm, ANS_PRP_PAGE_SIZE);
+        *plan = check(sense.key, sense.asc, sense.ascq);
+    } else if (!ranges) {
+        plan->action = ANS_SCSI_COMPLETE;
+        plan->nvme_opcode = 0;
+        plan->direction = ANS_DMA_NONE;
+        plan->dsm_ranges = 0;
+    } else plan->dsm_ranges = ranges;
 }
 struct ans_sense ans_scsi_nvme_sense(ans_u16 status, int writing)
 {

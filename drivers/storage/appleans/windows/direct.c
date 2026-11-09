@@ -178,6 +178,11 @@ BOOLEAN AppleAnsDirectInitialize(PAPPLE_ANS_ADAPTER a)
     if (!direct_admin(a, 6, 1, 0, 0, a->PageDma[ANS_QUEUE_DEPTH + 1], NULL) ||
         !ans_identify_namespace(a->Pages[ANS_QUEUE_DEPTH], a->Pages[ANS_QUEUE_DEPTH + 1], &a->Namespace))
         goto failure;
+    /* UNMAP is advertised from ONCS alone. A controller without Dataset Management is
+     * recorded once per start so an absent TRIM can be told from an unread VPD page. */
+    if (!a->Namespace.deallocate)
+        AppleAnsDiag(a, NULL, 0xA8, (ULONG)a->Pages[ANS_QUEUE_DEPTH][520] |
+                                    ((ULONG)a->Pages[ANS_QUEUE_DEPTH][521] << 8));
     a->Stage = AppleAnsStageCache;
     if (a->Pages[ANS_QUEUE_DEPTH][525] & 1) {
         if (!direct_admin(a, 0x0a, 0, 6, 0, 0, &dw0) || (dw0 & ~1u)) goto failure;

@@ -12,6 +12,10 @@ int main(void)
     assert(ans_identify_namespace(c,n,&ns));
     assert(ns.blocks==256 && ns.read_only && !ns.ready && !ns.cache_known);
     assert(!memcmp(ns.product,"APPLE SSD AP0256Q",16));
+    /* Dataset Management is ONCS bit 2 (bytes 520..521) and nothing else. */
+    assert(!ns.deallocate);
+    c[520]=0xfb;c[521]=0xff;assert(ans_identify_namespace(c,n,&ns) && !ns.deallocate);
+    c[520]=4;c[521]=0;assert(ans_identify_namespace(c,n,&ns) && ns.deallocate==1);
     memcpy(c+64,"12345678",8);
     assert(ans_identify_namespace(c,n,&ns) && !memcmp(ns.revision,"5678",4));
     assert(!memcmp(ns.vendor,"NVMe    ",8));

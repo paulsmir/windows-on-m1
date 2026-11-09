@@ -106,7 +106,8 @@ VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a);
  * 0xA2 SG->PRP reject (value = error<<20 | (first SG address>>12 & 0xfffff)), 0xA3 SG element
  * count (value = count), 0xA4 NVMe CQE error (value = status<<8 | opcode), 0xA5 reset,
  * 0xA6 SRB_FUNCTION_DUMP_POINTERS answered (value = sealed<<8 | count), 0xA7 dump-instance
- * receipt (value = ans_dump_context_receipt_value). */
+ * receipt (value = ans_dump_context_receipt_value), 0xA8 Identify ONCS without Dataset
+ * Management: UNMAP stays unadvertised (value = ONCS). */
 #define APPLE_ANS_DIAG_MAX 96
 VOID AppleAnsDiag(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, ULONG code, ULONG value);
 VOID AppleAnsFinish(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, USHORT nvme_status, ULONG length);
