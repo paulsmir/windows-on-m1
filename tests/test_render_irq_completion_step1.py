@@ -5,7 +5,8 @@ Real bugs these invariants catch:
   interleaving the two 64-bit reads of one message: the worker must read the
   hardware FIFO only inside DxgkCbSynchronizeExecution while the line is armed;
 - a level line that the ISR returns without quiescing (interrupt storm): the
-  mailbox path drains the FIFO before returning TRUE;
+  mailbox path drains the FIFO before returning TRUE (every driver state is
+  modelled in test_render_irq_quiesce.py);
 - the mailbox resource leaking into the default firmware: the ASL lists the
   level interrupt only inside the AGX_MAILBOX_IRQ preprocessor block and the Mu
   flag defaults to FALSE.
@@ -108,8 +109,8 @@ class KmdInterruptStepOneTests(unittest.TestCase):
 
     def test_isr_drains_the_fifo_before_claiming_a_level_interrupt(self):
         handler = body(BACKEND, "AdmissionPlatformMailboxInterrupt")
-        drain = body(BACKEND, "AdmissionMailboxDrainFifoAtDirql")
-        self.assertIn("AdmissionMailboxDrainFifoAtDirql(runtime)", handler)
+        drain = body(BACKEND, "AdmissionMailboxServiceFifoAtDirql")
+        self.assertIn("AdmissionMailboxServiceFifoAtDirql(", handler)
         self.assertIn("return FALSE", handler)
         self.assertIn("J313_AGX_G2_ASC_OUTBOX_CTRL_OFFSET", drain)
         self.assertIn("J313_AGX_G2_ASC_OUTBOX0_OFFSET", drain)
@@ -133,19 +134,27 @@ class KmdInterruptStepOneTests(unittest.TestCase):
 
     def test_arm_follows_the_acpi_resource_and_disarm_runs_under_both_locks(self):
         self.assertIn("Context->MailboxInterruptVector != 0u ? 1 : 0", BACKEND)
+        # default-on plan: the disarm moved behind the sender stop (the order
+        # is pinned in test_render_irq_quiesce.py); it still runs under both
+        # possible interrupt locks and before the unmap.
         destroy = body(BACKEND, "AdmissionPlatformDestroy")
-        self.assertIn("AdmissionMailboxDisarmed", destroy)
-        self.assertIn("message < 2u", destroy)
-        self.assertLess(destroy.index("MailboxIrqArmed"), destroy.index("SgxBase"))
+        close = body(BACKEND, "AdmissionMailboxIsrClose")
+        self.assertIn("AdmissionMailboxIsrClosed", close)
+        self.assertIn("message < 2u", close)
+        self.assertIn("MailboxIrqArmed, 0)", close)
+        self.assertLess(destroy.index("AdmissionMailboxIsrClose(Runtime);"),
+                        destroy.index("(PVOID)Runtime->SgxBase"))
 
-    def test_step2_wake_is_opt_in_and_the_wait_replaces_spin_and_sleep(self):
+    def test_step2_wake_follows_the_switch_and_the_wait_replaces_spin_and_sleep(self):
         isr = body(BACKEND, "AdmissionPlatformMailboxInterrupt")
         dpc = body(BACKEND, "AdmissionPlatformMailboxDpc")
         wait = body(BACKEND, "AdmissionJobPollWaitWindows")
         worker = BACKEND[BACKEND.index("action = AdmissionJobPollPlan("):]
         worker = worker[:worker.index("ADMISSION_JOB_POLL_SPIN) {")]
-        # the ISR queues the DPC only with the switch; the DPC wakes only with it
-        self.assertIn("runtime->IrqCompletion && Context->InterfaceValid", isr)
+        # the ISR queues the DPC only with the switch (default on since the
+        # default-on plan; Wom1IrqCompletion = 0 opts out) and only for messages
+        # it moved into the ring; the DPC wakes only with the switch
+        self.assertIn("moved != 0u && runtime->IrqCompletion && Context->InterfaceValid", isr)
         self.assertIn("DxgkCbQueueDpc", isr)
         self.assertIn("!runtime->IrqCompletion", dpc)
         self.assertIn("KeSetEvent(&runtime->JobPollTimerEvent", dpc)
@@ -161,8 +170,8 @@ class KmdInterruptStepOneTests(unittest.TestCase):
         # pre-set the next wait), and the wait is accounted like a sleep
         self.assertIn("ExCancelTimer(runtime->JobPollTimer, NULL) ? TRUE : FALSE", wait)
         self.assertIn("AdmissionJobPollNoteSleep(&runtime->JobPoll, us", wait)
-        self.assertIn('L"Wom1IrqCompletion"', BACKEND)
-        self.assertIn("ADMISSION_IRQ_RX_RECEIPT_VERSION 2u", HEADER)
+        self.assertIn('!AdmissionPlatformSwitchDisabled(Context, L"Wom1IrqCompletion")', BACKEND)
+        self.assertIn("ADMISSION_IRQ_RX_RECEIPT_VERSION 3u", HEADER)
 
     def test_census_receipt_is_exported_only_with_the_resource_present(self):
         self.assertIn("ADMISSION_IRQ_RX_RECEIPT", HEADER)

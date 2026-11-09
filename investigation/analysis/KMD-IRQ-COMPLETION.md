@@ -241,3 +241,143 @@ stays MUANSCPPC002 (no line), so recovery always has the poll path.
    architecture 2.1 item moves to DONE.
 
 Not in this change: waking the worker only from the mailbox DPC (dropping the fallback timer) and the launch-path work.
+
+## Implementation notes (offline implementer, 2026-11-09T20:03Z, commit a6916965c on claude/irq-default-on-24672b)
+
+Software only: host tests, no MSVC build, no hardware. H1 stays a labelled hypothesis.
+
+### What was verified about H1
+
+- AGX/ASAHI CONTRACT confirmed from upstream Linux `drivers/soc/apple/mailbox.c` (the local reference tree carries only
+  `arch/` and `drivers/gpu/`, so the file was read from torvalds/linux master): `apple_mbox_asc_hw` has
+  `.has_irq_controls = false` and no `irq_enable` / `irq_ack` / `irq_bit_*`; only `apple_mbox_m3_hw` has them.
+  `apple_mbox_poll_locked` reads I2A_RECV0/RECV1 while `!(i2a_control & control_empty)` and writes `irq_ack` only
+  `if (has_irq_controls)`. Registers match ours: I2A_CONTROL 0x114, RECV0 0x830, RECV1 0x838, EMPTY bit 17
+  (`J313_AGX_G2_ASC_OUTBOX_*` = 0x8114 / 0x8830 / 0x8838). Linux gates the ASC line only at the irqchip
+  (`enable_irq` in `apple_mbox_start`, `disable_irq` in `apple_mbox_stop`, requested `IRQF_NO_AUTOEN`). A WDDM miniport has
+  no equivalent: dxgkrnl owns connect/disconnect, so "pop until EMPTY" is the only dismissal available to the KMD.
+- Path 1 (gates before the handler) cannot be excluded. Microsoft's DxgkDdiInterruptRoutine / DxgkDdiStartDevice /
+  DxgkDdiStopDevice pages say nothing about when the interrupt is connected or disconnected. In our own order
+  (`lifecycle.c`) `InterruptReady` is 0 before `AdmissionInterruptStart` and after `AdmissionInterruptStop`, and in both
+  windows `PlatformRuntime` is NULL (`AdmissionPlatformRuntimeStart` follows InterruptStart, `AdmissionPlatformRuntimeStop`
+  precedes every InterruptStop). So with the gates closed there is no mapping to pop from either: moving the handler
+  ahead of the gates is correct and kept, but the state it then meets is "BaseMapped == 0", not DISCARD.
+- Path 2 confirmed in source, and found to be coupled to the stop sequence: the old Destroy disarmed first, and the
+  sender stop (below) then read its replies from the raw FIFO at PASSIVE while the ISR returned FALSE. An ISR that
+  discards when not armed would have stolen those replies, so the order had to change together with the dismissal.
+- Path 3 confirmed in source (`RingDrops++; break;` with the message left in the FIFO).
+- Which step stops the sender: `AdmissionPlatformDestroy` -> `AppleAgxBackendRuntimeStop` -> firmware cleanup
+  (`apple_agx_firmware.c`: StopEndpoint x2, StopAsc, DestroyFirmwareUat, PowerOff) -> `AdmissionFirmwareStopAsc` ->
+  `AppleAgxRtkitSessionStop` (AP power 0x10, IOP power 0x10 + ack, then `AppleAgxAscSetRun(FALSE)` clears CPU RUN).
+  `AppleAgxFirmwareProviderDestroy` only checks that this already happened. There is no separate surprise-removal
+  path: `AdmissionDdiRemoveDevice` calls the same `AdmissionPlatformRuntimeStop`.
+
+### Deviations from the spec, and why
+
+1. Teardown order is "stop the sender (line still armed) -> close -> power off / unmap", with the close in two places:
+   `AdmissionFirmwarePowerOff` (before `AppleAgxPowerRelease`) and `AdmissionPlatformDestroy` (before its own release
+   and the unmap). Reason: PowerOff follows StopAsc inside the same cleanup, and the ISR is entered for every scanout
+   interrupt too (both lines arrive as message 0), where it reads OUTBOX_CTRL. Leaving it armed until Destroy's unmap
+   would read ASC registers after the power release. Whether such a read faults is not known; the order avoids it.
+2. `BaseMapped` is a new gate `MailboxIsrOpen` (set with the mapping when the line is listed, cleared under both
+   interrupt locks by `AdmissionMailboxIsrClose`), not `AscTransport.Base != NULL`: the pointer is never cleared and
+   PASSIVE code still needs it after the close.
+3. DISCARD is therefore only a transient state (between the disarm and the synchronized close). It is kept as specified.
+4. `IrqRx.Overflow` is the sticky receipt flag; the worker acts on a separate one-shot `IrqOverflowLatch`
+   (`InterlockedExchange(..., 0)` at the top of the poll loop -> `SchedulerFaulted` + break, as a failed RTKit drain).
+   A flag that stays set would fault every job after the reset.
+5. The diagnostics-off export of `Wom1IrqRx` + `Wom1JobPoll` happens only when the mailbox line is listed (own 2 s
+   throttle, no flush). Without the line the worker does not call the export at all, as before, so IRQD1 has no
+   `Wom1IrqRx` value (absent, not zero) and `Wom1JobPoll` still needs `Wom1JobDiagnostics` there.
+6. `Wom1IrqRx` is version 3 (two ULONGs appended: Discarded, Overflow; 108 bytes). `tools/agx_irq_rx_decode.py`
+   reads v1-v3 and prints a LOST MESSAGES line when RingDrops, Discarded or Overflow is non-zero.
+7. The DPC is queued only when the pass moved a message into the ring (not for discards). `IsrEmptyCalls` now also
+   counts passes after the close.
+8. The worker's synchronized pop (`AdmissionMailboxSyncPop`) uses the same loop, so it also drops at a full ring.
+
+### Residual states the KMD cannot dismiss (BaseMapped == 0 with the line listed)
+
+- No runtime: before `AdmissionPlatformRuntimeStart` maps the SGX region, and after the close. Safe only while the
+  ASC cannot send. EXP2272/2273 booted and stopped cleanly in this state, which is the only evidence.
+- Stop failures: if `AppleAgxRtkitSessionStop` fails or times out, the cleanup still calls PowerOff, which closes the
+  ISR; if `AppleAgxPowerRelease` then fails, the ASC may be running with the ISR closed. Destroy returns
+  STATUS_DEVICE_BUSY in both cases. Not changed here.
+- Pre-existing, not changed: `AdmissionPlatformRuntimeStop` clears `Context->PlatformRuntime` and frees the runtime
+  without the interrupt lock, so an ISR already inside the handler can still read the freed runtime.
+- An idle period with more than 64 undrained messages now ends in Overflow and one engine reset at the next job
+  instead of a livelock. EXP2272 ring high water was 3.
+
+### Tests
+
+`tests/test_render_irq_quiesce.py` compiles the production `AdmissionDdiInterruptRoutine`,
+`AdmissionPlatformMailboxInterrupt`, `AdmissionMailboxServiceFifoAtDirql` and the header against a model FIFO
+(clang, -Wall -Wextra -Wconversion -Werror, ASan/UBSan) over 1920 states: line listed x runtime x open x armed x ready x
+ingress x switch x ring depth {0, 63, 64} x fill {0, 1, 3, 200, 300}. `test_model_detects_the_h1_defects` puts each
+H1 path back and requires the model to fail. Results in this worktree: quiesce 9/9; KMD suites (`test_render_*`,
+`test_depth2_*`, `test_fw_rx_*`, `test_notifier_*`, `test_apple_agx_scheduler`) 162 of 163, the one failure being
+`test_mu_flag_defaults_off_and_only_adds_the_aslpp_define` (mu submodule not initialised here). The full
+`run_against_baseline.py` gives BASELINE_NEW_FAILURES on the parent commit too (56 NEW: pinned Mesa/AIL under
+`.local` and mu are missing in this worktree); the NEW set after the change is identical. BASELINE_OK has to be
+taken in the GPU worktree after the merge.
+
+## Implementation notes, revision 2: cross-check against the bench session's parked patch (2026-11-09)
+
+The bench session implemented the same spec independently (parked, uncommitted:
+`.local/handoff/fork6-irq-default-on.patch`, sha256 3b7b2f1d...48f10). The architect passed on five findings; each was
+checked against the source. Where this revision changes the code, it supersedes the notes above (deviation 2 and the
+second and third residual states).
+
+1. **"There is no sender-stop step": not confirmed; the spec's order stands.** The comment that patch cites
+   ("the retained firmware cannot be stopped and restarted", EXP1241/EXP1278, `backend_platform_windows.c`) is the
+   header of `AdmissionPlatformRuntimeQuiesceActive`, the TDR engine reset: there the firmware keeps running, and so
+   does the runtime, armed. The teardown is a different path and does stop the sender:
+   `AdmissionPlatformDestroy` -> `AppleAgxBackendRuntimeStop` -> `AppleAgxFirmwareRollback` -> StopAsc ->
+   `AppleAgxRtkitSessionStop` -> `AppleAgxAscSetRun(FALSE)`, then PowerOff -> broker `HV_AGX_POWER_CMD_OFF` ->
+   m1n1 `power_off()` -> `pmgr_adt_power_disable("/arm-io/sgx")` and `("/arm-io/gfx-asc")`
+   (`hv_agx_power_broker.c`, `hv_agx_power_platform.c`). The KMD is also what starts the sender
+   (`AppleAgxRtkitSessionStartCpuAndInitializeHandoff` sets CPU RUN), so before the first start nothing sends.
+   Whether the stop conversation succeeds on hardware with the line listed is not something the source can show;
+   EXP2273 stopped cleanly with the old order. That is an IRQD2 observation.
+   - Why the adapter-owned mapping (InterruptStart..InterruptStop) was not adopted: it keeps the ISR reading
+     OUTBOX_CTRL on every interrupt (scanout included) while gfx-asc is powered off: before PowerOn, and after the
+     release until InterruptStop. Whether a read of the disabled domain faults is unknown; the sender is stopped in
+     exactly those states, so there is nothing to pop there. The runtime-owned access avoids the read after the
+     release. (It does not avoid it before PowerOn: the line is armed when the region is mapped, as in the
+     hardware-validated EXP2272/2273 code. The scanout source is masked then; not changed.)
+   - What that patch gets right and this revision takes over: the runtime-gone states must not depend on a stop that
+     failed. A failed power release now reopens the ISR's access (`AdmissionMailboxIsrReopen`, armed again). By the
+     m1n1 source every failed or refused OFF leaves gfx-asc powered (`asc_off` is the last step; a refusal while the
+     retained root is Prepared/Active returns BUSY before anything is switched). Destroy then returns
+     STATUS_DEVICE_BUSY and the callers keep the runtime, so a still-running ASC always has an armed consumer.
+   - Remaining unknown for IRQD2 (disable/enable cycles, ordered restart): the windows with the line connected and no
+     runtime (before `AdmissionPlatformRuntimeStart`, after a successful Destroy until dxgkrnl disconnects). The KMD
+     cannot pop there. They are safe only because the ASC is not running; when dxgkrnl connects and disconnects
+     relative to StartDevice/StopDevice is undocumented. A hang or DPC watchdog at stop/start is the signature.
+
+2. **DPC and ISR lifetime: confirmed, fixed.** `AdmissionPlatformMailboxDpc` and the ISR took the runtime from
+   `Context->PlatformRuntime`, which `AdmissionPlatformRuntimeStop` clears and frees with no interrupt lock and no DPC
+   flush. Both now use `Context->MailboxIsrRuntime` (replaces the `MailboxIsrOpen` flag): set with the mapping when
+   the line is listed, cleared inside `DxgkCbSynchronizeExecution` by `AdmissionMailboxIsrClosed`, and
+   `AdmissionPlatformDestroy` calls `KeFlushQueuedDpcs` after the close and the power release, before any unmap,
+   only when the line is listed. The create-failure path was checked: when Destroy fails, `RuntimeStart` returns
+   STATUS_DEVICE_BUSY without freeing, so the same holds there. The other DPC halves (paging, scheduler, scanout)
+   still use `PlatformRuntime`; that is older than this change and not touched.
+3. **Export guard literal: already satisfied.** The new term sits before the Ov5 terms;
+   `test_ov5_frag_wait_drill` and `test_ov5_ta_waiver` pass.
+4. **Diagnostics-off receipt rule: same as the parked patch.** Written only when the line is listed. IRQD1 on
+   today's Mu: `Wom1IrqRx` absent, not "present and all zero".
+5. **Dependency named, no locking added.** The worker's synchronized pop (`AdmissionMailboxSyncPop`, MessageNumber 0)
+   and the ISR exclude each other only if `DxgkCbSynchronizeExecution(…, 0, …)` takes the lock the mailbox line's
+   ISR runs under. That rests on the EXP2272/2273 observation that both AGX lines arrive as MessageNumber 0; how
+   dxgkrnl maps two line interrupts to interrupt objects is undocumented, and the source shows no way to decide it.
+   If it were false, the two 64-bit reads of one message could interleave (`WorkerSyncPopHits` with garbled RTKit
+   messages would be the sign). The close synchronizes on both 0 and 1.
+
+Differences that remain, decided from the source:
+
+- **Overflow.** The parked patch fails every outbox control read while `IrqRx.Overflow` is set, until the runtime is
+  recreated. The engine reset (`AdmissionPlatformRuntimeQuiesceActive`) does not recreate the runtime, so after one
+  overflow every later job would fault again. Here the flag stays sticky in the receipt and the worker faults once
+  per overflow episode (`IrqOverflowLatch`).
+- **DISCARD.** With the reopen, "not armed but reachable" exists only between the disarm and the synchronized close.
+  `Discarded` should stay 0 on hardware; a non-zero value means a message arrived inside that window.

@@ -175,17 +175,22 @@ _Use_decl_annotations_ BOOLEAN AdmissionDdiInterruptRoutine(
   /* One line: dxgkrnl passes 0.  Two line interrupts (scanout edge + the
    * mailbox level line): which MessageNumber each gets is undocumented, so
    * both sources are checked on every call and the census records the pair. */
-  if (context == NULL || (MessageNumber != 0 && MessageNumber != 1) ||
-      InterlockedCompareExchange(&context->InterruptReady, 0, 0) == 0 ||
-      InterlockedCompareExchange(&context->InterruptIngressEnabled, 0, 0) == 0)
+  if (context == NULL || (MessageNumber != 0 && MessageNumber != 1))
     return FALSE;
-  InterlockedIncrement(&context->IrqIsrByMessage[MessageNumber & 3u]);
+  /* The mailbox level line has no enable or acknowledge register: the only
+   * dismissal is popping the FIFO, so it runs before (and regardless of) the
+   * ready/ingress gates, which keep gating the scanout and broker sources
+   * (KMD-IRQ-COMPLETION.md, default-on plan). */
   if (context->MailboxInterruptVector != 0u &&
       AdmissionPlatformMailboxInterrupt(context, MessageNumber)) {
     handled = TRUE;
     InterlockedIncrement(&context->IrqMailboxHandled);
     InterlockedOr(&context->IrqMailboxMessageMask, 1L << (MessageNumber & 3u));
   }
+  if (InterlockedCompareExchange(&context->InterruptReady, 0, 0) == 0 ||
+      InterlockedCompareExchange(&context->InterruptIngressEnabled, 0, 0) == 0)
+    return handled;
+  InterlockedIncrement(&context->IrqIsrByMessage[MessageNumber & 3u]);
   if (context->ScanoutRuntime != NULL) {
     if (AdmissionScanoutInterrupt(context)) {
       handled = TRUE;
