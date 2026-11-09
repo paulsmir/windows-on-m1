@@ -75983,3 +75983,17 @@ EXP2307B HARDWARE BEFORE 2026-11-09T22:53Z (continuation in the same boot, same 
   cross-boot (Wom1IrqCompletion set before the first start).
 - Next: one experiment, one variable = commit 041495ca7 in the package, same m1n1 e6ac18bb and Mu MUANSCPPC002:
   re-armed toggle cycles must report `status OK`.
+
+EXP2308 HARDWARE BEFORE 2026-11-09T23:19:58Z:
+- WHY THIS HYPOTHESIS: (1) EXP2307B: the re-armed start failed at stage 10 with 0xC0000483 while stages 1..9 (power, firmware boot, second RR_OPEN) passed; (2) source: AdmissionScanoutStart initializes the client with FirstSequence 1 on every start, and the m1n1 scanout broker accepts a command only when sequence > highest_sequence, which lives for the whole boot (hv_agx_scanout_broker.c sequence_fresh) - the first start had already consumed sequences, so REGISTER with 1 is STALE_SEQUENCE; (3) the offline test test_qualify_resumes_above_the_broker_receipt_sequence reproduces the reject (RED) and passes with the fix; no other difference between first and second start was found in the stage-10 path.
+- WINDOWS CONTRACT: PnP disable/enable of the display adapter runs StopDevice/RemoveDevice and then AddDevice/StartDevice in the same boot; StartDevice must succeed again and the adapter must return to Status OK with a working VidPn source (no reboot requirement for a WDDM driver restart).
+- AGX/ASAHI CONTRACT: (m1n1 scanout broker, current source) command freshness is monotonic per boot: sequence != 0 and sequence > highest_sequence; the receipt-sequence register equals highest_sequence whenever no command is pending; a stale command is rejected without changing the receipt.
+- TRANSLATION: Qualify reads RECEIPT_SEQUENCE after the capability checks and, when receipt >= NextSequence, continues at receipt + 1 (receipt == UINT64_MAX -> sequence exhausted, fail closed). First start in a boot: receipt 0, NextSequence 1, unchanged behaviour. No m1n1 or ABI change.
+- ATOMIC CONTRACT: none.
+- WHAT IS STILL UNKNOWN: (1) whether stages 11..12 and the first present after a same-boot restart work on hardware (never reached); (2) whether the desktop returns from the basic display path to the AGX path with correct scanout ownership after the second REGISTER; (3) performance after a same-boot restart (arm a2 vs a1) - firmware and pool are re-created, never measured.
+- Suite probe binary: agx_d3d12_probe_e2308_arm64.exe is a byte copy of the EXP2307 binary (eb8e3291f5e4fc8b); the probe source is identical in both package commits.
+- Expected: Problem 0; suite PASS 119 FAIL 0; arm a1 PERF_GATE_PASS (first start is unchanged); three TOGGLE lines "armed 1 after consumed ... status OK"; arm a2 PERF_GATE_PASS and within 2 % of a1; no EL2 exception on the vUART; WER_REPORTS 0, STOPS 0; ordered restart prints "BUGCHECK ok ... code=0x0".
+- Failure criteria: a toggle not returning to Status OK (record LastStartStage/Status: stage 10 again = fix insufficient; a later stage = next defect behind it); Windows stop, hang, EL2 exception; perf gate FAIL on a1 or a2; suite regression; non-zero BUGCHECK.
+- Recovery: rec2308h (ANS; Mu MUANSCPPC002); at a reset to the proxy: AGX_RECOVERY_ALLOW_AT_PROXY=1 recover.sh.
+- Hashes: sys 6af2b6249f6e, UmdArm64 3ba39e325c6a, UmdX64 c08069198afd, Umd32 2cf903e589a3; manifest de7c08a798a2, hardware-manifest 37c9b7839501; probe2308.sh 3a6ec2a62e58 (PROBE_LINT_OK); visible recovery rec2308h 996e72aeabe17b25; m1n1 0d3a75b3.
+- Recovery rec2308h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2308-scanout-seq/run2308.sh.
