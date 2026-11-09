@@ -35,3 +35,20 @@ void AdmissionGpuFaultReceiptRecord(ADMISSION_GPU_FAULT_RECEIPT *Receipt,
     Receipt->First = *Event;
   Receipt->Last = *Event;
 }
+
+unsigned int AdmissionGpuResetFailureClass(unsigned int Quiesce,
+    unsigned int RtkitCrashed, unsigned int Halted,
+    unsigned int RecoveryPending) {
+  /* Only a wait this thread ran to a failed end has a class: the outcomes
+   * None/Ended/Unsubmitted succeeded, Worker and State never owned the
+   * runtime, so its firmware words were not this thread's to read. */
+  if (Quiesce != (unsigned int)AdmissionGpuResetQuiesceTimeout &&
+      Quiesce != (unsigned int)AdmissionGpuResetQuiescePoll &&
+      Quiesce != (unsigned int)AdmissionGpuResetQuiesceBackend)
+    return ADMISSION_GPU_RESET_CLASS_NONE;
+  if (RtkitCrashed != 0u)
+    return ADMISSION_GPU_RESET_CLASS_F2;
+  if ((Halted != 0u && Halted != 0xffffffffu) || RecoveryPending != 0u)
+    return ADMISSION_GPU_RESET_CLASS_F1;
+  return ADMISSION_GPU_RESET_CLASS_F3;
+}

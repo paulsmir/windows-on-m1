@@ -9291,6 +9291,27 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStop(
   return STATUS_SUCCESS;
 }
 
+/* Wom1GpuReset v5: the failure class of a reset wait this thread ran, from
+ * CPU-owned state and firmware-shared words only (no ASC or SGX read). */
+static VOID AdmissionGpuResetCaptureClass(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG Outcome,
+    ADMISSION_GPU_RESET_RECEIPT *Receipt) {
+  const volatile ULONG *status = (const volatile ULONG *)runtime->Initdata
+      .DataObjects[AppleAgxInitdataMemoryFirmwareStatus].CpuAddress;
+  const ULONG halted = status != NULL ? status[0x20u / 4u] : MAXULONG;
+  Receipt->HaltCount = status != NULL ? status[0x10u / 4u] : 0u;
+  Receipt->RtkitCrashed = runtime->Rtkit.CrashlogCrashed ? 1u : 0u;
+  Receipt->MailboxValid = (runtime->Rtkit.InboxAtFailureValid ? 1u : 0u) |
+                          (runtime->Rtkit.OutboxAtFailureValid ? 2u : 0u);
+  Receipt->InboxControl = runtime->Rtkit.InboxAtFailureValid
+      ? runtime->Rtkit.InboxControlAtFailure : 0u;
+  Receipt->OutboxControl = runtime->Rtkit.OutboxAtFailureValid
+      ? runtime->Rtkit.OutboxControlAtFailure : 0u;
+  Receipt->FailureClass = AdmissionGpuResetFailureClass(
+      Outcome, Receipt->RtkitCrashed, halted,
+      runtime->Provider.QueueProvider.Runtime.RecoveryPending ? 1u : 0u);
+}
+
 /* G4-r3 (EXP1296): the retained firmware cannot be stopped and restarted
  * (EXP1241, EXP1278): the former reset stopped RTKit and then refused, a
  * 0x116 on every TDR with a job active. Resetting keeps a new worker from
@@ -9655,6 +9676,8 @@ Exit:
   /* Recoveries this thread ran are published like the worker's; a worker
    * that did not leave still owns the provider and its receipts. */
   if (outcome != AdmissionGpuResetQuiesceWorker) {
+    if (Receipt != NULL)
+      AdmissionGpuResetCaptureClass(runtime, (ULONG)outcome, Receipt);
     if (Receipt != NULL)
       AdmissionGpuRecoverySnapshot(&runtime->Provider.QueueProvider.Runtime,
                                    &Receipt->RetirementAfter);

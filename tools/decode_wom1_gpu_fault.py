@@ -5,10 +5,14 @@ Receipts (REG_BINARY under the APPL0002 device key):
   Wom1GpuFault          v1, 168 bytes: firmware Timeout/Fault events, captured
                         before the firmware is resumed (first, first with a
                         valid FAULT_INFO, last).
-  Wom1GpuReset          v1 96 / v2 496 / v3 536 / v4 792 bytes: the last DxgkDdiResetEngine or
+  Wom1GpuReset          v1 96 / v2 496 / v3 536 / v4 792 / v5 1064 bytes: the last
+                        DxgkDdiResetEngine or
                         DxgkDdiResetFromTimeout and the state it found; v2
                         adds timing and the last 8 resets; v3 adds reset stages;
-                        v4 adds before/after quiesce queue retirement samples.
+                        v4 adds before/after quiesce queue retirement samples;
+                        v5 adds the failure class of the last reset (F1 halted
+                        and resumed, F2 RTKit crash, F3 silent) and the warm
+                        firmware restart record (TDR stage 2, drill-only).
   Wom1FirmwareRecovery  8 dwords (EXP1075/G4-recovery).
   Wom1GpuFaultPostResume v1/v2 184, v3 264, v4 312 bytes (rc77/Q13/Q15): at the end of each reset
                         wait, RegionC fault_control, SGX 0x17620/0x17630
@@ -111,6 +115,26 @@ RECOVERY_SNAPSHOT_HEADER = struct.Struct('<5I')
 RECOVERY_QUEUE = struct.Struct('<9I')
 RECOVERY_SNAPSHOT_SIZE = RECOVERY_SNAPSHOT_HEADER.size + 3 * RECOVERY_QUEUE.size
 RESET_V4 = RESET_V3 + 2 * RECOVERY_SNAPSHOT_SIZE
+# v5: FailureClass, HaltCount, RtkitCrashed, MailboxValid, InboxControl,
+# OutboxControl, then ADMISSION_GPU_FW_RESTART_RECEIPT.
+RESET_V5_CLASS = struct.Struct('<6I')
+FW_RESTART = struct.Struct('<26I2Q32I')
+RESET_V5 = RESET_V4 + RESET_V5_CLASS.size + FW_RESTART.size
+FAILURE_CLASSES = ('none', 'F1', 'F2', 'F3')
+FW_RESTART_STAGES = ('none', 'owned', 'stop-warm', 'stop-proof', 'provider-destroy',
+                     'queue-lifetime', 'graph-rebuild', 'provider-initialize',
+                     'isr-reopen', 'start-warm', 'lifetime-fresh', 'complete')
+FW_RESTART_STOPS = ('none', 'orderly', 'forced')
+FW_RESTART_FLAGS = ('cpu_control_read', 'isr_closed', 'isr_reopened', 'warm_publish',
+                    'lifetime_fresh', 'forced_after_boot', 'status_before',
+                    'status_after', 'line_listed', 'inbox_read', 'outbox_read')
+FW_RESTART_REFUSALS = ('none', 'not-allowed', 'payload', 'state', 'faulted', 'busy',
+                       'worker')
+# apple_agx_retained_root_abi.h AGX_RR_*; a restart may send none of these.
+RR_COMMANDS = {1: 'PREPARE', 2: 'ACTIVATE', 3: 'MAP', 4: 'UNMAP', 5: 'QUERY', 6: 'CLOSE',
+               7: 'VERIFY_ABSENT', 8: 'QUERY_ARENA', 9: 'QUERY_TABLE_HASH'}
+RR_FORBIDDEN_IN_RESTART = (1, 2, 6)
+ASC_CPU_RUN = 1 << 4
 DBGINFO_V1 = 32
 DBGINFO_V2 = 56
 
@@ -233,14 +257,62 @@ def decode_retirement(data, offset):
     return result
 
 
+def decode_fw_restart(data, offset):
+    words = FW_RESTART.unpack_from(data, offset)
+    (restarts, succeeded, refused, reason, stage, status, stop, stop_ms, rebuild_ms,
+     boot_ms, total_ms, backend_stop, backend_start, fw_phase, fw_completed, fw_cleanup,
+     fw_last, provider, cpu_control, flags, rr_mask, rr_flags, mailbox_valid, crashed,
+     inbox, outbox, epoch_before, epoch_after) = words[:28]
+    if flags >> len(FW_RESTART_FLAGS):
+        raise ValueError('invalid firmware restart flags')
+    names = [name for bit, name in enumerate(FW_RESTART_FLAGS) if flags & (1 << bit)]
+    commands = [RR_COMMANDS.get(bit, f'unknown({bit})') for bit in range(32)
+                if rr_mask & (1 << bit)]
+    result = {
+        'restarts': restarts, 'succeeded': succeeded, 'refused': refused,
+        'refused_reason': name_of(FW_RESTART_REFUSALS, reason),
+        'stage': name_of(FW_RESTART_STAGES, stage), 'status': f'{status:#010x}',
+        'stop_kind': name_of(FW_RESTART_STOPS, stop),
+        'ms': {'stop': stop_ms, 'rebuild': rebuild_ms, 'boot': boot_ms, 'total': total_ms},
+        'backend_stop_result': backend_stop, 'backend_start_result': backend_start,
+        'firmware': {'phase': fw_phase, 'completed_mask': f'{fw_completed:#x}',
+                     'cleanup_mask': f'{fw_cleanup:#x}', 'last_result': fw_last},
+        'provider_state': f'{provider:#x}', 'flags': names,
+        # None = not read; never a guessed "stopped".
+        'cpu_run_after_stop': bool(cpu_control & ASC_CPU_RUN) if flags & 1 else None,
+        'cpu_control_after_stop': f'{cpu_control:#x}' if flags & 1 else None,
+        'inbox_control_after_stop': f'{inbox:#x}' if flags & 0x200 else None,
+        'outbox_control_after_stop': f'{outbox:#x}' if flags & 0x400 else None,
+        'retained_commands': commands,
+        'retained_forbidden_sent': [RR_COMMANDS[bit] for bit in RR_FORBIDDEN_IN_RESTART
+                                    if rr_mask & (1 << bit)],
+        'retained_flags': {'raw': f'{rr_flags:#x}', 'prepared': bool(rr_flags & 1),
+                           'active': bool(rr_flags & 2),
+                           'prefix_unchanged': bool(rr_flags & 4)},
+        'rtkit_at_entry': {'inbox_snapshot': bool(mailbox_valid & 1),
+                           'outbox_snapshot': bool(mailbox_valid & 2),
+                           'crashed': bool(crashed)},
+        'epoch_before': epoch_before, 'epoch_after': epoch_after,
+        # epoch_after is what the broker returned at the warm publish; 0 = the
+        # restart never got that far, which is not "unchanged".
+        'epoch_unchanged': (epoch_before == epoch_after) if epoch_after else None,
+        'firmware_status_before': ([f'{w:#x}' for w in words[28:44]]
+                                   if flags & 0x40 else None),
+        'firmware_status_after': ([f'{w:#x}' for w in words[44:60]]
+                                  if flags & 0x80 else None),
+    }
+    return result
+
+
 def decode_reset(data):
-    if len(data) not in (RESET.size, RESET_V2, RESET_V3, RESET_V4):
+    if len(data) not in (RESET.size, RESET_V2, RESET_V3, RESET_V4, RESET_V5):
         raise ValueError('unsupported Wom1GpuReset length')
     (version, size, resets, succeeded, entry, status, faulted, packet_state,
      packet_fence, active, completed, submitted, phase, aborted, quiesce,
      wait_ms, backend, provider, poll_guard, worker, halted, recoveries,
      context) = RESET.unpack_from(data)
-    if (version, size) not in ((1, RESET.size), (2, RESET_V2), (3, RESET_V3), (4, RESET_V4)) or size != len(data):
+    if (version, size) not in ((1, RESET.size), (2, RESET_V2), (3, RESET_V3), (4, RESET_V4),
+                               (5, RESET_V5)) or size != len(data):
         raise ValueError('unsupported Wom1GpuReset version')
     result = {
         'version': version, 'resets': resets, 'succeeded': succeeded,
@@ -278,6 +350,16 @@ def decode_reset(data):
         if version >= 4:
             result['retirement_before'] = decode_retirement(data, RESET_V3)
             result['retirement_after'] = decode_retirement(data, RESET_V3 + RECOVERY_SNAPSHOT_SIZE)
+        if version >= 5:
+            (failure, halt_count, crashed, mailbox_valid, inbox,
+             outbox) = RESET_V5_CLASS.unpack_from(data, RESET_V4)
+            result['failure_class'] = name_of(FAILURE_CLASSES, failure)
+            result['halt_count'] = halt_count
+            result['rtkit_crashed'] = bool(crashed)
+            result['inbox_control'] = f'{inbox:#x}' if mailbox_valid & 1 else None
+            result['outbox_control'] = f'{outbox:#x}' if mailbox_valid & 2 else None
+            result['firmware_restart'] = decode_fw_restart(
+                data, RESET_V4 + RESET_V5_CLASS.size)
     return result
 
 

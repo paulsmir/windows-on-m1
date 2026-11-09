@@ -900,6 +900,10 @@ static __declspec(noinline) NTSTATUS AdmissionResetEngineRecorded(
   receipt->ReservedV3 = 0u;
   RtlZeroMemory(&receipt->RetirementBefore, sizeof(receipt->RetirementBefore));
   RtlZeroMemory(&receipt->RetirementAfter, sizeof(receipt->RetirementAfter));
+  /* v5: the class belongs to this attempt; Restart is not a reset's. */
+  receipt->FailureClass = ADMISSION_GPU_RESET_CLASS_NONE;
+  receipt->HaltCount = receipt->RtkitCrashed = 0u;
+  receipt->MailboxValid = receipt->InboxControl = receipt->OutboxControl = 0u;
   receipt->EntryMs = receipt->JobAgeMs = 0u;
   receipt->PollAgeMs = MAXULONG;
   AdmissionPlatformRuntimeResetState(context, receipt);

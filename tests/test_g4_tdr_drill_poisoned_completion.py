@@ -315,6 +315,9 @@ static void AdmissionPublishFirmwareRecovery(ADMISSION_PLATFORM_RUNTIME *r) { (v
 static void AdmissionCapturePostResume(ADMISSION_PLATFORM_RUNTIME *r, ULONG f, ULONG w,
     ADMISSION_GPU_POST_RESUME_RECEIPT *p) { (void)r; p->Fence = f; p->WaitMs = w; }
 static void AdmissionPublishPostResume(ADMISSION_PLATFORM_RUNTIME *r) { (void)r; }
+/* Wom1GpuReset v5 class capture: covered by test_render_fw_restart. */
+static void AdmissionGpuResetCaptureClass(ADMISSION_PLATFORM_RUNTIME *r, ULONG outcome,
+    ADMISSION_GPU_RESET_RECEIPT *receipt) { (void)r; (void)outcome; (void)receipt; }
 static APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionDrainRuntime(int *s, int *io,
     unsigned limit, APPLE_AGX_RTKIT_U32 *n) { (void)s; (void)io; (void)limit; *n = 0; return AppleAgxRtkitSessionResultOk; }
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeForceChannelRecovery(
