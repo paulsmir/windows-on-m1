@@ -75948,3 +75948,38 @@ EXP2307B HARDWARE BEFORE 2026-11-09T22:53Z (continuation in the same boot, same 
 - Failure criterion: any TOGGLE not OK, EL2 exception/reset, guest unreachable, or a2 below the perf gate.
 - Recovery: `.local/experiments/EXP2307-closedv5/evidence/rec2307h/recover.sh` (AGX_RECOVERY_ALLOW_AT_PROXY=1 if the
   machine is at the proxy).
+
+## EXP2307B — re-armed live adapter cycle (ACTUAL) 2026-11-09T23:04:45Z
+
+- Expected: three TOGGLE lines `status OK`, no EL2 exception, a2 within 2 % of a1, `BUGCHECK ok code=0x0`.
+- Actual: toggle 1 `armed 1 after consumed disabled CM_PROB_DISABLED enabled CM_PROB_FAILED_POST_START status Error`
+  (120 s). Arm a2 and cycles 2-3 did not run (probe aborts on a failed toggle). Guest stayed alive over SSH.
+- m1n1 (full.log 51883-52929): `GPUVA ARM_CONSUMED seq=2089436608`, power receipts seq 4/5 result=0,
+  `retained op=1 seq=1040 status=0 epoch=2`, `GPUVA broker v5 init=0 epoch=2`, maps up to count 206, then the
+  ordered teardown (`retained op=6 seq=2078 status=0`, power cmd=2 result=0). No EL2 exception in the whole boot;
+  two live disables, one second RR_OPEN + firmware boot.
+- Driver receipts (`evidence/EXP2307B/kmd-receipts-toggle-fail.txt`): Wom1RtkitBootResult 0, ProviderBootSucceeded 1,
+  Wom1PlatformStage 14 status 0, Wom1StartStage 10 (Scanout), Wom1StartStatus 0xC0000483
+  (STATUS_DEVICE_HARDWARE_ERROR).
+- Cause (source, not a guess): `AdmissionScanoutStart` builds a new scanout client with FirstSequence 1 on every
+  StartDevice (`render-admission/src/scanout_windows.c`), while the m1n1 scanout broker keeps `highest_sequence`
+  for the whole boot and rejects `sequence <= highest_sequence` as STALE_SEQUENCE
+  (`hv_agx_scanout_broker.c` sequence_fresh/submit). REGISTER_POOL of the second start is therefore rejected, the
+  broker stays UNREGISTERED and StartDevice returns STATUS_DEVICE_HARDWARE_ERROR. The broker contract is correct
+  (replay protection); the client owns the sequence choice.
+- Fix: commit 041495ca7 — `AppleAgxScanoutQualify` reads RECEIPT_SEQUENCE and resumes above it (forward only,
+  exhausted space stays fail-closed); regression test
+  `test_qualify_resumes_above_the_broker_receipt_sequence` RED before / GREEN after; baseline 1105 tests, 0 NEW.
+  Not yet on hardware.
+- Ordered restart: `BUGCHECK ok base=0xfffff801c9c00000 code=0x0` (full.log 53011).
+- Recovery: rec2307h RECOVERY_DONE (boot 2026-11-09T22:59:35Z); verified read-only afterwards: 8 CPUs, AppleAns
+  Running, no AppleAgx package, inert APPL0002 devnode, no G3Armed/Wom1IrqCompletion values, C: 30.4 GiB free.
+- Verdicts: EXP2307 hypothesis "disable no longer aborts EL2 on m1n1 06616be7" CONFIRMED (two disables, clean
+  close both times, BUGCHECK code 0). EXP2307B hypothesis "re-armed start completes" REJECTED: the second
+  RR_OPEN and firmware boot work, the start then fails at scanout registration for the cause above.
+- Arm a1 on m1n1 e6ac18bb + Mu MUANSCPPC002: suite 119/0, PERF_GATE_PASS (CS 1.6 worst 51.172 vs 49.943; GM HD PERF
+  worst 44.392 vs 40.770).
+- Consequence for IRQD2: a same-boot A/B needs the fix in a package; until it is hardware-proven the A/B is
+  cross-boot (Wom1IrqCompletion set before the first start).
+- Next: one experiment, one variable = commit 041495ca7 in the package, same m1n1 e6ac18bb and Mu MUANSCPPC002:
+  re-armed toggle cycles must report `status OK`.
