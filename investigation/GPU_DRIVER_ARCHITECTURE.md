@@ -56,12 +56,15 @@ Rules:
   the production Mu the ISR must dismiss the level line in every state (not ready, not armed, unmapped, ring full);
   then IRQD1 (inert on the current Mu) and IRQD2 (candidate Mu, same-boot ABBA) flip the default.
 
-- **BUILD (C)** timeout-only TDR recovery: when the firmware never retires a job,
+- **BUILD (C), DESIGNED 2026-11-09** timeout-only TDR recovery: when the firmware never retires a job,
   DxgkDdiResetFromTimeout's quiesce returns STATUS_DEVICE_HARDWARE_ERROR and
-  Windows bugchecks 0x116 (EXP1964/1965, EXP2214, EXP2283-2286). Production
-  needs an adapter reset that restarts the ASC firmware (Asahi gpu.rs full
-  reset / macOS AGX restart) and re-publishes the queues, so a stall ends in a
-  recoverable TDR. Open since 2026-10-26 ("timeout-only recovery is still open").
+  Windows bugchecks 0x116 (EXP1964/1965, EXP2100, EXP2214, EXP2283-2286). Design:
+  investigation/analysis/TDR-FIRMWARE-RESTART-RECOVERY.md (7bedfb1fa). Asahi has no firmware restart (crash
+  latch, timeout FIXME); the reference is macOS (stopFirmware/bootFirmware). "Cannot be restarted" was never
+  tested on hardware (EXP589 never ran). ResetFromTimeout = stop the ASC and prove silence;
+  RestartFromTimeout = boot and re-publish. Stages: 1 (D) reset receipt v5; 2 (I) restart mechanism, off;
+  **H1** idle warm restart of a healthy firmware (unknown U1); 3 (C) warm path + withheld-kick stall drill (H2);
+  4 (C) cold path with a new m1n1 broker op (H3); 5 default on.
 
 ### 2.2 Dependencies (D3D12 -> AGX)
 Target: order work only by what D3D12 orders (ResourceBarrier) and by
@@ -144,3 +147,7 @@ driver-internal hazards -- the same per-resource model Apple's kext uses
   line is dismissed in every ISR state (source finding, KMD-IRQ-COMPLETION.md "Default-on plan").
 - DWM composition row (0.85 ms): no build before F0; cross-process serialization (refusal 55) is a legacy of the
   single VM slot, to be narrowed as class I (C1) if F0 shows the row is real.
+- TDR recovery: design accepted (firmware restart split across ResetFromTimeout/RestartFromTimeout); first
+  hardware stage is H1 (idle warm restart), nothing is wired into the TDR DDIs before H1 answers U1.
+- Mu for IRQ default-on: MUIRQ001-95263b97 is the candidate (MUANSCPPC002 + one commit + the flag; only the
+  J313ABI SSDT differs, by interrupt 887). No new image.

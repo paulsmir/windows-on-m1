@@ -2551,3 +2551,15 @@ pre-bound behind the render it depends on; only its neighbours can overlap it. N
 WHY CONTINUE COMPARISON: not applicable (no archaeology). ACTIVE HYPOTHESIS: exclusive fullscreen removes the DWM job and
 returns 2.5-4 % at HD. NEXT CAUSAL TARGET: F0 = windowed vs fullscreen same-boot ABBA + ETW attribution, default package,
 no code. F0 outcome selects: cross-process depth-2 pairs (C1 then C2a), display direct-flip fix, or dropping the row.
+
+## UPDATE 2026-11-09T20:00:21Z -- TDR RECOVERY DESIGNED (NEXT TARGET H1), MU CANDIDATE FOR IRQD2 = MUIRQ001 (architect, offline)
+
+- TDR timeout-only recovery: design in investigation/analysis/TDR-FIRMWARE-RESTART-RECOVERY.md (7bedfb1fa).
+  Active hypothesis U1: the iBoot-loaded GFX image boots a second time after an orderly stop (AP 0x10, IOP
+  0x10, CPU RUN off/on) with power and the retained root untouched. Never tested (EXP589 did not run). Next
+  causal target: stage 2 restart mechanism (off by default), then hardware H1 = idle warm restart, three
+  cycles in one boot. No TDR DDI wiring before H1.
+- IRQ completion default-on: Mu candidate is MUIRQ001-95263b97 (FD 0fa3cea5...), gate clean on the J313ABI
+  SSDT (the GPU device is not in the DSDT). KMD change on refs/heads/claude/irq-default-on-24672b (in
+  progress, merge needs the user's word); fork 6's parked patch is the cross-check. Then IRQD1, IRQD2.
+- Bench: EXP2301 F0 (DWM row discriminator) running since 19:37:58Z.

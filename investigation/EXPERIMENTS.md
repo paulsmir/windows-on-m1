@@ -75455,3 +75455,37 @@ EXP2301 HARDWARE BEFORE 2026-11-09T19:53:47Z:
 - Recovery: rec2301h (ANS). Guest ETL/CSV deleted after the fetch.
 - Hashes: sys 099f4e861c00, UmdArm64 cec484ae9d8e, UmdX64 ede76b6e8898, Umd32 4a5d635e6aa6; manifest fee161f52da8, hardware-manifest 285c444de9d6; probe2301.sh 2c8915b6a6f1 (PROBE_LINT_OK); visible recovery rec2301h 56a2ec175572ecc9; m1n1 0d3a75b3.
 - Recovery rec2301h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2301-f0-dwm/run2301.sh.
+
+## PARALLEL-OFFLINE ARCHITECT VERDICTS 2026-11-09T20:00:21Z (no hardware)
+
+Two offline parallel sessions reported; both outputs were checked against the files before this record.
+
+1. Mu candidate for IRQD2 (manifest `.local/experiments/MUIRQ002-candidate/MANIFEST.md`, no build):
+   the candidate is the existing image MUIRQ001-95263b97, FD SHA-256
+   0fa3cea5dbe611b399c1c2c3f8d76086dca3ecf36b53485adb850053252b46c0 (recomputed here; MUANSCPPC002 FD
+   ce17dea8da9087b6e7a3b8916b168c09df851f1676e77cb161f18ab5c9b63284 recomputed too). Mu 95263b97 is the
+   direct child of bafd29b4; build flags differ only by J313_AGX_MAILBOX_IRQ=TRUE; DSDT byte-identical; the
+   J313ABI SSDT differs only by the Level/ActiveHigh interrupt 887 appended to both AGX0 templates.
+   Correction to the IRQDEF-SPEC entry above: the GPU device lives in the J313ABI SSDT, not the DSDT; the
+   "DSDT diff gate" of IRQD2 is an SSDT gate and is already satisfied by this manifest. Recovery Mu unchanged.
+   Open for IRQD2: the image lists 887 for every guest booted on it, including one with no AppleAgx package.
+2. TDR timeout-only recovery design (commit 7bedfb1fa,
+   `investigation/analysis/TDR-FIRMWARE-RESTART-RECOVERY.md`). Spot-checked citations: Asahi gpu.rs:378-396
+   (crash latch, never cleared), queue/mod.rs:403-411 (timeout handler FIXME), KMD comment
+   backend_platform_windows.c:9150-9157, EXP589 "HARDWARE DEFERRED", macOS symbols agx.dm:1432-1435. All hold.
+   Accepted findings: Asahi has no firmware restart (reference is macOS); "the retained firmware cannot be
+   restarted" was never tested on hardware (EXP1241/1278/1296 refused by design, EXP589 never ran); the KMD
+   owns the ASC CPU and RTKit session. Accepted design: ResetFromTimeout = stop and prove silence,
+   RestartFromTimeout = boot and re-publish; stages 1 (D receipt v5), 2 (I restart mechanism, off), H1, 3 (C
+   warm path + withheld-kick stall drill, H2), 4 (C cold path via a new broker op, H3), 5 (default).
+   First hardware stage accepted as specified: H1 = idle warm restart of a healthy firmware (unknown U1), one
+   variable, three cycles in one boot; H1b forced stop only after H1.
+3. IRQ default-on: fork 6 implemented the spec before it read the split; its uncommitted version is parked as
+   `.local/handoff/fork6-irq-default-on.patch` (SHA-256
+   3b7b2f1d1a31cb86d3e9d35d14242513c270ef937ece441a39b8fea63fb48f10) and serves as an independent cross-check
+   for the planned branch refs/heads/claude/irq-default-on-24672b. Spec correction pending that session's
+   verification: "stop the sender" does not exist for the retained firmware; dismissal must work from an
+   adapter-owned mapping with no runtime.
+
+Next: TDR stage 2 shared-layer part and unknowns U4/U8 go to parallel offline sessions; KMD-side stage 2 waits
+for the IRQ branch (same file backend_platform_windows.c). Bench order unchanged: EXP2301 F0, then IRQD1/IRQD2.
