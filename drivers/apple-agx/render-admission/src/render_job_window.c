@@ -289,7 +289,18 @@ unsigned int AdmissionJobWindowKickRefusal(
   /* A paging packet between them may change mappings N+1 was bound with. */
   if (s->PagingPending ||
       (s->CpuHeadFence != 0u && s->CpuHeadFence == m->Fence)) return 54u;
-  if (n->Process == 0ULL || m->Process != n->Process) return 55u;
+  if (n->Process == 0ULL || m->Process != n->Process) {
+    /* C1: one cross-process class, a compute job behind a plain render
+     * (COMPUTE_ON_3D, lead Barrier kept), each in its own VM slot. The raw
+     * kinds: a present is never one, whatever PRESENT_PAIRS says. */
+    if (!(s->Capabilities & ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS) ||
+        n->Process == 0ULL || m->Process == 0ULL ||
+        n->Kind != ADMISSION_JOB_WINDOW_KIND_RENDER ||
+        m->Kind != ADMISSION_JOB_WINDOW_KIND_COMPUTE)
+      return 55u;
+    if (n->VmSlot == 0u || m->VmSlot == 0u || n->VmSlot == m->VmSlot)
+      return ADMISSION_JOB_WINDOW_REFUSAL_CROSS_PROCESS_INELIGIBLE;
+  }
   if (!window_g4(nk) || !window_g4(mk)) return 56u;
   /* P1: one present arena per process */
   if (n->Kind == ADMISSION_JOB_WINDOW_KIND_PRESENT &&
@@ -324,6 +335,63 @@ unsigned int AdmissionJobWindowKickRefusal(
   if (s->NextNeedsIdle) return 61u;
   if (s->SetsValid && s->RunningSet == s->NextSet) return 62u;
   return 0u;
+}
+
+unsigned int AdmissionJobWindowCrossProcess(const ADMISSION_JOB_WINDOW_JOB *Running,
+    const ADMISSION_JOB_WINDOW_JOB *Next) {
+  return Running != 0 && Next != 0 && Running->Process != 0ULL &&
+         Next->Process != 0ULL && Running->Process != Next->Process ? 1u : 0u;
+}
+
+void AdmissionJobWindowXprocReceiptInitialize(
+    ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt) {
+  unsigned char *bytes = (unsigned char *)Receipt;
+  unsigned int i;
+  if (Receipt == 0) return;
+  for (i = 0u; i < (unsigned int)sizeof(*Receipt); ++i) bytes[i] = 0u;
+  Receipt->Version = ADMISSION_JOB_WINDOW_XPROC_RECEIPT_VERSION;
+  Receipt->Bytes = (unsigned int)sizeof(*Receipt);
+}
+
+unsigned int AdmissionJobWindowXprocNote(
+    ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt, unsigned int Refusal,
+    const ADMISSION_JOB_WINDOW_JOB *Running, const ADMISSION_JOB_WINDOW_JOB *Next) {
+  unsigned int i;
+  if (Receipt == 0 || Running == 0 || Next == 0) return 0u;
+  ++Receipt->Considered;
+  if (Refusal == 0u) {
+    ++Receipt->Allowed;
+  } else {
+    Receipt->LastRefusal = Refusal;
+    Receipt->LastRefusedFence = Next->Fence;
+    for (i = 0u; i < ADMISSION_JOB_WINDOW_XPROC_CODES; ++i) {
+      if (Receipt->RefusalCount[i] == 0u) Receipt->RefusalCode[i] = Refusal;
+      if (Receipt->RefusalCode[i] == Refusal) {
+        ++Receipt->RefusalCount[i];
+        break;
+      }
+    }
+    if (i == ADMISSION_JOB_WINDOW_XPROC_CODES) ++Receipt->RefusalOther;
+  }
+  return Receipt->Considered <= 16u || (Receipt->Considered & 0xffu) == 0u ? 1u : 0u;
+}
+
+void AdmissionJobWindowXprocKicked(ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt,
+    const ADMISSION_JOB_WINDOW_JOB *Running, const ADMISSION_JOB_WINDOW_JOB *Next) {
+  if (Receipt == 0 || Running == 0 || Next == 0) return;
+  ++Receipt->Kicked;
+  Receipt->LastFence = Next->Fence;
+  Receipt->LastRunningFence = Running->Fence;
+  Receipt->LastRunningSlot = Running->VmSlot;
+  Receipt->LastNextSlot = Next->VmSlot;
+}
+
+void AdmissionJobWindowXprocUndone(ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt,
+    unsigned int FellBack, unsigned int Fence, unsigned int Detail) {
+  if (Receipt == 0) return;
+  if (FellBack) ++Receipt->FellBack; else ++Receipt->Failed;
+  Receipt->LastUndoneFence = Fence;
+  Receipt->LastUndoneDetail = Detail;
 }
 
 unsigned int AdmissionJobWindowLeadQueue(unsigned int Barrier) {

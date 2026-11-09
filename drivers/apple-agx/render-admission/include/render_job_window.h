@@ -26,7 +26,10 @@
  *   - the notifier threshold (object 12) counts every kicked job (Asahi
  *     raises it at run()), so N's completion event is deferred until N+1
  *     ends; N's completion must be seen from its own stamps (U4);
- *   - one VM slot lease (graph slot 1): one process at a time.
+ *   - one VM slot lease (graph slot 1): one process at a time. C1: with
+ *     retained per-process VM slots (V1) two processes each hold their own
+ *     slot, and ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS admits one
+ *     cross-process class (below).
  *
  * Pure decisions and the in-flight window state; the KMD fills the inputs
  * under SchedulerLock. Refusals are stable receipt values (0 = allowed). */
@@ -57,6 +60,11 @@ typedef struct _ADMISSION_JOB_WINDOW_JOB {
    * proved its vertex/TA work independent of the compute job submitted just
    * before it, AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT). */
   unsigned int TaIndependent;
+  /* C1: the retained VM slot the job's process holds (V1; 0 = none: the
+   * baseline per-job slot, or no lease). For N the slot BeginJob leased;
+   * for N+1 the slot its process holds when the kick is decided. Read
+   * only for a cross-process pair. */
+  unsigned int VmSlot;
 } ADMISSION_JOB_WINDOW_JOB;
 
 /* Firmware-side features the window needs for some pairs (rc95: all 0).
@@ -77,6 +85,16 @@ typedef struct _ADMISSION_JOB_WINDOW_JOB {
  * top of the general depth-two mode; never two presents in one window
  * (one present arena per process, AppleAgxPresentBuild). */
 #define ADMISSION_JOB_WINDOW_CAP_PRESENT_PAIRS 0x10u
+/* C1 (investigation/analysis/DWM-COMPOSITION-LEVER.md, mechanism C;
+ * REG_DWORD Wom1CrossProcessPairs = 1, default off): one cross-process
+ * class joins the window: a compute job (KIND_COMPUTE, not a present)
+ * behind a running plain render (KIND_RENDER, no prelude) of another
+ * process: COMPUTE_ON_3D with its lead Barrier, the wire constructs of the
+ * same-process pair (EXP2088). Both jobs name their own, different,
+ * nonzero VM slots; the only new fact for the firmware is two context ids
+ * in flight (Asahi: one VM per file, queues of different VMs run
+ * concurrently). Every other cross-process pair keeps refusal 55. */
+#define ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS 0x20u
 
 #define ADMISSION_JOB_WINDOW_CAPS_RC98                                       \
   (ADMISSION_JOB_WINDOW_CAP_SECOND_SIDECAR | ADMISSION_JOB_WINDOW_CAP_TA_ON_3D | \
@@ -128,14 +146,23 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
 
 /* Previously unused policy reason; keep all existing wire values and layout. */
 #define ADMISSION_JOB_WINDOW_REFUSAL_PRELUDE_UNPROVEN 5u
+/* C1: the cross-process class is admitted (capability on, plain render ->
+ * compute) but a VM slot is zero or both are equal. Kick refusals in use:
+ * 1-5, 50-62, 63 (KMD KickLocked), 64, 65 (KMD Q3 checkpoint); 66-71 are
+ * the decision reasons of render_rc_progress.h, whose histogram ends at 71,
+ * so the next free policy number is 6. */
+#define ADMISSION_JOB_WINDOW_REFUSAL_CROSS_PROCESS_INELIGIBLE 6u
 
 /* While N runs: may N+1 be kicked now? Refusal values:
  *   1 disabled, 2 stopping/resetting, 3 scheduler faulted, 4 preemption,
  *   5 general-mode prelude pair not explicitly enabled,
+ *   6 the admitted cross-process class with a zero or an equal VM slot (C1),
  *   50 window not exactly {N}, 51 window poisoned (a dropped job),
  *   52 no Prebound successor, 53 successor is not the scheduler's next
  *   fence, 54 a paging/CPU packet runs or heads the queue,
- *   55 another process (one VM slot), 56 a present or legacy job,
+ *   55 another process (one VM slot; C1: every cross-process pair but a
+ *   compute job behind a plain render under CAP_CROSS_PROCESS), 56 a present
+ *   or legacy job,
  *   57 both use the compute sidecar (U7), 58 render after render with
  *   another manager binding (legacy SceneId; Q6 live-slot key), 59 missing
  *   live-manager capability (U1), 60 the pair's Barrier is not available (TA on a 3D stamp,
@@ -143,6 +170,46 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
  *   the hardware-validated D3D-G1b one (EXP1279+). */
 unsigned int AdmissionJobWindowKickRefusal(
     const ADMISSION_JOB_WINDOW_KICK_STATE *State);
+/* C1: 1 when both jobs name a process and the processes differ. */
+unsigned int AdmissionJobWindowCrossProcess(const ADMISSION_JOB_WINDOW_JOB *Running,
+    const ADMISSION_JOB_WINDOW_JOB *Next);
+/* C1: cumulative receipt of cross-process pairs (device value
+ * Wom1CrossProcessPairsReceipt, written by the worker with and without
+ * Wom1JobDiagnostics, as Wom1Ov2Receipt). Counted only while the
+ * capability is declared. Considered: final kick decisions on a
+ * cross-process pair (a decision the next poll retries is not counted);
+ * Allowed: of those, refusal 0; Kicked: handed to the firmware; FellBack /
+ * Failed: allowed but undone to depth one / failed closed before or at the
+ * hand-over; the refusals by code (the first CODES distinct codes, further
+ * ones in RefusalOther); the last kicked pair and the last refused and
+ * undone successors (LastUndoneDetail: the KMD line in bits 0-15, the
+ * BeginSuccessorJob refusal in bits 16-23, as LastKickFailure). */
+#define ADMISSION_JOB_WINDOW_XPROC_RECEIPT_VERSION 1u
+#define ADMISSION_JOB_WINDOW_XPROC_CODES 8u
+typedef struct _ADMISSION_JOB_WINDOW_XPROC_RECEIPT {
+  unsigned int Version, Bytes;
+  unsigned int Considered, Allowed, Kicked, FellBack, Failed;
+  unsigned int RefusalCode[ADMISSION_JOB_WINDOW_XPROC_CODES];
+  unsigned int RefusalCount[ADMISSION_JOB_WINDOW_XPROC_CODES];
+  unsigned int RefusalOther;
+  unsigned int LastFence, LastRunningFence, LastRunningSlot, LastNextSlot;
+  unsigned int LastRefusal, LastRefusedFence;
+  unsigned int LastUndoneFence, LastUndoneDetail;
+} ADMISSION_JOB_WINDOW_XPROC_RECEIPT;
+void AdmissionJobWindowXprocReceiptInitialize(
+    ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt);
+/* Counts one final decision (Refusal as AdmissionJobWindowKickRefusal or
+ * the KMD's 63/65). Returns 1 when an export is due: the first 16
+ * considered pairs, then every 256th. */
+unsigned int AdmissionJobWindowXprocNote(
+    ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt, unsigned int Refusal,
+    const ADMISSION_JOB_WINDOW_JOB *Running, const ADMISSION_JOB_WINDOW_JOB *Next);
+/* The allowed pair reached the firmware (SubmitSuccessor succeeded). */
+void AdmissionJobWindowXprocKicked(ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt,
+    const ADMISSION_JOB_WINDOW_JOB *Running, const ADMISSION_JOB_WINDOW_JOB *Next);
+/* The allowed pair did not: FellBack (depth one, no fault) or failed. */
+void AdmissionJobWindowXprocUndone(ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt,
+    unsigned int FellBack, unsigned int Fence, unsigned int Detail);
 /* rc102 (EXP2047): the classes the wired window kicks. By default only
  * those whose Barrier waits on N's compute stamp; On3d (device value
  * Wom1JobDepth2KickOn3d = 1) adds those waiting on N's 3D stamp (R->R,
