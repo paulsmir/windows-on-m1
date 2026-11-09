@@ -2496,3 +2496,6 @@ pending. Then fix (a): no waiver behind a process's first compute, if the beacon
 6773 waived pairs, 0 resets, vs 3/3 without the beacon. H3: the waived successor's doorbell reaches the firmware before
 the running compute has started (start-up pair: render already pending at the compute's kick). EXP2292 = defer the waived
 kick until the compute's firmware start timestamp is nonzero (one variable, beacon off), 3 GM starts; then the ABBA.
+
+## UPDATE 2026-11-09T02:17:10Z -- EXP2292: deferral premise confirmed (Deferred 1 per start, compute not started); placement after the pending claim broke the start (3 ENGINE resets)
+Fix placement: decide before AdmissionG4PendingKickLocked, under the locks, return FALSE with nothing mutated. EXP2293 reruns.
