@@ -2594,3 +2594,17 @@ no code. F0 outcome selects: cross-process depth-2 pairs (C1 then C2a), display 
   cycles, ordered restart `BUGCHECK ok code=0x0`; (4) scaled-source m1n1 checkpoint, then F0 again.
 - Architect, offline: TDR stage 2b spec/implementation and receipt v5 (design note section 9.4); direct-flip
   contract note (`investigation/analysis/DIRECT-FLIP-CONTRACT.md`).
+
+## UPDATE 2026-11-09T21:00:41Z -- direct-flip contract written (no hardware)
+
+- investigation/analysis/DIRECT-FLIP-CONTRACT.md (FULL GRAPHICS). D3/D4 of DWM-COMPOSITION-LEVER.md section 7
+  corrected: the KMD already scans an RGBA8 or BGRA8 linear application buffer with the committed geometry
+  (rc106/rc110). The only gate for a full-screen application buffer is the Mesa D3D11 CheckDirectFlipSupport
+  answer (FALSE), plus D1 for sizes other than 2560x1600.
+- KMD SupportDirectFlip/FlipIndependent are truthful; no segment carries DXGK_SEGMENTFLAGS.DirectFlip (atomic
+  companion of a truthful UMD answer, not changed alone).
+- Next causal target unchanged in order: D1 checkpoint -> F0 repeat at a real 1280x720 mode (no package). The F0
+  repeat decides: full screen already bypasses DWM (measure only) / still RedirectedFlip (build the atomic P1
+  package: segment flag + UMD rule) / mode set fails (D1 not fixed).
+- Windowed GravityMark (the 0.85 ms DWM row) needs a second DCP layer + CheckMultiPlaneOverlaySupport3 (P2),
+  parked until P1 is measured.

@@ -186,3 +186,13 @@ written down before any code: which present paths DWM hands to dxgkrnl, what DIS
 allocation, and what the KMD must accept in SetVidPnSourceAddress(MPO3). C1/C2a stay parked: F0 did not show that
 serialization behind DWM is the row's cost, and a granted direct flip removes the DWM job instead of overlapping it.
 F0 is repeated with a real 1280x720 mode after D1.
+
+## 8. Addendum 2026-11-09T21:00:41Z: D2-D4 contract written, D3 and D4 corrected
+
+The contract asked for in section 7 is investigation/analysis/DIRECT-FLIP-CONTRACT.md. Two rows of the section 7
+table were stated from EXP1038 and are no longer true of the tree (the table stays as written): since rc110 an
+RGBA8 linear GPU-only GDI-surface allocation is scanout-capable in the KMD (D3), and since rc106 the KMD flips any
+allocation with the committed source-mode geometry (D4). What remains: D1 (m1n1 scaled source), D2 (the Mesa
+D3D11 table answers FALSE to CheckDirectFlipSupport) with the missing segment DirectFlip flag as its atomic
+companion, and, for a window smaller than the output, a second DCP layer plus CheckMultiPlaneOverlaySupport3 (P2,
+parked). The windowed 0.85 ms row cannot be removed by direct flip; only P2 can remove it.
