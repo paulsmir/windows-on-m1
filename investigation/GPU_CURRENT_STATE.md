@@ -2531,3 +2531,9 @@ EXP2298/2299 receipts. Apple's 2.2 ms is the Metal port's structure, not availab
 recoverable HD gap ~1.5-2.0 ms of 21.6: DWM windowed composition 0.85 (independent flip/MPO, DISPLAY work), launch 0.45
 (HV LEASE / worker), detect 0.3-0.5 (Wom1IrqCompletion proven: FPS neutral, frees a core -> default-on candidate via the
 perf gate), idle 0.22, C4 kernel +0.3 (workload). Next causal targets in that order; no OV hardware runs.
+
+## UPDATE 2026-11-09T06:19:02Z -- shutdown bugcheck: probable cause in the AppleAns storport miniport (fork 6, offline)
+The first SRB_FUNCTION_SHUTDOWN set ShuttingDown and stopped the controller from a DPC; later paging I/O got
+SRB_STATUS_NO_DEVICE -> STATUS_NO_SUCH_DEVICE (= p2 of the 0x1A), hence 0x1A/0xEF/0x154 only after sessions with paged-out
+memory. Fix under test: SHUTDOWN = ordered cache flush only, the controller stops in ScsiStopAdapter / the power-down path.
+Verification: GM runs + shutdown /r -> m1n1 prints BUGCHECK code=0x0. Not a GPU defect.
