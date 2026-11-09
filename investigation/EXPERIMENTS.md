@@ -75728,3 +75728,33 @@ Correction to "EXP2302 ... (ACTUAL)" (the original entry stays as written):
   guest does not boot natively: kill the exact launcher PID, AGX_RECOVERY_STORAGE=bridge AT_PROXY recovery,
   ImagePath back, check stornvme\StartOverride.
 - Evidence: .local/experiments/ANSDUMP2/evidence/EXP2304/ (pre-043.txt = baseline on 0.4.3).
+
+## EXP2304 — AppleAns 0.4.4 DUMP2 boot check (ACTUAL, 2026-11-09T21:04:24Z)
+
+- Phases: stage.ps1 STAGE_OK; ordered `shutdown /r`; launcher exit; proxy-ready; normal ANS launcher
+  (m1n1 882985fb, FD J313_EFI-gpu-ans-direct-G2.fd); kernel boot 2026-11-09T21:00:01Z; SSH up 21:00:36Z.
+- Expected vs actual:
+  - boots on 0.4.4: CONFIRMED. ImagePath appleans.inf_arm64_cdca66c5acb2980a, running-file hash
+    DAC3A772A2A6FDEBE5EA3BD5F5D86B759145F946E08D32CCA5BCF646AED13D33, service RUNNING.
+  - 0xA6 sealed records: CONFIRMED. Two AppleAns id=11 records at 21:00:02Z/21:00:03Z,
+    UniqueId 0x00a60101 and 0x00a60102 (sealed=1, count 1 and 2), as in EXP2302.
+  - dump stack loaded: CONFIRMED. EnumDeviceDrivers lists crashdmp.sys, dump_diskdump.sys, dump_AppleAns.sys,
+    dump_dumpfve.sys.
+  - no 0xA7 after a telemetry query: CONFIRMED (query on \\.\Scsi0: returned 508 bytes; no 0xA7 record), i.e. the
+    dump copy was not entered in CRASH mode before a crash and the live controller was not touched.
+  - no volmgr 46 / disk / storport errors: CONFIRMED (only DCOM 10016 and the explorer shutdown-delay note).
+    CrashDumpEnabled 2, `fsutil dirty query C:` = NOT dirty.
+  - `BUGCHECK ok code=0x0` at the restart: NOT MEASURABLE. The normal recovery profile runs m1n1 882985fb, which
+    has no bugcheck print (0 matches in normal-prev-full.log here and in EXP2302); the line exists only in
+    ansdirect-bugcheck4 83a9cf74. The expectation was wrong for this profile; the restart itself was ordered and
+    the next boot shows no event 41/6008/1001.
+- Tool correction: post.ps1 filtered records by Win32_OperatingSystem.LastBootUpTime (21:00:19), which is later
+  than the first driver records (21:00:02), so post-after-restart.txt wrongly shows "no AppleAns records".
+  post.ps1 now takes the boot time from Kernel-General id 12; post3.txt is the valid capture.
+- Alive: display, SSH, storage (native ANS), all 8 CPUs (Processor-Power id 55 for 0..7). USB input/RDP not checked.
+- Existing dump files are old (MEMORY.DMP 2026-11-07 0x116, written on the bridge); no new dump, as intended.
+- Verdict: CONFIRMED for the boot-safety hypothesis (0.4.4 does not disturb normal boot/runtime). Dump writing
+  itself is still unproven.
+- Next: EXP2305, one declared manual bugcheck on 0.4.4 with CrashDumpEnabled unchanged (2), to test whether the
+  dump instance writes a readable dump to the native SSD.
+- Evidence: .local/experiments/ANSDUMP2/evidence/EXP2304/{stage.txt,restart-run.log,normal-prev-full.log,post-after-restart.txt,post2.txt,post3.txt}.
