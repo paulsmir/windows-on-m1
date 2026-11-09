@@ -75232,3 +75232,7 @@ EXP2290 HARDWARE BEFORE 2026-11-09T01:00:11Z:
 - Hashes: sys 68c31aeabe43, UmdArm64 fdaf6d9d715a, UmdX64 1f7e523daba2, Umd32 f3c953d4f179; manifest 9dd5f3d3c8ff, hardware-manifest ea18a5940a0f; probe2290.sh 9b304b8bdc81 (PROBE_LINT_OK); visible recovery rec2290h f3ed7385479b3175; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2290h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2290-waiver-beacon/run2290.sh.
+
+EXP2290 HARDWARE ACTUAL 2026-11-09T01:10:09Z:
+- Result: invalid run. All three GM starts failed in about 2 s with "D3D12::error(): out of memory" (can't reserve upload buffers), UMD log 55 lines, no reset, no rendering. The m1n1 beacon was placed at broker offset 0xE00, which is AGX_POOL_WINDOW_OFFSET: it swallowed the pool window registers. Implementer's error: the offset was to be checked before use.
+- Verdict: invalid; it says nothing about the 0x116. Fixed: the beacon moves to 0xF00, regression test tests/test_ov5_beacon_offset.py. Rerun as EXP2291. Recovery rec2290h.
