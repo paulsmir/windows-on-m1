@@ -1,9 +1,9 @@
 # AppleAns: Windows classifies the internal SSD as a hard disk
 
-Status 2026-11-10: cause confirmed offline and on the live guest; fix S1
+Status 2026-11-09T23:15Z: cause confirmed offline and on the live guest; fix S1
 implemented and host-tested; no hardware run yet.
 
-## Observation (live J313 guest, read-only query, 2026-11-10)
+## Observation (live J313 guest, read-only query, 2026-11-09T23:1xZ)
 
 `Get-PhysicalDisk` for `NVMe APPLE SSD AP0256`: `MediaType = Unspecified`,
 `BusType = Fibre Channel`, `SpindleSpeed = 0`. `fsutil behavior query
@@ -81,6 +81,6 @@ Recovery: AppleAns is the boot-disk driver. Keep the current signed package and
 the bridge-boot emergency profile available before installing; a failed boot is
 rolled back from the bridge profile by restoring the previous package.
 
-Note for whoever runs it: until S3 exists, Optimize Drives on an SSD-classified
-volume issues a retrim that the driver rejects per range; that is the same
-ILLEGAL REQUEST path the file system's delete notifications take today.
+Note for whoever runs it: without page B2h classpnp reports no UNMAP support,
+so no UNMAP reaches the driver before or after S1. What Optimize Drives offers
+for an SSD-classified volume without TRIM is not verified; record what it shows.
