@@ -75236,3 +75236,15 @@ EXP2290 HARDWARE BEFORE 2026-11-09T01:00:11Z:
 EXP2290 HARDWARE ACTUAL 2026-11-09T01:10:09Z:
 - Result: invalid run. All three GM starts failed in about 2 s with "D3D12::error(): out of memory" (can't reserve upload buffers), UMD log 55 lines, no reset, no rendering. The m1n1 beacon was placed at broker offset 0xE00, which is AGX_POOL_WINDOW_OFFSET: it swallowed the pool window registers. Implementer's error: the offset was to be checked before use.
 - Verdict: invalid; it says nothing about the 0x116. Fixed: the beacon moves to 0xF00, regression test tests/test_ov5_beacon_offset.py. Rerun as EXP2291. Recovery rec2290h.
+
+EXP2291 HARDWARE BEFORE 2026-11-09T01:29:06Z:
+- WHY THIS HYPOTHESIS: (1) EXP2286: 0x116 with p3 0xC0000483; (2) EXP2289: the reset needs the published feature; (3) EXP2284a shows exactly one render-after-compute before the benchmark, the loading-screen render right after the first compute of the process, so a fast worker can waive it.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: as EXP2279. TRANSLATION: existing OV5 path plus about 12 MMIO writes per waived build.
+- ATOMIC CONTRACT: none -- beacon only; the writes occur on waived builds, not per job.
+- WHAT IS STILL UNKNOWN: which pair, whether the compute stamp advanced, whether completions sit unread.
+- Expected: OV5B fence of the stalled pair; stamp below wait with an empty RX -> firmware stall under parallel TA; stamp at or above wait -> barrier was satisfiable, look at completion order; RX not empty -> missed completions. No reset -> report; the beacon may have moved the timing.
+- Failure criteria: a reset is the expected outcome.
+- Recovery: rec2291h (ANS); on a reset save full.log first, then AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2291h/recover.sh.
+- Hashes: sys 680a617f562b, UmdArm64 7643c92b38a9, UmdX64 a70525f0169f, Umd32 25820e794f86; manifest 3329ba4e2405, hardware-manifest 5653c2eae6b5; probe2291.sh 95702b49ba0c (PROBE_LINT_OK); visible recovery rec2291h 2c6a3ba0506196ad; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
+- Recovery rec2291h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2291-waiver-beacon/run2291.sh.
