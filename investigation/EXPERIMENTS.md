@@ -75416,3 +75416,12 @@ ANSSHUT001 HARDWARE BEFORE 2026-11-09T06:20:41Z:
 - WHY THIS HYPOTHESIS: (1) native.c stopped the controller on the first SRB_FUNCTION_SHUTDOWN and later requests got SRB_STATUS_NO_DEVICE; (2) EXP2291/2293 bugcheck 0x1A p2 C000000E is STATUS_NO_SUCH_DEVICE, seen only at restart after sessions with paged-out memory; (3) Microsoft documents that a miniport can receive several shutdown requests before the system is actually shut down.
 - Contracts: WDK storport: complete the shutdown after the cache is flushed; several may arrive. NVMe shutdown (CC.SHN, CSTS.SHST) stays in ScsiStopAdapter via AppleAnsDirectStop. During the flush, later requests are served or ordered (ANS_ORDER_ORDERED), not failed.
 - Falsifiable check: GM runs then shutdown /r on the m1n1 that prints BUGCHECK: code=0x0 and no launcher hang. Failure: a boot failure on the new driver -> ImagePath rollback from the bridge.
+
+EXP2300 HARDWARE BEFORE 2026-11-09T06:35:09Z:
+- WHY THIS HYPOTHESIS: see ANSSHUT001 BEFORE: SHUTDOWN stopped the controller, later paging I/O got STATUS_NO_SUCH_DEVICE (0x1A p2 C000000E).
+- WINDOWS CONTRACT: storport shutdown is a flush, several may arrive. AGX/ASAHI CONTRACT: unchanged. TRANSLATION: none on the GPU side.
+- ATOMIC CONTRACT: none. WHAT IS STILL UNKNOWN: whether the 0xEF and 0x154 cases share this cause.
+- Expected: BUGCHECK ok code=0x0 at the ordered restart, no launcher hang, RECOVERY_DONE. Failure: any non-zero code, a hang, or a boot failure.
+- Recovery: rec2300h (ANS); boot failure -> ImagePath rollback to ANSBUILD011-I from the bridge.
+- Hashes: sys 7b1089543ce3, UmdArm64 fc6927758421, UmdX64 6ccc7671b1a8, Umd32 98e80e38525e; manifest 32c6487a5ead, hardware-manifest f0622b277b77; probe2300.sh 6f3b5a00f52b (PROBE_LINT_OK); visible recovery rec2300h 913ed32eef2358b8; m1n1 0d3a75b3.
+- Recovery rec2300h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2300-shutdown-fix/run2300.sh.
