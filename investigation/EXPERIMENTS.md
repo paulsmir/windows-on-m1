@@ -75444,3 +75444,14 @@ DWM-LEVER ARCHITECT OFFLINE 2026-11-09T19:32:40Z (no hardware; existing captures
 - First discriminator F0 (no code, preregistered in the note, to be run by fork 6 under a new EXP ID): GravityMark HD windowed vs exclusive fullscreen, same-boot ABBA in PERF mode + one ETW attribution run per mode. It bounds the lever (FPS with zero DWM jobs) and selects between "build C/A", "fix the direct-flip path" and "drop the row from the budget".
 - Limits: the sample is one frame type (app render -> DWM -> app compute); the 35 % "foreign job ahead of the render" type is not in it. after-d ring, steady GM pattern verified by job kinds; a mid-run ring is preferred for the next reading.
 - Verdict: none (design). Next: F0.
+
+EXP2301 HARDWARE BEFORE 2026-11-09T19:53:47Z:
+- Pre-state: the recovery guest was found shut down (RECANS001 normal-full.log: PSCI 0x84000008 SYSTEM_OFF at 2026-11-09 ~10:30Z, not requested by this session; machine back at m1n1 proxy). Booted launch-normal-ans.sh at 19:36Z: SSH up, 8 CPUs, APPL0002 Code 28 (package absent), AppleAns from the DriverStore.
+- WHY THIS HYPOTHESIS: (1) EXP2273 hot ring, 7 of 7 frames: a DWM job is submitted +0.06 ms after GravityMark's render completes and completes at +0.85 ms, GravityMark's next compute is kicked at +0.96 ms; (2) EXP2056: the fullscreen path flips the application's primary (CommitCalls 3, SourceAddress status 0), so dxgkrnl may drop the composition there; (3) EXP2056 could not tell the FPS effect (FHD, arms confounded with run order).
+- WINDOWS CONTRACT / AGX/ASAHI CONTRACT / TRANSLATION: unchanged (no code). ATOMIC CONTRACT: none.
+- WHAT IS STILL UNKNOWN: whether dxgkrnl grants a direct/independent flip to the fullscreen swap chain on this adapter (internal dxgkrnl decision), and whether the DWM job is on GravityMark's critical path.
+- Expected: one of the three readings of the spec: (i) DWM packets per GM present ~0 in fullscreen and b,c above a,d by 2.5-4 %; (ii) DWM still composes in fullscreen; (iii) DWM gone, FPS equal within the ABBA spread. BUGCHECK ok code=0x0 at the ordered restart.
+- Failure criteria: mode-set failure or hang entering fullscreen at 1280x720, GM error, TDR/WER, no DxgKrnl events, non-zero BUGCHECK code.
+- Recovery: rec2301h (ANS). Guest ETL/CSV deleted after the fetch.
+- Hashes: sys 099f4e861c00, UmdArm64 cec484ae9d8e, UmdX64 ede76b6e8898, Umd32 4a5d635e6aa6; manifest fee161f52da8, hardware-manifest 285c444de9d6; probe2301.sh 2c8915b6a6f1 (PROBE_LINT_OK); visible recovery rec2301h 56a2ec175572ecc9; m1n1 0d3a75b3.
+- Recovery rec2301h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2301-f0-dwm/run2301.sh.
