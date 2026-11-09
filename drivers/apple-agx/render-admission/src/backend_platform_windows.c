@@ -9032,7 +9032,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       runtime->Initdata.RenderSharedMemory.ComputeOwnQueue ? 1u : 0u,
       runtime->Provider.QueueProvider.Config.HasCompute ? 1u : 0u) ? TRUE : FALSE;
 #endif
-  InterlockedExchange(&Context->GpuRenderTaIndependent, runtime->Ov5Waiver ? 1 : 0);
+  /* EXP2289 (diagnostic, default off): Wom1Ov5TaWaiverNoFeature = 1 keeps the KMD waiver
+   * state but does not publish the feature, so the UMD never takes its OV5 path. */
+  if (AdmissionPlatformSwitchEnabled(Context, L"Wom1Ov5TaWaiverNoFeature"))
+    InterlockedExchange(&Context->GpuRenderTaIndependent, 0);
+  else
+    InterlockedExchange(&Context->GpuRenderTaIndependent, runtime->Ov5Waiver ? 1 : 0);
   AdmissionRecordPlatformStage(Context, AdmissionPlatformComplete,
                                STATUS_SUCCESS);
   return STATUS_SUCCESS;
