@@ -75841,3 +75841,14 @@ Correction to "EXP2302 ... (ACTUAL)" (the original entry stays as written):
 - Next: DUMP3 scope decision (hibernation path stays unsupported/disabled; complete-dump size check optional);
   the normal recovery profile should move to an m1n1 with the BUGCHECK print as a separate validated change.
 - Evidence: .local/experiments/ANSDUMP2/evidence/EXP2305/{trigger.txt,restart-run.log,normal-prev-full.log,post-after-restart.txt,110926-6203-01.dmp}.
+
+EXP2303 HARDWARE BEFORE 2026-11-09T21:14:55Z:
+- WHY THIS HYPOTHESIS: (1) on MUANSCPPC002 the firmware does not describe the second AGX line, so the ISR default-on path must stay inert (architect's offline analysis of 212f09e0e: registration depends on the resource list); (2) per the architect's handoff (OV-ARCHITECT-HANDOFF.md, 2026-11-09T20:54Z) fe119f211/84b91a7cb change no default-path behaviour and pass the offline gate (not re-run by this session); (3) EXP2300 is the same platform with the previous package, so any difference is attributable to the package.
+- WINDOWS CONTRACT: DxgkDdiInterruptRoutine/DPC registration only for interrupt resources PnP hands to StartDevice; TDR callbacks (ResetFromTimeout/RestartFromTimeout) unchanged in this step. AGX/ASAHI CONTRACT: unchanged (completion still detected by the job poll worker when no IRQ resource exists). TRANSLATION: none new on this firmware.
+- ATOMIC CONTRACT: none. The three merges are inseparable only as "the head package"; IRQ behaviour itself is tested separately in IRQD2 (variable = Mu MUIRQ001).
+- WHAT IS STILL UNKNOWN: whether the /W4 MSVC build of the merged head behaves as the clang/offline gates predict on hardware (StartDevice with the ISR code present but no second line).
+- Expected: StartDevice ok (Problem 0); suite PASS 119 FAIL 0; GM d and CS within the perf gate (PERF_GATE_PASS); Wom1IrqRx receipts ABSENT; Wom1JobPoll receipts as in EXP2300; DWM/explorer faults 0; BUGCHECK ok code=0x0 at the ordered restart.
+- Failure criteria: Code 31/43 or stop at StartDevice, any suite regression vs known failures, PERF_GATE_FAIL (>2 %), Wom1IrqRx present, TDR/WER, non-zero BUGCHECK code.
+- Recovery: rec2303h (ANS, m1n1 83a9cf74 / last-good 882985fb); package removed in rollback.
+- Hashes: sys 6baf58aaef9b, UmdArm64 1e9f3d80afe7, UmdX64 a2b1026d8742, Umd32 3ca4c39c8b27; manifest 7c173edb16b7, hardware-manifest 49278f956401; probe2303.sh 66af187e26e8 (PROBE_LINT_OK); visible recovery rec2303h e7f4ac72f090a54f; m1n1 0d3a75b3.
+- Recovery rec2303h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2303-irqd1/run2303.sh.
