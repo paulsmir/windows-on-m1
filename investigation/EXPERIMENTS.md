@@ -75489,3 +75489,31 @@ Two offline parallel sessions reported; both outputs were checked against the fi
 
 Next: TDR stage 2 shared-layer part and unknowns U4/U8 go to parallel offline sessions; KMD-side stage 2 waits
 for the IRQ branch (same file backend_platform_windows.c). Bench order unchanged: EXP2301 F0, then IRQD1/IRQD2.
+
+## EXP2301 — F0: GravityMark HD windowed vs fullscreen, DWM attribution (ACTUAL)
+
+- Stamp: 2026-11-09T20:17:48Z. One boot, default package, m1n1 ansdirect-bugcheck4, Mu MUANSCPPC002, native SSD.
+  All seven GravityMark runs closed normally (wer 0), guest alive after each; 1280x720 fullscreen
+  was accepted by GravityMark ("Set fullscreen mode on 0 screen", "Starting 1280x720").
+- FPS (tools/agx_gm_perf.py summary --skip 10 --window 60), run order w a b c d e f:
+  windowed w 44.35 (warm-up), a 44.26, d 43.27, e 44.04 (ETW run, not FPS evidence);
+  fullscreen b 42.84, c 42.94, f 42.61 (ETW run).
+  ABBA a/b/c/d: windowed mean 43.77, fullscreen mean 42.89 -> fullscreen is 2.0 % slower;
+  windowed spread a-d is 2.3 %, fullscreen spread b-c is 0.2 %.
+- ETW (12 s DxgKrnl, evidence/EXP2301/etw-e windowed, etw-f fullscreen), dwm.exe pid 0x4D4:
+  - GravityMark Present_Info mode is "RedirectedFlip" in BOTH modes (500 presents windowed,
+    489 fullscreen).
+  - dwm.exe presents "Flip" once per GravityMark present in both modes (506 vs 500; 502 vs 489),
+    and queues 2 packets per GravityMark present in both modes (1007/500 = 2.01; 991/489 = 2.03).
+  - MMIOFlipMultiPlaneOverlay source stays 2560x1600, FlipWaitVSync, in both modes: the desktop
+    mode is not changed and the application's buffer is never the scanned-out primary.
+  - IndependentFlip (266): 16 events windowed, 18 fullscreen (not decoded; no change between modes).
+- Expected vs actual: expected one of three readings; actual is reading (ii) of
+  DWM-COMPOSITION-LEVER.md section 4 -- DWM still composes in fullscreen, the direct flip is
+  not granted. The FPS-up prediction of reading (i) is rejected: fullscreen is slower, not faster.
+- Restart: `BUGCHECK ok ... code=0x0`. Recovery rec2301h: RECOVERY_STORAGE_APPLEANS_OK, RECOVERY_DONE.
+  Display, SSH, storage, 8 CPUs alive.
+- Verdict: confirmed (ii). Hypothesis "fullscreen removes the DWM job" rejected for this driver state.
+- Next: C1/C2 are not justified by this run. The next causal target is the display side: why
+  GravityMark's fullscreen present stays RedirectedFlip (no mode change to 1280x720, no direct/
+  independent flip): caps, format, geometry, CheckDirectFlip/MPO support. Architect to specify.
