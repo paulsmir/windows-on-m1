@@ -93,6 +93,24 @@ typedef struct _APPLE_AGX_FIRMWARE_IO {
   void (*RecordPhase)(void *Context, APPLE_AGX_FIRMWARE_PHASE Phase,
                       APPLE_AGX_FIRMWARE_RESULT Result,
                       APPLE_AGX_FW_U32 CompletedMask);
+  /*
+   * Optional, warm restart only (NULL: that entry point returns Invalid).
+   *
+   * ForceStopAsc: stop an ASC CPU whose firmware does not answer and prove
+   * it stopped.  No RTKit message may be sent.  On success the callee has
+   * also retired its initdata publication and both endpoints' host state;
+   * UnpublishInitdata and StopEndpoint are not called for a forced stop.
+   *
+   * RevalidateFirmwareUat: the warm replacement for CreateFirmwareUat.  The
+   * retained UAT roots must be unchanged; the callee re-arms whatever a
+   * second ASC boot needs (handoff) and refreshes the initdata address that
+   * PublishInitdata will return.  It must not create, destroy or re-root
+   * page tables and must not touch the power domain.
+   */
+  APPLE_AGX_FW_BOOL (*ForceStopAsc)(void *Context,
+                                    APPLE_AGX_FW_U64 DeadlineMs);
+  APPLE_AGX_FW_BOOL (*RevalidateFirmwareUat)(void *Context,
+                                             APPLE_AGX_FW_U64 DeadlineMs);
 } APPLE_AGX_FIRMWARE_IO;
 
 void AppleAgxFirmwareInitialize(APPLE_AGX_FIRMWARE *Firmware);
@@ -102,5 +120,48 @@ APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareRollback(
     APPLE_AGX_FIRMWARE *Firmware, const APPLE_AGX_FIRMWARE_IO *Io);
 void AppleAgxFirmwareFail(APPLE_AGX_FIRMWARE *Firmware,
                           APPLE_AGX_FIRMWARE_RESULT Result);
+
+/*
+ * Warm restart (TDR-FIRMWARE-RESTART-RECOVERY.md, stage 2; untested on
+ * hardware until H1).  "Warm" = the ASC CPU and the RTKit session are
+ * stopped and booted again while the power domain stays on and the UAT
+ * stays as it is: PowerOn, CreateFirmwareUat, DestroyFirmwareUat and
+ * PowerOff are never called by these functions.  The warm-stopped state is
+ * Phase == AppleAgxFirmwareUatReady with CompletedMask ==
+ * APPLE_AGX_FIRMWARE_WARM_RETAINED and CleanupMask == 0.
+ *
+ * StopWarm: the orderly stop.  Same cleanup order and deadlines as
+ * AppleAgxFirmwareRollback up to and including StopAsc, then it stops.  A
+ * failed step leaves Phase == AppleAgxFirmwareFailed with the unfinished
+ * bits still set; from there exactly three calls are meaningful: StopWarm
+ * again (resume), ForceStopWarm, or AppleAgxFirmwareRollback (cold).  It
+ * never falls back to a forced stop by itself.
+ *
+ * ForceStopWarm: for a firmware that does not answer.  Calls only
+ * Io->ForceStopAsc; no endpoint stop and no unpublish callback runs.
+ *
+ * StartWarm: from the warm-stopped state only.  RevalidateFirmwareUat, then
+ * the same sequence AppleAgxFirmwareStart runs from BootAsc on, with the
+ * same deadlines.  A failed step warm-stops again (orderly) and returns the
+ * failure with Phase == AppleAgxFirmwareUatReady, so the caller may retry,
+ * force, or roll back cold.
+ *
+ * RestartWarm: StopWarm then StartWarm, for a caller with nothing to
+ * rebuild in between.  A caller that rebuilds firmware-visible memory
+ * between the two halves calls them separately.
+ *
+ * A warm-stopped firmware still owns the UAT and the power domain:
+ * AppleAgxFirmwareRollback from that state destroys the UAT and powers off.
+ */
+#define APPLE_AGX_FIRMWARE_WARM_RETAINED \
+  (APPLE_AGX_FIRMWARE_POWERED | APPLE_AGX_FIRMWARE_UAT_READY)
+APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareStopWarm(
+    APPLE_AGX_FIRMWARE *Firmware, const APPLE_AGX_FIRMWARE_IO *Io);
+APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareForceStopWarm(
+    APPLE_AGX_FIRMWARE *Firmware, const APPLE_AGX_FIRMWARE_IO *Io);
+APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareStartWarm(
+    APPLE_AGX_FIRMWARE *Firmware, const APPLE_AGX_FIRMWARE_IO *Io);
+APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareRestartWarm(
+    APPLE_AGX_FIRMWARE *Firmware, const APPLE_AGX_FIRMWARE_IO *Io);
 
 #endif /* APPLE_AGX_FIRMWARE_H */

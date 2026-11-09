@@ -58,6 +58,12 @@ APPLE_AGX_GFX_HANDOFF_RESULT AppleAgxGfxHandoffAcquire(
     APPLE_AGX_GFX_HANDOFF_STATE *, unsigned long long);
 APPLE_AGX_GFX_HANDOFF_RESULT AppleAgxGfxHandoffInitialize(
     APPLE_AGX_GFX_HANDOFF_STATE *, unsigned long long);
+/* Firmware restart: AppleAgxGfxHandoffInitialize is a no-op once Initialized,
+ * so a second boot in one driver lifetime would skip the magic/flush-slot
+ * handshake. Re-arm it; only with the ASC CPU stopped and the AP lock free.
+ * No handoff memory is written here. */
+APPLE_AGX_GFX_HANDOFF_RESULT AppleAgxGfxHandoffRearm(
+    APPLE_AGX_GFX_HANDOFF_STATE *State);
 APPLE_AGX_GFX_HANDOFF_RESULT AppleAgxGfxHandoffRelease(
     APPLE_AGX_GFX_HANDOFF_STATE *);
 

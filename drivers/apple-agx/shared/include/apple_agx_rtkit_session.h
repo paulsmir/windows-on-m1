@@ -79,4 +79,31 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionStop(
     APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
     APPLE_AGX_ASC_U64 DeadlineMs);
 
+/*
+ * Firmware restart (TDR-FIRMWARE-RESTART-RECOVERY.md, stage 2).  Nothing on
+ * an existing path calls these two.
+ *
+ * StopForRestart is the orderly stop of a booted session: the same AP 0x10 /
+ * IOP 0x10 / RUN-off sequence as AppleAgxRtkitSessionStop, then CPU_CONTROL
+ * is read back and RUN must read 0.  It never clears RUN on a firmware that
+ * did not acknowledge: an ack timeout is returned with the stop phase left
+ * where it stopped (resumable, CPU still running), and a session whose
+ * management boot is not Ready is refused with InvalidState.  The caller
+ * then either retries or calls AppleAgxRtkitSessionForceStop by name.
+ *
+ * ForceStop is for a firmware that does not answer.  It writes RUN off,
+ * reads CPU_CONTROL back and, when RUN reads 0, moves the session to
+ * Running = FALSE / StopComplete from any state.  It sends no RTKit message,
+ * reads no clock and does not wait.  The crash latch and mailbox snapshots
+ * are kept for the receipt; the next start clears the latch.
+ *
+ * After either returns Ok, AppleAgxRtkitSessionStartCpuAndInitializeHandoff
+ * runs a complete second boot.
+ */
+APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionStopForRestart(
+    APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
+    APPLE_AGX_ASC_U64 DeadlineMs);
+APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionForceStop(
+    APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io);
+
 #endif /* APPLE_AGX_RTKIT_SESSION_H */

@@ -74,6 +74,28 @@ typedef struct _APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES {
                                          unsigned long long DeadlineMs);
   unsigned char (*UpdateIdleTimestamp)(void *Context,
                                        unsigned long long DeadlineMs);
+  /*
+   * Optional, warm firmware restart only (TDR-FIRMWARE-RESTART-RECOVERY.md,
+   * stage 2).  With either one NULL the matching FirmwareIo member is NULL
+   * and the warm entry point that needs it returns Invalid.
+   *
+   * ForceStopAsc: clear the ASC CPU RUN bit and prove it reads 0, without
+   * sending an RTKit message (AppleAgxRtkitSessionForceStop).  The provider
+   * then drops its endpoint state and calls UnpublishUatRoots WITHOUT the
+   * handoff lock: the only other lock holder is the CPU just stopped, and a
+   * firmware that died inside its critical section would never release it.
+   *
+   * RevalidateFirmwareUat: called instead of CreateFirmwareUat before a warm
+   * boot.  It must return the SAME root pair the retained UAT was created
+   * with (a different pair fails the restart) and the initdata address of
+   * the firmware-visible graph the caller has rebuilt since the stop.  It
+   * must not create, close or re-root page tables and must not touch power.
+   */
+  unsigned char (*ForceStopAsc)(void *Context, unsigned long long DeadlineMs);
+  unsigned char (*RevalidateFirmwareUat)(
+      void *Context, unsigned long long DeadlineMs,
+      APPLE_AGX_UAT_TTBR_PAIR *Pair,
+      unsigned long long *InitdataAddress);
 } APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES;
 
 typedef struct _APPLE_AGX_FIRMWARE_PROVIDER {

@@ -20,6 +20,14 @@ enum {
   OP_STOP_QUEUES,
   OP_RESET_QUEUES,
   OP_COMPLETE,
+  OP_FW_POWER_ON,
+  OP_FW_CREATE_UAT,
+  OP_FW_BOOT_ASC,
+  OP_FW_STOP_ASC,
+  OP_FW_DESTROY_UAT,
+  OP_FW_POWER_OFF,
+  OP_FW_REVALIDATE_UAT,
+  OP_FW_FORCE_STOP_ASC,
 };
 
 typedef struct _FAKE_BACKEND {
@@ -40,6 +48,7 @@ typedef struct _FAKE_BACKEND {
   unsigned int LastRelocatedFence;
   unsigned int FailStop;
   unsigned int FailRun3d;
+  unsigned int FailCreateQueues;
   /* G2: Relocate produces a compute job; RunCompute calls and refusal. */
   unsigned int ComputeJob, RunComputeCalls, FailRunCompute;
   APPLE_AGX_BACKEND_RUNTIME *Runtime;
@@ -130,6 +139,25 @@ static APPLE_AGX_FIRMWARE_IO FirmwareIo(FAKE_BACKEND *Fake) {
   io.RecordPhase = FwRecord;
   return io;
 }
+
+#define FW_RECORDED(Name, Operation)                                        \
+  static APPLE_AGX_FW_BOOL Name(void *Context, APPLE_AGX_FW_U64 Deadline) { \
+    (void)Deadline;                                                         \
+    return Record((FAKE_BACKEND *)Context, (Operation)) ? 1u : 0u;          \
+  }
+FW_RECORDED(FwPowerOn, OP_FW_POWER_ON)
+FW_RECORDED(FwCreateUat, OP_FW_CREATE_UAT)
+FW_RECORDED(FwBootAsc, OP_FW_BOOT_ASC)
+FW_RECORDED(FwStopAsc, OP_FW_STOP_ASC)
+FW_RECORDED(FwDestroyUat, OP_FW_DESTROY_UAT)
+FW_RECORDED(FwPowerOff, OP_FW_POWER_OFF)
+FW_RECORDED(FwRevalidateUat, OP_FW_REVALIDATE_UAT)
+FW_RECORDED(FwForceStopAsc, OP_FW_FORCE_STOP_ASC)
+#undef FW_RECORDED
+
+/* A platform with the warm-restart primitives, recording the firmware steps
+ * that own hardware resources. */
+static APPLE_AGX_BACKEND_IO WarmBackendIo(FAKE_BACKEND *Fake);
 
 static APPLE_AGX_BOOL Map(void *Context, void **CpuAddress,
                           APPLE_AGX_U64 *GpuAddress,
@@ -234,6 +262,8 @@ static APPLE_AGX_BOOL SimpleUnpublish(void *Context) {
 }
 
 static APPLE_AGX_BOOL CreateQueues(void *Context) {
+  if (((FAKE_BACKEND *)Context)->FailCreateQueues)
+    return APPLE_AGX_FALSE;
   return Record((FAKE_BACKEND *)Context, OP_CREATE_QUEUES);
 }
 
@@ -348,6 +378,19 @@ static APPLE_AGX_BACKEND_IO BackendIo(FAKE_BACKEND *Fake) {
   io.Queues.Reset = ResetQueues;
   io.Complete = Complete;
   io.Retire = Retire;
+  return io;
+}
+
+static APPLE_AGX_BACKEND_IO WarmBackendIo(FAKE_BACKEND *Fake) {
+  APPLE_AGX_BACKEND_IO io = BackendIo(Fake);
+  io.Firmware.PowerOn = FwPowerOn;
+  io.Firmware.CreateFirmwareUat = FwCreateUat;
+  io.Firmware.BootAsc = FwBootAsc;
+  io.Firmware.StopAsc = FwStopAsc;
+  io.Firmware.DestroyFirmwareUat = FwDestroyUat;
+  io.Firmware.PowerOff = FwPowerOff;
+  io.Firmware.RevalidateFirmwareUat = FwRevalidateUat;
+  io.Firmware.ForceStopAsc = FwForceStopAsc;
   return io;
 }
 
@@ -841,6 +884,135 @@ static void TestCanonicalFifoCompletesTwoSubmissionsInOrder(void) {
          AppleAgxBackendRuntimeResultOk);
 }
 
+static void AssertOperations(const FAKE_BACKEND *Fake, unsigned int From,
+                             const unsigned int *Expected,
+                             unsigned int Count) {
+  unsigned int index;
+  assert(Fake->OperationCount == From + Count);
+  for (index = 0u; index < Count; ++index)
+    assert(Fake->Operations[From + index] == Expected[index]);
+}
+
+/* Bugs caught, all of them at the layer the KMD restart will call:
+ *  - the stop half of a restart running the full firmware rollback (UAT
+ *    destroyed = retained-root CLOSE, power off: both refused by the broker
+ *    while a GPU process lives, so ResetFromTimeout fails -> 0x116);
+ *  - the start half running the cold start (PowerOn/CreateFirmwareUat on a
+ *    live root) or skipping the firmware boot, context or queue creation;
+ *  - a cold start accepted on a warm-stopped runtime, which re-initializes
+ *    the firmware state machine and leaks the UAT and the power domain;
+ *  - a failed warm start falling into the cold rollback;
+ *  - a device stop after a warm stop leaving the UAT and power behind. */
+static void TestWarmStopAndStartKeepUatAndPowerAndRebuildTheRest(void) {
+  static const unsigned int cold_start[] = {
+      OP_MAP, OP_ACQUIRE_PREPARED, OP_FLUSH_DEVICE, OP_FW_POWER_ON,
+      OP_FW_CREATE_UAT, OP_FW_BOOT_ASC, OP_PUBLISH_CONTEXT, OP_CREATE_QUEUES,
+  };
+  static const unsigned int warm_stop[] = {
+      OP_STOP_QUEUES, OP_DESTROY_QUEUES, OP_UNPUBLISH_CONTEXT, OP_FW_STOP_ASC,
+      OP_UNMAP,
+  };
+  static const unsigned int warm_start[] = {
+      OP_MAP, OP_ACQUIRE_PREPARED, OP_FLUSH_DEVICE, OP_FW_REVALIDATE_UAT,
+      OP_FW_BOOT_ASC, OP_PUBLISH_CONTEXT, OP_CREATE_QUEUES,
+  };
+  static const unsigned int failed_warm_start[] = {
+      OP_MAP, OP_ACQUIRE_PREPARED, OP_FLUSH_DEVICE, OP_FW_REVALIDATE_UAT,
+      OP_FW_BOOT_ASC, OP_PUBLISH_CONTEXT, OP_UNPUBLISH_CONTEXT,
+      OP_FW_STOP_ASC, OP_UNMAP,
+  };
+  static const unsigned int forced_stop[] = {
+      OP_FW_FORCE_STOP_ASC, OP_STOP_QUEUES, OP_COMPLETE, OP_DESTROY_QUEUES,
+      OP_UNPUBLISH_CONTEXT, OP_UNMAP,
+  };
+  static const unsigned int final_stop[] = {
+      OP_FW_DESTROY_UAT, OP_FW_POWER_OFF,
+  };
+  FAKE_BACKEND fake;
+  APPLE_AGX_BACKEND_RUNTIME runtime;
+  APPLE_AGX_BACKEND_IO io;
+  APPLE_AGX_BACKEND_SUBMISSION submission;
+  unsigned int base;
+  unsigned int cycle;
+
+  memset(&fake, 0, sizeof(fake));
+  io = WarmBackendIo(&fake);
+  submission = Submission(&fake);
+  AppleAgxBackendRuntimeInitialize(&runtime, 3ULL);
+  fake.Runtime = &runtime;
+  /* Nothing to restart yet. */
+  assert(AppleAgxBackendRuntimeStartWarm(&runtime, &io) ==
+         AppleAgxBackendRuntimeResultInvalidState);
+  assert(fake.OperationCount == 0u);
+  assert(AppleAgxBackendRuntimeStart(&runtime, &io) ==
+         AppleAgxBackendRuntimeResultOk);
+  AssertOperations(&fake, 0u, cold_start, 8u);
+
+  for (cycle = 0u; cycle < 2u; ++cycle) {
+    base = fake.OperationCount;
+    assert(AppleAgxBackendRuntimeStopWarm(&runtime) ==
+           AppleAgxBackendRuntimeResultOk);
+    assert(runtime.Phase == AppleAgxBackendRuntimeStopped);
+    assert(runtime.Firmware.Phase == AppleAgxFirmwareUatReady);
+    assert(runtime.Firmware.CompletedMask == APPLE_AGX_FIRMWARE_WARM_RETAINED);
+    AssertOperations(&fake, base, warm_stop, 5u);
+
+    base = fake.OperationCount;
+    assert(AppleAgxBackendRuntimeStart(&runtime, &io) ==
+           AppleAgxBackendRuntimeResultInvalidState);
+    assert(fake.OperationCount == base);
+    assert(runtime.Firmware.CompletedMask == APPLE_AGX_FIRMWARE_WARM_RETAINED);
+
+    fake.FailCreateQueues = 1u;
+    assert(AppleAgxBackendRuntimeStartWarm(&runtime, &io) ==
+           AppleAgxBackendRuntimeResultQueueFailed);
+    assert(runtime.Phase == AppleAgxBackendRuntimeStopped);
+    assert(runtime.Firmware.Phase == AppleAgxFirmwareUatReady);
+    AssertOperations(&fake, base, failed_warm_start, 9u);
+    fake.FailCreateQueues = 0u;
+
+    base = fake.OperationCount;
+    assert(AppleAgxBackendRuntimeStartWarm(&runtime, &io) ==
+           AppleAgxBackendRuntimeResultOk);
+    assert(runtime.Phase == AppleAgxBackendRuntimeReady);
+    assert(runtime.Firmware.Phase == AppleAgxFirmwareIdleTimestampUpdated);
+    AssertOperations(&fake, base, warm_start, 7u);
+  }
+  /* The restarted runtime takes work like a freshly started one. */
+  assert(AppleAgxBackendRuntimeSubmit(&runtime, &submission) ==
+         AppleAgxBackendRuntimeResultOk);
+  assert(runtime.Phase == AppleAgxBackendRuntimeSubmitted);
+
+  /* Firmware that does not answer: forced firmware stop first, then the
+   * ordinary warm teardown, which finds the CPU already stopped. */
+  fake.OperationCount = 0u;
+  assert(AppleAgxFirmwareForceStopWarm(&runtime.Firmware,
+                                       &runtime.Io.Firmware) ==
+         AppleAgxFirmwareResultOk);
+  assert(AppleAgxBackendRuntimeStopWarm(&runtime) ==
+         AppleAgxBackendRuntimeResultOk);
+  AssertOperations(&fake, 0u, forced_stop, 6u);
+  assert(fake.CompletionCount == 1u && fake.CompletionFence == 77u);
+  assert(fake.CompletionStatus == AppleAgxBackendCompletionCancelled);
+
+  base = fake.OperationCount;
+  assert(AppleAgxBackendRuntimeStopWarm(&runtime) ==
+         AppleAgxBackendRuntimeResultOk);
+  assert(fake.OperationCount == base);
+  assert(AppleAgxBackendRuntimeStop(&runtime) ==
+         AppleAgxBackendRuntimeResultOk);
+  AssertOperations(&fake, base, final_stop, 2u);
+  assert(runtime.Firmware.CompletedMask == 0u &&
+         runtime.Firmware.CleanupMask == 0u);
+  assert(CountOperation(&fake, OP_FW_POWER_ON) == 0u &&
+         CountOperation(&fake, OP_FW_CREATE_UAT) == 0u);
+  /* And a cold start is possible again. */
+  assert(AppleAgxBackendRuntimeStart(&runtime, &io) ==
+         AppleAgxBackendRuntimeResultOk);
+  assert(AppleAgxBackendRuntimeStop(&runtime) ==
+         AppleAgxBackendRuntimeResultOk);
+}
+
 int main(void) {
   TestCanonicalEntryBridge();
   TestJoinedCompletion();
@@ -853,6 +1025,7 @@ int main(void) {
   TestFaultWithoutQuiesceDoesNotCompleteOrDropFence();
   TestCanonicalFifoCompletesTwoSubmissionsInOrder();
   TestRecoveredCompletesWithoutStop();
+  TestWarmStopAndStartKeepUatAndPowerAndRebuildTheRest();
   puts("apple_agx_backend_runtime_test: ok");
   return 0;
 }

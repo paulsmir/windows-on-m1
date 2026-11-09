@@ -307,6 +307,18 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeCancel(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, APPLE_AGX_BACKEND_U32 Fence);
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT
 AppleAgxG13QueueRuntimeReset(APPLE_AGX_G13_QUEUE_RUNTIME *Runtime);
+/* Firmware restart (TDR-FIRMWARE-RESTART-RECOVERY.md 4.3, stage 2): is this
+ * runtime at the start of a queue lifetime the restarted firmware has never
+ * seen?  TRUE only when it is Ready with nothing pending, the next
+ * submission will carry InitBM and NewQueue on every queue, and every bound
+ * ring reads write == done == 0, i.e. the rings were rebuilt and no ring
+ * index of the previous firmware lifetime is carried over.
+ * AppleAgxG13QueueRuntimeReset does NOT produce this state: it rebases the
+ * write pointers onto the old done pointers, which is right inside one
+ * firmware lifetime and wrong across a restart.  Read-only; two ReadU32 per
+ * queue. */
+APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueRuntimeLifetimeIsFresh(
+    const APPLE_AGX_G13_QUEUE_RUNTIME *Runtime);
 /* Worker-serialized, diagnostic only. Target 1=head, 2=successor; invalid,
  * stale, already retired or second arms are rejected. Release is called only
  * after Resetting has stopped the worker. Poll still proves physical retirement. */

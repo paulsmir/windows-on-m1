@@ -156,3 +156,11 @@ APPLE_AGX_GFX_HANDOFF_RESULT AppleAgxGfxHandoffRelease(
   s->Locked = 0u;
   return AppleAgxGfxHandoffResultOk;
 }
+
+APPLE_AGX_GFX_HANDOFF_RESULT AppleAgxGfxHandoffRearm(
+    APPLE_AGX_GFX_HANDOFF_STATE *s) {
+  if (s == AGX_NULL || !s->Bound || s->Locked)
+    return AppleAgxGfxHandoffResultInvalidState;
+  s->Initialized = 0u;
+  return AppleAgxGfxHandoffResultOk;
+}

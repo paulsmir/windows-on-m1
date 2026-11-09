@@ -332,6 +332,60 @@ static APPLE_AGX_FW_BOOL provider_stop_asc(void *context,
   return APPLE_AGX_FW_TRUE;
 }
 
+static APPLE_AGX_FW_BOOL provider_force_stop_asc(void *context,
+                                                 APPLE_AGX_FW_U64 deadline) {
+  APPLE_AGX_FIRMWARE_PROVIDER *provider = context;
+  unsigned char success;
+  if (!at_passive(provider) ||
+      provider->Primitives.ForceStopAsc == APPLE_AGX_PROVIDER_NULL)
+    return APPLE_AGX_FW_FALSE;
+  /* The CPU stop comes first and unconditionally; bookkeeping that can fail
+   * follows and is retried by calling this again. */
+  if (!provider->Primitives.ForceStopAsc(provider->Primitives.Context,
+                                         deadline)) {
+    record_boot(provider, APPLE_AGX_PROVIDER_BOOT_CLEANUP, 0u);
+    return APPLE_AGX_FW_FALSE;
+  }
+  provider->State &= ~(APPLE_AGX_FIRMWARE_PROVIDER_ASC |
+                       APPLE_AGX_FIRMWARE_PROVIDER_FW_ENDPOINT |
+                       APPLE_AGX_FIRMWARE_PROVIDER_DOORBELL_ENDPOINT);
+  success = 1u;
+  if (provider->Handoff->Locked != 0u && !release_handoff(provider))
+    success = 0u;
+  if (success &&
+      (provider->State & APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED) != 0u) {
+    /* No handoff acquire: see ForceStopAsc in the primitives contract. */
+    if (provider->Primitives.UnpublishUatRoots(provider->Primitives.Context))
+      provider->State &= ~APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED;
+    else
+      success = 0u;
+  }
+  record_boot(provider, APPLE_AGX_PROVIDER_BOOT_CLEANUP, success);
+  return success ? APPLE_AGX_FW_TRUE : APPLE_AGX_FW_FALSE;
+}
+
+static APPLE_AGX_FW_BOOL provider_revalidate_uat(void *context,
+                                                 APPLE_AGX_FW_U64 deadline) {
+  APPLE_AGX_FIRMWARE_PROVIDER *provider = context;
+  APPLE_AGX_UAT_TTBR_PAIR pair = {0ULL, 0ULL};
+  unsigned long long address = 0ULL;
+  if (!at_passive(provider) ||
+      provider->Primitives.RevalidateFirmwareUat == APPLE_AGX_PROVIDER_NULL ||
+      provider->State != (APPLE_AGX_FIRMWARE_PROVIDER_INITIALIZED |
+                          APPLE_AGX_FIRMWARE_PROVIDER_POWERED |
+                          APPLE_AGX_FIRMWARE_PROVIDER_UAT) ||
+      provider->Handoff->Locked != 0u ||
+      !provider->Primitives.RevalidateFirmwareUat(
+          provider->Primitives.Context, deadline, &pair, &address) ||
+      pair.Ttbr0 != provider->Pair.Ttbr0 ||
+      pair.Ttbr1 != provider->Pair.Ttbr1 || address == 0ULL ||
+      AppleAgxGfxHandoffRearm(provider->Handoff) !=
+          AppleAgxGfxHandoffResultOk)
+    return APPLE_AGX_FW_FALSE;
+  provider->InitdataAddress = address;
+  return APPLE_AGX_FW_TRUE;
+}
+
 static APPLE_AGX_FW_BOOL provider_destroy_uat(void *context,
                                               APPLE_AGX_FW_U64 deadline) {
   APPLE_AGX_FIRMWARE_PROVIDER *provider = context;
@@ -397,6 +451,14 @@ APPLE_AGX_FIRMWARE_PROVIDER_RESULT AppleAgxFirmwareProviderInitialize(
   firmware_io->DestroyFirmwareUat = provider_destroy_uat;
   firmware_io->PowerOff = provider_power_off;
   firmware_io->RecordPhase = APPLE_AGX_PROVIDER_NULL;
+  firmware_io->ForceStopAsc =
+      primitives->ForceStopAsc != APPLE_AGX_PROVIDER_NULL
+          ? provider_force_stop_asc
+          : APPLE_AGX_PROVIDER_NULL;
+  firmware_io->RevalidateFirmwareUat =
+      primitives->RevalidateFirmwareUat != APPLE_AGX_PROVIDER_NULL
+          ? provider_revalidate_uat
+          : APPLE_AGX_PROVIDER_NULL;
   return AppleAgxFirmwareProviderResultOk;
 }
 

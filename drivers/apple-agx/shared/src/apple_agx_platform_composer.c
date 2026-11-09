@@ -27,6 +27,9 @@ FW_SIMPLE(fw_unpublish, UnpublishInitdata)
 FW_SIMPLE(fw_stop_asc, StopAsc)
 FW_SIMPLE(fw_destroy_uat, DestroyFirmwareUat)
 FW_SIMPLE(fw_power_off, PowerOff)
+/* Optional warm-restart members: forwarded only when the source has them. */
+FW_SIMPLE(fw_force_stop_asc, ForceStopAsc)
+FW_SIMPLE(fw_revalidate_uat, RevalidateFirmwareUat)
 #undef FW_SIMPLE
 
 static APPLE_AGX_FW_BOOL fw_endpoint(void *Context, APPLE_AGX_FW_U32 Endpoint,
@@ -207,6 +210,13 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformComposerInitialize(
   Io->Firmware.DestroyFirmwareUat = fw_destroy_uat;
   Io->Firmware.PowerOff = fw_power_off;
   Io->Firmware.RecordPhase = fw_record;
+  Io->Firmware.ForceStopAsc =
+      Composer->Firmware.ForceStopAsc != COMPOSER_NULL ? fw_force_stop_asc
+                                                       : COMPOSER_NULL;
+  Io->Firmware.RevalidateFirmwareUat =
+      Composer->Firmware.RevalidateFirmwareUat != COMPOSER_NULL
+          ? fw_revalidate_uat
+          : COMPOSER_NULL;
   Io->Image.Relocate = image_relocate;
   Io->RenderContext.Publish = render_publish;
   Io->RenderContext.Unpublish = render_unpublish;

@@ -16,6 +16,8 @@ typedef struct _FAKE_SESSION_ASC {
   unsigned long long PendingPayload;
   unsigned char FailWrite;
   unsigned char FailControlWrite;
+  /* The write is accepted but the RUN bit does not clear. */
+  unsigned char StickyRun;
   unsigned int CpuStatus[8];
   unsigned int CpuStatusCount;
   unsigned int CpuStatusIndex;
@@ -76,6 +78,8 @@ static unsigned char FakeWrite32(void *Context, unsigned int Offset,
   if (fake->FailWrite || fake->FailControlWrite ||
       Offset != J313_AGX_G2_ASC_CPU_CONTROL_OFFSET)
     return 0u;
+  if (fake->StickyRun)
+    Value |= fake->Control & APPLE_AGX_ASC_CPU_RUN;
   fake->Control = Value;
   return 1u;
 }
@@ -487,6 +491,235 @@ static void TestCrashlogRefusesUnbackedRequestsAndDetectsCrash(void) {
   }
 }
 
+static void BootFresh(FAKE_SESSION_ASC *fake, APPLE_AGX_ASC_IO *io,
+                      APPLE_AGX_RTKIT_SESSION *session) {
+  memset(fake, 0, sizeof(*fake));
+  QueueBoot(fake);
+  *io = MakeIo(fake);
+  AppleAgxRtkitSessionInitialize(session);
+  assert(AppleAgxRtkitSessionBoot(session, io, NULL, NULL, NULL, 100u) ==
+         AppleAgxRtkitSessionResultOk);
+  assert(fake->SendCount == 4u);
+}
+
+/* The four messages of a management boot: IOP 0x220, HELLO reply, EPMAP
+ * reply, AP 0x20.  A second boot must send all of them again. */
+static void AssertFullBootSent(const FAKE_SESSION_ASC *fake,
+                               unsigned int first) {
+  assert(fake->SendCount == first + 4u);
+  assert(fake->SendPayload[first] == 0x0060000000000220ULL);
+  assert(fake->SendPayload[first + 1u] == 0x0020000000040004ULL);
+  assert(fake->SendPayload[first + 2u] == 0x0088000000000000ULL);
+  assert(fake->SendPayload[first + 3u] == 0x00b0000000000020ULL);
+}
+
+/* Bug caught (design 3.3, apple_agx_rtkit_session.c start guard): an orderly
+ * stop whose IOP ack never arrives leaves Running set and the stop phase
+ * mid-way; every later start then returns InvalidState and nothing leads
+ * out, so a TDR restart could never boot again.  Also caught: the orderly
+ * path quietly clearing RUN on a firmware that did not acknowledge, which
+ * would make hardware runs H1 (orderly) and H1b (forced) indistinguishable. */
+static void TestIopAckTimeoutIsLeftOnlyByNamedForceThenFullBoot(void) {
+  FAKE_SESSION_ASC fake;
+  APPLE_AGX_ASC_IO io;
+  APPLE_AGX_RTKIT_SESSION session;
+  unsigned int sends;
+
+  BootFresh(&fake, &io, &session);
+  Queue(&fake, 0x00b0000000000010ULL);
+  assert(AppleAgxRtkitSessionStopForRestart(&session, &io, 115u) ==
+         AppleAgxRtkitSessionResultTimeout);
+  assert(session.Running);
+  assert(session.StopPhase == AppleAgxRtkitStopIopRequested);
+  assert((fake.Control & APPLE_AGX_ASC_CPU_RUN) != 0u);
+  sends = fake.SendCount;
+  assert(sends == 6u);
+
+  /* The half-stopped CPU is still running: a start is refused untouched. */
+  assert(AppleAgxRtkitSessionStartCpuAndInitializeHandoff(
+             &session, &io, NULL, 1000u) ==
+         AppleAgxRtkitSessionResultInvalidState);
+  assert(session.StopPhase == AppleAgxRtkitStopIopRequested);
+  assert(fake.SendCount == sends);
+
+  assert(AppleAgxRtkitSessionForceStop(&session, &io) ==
+         AppleAgxRtkitSessionResultOk);
+  assert(!session.Running && !session.CpuReady);
+  assert(session.StopPhase == AppleAgxRtkitStopComplete);
+  assert((fake.Control & APPLE_AGX_ASC_CPU_RUN) == 0u);
+  assert(fake.SendCount == sends);
+
+  fake.ReceiveIndex = fake.ReceiveCount = 0u;
+  QueueBoot(&fake);
+  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 1000u) ==
+         AppleAgxRtkitSessionResultOk);
+  assert(session.Running && session.CpuReady);
+  assert(session.StopPhase == AppleAgxRtkitStopIdle);
+  assert((fake.Control & APPLE_AGX_ASC_CPU_RUN) != 0u);
+  AssertFullBootSent(&fake, sends);
+}
+
+/* Bug caught: a second boot that inherits the first lifetime's session
+ * state: a stale Ready boot machine (no HELLO/EPMAP handshake is run),
+ * stale receive counters in the receipt, or the crash latch of the old
+ * firmware making every drain of the new one report FirmwareCrashed. */
+static void TestOrderlyStopThenSecondBootStartsACleanSession(void) {
+  FAKE_SESSION_ASC fake;
+  APPLE_AGX_ASC_IO io;
+  APPLE_AGX_RTKIT_SESSION session;
+  unsigned int drained;
+  unsigned int cycle;
+
+  BootFresh(&fake, &io, &session);
+  for (cycle = 0u; cycle < 3u; ++cycle) {
+    unsigned long long deadline = 1000u * (cycle + 1u);
+    unsigned int sends;
+    fake.ReceiveIndex = fake.ReceiveCount = 0u;
+    Queue(&fake, 0x0042000000000000ULL);
+    fake.ReceiveEndpoint[0] = 0x20u;
+    assert(AppleAgxRtkitSessionDrainRuntime(&session, &io, 64u, &drained) ==
+           AppleAgxRtkitSessionResultOk && drained == 1u);
+    assert(session.ReceivedCount == 5u && session.LastRxEndpoint == 0x20u);
+
+    fake.ReceiveIndex = fake.ReceiveCount = 0u;
+    Queue(&fake, 0x00b0000000000010ULL);
+    Queue(&fake, 0x0070000000000010ULL);
+    sends = fake.SendCount;
+    assert(AppleAgxRtkitSessionStopForRestart(&session, &io, deadline) ==
+           AppleAgxRtkitSessionResultOk);
+    assert(fake.SendCount == sends + 2u);
+    assert(fake.SendPayload[sends] == 0x00b0000000000010ULL);
+    assert(fake.SendPayload[sends + 1u] == 0x0060000000000010ULL);
+    assert(!session.Running);
+    assert(session.StopPhase == AppleAgxRtkitStopComplete);
+    assert((fake.Control & APPLE_AGX_ASC_CPU_RUN) == 0u);
+    assert(!AppleAgxRtkitBootIsReady(&session.Boot));
+    assert(session.Boot.NegotiatedVersion == 0u && !session.Boot.Begun);
+    /* No mailbox traffic against a stopped CPU. */
+    assert(AppleAgxRtkitSessionDrainRuntime(&session, &io, 64u, &drained) ==
+           AppleAgxRtkitSessionResultInvalidState);
+    assert(AppleAgxRtkitSessionHeartbeat(&session, &io, deadline) ==
+           AppleAgxRtkitSessionResultInvalidState);
+
+    fake.ReceiveIndex = fake.ReceiveCount = 0u;
+    fake.SendCount = 0u;
+    QueueBoot(&fake);
+    assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL,
+                                    deadline) == AppleAgxRtkitSessionResultOk);
+    AssertFullBootSent(&fake, 0u);
+    assert(session.Boot.NegotiatedVersion == 4u);
+    assert(session.ReceivedCount == 4u);
+    assert(session.LastRxEndpoint == 0u);
+    assert(session.LastRxPayload == 0x00b0000000000020ULL);
+    assert(session.StopPhase == AppleAgxRtkitStopIdle);
+  }
+
+  /* F2: the old lifetime crashed.  It cannot be stopped in order, and its
+   * latch must not outlive the forced stop and the next boot. */
+  session.CrashlogReplySent = APPLE_AGX_RTKIT_TRUE;
+  fake.ReceiveIndex = fake.ReceiveCount = 0u;
+  Queue(&fake, 1ULL << 52u);
+  fake.ReceiveEndpoint[0] = 1u;
+  assert(AppleAgxRtkitSessionDrainRuntime(&session, &io, 64u, &drained) ==
+         AppleAgxRtkitSessionResultFirmwareCrashed);
+  assert(AppleAgxRtkitSessionForceStop(&session, &io) ==
+         AppleAgxRtkitSessionResultOk);
+  assert(session.CrashlogCrashed);
+  fake.ReceiveIndex = fake.ReceiveCount = 0u;
+  fake.SendCount = 0u;
+  QueueBoot(&fake);
+  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 9000u) ==
+         AppleAgxRtkitSessionResultOk);
+  AssertFullBootSent(&fake, 0u);
+  assert(!session.CrashlogCrashed && !session.CrashlogReplySent);
+  fake.ReceiveIndex = fake.ReceiveCount = 0u;
+  assert(AppleAgxRtkitSessionDrainRuntime(&session, &io, 64u, &drained) ==
+         AppleAgxRtkitSessionResultOk && drained == 0u);
+}
+
+/* Bug caught: a forced stop that talks to the dead firmware (a mailbox
+ * write, an ack wait, a clock read inside ResetFromTimeout), or one that
+ * reports success while CPU_CONTROL still reads RUN, after which the KMD
+ * would free memory the GPU coprocessor can still reach. */
+static void TestForceStopSendsNothingAndProvesRunReadsZero(void) {
+  FAKE_SESSION_ASC fake;
+  APPLE_AGX_ASC_IO io;
+  APPLE_AGX_RTKIT_SESSION session;
+  unsigned long long now;
+
+  BootFresh(&fake, &io, &session);
+  now = fake.Now;
+  /* Anything but a CPU_CONTROL read/write would dereference NULL. */
+  io.Write64 = NULL; io.Read64 = NULL; io.NowMs = NULL; io.Pause = NULL;
+
+  fake.StickyRun = 1u;
+  assert(AppleAgxRtkitSessionForceStop(&session, &io) ==
+         AppleAgxRtkitSessionResultCleanupFailed);
+  assert(session.Running);
+  assert((fake.Control & APPLE_AGX_ASC_CPU_RUN) != 0u);
+  fake.StickyRun = 0u;
+  fake.FailControlWrite = 1u;
+  assert(AppleAgxRtkitSessionForceStop(&session, &io) ==
+         AppleAgxRtkitSessionResultCleanupFailed);
+  assert(session.Running);
+  fake.FailControlWrite = 0u;
+
+  assert(AppleAgxRtkitSessionForceStop(&session, &io) ==
+         AppleAgxRtkitSessionResultOk);
+  assert(!session.Running);
+  assert(session.StopPhase == AppleAgxRtkitStopComplete);
+  assert((fake.Control & APPLE_AGX_ASC_CPU_RUN) == 0u);
+  assert(fake.SendCount == 4u && fake.Now == now);
+  /* Idempotent, and valid on a session that never started. */
+  assert(AppleAgxRtkitSessionForceStop(&session, &io) ==
+         AppleAgxRtkitSessionResultOk);
+  AppleAgxRtkitSessionInitialize(&session);
+  assert(AppleAgxRtkitSessionForceStop(&session, &io) ==
+         AppleAgxRtkitSessionResultOk);
+  assert(fake.SendCount == 4u && fake.Now == now);
+  io = MakeIo(&fake);
+  fake.ReceiveIndex = fake.ReceiveCount = 0u;
+  QueueBoot(&fake);
+  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 1000u) ==
+         AppleAgxRtkitSessionResultOk);
+  AssertFullBootSent(&fake, 4u);
+}
+
+/* Bug caught: the orderly restart stop reporting success without proof
+ * (RUN still reads 1, so the "second boot" would run on a CPU that never
+ * stopped), and the legacy handshake-free RUN-off of a half-booted session
+ * being reachable through the orderly entry point. */
+static void TestOrderlyRestartStopNeedsProofAndNeverForces(void) {
+  FAKE_SESSION_ASC fake;
+  APPLE_AGX_ASC_IO io;
+  APPLE_AGX_RTKIT_SESSION session;
+
+  BootFresh(&fake, &io, &session);
+  Queue(&fake, 0x00b0000000000010ULL);
+  Queue(&fake, 0x0070000000000010ULL);
+  fake.StickyRun = 1u;
+  assert(AppleAgxRtkitSessionStopForRestart(&session, &io, 1000u) ==
+         AppleAgxRtkitSessionResultCleanupFailed);
+  assert(session.Running);
+  assert(AppleAgxRtkitSessionStartCpuAndInitializeHandoff(
+             &session, &io, NULL, 1000u) ==
+         AppleAgxRtkitSessionResultInvalidState);
+  fake.StickyRun = 0u;
+  assert(AppleAgxRtkitSessionForceStop(&session, &io) ==
+         AppleAgxRtkitSessionResultOk);
+
+  /* CPU started, management boot not run: not stoppable in order. */
+  assert(AppleAgxRtkitSessionStartCpuAndInitializeHandoff(
+             &session, &io, NULL, 2000u) == AppleAgxRtkitSessionResultOk);
+  assert(AppleAgxRtkitSessionStopForRestart(&session, &io, 2000u) ==
+         AppleAgxRtkitSessionResultInvalidState);
+  assert(session.Running);
+  assert((fake.Control & APPLE_AGX_ASC_CPU_RUN) != 0u);
+  assert(AppleAgxRtkitSessionForceStop(&session, &io) ==
+         AppleAgxRtkitSessionResultOk);
+  assert((fake.Control & APPLE_AGX_ASC_CPU_RUN) == 0u);
+}
+
 int main(void) {
   TestCrashlogRefusesUnbackedRequestsAndDetectsCrash();
   TestCrashlogGrantUsesOnlyRegisteredUatBuffer();
@@ -500,5 +733,9 @@ int main(void) {
   TestStopCleanupFailurePreservesRetryState();
   TestStopResumesApAckWithoutReplayingRequest();
   TestStopResumesIopAckWithoutReplayingEitherRequest();
+  TestIopAckTimeoutIsLeftOnlyByNamedForceThenFullBoot();
+  TestOrderlyStopThenSecondBootStartsACleanSession();
+  TestForceStopSendsNothingAndProvesRunReadsZero();
+  TestOrderlyRestartStopNeedsProofAndNeverForces();
   return 0;
 }

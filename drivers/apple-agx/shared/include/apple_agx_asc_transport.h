@@ -51,6 +51,10 @@ APPLE_AGX_ASC_RESULT AppleAgxAscReadOutboxControl(
     const APPLE_AGX_ASC_IO *Io, APPLE_AGX_ASC_U32 *Control);
 APPLE_AGX_ASC_RESULT AppleAgxAscSetRun(const APPLE_AGX_ASC_IO *Io,
                                        APPLE_AGX_ASC_BOOL Run);
+/* Read CPU_CONTROL back (the register AppleAgxAscSetRun modifies). One read,
+ * no wait, no clock: usable as the stop proof of a firmware restart. */
+APPLE_AGX_ASC_RESULT AppleAgxAscReadCpuControl(const APPLE_AGX_ASC_IO *Io,
+                                                APPLE_AGX_ASC_U32 *Control);
 APPLE_AGX_ASC_RESULT AppleAgxAscWaitRunning(const APPLE_AGX_ASC_IO *Io,
                                             APPLE_AGX_ASC_U64 DeadlineMs,
                                             APPLE_AGX_ASC_U32 *Status);

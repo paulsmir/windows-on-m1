@@ -296,5 +296,25 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeAcknowledgeCompletion(
     APPLE_AGX_BACKEND_RUNTIME *Runtime);
 APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStop(
     APPLE_AGX_BACKEND_RUNTIME *Runtime);
+/*
+ * Warm firmware restart (TDR-FIRMWARE-RESTART-RECOVERY.md, stage 2; nothing
+ * calls these yet).  StopWarm is AppleAgxBackendRuntimeStop with
+ * AppleAgxFirmwareStopWarm in place of the full rollback: queues, render
+ * context and arena go as usual, the UAT and the power domain stay.
+ * StartWarm is AppleAgxBackendRuntimeStart with AppleAgxFirmwareStartWarm
+ * and is accepted only on a warm-stopped firmware.
+ *
+ * Between the two the caller must NOT call AppleAgxBackendRuntimeInitialize
+ * (it would forget the retained UAT and power).  A cold
+ * AppleAgxBackendRuntimeStart is refused while the firmware is retained; a
+ * cold AppleAgxBackendRuntimeStop after a warm stop completes the teardown.
+ * For a firmware that does not answer, call AppleAgxFirmwareForceStopWarm
+ * on Runtime->Firmware / Runtime->Io.Firmware first; StopWarm then finds the
+ * CPU stopped and only tears the host state down.
+ */
+APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStopWarm(
+    APPLE_AGX_BACKEND_RUNTIME *Runtime);
+APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStartWarm(
+    APPLE_AGX_BACKEND_RUNTIME *Runtime, const APPLE_AGX_BACKEND_IO *Io);
 
 #endif /* APPLE_AGX_BACKEND_RUNTIME_H */

@@ -81,6 +81,15 @@ APPLE_AGX_ASC_RESULT AppleAgxAscSetRun(const APPLE_AGX_ASC_IO *Io,
   return AppleAgxAscResultOk;
 }
 
+APPLE_AGX_ASC_RESULT AppleAgxAscReadCpuControl(const APPLE_AGX_ASC_IO *Io,
+                                                APPLE_AGX_ASC_U32 *Control) {
+  if (!AppleAgxAscReadIoValid(Io) || Control == APPLE_AGX_ASC_NULL)
+    return AppleAgxAscResultInvalidArgument;
+  if (!Io->Read32(Io->Context, J313_AGX_G2_ASC_CPU_CONTROL_OFFSET, Control))
+    return AppleAgxAscResultTransportFailed;
+  return AppleAgxAscResultOk;
+}
+
 APPLE_AGX_ASC_RESULT AppleAgxAscWaitRunning(const APPLE_AGX_ASC_IO *Io,
                                             APPLE_AGX_ASC_U64 DeadlineMs,
                                             APPLE_AGX_ASC_U32 *Status) {
