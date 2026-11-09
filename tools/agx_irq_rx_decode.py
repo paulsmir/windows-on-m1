@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Decode the Wom1IrqRx receipt (render_admission.h ADMISSION_IRQ_RX_RECEIPT v1).
+"""Decode the Wom1IrqRx receipt (render_admission.h ADMISSION_IRQ_RX_RECEIPT v1-v3).
 
 Usage: agx_irq_rx_decode.py <kmd-receipts.txt | raw .bin> [--before <kmd-receipts.txt>]
 
@@ -19,10 +19,14 @@ FIELDS = ("Version", "Bytes", "ScanoutVector", "MailboxVector", "Armed",
           "WorkerSyncPops", "WorkerSyncPopHits", "RingHighWater")
 FIELDS_V2 = FIELDS + ("IrqCompletionOn", "DpcQueued", "DpcWakes", "WaitEarly",
                       "WaitTimeout", "WaitSkipped")
+# v3 (default-on plan): messages dropped while not armed, sticky ring overflow
+FIELDS_V3 = FIELDS_V2 + ("Discarded", "Overflow")
 LAYOUT = struct.Struct("<" + "I" * len(FIELDS))
 LAYOUT_V2 = struct.Struct("<" + "I" * len(FIELDS_V2))
-COUNTERS = FIELDS_V2[5:]
-NON_COUNTERS = {"RingHighWater", "IrqCompletionOn"}
+LAYOUT_V3 = struct.Struct("<" + "I" * len(FIELDS_V3))
+VERSIONS = {1: (FIELDS, LAYOUT), 2: (FIELDS_V2, LAYOUT_V2), 3: (FIELDS_V3, LAYOUT_V3)}
+COUNTERS = FIELDS_V3[5:]
+NON_COUNTERS = {"RingHighWater", "IrqCompletionOn", "Overflow"}
 
 
 def load(path):
@@ -41,13 +45,15 @@ def decode(blob):
     if len(blob) < LAYOUT.size:
         raise SystemExit(f"Wom1IrqRx too short: {len(blob)} bytes")
     version = struct.unpack_from("<I", blob, 0)[0]
-    fields, layout = (FIELDS, LAYOUT) if version == 1 else (FIELDS_V2, LAYOUT_V2)
+    if version not in VERSIONS:
+        raise SystemExit(f"unsupported Wom1IrqRx version {version}")
+    fields, layout = VERSIONS[version]
     if len(blob) < layout.size:
         raise SystemExit(f"Wom1IrqRx v{version} too short: {len(blob)} bytes")
     values = dict(zip(fields, layout.unpack_from(blob, 0)))
-    if version not in (1, 2) or values["Bytes"] != layout.size:
+    if values["Bytes"] != layout.size:
         raise SystemExit(f"unsupported Wom1IrqRx version {version} size {values['Bytes']}")
-    for key in FIELDS_V2:
+    for key in FIELDS_V3:
         values.setdefault(key, 0)
     return values
 
@@ -70,6 +76,9 @@ def main():
     if now["IsrMessages"]:
         share = now["WorkerSyncPopHits"] / max(1, now["IsrMessages"] + now["WorkerSyncPopHits"])
         print(f"worker self-pop share: {share:.3%}")
+    if now["RingDrops"] or now["Discarded"] or now["Overflow"]:
+        print(f"LOST MESSAGES: RingDrops {now['RingDrops']} Discarded {now['Discarded']} "
+              f"Overflow {now['Overflow']} (default-on gate: all three must be 0 in steady state)")
     waits = now["WaitEarly"] + now["WaitTimeout"]
     if waits:
         print(f"wait early share: {now['WaitEarly'] / waits:.3%} of {waits} waits, skipped {now['WaitSkipped']}")

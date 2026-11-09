@@ -9,6 +9,7 @@
 #include "render_preempt_trace.h"
 #include "render_ov2.h"
 #include "render_ov5.h"
+#include "render_mailbox_isr.h"
 
 /* Fault diagnostics: first nonzero transition stores file tag 4 and
  * source line. Consumers retain zero/nonzero semantics; reset clears it. */
@@ -197,11 +198,21 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   volatile LONG IrqRingHead;
   volatile LONG IrqRingTail;
   ADMISSION_IRQ_RX_RECEIPT IrqRx;
-  /* Step 2 (Wom1IrqCompletion, default off): the mailbox ISR queues the
-   * DPC, the DPC sets JobPollTimerEvent, and the worker's poll waits on that
-   * event (timer = bounded fallback) instead of spinning or sleeping. */
+  /* Step 2 (Wom1IrqCompletion, default on; = 0 turns it off): the mailbox
+   * ISR queues the DPC, the DPC sets JobPollTimerEvent, and the worker's poll
+   * waits on that event (timer = bounded fallback) instead of spinning or
+   * sleeping. Inert without the ACPI line (MailboxIrqArmed stays 0). */
   BOOLEAN IrqCompletion;
   volatile LONG IrqWakePending;
+  /* Default-on plan: the ISR may touch the ASC mapping only while
+   * MailboxIsrOpen (set with the mapping when the line is listed, cleared
+   * under the interrupt lock before the ASC loses power or its mapping).
+   * IrqOverflowLatch: the ISR dropped a message at a full ring; the worker
+   * consumes it once as a transport fault. IrqRxExportQpc throttles the
+   * diagnostics-off export of Wom1IrqRx and Wom1JobPoll. */
+  volatile LONG MailboxIsrOpen;
+  volatile LONG IrqOverflowLatch;
+  ULONGLONG IrqRxExportQpc;
   /* Wom1FwRx (receipt-only, with Wom1JobDiagnostics): the firmware->host
    * channels the KMD does not drain (stats, ktrace, fwlog), sampled
    * read-only at each export (apple_agx_fw_rx_receipt.h). */
@@ -1477,6 +1488,29 @@ static VOID AdmissionFwRxDrainWindows(ADMISSION_PLATFORM_RUNTIME *runtime) {
   (void)AppleAgxFwRxDrain(&runtime->FwRx, &view);
 }
 
+/* Wom1IrqRx: the worker-owned copy of the ISR counters plus the adapter's
+ * census (PASSIVE_LEVEL, worker). */
+static VOID AdmissionIrqRxSnapshotWindows(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ADMISSION_IRQ_RX_RECEIPT *rx) {
+  ULONG i;
+  *rx = runtime->IrqRx;
+  rx->Version = ADMISSION_IRQ_RX_RECEIPT_VERSION;
+  rx->Bytes = sizeof(*rx);
+  rx->IrqCompletionOn = runtime->IrqCompletion ? 1u : 0u;
+  rx->ScanoutVector = runtime->Adapter->ScanoutInterruptVector;
+  rx->MailboxVector = runtime->Adapter->MailboxInterruptVector;
+  rx->Armed = (ULONG)InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0);
+  for (i = 0u; i < 4u; ++i)
+    rx->IsrByMessage[i] = (ULONG)InterlockedCompareExchange(
+        &runtime->Adapter->IrqIsrByMessage[i], 0, 0);
+  rx->MailboxHandled = (ULONG)InterlockedCompareExchange(
+      &runtime->Adapter->IrqMailboxHandled, 0, 0);
+  rx->MailboxMessageMask = (ULONG)InterlockedCompareExchange(
+      &runtime->Adapter->IrqMailboxMessageMask, 0, 0);
+  rx->ScanoutHandled = (ULONG)InterlockedCompareExchange(
+      &runtime->Adapter->IrqScanoutHandled, 0, 0);
+}
+
 static VOID AdmissionJobTimingExportWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime) {
   HANDLE key = NULL;
@@ -1484,11 +1518,11 @@ static VOID AdmissionJobTimingExportWindows(
   NTSTATUS status;
   KIRQL oldIrql;
   ULONGLONG before;
-  if (runtime == NULL ||
+  if (runtime == NULL || runtime->Adapter == NULL ||
       (!runtime->JobDiagnostics && !runtime->RcReceiptEnabled && !runtime->Depth2Drill.Mode &&
+       runtime->Adapter->MailboxInterruptVector == 0u &&
        !runtime->PresentTsEnabled && !runtime->Ov2Enabled &&
        !runtime->Ov5Waiver && !runtime->Ov5DrillEnabled) ||
-      runtime->Adapter == NULL ||
       runtime->Adapter->PhysicalDeviceObject == NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return;
   /* EXP1117-EXP1119: every 16th job this export (registry set and flush,
@@ -1559,6 +1593,36 @@ static VOID AdmissionJobTimingExportWindows(
     }
   }
 #endif
+  /* Default-on plan (KMD-IRQ-COMPLETION.md): with the mailbox line listed,
+   * Wom1IrqRx and Wom1JobPoll are exported without Wom1JobDiagnostics (which
+   * changes timing), at most every two seconds and never flushed, as the
+   * OV2 receipt. Without the line nothing is written here. */
+  if (!runtime->JobDiagnostics && runtime->Adapter->MailboxInterruptVector != 0u) {
+    LARGE_INTEGER frequency;
+    const ULONGLONG now = (ULONGLONG)KeQueryPerformanceCounter(&frequency).QuadPart;
+    if (runtime->IrqRxExportQpc == 0ULL ||
+        now - runtime->IrqRxExportQpc >= 2ULL * (ULONGLONG)frequency.QuadPart) {
+      runtime->IrqRxExportQpc = now;
+      status = IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key);
+      if (NT_SUCCESS(status)) {
+        ADMISSION_IRQ_RX_RECEIPT rx;
+        AdmissionIrqRxSnapshotWindows(runtime, &rx);
+        RtlInitUnicodeString(&name, L"Wom1IrqRx");
+        (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &rx, sizeof(rx));
+        /* the poll state is the worker's own (this is the worker) */
+        RtlCopyMemory(&runtime->JobPollSnapshot, &runtime->JobPoll,
+            sizeof(runtime->JobPollSnapshot));
+        if (runtime->JobPollSnapshot.Version != 0u) {
+          RtlInitUnicodeString(&name, L"Wom1JobPoll");
+          (void)ZwSetValueKey(key, &name, 0u, REG_BINARY,
+              &runtime->JobPollSnapshot, sizeof(runtime->JobPollSnapshot));
+        }
+        ZwClose(key);
+        key = NULL;
+      }
+    }
+  }
   if (!runtime->JobDiagnostics && runtime->PresentTsEnabled) {
     /* T1: the present ring at most every two seconds */
     LARGE_INTEGER frequency;
@@ -1648,23 +1712,8 @@ static VOID AdmissionJobTimingExportWindows(
     }
     /* IRQ-completion step 1 census (worker-owned copy of ISR counters). */
     if (NT_SUCCESS(status) && runtime->Adapter->MailboxInterruptVector != 0u) {
-      ADMISSION_IRQ_RX_RECEIPT rx = runtime->IrqRx;
-      ULONG i;
-      rx.Version = ADMISSION_IRQ_RX_RECEIPT_VERSION;
-      rx.Bytes = sizeof(rx);
-      rx.IrqCompletionOn = runtime->IrqCompletion ? 1u : 0u;
-      rx.ScanoutVector = runtime->Adapter->ScanoutInterruptVector;
-      rx.MailboxVector = runtime->Adapter->MailboxInterruptVector;
-      rx.Armed = (ULONG)InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0);
-      for (i = 0u; i < 4u; ++i)
-        rx.IsrByMessage[i] = (ULONG)InterlockedCompareExchange(
-            &runtime->Adapter->IrqIsrByMessage[i], 0, 0);
-      rx.MailboxHandled = (ULONG)InterlockedCompareExchange(
-          &runtime->Adapter->IrqMailboxHandled, 0, 0);
-      rx.MailboxMessageMask = (ULONG)InterlockedCompareExchange(
-          &runtime->Adapter->IrqMailboxMessageMask, 0, 0);
-      rx.ScanoutHandled = (ULONG)InterlockedCompareExchange(
-          &runtime->Adapter->IrqScanoutHandled, 0, 0);
+      ADMISSION_IRQ_RX_RECEIPT rx;
+      AdmissionIrqRxSnapshotWindows(runtime, &rx);
       RtlInitUnicodeString(&name, L"Wom1IrqRx");
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY, &rx, sizeof(rx));
     }
@@ -2802,59 +2851,83 @@ static APPLE_AGX_ASC_U64 AdmissionAscNow(void *Context) {
 /* Step 2: a planner spin step (20 us) waits this long for the wake instead. */
 #define ADMISSION_IRQ_SPIN_WAIT_US 500u
 
-/* DIRQL (ISR, or the worker inside DxgkCbSynchronizeExecution): move every
- * message of the ASC outbox FIFO into the ring. Returns the count moved. */
-static ULONG AdmissionMailboxDrainFifoAtDirql(ADMISSION_PLATFORM_RUNTIME *runtime) {
-  volatile UCHAR *base = runtime->AscTransport.Base;
-  ULONG moved = 0u;
-  while (moved < ADMISSION_IRQ_RING_SLOTS) {
-    ULONG control = READ_REGISTER_ULONG(
-        (volatile ULONG *)(base + J313_AGX_G2_ASC_OUTBOX_CTRL_OFFSET));
-    LONG head, tail, depth;
-    if ((control & APPLE_AGX_ASC_MAILBOX_EMPTY) != 0u)
+/* DIRQL (ISR, or the worker inside DxgkCbSynchronizeExecution): dismiss the
+ * level line by popping the ASC outbox FIFO until EMPTY (the ASC mailbox has
+ * no enable or acknowledge register). AdmissionMailboxIsrAction decides per
+ * message: into the ring (armed, room), dropped with the sticky overflow
+ * (armed, ring full) or dropped (not armed). The base is read only while
+ * MailboxIsrOpen. Returns the count popped; *Moved = the part in the ring. */
+static ULONG AdmissionMailboxServiceFifoAtDirql(
+    ADMISSION_PLATFORM_RUNTIME *runtime, int LineListed, ULONG *Moved) {
+  volatile UCHAR *base =
+      InterlockedCompareExchange(&runtime->MailboxIsrOpen, 0, 0) != 0
+          ? runtime->AscTransport.Base : NULL;
+  const int armed =
+      InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0) != 0;
+  ULONG popped = 0u;
+  *Moved = 0u;
+  while (popped < ADMISSION_MAILBOX_ISR_POP_CAP) {
+    const LONG head = runtime->IrqRingHead;
+    const LONG depth = head - runtime->IrqRingTail;
+    ADMISSION_MAILBOX_ISR_ACTION action;
+    ULONGLONG payload, selector;
+    int fifoEmpty = 1;
+    if (LineListed && base != NULL)
+      fifoEmpty = (READ_REGISTER_ULONG((volatile ULONG *)(
+                       base + J313_AGX_G2_ASC_OUTBOX_CTRL_OFFSET)) &
+                   APPLE_AGX_ASC_MAILBOX_EMPTY) != 0u;
+    action = AdmissionMailboxIsrAction(
+        LineListed, base != NULL, armed, fifoEmpty, (unsigned int)depth,
+        ADMISSION_IRQ_RING_SLOTS);
+    if (action == AdmissionMailboxIsrNotOurs)
       break;
-    head = runtime->IrqRingHead;
-    tail = runtime->IrqRingTail;
-    depth = head - tail;
-    if (depth >= (LONG)ADMISSION_IRQ_RING_SLOTS) {
-      /* Ring full: leave the message in the FIFO (the level line stays
-       * asserted; the next ISR or synchronized pop retries). */
-      runtime->IrqRx.RingDrops++;
-      break;
-    }
-    runtime->IrqRing[head % ADMISSION_IRQ_RING_SLOTS].Payload = READ_REGISTER_ULONG64(
+    payload = READ_REGISTER_ULONG64(
         (volatile ULONG64 *)(base + J313_AGX_G2_ASC_OUTBOX0_OFFSET));
-    runtime->IrqRing[head % ADMISSION_IRQ_RING_SLOTS].Selector = READ_REGISTER_ULONG64(
+    selector = READ_REGISTER_ULONG64(
         (volatile ULONG64 *)(base + J313_AGX_G2_ASC_OUTBOX1_OFFSET));
-    KeMemoryBarrier();
-    runtime->IrqRingHead = head + 1;
-    if ((ULONG)(depth + 1) > runtime->IrqRx.RingHighWater)
-      runtime->IrqRx.RingHighWater = (ULONG)(depth + 1);
-    ++moved;
+    ++popped;
+    if (action == AdmissionMailboxIsrMove) {
+      runtime->IrqRing[head % ADMISSION_IRQ_RING_SLOTS].Payload = payload;
+      runtime->IrqRing[head % ADMISSION_IRQ_RING_SLOTS].Selector = selector;
+      KeMemoryBarrier();
+      runtime->IrqRingHead = head + 1;
+      if ((ULONG)(depth + 1) > runtime->IrqRx.RingHighWater)
+        runtime->IrqRx.RingHighWater = (ULONG)(depth + 1);
+      ++*Moved;
+    } else if (action == AdmissionMailboxIsrDiscardFault) {
+      /* Ring full (a stalled worker): the message is lost, which the worker
+       * must treat as a transport fault, never as silence. */
+      runtime->IrqRx.RingDrops++;
+      runtime->IrqRx.Overflow = 1u;
+      InterlockedExchange(&runtime->IrqOverflowLatch, 1);
+    } else {
+      runtime->IrqRx.Discarded++;
+    }
   }
-  return moved;
+  return popped;
 }
 
-/* DIRQL (ISR): the mailbox line.  Not armed, or an empty FIFO -> not ours. */
+/* DIRQL (ISR): the mailbox line. Runs in every driver state while the line
+ * is listed; FALSE only when nothing was popped (FIFO empty, or no mapping
+ * the ISR may touch). */
 _Use_decl_annotations_ BOOLEAN AdmissionPlatformMailboxInterrupt(
     ADMISSION_CONTEXT *Context, ULONG MessageNumber) {
   ADMISSION_PLATFORM_RUNTIME *runtime;
-  ULONG moved;
+  ULONG popped, moved;
   UNREFERENCED_PARAMETER(MessageNumber);
   if (Context == NULL)
     return FALSE;
   runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
-  if (runtime == NULL ||
-      InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0) == 0 ||
-      runtime->AscTransport.Base == NULL)
+  if (runtime == NULL)
     return FALSE;
-  moved = AdmissionMailboxDrainFifoAtDirql(runtime);
-  if (moved == 0u) {
+  popped = AdmissionMailboxServiceFifoAtDirql(
+      runtime, Context->MailboxInterruptVector != 0u, &moved);
+  if (popped == 0u) {
     runtime->IrqRx.IsrEmptyCalls++;
     return FALSE;
   }
   runtime->IrqRx.IsrMessages += moved;
-  if (runtime->IrqCompletion && Context->InterfaceValid &&
+  if (moved != 0u && runtime->IrqCompletion && Context->InterfaceValid &&
       Context->Interface.DxgkCbQueueDpc != NULL) {
     runtime->IrqRx.DpcQueued++;
     (void)Context->Interface.DxgkCbQueueDpc(Context->Interface.DeviceHandle);
@@ -2885,23 +2958,46 @@ static BOOLEAN AdmissionIrqWaitActive(ADMISSION_PLATFORM_RUNTIME *runtime) {
              : FALSE;
 }
 
-/* DxgkCbSynchronizeExecution routine: observes the disarm under the lock. */
-static BOOLEAN AdmissionMailboxDisarmed(PVOID Context) {
+/* DxgkCbSynchronizeExecution routine: under the interrupt lock, disarm and
+ * end the ISR's access to the ASC mapping. */
+static BOOLEAN AdmissionMailboxIsrClosed(PVOID Context) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
-  return runtime != NULL &&
-                 InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0) == 0
-             ? TRUE
-             : FALSE;
+  if (runtime == NULL)
+    return FALSE;
+  InterlockedExchange(&runtime->MailboxIrqArmed, 0);
+  InterlockedExchange(&runtime->MailboxIsrOpen, 0);
+  return TRUE;
+}
+
+/* PASSIVE_LEVEL: called once the sender is stopped and before the ASC loses
+ * its power or its mapping. Disarm (the ISR drops what it still pops), then
+ * close the ISR's access under both possible interrupt locks: when this
+ * returns no ISR is inside the mapping and none will enter it. Idempotent. */
+static VOID AdmissionMailboxIsrClose(ADMISSION_PLATFORM_RUNTIME *Runtime) {
+  ULONG message;
+  if (InterlockedCompareExchange(&Runtime->MailboxIsrOpen, 0, 0) == 0)
+    return;
+  InterlockedExchange(&Runtime->MailboxIrqArmed, 0);
+  for (message = 0u; message < 2u; ++message) {
+    BOOLEAN closed = FALSE;
+    if (Runtime->Adapter != NULL && Runtime->Adapter->InterfaceValid &&
+        Runtime->Adapter->Interface.DxgkCbSynchronizeExecution != NULL)
+      (void)Runtime->Adapter->Interface.DxgkCbSynchronizeExecution(
+          Runtime->Adapter->Interface.DeviceHandle,
+          AdmissionMailboxIsrClosed, Runtime, message, &closed);
+  }
+  /* no interrupt object to synchronize with: no ISR can be running */
+  InterlockedExchange(&Runtime->MailboxIsrOpen, 0);
 }
 
 /* DxgkCbSynchronizeExecution routine: the worker found the ring empty. */
 static BOOLEAN AdmissionMailboxSyncPop(PVOID Context) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
-  ULONG moved;
+  ULONG moved = 0u;
   if (runtime == NULL || runtime->AscTransport.Base == NULL ||
       InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0) == 0)
     return FALSE;
-  moved = AdmissionMailboxDrainFifoAtDirql(runtime);
+  (void)AdmissionMailboxServiceFifoAtDirql(runtime, 1, &moved);
   runtime->IrqRx.WorkerSyncPops++;
   if (moved != 0u)
     runtime->IrqRx.WorkerSyncPopHits++;
@@ -3203,6 +3299,9 @@ static unsigned char AdmissionFirmwarePowerOff(
   if (runtime == NULL || !runtime->Powered ||
       AdmissionPlatformNowMs() >= DeadlineMs)
     return 0u;
+  /* The ASC is stopped (StopAsc precedes PowerOff in the firmware cleanup):
+   * no ISR may read its registers once the power is released. */
+  AdmissionMailboxIsrClose(runtime);
   AdmissionPowerIo(runtime, &io);
   if (!AppleAgxPowerRelease(&io))
     return 0u;
@@ -7567,6 +7666,15 @@ AdoptedKicked:
       break; /* reset owns both published jobs; no worker poll */
     }
 #endif
+    /* Default-on plan: the mailbox ISR dropped a firmware message at a full
+     * ring. A lost message is a transport fault (as a failed RTKit drain
+     * below): fault the scheduler so the engine reset recovers, never
+     * continue as if nothing was lost. */
+    if (InterlockedExchange(&runtime->IrqOverflowLatch, 0) != 0) {
+      InterlockedCompareExchange(&adapter->SchedulerFaulted,
+          0x40000L | __LINE__, 0);
+      break;
+    }
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
     {
       APPLE_AGX_RTKIT_U32 notifications = 0u;
@@ -7951,7 +8059,9 @@ AdoptedKicked:
   if (runtime->FwRxDrain) AdmissionFwRxDrainWindows(runtime);
   if (runtime->JobDiagnostics || runtime->RcReceiptEnabled || runtime->Depth2Drill.Mode ||
       runtime->PresentTsEnabled || runtime->Ov2Enabled || runtime->Ov5DrillEnabled ||
-      runtime->Ov5Waiver)
+      runtime->Ov5Waiver ||
+      /* default-on plan: Wom1IrqRx / Wom1JobPoll whenever the line is listed */
+      adapter->MailboxInterruptVector != 0u)
     AdmissionJobTimingExportWindows(runtime);
 #endif
 #if ADMISSION_JOB_AHEAD_BUILD
@@ -8146,20 +8256,14 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeSubmit(
 
 static NTSTATUS AdmissionPlatformDestroy(
     ADMISSION_PLATFORM_RUNTIME *Runtime) {
-  /* IRQ-completion step 1: disarm the mailbox line under both possible
-   * interrupt locks before the FIFO owner (this runtime) goes away. */
-  if (InterlockedCompareExchange(&Runtime->MailboxIrqArmed, 0, 0) != 0) {
-    ULONG message;
-    InterlockedExchange(&Runtime->MailboxIrqArmed, 0);
-    for (message = 0u; message < 2u; ++message) {
-      BOOLEAN quiet = FALSE;
-      if (Runtime->Adapter != NULL && Runtime->Adapter->InterfaceValid &&
-          Runtime->Adapter->Interface.DxgkCbSynchronizeExecution != NULL)
-        (void)Runtime->Adapter->Interface.DxgkCbSynchronizeExecution(
-            Runtime->Adapter->Interface.DeviceHandle,
-            AdmissionMailboxDisarmed, Runtime, message, &quiet);
-    }
-  }
+  /* Default-on plan, order: (1) stop the sender with the mailbox line still
+   * armed, so the stop conversation's replies reach the worker through the
+   * ring (AppleAgxBackendRuntimeStop -> firmware cleanup -> StopAsc ->
+   * AppleAgxRtkitSessionStop clears the ASC CPU RUN bit); (2) disarm and
+   * close the ISR's access (AdmissionMailboxIsrClose: in PowerOff before
+   * the power is released, and below for a runtime that never powered on);
+   * (3) only then unmap. Every early STATUS_DEVICE_BUSY return before (2)
+   * leaves the line armed and the mapping in place. */
   NTSTATUS status = STATUS_SUCCESS;
   KIRQL oldIrql;
   PIO_WORKITEM workItem;
@@ -8249,6 +8353,7 @@ static NTSTATUS AdmissionPlatformDestroy(
     return STATUS_DEVICE_BUSY;
   if (Runtime->RetainedPrepared || Runtime->Context0Lease.Count || Runtime->Context0Lease.Uncertain)
     return STATUS_DEVICE_BUSY;
+  AdmissionMailboxIsrClose(Runtime);
   if (Runtime->Powered) {
     APPLE_AGX_POWER_IO io;
     AdmissionPowerIo(Runtime, &io);
@@ -8540,6 +8645,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
    * listed it; from here the ISR owns the outbox FIFO and the worker reads
    * it through the ring (AdmissionAscRead32/64). */
   InterlockedExchange(&runtime->IrqWakePending, 0);
+  InterlockedExchange(&runtime->IrqOverflowLatch, 0);
+  InterlockedExchange(&runtime->MailboxIsrOpen,
+                      Context->MailboxInterruptVector != 0u ? 1 : 0);
   InterlockedExchange(&runtime->MailboxIrqArmed,
                       Context->MailboxInterruptVector != 0u ? 1 : 0);
   AppleAgxRtkitSessionInitialize(&runtime->Rtkit);
@@ -8814,8 +8922,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1JobDiagnostics");
   runtime->SubmitBracket =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1SubmitBracket");
+  /* Class C, default on (KMD-IRQ-COMPLETION.md default-on plan);
+   * Wom1IrqCompletion = 0 restores the predictive poll. Inert without the
+   * ACPI mailbox line: AdmissionIrqWaitActive needs MailboxIrqArmed. */
   runtime->IrqCompletion =
-      AdmissionPlatformSwitchEnabled(Context, L"Wom1IrqCompletion");
+      !AdmissionPlatformSwitchDisabled(Context, L"Wom1IrqCompletion");
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   runtime->FwRxDrain =
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1FwRxDrain");

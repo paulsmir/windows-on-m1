@@ -1963,12 +1963,13 @@ void AdmissionRecordMemoryQualification(
     _In_ const ADMISSION_MEMORY_QUALIFICATION *Qualification);
 NTSTATUS AdmissionInterruptStart(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionInterruptStop(_Inout_ ADMISSION_CONTEXT *Context);
-/* DIRQL: drain the ASC mailbox outbox FIFO into the platform runtime's ring
- * when the mailbox line is armed; FALSE = not armed or FIFO empty. */
+/* DIRQL: dismiss the ASC mailbox level line: pop the outbox FIFO until EMPTY
+ * (into the platform runtime's ring while armed, dropped otherwise; see
+ * render_mailbox_isr.h).  FALSE = nothing was popped (not ours). */
 BOOLEAN AdmissionPlatformMailboxInterrupt(_Inout_ ADMISSION_CONTEXT *Context,
                                           ULONG MessageNumber);
 
-/* Wom1IrqRx receipt (REG_BINARY), version 1: the step-1 census. */
+/* Wom1IrqRx receipt (REG_BINARY): the step-1 census, extended by v2 and v3. */
 typedef struct _ADMISSION_IRQ_RX_RECEIPT {
   ULONG Version, Bytes;
   ULONG ScanoutVector, MailboxVector;
@@ -1990,8 +1991,12 @@ typedef struct _ADMISSION_IRQ_RX_RECEIPT {
   ULONG WaitEarly;          /* poll waits ended by the wake before the timer */
   ULONG WaitTimeout;        /* poll waits ended by the timer (fallback) */
   ULONG WaitSkipped;        /* a wake was already pending: re-polled at once */
+  /* v3 (default-on plan): the level line is dismissed in every state. */
+  ULONG Discarded;          /* popped and dropped while not armed (no consumer) */
+  ULONG Overflow;           /* sticky: a message was dropped at a full ring;
+                             * the worker faulted the transport (engine reset) */
 } ADMISSION_IRQ_RX_RECEIPT;
-#define ADMISSION_IRQ_RX_RECEIPT_VERSION 2u
+#define ADMISSION_IRQ_RX_RECEIPT_VERSION 3u
 
 /* DISPATCH_LEVEL (DxgkDdiDpcRoutine): wake the job worker's poll wait when
  * Wom1IrqCompletion is on and the mailbox ISR queued this DPC. */
