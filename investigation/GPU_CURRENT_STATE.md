@@ -2507,3 +2507,10 @@ Next EXP2294 ABBA (one variable: waiver on top of Ov2 lead; diag off; warm-up + 
 Independent of OV switches. Suspects: KMD shutdown teardown with live user mappings (native staging rings, pool MDLs) vs ANS stopping before paging ends. Separate task proposed; ABBA (EXP2294/2295 first pair +0.02 %, inside noise) continues.
 
 UPDATE 2026-11-09T04:44:43Z OV5 WAIVER A/B/B/A VERDICT (EXP2294-2297): no frame-rate gain in HD (+0.02 %, -0.28 %; 43.25 on vs 43.30 off). Wom1Ov5TaWaiver and COMPUTE_FIRST stay default off. Separate open defect: bugcheck at ordered reboot after a GPU session (0x154/0xEF/0x1A), reported by m1n1's KiBugCheckData print.
+
+## UPDATE 2026-11-09T04:45:44Z -- OV5 WAIVER LINE CLOSED: stable (compute-start gate), no gain (ABBA EXP2294-2297 +0.02 % / -0.28 %), KEEP-OFF
+The R||C overlap via R8 is real but tiny (5 % of pairs, 0.54 ms median). The ~2.0 ms "missing overlap" of the structural
+decomposition cannot come from R8; R2/R4/R6 carry true VB-read vs UAV-write dependencies (OV6b). Next causal question
+(architect, offline): where in Apple's timeline the overlap sits -- cross-frame (C(N+1) || R(N)) or intra-frame -- using the
+scene-aligned job timelines (agx_gm_scene_align.py, agx_gpu_frame_breakdown.py --jobs) before any further OV work.
+Open defect in its own task: shutdown bugcheck after GPU sessions (0xEF/0x1A/0x154; EXP2288-2297), see the proposal card.

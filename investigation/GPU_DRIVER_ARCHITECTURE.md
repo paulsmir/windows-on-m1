@@ -69,9 +69,15 @@ driver-internal hazards -- the same per-resource model Apple's kext uses
   prelude (no new preludes); OV5 UMD TA-independence verdict; OV5 3D-queue
   compute-stamp Barrier (firmware accepts it, EXP2210); backend successor rule
   for a waived TA lead (56772879).
-- **OPEN** OV5 TA waiver hangs the GPU (EXP2214, 0x116). Next evidence: compare
-  our firmware work items for a C->R pair byte-for-byte with Apple's (kext RE of
-  the work-command encoding), then a bounded reproducer.
+- **KEEP-OFF (C/I), CLOSED 2026-11-09** OV5 TA waiver: the GM-start 0x116 was a
+  kick-timing race (the waived successor's doorbell reaching the firmware before
+  the running compute had started; EXP2283-2293), fixed by the compute-start gate
+  (defer the waived kick until the compute's firmware start timestamp is nonzero,
+  6f18cfb8; class C). Stable: 0 resets in 12 GM starts with diagnostics off
+  (EXP2293-2297). ABBA EXP2294-2297 (waiver on top of the OV2 lead, diag off):
+  +0.02 % / -0.28 %, inside noise -> no gain, stays off. Only R8 is waivable
+  (R2/R4/R6 verdict 10: VB read vs UAV write, OV6b); the measured overlap
+  (EXP2282: 601 of 11261 pairs, median 0.54 ms) is too small to show in fps.
 
 ### 2.3 Memory and residency
 - **DONE** G3 private scenes, UAT, broker; read-only opens answered as data and
