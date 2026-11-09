@@ -204,6 +204,7 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutQualify(
   APPLE_AGX_SCANOUT_U32 magic;
   APPLE_AGX_SCANOUT_U32 version;
   APPLE_AGX_SCANOUT_U32 capabilities;
+  APPLE_AGX_SCANOUT_U64 receipt;
 
   if (Client == APPLE_AGX_SCANOUT_NULL)
     return AppleAgxScanoutInvalidArgument;
@@ -222,6 +223,17 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutQualify(
   if ((capabilities & APPLE_AGX_SCANOUT_REQUIRED_CAPABILITIES) !=
       APPLE_AGX_SCANOUT_REQUIRED_CAPABILITIES)
     return AppleAgxScanoutMissingCapabilities;
+  /* The broker's freshness floor lives as long as the hypervisor, not as long
+   * as this client: a StartDevice after StopDevice in the same boot must
+   * resume above the last terminal receipt, never at its own first sequence.
+   * Sequences this client already issued are above every receipt, so the
+   * adjustment only ever moves forward. */
+  if (!AppleAgxScanoutRead64(Client, APPLE_AGX_SCANOUT_REG_RECEIPT_SEQUENCE,
+                             &receipt))
+    return AppleAgxScanoutTransportFailed;
+  if (Client->NextSequence != 0ULL && receipt >= Client->NextSequence)
+    Client->NextSequence =
+        receipt == APPLE_AGX_SCANOUT_U64_MAX ? 0ULL : receipt + 1ULL;
   Client->AbiVersion = version;
   Client->Capabilities = capabilities;
   Client->Qualified = APPLE_AGX_SCANOUT_TRUE;

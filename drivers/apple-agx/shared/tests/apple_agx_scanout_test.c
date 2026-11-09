@@ -528,6 +528,35 @@ static void test_v2_latched_irq_is_consumed_exactly_once(void) {
          AppleAgxScanoutNoInterrupt);
 }
 
+/* EXP2307B: a second StartDevice in one boot built a fresh client at sequence
+ * 1 while the broker's freshness floor survived the previous RELEASE, so
+ * REGISTER was rejected as stale and StartDevice failed at the scanout stage. */
+static void test_qualify_resumes_above_the_broker_receipt_sequence(void) {
+  FAKE_MMIO fake;
+  APPLE_AGX_SCANOUT_CLIENT client;
+  fake_init(&fake);
+  fake.ReceiptSequence = 2078ULL;
+  fake.AppliedSequence = 2078ULL;
+  client = make_client(&fake, 1ULL, 4u);
+  qualify(&client);
+  fake.Response = FakeResponseRegisterGood;
+  assert(AppleAgxScanoutRegisterPool(&client, 0x100000000ULL,
+                                     APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE,
+                                     100ULL) == AppleAgxScanoutOk);
+  assert(fake.RequestSequence == 2079ULL);
+  /* A later qualify never moves the sequence backwards or past issued ones. */
+  qualify(&client);
+  assert(client.NextSequence == 2080ULL);
+  /* An exhausted broker sequence space stays fail-closed. */
+  fake_init(&fake);
+  fake.ReceiptSequence = ~0ULL;
+  client = make_client(&fake, 1ULL, 4u);
+  qualify(&client);
+  assert(AppleAgxScanoutRegisterPool(&client, 0x100000000ULL,
+                                     APPLE_AGX_SCANOUT_J313_POOL_MAX_SIZE,
+                                     100ULL) == AppleAgxScanoutSequenceExhausted);
+}
+
 int main(void) {
   test_abi_matches_m1n1_v1_header();
   test_qualification_rejects_each_incompatible_identity();
@@ -539,5 +568,6 @@ int main(void) {
   test_present_specific_snapshot_must_also_meet_deadline();
   test_v2_queue_present_is_nonblocking_and_fail_closed();
   test_v2_latched_irq_is_consumed_exactly_once();
+  test_qualify_resumes_above_the_broker_receipt_sequence();
   return 0;
 }
