@@ -75666,3 +75666,65 @@ Next (in this order):
   manifests here.
 - Process: the BEFORE generator should take the m1n1 commit from the launched image's
   `m1n1-build-info.json`, not from the gitlink (handed to fork 6, who owns the experiment scripts).
+
+## EXP2302 — CORRECTION: dump stack was loaded; 0xA7 absence was not measured then (2026-11-09T20:59:11Z, read-only guest queries, no restart)
+
+Correction to "EXP2302 ... (ACTUAL)" (the original entry stays as written):
+- "no `dump_` modules" was a measurement artifact: `driverquery` / Win32_SystemDriver do not list dump-stack
+  images. psapi EnumDeviceDrivers on the same boot (2026-11-09T20:24:08Z, AppleAns 0.4.3 5529bf1c...) lists
+  crashdmp.sys, dump_diskdump.sys, dump_AppleAns.sys, dump_dumpfve.sys. No volmgr event 46 since boot.
+  CrashDumpEnabled = 2 (as DUMP0 had already recorded).
+- "no 0xA7" was uninformative in EXP2302: the receipt is written only at a telemetry query and no query tool existed
+  on the guest. A query was sent now (IOCTL_SCSI_MINIPORT APANS001 through \\.\Scsi0:, 508 bytes returned, record
+  magic valid) and still no 0xA7 followed: `DumpContext.calls == 0`, i.e. with the dump stack loaded crashdmp has not
+  called the dump image's HwFindAdapter before a crash (caveat: assumes MiniportPrivateDumpData is used by pointer,
+  not copied; storahci relies on the same).
+- Evidence: .local/experiments/ANSDUMP2/evidence/EXP2304/pre-043.txt.
+
+## EXP2304 — AppleAns 0.4.4 DUMP2 boot check: functional dump instance loaded, no crash provoked (BEFORE)
+
+- Stamp: 2026-11-09T20:59:11Z
+- Hypothesis: with the dump instance now functional (takeover + polled I/O instead of refusing), the normal boot is
+  unchanged because crashdmp only loads `dump_AppleAns.sys` at boot and does not run its HwFindAdapter/HwInitialize
+  until a bugcheck; the live instance answers DUMP_POINTERS with a sealed record as in EXP2302.
+- WHY THIS HYPOTHESIS:
+  1. Same boot, 0.4.3: dump stack loaded (dump_AppleAns.sys present), telemetry query answered, no 0xA7 ->
+     calls == 0 (correction above). The alternative "crashdmp pre-initialises the dump miniport in CRASH mode at
+     boot" would have produced calls >= 1.
+  2. The live path of 0.4.4 differs from 0.4.3 only by the DumpMode branches (commit 31e0d414, all behind
+     `ConfigInfo->DumpMode != 0` / `a->DumpMode`), host tests and builder code analysis (13 files, 0 defects) pass.
+- WINDOWS CONTRACT: StorPort virtual-miniport-free physical miniport with STOR_FEATURE_DUMP_POINTERS;
+  SRB_FUNCTION_DUMP_POINTERS at dump-stack initialisation; dump image entered with ConfigInfo->DumpMode
+  (DUMP_MODE_CRASH 1 at bugcheck; MARK_MEMORY 3 / HIBER 2 / RESUME 4 for hibernation), no interrupts, no allocation,
+  only the memory handed over in MiniportDumpData (ANS-DUMP-MODE.md, WDK 26100 storport.h).
+- AGX/ASAHI CONTRACT (ANS): controller may be live at takeover (CC.EN=1); stop = CC.EN=0 -> CSTS.RDY=0 with
+  BOOT_STATUS ok, then linear SQ / NVMMU / admin queue programming and enable as in the live path (m1n1 nvme.c,
+  Asahi apple.c behaviour); nothing written into queue memory before the stop is proven.
+- TRANSLATION: dump_find validates the sealed record first, maps both register ranges only for CRASH, carves the
+  queues from the recorded common buffer, ansd_init_takeover -> ansd_enable -> I/O queue, depth 1, polled drain
+  bounded at 30 s per request; MARK_MEMORY marks the record + common buffer; HIBER/RESUME refused.
+- WHAT IS STILL UNKNOWN: (1) whether any pre-crash call reaches the 0.4.4 dump image (expected none, see above);
+  (2) the real crash path (EXP2305, separate variable): mapping in the dump environment, takeover of a live
+  controller on hardware, crashdmp's I/O pattern.
+- Single variable: AppleAns package 0.4.3 (ANSBUILD013-K) -> 0.4.4 (ANSBUILD014-L). CrashDumpEnabled stays 2.
+- Commit: 31e0d4147dcfba84064724e9a36331fa1352e09f (driver), branch gpu/memory-latency head 6a53a8646;
+  launcher: RECANS001 normal ANS profile (run_uefi.py, J313_EFI-gpu-ans-direct-G2.fd FD SHA 7c283fb1..., ANS_NATIVE
+  --ans-direct, expanded RAM), GPU-visible recovery, no AppleAgx package.
+- Artifact: .local/experiments/ANSDUMP2/ANSBUILD014-L-package.zip
+  SHA-256 4802befbb37d88368a109faec9f94878a854729927e26236b00d66f66aa9b9a3;
+  AppleAns.sys dac3a772a2a6fdebe5ea3bd5f5d86b759145f946e08d32cca5bcf646aed13d33;
+  AppleAns.inf dc8a5850629a419e05d4e9139a8594e52d2b92211f7aaadf032d500508ad50db;
+  appleans.cat 43e9ffed0739c4b221efec0b9f15699fc416c3f49697015bb543a4fe75c7e888;
+  source tar 603c869255bf98dd245c5e73d80ef5f84ddd06891204abac1105a85cb81e7286.
+- Build: L.ps1 on the builder (MSBuild Release ARM64 /W4 /WX + RunCodeAnalysis, InfVerif, signtool, Inf2Cat).
+- Install: stage.ps1 on the guest (hash check, signature, pnputil /add-driver stage only, Services\AppleAns
+  ImagePath -> the new store directory), then restart-normal.sh (ordered shutdown /r, proxy-ready, normal launcher).
+- Expected: boots on 0.4.4 (running-file hash dac3a772...); 0xA6 sealed records as in EXP2302; dump_AppleAns.sys
+  and crashdmp.sys loaded; no volmgr 46; after a telemetry query no 0xA7; no disk/storport errors;
+  `BUGCHECK ok code=0x0` in the previous launcher log at the restart.
+- Failure criteria: no boot / 0x7B / hang (would mean a pre-crash CRASH-mode call stopped the live controller);
+  0xA7 with DumpMode 1; 0xA6 missing or sealed=0; volmgr 46; any non-zero BUGCHECK code; I/O errors.
+- Recovery: ImagePath back to appleans.inf_arm64_ac3dfa6e847ba00c (0.4.3; old-imagepath.txt) from the guest; if the
+  guest does not boot natively: kill the exact launcher PID, AGX_RECOVERY_STORAGE=bridge AT_PROXY recovery,
+  ImagePath back, check stornvme\StartOverride.
+- Evidence: .local/experiments/ANSDUMP2/evidence/EXP2304/ (pre-043.txt = baseline on 0.4.3).
