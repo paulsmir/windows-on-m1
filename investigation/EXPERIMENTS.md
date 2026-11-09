@@ -75196,3 +75196,15 @@ EXP2288 ARCHITECT READING (2026-11-08T23:54:14Z; fork 6's ACTUAL carries the run
 - UMD side in that phase (EXP2284a, diagnostics on, waiver on): the first receipt row at t=9.8 s shows renders 0, flagged 0; the first render sent with the TA-independent flag is at t=21.7 s (after Ready). owner_render_ta returns 0 for every setup render (AgxD3d12JobRenderTaRefusal: PreviousKind != compute -> 2). So no setup render carried cdm_barrier NONE, and the KMD's Waived 0 / Placed 0 at the reset is real, not stale.
 - What the switch still changes before any waiver: KMD -- Ov5Waiver TRUE: per-kick AdmissionJobWindowOv5WaiverRefusal (pure), AdmissionJobWindowOv5WaiverNote -> RcExportPending (first 16 considered, every 256th) -> registry writes from the worker (diag-off branch), the 2-s throttled Wom1Ov5WaiverReceipt export; UMD -- the device feature RENDER_TA_INDEPENDENT read at owner creation (AgxWin32Ov5Feature=1) which only adds the owner_render_ta hook call per render (returns 0 in setup). Neither is a firmware-visible change, so the stall mechanism is still unexplained; the next split is feature publication vs KMD flag.
 - Next: EXP2289 = EXP2286 configuration (waiver on, diag off, OV3B=1) with one variable: the KMD does not publish AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT (opt-in Wom1Ov5TaWaiverNoFeature=1 forces GpuRenderTaIndependent=0 while Ov5Waiver stays TRUE), three GM starts. Reset -> the KMD-internal path (notes/exports/per-kick refusal) is the trigger; no reset in 3 -> the UMD feature path. m1n1 with D4 (ASC RX pending at the PSCI trap) may ship with it: receipt only, no guest timing change.
+
+EXP2289 HARDWARE BEFORE 2026-11-09T00:24:16Z:
+- WHY THIS HYPOTHESIS: (1) EXP2288: without Wom1Ov5TaWaiver 0 resets in 3 GM starts, with it 3 of 3 boots; (2) in the healthy EXP2284a no render is flagged before GM Ready, so waived work does not explain a reset before the first frame; (3) the switch has two remaining effects, the KMD note/export path and the UMD feature path.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: as EXP2279. TRANSLATION: existing path, feature unpublished.
+- ATOMIC CONTRACT: none -- one switch against EXP2286; the reset-trap print is read-only.
+- WHAT IS STILL UNKNOWN: which effect of the switch is needed.
+- Expected: reset -> the KMD effect (note/export path); no reset in 3 starts -> the UMD path behind the feature.
+- Failure criteria: a reset is an accepted outcome.
+- Recovery: rec2289h (ANS); on a reset save full.log first, then AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2289h/recover.sh.
+- Hashes: sys 8fa98cdb8afb, UmdArm64 5a024d8f0c51, UmdX64 b7bbdd9f8d19, Umd32 684ea5bb89d7; manifest 91e680b15ab8, hardware-manifest 91d68b094b74; probe2289.sh f55a99f751f7 (PROBE_LINT_OK); visible recovery rec2289h c7a09776e347c81d; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1 Wom1Ov5TaWaiverNoFeature=1.
+- Recovery rec2289h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2289-waiver-nofeature/run2289.sh.
