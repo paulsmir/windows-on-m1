@@ -75808,3 +75808,36 @@ Correction to "EXP2302 ... (ACTUAL)" (the original entry stays as written):
   0.4.4 -> AGX_RECOVERY_STORAGE=bridge AT_PROXY recovery, ImagePath back to appleans.inf_arm64_ac3dfa6e847ba00c
   (0.4.3), check stornvme\StartOverride, chkdsk C: read-only before any repair.
 - Evidence: .local/experiments/ANSDUMP2/evidence/EXP2305/.
+
+## EXP2305 — AppleAns 0.4.4 DUMP2 manual bugcheck (ACTUAL, 2026-11-09T21:08:48Z)
+
+- Trigger note: the first attempt (21:05:31Z) failed on shell quoting and ended no process; the bugcheck was
+  triggered once by trigger.ps1 at 2026-11-09T21:06:04Z (taskkill /f /pid 792, svchost DcomLaunch).
+- Phases: bugcheck 21:06:04Z; guest PSCI SYSTEM_RESET, launcher exit 21:06:11Z (about 7 s for stop + dump +
+  reset); proxy-ready; normal ANS launcher; SSH up 21:07:04Z. No hang, no manual recovery.
+- Expected vs actual:
+  - stop 0xEF and self-reset within 900 s: CONFIRMED (7 s).
+  - new MEMORY.DMP: CONFIRMED. C:\Windows\MEMORY.DMP 716332131 bytes, PAGEDU64, bugcheck 0xEF
+    (0xffffc384ce1d0080, 0, 0xffffc384d42db080, 0), dumptype 6, systime 2026-11-09T21:06:04Z.
+  - new minidump: CONFIRMED. C:\Windows\Minidump\110926-6203-01.dmp 1459540 bytes, same header;
+    SHA-256 7c5c74d5c546f08aea43c2c190ffe78199934b034efcce9a32b86959817e8517 (copy in the evidence directory).
+  - readable: CONFIRMED. cdb on the builder: .bugcheck 0xEF with the same arguments, stack
+    nt!NtTerminateProcess -> PspTerminateProcess -> PspTerminateAllThreads -> PspCatchCriticalBreak ->
+    KeBugCheckEx; modules AppleAns, dump_AppleAns, dump_diskdump, dump_dumpfve present.
+  - events: WER-SystemErrorReporting 1001 "rebooted from a bugcheck 0x000000ef ... A dump was saved in
+    C:\Windows\MEMORY.DMP"; volmgr 162 "Dump file generation succeeded"; Kernel-Power 41 (expected after a
+    bugcheck). No volmgr 46/161, no Ntfs 55.
+  - volume: `fsutil dirty query C:` = NOT dirty. Boot on 0.4.4 (hash dac3a772...), 0xA6 sealed records count 1/2,
+    dump stack loaded again, telemetry query ok.
+- Throughput: ~716 MB kernel dump inside the 7 s window, i.e. on the order of 100 MB/s in polled mode (upper
+  bound on duration only; no separate timing of the write phase).
+- Clock note: the first events of the new boot are stamped 21:00:16Z (guest clock before time sync), the WER
+  record 21:07:05Z; the order of records, not these stamps, was used.
+- Not measured: 0xA7 dump receipt (the dump instance's counters do not survive the reset by design); BUGCHECK
+  line of m1n1 (profile m1n1 882985fb has no such print); USB input/RDP.
+- Alive after the run: display, SSH, storage (native ANS), all CPUs.
+- Verdict: CONFIRMED. The crash-time takeover of a live ANS2 controller and polled writes work; kernel dumps on
+  the native SSD are functional with AppleAns 0.4.4. WHAT IS STILL UNKNOWN items 1 and 2 are answered by hardware.
+- Next: DUMP3 scope decision (hibernation path stays unsupported/disabled; complete-dump size check optional);
+  the normal recovery profile should move to an m1n1 with the BUGCHECK print as a separate validated change.
+- Evidence: .local/experiments/ANSDUMP2/evidence/EXP2305/{trigger.txt,restart-run.log,normal-prev-full.log,post-after-restart.txt,110926-6203-01.dmp}.
