@@ -75852,3 +75852,15 @@ EXP2303 HARDWARE BEFORE 2026-11-09T21:14:55Z:
 - Recovery: rec2303h (ANS, m1n1 83a9cf74 / last-good 882985fb); package removed in rollback.
 - Hashes: sys 6baf58aaef9b, UmdArm64 1e9f3d80afe7, UmdX64 a2b1026d8742, Umd32 3ca4c39c8b27; manifest 7c173edb16b7, hardware-manifest 49278f956401; probe2303.sh 66af187e26e8 (PROBE_LINT_OK); visible recovery rec2303h e7f4ac72f090a54f; m1n1 0d3a75b3.
 - Recovery rec2303h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2303-irqd1/run2303.sh.
+
+## EXP2303 — IRQD1: head 6a53a8646 package on the unchanged platform (ACTUAL)
+
+EXP2303 HARDWARE ACTUAL 2026-11-09T21:34:49Z:
+- Launched image: m1n1 83a9cf74 (m1n1-build-info.json of m1n1-ansdirect-bugcheck4, macho SHA-256 f01f5961bb4a6f5c18f4396f522352ff47399f0dd97a17437d5d50048e3e799d), Mu MUANSCPPC002, expanded guest RAM, native SSD (AppleAns 0.4.4). Package built 21:11:19Z from 6a53a86463a17e51491babadf993e195c086ff7e, first MSVC /W4 compile of the merges 212f09e0e/fe119f211/84b91a7cb: 0 errors, no C4242/C4201/C4389.
+- First launch attempt 21:12Z stopped before any guest change: LAUNCH_2303_FAIL mac-disk-below-6GiB (/Volumes/pwdev 5.8 GiB free). Space reclaimed (MUANSCPPC001 work tree removed, FD + build.log kept), relaunched 21:14Z.
+- Expected vs actual: StartDevice Problem 0 -> CM_PROB_NONE. Suite 119/0 -> PASS=119 FAIL=0. Perf gate PASS -> PERF_GATE_PASS: CS 1.6 warm r2/r3 53.168/52.738 (baseline 49.943, +5.60 %), GravityMark HD PERF repeats worst 44.154 (baseline 40.770, +8.30 %); the gains are not attributed to this package (no claim; baseline is EXP2220). Wom1IrqRx ABSENT -> absent in pre-suite and after-d receipts. Wom1JobPoll "as in EXP2300" -> absent, same as EXP2300/EXP2301 (written only when the line is listed). GravityMark/suite WER 0. Ordered restart of the experiment boot -> "BUGCHECK ok base=0xfffff800ecc00000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0" (full.log).
+- Alive: display, SSH, storage (RECOVERY_STORAGE_APPLEANS_OK), 8 CPUs (VISIBLE_INERT_PACKAGE_ABSENT_8CPU). No stop, no hang, watchdog silent.
+- Recovery rec2303h: RECOVERY_DONE 21:33:51Z, package absent, visible inert devnode.
+- Verdict: CONFIRMED. The ISR default-on package is inert without the ACPI mailbox line and the TDR 2a shared layer changes nothing observable.
+- Evidence: .local/experiments/EXP2303-irqd1/evidence/{EXP2303,EXP2303-gate,EXP2303-gmrep,rec2303h}, .local/experiments/EXP2303-irqd1/full.log.
+- Next: IRQD2 (variable = Mu MUIRQ001-95263b97, same package, same-boot A/B/B/A on Wom1IrqCompletion). Blocked until /Volumes/pwdev has >= 6 GiB free (5.7 GiB after this run).
