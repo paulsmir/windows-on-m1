@@ -75558,3 +75558,35 @@ for the IRQ branch (same file backend_platform_windows.c). Bench order unchanged
   System-log records since boot; the last MEMORY.DMP (2026-11-07) and minidumps predate ANS-DIRECT as the only path
   (written through the bridge/stornvme). Crash dumps are configured, so StorPort should initialise the dump stack
   and DUMP_POINTERS is expected at boot.
+
+## EXP2302 — AppleAns 0.4.3 DUMP1 on hardware (ACTUAL, 2026-11-09T20:26:16Z)
+
+- Staging 20:2xZ: STAGE2302_OK (hashes and signature valid, oem13.inf, ImagePath ->
+  appleans.inf_arm64_ac3dfa6e847ba00c; old path saved on the guest).
+- Restart attempt 1 (rec2301h/recover.sh): refused before any mutation, rc=3,
+  `NO_HOST_OWNER_REFUSED launcher_query_status=0 output=44379 / EXACT_OWNER_NOT_FOUND`:
+  the guest was owned by the RECANS001 normal launcher, which the EXP2301 exact-owner
+  selector does not accept. No guest state changed.
+- Restart attempt 2 (scratchpad restart2302.sh, same steps as the script's
+  RESUME_PACKAGE_ABSENT tail, exact PID 44379 checked against the normal launcher command
+  line): shutdown /r sent 20:23:19Z, PROXY_READY_PASS, launch-normal-ans.sh, guest boot
+  20:24:08, SSH up 20:24:25Z (66 s from the restart command).
+- Correction to BEFORE: the normal recovery profile runs m1n1 gpu-ans-direct-882985fb
+  (c6f0c8cb...) with Mu G2 7c283fb1..., not ansdirect-bugcheck4/MUANSCPPC002. This m1n1 has
+  no `BUGCHECK ok code=` line; it prints `HV BUGCHECK:` only when a stop code is seen.
+  Observed: no HV BUGCHECK line, `PSCI RESET REGS x0=0x84000009` (SYSTEM_RESET) -> ordered
+  restart, no stop code seen. The explicit code=0x0 line was therefore not obtainable here.
+- Guest after boot: Services\AppleAns RUNNING from appleans.inf_arm64_ac3dfa6e847ba00c
+  (sys 5529BF1C...FE88B7C); System log: two AppleAns records, 0xA6000101 (20:24:41) and
+  0xA6000102 (20:24:43) = SRB_FUNCTION_DUMP_POINTERS answered twice, sealed=1 both times;
+  no 0xA7 (dump image not called, allowed outcome); no disk/volmgr/crash warnings;
+  no dump_* modules listed. Display, SSH and storage alive.
+- Expected vs actual: boot as today — yes; one 0xA6 sealed=1 — two, both sealed (StorPort
+  asks twice); 0xA7 optional — absent; I/O errors — none; BUGCHECK code=0x0 — no stop code
+  reported by this m1n1 (see correction).
+- Verdict: confirmed. StorPort queries the live AppleAns miniport for dump pointers and
+  accepts the sealed record. 0.4.3 stays installed; rollback not needed.
+- Evidence: .local/experiments/ANSDUMP1/evidence/EXP2302/{stage.txt,recover-run.log,
+  restart-run.log,normal-prev-full.log,post-after-restart.txt}.
+- Next: DUMP2 (dump-image takeover + polled I/O on the handed-over record), offline first;
+  process fix: a recovery-profile restart helper that accepts the RECANS001 normal owner.
