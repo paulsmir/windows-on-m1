@@ -142,3 +142,102 @@ boot; DPC wake only when the mailbox ISR requested it; HV trap count per interru
   criteria: GPU timeout/TDR without a real hang (missed wake), suite failure, perf gate -2 %.
 - Rejected alternative: forwarding the RX doorbell as a status bit on the virtual 889 edge from m1n1's
   service step (keeps the HV in the data path and inherits the 5 kHz tick latency).
+
+## Default-on plan (architect spec, 2026-11-09T19:28:41Z)
+
+Correction to "Step 2 result" above: the "~40k traps/s HV interrupt tax" reading is withdrawn (ledger, EXP2273
+CORRECTION): the line fires ~390 times/s and the GM difference between the 887 runs and the no-887 controls is inside
+run-to-run spread. What stands: worker busy 47.6 % -> 2.5 %, FPS neutral.
+
+Class: **C**. The predictive poll burns half a core for a device that has a completion interrupt; a WDDM miniport is
+expected to be interrupt-driven (ISR -> DxgkCbQueueDpc -> DPC). FPS neutrality is therefore not a reason to keep it off
+(GPU_DRIVER_ARCHITECTURE.md section 1). Two things separate today's opt-in from a default: the production Mu does not
+list the line, and the ISR does not yet honour the level-line contract in every state.
+
+### Contracts
+
+- WINDOWS CONTRACT (FULL GRAPHICS, DxgkDdiInterruptRoutine): return FALSE only when the adapter did not interrupt;
+  otherwise dismiss the interrupt on the adapter before returning TRUE; only DxgkCbQueueDpc / DxgkCbNotifyInterrupt
+  from the ISR. When dxgkrnl connects and disconnects the ISR relative to Start/Stop/SetPowerState is not documented.
+- AGX/ASAHI CONTRACT: ASC mailbox recv-not-empty is a level line (AIC 578 -> vINTID 887) with no enable/ack register in
+  the ASC variant (Asahi apple-mailbox: only the M3 variant has irq controls; the ASC line is gated at the AIC). The
+  only way to dismiss it is to read the outbox FIFO until EMPTY.
+- m1n1: masks the AIC line when it forwards the interrupt and unmasks it on the guest's deactivate. A handler that
+  returns without draining gets the same interrupt again immediately.
+- TRANSLATION: "dismiss" == "pop until EMPTY". Whenever the line is listed and the outbox can hold a message, some ISR
+  path must pop it.
+
+### Defect to fix first (H1, labelled hypothesis: derived from source, never observed on hardware)
+
+Three paths return with the FIFO possibly non-empty:
+
+1. `AdmissionDdiInterruptRoutine` (interrupt.c) returns FALSE before the mailbox handler when
+   `InterruptIngressEnabled == 0` (after `AdmissionInterruptStop`, 16 call sites in lifecycle.c) or
+   `InterruptReady == 0`.
+2. `AdmissionPlatformMailboxInterrupt` returns FALSE when `MailboxIrqArmed == 0` (after the disarm in
+   `AdmissionPlatformDestroy`, and in any window where the runtime exists but is not armed) or when the runtime is gone.
+3. `AdmissionMailboxDrainFifoAtDirql` stops at a full ring (64) and leaves the message in the FIFO (`RingDrops++`).
+
+In each case a message that is in the FIFO (a late firmware reply, a crashlog/syslog burst, a stalled worker) re-raises
+the line at DIRQL without end. With the line absent (today's production Mu) none of this can happen, which is why the
+default flip needs it closed first. EXP2272/2273 did not hit it: 0 RingDrops, clean stops.
+
+### KMD change (one commit, class C, no behaviour change while the line is armed and the ring has room)
+
+Introduce one pure decision function in a header that the offline test can compile:
+
+```
+AdmissionMailboxIsrAction(LineListed, BaseMapped, Armed, FifoEmpty, RingDepth, RingSlots)
+  -> NOT_OURS        LineListed == 0, or BaseMapped == 0, or FifoEmpty
+  -> MOVE            Armed, ring has room                 (today's path)
+  -> DISCARD_FAULT   Armed, ring full: pop, count RingDrops, set sticky IrqRx.Overflow
+  -> DISCARD         not Armed: pop, count IrqRx.Discarded
+```
+
+- The top-level ISR calls the mailbox handler **before** the `InterruptReady` / `InterruptIngressEnabled` checks
+  whenever `MailboxInterruptVector != 0`; those checks keep gating only the scanout/broker sources.
+- The handler loops on the action until NOT_OURS (bounded by a per-call cap, e.g. 256 pops, then return TRUE: the FIFO
+  cannot refill faster than it is popped, the cap only bounds one ISR).
+- `BaseMapped == 0` is the one state where nothing can be popped. Make it unreachable while the firmware can send:
+  keep the transport mapping until the ASC is stopped, and order `AdmissionPlatformDestroy` as: stop the sender
+  (existing shutdown), disarm (ISR now discards), then unmap. Record in the note which existing step stops the sender;
+  if none does on the surprise-removal path, DISCARD covers it as long as the mapping is still there.
+- Sticky `Overflow` is a transport fault: the worker treats it like a lost reply (existing engine-reset path), never
+  silently continues. A lost message becomes a recoverable TDR instead of a DIRQL livelock.
+- Receipt: `Wom1IrqRx` gains Discarded and Overflow; export it and `Wom1JobPoll` on the throttled
+  diagnostics-off path (next to OV2/OV5/PresentTs at backend_platform_windows.c 1500-1584) so a default-on run can be
+  judged without `Wom1JobDiagnostics` (which changes timing).
+- Default: `runtime->IrqCompletion = !AdmissionPlatformSwitchDisabled(Context, L"Wom1IrqCompletion")`. It stays inert
+  without the ACPI line (`AdmissionIrqWaitActive` needs `MailboxIrqArmed`), so the same package runs on the old Mu
+  and on recovery unchanged.
+
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH: "the ISR never returns with a listed, mapped, non-empty FIFO" is a
+deterministic state machine. Test (new `tests/test_render_irq_quiesce.py`, C model compiled from the header):
+enumerate LineListed x BaseMapped x Armed x FifoEmpty x RingDepth in {0, 63, 64}; assert that after the handler loop
+the model FIFO is empty in every state with LineListed && BaseMapped, that MOVE is chosen only when armed with room,
+and that Overflow is set exactly on DISCARD_FAULT. Update the source-text assertions in
+tests/test_render_irq_completion_step1.py (148/150/164) and tests/test_render_job_poll_predicted_sleep.py (320) for
+the default flip; grep tests/ for `Wom1IrqCompletion` and `IrqCompletion` before the commit
+(test_depth2_defaults.py:89, test_depth2_general_admission.py:125 carry the "default off" comment).
+
+### Mu change
+
+New production candidate = the MUANSCPPC002 source with `J313_AGX_MAILBOX_IRQ = TRUE` (MacBookAirMid2020.dsc:43),
+nothing else. Gate before any boot: decompiled DSDT diff against MUANSCPPC002 shows only the added
+`Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive) { 887 }` in the two APPL0002 templates. The recovery Mu
+stays MUANSCPPC002 (no line), so recovery always has the poll path.
+
+### Hardware sequence (fork 6; one variable each)
+
+1. IRQD1: new KMD package on the **current** production Mu (no line). Expected: byte-identical behaviour, perf gate
+   PASS, suite 119/0, `Wom1IrqRx` all zero. Proves the default flip is inert without the line.
+2. IRQD2: same package on the new Mu candidate, same boot A/B/B/A on `Wom1IrqCompletion` (0 = off arm; warm-up + 2
+   measured runs per arm, GM HD PERF and CS 1.6 warm r2/r3). Expected: FPS inside the 2 % gate both ways, worker busy
+   ~2.5 % on vs ~48 % off, RingDrops 0, Discarded 0 in steady state, Overflow 0, suite 119/0, 3 driver
+   disable/enable cycles and one ordered restart with `BUGCHECK ok code=0x0`, no watchdog (0x133/0x101) stop.
+   Failure: any stop, a hang at stop/restart (the H1 signature), perf gate FAIL -> production Mu stays MUANSCPPC002
+   and the package default returns to off.
+3. On PASS: the candidate becomes the production Mu (working-profile memory + state file updated by the architect),
+   architecture 2.1 item moves to DONE.
+
+Not in this change: waking the worker only from the mailbox DPC (dropping the fallback timer) and the launch-path work.

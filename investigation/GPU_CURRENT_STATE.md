@@ -2539,3 +2539,15 @@ memory. Fix under test: SHUTDOWN = ordered cache flush only, the controller stop
 Verification: GM runs + shutdown /r -> m1n1 prints BUGCHECK code=0x0. Not a GPU defect.
 
 UPDATE 2026-11-09T06:48:53Z RESTART BUGCHECK FIXED (AppleAns 0.4.2, 1f7129fd; EXP2300 code=0x0 after three GM runs). Cause: the first SRB_FUNCTION_SHUTDOWN stopped the controller, later paging I/O got STATUS_NO_SUCH_DEVICE. Installed on the bench C:; ANSBUILD011-I stays staged as rollback.
+
+## UPDATE 2026-11-09T19:32:40Z -- NEXT TARGETS: IRQ COMPLETION DEFAULT-ON (SPEC) AND DWM ROW DISCRIMINATOR F0 (architect, offline)
+1. Wom1IrqCompletion default-on: spec in investigation/analysis/KMD-IRQ-COMPLETION.md ("Default-on plan"). Blocking source
+finding H1 (hypothesis, never observed): the level mailbox line is not dismissed when the ISR returns early (not ready, not
+armed, unmapped) or the 64-slot ring is full -> storm risk once the line is in a default Mu. Order: harden ISR + test,
+IRQD1 (inert on MUANSCPPC002), IRQD2 (candidate Mu with the line, same-boot ABBA), then promote the Mu. Recovery Mu unchanged.
+2. DWM row (0.85 ms): EXP2273 hot ring, 7/7 frames: DWM job submitted +0.06 ms after GravityMark's render completes, kicked
++0.32, complete +0.85, GravityMark compute (submitted +0.21) kicked +0.96; refusal 55 on every DWM job. DWM cannot be
+pre-bound behind the render it depends on; only its neighbours can overlap it. Note: investigation/analysis/DWM-COMPOSITION-LEVER.md.
+WHY CONTINUE COMPARISON: not applicable (no archaeology). ACTIVE HYPOTHESIS: exclusive fullscreen removes the DWM job and
+returns 2.5-4 % at HD. NEXT CAUSAL TARGET: F0 = windowed vs fullscreen same-boot ABBA + ETW attribution, default package,
+no code. F0 outcome selects: cross-process depth-2 pairs (C1 then C2a), display direct-flip fix, or dropping the row.

@@ -52,6 +52,9 @@ Rules:
 - **KEEP-OFF (C), steps 1-2 DONE (EXP2272/2273: core freed, FPS neutral, detect is firmware/HV latency)** interrupt-driven job completion (ASC mailbox recv-not-empty AIC 578 = vINTID 887 -> ISR/DPC ->
   worker) replacing the predictive sleep+spin poll on the critical path (Wom1JobPoll: 320 us mean late wake per
   sleep, 49 % CPU busy; ~0.3-0.5 ms/frame). Design: investigation/analysis/KMD-IRQ-COMPLETION.md.
+  **BUILD (C) default-on (architect spec 2026-11-09, same note, "Default-on plan")**: before the mailbox line enters
+  the production Mu the ISR must dismiss the level line in every state (not ready, not armed, unmapped, ring full);
+  then IRQD1 (inert on the current Mu) and IRQD2 (candidate Mu, same-boot ABBA) flip the default.
 
 - **BUILD (C)** timeout-only TDR recovery: when the firmware never retires a job,
   DxgkDdiResetFromTimeout's quiesce returns STATUS_DEVICE_HARDWARE_ERROR and
@@ -98,8 +101,15 @@ driver-internal hazards -- the same per-resource model Apple's kext uses
 ### 2.4 Present and display
 - **DONE** DXGI flip-model presenter in the GL ICD; ICD built from the package
   source (EXP2205).
-- **BUILD** independent flip / DirectFlip so DWM stops composing GravityMark
-  (RedirectedFlip, ~0.9 ms GPU + preemption per frame, EXP2212 ETW).
+- **OPEN -> F0** DWM composition of windowed GravityMark (RedirectedFlip, EXP2212 ETW): 0.85 ms/frame (EXP2268);
+  EXP2273 hot ring: the DWM job arrives 0.06 ms after the application's render completes, costs <= 0.54 ms of GPU
+  plus 0.41 ms of depth-one boundary overhead, refusal 55 on every DWM job. Design and ranking:
+  investigation/analysis/DWM-COMPOSITION-LEVER.md.
+  - F0 (no code): windowed vs exclusive fullscreen ABBA bounds the lever and tells whether dxgkrnl grants the direct flip.
+  - **BUILD (I, after F0)** C1 cross-process compute-behind-render pair in the depth-2 window (per-job VM slot, 55
+    narrowed, opt-in Wom1CrossProcessPairs); **BUILD (O)** C2a Barrier waived for a UMD "private-only" compute.
+  - **BUILD** windowed independent flip on a second hardware plane (MPO: m1n1 IOMFB surface 1 + KMD MPO DDIs); only
+    after F0 and C are measured.
 
 ### 2.5 Shader compiler
 - **DONE** compute, VS and FS code at Metal-oracle parity (instruction and load
@@ -128,3 +138,9 @@ driver-internal hazards -- the same per-resource model Apple's kext uses
 ## 4. Decisions log (2026-11-07)
 - Depth-2 kick fallback S4a: class C (a firmware-invisible refusal must not
   reset the engine), default on; EXP2224 drill proof; EXP2225 perf gate PASS.
+
+## 5. Decisions log (2026-11-09)
+- Interrupt-driven completion: class C, FPS neutral, frees the worker core -> to become the default once the level
+  line is dismissed in every ISR state (source finding, KMD-IRQ-COMPLETION.md "Default-on plan").
+- DWM composition row (0.85 ms): no build before F0; cross-process serialization (refusal 55) is a legacy of the
+  single VM slot, to be narrowed as class I (C1) if F0 shows the row is real.
