@@ -75270,3 +75270,8 @@ EXP2292 HARDWARE BEFORE 2026-11-09T02:11:15Z:
 - Hashes: sys e26e6d1403bc, UmdArm64 50469beed446, UmdX64 e197b7c9b2eb, Umd32 095d457e0d41; manifest fa13c59bc5ac, hardware-manifest 0fb97bb3e44d; probe2292.sh 31b88d006623 (PROBE_LINT_OK); visible recovery rec2292h d25c56edfc71690f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2292h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2292-defer-start/run2292.sh.
+
+EXP2292 HARDWARE ACTUAL 2026-11-09T02:15:57Z:
+- Package 6590e613: waived kick deferred while the compute start timestamp is 0. No guest reset (0 PSCI RESET), but all three GM starts failed early: a exited after 9 s, b and c REMOVED after 16 s and 7 s; UMD logs 2.7-5.3 k lines.
+- Receipts: Waived 0, Placed 0, Deferred 3 (one per GM start), Considered 2294. Wom1GpuReset: 3 ENGINE resets, all recovered, completed 0x230b, last 0x230c, active 0: the job after the deferral did not complete.
+- Verdict: the change as implemented is rejected: it breaks GravityMark start (a regression, default-off path). H3 is not tested: no render ran waived. The deferral fires exactly once per start, which confirms a waivable pair at that point with the compute not yet started. The deferred successor then stalls; whether from the KMD's handling of the held prebound successor or from the firmware is not known. Recovery rec2292h.
