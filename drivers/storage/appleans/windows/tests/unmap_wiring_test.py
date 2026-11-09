@@ -31,3 +31,19 @@ dump = DIRECT[DIRECT.index('BOOLEAN AppleAnsDirectDumpInitialize('):DIRECT.index
 assert 'a->Namespace = (struct ans_namespace){0};' in dump and 'deallocate' not in dump, \
     'the dump instance does not advertise UNMAP'
 print('PASS unmap_wiring')
+# Qualification gate (ANS-TRIM-UNMAP.md): policy sits between the resolver and admission, the
+# request builder gets an independent mode check, and the policy is read where the registry
+# may be read (FindAdapter) and never by the dump instance.
+gate = body.index('ans_trim_gate(&a->Trim,&plan,a->Pages[tag])')
+assert resolve < gate < body.index('ans_order_admit('), 'the policy gate follows the resolver'
+assert re.search(r'plan\.nvme_opcode!=ANS_NVME_DSM \|\| a->Trim\.config\.mode==ANS_TRIM_DEALLOCATE',
+                 body), 'the request builder refuses deallocate outside DEALLOCATE mode'
+DRIVER = (ROOT / 'driver.c').read_text()
+find = DRIVER[DRIVER.index('ULONG AppleAnsFindAdapter('):DRIVER.index('BOOLEAN AppleAnsInitialize(')]
+assert find.index('if (dump) return dump_find(a, ConfigInfo);') < find.index('unmap_config(a);'), \
+    'the dump instance keeps the zeroed policy (ANS_TRIM_OFF)'
+assert 'ans_trim_config_make(have, value[0], value[1], value[2])' in DRIVER
+assert 'if (a->Trim.config.mode == ANS_TRIM_OFF) a->Namespace.deallocate = 0;' in DIRECT
+assert 'Trim' not in dump, 'the dump instance has no UNMAP policy'
+assert 'ans_trim_done(&a->Trim' in DIRECT and 'ans_trim_queued(&a->Trim)' in NATIVE
+print('PASS unmap_policy_wiring')

@@ -112,3 +112,26 @@ direct-runtime record in the second slot instead: `source = 3` and `generation =
 | `last_error` | bit 0 = faulted, bit 1 = IOP crashed |
 
 Only these fields are set in `valid_fields`.
+
+## UNMAP receipt (control code 0x001b6004)
+
+Same SRB_IO_CONTROL header and signature as the telemetry query, total size exactly 988
+bytes (28 + 960). Read-only: it never changes the policy. Payload offsets (little-endian):
+
+| Offset | Bytes | Field |
+|---|---:|---|
+| 0, 4 | 4, 4 | version = 1, payload size = 960 |
+| 8, 12 | 4, 4 | effective mode (0 off, 1 observe, 2 deallocate), Identify ONCS |
+| 16, 24 | 8, 8 | fence start, fence end (namespace LBAs, end exclusive) |
+| 32 | 8 | namespace blocks |
+| 40..64 | 4 x 8 | UNMAP commands, accepted, empty, rejected |
+| 72, 80 | 8, 8 | validated ranges, blocks (before mode and fence) |
+| 88 | 8 | accepted commands not sent because of the mode |
+| 96, 104 | 8, 8 | ranges, blocks dropped by the fence |
+| 112, 120 | 8, 8 | ranges, blocks handed to Dataset Management |
+| 128..152 | 4 x 8 | DSM commands queued, completed ok, completed with error, not sent |
+| 160, 164 | 4, 4 | last NVMe error status, last reject (key<<16, asc<<8, ascq) |
+| 168, 176 | 8, 8 | hull of all validated ranges: first LBA, end LBA |
+| 184, 188 | 4, 4 | extent count, total ranges recorded in the ring |
+| 192 | 16 x 16 | extents (start, end), ascending, disjoint |
+| 448 | 32 x 16 | ring: LBA (8), count (4), sequence (4); slot = sequence mod 32 |

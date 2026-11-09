@@ -117,6 +117,30 @@ static BOOLEAN dump_start(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
     return result;
 }
 
+/* PASSIVE_LEVEL (FindAdapter). Services\AppleAns\Parameters\Device, REG_DWORD each:
+ * UnmapMode 0 off / 1 observe / 2 deallocate, UnmapFenceStart and UnmapFenceEnd in namespace
+ * LBAs (end exclusive). Anything missing or unreadable resolves to the safe side
+ * (ans_trim_config_make): observe, and never deallocate without a fence. */
+static VOID unmap_config(PAPPLE_ANS_ADAPTER a)
+{
+    static const char *const names[3] = {"UnmapMode", "UnmapFenceStart", "UnmapFenceEnd"};
+    ULONG value[3] = {0}, have = 0, length = sizeof(ULONG);
+    PUCHAR buffer = StorPortAllocateRegistryBuffer(a, &length);
+    if (buffer) {
+        for (unsigned i = 0; i < 3 && length >= sizeof(ULONG); i++) {
+            ULONG bytes = sizeof(ULONG);
+            RtlZeroMemory(buffer, sizeof(ULONG));
+            if (StorPortRegistryRead(a, (PUCHAR)names[i], 1, MINIPORT_REG_DWORD, buffer, &bytes) &&
+                bytes == sizeof(ULONG)) {
+                RtlCopyMemory(&value[i], buffer, sizeof(ULONG));
+                have |= 1u << i;
+            }
+        }
+        StorPortFreeRegistryBuffer(a, buffer);
+    }
+    a->Trim.config = ans_trim_config_make(have, value[0], value[1], value[2]);
+}
+
 _Use_decl_annotations_
 ULONG AppleAnsFindAdapter(PVOID DeviceExtension, PVOID HwContext,
     PVOID BusInformation, PCHAR ArgumentString,
@@ -172,6 +196,7 @@ ULONG AppleAnsFindAdapter(PVOID DeviceExtension, PVOID HwContext,
         a->Stage = AppleAnsStageResourcesRejected;return SP_RETURN_ERROR;
     }
 #endif
+    unmap_config(a);
     a->ResourcesAccepted = TRUE;a->Stage = AppleAnsStageResourcesAccepted;
     return SP_RETURN_FOUND;
 }

@@ -7,6 +7,7 @@
 #include "identify.h"
 #include "../common/ans_order.h"
 #include "../common/ans_direct.h"
+#include "../common/ans_trim.h"
 #include "telemetry.h"
 #include "dump.h"
 #ifndef APPLE_ANS_NATIVE_READ_ONLY
@@ -84,6 +85,9 @@ typedef struct _APPLE_ANS_ADAPTER {
      * are off, so no lock, DPC, timer or log API is used and StartIo polls its own request.
      * DumpContext is then this instance's validated copy of the live record. */
     ULONG DumpMode;
+    /* UNMAP policy (Parameters\Device: UnmapMode, UnmapFenceStart, UnmapFenceEnd, read in
+     * FindAdapter) and receipt. Zero (the dump instance) is ANS_TRIM_OFF. */
+    struct ans_trim Trim;
 } APPLE_ANS_ADAPTER, *PAPPLE_ANS_ADAPTER;
 BOOLEAN AppleAnsNativeResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config);
 BOOLEAN AppleAnsNativeInitialize(PAPPLE_ANS_ADAPTER a);
@@ -107,7 +111,8 @@ VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a);
  * count (value = count), 0xA4 NVMe CQE error (value = status<<8 | opcode), 0xA5 reset,
  * 0xA6 SRB_FUNCTION_DUMP_POINTERS answered (value = sealed<<8 | count), 0xA7 dump-instance
  * receipt (value = ans_dump_context_receipt_value), 0xA8 Identify ONCS without Dataset
- * Management: UNMAP stays unadvertised (value = ONCS). */
+ * Management: UNMAP stays unadvertised (value = ONCS), 0xA9 UNMAP policy at start
+ * (value = effective mode<<16 | ONCS). */
 #define APPLE_ANS_DIAG_MAX 96
 VOID AppleAnsDiag(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, ULONG code, ULONG value);
 VOID AppleAnsFinish(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, USHORT nvme_status, ULONG length);

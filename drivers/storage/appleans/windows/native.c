@@ -133,6 +133,13 @@ static BOOLEAN telemetry_query(PAPPLE_ANS_ADAPTER a,PSCSI_REQUEST_BLOCK srb)
         ULONG receipt=ans_dump_context_receipt_value(&a->DumpContext);
         if(receipt!=a->DumpReceiptLogged) { a->DumpReceiptLogged=receipt;AppleAnsDiag(a,NULL,0xA7,receipt); }
     }
+    /* UNMAP receipt: a second read-only query, told apart by its control code and size. */
+    if(ans_trim_ioctl_validate(srb->DataBuffer,srb->DataTransferLength)) {
+        if(!ans_trim_ioctl_reply(srb->DataBuffer,srb->DataTransferLength,&a->Trim,a->Namespace.blocks)) {
+            AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
+        }
+        AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,ANS_TRIM_IOCTL_TOTAL);return TRUE;
+    }
     ans_u32 sources;
     if(!ans_stats_ioctl_validate(srb->DataBuffer,srb->DataTransferLength,&sources)) {
         AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
@@ -428,12 +435,14 @@ VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a)
             /* Authenticated nonfaulted rejection, or local rejection before a
              * doorbell: the task ended without hardware owning its payload. */
             if (ans_order_complete(&a->Order,token)!=ANS_ORDER_OK) { quarantine(a);return; }
+            if (slot->Request.sqe[0]==ANS_NVME_DSM) ans_trim_not_sent(&a->Trim);
             if (slot->Shutdown) {
                 a->ShutdownTag=token.tag;a->ShutdownFlushOk=FALSE;
                 (void)StorPortIssueDpc(a,&a->ShutdownDpc,NULL,NULL);
             } else { *slot=(APPLE_ANS_SLOT){0};AppleAnsComplete(a,srb,SRB_STATUS_ERROR,0); }
         } else if (ret==ANS_WIRE_OK) {
             ans_stats_submit(&a->Stats,1,slot->Request.sqe[0]);
+            if (slot->Request.sqe[0]==ANS_NVME_DSM) ans_trim_queued(&a->Trim);
         } else {
             ans_stats_uncertain(&a->Stats,1,slot->Request.sqe[0]);
             (void)ans_order_quarantine(&a->Order,token);quarantine(a);return;
@@ -509,6 +518,8 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
             AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
         }
         ans_scsi_unmap_resolve(&a->Namespace,&plan,srb->DataBuffer,a->Pages[tag]);
+        /* Policy and receipt: SUBMIT survives only in DEALLOCATE mode, fenced ranges only. */
+        ans_trim_gate(&a->Trim,&plan,a->Pages[tag]);
     }
     struct ans_order_token token;
     int admitted=ans_order_admit(&a->Order,tag,attribute,&token);
@@ -535,7 +546,9 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
     }
     if(plan.action==ANS_SCSI_SUBMIT &&
         !ans_io_request(&plan,prps,tag,a->PageDma[tag],a->Pages[tag],
-                        !a->Namespace.read_only,&slot->Request)) {
+                        !a->Namespace.read_only &&
+                        (plan.nvme_opcode!=ANS_NVME_DSM || a->Trim.config.mode==ANS_TRIM_DEALLOCATE),
+                        &slot->Request)) {
         ans_stats_add(&a->Stats,ANS_TELEM_PRP_TRANSLATION_FAILURES,1);
         (void)ans_order_cancel_queued(&a->Order,token);
         *slot=(APPLE_ANS_SLOT){0};AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);

@@ -219,3 +219,39 @@ failure criterion is rolled back from the bridge profile by restoring the
 baseline package; if the guest still boots, `fsutil behavior set
 DisableDeleteNotify 1` stops the file system from sending TRIM until the
 package is replaced.
+
+## Independent review and qualification gate (2026-11-10, before any hardware run)
+
+Review of `f9f03b9a7` against the code (not this note), the Asahi `apple.c`/`core.c`
+(AsahiLinux/linux `asahi` branch, read 2026-11-09) and WDK 26100 `storport.h`:
+
+| Item | Finding |
+| --- | --- |
+| Parameter list parsing | `unmap_ranges`: big-endian header and descriptors, each field read once; descriptor bytes bounded by the list (5/1Ah), multiple of 16, UNMAP DATA LENGTH = bytes + 6, reserved bytes zero (5/26h); zero-count descriptors skipped; ANCHOR/GROUP/CONTROL rejected in `ans_scsi_prepare` (5/24h). No defect. |
+| LBA unit | `ans_identify_namespace` accepts only LBADS 12 and reports block size 4096; READ/WRITE and UNMAP both pass the SCSI LBA through unscaled. No 512/4096 conversion exists anywhere. |
+| Bounds | `lba > blocks || count > blocks - lba` (overflow-safe) against the same `ns->blocks` READ CAPACITY reports; any bad descriptor fails the whole command and zeroes the page. |
+| Range count, buffer, tags | At most 256 ranges (list length capped at 8 + 256 x 16, B0h says 0100h), so no splitting. The list is the tag's own page, written under InterruptLock while the slot is free; completion, reset and stop use the ordinary slot path. |
+| VPD/READ CAPACITY | B0h/B2h fields equal the enforced limits; LBPME/LBPRZ 0. |
+| Reset, shutdown, dump | Ordinary task; the dump instance's namespace is zeroed (no capability). |
+| Asahi | Discard is enabled from ONCS alone (`nvme_config_discard`); the Apple driver sets `SKIP_CID_GEN | IDENTIFY_CNS | ADMIN_PAGE_ALIGN`, none about discard; TCB `length` is the CDW12 word (0 for DSM), DMA TO_DEVICE: identical to `ansd_submit`. |
+
+No defect found. What the review cannot give is protection of the other operating systems
+on the same namespace, so the driver now carries its own gate (`common/ans_trim.c`):
+
+- `Services\AppleAns\Parameters\Device` (REG_DWORD, read with `StorPortRegistryRead` in
+  FindAdapter): `UnmapMode` 0 off / 1 observe / 2 deallocate; `UnmapFenceStart`,
+  `UnmapFenceEnd` in namespace (4 KiB) LBAs, end exclusive. Missing, unreadable or unknown
+  values give observe; deallocate without a non-empty fence gives observe.
+- observe: UNMAP is advertised, validated, translated and recorded, then completed GOOD
+  without a command. deallocate: ranges not entirely inside the fence are dropped (UNMAP is
+  advisory: LBPRZ 0, nothing may depend on it) and only the rest is sent. off: as before S3.
+- `ans_io_request` gets an independent mode check from the wrapper; the dump instance's
+  policy is zero (off).
+- Receipt (`TELEMETRY.md`, control code 0x001b6004): counters per command and range, the
+  hull, up to 16 disjoint extents whose union contains every validated range (nearest two are
+  joined on overflow, so the union only grows), the last 32 ranges. Diag 0xA9 records
+  mode<<16 | ONCS at every start.
+
+Hardware order: observe (ranges compared with the GPT) -> deallocate with the fence on the
+Windows partition and a scratch file -> full retrim. `ArgumentString`/`DriverParameter` was
+not used: Microsoft documents `StorPortRegistryRead` for exactly this key.

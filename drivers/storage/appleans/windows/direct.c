@@ -183,6 +183,10 @@ BOOLEAN AppleAnsDirectInitialize(PAPPLE_ANS_ADAPTER a)
     if (!a->Namespace.deallocate)
         AppleAnsDiag(a, NULL, 0xA8, (ULONG)a->Pages[ANS_QUEUE_DEPTH][520] |
                                     ((ULONG)a->Pages[ANS_QUEUE_DEPTH][521] << 8));
+    /* Policy: OFF withdraws the capability; the effective mode is recorded once per start. */
+    a->Trim.oncs = (ULONG)a->Pages[ANS_QUEUE_DEPTH][520] | ((ULONG)a->Pages[ANS_QUEUE_DEPTH][521] << 8);
+    if (a->Trim.config.mode == ANS_TRIM_OFF) a->Namespace.deallocate = 0;
+    AppleAnsDiag(a, NULL, 0xA9, (a->Trim.config.mode << 16) | a->Trim.oncs);
     a->Stage = AppleAnsStageCache;
     if (a->Pages[ANS_QUEUE_DEPTH][525] & 1) {
         if (!direct_admin(a, 0x0a, 0, 6, 0, 0, &dw0) || (dw0 & ~1u)) goto failure;
@@ -285,6 +289,7 @@ static VOID complete_tag(PAPPLE_ANS_ADAPTER a, const struct ansd_cqe *e)
     ans_stats_add(&a->Stats, ANS_TELEM_CQES, 1);
     ans_stats_complete(&a->Stats, 1, slot->Request.sqe[0], slot->Length, (status >> 1) == 0);
     if (status >> 1) AppleAnsDiag(a, slot->Srb, 0xA4, ((ULONG)(status >> 1) << 8) | slot->Request.sqe[0]);
+    if (slot->Request.sqe[0] == ANS_NVME_DSM) ans_trim_done(&a->Trim, (ULONG)(status >> 1));
     if (slot->Shutdown) {
         a->ShutdownTag = tag; a->ShutdownFlushOk = (status >> 1) == 0;
         (void)StorPortIssueDpc(a, &a->ShutdownDpc, NULL, NULL);
