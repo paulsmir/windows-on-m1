@@ -75425,3 +75425,8 @@ EXP2300 HARDWARE BEFORE 2026-11-09T06:35:09Z:
 - Recovery: rec2300h (ANS); boot failure -> ImagePath rollback to ANSBUILD011-I from the bridge.
 - Hashes: sys 7b1089543ce3, UmdArm64 fc6927758421, UmdX64 6ccc7671b1a8, Umd32 98e80e38525e; manifest 32c6487a5ead, hardware-manifest f0622b277b77; probe2300.sh 6f3b5a00f52b (PROBE_LINT_OK); visible recovery rec2300h 913ed32eef2358b8; m1n1 0d3a75b3.
 - Recovery rec2300h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2300-shutdown-fix/run2300.sh.
+
+ANSSHUT001 / EXP2300 HARDWARE ACTUAL 2026-11-09T06:48:53Z:
+- AppleAns 0.4.2 (sys 0624637f) booted the native SSD; default GPU profile, no switches. GM HD PERF a 43.790, b 44.399, c 44.194 fps, no reset, GPU_RESET none.
+- Ordered restart after the GM session on m1n1 ansdirect-bugcheck4: BUGCHECK ok code=0x0 p1..p4=0, no launcher hang, RECOVERY_DONE on the native SSD. Before the fix every comparable restart bugchecked (EXP2288, 2289, 2291, 2293, 2294, 2295, 2296, 2297: 0xEF, 0x1A C000000E, 0x154).
+- Verdict: confirmed on this sample: treating SRB_FUNCTION_SHUTDOWN as a flush removes the restart bugcheck after a GPU session. One boot; a repeat will come with later experiments, which all print the code.

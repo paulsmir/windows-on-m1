@@ -2537,3 +2537,5 @@ The first SRB_FUNCTION_SHUTDOWN set ShuttingDown and stopped the controller from
 SRB_STATUS_NO_DEVICE -> STATUS_NO_SUCH_DEVICE (= p2 of the 0x1A), hence 0x1A/0xEF/0x154 only after sessions with paged-out
 memory. Fix under test: SHUTDOWN = ordered cache flush only, the controller stops in ScsiStopAdapter / the power-down path.
 Verification: GM runs + shutdown /r -> m1n1 prints BUGCHECK code=0x0. Not a GPU defect.
+
+UPDATE 2026-11-09T06:48:53Z RESTART BUGCHECK FIXED (AppleAns 0.4.2, 1f7129fd; EXP2300 code=0x0 after three GM runs). Cause: the first SRB_FUNCTION_SHUTDOWN stopped the controller, later paging I/O got STATUS_NO_SUCH_DEVICE. Installed on the bench C:; ANSBUILD011-I stays staged as rollback.
