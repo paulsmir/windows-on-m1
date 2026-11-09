@@ -2514,3 +2514,9 @@ decomposition cannot come from R8; R2/R4/R6 carry true VB-read vs UAV-write depe
 (architect, offline): where in Apple's timeline the overlap sits -- cross-frame (C(N+1) || R(N)) or intra-frame -- using the
 scene-aligned job timelines (agx_gm_scene_align.py, agx_gpu_frame_breakdown.py --jobs) before any further OV work.
 Open defect in its own task: shutdown bugcheck after GPU sessions (0xEF/0x1A/0x154; EXP2288-2297), see the proposal card.
+
+## UPDATE 2026-11-09T04:50:04Z -- APPLE'S 2 ms OVERLAP LOCATED: C4||R1 (1.46 ms) and C6||R3 (0.75 ms), intra-frame, render starts first
+From splitd-hd.csv directly (sum 21.41 vs union 18.52 ms/frame; compute||render 2.03, cross-frame 0.31). Not the R8 waiver.
+Metal order C0 R5 C2 R7 C4 R1 C6 R3 vs our D3D12 order C0 R1 C2 R3 C4 R5 C6 R7. Next (offline): do our OV2 receipts judge
+C2-behind-R1 and C4-behind-R3 independent? If the tracker refuses them for a reason Apple's overlap disproves, that is the
+next lever (compute kicked behind a running independent render: COMPUTE_ON_3D + OV2 lead). Ledger: "APPLE OVERLAP STRUCTURE".
