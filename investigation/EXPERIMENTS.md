@@ -75303,3 +75303,14 @@ EXP2293 HARDWARE ACTUAL 2026-11-09T02:51:37Z:
 EXP2293 ARCHITECT READING (2026-11-09T02:52:12Z; fork 6's ACTUAL carries the run):
 - Deferral before the pending claim (6f18cfb8): 3/3 GM starts clean, 0 PSCI, no GPU reset, 43.6/43.2/43.3 fps, Waived = Placed 7436, Deferred 75894 (counted per poll, so frame kicks are also held until the compute starts). Tally for the waiver profile with diagnostics off: without a gate 3/3 resets; with the beacon delay 0/3; with the compute-start gate 0/3. H3 (waived doorbell before the compute starts) is consistent and now the only standing explanation; the gate is a class C contract (a successor whose TA no longer waits must not reach the firmware before its predecessor has started) and stays with the opt-in waiver.
 - Next: EXP2294 ABBA on package 6f18cfb8, diagnostics off, OV3B=1 in both arms, ONE variable: on = Wom1Ov2NoHazardLead=1 + Wom1Ov5TaWaiver=1, off = Wom1Ov2NoHazardLead=1 only. Per boot: one warm-up GM run (cold, excluded) then two measured runs; compare medians of the measured runs, A/B/B/A order. Expected gain <= ~0.65 ms/frame HD (~3 %), noise ~1 %; a result inside noise keeps the waiver KEEP-OFF (C/I) per the architecture policy, a gain beyond noise in both pairs allows the default discussion. Also the two extra "on" boots count toward stability (0 resets expected).
+
+EXP2294 HARDWARE BEFORE 2026-11-09T03:06:32Z:
+- WHY THIS HYPOTHESIS: (1) EXP2293: with the corrected deferral the waiver ran 7436 pairs in 3 clean GM starts; (2) EXP2288/2293 fps differ only across boots, so no gain is shown; (3) cross-boot switches need boot-level ABBA.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: as EXP2279. TRANSLATION: existing OV5 path.
+- ATOMIC CONTRACT: none -- Wom1Ov5TaWaiver is the one variable; Wom1Ov2NoHazardLead is on in both arms.
+- WHAT IS STILL UNKNOWN: the frame-time effect.
+- Expected: on arms faster than off arms in both pairs by more than the run noise, else no default change. Failure criteria: hang, GPU reset.
+- Recovery: rec2294h (ANS).
+- Hashes: sys ba0553b058fc, UmdArm64 7e3da5936b7d, UmdX64 15a20d3a5d6c, Umd32 2818e2d0ec91; manifest 3b8a59ae5367, hardware-manifest 52f4ec3cccea; probe2294.sh fcd89ace76ca (PROBE_LINT_OK); visible recovery rec2294h 98747948a39a48f8; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
+- Recovery rec2294h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2294-abba-on/run2294.sh.
