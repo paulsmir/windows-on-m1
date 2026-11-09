@@ -75648,3 +75648,21 @@ Next (in this order):
 2. Architect, offline: direct-flip contract from Microsoft documentation and the pinned WDK (DISPLAYABLE back
    buffers, pfnCheckDirectFlipSupport, independent-flip conditions) -> spec, class FULL GRAPHICS.
 3. Only then repeat F0 with a real 1280x720 mode (bounds the DWM row with equal present sizes).
+
+## EXP2300 / EXP2301 — CORRECTION: m1n1 identity in the BEFORE "Hashes" lines (2026-11-09T20:45:51Z, no hardware)
+
+- The BEFORE entries of EXP2300 (2026-11-09T06:35:09Z) and EXP2301 (2026-11-09T19:53:47Z) end their "Hashes"
+  line with `m1n1 0d3a75b3`. That value is the `m1n1_windows` checkout of the GPU worktree, written by the
+  entry template; it is not the image that was launched.
+- Launched image in both runs (launch script chainload line and hardware-manifest "Artifacts"):
+  `.local/experiments/m1n1-ansdirect-bugcheck4/m1n1-g2-abi6-iomfb-owner-ansdirect-bugcheck4.macho`, SHA-256
+  `f01f5961bb4a6f5c18f4396f522352ff47399f0dd97a17437d5d50048e3e799d`, source commit 83a9cf74 on
+  `exp/m1n1-ans-direct-slc` (`m1n1-build-info.json`). Evidence table:
+  `investigation/analysis/TDR-RESTART-U4-U8-SOURCES.md` A.1.
+- The original entries are left unchanged. The results of both experiments do not depend on the field, but
+  every source citation against "the bench m1n1" must use 83a9cf74, not 0d3a75b3 (the two differ in
+  `hv_agx_retained_platform.c`, `hv_agx_gpuva_v5.c`, `hv_agx_power_mmio.c`, `rtkit.c`, `nvme.c`).
+- The same field in EXP2296-EXP2299 carries the same template value and was not checked against those
+  manifests here.
+- Process: the BEFORE generator should take the m1n1 commit from the launched image's
+  `m1n1-build-info.json`, not from the gitlink (handed to fork 6, who owns the experiment scripts).

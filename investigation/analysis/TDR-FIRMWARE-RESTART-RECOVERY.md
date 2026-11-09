@@ -423,3 +423,65 @@ Host suites `test_apple_agx_rtkit_session`, `_firmware`, `_firmware_provider`, `
 default set); each new test names the bug it catches. Eleven injected defects (no handoff re-arm, no
 read-back, silent force, cold rollback in the warm stop, skipped boot phase, stale ring indices, ...)
 are all caught.
+
+## 9. Corrections after the U4/U8 source pass; U9 settled (architect, 2026-11-09T20:44:54Z, no hardware)
+
+Basis: `investigation/analysis/TDR-RESTART-U4-U8-SOURCES.md` (424a6aab2), sections A.5, A.7, B and
+"Consequences for the design". Earlier sections are left as written; where they disagree with this
+section, this section is the design.
+
+### 9.1 Unknowns closed from source
+
+| # | Result | Consequence |
+|---|---|---|
+| U4 | Settled. JOB_END then RELEASE with the existing broker ops clean up a job the firmware never ended; the broker cannot tell the two cases apart. Envelope: broker power ON, root Active, ASC CPU may be stopped | no m1n1 change for the warm path. Order inside ResetFromTimeout: stop proof, then JOB_END (twice when `JobNested`), then RELEASE, then return; before the VidMm purge, because page-table updates of an owner with a pending job return BUSY. A graph marked `Uncertain` cannot be ended through the existing client functions: the warm path stays restricted to "job provably never reached the GPU" |
+| U8 | Settled for one pass. macOS recovers at runtime by a cooperative firmware halt / two-phase resume with the firmware running, and boots the firmware again only at system wake. It gives no evidence for or against restarting an unresponsive firmware | 0.4 is corrected to "at system wake". U1 and U2 stay pure hardware questions; macOS is not cited as support for the AP 0x10 / IOP 0x10 stop pair on GFX |
+| U9 | Settled. On an Active root a second AGX_RR_ACTIVATE returns STATE and does nothing; a second PREPARE returns STATE (source note A.5, `retained_root.c:280-281,246-247`). ACTIVATE is the only place that re-initialises GPUVA v5 with a new epoch | the warm `PublishUatRoots` must not send ACTIVATE. It redoes only the rest of `AdmissionRetainedActivate`: command arena, relocation binding, hwdata, `AppleAgxContext0BrokerMap` of the rebuilt graph, crash-log buffer. Sending ACTIVATE and ignoring STATE is rejected: it hides a real STATE refusal on the first boot |
+
+### 9.2 Changes to the translation (section 4)
+
+- **T2, class F1** (firmware halted and answering): the macOS-conformant action is the two-phase resume
+  (write 2, wait for 3, repair queues, write 0), not a stop. The KMD uses Asahi's one-step resume, and
+  EXP1964/1965/2214 are "resumed, never retires". Whether the one-step resume is the cause is a labelled
+  hypothesis; it is a cheaper experiment than a restart and is ranked **before H2** for class F1.
+- **T3** (silence proof): for F2/F3 the proof comes from hardware state only (CPU RUN read-back, plus a
+  power or reset cycle on the cold path). macOS offers no host-side proof.
+- **T7** (replay of 3.2): on the warm path step 4 (PREPARE + ACTIVATE) is skipped entirely. Slot 0 is
+  therefore valid before the CPU starts, unlike the first boot. Whether the firmware tolerates that is
+  part of what H1 tests.
+- **4.4 `AGX_RR_RECOVER`** (cold path, stage 4): reduced to the power (or pmgr reset) cycle with the
+  root kept Prepared + Active. Dropped: "unbind slots / drop leases / job state" (the KMD does it with
+  existing ops) and "root back to prepared, not active" (incompatible with the bench source). Added:
+  RR-class locking (`broker_lock` + `v5_lock`) across the whole cycle, a way out of power FAILED,
+  a post-condition check that slot 0 and the TTBR1 prefix are unchanged.
+- **Caveat on `M/`** (section 0, 3.4): the bench m1n1 is 83a9cf74 (branch `exp/m1n1-ans-direct-slc`,
+  macho f01f5961...), not the 0d3a75b3 checkout; re-pinned citations are in the source note A.6.
+
+### 9.3 H1 preregistration additions
+
+- **Expected checkpoint, added:** (1) the restart path sends neither PREPARE nor ACTIVATE and the broker
+  epoch is unchanged; (2) the first GPUVA v5 response after the boot has Status OK with the tainted flag
+  clear, and an RR QUERY reports `AGX_RR_FLAG_ACTIVE` and `AGX_RR_FLAG_PREFIX_UNCHANGED`; (3) a LEASE
+  of a previously used slot succeeds; (4) the firmware status block (recovery counter, phase, +0x20
+  field) is recorded before the stop and after the boot, no expected value.
+- **Failure criterion, added:** any broker TAINTED status after the restart. It is unrecoverable in the
+  same boot and rejects the warm path as designed even if the firmware came up; evidence is the m1n1
+  "retained op" print.
+- **Known confound, to be named in BEFORE:** a boot failure alone does not separate "the image does not
+  boot twice" from "the firmware rejects a pre-populated slot 0".
+
+### 9.4 Stage 2 status and what is left before H1
+
+| Part | State |
+|---|---|
+| 2a shared layer (section 8) | merged into `gpu/memory-latency` (fe119f211); host suites green; nothing calls it; not yet compiled with MSVC |
+| 2b KMD primitives (8.2 items 1-3) | not started |
+| 2b warm publish (8.2 item 4) | not started; contract fixed by U9 above |
+| 2b KMD-owned reset state (8.4), `AdmissionPlatformRuntimeRestart`, drill escape gated by `Wom1FwRestartDrillAllowed` | not started |
+| Stage 1 receipt v5 | not started; rides on H1's package |
+
+2b touches `backend_platform_windows.c`, the file the mailbox ISR merge (212f09e0e) changed. The restart
+path must use `AdmissionMailboxIsrClose` after the ASC stop (as `AdmissionFirmwarePowerOff` and
+`AdmissionPlatformDestroy` do) and `AdmissionMailboxIsrReopen` (arm, then publish) before the CPU is
+started again; it must not write `MailboxIsrRuntime` or
+`MailboxIrqArmed` directly.

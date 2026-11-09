@@ -55,6 +55,9 @@ Rules:
   **BUILD (C) default-on (architect spec 2026-11-09, same note, "Default-on plan")**: before the mailbox line enters
   the production Mu the ISR must dismiss the level line in every state (not ready, not armed, unmapped, ring full);
   then IRQD1 (inert on the current Mu) and IRQD2 (candidate Mu, same-boot ABBA) flip the default.
+  **MERGED 2026-11-09 (212f09e0e + arm-order correction 84b91a7cb)**: Wom1IrqCompletion defaults on, inert without
+  the ACPI line; ISR/DPC reach the runtime only through Context->MailboxIsrRuntime (close after the ASC stop,
+  reopen = arm, then publish). Not MSVC-compiled yet; hardware IRQD1 then IRQD2 pending (fork 6).
 
 - **BUILD (C), DESIGNED 2026-11-09** timeout-only TDR recovery: when the firmware never retires a job,
   DxgkDdiResetFromTimeout's quiesce returns STATUS_DEVICE_HARDWARE_ERROR and
@@ -65,6 +68,10 @@ Rules:
   RestartFromTimeout = boot and re-publish. Stages: 1 (D) reset receipt v5; 2 (I) restart mechanism, off;
   **H1** idle warm restart of a healthy firmware (unknown U1); 3 (C) warm path + withheld-kick stall drill (H2);
   4 (C) cold path with a new m1n1 broker op (H3); 5 default on.
+  **Stage 2a MERGED 2026-11-09 (fe119f211)**: shared-layer warm stop/start/restart entry points, called by
+  nothing. U4, U8, U9 settled from sources (design note section 9): the warm publish must not send a second
+  ACTIVATE; macOS halts cooperatively and resumes in two phases, so T2 ranks the two-phase resume before H2.
+  Next: stage 2b (KMD primitives, AdmissionPlatformRuntimeRestart, drill escape) and stage 1 receipt v5, then H1.
 
 ### 2.2 Dependencies (D3D12 -> AGX)
 Target: order work only by what D3D12 orders (ResourceBarrier) and by
@@ -160,3 +167,10 @@ driver-internal hazards -- the same per-resource model Apple's kext uses
 - F0 (EXP2301): the fullscreen arm was a failed mode set (bench m1n1 lost CAP_SCALED_SOURCE with the move to the
   brokerlock/ansdirect line) -> lever size unmeasured; DWM composes because the UMD refuses direct flip by design.
   Order: scaled-source port (C, m1n1 only), direct-flip contract and spec (FULL GRAPHICS), then F0 again. C1/C2a parked.
+- Merged into gpu/memory-latency (user decision "влить обе", 2026-11-09): ISR default-on branch (212f09e0e) and TDR
+  stage 2a shared layer (fe119f211). Review correction on top: RuntimeStart arms before it publishes (84b91a7cb).
+  Gate on the merged tree: 1091 tests, 0 NEW once the three test_g4_live_* suites read the q22 m1n1
+  (Q22_M1N1_SOURCE=.worktrees/m1n1-q22; the m1n1_windows checkout 0d3a75b3 lacks live_additive). MSVC /W4 compile
+  = the next package build.
+- Bench m1n1 identity: ledger BEFORE "m1n1 0d3a75b3" (EXP2300/2301) is the gitlink checkout; the launched image is
+  ansdirect-bugcheck4 83a9cf74 (correction appended to EXPERIMENTS.md).

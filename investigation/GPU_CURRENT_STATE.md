@@ -2578,3 +2578,19 @@ no code. F0 outcome selects: cross-process depth-2 pairs (C1 then C2a), display 
 - ACTIVE HYPOTHESIS: none on hardware. NEXT CAUSAL TARGET: (1) port the scaled source to the bench m1n1 line and
   verify 11 modes + a real 1280x720 GravityMark mode (one variable = m1n1, recovery 83a9cf74); (2) offline
   direct-flip contract (Microsoft docs + pinned WDK) -> spec; (3) F0 again with equal present sizes. C1/C2a parked.
+
+## UPDATE 2026-11-09T20:53:07Z -- ISR default-on and TDR stage 2a merged (no hardware)
+
+- `gpu/memory-latency` now contains 212f09e0e (KMD mailbox ISR, `Wom1IrqCompletion` default on, inert without the
+  ACPI line), fe119f211 (shared-layer warm firmware restart entry points, called by nothing) and 84b91a7cb
+  (RuntimeStart arms the runtime before publishing it to the ISR).
+- Verified offline only: touched suites pass; `run_against_baseline.py` 1091 tests, 0 NEW when
+  `Q22_M1N1_SOURCE=/Volumes/pwdev/public_windows/.worktrees/m1n1-q22` (without it three `test_g4_live_*` tests
+  fail against the `m1n1_windows` checkout 0d3a75b3, which predates 7cce5a0e). Not MSVC-compiled, not on hardware.
+- Accepted package: unchanged (the EXP2300 package). Production Mu MUANSCPPC002; candidate MUIRQ001-95263b97.
+- NEXT CAUSAL TARGETS (bench serial, fork 6): (1) package build of the merged tree = /W4 compile gate;
+  (2) IRQD1 on MUANSCPPC002: behaviour identical, perf gate PASS, suite 119/0, `Wom1IrqRx` absent;
+  (3) IRQD2 on MUIRQ001: same-boot ABBA on `Wom1IrqCompletion`, Discarded/RingDrops/Overflow 0, 3 disable/enable
+  cycles, ordered restart `BUGCHECK ok code=0x0`; (4) scaled-source m1n1 checkpoint, then F0 again.
+- Architect, offline: TDR stage 2b spec/implementation and receipt v5 (design note section 9.4); direct-flip
+  contract note (`investigation/analysis/DIRECT-FLIP-CONTRACT.md`).

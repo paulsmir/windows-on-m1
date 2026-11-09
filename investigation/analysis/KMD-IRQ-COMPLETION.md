@@ -230,7 +230,8 @@ stays MUANSCPPC002 (no line), so recovery always has the poll path.
 ### Hardware sequence (fork 6; one variable each)
 
 1. IRQD1: new KMD package on the **current** production Mu (no line). Expected: byte-identical behaviour, perf gate
-   PASS, suite 119/0, `Wom1IrqRx` all zero. Proves the default flip is inert without the line.
+   PASS, suite 119/0, `Wom1IrqRx` absent (the KMD writes `Wom1IrqRx` and `Wom1JobPoll` only when the line is
+   listed; corrected 2026-11-09 after the merge 212f09e0e). Proves the default flip is inert without the line.
 2. IRQD2: same package on the new Mu candidate, same boot A/B/B/A on `Wom1IrqCompletion` (0 = off arm; warm-up + 2
    measured runs per arm, GM HD PERF and CS 1.6 warm r2/r3). Expected: FPS inside the 2 % gate both ways, worker busy
    ~2.5 % on vs ~48 % off, RingDrops 0, Discarded 0 in steady state, Overflow 0, suite 119/0, 3 driver
