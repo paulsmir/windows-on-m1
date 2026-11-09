@@ -12,11 +12,14 @@ and run over LineListed x BaseMapped x Armed x fill x RingDepth {0, 63, 64} x
 the ready/ingress gates:
 - the handler never returns with the line asserted and the FIFO non-empty
   (bounded by the per-call cap, after which it claims the interrupt);
-- it never reads a base the ISR may not touch (closed, or no runtime);
+- it never touches a runtime or a base the ISR may not use (closed, or no
+  runtime): it reaches both only through the adapter's MailboxIsrRuntime,
+  never through PlatformRuntime;
 - MOVE only while armed with ring room; a full ring drops, counts RingDrops
   and latches the overflow; not armed drops and counts Discarded.
 Source-text checks pin the teardown order (stop the sender, close the ISR's
-access, then power off / unmap), the worker's overflow fault and the default.
+access, then power off / flush DPCs / unmap; a failed power release reopens),
+the DPC's runtime lifetime, the worker's overflow fault and the default.
 """
 import pathlib
 import re
@@ -79,7 +82,7 @@ typedef void VOID;
 ''' + "%RECEIPT%" + r'''
 typedef struct {
   struct { volatile UCHAR *Base; } AscTransport;
-  volatile LONG MailboxIsrOpen, MailboxIrqArmed, IrqOverflowLatch;
+  volatile LONG MailboxIrqArmed, IrqOverflowLatch;
   struct { ULONGLONG Payload; ULONGLONG Selector; } IrqRing[64];
   volatile LONG IrqRingHead, IrqRingTail;
   ADMISSION_IRQ_RX_RECEIPT IrqRx;
@@ -91,6 +94,7 @@ typedef struct {
   volatile LONG IrqScanoutHandled, LastInterruptStatus, InterruptCount, InterruptAckCount;
   ULONG MailboxInterruptVector;
   PVOID ScanoutRuntime, PlatformRuntime;
+  PVOID volatile MailboxIsrRuntime;
   BOOLEAN InterfaceValid;
   struct { HANDLE DeviceHandle; BOOLEAN (*DxgkCbQueueDpc)(HANDLE); } Interface;
 } ADMISSION_CONTEXT;
@@ -184,14 +188,15 @@ int main(void) {
     unsigned i;
     memset(&runtime, 0, sizeof(runtime));
     memset(&context, 0, sizeof(context));
-    /* a stale pointer stays behind after the close: only the gate protects it */
+    /* after the close the stale base and PlatformRuntime stay behind: only
+     * MailboxIsrRuntime may lead the ISR to the runtime */
     runtime.AscTransport.Base = mmio;
-    runtime.MailboxIsrOpen = open;
     runtime.MailboxIrqArmed = armed;
     runtime.IrqCompletion = (BOOLEAN)completion;
     runtime.IrqRingTail = 7; runtime.IrqRingHead = 7 + (LONG)depth;
     context.MailboxInterruptVector = listed ? 887u : 0u;
     context.PlatformRuntime = has_runtime ? &runtime : NULL;
+    context.MailboxIsrRuntime = base_mapped ? &runtime : NULL;
     context.InterruptReady = ready; context.InterruptIngressEnabled = ingress;
     context.InterfaceValid = TRUE; context.Interface.DxgkCbQueueDpc = QueueDpc;
     mapped = base_mapped;
@@ -220,7 +225,11 @@ int main(void) {
     /* the ready/ingress gates still gate the other sources, and only them */
     assert(scanout_calls == 0u && broker_calls == (unsigned)(ready && ingress));
     assert(context.IrqIsrByMessage[0] == (ready && ingress ? 1 : 0));
-    if (!has_runtime) continue;
+    if (!base_mapped) {
+      /* a closed runtime is not even counted in */
+      assert(runtime.IrqRx.IsrEmptyCalls == 0u && runtime.IrqRingHead == 7 + (LONG)depth);
+      continue;
+    }
     assert((unsigned)(runtime.IrqRingHead - runtime.IrqRingTail) == depth + moved);
     for (i = 0u; i < moved; ++i) {
       const unsigned slot = (unsigned)(7 + (LONG)depth + (LONG)i) % 64u;
@@ -302,10 +311,15 @@ class MailboxQuiesceModel(unittest.TestCase):
                  "        action == AdmissionMailboxIsrDiscardFault)\n      break;"),
                 ("disarmed returns before popping",
                  "  *Moved = 0u;\n", "  *Moved = 0u;\n  if (!armed) return 0u;\n"),
-                ("closed base is still read",
-                 "InterlockedCompareExchange(&runtime->MailboxIsrOpen, 0, 0) != 0", "1")):
+                ):
             self.assertIn(old, service, name)
             mutants[name] = (BACKEND.replace(service, service.replace(old, new)), INTERRUPT)
+        handler = function(BACKEND, "AdmissionPlatformMailboxInterrupt")
+        old = "runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->MailboxIsrRuntime;"
+        self.assertIn(old, handler)
+        mutants["closed runtime reached through PlatformRuntime"] = (BACKEND.replace(
+            handler, handler.replace(old, old.replace("MailboxIsrRuntime", "PlatformRuntime"))),
+            INTERRUPT)
         for name, (backend, interrupt) in mutants.items():
             with self.subTest(name), tempfile.TemporaryDirectory(prefix="irq-quiesce-") as directory:
                 run = build_and_run(model_source(backend, interrupt), directory)
@@ -341,9 +355,17 @@ class MailboxQuiesceWiring(unittest.TestCase):
         close = destroy.index("AdmissionMailboxIsrClose(Runtime);")
         release = destroy.index("AppleAgxPowerRelease(")
         unmap = destroy.index("(PVOID)Runtime->SgxBase")
+        flush = destroy.index("KeFlushQueuedDpcs();")
         self.assertLess(stop, close)
         self.assertLess(close, release)
-        self.assertLess(release, unmap)
+        self.assertLess(release, flush)
+        self.assertLess(flush, unmap)
+        # a device without the line queues no mailbox DPC and is not flushed
+        self.assertRegex(destroy, r"MailboxInterruptVector != 0u\)\s*KeFlushQueuedDpcs\(\);")
+        # the release failed: the ASC is still powered, the close is undone
+        self.assertRegex(destroy[release:flush],
+                         r"\{\s*AdmissionMailboxIsrReopen\(Runtime\);\s*"
+                         r"return STATUS_DEVICE_BUSY;")
         # nothing disarms before the sender is stopped: the stop conversation's
         # replies must still reach the ring, not be discarded by the ISR
         self.assertNotIn("MailboxIrqArmed", destroy[:stop])
@@ -356,6 +378,11 @@ class MailboxQuiesceWiring(unittest.TestCase):
         power_off = body(BACKEND, "AdmissionFirmwarePowerOff")
         self.assertLess(power_off.index("AdmissionMailboxIsrClose(runtime);"),
                         power_off.index("AppleAgxPowerRelease("))
+        self.assertRegex(power_off, r"if \(!AppleAgxPowerRelease\(&io\)\) \{\s*"
+                                    r"AdmissionMailboxIsrReopen\(runtime\);\s*return 0u;")
+        reopen = body(BACKEND, "AdmissionMailboxIsrReopen")
+        self.assertIn("InterlockedExchange(&Runtime->MailboxIrqArmed, 1);", reopen)
+        self.assertIn("MailboxInterruptVector == 0u", reopen)
         # StopAsc is the sender stop: RTKit shutdown, then the CPU RUN bit
         self.assertIn("AppleAgxRtkitSessionStop(&runtime->Rtkit",
                       body(BACKEND, "AdmissionFirmwareStopAsc"))
@@ -369,15 +396,27 @@ class MailboxQuiesceWiring(unittest.TestCase):
         self.assertIn("message < 2u", close)
         self.assertIn("DxgkCbSynchronizeExecution", close)
         self.assertIn("AdmissionMailboxIsrClosed, Runtime, message", close)
-        self.assertLess(close.index("MailboxIsrOpen, 0, 0) == 0"), close.index("message < 2u"))
+        self.assertLess(close.index("adapter->MailboxIsrRuntime != (PVOID)Runtime"),
+                        close.index("message < 2u"))
         self.assertIn("InterlockedExchange(&runtime->MailboxIrqArmed, 0);", closed)
-        self.assertIn("InterlockedExchange(&runtime->MailboxIsrOpen, 0);", closed)
+        self.assertRegex(closed, r"InterlockedCompareExchangePointer\(\s*\(PVOID volatile \*\)"
+                                 r"&runtime->Adapter->MailboxIsrRuntime, NULL, runtime\);")
         # the access opens with the mapping, only when the line is listed
         start = body(BACKEND, "AdmissionPlatformRuntimeStart")
-        self.assertRegex(start, r"InterlockedExchange\(&runtime->MailboxIsrOpen,\s*"
-                                r"Context->MailboxInterruptVector != 0u \? 1 : 0\);")
+        self.assertRegex(start, r"&Context->MailboxIsrRuntime,\s*"
+                                r"Context->MailboxInterruptVector != 0u \? runtime : NULL\);")
         self.assertLess(start.index("runtime->AscTransport.Base ="),
-                        start.index("&runtime->MailboxIsrOpen"))
+                        start.index("&Context->MailboxIsrRuntime"))
+
+    def test_isr_and_dpc_never_reach_the_runtime_through_platform_runtime(self):
+        # RuntimeStop clears PlatformRuntime and frees the runtime without the
+        # interrupt lock; the ISR and the mailbox DPC use the synchronized pointer
+        for name in ("AdmissionPlatformMailboxInterrupt", "AdmissionPlatformMailboxDpc"):
+            text = body(BACKEND, name)
+            self.assertIn("Context->MailboxIsrRuntime", text)
+            self.assertNotIn("PlatformRuntime", text)
+        self.assertNotIn("PlatformRuntime", body(INTERRUPT, "AdmissionDdiInterruptRoutine"))
+        self.assertIn("PVOID volatile MailboxIsrRuntime;", HEADER)
 
     def test_worker_routes_an_overflow_to_the_engine_reset_path(self):
         latch = BACKEND.index("InterlockedExchange(&runtime->IrqOverflowLatch, 0) != 0")

@@ -204,13 +204,11 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * sleeping. Inert without the ACPI line (MailboxIrqArmed stays 0). */
   BOOLEAN IrqCompletion;
   volatile LONG IrqWakePending;
-  /* Default-on plan: the ISR may touch the ASC mapping only while
-   * MailboxIsrOpen (set with the mapping when the line is listed, cleared
-   * under the interrupt lock before the ASC loses power or its mapping).
+  /* Default-on plan: the ISR and DPC reach this runtime (and through it the
+   * ASC mapping) only through Adapter->MailboxIsrRuntime, see there.
    * IrqOverflowLatch: the ISR dropped a message at a full ring; the worker
    * consumes it once as a transport fault. IrqRxExportQpc throttles the
    * diagnostics-off export of Wom1IrqRx and Wom1JobPoll. */
-  volatile LONG MailboxIsrOpen;
   volatile LONG IrqOverflowLatch;
   ULONGLONG IrqRxExportQpc;
   /* Wom1FwRx (receipt-only, with Wom1JobDiagnostics): the firmware->host
@@ -2855,13 +2853,13 @@ static APPLE_AGX_ASC_U64 AdmissionAscNow(void *Context) {
  * level line by popping the ASC outbox FIFO until EMPTY (the ASC mailbox has
  * no enable or acknowledge register). AdmissionMailboxIsrAction decides per
  * message: into the ring (armed, room), dropped with the sticky overflow
- * (armed, ring full) or dropped (not armed). The base is read only while
- * MailboxIsrOpen. Returns the count popped; *Moved = the part in the ring. */
+ * (armed, ring full) or dropped (not armed). The caller holds the interrupt
+ * lock and took `runtime` from Adapter->MailboxIsrRuntime (ISR) or owns it
+ * and found it armed (worker). Returns the count popped; *Moved = the part
+ * in the ring. */
 static ULONG AdmissionMailboxServiceFifoAtDirql(
     ADMISSION_PLATFORM_RUNTIME *runtime, int LineListed, ULONG *Moved) {
-  volatile UCHAR *base =
-      InterlockedCompareExchange(&runtime->MailboxIsrOpen, 0, 0) != 0
-          ? runtime->AscTransport.Base : NULL;
+  volatile UCHAR *base = runtime->AscTransport.Base;
   const int armed =
       InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0) != 0;
   ULONG popped = 0u;
@@ -2908,8 +2906,8 @@ static ULONG AdmissionMailboxServiceFifoAtDirql(
 }
 
 /* DIRQL (ISR): the mailbox line. Runs in every driver state while the line
- * is listed; FALSE only when nothing was popped (FIFO empty, or no mapping
- * the ISR may touch). */
+ * is listed; FALSE only when nothing was popped (FIFO empty, or no runtime
+ * the ISR may touch: MailboxIsrRuntime, never PlatformRuntime). */
 _Use_decl_annotations_ BOOLEAN AdmissionPlatformMailboxInterrupt(
     ADMISSION_CONTEXT *Context, ULONG MessageNumber) {
   ADMISSION_PLATFORM_RUNTIME *runtime;
@@ -2917,7 +2915,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformMailboxInterrupt(
   UNREFERENCED_PARAMETER(MessageNumber);
   if (Context == NULL)
     return FALSE;
-  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->MailboxIsrRuntime;
   if (runtime == NULL)
     return FALSE;
   popped = AdmissionMailboxServiceFifoAtDirql(
@@ -2935,12 +2933,14 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformMailboxInterrupt(
   return TRUE;
 }
 
-/* DISPATCH_LEVEL: the DPC half of the mailbox interrupt (step 2). */
+/* DISPATCH_LEVEL: the DPC half of the mailbox interrupt (step 2). The
+ * runtime comes from MailboxIsrRuntime: the close clears it and Destroy
+ * flushes queued DPCs before the runtime can be freed. */
 _Use_decl_annotations_ VOID AdmissionPlatformMailboxDpc(ADMISSION_CONTEXT *Context) {
   ADMISSION_PLATFORM_RUNTIME *runtime;
   if (Context == NULL)
     return;
-  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->MailboxIsrRuntime;
   if (runtime == NULL || !runtime->IrqCompletion ||
       InterlockedCompareExchange(&runtime->MailboxIrqArmed, 0, 0) == 0)
     return;
@@ -2959,35 +2959,55 @@ static BOOLEAN AdmissionIrqWaitActive(ADMISSION_PLATFORM_RUNTIME *runtime) {
 }
 
 /* DxgkCbSynchronizeExecution routine: under the interrupt lock, disarm and
- * end the ISR's access to the ASC mapping. */
+ * take the runtime (and with it the ASC mapping) away from the ISR and DPC. */
 static BOOLEAN AdmissionMailboxIsrClosed(PVOID Context) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
-  if (runtime == NULL)
+  if (runtime == NULL || runtime->Adapter == NULL)
     return FALSE;
   InterlockedExchange(&runtime->MailboxIrqArmed, 0);
-  InterlockedExchange(&runtime->MailboxIsrOpen, 0);
+  (void)InterlockedCompareExchangePointer(
+      (PVOID volatile *)&runtime->Adapter->MailboxIsrRuntime, NULL, runtime);
   return TRUE;
 }
 
 /* PASSIVE_LEVEL: called once the sender is stopped and before the ASC loses
  * its power or its mapping. Disarm (the ISR drops what it still pops), then
  * close the ISR's access under both possible interrupt locks: when this
- * returns no ISR is inside the mapping and none will enter it. Idempotent. */
+ * returns no ISR is inside the runtime or the mapping and none will enter.
+ * A mailbox DPC that already holds the runtime is waited out by the
+ * KeFlushQueuedDpcs in AdmissionPlatformDestroy. Idempotent. */
 static VOID AdmissionMailboxIsrClose(ADMISSION_PLATFORM_RUNTIME *Runtime) {
+  ADMISSION_CONTEXT *adapter = Runtime->Adapter;
   ULONG message;
-  if (InterlockedCompareExchange(&Runtime->MailboxIsrOpen, 0, 0) == 0)
+  if (adapter == NULL || adapter->MailboxIsrRuntime != (PVOID)Runtime)
     return;
   InterlockedExchange(&Runtime->MailboxIrqArmed, 0);
   for (message = 0u; message < 2u; ++message) {
     BOOLEAN closed = FALSE;
-    if (Runtime->Adapter != NULL && Runtime->Adapter->InterfaceValid &&
-        Runtime->Adapter->Interface.DxgkCbSynchronizeExecution != NULL)
-      (void)Runtime->Adapter->Interface.DxgkCbSynchronizeExecution(
-          Runtime->Adapter->Interface.DeviceHandle,
+    if (adapter->InterfaceValid &&
+        adapter->Interface.DxgkCbSynchronizeExecution != NULL)
+      (void)adapter->Interface.DxgkCbSynchronizeExecution(
+          adapter->Interface.DeviceHandle,
           AdmissionMailboxIsrClosed, Runtime, message, &closed);
   }
   /* no interrupt object to synchronize with: no ISR can be running */
-  InterlockedExchange(&Runtime->MailboxIsrOpen, 0);
+  (void)InterlockedCompareExchangePointer(
+      (PVOID volatile *)&adapter->MailboxIsrRuntime, NULL, Runtime);
+}
+
+/* PASSIVE_LEVEL: the power release after a close failed, so the ASC is
+ * still powered (m1n1 leaves gfx-asc on whenever the OFF command does not
+ * complete) and may still send. Undo the close: armed again, so a retried
+ * stop conversation gets its replies through the ring and an unconsumed
+ * ring ends in DISCARD_FAULT, never in a line nobody can dismiss. */
+static VOID AdmissionMailboxIsrReopen(ADMISSION_PLATFORM_RUNTIME *Runtime) {
+  ADMISSION_CONTEXT *adapter = Runtime->Adapter;
+  if (adapter == NULL || adapter->MailboxInterruptVector == 0u ||
+      Runtime->AscTransport.Base == NULL)
+    return;
+  InterlockedExchange(&Runtime->MailboxIrqArmed, 1);
+  (void)InterlockedExchangePointer(
+      (PVOID volatile *)&adapter->MailboxIsrRuntime, Runtime);
 }
 
 /* DxgkCbSynchronizeExecution routine: the worker found the ring empty. */
@@ -3303,8 +3323,10 @@ static unsigned char AdmissionFirmwarePowerOff(
    * no ISR may read its registers once the power is released. */
   AdmissionMailboxIsrClose(runtime);
   AdmissionPowerIo(runtime, &io);
-  if (!AppleAgxPowerRelease(&io))
+  if (!AppleAgxPowerRelease(&io)) {
+    AdmissionMailboxIsrReopen(runtime);
     return 0u;
+  }
   runtime->Powered = FALSE;
   return 1u;
 }
@@ -8261,9 +8283,10 @@ static NTSTATUS AdmissionPlatformDestroy(
    * ring (AppleAgxBackendRuntimeStop -> firmware cleanup -> StopAsc ->
    * AppleAgxRtkitSessionStop clears the ASC CPU RUN bit); (2) disarm and
    * close the ISR's access (AdmissionMailboxIsrClose: in PowerOff before
-   * the power is released, and below for a runtime that never powered on);
-   * (3) only then unmap. Every early STATUS_DEVICE_BUSY return before (2)
-   * leaves the line armed and the mapping in place. */
+   * the power is released, and below for a runtime that never powered on;
+   * a failed release reopens); (3) flush queued DPCs; (4) only then unmap.
+   * Every STATUS_DEVICE_BUSY return leaves the line armed and the mapping
+   * in place, and the callers keep the runtime. */
   NTSTATUS status = STATUS_SUCCESS;
   KIRQL oldIrql;
   PIO_WORKITEM workItem;
@@ -8357,10 +8380,17 @@ static NTSTATUS AdmissionPlatformDestroy(
   if (Runtime->Powered) {
     APPLE_AGX_POWER_IO io;
     AdmissionPowerIo(Runtime, &io);
-    if (!AppleAgxPowerRelease(&io))
+    if (!AppleAgxPowerRelease(&io)) {
+      AdmissionMailboxIsrReopen(Runtime);
       return STATUS_DEVICE_BUSY;
+    }
     Runtime->Powered = FALSE;
   }
+  /* The close took the runtime from the mailbox DPC; wait out one that
+   * already held it before anything it uses is unmapped or freed. Only with
+   * the line listed: a device without it queues no mailbox DPC. */
+  if (Runtime->Adapter != NULL && Runtime->Adapter->MailboxInterruptVector != 0u)
+    KeFlushQueuedDpcs();
   if (Runtime->Initdata.Initialized &&
       AppleAgxInitdataMemoryDestroy(&Runtime->Initdata) !=
           AppleAgxInitdataMemoryResultOk)
@@ -8646,8 +8676,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
    * it through the ring (AdmissionAscRead32/64). */
   InterlockedExchange(&runtime->IrqWakePending, 0);
   InterlockedExchange(&runtime->IrqOverflowLatch, 0);
-  InterlockedExchange(&runtime->MailboxIsrOpen,
-                      Context->MailboxInterruptVector != 0u ? 1 : 0);
+  (void)InterlockedExchangePointer(
+      (PVOID volatile *)&Context->MailboxIsrRuntime,
+      Context->MailboxInterruptVector != 0u ? runtime : NULL);
   InterlockedExchange(&runtime->MailboxIrqArmed,
                       Context->MailboxInterruptVector != 0u ? 1 : 0);
   AppleAgxRtkitSessionInitialize(&runtime->Rtkit);

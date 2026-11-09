@@ -792,6 +792,12 @@ typedef struct _ADMISSION_CONTEXT {
    * level line. MailboxInterruptVector == 0 keeps today's single-line ISR. */
   ULONG ScanoutInterruptVector;
   ULONG MailboxInterruptVector;
+  /* The platform runtime as the mailbox ISR and DPC may use it: set with the
+   * ASC mapping when the line is listed, cleared under the interrupt lock
+   * (and queued DPCs flushed) before the ASC loses power, its mapping, or
+   * the runtime is freed. They never reach the runtime through
+   * PlatformRuntime, which is cleared without that synchronization. */
+  PVOID volatile MailboxIsrRuntime;
   /* Receipt-only ISR census: calls per MessageNumber (0..2, 3 = other),
    * mailbox-handled calls, the MessageNumbers that carried mailbox work,
    * scanout-handled calls. Learn how dxgkrnl numbers two line interrupts. */
