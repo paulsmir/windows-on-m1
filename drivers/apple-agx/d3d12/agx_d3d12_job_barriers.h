@@ -92,6 +92,8 @@ typedef struct AGX_D3D12_JOB_BARRIERS {
    * the last dispatch ended. Render ranges carry AGX_D3D12_JOB_VERTEX on
    * vertex-stage accesses (VB, IB, indirect, SO, VS views). */
   AGX_D3D12_JOB_RANGE_SET RangeDispatch, RangeCompute, RangeLastCompute;
+  /* OV8 (receipt): every barrier range since the last dispatch ended */
+  AGX_D3D12_JOB_RANGE_SET BarriersSinceDispatch;
   unsigned GlobalUavSinceDispatch;
 } AGX_D3D12_JOB_BARRIERS;
 #define AGX_D3D12_JOB_VERTEX 4u
@@ -152,6 +154,7 @@ static inline void AgxD3d12JobRangesReset(AGX_D3D12_JOB_BARRIERS *j) {
   AgxD3d12JobRangeClear(&j->RangeDispatch);
   AgxD3d12JobRangeClear(&j->RangeCompute);
   AgxD3d12JobRangeClear(&j->RangeLastCompute);
+  AgxD3d12JobRangeClear(&j->BarriersSinceDispatch);
   j->RangeLastCompute.Overflow = 1u; /* no compute batch yet */
   j->GlobalUavSinceDispatch = 0u;
   j->RangeLast.Overflow = 1u; /* no render yet */
@@ -253,6 +256,7 @@ static inline void AgxD3d12JobBarrierEnd(AGX_D3D12_JOB_BARRIERS *j) {
     j->PostCommitted = j->PostCommittedOverflow = 0u;
   } else if (j->Active == 2u) {
     j->GlobalUavSinceDispatch = 0u;
+    AgxD3d12JobRangeClear(&j->BarriersSinceDispatch);
     ++j->DispatchesSince;
     j->PostCommitted = j->Post.Count;
     j->PostCommittedOverflow = j->Post.Overflow;
@@ -291,6 +295,7 @@ static inline void AgxD3d12JobBarrierRange(AGX_D3D12_JOB_BARRIERS *j, unsigned t
     heap = (const void *)1;
     lo = hi = 0ull;
   }
+  if (!(type == 2u && !id)) AgxD3d12JobRangeAdd(&j->BarriersSinceDispatch, heap, lo, hi, 0u);
   {
     const unsigned before = j->Post.Count;
     AgxD3d12JobRangeAdd(&j->Post, heap, lo, hi, type == 2u ? (id ? 1u : 2u) : 0u);
@@ -515,6 +520,53 @@ static inline unsigned AgxD3d12JobRenderTaRefusal(const AGX_D3D12_JOB_BARRIERS *
       const AGX_D3D12_JOB_RANGE *y = &c->R[b];
       if (y->Heap != x->Heap || x->Lo >= y->Hi || y->Lo >= x->Hi) continue;
       if ((y->Uav & 1u) || (x->Uav & 1u)) return 10u;
+    }
+  }
+  return 0u;
+}
+/* OV8 receipt verdicts for the render about to be submitted after a compute batch.
+ * Range: 0 independent, 10 a render access (every stage) overlaps a compute access
+ * with a write on either side, 11 unplaceable. Barrier: 0, 8 a barrier since the
+ * last dispatch names a range the compute wrote (or a global UAV barrier), 11
+ * unplaceable. Prelude: 0, 9 the render has a prelude and an indirect argument or
+ * count range overlaps a compute write. */
+static inline unsigned AgxD3d12JobOv8Range(const AGX_D3D12_JOB_BARRIERS *j) {
+  const AGX_D3D12_JOB_RANGE_SET *c = &j->RangeLastCompute, *r = &j->RangeRender;
+  unsigned a, b;
+  if (c->Overflow || r->Overflow) return 11u;
+  for (a = 0; a < r->Count; ++a) {
+    const AGX_D3D12_JOB_RANGE *x = &r->R[a];
+    const unsigned writes = (x->Uav & 1u) || (x->Uav & (AGX_D3D12_JOB_SRC_TARGET | AGX_D3D12_JOB_SRC_CLEAR));
+    for (b = 0; b < c->Count; ++b) {
+      const AGX_D3D12_JOB_RANGE *y = &c->R[b];
+      if (y->Heap != x->Heap || x->Lo >= y->Hi || y->Lo >= x->Hi) continue;
+      if ((y->Uav & 1u) || writes) return 10u;
+    }
+  }
+  return 0u;
+}
+static inline unsigned AgxD3d12JobOv8Barrier(const AGX_D3D12_JOB_BARRIERS *j) {
+  const AGX_D3D12_JOB_RANGE_SET *c = &j->RangeLastCompute, *s = &j->BarriersSinceDispatch;
+  unsigned a, b;
+  if (c->Overflow || s->Overflow) return 11u;
+  if (j->GlobalUavSinceDispatch && c->Uav) return 8u;
+  for (a = 0; a < s->Count; ++a)
+    for (b = 0; b < c->Count; ++b) {
+      const AGX_D3D12_JOB_RANGE *x = &s->R[a], *y = &c->R[b];
+      if (y->Heap == x->Heap && x->Lo < y->Hi && y->Lo < x->Hi && (y->Uav & 1u)) return 8u;
+    }
+  return 0u;
+}
+static inline unsigned AgxD3d12JobOv8Prelude(const AGX_D3D12_JOB_BARRIERS *j, unsigned prelude) {
+  const AGX_D3D12_JOB_RANGE_SET *c = &j->RangeLastCompute, *r = &j->RangeRender;
+  unsigned a, b;
+  if (!prelude) return 0u;
+  for (a = 0; a < r->Count; ++a) {
+    const AGX_D3D12_JOB_RANGE *x = &r->R[a];
+    if (!(x->Uav & (AGX_D3D12_JOB_SRC_IND_ARGS | AGX_D3D12_JOB_SRC_IND_CNT))) continue;
+    for (b = 0; b < c->Count; ++b) {
+      const AGX_D3D12_JOB_RANGE *y = &c->R[b];
+      if (y->Heap == x->Heap && x->Lo < y->Hi && y->Lo < x->Hi && (y->Uav & 1u)) return 9u;
     }
   }
   return 0u;

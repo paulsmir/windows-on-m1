@@ -662,6 +662,8 @@ static UINT owner_ov5_flagged; /* renders sent with the OV5 flag */
  * hides the range check behind it): do the vertex-stage accesses of a prelude
  * render, ExecuteIndirect arguments included, conflict with the compute batch. */
 static UINT owner_ov5_noprelude_sequence;
+/* OV8 receipt: per render after a compute batch, the range, barrier and prelude verdicts */
+static UINT owner_ov8_sequence[3];
 /* OV6 receipt: per render-after-compute, why its ranges were unplaceable --
  * nibble = render set Overflow bits | compute set Overflow bits << 2
  * (AGX_D3D12_JOB_RANGE_FULL 1, _NULL 2), 0 = both sets placeable. */
@@ -710,6 +712,10 @@ static void owner_ov2_receipt_locked(void) {
     values[23] = owner_ov5_renders;
     values[24] = owner_ov5_flagged;
     values[25] = AgxWin32Ov5Feature ? 1u : 0u;
+    if (owner_ov5_renders && AdmissionUmdMeasureEnabled()) {
+      const UINT ov8[4] = {owner_ov5_renders, owner_ov8_sequence[0], owner_ov8_sequence[1], owner_ov8_sequence[2]};
+      AdmissionUmdDiagnostic("measure-d3d12-ov8", S_OK, ov8, 4u);
+    }
     values[26] = owner_ov5_noprelude_sequence;
     values[27] = owner_ov5_overflow_sequence;
     values[28] = owner_compute_first_flushes;
@@ -721,6 +727,7 @@ static void owner_ov2_receipt_locked(void) {
   owner_ov4_splits = 0;
   owner_ov5_sequence = owner_ov5_renders = owner_ov5_flagged = owner_ov5_noprelude_sequence = 0;
   owner_ov5_overflow_sequence = 0;
+  owner_ov8_sequence[0] = owner_ov8_sequence[1] = owner_ov8_sequence[2] = 0;
   owner_compute_first_flushes = 0;
 }
 extern "C" void AgxD3d12OwnerJobDrawRange(const void *heap, unsigned long long lo, unsigned long long hi,
@@ -847,6 +854,9 @@ static unsigned owner_batch_kind(unsigned kind) {
       owner_ov5_sequence |= (ta & 0xfu) << (4u * owner_ov5_renders);
       owner_ov5_noprelude_sequence |= (AgxD3d12JobRenderTaRefusal(&owner_job_barriers, 0u) & 0xfu) << (4u * owner_ov5_renders);
       owner_ov6b_conflict_receipt();
+      owner_ov8_sequence[0] |= (AgxD3d12JobOv8Range(&owner_job_barriers) & 0xfu) << (4u * owner_ov5_renders);
+      owner_ov8_sequence[1] |= (AgxD3d12JobOv8Barrier(&owner_job_barriers) & 0xfu) << (4u * owner_ov5_renders);
+      owner_ov8_sequence[2] |= (AgxD3d12JobOv8Prelude(&owner_job_barriers, prelude) & 0xfu) << (4u * owner_ov5_renders);
       owner_ov5_overflow_sequence |= ((owner_job_barriers.RangeRender.Overflow & 3u) |
                                       ((owner_job_barriers.RangeLastCompute.Overflow & 3u) << 2u)) << (4u * owner_ov5_renders);
     }

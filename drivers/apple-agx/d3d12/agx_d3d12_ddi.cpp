@@ -4013,6 +4013,7 @@ struct AgxD3d12VertexBuffer {
     AgxD3d12Heap *heap;
     UINT64 offset;
     UINT stride;
+    UINT size; /* OV8: the view's SizeInBytes for the access range */
 };
 /* C39: a stream-output view: the target range and its filled-size location */
 static constexpr UINT kSoTargets = 4;
@@ -4038,6 +4039,7 @@ struct AgxD3d12Draw {
     AgxD3d12Heap *index_heap;
     UINT64 index_offset;
     UINT index_size;
+    UINT index_bytes; /* OV8 */
     INT base_vertex;
     AgxD3d12Indirect indirect; /* C14 */
     AgxD3d12SoTarget so[kSoTargets]; /* C39 */
@@ -4150,6 +4152,7 @@ struct AgxD3d12CommandList {
     AgxD3d12Heap *index_heap;
     UINT64 index_offset;
     UINT index_size;
+    UINT index_bytes; /* OV8 */
     AgxD3d12Command *command;
     UINT capacity;
     /* C30: a bundle's call log (BundleAppend), replayed by ExecuteBundle */
@@ -5108,6 +5111,7 @@ static VOID APIENTRY IASetVertexBuffers(D3D12DDI_HCOMMANDLIST handle, UINT start
         if (!views || !views[i].BufferLocation) continue;
         vb.heap = HeapAt(list->device, views[i].BufferLocation, &vb.offset);
         vb.stride = views[i].StrideInBytes;
+        vb.size = views[i].SizeInBytes;
         if (!vb.heap) ListError(list, E_INVALIDARG);
     }
 }
@@ -5139,10 +5143,12 @@ static VOID APIENTRY IASetIndexBuffer(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     list->index_heap = nullptr;
     list->index_offset = 0;
     list->index_size = 0;
+    list->index_bytes = 0;
     if (!view || !view->BufferLocation) return;
     const UINT size = view->Format == DXGI_FORMAT_R16_UINT ? 2u : view->Format == DXGI_FORMAT_R32_UINT ? 4u : 0u;
     list->index_heap = size ? HeapAt(list->device, view->BufferLocation, &list->index_offset) : nullptr;
     list->index_size = list->index_heap ? size : 0u;
+    list->index_bytes = list->index_heap ? view->SizeInBytes : 0u;
     if (!list->index_heap) ListError(list, E_INVALIDARG);
 }
 /* RC75: the root CBVs and UAVs of a root signature, with the stages that
@@ -6122,6 +6128,7 @@ static void RecordDraw(AgxD3d12CommandList *list, UINT vertices, UINT instances,
         draw.index_heap = list->index_heap;
         draw.index_offset = list->index_offset;
         draw.index_size = list->index_size;
+        draw.index_bytes = list->index_bytes;
         draw.base_vertex = base_vertex;
     }
     if (indirect) draw.indirect = *indirect;
@@ -6887,8 +6894,8 @@ static void JobDrawRanges(const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &op
         else if (clears[k].kind == kCommandClearUav) JobDescriptorRange(sink, &clears[k].clear_uav.view, 1u | AGX_D3D12_JOB_SRC_CLEAR); /* OV6 */
         else sink(nullptr, 0, 0, 0u);
     }
-    for (UINT v = 0; v < kVertexBuffers; ++v) JobHeapRange(sink, d.vb[v].heap, d.vb[v].offset, 0, vertex | AGX_D3D12_JOB_SRC_VB);
-    if (d.index_size) JobHeapRange(sink, d.index_heap, d.index_offset, 0, vertex | AGX_D3D12_JOB_SRC_IB);
+    for (UINT v = 0; v < kVertexBuffers; ++v) JobHeapRange(sink, d.vb[v].heap, d.vb[v].offset, d.vb[v].size, vertex | AGX_D3D12_JOB_SRC_VB);
+    if (d.index_size) JobHeapRange(sink, d.index_heap, d.index_offset, d.index_bytes, vertex | AGX_D3D12_JOB_SRC_IB);
     JobIndirectRanges(sink, d.indirect, vertex);
     for (UINT t = 0; t < kSoTargets; ++t) {
         JobHeapRange(sink, d.so[t].heap, d.so[t].offset, d.so[t].size, 1u | vertex | AGX_D3D12_JOB_SRC_SO);
