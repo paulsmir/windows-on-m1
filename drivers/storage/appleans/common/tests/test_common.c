@@ -120,8 +120,28 @@ static void discovery_tests(void)
     assert(p.metadata[7] == 2 && p.metadata[5] == 0 && p.metadata[6] == 0);
     ns.tagged_queuing = 0;
     c[1] = 1; p = prep(c, 6, 64);
-    assert(p.metadata_length == 5 && p.metadata[3] == 1 && p.metadata[4] == 0);
+    /* Supported pages: 00h and B1h only, ascending. */
+    assert(p.metadata_length == 6 && p.metadata[1] == 0 && p.metadata[3] == 2);
+    assert(p.metadata[4] == 0 && p.metadata[5] == 0xb1);
     c[2] = 0x80; sense(prep(c, 6, 64), 5, 0x24);
+    /* No UNMAP translation exists: Block Limits and LB Provisioning stay absent. */
+    c[2] = 0xb0; sense(prep(c, 6, 64), 5, 0x24);
+    c[2] = 0xb2; sense(prep(c, 6, 64), 5, 0x24);
+    /* Block Device Characteristics: 64 bytes, PAGE LENGTH 003Ch, MEDIUM ROTATION
+     * RATE 0001h (non-rotating); classpnp rejects any other page length and
+     * reports a seek penalty for anything but 0001h. */
+    c[2] = 0xb1; p = prep(c, 6, 64);
+    assert(p.action == ANS_SCSI_COMPLETE && p.metadata_length == 64);
+    assert(p.direction == ANS_DMA_FROM_DEVICE && p.transfer_bytes == 64);
+    assert(p.metadata[0] == 0 && p.metadata[1] == 0xb1);
+    assert(p.metadata[2] == 0 && p.metadata[3] == 0x3c);
+    assert(p.metadata[4] == 0 && p.metadata[5] == 1);
+    for (size_t n = 6; n < 64; ++n) assert(p.metadata[n] == 0);
+    c[4] = 8; assert(prep(c, 6, 64).metadata_length == 8);
+    c[4] = 64; assert(prep(c, 6, 5).metadata_length == 5);
+    /* The page is medium-independent: answered before the namespace is ready. */
+    ns.ready = 0; assert(prep(c, 6, 64).metadata_length == 64); ns.ready = 1;
+    c[1] = 0; sense(prep(c, 6, 64), 5, 0x24); /* Page code without EVPD. */
     memset(c, 0, sizeof(c)); c[0] = 0xa0; c[9] = 16;
     p = prep(c, 12, 16);
     assert(p.metadata_length == 16 && p.metadata[3] == 8 && p.metadata[8] == 0);

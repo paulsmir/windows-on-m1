@@ -78,13 +78,26 @@ struct ans_scsi_plan ans_scsi_prepare(const struct ans_namespace *ns,
     }
     if (c[len - 1]) return invalid(); /* No linked command/NACA/vendor control. */
     switch (c[0]) {
-    case 0x12: /* Standard inquiry or supported-VPD-pages page, no identities invented. */
+    case 0x12: /* Standard inquiry and VPD pages 00h/B1h, no identities invented. */
         if ((c[1] & ~1u) || (!(c[1] & 1) && c[2])) return invalid();
         alloc = (ans_u32)be(c + 3, 2);
         if (c[1] & 1) {
+            if (c[2] == 0xb1) {
+                /* Block Device Characteristics (SBC-3; NVMe-SCSI translation):
+                 * ANS is NAND, so MEDIUM ROTATION RATE is 0001h, non-rotating.
+                 * The Windows class driver derives the seek-penalty property
+                 * from this field and accepts only PAGE LENGTH 003Ch. Form
+                 * factor and every other field stay "not reported". */
+                p.metadata[1] = 0xb1;
+                p.metadata[3] = 0x3c;
+                p.metadata[5] = 1;
+                return data(p, 64, alloc, buffer);
+            }
             if (c[2]) return invalid();
-            p.metadata[3] = 1; /* Only supported VPD page 00h. */
-            return data(p, 5, alloc, buffer);
+            /* Supported pages 00h and B1h. No B0h/B2h: UNMAP is not translated. */
+            p.metadata[3] = 2;
+            p.metadata[5] = 0xb1;
+            return data(p, 6, alloc, buffer);
         }
         p.metadata[2] = 6; /* SPC-4 response format, subset command implementation. */
         p.metadata[3] = 2;
