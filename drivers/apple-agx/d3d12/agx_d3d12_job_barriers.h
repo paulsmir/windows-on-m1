@@ -94,6 +94,10 @@ typedef struct AGX_D3D12_JOB_BARRIERS {
   AGX_D3D12_JOB_RANGE_SET RangeDispatch, RangeCompute, RangeLastCompute;
   /* OV8 (receipt): every barrier range since the last dispatch ended */
   AGX_D3D12_JOB_RANGE_SET BarriersSinceDispatch;
+  /* OV8 1b: draws ended since the last dispatch (0 = still before the first draw);
+   * the most recent barrier's kind, resource id and states, and those of the
+   * first barrier that orders a compute write */
+  unsigned DrawsSinceDispatch, LastBarrierType, LastBarrierId, LastBarrierBefore, LastBarrierAfter;
   unsigned GlobalUavSinceDispatch;
 } AGX_D3D12_JOB_BARRIERS;
 #define AGX_D3D12_JOB_VERTEX 4u
@@ -181,6 +185,7 @@ static inline void AgxD3d12JobBarriersInit(AGX_D3D12_JOB_BARRIERS *j) {
   AgxD3d12JobBarrierSetClear(&j->Before);
   AgxD3d12JobBarrierSetClear(&j->Open);
   j->Active = j->Total = j->PreviousKind = 0u;
+  j->DrawsSinceDispatch = j->LastBarrierType = j->LastBarrierId = j->LastBarrierBefore = j->LastBarrierAfter = 0u;
   j->NonUavSince = 0u;
   j->GapAfterRender = ~0u;
   j->UavDraws = j->UavDrawsBase[0] = j->UavDrawsBase[1] = 0u;
@@ -199,6 +204,8 @@ static inline void AgxD3d12JobBarrierAdd(AGX_D3D12_JOB_BARRIERS *j, unsigned typ
                                          unsigned before, unsigned after, unsigned id) {
   AGX_D3D12_JOB_BARRIER_SET *s = &j->Open;
   unsigned i;
+  j->LastBarrierBefore = before;
+  j->LastBarrierAfter = after;
   ++j->Total;
   ++s->Count;
   s->Flags |= flags;
@@ -249,6 +256,7 @@ static inline void AgxD3d12JobBarrierEnd(AGX_D3D12_JOB_BARRIERS *j) {
   /* (an ExecuteIndirect expansion counts only when it replayed draws: a
    * dispatch expansion must not drop the barriers before it) */
   if (j->Active == 5u || j->RangeDraw.Count || j->RangeDraw.Overflow) {
+    ++j->DrawsSinceDispatch;
     AgxD3d12JobRangeMerge(&j->RangeRender, &j->RangeDraw);
     AgxD3d12JobRangeMerge(&j->RangeRender, &j->Resolved);
     AgxD3d12JobRangeClear(&j->RangeDraw);
@@ -257,6 +265,7 @@ static inline void AgxD3d12JobBarrierEnd(AGX_D3D12_JOB_BARRIERS *j) {
   } else if (j->Active == 2u) {
     j->GlobalUavSinceDispatch = 0u;
     AgxD3d12JobRangeClear(&j->BarriersSinceDispatch);
+    j->DrawsSinceDispatch = 0u;
     ++j->DispatchesSince;
     j->PostCommitted = j->Post.Count;
     j->PostCommittedOverflow = j->Post.Overflow;
@@ -295,7 +304,13 @@ static inline void AgxD3d12JobBarrierRange(AGX_D3D12_JOB_BARRIERS *j, unsigned t
     heap = (const void *)1;
     lo = hi = 0ull;
   }
-  if (!(type == 2u && !id)) AgxD3d12JobRangeAdd(&j->BarriersSinceDispatch, heap, lo, hi, 0u);
+  if (!(type == 2u && !id) && !j->DrawsSinceDispatch) {
+    const unsigned count = j->BarriersSinceDispatch.Count;
+    AgxD3d12JobRangeAdd(&j->BarriersSinceDispatch, heap, lo, hi,
+                        (type & 3u) | ((id & 0xfffffu) << 12)); /* receipt only */
+    if (j->BarriersSinceDispatch.Count > count)
+      j->BarriersSinceDispatch.At[count] = (j->LastBarrierBefore & 0xffffu) | (j->LastBarrierAfter << 16);
+  }
   {
     const unsigned before = j->Post.Count;
     AgxD3d12JobRangeAdd(&j->Post, heap, lo, hi, type == 2u ? (id ? 1u : 2u) : 0u);
@@ -543,6 +558,42 @@ static inline unsigned AgxD3d12JobOv8Range(const AGX_D3D12_JOB_BARRIERS *j) {
       if ((y->Uav & 1u) || writes) return 10u;
     }
   }
+  return 0u;
+}
+/* OV8 1b: the first pair behind verdict 10, any stage */
+static inline unsigned AgxD3d12JobOv8RangePair(const AGX_D3D12_JOB_BARRIERS *j, AGX_D3D12_JOB_RANGE *render,
+                                               AGX_D3D12_JOB_RANGE *compute) {
+  const AGX_D3D12_JOB_RANGE_SET *c = &j->RangeLastCompute, *r = &j->RangeRender;
+  unsigned a, b;
+  for (a = 0; a < r->Count; ++a) {
+    const AGX_D3D12_JOB_RANGE *x = &r->R[a];
+    const unsigned writes = (x->Uav & 1u) || (x->Uav & (AGX_D3D12_JOB_SRC_TARGET | AGX_D3D12_JOB_SRC_CLEAR));
+    for (b = 0; b < c->Count; ++b) {
+      const AGX_D3D12_JOB_RANGE *y = &c->R[b];
+      if (y->Heap != x->Heap || x->Lo >= y->Hi || y->Lo >= x->Hi || !((y->Uav & 1u) || writes)) continue;
+      *render = *x;
+      *compute = *y;
+      return 1u;
+    }
+  }
+  return 0u;
+}
+/* OV8 1b: the first barrier before the first draw that names a compute write */
+static inline unsigned AgxD3d12JobOv8BarrierPair(const AGX_D3D12_JOB_BARRIERS *j, AGX_D3D12_JOB_RANGE *barrier,
+                                                 AGX_D3D12_JOB_RANGE *compute, unsigned *states) {
+  const AGX_D3D12_JOB_RANGE_SET *c = &j->RangeLastCompute, *s = &j->BarriersSinceDispatch;
+  unsigned a, b;
+  for (a = 0; a < s->Count; ++a)
+    for (b = 0; b < c->Count; ++b) {
+      const AGX_D3D12_JOB_RANGE *x = &s->R[a], *y = &c->R[b];
+      if (y->Heap == x->Heap && x->Lo < y->Hi && y->Lo < x->Hi && (y->Uav & 1u)) {
+        *barrier = *x;
+        barrier->Lo = x->Lo;
+        *compute = *y;
+        if (states) *states = s->At[a];
+        return 1u;
+      }
+    }
   return 0u;
 }
 static inline unsigned AgxD3d12JobOv8Barrier(const AGX_D3D12_JOB_BARRIERS *j) {

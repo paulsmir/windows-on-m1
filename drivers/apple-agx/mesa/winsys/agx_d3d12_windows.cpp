@@ -826,6 +826,31 @@ static unsigned owner_render_ta(unsigned prelude) {
 /* OV6b receipt: the first conflicting pair behind verdict 10, for the first 64
  * executions that have one (under owner_job_barriers_lock) */
 static UINT owner_ov6b_executions, owner_ov6b_seen_renders;
+/* OV8 1b receipt: for the first 64 executions, per render after a compute batch the
+ * first range pair (any stage) and the first barrier before the first draw that names
+ * a compute write. Heap ids and offsets show whether a resource alternates per frame. */
+static UINT owner_ov8_pair_executions, owner_ov8_pair_seen;
+static void owner_ov8_pair_receipt(void) {
+  AGX_D3D12_JOB_RANGE x, y;
+  UINT states = 0;
+  if (!AdmissionUmdMeasureEnabled()) return;
+  if (!owner_ov8_pair_seen || owner_ov5_renders < owner_ov8_pair_seen) ++owner_ov8_pair_executions;
+  owner_ov8_pair_seen = owner_ov5_renders + 1u;
+  if (owner_ov8_pair_executions > 64u) return;
+  if (AgxD3d12JobOv8RangePair(&owner_job_barriers, &x, &y)) {
+    const UINT values[10] = {owner_ov5_renders, AgxD3d12JobBarrierId(reinterpret_cast<unsigned long long>(x.Heap)),
+                             static_cast<UINT>(x.Lo), static_cast<UINT>(x.Hi - x.Lo), x.Uav,
+                             AgxD3d12JobBarrierId(reinterpret_cast<unsigned long long>(y.Heap)),
+                             static_cast<UINT>(y.Lo), static_cast<UINT>(y.Hi - y.Lo), y.Uav,
+                             owner_ov8_pair_executions};
+    AdmissionUmdDiagnostic("measure-d3d12-ov8-range", S_OK, values, 10u);
+  }
+  if (AgxD3d12JobOv8BarrierPair(&owner_job_barriers, &x, &y, &states)) {
+    const UINT values[8] = {owner_ov5_renders, x.Uav & 3u, x.Uav >> 12, states & 0xffffu, states >> 16,
+                            static_cast<UINT>(x.Lo), static_cast<UINT>(y.Lo), owner_ov8_pair_executions};
+    AdmissionUmdDiagnostic("measure-d3d12-ov8-barrier", S_OK, values, 8u);
+  }
+}
 static void owner_ov6b_conflict_receipt(void) {
   AGX_D3D12_JOB_RANGE x, y;
   if (!AdmissionUmdMeasureEnabled() || AgxD3d12JobRenderTaRefusal(&owner_job_barriers, 0u) != 10u) return;
@@ -854,6 +879,7 @@ static unsigned owner_batch_kind(unsigned kind) {
       owner_ov5_sequence |= (ta & 0xfu) << (4u * owner_ov5_renders);
       owner_ov5_noprelude_sequence |= (AgxD3d12JobRenderTaRefusal(&owner_job_barriers, 0u) & 0xfu) << (4u * owner_ov5_renders);
       owner_ov6b_conflict_receipt();
+      owner_ov8_pair_receipt();
       owner_ov8_sequence[0] |= (AgxD3d12JobOv8Range(&owner_job_barriers) & 0xfu) << (4u * owner_ov5_renders);
       owner_ov8_sequence[1] |= (AgxD3d12JobOv8Barrier(&owner_job_barriers) & 0xfu) << (4u * owner_ov5_renders);
       owner_ov8_sequence[2] |= (AgxD3d12JobOv8Prelude(&owner_job_barriers, prelude) & 0xfu) << (4u * owner_ov5_renders);

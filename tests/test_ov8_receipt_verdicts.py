@@ -38,6 +38,9 @@ int main(void) {
   assert(AgxD3d12JobOv8Barrier(&j) == 8);
   compute(); AgxD3d12JobBarrierRange(&j, 2u, 0u, 0, 0, 0);  /* a global UAV barrier */
   assert(AgxD3d12JobOv8Barrier(&j) == 8);
+  compute(); draw(100, 128, AGX_D3D12_JOB_VERTEX | AGX_D3D12_JOB_SRC_VB);
+  AgxD3d12JobBarrierRange(&j, 0u, 7u, A, 0, 64);           /* after the first draw: not an ordering of the compute */
+  assert(AgxD3d12JobOv8Barrier(&j) == 0);
   compute(); draw(0, 32, AGX_D3D12_JOB_VERTEX | AGX_D3D12_JOB_SRC_IND_ARGS);
   assert(AgxD3d12JobOv8Prelude(&j, 1) == 9 && AgxD3d12JobOv8Prelude(&j, 0) == 0);
   return 0;
