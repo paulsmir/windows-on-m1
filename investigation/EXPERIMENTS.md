@@ -75399,3 +75399,9 @@ EXP2299 HARDWARE BEFORE 2026-11-09T05:39:49Z:
 - Hashes: sys c806cab74431, UmdArm64 917429670dc6, UmdX64 014d474ae4bf, Umd32 ece3756ebe25; manifest 292518ce7215, hardware-manifest 2c041b232a4f; probe2299.sh 4142687db2a6 (PROBE_LINT_OK); visible recovery rec2299h b23e4a0980e495cb; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1.
 - Recovery rec2299h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2299-ov8-pairs/run2299.sh.
+
+EXP2299 HARDWARE ACTUAL 2026-11-09T05:45:04Z:
+- Receipt only: no reset, GPU_RESET none, GM HD PERF arm d 42.922 fps. Verdicts range 0xaaaa, barrier 0x8888 (now only barriers before the first draw), prelude 0x0099, in 3297 executions.
+- First pairs (tools/agx_ov8_pair_decode.py, 64 executions, constant offsets per render, so no per-frame alternation of these pairs): render 0 and 1: VB read vs compute root UAV write, 44.7 MB, same heap; render 2: render target vs compute view write, 7405568 bytes; render 3: view read vs compute view write, the same 7405568 bytes.
+- First ordering barrier before the first draw: render 0 and 1: UAV barrier; render 2: UAV barrier, alternating between two resource ids (0xcdbe0 / 0xcfdb0) in 29 / 29 executions; render 3: a transition of resource 0xd6cf0 from 0x8 (UNORDERED_ACCESS) to 0x80 (PIXEL_SHADER_RESOURCE), 57 of 57.
+- Reading: on R7 the application transitions the compute's output for pixel-shader reading before the render: under D3D12 rules R7's pixel stage depends on the compute, so a full (both-stage) overlap of that pair is not allowed; only the TA can run ahead, which is what the OV5 waiver did and it gave no gain (EXP2294-2297). Interpretation of R5 under the OV8 rules is the architect's. Recovery rec2299h.
