@@ -4327,6 +4327,34 @@ static VOID AdmissionBuildOv5FragBarrier(
  * refusal, counted in Wom1Ov5WaiverReceipt) leaves the job untouched and
  * the caller builds today's TA lead Barrier. Called before that Barrier,
  * in the same job-word set Set; the decision is consumed here. */
+/* EXP2290 (diagnostic): the identity of each waived pair in the broker page at
+ * 0xE00, printed by m1n1 at a guest reset (a bugcheck leaves no dump on the
+ * native SSD). Waived builds only, so ordinary jobs take no extra trap. */
+static VOID AdmissionOv5WaiverBeacon(ADMISSION_PLATFORM_RUNTIME *runtime,
+    const APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan, ULONG Fence,
+    const APPLE_AGX_RENDER_BARRIER_INPUT *Barrier) {
+  static LONG sequence;
+  APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *owner = &runtime->Initdata.RenderSharedMemory;
+  const PUCHAR cpu = (PUCHAR)owner->Objects[APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress;
+  const PHYSICAL_ADDRESS stamp = MmGetPhysicalAddress(cpu + APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET);
+  ULONG words[12];
+  ULONG i;
+  words[0] = 0x4235564fu; /* 'OV5B' */
+  words[1] = (ULONG)InterlockedIncrement(&sequence);
+  words[2] = Fence;
+  words[3] = runtime->Depth2Running.Fence;
+  words[4] = Barrier->WaitValue;
+  words[5] = Barrier->WaitSlot;
+  words[6] = Barrier->StampSelf;
+  words[7] = (ULONG)Plan->TaWaivedExpectedDonePointer;
+  words[8] = (ULONG)Plan->D3BarrierExpectedDonePointer;
+  words[9] = stamp.LowPart;
+  words[10] = (ULONG)stamp.HighPart;
+  words[11] = 0xffffffffu;
+  for (i = 0; i < RTL_NUMBER_OF(words); ++i)
+    WRITE_REGISTER_ULONG((volatile ULONG *)(runtime->Adapter->BrokerBase + 0xE00u + i * sizeof(ULONG)), words[i]);
+}
+
 static BOOLEAN AdmissionBuildOv5TaWaiver(
     ADMISSION_PLATFORM_RUNTIME *runtime, const APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan,
     APPLE_AGX_U32 Set, ULONG Fence, APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
@@ -4355,6 +4383,7 @@ static BOOLEAN AdmissionBuildOv5TaWaiver(
     Job->D3ExpectedDonePointer = Plan->D3BarrierExpectedDonePointer;
     Job->TaExpectedDonePointer = Plan->TaWaivedExpectedDonePointer;
     Job->TaLeadWaived = 1u;
+    AdmissionOv5WaiverBeacon(runtime, Plan, Fence, &barrier);
   }
   if (AdmissionJobWindowOv5WaiverNote(&runtime->Ov5WaiverReceipt, refusal, Fence,
           barrier.WaitValue, barrier.StampSelf,
