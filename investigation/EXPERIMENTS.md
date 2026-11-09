@@ -75208,3 +75208,8 @@ EXP2289 HARDWARE BEFORE 2026-11-09T00:24:16Z:
 - Hashes: sys 8fa98cdb8afb, UmdArm64 5a024d8f0c51, UmdX64 b7bbdd9f8d19, Umd32 684ea5bb89d7; manifest 91e680b15ab8, hardware-manifest 91d68b094b74; probe2289.sh f55a99f751f7 (PROBE_LINT_OK); visible recovery rec2289h c7a09776e347c81d; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1 Wom1Ov5TaWaiverNoFeature=1.
 - Recovery rec2289h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2289-waiver-nofeature/run2289.sh.
+
+EXP2289 HARDWARE ACTUAL 2026-11-09T00:33:36Z:
+- Wom1Ov2NoHazardLead Wom1Ov5TaWaiver Wom1Ov5TaWaiverNoFeature, diagnostics off, OV3B=1, m1n1 ansdirect-bugcheck2.
+- Result: no reset (0 PSCI RESET) in 3 GM starts, device_removed false, wer 0; each run finished normally. GM HD PERF a 42.544, b 42.942, c 43.215 fps.
+- Verdict: with the KMD waiver state on and the feature not published to the UMD, the reset does not occur (0 of 3 starts, versus 3 of 3 boots in EXP2283/2285/2286). The trigger therefore needs the published UMD feature (RENDER_TA_INDEPENDENT path); the KMD note/export path alone is not sufficient. Small sample. Recovery rec2289h. Next: architect, UMD path behind the feature during GM setup.
