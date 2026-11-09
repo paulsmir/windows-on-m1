@@ -144,4 +144,38 @@ the bridge-boot emergency path if the native SSD does not boot)
   counters that m1n1 can print next to KiBugCheckData.
 - **DUMP3**: kernel dump (`CrashDumpEnabled = 2`) once DUMP2 passes and disk space is confirmed.
 
-Smallest falsifiable step now: DUMP0.
+## DUMP2 as implemented (supersedes the TRANSLATION text where they differ)
+
+EXP2302 (DUMP1) verdict carried in: DUMP_POINTERS answered twice with a sealed record (0xA6), no 0xA7 and no
+`dump_` modules before a crash, so nothing about the dump image's environment is measured yet.
+
+- **Order in HwFindAdapter**: structure length -> `DumpMode` -> dump branch. The PnP-restart ownership check is
+  skipped for the dump image because its device extension is new and unspecified; the dump branch zeroes it.
+- **Validation first**: without a record that passes `ans_dump_context_valid` the dump image returns
+  SP_RETURN_NOT_FOUND and has dereferenced, mapped and marked nothing.
+- **Modes**: DUMP_MODE_CRASH maps the two register ranges (they must be exactly the live ones) and adopts the lent
+  buffer; DUMP_MODE_MARK_MEMORY only marks the record and the buffer and never touches hardware (hypothesis:
+  HwInitialize may still be called, it returns TRUE without work); DUMP_MODE_HIBER / RESUME are refused, which
+  replaces the earlier text about marking for hibernation. Hibernation stays unsupported.
+- **No write before stop** replaces "ansd_init rewrites every byte": `direct_carve` only computes addresses from the
+  record (`common_pa` + offset through `ansd_translate`), `ansd_init_takeover` proves CC.EN=0 / CSTS.RDY=0 and only
+  then clears the queue arrays; then `ansd_enable` and Create IOCQ/IOSQ. No Identify, no Set Features, no timer:
+  the namespace comes from the record.
+- **I/O**: `MaxIOsPerLun = 1`; HwStartIo takes no lock, starts the request through the live translation and polls
+  `AppleAnsDirectInterrupt` until no slot is busy. Bound: 3 000 000 polls x 10 us; on expiry the adapter is
+  faulted and the SRB fails, buffers are kept. Only EXECUTE_SCSI, FLUSH and SHUTDOWN are served.
+- **SHUTDOWN = ordered FLUSH only**, as in the live path, instead of "FLUSH then ansd_shutdown inline": I/O that
+  crashdmp sends after SHUTDOWN cannot fail, and a bugcheck without a dump already leaves the controller running
+  into the reset. `ScsiStopAdapter`, if crashdmp sends it, runs the existing `ansd_shutdown` inline. A normal
+  shutdown notification at the end of the dump is a later single-variable step.
+- **Not implemented**: stage counters readable by m1n1; the receipt in the live record (flags CTRL_MAPPED,
+  MBOX_MAPPED) is the only trace and is lost if the dump never completes. Live register VAs are not passed in the
+  record; if `StorPortGetDeviceBase` fails in dump mode, the result is "no dump", and the fallback is a new step.
+- HwInterrupt returns FALSE, HwResetBus returns TRUE without touching the controller, ScsiRestartAdapter fails,
+  the error log is never called (`AppleAnsDiag` returns at once).
+
+Still unknown (hardware only): whether crashdmp loads `dump_AppleAns.sys` at all once CrashDumpEnabled != 0;
+whether the dump-mode configuration carries both access ranges; whether ANS accepts CC.EN 1 -> 0 -> 1 with requests
+in flight; whether HwInitialize runs in MARK_MEMORY mode.
+
+Smallest falsifiable step now: DUMP2 (package 0.4.4).

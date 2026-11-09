@@ -42,22 +42,79 @@ ULONG DriverEntry(PVOID DriverObject, PVOID RegistryPath)
     return StorPortInitialize(DriverObject, RegistryPath, &init, NULL);
 }
 
-/* Runs in the dump image, possibly at HIGH_LEVEL: no registry, pool, DPC, timer or MMIO.
- * The only memory written is the receipt part of a record that passed validation. */
-static VOID dump_receipt(PPORT_CONFIGURATION_INFORMATION config)
+static BOOLEAN dump_ranges(PPORT_CONFIGURATION_INFORMATION config)
+{
+    if (config->NumberOfAccessRanges != 2 || config->AccessRanges == NULL) return FALSE;
+    PACCESS_RANGE r = *config->AccessRanges;
+    return (ULONGLONG)r[0].RangeStart.QuadPart == ANSD_CTRL_BASE &&
+        r[0].RangeLength == ANSD_CTRL_SIZE && r[0].RangeInMemory &&
+        (ULONGLONG)r[1].RangeStart.QuadPart == ANSD_MBOX_BASE &&
+        r[1].RangeLength == ANSD_MBOX_SIZE && r[1].RangeInMemory;
+}
+static VOID adapter_limits(PPORT_CONFIGURATION_INFORMATION config, ULONG depth)
+{
+    config->MaximumTransferLength = ANS_MAX_TRANSFER;
+    config->NumberOfPhysicalBreaks = ANS_MAX_DATA_PAGES;
+    config->NumberOfBuses = 1;
+    config->MaximumNumberOfTargets = 1;
+    config->MaximumNumberOfLogicalUnits = 1;
+    config->MaxIOsPerLun = depth;
+    config->ScatterGather = TRUE;config->Master = TRUE;
+    config->TaggedQueuing = TRUE;config->MultipleRequestPerLu = TRUE;
+    config->AutoRequestSense = TRUE;
+    config->MapBuffers = STOR_MAP_NON_READ_WRITE_BUFFERS;
+    config->AlignmentMask = 3;
+    config->SynchronizationModel = StorSynchronizeFullDuplex;
+}
+/* Dump image (dump_AppleAns.sys), possibly at HIGH_LEVEL: no registry, pool, DPC, timer, lock
+ * or log. ANS-DUMP-MODE.md, TRANSLATION 2. Nothing is dereferenced, mapped or marked before
+ * the live instance's record passed validation; without it there is no dump, never I/O.
+ *   CRASH        map the two register ranges, adopt the lent buffer, one request at a time;
+ *                the controller itself is first touched in HwInitialize.
+ *   MARK_MEMORY  only names the memory the crash instance will use; no mapping, no hardware.
+ *   HIBER/RESUME refused: hibernation on this adapter stays unsupported. */
+static ULONG dump_find(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config)
 {
     struct ans_dump_context *c = config->MiniportDumpData;
-    if (!ans_dump_context_valid(c, APPLE_ANS_DIRECT_BYTES)) return;
-    ULONG flags = ANS_DUMP_SEEN_VALID;
-    if (config->NumberOfAccessRanges == 2 && config->AccessRanges != NULL) {
-        PACCESS_RANGE r = *config->AccessRanges;
-        if ((ULONGLONG)r[0].RangeStart.QuadPart == ANSD_CTRL_BASE &&
-            r[0].RangeLength == ANSD_CTRL_SIZE && r[0].RangeInMemory &&
-            (ULONGLONG)r[1].RangeStart.QuadPart == ANSD_MBOX_BASE &&
-            r[1].RangeLength == ANSD_MBOX_SIZE && r[1].RangeInMemory)
-            flags |= ANS_DUMP_SEEN_RANGES;
+    ULONG mode = config->DumpMode;
+    a->Stage = AppleAnsStageResourcesRejected;
+    if (!ans_dump_context_valid(c, APPLE_ANS_DIRECT_BYTES)) return SP_RETURN_NOT_FOUND;
+    ULONG flags = ANS_DUMP_SEEN_VALID | (dump_ranges(config) ? ANS_DUMP_SEEN_RANGES : 0);
+    BOOLEAN found = FALSE;
+#if APPLE_ANS_NATIVE_READ_ONLY
+    a->DumpContext = *c;
+    if (mode == DUMP_MODE_MARK_MEMORY) found = TRUE;
+    else if (mode == DUMP_MODE_CRASH && (flags & ANS_DUMP_SEEN_RANGES)) {
+        a->DumpMode = mode; /* AppleAnsDirectResources: map only, adopt the lent buffer */
+        found = AppleAnsDirectResources(a, config);
+        if (found) flags |= ANS_DUMP_SEEN_CTRL_MAPPED | ANS_DUMP_SEEN_MBOX_MAPPED;
     }
-    ans_dump_context_receipt(c, config->DumpMode, flags, config->NumberOfAccessRanges);
+    if (found) {
+        a->DumpMode = mode;a->Direct = TRUE;
+        adapter_limits(config, 1);
+        /* storahci marks its context in every dump mode; the return value is advisory. */
+        (void)StorPortMarkDumpMemory(a, c, sizeof(*c), 0);
+        (void)StorPortMarkDumpMemory(a, (PVOID)(ULONG_PTR)c->common_va, c->common_bytes, 0);
+        a->ResourcesAccepted = TRUE;a->Stage = AppleAnsStageResourcesAccepted;
+    }
+#endif
+    ans_dump_context_receipt(c, mode, flags, config->NumberOfAccessRanges);
+    return found ? SP_RETURN_FOUND : SP_RETURN_NOT_FOUND;
+}
+/* Dump image: interrupts are off and nothing else runs, so no InterruptLock; the request is
+ * finished by polling before StartIo returns (TRANSLATION 4). SHUTDOWN is the ordered FLUSH
+ * of the live path; the controller is left running for the reset that follows, exactly as
+ * after a bugcheck without a dump. */
+static BOOLEAN dump_start(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
+{
+    if (a->DumpMode != DUMP_MODE_CRASH ||
+        (srb->Function != SRB_FUNCTION_EXECUTE_SCSI && srb->Function != SRB_FUNCTION_FLUSH &&
+         srb->Function != SRB_FUNCTION_SHUTDOWN)) {
+        AppleAnsComplete(a, srb, SRB_STATUS_INVALID_REQUEST, 0);return TRUE;
+    }
+    BOOLEAN result = AppleAnsNativeStart(a, srb);
+    AppleAnsDirectDumpDrain(a);
+    return result;
 }
 
 _Use_decl_annotations_
@@ -70,25 +127,19 @@ ULONG AppleAnsFindAdapter(PVOID DeviceExtension, PVOID HwContext,
     UNREFERENCED_PARAMETER(BusInformation);
     UNREFERENCED_PARAMETER(ArgumentString);
     UNREFERENCED_PARAMETER(Reserved3);
+    if (ConfigInfo->Length < sizeof(*ConfigInfo)) return SP_RETURN_NOT_FOUND;
+    /* The dump image gets its own, never-started extension: decided before anything in it
+     * is read. */
+    BOOLEAN dump = ConfigInfo->DumpMode != 0;
     /* A PnP restart must never erase ownership after an unproven stop. */
-    if (a->Signature == ANS_MAGIC && (a->MayOwn || a->Wire.faulted || a->Ansd.faulted))
+    if (!dump && a->Signature == ANS_MAGIC && (a->MayOwn || a->Wire.faulted || a->Ansd.faulted))
         return SP_RETURN_ERROR;
     RtlZeroMemory(a, sizeof(*a));
     a->Signature = ANS_MAGIC;a->Version = 2;a->Stage = AppleAnsStageFindAdapter;
     (void)ans_order_init(&a->Order, 1);
     ans_stats_init(&a->Stats);
     a->ShutdownTag=ANS_QUEUE_DEPTH;
-    if (ConfigInfo->Length < sizeof(*ConfigInfo)) {
-        a->Stage = AppleAnsStageResourcesRejected;return SP_RETURN_NOT_FOUND;
-    }
-    /* Crash-dump/hibernation instance (dump_AppleAns.sys), DUMP1 of ANS-DUMP-MODE.md: it
-     * validates the live instance's hand-over record, leaves a receipt in it and still
-     * refuses, before any resource is parsed, mapped or touched. A bugcheck therefore
-     * restarts without dump I/O exactly as before. */
-    if (ConfigInfo->DumpMode != 0) {
-        dump_receipt(ConfigInfo);
-        a->Stage = AppleAnsStageResourcesRejected;return SP_RETURN_NOT_FOUND;
-    }
+    if (dump) return dump_find(a, ConfigInfo);
     if (ConfigInfo->NumberOfAccessRanges < 1 || ConfigInfo->NumberOfAccessRanges > 2 ||
         ConfigInfo->AccessRanges == NULL) {
         a->Stage = AppleAnsStageResourcesRejected;return SP_RETURN_NOT_FOUND;
@@ -115,18 +166,7 @@ ULONG AppleAnsFindAdapter(PVOID DeviceExtension, PVOID HwContext,
     a->BrokerAddress = range->RangeStart;a->BrokerLength = range->RangeLength;
     a->AssignedInterruptVector = ConfigInfo->BusInterruptVector;
     a->AssignedInterruptLevel = ConfigInfo->BusInterruptLevel;
-    ConfigInfo->MaximumTransferLength = ANS_MAX_TRANSFER;
-    ConfigInfo->NumberOfPhysicalBreaks = ANS_MAX_DATA_PAGES;
-    ConfigInfo->NumberOfBuses = 1;
-    ConfigInfo->MaximumNumberOfTargets = 1;
-    ConfigInfo->MaximumNumberOfLogicalUnits = 1;
-    ConfigInfo->MaxIOsPerLun = ANS_QUEUE_DEPTH - ANS_ADMIN_TAGS;
-    ConfigInfo->ScatterGather = TRUE;ConfigInfo->Master = TRUE;
-    ConfigInfo->TaggedQueuing = TRUE;ConfigInfo->MultipleRequestPerLu = TRUE;
-    ConfigInfo->AutoRequestSense = TRUE;
-    ConfigInfo->MapBuffers = STOR_MAP_NON_READ_WRITE_BUFFERS;
-    ConfigInfo->AlignmentMask = 3;
-    ConfigInfo->SynchronizationModel = StorSynchronizeFullDuplex;
+    adapter_limits(ConfigInfo, ANS_QUEUE_DEPTH - ANS_ADMIN_TAGS);
 #if APPLE_ANS_NATIVE_READ_ONLY
     if (direct ? !AppleAnsDirectResources(a, ConfigInfo) : !AppleAnsNativeResources(a, ConfigInfo)) {
         a->Stage = AppleAnsStageResourcesRejected;return SP_RETURN_ERROR;
@@ -140,6 +180,10 @@ _Use_decl_annotations_
 BOOLEAN AppleAnsInitialize(PVOID DeviceExtension)
 {
     PAPPLE_ANS_ADAPTER a = DeviceExtension;
+    /* Dump image: no passive initialisation, DPC or log. MARK_MEMORY never starts hardware. */
+    if (a->DumpMode)
+        return a->ResourcesAccepted &&
+            (a->DumpMode == DUMP_MODE_MARK_MEMORY || AppleAnsDirectDumpInitialize(a));
 #if APPLE_ANS_NATIVE_READ_ONLY
     if (a->ResourcesAccepted && AppleAnsNativeInitialize(a)) {
         /* Hardware and namespace are already ready; passive work only constructs
@@ -196,6 +240,7 @@ _Use_decl_annotations_
 BOOLEAN AppleAnsStartIo(PVOID DeviceExtension, PSCSI_REQUEST_BLOCK Srb)
 {
     STOR_LOCK_HANDLE lock={0};
+    if (((PAPPLE_ANS_ADAPTER)DeviceExtension)->DumpMode) return dump_start(DeviceExtension,Srb);
     StorPortAcquireSpinLock(DeviceExtension,InterruptLock,NULL,&lock);
     BOOLEAN result = AppleAnsNativeStart(DeviceExtension,Srb);
     StorPortReleaseSpinLock(DeviceExtension,&lock);
@@ -206,6 +251,8 @@ _Use_decl_annotations_
 BOOLEAN AppleAnsInterrupt(PVOID DeviceExtension)
 {
     /* Storport already holds InterruptLock; never acquire it recursively. */
+    /* Dump image: StartIo already drained the queue; a polled call finds nothing to do. */
+    if (((PAPPLE_ANS_ADAPTER)DeviceExtension)->DumpMode) return FALSE;
     return AppleAnsNativeInterrupt(DeviceExtension);
 }
 
@@ -213,6 +260,8 @@ _Use_decl_annotations_
 BOOLEAN AppleAnsResetBus(PVOID DeviceExtension, ULONG PathId)
 {
     if (PathId) return FALSE;
+    /* Dump image: a controller reset here could only lose the dump; report success untouched. */
+    if (((PAPPLE_ANS_ADAPTER)DeviceExtension)->DumpMode) return TRUE;
     STOR_LOCK_HANDLE lock={0};
     StorPortAcquireSpinLock(DeviceExtension,InterruptLock,NULL,&lock);
     BOOLEAN result = AppleAnsNativeReset(DeviceExtension);
@@ -242,6 +291,7 @@ SCSI_ADAPTER_CONTROL_STATUS AppleAnsAdapterControl(PVOID DeviceExtension,
         return AppleAnsNativeStop(a) ? ScsiAdapterControlSuccess : ScsiAdapterControlUnsuccessful;
     }
     if (ControlType == ScsiRestartAdapter) {
+        if (a->DumpMode) return ScsiAdapterControlUnsuccessful;
 #if APPLE_ANS_NATIVE_READ_ONLY
         return AppleAnsNativeInitialize(a) ? ScsiAdapterControlSuccess : ScsiAdapterControlUnsuccessful;
 #else

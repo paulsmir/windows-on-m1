@@ -80,6 +80,10 @@ typedef struct _APPLE_ANS_ADAPTER {
      * instance; DumpReceiptLogged is the receipt value already written to the System log. */
     struct ans_dump_context DumpContext;
     ULONG DumpPointersSrbs, DumpReceiptLogged;
+    /* Non-zero only in the dump image (PORT_CONFIGURATION_INFORMATION.DumpMode): interrupts
+     * are off, so no lock, DPC, timer or log API is used and StartIo polls its own request.
+     * DumpContext is then this instance's validated copy of the live record. */
+    ULONG DumpMode;
 } APPLE_ANS_ADAPTER, *PAPPLE_ANS_ADAPTER;
 BOOLEAN AppleAnsNativeResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config);
 BOOLEAN AppleAnsNativeInitialize(PAPPLE_ANS_ADAPTER a);
@@ -89,6 +93,8 @@ BOOLEAN AppleAnsNativeReset(PAPPLE_ANS_ADAPTER a);
 BOOLEAN AppleAnsNativeStop(PAPPLE_ANS_ADAPTER a);
 BOOLEAN AppleAnsDirectResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config);
 BOOLEAN AppleAnsDirectInitialize(PAPPLE_ANS_ADAPTER a);
+BOOLEAN AppleAnsDirectDumpInitialize(PAPPLE_ANS_ADAPTER a);
+VOID AppleAnsDirectDumpDrain(PAPPLE_ANS_ADAPTER a);
 BOOLEAN AppleAnsDirectInterrupt(PAPPLE_ANS_ADAPTER a);
 BOOLEAN AppleAnsDirectReset(PAPPLE_ANS_ADAPTER a);
 BOOLEAN AppleAnsDirectStop(PAPPLE_ANS_ADAPTER a);

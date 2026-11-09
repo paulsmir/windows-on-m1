@@ -372,6 +372,7 @@ static VOID sense(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, struct ans_sens
 }
 VOID AppleAnsDiag(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, ULONG code, ULONG value)
 {
+    if (a->DumpMode) return; /* the dump image has no error log */
     if (InterlockedIncrement(&a->DiagLogs) > APPLE_ANS_DIAG_MAX) return;
     StorPortLogError(a, srb, 0, 0, 0, SP_INTERNAL_ADAPTER_ERROR, (code << 24) | (value & 0xffffff));
 }

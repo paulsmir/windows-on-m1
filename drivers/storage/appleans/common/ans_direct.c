@@ -80,29 +80,6 @@ static int queue_valid(const struct ansd_queue *q, ans_u32 depth)
         !(q->sq_pa & (ANSD_QUEUE_ALIGN - 1)) && !(q->cq_pa & (ANSD_QUEUE_ALIGN - 1)) &&
         !(q->tcb_pa & (ANSD_QUEUE_ALIGN - 1));
 }
-int ansd_init(struct ansd_ctrl *c, const struct ansd_ops *ops, void *ctx,
-              const struct ansd_queue queues[2])
-{
-    if (!c || !ops || !ops->read32 || !ops->write32 || !ops->read64 || !ops->write64 ||
-        !ops->barrier || !ops->stall || !queues ||
-        !queue_valid(&queues[0], ANSD_ADMIN_DEPTH) || !queue_valid(&queues[1], ANSD_IO_DEPTH))
-        return ANSD_INVALID;
-    ansd_zero(c, sizeof(*c));
-    c->ops = ops;
-    c->ctx = ctx;
-    for (unsigned i = 0; i < 2; i++) {
-        c->q[i] = queues[i];
-        c->q[i].head = 0;
-        c->q[i].phase = 1;
-        c->q[i].outstanding = 0;
-        ansd_zero((void *)c->q[i].cq, c->q[i].depth * sizeof(struct ansd_cqe));
-        ansd_zero(c->q[i].tcb, c->q[i].depth * sizeof(struct ansd_tcb));
-        ansd_zero(c->q[i].sq, c->q[i].depth * 64u);
-    }
-    c->stage = ANSD_STAGE_HANDOFF;
-    return ANSD_OK;
-}
-
 static int fault(struct ansd_ctrl *c, int result)
 {
     c->faulted = 1;
@@ -122,7 +99,78 @@ static int wait_csts(struct ansd_ctrl *c, ans_u32 mask, ans_u32 wanted, ans_u32 
     }
     return ANSD_TIMEOUT;
 }
+int ansd_takeover(struct ansd_ctrl *c);
+static int bind(struct ansd_ctrl *c, const struct ansd_ops *ops, void *ctx,
+                const struct ansd_queue queues[2])
+{
+    if (!c || !ops || !ops->read32 || !ops->write32 || !ops->read64 || !ops->write64 ||
+        !ops->barrier || !ops->stall || !queues ||
+        !queue_valid(&queues[0], ANSD_ADMIN_DEPTH) || !queue_valid(&queues[1], ANSD_IO_DEPTH))
+        return ANSD_INVALID;
+    ansd_zero(c, sizeof(*c));
+    c->ops = ops;
+    c->ctx = ctx;
+    for (unsigned i = 0; i < 2; i++) {
+        c->q[i] = queues[i];
+        c->q[i].head = 0;
+        c->q[i].phase = 1;
+        c->q[i].outstanding = 0;
+    }
+    c->stage = ANSD_STAGE_HANDOFF;
+    return ANSD_OK;
+}
+static void clear_queues(struct ansd_ctrl *c)
+{
+    for (unsigned i = 0; i < 2; i++) {
+        ansd_zero((void *)c->q[i].cq, c->q[i].depth * sizeof(struct ansd_cqe));
+        ansd_zero(c->q[i].tcb, c->q[i].depth * sizeof(struct ansd_tcb));
+        ansd_zero(c->q[i].sq, c->q[i].depth * 64u);
+    }
+}
+int ansd_init(struct ansd_ctrl *c, const struct ansd_ops *ops, void *ctx,
+              const struct ansd_queue queues[2])
+{
+    int r = bind(c, ops, ctx, queues);
+    if (r == ANSD_OK) clear_queues(c);
+    return r;
+}
+int ansd_init_takeover(struct ansd_ctrl *c, const struct ansd_ops *ops, void *ctx,
+                       const struct ansd_queue queues[2])
+{
+    int r = bind(c, ops, ctx, queues);
+    if (r != ANSD_OK) return r;
+    /* The controller may still be running on this very memory: stop it first. */
+    r = ansd_takeover(c);
+    if (r == ANSD_OK) clear_queues(c);
+    return r;
+}
 
+int ansd_takeover(struct ansd_ctrl *c)
+{
+    if (!c || !c->ops || c->faulted || c->enabled || c->stage != ANSD_STAGE_HANDOFF)
+        return ANSD_STATE;
+    if (r32(c, ANSD_BANK_CTRL, ANSD_BOOT_STATUS) != ANSD_BOOT_STATUS_OK) return fault(c, ANSD_STATE);
+    ans_u32 cc = r32(c, ANSD_BANK_CTRL, ANSD_CC), csts = r32(c, ANSD_BANK_CTRL, ANSD_CSTS);
+    c->last_csts = csts;
+    if (csts == 0xffffffffu || (csts & ANSD_CSTS_CFS)) return fault(c, ANSD_FAULT);
+    if (!(cc & ANSD_CC_EN) && !(csts & ANSD_CSTS_RDY)) return ANSD_OK;
+    ans_u32 to = (ans_u32)((c->ops->read64(c->ctx, ANSD_BANK_CTRL, ANSD_CAP) >> 24) & 0xff) * 500u;
+    to = to ? (to > MAX_TIMEOUT_MS ? MAX_TIMEOUT_MS : to) : DEFAULT_TIMEOUT_MS;
+    if (cc & (ANSD_CC_EN | ANSD_CC_SHN_MASK)) {
+        w32(c, ANSD_BANK_CTRL, ANSD_CC, cc & ~(ANSD_CC_EN | ANSD_CC_SHN_MASK));
+        c->ops->barrier(c->ctx);
+    }
+    ans_u32 loops = to * (1000u / POLL_US);
+    for (ans_u32 i = 0; i <= loops; i++) {
+        csts = r32(c, ANSD_BANK_CTRL, ANSD_CSTS);
+        c->last_csts = csts;
+        if (csts == 0xffffffffu || (csts & ANSD_CSTS_CFS)) return fault(c, ANSD_FAULT);
+        if (!(csts & ANSD_CSTS_RDY)) return ANSD_OK;
+        if (ansd_mbox_service(c, 8) == ANSD_CRASHED) return fault(c, ANSD_CRASHED);
+        c->ops->stall(c->ctx, POLL_US);
+    }
+    return fault(c, ANSD_TIMEOUT);
+}
 int ansd_enable(struct ansd_ctrl *c)
 {
     if (!c || !c->ops || c->faulted || c->enabled || c->stage != ANSD_STAGE_HANDOFF)

@@ -134,6 +134,12 @@ int ansd_translate_prps(const struct ans_logical_prps *in, struct ans_logical_pr
 int ansd_init(struct ansd_ctrl *c, const struct ansd_ops *ops, void *ctx,
               const struct ansd_queue queues[2]);
 /* Verifies the m1n1 hand-off state, programs linear SQ/NVMMU/admin queue, enables. */
+/* Dump mode only: stop a possibly live controller (CC.EN=0, CSTS.RDY=0) before ansd_enable. */
+int ansd_takeover(struct ansd_ctrl *c);
+/* Dump mode only: ansd_init over queue memory the controller may still be using. Nothing in
+ * that memory is written until ansd_takeover proved the controller stopped. */
+int ansd_init_takeover(struct ansd_ctrl *c, const struct ansd_ops *ops, void *ctx,
+                       const struct ansd_queue queues[2]);
 int ansd_enable(struct ansd_ctrl *c);
 /* Copies a 64-byte SQE (command id forced to tag), fills TCB[tag], doorbell = tag.
  * Caller holds the interrupt lock (Asahi missed-IRQ rule). */

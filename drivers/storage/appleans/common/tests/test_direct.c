@@ -12,6 +12,7 @@ struct sim {
     ans_u64 cap, asq, acq, asq_tcb, iosq_tcb;
     ans_u32 db_acq, db_iocq, inval_count, last_inval;
     unsigned rdy_delay, writes;
+    unsigned clr_delay; int draining, cfs_on_clear; /* CC.EN 1->0: RDY clears after clr_delay CSTS reads */
     ans_u32 log[64]; unsigned nlog; /* register write order */
     /* device-side CQ producer */
     unsigned cq_tail[2], cq_phase[2];
@@ -22,6 +23,7 @@ struct sim {
     ans_u64 out0[16]; ans_u32 out1[16]; unsigned out_count;
     ans_u64 pending_send0;
     struct ansd_ctrl *c;
+    const ans_u8 *watch; unsigned watch_n; int watch_seen, watch_intact; /* lent memory at the CC write */
 };
 static void logw(struct sim *s, ans_u32 off) { if (s->nlog < 64) s->log[s->nlog++] = off; }
 
@@ -46,6 +48,10 @@ static ans_u32 rd32(void *ctx, unsigned bank, ans_u32 off)
     case ANSD_CSTS:
         if ((s->cc & ANSD_CC_EN) && !(s->csts & ANSD_CSTS_RDY)) {
             if (s->rdy_delay) s->rdy_delay--; else s->csts |= ANSD_CSTS_RDY;
+        }
+        if (s->draining && !(s->cc & ANSD_CC_EN)) {
+            if (s->clr_delay) s->clr_delay--;
+            else { s->csts &= ~ANSD_CSTS_RDY; s->draining = 0; if (s->cfs_on_clear) s->csts |= ANSD_CSTS_CFS; }
         }
         return s->csts;
     case ANSD_BOOT_STATUS: return s->boot;
@@ -73,8 +79,15 @@ static void wr32(void *ctx, unsigned bank, ans_u32 off, ans_u32 v)
     logw(s, off); s->writes++;
     switch (off) {
     case ANSD_CC:
+        if (s->watch) {
+            s->watch_seen = 1; s->watch_intact = 1;
+            for (unsigned i = 0; i < s->watch_n; i++) if (s->watch[i] != 0x5a) s->watch_intact = 0;
+        }
         s->cc = v;
-        if (!(v & ANSD_CC_EN)) s->csts &= ~(ANSD_CSTS_RDY | ANSD_CSTS_SHST_MASK);
+        if (!(v & ANSD_CC_EN)) {
+            if (s->clr_delay && (s->csts & ANSD_CSTS_RDY)) { s->draining = 1; s->csts &= ~ANSD_CSTS_SHST_MASK; }
+            else s->csts &= ~(ANSD_CSTS_RDY | ANSD_CSTS_SHST_MASK);
+        }
         if ((v & ANSD_CC_SHN_MASK) == ANSD_CC_SHN_NORMAL) s->csts = (s->csts & ~ANSD_CSTS_SHST_MASK) | ANSD_CSTS_SHST_DONE;
         return;
     case ANSD_AQA: s->aqa = v; return;
@@ -322,6 +335,109 @@ static void test_shutdown(void)
     freeq(&qs[0]); freeq(&qs[1]);
 }
 
+/* Dump-instance takeover (ANS-DUMP-MODE.md): the controller may still run on the crashed
+ * instance's queues. It must be proven stopped (CC.EN=0, CSTS.RDY=0) before ansd_enable
+ * programs new queue registers; every other outcome is a fault with no enable. */
+static void test_takeover(void)
+{
+    struct sim s; struct ansd_ctrl c; struct ansd_queue qs[2];
+    /* Clean hand-off state: nothing to do, no register write. */
+    setup(&s, &c, qs);
+    assert(ansd_takeover(&c) == ANSD_OK && s.writes == 0 && c.stage == ANSD_STAGE_HANDOFF && !c.faulted);
+    assert(ansd_enable(&c) == ANSD_OK);
+    /* A second takeover over our own enabled controller is refused untouched. */
+    s.writes = 0;
+    assert(ansd_takeover(&c) == ANSD_STATE && s.writes == 0 && c.enabled);
+    freeq(&qs[0]); freeq(&qs[1]);
+    /* Live controller: exactly one write (CC without EN/SHN), then RDY=0 is awaited. */
+    setup(&s, &c, qs);
+    s.cc = ANSD_CC_IOSQES_IOCQES | ANSD_CC_EN | ANSD_CC_SHN_NORMAL; s.csts = ANSD_CSTS_RDY; s.clr_delay = 4;
+    assert(ansd_takeover(&c) == ANSD_OK && s.writes == 1 && s.log[0] == ANSD_CC);
+    assert(s.cc == ANSD_CC_IOSQES_IOCQES && !(s.csts & ANSD_CSTS_RDY) && c.stage == ANSD_STAGE_HANDOFF);
+    s.nlog = 0;
+    assert(ansd_enable(&c) == ANSD_OK && s.log[0] == ANSD_LINEAR_SQ_CTRL && s.asq == qs[0].sq_pa);
+    freeq(&qs[0]); freeq(&qs[1]);
+    /* Already disabled but still draining: wait only. */
+    setup(&s, &c, qs);
+    s.csts = ANSD_CSTS_RDY; s.draining = 1; s.clr_delay = 3;
+    assert(ansd_takeover(&c) == ANSD_OK && s.writes == 0 && !(s.csts & ANSD_CSTS_RDY));
+    freeq(&qs[0]); freeq(&qs[1]);
+    /* Faults: bad BOOT_STATUS, fatal status, dead bus -> no write, and enable stays refused. */
+    for (int k = 0; k < 3; k++) {
+        setup(&s, &c, qs);
+        s.cc = ANSD_CC_EN; s.csts = ANSD_CSTS_RDY;
+        if (k == 0) s.boot = 0;
+        if (k == 1) s.csts |= ANSD_CSTS_CFS;
+        if (k == 2) s.csts = 0xffffffffu;
+        assert(ansd_takeover(&c) != ANSD_OK && c.faulted && s.writes == 0);
+        assert(ansd_enable(&c) == ANSD_STATE && s.writes == 0);
+        freeq(&qs[0]); freeq(&qs[1]);
+    }
+    /* RDY never clears: bounded, one write, never an enable over a running controller. */
+    setup(&s, &c, qs);
+    s.cc = ANSD_CC_EN; s.csts = ANSD_CSTS_RDY; s.clr_delay = 1u << 30;
+    assert(ansd_takeover(&c) == ANSD_TIMEOUT && c.faulted && s.writes == 1);
+    assert(ansd_enable(&c) == ANSD_STATE && s.writes == 1);
+    freeq(&qs[0]); freeq(&qs[1]);
+    /* The controller reports a fatal status while stopping. */
+    setup(&s, &c, qs);
+    s.cc = ANSD_CC_EN; s.csts = ANSD_CSTS_RDY; s.clr_delay = 2; s.cfs_on_clear = 1;
+    assert(ansd_takeover(&c) == ANSD_FAULT && c.faulted && s.writes == 1);
+    freeq(&qs[0]); freeq(&qs[1]);
+    /* An IOP crash message while waiting ends the takeover. */
+    setup(&s, &c, qs);
+    s.cc = ANSD_CC_EN; s.csts = ANSD_CSTS_RDY; s.clr_delay = 8;
+    inbox(&s, (ans_u64)1 << 52, 1);
+    assert(ansd_takeover(&c) == ANSD_CRASHED && c.faulted && c.crashed);
+    freeq(&qs[0]); freeq(&qs[1]);
+}
+
+/* The dump instance binds to queue memory the controller may still be using: nothing in it may
+ * change before the controller is proven stopped (a zeroed TCB of an in-flight command is an
+ * NVMMU fault, and a faulted controller writes no dump). */
+static void fillq(struct ansd_queue *q, int v)
+{
+    memset((void *)q->cq, v, q->depth * sizeof(struct ansd_cqe));
+    memset(q->tcb, v, q->depth * sizeof(struct ansd_tcb));
+    memset(q->sq, v, q->depth * 64u);
+}
+static int allq(const struct ansd_queue *q, int v)
+{
+    const ans_u8 *b[3] = {(const ans_u8 *)q->cq, (const ans_u8 *)q->tcb, q->sq};
+    unsigned n[3] = {q->depth * (unsigned)sizeof(struct ansd_cqe), q->depth * (unsigned)sizeof(struct ansd_tcb), q->depth * 64u};
+    for (unsigned k = 0; k < 3; k++) for (unsigned i = 0; i < n[k]; i++) if (b[k][i] != (ans_u8)v) return 0;
+    return 1;
+}
+static void test_init_takeover(void)
+{
+    struct sim s; struct ansd_ctrl c, c2; struct ansd_queue qs[2];
+    /* Live controller: lent memory untouched at the stop write, zeroed once stopped. */
+    setup(&s, &c, qs);
+    fillq(&qs[0], 0x5a); fillq(&qs[1], 0x5a);
+    s.cc = ANSD_CC_EN; s.csts = ANSD_CSTS_RDY; s.clr_delay = 4;
+    s.watch = (const ans_u8 *)qs[1].tcb; s.watch_n = qs[1].depth * (unsigned)sizeof(struct ansd_tcb);
+    s.c = &c2;
+    assert(ansd_init_takeover(&c2, &ops, &s, qs) == ANSD_OK);
+    assert(s.watch_seen && s.watch_intact && s.writes == 1);
+    assert(allq(&qs[0], 0) && allq(&qs[1], 0) && c2.stage == ANSD_STAGE_HANDOFF);
+    s.watch = NULL;
+    assert(ansd_enable(&c2) == ANSD_OK);
+    freeq(&qs[0]); freeq(&qs[1]);
+    /* Controller never stops: the lent memory keeps every byte. */
+    setup(&s, &c, qs);
+    fillq(&qs[0], 0x5a); fillq(&qs[1], 0x5a);
+    s.cc = ANSD_CC_EN; s.csts = ANSD_CSTS_RDY; s.clr_delay = 1u << 30; s.c = &c2;
+    assert(ansd_init_takeover(&c2, &ops, &s, qs) == ANSD_TIMEOUT && c2.faulted);
+    assert(allq(&qs[0], 0x5a) && allq(&qs[1], 0x5a));
+    assert(ansd_enable(&c2) == ANSD_STATE);
+    freeq(&qs[0]); freeq(&qs[1]);
+    /* Invalid binding: no register access at all. */
+    setup(&s, &c, qs);
+    s.cc = ANSD_CC_EN; s.csts = ANSD_CSTS_RDY;
+    assert(ansd_init_takeover(&c2, &ops, &s, NULL) == ANSD_INVALID && s.writes == 0);
+    freeq(&qs[0]); freeq(&qs[1]);
+}
+
 int main(void)
 {
     test_translate();
@@ -330,6 +446,8 @@ int main(void)
     test_io_path();
     test_mailbox();
     test_shutdown();
+    test_takeover();
+    test_init_takeover();
     puts("ans_direct tests passed");
     return 0;
 }

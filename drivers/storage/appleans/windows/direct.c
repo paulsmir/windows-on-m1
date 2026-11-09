@@ -51,6 +51,41 @@ static BOOLEAN span_pa(PAPPLE_ANS_ADAPTER a, PUCHAR va, ULONG bytes, ULONGLONG *
     return ansd_translate((ans_u64)ipa.QuadPart, bytes, pa) != 0;
 }
 
+/* Lays the six queue arrays and the PRP pages over a->Common and resolves their controller
+ * PAs. common_ipa == 0: live instance, Storport translates each span. Otherwise the dump
+ * instance: the buffer is the live one, lent as one contiguous range starting at common_ipa.
+ * Nothing in the buffer is written here (the controller may still be running on it). */
+static BOOLEAN carve_pa(PAPPLE_ANS_ADAPTER a, ULONGLONG common_ipa, PUCHAR va, ULONG bytes, ULONGLONG *pa)
+{
+    /* Each array is one physically contiguous chunk inside one DMA window. */
+    if (!(common_ipa ? ansd_translate(common_ipa + (ULONGLONG)(va - (PUCHAR)a->Common), bytes, pa) != 0
+                     : span_pa(a, va, bytes, pa))) return FALSE;
+    return (*pa & (bytes - 1)) == 0;
+}
+static BOOLEAN direct_carve(PAPPLE_ANS_ADAPTER a, ULONGLONG common_ipa, struct ansd_queue q[2])
+{
+    ULONG_PTR base = ((ULONG_PTR)a->Common + ANSD_QUEUE_ALIGN - 1) & ~(ULONG_PTR)(ANSD_QUEUE_ALIGN - 1);
+    PUCHAR chunk[6] = {0};
+    ULONGLONG chunk_pa[6] = {0};
+    for (unsigned i = 0; i < 6; i++) {
+        chunk[i] = (PUCHAR)(base + (ULONG_PTR)i * ANSD_QUEUE_ALIGN);
+        if (!carve_pa(a, common_ipa, chunk[i], ANSD_QUEUE_ALIGN, &chunk_pa[i])) return FALSE;
+    }
+    PUCHAR pages = (PUCHAR)(base + 6u * ANSD_QUEUE_ALIGN);
+    for (unsigned i = 0; i < APPLE_ANS_METADATA_PAGES; i++) {
+        a->Pages[i] = pages + (ULONG_PTR)i * ANS_PRP_PAGE_SIZE;
+        if (!carve_pa(a, common_ipa, a->Pages[i], ANS_PRP_PAGE_SIZE, &a->PageDma[i])) return FALSE;
+    }
+    for (unsigned n = 0; n < 2; n++) {
+        q[n] = (struct ansd_queue){0};
+        q[n].sq = chunk[3*n]; q[n].cq = (volatile struct ansd_cqe *)chunk[3*n+1];
+        q[n].tcb = (struct ansd_tcb *)chunk[3*n+2];
+        q[n].sq_pa = chunk_pa[3*n]; q[n].cq_pa = chunk_pa[3*n+1]; q[n].tcb_pa = chunk_pa[3*n+2];
+        q[n].depth = n ? ANSD_IO_DEPTH : ANSD_ADMIN_DEPTH;
+    }
+    return TRUE;
+}
+
 BOOLEAN AppleAnsDirectResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config)
 {
     PACCESS_RANGE r = *config->AccessRanges;
@@ -60,32 +95,15 @@ BOOLEAN AppleAnsDirectResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORM
                                     r[1].RangeStart, r[1].RangeLength, FALSE);
     if (!a->Ctrl || !a->Mbox) goto failed;
     config->Dma64BitAddresses = SCSI_DMA64_MINIPORT_FULL64BIT_SUPPORTED;
+    /* Dump instance: no allocation, the validated record names the live buffer; mapping the
+     * registers is all FindAdapter does with the hardware. */
+    if (a->DumpMode) { a->Common = (PVOID)(ULONG_PTR)a->DumpContext.common_va; a->Direct = TRUE; return TRUE; }
     a->Common = StorPortGetUncachedExtension(a, config, APPLE_ANS_DIRECT_BYTES);
     if (!a->Common) goto failed;
     ULONG_PTR base = ((ULONG_PTR)a->Common + ANSD_QUEUE_ALIGN - 1) & ~(ULONG_PTR)(ANSD_QUEUE_ALIGN - 1);
     RtlZeroMemory((PVOID)base, APPLE_ANS_DIRECT_BYTES - ANSD_QUEUE_ALIGN);
-    struct ansd_queue q[2] = {0};
-    PUCHAR chunk[6];
-    ULONGLONG chunk_pa[6];
-    for (unsigned i = 0; i < 6; i++) {
-        chunk[i] = (PUCHAR)(base + (ULONG_PTR)i * ANSD_QUEUE_ALIGN);
-        /* Each array is one physically contiguous 16 KiB chunk inside one DMA window. */
-        if (!span_pa(a, chunk[i], ANSD_QUEUE_ALIGN, &chunk_pa[i]) ||
-            (chunk_pa[i] & (ANSD_QUEUE_ALIGN - 1))) goto failed;
-    }
-    for (unsigned n = 0; n < 2; n++) {
-        q[n].sq = chunk[3*n]; q[n].cq = (volatile struct ansd_cqe *)chunk[3*n+1];
-        q[n].tcb = (struct ansd_tcb *)chunk[3*n+2];
-        q[n].sq_pa = chunk_pa[3*n]; q[n].cq_pa = chunk_pa[3*n+1]; q[n].tcb_pa = chunk_pa[3*n+2];
-        q[n].depth = n ? ANSD_IO_DEPTH : ANSD_ADMIN_DEPTH;
-    }
-    PUCHAR pages = (PUCHAR)(base + 6u * ANSD_QUEUE_ALIGN);
-    for (unsigned i = 0; i < APPLE_ANS_METADATA_PAGES; i++) {
-        a->Pages[i] = pages + (ULONG_PTR)i * ANS_PRP_PAGE_SIZE;
-        if (!span_pa(a, a->Pages[i], ANS_PRP_PAGE_SIZE, &a->PageDma[i]) ||
-            (a->PageDma[i] & (ANS_PRP_PAGE_SIZE - 1))) goto failed;
-    }
-    if (ansd_init(&a->Ansd, &direct_ops, a, q) != ANSD_OK) goto failed;
+    struct ansd_queue q[2];
+    if (!direct_carve(a, 0, q) || ansd_init(&a->Ansd, &direct_ops, a, q) != ANSD_OK) goto failed;
     a->Direct = TRUE;
     return TRUE;
 failed:
@@ -132,6 +150,15 @@ static BOOLEAN direct_admin(PAPPLE_ANS_ADAPTER a, UCHAR opcode, ULONG nsid, ULON
     return FALSE;
 }
 
+static BOOLEAN direct_create_io(PAPPLE_ANS_ADAPTER a)
+{
+    a->Stage = AppleAnsStageCreateCq;
+    /* Asahi: Create IOCQ PC|IEN vector 0, then IOSQ bound to CQ 1. */
+    if (!direct_admin(a, 5, 0, ((ANSD_IO_DEPTH - 1) << 16) | 1, 3, a->Ansd.q[1].cq_pa, NULL)) return FALSE;
+    a->Stage = AppleAnsStageCreateSq;
+    return direct_admin(a, 1, 0, ((ANSD_IO_DEPTH - 1) << 16) | 1, 0x10001, a->Ansd.q[1].sq_pa, NULL);
+}
+
 BOOLEAN AppleAnsDirectInitialize(PAPPLE_ANS_ADAPTER a)
 {
     ULONG dw0 = 0;
@@ -158,11 +185,7 @@ BOOLEAN AppleAnsDirectInitialize(PAPPLE_ANS_ADAPTER a)
     }
     a->Namespace.read_cache_disabled = 0;
     a->Namespace.cache_known = 1;
-    a->Stage = AppleAnsStageCreateCq;
-    /* Asahi: Create IOCQ PC|IEN vector 0, then IOSQ bound to CQ 1. */
-    if (!direct_admin(a, 5, 0, ((ANSD_IO_DEPTH - 1) << 16) | 1, 3, a->Ansd.q[1].cq_pa, NULL)) goto failure;
-    a->Stage = AppleAnsStageCreateSq;
-    if (!direct_admin(a, 1, 0, ((ANSD_IO_DEPTH - 1) << 16) | 1, 0x10001, a->Ansd.q[1].sq_pa, NULL)) goto failure;
+    if (!direct_create_io(a)) goto failure;
     /* An ordinary storage driver: Windows decides which sectors it writes. */
     a->Namespace.read_only = 0;
     a->Namespace.tagged_queuing = 1;
@@ -178,6 +201,61 @@ failure:
     if (!a->Ansd.crashed && a->Ansd.enabled) (void)ansd_disable(&a->Ansd);
     direct_fault(a);
     return FALSE;
+}
+
+/* Dump instance, DUMP_MODE_CRASH (ANS-DUMP-MODE.md, TRANSLATION 3). The live instance is dead
+ * but its controller may still be running on the lent queue memory, so the controller is
+ * stopped first (ansd_init_takeover) and only then are the arrays cleared and reused. The
+ * namespace comes from the validated record: no Identify, no feature changes, no timer. */
+BOOLEAN AppleAnsDirectDumpInitialize(PAPPLE_ANS_ADAPTER a)
+{
+    const struct ans_dump_context *c = &a->DumpContext;
+    struct ansd_queue q[2];
+    ans_stats_add(&a->Stats, ANS_TELEM_STARTS, 1);
+    a->Ready = FALSE;
+    a->ShuttingDown = FALSE; a->ShutdownTag = ANS_QUEUE_DEPTH;
+    a->Namespace = (struct ans_namespace){0};
+    if (!a->Direct || !a->Ctrl || !a->Mbox || !a->Common || !direct_carve(a, c->common_pa, q)) return FALSE;
+    a->Stage = AppleAnsStageAdminReady;
+    a->MayOwn = TRUE;
+    if (ansd_init_takeover(&a->Ansd, &direct_ops, a, q) != ANSD_OK || ansd_enable(&a->Ansd) != ANSD_OK ||
+        !direct_create_io(a)) {
+        a->FailureStage = a->Stage;
+        direct_fault(a);
+        return FALSE;
+    }
+    a->Namespace.blocks = c->blocks; a->Namespace.block_size = c->block_size;
+    a->Namespace.nsid = c->nsid; a->Namespace.read_only = (ans_u8)c->read_only;
+    /* The live instance left the volatile write cache as it was: report it enabled so the
+     * dump stack keeps flushing. INQUIRY strings are fixed (no Identify data here). */
+    a->Namespace.cache_known = 1; a->Namespace.write_cache_enabled = 1;
+    RtlCopyMemory(a->Namespace.vendor, "NVMe    ", 8);
+    RtlCopyMemory(a->Namespace.product, "APPLE SSD (DUMP)", 16);
+    RtlCopyMemory(a->Namespace.revision, "DUMP", 4);
+    a->Namespace.ready = 1;
+    a->Claimed = TRUE;
+    a->Ready = TRUE;
+    a->Stage = AppleAnsStageReady;
+    return TRUE;
+}
+
+static VOID direct_retire(PAPPLE_ANS_ADAPTER a, UCHAR status);
+/* Dump instance: interrupts are off, so StartIo finishes what it started by polling. Time is
+ * counted in stall iterations (no clock at HIGH_LEVEL). A request that does not complete in
+ * DIRECT_DUMP_POLLS x 10 us faults the adapter and fails every outstanding SRB; nothing is
+ * freed, so a controller that still owns the buffers cannot corrupt reused memory. */
+#define DIRECT_DUMP_POLLS 3000000u
+VOID AppleAnsDirectDumpDrain(PAPPLE_ANS_ADAPTER a)
+{
+    for (unsigned polls = 0; !a->Ansd.faulted; polls++) {
+        unsigned tag;
+        (void)AppleAnsDirectInterrupt(a);
+        for (tag = 0; tag < ANS_QUEUE_DEPTH && !a->Slots[tag].Busy; tag++) {}
+        if (tag == ANS_QUEUE_DEPTH) return;
+        if (polls == DIRECT_DUMP_POLLS) { ans_stats_add(&a->Stats, ANS_TELEM_TIMEOUTS, 1); direct_fault(a); break; }
+        StorPortStallExecution(10);
+    }
+    direct_retire(a, SRB_STATUS_ERROR);
 }
 
 /* StartIo/ISR under InterruptLock: publish the already validated SQE. */
