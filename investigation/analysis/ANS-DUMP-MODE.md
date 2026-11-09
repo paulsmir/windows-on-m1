@@ -125,8 +125,17 @@ the bridge-boot emergency path if the native SSD does not boot)
   `dump_*` modules. Expected: event 46 present on every native boot, no `dump_AppleAns`. This fixes the baseline the
   later checkpoints are judged against. Read-only.
 - **DUMP1 (live half only)**: package with the DUMP_POINTERS handling and a dump instance that validates the context,
-  maps, records a receipt in the *context* (stage counters) and still returns NOT_FOUND. Expected: boots as today,
-  SRB_FUNCTION_DUMP_POINTERS counted once in telemetry, I/O gate unchanged. Answers unknown 1 without any crash.
+  records a receipt in the *context* and still returns NOT_FOUND. Expected: boots as today, System-log record 0xA6
+  (SRB_FUNCTION_DUMP_POINTERS answered, sealed = 1) once per boot, I/O gate unchanged. Answers unknown 1 without any
+  crash. Implemented 2026-11-09 (`windows/dump.{h,c}`, `driver.c` dump_receipt, `native.c` dump_pointers) with two
+  deliberate reductions against the TRANSLATION text: (a) the dump instance does not map the ranges yet - it only
+  records whether exactly the controller + mailbox ranges were supplied, so that unknown 1 and unknown 2 are not
+  tested by one package; mapping moves to DUMP2's first boot, where the receipt flags CTRL_MAPPED / MBOX_MAPPED are
+  already reserved; (b) only Version, Size and MiniportPrivateDumpData are filled (the storahci minimum), because the
+  dump transfer limits equal the live ones. Receipts: 0xA6 value = sealed << 8 | SRB count; 0xA7 value =
+  calls << 16 | DumpMode << 8 | flags, written by the live instance at the next telemetry query after the dump image
+  ran HwFindAdapter (the dump image itself cannot log). No 0xA7 after boot means crashdmp does not call the dump
+  image's HwFindAdapter before a crash, which is a valid outcome and not a failure of DUMP1.
 - **DUMP2 (full path, small dump)**: `CrashDumpEnabled = 3` (small memory dump; fits the 4 GiB disk gate), then one
   preregistered manual bugcheck (CRITICAL_PROCESS_DIED by ending a critical process; no third-party tool). Expected:
   m1n1 prints the code, the next boot has `C:\Windows\Minidump\*.dmp` readable by cdb with the same code, volume

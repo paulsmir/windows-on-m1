@@ -99,8 +99,40 @@ static int wire_call(PAPPLE_ANS_ADAPTER a,struct ans_broker_request *r,
     }
     return result;
 }
+/* Live half of the crash-dump hand-over (ANS-DUMP-MODE.md, TRANSLATION 1). Only the
+ * documented minimum is filled: Version, Size and the private pointer; transfer limits stay
+ * the live ones. Without a ready direct adapter the request fails and the dump instance gets
+ * no record, which it treats as "no dump". */
+static BOOLEAN dump_pointers(PAPPLE_ANS_ADAPTER a,PSCSI_REQUEST_BLOCK srb)
+{
+    PMINIPORT_DUMP_POINTERS p=srb->DataBuffer;
+    BOOLEAN sealed=FALSE;
+    a->DumpPointersSrbs++;
+    if(p && srb->DataTransferLength>=RTL_SIZEOF_THROUGH_FIELD(MINIPORT_DUMP_POINTERS,MiniportPrivateDumpData) &&
+       a->Direct && a->Ready && a->Common && !a->ShuttingDown) {
+        ULONG length=0;
+        STOR_PHYSICAL_ADDRESS ipa=StorPortGetPhysicalAddress(a,NULL,a->Common,&length);
+        struct ans_dump_geometry g={
+            .common_va=(ULONG_PTR)a->Common,
+            .common_pa=length>=APPLE_ANS_DIRECT_BYTES?(ULONGLONG)ipa.QuadPart:0,
+            .blocks=a->Namespace.blocks,.common_bytes=APPLE_ANS_DIRECT_BYTES,
+            .block_size=a->Namespace.block_size,.nsid=a->Namespace.nsid,
+            .read_only=a->Namespace.read_only};
+        sealed=ans_dump_context_seal(&a->DumpContext,&g)?TRUE:FALSE;
+    }
+    AppleAnsDiag(a,NULL,0xA6,(sealed?0x100u:0u)|(a->DumpPointersSrbs&0xff));
+    if(!sealed) { AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE; }
+    p->Version=DUMP_MINIPORT_VERSION_1;p->Size=(USHORT)sizeof(*p);
+    p->MiniportPrivateDumpData=&a->DumpContext;
+    AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,srb->DataTransferLength);return TRUE;
+}
 static BOOLEAN telemetry_query(PAPPLE_ANS_ADAPTER a,PSCSI_REQUEST_BLOCK srb)
 {
+    /* Dump-instance receipt, logged once per change (the dump image cannot log). */
+    if(a->DumpContext.magic==ANS_DUMP_MAGIC && a->DumpContext.calls) {
+        ULONG receipt=ans_dump_context_receipt_value(&a->DumpContext);
+        if(receipt!=a->DumpReceiptLogged) { a->DumpReceiptLogged=receipt;AppleAnsDiag(a,NULL,0xA7,receipt); }
+    }
     ans_u32 sources;
     if(!ans_stats_ioctl_validate(srb->DataBuffer,srb->DataTransferLength,&sources)) {
         AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
@@ -408,6 +440,11 @@ VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a)
 BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
 {
     if(srb->Function==SRB_FUNCTION_IO_CONTROL) return telemetry_query(a,srb);
+    if(srb->Function==SRB_FUNCTION_DUMP_POINTERS) return dump_pointers(a,srb);
+    if(srb->Function==SRB_FUNCTION_FREE_DUMP_POINTERS) {
+        /* The record lives in the device extension: nothing was allocated. */
+        AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,0);return TRUE;
+    }
     PAPPLE_ANS_SRB x=srb->SrbExtension;
     if(srb->Function==SRB_FUNCTION_EXECUTE_SCSI && x && x->PrpFailure) {
         ans_stats_add(&a->Stats,ANS_TELEM_PRP_TRANSLATION_FAILURES,1);x->PrpFailure=FALSE;

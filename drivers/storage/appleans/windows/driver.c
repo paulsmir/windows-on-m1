@@ -17,8 +17,10 @@ ULONG DriverEntry(PVOID DriverObject, PVOID RegistryPath)
     HW_INITIALIZATION_DATA init = {0};
     init.HwInitializationDataSize = sizeof(init);
     init.AdapterInterfaceType = InterfaceTypeUndefined;
+    /* DUMP_POINTERS: the live instance answers SRB_FUNCTION_DUMP_POINTERS (native.c). */
     init.FeatureSupport = STOR_FEATURE_SET_ADAPTER_INTERFACE_TYPE |
-                          STOR_FEATURE_ADAPTER_NOT_REQUIRE_IO_PORT;
+                          STOR_FEATURE_ADAPTER_NOT_REQUIRE_IO_PORT |
+                          STOR_FEATURE_DUMP_POINTERS;
     /* WDK 26100 stores physical/virtual FindAdapter alternatives in PVOID;
      * the HW_FIND_ADAPTER declaration verifies our physical signature. */
 #pragma warning(suppress:4152)
@@ -40,6 +42,24 @@ ULONG DriverEntry(PVOID DriverObject, PVOID RegistryPath)
     return StorPortInitialize(DriverObject, RegistryPath, &init, NULL);
 }
 
+/* Runs in the dump image, possibly at HIGH_LEVEL: no registry, pool, DPC, timer or MMIO.
+ * The only memory written is the receipt part of a record that passed validation. */
+static VOID dump_receipt(PPORT_CONFIGURATION_INFORMATION config)
+{
+    struct ans_dump_context *c = config->MiniportDumpData;
+    if (!ans_dump_context_valid(c, APPLE_ANS_DIRECT_BYTES)) return;
+    ULONG flags = ANS_DUMP_SEEN_VALID;
+    if (config->NumberOfAccessRanges == 2 && config->AccessRanges != NULL) {
+        PACCESS_RANGE r = *config->AccessRanges;
+        if ((ULONGLONG)r[0].RangeStart.QuadPart == ANSD_CTRL_BASE &&
+            r[0].RangeLength == ANSD_CTRL_SIZE && r[0].RangeInMemory &&
+            (ULONGLONG)r[1].RangeStart.QuadPart == ANSD_MBOX_BASE &&
+            r[1].RangeLength == ANSD_MBOX_SIZE && r[1].RangeInMemory)
+            flags |= ANS_DUMP_SEEN_RANGES;
+    }
+    ans_dump_context_receipt(c, config->DumpMode, flags, config->NumberOfAccessRanges);
+}
+
 _Use_decl_annotations_
 ULONG AppleAnsFindAdapter(PVOID DeviceExtension, PVOID HwContext,
     PVOID BusInformation, PCHAR ArgumentString,
@@ -58,15 +78,19 @@ ULONG AppleAnsFindAdapter(PVOID DeviceExtension, PVOID HwContext,
     (void)ans_order_init(&a->Order, 1);
     ans_stats_init(&a->Stats);
     a->ShutdownTag=ANS_QUEUE_DEPTH;
-    if (ConfigInfo->Length < sizeof(*ConfigInfo) ||
-        ConfigInfo->NumberOfAccessRanges < 1 || ConfigInfo->NumberOfAccessRanges > 2 ||
-        ConfigInfo->AccessRanges == NULL) {
+    if (ConfigInfo->Length < sizeof(*ConfigInfo)) {
         a->Stage = AppleAnsStageResourcesRejected;return SP_RETURN_NOT_FOUND;
     }
-    /* Crash-dump/hibernation instance (dump_AppleAns.sys): the broker is owned by the live
-     * instance and dump I/O would have to run polled at HIGH_LEVEL. Unsupported: refuse
-     * before any broker access, so a native bugcheck reboots without touching the SSD. */
+    /* Crash-dump/hibernation instance (dump_AppleAns.sys), DUMP1 of ANS-DUMP-MODE.md: it
+     * validates the live instance's hand-over record, leaves a receipt in it and still
+     * refuses, before any resource is parsed, mapped or touched. A bugcheck therefore
+     * restarts without dump I/O exactly as before. */
     if (ConfigInfo->DumpMode != 0) {
+        dump_receipt(ConfigInfo);
+        a->Stage = AppleAnsStageResourcesRejected;return SP_RETURN_NOT_FOUND;
+    }
+    if (ConfigInfo->NumberOfAccessRanges < 1 || ConfigInfo->NumberOfAccessRanges > 2 ||
+        ConfigInfo->AccessRanges == NULL) {
         a->Stage = AppleAnsStageResourcesRejected;return SP_RETURN_NOT_FOUND;
     }
     PACCESS_RANGE range = &(*ConfigInfo->AccessRanges)[0];
