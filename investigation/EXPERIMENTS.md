@@ -75282,3 +75282,15 @@ EXP2292 ARCHITECT READING (2026-11-09T02:17:10Z; fork 6's ACTUAL carries the run
 - Correct placement: evaluate the deferral BEFORE the claim, inside the locked section right after refusal = AdmissionJobWindowKickRefusal(&s) (+65 check) and before "if (refusal == 0u) { next = ...; AdmissionG4PendingKickLocked". Compute barrier = AdmissionJobWindowBarrierEx(s.Running.Kind, s.Next.Kind, caps) (pure) and ov5w = AdmissionJobWindowOv5WaiverRefusal(1u, barrier, &s.Running, &s.Next) (pure); computeStarted is read before taking the locks (the running job's ComputeTimestampBlock Start word, or TRUE when the block is NULL / the running job is not compute). If refusal == 0 && Ov5Waiver && ov5w == WAIVE && !computeStarted: release both locks, ++Ov5WaiverReceipt.Deferred, return FALSE with no RcDecision and no Ov5 note -- nothing has been mutated (AdmissionJobAheadStateWindows, DescribeLocked, NextNeedsIdle are reads). kickDone stays FALSE so the next poll retries; if the compute completes first, the head stays Prebound and runs at depth 1 as a refused kick does today (EXP2288 path).
 - Keep the refusal 65/63 paths unchanged. Test: tests/test_ov5_ta_waiver.py model -- deferral leaves G4Pending head Prebound and G4PendingCount unchanged, Deferred increments once per poll, a later poll with start != 0 kicks and counts Waived once.
 - EXP2293 = EXP2292 configuration with the corrected placement (beacon off, m1n1 83a9cf74), three GM starts. Expected 0 resets, Waived > 0 per start, Deferred >= 1 per start, no Wom1GpuReset.
+
+EXP2293 HARDWARE BEFORE 2026-11-09T02:42:12Z:
+- WHY THIS HYPOTHESIS: (1) EXP2283/2285/2286 reset at GM start with the waiver and diagnostics off; (2) EXP2284 (diagnostics on) and EXP2291 (12 MMIO traps per waived build) did not, so added delay between the decision and the doorbell removes it; (3) the first GM compute/render pair has the render already queued when the compute is kicked, so its doorbell can precede the compute's start.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: as EXP2279; timestamps are the existing compute microsequence. TRANSLATION: the kick decision waits on Start != 0.
+- ATOMIC CONTRACT: none -- one change relative to EXP2286 (the beacon is absent).
+- WHAT IS STILL UNKNOWN: whether the race is at the compute's start; three boots of the unmodified profile are not a measured rate.
+- Expected: 0 resets in 3 starts, Waived > 0 and Deferred > 0. Reset -> H3 rejected. A clean run does not prove H3 alone, as EXP2291 was also clean.
+- Failure criteria: a reset is an accepted outcome.
+- Recovery: rec2293h (ANS); on a reset save full.log first, then AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2293h/recover.sh.
+- Hashes: sys 7d9089f53ed1, UmdArm64 868cc7c3f747, UmdX64 ecffed47c0fc, Umd32 f51c6ca57287; manifest d38f87cbb6bc, hardware-manifest 47394b78aeb1; probe2293.sh 806c90c33821 (PROBE_LINT_OK); visible recovery rec2293h 9dd4bb7a95e435fe; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
+- Recovery rec2293h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2293-defer-placed/run2293.sh.
