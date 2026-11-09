@@ -75903,3 +75903,48 @@ EXP2307 HARDWARE BEFORE 2026-11-09T22:34:29Z:
 - Recovery: rec2307h (ANS; Mu MUANSCPPC002, m1n1 83a9cf74 / last-good 882985fb); at a reset to the proxy: AGX_RECOVERY_ALLOW_AT_PROXY=1 recover.sh.
 - Hashes: sys 01daa9b4a4dd, UmdArm64 c6e5e7dd6f88, UmdX64 7e775152b2f6, Umd32 dc84fd913122; manifest 9e19357cb9c9, hardware-manifest 4eb0ee55fcbf; probe2307.sh a89bf64bae88 (PROBE_LINT_OK); visible recovery rec2307h d303cdbe050e1bcd; m1n1 0d3a75b3.
 - Recovery rec2307h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2307-closedv5/run2307.sh.
+
+## EXP2307 — m1n1 closed-broker fix, live adapter cycles (ACTUAL, part 1) 2026-11-09T22:53Z
+
+- Launch note: the first launch attempt (22:31Z) was refused by the launch gate before any hardware action
+  (`LAUNCH_2307_FAIL m1n1-image-lacks-expanded-guest-ram`): `m1n1-build-info.json` of the closedv5 image lacked the
+  `guest_ram` statement. The field was added (source = bugcheck4 snapshot + the two fix files; macho unchanged,
+  SHA-256 e6ac18bb…db9a) and the same chain relaunched; BEFORE is the 22:34:29Z entry.
+- Arm a1 (m1n1 e6ac18bb, Mu MUANSCPPC002): PERF_GATE_PASS — CS 1.6 worst 51.172 vs 49.943 (+2.46 %), GravityMark HD
+  PERF worst 44.392 vs 40.770 (+8.88 %). Guest alive after suite, GM and CS.
+- Cycle 1 `pnputil /disable-device ACPI\APPL0002\0`: "Device disabled successfully", CM_PROB_DISABLED. m1n1 vUART:
+  retained unmap sequence to count=0, `retained op=6 seq=1039 status=0`, `AGX power receipt seq=3 cmd=2 state=0
+  result=0`, `AGX pool window cmd=2 result=0 mapped=0x0`, then periodic statistics continue. No EL2 exception, no
+  reboot (EXP2306 died exactly here). Expected "no EL2 abort on disable": MET for one cycle.
+- Cycle 1 enable: CM_PROB_FAILED_POST_START, `Wom1StartStage=1 Wom1StartStatus=0xC00000BB`, `Wom1GpuvaArmPhase=2
+  Wom1GpuvaArmStatus=0xC0000034`; m1n1 saw no broker call. Cause (source, render-admission/src/lifecycle.c
+  AdmissionConsumeGpuvaArm): StartDevice consumes the one-shot `G3Armed` value on every start; the stage script arms
+  once, `irq-toggle.ps1` does not re-arm, so the second StartDevice fail-closes by design. This is a probe defect
+  (also present in EXP2306's plan), not a driver or m1n1 defect. Expected "three TOGGLE status OK": NOT MET, for a
+  harness reason; arm a2 and cycles 2-3 did not run.
+- Guest remained alive (SSH), experiment package installed, device in code 43, same boot.
+- Evidence: `.local/experiments/EXP2307-closedv5/evidence/EXP2307/{toggle.txt,perf-gate-a1.txt,kmd-receipts-toggle-fail.txt,full.log}`.
+
+EXP2307B HARDWARE BEFORE 2026-11-09T22:53Z (continuation in the same boot, same package, same m1n1/Mu as EXP2307):
+
+- Single variable vs EXP2307 cycle 1: the toggle writes `G3Armed=1` between disable and enable
+  (`irq-toggle-rearm.ps1` SHA-256 86522ab2b1aa4695e93d58428a74bada101bbc3ee68e9471fd293973f7f467d0; probe
+  `probe2307b.sh` f4596dc1e44205566060e16a55caa711c0b61389e454e1d54838c560d4494cae). No binary changes; commits,
+  package hashes, m1n1 e6ac18bb, Mu ce17dea8…3284 as in the EXP2307 BEFORE entry.
+- Hypothesis: with the arm present, StartDevice after a live StopDevice completes on the fixed m1n1 (broker reopened
+  from the closed state) and performance returns to arm a1.
+- WHY THIS HYPOTHESIS: (1) receipts show the failed start stopped at AdmissionStartEntered with the arm value absent
+  (OBJECT_NAME_NOT_FOUND), before any hardware or broker access; (2) m1n1 logged a clean close (op=6 status=0, power
+  cmd=2 result=0) and no later request; (3) m1n1 hv_guest_arm_consumed_handle accepts repeated reports in one boot.
+- WINDOWS CONTRACT: PnP disable -> DxgkDdiStopDevice/RemoveDevice path; enable -> AddDevice/StartDevice on the same
+  devnode in the same boot. AGX/ASAHI CONTRACT: firmware/power released at stop, re-initialized at start (Asahi
+  runtime PM resume path re-runs the RTKit boot). TRANSLATION: render-admission start path, m1n1 retained-platform
+  RR_OPEN after RR_CLOSE. WHAT IS STILL UNKNOWN: whether a second RR_OPEN/firmware start in one boot works on
+  hardware (never exercised: EXP2306 died at close, EXP2307 start was refused by the arm gate).
+- Sequence: toggle 1 (from the failed state: disable, arm, enable); arm a2 (GM HD PERF w/r2/r3, CS warm/r2/r3, perf
+  gate); toggle 2; toggle 3; final receipts. Evidence dir `.local/experiments/EXP2307-closedv5/evidence/EXP2307B`.
+- Expected: three TOGGLE lines `status OK` with `after consumed`; no EL2 exception; a2 PERF_GATE_PASS and within 2 %
+  of a1 (CS 51.172, GM 44.392); ordered restart prints `BUGCHECK ok code=0x0`.
+- Failure criterion: any TOGGLE not OK, EL2 exception/reset, guest unreachable, or a2 below the perf gate.
+- Recovery: `.local/experiments/EXP2307-closedv5/evidence/rec2307h/recover.sh` (AGX_RECOVERY_ALLOW_AT_PROXY=1 if the
+  machine is at the proxy).
