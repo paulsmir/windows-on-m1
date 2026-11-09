@@ -165,6 +165,32 @@ int main(void) {
   assert(fake.FirmwareCalls == 2u);
   assert(fake.RenderCalls == 1u);
   assert(fake.QueueCalls == 2u);
+  /* Warm firmware restart: the composed IO offers the two optional members
+   * exactly when the platform does.  Bug caught: the composer dropping them
+   * (the backend's warm restart would always be refused) or inventing them
+   * for a platform without the primitives (a NULL call at restart time). */
+  assert(combined.Firmware.ForceStopAsc == NULL &&
+         combined.Firmware.RevalidateFirmwareUat == NULL);
+  {
+    APPLE_AGX_PLATFORM_COMPOSER warm_state;
+    APPLE_AGX_BACKEND_IO warm_combined;
+    APPLE_AGX_FIRMWARE_IO warm_firmware = firmware;
+    APPLE_AGX_PLATFORM_COMPOSER_CONFIG warm_config = config;
+    unsigned int calls = fake.FirmwareCalls;
+    memset(&warm_state, 0, sizeof(warm_state));
+    memset(&warm_combined, 0, sizeof(warm_combined));
+    warm_firmware.ForceStopAsc = fw_simple;
+    warm_firmware.RevalidateFirmwareUat = fw_simple;
+    warm_config.Firmware = &warm_firmware;
+    assert(AppleAgxPlatformComposerInitialize(&warm_state, &warm_config,
+                                               &warm_combined));
+    assert(warm_combined.Firmware.ForceStopAsc != NULL &&
+           warm_combined.Firmware.ForceStopAsc(warm_combined.Context, 10u));
+    assert(warm_combined.Firmware.RevalidateFirmwareUat != NULL &&
+           warm_combined.Firmware.RevalidateFirmwareUat(
+               warm_combined.Context, 10u));
+    assert(fake.FirmwareCalls == calls + 2u);
+  }
   {
     APPLE_AGX_PLATFORM_COMPOSER compute_state;
     APPLE_AGX_BACKEND_IO compute_combined;

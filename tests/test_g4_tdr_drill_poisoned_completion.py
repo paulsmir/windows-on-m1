@@ -342,6 +342,11 @@ APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareStart(APPLE_AGX_FIRMWARE *f, const APP
   (void)f; (void)io; assert(0); return (APPLE_AGX_FIRMWARE_RESULT)0; }
 APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareRollback(APPLE_AGX_FIRMWARE *f, const APPLE_AGX_FIRMWARE_IO *io) {
   (void)f; (void)io; assert(0); return (APPLE_AGX_FIRMWARE_RESULT)0; }
+/* Warm restart entry points the backend runtime links against; never reached here. */
+APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareStopWarm(APPLE_AGX_FIRMWARE *f, const APPLE_AGX_FIRMWARE_IO *io) {
+  (void)f; (void)io; assert(0); return (APPLE_AGX_FIRMWARE_RESULT)0; }
+APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareStartWarm(APPLE_AGX_FIRMWARE *f, const APPLE_AGX_FIRMWARE_IO *io) {
+  (void)f; (void)io; assert(0); return (APPLE_AGX_FIRMWARE_RESULT)0; }
 /* Queue provider decode model: one observation per event message
  * (word 0 queue, 1 event, 2 stamp, 3 done pointer, 4 completed fence). */
 APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderIngestEvent(APPLE_AGX_G13_QUEUE_PROVIDER *p,

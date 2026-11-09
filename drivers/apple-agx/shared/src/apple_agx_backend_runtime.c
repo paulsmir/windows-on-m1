@@ -52,9 +52,21 @@ static void AppleAgxBackendClearPending(APPLE_AGX_BACKEND_RUNTIME *Runtime) {
   Runtime->TerminalResult = AppleAgxBackendRuntimeResultInvalidState;
 }
 
+static APPLE_AGX_BOOL AppleAgxBackendFirmwareWarmStopped(
+    const APPLE_AGX_BACKEND_RUNTIME *Runtime) {
+  return Runtime->Firmware.Phase == AppleAgxFirmwareUatReady &&
+                 Runtime->Firmware.CompletedMask ==
+                     APPLE_AGX_FIRMWARE_WARM_RETAINED &&
+                 Runtime->Firmware.CleanupMask == 0u
+             ? APPLE_AGX_TRUE
+             : APPLE_AGX_FALSE;
+}
+
+/* Warm: a failed warm start keeps the UAT and the power domain (the firmware
+ * layer has already gone back to its warm-stopped state, or says Failed). */
 static APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendStartRollback(
     APPLE_AGX_BACKEND_RUNTIME *Runtime,
-    APPLE_AGX_BACKEND_RUNTIME_RESULT Failure) {
+    APPLE_AGX_BACKEND_RUNTIME_RESULT Failure, APPLE_AGX_BOOL Warm) {
   APPLE_AGX_BOOL cleanupFailed = APPLE_AGX_FALSE;
 
   if (Runtime->QueuesCreated) {
@@ -71,9 +83,15 @@ static APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendStartRollback(
     else
       Runtime->ContextPublished = APPLE_AGX_FALSE;
   }
-  if (Runtime->Firmware.CompletedMask != 0u &&
-      AppleAgxFirmwareRollback(&Runtime->Firmware, &Runtime->Io.Firmware) !=
-          AppleAgxFirmwareResultOk)
+  if (Warm) {
+    if (!AppleAgxBackendFirmwareWarmStopped(Runtime) &&
+        AppleAgxFirmwareStopWarm(&Runtime->Firmware, &Runtime->Io.Firmware) !=
+            AppleAgxFirmwareResultOk)
+      cleanupFailed = APPLE_AGX_TRUE;
+  } else if (Runtime->Firmware.CompletedMask != 0u &&
+             AppleAgxFirmwareRollback(&Runtime->Firmware,
+                                      &Runtime->Io.Firmware) !=
+                 AppleAgxFirmwareResultOk)
     cleanupFailed = APPLE_AGX_TRUE;
   if (Runtime->ArenaMapped) {
     if (!Runtime->Io.Memory.Unmap(Runtime->Io.Context,
@@ -129,12 +147,19 @@ APPLE_AGX_BOOL AppleAgxBackendSubmissionFromEntry(
   return APPLE_AGX_TRUE;
 }
 
-APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStart(
-    APPLE_AGX_BACKEND_RUNTIME *Runtime, const APPLE_AGX_BACKEND_IO *Io) {
+static APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStartMode(
+    APPLE_AGX_BACKEND_RUNTIME *Runtime, const APPLE_AGX_BACKEND_IO *Io,
+    APPLE_AGX_BOOL Warm) {
   if (Runtime == APPLE_AGX_BACKEND_NULL || !AppleAgxBackendIoValid(Io) ||
       Runtime->ContextIdentity == 0ULL)
     return AppleAgxBackendRuntimeResultInvalidArgument;
   if (Runtime->Phase != AppleAgxBackendRuntimeStopped)
+    return AppleAgxBackendRuntimeResultInvalidState;
+  /* A cold start re-initializes the firmware state machine and would forget
+   * a retained UAT and power domain; a warm start needs exactly those. */
+  if (Warm ? !AppleAgxBackendFirmwareWarmStopped(Runtime)
+           : (Runtime->Firmware.CompletedMask != 0u ||
+              Runtime->Firmware.CleanupMask != 0u))
     return AppleAgxBackendRuntimeResultInvalidState;
 
   Runtime->Io = *Io;
@@ -145,7 +170,7 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStart(
       Runtime->ArenaCpuAddress == APPLE_AGX_BACKEND_NULL ||
       Runtime->ArenaGpuAddress == 0ULL || Runtime->ArenaBytes == 0u)
     return AppleAgxBackendStartRollback(
-        Runtime, AppleAgxBackendRuntimeResultMemoryFailed);
+        Runtime, AppleAgxBackendRuntimeResultMemoryFailed, Warm);
   Runtime->ArenaMapped = APPLE_AGX_TRUE;
   if (!Runtime->Io.Image.AcquirePrepared(Runtime->Io.Context,
                                          Runtime->ArenaCpuAddress,
@@ -153,29 +178,43 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStart(
                                          &Runtime->Roots) ||
       !AppleAgxBackendRootsValid(&Runtime->Roots))
     return AppleAgxBackendStartRollback(
-        Runtime, AppleAgxBackendRuntimeResultImageFailed);
+        Runtime, AppleAgxBackendRuntimeResultImageFailed, Warm);
   if (!Runtime->Io.Memory.FlushForDevice(Runtime->Io.Context,
                                          Runtime->ArenaCpuAddress,
                                          Runtime->ArenaBytes))
     return AppleAgxBackendStartRollback(
-        Runtime, AppleAgxBackendRuntimeResultMemoryFailed);
+        Runtime, AppleAgxBackendRuntimeResultMemoryFailed, Warm);
 
-  AppleAgxFirmwareInitialize(&Runtime->Firmware);
-  if (AppleAgxFirmwareStart(&Runtime->Firmware, &Runtime->Io.Firmware) !=
+  if (!Warm)
+    AppleAgxFirmwareInitialize(&Runtime->Firmware);
+  if ((Warm ? AppleAgxFirmwareStartWarm(&Runtime->Firmware,
+                                        &Runtime->Io.Firmware)
+            : AppleAgxFirmwareStart(&Runtime->Firmware,
+                                    &Runtime->Io.Firmware)) !=
       AppleAgxFirmwareResultOk)
     return AppleAgxBackendStartRollback(
-        Runtime, AppleAgxBackendRuntimeResultFirmwareFailed);
+        Runtime, AppleAgxBackendRuntimeResultFirmwareFailed, Warm);
   if (!Runtime->Io.RenderContext.Publish(Runtime->Io.Context))
     return AppleAgxBackendStartRollback(
-        Runtime, AppleAgxBackendRuntimeResultContextFailed);
+        Runtime, AppleAgxBackendRuntimeResultContextFailed, Warm);
   Runtime->ContextPublished = APPLE_AGX_TRUE;
   if (!Runtime->Io.Queues.Create(Runtime->Io.Context))
     return AppleAgxBackendStartRollback(
-        Runtime, AppleAgxBackendRuntimeResultQueueFailed);
+        Runtime, AppleAgxBackendRuntimeResultQueueFailed, Warm);
   Runtime->QueuesCreated = APPLE_AGX_TRUE;
   Runtime->QueuesQuiesced = APPLE_AGX_FALSE;
   Runtime->Phase = AppleAgxBackendRuntimeReady;
   return AppleAgxBackendRuntimeResultOk;
+}
+
+APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStart(
+    APPLE_AGX_BACKEND_RUNTIME *Runtime, const APPLE_AGX_BACKEND_IO *Io) {
+  return AppleAgxBackendRuntimeStartMode(Runtime, Io, APPLE_AGX_FALSE);
+}
+
+APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStartWarm(
+    APPLE_AGX_BACKEND_RUNTIME *Runtime, const APPLE_AGX_BACKEND_IO *Io) {
+  return AppleAgxBackendRuntimeStartMode(Runtime, Io, APPLE_AGX_TRUE);
 }
 
 static APPLE_AGX_BOOL AppleAgxBackendSubmissionValid(
@@ -552,15 +591,26 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeObserve(
   return AppleAgxBackendRuntimeResultOk;
 }
 
-APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStop(
-    APPLE_AGX_BACKEND_RUNTIME *Runtime) {
+static APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStopMode(
+    APPLE_AGX_BACKEND_RUNTIME *Runtime, APPLE_AGX_BOOL Warm) {
   APPLE_AGX_BACKEND_RUNTIME_RESULT retirementResult;
   APPLE_AGX_U32 pendingFence;
 
   if (Runtime == APPLE_AGX_BACKEND_NULL)
     return AppleAgxBackendRuntimeResultInvalidArgument;
-  if (Runtime->Phase == AppleAgxBackendRuntimeStopped)
+  if (Runtime->Phase == AppleAgxBackendRuntimeStopped) {
+    /* A cold stop after a warm stop finishes the teardown the warm stop
+     * left out (UAT, power).  Without a warm stop both masks are 0 here. */
+    if (!Warm && (Runtime->Firmware.CompletedMask != 0u ||
+                  Runtime->Firmware.CleanupMask != 0u) &&
+        AppleAgxFirmwareRollback(&Runtime->Firmware,
+                                 &Runtime->Io.Firmware) !=
+            AppleAgxFirmwareResultOk) {
+      Runtime->Phase = AppleAgxBackendRuntimeFailed;
+      return AppleAgxBackendRuntimeResultCleanupFailed;
+    }
     return AppleAgxBackendRuntimeResultOk;
+  }
   if (Runtime->Phase != AppleAgxBackendRuntimeReady &&
       Runtime->Phase != AppleAgxBackendRuntimeSubmitted &&
       Runtime->Phase != AppleAgxBackendRuntimeFailed)
@@ -640,7 +690,10 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStop(
     }
     Runtime->ContextPublished = APPLE_AGX_FALSE;
   }
-  if (AppleAgxFirmwareRollback(&Runtime->Firmware, &Runtime->Io.Firmware) !=
+  if ((Warm ? AppleAgxFirmwareStopWarm(&Runtime->Firmware,
+                                       &Runtime->Io.Firmware)
+            : AppleAgxFirmwareRollback(&Runtime->Firmware,
+                                       &Runtime->Io.Firmware)) !=
       AppleAgxFirmwareResultOk) {
     Runtime->Phase = AppleAgxBackendRuntimeFailed;
     return AppleAgxBackendRuntimeResultCleanupFailed;
@@ -656,4 +709,14 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStop(
   }
   Runtime->Phase = AppleAgxBackendRuntimeStopped;
   return AppleAgxBackendRuntimeResultOk;
+}
+
+APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStop(
+    APPLE_AGX_BACKEND_RUNTIME *Runtime) {
+  return AppleAgxBackendRuntimeStopMode(Runtime, APPLE_AGX_FALSE);
+}
+
+APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeStopWarm(
+    APPLE_AGX_BACKEND_RUNTIME *Runtime) {
+  return AppleAgxBackendRuntimeStopMode(Runtime, APPLE_AGX_TRUE);
 }

@@ -412,3 +412,57 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionStop(
   Session->StopPhase = AppleAgxRtkitStopComplete;
   return AppleAgxRtkitSessionResultOk;
 }
+
+/* TRUE only when CPU_CONTROL was read and its RUN bit is clear. */
+static APPLE_AGX_RTKIT_BOOL AppleAgxRtkitSessionRunReadsOff(
+    const APPLE_AGX_ASC_IO *Io) {
+  APPLE_AGX_ASC_U32 control = APPLE_AGX_ASC_CPU_RUN;
+  return AppleAgxAscReadCpuControl(Io, &control) == AppleAgxAscResultOk &&
+                 (control & APPLE_AGX_ASC_CPU_RUN) == 0u
+             ? APPLE_AGX_RTKIT_TRUE
+             : APPLE_AGX_RTKIT_FALSE;
+}
+
+APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionStopForRestart(
+    APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
+    APPLE_AGX_ASC_U64 DeadlineMs) {
+  APPLE_AGX_RTKIT_SESSION_RESULT result;
+
+  if (Session == APPLE_AGX_RTKIT_SESSION_NULL ||
+      Io == APPLE_AGX_RTKIT_SESSION_NULL)
+    return AppleAgxRtkitSessionResultInvalidArgument;
+  /* AppleAgxRtkitSessionStop clears RUN without a handshake when the
+   * management boot is not Ready.  That is a forced stop; refuse it here. */
+  if (Session->Running != APPLE_AGX_RTKIT_FALSE &&
+      !AppleAgxRtkitBootIsReady(&Session->Boot))
+    return AppleAgxRtkitSessionResultInvalidState;
+  result = AppleAgxRtkitSessionStop(Session, Io, DeadlineMs);
+  if (result != AppleAgxRtkitSessionResultOk)
+    return result;
+  if (!AppleAgxRtkitSessionRunReadsOff(Io)) {
+    /* The write was accepted but RUN is not proven clear: the CPU counts as
+     * running, so no start is accepted until a stop is proven. */
+    Session->Running = APPLE_AGX_RTKIT_TRUE;
+    return AppleAgxRtkitSessionResultCleanupFailed;
+  }
+  return AppleAgxRtkitSessionResultOk;
+}
+
+APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionForceStop(
+    APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io) {
+  if (Session == APPLE_AGX_RTKIT_SESSION_NULL ||
+      Io == APPLE_AGX_RTKIT_SESSION_NULL)
+    return AppleAgxRtkitSessionResultInvalidArgument;
+  if (AppleAgxAscSetRun(Io, APPLE_AGX_ASC_FALSE) != AppleAgxAscResultOk ||
+      !AppleAgxRtkitSessionRunReadsOff(Io)) {
+    /* Not proven stopped.  Whatever the session believed, a start must not
+     * be accepted on top of a CPU that may still run. */
+    Session->Running = APPLE_AGX_RTKIT_TRUE;
+    return AppleAgxRtkitSessionResultCleanupFailed;
+  }
+  Session->Running = APPLE_AGX_RTKIT_FALSE;
+  Session->CpuReady = APPLE_AGX_RTKIT_FALSE;
+  AppleAgxRtkitBootInitialize(&Session->Boot);
+  Session->StopPhase = AppleAgxRtkitStopComplete;
+  return AppleAgxRtkitSessionResultOk;
+}

@@ -1,6 +1,7 @@
 #include "apple_agx_firmware_provider.h"
 
 #include <assert.h>
+#include <stddef.h>
 #include <string.h>
 
 typedef struct _FAKE_PLATFORM {
@@ -22,6 +23,14 @@ typedef struct _FAKE_PLATFORM {
   unsigned int UnpublishCount;
   unsigned long long NowMs;
   unsigned long long LastPowerOffDeadline;
+  /* Warm restart. */
+  unsigned char ForcedUnpublishContract;
+  unsigned char RevalidateOtherRoots;
+  unsigned int PowerOnCount, CreateUatCount, BootCount;
+  unsigned int StopAscCount, StopEndpointCount, ForceStopCount;
+  unsigned int RevalidateCount;
+  unsigned long long RebuiltInitdataAddress;
+  unsigned long long LastSentInitdataAddress;
   unsigned char Handoff[J313_AGX_G2_HANDOFF_SIZE];
 } FAKE_PLATFORM;
 
@@ -42,6 +51,7 @@ static unsigned char power_on(void *context, unsigned long long deadline) {
   if (fake->Powered)
     return 0u;
   fake->Powered = 1u;
+  ++fake->PowerOnCount;
   return 1u;
 }
 
@@ -64,6 +74,7 @@ static unsigned char create_uat(void *context, unsigned long long deadline,
   if (!fake->Powered || fake->UatCreated)
     return 0u;
   fake->UatCreated = 1u;
+  ++fake->CreateUatCount;
   pair->Ttbr0 = 0x1003ULL;
   pair->Ttbr1 = 0x2003ULL;
   *initdata_address = 0x1500000000ULL;
@@ -85,6 +96,7 @@ static unsigned char boot_asc(void *context, unsigned long long deadline) {
   if (!fake->UatCreated || fake->AscRunning)
     return 0u;
   fake->AscRunning = 1u;
+  ++fake->BootCount;
   if (fake->PublishHandoffMagicOnAscBoot)
     assert(write64(fake, APPLE_AGX_GFX_HANDOFF_MAGIC_FW_OFFSET,
                    APPLE_AGX_GFX_HANDOFF_PPL_MAGIC));
@@ -97,6 +109,7 @@ static unsigned char stop_asc(void *context, unsigned long long deadline) {
   if (!fake->AscRunning)
     return 0u;
   if (fake->ExpectPublishedAtStop) assert(fake->RootsPublished);
+  ++fake->StopAscCount;
   fake->AscRunning = 0u;
   fake->FirmwareEndpoint = 0u;
   fake->DoorbellEndpoint = 0u;
@@ -130,6 +143,7 @@ static unsigned char stop_endpoint(void *context, unsigned int endpoint,
                                    unsigned long long deadline) {
   FAKE_PLATFORM *fake = context;
   assert(fake->NowMs <= deadline);
+  ++fake->StopEndpointCount;
   if (endpoint == J313_AGX_G2_DOORBELL_ENDPOINT && fake->DoorbellEndpoint) {
     fake->DoorbellEndpoint = 0u;
     return 1u;
@@ -155,7 +169,14 @@ static unsigned char publish_roots(void *context,
 
 static unsigned char unpublish_roots(void *context) {
   FAKE_PLATFORM *fake = context;
-  assert(fake->Handoff[APPLE_AGX_GFX_HANDOFF_LOCK_AP_OFFSET] == 1u);
+  if (fake->ForcedUnpublishContract) {
+    /* Forced stop: the CPU is already off and the AP lock is NOT taken (the
+     * dead firmware may hold its side for ever). */
+    assert(!fake->AscRunning);
+    assert(fake->Handoff[APPLE_AGX_GFX_HANDOFF_LOCK_AP_OFFSET] == 0u);
+  } else {
+    assert(fake->Handoff[APPLE_AGX_GFX_HANDOFF_LOCK_AP_OFFSET] == 1u);
+  }
   if (fake->FailUnpublish)
     return 0u;
   if (!fake->RootsPublished)
@@ -170,8 +191,11 @@ static unsigned char send_initdata(void *context,
                                    unsigned long long deadline) {
   FAKE_PLATFORM *fake = context;
   assert(fake->NowMs <= deadline);
+  fake->LastSentInitdataAddress = address;
   return (unsigned char)(fake->AscRunning && fake->RootsPublished &&
-                         address == 0x1500000000ULL);
+                         address == (fake->RebuiltInitdataAddress
+                                         ? fake->RebuiltInitdataAddress
+                                         : 0x1500000000ULL));
 }
 
 static unsigned char send_device_control_init(
@@ -184,6 +208,33 @@ static unsigned char update_idle_timestamp(
     void *context, unsigned long long deadline) {
   FAKE_PLATFORM *fake = context;
   return (unsigned char)(fake->NowMs <= deadline && fake->RootsPublished);
+}
+
+static unsigned char force_stop_asc(void *context,
+                                    unsigned long long deadline) {
+  FAKE_PLATFORM *fake = context;
+  assert(fake->NowMs <= deadline);
+  ++fake->ForceStopCount;
+  fake->AscRunning = 0u;
+  fake->FirmwareEndpoint = 0u;
+  fake->DoorbellEndpoint = 0u;
+  return 1u;
+}
+
+static unsigned char revalidate_uat(void *context, unsigned long long deadline,
+                                    APPLE_AGX_UAT_TTBR_PAIR *pair,
+                                    unsigned long long *initdata_address) {
+  FAKE_PLATFORM *fake = context;
+  assert(fake->NowMs <= deadline);
+  ++fake->RevalidateCount;
+  if (!fake->Powered || !fake->UatCreated || fake->AscRunning)
+    return 0u;
+  pair->Ttbr0 = fake->RevalidateOtherRoots ? 0x5003ULL : 0x1003ULL;
+  pair->Ttbr1 = 0x2003ULL;
+  *initdata_address = fake->RebuiltInitdataAddress
+                          ? fake->RebuiltInitdataAddress
+                          : 0x1500000000ULL;
+  return 1u;
 }
 
 static unsigned char read8(void *context, unsigned int offset,
@@ -559,6 +610,150 @@ static void test_broker_mappings_live_until_asc_stops(void) {
   assert(io.PowerOff(io.Context,100));
 }
 
+static APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES warm_primitives(
+    FAKE_PLATFORM *fake) {
+  APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES ops = primitives(fake);
+  ops.RetireMappingsAfterAscStop = 1u;
+  ops.ForceStopAsc = force_stop_asc;
+  ops.RevalidateFirmwareUat = revalidate_uat;
+  return ops;
+}
+
+static const unsigned int warm_stopped_state =
+    APPLE_AGX_FIRMWARE_PROVIDER_INITIALIZED |
+    APPLE_AGX_FIRMWARE_PROVIDER_POWERED | APPLE_AGX_FIRMWARE_PROVIDER_UAT;
+
+/* Bugs caught on the second boot of one driver lifetime:
+ *  - the handoff "Initialized" latch makes AppleAgxGfxHandoffInitialize a
+ *    no-op, so the magic/flush-slot handshake the restarted firmware waits
+ *    for never runs and stale flush slots survive;
+ *  - the initdata address captured at CreateFirmwareUat is sent again after
+ *    the firmware-visible graph was rebuilt elsewhere;
+ *  - the restart re-creates the UAT or cycles power (new retained-root
+ *    epoch, broker refusal), or accepts roots that changed underneath it. */
+static void test_warm_restart_rearms_handoff_and_keeps_roots_and_power(void) {
+  FAKE_PLATFORM fake = {.Passive = 1u, .PublishHandoffMagicOnAscBoot = 1u};
+  APPLE_AGX_GFX_HANDOFF_STATE handoff = bind_uninitialized_handoff(&fake);
+  APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES ops = warm_primitives(&fake);
+  APPLE_AGX_FIRMWARE_PROVIDER provider;
+  APPLE_AGX_FIRMWARE firmware;
+  APPLE_AGX_FIRMWARE_IO io;
+  unsigned long long flush = 0u;
+
+  memset(&provider, 0, sizeof(provider));
+  assert(AppleAgxFirmwareProviderInitialize(&provider, &ops, &handoff, &io) ==
+         AppleAgxFirmwareProviderResultOk);
+  assert(io.ForceStopAsc != NULL && io.RevalidateFirmwareUat != NULL);
+  AppleAgxFirmwareInitialize(&firmware);
+  assert(AppleAgxFirmwareStart(&firmware, &io) == AppleAgxFirmwareResultOk);
+  assert(handoff.Initialized && fake.BootCount == 1u);
+
+  /* What a running firmware leaves behind in the handoff region. */
+  assert(write64(&fake, APPLE_AGX_GFX_HANDOFF_FLUSH_STATE_OFFSET, 1ULL));
+  assert(AppleAgxFirmwareStopWarm(&firmware, &io) == AppleAgxFirmwareResultOk);
+  assert(!fake.AscRunning && !fake.RootsPublished);
+  assert(fake.UatCreated && fake.Powered);
+  assert(provider.State == warm_stopped_state);
+  assert(fake.StopAscCount == 1u && fake.ForceStopCount == 0u);
+
+  fake.RevalidateOtherRoots = 1u;
+  assert(AppleAgxFirmwareStartWarm(&firmware, &io) !=
+         AppleAgxFirmwareResultOk);
+  assert(firmware.Phase == AppleAgxFirmwareUatReady);
+  assert(fake.BootCount == 1u && !fake.AscRunning);
+  fake.RevalidateOtherRoots = 0u;
+
+  fake.RebuiltInitdataAddress = 0x1500004000ULL;
+  assert(AppleAgxFirmwareStartWarm(&firmware, &io) == AppleAgxFirmwareResultOk);
+  assert(firmware.Phase == AppleAgxFirmwareIdleTimestampUpdated);
+  assert(fake.BootCount == 2u && fake.AscRunning && fake.RootsPublished);
+  assert(handoff.Initialized);
+  assert(read64(&fake, APPLE_AGX_GFX_HANDOFF_FLUSH_STATE_OFFSET, &flush) &&
+         flush == 0ULL);
+  assert(firmware.InitdataAddress == 0x1500004000ULL);
+  assert(fake.LastSentInitdataAddress == 0x1500004000ULL);
+  assert(fake.PowerOnCount == 1u && fake.CreateUatCount == 1u);
+  assert(fake.PublishCount == 2u && fake.UnpublishCount == 1u);
+
+  assert(AppleAgxFirmwareRollback(&firmware, &io) == AppleAgxFirmwareResultOk);
+  assert(!fake.Powered && !fake.UatCreated);
+  assert(AppleAgxFirmwareProviderDestroy(&provider) ==
+         AppleAgxFirmwareProviderResultOk);
+}
+
+/* Bugs caught: a forced stop that (a) calls the orderly primitives, which
+ * send RTKit messages to a dead firmware, (b) retires the published mappings
+ * before the CPU is stopped, or (c) waits for the handoff lock the dead
+ * firmware holds, so the stop itself can never complete.  The stale firmware
+ * lock is then met by the next boot, which must fail closed, not hang. */
+static void test_forced_stop_is_cpu_first_and_lock_free(void) {
+  FAKE_PLATFORM fake = {.Passive = 1u, .PublishHandoffMagicOnAscBoot = 1u};
+  APPLE_AGX_GFX_HANDOFF_STATE handoff = bind_uninitialized_handoff(&fake);
+  APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES ops = warm_primitives(&fake);
+  APPLE_AGX_FIRMWARE_PROVIDER provider;
+  APPLE_AGX_FIRMWARE firmware;
+  APPLE_AGX_FIRMWARE_IO io;
+
+  memset(&provider, 0, sizeof(provider));
+  assert(AppleAgxFirmwareProviderInitialize(&provider, &ops, &handoff, &io) ==
+         AppleAgxFirmwareProviderResultOk);
+  AppleAgxFirmwareInitialize(&firmware);
+  assert(AppleAgxFirmwareStart(&firmware, &io) == AppleAgxFirmwareResultOk);
+
+  /* The firmware dies inside its handoff critical section. */
+  fake.Handoff[APPLE_AGX_GFX_HANDOFF_LOCK_FW_OFFSET] = 1u;
+  fake.ForcedUnpublishContract = 1u;
+  assert(AppleAgxFirmwareForceStopWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultOk);
+  assert(firmware.Phase == AppleAgxFirmwareUatReady);
+  assert(provider.State == warm_stopped_state);
+  assert(fake.ForceStopCount == 1u);
+  assert(fake.StopAscCount == 0u && fake.StopEndpointCount == 0u);
+  assert(!fake.AscRunning && !fake.RootsPublished && fake.UnpublishCount == 1u);
+  assert(fake.UatCreated && fake.Powered && handoff.Locked == 0u);
+  fake.ForcedUnpublishContract = 0u;
+
+  /* No source says who clears a dead firmware's lock byte (hardware unknown
+   * U2).  Until H1b answers it the boot fails closed and stays warm. */
+  assert(AppleAgxFirmwareStartWarm(&firmware, &io) !=
+         AppleAgxFirmwareResultOk);
+  assert(firmware.Phase == AppleAgxFirmwareUatReady);
+  assert(provider.State == warm_stopped_state && !fake.AscRunning);
+  assert(fake.UatCreated && fake.Powered);
+
+  fake.Handoff[APPLE_AGX_GFX_HANDOFF_LOCK_FW_OFFSET] = 0u;
+  fake.NowMs = 0u;
+  assert(AppleAgxFirmwareStartWarm(&firmware, &io) == AppleAgxFirmwareResultOk);
+  assert(fake.AscRunning && fake.RootsPublished);
+}
+
+/* Bug caught: a platform without the two warm primitives (every caller
+ * today) silently getting a warm path built from the cold primitives. */
+static void test_warm_path_is_absent_without_its_primitives(void) {
+  FAKE_PLATFORM fake = {.Passive = 1u};
+  APPLE_AGX_GFX_HANDOFF_STATE handoff = bind_handoff(&fake);
+  APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES ops = primitives(&fake);
+  APPLE_AGX_FIRMWARE_PROVIDER provider;
+  APPLE_AGX_FIRMWARE firmware;
+  APPLE_AGX_FIRMWARE_IO io;
+
+  memset(&provider, 0, sizeof(provider));
+  memset(&io, 0xff, sizeof(io));
+  assert(AppleAgxFirmwareProviderInitialize(&provider, &ops, &handoff, &io) ==
+         AppleAgxFirmwareProviderResultOk);
+  assert(io.ForceStopAsc == NULL && io.RevalidateFirmwareUat == NULL);
+  AppleAgxFirmwareInitialize(&firmware);
+  assert(AppleAgxFirmwareStart(&firmware, &io) == AppleAgxFirmwareResultOk);
+  assert(AppleAgxFirmwareForceStopWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultInvalid);
+  assert(fake.AscRunning);
+  assert(AppleAgxFirmwareStopWarm(&firmware, &io) == AppleAgxFirmwareResultOk);
+  assert(AppleAgxFirmwareStartWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultInvalid);
+  assert(AppleAgxFirmwareRollback(&firmware, &io) == AppleAgxFirmwareResultOk);
+  assert(!fake.Powered && !fake.UatCreated);
+}
+
 int main(void) {
   test_broker_mappings_live_until_asc_stops();
   test_split_bootstrap_owns_early_roots_and_failed_cleanup();
@@ -569,5 +764,8 @@ int main(void) {
   test_passive_lifetime_is_enforced();
   test_handoff_initializes_only_after_asc_boot();
   test_handoff_timeout_is_after_asc_boot();
+  test_warm_restart_rearms_handoff_and_keeps_roots_and_power();
+  test_forced_stop_is_cpu_first_and_lock_free();
+  test_warm_path_is_absent_without_its_primitives();
   return 0;
 }

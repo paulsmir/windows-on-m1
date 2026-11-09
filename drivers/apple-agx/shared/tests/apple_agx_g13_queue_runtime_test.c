@@ -647,6 +647,75 @@ static void TestResetRequiresBufferManagerInitializationAgain(void) {
   assert(fixture.Runtime.D3Pending.ExpectedDonePointer == 4u);
 }
 
+/* Firmware restart (TDR-FIRMWARE-RESTART-RECOVERY.md 4.3).  Bug caught: a
+ * restart that keeps the queue runtime and only resets it.  Reset re-arms
+ * InitBM/NewQueue but rebases the write pointers onto the done pointers of
+ * the firmware that was just stopped, so the restarted firmware would be
+ * handed ring indices (and through them work slots) of a lifetime it never
+ * saw.  A new lifetime needs rebuilt rings and a newly initialized runtime;
+ * its first job must carry InitBM and start every ring at index 0. */
+static void TestRestartNeedsAFreshLifetimeNotAReset(void) {
+  TEST_FIXTURE fixture;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
+
+  assert(!AppleAgxG13QueueRuntimeLifetimeIsFresh(NULL));
+  TestInitialize(&fixture);
+  assert(AppleAgxG13QueueRuntimeLifetimeIsFresh(&fixture.Runtime));
+  submission = TestSubmission(&fixture, 60u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(!AppleAgxG13QueueRuntimeLifetimeIsFresh(&fixture.Runtime));
+  TestCompleteSubmission(&fixture, &submission);
+  assert(!AppleAgxG13QueueRuntimeLifetimeIsFresh(&fixture.Runtime));
+
+  /* Reset: flags of a first run, ring indices of the old lifetime. */
+  assert(AppleAgxG13QueueRuntimeReset(&fixture.Runtime) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.Runtime.TaFirstRun && fixture.Runtime.D3FirstRun &&
+         !fixture.Runtime.BufferManagerInitialized);
+  assert(fixture.TaWrite == 2u && fixture.D3Write == 2u);
+  assert(!AppleAgxG13QueueRuntimeLifetimeIsFresh(&fixture.Runtime));
+
+  /* The restart: rings rebuilt with zero pointers, runtime initialized. */
+  TestInitialize(&fixture);
+  assert(AppleAgxG13QueueRuntimeLifetimeIsFresh(&fixture.Runtime));
+  fixture.IoState.FailReads = 1u;
+  assert(!AppleAgxG13QueueRuntimeLifetimeIsFresh(&fixture.Runtime));
+  fixture.IoState.FailReads = 0u;
+  fixture.D3Done = 1u;
+  assert(!AppleAgxG13QueueRuntimeLifetimeIsFresh(&fixture.Runtime));
+  fixture.D3Done = 0u;
+  TestEnableCompute(&fixture);
+  assert(AppleAgxG13QueueRuntimeLifetimeIsFresh(&fixture.Runtime));
+  fixture.ComputeWrite = 3u;
+  assert(!AppleAgxG13QueueRuntimeLifetimeIsFresh(&fixture.Runtime));
+  fixture.ComputeWrite = 0u;
+  fixture.Runtime.ComputeFirstRun = APPLE_AGX_BACKEND_FALSE;
+  assert(!AppleAgxG13QueueRuntimeLifetimeIsFresh(&fixture.Runtime));
+  fixture.Runtime.ComputeFirstRun = APPLE_AGX_BACKEND_TRUE;
+
+  /* First job of the lifetime: a TA without InitBM is refused unpublished;
+   * with it, every ring starts at index 0. */
+  submission = TestSubmission(&fixture, 61u);
+  submission.Ta.GpuAddresses[0] = submission.Ta.GpuAddresses[1];
+  submission.Ta.GpuAddresses[1] = 0ULL;
+  submission.Ta.GpuAddressCount = 1u;
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+  assert(fixture.TaWrite == 0u && fixture.D3Write == 0u);
+  assert(AppleAgxG13QueueRuntimeLifetimeIsFresh(&fixture.Runtime));
+  submission = TestSubmission(&fixture, 61u);
+  assert(AppleAgxG13QueueRuntimeSubmit(&fixture.Runtime, &submission) ==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(fixture.TaRing[0] == submission.Ta.GpuAddresses[0]);
+  assert(fixture.TaRing[1] == submission.Ta.GpuAddresses[1]);
+  assert(fixture.D3Ring[0] == submission.D3.GpuAddresses[0]);
+  assert(fixture.Runtime.TaPending.ExpectedDonePointer == 2u);
+  assert(fixture.Runtime.BufferManagerInitialized &&
+         !fixture.Runtime.TaFirstRun && !fixture.Runtime.D3FirstRun);
+  assert(!AppleAgxG13QueueRuntimeLifetimeIsFresh(&fixture.Runtime));
+}
+
 static void TestTwoEntryWrapAndFreeSpace(void) {
   TEST_FIXTURE fixture;
   APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
@@ -935,6 +1004,7 @@ unsigned AppleAgxG13QueueRuntimeContractTests(void) {
   TestCountsAreBoundedAndQueueSpecific();
   TestLaterSubmitWrapUsesActualCounts();
   TestResetRequiresBufferManagerInitializationAgain();
+  TestRestartNeedsAFreshLifetimeNotAReset();
   TestTwoEntryWrapAndFreeSpace();
   TestEventAloneCannotComplete();
   TestDeadlineIsRecordedNotTerminal();

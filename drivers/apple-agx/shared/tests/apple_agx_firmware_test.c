@@ -20,6 +20,8 @@ enum {
   TraceStopAsc,
   TraceDestroyUat,
   TracePowerOff,
+  TraceForceStopAsc,
+  TraceRevalidateUat,
 };
 
 typedef struct _FAKE_TRANSPORT {
@@ -173,6 +175,18 @@ static APPLE_AGX_FW_BOOL power_off(void *context,
   return cleanup_operation((FAKE_TRANSPORT *)context, TracePowerOff);
 }
 
+static APPLE_AGX_FW_BOOL force_stop_asc(void *context,
+                                        APPLE_AGX_FW_U64 deadline) {
+  (void)deadline;
+  return cleanup_operation((FAKE_TRANSPORT *)context, TraceForceStopAsc);
+}
+
+static APPLE_AGX_FW_BOOL revalidate_uat(void *context,
+                                        APPLE_AGX_FW_U64 deadline) {
+  (void)deadline;
+  return start_operation((FAKE_TRANSPORT *)context, TraceRevalidateUat);
+}
+
 static void record_phase(void *context, APPLE_AGX_FIRMWARE_PHASE phase,
                          APPLE_AGX_FIRMWARE_RESULT result,
                          APPLE_AGX_FW_U32 completed_mask) {
@@ -199,6 +213,8 @@ static APPLE_AGX_FIRMWARE_IO make_io(FAKE_TRANSPORT *fake) {
       destroy_uat,
       power_off,
       record_phase,
+      force_stop_asc,
+      revalidate_uat,
   };
   return io;
 }
@@ -441,6 +457,251 @@ static void test_cleanup_clock_regression_is_failure(void) {
   assert(firmware.CompletedMask == APPLE_AGX_FIRMWARE_INITDATA_PUBLISHED);
 }
 
+static unsigned int count_trace(const FAKE_TRANSPORT *fake,
+                                unsigned int from, unsigned char value) {
+  unsigned int index;
+  unsigned int count = 0;
+  for (index = from; index < fake->TraceCount; ++index)
+    if (fake->Trace[index] == value)
+      ++count;
+  return count;
+}
+
+static void assert_warm_stopped(const APPLE_AGX_FIRMWARE *firmware) {
+  assert(firmware->Phase == AppleAgxFirmwareUatReady);
+  assert(firmware->CompletedMask == APPLE_AGX_FIRMWARE_WARM_RETAINED);
+  assert(firmware->CleanupMask == 0u);
+}
+
+/* Bug caught: a warm restart that skips a boot phase (the restarted firmware
+ * never gets its endpoints, initdata or device-control init), or that
+ * re-creates the UAT / cycles power (a new retained-root epoch makes every
+ * GPUVA record stale; the broker refuses power-off with a live process). */
+static void test_warm_restart_replays_boot_and_keeps_uat_and_power(void) {
+  static const unsigned char expected_restart[] = {
+      TraceUnpublishInitdata,     TraceStopDoorbellEndpoint,
+      TraceStopFirmwareEndpoint,  TraceStopAsc,
+      TraceRevalidateUat,         TraceBootAsc,
+      TraceStartFirmwareEndpoint, TraceStartDoorbellEndpoint,
+      TracePublishInitdata,       TraceSendInitdata,
+      TraceDeviceControlInit,     TraceUpdateIdleTimestamp,
+  };
+  APPLE_AGX_FIRMWARE firmware;
+  FAKE_TRANSPORT fake = {0};
+  APPLE_AGX_FIRMWARE_IO io = make_io(&fake);
+  unsigned int index;
+  unsigned int cycle;
+
+  fake.NowMs = 1000;
+  AppleAgxFirmwareInitialize(&firmware);
+  assert(AppleAgxFirmwareStart(&firmware, &io) == AppleAgxFirmwareResultOk);
+  assert(fake.TraceCount == 9u);
+  for (cycle = 0; cycle < 3u; ++cycle) {
+    unsigned int base = fake.TraceCount;
+    assert(AppleAgxFirmwareRestartWarm(&firmware, &io) ==
+           AppleAgxFirmwareResultOk);
+    assert(firmware.Phase == AppleAgxFirmwareIdleTimestampUpdated);
+    assert(firmware.CompletedMask == APPLE_AGX_FIRMWARE_ALL_COMPLETED);
+    assert(firmware.InitdataAddress == 0x1500000000ULL);
+    assert(fake.TraceCount == base + sizeof(expected_restart));
+    for (index = 0; index < sizeof(expected_restart); ++index)
+      assert(fake.Trace[base + index] == expected_restart[index]);
+    /* The warm boot is the cold boot from BootAsc on, phase for phase. */
+    for (index = 0; index < 7u; ++index)
+      assert(fake.Trace[base + 5u + index] == fake.Trace[2u + index]);
+  }
+  assert(count_trace(&fake, 0u, TracePowerOn) == 1u);
+  assert(count_trace(&fake, 0u, TraceCreateUat) == 1u);
+  assert(count_trace(&fake, 0u, TraceDestroyUat) == 0u);
+  assert(count_trace(&fake, 0u, TracePowerOff) == 0u);
+  assert(count_trace(&fake, 0u, TraceForceStopAsc) == 0u);
+  /* The retained resources still belong to the state machine. */
+  assert(AppleAgxFirmwareRollback(&firmware, &io) == AppleAgxFirmwareResultOk);
+  assert(firmware.Phase == AppleAgxFirmwareStopped);
+  assert(count_trace(&fake, 0u, TraceDestroyUat) == 1u);
+  assert(count_trace(&fake, 0u, TracePowerOff) == 1u);
+}
+
+/* Bug caught: an orderly stop whose ASC step fails (IOP ack timeout) leaves
+ * the state machine where no start is accepted and nothing leads out; or the
+ * orderly path silently clears RUN on a firmware that never acknowledged.
+ * Required: the half-stopped state refuses a start without touching anything,
+ * resumes, and has exactly one explicit way to a full second boot. */
+static void test_warm_stop_failure_has_an_explicit_way_to_a_second_boot(void) {
+  APPLE_AGX_FIRMWARE firmware;
+  FAKE_TRANSPORT fake = {0};
+  APPLE_AGX_FIRMWARE_IO io = make_io(&fake);
+  unsigned int base;
+
+  fake.NowMs = 1000;
+  AppleAgxFirmwareInitialize(&firmware);
+  assert(AppleAgxFirmwareStart(&firmware, &io) == AppleAgxFirmwareResultOk);
+  fake.FailCleanupOperation = 4; /* StopAsc */
+  assert(AppleAgxFirmwareStopWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultCleanupFailed);
+  assert(firmware.Phase == AppleAgxFirmwareFailed);
+  assert(firmware.CompletedMask ==
+         (APPLE_AGX_FIRMWARE_WARM_RETAINED | APPLE_AGX_FIRMWARE_ASC_RUNNING));
+  assert(count_trace(&fake, 0u, TraceForceStopAsc) == 0u);
+  assert(count_trace(&fake, 0u, TraceDestroyUat) == 0u);
+  assert(count_trace(&fake, 0u, TracePowerOff) == 0u);
+
+  base = fake.TraceCount;
+  assert(AppleAgxFirmwareStartWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultInvalid);
+  assert(fake.TraceCount == base);
+  assert(firmware.Phase == AppleAgxFirmwareFailed);
+
+  /* Resume: only the unfinished step runs again, and it still fails. */
+  fake.FailCleanupOperation = 5;
+  assert(AppleAgxFirmwareStopWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultCleanupFailed);
+  assert(fake.TraceCount == base + 1u);
+  assert(fake.Trace[base] == TraceStopAsc);
+
+  base = fake.TraceCount;
+  assert(AppleAgxFirmwareForceStopWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultOk);
+  assert_warm_stopped(&firmware);
+  assert(fake.TraceCount == base + 1u);
+  assert(fake.Trace[base] == TraceForceStopAsc);
+
+  base = fake.TraceCount;
+  assert(AppleAgxFirmwareStartWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultOk);
+  assert(firmware.Phase == AppleAgxFirmwareIdleTimestampUpdated);
+  assert(firmware.CompletedMask == APPLE_AGX_FIRMWARE_ALL_COMPLETED);
+  assert(fake.TraceCount == base + 8u);
+  assert(fake.Trace[base] == TraceRevalidateUat);
+  assert(fake.Trace[base + 1u] == TraceBootAsc);
+  assert(fake.Trace[base + 7u] == TraceUpdateIdleTimestamp);
+}
+
+/* Bug caught: a forced stop that still runs the orderly callbacks, i.e.
+ * sends StopEndpoint / power-state messages to a firmware that is dead and
+ * waits for their acks inside ResetFromTimeout. */
+static void test_forced_warm_stop_runs_only_the_force_callback(void) {
+  APPLE_AGX_FIRMWARE firmware;
+  FAKE_TRANSPORT fake = {0};
+  APPLE_AGX_FIRMWARE_IO io = make_io(&fake);
+  APPLE_AGX_FIRMWARE before;
+
+  fake.NowMs = 1000;
+  AppleAgxFirmwareInitialize(&firmware);
+  assert(AppleAgxFirmwareStart(&firmware, &io) == AppleAgxFirmwareResultOk);
+
+  io.ForceStopAsc = NULL;
+  before = firmware;
+  assert(AppleAgxFirmwareForceStopWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultInvalid);
+  assert(firmware.Phase == before.Phase &&
+         firmware.CompletedMask == before.CompletedMask);
+  assert(fake.TraceCount == 9u);
+  io.ForceStopAsc = force_stop_asc;
+
+  fake.FailCleanupOperation = 1;
+  assert(AppleAgxFirmwareForceStopWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultCleanupFailed);
+  assert(firmware.Phase == AppleAgxFirmwareFailed);
+  /* A force that is not proven changes no ownership bit. */
+  assert(firmware.CompletedMask == APPLE_AGX_FIRMWARE_ALL_COMPLETED);
+
+  assert(AppleAgxFirmwareForceStopWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultOk);
+  assert_warm_stopped(&firmware);
+  assert(firmware.InitdataAddress == 0u);
+  assert(fake.TraceCount == 11u);
+  assert(fake.Trace[9] == TraceForceStopAsc);
+  assert(fake.Trace[10] == TraceForceStopAsc);
+  /* Asked again on a stopped firmware it proves the stop again. */
+  assert(AppleAgxFirmwareForceStopWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultOk);
+  assert(fake.TraceCount == 12u && fake.Trace[11] == TraceForceStopAsc);
+  assert_warm_stopped(&firmware);
+}
+
+/* Bug caught: a warm boot that fails half-way falls into the cold rollback
+ * and destroys the UAT / powers off under live GPU processes, or leaves the
+ * state machine unable to try again. */
+static void test_failed_warm_start_stays_warm_and_can_retry(void) {
+  unsigned int step;
+
+  for (step = 1; step <= 8u; ++step) {
+    APPLE_AGX_FIRMWARE firmware;
+    FAKE_TRANSPORT fake = {0};
+    APPLE_AGX_FIRMWARE_IO io = make_io(&fake);
+    unsigned int base;
+
+    fake.NowMs = 1000;
+    AppleAgxFirmwareInitialize(&firmware);
+    assert(AppleAgxFirmwareStart(&firmware, &io) == AppleAgxFirmwareResultOk);
+    assert(AppleAgxFirmwareStopWarm(&firmware, &io) ==
+           AppleAgxFirmwareResultOk);
+    assert_warm_stopped(&firmware);
+    /* Stopping twice is not a second stop. */
+    base = fake.TraceCount;
+    assert(AppleAgxFirmwareStopWarm(&firmware, &io) ==
+           AppleAgxFirmwareResultOk);
+    assert(fake.TraceCount == base);
+
+    fake.FailStartOperation = 9u + step;
+    assert(AppleAgxFirmwareStartWarm(&firmware, &io) ==
+           AppleAgxFirmwareResultTransportFailed);
+    assert_warm_stopped(&firmware);
+    assert(firmware.LastResult == AppleAgxFirmwareResultTransportFailed);
+    assert(count_trace(&fake, 0u, TraceDestroyUat) == 0u);
+    assert(count_trace(&fake, 0u, TracePowerOff) == 0u);
+    assert(count_trace(&fake, 0u, TraceForceStopAsc) == 0u);
+    /* A boot attempt that reached BootAsc owes exactly one StopAsc. */
+    assert(count_trace(&fake, base, TraceStopAsc) == (step >= 2u ? 1u : 0u));
+
+    base = fake.TraceCount;
+    assert(AppleAgxFirmwareStartWarm(&firmware, &io) ==
+           AppleAgxFirmwareResultOk);
+    assert(firmware.CompletedMask == APPLE_AGX_FIRMWARE_ALL_COMPLETED);
+    assert(fake.TraceCount == base + 8u);
+  }
+}
+
+/* Bug caught: a warm entry point accepted on a firmware that holds no UAT or
+ * power (boots an ASC against no page tables), or a warm start that runs
+ * without the revalidation step and publishes a stale initdata address. */
+static void test_warm_entry_points_refuse_states_they_do_not_own(void) {
+  APPLE_AGX_FIRMWARE firmware;
+  FAKE_TRANSPORT fake = {0};
+  APPLE_AGX_FIRMWARE_IO io = make_io(&fake);
+
+  fake.NowMs = 1000;
+  AppleAgxFirmwareInitialize(&firmware);
+  assert(AppleAgxFirmwareStartWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultInvalid);
+  assert(AppleAgxFirmwareStopWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultInvalid);
+  assert(AppleAgxFirmwareForceStopWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultInvalid);
+  assert(AppleAgxFirmwareRestartWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultInvalid);
+  assert(firmware.Phase == AppleAgxFirmwareOff && fake.TraceCount == 0u);
+
+  assert(AppleAgxFirmwareStart(&firmware, &io) == AppleAgxFirmwareResultOk);
+  /* Running: a warm start is not a restart. */
+  assert(AppleAgxFirmwareStartWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultInvalid);
+  assert(fake.TraceCount == 9u);
+  assert(AppleAgxFirmwareStopWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultOk);
+  io.RevalidateFirmwareUat = NULL;
+  assert(AppleAgxFirmwareStartWarm(&firmware, &io) ==
+         AppleAgxFirmwareResultInvalid);
+  assert_warm_stopped(&firmware);
+  assert(fake.TraceCount == 13u);
+  /* The cold start must not adopt a warm-stopped firmware either. */
+  assert(AppleAgxFirmwareStart(&firmware, &io) ==
+         AppleAgxFirmwareResultInvalid);
+  assert(fake.TraceCount == 13u);
+  assert_warm_stopped(&firmware);
+}
+
 int main(void) {
   {
     FAKE_TRANSPORT fake={0};
@@ -466,5 +727,10 @@ int main(void) {
   test_cleanup_failure_keeps_exact_resource_bit();
   test_cleanup_timeout_is_failure();
   test_cleanup_clock_regression_is_failure();
+  test_warm_restart_replays_boot_and_keeps_uat_and_power();
+  test_warm_stop_failure_has_an_explicit_way_to_a_second_boot();
+  test_forced_warm_stop_runs_only_the_force_callback();
+  test_failed_warm_start_stays_warm_and_can_retry();
+  test_warm_entry_points_refuse_states_they_do_not_own();
   return 0;
 }

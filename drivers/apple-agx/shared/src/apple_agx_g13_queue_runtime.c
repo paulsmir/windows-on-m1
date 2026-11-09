@@ -1329,8 +1329,12 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeCheckTimeout(
    * The firmware reports faulting work itself (Timeout/Fault events, Asahi
    * handle_timeout/recover) and the Windows TDR owns hang detection
    * (TdrDelay, DxgkDdiResetEngine). The terminal Quiesce that ran here stopped
-   * a retained firmware that cannot be restarted, so every later TDR was a
-   * 0x116. The expiry is counted once and the job stays pending. */
+   * the retained firmware, and no path restarted it, so every later TDR was a
+   * 0x116. Whether that firmware can be restarted in the same boot was never
+   * tested: the reset paths of EXP1241/1278/1296 refused by design and the one
+   * restart candidate, EXP589, was built and never run
+   * (TDR-FIRMWARE-RESTART-RECOVERY.md 0.2). The expiry is counted once and the
+   * job stays pending. */
   if (!Runtime->DeadlinePassed) {
     Runtime->DeadlinePassed = APPLE_AGX_BACKEND_TRUE;
     ++Runtime->DeadlineExpiries;
@@ -1456,4 +1460,35 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueRuntimeHasSuccessor(
                  Runtime->Successor.Fence != 0u
              ? APPLE_AGX_BACKEND_TRUE
              : APPLE_AGX_BACKEND_FALSE;
+}
+
+APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueRuntimeLifetimeIsFresh(
+    const APPLE_AGX_G13_QUEUE_RUNTIME *Runtime) {
+  const APPLE_AGX_G13_QUEUE_BINDING *bindings[3];
+  APPLE_AGX_BACKEND_U32 count = 2u;
+  APPLE_AGX_BACKEND_U32 index;
+
+  if (Runtime == APPLE_AGX_G13_QUEUE_RUNTIME_NULL ||
+      Runtime->Phase != AppleAgxG13QueueRuntimeReady ||
+      Runtime->PendingFence != 0u || Runtime->Successor.Fence != 0u ||
+      Runtime->CompletionAvailable || Runtime->RecoveryPending ||
+      Runtime->BufferManagerInitialized || !Runtime->TaFirstRun ||
+      !Runtime->D3FirstRun || !Runtime->ComputeFirstRun)
+    return APPLE_AGX_BACKEND_FALSE;
+  bindings[0] = &Runtime->Config.Ta;
+  bindings[1] = &Runtime->Config.D3;
+  bindings[2] = &Runtime->Config.Compute;
+  if (Runtime->Config.HasCompute)
+    count = 3u;
+  for (index = 0u; index < count; ++index) {
+    APPLE_AGX_BACKEND_U32 write = 1u;
+    APPLE_AGX_BACKEND_U32 done = 1u;
+    if (!Runtime->Io.ReadU32(Runtime->Io.Context,
+                             bindings[index]->CpuWritePointer, &write) ||
+        !Runtime->Io.ReadU32(Runtime->Io.Context,
+                             bindings[index]->GpuDonePointer, &done) ||
+        write != 0u || done != 0u)
+      return APPLE_AGX_BACKEND_FALSE;
+  }
+  return APPLE_AGX_BACKEND_TRUE;
 }
