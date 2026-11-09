@@ -4328,7 +4328,7 @@ static VOID AdmissionBuildOv5FragBarrier(
  * the caller builds today's TA lead Barrier. Called before that Barrier,
  * in the same job-word set Set; the decision is consumed here. */
 /* EXP2290 (diagnostic): the identity of each waived pair in the broker page at
- * 0xE00, printed by m1n1 at a guest reset (a bugcheck leaves no dump on the
+ * 0xF00, printed by m1n1 at a guest reset (a bugcheck leaves no dump on the
  * native SSD). Waived builds only, so ordinary jobs take no extra trap. */
 static VOID AdmissionOv5WaiverBeacon(ADMISSION_PLATFORM_RUNTIME *runtime,
     const APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan, ULONG Fence,
@@ -4352,7 +4352,7 @@ static VOID AdmissionOv5WaiverBeacon(ADMISSION_PLATFORM_RUNTIME *runtime,
   words[10] = (ULONG)stamp.HighPart;
   words[11] = 0xffffffffu;
   for (i = 0; i < RTL_NUMBER_OF(words); ++i)
-    WRITE_REGISTER_ULONG((volatile ULONG *)(runtime->Adapter->BrokerBase + 0xE00u + i * sizeof(ULONG)), words[i]);
+    WRITE_REGISTER_ULONG((volatile ULONG *)(runtime->Adapter->BrokerBase + 0xF00u + i * sizeof(ULONG)), words[i]);
 }
 
 static BOOLEAN AdmissionBuildOv5TaWaiver(
