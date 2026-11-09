@@ -75314,3 +75314,14 @@ EXP2294 HARDWARE BEFORE 2026-11-09T03:06:32Z:
 - Hashes: sys ba0553b058fc, UmdArm64 7e3da5936b7d, UmdX64 15a20d3a5d6c, Umd32 2818e2d0ec91; manifest 3b8a59ae5367, hardware-manifest 52f4ec3cccea; probe2294.sh fcd89ace76ca (PROBE_LINT_OK); visible recovery rec2294h 98747948a39a48f8; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2294h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2294-abba-on/run2294.sh.
+
+EXP2295 HARDWARE BEFORE 2026-11-09T03:33:10Z:
+- WHY THIS HYPOTHESIS: (1) EXP2293: with the corrected deferral the waiver ran 7436 pairs in 3 clean GM starts; (2) EXP2288/2293 fps differ only across boots, so no gain is shown; (3) cross-boot switches need boot-level ABBA.
+- WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: as EXP2279. TRANSLATION: existing OV5 path.
+- ATOMIC CONTRACT: none -- Wom1Ov5TaWaiver is the one variable; Wom1Ov2NoHazardLead is on in both arms.
+- WHAT IS STILL UNKNOWN: the frame-time effect.
+- Expected: on arms faster than off arms in both pairs by more than the run noise, else no default change. Failure criteria: hang, GPU reset.
+- Recovery: rec2295h (ANS).
+- Hashes: sys 090cad4b624f, UmdArm64 3b734818f64b, UmdX64 bfd5c261b5f3, Umd32 064a31dc14eb; manifest 2387e267c14c, hardware-manifest 2ac8b407e68d; probe2295.sh b55e205eb026 (PROBE_LINT_OK); visible recovery rec2295h be1aa2a0851dcc6b; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1.
+- Recovery rec2295h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2295-abba-off/run2295.sh.
