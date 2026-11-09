@@ -75758,3 +75758,53 @@ Correction to "EXP2302 ... (ACTUAL)" (the original entry stays as written):
 - Next: EXP2305, one declared manual bugcheck on 0.4.4 with CrashDumpEnabled unchanged (2), to test whether the
   dump instance writes a readable dump to the native SSD.
 - Evidence: .local/experiments/ANSDUMP2/evidence/EXP2304/{stage.txt,restart-run.log,normal-prev-full.log,post-after-restart.txt,post2.txt,post3.txt}.
+
+## EXP2305 — AppleAns 0.4.4 DUMP2: one declared manual bugcheck, kernel dump to the native SSD (BEFORE, 2026-11-09T21:05:22Z)
+
+- Hypothesis: on a bugcheck the dump copy of AppleAns (dump_AppleAns.sys, DUMP_MODE_CRASH) takes over the ANS
+  controller in polled mode and writes a readable kernel dump to C: on the native SSD; the next boot finds an
+  intact volume and converts the dump.
+- Single variable: one deliberate bugcheck on the otherwise unchanged EXP2304 guest (AppleAns 0.4.4, CrashDumpEnabled 2,
+  AutoReboot 1, pagefile C:\pagefile.sys 6912 MB, 29.5 GB free). No package, registry or profile change.
+- WHY THIS HYPOTHESIS:
+  1. EXP2302/EXP2304: 0xA6 sealed records show Storport asked for and received the dump pointers; crashdmp.sys,
+     dump_diskdump.sys and dump_AppleAns.sys are loaded, so the Windows side of the dump path is armed.
+  2. EXP2304: no 0xA7 before a crash and normal I/O undisturbed, so the remaining unproven part is exactly the
+     crash-time takeover (ansd_init_takeover/ansd_takeover/ansd_enable) and polled writes; offline tests
+     (test_direct.c takeover cases) pass, hardware behaviour of CC.EN=0 on a live ANS2 from a second driver copy
+     is not measurable offline.
+- WINDOWS CONTRACT: Storport dump path (Microsoft "Storport crash dump and hibernation support"): the miniport is
+  loaded a second time as dump_<name>.sys, HwFindAdapter/HwInitialize run with DumpMode = DUMP_MODE_CRASH at high
+  IRQL, no interrupts, no allocations; MiniportDumpData from STOR_DUMP_POINTERS (SRB_FUNCTION_DUMP_POINTERS)
+  carries the hand-over record; I/O is synchronous through HwStartIo + polled HwInterrupt; crashdmp writes header
+  and pages through dump_diskdump into the pagefile extents, the next boot's smss/werfault produce
+  C:\Windows\MEMORY.DMP, a minidump and BugCheck event 1001.
+- AGX/ASAHI CONTRACT (ANS2, m1n1 nvme.c / Asahi apple.c behaviour): controller may be live with queues
+  programmed; CC.EN=0 then CSTS.RDY=0 stops it; linear SQ + NVMMU TCBs must be reprogrammed before CC.EN=1;
+  RTKit stays booted (no co-processor restart); completion by polling the CQ phase bit; tag == SQ slot.
+- TRANSLATION: drivers/storage/appleans (commit 31e0d4147): dump instance validates the hand-over record, maps
+  the two register banks from it, ansd_init_takeover -> ansd_takeover -> ansd_enable on the pre-allocated dump
+  queue memory, then serves READ/WRITE/SYNCHRONIZE_CACHE with ansd_submit + ansd_poll; diag 0xA7 at the next
+  telemetry query of the normal instance reports calls/DumpMode/flags.
+- WHAT IS STILL UNKNOWN: whether a live ANS2 accepts the CC.EN=0 -> re-enable sequence at crash time without an
+  RTKit restart; whether polled writes complete at HIGH_LEVEL with the m1n1 stage-2/vGIC state after a bugcheck;
+  write throughput (dump duration).
+- Trigger (no third-party tool): elevated `taskkill /f /pid <svchost hosting DcomLaunch>` (critical process, not
+  protected) -> bugcheck 0xEF CRITICAL_PROCESS_DIED. The trigger is a preregistered deliberate crash, not a defect.
+- Root/branch: gpu/memory-latency 905a0a40d (ledger only since 31e0d4147 driver); profile RECANS001-normal-ans
+  (m1n1 882985fb SHA c6f0c8cb..., FD J313_EFI-gpu-ans-direct-G2.fd SHA 7c283fb1...), launcher run_uefi PID 86207.
+- Artifact: AppleAns 0.4.4 ANSBUILD014-L (package zip 4802befb..., AppleAns.sys dac3a772...), already installed.
+- Commands: airssh taskkill (bounded); then
+  `RESTART_DOWN_S=900 restart-normal.sh 86207 .local/experiments/ANSDUMP2/evidence/EXP2305 C:\Users\pavel\ANSDUMP2\postcrash.ps1 nosend`
+  under a bounded notifying waiter.
+- Expected: guest stops with 0xEF, writes the dump, resets by itself (launcher exits within 900 s); next boot on
+  0.4.4; new C:\Windows\MEMORY.DMP (PAGEDU64, bugcheck 0xEF, dumptype 6 kernel/auto, systime = crash time) and a
+  new minidump; BugCheck event 1001; C: not dirty or repaired without loss; no volmgr 46 ("crash dump
+  initialization failed") and no volmgr 161; 0xA6 sealed records again.
+- Failure criteria: no reset within 900 s (dump instance hung in takeover or polled I/O); reboot without any new
+  dump + volmgr 46/161 or event 1001 without dump file; dump header unreadable; NTFS corruption (event 55, dirty
+  volume with lost files); guest does not boot (0x7B).
+- Recovery: hang -> kill exact launcher PID 86207, wait proxy endpoints, relaunch launch-normal-ans.sh. No boot on
+  0.4.4 -> AGX_RECOVERY_STORAGE=bridge AT_PROXY recovery, ImagePath back to appleans.inf_arm64_ac3dfa6e847ba00c
+  (0.4.3), check stornvme\StartOverride, chkdsk C: read-only before any repair.
+- Evidence: .local/experiments/ANSDUMP2/evidence/EXP2305/.
