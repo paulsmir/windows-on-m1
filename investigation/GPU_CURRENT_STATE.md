@@ -2484,3 +2484,10 @@ Death at 10-15 s after launch = GravityMark scene creation, before "Ready" (13-1
 is flagged TA-independent before Ready (first at 21.7 s), so Waived 0 at the reset is real. Switch effects left: KMD-internal
 (per-kick refusal, receipt notes -> worker registry exports) vs the UMD feature bit (hook call only). Next EXP2289: waiver on,
 diag off, feature bit withheld (Wom1Ov5TaWaiverNoFeature=1), 3 starts, with D4 in m1n1. ABBA/default waiver still blocked.
+
+## UPDATE 2026-11-09T00:39:56Z -- EXP2289: the UMD feature bit is necessary; the GM-start pair is "process's first compute -> loading-screen UI render"
+Bit published 3/3 resets, withheld 0/3, switch off 0/3 (diag off). In the healthy log the only waivable pair before the
+benchmark is the UI render at 18.30 s behind the process's first compute batch (18.24 s), verdict 0. Diag off lands the
+kick inside that short compute; diag on misses it. Next: EXP2290 = EXP2286 config + waiver-only beacon in the broker page
+(fence, compute WaitValue/Event, StampSelf, stamp PA) printed by m1n1 at the PSCI trap with the live stamp and ASC RX
+pending. Then fix (a): no waiver behind a process's first compute, if the beacon names that pair.
