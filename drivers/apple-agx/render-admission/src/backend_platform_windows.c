@@ -6740,6 +6740,11 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   APPLE_AGX_BACKEND_SUBMISSION submission;
   APPLE_AGX_BACKEND_RUNTIME_RESULT result;
   ULONG refusal, next = 0u, barrier = 0u;
+#if defined(ADMISSION_OV5_ON)
+  unsigned int ov5HasBlock = 0u;
+  ULONGLONG ov5Start = 0ull;
+#endif
+  BOOLEAN ov5Defer = FALSE;
   ULONGLONG preemption = 0ULL;
   APPLE_AGX_U32 stageSequence;
   APPLE_AGX_EXP208_DYNAMIC_RESULT stageDynamic;
@@ -6777,6 +6782,12 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     pendingManagerValid = AdmissionGpuvaG3PendingManager(adapter,
         pendingContext, pendingFence, &pendingManager, &pendingKey);
   AdmissionJobAheadStateWindows(runtime, fence, &ahead);
+#if defined(ADMISSION_OV5_ON)
+  if (runtime->Ov5Waiver && runtime->Backend.PendingJob.ComputeTimestampBlock != NULL) {
+    ov5HasBlock = 1u;
+    RtlCopyMemory(&ov5Start, runtime->Backend.PendingJob.ComputeTimestampBlock, sizeof(ov5Start));
+  }
+#endif
   KeAcquireSpinLock(&adapter->PagingLock, &old_irql);
   KeAcquireSpinLockAtDpcLevel(&adapter->SchedulerLock);
   AdmissionJobAheadFillLocked(adapter, &ahead);
@@ -6849,7 +6860,21 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   if (!refusal && !runtime->Depth2General &&
       !AdmissionRcPairAllowed(runtime->RcDepth2, s.Running.Kind, s.Next.Kind))
     refusal = 65u; /* restricted Q3 checkpoint, no new pair classes */
-  if (refusal == 0u) {
+#if defined(ADMISSION_OV5_ON)
+  /* EXP2292/2293 (H3): a waived render's doorbell must not reach the firmware
+   * before the running compute has started. Decided here, before the pending
+   * head is claimed (EXP2292: deciding after the claim lost the head), so the
+   * successor stays Prebound and the next poll retries. */
+  if (refusal == 0u && runtime->Ov5Waiver &&
+      AdmissionJobWindowOv5WaiverDefer(
+          AdmissionJobWindowOv5WaiverRefusal(1u,
+              (unsigned int)AdmissionJobWindowBarrierEx(s.Running.Kind, s.Next.Kind,
+                                                        runtime->Depth2Capabilities),
+              &s.Running, &s.Next),
+          ov5HasBlock, ov5Start))
+    ov5Defer = TRUE;
+#endif
+  if (refusal == 0u && !ov5Defer) {
     next = s.Next.Fence;
     if (AdmissionG4PendingKickLocked(adapter, next)) {
       packet = head->Packet;
@@ -6864,6 +6889,10 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   }
   KeReleaseSpinLockFromDpcLevel(&adapter->SchedulerLock);
   KeReleaseSpinLock(&adapter->PagingLock, old_irql);
+  if (ov5Defer) {
+    ++runtime->Ov5WaiverReceipt.Deferred;
+    return FALSE;
+  }
   if (runtime->RcReceiptEnabled) {
     AdmissionRcDecisionTyped(&runtime->RcDecisions,(unsigned int)refusal,
         (unsigned int)prebindRefusal,(unsigned int)fence,s.Next.Fence,
@@ -6878,22 +6907,6 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     /* Preemption, paging and a not yet Prebound successor may clear. */
     return refusal == 4u || refusal == 52u || refusal == 53u ||
            refusal == 54u ? FALSE : TRUE;
-#if defined(ADMISSION_OV5_ON)
-  /* EXP2292 (H3): a waived render's doorbell must not reach the firmware before
-   * the running compute job has started. Not kicked in this poll; the next one
-   * retries, and a compute that completes first leaves an ordinary kick. */
-  if (runtime->Ov5Waiver) {
-    const void *block = runtime->Backend.PendingJob.ComputeTimestampBlock;
-    ULONGLONG start = 0ull;
-    if (block != NULL) RtlCopyMemory(&start, block, sizeof(start));
-    if (AdmissionJobWindowOv5WaiverDefer(
-            AdmissionJobWindowOv5WaiverRefusal(1u, (unsigned int)barrier, &s.Running, &s.Next),
-            block != NULL ? 1u : 0u, start)) {
-      ++runtime->Ov5WaiverReceipt.Deferred;
-      return FALSE;
-    }
-  }
-#endif
   if (runtime->RcReceiptEnabled || runtime->Depth2Drill.Mode) {
     RtlZeroMemory(&runtime->RcCurrent, sizeof(runtime->RcCurrent));
     runtime->RcCurrent.RFence = fence; runtime->RcCurrent.CFence = next;

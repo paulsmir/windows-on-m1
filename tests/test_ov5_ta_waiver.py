@@ -560,6 +560,14 @@ class KmdWiring(unittest.TestCase):
         self.assertNotIn('ZwFlushKey', export)
         self.assertIn('!runtime->Ov5Waiver && !runtime->Ov5DrillEnabled) ||', export)
 
+    def test_deferral_precedes_the_pending_head_claim(self):
+        """EXP2292: returning after AdmissionG4PendingKickLocked lost the head and hung the next job."""
+        body = section(WORKER.read_text(), 'static BOOLEAN AdmissionJobWindowKickWindows(')
+        defer, claim = body.index('AdmissionJobWindowOv5WaiverDefer('), body.index('AdmissionG4PendingKickLocked(')
+        self.assertLess(defer, claim)
+        self.assertIn('if (refusal == 0u && !ov5Defer) {', body)
+        self.assertLess(body.index('KeReleaseSpinLock(&adapter->PagingLock', claim), body.index('if (ov5Defer) {'))
+
     def test_msvc_w4_traps(self):
         """C4201 nameless unions/structs in the new receipt; BOOLEAN from a
         comparison (no C4242 narrowing). The host probes above compile the
