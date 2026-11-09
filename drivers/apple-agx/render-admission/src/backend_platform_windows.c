@@ -8673,14 +8673,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   RtlZeroMemory(&runtime->IrqRx, sizeof(runtime->IrqRx));
   /* IRQ-completion step 1: arm the mailbox line only when the ACPI device
    * listed it; from here the ISR owns the outbox FIFO and the worker reads
-   * it through the ring (AdmissionAscRead32/64). */
+   * it through the ring (AdmissionAscRead32/64). Arm before the publish (as
+   * AdmissionMailboxIsrReopen does): an ISR that sees the runtime while it
+   * is still unarmed drops the message instead of moving it into the ring. */
   InterlockedExchange(&runtime->IrqWakePending, 0);
   InterlockedExchange(&runtime->IrqOverflowLatch, 0);
+  InterlockedExchange(&runtime->MailboxIrqArmed,
+                      Context->MailboxInterruptVector != 0u ? 1 : 0);
   (void)InterlockedExchangePointer(
       (PVOID volatile *)&Context->MailboxIsrRuntime,
       Context->MailboxInterruptVector != 0u ? runtime : NULL);
-  InterlockedExchange(&runtime->MailboxIrqArmed,
-                      Context->MailboxInterruptVector != 0u ? 1 : 0);
   AppleAgxRtkitSessionInitialize(&runtime->Rtkit);
 
   address.QuadPart = J313_AGX_G2_HANDOFF_BASE;

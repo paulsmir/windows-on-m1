@@ -407,6 +407,10 @@ class MailboxQuiesceWiring(unittest.TestCase):
                                 r"Context->MailboxInterruptVector != 0u \? runtime : NULL\);")
         self.assertLess(start.index("runtime->AscTransport.Base ="),
                         start.index("&Context->MailboxIsrRuntime"))
+        # armed before published: an ISR that finds the runtime unarmed drops
+        # the message (AdmissionMailboxIsrDiscard) instead of ringing it
+        self.assertLess(start.index("InterlockedExchange(&runtime->MailboxIrqArmed,"),
+                        start.index("&Context->MailboxIsrRuntime"))
 
     def test_isr_and_dpc_never_reach_the_runtime_through_platform_runtime(self):
         # RuntimeStop clears PlatformRuntime and frees the runtime without the
