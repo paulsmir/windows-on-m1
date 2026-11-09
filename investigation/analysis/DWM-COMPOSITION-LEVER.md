@@ -137,3 +137,21 @@ package is the default one, so nothing is experiment-local except the ETW files.
   cross-process pairs > 0 with refusal 0 on the compute behind DWM, 0 resets in 3 starts, suite 119/0; then the perf
   gate with diagnostics off. Failure: firmware timeout or fault on the first cross-process pair -> unknown 1 answered
   "no" on our initialisation; record the firmware state and stop C.
+
+## 6. Addendum 2026-11-09T19:34:30Z: unknown 3 narrowed offline (private-only rule for C2a)
+
+Pinned header (.local/reference/wdk26100/d3d12umddi.h): D3D12DDIARG_CREATEHEAP_0001.Flags (D3D12DDI_HEAP_FLAGS) has no
+shared bit; the API's D3D12_HEAP_FLAG_SHARED value 0x1 is not part of the DDI enum. What the UMD can observe:
+- creation: its own allocate call, D3D12DDICB_ALLOCATE_0022 { hResource in, hKMResource out } and per allocation
+  D3D12DDI_ALLOCATION_INFO_FLAGS_0022_PRIMARY (bridge: agx_d3d12_ddi.cpp BridgeAllocateCb, 688-717);
+- open: every allocation that entered through pfnOpenHeapAndResource (D3D12DDIARG_OPENHEAP_0003, agx_d3d12_ddi.cpp
+  2741-2805) belongs to another creator;
+- resource flags CROSS_ADAPTER 0x4 (already tested at 2555) and SIMULTANEOUS_ACCESS 0x8.
+
+Candidate rule, fail-closed: an allocation is private when this device created it through the allocate callback, the
+callback returned hKMResource == 0, the PRIMARY flag was not set, the resource flags carry neither CROSS_ADAPTER nor
+SIMULTANEOUS_ACCESS, and it was never opened. A job is private-only when every allocation it binds or references in
+its allocation list is private. Still to confirm from Microsoft documentation before C2a is specified: that the
+runtime returns a nonzero hKMResource for every shareable heap (labelled hypothesis until then). GravityMark's
+compute jobs bind only device-created buffers and textures, so the rule is expected to hold for them; verify with a
+receipt (private-only verdict per compute job) before any waive.
