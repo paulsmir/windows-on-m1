@@ -319,3 +319,65 @@ H1 path back and requires the model to fail. Results in this worktree: quiesce 9
 `run_against_baseline.py` gives BASELINE_NEW_FAILURES on the parent commit too (56 NEW: pinned Mesa/AIL under
 `.local` and mu are missing in this worktree); the NEW set after the change is identical. BASELINE_OK has to be
 taken in the GPU worktree after the merge.
+
+## Implementation notes, revision 2: cross-check against the bench session's parked patch (2026-11-09)
+
+The bench session implemented the same spec independently (parked, uncommitted:
+`.local/handoff/fork6-irq-default-on.patch`, sha256 3b7b2f1d...48f10). The architect passed on five findings; each was
+checked against the source. Where this revision changes the code, it supersedes the notes above (deviation 2 and the
+second and third residual states).
+
+1. **"There is no sender-stop step": not confirmed; the spec's order stands.** The comment that patch cites
+   ("the retained firmware cannot be stopped and restarted", EXP1241/EXP1278, `backend_platform_windows.c`) is the
+   header of `AdmissionPlatformRuntimeQuiesceActive`, the TDR engine reset: there the firmware keeps running, and so
+   does the runtime, armed. The teardown is a different path and does stop the sender:
+   `AdmissionPlatformDestroy` -> `AppleAgxBackendRuntimeStop` -> `AppleAgxFirmwareRollback` -> StopAsc ->
+   `AppleAgxRtkitSessionStop` -> `AppleAgxAscSetRun(FALSE)`, then PowerOff -> broker `HV_AGX_POWER_CMD_OFF` ->
+   m1n1 `power_off()` -> `pmgr_adt_power_disable("/arm-io/sgx")` and `("/arm-io/gfx-asc")`
+   (`hv_agx_power_broker.c`, `hv_agx_power_platform.c`). The KMD is also what starts the sender
+   (`AppleAgxRtkitSessionStartCpuAndInitializeHandoff` sets CPU RUN), so before the first start nothing sends.
+   Whether the stop conversation succeeds on hardware with the line listed is not something the source can show;
+   EXP2273 stopped cleanly with the old order. That is an IRQD2 observation.
+   - Why the adapter-owned mapping (InterruptStart..InterruptStop) was not adopted: it keeps the ISR reading
+     OUTBOX_CTRL on every interrupt (scanout included) while gfx-asc is powered off: before PowerOn, and after the
+     release until InterruptStop. Whether a read of the disabled domain faults is unknown; the sender is stopped in
+     exactly those states, so there is nothing to pop there. The runtime-owned access avoids the read after the
+     release. (It does not avoid it before PowerOn: the line is armed when the region is mapped, as in the
+     hardware-validated EXP2272/2273 code. The scanout source is masked then; not changed.)
+   - What that patch gets right and this revision takes over: the runtime-gone states must not depend on a stop that
+     failed. A failed power release now reopens the ISR's access (`AdmissionMailboxIsrReopen`, armed again). By the
+     m1n1 source every failed or refused OFF leaves gfx-asc powered (`asc_off` is the last step; a refusal while the
+     retained root is Prepared/Active returns BUSY before anything is switched). Destroy then returns
+     STATUS_DEVICE_BUSY and the callers keep the runtime, so a still-running ASC always has an armed consumer.
+   - Remaining unknown for IRQD2 (disable/enable cycles, ordered restart): the windows with the line connected and no
+     runtime (before `AdmissionPlatformRuntimeStart`, after a successful Destroy until dxgkrnl disconnects). The KMD
+     cannot pop there. They are safe only because the ASC is not running; when dxgkrnl connects and disconnects
+     relative to StartDevice/StopDevice is undocumented. A hang or DPC watchdog at stop/start is the signature.
+
+2. **DPC and ISR lifetime: confirmed, fixed.** `AdmissionPlatformMailboxDpc` and the ISR took the runtime from
+   `Context->PlatformRuntime`, which `AdmissionPlatformRuntimeStop` clears and frees with no interrupt lock and no DPC
+   flush. Both now use `Context->MailboxIsrRuntime` (replaces the `MailboxIsrOpen` flag): set with the mapping when
+   the line is listed, cleared inside `DxgkCbSynchronizeExecution` by `AdmissionMailboxIsrClosed`, and
+   `AdmissionPlatformDestroy` calls `KeFlushQueuedDpcs` after the close and the power release, before any unmap,
+   only when the line is listed. The create-failure path was checked: when Destroy fails, `RuntimeStart` returns
+   STATUS_DEVICE_BUSY without freeing, so the same holds there. The other DPC halves (paging, scheduler, scanout)
+   still use `PlatformRuntime`; that is older than this change and not touched.
+3. **Export guard literal: already satisfied.** The new term sits before the Ov5 terms;
+   `test_ov5_frag_wait_drill` and `test_ov5_ta_waiver` pass.
+4. **Diagnostics-off receipt rule: same as the parked patch.** Written only when the line is listed. IRQD1 on
+   today's Mu: `Wom1IrqRx` absent, not "present and all zero".
+5. **Dependency named, no locking added.** The worker's synchronized pop (`AdmissionMailboxSyncPop`, MessageNumber 0)
+   and the ISR exclude each other only if `DxgkCbSynchronizeExecution(…, 0, …)` takes the lock the mailbox line's
+   ISR runs under. That rests on the EXP2272/2273 observation that both AGX lines arrive as MessageNumber 0; how
+   dxgkrnl maps two line interrupts to interrupt objects is undocumented, and the source shows no way to decide it.
+   If it were false, the two 64-bit reads of one message could interleave (`WorkerSyncPopHits` with garbled RTKit
+   messages would be the sign). The close synchronizes on both 0 and 1.
+
+Differences that remain, decided from the source:
+
+- **Overflow.** The parked patch fails every outbox control read while `IrqRx.Overflow` is set, until the runtime is
+  recreated. The engine reset (`AdmissionPlatformRuntimeQuiesceActive`) does not recreate the runtime, so after one
+  overflow every later job would fault again. Here the flag stays sticky in the receipt and the worker faults once
+  per overflow episode (`IrqOverflowLatch`).
+- **DISCARD.** With the reopen, "not armed but reachable" exists only between the disarm and the synchronized close.
+  `Discarded` should stay 0 on hardware; a non-zero value means a message arrived inside that window.
