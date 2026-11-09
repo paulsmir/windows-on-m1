@@ -2687,3 +2687,28 @@ no code. F0 outcome selects: cross-process depth-2 pairs (C1 then C2a), display 
 - **Bench item N1 (fork 6):** GM-NIGHT-BASE, measurement only: FHD and HD with the job-timing ring, PERF runs,
   mid-run pstate residency. Staged in .local/handoff/OV-ARCHITECT-HANDOFF.md (2026-11-09T23:35Z).
 - **Next causal target:** the largest FHD row by (ours - Apple) from r1 + N1; one lever per experiment after it.
+
+## UPDATE 2026-11-09T23:49:25Z -- full-screen at other resolutions: owner order and staged checkpoint FS-D1
+
+User order: full-screen mode at different resolutions must work as on an ordinary Windows PC. Priority stays below
+the GravityMark gap (the user repeated that the windowed macOS score is already ~30 % above ours, so the windowed
+comparison is the target; full-screen is not the explanation of the gap).
+
+Proven boundary (EXP2301): the bench m1n1 line has no CAP_SCALED_SOURCE (BrokerCaps 0xff, ScaledModes 0), the KMD
+exposes 1 of 11 modes, ChangeDisplaySettingsExW fails. Nothing above that boundary was ever exercised on the
+ANS-direct line.
+
+Decision (owner-layer order, DISPLAY_ONLY first):
+1. FS-D1: scaled source on the current bench m1n1 source (closedv5, with 06616be7). The old offline port
+   (b87eda82..., base 83a9cf74) is superseded before any run because the bench moved to e6ac18bb; the m1n1 port
+   session rebuilds it in `.local/experiments/m1n1-ansdirect-closedv5-scaled1/`. Checkpoint staged in the
+   architect handoff (one variable = m1n1; mode list, every mode set and back, GravityMark full-screen at two
+   sizes, adapter disable/enable in a scaled mode, perf gate). Not run yet; hash pending.
+2. Windows-side audit (read-only agent, `.local/night-20261110/fs-windows-audit/REPORT.md`): VidPn scaling types,
+   primaries at non-native sizes, DXGI blt-model exclusive and flip-model full-screen in the D3D11/D3D12 UMDs,
+   GL ICD, pointer in scaled modes, mode restore; plus the specification of a full-screen conformance probe
+   (`AGX_FS_<step>: PASS|FAIL`). Defects are fixed in the owning layer, one per experiment.
+3. Direct flip P1 (segment DirectFlip flag + UMD CheckDirectFlipSupport rule, atomic companion) only after a real
+   mode set exists; unchanged from DIRECT-FLIP-CONTRACT.md.
+
+Next causal target for this line: FS-D1 receipt (BrokerCaps 0x1ff, ScaledModes 1, 11 modes) on hardware.
