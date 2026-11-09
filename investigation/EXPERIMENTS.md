@@ -75352,3 +75352,12 @@ EXP2297 HARDWARE BEFORE 2026-11-09T04:30:35Z:
 - Hashes: sys bafb62225691, UmdArm64 c92927c7f346, UmdX64 1a00971faa24, Umd32 9b362e8d1114; manifest bce9963dba93, hardware-manifest 267a979a4200; probe2297.sh f91ffe261941 (PROBE_LINT_OK); visible recovery rec2297h a471f74c7beadb35; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2297h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2297-abba-on/run2297.sh.
+
+EXP2294-2297 HARDWARE ACTUAL 2026-11-09T04:44:43Z (A/B/B/A of Wom1Ov5TaWaiver; Wom1Ov2NoHazardLead on in both arms, OV3B=1, diagnostics off, package code 6f18cfb8, m1n1 83a9cf74, GM HD PERF, run a is warm-up):
+- 2294 on: 43.704 / 43.098 / 43.373, median of b,c 43.236; Waived 7551, Deferred 111388 (per poll).
+- 2295 off: 42.916 / 43.150 / 43.304, median 43.227.
+- 2296 off: 43.049 / 43.266 / 43.492, median 43.379.
+- 2297 on: 42.782 / 43.309 / 43.206, median 43.258; Waived 7289, Deferred 157206.
+- Pairs: on vs off +0.020 % and -0.280 %; mean on 43.246, off 43.303, -0.03 ms/frame gain. No reset or GPU reset during GM in any arm; two more waiver boots stable.
+- Verdict: no measurable frame-rate gain from the R8 TA waiver in HD. Wom1Ov5TaWaiver stays default off (keep-off), as does COMPUTE_FIRST.
+- Separate defect, not caused by the waiver: BUGCHECK at the ordered reboot after a GPU session in both arms (0x154, 0xEF, 0x1A in earlier runs). 2295's hang needed AT_PROXY recovery (its full.log was then overwritten; the 0xEF line is in evidence/EXP2295/full-after.log).

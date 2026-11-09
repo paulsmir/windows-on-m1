@@ -2505,3 +2505,5 @@ Next EXP2294 ABBA (one variable: waiver on top of Ov2 lead; diag off; warm-up + 
 
 ## UPDATE 2026-11-09T03:50:48Z -- NEW DEFECT: every restart after a GPU session bugchecks (0xEF / 0x1A 0x6001 C000000E / 0x154), seen via the D2 print; clean after staging
 Independent of OV switches. Suspects: KMD shutdown teardown with live user mappings (native staging rings, pool MDLs) vs ANS stopping before paging ends. Separate task proposed; ABBA (EXP2294/2295 first pair +0.02 %, inside noise) continues.
+
+UPDATE 2026-11-09T04:44:43Z OV5 WAIVER A/B/B/A VERDICT (EXP2294-2297): no frame-rate gain in HD (+0.02 %, -0.28 %; 43.25 on vs 43.30 off). Wom1Ov5TaWaiver and COMPUTE_FIRST stay default off. Separate open defect: bugcheck at ordered reboot after a GPU session (0x154/0xEF/0x1A), reported by m1n1's KiBugCheckData print.
