@@ -75294,3 +75294,8 @@ EXP2293 HARDWARE BEFORE 2026-11-09T02:42:12Z:
 - Hashes: sys 7d9089f53ed1, UmdArm64 868cc7c3f747, UmdX64 ecffed47c0fc, Umd32 f51c6ca57287; manifest d38f87cbb6bc, hardware-manifest 47394b78aeb1; probe2293.sh 806c90c33821 (PROBE_LINT_OK); visible recovery rec2293h 9dd4bb7a95e435fe; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2293h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2293-defer-placed/run2293.sh.
+
+EXP2293 HARDWARE ACTUAL 2026-11-09T02:51:37Z:
+- Package 6f18cfb8: the deferral now runs before the pending head is claimed. Waiver on, diagnostics off, OV3B=1, m1n1 83a9cf74.
+- Result: no reset (0 PSCI RESET), GPU_RESET none, device_removed false in 3 of 3 GM starts. GM HD PERF a 43.598, b 43.167, c 43.279 fps. Waived 7436, Placed 7436, Considered 73618, Deferred 75894 (counted per poll, not per pair).
+- Verdict: the corrected deferral is stable in this sample and the waiver runs. H3 is consistent but not proven (EXP2291 was also clean; the unmodified profile reset in 3 boots only). No frame-rate claim: cross-boot comparison only (EXP2288 without waiver 42.2-43.3). Next: A/B/B/A on one package, waiver on vs off. Recovery rec2293h.
