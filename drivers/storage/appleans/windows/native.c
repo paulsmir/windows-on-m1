@@ -427,8 +427,11 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
         default: AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
         }
     }
+    /* SHUTDOWN is an ordered FLUSH, not the end of I/O: a miniport can get several
+     * before the system stops, and paging I/O still arrives after the first (a
+     * NO_DEVICE here is STATUS_NO_SUCH_DEVICE, bugcheck 0x1A/0xEF at restart). The
+     * controller stops in ScsiStopAdapter. */
     BOOLEAN shutdown=srb->Function==SRB_FUNCTION_SHUTDOWN;
-    if (shutdown && !a->DpcReady) { AppleAnsComplete(a,srb,SRB_STATUS_BUSY,0);return TRUE; }
     if (srb->Function==SRB_FUNCTION_FLUSH || shutdown) {
         plan.action=ANS_SCSI_SUBMIT;plan.nsid=1;
         if (shutdown) attribute=ANS_ORDER_ORDERED; /* global shutdown fence */
@@ -462,7 +465,7 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
     }
     APPLE_ANS_SLOT *slot=&a->Slots[tag];
     slot->Busy=TRUE;slot->Srb=srb;slot->Length=plan.transfer_bytes;
-    slot->Plan=plan;slot->Token=token;slot->Shutdown=shutdown;
+    slot->Plan=plan;slot->Token=token;slot->Shutdown=FALSE;
     /* Direct: controller PAs (guest DMA view translated); PageDma already holds PAs. */
     struct ans_logical_prps translated;
     const struct ans_logical_prps *prps=x?&x->Prps:NULL;
@@ -485,7 +488,6 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
         *slot=(APPLE_ANS_SLOT){0};AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);
         return TRUE;
     }
-    if (shutdown) a->ShuttingDown=TRUE;
     AppleAnsDispatch(a);
     return TRUE;
 }
