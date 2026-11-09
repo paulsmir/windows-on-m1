@@ -2491,3 +2491,8 @@ benchmark is the UI render at 18.30 s behind the process's first compute batch (
 kick inside that short compute; diag on misses it. Next: EXP2290 = EXP2286 config + waiver-only beacon in the broker page
 (fence, compute WaitValue/Event, StampSelf, stamp PA) printed by m1n1 at the PSCI trap with the live stamp and ASC RX
 pending. Then fix (a): no waiver behind a process's first compute, if the beacon names that pair.
+
+## UPDATE 2026-11-09T01:40:46Z -- EXP2291: beacon (tens of us before the waived doorbell) removes the stall: a kick-timing race
+6773 waived pairs, 0 resets, vs 3/3 without the beacon. H3: the waived successor's doorbell reaches the firmware before
+the running compute has started (start-up pair: render already pending at the compute's kick). EXP2292 = defer the waived
+kick until the compute's firmware start timestamp is nonzero (one variable, beacon off), 3 GM starts; then the ABBA.
