@@ -2662,3 +2662,28 @@ no code. F0 outcome selects: cross-process depth-2 pairs (C1 then C2a), display 
 - **Next causal target:** performance unchanged (EXP2307B -> IRQD2 rerun on MUIRQ001 with m1n1 e6ac18bb if
   confirmed -> scaled-source checkpoint, which needs 06616be7 on its m1n1 line before any adapter disable ->
   F0 repeat at real 1280x720). Recovery: the three-step order above.
+
+## UPDATE 2026-11-09T23:40:00Z -- night plan: the GravityMark gap vs macOS becomes the only performance target
+
+- **User order:** approach macOS as closely as possible this night (FULL scores: FHD 69 %, HD 68 %; HD PERF ~74 %);
+  the architect decides and starts work without asking. Bench order: GM-gap experiments first; H1/TDR drills, IRQD2
+  and ANS-S1 only when the bench would otherwise idle.
+- **Why the plan changes:** the FHD frame was never decomposed although its gap is larger (ours ~31.0 ms vs Apple
+  21.4 ms; HD ~22.5 vs 17.4). The closed same-frame overlap line (EXP2298/2299) and the known HD overhead rows
+  (~2.0 ms) together reach only ~86-89 % of macOS at HD, so a cause outside those rows must exist or the job
+  structure itself must change.
+- **Open hypotheses, ranked (all labelled HYPOTHESIS until a report cites evidence):**
+  H-A FHD-only cost on the render/present side (load/store, compression, partial renders, DWM copy size);
+  H-B dxgkrnl queue contract / late submission owns launch + detect + idle + the wait behind DWM;
+  H-C a legal overlap we do not use (cross-process DWM||compute; cross-frame or next-compute-behind-render pairs);
+  H-D GPU runs below its maximum (P6 residency 86-87 %, firmware power inputs), or mapping granularity;
+  H-E macOS queues the frame ahead in firmware and has no compositor job on the critical path.
+- **Running offline (read-only subagents, reports in /Users/pavel/public_windows/.local/night-20261110/):**
+  r1-fhd-budget, r2-dxgk-queue, r3-dag-bound, r4-compute-levers, r5-macos-submission, r6-render-scaling.
+- **Decision (architect):** mechanism C of DWM-COMPOSITION-LEVER.md is unparked. C1 (class I, opt-in
+  `Wom1CrossProcessPairs`) and C2a (class O) are being implemented offline in a separate worktree session; F0 is
+  not a precondition any more because the cross-process boundary is also the first step towards per-process
+  firmware queues (the Asahi structure), whatever the size of the DWM row.
+- **Bench item N1 (fork 6):** GM-NIGHT-BASE, measurement only: FHD and HD with the job-timing ring, PERF runs,
+  mid-run pstate residency. Staged in .local/handoff/OV-ARCHITECT-HANDOFF.md (2026-11-09T23:35Z).
+- **Next causal target:** the largest FHD row by (ours - Apple) from r1 + N1; one lever per experiment after it.
