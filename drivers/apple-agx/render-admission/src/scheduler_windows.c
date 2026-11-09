@@ -630,7 +630,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryEngineStatus(
 /* G4-r3 (EXP1296 0x116): no host operation stops a running AGX job. The
  * retained firmware ends hung or faulting work itself (Timeout/Fault event,
  * halt) and drops it when resumed (Asahi gpu.rs handle_timeout, recover), and
- * an RTKit stop cannot be undone on it. So the reset waits, bounded, for the
+ * no reset path restarts a stopped firmware (whether that works in the same
+ * boot was never tested: EXP589 was built and never run; the mechanism is
+ * AdmissionPlatformRuntimeRestart, drill-only until hardware stage H1 of
+ * TDR-FIRMWARE-RESTART-RECOVERY.md). So the reset waits, bounded, for the
  * firmware to end the active job through the ordinary completion path; that
  * end is the proof that the GPU no longer accesses the job's memory, and the
  * job's fence becomes LastAbortedFenceId (Microsoft: TDR in Windows 8 and

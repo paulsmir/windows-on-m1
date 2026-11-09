@@ -485,3 +485,107 @@ path must use `AdmissionMailboxIsrClose` after the ASC stop (as `AdmissionFirmwa
 `AdmissionPlatformDestroy` do) and `AdmissionMailboxIsrReopen` (arm, then publish) before the CPU is
 started again; it must not write `MailboxIsrRuntime` or
 `MailboxIrqArmed` directly.
+
+## 10. Stage 2b and stage 1 implementation notes (KMD, 2026-11-09T21:27Z, offline)
+
+Branch `claude/tdr-stage-2b`, cut from `gpu/memory-latency` 7ef55af89 and rebased onto dcdce59d4. KMD only (`K/`), the receipt decoder
+and one new tool; nothing under `S/` or in m1n1 was edited. Not compiled with MSVC, not run on hardware.
+Unknown U1 is unchanged: open until H1. Earlier sections are left as written; where they disagree with
+this one about what the code does, this section describes the code.
+
+### 10.1 What exists now
+
+| Item | Where | Contract |
+|---|---|---|
+| `FirmwarePrimitives.ForceStopAsc` (8.2 item 1) | `AdmissionFirmwareForceStopAsc` | `AppleAgxRtkitSessionForceStop`; only when RUN reads 0: `AdmissionMailboxIsrClose`, then `AppleAgxRenderFlightStopped` |
+| `FirmwarePrimitives.RevalidateFirmwareUat` (8.2 item 2) | `AdmissionFirmwareRevalidateUat` | returns `{RetainedRoot0 \| 1, RetainedRoot \| 1}` and the rebuilt graph's initdata address; sends no broker command; refused unless the root is Prepared and Active, the CPU is stopped and the graph is built |
+| Restart stop (8.2 item 3) | `AdmissionFirmwareStopAscForRestart`, taken by `AdmissionFirmwareStopAsc` while `FwRestartActive` | `AppleAgxRtkitSessionStopForRestart`; only after Ok: ISR close, flights stopped. A timeout closes nothing and forces nothing |
+| Warm publish (8.2 item 4, 9.1 U9) | `AdmissionRetainedRepublishWarm`, chosen by `AdmissionFirmwarePublishUat` when `RetainedActive` | no ACTIVATE, no PREPARE; one read-only `AGX_RR_QUERY_ARENA` must report ACTIVE and PREFIX_UNCHANGED under the held epoch; then `AdmissionRetainedPublishGraph`, the same function the first boot runs after ACTIVATE |
+| Restart | `AdmissionPlatformRuntimeRestart` / `...RestartOwned` | 10.2 |
+| Drill | `AdmissionPlatformFwRestartDrillEscape`, payload `ADMISSION_FW_RESTART_DRILL` ("FWRR"), tool `windows/icd/agx_fw_restart_drill.c` | refused with STATUS_NOT_SUPPORTED unless `Wom1FwRestartDrillAllowed` = 1 at runtime start (absent = refused). The only caller of the restart |
+| Receipt | `Wom1GpuReset` v5 (1064 bytes), `tools/decode_wom1_gpu_fault.py` | 10.4 |
+
+The reset DDIs are unchanged; `scheduler_windows.c` gained only the v5 clearing at reset entry.
+
+### 10.2 `AdmissionPlatformRuntimeRestart`, step by step
+
+Entry (refused without touching anything, counted in `Restart.Refused`): PASSIVE_LEVEL, a started runtime
+with both warm primitives, not stopping, `SchedulerFaulted` clear; then, under the scheduler lock, nothing
+in flight (render packet Empty, no G4 pending, no dispatched / active / kicked fence, no scheduled or
+active worker, backend Ready with no pending or successor submission, queue provider Created with nothing
+pending) and `Resetting` taken 0 -> 1 in the same lock hold (`AdmissionPlatformRuntimeSubmit` tests it
+under that lock). A bounded wait for `WorkIdle` follows; if it fails, `Resetting` is given back.
+
+| # | Step | Design | Failure |
+|---|---|---|---|
+| 1 | record the epoch, the RTKit mailbox snapshot flags, the crash latch and the first 64 bytes of the firmware status block | 9.3 (4), 8.4 last row | -- |
+| 2 | `AppleAgxBackendRuntimeStopWarm`: queues, context, arena as in an ordinary stop; firmware AP 0x10, IOP 0x10, RUN off, read back; the StopAsc primitive closes the ISR; the provider retires the context-0 mappings | 8.3 step 1, 9.4 | restart failed, nothing else is called, never forced |
+| 3 | stop proof: CPU_CONTROL read once, RUN = 0; session not running; ISR no longer has the runtime; no context-0 lease. Then the raw inbox / outbox control words are recorded and queued DPCs flushed | 8.3 step 4, T1 | nothing is destroyed |
+| 4 | `BackendStarted = FALSE`, `AppleAgxPlatformProviderDestroy` | 8.3 step 2 | |
+| 5 | `AdmissionBackendImageRestartQueueLifetime` | 8.3 step 3 | |
+| 6 | `AppleAgxInitdataMemoryDestroy` + `AppleAgxInitdataMemoryPrepareBroker`, queue image bound as in RuntimeStart (objects copied, relocation objects bound, relocations applied, compute queue initialized) | 8.3 step 4, 8.4 | |
+| 7 | `PlatformIo` zeroed, `AppleAgxPlatformProviderInitialize`, `RuntimeIo.Firmware = PlatformIo.Firmware`; KMD lifetime state reset (completion transaction, dynamic overlay state / plan / job / storage, native bindings, progress, completion context, poll and progress times, `UnmanagedInitBmSlot`, `AheadManager`, the mailbox ring and its latches, the two queue-config fields RuntimeStart sets on the provider). No `AppleAgxBackendRuntimeInitialize` | 8.3 step 5, 8.4 | |
+| 8 | `AdmissionMailboxIsrReopen` (arm, then publish) | 9.4 | |
+| 9 | `AppleAgxBackendRuntimeStartWarm`: revalidation, BootAsc, handoff, warm publish, management, endpoints, initdata, DC init, queues | 8.3 step 6 | a CPU left running by a boot that never became Ready is force-stopped by name; the ISR is closed again when the CPU is stopped |
+| 10 | `AppleAgxG13QueueRuntimeLifetimeIsFresh` must be TRUE | 8.3 step 7 | no submission is accepted |
+| 11 | `BackendStarted = TRUE`, firmware status block recorded again | 8.3 step 8 | |
+
+Exit: `FwRestartActive` and `Resetting` cleared, `SlotEvent` set, receipt published (flushed); on success
+`AdmissionDispatchQueuedWork`. Any failure after the runtime was taken sets `SchedulerFaulted` (file tag 4):
+the adapter fails closed and the ordinary teardown finishes the firmware.
+
+### 10.3 Where the code differs from sections 8 and 9
+
+| # | Note | Code | Why |
+|---|---|---|---|
+| E1 | 8.3 checks "not running, no context-0 lease" in step 4, after the provider destroy | step 3, before anything is destroyed, and it also reads CPU_CONTROL and checks the ISR | W4: no firmware-derived state goes without the proof; the session flag alone is the KMD's belief, not the register |
+| E2 | 9.1: warm publish "redoes only the rest" | it first requires ACTIVE and PREFIX_UNCHANGED from the response of the QUERY_ARENA the rest sends anyway (every retained-root response carries flags, epoch, root, system page: bench `hv_agx_retained_platform.c:465-474`) | the crash-log buffer address came from the ACTIVATE response; a rebooted firmware that rewrote its prefix is caught before any mapping is made. 9.3 (2) names "RR QUERY": `AGX_RR_QUERY` is a per-leaf query, so the receipt takes the flags from QUERY_ARENA |
+| E3 | 8.2 item 3: a different StopAsc primitive on the restart path | one primitive, branch on `FwRestartActive` | the firmware provider copies its primitives at initialization and is not re-initialized by a restart |
+| E4 | 8.3 / T1: disarm before the stop, re-arm at T8 | close inside the stop primitives after the proven stop; reopen before the CPU start; ring indices reset while closed | 9.4 and the merged ISR contract: the stop conversation's replies arrive through the ring, and the boot's first messages need it |
+| E5 | 8.3 failure exits: "retry, or tear down" | after a failed warm start with RUN still on: `AppleAgxFirmwareForceStopWarm` | `AppleAgxRtkitSessionStopForRestart` refuses a session whose management boot is not Ready, so a boot that died before HELLO would be left running; the cold path's StopAsc clears RUN in that case too. H1's own stop is never forced |
+| E6 | not in the design | `AdmissionPlatformRuntimeAwaitWork` treats its refusals as transient while `FwRestartActive` | DWM may submit during the restart; a refusal there would be a device error unrelated to U1. Inert unless a restart is running |
+| E7 | 8.3 failure exits | `AdmissionPlatformDestroy` calls the backend stop also for a Stopped backend whose firmware masks are not 0, and `AppleAgxFirmwareRollback` on the firmware provider's IO when the platform provider is gone | as 8.3 asks; both masks are 0 in every state a runtime without a restart can reach |
+| E8 | 6, stage 1: "per-pipe done/write, mailbox control words" in v5 | per-pipe done/write stay in the v4 RetirementBefore/After; v5 adds the class, halt_count, the crash latch and the session's mailbox failure snapshot | no second copy of the same words. Class: F2 = crash latch; F1 = halted word non-zero or a recovery pending; F3 = neither; only for a wait this thread ran to a failed end |
+| E9 | 6, stage 2: "G3 release-with-stop-proof" (T5) | not implemented | 8.4: not needed for idle H1. Retained VM-slot leases of idle processes stay leased across the restart; 9.3 (3) is the observation |
+| E10 | 6, stage 2: drill in `windows/icd/agx_tdr_drill.c` | new tool `agx_fw_restart_drill.c` | the TDR drill tool creates a D3D device and submits; the restart drill must own nothing at the firmware |
+| E11 | T8: `SchedulerFaulted` cleared | never cleared by the restart; a faulted scheduler refuses the drill | the drill is not a recovery; stage 3 owns that |
+| E12 | -- | the escape returns STATUS_SUCCESS once a restart was attempted; the verdict is in the payload and the receipt | whether dxgkrnl copies an escape buffer back on a failing status is not documented |
+
+### 10.4 Receipt v5 and the H1 checkpoints
+
+| H1 checkpoint (section 6, 9.3) | Field |
+|---|---|
+| stop Complete, CPU stopped | `Restart.Stage` past stop-proof, `CpuControlAfterStop` (RUN = bit 4), flag `isr_closed`, `StopKind`, `StopMs` |
+| HELLO / EPMAP, endpoints, initdata, DC init | `Restart.Stage` = complete, `FirmwarePhase` / `FirmwareCompletedMask` / `ProviderState`, plus the existing bootstrap receipts written by the same primitives |
+| boot time | `BootMs`, `RebuildMs`, `TotalMs` |
+| 9.3 (1) neither PREPARE nor ACTIVATE, epoch unchanged | `RetainedCommandMask` (bits 1, 2, 6 clear), `EpochBefore` / `EpochAfter` |
+| 9.3 (2) root Active, prefix unchanged | `RetainedFlags`; a TAINTED status fails the exchange and the restart |
+| 9.3 (4) firmware status block before and after | `FirmwareStatusBefore/After[16]` with validity flags |
+| first job InitBM / sequence 1 | flag `lifetime_fresh`; the job itself is the smoke's evidence |
+| three cycles | `Restarts`, `Succeeded`, `Refused`, `RefusedReason` |
+
+### 10.5 Tests
+
+`tests/test_render_fw_restart.py` and `tests/test_render_gpu_reset_receipt_v5.py` (both in the
+`run_against_baseline` default set). The production functions are compiled out of
+`backend_platform_windows.c` against models: a broker that refuses a second ACTIVATE and PREPARE; the stop
+primitives with a logged ISR close; the restart sequence with one injected failure per step; the entry
+with every busy condition; the receipt layout against the decoder; the submitter's wait during a restart
+in `tests/test_g4_envelope_backpressure.py`. Sixteen injected defects (ACTIVATE on
+the warm path, close before the stop, no RUN proof, reopen after the start, a refusal that faults the
+adapter, a foreign `Resetting` cleared, the gate ignored, ...) are all caught.
+
+### 10.6 Not verified, and open before H1
+
+- No MSVC build of the KMD or of the tool; no hardware.
+- `APPLE_AGX_RENDER_SHARED_MEMORY_OWNER` is not cleared by the graph rebuild
+  (`S/src/apple_agx_render_shared_memory.c:206-241`). Its configuration therefore survives, which the
+  restart relies on, and so do its lifetime words (manager key and slot bindings, notifier totals, job-word
+  set). The first job of a fresh queue runtime is planned with InitializeQueues, which drains the
+  managers, unbinds every slot and marks the flight EpochReset (`:1479-1489,1975-1978`); that this covers
+  every such word after a firmware restart is read from source, not tested.
+- Whether a stopped ASC keeps messages in its outbox FIFO is not known. After the reopen the ISR would
+  move them into the ring ahead of the new boot's HELLO. The receipt records the raw control words after
+  the stop; nothing is drained.
+- The GPU timestamp calibration and the job-poll predictions are not reset.
+- DDIs other than submission that arrive while the restart owns the runtime were not audited one by one.

@@ -362,6 +362,20 @@ typedef struct _ADMISSION_GPU_RESET_RECEIPT {
   ADMISSION_GPU_FW_RESTART_RECEIPT Restart;
 } ADMISSION_GPU_RESET_RECEIPT;
 
+/* Firmware restart drill (DxgkDdiEscape payload, in and out): one orderly
+ * warm restart of a healthy, idle firmware (hardware stage H1 of
+ * TDR-FIRMWARE-RESTART-RECOVERY.md). Refused unless the device value
+ * Wom1FwRestartDrillAllowed = 1 (absent = refused) and no job, packet or
+ * reset is in flight. On return Status/Stage/Restarts/Succeeded repeat the
+ * Wom1GpuReset v5 restart record. */
+#define ADMISSION_FW_RESTART_DRILL_MAGIC 0x52525746u /* "FWRR" */
+#define ADMISSION_FW_RESTART_DRILL_VERSION 1u
+#define ADMISSION_FW_RESTART_DRILL_WARM_ORDERLY 1u
+typedef struct _ADMISSION_FW_RESTART_DRILL {
+  unsigned int Magic, Version, Bytes, Operation;
+  unsigned int Status, Stage, Restarts, Succeeded;
+} ADMISSION_FW_RESTART_DRILL;
+
 /* TDR drill (DxgkDdiEscape payload): the KMD strands the next Jobs render
  * jobs of the calling process in the worker, as a worker that left its poll
  * loop would (the EXP1296 state): the job stays with the firmware, dispatch
