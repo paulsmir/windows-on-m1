@@ -301,3 +301,125 @@ notes: `G4-recovery.md`, `RC37-firmware-channel-recovery.md`, `T10-fw-timeout-re
 `T14-survivable-fault-recovery.md`, `Q13-gm-depth2-tdr.md`. Mu/ACPI was not re-read: no change to it is
 proposed and it exposes no recovery service (`T10-fw-timeout-reset.md`, AGX/ASAHI CONTRACT). No external
 code was copied.
+
+## 8. Stage 2a implementation notes (shared layer)
+
+2026-11-09, offline. Code commit 2b688c7be8accda89d31cbf364a3690837d8d789, ledger row
+CHG-20261109-2b688c7b-FW-RESTART-SHARED. Shared layer only (`S/`); nothing under `K/` was edited and
+no existing path calls the new entry points. Not compiled for Windows (no MSVC here); host clang with
+`-Wall -Wextra -Werror -Wconversion` is clean. Hardware unknown U1 is unchanged: open until H1.
+
+### 8.1 What exists now
+
+| Layer | Entry point | Contract |
+|---|---|---|
+| ASC transport | `AppleAgxAscReadCpuControl` | one read of CPU_CONTROL (the register `AppleAgxAscSetRun` modifies), no wait |
+| Handoff | `AppleAgxGfxHandoffRearm` | clears the `Initialized` latch (Bound, AP lock free); writes no handoff memory |
+| RTKit session | `AppleAgxRtkitSessionStopForRestart` | orderly: AP 0x10, IOP 0x10, RUN off (the existing `AppleAgxRtkitSessionStop`), then RUN must read 0. Ack timeout: returned as Timeout, stop phase kept, resumable, CPU left running. Session not management-Ready: InvalidState. Never clears RUN without the acks |
+| RTKit session | `AppleAgxRtkitSessionForceStop` | RUN off, read back, then Running FALSE / StopComplete from any state. No RTKit message, no clock, no wait. Not proven: CleanupFailed and the session counts as running |
+| Firmware state machine | `AppleAgxFirmwareStopWarm` | rollback order of `AppleAgxFirmwareRollback` up to and including StopAsc; ends at Phase UatReady, mask POWERED\|UAT_READY. A failed step: Phase Failed, bits kept; then only StopWarm (resume), ForceStopWarm or the cold Rollback are meaningful |
+| | `AppleAgxFirmwareForceStopWarm` | calls only `Io->ForceStopAsc`; same end state |
+| | `AppleAgxFirmwareStartWarm` | from the warm-stopped state only: `Io->RevalidateFirmwareUat`, then the cold start's own code from BootAsc on (one shared function, same deadlines). A failed step warm-stops again and returns the failure at UatReady |
+| | `AppleAgxFirmwareRestartWarm` | StopWarm + StartWarm for a caller with nothing to rebuild in between |
+| Firmware IO | optional `ForceStopAsc`, `RevalidateFirmwareUat` | NULL: the entry point that needs it returns Invalid |
+| Firmware provider | optional primitives `ForceStopAsc`, `RevalidateFirmwareUat` | forced stop: CPU first, endpoint state dropped, `UnpublishUatRoots` called without the handoff lock. Revalidate: roots must equal the retained pair, handoff re-armed, initdata address refreshed |
+| Platform composer | forwards the two optional members | present only when the platform has them |
+| Backend runtime | `AppleAgxBackendRuntimeStopWarm`, `AppleAgxBackendRuntimeStartWarm` | the ordinary Stop/Start with the warm firmware halves. Cold Start is refused on a retained firmware; cold Stop after a warm stop finishes the teardown (UAT, power) |
+| Queue runtime | `AppleAgxG13QueueRuntimeLifetimeIsFresh` | Ready, nothing pending, InitBM and NewQueue due on every queue, every bound ring write == done == 0 |
+
+`PowerOn`, `CreateFirmwareUat`, `DestroyFirmwareUat`, `PowerOff` are never called on the warm path, so
+neither the power broker nor retained-root PREPARE/CLOSE is reached.
+
+### 8.2 KMD part: primitives to add
+
+1. `FirmwarePrimitives.ForceStopAsc`: `AppleAgxRtkitSessionForceStop(&runtime->Rtkit, &runtime->AscIo)`,
+   then `AppleAgxRenderFlightStopped` (as `AdmissionFirmwareStopAsc` does, `K/src/backend_platform_windows.c:3476`).
+2. `FirmwarePrimitives.RevalidateFirmwareUat`: return `{RetainedRoot0 | 1, RetainedRoot | 1}` and the
+   rebuilt graph's `InitdataVirtualAddress & ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK` (the values
+   `AdmissionFirmwareCreateUat` returns, `:3382-3402`) without sending AGX_RR_PREPARE.
+3. On the restart path the `StopAsc` primitive must call `AppleAgxRtkitSessionStopForRestart`
+   (`AdmissionFirmwareStopAsc` calls `AppleAgxRtkitSessionStop`: no read-back, and it clears RUN without
+   a handshake on a half-booted session).
+4. Open, blocks H1 (call it U9): `PublishUatRoots` is `AdmissionRetainedActivate` (`:3327-3380,3533-3540`)
+   and the provider calls it on every boot. It sends AGX_RR_ACTIVATE, which per 3.4 re-initialises GPUVA
+   v5 with a new epoch. On the warm path the root is already Active: either the bench m1n1 treats a
+   second ACTIVATE as a no-op (read its source), or the warm publish must skip the command and redo only
+   the rest of that function (command arena, relocation binding, hwdata, `AppleAgxContext0BrokerMap` of
+   the rebuilt graph, crash-log buffer).
+
+### 8.3 Call sequence for H1 (orderly, idle)
+
+Preconditions as in 4.2 T1: runtime owned (`Resetting`), worker idle, no job in flight, mailbox
+interrupt path disarmed.
+
+1. `AppleAgxBackendRuntimeStopWarm(&runtime->Backend)`. Not Ok: H1 has failed; do not force (that is H1b).
+2. `runtime->BackendStarted = FALSE`; `AppleAgxPlatformProviderDestroy(&runtime->Provider)`.
+3. `AdmissionBackendImageRestartQueueLifetime(&Context->BackendImage)` (`K/src/render_backend_image.c:753-760`).
+4. Require `!runtime->Rtkit.Running` and `runtime->Context0Lease.Count == 0`. `RetainedPrepared` stays
+   TRUE: the 590ae1dcc check that refused it must not be carried over.
+   `AppleAgxInitdataMemoryDestroy`, `AppleAgxInitdataMemoryPrepareBroker`.
+5. Do **not** call `AppleAgxBackendRuntimeInitialize` (it forgets the retained UAT and power).
+   Zero `PlatformIo`, `AppleAgxPlatformProviderInitialize`, `RuntimeIo.Firmware = PlatformIo.Firmware`,
+   then the per-lifetime KMD state of 8.4.
+6. `AppleAgxBackendRuntimeStartWarm(&runtime->Backend, &runtime->RuntimeIo)`.
+7. Before the first submission: `AppleAgxG13QueueRuntimeLifetimeIsFresh(&runtime->Provider.QueueProvider.Runtime)`
+   must be TRUE.
+8. `BackendStarted = TRUE`, re-arm the interrupt path, publish the receipt.
+
+H1b (forced, own run): `AppleAgxFirmwareForceStopWarm(&runtime->Backend.Firmware, &runtime->Backend.Io.Firmware)`
+first, while the platform provider still exists, then steps 1-8; step 1 finds the CPU stopped and the
+session stop returns at once.
+
+Failure exits. A failed step 6 leaves the backend Stopped with the firmware warm-stopped: retry, or
+tear down. Teardown: `AppleAgxBackendRuntimeStop` must be called even when the backend phase is already
+Stopped (`AdmissionPlatformRuntimeStop` skips it then, `K/src/backend_platform_windows.c:8234-8239`),
+otherwise the UAT and power are leaked and `AppleAgxFirmwareProviderDestroy` refuses. If the platform
+provider was already destroyed (failure between steps 2 and 5), the backend's composed firmware IO is
+dead: call `AppleAgxFirmwareRollback(&runtime->Backend.Firmware, &runtime->FirmwareIo)` directly.
+
+### 8.4 What the KMD must reset itself
+
+Not owned by the shared layer and not touched:
+
+| State | Where | Reset |
+|---|---|---|
+| Job local sequence | `Image->Sequence`, `K/src/render_backend_image.c:753-760` | `AdmissionBackendImageRestartQueueLifetime` (first job then carries sequence 1) |
+| Notifier flights | `AppleAgxRenderFlightStopped`, called from `K/src/backend_platform_windows.c:3476` | also from the new forced-stop primitive |
+| Stamps, channel rings, FW RX rings, RegionC, firmware status | initdata memory graph | `AppleAgxInitdataMemoryDestroy` + `AppleAgxInitdataMemoryPrepareBroker` (`:8260`, `:8579`) |
+| Queue runtime (InitBM, NewQueue, ring indices) | inside the platform provider | destroy and re-initialize the provider; `AppleAgxG13QueueRuntimeReset` is not enough (it keeps the old ring indices) |
+| Completion transaction, dynamic overlay state/plan/job/storage, native bindings, progress, completion context | list in the removed `AdmissionPlatformRuntimeReset` (`git show 590ae1dcc`); today `:8493`, `:8796` | as there |
+| Mailbox interrupt disarm / re-arm, DPC flush | `K/src/interrupt.c` (other session's area) | T1 / T8 |
+| GPUVA leases, started private scenes, VM slots 1..63 | broker + `K/src/gpuva_g3_windows.c` | U4, T5; not needed for idle H1 |
+| RTKit mailbox snapshot flags (`Inbox*Valid`, `Outbox*Valid`) | session, survive a restart | record them per boot; a stale flag can pair with a failed read |
+
+Comments still saying the firmware cannot be restarted (KMD area, left alone):
+`K/src/backend_platform_windows.c:9150-9157`, `K/src/scheduler_windows.c:626-636`. The third,
+`S/src/apple_agx_g13_queue_runtime.c` (CheckTimeout), is corrected.
+
+### 8.5 Where the code differs from this note
+
+| # | Note | Code | Consequence |
+|---|---|---|---|
+| D1 | 0.3: the state machines accept a second start | true for the session and the firmware state machine; `AppleAgxGfxHandoffInitialize` returns Ok without doing anything once `Initialized` (`S/src/apple_agx_gfx_handoff.c:76`) and nothing cleared the latch | a second boot would have skipped 3.2 step 3; `AppleAgxGfxHandoffRearm`, called from the provider's revalidation |
+| D2 | 3.3: "forced variant clears RUN only" (`apple_agx_rtkit_session.c:44-56`) | that static helper is reachable only from a failed boot and from Stop on a session that is not management-Ready; it has no read-back | `AppleAgxRtkitSessionForceStop` is new code, not a renamed path |
+| D3 | 3.3: a stop that timed out between the acks leaves the session unstartable (`:105-108`) | the guard that fires first is `Running` (`:103`); the timed-out stop is deliberately resumable (two existing tests) | kept resumable. Start straight after a timed-out stop still returns InvalidState and touches nothing, because the CPU is running; the named forced stop is the way out. Test (a) is written as timeout -> ForceStop -> full boot |
+| D4 | 4.2 T7: replay 3.2 from step 2 | step 4 is PREPARE + ACTIVATE; PREPARE is skipped by design, ACTIVATE sits inside `PublishUatRoots` | U9 in 8.2 |
+| D5 | -- | the provider keeps the initdata address captured at `CreateFirmwareUat` (`S/src/apple_agx_firmware_provider.c:75`) | stale after the graph rebuild; `RevalidateFirmwareUat` refreshes it and fails the restart if the roots changed |
+| D6 | stage 2 file list | also `apple_agx_backend_runtime.c`, `apple_agx_platform_composer.c`, `apple_agx_gfx_handoff.c`, `apple_agx_asc_transport.c` | the firmware state machine lives inside the backend runtime (`S/include/apple_agx_backend_runtime.h`), whose Start always re-initializes and cold-starts it; the composer wraps the firmware IO member by member |
+| D7 | `AppleAgxFirmwareRestartWarm` as the entry point | exists, but H1 uses the two halves | the KMD rebuilds the initdata graph and the provider between stop and start, and ResetFromTimeout / RestartFromTimeout are two DDIs |
+| D8 | -- | orderly unpublish takes the handoff lock; the forced one does not | a firmware stopped inside its critical section never releases its side |
+| D9 | 4.3 lifetime invariant | shared part = InitBM / NewQueue flags and ring pointers; `AppleAgxG13QueueRuntimeInitialize` already starts a lifetime but accepts any ring index | read-only check added instead of changing Initialize (existing path) |
+
+Two facts for H1/H1b that no source settles; nothing was guessed:
+- MAGIC_FW of the first boot stays in the handoff region, so on a second boot the handoff wait
+  passes at once and proves nothing. The first proof that the image booted again is HELLO.
+- After a forced stop the firmware's handoff lock byte may stay 1. The next boot then fails closed
+  with a timeout and stays warm-stopped (provider test). Who clears that byte is part of U2.
+
+### 8.6 Tests
+
+Host suites `test_apple_agx_rtkit_session`, `_firmware`, `_firmware_provider`, `_backend_runtime`,
+`_platform_composer`, `_g13_queue_runtime` (driven from `tests/`, none in the `run_against_baseline`
+default set); each new test names the bug it catches. Eleven injected defects (no handoff re-arm, no
+read-back, silent force, cold rollback in the warm stop, skipped boot phase, stale ring indices, ...)
+are all caught.
