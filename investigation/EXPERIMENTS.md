@@ -75517,3 +75517,44 @@ for the IRQ branch (same file backend_platform_windows.c). Bench order unchanged
 - Next: C1/C2 are not justified by this run. The next causal target is the display side: why
   GravityMark's fullscreen present stays RedirectedFlip (no mode change to 1280x720, no direct/
   independent flip): caps, format, geometry, CheckDirectFlip/MPO support. Architect to specify.
+
+## EXP2302 — AppleAns 0.4.3 DUMP1: dump hand-over record on the live stack (BEFORE)
+
+- Stamp: 2026-11-09T20:20:23Z
+- Hypothesis: StorPort accepts `STOR_FEATURE_DUMP_POINTERS` from AppleAns and sends
+  `SRB_FUNCTION_DUMP_POINTERS` during crash-dump stack initialisation; the miniport answers
+  with a sealed `ans_dump_context` (receipt 0xA6, sealed=1) and the normal boot, I/O and
+  ordered shutdown are unchanged. The dump image still refuses (`DumpMode != 0` ->
+  `SP_RETURN_NOT_FOUND`), so no crash is provoked in this run.
+- WHY THIS HYPOTHESIS:
+  1. DUMP0 design (ANS-DUMP-MODE.md): without the feature bit StorPort never asks the
+     miniport for dump pointers, so the dump stack cannot be built on the native SSD.
+  2. Offline: host tests (dump_test, dump_mode_test) and builder code analysis
+     (13 files, 0 defects) pass; the only unknown left is StorPort's live behaviour.
+- Single variable: AppleAns package 0.4.2 (ANSBUILD012-J) -> 0.4.3 (ANSBUILD013-K).
+- Commit: fdcb79e3f025bb31bdab678c7860e4809267ec81 (branch gpu/memory-latency); m1n1 ansdirect-bugcheck4; Mu MUANSCPPC002;
+  recovery GPU-visible profile, no AppleAgx package.
+- Artifact: .local/experiments/ANSDUMP1/ANSBUILD013-K-package.zip
+  SHA-256 b5fb31b636f43d00266612e7785049a7238b054dc43af225c093f2b83f976fe5;
+  AppleAns.sys 5529bf1cffa1226490f2b8e0c9a4c8b122ecdc04088195d31d0f38680fe88b7c;
+  AppleAns.inf e8f9de55440faba46cc6c7bdcbec66f2806385e90f90c4859e535438e9020c7c;
+  appleans.cat c9575eede77be36332a71d88c49097398ba98a727588ca6c1cce456e9c099457;
+  source tar b2cf425fcb2e4df3ce967d4c4b0467a30e8b16bdb75c30f2d8c10fad184f1f80.
+- Build: K.ps1 on the builder (MSBuild Release ARM64 + RunCodeAnalysis, infverif, signtool, Inf2Cat).
+- Install: as ANSSHUT001: pnputil /add-driver (stage only; devnode stays on oem6.inf), point Services\AppleAns ImagePath at the new store directory after a hash check, then the ordered restart of rec2301h/recover.sh (RESUME_PACKAGE_ABSENT path, native SSD).
+- Expected: boot on AppleAns 0.4.3 as today; one 0xA6 record with sealed=1; optional 0xA7
+  (its absence is a valid outcome: StorPort may not load the dump image while
+  CrashDumpEnabled/dump stack is not configured); I/O gate unchanged; `BUGCHECK ok code=0x0`
+  at the restart.
+- Failure criteria: no boot / 0x7B; 0xA6 with sealed=0 or missing while crashdmp is
+  configured; any non-zero BUGCHECK code; I/O errors in the System log.
+- Recovery: ImagePath back to appleans.inf_arm64_8bb08d185c44a80e (0.4.2, sys 0624637f...) from the guest;
+  if the guest does not boot natively: kill the exact launcher PID, AGX_RECOVERY_STORAGE=bridge AT_PROXY recovery, ImagePath back, check
+  `stornvme\StartOverride`.
+- Evidence: .local/experiments/ANSDUMP1/evidence/EXP2302/.
+- DUMP0 (read-only, 2026-11-09T20:18Z, .local/experiments/ANSDUMP1/dump0-out.txt, dump0b-out.txt, dump0c-out.txt):
+  CrashDumpEnabled=2 (kernel), DumpFile C:\Windows\MEMORY.DMP, DumpFilters dumpfve.sys, pagefile C:\pagefile.sys 6912 MB,
+  free 31.7 GB; running AppleAns image 0624637F... (0.4.2) via ImagePath, devnode bound to oem6.inf; no AppleAns
+  System-log records since boot; the last MEMORY.DMP (2026-11-07) and minidumps predate ANS-DIRECT as the only path
+  (written through the bridge/stornvme). Crash dumps are configured, so StorPort should initialise the dump stack
+  and DUMP_POINTERS is expected at boot.
