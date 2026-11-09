@@ -75380,3 +75380,9 @@ EXP2298 HARDWARE BEFORE 2026-11-09T05:14:21Z:
 - Hashes: sys a3f4800a903f, UmdArm64 5d9cb7ce973c, UmdX64 08546af19d40, Umd32 d7d291738dc8; manifest 660396647b2a, hardware-manifest 305e9829af5e; probe2298.sh 473dd8bc4e46 (PROBE_LINT_OK); visible recovery rec2298h b56323196590045f; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1Ov2NoHazardLead=1.
 - Recovery rec2298h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2298-ov8-receipt/run2298.sh.
+
+EXP2298 HARDWARE ACTUAL 2026-11-09T05:19:16Z:
+- Receipt only, no reset, GPU_RESET none, device_removed false; GM HD PERF arm d 40.09 fps (diagnostics and switches on, not comparable).
+- measure-d3d12-ov8, 3135 of 3152 executions with 4 renders (nibble 0 = first render): range 0xaaaa, barrier 0x8888, prelude 0x0099.
+- Reading: the prelude verdict is 9 for the first two renders (R1, R3: their indirect stream reads compute writes) and 0 for R5 and R7, which matches the two pairs Apple overlaps. Range is 10 and barrier 8 on all four, including R7, which was expected clean. Both verdicts are conservative by construction: VS UAV counted as a write, barriers counted through the whole render batch. Provenance rows: render 0 and 1 VB read vs compute root UAV write (about 44.7 MB overlap with sized views), render 2 vertex root UAV vs compute root UAV.
+- Verdict: inconclusive for R5 and R7 independence; the prelude result is decisive for R1 and R3 (they depend on compute output). Next: step 1b, barriers only between the last dispatch and the first draw, and which range conflicts R7. Recovery rec2298h.
