@@ -2608,3 +2608,31 @@ no code. F0 outcome selects: cross-process depth-2 pairs (C1 then C2a), display 
   package: segment flag + UMD rule) / mode set fails (D1 not fixed).
 - Windowed GravityMark (the 0.85 ms DWM row) needs a second DCP layer + CheckMultiPlaneOverlaySupport3 (P2),
   parked until P1 is measured.
+
+## UPDATE 2026-11-09T22:03:55Z -- IRQD1 confirmed (EXP2303); TDR stage 2b implemented offline on a side branch
+
+- **IRQD1 verdict: CONFIRMED (EXP2303, package from 6a53a8646, MSVC-built).** On the unchanged platform
+  (Mu MUANSCPPC002, m1n1 83a9cf74) the ISR-default-on package with the TDR stage 2a shared layer is inert:
+  CM_PROB_NONE, suite 119/0, perf gate PASS (CS 1.6 warm 53.168/52.738 vs baseline 49.943; GravityMark HD
+  PERF worst 44.154 vs 40.770), recovery rec2303h done. This is also the first MSVC build and hardware pass
+  of the merged ISR + stage 2a tree.
+- **IRQD2 is in flight as EXP2306** (fork 6, Mu MUIRQ001 with the mailbox line, same-boot A/B/B/A on
+  Wom1IrqCompletion). Promotion rule unchanged: Mu becomes MUIRQ001 only on PASS; on any stop the package
+  default returns to off and Mu stays MUANSCPPC002.
+- **TDR stage 2b + receipt v5** exist on `refs/heads/claude/tdr-stage-2b` (b0587f169, fa4d7cf17, 08b519773 on
+  dcdce59d4; not merged, not pushed, no MSVC build, no hardware). Architect check: the baseline gate on its
+  tip in a checkout with the full environment (`.local`, `Q22_M1N1_SOURCE`) runs 1105 tests with 0 genuine
+  NEW failures (the one reported NEW is the absent `mu` checkout of the temporary worktree; the session's
+  "17 failures" were the same kind of environment gap). Sequence reviewed against sections 8-10 of
+  TDR-FIRMWARE-RESTART-RECOVERY.md: no ACTIVATE/PREPARE on the warm publish, ISR closed only after the proven
+  stop and reopened before the CPU start, only caller is the drill escape behind `Wom1FwRestartDrillAllowed`.
+- **Not purely additive:** the branch also splits `AdmissionRetainedActivate` on the cold path, widens the
+  backend-stop condition of `AdmissionPlatformDestroy`, and grows `Wom1GpuReset` from 792 to 1064 bytes. So
+  after a merge the order is: MSVC build -> inert checkpoint (drill value absent: suite + perf gate, as IRQD1)
+  -> only then H1 (idle warm restart, three cycles).
+- **H1 BEFORE must name:** (1) a stopped ASC may keep outbox messages that the reopened ISR hands to the new
+  boot (control words recorded, nothing drained); (2) submitters wait out the restart, so `TotalMs` against
+  the 2 s TDR budget is an observation; (3) the render shared-memory owner's lifetime words rely on the first
+  job's InitializeQueues plan; (4) retained VM-slot leases stay leased (T5 not implemented).
+- **Next causal target:** unchanged for performance (IRQD2 -> scaled-source checkpoint -> F0 repeat at real
+  1280x720); for recovery: merge decision on stage 2b (the user's), then the two-step hardware order above.
