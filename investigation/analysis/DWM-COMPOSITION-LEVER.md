@@ -155,3 +155,34 @@ its allocation list is private. Still to confirm from Microsoft documentation be
 runtime returns a nonzero hKMResource for every shareable heap (labelled hypothesis until then). GravityMark's
 compute jobs bind only device-created buffers and textures, so the rule is expected to hold for them; verify with a
 receipt (private-only verdict per compute job) before any waive.
+
+## 7. F0 result and corrections (2026-11-09T20:28:57Z, EXP2301 + source reading)
+
+Result. Same boot, default package, HD PERF 10+60: windowed 43.77 fps, "fullscreen" 42.89 fps (-2.0 %). ETW in both
+arms: GravityMark Present_Info = RedirectedFlip, one dwm Flip and 2.0 QueuePackets per GravityMark present,
+MMIOFlipMPO source 2560x1600. DWM composes in both arms (reading ii of section 4).
+
+Correction 1: arm B was not the specified one. ChangeDisplaySettingsExW failed ("can't set 1280x720 mode");
+GravityMark fell back to a 2560x1600 screen-covering window with a 2560x1600 swap chain and a 1280x720 internal
+render. The failure criterion of section 4 ("a mode-set failure") was met, so the -2.0 % is a 4.4x larger present
+through DWM, not the cost or gain of removing DWM. The size of the lever is still unmeasured.
+
+Correction 2: evidence E6 and the premise of mechanism B are unproven. EXP2056's CommitCalls 3 at 1920x1080 shows
+a mode change, not an application flip: the D3D11 UMD that DWM loads answers pfnCheckDirectFlipSupport with FALSE
+(mesa/d3d11/agx_wddm2_ddi.cpp:677), so no application buffer has ever been flipped to the panel by this driver.
+
+Display-side causes, in dependency order:
+
+| # | Cause | Layer | Evidence | Class |
+|---|---|---|---|---|
+| D1 | No non-native display modes: bench m1n1 83a9cf74 lacks CAP_SCALED_SOURCE (bit 8), ScaledModes 0, 1 of 11 modes offered | m1n1 (branch codex/m1n1-scaled never ported to the brokerlock/ansdirect line) | Wom1DisplayModesReceipt, scanout_windows.c:916, hv_agx_scanout_broker.c:141, EXP2056 | C (regression) |
+| D2 | Direct flip refused by the UMD by design | Mesa D3D11 WDDM 2.0 table | agx_wddm2_ddi.cpp:677 | FULL GRAPHICS, BUILD |
+| D3 | Flip-model back buffers are not scanout-capable (RGBA8, tiled/compressed pool, Displayable 0) | UMD allocation + KMD segment | EXP1038, direct_flip_contract.c | FULL GRAPHICS, BUILD |
+| D4 | KMD flips only the fixed primary geometry on plane 0; no CheckMultiPlaneOverlaySupport | KMD display | display.c:1294, lifecycle.c ~806-814 | FULL GRAPHICS, BUILD |
+
+Decision. D1 is a contract regression and is fixed first, on its own (m1n1 only, one hardware checkpoint). D2-D4 are
+one design (truthful direct flip / independent flip of an application buffer) and need the Microsoft contract
+written down before any code: which present paths DWM hands to dxgkrnl, what DISPLAYABLE requires of the
+allocation, and what the KMD must accept in SetVidPnSourceAddress(MPO3). C1/C2a stay parked: F0 did not show that
+serialization behind DWM is the row's cost, and a granted direct flip removes the DWM job instead of overlapping it.
+F0 is repeated with a real 1280x720 mode after D1.

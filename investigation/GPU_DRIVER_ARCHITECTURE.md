@@ -104,15 +104,21 @@ driver-internal hazards -- the same per-resource model Apple's kext uses
 ### 2.4 Present and display
 - **DONE** DXGI flip-model presenter in the GL ICD; ICD built from the package
   source (EXP2205).
-- **OPEN -> F0** DWM composition of windowed GravityMark (RedirectedFlip, EXP2212 ETW): 0.85 ms/frame (EXP2268);
-  EXP2273 hot ring: the DWM job arrives 0.06 ms after the application's render completes, costs <= 0.54 ms of GPU
-  plus 0.41 ms of depth-one boundary overhead, refusal 55 on every DWM job. Design and ranking:
-  investigation/analysis/DWM-COMPOSITION-LEVER.md.
-  - F0 (no code): windowed vs exclusive fullscreen ABBA bounds the lever and tells whether dxgkrnl grants the direct flip.
-  - **BUILD (I, after F0)** C1 cross-process compute-behind-render pair in the depth-2 window (per-job VM slot, 55
-    narrowed, opt-in Wom1CrossProcessPairs); **BUILD (O)** C2a Barrier waived for a UMD "private-only" compute.
-  - **BUILD** windowed independent flip on a second hardware plane (MPO: m1n1 IOMFB surface 1 + KMD MPO DDIs); only
-    after F0 and C are measured.
+- **OPEN (lever size unmeasured)** DWM composition of GravityMark (RedirectedFlip, EXP2212 ETW): 0.85 ms/frame
+  (EXP2268); EXP2273 hot ring: the DWM job arrives 0.06 ms after the application's render completes, costs <= 0.54 ms
+  of GPU plus 0.41 ms of depth-one boundary overhead, refusal 55 on every DWM job. Design, F0 result and corrections:
+  investigation/analysis/DWM-COMPOSITION-LEVER.md (section 7).
+  - F0 (EXP2301): DWM composes a screen-covering flip-model swap chain too; the 1280x720 mode set failed, so the
+    fullscreen arm was a 2560x1600 present and the FPS bound is not measured.
+  - **BUILD (C), regression** non-native display modes: the bench m1n1 line (83a9cf74) lacks CAP_SCALED_SOURCE
+    (branch codex/m1n1-scaled: 66bf65c1, 8209e527, 74a4d8f4 never ported); ScaledModes 0, 1 of 11 modes offered,
+    every mode change fails. Port first, m1n1 only.
+  - **BUILD (FULL GRAPHICS), contract first** truthful direct / independent flip of an application buffer: the D3D11
+    UMD answers CheckDirectFlipSupport FALSE by design, flip-model back buffers are not scanout-capable (EXP1038),
+    the KMD flips only the fixed primary. Needs the Microsoft contract written down before code.
+  - **PARKED (I/O)** C1 cross-process compute-behind-render pair, C2a Barrier waiver: not justified by F0.
+  - **BUILD (later)** windowed independent flip on a second hardware plane (MPO: m1n1 IOMFB surface 1 + KMD MPO
+    DDIs); after the single-plane direct flip.
 
 ### 2.5 Shader compiler
 - **DONE** compute, VS and FS code at Metal-oracle parity (instruction and load
@@ -151,3 +157,6 @@ driver-internal hazards -- the same per-resource model Apple's kext uses
   hardware stage is H1 (idle warm restart), nothing is wired into the TDR DDIs before H1 answers U1.
 - Mu for IRQ default-on: MUIRQ001-95263b97 is the candidate (MUANSCPPC002 + one commit + the flag; only the
   J313ABI SSDT differs, by interrupt 887). No new image.
+- F0 (EXP2301): the fullscreen arm was a failed mode set (bench m1n1 lost CAP_SCALED_SOURCE with the move to the
+  brokerlock/ansdirect line) -> lever size unmeasured; DWM composes because the UMD refuses direct flip by design.
+  Order: scaled-source port (C, m1n1 only), direct-flip contract and spec (FULL GRAPHICS), then F0 again. C1/C2a parked.

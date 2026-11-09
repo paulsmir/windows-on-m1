@@ -75590,3 +75590,61 @@ for the IRQ branch (same file backend_platform_windows.c). Bench order unchanged
   restart-run.log,normal-prev-full.log,post-after-restart.txt}.
 - Next: DUMP2 (dump-image takeover + polled I/O on the handed-over record), offline first;
   process fix: a recovery-profile restart helper that accepts the RECANS001 normal owner.
+
+## EXP2301 — ARCHITECT VERDICT AND CORRECTION (2026-11-09T20:28:57Z, no hardware)
+
+Correction to "EXP2301 — F0 ... (ACTUAL)" (the original entry stays as written):
+- The ACTUAL entry says the 1280x720 fullscreen mode was accepted by GravityMark. It was not. Evidence
+  (.local/experiments/EXP2301-f0-dwm/evidence/EXP2301/): gm2301{b,c,f}-err.txt
+  "Desktop::setMode(): ChangeDisplaySettingsExW(): failed" / "GravityMark::create(): can't set 1280x720 mode";
+  gm2301b-out.txt "Desktop: 2560x1600", "Set fullscreen mode on 0 screen", "Creating 2560x1600 Direct3D12 Window",
+  "Starting 1280x720 Direct3D12 Benchmark"; gm2301b-umd.log measure-present-resource 0xa00 x 0x640 (2560x1600).
+  Arm B was a screen-covering 2560x1600 window with a 2560x1600 flip-model swap chain and a 1280x720 internal
+  render, not a 1280x720 display mode. The preregistered failure criterion "a mode-set failure" was met.
+- Consequence for the numbers: windowed 43.77 vs "fullscreen" 42.89 fps (-2.0 %) compares a 1280x720 present
+  with a 2560x1600 present (4.4x larger DWM source). It is not the specified comparison and bounds nothing.
+
+Why the mode set failed (sources and receipts, no new run):
+- Wom1DisplayModesReceipt (kmd-receipts-pre-suite.txt / -after-d.txt, layout ADMISSION_DISPLAY_MODES_RECEIPT,
+  render_admission.h:123): BrokerAbi 2, BrokerCaps 0xff, ScaledModes 0, MonitorModeCalls 1,
+  LastMonitorModesAdded 1, CommitCalls 1 (before and after), committed 2560x1600 stride 10240, refusals 0.
+- AdmissionScanoutScaledModes (render-admission/src/scanout_windows.c:916) requires broker ABI V2 and
+  APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE (bit 8). Caps 0xff lack bit 8 -> only mode 0 of the 11-mode fixed panel
+  table (shared/include/apple_agx_fixed_panel_modes.h) is offered.
+- m1n1: the scaled source lives on branch codex/m1n1-scaled (075e3980 + 66bf65c1 "hv: scanout broker admits a
+  scaled source behind CAP_SCALED_SOURCE" + 8209e527 "display: carry the scanout destination into the DCP swap"
+  + 74a4d8f4 "display: log each scanout geometry change on the vUART"; build .local/experiments/m1n1-74a4d8f4-scaled).
+  The bench m1n1 83a9cf74 (ansdirect-bugcheck4, line 075e3980 -> brokerlock -> 8cf9f0a3 -> 83a9cf74) does not
+  contain 66bf65c1: hv_agx_scanout_broker.c:141 sets capabilities = SCANOUT_V1_CAPS and src/display.c has no
+  "scanout source" line. EXP2056 (2026-10-28, fullscreen 1920x1080) ran on the scaled build.
+  => Class C regression since the working m1n1 moved to the brokerlock/ansdirect line: every application that
+  changes the display mode fails. Not introduced by EXP2301; found by it.
+
+Why a screen-covering flip-model swap chain is still composed (sources):
+- KMD advertises FlipCaps.FlipIndependent = 1 and SupportDirectFlip = TRUE (render-admission/src/lifecycle.c
+  ~806-814) and accepts one MPO plane (SetVidPnSourceAddressWithMultiPlaneOverlay3 -> SetVidPnSourceAddress).
+- The Mesa D3D11 WDDM 2.0 table, default with FL 11_0 (agx_d3d11_ddi.cpp:118), answers pfnCheckDirectFlipSupport
+  with FALSE unconditionally (mesa/d3d11/agx_wddm2_ddi.cpp:677, registered :931). DWM therefore never asks
+  dxgkrnl to flip an application buffer.
+- EXP1038: RGBA8 flip-model back buffers keep the non-scanout RGBA allocation (Displayable 0); the legacy UMD
+  gate AdmissionUmdDirectFlipCompatible (render-admission/umd/src/direct_flip_contract.c) requires segment 2,
+  linear, displayable, A8R8G8B8, fixed-panel geometry.
+
+Verdict (replaces the one-line reading in ACTUAL, original unchanged):
+- Observation confirmed: with a screen-covering flip-model swap chain DWM still composes (Present_Info
+  RedirectedFlip 489, dwm Flip 502, MMIOFlipMPO source 2560x1600). Reading (ii) of the F0 spec.
+- The FPS bound of the DWM row was NOT measured: arm B was not the specified mode. Inconclusive for the lever size.
+- C1 / C2a (cross-process pairs) are not justified by F0 and stay BUILD-parked.
+- DWM-COMPOSITION-LEVER.md evidence E6 / mechanism B premise ("exclusive fullscreen flips the application's
+  primary", EXP2056 CommitCalls 3) is unproven: with CheckDirectFlipSupport FALSE those flips can only have been
+  DWM's primary at the new mode.
+- The cause of "stays RedirectedFlip" is known offline; no hardware run is needed to explain it.
+
+Next (in this order):
+1. Class C, m1n1 only: port 66bf65c1 + 8209e527 + 74a4d8f4 onto the bench line 83a9cf74. Hardware checkpoint
+   (one variable = m1n1): BrokerCaps bit 8 set, ScaledModes 1, LastMonitorModesAdded 11, GravityMark -fullscreen 1
+   sets 1280x720 with an empty err log and a vUART "display: scanout source 1280x720 ..." line; desktop mode
+   switch and back survive. Recovery m1n1 = 83a9cf74.
+2. Architect, offline: direct-flip contract from Microsoft documentation and the pinned WDK (DISPLAYABLE back
+   buffers, pfnCheckDirectFlipSupport, independent-flip conditions) -> spec, class FULL GRAPHICS.
+3. Only then repeat F0 with a real 1280x720 mode (bounds the DWM row with equal present sizes).

@@ -2563,3 +2563,18 @@ no code. F0 outcome selects: cross-process depth-2 pairs (C1 then C2a), display 
   SSDT (the GPU device is not in the DSDT). KMD change on refs/heads/claude/irq-default-on-24672b (in
   progress, merge needs the user's word); fork 6's parked patch is the cross-check. Then IRQD1, IRQD2.
 - Bench: EXP2301 F0 (DWM row discriminator) running since 19:37:58Z.
+
+## UPDATE 2026-11-09T20:28:57Z -- F0 VERDICT (EXP2301): LEVER UNMEASURED, DISPLAY-SIDE CAUSES FOUND OFFLINE (architect)
+
+- EXP2301 observation: DWM composes GravityMark in both arms (RedirectedFlip, one dwm Flip per present). The
+  "fullscreen" arm was a failed mode set (ChangeDisplaySettingsExW failed; 2560x1600 swap chain, 1280x720 render),
+  so windowed 43.77 vs 42.89 fps is not the specified comparison. Correction appended to the ledger (EXP2301
+  ARCHITECT VERDICT AND CORRECTION).
+- Proven boundary (sources + receipt): bench m1n1 83a9cf74 has no CAP_SCALED_SOURCE (BrokerCaps 0xff, ScaledModes 0,
+  1 of 11 modes) -> class C regression, the scaled source exists only on codex/m1n1-scaled (66bf65c1, 8209e527,
+  74a4d8f4). Direct flip: UMD CheckDirectFlipSupport = FALSE by design (agx_wddm2_ddi.cpp:677), back buffers not
+  scanout-capable (EXP1038).
+- Rejected premise: "exclusive fullscreen flips the application's primary" (note E6 / mechanism B) is unproven.
+- ACTIVE HYPOTHESIS: none on hardware. NEXT CAUSAL TARGET: (1) port the scaled source to the bench m1n1 line and
+  verify 11 modes + a real 1280x720 GravityMark mode (one variable = m1n1, recovery 83a9cf74); (2) offline
+  direct-flip contract (Microsoft docs + pinned WDK) -> spec; (3) F0 again with equal present sizes. C1/C2a parked.
