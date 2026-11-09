@@ -91,8 +91,8 @@ ZwFlushKey). m1n1 and Mu are not involved.
 2. Whether dxgkrnl calls DxgkDdiStopDevice at system shutdown on this configuration. The design does not depend
    on the answer (rule 4, third bullet); the first hardware run records it from the start-stage receipts.
 3. Whether the registry flush before the first hardware access is durable across an EL2 reset on the native SSD
-   path (AppleAns). Today's arm relies on the same property and held in EXP2306 (the arm did not reappear), which
-   is one observation, not a proof.
+   path (AppleAns). Today's arm relies on the same property, but no run has measured it: in EXP2306 the reset came
+   minutes after the arm was consumed. L2 below is the first measurement.
 
 ## Implementation shape (for the implementer)
 
