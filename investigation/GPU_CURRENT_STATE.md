@@ -2636,3 +2636,29 @@ no code. F0 outcome selects: cross-process depth-2 pairs (C1 then C2a), display 
   job's InitializeQueues plan; (4) retained VM-slot leases stay leased (T5 not implemented).
 - **Next causal target:** unchanged for performance (IRQD2 -> scaled-source checkpoint -> F0 repeat at real
   1280x720); for recovery: merge decision on stage 2b (the user's), then the two-step hardware order above.
+
+## UPDATE 2026-11-09T23:02:11Z -- TDR stage 2b merged (e6fb8736e); IRQD2 interrupted by an m1n1 defect (EXP2306), fix under test
+
+- **Stage 2b is on gpu/memory-latency** (merge e6fb8736e of claude/tdr-stage-2b on 06b4fdcf4; the user's decision).
+  Host gate on the merged tree: 1105 tests, 0 NEW (BASELINE_OK). Still no MSVC build and no hardware. The warm
+  restart has one caller, the drill escape behind `Wom1FwRestartDrillAllowed`; nothing is wired into the TDR DDIs.
+- **Recovery order (fork 6, behind the IRQ runs):** MSVC package + drill tool build -> inert checkpoint (drill
+  value absent; must equal EXP2303, receipt decodes as v5 with no restart) -> H1 = idle warm restart, three
+  cycles, on Mu MUANSCPPC002 first. Without the mailbox line H1 does not exercise the ISR close/reopen; that is
+  a separate later run on MUIRQ001. H1 answers U1 (does the iBoot-loaded GFX image boot a second time).
+  Staged in .local/handoff/OV-ARCHITECT-HANDOFF.md (pass criteria from the decoded `firmware_restart` record).
+- **EXP2306 (IRQD2): INCONCLUSIVE for the Mu promotion, arm A1 valid.** With the line listed and the default on:
+  107645 ISR messages, RingDrops/Discarded/Overflow 0, job-poll busy fraction 0.0206, perf gate PASS. The run
+  ended at the first live `pnputil /disable-device`: EL2 SYNC abort in m1n1 (`backing_find` on the broker that
+  AGX_RR_CLOSE had just zeroed). Owner layer m1n1, independent of the Mu image by source. MUIRQ001 is not
+  promoted: stop/start with the line connected is still unmeasured.
+- **EXP2307 part 1:** m1n1 e6ac18bb (06616be7, closed-broker lookup returns NULL) passed one live disable with no
+  EL2 exception. The following enable failed closed by design: StartDevice consumes the one-shot `G3Armed`
+  value and the toggle script did not re-arm (probe defect). EXP2307B (same boot, re-arm between disable and
+  enable) is in flight; it is the first second RR_OPEN + firmware start in one boot on this bench.
+- **Production gap named by EXP2307:** a live disable/enable (Device Manager, driver update without reboot)
+  ends in Code 43 because every StartDevice needs a freshly written one-shot arm. Acceptable for qualification,
+  not for a production driver; the arm gate needs a replacement contract (architect, offline; no bench need).
+- **Next causal target:** performance unchanged (EXP2307B -> IRQD2 rerun on MUIRQ001 with m1n1 e6ac18bb if
+  confirmed -> scaled-source checkpoint, which needs 06616be7 on its m1n1 line before any adapter disable ->
+  F0 repeat at real 1280x720). Recovery: the three-step order above.
