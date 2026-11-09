@@ -75248,3 +75248,8 @@ EXP2291 HARDWARE BEFORE 2026-11-09T01:29:06Z:
 - Hashes: sys 680a617f562b, UmdArm64 7643c92b38a9, UmdX64 a70525f0169f, Umd32 25820e794f86; manifest 3329ba4e2405, hardware-manifest 5653c2eae6b5; probe2291.sh 95702b49ba0c (PROBE_LINT_OK); visible recovery rec2291h 2c6a3ba0506196ad; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1Ov2NoHazardLead=1 Wom1Ov5TaWaiver=1.
 - Recovery rec2291h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2291-waiver-beacon/run2291.sh.
+
+EXP2291 HARDWARE ACTUAL 2026-11-09T01:38:39Z:
+- Rerun of the invalid EXP2290 with the beacon at 0xF00. Waiver on, diagnostics off, OV3B=1, m1n1 ansdirect-bugcheck4 83a9cf74.
+- Result: no reset (0 PSCI RESET, so no BUGCHECK/OV5B/ASC lines), wer 0, 3 of 3 GM starts finished normally. GM HD PERF a 42.567, b 43.376, c 43.159 fps. Receipts (last snapshots: tag, Considered, Waived, Placed): [('gmt8', 67618, 6357, 6357), ('gmt9', 71115, 6773, 6773), ('pre-suite', 841, 0, 0)].
+- Verdict: the reset did not reproduce with the beacon (0 of 3 starts, versus 3 of 3 boots in EXP2283/2285/2286). Either the beacon's MMIO traps on waived builds move the timing, or the reset is rarer than those boots suggested; a single boot does not separate them. The beacon gave no stall data. Recovery rec2291h.
