@@ -404,6 +404,12 @@ int main(void) {
   }
   AdmissionJobWindowOv5WaiverReceiptInitialize(&rc);
   assert(rc.Version == ADMISSION_JOB_WINDOW_OV5W_RECEIPT_VERSION && rc.Bytes == sizeof(rc));
+  /* EXP2292: held back only while a compute with a timestamp block has not started */
+  assert(rc.Deferred == 0u);
+  assert(AdmissionJobWindowOv5WaiverDefer(ADMISSION_JOB_WINDOW_OV5W_WAIVE, 1u, 0ull) == 1u);
+  assert(AdmissionJobWindowOv5WaiverDefer(ADMISSION_JOB_WINDOW_OV5W_WAIVE, 1u, 5ull) == 0u);
+  assert(AdmissionJobWindowOv5WaiverDefer(ADMISSION_JOB_WINDOW_OV5W_WAIVE, 0u, 0ull) == 0u);
+  assert(AdmissionJobWindowOv5WaiverDefer(ADMISSION_JOB_WINDOW_OV5W_CLASS, 1u, 0ull) == 0u);
   assert(AdmissionJobWindowOv5WaiverNote(&rc, ADMISSION_JOB_WINDOW_OV5W_WAIVE, 77, 0x300, 0x4200, 0xa840) == 1u);
   assert(AdmissionJobWindowOv5WaiverNote(&rc, ADMISSION_JOB_WINDOW_OV5W_CLASS, 78, 0, 0, 0) == 1u);
   assert(AdmissionJobWindowOv5WaiverNote(&rc, ADMISSION_JOB_WINDOW_OV5W_COMPUTE_WORK, 79, 0, 0, 0) == 1u);
@@ -433,8 +439,8 @@ class KmdDecision(unittest.TestCase):
             # only with switch, kick, TA_ON_COMPUTE (0 = every class), Q2c, compute
             'available 1 1 0 0 0 0 0',
             'receipt 5 1 0 1 1 1 77 300 4200 a840',
-            # Version, Bytes, Considered, Waived, Placed, Refused[9], Last x4
-            'bytes %d' % (4 * (5 + 9 + 4))])
+            # Version, Bytes, Considered, Waived, Placed, Refused[9], Last x4, Deferred
+            'bytes %d' % (4 * (5 + 9 + 4 + 1))])
 
 
 def section(text, start):
@@ -537,7 +543,7 @@ class KmdWiring(unittest.TestCase):
 
     def test_kick_decision_uses_the_pure_rule(self):
         text = WORKER.read_text()
-        self.assertEqual(text.count('AdmissionJobWindowOv5WaiverRefusal(1u,'), 1)
+        self.assertEqual(text.count('AdmissionJobWindowOv5WaiverRefusal(1u,'), 2)  # the kick decision and the EXP2292 deferral
         self.assertEqual(text.count('runtime->Ov5Waive = TRUE;'), 1)
         kick = text[text.index('unsigned int ov5w = AdmissionJobWindowOv5WaiverRefusal(1u,'):]
         self.assertLess(kick.index('runtime->Ov5Waive = TRUE;'),

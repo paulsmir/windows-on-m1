@@ -240,6 +240,12 @@ void AdmissionJobWindowOv5WaiverReceiptInitialize(
   for (i = 0u; i < ADMISSION_JOB_WINDOW_OV5W_REASONS; ++i) Receipt->Refused[i] = 0u;
   Receipt->LastFence = Receipt->LastWaitValue = 0u;
   Receipt->LastStampSelf = Receipt->LastOffset = 0u;
+  Receipt->Deferred = 0u;
+}
+
+unsigned int AdmissionJobWindowOv5WaiverDefer(unsigned int Refusal,
+    unsigned int HasTimestampBlock, unsigned long long Start) {
+  return Refusal == ADMISSION_JOB_WINDOW_OV5W_WAIVE && HasTimestampBlock && Start == 0ull ? 1u : 0u;
 }
 
 unsigned int AdmissionJobWindowOv5WaiverNote(

@@ -334,13 +334,19 @@ unsigned int AdmissionJobWindowOv5WaiverAvailable(unsigned int Switch,
  * provider's count, copied at export), refusals per reason, the last
  * waived render's fence, its 3D Barrier's WaitValue, StampSelf and sidecar
  * offset. */
-#define ADMISSION_JOB_WINDOW_OV5W_RECEIPT_VERSION 1u
+#define ADMISSION_JOB_WINDOW_OV5W_RECEIPT_VERSION 2u
 typedef struct _ADMISSION_JOB_WINDOW_OV5W_RECEIPT {
   unsigned int Version, Bytes;
   unsigned int Considered, Waived, Placed;
   unsigned int Refused[ADMISSION_JOB_WINDOW_OV5W_REASONS];
   unsigned int LastFence, LastWaitValue, LastStampSelf, LastOffset;
+  unsigned int Deferred; /* v2: kicks held back because the compute had not started */
 } ADMISSION_JOB_WINDOW_OV5W_RECEIPT;
+/* EXP2292 (H3): hold a waivable successor back while the running compute job's
+ * firmware start timestamp is still zero (the block is zeroed at build). 1 when
+ * the kick must wait for the next poll; a job without a block is never held. */
+unsigned int AdmissionJobWindowOv5WaiverDefer(unsigned int Refusal,
+    unsigned int HasTimestampBlock, unsigned long long Start);
 void AdmissionJobWindowOv5WaiverReceiptInitialize(
     ADMISSION_JOB_WINDOW_OV5W_RECEIPT *Receipt);
 /* Counts one decision (Refusal as above). Returns 1 when an export is due:

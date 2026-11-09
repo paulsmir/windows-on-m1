@@ -4330,6 +4330,7 @@ static VOID AdmissionBuildOv5FragBarrier(
 /* EXP2290 (diagnostic): the identity of each waived pair in the broker page at
  * 0xF00, printed by m1n1 at a guest reset (a bugcheck leaves no dump on the
  * native SSD). Waived builds only, so ordinary jobs take no extra trap. */
+#if defined(ADMISSION_OV5_BEACON)
 static VOID AdmissionOv5WaiverBeacon(ADMISSION_PLATFORM_RUNTIME *runtime,
     const APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan, ULONG Fence,
     const APPLE_AGX_RENDER_BARRIER_INPUT *Barrier) {
@@ -4354,6 +4355,7 @@ static VOID AdmissionOv5WaiverBeacon(ADMISSION_PLATFORM_RUNTIME *runtime,
   for (i = 0; i < RTL_NUMBER_OF(words); ++i)
     WRITE_REGISTER_ULONG((volatile ULONG *)(runtime->Adapter->BrokerBase + 0xF00u + i * sizeof(ULONG)), words[i]);
 }
+#endif
 
 static BOOLEAN AdmissionBuildOv5TaWaiver(
     ADMISSION_PLATFORM_RUNTIME *runtime, const APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan,
@@ -4383,7 +4385,9 @@ static BOOLEAN AdmissionBuildOv5TaWaiver(
     Job->D3ExpectedDonePointer = Plan->D3BarrierExpectedDonePointer;
     Job->TaExpectedDonePointer = Plan->TaWaivedExpectedDonePointer;
     Job->TaLeadWaived = 1u;
+#if defined(ADMISSION_OV5_BEACON)
     AdmissionOv5WaiverBeacon(runtime, Plan, Fence, &barrier);
+#endif
   }
   if (AdmissionJobWindowOv5WaiverNote(&runtime->Ov5WaiverReceipt, refusal, Fence,
           barrier.WaitValue, barrier.StampSelf,
@@ -6874,6 +6878,22 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     /* Preemption, paging and a not yet Prebound successor may clear. */
     return refusal == 4u || refusal == 52u || refusal == 53u ||
            refusal == 54u ? FALSE : TRUE;
+#if defined(ADMISSION_OV5_ON)
+  /* EXP2292 (H3): a waived render's doorbell must not reach the firmware before
+   * the running compute job has started. Not kicked in this poll; the next one
+   * retries, and a compute that completes first leaves an ordinary kick. */
+  if (runtime->Ov5Waiver) {
+    const void *block = runtime->Backend.PendingJob.ComputeTimestampBlock;
+    ULONGLONG start = 0ull;
+    if (block != NULL) RtlCopyMemory(&start, block, sizeof(start));
+    if (AdmissionJobWindowOv5WaiverDefer(
+            AdmissionJobWindowOv5WaiverRefusal(1u, (unsigned int)barrier, &s.Running, &s.Next),
+            block != NULL ? 1u : 0u, start)) {
+      ++runtime->Ov5WaiverReceipt.Deferred;
+      return FALSE;
+    }
+  }
+#endif
   if (runtime->RcReceiptEnabled || runtime->Depth2Drill.Mode) {
     RtlZeroMemory(&runtime->RcCurrent, sizeof(runtime->RcCurrent));
     runtime->RcCurrent.RFence = fence; runtime->RcCurrent.CFence = next;
