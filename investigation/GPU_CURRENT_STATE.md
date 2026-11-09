@@ -2499,3 +2499,6 @@ kick until the compute's firmware start timestamp is nonzero (one variable, beac
 
 ## UPDATE 2026-11-09T02:17:10Z -- EXP2292: deferral premise confirmed (Deferred 1 per start, compute not started); placement after the pending claim broke the start (3 ENGINE resets)
 Fix placement: decide before AdmissionG4PendingKickLocked, under the locks, return FALSE with nothing mutated. EXP2293 reruns.
+
+## UPDATE 2026-11-09T02:52:12Z -- EXP2293: compute-start gate holds (3/3 clean, Waived 7436); waiver profile stable with diagnostics off
+Next EXP2294 ABBA (one variable: waiver on top of Ov2 lead; diag off; warm-up + 2 measured runs per boot).
