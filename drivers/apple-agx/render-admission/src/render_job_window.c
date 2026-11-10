@@ -499,6 +499,25 @@ void AdmissionJobWindowReceiptReported(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
   ++Receipt->Reported[Count < 3u ? Count : 2u];
 }
 
+void AdmissionJobWindowReceiptGateRefused(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
+                                          unsigned int FirstForFence) {
+  if (!Receipt) return;
+  ++Receipt->RefusedGate;
+  if (FirstForFence) ++Receipt->GateHolds;
+}
+
+void AdmissionJobWindowReceiptGateEnded(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
+                                        unsigned long long HoldUs,
+                                        unsigned int TimedOut) {
+  unsigned int us;
+  if (!Receipt) return;
+  us = HoldUs > 0xffffffffULL ? 0xffffffffu : (unsigned int)HoldUs;
+  if (TimedOut) ++Receipt->GateTimeout; else ++Receipt->GateSettled;
+  Receipt->GateHoldSumUs = 0xffffffffu - Receipt->GateHoldSumUs < us
+      ? 0xffffffffu : Receipt->GateHoldSumUs + us;
+  if (us > Receipt->GateHoldMaxUs) Receipt->GateHoldMaxUs = us;
+}
+
 void AdmissionJobWindowInitialize(ADMISSION_JOB_WINDOW *Window) {
   unsigned int i;
   if (!Window) return;

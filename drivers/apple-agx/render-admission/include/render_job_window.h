@@ -537,7 +537,7 @@ unsigned int AdmissionJobWindowResetAbort(ADMISSION_JOB_WINDOW *Window,
 /* rc102: cumulative receipt of the wired window (device value
  * Wom1JobWindow, exported with the job timing; decoded by
  * tools/agx_gpu_frame_breakdown.py --kmd-window). */
-#define ADMISSION_JOB_WINDOW_RECEIPT_VERSION 3u /* v2: KickFallbacks, v3: KickFallbacksPreempt */
+#define ADMISSION_JOB_WINDOW_RECEIPT_VERSION 4u /* v2: KickFallbacks, v3: KickFallbacksPreempt, v4: R14 gate */
 typedef struct _ADMISSION_JOB_WINDOW_RECEIPT {
   unsigned int Version, Bytes;
   unsigned int Kicks;          /* successors kicked while a job ran */
@@ -554,6 +554,15 @@ typedef struct _ADMISSION_JOB_WINDOW_RECEIPT {
   unsigned int LastKickStatus; /* NTSTATUS of the failed step (was Reserved) */
   unsigned int KickFallbacks;  /* v2: failed kicks undone to depth 1 (no fault) */
   unsigned int KickFallbacksPreempt; /* v3: of those, undone in a boundary preemption */
+  /* v4 (R14, Wom1PreludeNotifyGate): RefusedGate counts every kick decision
+   * the gate refused (several per hold at the 100 us poll), GateHolds the
+   * running fences it held. A hold ends once: GateSettled when the prelude's
+   * Queue-B completion was drained, GateTimeout when the 1000 us bound opened
+   * it first; the hold time (first refusal to that decision) goes to
+   * GateHoldSumUs / GateHoldMaxUs. A hold whose running job left the head
+   * first is in GateHolds only. */
+  unsigned int RefusedGate, GateHolds, GateSettled, GateTimeout;
+  unsigned int GateHoldSumUs, GateHoldMaxUs;
 } ADMISSION_JOB_WINDOW_RECEIPT;
 
 /* rc102 (EXP2045): the state at the last failed kick (device value
@@ -620,6 +629,14 @@ void AdmissionJobWindowReceiptKick(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
 /* Completions reported to Windows by one poll batch (1 or 2). */
 void AdmissionJobWindowReceiptReported(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
                                        unsigned int Count);
+/* R14: the gate refused a kick decision; FirstForFence starts a hold. */
+void AdmissionJobWindowReceiptGateRefused(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
+                                          unsigned int FirstForFence);
+/* R14: a hold ended after HoldUs; TimedOut: the bound opened it, not the
+ * drained completion. The sum saturates. */
+void AdmissionJobWindowReceiptGateEnded(ADMISSION_JOB_WINDOW_RECEIPT *Receipt,
+                                        unsigned long long HoldUs,
+                                        unsigned int TimedOut);
 
 /* rc95 receipt helper: a firmware stamp has reached the expected value
  * (stamps step by 0x100 and wrap; 0 expected is never reached). */

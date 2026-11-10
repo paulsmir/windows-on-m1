@@ -210,6 +210,13 @@ int main(void) {
   AdmissionJobWindowReceiptReported(&r, 2u);
   r.Adopted = 3u; r.KickFailures = 1u; r.LastKickFailure = 5000u | (7u << 16);
   r.ResetAborts = 1u; r.LastKickStatus = 0xc0000184u;
+  AdmissionJobWindowReceiptGateRefused(&r, 1u);
+  AdmissionJobWindowReceiptGateRefused(&r, 0u);
+  AdmissionJobWindowReceiptGateEnded(&r, 240u, 0u);
+  AdmissionJobWindowReceiptGateRefused(&r, 1u);
+  AdmissionJobWindowReceiptGateEnded(&r, 1004u, 1u);
+  AdmissionJobWindowReceiptGateRefused(&r, 1u); /* running job left first */
+  AdmissionJobWindowReceiptGateEnded(0, 5u, 0u);
   for (i = 0; i < sizeof(r); ++i) printf("%02x", p[i]);
   putchar('\n');
   return 0;
@@ -267,6 +274,9 @@ class KickReceipts(unittest.TestCase):
                           out["reset_aborts"], out["last_kicked_fence"]), (3, 1, 5000, 1, 43))
         self.assertEqual((out["kick_fallbacks"], out["kick_fallbacks_preempt"]), (0, 0))
         self.assertEqual((out["begin_successor_refusal"], out["last_kick_status"]), (7, "0xc0000184"))
+        self.assertEqual((out["refused_gate"], out["gate_holds"], out["gate_settled"],
+                          out["gate_timeout"], out["gate_hold_sum_us"], out["gate_hold_max_us"],
+                          out["gate_hold_mean_us"]), (4, 3, 1, 1, 1244, 1004, 622.0))
 
     def test_kick_failure_record_decodes_the_c_struct(self):
         b = load()

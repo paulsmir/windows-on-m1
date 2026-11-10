@@ -413,6 +413,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * refusal, for the fail-open bound. */
   BOOLEAN PreludeNotifyGate;
   BOOLEAN PreludeGateHeld;
+  BOOLEAN PreludeGateOpen; /* receipt: the hold of PreludeGateFence has not ended */
   ULONG PreludeGateFence;
   ULONGLONG PreludeGateStartQpc;
   /* PT1 (default absent): REG_DWORD Wom1PerfTgtUtilization, 50..85, replaces
@@ -7226,18 +7227,30 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     LARGE_INTEGER gateFrequency;
     const ULONGLONG gateNow =
         (ULONGLONG)KeQueryPerformanceCounter(&gateFrequency).QuadPart;
+    const ULONGLONG gateHoldUs = gateFrequency.QuadPart <= 0 ? 0ULL
+        : (gateNow - runtime->PreludeGateStartQpc) * 1000000ULL /
+              (ULONGLONG)gateFrequency.QuadPart;
     /* an unusable clock releases the head (fail-open) */
     s.PreludeGateExpired = gateFrequency.QuadPart <= 0 ||
-        (gateNow - runtime->PreludeGateStartQpc) * 1000000ULL /
-            (ULONGLONG)gateFrequency.QuadPart >= ADMISSION_PRELUDE_GATE_BOUND_US
-        ? 1u : 0u;
+        gateHoldUs >= ADMISSION_PRELUDE_GATE_BOUND_US ? 1u : 0u;
+    /* receipt: the hold of this running fence ends once, at the first
+     * decision that finds the completion drained or the bound passed */
+    if (runtime->PreludeGateOpen &&
+        (s.RunningPreludeComplete || s.PreludeGateExpired)) {
+      runtime->PreludeGateOpen = FALSE;
+      AdmissionJobWindowReceiptGateEnded(&runtime->Depth2Receipt, gateHoldUs,
+                                         s.RunningPreludeComplete ? 0u : 1u);
+    }
   }
   refusal = AdmissionJobWindowKickRefusal(&s);
   if (refusal == ADMISSION_JOB_WINDOW_REFUSAL_PRELUDE_NOTIFY_GATE) {
-    if (runtime->PreludeGateFence != fence) {
+    const BOOLEAN gateFirst = runtime->PreludeGateFence != fence;
+    if (gateFirst) {
       runtime->PreludeGateFence = fence;
       runtime->PreludeGateStartQpc = AdmissionJobQpc();
+      runtime->PreludeGateOpen = TRUE;
     }
+    AdmissionJobWindowReceiptGateRefused(&runtime->Depth2Receipt, gateFirst ? 1u : 0u);
     runtime->PreludeGateHeld = TRUE;
   }
   if (!refusal && !runtime->Depth2General &&
@@ -9081,6 +9094,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->PreludeGateHeld = FALSE;
   runtime->PreludeGateFence = 0u;
   runtime->PreludeGateStartQpc = 0ULL;
+  runtime->PreludeGateOpen = FALSE;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   /* PT1: read before the firmware provider is started below; a value outside
    * the accepted range is reported, never applied. */

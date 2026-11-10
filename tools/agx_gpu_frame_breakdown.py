@@ -620,6 +620,7 @@ def kmd_job_poll(data, before=None):
 WINDOW_RECEIPT = struct.Struct('<IIII3I5IIIIIII')
 WINDOW_RECEIPT_V2 = struct.Struct('<IIII3I5IIIIIIII')  # + kick_fallbacks
 WINDOW_RECEIPT_V3 = struct.Struct('<IIII3I5IIIIIIIII')  # + kick_fallbacks_preempt
+WINDOW_RECEIPT_V4 = struct.Struct('<IIII3I5IIIIIIIII6I')  # + R14 prelude notify gate
 
 
 def kmd_job_window(data):
@@ -627,12 +628,15 @@ def kmd_job_window(data):
     raw = _registry_value(data, 'Wom1JobWindow')
     fields = WINDOW_RECEIPT.unpack_from(raw, 0)
     version, size = fields[0], fields[1]
-    layout = {1: WINDOW_RECEIPT, 2: WINDOW_RECEIPT_V2, 3: WINDOW_RECEIPT_V3}.get(version)
+    layout = {1: WINDOW_RECEIPT, 2: WINDOW_RECEIPT_V2, 3: WINDOW_RECEIPT_V3,
+              4: WINDOW_RECEIPT_V4}.get(version)
     if layout is None or size != layout.size or len(raw) < size:
-        raise ValueError('not an ADMISSION_JOB_WINDOW_RECEIPT v1-v3 snapshot')
+        raise ValueError('not an ADMISSION_JOB_WINDOW_RECEIPT v1-v4 snapshot')
     fields = layout.unpack_from(raw, 0)
     fallbacks = fields[18] if version >= 2 else 0
     fallbacks_preempt = fields[19] if version >= 3 else 0
+    gate = fields[20:26] if version >= 4 else (0,) * 6
+    ended = gate[2] + gate[3]
     kicks, max_in_flight = fields[2], fields[3]
     reported = fields[4:7]
     barriers = fields[7:12]
@@ -648,7 +652,13 @@ def kmd_job_window(data):
                 begin_successor_refusal=last_failure >> 16 & 0xff,
                 last_kick_status='%#010x' % last_status,
                 reset_aborts=aborts, last_kicked_fence=last_kicked,
-                kick_fallbacks=fallbacks, kick_fallbacks_preempt=fallbacks_preempt)
+                kick_fallbacks=fallbacks, kick_fallbacks_preempt=fallbacks_preempt,
+                # R14 (Wom1PreludeNotifyGate): refused decisions, held running
+                # fences, holds ended by the drained completion / by the bound
+                refused_gate=gate[0], gate_holds=gate[1], gate_settled=gate[2],
+                gate_timeout=gate[3], gate_hold_sum_us=gate[4],
+                gate_hold_max_us=gate[5],
+                gate_hold_mean_us=round(gate[4] / ended, 1) if ended else 0.0)
 
 
 # rc102 (EXP2045): Wom1JobWindowKickFail, ADMISSION_JOB_WINDOW_KICK_FAILURE
