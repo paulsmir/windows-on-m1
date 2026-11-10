@@ -12,12 +12,19 @@
  *        --synthetic-array-samples=N[,heap]|--synthetic-break-loops=N|--synthetic-shared-reads=K
  *        [--no-d3d-robust] [--assume-in-bounds] [--root-views=UAV,CBV]
  *        [--print-lowered] [--print-nir] [--print-selected] [--soft-fault|--soft-fault-loads]
+ *        [--promote-tex] [--print-preamble]
  * --root-views: hex masks of the UAV and constant-buffer slots that are
  * D3D12 root descriptors (RC75 dxbc_nir_mark_root_views: left unchecked) 
  * --soft-fault: Asahi's compiler key with soft faults (set_speculate: every
  * access-qualified intrinsic and every texture instruction);
  * --soft-fault-loads: RC82's Windows projection (agx_win32_soft_fault.h:
  * memory loads only, key soft_fault false)
+ * --promote-tex: T5, the key of a D3D12 owner with APPLE_AGX_D3D_PROMOTE_TEX=1
+ * (agx_win32_d3d_texture_promote.h); adds one line before COST:
+ *   PROMOTE units <n> descriptors <n> registers <n>
+ * (agx_shader_info::texture_state_count, the bindful descriptors and the USC
+ * texture-state register count of the draw or launch)
+ * --print-preamble: the preamble's listing between PREAMBLE BEGIN / END
  * prints one line:
  *   COST stage <s> block <x>x<y>x<z> shared <B> nir-ifs <n> guarded-loads <n>
  *        loads <n> stores <n> txf <n> mem-blocks <n> hot-mem-blocks <n>
@@ -48,6 +55,7 @@
 
 #include "agx_win32_d3d_robustness.h"
 #include "agx_win32_d3d_texture_crawl.h"
+#include "agx_win32_d3d_texture_promote.h"
 #include "agx_win32_soft_fault.h"
 #include "asahi/lib/agx_abi.h"
 #include "genxml/agx_pack.h"
@@ -1234,7 +1242,7 @@ main(int argc, char **argv)
 {
    bool d3d_robust = true, print_nir = false, print_lowered = false, in_bounds = false;
    bool soft_fault = false, soft_fault_loads = false, fs_backend = false, print_selected = false, hex_main = false;
-   bool shared_store_oracle = false;
+   bool shared_store_oracle = false, promote_tex = false, print_preamble = false;
    unsigned root_uavs = 0, root_cbvs = 0;
    for (int a = 2; a < argc; ++a) {
       if (sscanf(argv[a], "--root-views=%x,%x", &root_uavs, &root_cbvs) == 2)
@@ -1248,6 +1256,8 @@ main(int argc, char **argv)
       in_bounds |= !strcmp(argv[a], "--assume-in-bounds");
       soft_fault |= !strcmp(argv[a], "--soft-fault");
       soft_fault_loads |= !strcmp(argv[a], "--soft-fault-loads");
+      promote_tex |= !strcmp(argv[a], "--promote-tex"); /* T5 */
+      print_preamble |= !strcmp(argv[a], "--print-preamble");
    }
    glsl_type_singleton_init_or_ref();
    if (argc > 1 && !strcmp(argv[1], "--selftest-const-licm"))
@@ -1411,10 +1421,24 @@ main(int argc, char **argv)
    const unsigned tex_speculated = count_tex_speculated(nir);
    struct agx_shader_key key = {.dev = {.needs_g13x_coherency = U_TRISTATE_NO, .soft_fault = soft_fault},
                                 .has_scratch = true, .promote_constants = true, .reserved_preamble = 240};
+   /* T5: agx_compile_nir's key for the application's CS/FS */
+   key.promote_textures = agx_win32_d3d_promote_textures(promote_tex, nir->info.stage, false, false);
    struct agx_shader_part part = {0};
    agx_compile_shader_nir(nir, &key, &part);
    if (shared_store_oracle)
       print_shared_oracle(nir);
+   if (print_preamble && part.info.has_preamble) {
+      /* the preamble function precedes the main function or ends the binary */
+      const unsigned end = part.info.main_offset > part.info.preamble_offset ?
+                           part.info.main_offset : part.info.binary_size;
+      puts("PREAMBLE BEGIN");
+      agx2_disassemble((uint8_t *)part.binary + part.info.preamble_offset, end - part.info.preamble_offset, stdout);
+      puts("PREAMBLE END");
+   }
+   if (promote_tex)
+      /* agx_state.c: the FS word 0 / CDM launch word 0 register count */
+      printf("PROMOTE units %u descriptors %u registers %u\n", part.info.texture_state_count, descriptors,
+             agx_win32_d3d_texture_state_registers(descriptors, part.info.texture_state_count));
    if (print_selected) {
       puts("SELECTED MAIN BEGIN");
       agx2_disassemble((uint8_t *)part.binary + part.info.main_offset, part.info.main_size, stdout);

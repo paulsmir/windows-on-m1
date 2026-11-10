@@ -1005,6 +1005,7 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
     project_query_timeline(out, save)
     project_d3d_robustness(out,save)
     project_soft_faults(out,save)
+    project_texture_promotion(out,save)
     project_wait_timing(out,save)
 
 
@@ -1211,6 +1212,55 @@ agx_has_soft_fault(struct agx_device *dev)
 
    agx_compile_shader_nir(nir, &key, &compiled->b);
 ''')+state[b:]
+    save(sp,state)
+
+
+def project_texture_promotion(out,save):
+    """T5: texture-state promotion of constant texture handles
+    (winsys/agx_win32_d3d_texture_promote.h; the compiler side is
+    native-asahi-latency-schedule.py PROMOTE_TEXTURES).
+
+    agx_compile_nir sets agx_shader_key::promote_textures for the compute and
+    fragment shaders of a backend with D3dPromoteTextures (the D3D12 owner
+    under APPLE_AGX_D3D_PROMOTE_TEX=1); nothing else in the driver sets it.
+    The compiler returns agx_shader_info::texture_state_count, 0 unless the
+    shader has promoted handles, and the two places that launch such a shader
+    (fragment shader word 0, CDM launch word 0) emit a register count that
+    covers the bindful descriptors and the promoted range.  The vertex and
+    background/end-of-tile words keep Gallium's count: their shaders are never
+    compiled with the key bit.
+    """
+    sp='src/gallium/drivers/asahi/agx_state.c';state=(out/sp).read_text()
+    state=replace(state,'#include "agx_win32_d3d_texture_crawl.h"\n',
+        '#include "agx_win32_d3d_texture_crawl.h"\n#include "agx_win32_d3d_texture_promote.h"\n')
+    a,b=function(state,'agx_compile_nir')
+    state=state[:a]+replace(state[a:b],'''   if (agx_win32_soft_faults(dev))
+      NIR_PASS(_, nir, agx_win32_speculate_soft_fault_loads);
+''','''   /* T5 (agx_win32_d3d_texture_promote.h) */
+   const AGX_WIN32_ASAHI_BACKEND *windows_promote = dev->windows_private;
+   key.promote_textures = agx_win32_d3d_promote_textures(
+      windows_promote && windows_promote->D3dPromoteTextures, stage,
+      internal_kernel, secondary);
+
+   if (agx_win32_soft_faults(dev))
+      NIR_PASS(_, nir, agx_win32_speculate_soft_fault_loads);
+''')+state[b:]
+    state=replace(state,'''         cfg.texture_state_register_count =
+            agx_nr_tex_descriptors(batch, ctx->fs);
+''','''         /* T5: the bindful descriptors and the promoted texture states */
+         cfg.texture_state_register_count =
+            agx_win32_d3d_texture_state_registers(
+               agx_nr_tex_descriptors(batch, ctx->fs),
+               ctx->fs->b.info.texture_state_count);
+''')
+    state=replace(state,'''      cfg.texture_state_register_count =
+         cs ? agx_nr_tex_descriptors(batch, cs) : 0;
+''','''      /* T5: the bindful descriptors and the promoted texture states */
+      cfg.texture_state_register_count =
+         agx_win32_d3d_texture_state_registers(
+            cs ? agx_nr_tex_descriptors(batch, cs) : 0,
+            cs ? cs->b.info.texture_state_count : 0u);
+''')
     save(sp,state)
 
 
