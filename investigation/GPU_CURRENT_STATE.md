@@ -4213,3 +4213,19 @@ no-fold arm of the same boot.
 
 Bench order after EXP2329: EXP2330 (cross-lead receipts) -> EXP2331 (STATS-NOPS) -> PF1b fold arm -> POOL-PROBE
 boot (when its commit is gated) -> TDR-H0.
+
+## UPDATE 2026-11-10T21:39:21Z -- architect: POOL-PROBE code integrated (a90f6e193), decoder f5c6c99fe; ready for its own boot
+
+Nothing run on hardware. The probe specified in the 21:27:02Z entry is on origin: KMD code `a90f6e193`, receipt
+decoder `tools/agx_pool_alloc_probe.py` `f5c6c99fe`. Gate: run_against_baseline 1201 tests, 1 NEW (the standing
+mu-flag case). I reviewed the diff: the trigger is reachable only through Slabs.NewSlab with the pool fast mutex
+held (the unlocked prefill calls AdmissionPoolAllocSlab directly and cannot trigger it); the allocation and free
+calls are the ones production already makes under that lock; the receipt is staged under the receipts spin lock and
+written by the existing worker with a flush. Arm table, field order and switch are as specified.
+NOT verified: MSVC /W4 compile (first is the package build); the probe's real duration under the pool lock
+(estimate 0.5..2 s, once, inside the GravityMark load); whether the PREFER_CONTIGUOUS arm (SkipBytes 0) returns
+pages at all on this kernel (its Ok and GranulesOk fields answer that).
+Two details of the implementation that matter when reading the receipt: GranulesOk applies the production
+alignment and consecutive-frame check without the physical-limit test (the allocation bound already enforces it);
+Reused counts 64 KiB-granule first frames shared with the previous arm, so it is at most 256 and is 0 for arm 0.
+The reading rules of the 21:27:02Z entry are unchanged and are applied to the decoder's POOL_PROBE_RATIOS line.
