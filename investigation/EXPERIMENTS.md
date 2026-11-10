@@ -76927,3 +76927,15 @@ EXP2318 HARDWARE BEFORE 2026-11-10T12:40:58Z:
 - Failure criteria / stop: any new refused request (record kind and code, roll back; answering it is a separate
   design step); new warnings; BusType not NVMe; the volume reported removable; stall.
 - Evidence: .local/experiments/ANSBUS1/evidence/ANSQ-T7b/.
+
+EXP2318 ACTUAL 2026-11-10T13:08:34Z:
+- Pipeline: launched 2026-11-10T12:41Z, EXP2318_PIPELINE_RC 0. Guest alive after every phase (suite, GM w/r2/r3/x, FULL f0, CS). No GPU_RESET, STOPS 0, WER_REPORTS 2 (same as EXP2316/EXP2317), suite 120 PASS lines / 0 FAIL (same set as EXP2317), GM err logs empty. Registry verified in the run: Wom1Ov2NoHazardLead absent, Wom1ComputeOwnQueue absent, Wom1JobDiagnostics / Wom1CrossProcessPairs / Wom1SubmitRequeue = 1.
+- Expected fps_frames 49.5-50.5 (w/r2/r3 and x). Actual: w 49.048, r2 49.808, r3 50.526, x (traced) 49.796. EXP2316: w 49.251, x 50.334. EXP2317 (switch = 1): w 42.346, x0 43.678. The cold arm w is 0.45 below the lower bound and within 0.4 % of EXP2316 w; the warm arms are inside the range. The regression of EXP2317 is gone.
+- Expected render pre-kick fractions near EXP2316 (98/66/55/46 %). Actual (nb.py on gm2318x-umd.log, n=2987): R1/R3/R5/R7 started before the KMD saw the previous completion in 99/65/59/40 % of frames, C0/C2/C4/C6 44/24/63/85 %; wall 20.082 ms, union busy 18.281, non-busy 1.801 (EXP2317: 4.45).
+- FULL HD windowed 100k -temporal 0, f0: Score 7923, 47.4 fps = 79.7 % of macOS 9946 (EXP2309 7784, EXP2317 7036). First FULL score of the C1 + requeue configuration without the switch.
+- CS 1.6: warm 48.550, r2 51.637, r3 51.715. Perf gate PERF_GATE_PASS (cs16 +3.39 %, GM presents 45.072 against the EXP2220 baseline 40.770; not the criterion, see BEFORE).
+- Storage base during the run: AppleAns 0.4.7, UnmapMode=2 (ANSQ-T6 completed before the launch). No AppleAns 0xAA/0xA4/0xA5 record in state-end / rcpt-final.
+- Verdict: CONFIRMED. The 13 % loss of EXP2317 was the side effect of Wom1Ov2NoHazardLead=1 (the feature bit changes the UMD's submission and removes render depth two even with the lever closed); the phase fix 3f34e22a2/b171f2991 and the dormant N4c code in package b46a092e8f6b are harmless and stay. The switch stays unset in every package; N4c is not retried (architect, GPU_CURRENT_STATE.md f71e3f57e).
+- New close-out rule from the architect (answer to the blind gate noted in EXP2317): HD fps_frames of arm w/p0 of every GM package must be >= 48.0 (EXP2316/2318 level 49.15 - 2.5 %), otherwise the next package is not staged.
+- Recovery rec2318h: started 2026-11-10T13:03:21Z, RECOVERY_DONE about 13:08Z; VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_STORAGE_APPLEANS_OK, cleanup verdict PASS. Restart line: BUGCHECK ok base=0xfffff8021c000000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0. Display/SSH/storage alive, 8 CPUs.
+- Next: bench slot for ANSQ-T7a/T7b (AppleAns session), then EXP2319 = N6 diagnostic cuts on its own package (eight HD PERF arms, p0 >= 48.0 as package control); offline in parallel the R14 prelude notify gate and PT1.
