@@ -933,6 +933,14 @@ static inline unsigned AgxD3d12JobCrossRefusal(const AGX_D3D12_JOB_BARRIERS *j, 
   }
   return 0u;
 }
+/* OV2 cross-execution apply (opt-in): the verdict in use for a compute
+ * batch. With the switch on, the execution-first compute batch (first) takes
+ * the shadow verdict; every other batch, and every batch with the switch
+ * off, keeps the verdict it had (independent). */
+static inline unsigned AgxD3d12JobCrossApply(unsigned enabled, unsigned first, unsigned shadow, unsigned independent) {
+  if (!enabled || !first) return independent;
+  return shadow == 0u ? 1u : 0u;
+}
 /* the receipt's histogram of shadow reasons, saturating nibbles: bits 0-3
  * independent, 4-7 reason 1, 8-11 reason 2, 12-15 reason 6, 16-19 reason 8,
  * 20-23 any other */

@@ -836,5 +836,110 @@ int main(void) {
         self.assertIn('if (JobStageHeapTable(dispatch)) AgxD3d12OwnerJobUnplaced(1u);', ddi)
         self.assertIn('if (JobStageHeapTable(d.vs_bind) || JobStageHeapTable(d.ps_bind)) AgxD3d12OwnerJobUnplaced(0u);', ddi)
 
+    def test_cross_execution_apply_switch(self):
+        """With APPLE_AGX_D3D12_OV2_CROSS_EXECUTION off the verdict in use is
+        the one of today (the execution-first compute is refused with 2) while
+        the shadow verdict is still recorded; on, the shadow verdict is the
+        verdict of that one batch and of no other. An apply that reaches a
+        later compute batch, or that turns a shadow refusal into
+        'independent', lets a compute run beside a render it depends on."""
+        code = r"""
+#include <stdio.h>
+#include "agx_d3d12_job_barriers.h"
+enum { DRAW = 5, DISPATCH = 2 };
+#define VIEW AGX_D3D12_JOB_SRC_VIEW
+#define TARGET AGX_D3D12_JOB_SRC_TARGET
+static AGX_D3D12_JOB_BARRIERS j;
+static unsigned values[AGX_D3D12_JOB_BARRIER_VALUES];
+static unsigned histogram;
+static int A, RT, T2, V;
+static void batch(unsigned kind, unsigned clean) {
+  AgxD3d12JobCrossBatch(&j, kind, clean);
+  AgxD3d12JobBarrierBatch(&j, kind, values);
+}
+/* the owner's batch hook for a compute batch (owner_batch_kind) */
+static void compute(unsigned enabled) {
+  const unsigned reason = AgxD3d12JobBarrierRefusal(&j);
+  const unsigned first = AgxD3d12JobCrossFirst(&j);
+  unsigned independent = reason == 0u ? 1u : 0u, shadow = 99u, detail = 0u;
+  if (first) {
+    shadow = AgxD3d12JobCrossRefusal(&j, &detail);
+    histogram = AgxD3d12JobCrossCount(histogram, shadow);
+    independent = AgxD3d12JobCrossApply(enabled, first, shadow, independent);
+  }
+  printf(" %u:%u:%u:%u", first, reason, shadow, independent);
+  batch(2u, 0);
+}
+static void run(unsigned enabled, unsigned overlap) {
+  AgxD3d12JobBarriersInit(&j);
+  histogram = 0;
+  AgxD3d12JobBarrierExecution(&j, 1);
+  AgxD3d12JobCrossBegin(&j, 0);
+  AgxD3d12JobBarrierBegin(&j, DRAW);
+  AgxD3d12JobBarrierDrawRange(&j, &RT, 0, 4096, TARGET);
+  AgxD3d12JobBarrierDrawRange(&j, &V, 0, 256, VIEW | AGX_D3D12_JOB_VERTEX);
+  AgxD3d12JobBarrierEnd(&j);
+  batch(1u, 1);
+  AgxD3d12JobCrossEnd(&j, 1);
+  AgxD3d12JobBarrierExecution(&j, 1);
+  AgxD3d12JobCrossBegin(&j, 0);
+  printf("%u %u", enabled, overlap);
+  AgxD3d12JobBarrierBegin(&j, DISPATCH);
+  AgxD3d12JobBarrierDispatchRange(&j, &A, 0, 64, 1u | VIEW);
+  if (overlap) AgxD3d12JobBarrierDispatchRange(&j, &RT, 0, 64, VIEW);
+  AgxD3d12JobBarrierEnd(&j);
+  AgxD3d12JobBarrierBegin(&j, DRAW);
+  compute(enabled); /* the execution-first compute */
+  AgxD3d12JobBarrierDrawRange(&j, &T2, 0, 4096, TARGET);
+  AgxD3d12JobBarrierEnd(&j);
+  AgxD3d12JobBarrierBegin(&j, DISPATCH);
+  batch(1u, 1);
+  AgxD3d12JobBarrierDispatchRange(&j, &T2, 0, 64, VIEW); /* reads that render's target */
+  AgxD3d12JobBarrierEnd(&j);
+  AgxD3d12JobBarrierBegin(&j, DRAW);
+  compute(enabled); /* a later compute of the same execution */
+  AgxD3d12JobBarrierEnd(&j);
+  printf(" %x\n", histogram);
+}
+int main(void) {
+  run(0, 0); run(1, 0); run(0, 1); run(1, 1);
+  /* enabled, first, shadow, independent */
+  printf("%u%u%u%u%u%u%u%u\n", AgxD3d12JobCrossApply(0, 1, 0, 0), AgxD3d12JobCrossApply(0, 1, 0, 1),
+         AgxD3d12JobCrossApply(1, 1, 0, 0), AgxD3d12JobCrossApply(1, 1, 8, 1), AgxD3d12JobCrossApply(1, 0, 0, 0),
+         AgxD3d12JobCrossApply(1, 0, 0, 1), AgxD3d12JobCrossApply(1, 1, 11, 0), AgxD3d12JobCrossApply(2, 3, 0, 0));
+  return 0;
+}
+"""
+        ran = build_run(code, [], [D3D12])
+        self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+        lines = ran.stdout.split('\n')[:-1]
+        # first:reason:shadow:independent of the execution-first compute, then of a later one; histogram
+        self.assertEqual(lines[0].split()[:3], ['0', '0', '1:2:0:0'])   # off: refused as today, shadow recorded
+        self.assertEqual(lines[0].split()[4], '1')                      # ... in the histogram (independent)
+        self.assertEqual(lines[1].split()[:3], ['1', '0', '1:2:0:1'])   # on: independent
+        self.assertEqual(lines[2].split()[:3], ['0', '1', '1:2:8:0'])
+        self.assertEqual(lines[3].split()[:3], ['1', '1', '1:2:8:0'])   # on: the shadow refusal stays a refusal
+        for off, on in ((lines[0], lines[1]), (lines[2], lines[3])):
+            later = off.split()[3]
+            self.assertTrue(later.startswith('0:'), later)              # not the execution-first batch
+            self.assertEqual(later.split(':')[2], '99')                 # no shadow verdict for it
+            self.assertEqual(later, on.split()[3])                      # the switch does not reach it
+            self.assertEqual(off.split()[4], on.split()[4])             # the receipt does not depend on it
+        self.assertEqual(lines[4], '01100101')
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        switch = owner[owner.index('static BOOL owner_ov2_cross_execution(void) {'):]
+        switch = switch[:switch.index('\n}\n')]
+        self.assertIn('GetEnvironmentVariableA("APPLE_AGX_D3D12_OV2_CROSS_EXECUTION", value, sizeof(value)) == 1 && '
+                      "value[0] == '1'", switch)
+        first = owner.index('if (AgxD3d12JobCrossFirst(&owner_job_barriers)) {')
+        shadow = owner[first:owner.index('\n    }', first)]
+        self.assertIn('independent = AgxD3d12JobCrossApply(owner_ov2_cross_execution() ? 1u : 0u, 1u, shadow, independent);',
+                      shadow)
+        self.assertEqual(owner.count('AgxD3d12JobCrossApply('), 1)
+        self.assertEqual(owner.count('owner_ov2_cross_execution()'), 3)
+        self.assertLess(shadow.index('owner_cross_histogram = AgxD3d12JobCrossCount(owner_cross_histogram, shadow);'),
+                        shadow.index('independent = AgxD3d12JobCrossApply('))
+        self.assertIn('(owner_ov2_cross_execution() ? 1u : 0u) | (owner_cross_applied << 1) |', owner)
+
 if __name__ == '__main__':
     unittest.main()

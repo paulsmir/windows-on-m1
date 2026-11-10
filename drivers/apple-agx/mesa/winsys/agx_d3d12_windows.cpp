@@ -704,6 +704,20 @@ static DWORD owner_cross_thread;
 static UINT owner_cross_depth, owner_cross_nested, owner_cross_valid;
 static unsigned long long owner_cross_fence;
 static UINT owner_cross_histogram, owner_cross_last, owner_cross_renders, owner_cross_clean;
+/* OV2 cross-execution apply (opt-in APPLE_AGX_D3D12_OV2_CROSS_EXECUTION=1,
+ * only with the OV2 feature): the shadow verdict is the verdict of the
+ * execution-first compute batch (AgxD3d12JobCrossApply). Off, nothing the
+ * owner submits changes. */
+static BOOL owner_ov2_cross_execution(void) {
+  static const BOOL enabled = [] {
+    char value[2] = {};
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_OV2_CROSS_EXECUTION", value, sizeof(value)) == 1 && value[0] == '1'
+               ? TRUE
+               : FALSE;
+  }();
+  return enabled;
+}
+static UINT owner_cross_applied; /* execution-first compute batches made independent by it */
 static void owner_ov2_receipt_locked(void) {
   UINT any = 0;
   for (unsigned i = 0; i < 8u; ++i) any |= owner_ov2_reason[i];
@@ -734,14 +748,16 @@ static void owner_ov2_receipt_locked(void) {
     /* OV2 cross-execution: shadow reasons of the execution-first compute as
      * saturating nibbles (independent, 1, 2, 6, 8, other); its last shadow
      * reason | detail << 8 | foreign command kinds << 16 (bit 15 driver
-     * work); render batches << 8 | clean ones << 20 */
+     * work); the apply switch | batches it made independent << 1 | render
+     * batches << 8 | clean ones << 20 */
     values[29] = owner_cross_histogram;
     values[30] = owner_cross_last;
-    values[31] = ((owner_cross_renders > 0xfffu ? 0xfffu : owner_cross_renders) << 8) |
+    values[31] = (owner_ov2_cross_execution() ? 1u : 0u) | (owner_cross_applied << 1) |
+                 ((owner_cross_renders > 0xfffu ? 0xfffu : owner_cross_renders) << 8) |
                  ((owner_cross_clean > 0xfffu ? 0xfffu : owner_cross_clean) << 20);
     AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 32u);
   }
-  owner_cross_histogram = owner_cross_last = owner_cross_renders = owner_cross_clean = 0;
+  owner_cross_histogram = owner_cross_last = owner_cross_renders = owner_cross_clean = owner_cross_applied = 0;
   for (unsigned i = 0; i < 8u; ++i) owner_ov2_reason[i] = 0;
   owner_ov2_sequence = owner_ov2_pairs = owner_ov2_range_sequence = 0;
   for (unsigned i = 0; i < 4u; ++i) owner_ov2_prefix[i] = owner_ov2_kinds[i] = 0;
@@ -997,6 +1013,9 @@ static unsigned owner_batch_kind(unsigned kind) {
       owner_cross_histogram = AgxD3d12JobCrossCount(owner_cross_histogram, shadow);
       owner_cross_last = (shadow & 0xffu) | ((detail & 0xffu) << 8) | ((kinds & 0x7fffu) << 16) |
                          ((kinds >> 31) << 31);
+      /* apply (opt-in): this batch takes the shadow verdict */
+      independent = AgxD3d12JobCrossApply(owner_ov2_cross_execution() ? 1u : 0u, 1u, shadow, independent);
+      if (owner_ov2_cross_execution() && independent && owner_cross_applied < 0x7fu) ++owner_cross_applied;
     }
     if (owner_job_barriers.PreviousKind == 1u) {
       if (owner_ov2_pairs < 8u) {
