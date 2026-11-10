@@ -76404,3 +76404,36 @@ EXP2309 HARDWARE BEFORE 2026-11-10T00:15:48Z:
 
 - Corrects the "New fact about the hung boot" item of ANSQ-T4-R1 (ACTUAL). The three AppleAns event 11 records stamped 01:22:02–01:22:04Z belong to the successful relaunch, not to the hung boot: the guest clock starts from the last shutdown time and jumps 01:22:10 -> 01:31:56 at the NTP sync; Kernel-General id 12 lists boots 01:08:42, 01:13:13, 01:17:56, 01:22:02 only, and Kernel-Boot 20 of the relaunch reports the previous boot as unsuccessful (AppleAns session, from the guest log). The hung boot persisted no event; it stalled before the event log came up, within seconds of the storage adapter start. The watchdog-snapshot observation (8 idle CPUs, live ticks) stands.
 - Release state of the bench (AppleAns session, 01:35Z): hash manifest 330/330, chkdsk C: /scan clean, registry UnmapMode=1 (observe) effective from the next boot, fence values left in place, AppleAns 0.4.6, ScheduledDefrag enabled (idle-maintenance trigger, not changed).
+
+## ANSQ-T4 — full ReTrim with live deallocate (ACTUAL part 2, 2026-11-10T01:37:00Z)
+
+- Recovery (bench owner, ledger ANSQ-T4-R1): the hung launcher 29078 was killed after two HV watchdog snapshots
+  25 s apart (hang-normal-full-snapshots.log: all 8 CPUs at pc 0xfffff800f24811ac both times, ticks advancing,
+  no EL2 exception: Windows idle, waiting); an identical relaunch of launch-normal-ans.sh reached SSH in 25 s
+  (01:32:05Z, run_uefi PID 40442) with the same package, mode 2 and fence.
+- Checks in the recovered boot: VERIFY_MANIFEST_OK (330/330), `chkdsk C: /scan` found no problems (exit 0), C:
+  not dirty, no disk/storport/Ntfs warnings, 8 CPUs, MediaType SSD, "Trim Supported"; receipt 23 commands / 924
+  ranges sent, 23 completed ok. No data damage is observable from Windows after the 37 GiB deallocate.
+- What the hung boot left behind: nothing. Kernel-General id 12 lists boots stamped 01:08:42, 01:13:13, 01:17:56
+  and 01:22:02; the last is the successful relaunch (the guest clock resumes from the last shutdown time; its
+  stamps jump from 01:22:10 to 01:31:56 at the NTP sync) and its Kernel-Boot id 20 says "the last boot's
+  success status was false". The hung boot therefore stalled before the event log existed. m1n1 side: all five
+  0.4.6 boot logs show "IRQ route enabled vINTID=960 AIC=590 count=1" (AppleAns interrupt connected); the four
+  healthy ones continue with the vINTID 865/857 routes 13-17 lines later, the hung one stops there.
+- Boundary: after HwInitialize/interrupt connect of AppleAns, before the next device's interrupt is connected;
+  all CPUs idle; no Storport-timeout recovery visible for 9 minutes; no bugcheck.
+- Not determined: the cause. Candidates, not ranked by evidence beyond timing: (a) controller-side latency or
+  a non-completing command after the mass deallocate; (b) a boot-time Dataset Management command (deallocate
+  mode sends them from the first seconds) that does not complete; (c) a lost completion in the AppleAns direct
+  path independent of TRIM (the 50 ms timer services the mailbox only, it does not poll the CQ); (d) an
+  unrelated recovery-guest hang. One occurrence in five boots of 0.4.6; none on record for 0.4.4/0.4.5.
+- State left: registry UnmapMode set to 1 (observe) at 01:34Z at the bench owner's request, fence values left
+  in place; effective from the next boot. ScheduledDefrag enabled, not changed.
+- Verdict: ReTrim with live deallocate CONFIRMED functionally (181/181 commands status 0, bounds pass,
+  integrity clean before and after a later boot); the stage is NOT PASSED: one unexplained boot stall directly
+  after it. TRIM (0.4.6 / a85a64e24) is not merged and not the recorded AppleAns; live deallocate stays disarmed.
+- Next (smallest discriminators, each a single variable, bench gaps only): N boots of 0.4.6 in observe mode
+  (stall recurs -> not deallocate, driver or platform); if clean, boots in deallocate mode without a preceding
+  ReTrim (-> boot-time DSM), then ReTrim + restart again (-> post-mass-deallocate). Offline first: read
+  Storport's timeout path for this adapter and why no reset record or recovery appeared.
+- Evidence: .local/experiments/ANSTRIM1/evidence/ANSQ-T4/{hang-normal-full.log,hang-normal-full-snapshots.log,post-boot3.txt,verify-boot3.txt,system-events-hang-window.txt,release-state.txt}.
