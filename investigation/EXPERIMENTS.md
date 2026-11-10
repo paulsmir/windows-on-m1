@@ -77239,3 +77239,23 @@ EXP2324 HARDWARE BEFORE 2026-11-10T17:22:51Z:
 - Hashes: sys cb58e0b6c786, UmdArm64 0c74ec89e770, UmdX64 d4c4a0a08de6, Umd32 bebbdfe18495; manifest ecbc30e4f7f8, hardware-manifest ac50af02a830; probe2324.sh 0fa446a5d4bd (PROBE_LINT_OK); visible recovery rec2324h 44a4135a6ed70807; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2324h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2324-n6b-cut-ladder/run2324.sh.
+
+EXP2324 ACTUAL 2026-11-10T18:05:10Z:
+- Phases: launch, package install and first start normal (Wom1JobDiagnostics, Wom1CrossProcessPairs, Wom1SubmitRequeue). Suite, w/r2/r3, p0 and the k48 arms kb2..k3228 completed; arm k4128 took the guest down at poll 5 (~25 s): m1n1 "BUGCHECK ok base=0xfffff803c3a00000 code=0x116 p1=0xffffcf085e2a8050 p2=0xfffff803c2011ec0 p3=0xffffffffc0000483 p4=0x3", then PSCI RESET. What is shown: a GPU job did not finish and the KMD reset path ended in 0x116 (same signature as EXP2323 t1). jb1, j364..j4120, p1, CS and the perf gate were not run. EXP2324_PIPELINE_RC 0 with GUEST_DOWN_DURING k4128.
+- Suite TOOL_SUITE PASS=119 FAIL=0. Untagged control w/r2/r3 fps_frames 49.596 / 49.975 / 50.579 (floor 48.0 PASS).
+- Step 0 PASS: p0 shader-stats k48 97efffb3 801/520/127/832/1/5400/22, k49 b1db88bf 810/504/111/896/1/5434/22. Every cut arm printed exactly its expected diag-cut row (a8260e42 97efffb3, point 2 cut a4 / point 4 cuts d2, 456, 846, ad8, c9c, code 1498, selected 1); N6_FAULT 0 in p0..k3228.
+- Per-job means (ms; architect n6read.py method: R11 pattern, window 10-84 s; fps_frames = the single run of each arm):
+  | arm | cut | fps_frames | b12 (k48) | b13 (k49) | b14 |
+  | p0 | none | 44.147 | 0.7940 | 0.3422 | 0.2525 |
+  | kb2 | 97efffb3:B2 | 48.936 | 0.1182 | 0.2993 | 0.0505 |
+  | k210 | 97efffb3:@210 | 50.858 | 0.1322 | 0.2992 | 0.0499 |
+  | k1110 | 97efffb3:@1110 | 49.529 | 0.4214 | 0.2983 | 0.0494 |
+  | k2118 | 97efffb3:@2118 | 47.338 | 0.5194 | 0.2987 | 0.0499 |
+  | k2776 | 97efffb3:@2776 | 49.263 | 0.5999 | 0.2980 | 0.0491 |
+  | k3228 | 97efffb3:@3228 | 48.342 | 0.6394 | 0.2985 | 0.0496 |
+  | k4128 | 97efffb3:@4128 | 0x116 | - | - | - |
+  b12 intervals: B2->@210 0.0140, @210->@1110 0.2892, @1110->@2118 0.0980, @2118->@2776 0.0805, @2776->@3228 0.0395, @3228->control 0.1546 (includes @3228->@4128 and the loop; unresolved). b0..b11 as control within ~1 %. The nested stop at @210 ran clean.
+- Dump: volmgr 162 at 18:23:38 guest time, WER 1001 0x116 with the same parameters; MEMORY.DMP (782485932 bytes) left on the guest; minidump C:\Windows\Minidump\111026-6375-01.dmp copied to .local/experiments/EXP2324-n6b-cut-ladder/evidence/EXP2324/exp2324-0x116-mini.dmp. full.log copy evidence/EXP2324/full-at-crash.log, tail before the BUGCHECK full-tail-k4128.txt. Not analysed. C: not dirty; AppleAns records 0xA9 + two 0xA6 per boot, no 0xAA/0xA4/0xA5.
+- Recovery: AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2324h/recover.sh: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE; GPU-visible recovery guest clean.
+- Verdict: PARTIAL for k48 (7 of 8 points, monotone); k49 half NOT RUN; k4128 = guest 0x116 (p3 0xC0000483, p4 3). Architect: EXP2324b (k49 half + k48 tail) comes as a new arm list later; cut arms that stop after a count/offset store but before its bound check go last, the run stops at the first 0x116.
+- Next: EXP2325 / EXP2326 (K1).
