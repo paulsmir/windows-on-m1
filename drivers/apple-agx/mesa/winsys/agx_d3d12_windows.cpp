@@ -146,6 +146,13 @@ struct AGX_D3D12_OWNER {
    * scratch the level is tiled into, a failed ring creation (not retried),
    * and receipt counters */
   AGX_D3D12_BUFFER LevelRing;
+  /* K48G diagnostic (AgxD3d12OwnerDiagIndirectArgs): eight 16-byte
+   * READBACK-class buffers, the call index + 1 that each one holds (0:
+   * none), the next call index, and 0 unused / 1 ready / 2 failed */
+  AGX_D3D12_BUFFER DiagArgs[AGX_D3D12_DIAG_ARGS_SLOTS];
+  unsigned long long DiagArgsWritten[AGX_D3D12_DIAG_ARGS_SLOTS];
+  unsigned long long DiagArgsNext;
+  UINT DiagArgsState;
   unsigned long long LevelRingUsed;
   void *LevelScratch;
   unsigned long long LevelScratchBytes;
@@ -1366,6 +1373,8 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   if (owner->UploadStaging) AgxWin32AsahiResourceRelease(&owner->UploadStaging);
   if (owner->DownloadStaging) AgxWin32AsahiResourceRelease(&owner->DownloadStaging);
   if (owner->LevelRing.Resource) AgxD3d12OwnerDestroyBuffer(owner, &owner->LevelRing);
+  for (UINT i = 0; i < AGX_D3D12_DIAG_ARGS_SLOTS; ++i) /* K48G */
+    if (owner->DiagArgs[i].Resource) AgxD3d12OwnerDestroyBuffer(owner, &owner->DiagArgs[i]);
   if (owner->LevelScratch) HeapFree(GetProcessHeap(), 0, owner->LevelScratch);
   owner->LevelScratch = NULL;
   owner->LevelScratchBytes = 0;
@@ -1981,6 +1990,69 @@ extern "C" HRESULT AgxD3d12OwnerCopy(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUF
                                        static_cast<struct pipe_resource *>(src->Resource), 0, &box);
   ++owner->PendingCopies;
   return S_OK;
+}
+
+/* K48G: the slot buffers, created on first use. READBACK intent (rc99) so
+ * they take native staging like a D3D12 READBACK heap; a CPU pointer that is
+ * private staging (GPU writes would need a download) or none fails the ring
+ * for good. Not RC65 upload targets: the CPU never writes them. */
+static bool diag_args_ring(AGX_D3D12_OWNER *owner) {
+  if (owner->DiagArgsState) return owner->DiagArgsState == 1u;
+  owner->DiagArgsState = 2u;
+  for (UINT i = 0; i < AGX_D3D12_DIAG_ARGS_SLOTS; ++i) {
+    AgxD3d12OwnerSetReadbackIntent(owner, TRUE);
+    const HRESULT hr = AgxD3d12OwnerCreateBuffer(owner, 16u, TRUE, &owner->DiagArgs[i]);
+    AgxD3d12OwnerSetReadbackIntent(owner, FALSE);
+    if (FAILED(hr) || !owner->DiagArgs[i].Cpu || AgxD3d12OwnerCpuMapIsPrivate(owner, owner->DiagArgs[i].Cpu)) {
+      for (UINT j = 0; j <= i; ++j)
+        if (owner->DiagArgs[j].Resource) AgxD3d12OwnerDestroyBuffer(owner, &owner->DiagArgs[j]);
+      return false;
+    }
+#ifdef APPLE_AGX_GPUVA_WINSYS
+    remove_upload_target(owner, static_cast<struct pipe_resource *>(owner->DiagArgs[i].Resource));
+#endif
+  }
+  memset(owner->DiagArgsWritten, 0, sizeof(owner->DiagArgsWritten));
+  owner->DiagArgsNext = 0ull;
+  owner->DiagArgsState = 1u;
+  return true;
+}
+
+extern "C" unsigned AgxD3d12OwnerDiagIndirectArgs(AGX_D3D12_OWNER *owner, const AGX_D3D12_BUFFER *args,
+                                                  unsigned long long offset, unsigned values[4]) {
+  OwnerLock lock(owner);
+  values[0] = values[1] = values[2] = 0xffffffffu;
+  values[3] = AGX_D3D12_DIAG_ARGS_UNAVAILABLE;
+  if (!owner || !owner->Context || !args || !args->Resource || offset > args->Bytes || args->Bytes - offset < 12u ||
+      !diag_args_ring(owner))
+    return 0u;
+  const unsigned long long k = owner->DiagArgsNext++;
+  const unsigned long long lag = AGX_D3D12_DIAG_ARGS_SLOTS - 1u;
+  unsigned source = 0u;
+  /* read the slot written lag calls ago, only when no batch of the context
+   * still holds it (non-waiting poll, never a flush) */
+  values[3] = AGX_D3D12_DIAG_ARGS_WARMUP;
+  if (k >= lag) {
+    const UINT r = static_cast<UINT>((k - lag) % AGX_D3D12_DIAG_ARGS_SLOTS);
+    const AGX_D3D12_BUFFER &slot = owner->DiagArgs[r];
+    if (owner->DiagArgsWritten[r] != k - lag + 1u) {
+      values[3] = AGX_D3D12_DIAG_ARGS_WARMUP;
+    } else if (AgxWin32AsahiResourceBusy(owner->Context, static_cast<struct pipe_resource *>(slot.Resource))) {
+      values[3] = AGX_D3D12_DIAG_ARGS_BUSY;
+    } else {
+      memcpy(values, slot.Cpu, 12u);
+      values[3] = static_cast<unsigned>(lag);
+      source = 4u;
+    }
+  }
+  /* then copy this call's record into slot k mod SLOTS: after the dispatch,
+   * in the open compute batch; a slot a batch still holds is skipped */
+  const UINT w = static_cast<UINT>(k % AGX_D3D12_DIAG_ARGS_SLOTS);
+  owner->DiagArgsWritten[w] = 0ull;
+  if (!AgxWin32AsahiResourceBusy(owner->Context, static_cast<struct pipe_resource *>(owner->DiagArgs[w].Resource)) &&
+      SUCCEEDED(AgxD3d12OwnerCopy(owner, &owner->DiagArgs[w], 0u, args, offset, 12u)))
+    owner->DiagArgsWritten[w] = k + 1u;
+  return source;
 }
 
 /* C5: the D3D11 frontend's compute path (agx_d3d11_ddi.cpp

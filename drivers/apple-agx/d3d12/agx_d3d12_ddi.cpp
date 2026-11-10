@@ -6784,18 +6784,20 @@ static unsigned long long JobHeapBytes(const void *heap) {
 }
 /* K48G (class D diagnostic): APPLE_AGX_D3D12_DIAG_INDIRECT_ARGS=<hex cs_tag>
  * (the 6th value of measure-d3d12-dispatch) writes one receipt
- * measure-d3d12-indirect-args {cs_tag, x, y, z, source} per replayed
+ * measure-d3d12-indirect-args {cs_tag, x, y, z, source, lag} per replayed
  * ExecuteIndirect dispatch of that shader: the first record's
- * D3D12_DISPATCH_ARGUMENTS read through the argument heap's persistent CPU
- * mapping on the replay (CPU) timeline, so before the GPU runs this
- * submission. No GPU work, flush, wait or submission change. source:
- *   0 the heap has no CPU mapping (NOT_AVAILABLE/DEFAULT heap: GPU-only BO);
- *     x = y = z = 0xffffffff
- *   1 WRITE_COMBINE heap (D3D12 UPLOAD: the CPU wrote it, current value)
- *   2 another CPU-mapped heap (WRITE_BACK/custom: the GPU may write it, so
- *     a GPU-produced value is the last one before this submission)
- *   3 C31 CPU expansion (synchronised read, the value this dispatch uses)
- * Unset: one cached check per indirect dispatch, no receipt. */
+ * D3D12_DISPATCH_ARGUMENTS. source:
+ *   0 not available: x = y = z = 0xffffffff, lag = reason (1 ring warming up
+ *     or slot copy skipped, 2 slot's batch not complete, 3 no ring)
+ *   1 WRITE_COMBINE heap (D3D12 UPLOAD: the CPU wrote it), read through the
+ *     heap's CPU mapping at replay: current value, lag 0
+ *   2 another CPU-mapped heap (WRITE_BACK/custom): read at replay, before
+ *     this submission runs, so a GPU-produced value is an earlier one; lag 0
+ *   3 C31 CPU expansion (synchronised read): exact, lag 0
+ *   4 heap without CPU mapping (DEFAULT): a 12-byte GPU copy after the
+ *     dispatch into the owner's 8-slot ring (AgxD3d12OwnerDiagIndirectArgs),
+ *     read lag = 7 tagged dispatches later once complete (never waits)
+ * Unset: one cached check per indirect dispatch; no buffer, copy or receipt. */
 static bool DiagIndirectArgsTag(UINT tag) {
     static volatile LONG state; /* 0 unread, 1 set, 2 unset */
     static UINT value;
@@ -6816,21 +6818,26 @@ static bool DiagIndirectArgsTag(UINT tag) {
     }
     return current == 1 && value == tag;
 }
-static void DiagIndirectArgsReceipt(UINT tag, const UINT args[3], UINT source) {
-    const UINT receipt[] = {tag, args[0], args[1], args[2], source};
-    AdmissionUmdDiagnostic("measure-d3d12-indirect-args", source ? S_OK : S_FALSE, receipt, 5);
+static void DiagIndirectArgsReceipt(UINT tag, const UINT args[3], UINT source, UINT lag) {
+    const UINT receipt[] = {tag, args[0], args[1], args[2], source, lag};
+    AdmissionUmdDiagnostic("measure-d3d12-indirect-args", source ? S_OK : S_FALSE, receipt, 6);
 }
-static void DiagIndirectArgs(const AgxD3d12Dispatch &dispatch) {
+/* after the dispatch was recorded (args: the owner record of in.args) */
+static void DiagIndirectArgs(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch, const AGX_D3D12_BUFFER &args) {
     const AgxD3d12Indirect &in = dispatch.indirect;
     if (!in.args || !dispatch.pso || !DiagIndirectArgsTag(dispatch.pso->cs_tag)) return;
-    UINT args[3] = {0xffffffffu, 0xffffffffu, 0xffffffffu};
-    UINT source = 0u;
     const AgxD3d12Heap *heap = in.args;
-    if (heap->cpu && in.args_offset <= heap->bytes && heap->bytes - in.args_offset >= sizeof(args)) {
-        memcpy(args, static_cast<const unsigned char *>(heap->cpu) + in.args_offset, sizeof(args));
-        source = heap->cpu_page == static_cast<UINT>(D3D12DDI_CPU_PAGE_PROPERTY_WRITE_COMBINE) ? 1u : 2u;
+    if (heap->cpu && in.args_offset <= heap->bytes && heap->bytes - in.args_offset >= 12u) {
+        UINT values[3];
+        memcpy(values, static_cast<const unsigned char *>(heap->cpu) + in.args_offset, sizeof(values));
+        const UINT source = heap->cpu_page == static_cast<UINT>(D3D12DDI_CPU_PAGE_PROPERTY_WRITE_COMBINE) ? 1u : 2u;
+        DiagIndirectArgsReceipt(dispatch.pso->cs_tag, values, source, 0u);
+        return;
     }
-    DiagIndirectArgsReceipt(dispatch.pso->cs_tag, args, source);
+    unsigned ring[4];
+    const unsigned source = AgxD3d12OwnerDiagIndirectArgs(owner, &args, in.args_offset, ring);
+    const UINT values[3] = {ring[0], ring[1], ring[2]};
+    DiagIndirectArgsReceipt(dispatch.pso->cs_tag, values, source, ring[3]);
 }
 static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch) {
     const bool job = AgxD3d12OwnerJobBarriersEnabled() != FALSE;
@@ -6862,11 +6869,11 @@ static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const
     AGX_D3D12_BUFFER args = {}, count = {};
     AGX_D3D12_INDIRECT indirect;
     OwnerIndirect(dispatch.indirect, &args, &count, &indirect);
-    DiagIndirectArgs(dispatch);
     if (dispatch.pso && SplitBeforeTag(dispatch.pso->cs_tag)) AgxD3d12OwnerSplitBatch(owner);
     const HRESULT hr = AgxD3d12OwnerDispatch(owner, pipeline, bind.uavs, bind.cbvs, bind.srvs, bind.samplers,
                                              dispatch.groups[0], dispatch.groups[1], dispatch.groups[2],
                                              indirect.Buffer ? &indirect : nullptr);
+    if (SUCCEEDED(hr) && indirect.Buffer) DiagIndirectArgs(owner, dispatch, args); /* K48G: after the dispatch */
     if (heap) HeapFree(GetProcessHeap(), 0, heap);
     return hr;
 }
@@ -7232,7 +7239,7 @@ static HRESULT ReplayIndirectExpand(AGX_D3D12_OWNER *owner, const AgxD3d12Comman
             UINT v[5] = {};
             memcpy(v, op, signature.kind == 2u ? 20u : signature.kind == 1u ? 16u : 12u);
             if (signature.kind == 3u && !i && state.list.pso && DiagIndirectArgsTag(state.list.pso->cs_tag))
-                DiagIndirectArgsReceipt(state.list.pso->cs_tag, v, 3u);
+                DiagIndirectArgsReceipt(state.list.pso->cs_tag, v, 3u, 0u);
             if (signature.kind == 3u) RecordDispatch(scratch, v[0], v[1], v[2], nullptr);
             else if (signature.kind == 2u) RecordDraw(scratch, v[0], v[1], v[2], static_cast<INT>(v[3]), v[4], true);
             else RecordDraw(scratch, v[0], v[1], v[2], 0, v[3], false);

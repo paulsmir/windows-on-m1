@@ -153,6 +153,18 @@ UINT AgxD3d12OwnerBufferAllocation(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFE
 HRESULT AgxD3d12OwnerCopy(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Dst,
                           unsigned long long DstOffset, const AGX_D3D12_BUFFER *Src,
                           unsigned long long SrcOffset, unsigned long long Bytes);
+/* K48G (class D diagnostic, APPLE_AGX_D3D12_DIAG_INDIRECT_ARGS): call right
+ * after a dispatch whose argument heap has no CPU mapping. Reads the 12-byte
+ * record copied SLOTS - 1 calls ago (Values = x, y, z, lag; returns 4) or
+ * returns 0 with Values = ~0, ~0, ~0, reason; then records a 12-byte GPU copy
+ * of Args + Offset into this call's slot in the open compute batch. Never
+ * waits, never flushes: a slot a batch still holds is skipped. */
+#define AGX_D3D12_DIAG_ARGS_SLOTS 8u
+#define AGX_D3D12_DIAG_ARGS_WARMUP 1u      /* slot not written (first SLOTS - 1 calls, or a skipped copy) */
+#define AGX_D3D12_DIAG_ARGS_BUSY 2u        /* the slot's batch is not complete: skipped, no wait */
+#define AGX_D3D12_DIAG_ARGS_UNAVAILABLE 3u /* no ring (creation failed or private staging) or a bad range */
+unsigned AgxD3d12OwnerDiagIndirectArgs(AGX_D3D12_OWNER *Owner, const AGX_D3D12_BUFFER *Args,
+                                       unsigned long long Offset, unsigned Values[4]);
 /* C5 (investigation/analysis/D3D12-C5-compute.md): a compute shader
  * compiled from its D3D tokenized program (DXBC -> NIR -> Asahi), with the
  * thread-group size the program declares. */
