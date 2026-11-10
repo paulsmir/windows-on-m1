@@ -76553,3 +76553,21 @@ EXP2311 HARDWARE BEFORE 2026-11-10T01:36:25Z:
 - Reading: clean with 0xAA records -> the ANSQ-T4 stall was a missed interrupt now absorbed (m1n1 route work
   follows); clean without 0xAA -> ANSQ-T4 not reproduced (stays an open single event); stall -> controller.
 - Evidence: .local/experiments/ANSTRIM2/evidence/ANSQ-T5c/.
+
+### EXP2311 — ACTUAL (2026-11-10T01:56:06Z)
+
+- Probe probe2311.sh sha256 prefix da3e334db22b8d71 (the BEFORE prefix 10e036cb67aef460 predates a one-line comment edit; no command changed).
+- Boot: package installed, Problem CM_PROB_NONE; SWITCH Wom1CrossProcessPairs absent, Wom1CrossProcessPrivateLead absent, Wom1JobDiagnostics 0x1. Pipeline RC 0 (launch about 01:35Z, probe done 01:50Z).
+- D3D12 suite: PASS=119 FAIL=0.
+- GM HD windowed 100k -temporal 0 PERF (10+60 s), runs back to back without the 60 s cool-down EXP2309 used:
+  w fps_frames 48.521 (fps 43.852, frames 2630), r2 48.901 (44.232, 2653), r3 48.708 (44.189, 2650); jobs_per_frame 8.0 in all three; err files empty.
+  Against the EXP2309 base 48.97-49.15 with +-1 % (48.48-49.64): all three inside (r2 -0.1..-0.5 %, r3 -0.5..-0.9 %, cold w -0.9..-1.3 % of the two base values, inside the band's lower edge).
+- Wom1CrossProcessPairsReceipt: absent (0 lines in kmd-receipts-post-gm.txt, reg query finds no value). Receipt value-name set identical to EXP2309 post-phd2; no Wom1GpuReset / Wom1GpuFault / Wom1FirmwareRecovery / Wom1PreemptRefusal values. A per-class refusal histogram comparison was not done here (left to the architect's bucket tools on the evidence).
+- CS 1.6: warm 47.777, r2 51.137, r3 51.731 fps. Perf gate: cs16 PASS worst 51.137 vs 49.943 (+2.39 %), gravitymark_hd_perf PASS worst 44.189 vs 40.770 (+8.39 %), PERF_GATE_PASS.
+- WER_REPORTS 2 = the two old files in C:\CrashDumps (dwm-live983.dmp, explorer-live984.dmp, 2026-10-06); no new dump. STOPS 0. Display, SSH, storage alive; guest reachable after every stage.
+- Storage: service AppleAns RUNNING, ImagePath appleans.inf_arm64_20a748c874b1e861\AppleAns.sys, file SHA-256 4AF699F474CB4A4DE8A45C699B3AE21E51FA7FB206E5FC15248A0687E3F95C6F (0.4.5), as stated in the correction to BEFORE.
+- Ordered restart of the rollback (full.log:52112): "BUGCHECK ok base=0xfffff803e1a00000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0".
+- Recovery: rec2311h/recover.sh RC 0 at 01:55:44Z, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_STORAGE_APPLEANS_OK, RECOVERY_DONE.
+- Verdict: CONFIRMED. With both switches off the package (25c1945b6) behaves as the EXP2309 package within the preregistered band; the cross-process pair code stays dark.
+- Evidence: .local/experiments/EXP2311-xproc-n3a/evidence/EXP2311 (gm2311{w,r2,r3}-umd.log, kmd-receipts-*.txt, perf-gate.txt, cs-*/), full.log.
+- Next: EXP2312 (N3b), same source, Wom1CrossProcessPairs=1 set before the first start of a fresh boot. The arms are separate boots because same-boot adapter cycles are invalid (EXP2308); off arm = this experiment.
