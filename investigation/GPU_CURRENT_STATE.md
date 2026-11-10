@@ -4229,3 +4229,39 @@ Two details of the implementation that matter when reading the receipt: Granules
 alignment and consecutive-frame check without the physical-limit test (the allocation bound already enforces it);
 Reused counts 64 KiB-granule first frames shared with the previous arm, so it is at most 256 and is 0 for arm 0.
 The reading rules of the 21:27:02Z entry are unchanged and are applied to the decoder's POOL_PROBE_RATIOS line.
+
+## UPDATE 2026-11-10T21:43:37Z -- architect: allocate-ahead (P3) is not a free branch -- prefill history read; amendment to the POOL-PROBE reading made before any probe data
+
+Source: ledger and code digest of the rc86..rc114 pool prefill (EXP2018, EXP2019a, EXP2022, EXP2024, EXP2025, EXP2060,
+EXP2061; pool_windows.c 1296-1372, 1396-1416, 1604-1630; render_pool_slab.c 29-89; paging_windows.c 527-532). The
+decisive lines were re-read in EXPERIMENTS.md (EXP2060 ACTUAL) and in the code before this entry.
+
+What the record says:
+- Allocating slabs ahead on another thread has been run on hardware twice. rc88/EXP2022: bo-allocate 5.3 -> 2.8 s,
+  score unchanged; EXP2024: D3D11 2529 -> 2279 with the prefill item and the paging worker on one DelayedWorkQueue
+  (rc91 turned it off). rc114 moved the paging worker to CriticalWorkQueue; EXP2060 with Wom1PoolPrefill=1 on that
+  build: bo-allocate 3.23 -> 2.08 s, bo-bind-paging 2.24 -> 3.54 s, stall 8.29 -> 8.15 s, paging worker body max
+  21 -> 223 ms. Sum of the two stall parts 5.47 -> 5.62 s: the work moved, it did not shrink. Verdict then:
+  "prefill rejected again".
+- The existing prefill already allocates outside the pool lock and adopts under it; it never takes the G3 lock. So
+  "outside the lock, on its own thread" is not a new variable against EXP2060.
+- HYPOTHESIS (not measured): the P1 kernel reading gives EXP2060 a mechanism. Each 64 KiB chunk of the chunked rung
+  issues an entire-TLB invalidate that is broadcast to every CPU (tlbi vmalle1is) and a per-page cache flush. A second
+  thread doing this while the paging worker runs costs the paging worker its TLB about 32 times per slab. That would
+  explain a slower worker body with no queueing.
+- Memory floor: growth must stop under LowMemory and be handed back on pressure reclaim (EXP2033e, EXP2061b; rc104,
+  rc109, rc115). The spare cache is 64 slabs (128 MiB) with a 2 s idle trim; a load asks for about 1450 slabs.
+
+AMENDMENT to the pre-registered POOL-PROBE reading (entry 21:27:02Z; made before the probe boot, no probe data exists):
+- The branches that ended in "only P3 (allocate-ahead on a dedicated thread) remains" are withdrawn in that form.
+  Moving the unchanged chunked allocation to another thread is EXP2060 again and gets no package.
+- Allocate-ahead may come back only on top of a cheaper per-slab allocation that the probe has shown (chunk ladder
+  arm C1/C2 at <= 0.5 of A1, or a cached form with its own flush design), and then its package must report
+  bo-bind-paging, paging worker max and score next to bo-allocate, as EXP2060 did.
+- If the probe shows no cheaper form (c1 > 0.75a, c2 > 0.75a and a < 1.3b), the allocation-cost line stops there and
+  the remaining question for the startup stall is the number of slabs a load asks for (accounting below), not their
+  placement on threads.
+
+Next offline step (no hardware): account for the ~1450 slabs (2.9 GiB) of one GravityMark HD load from existing
+receipts and logs -- which allocation classes ask for them and whether any class is backed at creation without
+being used. Read-only study started; result will be recorded here.
