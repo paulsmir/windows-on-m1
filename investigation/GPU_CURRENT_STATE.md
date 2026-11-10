@@ -3098,3 +3098,64 @@ Lever ranking after N3-N5 (HD, ms per frame; gap to macOS about 4.7 ms; none of 
    candidates per R10: exec-mask control-flow shape, integer address arithmetic, per-view data effect. Next step is an
    offline design of the (b) probe (C0 kernel on the C2 view data), no hardware until it is written.
 Identified levers 1-3 sum to at most 0.6 ms of 4.7 ms: they cannot bring the gap under 5 % by themselves.
+
+## UPDATE 2026-11-10T04:27:19Z -- N4b verdict (EXP2316): requeue ACCEPTED as class I, +1.05 % separate-boot indication; R11: C0 excess is a fixed cost per thread group; next target N6 section profiler
+
+Sources: EXP2316 evidence .local/experiments/EXP2316-n4b-requeue/evidence/EXP2316 (gm2316{w,r2,r3,x}-umd.log,
+submit-path-*.txt, perf-gate.txt), read by the architect; R11 offline report
+.local/night-20261110/r11-c0-dynload/REPORT.md with out-r11-map-2310.txt (EXP2310 arm b against the macOS split data).
+EXP2316 ACTUAL (rollback, BUGCHECK line) is recorded by the implementer; this section holds the architect's verdict.
+
+N4b = Wom1SubmitRequeue=1 on package f84f0d1a2b83, registry as EXP2314 (C1 on), HD windowed 100k -temporal 0, PERF.
+
+| fps_frames | warm | r2 | r3 | mean |
+|---|---|---|---|---|
+| EXP2314 (requeue 0) | 49.205 | 49.100 | 49.572 | 49.292 |
+| EXP2316 (requeue 1) | 49.251 | 49.886 | 50.285 | 49.807 (+1.05 %) |
+
+- Receipts (GM block): requeued 7493 = context limit 7493; "worker finishing" waits 6346 with mean 27 us (EXP2314:
+  5654 waits, mean 1907 us); backend-submitted waits 0. GM error logs empty, no device removal, no GPU_RESET or
+  PREEMPT_REFUSAL, kick failures 0, PERF_GATE_PASS.
+- VERDICT: mechanism CONFIRMED by receipt, class I, ACCEPTED as an opt-in switch. The FPS step is a SEPARATE-BOOT
+  comparison: three earlier boots of the same registry (EXP2312 49.267, EXP2313 49.248, EXP2314 49.292) agree within
+  0.1 %, so +1.05 % is about ten times the boot spread, but it is an indication, not a same-boot proof. Default stays 0.
+- Two preregistered expectations were NOT met and are recorded as such: the context-limit count rose (5819 -> 7493)
+  and the wait count did not fall; only the wait duration fell (70 x). Reading (HYPOTHESIS): a requeued submission
+  retests the limit instead of sleeping through the window, so the same limit is counted more often.
+- N4c (EXP2317, package b46a092e8f6b = N4 line + phase fix with the volatile read) runs with Wom1SubmitRequeue=1 as
+  the base; its variable is the env APPLE_AGX_D3D12_OV2_CROSS_EXECUTION inside the boot (arms x0..x3). x0/x3 are a
+  second boot of the requeue configuration (compare with EXP2316 x 50.334).
+
+R11 (offline) on the open C0 item:
+- REJECTED: the architect's four-point model "excess = 25 + 1.8 x dynamic CB loads x threads/256 ns per group". The
+  kernel 6cf11e8a (54 dynamic CB loads, 256 threads) measures +53.6 ns per group against 122 predicted, and is the
+  worst ratio in the frame: 0.348 ms against Apple 0.191 ms (1.82 x). Its C2 sibling 2286332c is at 1.11 x.
+- No static count explains all rows: dynamic CB loads fail on 6cf11e8a, integer-op difference has the wrong sign on
+  both traversal variants, waits were rejected by EXP2315.
+- NEW FACT: the excess is a fixed amount per thread group, not a rate. Traversal 7aa43c6c launches b5/b6/b7 have
+  slopes 1.14 / 1.215 / 1.41 but excess 35.1 / 43.4 / 37.7 ns per group (Apple 249 / 202 / 92 ns per group); the C2
+  traversal 24.8 / 15.5; 97efffb3 119.5 on Apple's 335.
+- Code difference found: we form the row address as register index (iadd idx, k, view x 57; load with lsl 2), Apple
+  folds view x 912 into the base once and uses immediate rows. Offline prototype reaches Apple's shape for 97efffb3
+  (793 -> 739 instructions, local loads 10 -> 3; Apple 745 / 3) but is worse for 7aa43c6c until the view load is
+  hoisted. Upper bound if both kernels reached 1.07 x: 0.378 ms per frame. Kept offline: it is one candidate location
+  of the fixed cost, not a measured one.
+- CLOSED without a run: scalar shared stores in thread-0 sections. APPLE_AGX_SHARED_STORE_VECTORIZE already exists
+  and was measured (pairs c->d -0.24 %, f->e -0.09 %, stays off); the fixture shows it does remove them
+  (7aa43c6c local stores 79 -> 37, fc968f7a 64 -> 23), so the removal was tested and gave nothing.
+
+WHY CONTINUE COMPARISON: not applicable. Static comparison of our and Apple's code for the C0 kernels is STOPPED
+(three candidate counts excluded, a fourth has only an upper bound). The next step is a measurement.
+
+Next causal target: N6 = prefix-cut section profiler (class D, opt-in env APPLE_AGX_DIAG_CUT=<hash8>:<E|B1|B2|L>,
+`stop` placed after register allocation so the prefix is byte-identical). Ten HD PERF arms in one boot on 97efffb3,
+6cf11e8a, 7aa43c6c. It separates group launch cost / pre-loop path / loop with device stores / thread-0 sections.
+Spec with the four sections: .local/handoff/OV-ARCHITECT-HANDOFF.md, section "N6 SPEC". Runs after N4c.
+
+Lever ranking (HD, ms per frame; gap to macOS about 4.7 ms):
+1. N4b requeue: accepted class I; indication about 0.2 ms (separate boots).
+2. N4c cross-execution lead: <= 0.35, EXP2317 pending.
+3. Traversal slot policy: 0.05, closed as a default.
+4. Parked: cross-process render -> prelude render.
+5. OPEN: C0 scene excess +0.833 ms (traversal 0.31, 97efffb3 0.21, 6cf11e8a 0.157, rest) -- location unknown, N6.
+Levers 1-2 and item 5 together are at most 1.4 ms of 4.7 ms. The remaining about 3.3 ms has no lever yet.
