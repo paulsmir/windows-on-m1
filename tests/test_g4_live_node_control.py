@@ -98,8 +98,10 @@ typedef struct {unsigned NodeOrdinal,EngineOrdinal;unsigned long long DependentN
 typedef void *HANDLE;typedef int NTSTATUS,KIRQL,LONG;
 typedef struct {unsigned NodeOrdinal,EngineOrdinal,LastAbortedFenceId;} DXGKARG_RESETENGINE;
 typedef struct {unsigned LiveAdditivePaging;LONG PagingAdapterResetting;int SchedulerLock;
- APPLE_AGX_SCHEDULER Scheduler,PagingScheduler;} ADMISSION_CONTEXT;
+ APPLE_AGX_SCHEDULER Scheduler,PagingScheduler;struct {int HaltObserve;} GpuReset;} ADMISSION_CONTEXT;
 static unsigned calls,fail_second;
+/* TDR-H0 halt observation: switch off here. */
+static void AdmissionPlatformRuntimeTdrHaltObserve(ADMISSION_CONTEXT *c,int *o){(void)c;(void)o;}
 static LONG InterlockedExchange(LONG *p,LONG v){LONG old=*p;*p=v;return old;}
 static void KeAcquireSpinLock(int *p,KIRQL *old){assert(!*p);*p=1;*old=0;}
 static void KeReleaseSpinLock(int *p,KIRQL old){assert(*p&&!old);*p=0;}

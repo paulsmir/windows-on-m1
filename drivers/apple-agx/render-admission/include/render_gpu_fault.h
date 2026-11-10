@@ -99,8 +99,9 @@ typedef struct _ADMISSION_GPU_FAULT_MAPPING {
  * (EXP1303: LONGJOB jobs completed seconds late with four resets, and one
  * receipt could not tell a worker that stopped polling from a job still
  * running on the firmware). Version 5 appends the failure class of the last
- * reset and the firmware restart record. */
-#define ADMISSION_GPU_RESET_RECEIPT_VERSION 5u
+ * reset and the firmware restart record. Version 6 appends the TDR-H0 halt
+ * observation (ADMISSION_GPU_TDR_HALT_OBSERVE). */
+#define ADMISSION_GPU_RESET_RECEIPT_VERSION 6u
 #define ADMISSION_GPU_RESET_HISTORY 8u
 #define ADMISSION_GPU_RESET_ENGINE 1u   /* DxgkDdiResetEngine */
 #define ADMISSION_GPU_RESET_ADAPTER 2u  /* DxgkDdiResetFromTimeout */
@@ -318,6 +319,40 @@ typedef struct _ADMISSION_GPU_FW_RESTART_RECEIPT {
   unsigned int FirmwareStatusBefore[16], FirmwareStatusAfter[16];
 } ADMISSION_GPU_FW_RESTART_RECEIPT;
 
+/* v6 (TDR-H0, opt-in device value Wom1TdrHaltObserve = 1): one observation
+ * at DxgkDdiResetFromTimeout entry, before the existing reset. The KMD sends
+ * the host halt request (RTKit 0x85 << 48 | N, N in bits 43:0) on endpoint
+ * 0x21 and polls the firmware status halt_count for N + 1 for at most
+ * ADMISSION_TDR_HALT_OBSERVE_POLL_MS. It never resumes the firmware and
+ * changes nothing the reset does afterwards. Status words: halt_count low
+ * (+0x10) and high (+0x14) dwords, halted (+0x20), resume (+0x30). Rewritten
+ * by every ResetFromTimeout while the switch is on; never by a reset. */
+#define ADMISSION_TDR_HALT_OBSERVE_OFF 0u     /* switch off: nothing ran */
+#define ADMISSION_TDR_HALT_OBSERVE_RAN 1u     /* request sent or send failed */
+#define ADMISSION_TDR_HALT_OBSERVE_SKIPPED 2u /* nothing sent: SkipReason */
+#define ADMISSION_TDR_HALT_SKIP_NONE 0u
+#define ADMISSION_TDR_HALT_SKIP_STATE 1u  /* no started runtime, stopping, IRQL, RTKit down */
+#define ADMISSION_TDR_HALT_SKIP_STATUS 2u /* firmware status block not mapped */
+#define ADMISSION_TDR_HALT_SKIP_BUSY 3u   /* Resetting already held */
+#define ADMISSION_TDR_HALT_SKIP_WORKER 4u /* the worker did not go idle */
+#define ADMISSION_TDR_HALT_NOT_SENT 0xffffffffu
+#define ADMISSION_TDR_HALT_NO_CHANGE 0xffffffffu
+typedef struct _ADMISSION_GPU_TDR_HALT_OBSERVE {
+  unsigned int Observe;       /* ADMISSION_TDR_HALT_OBSERVE_* */
+  unsigned int SkipReason;    /* ADMISSION_TDR_HALT_SKIP_* */
+  unsigned int Endpoint;      /* RTKit endpoint the request went to */
+  unsigned int Sent;          /* N (host recovery count), bits 31:0 */
+  unsigned int SendStatus;    /* APPLE_AGX_ASC_RESULT, or NOT_SENT */
+  unsigned int Acked;         /* halt_count reached N + 1 */
+  unsigned int AckMs;         /* send to ack; the whole poll when not acked */
+  unsigned int Polls;         /* status reads in the poll */
+  unsigned int FirstChangeMs; /* first read differing from Before, NO_CHANGE */
+  unsigned int WorkerWaitMs;  /* wait for the idle worker before the send */
+  unsigned int Before[4];     /* halt_count lo, hi, halted, resume */
+  unsigned int After[4];
+  unsigned int Reserved[2];
+} ADMISSION_GPU_TDR_HALT_OBSERVE;
+
 typedef struct _ADMISSION_GPU_RESET_RECEIPT {
   unsigned int Version, Bytes;
   unsigned int Resets, Succeeded;
@@ -360,6 +395,8 @@ typedef struct _ADMISSION_GPU_RESET_RECEIPT {
   unsigned int RtkitCrashed;
   unsigned int MailboxValid, InboxControl, OutboxControl;
   ADMISSION_GPU_FW_RESTART_RECEIPT Restart;
+  /* v6 follows the complete 1064-byte v5 prefix. */
+  ADMISSION_GPU_TDR_HALT_OBSERVE HaltObserve;
 } ADMISSION_GPU_RESET_RECEIPT;
 
 /* Firmware restart drill (DxgkDdiEscape payload, in and out): one orderly

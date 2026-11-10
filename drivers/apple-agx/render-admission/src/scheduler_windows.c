@@ -966,6 +966,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetFromTimeout(HANDLE Adapter) {
   NTSTATUS status;
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
+  /* TDR-H0: the opt-in (Wom1TdrHaltObserve = 1) halt observation runs
+   * before anything below and leaves it unchanged; off, it returns at once.
+   * Its record reaches Wom1GpuReset with the reset's own write. */
+  AdmissionPlatformRuntimeTdrHaltObserve(context, &context->GpuReset.HaltObserve);
   RtlZeroMemory(&reset, sizeof(reset));
   if (context->LiveAdditivePaging) InterlockedExchange(&context->PagingAdapterResetting, 1);
 #if defined(APPLE_AGX_EXP907_FRAME_RECEIPT)

@@ -336,6 +336,10 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN RecoverChannelOnStall;
   BOOLEAN ReadFaultControl;
   ADMISSION_GPU_POST_RESUME_RECEIPT PostResume;
+  /* TDR-H0: Wom1TdrHaltObserve switch and the host halt requests the
+   * firmware acknowledged (part of the host recovery count N). */
+  BOOLEAN TdrHaltObserve;
+  volatile LONG TdrHaltAcked;
   /* rc79: device value Wom1PreludeTimestampsOff = 1 builds v5 render
    * preludes without the timestamp microsequence (the pre-rc79 job). */
   BOOLEAN PreludeTimestampsOff;
@@ -9686,6 +9690,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultRecoverChannel");
   runtime->ReadFaultControl =
       AdmissionPlatformSwitchEnabled(Context, L"Wom1GpuFaultControlRead");
+  /* TDR-H0: absent or anything but REG_DWORD 1 = no halt observation. */
+  runtime->TdrHaltObserve =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1TdrHaltObserve");
   /* EXP2013/2014 validated soft faults (RC82A, GravityMark), so they are on
    * unless Wom1SoftFaults = 0. */
   runtime->SoftFaultsRequested =
@@ -10711,6 +10718,122 @@ _Use_decl_annotations_ VOID AdmissionPlatformRuntimeResetState(
     Receipt->PollAgeMs = polled != 0ULL && now >= polled
         ? (ULONG)(now - polled) : MAXULONG;
   }
+}
+
+/* TDR-H0 (Wom1TdrHaltObserve = 1): does the 13.5 firmware acknowledge the
+ * host halt request while a job hangs? macOS stopFirmwareForRecoveryInspection
+ * sends RTKit 0x85 << 48 | (host recovery count & 44 bits) through the note
+ * path that also carries the 0x83/0x84 doorbells (endpoint 0x21) and polls
+ * every 1 ms until the firmware's recovery count (FW status halt_count,
+ * +0x10) equals count + 1. The host count covers every recovery, including
+ * firmware-initiated ones (macOS increments it on both paths), so N is the
+ * Timeout/Fault resumes plus the acknowledged host halts. Observation only:
+ * nothing is resumed, no ring is reset; the reset below runs as without the
+ * switch. Sends are owned like the reset's quiescence (Resetting held,
+ * worker idle), so no doorbell of the worker interleaves on the mailbox. */
+_Use_decl_annotations_ VOID AdmissionPlatformRuntimeTdrHaltObserve(
+    ADMISSION_CONTEXT *Context, ADMISSION_GPU_TDR_HALT_OBSERVE *Observe) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  const APPLE_AGX_MEMORY_OBJECT *object;
+  const volatile ULONG *status;
+  LARGE_INTEGER interval;
+  ULONGLONG start;
+  ULONGLONG now;
+  ULONGLONG count;
+  ULONG expected;
+  ULONG word[4];
+  ULONG index;
+  APPLE_AGX_ASC_RESULT sent;
+
+  if (Context == NULL || Observe == NULL)
+    return;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (runtime == NULL || !runtime->TdrHaltObserve)
+    return;
+  RtlZeroMemory(Observe, sizeof(*Observe));
+  Observe->Observe = ADMISSION_TDR_HALT_OBSERVE_SKIPPED;
+  Observe->Endpoint = J313_AGX_G2_DOORBELL_ENDPOINT;
+  Observe->SendStatus = ADMISSION_TDR_HALT_NOT_SENT;
+  Observe->FirstChangeMs = ADMISSION_TDR_HALT_NO_CHANGE;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL || !runtime->BackendStarted ||
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
+      runtime->Rtkit.Running == APPLE_AGX_RTKIT_FALSE) {
+    Observe->SkipReason = ADMISSION_TDR_HALT_SKIP_STATE;
+    return;
+  }
+  object = &runtime->Initdata.DataObjects[AppleAgxInitdataMemoryFirmwareStatus];
+  status = (const volatile ULONG *)object->CpuAddress;
+  if (status == NULL || object->Length < 0x40u) {
+    Observe->SkipReason = ADMISSION_TDR_HALT_SKIP_STATUS;
+    return;
+  }
+  if (InterlockedCompareExchange(&runtime->Resetting, 1, 0) != 0) {
+    Observe->SkipReason = ADMISSION_TDR_HALT_SKIP_BUSY;
+    return;
+  }
+  start = AdmissionPlatformNowMs();
+  interval.QuadPart = -10000LL * (LONGLONG)ADMISSION_TDR_HALT_OBSERVE_WAIT_MS;
+  if (KeWaitForSingleObject(&runtime->WorkIdle, Executive, KernelMode,
+                            FALSE, &interval) != STATUS_SUCCESS) {
+    Observe->WorkerWaitMs = (ULONG)(AdmissionPlatformNowMs() - start);
+    Observe->SkipReason = ADMISSION_TDR_HALT_SKIP_WORKER;
+    InterlockedExchange(&runtime->Resetting, 0);
+    return;
+  }
+  Observe->WorkerWaitMs = (ULONG)(AdmissionPlatformNowMs() - start);
+  KeMemoryBarrier();
+  Observe->Before[0] = status[0x10u / 4u];
+  Observe->Before[1] = status[0x14u / 4u];
+  Observe->Before[2] = status[0x20u / 4u];
+  Observe->Before[3] = status[0x30u / 4u];
+  count = (ULONGLONG)(ULONG)InterlockedCompareExchange(
+              &runtime->FirmwareRecoveries, 0, 0) +
+          (ULONGLONG)(ULONG)InterlockedCompareExchange(
+              &runtime->TdrHaltAcked, 0, 0);
+  count &= (1ULL << 44) - 1ULL;
+  Observe->Sent = (ULONG)count;
+  expected = (ULONG)(count + 1ULL);
+  Observe->Observe = ADMISSION_TDR_HALT_OBSERVE_RAN;
+  start = AdmissionPlatformNowMs();
+  sent = AppleAgxAscSend(&runtime->AscIo, (0x85ULL << 48) | count,
+                         J313_AGX_G2_DOORBELL_ENDPOINT,
+                         start + ADMISSION_TDR_HALT_OBSERVE_SEND_MS);
+  Observe->SendStatus = (ULONG)sent;
+  if (sent == AppleAgxAscResultOk) {
+    start = AdmissionPlatformNowMs();
+    interval.QuadPart = -10000LL;
+    for (;;) {
+      KeMemoryBarrier();
+      word[0] = status[0x10u / 4u];
+      word[1] = status[0x14u / 4u];
+      word[2] = status[0x20u / 4u];
+      word[3] = status[0x30u / 4u];
+      now = AdmissionPlatformNowMs();
+      ++Observe->Polls;
+      if (Observe->FirstChangeMs == ADMISSION_TDR_HALT_NO_CHANGE)
+        for (index = 0u; index < 4u; ++index)
+          if (word[index] != Observe->Before[index]) {
+            Observe->FirstChangeMs = (ULONG)(now - start);
+            break;
+          }
+      if (word[0] == expected) {
+        Observe->Acked = 1u;
+        break;
+      }
+      if (now - start >= ADMISSION_TDR_HALT_OBSERVE_POLL_MS)
+        break;
+      (void)KeDelayExecutionThread(KernelMode, FALSE, &interval);
+    }
+    Observe->AckMs = (ULONG)(AdmissionPlatformNowMs() - start);
+    if (Observe->Acked != 0u)
+      InterlockedIncrement(&runtime->TdrHaltAcked);
+  }
+  KeMemoryBarrier();
+  Observe->After[0] = status[0x10u / 4u];
+  Observe->After[1] = status[0x14u / 4u];
+  Observe->After[2] = status[0x20u / 4u];
+  Observe->After[3] = status[0x30u / 4u];
+  InterlockedExchange(&runtime->Resetting, 0);
 }
 
 _Use_decl_annotations_ ULONG AdmissionPlatformRuntimeDebugState(

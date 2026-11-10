@@ -478,6 +478,9 @@ static void AdmissionPlatformRuntimeResetState(ADMISSION_CONTEXT *c, ADMISSION_G
   r->BackendPhase = (ULONG)p->Backend.Phase; r->WorkerBusy = p->WorkScheduled ? 1u : 0u;
   r->Halted = 0u; r->FirmwareRecoveries = (ULONG)p->FirmwareRecoveries;
   r->EntryMs = (ULONG)now_ms; r->JobAgeMs = 2100u; r->PollAgeMs = 7u; }
+/* TDR-H0 halt observation: the switch is off in this replay. */
+static void AdmissionPlatformRuntimeTdrHaltObserve(ADMISSION_CONTEXT *c,
+    ADMISSION_GPU_TDR_HALT_OBSERVE *o) { (void)c; (void)o; }
 static void AdmissionRecordGpuReset(ADMISSION_CONTEXT *c) {
   assert(!lock_depth); ++recorded; last_recorded = c->GpuReset; }
 '''

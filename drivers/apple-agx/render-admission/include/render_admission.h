@@ -2206,6 +2206,17 @@ ULONG AdmissionPlatformRuntimeUnheldKicked(_In_ ADMISSION_CONTEXT *Context);
  * phases, worker, firmware halted flag, recoveries). */
 VOID AdmissionPlatformRuntimeResetState(_In_ ADMISSION_CONTEXT *Context,
     _Inout_ ADMISSION_GPU_RESET_RECEIPT *Receipt);
+/* TDR-H0: bound of the wait for the idle worker and of the halt_count poll. */
+#define ADMISSION_TDR_HALT_OBSERVE_WAIT_MS 1000u
+#define ADMISSION_TDR_HALT_OBSERVE_POLL_MS 1000u
+#define ADMISSION_TDR_HALT_OBSERVE_SEND_MS 100u
+/* TDR-H0, PASSIVE_LEVEL, DxgkDdiResetFromTimeout entry only. Returns at once
+ * and touches nothing unless the device value Wom1TdrHaltObserve was 1 at
+ * runtime start. Otherwise: owns the idle worker (Resetting), sends the host
+ * halt request, polls halt_count, records Observe, releases Resetting. It
+ * never resumes the firmware. */
+VOID AdmissionPlatformRuntimeTdrHaltObserve(_Inout_ ADMISSION_CONTEXT *Context,
+    _Inout_ ADMISSION_GPU_TDR_HALT_OBSERVE *Observe);
 /* Any IRQL, no locks: backend phase | provider phase << 8 | last poll guard
  * << 16 | WorkScheduled << 24 | Resetting << 25 | Stopping << 26. */
 ULONG AdmissionPlatformRuntimeDebugState(_In_ ADMISSION_CONTEXT *Context);

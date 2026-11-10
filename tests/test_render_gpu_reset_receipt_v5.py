@@ -60,7 +60,10 @@ int main(int argc, char **argv) {
   assert(sizeof(ADMISSION_GPU_FW_RESTART_RECEIPT) == 26u * 4u + 2u * 8u + 32u * 4u);
   assert(offsetof(ADMISSION_GPU_FW_RESTART_RECEIPT, EpochBefore) == 104u);
   assert(offsetof(ADMISSION_GPU_FW_RESTART_RECEIPT, FirmwareStatusBefore) == 120u);
-  assert(sizeof(reset) == 1064u);
+  /* v6 (TDR-H0) appends the halt observation after the complete v5 prefix. */
+  assert(offsetof(ADMISSION_GPU_RESET_RECEIPT, HaltObserve) == 1064u);
+  assert(sizeof(ADMISSION_GPU_TDR_HALT_OBSERVE) == 20u * 4u);
+  assert(sizeof(reset) == 1064u + sizeof(ADMISSION_GPU_TDR_HALT_OBSERVE));
 
   /* Class: only a wait that failed has one; a crash wins over a halt. */
   for (quiesce = 0u; quiesce < 9u; ++quiesce)
@@ -119,10 +122,11 @@ class ReceiptV5(unittest.TestCase):
     def test_v5_layout_class_and_decoder(self):
         data = run_c(RECEIPT, includes=(RENDER / "include",),
                      extra=(RENDER / "src" / "render_gpu_fault.c",))
-        self.assertEqual(len(data), DECODER.RESET_V5)
+        self.assertEqual(len(data), DECODER.RESET_V6)
         reset = DECODER.decode_reset(data)
         self.assertEqual((reset['version'], reset['failure_class'], reset['halt_count'],
-                          reset['rtkit_crashed']), (5, 'F2', 3, True))
+                          reset['rtkit_crashed']), (6, 'F2', 3, True))
+        self.assertEqual(reset['tdr_halt_observe'], {'observe': 'off'})
         self.assertEqual((reset['inbox_control'], reset['outbox_control']), (None, '0x20101'))
         restart = reset['firmware_restart']
         self.assertEqual((restart['restarts'], restart['succeeded'], restart['refused'],
@@ -190,7 +194,7 @@ class ReceiptV5(unittest.TestCase):
         self.assertEqual([(name.lower().replace('_', '-'), int(value)) for name, value in refusals],
                          list(zip(DECODER.FW_RESTART_REFUSALS[1:], range(1, 7))))
         self.assertEqual(re.search(r"#define ADMISSION_GPU_RESET_RECEIPT_VERSION (\d+)u",
-                                   HEADER).group(1), '5')
+                                   HEADER).group(1), '6')
 
     def test_reset_entry_clears_the_class_but_not_the_restart_record(self):
         scheduler = (RENDER / "src" / "scheduler_windows.c").read_text()

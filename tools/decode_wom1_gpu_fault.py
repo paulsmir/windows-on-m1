@@ -5,14 +5,18 @@ Receipts (REG_BINARY under the APPL0002 device key):
   Wom1GpuFault          v1, 168 bytes: firmware Timeout/Fault events, captured
                         before the firmware is resumed (first, first with a
                         valid FAULT_INFO, last).
-  Wom1GpuReset          v1 96 / v2 496 / v3 536 / v4 792 / v5 1064 bytes: the last
+  Wom1GpuReset          v1 96 / v2 496 / v3 536 / v4 792 / v5 1064 / v6 1144 bytes: the last
                         DxgkDdiResetEngine or
                         DxgkDdiResetFromTimeout and the state it found; v2
                         adds timing and the last 8 resets; v3 adds reset stages;
                         v4 adds before/after quiesce queue retirement samples;
                         v5 adds the failure class of the last reset (F1 halted
                         and resumed, F2 RTKit crash, F3 silent) and the warm
-                        firmware restart record (TDR stage 2, drill-only).
+                        firmware restart record (TDR stage 2, drill-only);
+                        v6 adds the TDR-H0 halt observation of the last
+                        DxgkDdiResetFromTimeout (Wom1TdrHaltObserve=1): the
+                        RTKit 0x85 halt request, whether halt_count reached
+                        N + 1, and the firmware status words around it.
   Wom1FirmwareRecovery  8 dwords (EXP1075/G4-recovery).
   Wom1GpuFaultPostResume v1/v2 184, v3 264, v4 312 bytes (rc77/Q13/Q15): at the end of each reset
                         wait, RegionC fault_control, SGX 0x17620/0x17630
@@ -120,6 +124,16 @@ RESET_V4 = RESET_V3 + 2 * RECOVERY_SNAPSHOT_SIZE
 RESET_V5_CLASS = struct.Struct('<6I')
 FW_RESTART = struct.Struct('<26I2Q32I')
 RESET_V5 = RESET_V4 + RESET_V5_CLASS.size + FW_RESTART.size
+# v6: ADMISSION_GPU_TDR_HALT_OBSERVE (render_gpu_fault.h): Observe, SkipReason,
+# Endpoint, Sent, SendStatus, Acked, AckMs, Polls, FirstChangeMs, WorkerWaitMs,
+# Before[4], After[4] (halt_count lo/hi, halted, resume), Reserved[2].
+HALT_OBSERVE = struct.Struct('<20I')
+RESET_V6 = RESET_V5 + HALT_OBSERVE.size
+HALT_OBSERVE_STATES = ('off', 'ran', 'skipped')
+HALT_SKIP_REASONS = ('none', 'state', 'status', 'busy', 'worker')
+# APPLE_AGX_ASC_RESULT (apple_agx_asc_transport.h)
+ASC_RESULTS = ('ok', 'invalid-argument', 'timeout', 'clock-regression', 'transport-failed')
+HALT_NOT_SENT = 0xffffffff
 FAILURE_CLASSES = ('none', 'F1', 'F2', 'F3')
 FW_RESTART_STAGES = ('none', 'owned', 'stop-warm', 'stop-proof', 'provider-destroy',
                      'queue-lifetime', 'graph-rebuild', 'provider-initialize',
@@ -304,15 +318,43 @@ def decode_fw_restart(data, offset):
     return result
 
 
+def decode_halt_status(words):
+    return {'halt_count': words[0] | (words[1] << 32), 'halted': words[2], 'resume': words[3]}
+
+
+def decode_halt_observe(data, offset):
+    words = HALT_OBSERVE.unpack_from(data, offset)
+    (state, skip, endpoint, sent, send_status, acked, ack_ms, polls, change_ms,
+     worker_ms) = words[:10]
+    if state >= len(HALT_OBSERVE_STATES) or skip >= len(HALT_SKIP_REASONS):
+        raise ValueError('invalid halt observation state')
+    result = {'observe': HALT_OBSERVE_STATES[state]}
+    if state == 0:
+        return result
+    result.update(skip_reason=HALT_SKIP_REASONS[skip], worker_wait_ms=worker_ms)
+    if state == 2:
+        return result
+    result.update(
+        endpoint=f'{endpoint:#x}', sent_n=sent,
+        message=f'{(0x85 << 48) | sent:#018x}',
+        send_status=(None if send_status == HALT_NOT_SENT
+                     else name_of(ASC_RESULTS, send_status)),
+        acked=bool(acked), ack_ms=ack_ms, polls=polls,
+        # None = no word changed during the poll; never a guessed time.
+        first_change_ms=None if change_ms == 0xffffffff else change_ms,
+        before=decode_halt_status(words[10:14]), after=decode_halt_status(words[14:18]))
+    return result
+
+
 def decode_reset(data):
-    if len(data) not in (RESET.size, RESET_V2, RESET_V3, RESET_V4, RESET_V5):
+    if len(data) not in (RESET.size, RESET_V2, RESET_V3, RESET_V4, RESET_V5, RESET_V6):
         raise ValueError('unsupported Wom1GpuReset length')
     (version, size, resets, succeeded, entry, status, faulted, packet_state,
      packet_fence, active, completed, submitted, phase, aborted, quiesce,
      wait_ms, backend, provider, poll_guard, worker, halted, recoveries,
      context) = RESET.unpack_from(data)
     if (version, size) not in ((1, RESET.size), (2, RESET_V2), (3, RESET_V3), (4, RESET_V4),
-                               (5, RESET_V5)) or size != len(data):
+                               (5, RESET_V5), (6, RESET_V6)) or size != len(data):
         raise ValueError('unsupported Wom1GpuReset version')
     result = {
         'version': version, 'resets': resets, 'succeeded': succeeded,
@@ -360,6 +402,8 @@ def decode_reset(data):
             result['outbox_control'] = f'{outbox:#x}' if mailbox_valid & 2 else None
             result['firmware_restart'] = decode_fw_restart(
                 data, RESET_V4 + RESET_V5_CLASS.size)
+        if version >= 6:
+            result['tdr_halt_observe'] = decode_halt_observe(data, RESET_V5)
     return result
 
 
