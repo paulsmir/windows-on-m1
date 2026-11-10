@@ -75997,3 +75997,49 @@ EXP2308 HARDWARE BEFORE 2026-11-09T23:19:58Z:
 - Recovery: rec2308h (ANS; Mu MUANSCPPC002); at a reset to the proxy: AGX_RECOVERY_ALLOW_AT_PROXY=1 recover.sh.
 - Hashes: sys 6af2b6249f6e, UmdArm64 3ba39e325c6a, UmdX64 c08069198afd, Umd32 2cf903e589a3; manifest de7c08a798a2, hardware-manifest 37c9b7839501; probe2308.sh 3a6ec2a62e58 (PROBE_LINT_OK); visible recovery rec2308h 996e72aeabe17b25; m1n1 0d3a75b3.
 - Recovery rec2308h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2308-scanout-seq/run2308.sh.
+
+## ANSQ-S1 — AppleAns 0.4.5: VPD B1h (non-rotating medium), SSD classification (BEFORE, 2026-11-10T00:04:00Z)
+
+- Hypothesis: with VPD page B1h (MEDIUM ROTATION RATE 0001h) listed in page 00h, classpnp answers the
+  seek-penalty property and Windows classifies the internal disk as SSD (`Get-PhysicalDisk` MediaType SSD);
+  boot and I/O are unchanged.
+- WHY THIS HYPOTHESIS: (1) live guest, read-only, 2026-11-09T23:1xZ: MediaType Unspecified, BusType Fibre
+  Channel, and the 0.4.4 planner advertises VPD 00h only (ANS-SSD-MEDIA-TYPE.md); (2) classpnp
+  `ClasspDeviceSeekPenaltyProperty` reads B1h only when 00h lists it and fails the query otherwise
+  (Microsoft classpnp sample); (3) the change is INQUIRY metadata only (cc2b6e476: ans_scsi.c planner), no
+  command path differs from 0.4.4.
+- WINDOWS CONTRACT / ANS CONTRACT / TRANSLATION: ANS-SSD-MEDIA-TYPE.md (S1).
+- WHAT IS STILL UNKNOWN: whether MediaType follows the seek-penalty property alone or also the bus type
+  (BusTypeFibre default); what Optimize Drives offers for an SSD-classified volume without TRIM.
+- Single variable: AppleAns package 0.4.4 (ANSBUILD014-L, sys dac3a772...) -> 0.4.5 (ANSBUILD015-M). GPU
+  package absent (recovery profile), m1n1, Mu, registry unchanged. No guest setting is changed.
+- Commit: cc2b6e476617 state of drivers/storage/appleans (identical at gpu/memory-latency 7054180e9; `git diff
+  cc2b6e476 HEAD -- drivers/storage/appleans` empty). Profile: RECANS001 normal ANS (m1n1 882985fb SHA
+  c6f0c8cb..., FD J313_EFI-gpu-ans-direct-G2.fd SHA 7c283fb1..., ANS_NATIVE --ans-direct, expanded RAM).
+- Build: .local/experiments/ANSS1/M.ps1 on the builder (MSBuild Release ARM64 /W4 /WX + RunCodeAnalysis 13 files
+  0 defects, InfVerif, signtool, Inf2Cat); build.log beside it. First MSVC build of cc2b6e476.
+- Artifact: .local/experiments/ANSS1/ANSBUILD015-M-package.zip
+  SHA-256 f172cc77092c6ec7bb29ff1c94b0ee953f309907d5575fdf3167f3a7e6800368;
+  AppleAns.sys 4af699f474cb4a4de8a45c699b3ae21e51fa7fb206e5fc15248a0687e3f95c6f;
+  AppleAns.inf da7dffc3295685ad0cc104db3941e1ad464ee0974483a4c737abfbf2f0cf295c;
+  appleans.cat afe267093bb53fdc5d54c16ce311960eb62a0c01727096caf1fa33868f768a1a;
+  source tar 2b3f477ab1d16933eededcf8bf43261249a4259a1471cbf651f1f1724e63b0bf.
+- Install: tools/ansq-stage.ps1 (hash + signature check, pnputil /add-driver stage only, Services\AppleAns
+  ImagePath -> new store directory; prints the old ImagePath and old file hash), then tools/restart-normal.sh
+  (ordered shutdown /r, proxy-ready, normal launcher), then tools/ansq-post.ps1 (read-only capture). Baseline:
+  ansq-post.ps1 before staging (pre.txt).
+- Expected: boots on 0.4.5 (running-file hash 4af699f4...); `Get-PhysicalDisk` MediaType SSD for NVMe APPLE SSD
+  AP0256; fsutil sectorinfo "No Seek Penalty"; "Trim Not Supported" unchanged; SSH up; no AppleAns error records
+  (0xA6 sealed records as before), no disk/storport/Ntfs errors; C: not dirty; 8 CPUs. Recorded, no pass/fail:
+  ScheduledDefrag state and last run, Optimize-Volume -Analyze output, Microsoft-Windows-Defrag history.
+- Not measurable in this profile: m1n1 `BUGCHECK ok code=0` (882985fb has no such print, EXP2304); substitute =
+  ordered restart, no Kernel-Power 41 / EventLog 6008 / WER 1001 on the next boot. The line is read on the next
+  GPU experiment boot (m1n1 83a9cf74), which runs the same AppleAns.
+- Failure criteria: no boot / 0x7B / hang; MediaType stays Unspecified (then stop: bus type is the next variable,
+  an architect decision; the package itself may stay only if everything else passes); any storage error record;
+  dirty volume.
+- Recovery artifact: installed 0.4.4 store directory appleans.inf_arm64_cdca66c5acb2980a (stays in the driver
+  store; ansq-rollback.ps1 restores the saved ImagePath) and .local/experiments/ANSDUMP2/ANSBUILD014-L-package.zip
+  (SHA-256 4802befb...). No native boot: kill the exact launcher PID, AGX_RECOVERY_STORAGE=bridge AT_PROXY
+  recovery, ImagePath back, delete Services\stornvme\StartOverride if set, chkdsk read-only before any repair.
+- Evidence: .local/experiments/ANSS1/evidence/ANSQ-S1/.
