@@ -4483,3 +4483,15 @@ Other facts:
 
 - The EXP2331 package is built from f5a3fc4b1 and the EXP2332 package from 05afd0ee6, not from 6b6f71668 as written there. Checked: 6b6f71668 is an ancestor of both, `git diff 6b6f71668 <commit> -- drivers/apple-agx/render-admission drivers/apple-agx/windows` is empty for both, and both carry the reader `!AdmissionPlatformSwitchDisabled(Context, L"Wom1CrossProcessRenderPairs")` (line 9585). The decision and the reading rules are unchanged.
 - EXP2331 is launched with `Wom1CrossProcessRenderPairs = 0` (BEFORE 72b4affc3). EXP2330 correction and EXP2334 ACTUAL are in 081c068c7; the EXP2330 minidump is at `.local/experiments/EXP2330-k1on-s1/evidence/exp2330-0x116-mini.dmp`.
+
+## UPDATE 2026-11-10T23:56:46Z -- architect: EXP2331 boot with K1 off does not hang; its quiet gate failed by a tool defect of mine (fixed); GravityMark arms not run
+
+Evidence read: `.local/experiments/EXP2331-stats-nops/evidence/EXP2331/{qgate.txt,wu-pause-status.txt,kmd-receipts-pre-suite.txt,rcpt-final/Wom1JobTiming971.bin,state-end.txt}`, `full.log`, two read-only guest queries at 23:54Z / 23:55Z.
+
+- Quiet gate: every poll of the first-arm gate read "no-answer" for 20 minutes and the probe ended as "INVALID-ENV servicing still running". That verdict is VOID. Cause, reproduced: the quoted PowerShell query of `quiet-gate.sh` broke in cmd.exe (the regex "|" was taken as a pipe: "'TrustedInstaller' is not recognized"). The guest was quiet: no TiWorker by tasklist, fixed query answers `BUSY= AVAIL_MB=3740`. Fix: the query is sent as -EncodedCommand; an empty answer after 20 minutes now ends as `QGATE <tag> TOOL-FAIL` (return 2) instead of a servicing verdict. Installed in fork 6's scratchpad and in `.local/scratchpad-tools-backup/quiet-gate.sh`. The gate had never run to a live guest before this boot (EXP2330 and EXP2334 died earlier).
+- K1 was off in this boot: `Wom1CrossProcessRenderPairs = 0` in the receipts, K1 class considered 0 / kicked 0, 18 cross-process candidates refused with code 55.
+- No hang: the DDI failure table at 55 s has no ResetEngine entry (the hung boots failed at 14.8 s and 19.2 s). The final job-timing ring counts 37,615 timed jobs up to fence 0x2ec8; its last slots are renders of dwm (pid 1244) and explorer (pid 5244) one per minute over the 20 idle minutes, each after an idle gap of about 60 s, all completed. The suite completed.
+- Reading so far: the form of B written down before the run ("first render after idle hangs on the new kernel, with no K1 pair") is contradicted by this boot. The full reading (a) needs the GravityMark arms, which did not run. One clean boot against two hung ones; the K1-necessary verdict is recorded only after the arms complete with resets 0.
+- Update pause: both Paused*Status values are 1 in this boot (`wu-pause-status.txt`). The System-log half of the criterion is still open.
+- `wer-final.txt` reports 2 files in C:\CrashDumps; their dates are not read yet (fork 6 lists them in the ACTUAL).
+- Next: fork 6 reruns the arms with the fixed gate, same package and the same value 0 (same boot if it is still up, else a new ID). No other change.
