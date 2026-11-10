@@ -3706,3 +3706,70 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
 - PF1 expand fold: implementer still running, nothing integrated.
 - Bench: EXP2325 / EXP2326 (K1) in progress at the bench owner; no ACTUAL on origin yet.
 - Best result with a claim unchanged: EXP2318 FULL 7923 = 79.7 % of macOS 9946. Nothing new measured on hardware.
+
+## UPDATE 2026-11-10T18:45:23Z -- architect: PF1 fold integrated (offline); U10 verdict = firmware halt, not ASC restart; k48 grid needs a GPU copy
+
+Best result with a claim is unchanged: EXP2318 FULL f0 7923 = 79.7 % of macOS 9946. Nothing below is measured.
+
+### PF1 expand fold -- integrated, offline only
+- Commits da3489ccb (job-barrier refusal 13) and 8d92ca8ec (fold), ledger rows CHG-20261110-da3489cc-PF1-JB and
+  CHG-20261110-8d92ca8e-PF1-FOLD. Gates on the tree with both commits: baseline 1193 tests, only the known NEW
+  (mu-flag test); builder syncheck SYNCHECK_OK. The package MSVC build is the first compile of the projected Mesa
+  hunks and of the _MSC_VER-only hooks in agx_win32_gpuva_batch.c.
+- Switch: APPLE_AGX_D3D12_EXPAND_FOLD=1 on the application process (default off; EXPAND_AHEAD=1 disables it).
+- Receipts: measure-d3d12-counted-fold, one per present, 23 values: [0] presents, [1] seals, [2] folded kernels,
+  [3] deferred hazard flushes, [4..12] refusals 1..9 (query, no compute, not writer, prelude, capacity, other
+  render, order, lost, draw), [13..20] flushes of a sealed batch by cause 0..7 (other, render = expected end,
+  dispatch, evict, flush-all, resource, hazard, reset), [21] OV5 renders refused by the mark, [22] OV2 computes
+  refused by the mark (layout read from owner_fold_receipt and AGX_WIN32_FOLD_* in agx_win32_expand_ahead.h).
+  measure-d3d12-counted-path 6th value: 0 none/off, 1 folded, 0x100|reason refused.
+- NOT VERIFIED: C4 still open at R5's first counted draw; non-deferred flushes of the sealed batch on GravityMark;
+  UAV write visibility to the folded kernel inside one CDM stream; adoption on render reset (mock only); ordering
+  against K1/C1/C2a/depth-two (argued from render_job_window.h); any gain.
+- Run and verdict rules: .local/handoff/PF1-EXPAND-FOLD.md "NEEDED RUN" (control vs fold, same boot, HD PERF traced
+  r1 warm-up + r2,r3 ABBA, FULL untraced once per arm, suite with fold=1). Expected with fold: compute envelopes
+  4/frame, render-prelude envelopes 0/frame (control 3), measure-gpu-prelude rows 0, frame 20.31 -> 20.0-20.1 ms.
+  Failure: a v5 envelope in steady state, more than 4 compute envelopes/frame, fault/0x116/flicker, fps_frames
+  below control by more than 1 %, six-job duration sum above control by more than 0.03 ms.
+
+### K1 boot A (EXP2325) -- neutral control, as pre-registered
+mean(r2,r3) 50.285 fps_frames (+0.41 % vs EXP2320 50.08), FULL f0 7911, perf gate PASS, suite 119/0. Boot B
+(EXP2326, Wom1CrossProcessRenderPairs=1) decides K1; refusal-55 limit is read per PERF arm from pre/post receipts
+(boot A total 14185 covers every arm of the boot, not one arm).
+
+### k48 grid -- the CPU-side read cannot see it
+Diagnostic commit 61c89ffe9 (branch gpu/k48-grid-diag, not integrated): k48's argument buffer is written by the
+GPU and sits in a NOT_AVAILABLE (DEFAULT) heap = GPU-only BO without a CPU mapping (agx_d3d12_windows.cpp heap
+creation; agx_win32_asahi_bo.c native_map refusal), so the receipt would carry source 0 and no grid. INFERENCE
+from heap classes in gm2324p0-umd.log (67 NOT_AVAILABLE buffers), not a hardware observation.
+Decision: measure with an opt-in 12-byte GPU copy of the argument record into a CPU-visible ring right after the
+k48 dispatch, read some frames later without a wait (diagnostic arm only; its FPS is not a result, the grid
+values are). The alternative (all DEFAULT buffers CPU-visible) changes every buffer's class and is rejected.
+Verdict rule unchanged: mean x within 5 % of Apple's 1840 groups/frame -> work equal, excess is per-group cost;
+>= 2100 -> the excess is work and belongs to the producing kernel / culling input.
+
+### U10 (host kill of a hung job) -- source verdict, changes the TDR plan
+Source: macOS 15.7.8 AGXG13G + IOGPUFamily disassembly, Asahi DRM, m1n1 proxyclient
+(.local/night-20261110/u10-kill-op/REPORT.md). All macOS facts are for the macOS 15 firmware; ours is 13.5.
+- FACT (macOS 15): hang recovery never stops or reboots the ASC and never power-cycles SGX
+  (resetFirmwareForRecovery is an empty function on G13G). No per-job or per-context kill op is sent.
+- FACT (macOS 15): host-detected timeout = RTKit 0x85<<48 | host_recovery_count, wait for firmware halt_count ==
+  count+1, complete all stamps with error, reset per-queue channel state, initFirmwareData, then resume in two
+  phases (write 2, wait for 3, rebuild channel tables, write 0). No acknowledgement = kernel panic.
+- FACT (macOS 15): firmware-detected events (lockup, CDM kill timeout, MMU) need no halt message; the host errors
+  only the guilty command and resumes; ChannelError is answered with RecoverChannel for that queue.
+- UNKNOWN: whether firmware 13.5 accepts 0x85 and the 2/3/0 phases (Asahi and m1n1 resume by one write); why the
+  looping kernel of EXP2324 k4128 produced no firmware event although the CL progress interval keeps its 250 ms
+  default in our RegionC (only the 3D interval is changed, apple_agx_regionc.c).
+- HYPOTHESIS kept, now better supported: an ASC stop does not stop running shader cores.
+Plan change (design note investigation/analysis/TDR-FIRMWARE-RESTART-RECOVERY.md stays the base):
+1. New stage 3H before stage 3: halt request, bounded acknowledgement wait, error-complete pending fences, reset
+   queue/ring state, two-phase resume. No ASC stop, no UAT rebuild.
+2. Warm ASC restart (stage 3) is demoted to the dead-firmware class; it is no longer the answer to a looping job.
+3. Cold SGX cycle (stage 4) stays as the fallback for "halt not acknowledged".
+4. "Per-engine success needs a kill op" is dropped; per-engine success comes from the firmware-initiated path.
+5. First hardware step is an observation, not recovery code (H0): at DxgkDdiResetFromTimeout entry with the
+   EXP2324 @4128 looping kernel, record fw_status {halt_count, halted, +0x20} and pending stamps, send the halt
+   request, poll the acknowledgement for at most 1 s, record the result in the Wom1GpuReset record. No
+   acknowledgement -> only cold can work; acknowledgement -> stage 3H is worth implementing. H1 (three idle warm
+   ASC restarts) drops behind H0.
