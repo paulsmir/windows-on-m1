@@ -1,4 +1,4 @@
-"""T5b: samples reach texture state registers (step A), default off.
+"""T5b: samples reach texture state registers (steps A and B2), default off.
 
 WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
   - a silent default change: with both switches off the guest's GravityMark
@@ -10,9 +10,14 @@ WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
     crawl that clamps its layer stays (a lost clamp samples past the array),
     and D3D12 heap handles (DXBC_HEAP_HANDLE_MARK) stay bindless (their
     descriptor is not in any register);
-  - the switch reaches the compile only through the D3D12 owner's backend
-    flag (projected after agx_nir_lower_texture, before the crawl
-    speculation).
+  - step B2 (APPLE_AGX_D3D12_SRV_STATIC_FIRST): the map stays dense and
+    unique, every declaration keeps consecutive slots in register order (a
+    dynamically indexed t[N] is addressed as base + index), single-register
+    declarations come first; the DDI side of a table that spans several
+    declarations is test_d3d12_register_spaces (static-first);
+  - the switches reach the compile only through the D3D12 owner: the backend
+    flag for A (projected after agx_nir_lower_texture, before the crawl
+    speculation) and the SRV limit flag for B2; no getenv in the frontend.
 The capture is evidence outside the repository (EXP1969); tests that need it
 skip with that reason when absent.
 """
@@ -35,6 +40,7 @@ LIGHTING_GUEST = (3450, 2808, 207, 512, 0, 0, 0, 21, 23978, 229)  # EXP2319 gm23
 FIELDS = ('instrs', 'alu', 'gprs', 'threads', 'scratch', 'spills', 'fills', 'loops', 'code', 'preamble')
 BATCH = ROOT / 'drivers/apple-agx/mesa/scripts/native-asahi-batch-lifecycle.py'
 OWNER = ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp'
+FRONTEND = ROOT / 'drivers/apple-agx/mesa/dxil/agx_dxil_to_nir.c'
 
 
 def samples(stdout):
@@ -61,10 +67,16 @@ class Sources(unittest.TestCase):
         calls = text[text.index('    project_query_timeline(out, save)\n'):]
         self.assertLess(calls.index('project_d3d_robustness(out,save)'), calls.index('project_crawl_bindful(out,save)'))
 
-    def test_the_switch_is_read_once_by_the_owner(self):
+    def test_switches_are_read_once_by_the_owner_and_b2_is_a_limit_flag(self):
         owner = OWNER.read_text()
         self.assertIn('static const bool on = t5b_switch("APPLE_AGX_D3D12_CRAWL_BINDFUL");', owner)
+        self.assertIn('static const bool on = t5b_switch("APPLE_AGX_D3D12_SRV_STATIC_FIRST");', owner)
         self.assertIn('owner->Backend.D3dCrawlBindful = t5b_crawl_bindful() ? 1 : 0;', owner)
+        self.assertIn('flagged[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_STATIC_FIRST;', owner)
+        self.assertIn('dxil_binding_limits(), options, &dxil)', owner)
+        frontend = FRONTEND.read_text()
+        self.assertNotIn('getenv', frontend[frontend.index('\nfreeze('):frontend.index('\nplaced(')])
+        self.assertIn('job->limits[DXBC_BINDING_SRV] & DXBC_BINDING_SRV_STATIC_FIRST', frontend)
 
 
 class Compiled(unittest.TestCase):
@@ -119,6 +131,32 @@ class Compiled(unittest.TestCase):
         self.assertEqual(samples(heap), ((0, 0, 0), (0, 0, 4), 0))
         plain = self.run_fixture('--synthetic-array-samples=4,heap', '--production', '--root-views=0,0')
         self.assertEqual(cost_fields(plain)['binary-fnv'], cost_fields(heap)['binary-fnv'])
+
+    def test_step_b2_map_is_dense_contiguous_and_single_registers_first(self):
+        out = self.lighting('--srv-static-first')
+        srv = dict(self.srv_map(out))  # reg -> slot
+        self.assertEqual(sorted(srv.values()), list(range(len(srv))))
+        # declarations of the lighting kernel: t0..t6 and t17 single, t7[8], t15[2]
+        singles = [0, 1, 2, 3, 4, 5, 6, 17]
+        ranges = [list(range(7, 15)), [15, 16]]
+        self.assertEqual(sorted(srv[r] for r in singles), list(range(len(singles))))
+        self.assertEqual([srv[r] for r in singles], sorted(srv[r] for r in singles))
+        for regs in ranges:
+            slots = [srv[r] for r in regs]
+            self.assertEqual(slots, list(range(slots[0], slots[0] + len(regs))))
+            self.assertGreater(slots[0], max(srv[r] for r in singles))
+        # the arm compiles the same samples; only A moves them
+        self.assertEqual(samples(out)[2], 0)
+
+    def test_steps_a_and_b2_leave_only_dynamic_samples_bindless(self):
+        out = self.lighting('--crawl-bindful', '--srv-static-first')
+        reg, bindless, moved = samples(out)
+        self.assertEqual(bindless, (0, 4, 0))
+        self.assertEqual(moved, 25)
+        c = cost_fields(out)
+        self.assertLessEqual(int(c['gprs']), LIGHTING_GUEST[2])
+        self.assertLess(int(c['instrs']), LIGHTING_GUEST[0])
+        self.assertEqual(int(c['spills']), 0)
 
 
 if __name__ == '__main__':

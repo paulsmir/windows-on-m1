@@ -68,6 +68,7 @@ struct nir_shader {}; struct nir_shader_compiler_options {};
 struct dxbc_binding_map {}; struct dxbc_nir_xfb {}; struct dxbc_nir_error {uint32_t opcode,offset;};
 static nir_shader translated;
 static const unsigned *shader_binding_limits(){return nullptr;}
+static const unsigned *dxil_binding_limits(){return nullptr;}
 static nir_shader *dxbc_translate_tokens_bindings_xfb(const UINT *,const nir_shader_compiler_options *,
  const unsigned *,dxbc_binding_map *,uint32_t,uint32_t,const dxbc_nir_xfb *,dxbc_nir_error *) {
  ++translations;return &translated;

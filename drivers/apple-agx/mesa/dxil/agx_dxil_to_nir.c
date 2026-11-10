@@ -134,25 +134,31 @@ scan_uav(void *u, const dxil_spv_uav_d3d_binding *b, dxil_spv_uav_vulkan_binding
 }
 
 static int
-earlier(const struct declaration *a, const struct declaration *b)
+earlier(const struct declaration *a, const struct declaration *b, bool srv_static_first)
 {
    if (a->kind != b->kind)
       return a->kind < b->kind;
+   /* T5b step B2 (DXBC_BINDING_SRV_STATIC_FIRST): single-register SRV
+    * declarations before ranges */
+   if (srv_static_first && a->kind == DXBC_BINDING_SRV && (a->range == 1) != (b->range == 1))
+      return a->range == 1;
    if (a->space != b->space)
       return a->space < b->space;
    return a->reg < b->reg;
 }
 
-/* dense slots per kind in (space, register) order, one per register */
+/* dense slots per kind in (space, register) order, one per register
+ * (DXBC_BINDING_SRV_STATIC_FIRST: single-register SRVs first) */
 static void
 freeze(struct job *job)
 {
    if (job->refusal != AGX_DXIL_NIR_OK)
       return;
+   const bool srv_static_first = (job->limits[DXBC_BINDING_SRV] & DXBC_BINDING_SRV_STATIC_FIRST) != 0;
    for (unsigned i = 1; i < job->decls; ++i) {
       struct declaration d = job->decl[i];
       unsigned j = i;
-      while (j && earlier(&d, &job->decl[j - 1])) {
+      while (j && earlier(&d, &job->decl[j - 1], srv_static_first)) {
          job->decl[j] = job->decl[j - 1];
          --j;
       }

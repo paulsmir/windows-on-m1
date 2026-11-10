@@ -383,9 +383,10 @@ static void receipt(PCSTR stage, HRESULT status, UINT a, UINT b, UINT c, UINT d,
   AdmissionUmdDiagnostic(stage, status, values, 5u);
 }
 
-/* T5b switch, exactly "1", read once per process, default off:
+/* T5b switches, each exactly "1", read once per process, default off:
  * APPLE_AGX_D3D12_CRAWL_BINDFUL (step A, the screen's backend flag
- * D3dCrawlBindful). */
+ * D3dCrawlBindful) and APPLE_AGX_D3D12_SRV_STATIC_FIRST (step B2, the DXIL
+ * frontend's DXBC_BINDING_SRV_STATIC_FIRST limit flag). */
 static bool t5b_switch(const char *name) {
   char value[2] = {};
   return GetEnvironmentVariableA(name, value, sizeof(value)) == 1 && value[0] == '1';
@@ -394,17 +395,21 @@ static bool t5b_crawl_bindful() {
   static const bool on = t5b_switch("APPLE_AGX_D3D12_CRAWL_BINDFUL");
   return on;
 }
+static bool t5b_srv_static_first() {
+  static const bool on = t5b_switch("APPLE_AGX_D3D12_SRV_STATIC_FIRST");
+  return on;
+}
 /* projected agx_state.c (native-asahi-batch-lifecycle.py
  * project_crawl_bindful): the samples step A moved on this thread since
  * the last call */
 extern "C" unsigned agx_win32_crawl_bindful_take(void);
 /* T5b compile receipt "measure-d3d12-bindful" (only while a T5b switch is
  * set): hash hi, hash lo, stage | SRV slots that B2 moved off their
- * (space, register) rank << 8, samples step A moved, switches (1 A).
+ * (space, register) rank << 8, samples step A moved, switches (1 A, 2 B2).
  * Takes the step A count of the create call it follows. */
 static void t5b_receipt(const UINT *tokens, mesa_shader_stage stage, const struct dxbc_binding_map *map) {
   const unsigned moved = agx_win32_crawl_bindful_take();
-  const UINT switches = t5b_crawl_bindful() ? 1u : 0u;
+  const UINT switches = (t5b_crawl_bindful() ? 1u : 0u) | (t5b_srv_static_first() ? 2u : 0u);
   if (!switches) return;
   UINT reordered = 0;
   if (map && map->count <= DXBC_BINDING_MAP_MAX) {
@@ -2005,6 +2010,19 @@ static const uint32_t *shader_binding_limits() {
   };
   return t_shader_minmax ? minmax_limits : owner_binding_limits;
 }
+#ifdef APPLE_AGX_D3D12_DXIL
+/* T5b step B2: the DXIL frontend's limits; APPLE_AGX_D3D12_SRV_STATIC_FIRST
+ * reaches it as the SRV limit flag DXBC_BINDING_SRV_STATIC_FIRST (the DXBC
+ * frontend keeps shader_binding_limits()) */
+static const uint32_t *dxil_binding_limits() {
+  const uint32_t *limits = shader_binding_limits();
+  if (!t5b_srv_static_first()) return limits;
+  static thread_local uint32_t flagged[DXBC_BINDING_KIND_COUNT];
+  memcpy(flagged, limits, sizeof(flagged));
+  flagged[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_STATIC_FIRST;
+  return flagged;
+}
+#endif
 /* C65S: the variant's slot-sampler min/max wrap of a translated stage */
 static void wrap_slot_minmax(struct nir_shader *nir, mesa_shader_stage stage) {
   if (!nir || !t_slot_minmax) return;
@@ -2176,7 +2194,7 @@ static struct nir_shader *translate_shader(const UINT *tokens, mesa_shader_stage
       agx_dxil_is_program(tokens, static_cast<size_t>(tokens[1]) * 4u)) {
     struct agx_dxil_nir_result dxil = {};
     enum agx_dxil_nir_status status =
-        agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, shader_binding_limits(), options, &dxil);
+        agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, dxil_binding_limits(), options, &dxil);
     if (status == AGX_DXIL_NIR_OK && xfb && !agx_dxil_nir_xfb(dxil.nir, xfb)) {
       ralloc_free(dxil.nir);
       dxil.nir = NULL;

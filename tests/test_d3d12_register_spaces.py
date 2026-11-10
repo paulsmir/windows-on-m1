@@ -85,6 +85,14 @@ class StaticRegisterSpaces(unittest.TestCase):
         # it.
         self.run_case('heap')
 
+    def test_static_first_slot_order_binds_every_register_of_a_table(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? T5b step B2: the
+        # DXIL frontend may give single-register SRVs their slots before
+        # ranges, so one descriptor table's registers are no longer in slot
+        # order; a resolver that bound "slot of the table's first register
+        # + k" would put views on the wrong slots.
+        self.run_case('static-first')
+
     def run_case(self, name):
         result = subprocess.run([str(self.binary), name], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

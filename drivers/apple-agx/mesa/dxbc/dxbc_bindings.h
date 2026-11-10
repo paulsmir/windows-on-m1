@@ -42,7 +42,14 @@ enum dxbc_binding_kind {
  * emulation is ~120 NIR instructions per sample, and its temporaries count
  * towards the whole shader's register allocation) */
 #define DXBC_BINDING_MINMAX 0x40000000u
-#define DXBC_BINDING_LIMIT_FLAGS (DXBC_BINDING_HEAP_RANGES | DXBC_BINDING_MINMAX)
+/* T5b step B2: a caller sets DXBC_BINDING_SRV_STATIC_FIRST in the SRV limit
+ * to have the DXIL frontend give its single-register SRV declarations their
+ * slots before the declarations of more than one register (each class in
+ * (space, register) order, a range's registers in consecutive slots), so
+ * the textures a shader names by constant reach the 16 texture state
+ * registers; the DXBC frontend ignores it */
+#define DXBC_BINDING_SRV_STATIC_FIRST 0x20000000u
+#define DXBC_BINDING_LIMIT_FLAGS (DXBC_BINDING_HEAP_RANGES | DXBC_BINDING_MINMAX | DXBC_BINDING_SRV_STATIC_FIRST)
 /* Tier 2: 64 UAVs per pipeline, which a shader may declare one register at
  * a time: 8 in slots, 56 heap ranges */
 #define DXBC_HEAP_RANGE_MAX 64u

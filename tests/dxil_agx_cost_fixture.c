@@ -25,9 +25,10 @@
  *        --synthetic-array-samples=N[,heap]|--synthetic-break-loops=N|--synthetic-shared-reads=K
  *        [--no-d3d-robust] [--assume-in-bounds] [--root-views=UAV,CBV]
  *        [--print-lowered] [--print-nir] [--print-selected] [--soft-fault|--soft-fault-loads]
- *        [--crawl-bindful] [--print-bindings] [--print-samples]
- * --crawl-bindful: T5b step A (the owner's APPLE_AGX_D3D12_CRAWL_BINDFUL);
- * with it or --print-samples a second line follows COST:
+ *        [--crawl-bindful] [--srv-static-first] [--print-bindings] [--print-samples]
+ * --crawl-bindful / --srv-static-first: T5b steps A and B2 (the owner's
+ * APPLE_AGX_D3D12_CRAWL_BINDFUL / APPLE_AGX_D3D12_SRV_STATIC_FIRST); with
+ * either or --print-samples a second line follows COST:
  *   SAMPLES reg <inner> <loop> <other> bindless <inner> <loop> <other> moved <n>
  * (non-query tex instructions of the NIR handed to the backend, by form and
  * place: innermost loop, other loop, outside loops; moved: step A's count);
@@ -1319,7 +1320,7 @@ main(int argc, char **argv)
    bool d3d_robust = true, print_nir = false, print_lowered = false, in_bounds = false;
    bool soft_fault = false, soft_fault_loads = false, fs_backend = false, print_selected = false, hex_main = false;
    bool shared_store_oracle = false;
-   bool crawl_bindful = false, print_bindings = false, print_samples = false;
+   bool crawl_bindful = false, srv_static_first = false, print_bindings = false, print_samples = false;
    unsigned root_uavs = 0, root_cbvs = 0;
    for (int a = 2; a < argc; ++a) {
       unsigned uav, cbv;
@@ -1334,6 +1335,7 @@ main(int argc, char **argv)
       fs_backend |= !strcmp(argv[a], "--fs-backend"); /* rc123: FS through the backend */
       print_lowered |= !strcmp(argv[a], "--print-lowered"); /* after the D3D lowering */
       crawl_bindful |= !strcmp(argv[a], "--crawl-bindful"); /* T5b step A */
+      srv_static_first |= !strcmp(argv[a], "--srv-static-first"); /* T5b step B2 */
       print_bindings |= !strcmp(argv[a], "--print-bindings"); /* T5b: the frontend's slot map */
       print_samples |= !strcmp(argv[a], "--print-samples"); /* T5b: the SAMPLES line */
       in_bounds |= !strcmp(argv[a], "--assume-in-bounds");
@@ -1385,9 +1387,11 @@ main(int argc, char **argv)
          return 2;
       fclose(f);
       /* the owner's capacities (agx_d3d12_windows.cpp owner_binding_limits) */
-      static const uint32_t limits[DXBC_BINDING_KIND_COUNT] = {14, 128 | DXBC_BINDING_HEAP_RANGES,
-                                                              8 | DXBC_BINDING_HEAP_RANGES,
-                                                              16 | DXBC_BINDING_HEAP_RANGES};
+      uint32_t limits[DXBC_BINDING_KIND_COUNT] = {14, 128 | DXBC_BINDING_HEAP_RANGES, 8 | DXBC_BINDING_HEAP_RANGES,
+                                                  16 | DXBC_BINDING_HEAP_RANGES};
+      /* T5b step B2: the owner's APPLE_AGX_D3D12_SRV_STATIC_FIRST */
+      if (srv_static_first)
+         limits[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_STATIC_FIRST;
       struct agx_dxil_nir_result r;
       if (agx_dxil_to_nir(bytes, (size_t)size, limits, &agx_nir_options, &r) != AGX_DXIL_NIR_OK) {
          printf("REFUSED %s\n", r.error);
@@ -1565,7 +1569,7 @@ main(int argc, char **argv)
           production ? "production" : "stand-in");
    /* T5b: samples by form (register / bindless) in innermost loops, other
     * loops, outside loops; step A's moved count */
-   if (print_samples || crawl_bindful)
+   if (print_samples || crawl_bindful || srv_static_first)
       printf("SAMPLES reg %u %u %u bindless %u %u %u moved %u\n", forms.reg[0], forms.reg[1], forms.reg[2],
           forms.bindless[0], forms.bindless[1], forms.bindless[2], bindful_moved);
    free(part.binary);

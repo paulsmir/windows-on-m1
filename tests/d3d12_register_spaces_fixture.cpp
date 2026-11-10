@@ -186,8 +186,40 @@ static void extended(const char *mode) {
   assert(ResolveRoot(&list,&root,va,words,D3D12DDI_SHADER_VISIBILITY_PIXEL,&out)); /* no table covers the range */
  } else {assert(!"unknown test mode");}
 }
+/* T5b step B2: the DXIL frontend's DXBC_BINDING_SRV_STATIC_FIRST map of
+ * GravityMark's lighting kernel 806ee7b1bdb1944a (single-register t0..t6
+ * and t17 first, then t7..t14 [8] and t15..t16 [2], each range contiguous)
+ * bound by ONE descriptor table t0..t17: every register must land on its own
+ * slot with the descriptor of its own table entry, whatever the slot order. */
+static void static_first_table() {
+ FakePso pso={}; AgxD3d12CommandList list={nullptr,&pso}; AgxD3d12RootSignature root={};
+ UINT64 va[64]={1}; UINT words[64]={}; AgxD3d12Dispatch out={};
+ static BYTE memory[18*64]={}; heaps[0].cpu=memory; heaps[0].bytes=sizeof(memory);
+ auto &map=pso.compute.Bindings; map.active=1; map.count=0;
+ static const UINT order[18]={0,1,2,3,4,5,6,17,7,8,9,10,11,12,13,14,15,16};
+ for(UINT slot=0;slot<18;++slot) {
+  const UINT reg=order[slot];
+  const UINT id=reg>=7&&reg<=14 ? 7 : reg>=15&&reg<=16 ? 8 : reg==17 ? 9 : reg;
+  map.bindings[map.count++]={DXBC_BINDING_SRV,id,0,reg,slot};
+ }
+ root.parameters=1; root.parameter[0].type=D3D12DDI_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+ root.parameter[0].ranges=1; root.parameter[0].visibility=D3D12DDI_SHADER_VISIBILITY_ALL;
+ RangesOf(&root)[0]={D3D12DDI_DESCRIPTOR_RANGE_TYPE_SRV,18,0,0,0};
+ assert(!ResolveRoot(&list,&root,va,words,kAnyStage,&out));
+ for(UINT slot=0;slot<18;++slot)
+  assert(out.srv_descriptor[slot]==reinterpret_cast<AgxD3d12Descriptor*>(memory+64*order[slot]));
+ /* the same map behind two tables that split the registers differently */
+ root.parameter[0].ranges=2;
+ RangesOf(&root)[0]={D3D12DDI_DESCRIPTOR_RANGE_TYPE_SRV,7,0,0,0};
+ RangesOf(&root)[1]={D3D12DDI_DESCRIPTOR_RANGE_TYPE_SRV,11,7,0,7};
+ AgxD3d12Dispatch split={};
+ assert(!ResolveRoot(&list,&root,va,words,kAnyStage,&split));
+ for(UINT slot=0;slot<18;++slot) assert(split.srv_descriptor[slot]==out.srv_descriptor[slot]);
+}
+
 int main(int argc,char **argv) {
  if(argc==1 || !std::strcmp(argv[1],"missing")) root_descriptors(argc>1);
+ else if(!std::strcmp(argv[1],"static-first")) static_first_table();
  else extended(argv[1]);
  puts("PASS static register spaces"); return 0;
 }

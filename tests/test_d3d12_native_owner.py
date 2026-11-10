@@ -68,7 +68,11 @@ class NativeOwner(unittest.TestCase):
         self.assertIn('&compute->Bindings, 0u, 0u, NULL, &error)', create)
         translate = body(text, 'static struct nir_shader *translate_shader(')
         self.assertIn('return dxbc_translate_tokens_bindings_xfb(tokens, options, shader_binding_limits(), bindings,', translate)
-        self.assertIn('agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, shader_binding_limits(), options, &dxil)', translate)
+        # T5b B2: the DXIL frontend gets shader_binding_limits() plus only the SRV slot-order flag
+        self.assertIn('agx_dxil_to_nir(tokens, static_cast<size_t>(tokens[1]) * 4u, dxil_binding_limits(), options, &dxil)', translate)
+        dxil_limits = body(text, 'static const uint32_t *dxil_binding_limits(')
+        self.assertIn('const uint32_t *limits = shader_binding_limits();', dxil_limits)
+        self.assertIn('flagged[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_STATIC_FIRST;', dxil_limits)
         # C65G/C65V: min/max emulation only for a PSO's min/max variant (the
         # creating call's AGX_D3D12_SHADER_MINMAX); the default limits carry
         # no DXBC_BINDING_MINMAX
