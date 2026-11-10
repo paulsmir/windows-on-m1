@@ -77039,3 +77039,20 @@ EXP2319 ACTUAL 2026-11-10T14:23:07Z:
 - Rollback rec2319h: RECOVERY_DONE 14:22Z, RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, package and devnode removed. BUGCHECK line of the experiment restart: code=0x0 (full.log).
 - Evidence: .local/experiments/EXP2319-n6-diag-cut/evidence/EXP2319 (gm2319*-umd.log, shader-stats-<arm>.txt, kmd-receipts-*.txt), scratchpad newexp2319.log.
 - Next: gate package boots EXP2320 (A, no switch) / EXP2321 (B, Wom1PreludeNotifyGate=1) / EXP2322 (C, Wom1PerfTgtUtilization=60), same commit 3d7e14097.
+
+EXP2320 HARDWARE BEFORE 2026-11-10T14:26:27Z:
+- Package: worktree exp-r14-pt1-gate HEAD 3d7e140974f0d044b195d7cd0cb77b21c2c565f9 = EXP2319 source 1a2cd106c + 9eec56145 (R14 prelude notify gate, opt-in Wom1PreludeNotifyGate, default unset) + 4158a52b0 (PT1 perf target utilization, opt-in Wom1PerfTgtUtilization, default unset = profile value 85) + 3d7e14097 (R14 receipt: gate counters in Wom1JobWindow v4; cherry-picks of 99791b376 / 8e7eafd95 line). EXP2320, EXP2321 and EXP2322 are three builds of this one commit (the package version carries the experiment number; no source differs), one registry switch per boot, set on the staged devnode before the first start of a fresh boot. A same-boot adapter cycle is not used as an A/B method.
+- Registry in every boot as EXP2319: Wom1JobDiagnostics=1, Wom1CrossProcessPairs=1, Wom1SubmitRequeue=1; Wom1Ov2NoHazardLead unset. Storage base AppleAns 0.4.8 (as EXP2319).
+- Hypothesis: with both switches unset the package behaves as EXP2319's untagged arms: the gate code and the perf-target write are not reached, the v4 job-window receipt only adds zero counters.
+- WHY THIS HYPOTHESIS: (1) both features are read once at runtime start from REG_DWORDs that default to off, and the offline suite (BASELINE_OK on 99791b376 and 8e7eafd95) covers the unset path; (2) the control must come from the same package and a separate boot, because EXP2317/EXP2318 showed that a package-to-package comparison alone hid a -13 % shift; (3) boots B and C are read against this boot, not against EXP2319.
+- WINDOWS CONTRACT: none changed (no DDI, capability or scheduling change with the switches unset).
+- AGX/ASAHI CONTRACT: none changed; hwdata perf target words 0x788/0x7ec stay at the profile value 85.
+- TRANSLATION: none in this boot.
+- WHAT IS STILL UNKNOWN: boot-to-boot spread of HD fps_frames and FULL f0 on this package (hardware behaviour); it sets what difference boots B and C can show.
+- Runs (probe2320.sh): D3D12 suite; GM HD windowed 100k -temporal 0 PERF w/r2/r3; traced x with pre/mid/post KMD receipts, JOB_WINDOW v4 decode and gpuperf snapshots (PERF_TGT lines); FULL f0; CS 1.6 warm/r2/r3; perf gate; final receipts; WER count.
+- Expected: suite as EXP2319; w/r2/r3 fps_frames 49.6-50.4 (EXP2319 49.616/50.325/49.829); JOB_WINDOW RefusedGate/GateHolds/GateSettled/GateTimeout all 0; PERF_TGT word 85, applied bit clear; FULL f0 about 7900 (reference 7923 is the R14 pass line for boot B).
+- Failure criteria: control w below 48.0 (stop, tell the architect, boots B/C not launched); any non-zero gate counter or applied perf target with the switches unset (defect: the default path is not dormant); WER from DWM, hang, bugcheck, TDR.
+- Recovery: rec2320h/recover.sh (GPU-visible recovery on the native SSD), bounded notifying waiter, guest watchdog; the package and devnode are removed. BUGCHECK line of every restart read and reported to the AppleAns session.
+- Hashes: sys a68c55f49204, UmdArm64 7e1f91b646eb, UmdX64 d01be1d7758d, Umd32 b21d5f15ca28; manifest abf0099003b4, hardware-manifest e35194056551; probe2320.sh 009b62a0e3c4 (PROBE_LINT_OK); visible recovery rec2320h aa789c70c9ae0cf2; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
+- Recovery rec2320h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2320-r14-pt1-gate/run2320.sh.
