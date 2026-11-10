@@ -189,6 +189,67 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned long long HeadroomRefusals;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
+/* POOL-PROBE diagnostic receipt Wom1PoolAllocProbe (pool_windows.c,
+ * AdmissionPoolAllocProbeLocked). Written once per boot, only when REG_DWORD
+ * Wom1PoolAllocProbe=1, at the first AdmissionPoolNewSlab call whose slab
+ * came from the 64 KiB rung. Every arm allocates PerArm MDLs of 2 MiB with
+ * MmAllocatePagesForMdlEx (bounds 0 .. ADMISSION_HVC_PHYSICAL_LIMIT - 1, no
+ * MM_ALLOCATE_FAST_LARGE_PAGES, no MM_DONT_ZERO_ALLOCATION), holds them all,
+ * then frees them all before the next arm. Arms, in order
+ * (CacheType / SkipBytes / Flags; CHUNKS = MM_ALLOCATE_REQUIRE_CONTIGUOUS_
+ * CHUNKS | MM_ALLOCATE_FULLY_REQUIRED, PREFER = MM_ALLOCATE_PREFER_CONTIGUOUS
+ * | MM_ALLOCATE_FULLY_REQUIRED):
+ *   0 B1 MmCached        64 KiB CHUNKS     6 B4 MmCached        64 KiB CHUNKS
+ *   1 B2 MmCached        64 KiB CHUNKS     7 C2 MmWriteCombined  1 MiB CHUNKS
+ *   2 A1 MmWriteCombined 64 KiB CHUNKS     8 B5 MmCached        64 KiB CHUNKS
+ *   3 A2 MmWriteCombined 64 KiB CHUNKS     9 D1 MmWriteCombined      0 PREFER
+ *   4 B3 MmCached        64 KiB CHUNKS    10 B6 MmCached        64 KiB CHUNKS
+ *   5 C1 MmWriteCombined 256 KiB CHUNKS   11 A3 MmWriteCombined 64 KiB CHUNKS
+ * Layout: all unsigned long long, in this order:
+ *   Version (1), Arms (12), PerArm (8), FieldsPerArm (9),
+ *   TriggerSlabAllocCalls, TriggerSlabFastMisses, TriggerSlabChunked (the
+ *     pool's SlabAllocCalls/SlabFastMisses/SlabChunked at the trigger, the
+ *     triggering slab included),
+ *   ProbeUs (wall time of the whole probe, microseconds),
+ *   Arm[12][9], per arm in this field order:
+ *     0 Calls       MmAllocatePagesForMdlEx calls (PerArm).
+ *     1 Ok          calls that returned an MDL of exactly 2 MiB.
+ *     2 SumUs       total time of the calls, failed ones included (us).
+ *     3 MinUs       fastest call (us).
+ *     4 MaxUs       slowest call (us).
+ *     5 GranulesOk  over the Ok MDLs: 64 KiB granules (16 pages, 32 per MDL)
+ *                   whose first frame is 64 KiB-aligned and whose 16 frames
+ *                   are consecutive (the production slab check).
+ *     6 Contig2M    Ok MDLs whose 512 frames are consecutive and whose first
+ *                   frame is 2 MiB-aligned.
+ *     7 Reused      first frames of this arm's granules (every 16-page group
+ *                   of every Ok MDL) that also were first frames of the
+ *                   previous arm's granules; 0 for arm 0.
+ *     8 FreeUs      total time of the arm's MmFreePagesFromMdl calls (us).
+ * A NULL MDL counts only in Calls and the time fields; a short MDL is held
+ * with the others, freed with them (its free counts in FreeUs), and is not
+ * inspected. */
+#define ADMISSION_POOL_ALLOC_PROBE_VERSION 1u
+#define ADMISSION_POOL_ALLOC_PROBE_ARMS 12u
+#define ADMISSION_POOL_ALLOC_PROBE_PER_ARM 8u
+#define ADMISSION_POOL_ALLOC_PROBE_FIELDS 9u
+#define ADMISSION_POOL_ALLOC_PROBE_CALLS 0u
+#define ADMISSION_POOL_ALLOC_PROBE_OK 1u
+#define ADMISSION_POOL_ALLOC_PROBE_SUM_US 2u
+#define ADMISSION_POOL_ALLOC_PROBE_MIN_US 3u
+#define ADMISSION_POOL_ALLOC_PROBE_MAX_US 4u
+#define ADMISSION_POOL_ALLOC_PROBE_GRANULES_OK 5u
+#define ADMISSION_POOL_ALLOC_PROBE_CONTIG_2M 6u
+#define ADMISSION_POOL_ALLOC_PROBE_REUSED 7u
+#define ADMISSION_POOL_ALLOC_PROBE_FREE_US 8u
+typedef struct _ADMISSION_POOL_ALLOC_PROBE_RECEIPT {
+  unsigned long long Version, Arms, PerArm, FieldsPerArm;
+  unsigned long long TriggerSlabAllocCalls, TriggerSlabFastMisses;
+  unsigned long long TriggerSlabChunked, ProbeUs;
+  unsigned long long Arm[ADMISSION_POOL_ALLOC_PROBE_ARMS]
+                        [ADMISSION_POOL_ALLOC_PROBE_FIELDS];
+} ADMISSION_POOL_ALLOC_PROBE_RECEIPT;
+
 /* M2-f4a: the declared size of the demand-backed segment 3 for a machine.
  * Backing follows use, so the size only bounds what VidMm may place there.
  * Windows lets PopulatedFromSystemMemory segments total at most

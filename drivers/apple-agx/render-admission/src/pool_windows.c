@@ -269,6 +269,10 @@ typedef struct _ADMISSION_POOL_RUNTIME {
    * was empty; SlabContiguousUs/SlabChunkedUs: time of the attempts that
    * produced a slab, by shape. */
   BOOLEAN ConstructLargePages;
+  /* POOL-PROBE: REG_DWORD Wom1PoolAllocProbe=1 (AllocProbe) runs
+   * AdmissionPoolAllocProbeLocked once (AllocProbeDone, under Lock) at the
+   * first AdmissionPoolNewSlab slab from the 64 KiB rung. */
+  BOOLEAN AllocProbe, AllocProbeDone;
   ULONGLONG SlabFastMisses, SlabContiguousUs, SlabChunkedUs;
   /* rc104: the floor wait (AdmissionMemoryPoolReserve; budget from
    * Wom1PoolPressureWaitMs), live allocations holding a segment-3 promise,
@@ -428,12 +432,149 @@ static VOID AdmissionPoolAddSlabCost(ADMISSION_POOL_RUNTIME *Pool,
   Pool->SlabChunkedUs += Cost->ChunkedUs;
 }
 
+/* POOL-PROBE diagnostic (receipt Wom1PoolAllocProbe; layout, arm order and
+ * field meanings: ADMISSION_POOL_ALLOC_PROBE_RECEIPT in render_pool_demand.h).
+ * Splits the ~150 us per 64 KiB chunk of the production 64 KiB rung between
+ * the chunk search and the write-combined conversion: cached against
+ * write-combined 64 KiB arms, larger SkipBytes, and an unchunked
+ * PREFER_CONTIGUOUS arm. Probe MDLs are only allocated, inspected through
+ * their PFN arrays and freed; they are never mapped or given to the pool. */
+#define ADMISSION_POOL_PROBE_CHUNKS \
+  (MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS | MM_ALLOCATE_FULLY_REQUIRED)
+#define ADMISSION_POOL_PROBE_GRANULES \
+  (ADMISSION_POOL_ALLOC_PROBE_PER_ARM * ADMISSION_POOL_SLAB_SLOTS)
+typedef struct _ADMISSION_POOL_PROBE_ARM {
+  MEMORY_CACHING_TYPE CacheType;
+  ULONG SkipBytes;
+  ULONG Flags;
+} ADMISSION_POOL_PROBE_ARM;
+static const ADMISSION_POOL_PROBE_ARM
+    AdmissionPoolProbeArms[ADMISSION_POOL_ALLOC_PROBE_ARMS] = {
+  {MmCached, 0x10000u, ADMISSION_POOL_PROBE_CHUNKS},         /* 0 B1 */
+  {MmCached, 0x10000u, ADMISSION_POOL_PROBE_CHUNKS},         /* 1 B2 */
+  {MmWriteCombined, 0x10000u, ADMISSION_POOL_PROBE_CHUNKS},  /* 2 A1 */
+  {MmWriteCombined, 0x10000u, ADMISSION_POOL_PROBE_CHUNKS},  /* 3 A2 */
+  {MmCached, 0x10000u, ADMISSION_POOL_PROBE_CHUNKS},         /* 4 B3 */
+  {MmWriteCombined, 0x40000u, ADMISSION_POOL_PROBE_CHUNKS},  /* 5 C1 */
+  {MmCached, 0x10000u, ADMISSION_POOL_PROBE_CHUNKS},         /* 6 B4 */
+  {MmWriteCombined, 0x100000u, ADMISSION_POOL_PROBE_CHUNKS}, /* 7 C2 */
+  {MmCached, 0x10000u, ADMISSION_POOL_PROBE_CHUNKS},         /* 8 B5 */
+  {MmWriteCombined, 0u,
+   MM_ALLOCATE_PREFER_CONTIGUOUS | MM_ALLOCATE_FULLY_REQUIRED}, /* 9 D1 */
+  {MmCached, 0x10000u, ADMISSION_POOL_PROBE_CHUNKS},         /* 10 B6 */
+  {MmWriteCombined, 0x10000u, ADMISSION_POOL_PROBE_CHUNKS},  /* 11 A3 */
+};
+/* Working memory, too large for the kernel stack (2 x 2 KiB of frames plus
+ * the 928-byte receipt). */
+typedef struct _ADMISSION_POOL_PROBE_WORK {
+  ADMISSION_POOL_ALLOC_PROBE_RECEIPT Receipt;
+  PMDL Mdl[ADMISSION_POOL_ALLOC_PROBE_PER_ARM];
+  PFN_NUMBER Previous[ADMISSION_POOL_PROBE_GRANULES];
+  PFN_NUMBER Current[ADMISSION_POOL_PROBE_GRANULES];
+} ADMISSION_POOL_PROBE_WORK;
+
+/* Called from AdmissionPoolNewSlab with the pool fast mutex held (APC_LEVEL;
+ * MmAllocatePagesForMdlEx and MmFreePagesFromMdl allow DISPATCH_LEVEL).
+ * Holding the pool lock for the whole probe (96 allocations of 2 MiB, about
+ * one second under load) stalls every pool user once per boot; that is
+ * accepted for the Wom1PoolAllocProbe=1 diagnostic boot only. */
+static VOID AdmissionPoolAllocProbeLocked(ADMISSION_POOL_RUNTIME *Pool) {
+  const ULONGLONG pages = ADMISSION_POOL_DEMAND_GRANULE / PAGE_SIZE;
+  const ULONGLONG slabPages = ADMISSION_POOL_SLAB_BYTES / PAGE_SIZE;
+  ADMISSION_POOL_PROBE_WORK *work;
+  PHYSICAL_ADDRESS low, high, skip;
+  LARGE_INTEGER probeStart = {0};
+  ULONG previous = 0u;
+  ULONG arm;
+  work = (ADMISSION_POOL_PROBE_WORK *)ExAllocatePool2(POOL_FLAG_NON_PAGED,
+      sizeof(*work), ADMISSION_POOL_TAG);
+  if (work == NULL) return;
+  probeStart = KeQueryPerformanceCounter(NULL);
+  work->Receipt.Version = ADMISSION_POOL_ALLOC_PROBE_VERSION;
+  work->Receipt.Arms = ADMISSION_POOL_ALLOC_PROBE_ARMS;
+  work->Receipt.PerArm = ADMISSION_POOL_ALLOC_PROBE_PER_ARM;
+  work->Receipt.FieldsPerArm = ADMISSION_POOL_ALLOC_PROBE_FIELDS;
+  work->Receipt.TriggerSlabAllocCalls = Pool->SlabAllocCalls;
+  work->Receipt.TriggerSlabFastMisses = Pool->SlabFastMisses;
+  work->Receipt.TriggerSlabChunked = Pool->SlabChunked;
+  low.QuadPart = 0;
+  high.QuadPart = (LONGLONG)(ADMISSION_HVC_PHYSICAL_LIMIT - 1ULL);
+  for (arm = 0u; arm < ADMISSION_POOL_ALLOC_PROBE_ARMS; ++arm) {
+    const ADMISSION_POOL_PROBE_ARM *spec = &AdmissionPoolProbeArms[arm];
+    unsigned long long *out = work->Receipt.Arm[arm];
+    ULONG current = 0u;
+    ULONG k, i, j;
+    skip.QuadPart = (LONGLONG)spec->SkipBytes;
+    out[ADMISSION_POOL_ALLOC_PROBE_MIN_US] = MAXULONGLONG;
+    for (k = 0u; k < ADMISSION_POOL_ALLOC_PROBE_PER_ARM; ++k) {
+      LARGE_INTEGER start = KeQueryPerformanceCounter(NULL);
+      PMDL mdl = MmAllocatePagesForMdlEx(low, high, skip,
+          (SIZE_T)ADMISSION_POOL_SLAB_BYTES, spec->CacheType, spec->Flags);
+      ULONGLONG us = AdmissionPoolElapsedUs(start);
+      const PFN_NUMBER *frames = NULL;
+      ULONGLONG g = 0ULL, p = 0ULL;
+      BOOLEAN contiguous = FALSE;
+      work->Mdl[k] = mdl;
+      ++out[ADMISSION_POOL_ALLOC_PROBE_CALLS];
+      out[ADMISSION_POOL_ALLOC_PROBE_SUM_US] += us;
+      if (us < out[ADMISSION_POOL_ALLOC_PROBE_MIN_US])
+        out[ADMISSION_POOL_ALLOC_PROBE_MIN_US] = us;
+      if (us > out[ADMISSION_POOL_ALLOC_PROBE_MAX_US])
+        out[ADMISSION_POOL_ALLOC_PROBE_MAX_US] = us;
+      /* A short MDL stays held and is freed with the others. */
+      if (mdl == NULL || MmGetMdlByteCount(mdl) != ADMISSION_POOL_SLAB_BYTES)
+        continue;
+      ++out[ADMISSION_POOL_ALLOC_PROBE_OK];
+      frames = MmGetMdlPfnArray(mdl);
+      contiguous = (BOOLEAN)((frames[0] & (slabPages - 1ULL)) == 0ULL);
+      for (p = 1ULL; contiguous && p < slabPages; ++p)
+        if (frames[p] != frames[0] + p) contiguous = FALSE;
+      if (contiguous) ++out[ADMISSION_POOL_ALLOC_PROBE_CONTIG_2M];
+      for (g = 0ULL; g < ADMISSION_POOL_SLAB_SLOTS; ++g) {
+        const PFN_NUMBER first = frames[g * pages];
+        BOOLEAN granule = (BOOLEAN)((first & (pages - 1ULL)) == 0ULL);
+        work->Current[current++] = first;
+        for (p = 1ULL; granule && p < pages; ++p)
+          if (frames[g * pages + p] != first + p) granule = FALSE;
+        if (granule) ++out[ADMISSION_POOL_ALLOC_PROBE_GRANULES_OK];
+      }
+    }
+    for (i = 0u; i < current; ++i)
+      for (j = 0u; j < previous; ++j)
+        if (work->Current[i] == work->Previous[j]) {
+          ++out[ADMISSION_POOL_ALLOC_PROBE_REUSED];
+          break;
+        }
+    for (i = 0u; i < current; ++i) work->Previous[i] = work->Current[i];
+    previous = current;
+    for (k = 0u; k < ADMISSION_POOL_ALLOC_PROBE_PER_ARM; ++k) {
+      LARGE_INTEGER start = {0};
+      if (work->Mdl[k] == NULL) continue;
+      start = KeQueryPerformanceCounter(NULL);
+      MmFreePagesFromMdl(work->Mdl[k]);
+      out[ADMISSION_POOL_ALLOC_PROBE_FREE_US] += AdmissionPoolElapsedUs(start);
+      ExFreePool(work->Mdl[k]);
+      work->Mdl[k] = NULL;
+    }
+  }
+  work->Receipt.ProbeUs = AdmissionPoolElapsedUs(probeStart);
+  AdmissionRecordM2PoolAllocProbe(Pool->Context, &work->Receipt);
+  ExFreePoolWithTag(work, ADMISSION_POOL_TAG);
+}
+
 /* ADMISSION_POOL_SLABS.NewSlab: called with the pool lock held. */
 static ADMISSION_POOL_SLAB *AdmissionPoolNewSlab(void *Opaque) {
   ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
   ADMISSION_POOL_SLAB_COST cost = {0};
   ADMISSION_POOL_SLAB *slab = AdmissionPoolAllocSlab(&cost, pool->ConstructLargePages);
   AdmissionPoolAddSlabCost(pool, &cost);
+  /* POOL-PROBE: once per boot, still under the pool lock, when this slab
+   * came from the 64 KiB rung. Switch off: one boolean test. The unlocked
+   * prefill (AdmissionPoolPrefillWork) never triggers it. */
+  if (pool->AllocProbe && !pool->AllocProbeDone && cost.Chunked != 0ULL) {
+    pool->AllocProbeDone = TRUE;
+    AdmissionPoolAllocProbeLocked(pool);
+  }
   return slab;
 }
 
@@ -1513,6 +1654,33 @@ static BOOLEAN AdmissionPoolConstructLargePagesEnabled(ADMISSION_CONTEXT *Contex
   return enabled;
 }
 
+/* POOL-PROBE: only REG_DWORD Wom1PoolAllocProbe=1 arms the one-shot
+ * allocation probe (AdmissionPoolAllocProbeLocked); absent or other values
+ * leave it off. */
+static BOOLEAN AdmissionPoolAllocProbeEnabled(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1PoolAllocProbe");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
 
 /* rc104: REG_DWORD Wom1PoolPressureWaitMs is the floor-wait budget of one
  * creation in milliseconds; 0 is the kill switch (refuse on the first
@@ -1749,6 +1917,7 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   /* rc88: without its work item the pool runs as before, unprefilled. */
   pool->PrefillEnabled = AdmissionPoolPrefillEnabled(Context);
   pool->ConstructLargePages = AdmissionPoolConstructLargePagesEnabled(Context);
+  pool->AllocProbe = AdmissionPoolAllocProbeEnabled(Context);
   pool->Pressure.BudgetMs = AdmissionPoolPressureBudgetMs(Context);
   if (pool->PrefillEnabled)
     pool->PrefillWork = IoAllocateWorkItem(Context->PhysicalDeviceObject);

@@ -2073,7 +2073,8 @@ enum {
   AdmissionPagingReceiptOmittedLeaves = 512u,
   AdmissionPagingReceiptBrokerFailures = 256u,
   AdmissionPagingReceiptNativePteRefusal = 2048u,
-  AdmissionPagingReceiptLiveWait = 4096u
+  AdmissionPagingReceiptLiveWait = 4096u,
+  AdmissionPagingReceiptAllocProbe = 8192u
 };
 typedef struct _ADMISSION_PAGING_RECEIPTS {
   KSPIN_LOCK Lock;
@@ -2095,6 +2096,10 @@ typedef struct _ADMISSION_PAGING_RECEIPTS {
   /* Only the serial worker writes this snapshot. Keep the 3912-byte buffer
    * off the kernel stack; publishers touch LiveWait under Lock only. */
   ADMISSION_G3_LIVE_WAIT_RECEIPT LiveWaitSnapshot;
+  /* POOL-PROBE Wom1PoolAllocProbe (928 bytes): staged copy, and the
+   * worker's snapshot kept off its stack like LiveWaitSnapshot. */
+  ADMISSION_POOL_ALLOC_PROBE_RECEIPT AllocProbe;
+  ADMISSION_POOL_ALLOC_PROBE_RECEIPT AllocProbeSnapshot;
 } ADMISSION_PAGING_RECEIPTS;
 
 static IO_WORKITEM_ROUTINE AdmissionPagingReceiptWorker;
@@ -2122,6 +2127,8 @@ static void AdmissionPagingReceiptStage(ADMISSION_CONTEXT *Context,
       RtlCopyMemory(receipts->SystemShapes, Data, sizeof(receipts->SystemShapes));
     else if (Kind == AdmissionPagingReceiptPoolDemand)
       RtlCopyMemory(&receipts->PoolDemand, Data, sizeof(receipts->PoolDemand));
+    else if (Kind == AdmissionPagingReceiptAllocProbe)
+      RtlCopyMemory(&receipts->AllocProbe, Data, sizeof(receipts->AllocProbe));
     else if (Kind == AdmissionPagingReceiptBrokerFailures)
       RtlCopyMemory(&receipts->Broker, Data, sizeof(receipts->Broker));
     else if (Kind == AdmissionPagingReceiptOmittedLeaves)
@@ -2192,6 +2199,9 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
     if (dirty & AdmissionPagingReceiptLiveWait)
       RtlCopyMemory(&receipts->LiveWaitSnapshot, &receipts->LiveWait,
                     sizeof(receipts->LiveWaitSnapshot));
+    if (dirty & AdmissionPagingReceiptAllocProbe)
+      RtlCopyMemory(&receipts->AllocProbeSnapshot, &receipts->AllocProbe,
+                    sizeof(receipts->AllocProbeSnapshot));
     receipts->Dirty = 0u;
     RtlCopyMemory(&flush, &receipts->Flush, sizeof(flush));
     RtlCopyMemory(&failure, &receipts->Failure, sizeof(failure));
@@ -2253,6 +2263,11 @@ static VOID AdmissionPagingReceiptWorker(_In_ PDEVICE_OBJECT Device,
           sizeof(pool),
           (BOOLEAN)(pool.Stats.CommitFailures || pool.Stats.ReleaseFailures ||
                     pool.Stats.Unaligned || pool.Stats.RefUnderflows));
+    if (dirty & AdmissionPagingReceiptAllocProbe)
+      /* Flushed: a one-shot diagnostic that must survive a later reset. */
+      AdmissionPagingReceiptWrite(context, L"Wom1PoolAllocProbe",
+          &receipts->AllocProbeSnapshot, sizeof(receipts->AllocProbeSnapshot),
+          TRUE);
     if ((dirty & AdmissionPagingReceiptWait) &&
         InterlockedExchange(&context->G3PagingWaitDirty, 0) != 0) {
       RtlCopyMemory(&wait, &context->G3PagingWait, sizeof(wait));
@@ -2698,6 +2713,15 @@ _Use_decl_annotations_ void AdmissionRecordM2PoolDemand(
     ADMISSION_CONTEXT *Context, const ADMISSION_POOL_DEMAND_RECEIPT *Receipt) {
   if (Context == NULL || Receipt == NULL) return;
   AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptPoolDemand,
+                              Receipt);
+}
+
+/* POOL-PROBE: called once per boot under the pool fast mutex (APC_LEVEL);
+ * staging takes only the receipts spin lock and queues the work item. */
+_Use_decl_annotations_ void AdmissionRecordM2PoolAllocProbe(
+    ADMISSION_CONTEXT *Context, const ADMISSION_POOL_ALLOC_PROBE_RECEIPT *Receipt) {
+  if (Context == NULL || Receipt == NULL) return;
+  AdmissionPagingReceiptStage(Context, AdmissionPagingReceiptAllocProbe,
                               Receipt);
 }
 

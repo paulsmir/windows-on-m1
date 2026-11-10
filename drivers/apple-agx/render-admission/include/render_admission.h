@@ -1635,6 +1635,10 @@ void AdmissionRecordM2PoolProbe(_In_opt_ ADMISSION_CONTEXT *Context,
 void AdmissionRecordM2PoolDemand(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_POOL_DEMAND_RECEIPT *Receipt);
+/* POOL-PROBE receipt Wom1PoolAllocProbe (staged; written by a work item). */
+void AdmissionRecordM2PoolAllocProbe(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_POOL_ALLOC_PROBE_RECEIPT *Receipt);
 void AdmissionRecordGpuvaG3SystemShapes(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_reads_(ADMISSION_G3_SYSTEM_SHAPE_COUNT)
