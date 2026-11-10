@@ -23,6 +23,7 @@ KMD = r'''
 typedef unsigned long ULONG;
 typedef unsigned long long ULONGLONG;
 typedef unsigned char BOOLEAN;
+typedef void VOID;
 #define FALSE 0
 #define TRUE 1
 typedef struct {unsigned TdrDrillAllowed;} ADMISSION_CONTEXT;
@@ -32,7 +33,7 @@ typedef struct {
  APPLE_AGX_BACKEND_RUNTIME Backend;
  struct {APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory;} Initdata;
  ADMISSION_RC_SAMPLE RcCurrent;
- unsigned Depth2KickedFence,Depth2General,RcExportPending;
+ unsigned Depth2KickedFence,Depth2General,RcExportPending,RcReceiptEnabled;
  ADMISSION_CONTEXT *Adapter;
 } ADMISSION_PLATFORM_RUNTIME;
 static ULONGLONG AdmissionJobQpc(void){return 0x100000002ULL;}
@@ -69,7 +70,8 @@ static void kmd_selector(void) {
 
 class Depth2DrillWindows(unittest.TestCase):
     def test_selector_with_real_runtime(self):
-        source=model_source()+KMD+extract(SRC.read_text(), 'AdmissionDepth2DrillTakeWindows')
+        source=model_source()+KMD+extract(SRC.read_text(), 'AdmissionRcExportRequest')
+        source+=extract(SRC.read_text(), 'AdmissionDepth2DrillTakeWindows')
         source+=MAIN.replace('int main(void)', 'static int runtime_main(void)')
         source+=SELECTOR+'\nint main(void) {kmd_selector();return 0;}\n'
         with tempfile.TemporaryDirectory() as d:

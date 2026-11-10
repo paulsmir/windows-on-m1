@@ -57,6 +57,8 @@ int main(void) {
         text = WORKER.read_text()
         kick = text[text.index('static BOOLEAN AdmissionJobWindowKickWindows('):]
         at = kick.index('    AdmissionRcDecisionTyped(')
+        request = text[text.index('static VOID AdmissionRcExportRequest('):]
+        request = request[:request.index('\n}\n') + 3]
         record = kick[at:kick.index('  AdmissionJobAheadNoteRefusalWindows(', at)]
         record = record[:record.rindex('  }')]
         code = r'''
@@ -66,9 +68,14 @@ int main(void) {
 #include "render_rc_progress.h"
 #define TRUE 1
 static unsigned long long AdmissionJobQpc(void) { return 10; }
+typedef void VOID;
+typedef struct { ADMISSION_RC_DECISIONS RcDecisions;
+ unsigned RcDecisionPid,RcExportPending,Depth2Capabilities,RcReceiptEnabled;
+ struct { unsigned Mode; } Depth2Drill; } ADMISSION_PLATFORM_RUNTIME;
+''' + request + r'''
 int main(void) {
- struct { ADMISSION_RC_DECISIONS RcDecisions; unsigned RcDecisionPid,RcExportPending,Depth2Capabilities; }
- storage={0}, *runtime=&storage;
+ ADMISSION_PLATFORM_RUNTIME storage={0}, *runtime=&storage;
+ runtime->RcReceiptEnabled=1; /* the decision block runs under RcReceiptEnabled */
  runtime->RcDecisionPid=42;
  AdmissionRcDecisionsInitialize(&runtime->RcDecisions);
  unsigned prebindRefusal=0, fence=11;

@@ -95,6 +95,8 @@ int main(void) {
         start=text.index('static const volatile APPLE_AGX_U32 *AdmissionRcObject(')
         end=text.index('/* EXP1075 kernel dump:',start)
         body=text[start:end]
+        request=text[text.index('static VOID AdmissionRcExportRequest('):]
+        request=request[:request.index('\n}\n')+3]
         code=r'''
 #include "render_job_window.h"
 #include "apple_agx_render_shared_memory.h"
@@ -122,7 +124,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportReadU32(void *c,
  (void)c;++reads;*v=*p;return 1;
 }
 static ULONGLONG AdmissionJobQpc(void) {return 0x100000002ULL;}
-'''+body+r'''
+'''+request+body+r'''
 int main(void) {
  static ADMISSION_PLATFORM_RUNTIME r;
  static unsigned objects[40][0x10000/4];

@@ -1421,6 +1421,16 @@ static VOID AdmissionJobTimingFirmwareWindows(
   AdmissionFwTimingCaptureWindows(runtime, fence);
 }
 
+/* C-a: RcExportPending bypasses the two-second export limit until an RC export
+ * clears it, and only Wom1RcProgress/Wom1RcDecisions (RcReceiptEnabled) or the
+ * drill receipt (Depth2Drill.Mode) clear it. Requested without either it would
+ * stay set and every job would write the registry for the rest of the boot
+ * (OV2 / OV5-waiver notes did that; their receipts have their own export). */
+static VOID AdmissionRcExportRequest(ADMISSION_PLATFORM_RUNTIME *runtime) {
+  if (runtime->RcReceiptEnabled || runtime->Depth2Drill.Mode)
+    runtime->RcExportPending = TRUE;
+}
+
 /* Pinned drill evidence is independent of timing-ring churn. Serialized by
  * the worker, or reset after WorkIdle; no MMIO and no registry work at DIRQL. */
 static VOID AdmissionDepth2DrillExportWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
@@ -3938,7 +3948,7 @@ static VOID AdmissionRcSampleWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
         (unsigned int)terminalFence, (unsigned int)status);
     if (count != runtime->Depth2Drill.ReportedCount ||
         overflow != runtime->Depth2Drill.ReportOverflow)
-      runtime->RcExportPending = TRUE;
+      AdmissionRcExportRequest(runtime);
   }
   if (!runtime->RcReceiptEnabled || !runtime->RcCurrent.RFence) return;
   s = runtime->RcCurrent; /* zero-initialized at pair begin */
@@ -3974,7 +3984,7 @@ static VOID AdmissionRcSampleWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
     unsigned int count=runtime->RcReceipt.Count, overflow=runtime->RcReceipt.Overflow;
     AdmissionRcAppend(&runtime->RcReceipt,&s);
     if(count!=runtime->RcReceipt.Count || overflow!=runtime->RcReceipt.Overflow)
-      runtime->RcExportPending=TRUE;
+      AdmissionRcExportRequest(runtime);
   }
 }
 
@@ -4520,10 +4530,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBuildLeadBarrier(
             running->D3ExpectedStamp, now);
         refusal = ADMISSION_JOB_WINDOW_OV2_WAIVE;
       }
-      if (AdmissionJobWindowOv2Note(&runtime->Ov2Receipt, refusal,
-              runtime->Depth2KickedFence, running->D3ExpectedStamp,
-              barrier.WaitValue))
-        runtime->RcExportPending = TRUE;
+      (void)AdmissionJobWindowOv2Note(&runtime->Ov2Receipt, refusal,
+          runtime->Depth2KickedFence, running->D3ExpectedStamp,
+          barrier.WaitValue);
       runtime->Ov2Waive = FALSE;
     }
     /* C2a: likewise for a private-only compute successor of another
@@ -4707,13 +4716,12 @@ static BOOLEAN AdmissionBuildOv5TaWaiver(
     AdmissionOv5WaiverBeacon(runtime, Plan, Fence, &barrier);
 #endif
   }
-  if (AdmissionJobWindowOv5WaiverNote(&runtime->Ov5WaiverReceipt, refusal, Fence,
-          barrier.WaitValue, barrier.StampSelf,
-          refusal == ADMISSION_JOB_WINDOW_OV5W_WAIVE
-              ? (unsigned int)(address - owner->VirtualAddresses[
-                    APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR])
-              : 0u))
-    runtime->RcExportPending = TRUE;
+  (void)AdmissionJobWindowOv5WaiverNote(&runtime->Ov5WaiverReceipt, refusal, Fence,
+      barrier.WaitValue, barrier.StampSelf,
+      refusal == ADMISSION_JOB_WINDOW_OV5W_WAIVE
+          ? (unsigned int)(address - owner->VirtualAddresses[
+                APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR])
+          : 0u);
   return refusal == ADMISSION_JOB_WINDOW_OV5W_WAIVE ? TRUE : FALSE;
 }
 #endif
@@ -6401,7 +6409,7 @@ static BOOLEAN AdmissionDepth2DrillTakeWindows(ADMISSION_PLATFORM_RUNTIME *runti
       !runtime->Backend.SuccessorPending || !runtime->Depth2KickedFence)
     return FALSE;
   ++d->Attempts;
-  runtime->RcExportPending = TRUE;
+  AdmissionRcExportRequest(runtime);
   if (q->PendingFence != runtime->Backend.PendingSubmission.Submission.Fence ||
       q->Successor.Fence != runtime->Depth2KickedFence ||
       q->Successor.Fence != runtime->Backend.SuccessorSubmission.Submission.Fence)
@@ -7043,7 +7051,7 @@ static VOID AdmissionRcDecisionWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
       (unsigned int)detail, (unsigned int)fence, (unsigned int)next,
       runtime->RcDecisionPid,
       AdmissionJobQpc());
-  runtime->RcExportPending = TRUE;
+  AdmissionRcExportRequest(runtime);
 }
 
 /* Record why the caller cannot even reach KickRefusal. Snapshot the pending
@@ -7308,7 +7316,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
         runtime->RcDecisionPid,AdmissionJobQpc(),s.Running.Kind,s.Next.Kind,
         AdmissionJobWindowBarrierEx(s.Running.Kind,s.Next.Kind,
                                     runtime->Depth2Capabilities));
-    runtime->RcExportPending = TRUE;
+    AdmissionRcExportRequest(runtime);
   }
   AdmissionJobAheadNoteRefusalWindows(runtime, fence,
       ADMISSION_JOB_AHEAD_SHIFT_DEPTH2, refusal);
@@ -7342,9 +7350,8 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
         &s.Running, &s.Next);
     if (ov2 == ADMISSION_JOB_WINDOW_OV2_WAIVE)
       runtime->Ov2Waive = TRUE;
-    else if (ov2 != ADMISSION_JOB_WINDOW_OV2_CLASS &&
-             AdmissionJobWindowOv2Note(&runtime->Ov2Receipt, ov2, next, 0u, 0u))
-      runtime->RcExportPending = TRUE;
+    else if (ov2 != ADMISSION_JOB_WINDOW_OV2_CLASS)
+      (void)AdmissionJobWindowOv2Note(&runtime->Ov2Receipt, ov2, next, 0u, 0u);
   }
   /* C2a: waive the lead Barrier's wait for a private-only compute successor
    * of another process (a refusal is counted here, a waiver where the
@@ -7370,9 +7377,9 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
         (unsigned int)barrier, &s.Running, &s.Next);
     if (ov5w == ADMISSION_JOB_WINDOW_OV5W_WAIVE)
       runtime->Ov5Waive = TRUE;
-    else if (AdmissionJobWindowOv5WaiverNote(&runtime->Ov5WaiverReceipt, ov5w,
-                 next, 0u, 0u, 0u))
-      runtime->RcExportPending = TRUE;
+    else
+      (void)AdmissionJobWindowOv5WaiverNote(&runtime->Ov5WaiverReceipt, ov5w,
+          next, 0u, 0u, 0u);
   }
 #endif
   /* The kick: the fence is the scheduler's kicked fence from here on. */
