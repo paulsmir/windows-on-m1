@@ -2895,3 +2895,21 @@ Scripts and tables: `.local/night-20261110/r8-work-deficit/n2_map.py`, `out-n2-m
   instruction-count parity, dependent-load latency (EXP2183), wait placement (EXP2124), occupancy, MEMBW.
 - Bench order unchanged: ANSQ-T2 slot -> N3a (EXP2311, Wom1JobDiagnostics=1 as EXP2309, both xproc switches
   absent) -> N3b -> N3c.
+
+## UPDATE 2026-11-10T01:20:00Z -- R9: source cause of two depth-two window misses (offline, no hardware)
+
+Report: `.local/night-20261110/r9-window-misses/REPORT.md`; cited lines re-checked at 42dbf3428.
+- "In time, never prebound" (0.4-0.5 jobs/frame, chain refusal 38): the successor is not in the KMD queue.
+  `AdmissionG4PendingAdmissible` is sampled once (gpuva_g3_windows.c:6282); on FALSE the dxgkrnl submit thread
+  sleeps in `AdmissionPlatformRuntimeAwaitWork` until the window is empty and never re-checks. Receipt agreement:
+  Wom1SubmitPath Waits[1] 0.53-0.66 per present, mean wait 1.7-2.3 ms. Which predicate fails is a HYPOTHESIS
+  (context two-fence limit: dxgkrnl is notified before the context retires the fence, resubmits ~20 us later).
+  Fix F-A2 (KMD, class I): the wait re-evaluates admissibility; upper bound 0.15-0.19 ms/frame HD.
+- Cross-frame pair C0(N+1) beside the 3D stage of R7(N) never fires: a refusal, not arrival (C0 reaches the KMD
+  before R7's end in 99.5-99.8 % of frames). `AgxD3d12JobBarrierExecution` (agx_d3d12_job_barriers.h:408-412)
+  resets PreviousKind and the ranges at every ExecuteCommandLists, so the frame-first compute always gets refusal
+  2. Fix F-B (UMD owner, class O): carry the last render's exact write ranges across the execution boundary,
+  resource-exact rule only; upper bound 0.35 ms/frame HD. Shadow-verdict receipt first.
+- Validity note: the "0 of 10204" cross-frame check of the OV2+OV3B ABBA arms compared an intra-execution pair
+  (OV3B appends a trailing drain job); it holds only for the default arm.
+- Next: implement both default-off with receipts (two sessions), bench as N4a (receipts) -> N4b -> N4c after N3.
