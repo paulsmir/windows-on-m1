@@ -29,6 +29,8 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "agx_shader_input_provider.h"
 #include "agx_d3d12_r1_io_span.h"
 #include "agx_d3d12_r1_shader_transaction.h"
+/* plain C counters used by both build variants (the command list carries them unconditionally) */
+#include "agx_d3d12_barrier_stats.h"
 extern "C" {
 #include "apple_agx_win32_device_info.h"
 #include "render_win32_transport.h"
@@ -36,7 +38,6 @@ extern "C" {
 #include "agx_d3d12_windows.h"
 #include "agx_d3d12_tile_mapping.h"
 #include "agx_d3d12_heap_backing.h"
-#include "agx_d3d12_barrier_stats.h"
 #include "agx_d3d12_job_barriers.h"
 static_assert(AGX_D3D12_HEAP_FLAG_BUFFERS == static_cast<unsigned>(D3D12DDI_HEAP_FLAG_BUFFERS), "rc87 heap flag");
 static_assert(AGX_D3D12_HEAP_FLAG_TEXTURES == (static_cast<unsigned>(D3D12DDI_HEAP_FLAG_NON_RT_DS_TEXTURES) |
@@ -1828,7 +1829,7 @@ static void HeapFreeSpans(AgxD3d12Heap *heap) {
 /* OV6: the end of the access that starts at offset: the largest end of the
  * placed buffers containing it, else the heap's extent (aliasing placed
  * resources overlap, so the largest end is the conservative bound). */
-static UINT64 HeapSpanEnd(const AgxD3d12Heap *heap, UINT64 offset) {
+[[maybe_unused]] static UINT64 HeapSpanEnd(const AgxD3d12Heap *heap, UINT64 offset) {
     UINT64 end = 0;
     for (UINT i = 0; i < heap->span_count; ++i) {
         const AgxD3d12Heap::AgxD3d12HeapSpan &span = heap->spans[i];
