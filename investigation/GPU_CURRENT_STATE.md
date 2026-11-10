@@ -4038,3 +4038,49 @@ re-read by the architect in the out files / source where marked V)
     after the cost is known. Per the process rule this lever gets no production package before that number.
 - RANKING unchanged in order; row 2 (startup stall) now has an owner: KMD admission pool (chunked slab path), then
   KMD G3 paging + m1n1 broker (per-16 KiB calls), then UMD gpuva (site 1 wait).
+
+UPDATE 2026-11-10T21:01:45Z POOL SLAB STUDY (offline; Opus study, V = re-read by the architect in the named file)
+- MEASURED (V, `.local/night-20261110/pool-slab-study/out-slab-intervals.txt`, all 26 EXP2309 receipt snapshots):
+  every GravityMark load takes about 1500 slabs (3 GiB) and returns them after exit (slabs held 1516..1556 during
+  a run, 93..101 between runs). Per load 370..675 slabs come from the large-page cache (25..33 us each; 263..289 us
+  in the first load after boot) and 777..1097 by the chunked path at 4515..7482 us each. So every launch pays
+  4.0..6.9 s of CPU in MmAllocatePagesForMdlEx on the application's threads; the scored stall is the part of it
+  that falls after the benchmark clock starts.
+- MEASURED (V, out-pool-abs.txt): the slab cache was empty at load start (EmptySlabs 1, SpareLimit 64; the 2000 ms
+  idle trim had returned the previous run's slabs, CacheDrops 37 -> 38) and the background prefill supplied nothing
+  (PrefillSlabs 0, PrefillUs 0): it is opt-in since rc91.
+- SOURCE (V, pool_windows.c comment above AdmissionPoolPrefillEnabled): rc91 turned the prefill off because its
+  work item shared the system DelayedWorkQueue with the paging worker (DispatchToWorker max 7.8..20 ms before,
+  1.06..1.55 s with the prefill; EXP2024 first frames 1.8 s -> 11.7 s). The reason is the shared queue, not the
+  idea of allocating ahead.
+- STUDY READING (ledger rows collected by the study, not re-read by the architect): the cost is per chunk, not per
+  byte and not per call: 75..260 us per chunk for 1, 3, 32 or 16000 chunks per call, and 16 KiB chunks cost the
+  same per chunk as 64 KiB chunks (EXP1261); a failed call costs 11 us; zeroing is about 0.2 ms per MiB. Never
+  measured: chunk sizes between 64 KiB and 2 MiB, MmCached instead of MmWriteCombined, PREFER_CONTIGUOUS, NO_WAIT.
+- SOURCE (study, lock order; spot-checked only): one creation holds the pool FAST_MUTEX across all its slab
+  allocations; the VidMm paging worker takes the G3 lock and then the pool lock, and the ACQUIRE escape holds the
+  G3 lock across TVB growth. A slab allocation on one thread therefore stalls paging and every G3 escape.
+  Whether that chain accounts for the 0.884 s ACQUIRE is HYPOTHESIS.
+- SOURCE (study): the TVB target rule equals Asahi's (grow to 3x used pages when 2x exceeds the current size);
+  1043 blocks follows from 1390 used pages. No change planned there.
+- SOURCE (V, m1n1_windows/src/hv.c:222-245): the hypervisor does not trap TLB invalidation or DC ZVA (no HCR TTLB,
+  TDZ, TPU), but every interrupt and every ICC register access is trapped (IMO/FMO, ICH_HCR TC|TALL1). A per-chunk
+  inter-processor interrupt to seven cores would therefore be expensive in this guest; whether Windows sends one
+  per chunk is NOT known (HYPOTHESIS; numerically 7 x about 20 us would match 140 us per chunk).
+- CORRECTION to the UPDATE of 2026-11-10T20:51:35Z: "per call or per chunk is not separable from the data in hand"
+  is superseded for the ledger history: across call sizes the cost follows the chunk count. What one chunk costs
+  inside Windows stays unknown.
+- DECISIONS:
+  (P1) Offline study started: static reading of the guest's own ARM64 kernel image with public symbols, to name the
+       per-chunk work of MmAllocatePagesForMdlEx (search, zeroing, attribute conversion, TLB or inter-processor
+       work) and what FAST_LARGE_PAGES, the chunk size and the cache type change. Behaviour only, no code copied.
+       It runs in parallel with the ST-ETW rider and does not depend on sampled profiling working in the guest.
+  (P2) Design direction, to be specified after P1: the request shape of the fallback rung (fewer, larger chunks:
+       a 2 MiB slab needs every 64 KiB slot aligned and contiguous, which any 128 KiB..1 MiB chunk satisfies), with
+       per-rung counters in the Wom1M2PoolDemand receipt so that one application load on hardware gives the cost
+       per rung. No package before P1 says which rung can be cheaper.
+  (P3) Candidate after P2: allocate ahead on a dedicated thread (not the shared DelayedWorkQueue that rc91 ran
+       into) and outside the pool lock. It halves wall time at best and only if Windows does not serialize the two
+       allocators; that is a P1 question (locks per chunk).
+  (P4) Not pursued: a larger permanent slab cache. It would help a relaunch only, not a first launch after boot,
+       and holding gigabytes of system memory idle is not a production design.
