@@ -76166,3 +76166,44 @@ EXP2309 HARDWARE BEFORE 2026-11-10T00:15:48Z:
 - Hashes: sys 25d4b0e30f39, UmdArm64 d317d95fcd3b, UmdX64 4c69ae315e55, Umd32 b304bd02decc; manifest 34963c7eaa87, hardware-manifest a494fd162fdb; probe2309.sh ba02137ff1e7 (PROBE_LINT_OK); visible recovery rec2309h e09df803ef0b072c; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1.
 - Recovery rec2309h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2309-gm-night-base/run2309.sh.
+
+## EXP2310 — N2 SPLIT-TAGS per-kernel run (BEFORE)
+
+- UTC: 2026-11-10T00:48:44Z. Class D (receipt-only diagnostic). Spec: architect handoff section 2026-11-10T00:46:07Z (N2), source
+  R8 report `.local/night-20261110/r8-work-deficit/REPORT.md`.
+- Same boot as EXP2309 (guest boot 00:16Z, healthy after EXP2309_PROBE_DONE: APPL0002 Status OK, per-run WER 0).
+  Package, m1n1, Mu, RAM profile, AppleAns 0.4.5, artifact hashes and manifest: exactly as in EXP2309 BEFORE
+  (package source 1d054a31f, manifest 2ae1de570dccc728). Devnode switch Wom1JobDiagnostics=1 (read back 0x1).
+  Nothing is installed, staged or rebooted for this experiment.
+- Hypothesis (falsifiable): for kernels whose Apple pipeline is identical in encoders e7 and e11, the ours/Apple
+  ratio in C0 equals the ratio in C2 within +-0.05 on one profile and boot (cause = generated code of the C0
+  variants); a C0 ratio higher by >= 0.10 instead points to data-dependent memory cost.
+- Single variable: environment switch APPLE_AGX_D3D12_SPLIT_TAGS. Arms in order, 60 s cool-down before each:
+  a = unset; b = 53aff18d,a4452d43,7aa43c6c,9e9aea5a,9f0d0b9d,b74fd86e,97efffb3,b1db88bf (EXP2078 list);
+  c = fc968f7a,9e9aea5a,cfb56a6a,369f607b,52716231,f582ac2c,1f20788f,9726b186 (EXP2211 list); a2 = unset.
+  All arms: GravityMark d3d12, 1280x720 windowed, 100k, -temporal 0, gm-run.ps1 -Mode PERF (10+60 s window),
+  environment block identical to EXP2309 PERF (= gm2211b template; job rows are present in that trace mode,
+  checked on gm2309phd1-umd.log: 31163 measure-gpu-completion rows).
+- WHY THIS HYPOTHESIS:
+  1. C0 = 2.70 + 1.258 x Apple(e7+e9) on EXP2308 a1r3: the 67-dispatch constant part is at parity, only the
+     scene-dependent part is slow (r8 out-c0parts.txt); a clock or per-dispatch cause would slow the constant too.
+  2. The same dispatch chain in C2 runs at only 1.05-1.075 (r8 out-c2pieces.txt), so the cost follows the C0
+     kernel variants or the data C0 walks, not job construction.
+  3. Idle-gap and foreign-job discriminators are flat (<= 0.02 ms, r8 out-idle.txt).
+- WINDOWS CONTRACT: none involved; D3D12 fixes kernels, order and grids, the driver is free in grouping
+  dispatches into GPU jobs. The switch only ends the batch before the listed compute shaders
+  (agx_d3d12_ddi.cpp, at most 8 tags).
+- AGX/ASAHI CONTRACT: one compute job = one firmware work item whose stamps bracket GPU execution; a split adds
+  one job launch per piece (intercept only, EXP2077).
+- TRANSLATION: unchanged; each listed kernel becomes its own KMD job with its own firmware time.
+- WHAT IS STILL UNKNOWN: hardware behaviour only -- whether those kernels run at the same ours/Apple ratio in
+  C0 and C2 on the current profile (both earlier split runs, EXP2078 and EXP2211, predate it).
+- Launch: `bash .local/experiments/EXP2310-gm-split-tags/probe2310.sh <evidence>` (sha256 9c0e47b2aca1611a...,
+  derived from probe2309.sh; no build). Evidence: `.local/experiments/EXP2310-gm-split-tags/evidence/EXP2310`
+  (gm2310{a,b,c,a2}-umd.log, kmd-receipts-{pre,mid,post}-<arm>.txt, gpuperf-{mid,post}-<arm>.txt, err/out/done/mode).
+- Expected: controls reproduce EXP2309 HD PERF (frames ~2650-2670 per 60 s, median ~21.8 ms); arm b C0 = 15 jobs,
+  arm c C2 = 13 jobs; every listed tag present in the log; slightly lower fps in b and c (one job launch per piece).
+- Failure criteria: P6 residency < 95 % in a window; controls a and a2 differ by > 0.05 in slope; piece count not
+  15 (b, C0) / 13 (c, C2); a listed tag absent; fault, TDR, WER, STOP or BUGCHECK code != 0.
+- Recovery: `.local/experiments/EXP2309-gm-night-base/evidence/rec2309h/recover.sh` (visible recovery, same
+  boot and package as EXP2309; one rollback covers both experiments).
