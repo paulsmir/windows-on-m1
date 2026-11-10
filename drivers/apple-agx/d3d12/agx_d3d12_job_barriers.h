@@ -627,6 +627,18 @@ static inline unsigned AgxD3d12JobSplitHere(const AGX_D3D12_JOB_BARRIERS *j) {
   if (j->Post.Overflow) return 1u; /* an unplaceable barrier orders too */
   return AgxD3d12JobRangeFirstOrdering(j, j->Post.Count, 0u) < j->Post.Count ? 1u : 0u;
 }
+/* PF1 (APPLE_AGX_D3D12_EXPAND_FOLD, mesa/winsys/agx_win32_expand_ahead.h):
+ * the batch took part in a fold -- a render whose counted draws read a VDM
+ * stream that a preceding compute batch writes as its last dispatches, or
+ * that compute batch. No D3D12 range shows that dependency, so neither may
+ * lead or overlap the other: the render's TA never starts before the
+ * compute (AgxD3d12JobRenderTaRefusal, prelude bit FOLDED) and the compute
+ * is never flagged independent (OV2, ranges, cross lead). 13 = refused. */
+#define AGX_D3D12_JOB_FOLDED 2u
+#define AGX_D3D12_JOB_REFUSAL_FOLDED 13u
+static inline unsigned AgxD3d12JobFoldRefusal(unsigned folded) {
+  return folded & AGX_D3D12_JOB_FOLDED ? AGX_D3D12_JOB_REFUSAL_FOLDED : 0u;
+}
 /* OV5 (EXP2201: Metal starts a render's vertex/TA work while the compute
  * encoder before it runs and orders only the 3D stage): the render batch
  * now being submitted (call before AgxD3d12JobBarrierBatch; prelude: its
@@ -641,6 +653,7 @@ static inline unsigned AgxD3d12JobSplitHere(const AGX_D3D12_JOB_BARRIERS *j) {
 static inline unsigned AgxD3d12JobRenderTaRefusal(const AGX_D3D12_JOB_BARRIERS *j, unsigned prelude) {
   const AGX_D3D12_JOB_RANGE_SET *c = &j->RangeLastCompute, *r = &j->RangeRender;
   unsigned a, b;
+  if (AgxD3d12JobFoldRefusal(prelude)) return AGX_D3D12_JOB_REFUSAL_FOLDED;
   if (j->Unknown) return 1u;
   if (j->PreviousKind != 2u) return 2u;
   if (prelude) return 9u;
