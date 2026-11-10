@@ -136,6 +136,9 @@ void AgxWin32AsahiContextDiagnostic(struct pipe_context *,
  * submitted << 9 and fence (8 values), then any_faults, backend Failed,
  * held | terminal << 1 | last refused line << 8, held render fence. */
 APPLE_AGX_U64 AgxWin32AsahiContextNewestFence(struct pipe_context *);
+/* OV2 cross-execution receipt: active render batches holding a draw or a
+ * clear (the batch being submitted counts while the batch-kind hook runs) */
+unsigned AgxWin32AsahiContextOpenRenders(struct pipe_context *);
 /* rc101 receipt-only: {APPLE_AGX_D3D12_LEAN_CDM_BARRIER mode, last lean
  * word, barriers left lean, full barriers} since the last call, which resets
  * the counts. */

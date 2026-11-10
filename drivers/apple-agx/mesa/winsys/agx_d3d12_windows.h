@@ -79,6 +79,14 @@ void AgxD3d12OwnerJobDispatchRange(const void *Heap, unsigned long long Lo, unsi
  * is the first to order the last render's accesses (AgxD3d12JobSplitHere) */
 void AgxD3d12OwnerJobSplit(AGX_D3D12_OWNER *Owner);
 void AgxD3d12OwnerJobExecution(unsigned Known);
+/* OV2 cross-execution (receipt; agx_d3d12_job_barriers.h AgxD3d12JobCross*):
+ * the replay of an ExecuteCommandLists of Queue begins (right after
+ * AgxD3d12OwnerJobExecution) and ends (after its submission; Ok 0 = it
+ * failed); the active draw (Dispatch 0) or dispatch (1) binds a
+ * descriptor-heap table, whose accesses the range sinks do not see */
+void AgxD3d12OwnerJobCrossBegin(AGX_D3D12_OWNER *Owner, const void *Queue);
+void AgxD3d12OwnerJobCrossEnd(AGX_D3D12_OWNER *Owner, const void *Queue, unsigned Ok);
+void AgxD3d12OwnerJobUnplaced(unsigned Dispatch);
 /* OV3 (with the OV2 device feature): a pipeline-statistics ResolveQueryData
  * submits the query writers and keeps its copies until the next draw, which
  * puts them in its render batch's compute prelude, so the compute batch after

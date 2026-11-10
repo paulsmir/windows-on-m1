@@ -616,5 +616,225 @@ int main(void) {
         info = (SHARED / 'include/apple_agx_win32_device_info.h').read_text()
         self.assertIn('#define AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT 0x4u', info)
 
+    def test_cross_execution_shadow_verdict(self):
+        """R9 B.4: AgxD3d12JobBarrierExecution forgets the previous batch, so
+        the frame-first compute is always refused with 2. The shadow verdict
+        keeps the last render of the previous execution and must say
+        independent only when that execution ended with a render whose
+        accesses are all placed, nothing else ran after it or between the
+        executions, both executions' barriers are known, and the compute's
+        ranges neither meet a range that render writes (nor write one it
+        reads) nor are named by a barrier since the render. A wrong
+        'independent' lets the compute read what the previous frame's render
+        still writes."""
+        code = r"""
+#include <stdio.h>
+#include "agx_d3d12_job_barriers.h"
+enum { DRAW = 5, DISPATCH = 2, COPY = 1, TRANSITION = 0, UAV = 2 };
+#define VIEW AGX_D3D12_JOB_SRC_VIEW
+#define TARGET AGX_D3D12_JOB_SRC_TARGET
+static AGX_D3D12_JOB_BARRIERS j;
+static unsigned values[AGX_D3D12_JOB_BARRIER_VALUES];
+static int A, B, RT, T1, V, W;
+static void barrier(unsigned type, unsigned id, const void *heap, unsigned long long lo, unsigned long long hi) {
+  AgxD3d12JobBarrierAdd(&j, type, 0, 0, 0, id);
+  AgxD3d12JobBarrierRange(&j, type, id, heap, lo, hi);
+}
+static void batch(unsigned kind, unsigned clean) {
+  AgxD3d12JobCrossBatch(&j, kind, clean);
+  AgxD3d12JobBarrierBatch(&j, kind, values);
+}
+/* execution N: C (writes B), Ra (draw 1: target T1, reads W), Rb (draw 2:
+ * target RT, reads V); execution N+1: C0 (writes A, reads B) submitted by
+ * the next render's first draw */
+static void run(int mode) {
+  const int both = mode == 18; /* Ra and Rb stay open until the final flush */
+  unsigned detail = 0, first, shadow;
+  AgxD3d12JobBarriersInit(&j);
+  AgxD3d12JobBarrierExecution(&j, mode != 4);
+  AgxD3d12JobCrossBegin(&j, 0);
+  AgxD3d12JobBarrierBegin(&j, DISPATCH);
+  AgxD3d12JobBarrierDispatchRange(&j, &B, 0, 64, 1u | VIEW);
+  AgxD3d12JobBarrierEnd(&j);
+  barrier(TRANSITION, 1, &B, 0, 64);
+  AgxD3d12JobBarrierBegin(&j, DRAW);
+  batch(2u, 0);
+  AgxD3d12JobBarrierDrawRange(&j, &T1, 0, 4096, TARGET);
+  AgxD3d12JobBarrierDrawRange(&j, &W, 0, 256, VIEW);
+  AgxD3d12JobBarrierEnd(&j);
+  barrier(TRANSITION, 2, &T1, 0, 4096);
+  if (mode == 20) barrier(TRANSITION, 9, &A, 0, 64); /* before Rb's last draw */
+  AgxD3d12JobBarrierBegin(&j, DRAW);
+  if (!both) batch(1u, 1);
+  AgxD3d12JobBarrierDrawRange(&j, &RT, 0, 4096, TARGET);
+  AgxD3d12JobBarrierDrawRange(&j, &V, 0, 256, VIEW | AGX_D3D12_JOB_VERTEX);
+  if (mode == 12) AgxD3d12JobCrossUnplaced(&j, 0);
+  if (mode == 21) AgxD3d12JobBarrierDrawRange(&j, 0, 0, 0, VIEW);
+  AgxD3d12JobBarrierEnd(&j);
+  barrier(TRANSITION, 3, &RT, 0, 4096); /* the back buffer goes to PRESENT */
+  if (mode == 6) { AgxD3d12JobBarrierBegin(&j, COPY); AgxD3d12JobBarrierEnd(&j); }
+  if (mode == 7) { AgxD3d12JobBarrierBegin(&j, DISPATCH); AgxD3d12JobBarrierEnd(&j); }
+  if (mode == 13) barrier(TRANSITION, 9, &A, 0, 64);
+  if (mode == 22) barrier(UAV, 0, 0, 0, 0);
+  if (mode == 23) barrier(TRANSITION, 9, 0, 0, 0); /* a resource the tracker cannot place */
+  if (mode == 24) AgxD3d12JobBarrierForeign(&j);  /* a resolve drained at the replay's end */
+  if (both) batch(1u, 0);
+  batch(1u, 1);
+  if (mode == 7 || mode == 24) batch(2u, 0);
+  AgxD3d12JobCrossEnd(&j, mode != 11);
+  if (mode == 5) AgxD3d12JobCrossBreak(&j, 1);   /* a batch submitted between the executions */
+  if (mode == 25) { /* an execution of a queue the tracker did not follow */
+    AgxD3d12JobBarrierExecution(&j, 1);
+    AgxD3d12JobCrossBegin(&j, 7);
+    AgxD3d12JobCrossEnd(&j, 1);
+  }
+  AgxD3d12JobBarrierExecution(&j, mode != 3);
+  AgxD3d12JobCrossBegin(&j, mode == 8 ? 5u : 0u);
+  if (mode == 14) barrier(TRANSITION, 9, &A, 0, 64);
+  if (mode == 9) { AgxD3d12JobBarrierBegin(&j, COPY); AgxD3d12JobBarrierEnd(&j); }
+  if (mode == 26) AgxD3d12JobCrossBreak(&j, 9);
+  if (mode != 27) {
+    AgxD3d12JobBarrierBegin(&j, DISPATCH);
+    AgxD3d12JobBarrierDispatchRange(&j, &A, 0, 64, 1u | VIEW);
+    AgxD3d12JobBarrierDispatchRange(&j, &B, 0, 64, VIEW);
+    if (mode == 1) AgxD3d12JobBarrierDispatchRange(&j, &RT, 100, 200, VIEW);
+    if (mode == 2) AgxD3d12JobBarrierDispatchRange(&j, &V, 0, 16, 1u | VIEW);
+    if (mode == 10) AgxD3d12JobBarrierDispatchRange(&j, &V, 0, 16, VIEW);
+    if (mode == 15) AgxD3d12JobCrossUnplaced(&j, 1);
+    if (mode == 17) AgxD3d12JobBarrierDispatchRange(&j, 0, 0, 0, VIEW);
+    if (mode == 18 || mode == 19) AgxD3d12JobBarrierDispatchRange(&j, &W, 0, 16, 1u | VIEW);
+    if (mode == 28) AgxD3d12JobBarrierDispatchRange(&j, &RT, 4096, 8192, 1u | VIEW);
+    AgxD3d12JobBarrierEnd(&j);
+  }
+  if (mode == 16) barrier(TRANSITION, 9, &A, 0, 64); /* after C0's last dispatch */
+  AgxD3d12JobBarrierBegin(&j, DRAW);
+  first = AgxD3d12JobCrossFirst(&j);
+  shadow = AgxD3d12JobCrossRefusal(&j, &detail);
+  printf("%d %u %u %u %u.%u\n", mode, first, AgxD3d12JobBarrierRefusal(&j),
+         AgxD3d12JobBarrierRefusalRanges(&j), shadow, detail);
+  batch(2u, 0);
+  AgxD3d12JobBarrierEnd(&j);
+  if (AgxD3d12JobCrossFirst(&j)) printf("still first\n");
+}
+int main(void) {
+  unsigned h = 0, i;
+  for (int m = 0; m <= 28; ++m) run(m);
+  h = AgxD3d12JobCrossCount(h, 0); h = AgxD3d12JobCrossCount(h, 1); h = AgxD3d12JobCrossCount(h, 2);
+  h = AgxD3d12JobCrossCount(h, 6); h = AgxD3d12JobCrossCount(h, 8); h = AgxD3d12JobCrossCount(h, 11);
+  h = AgxD3d12JobCrossCount(h, 8);
+  printf("histogram %x\n", h);
+  for (i = 0; i < 40; ++i) h = AgxD3d12JobCrossCount(h, 6);
+  printf("saturated %x\n", h);
+  return 0;
+}
+"""
+        ran = build_run(code, [], [D3D12])
+        self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+        self.assertEqual(ran.stdout.split('\n')[:-1], [
+            '0 1 2 2 0.0',     # disjoint ranges: independent; the verdict in use stays 2
+            '1 1 2 2 8.1',     # the compute reads the kept render's target
+            '2 1 2 2 8.2',     # the compute writes what the kept render reads
+            '3 1 1 1 1.1',     # this execution's barriers are not all known
+            '4 1 2 2 1.2',     # the previous execution's were not
+            '5 1 2 2 6.17',    # a batch submitted between the executions
+            '6 1 2 2 6.2',     # a copy after the kept render's last draw
+            '7 1 2 2 2.2',     # the previous execution ended with a compute
+            '8 1 2 2 6.81',    # a deferred upload joins the first batch
+            '9 1 2 2 6.3',     # a copy before the compute in its execution
+            '10 1 2 2 0.0',    # both only read the range
+            '11 1 2 2 6.4',    # the previous execution failed
+            '12 1 2 2 11.2',   # a heap-table access in the kept render
+            '13 1 2 2 8.3',    # a barrier after the render names a compute range
+            '14 1 2 2 8.3',    # so does one before the compute's dispatch
+            '15 1 2 2 11.4',   # a heap-table access in the compute
+            '16 1 2 2 0.0',    # after the compute's last dispatch: orders later work
+            '17 1 2 2 11.3',   # a compute access the tracker cannot place
+            '18 1 2 2 8.2',    # two open renders: the kept set is their union
+            '19 1 2 2 0.0',    # Ra submitted alone before: only Rb is kept
+            '20 1 2 2 0.0',    # a barrier before the kept render's last draw
+            '21 1 2 2 11.1',   # a kept render access the tracker cannot place
+            '22 1 2 2 8.4',    # a global UAV barrier and a compute UAV
+            '23 1 2 2 11.5',   # a barrier on an unknown resource
+            '24 1 2 2 2.2',    # a drained resolve: the execution ends with a compute
+            '25 1 2 2 2.1',    # an unrelated execution in between
+            '26 1 2 2 6.145',  # a batch from another thread in this execution
+            '27 1 2 2 11.6',   # a compute batch without a tracked dispatch
+            '28 1 2 2 0.0',    # the same heap, a disjoint range
+            'histogram 121111', 'saturated 12f111'])
+
+    def test_cross_execution_receipt_wiring(self):
+        """The shadow verdict is recorded and never used: the row grows by
+        three values behind the old 29, and every condition that ends what is
+        kept (another owner or queue, a submission between the executions,
+        pending owner work, a deferred upload, deferred resolves, driver work
+        or a batch outside an execution, a render batch left open) is wired.
+        Dropping one of them turns a refusal into a wrong 'independent'."""
+        header = (D3D12 / 'agx_d3d12_job_barriers.h').read_text()
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        ddi = (D3D12 / 'agx_d3d12_ddi.cpp').read_text()
+        scene = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_asahi_scene.c').read_text()
+        # the exact rule never reads the coarse counters
+        rule = header[header.index('static inline unsigned AgxD3d12JobCrossRefusal('):
+                      header.index('static inline unsigned AgxD3d12JobCrossCount(')]
+        for coarse in ('GapAfterRender', 'RenderUav', 'EarlyDispatch'):
+            self.assertNotIn(coarse, rule)
+        # the execution boundary itself is unchanged: the verdict in use still forgets
+        execution = header[header.index('static inline void AgxD3d12JobBarrierExecution('):]
+        execution = execution[:execution.index('\n}\n')]
+        self.assertIn('j->PreviousKind = 0u;', execution)
+        self.assertNotIn('Cross', execution)
+        # receipt: old values stay where they were
+        self.assertIn('UINT values[32];', owner)
+        self.assertIn('values[28] = owner_compute_first_flushes;', owner)
+        self.assertIn('values[29] = owner_cross_histogram;', owner)
+        self.assertIn('values[30] = owner_cross_last;', owner)
+        self.assertIn('"measure-d3d12-ov2-refusal", S_OK, values, 32u', owner)
+        # the shadow verdict is computed after the verdict in use and for the
+        # execution-first compute only
+        used = owner.index('independent = (owner_ov2_ranges() ? ranged : reason) == 0u ? 1u : 0u;')
+        first = owner.index('if (AgxD3d12JobCrossFirst(&owner_job_barriers)) {')
+        self.assertLess(used, first)
+        shadow = owner[first:owner.index('\n    }', first)]
+        self.assertIn('AgxD3d12JobCrossRefusal(&owner_job_barriers, &detail)', shadow)
+        self.assertIn('owner_cross_histogram = AgxD3d12JobCrossCount(owner_cross_histogram, shadow);', shadow)
+        self.assertLess(owner.index('AgxD3d12JobCrossBatch(&owner_job_barriers, kind, cross_clean);'),
+                        owner.index('AgxD3d12JobBarrierBatch(&owner_job_barriers, kind, owner_job_values);'))
+        # what ends the kept render
+        begin = owner[owner.index('extern "C" void AgxD3d12OwnerJobCrossBegin('):
+                      owner.index('extern "C" void AgxD3d12OwnerJobCrossEnd(')]
+        for clear in ('owner != owner_cross_owner', 'queue != owner_cross_queue', '!owner_cross_valid',
+                      'AgxWin32AsahiContextNewestFence(owner->Context) != owner_cross_fence',
+                      'owner->PendingDraws || owner->PendingCopies || owner->PendingDispatches',
+                      'owner->UploadDeferred', 'owner->DeferredResolves', 'if (owner_cross_depth++)'):
+            self.assertIn(clear, begin)
+        destroy = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {'):]
+        destroy = destroy[:destroy.index('owner->Context->flush(')]
+        self.assertIn('if (owner == owner_cross_owner) {\n    owner_cross_owner = NULL;\n    owner_cross_valid = 0u;',
+                      destroy)
+        end = owner[owner.index('extern "C" void AgxD3d12OwnerJobCrossEnd('):
+                    owner.index('extern "C" void AgxD3d12OwnerJobUnplaced(')]
+        self.assertIn('AgxWin32AsahiContextOpenRenders(owner->Context))', end)
+        self.assertLess(end.index('AgxWin32AsahiContextOpenRenders(owner->Context))'),
+                        end.index('AgxD3d12JobCrossEnd(&owner_job_barriers, ok);'))
+        self.assertLess(end.index('AgxD3d12JobCrossEnd(&owner_job_barriers, ok);'),
+                        end.index('owner_cross_fence = owner && owner->Context'))
+        self.assertIn('if (!owner_cross_depth) AgxD3d12JobCrossBreak(&owner_job_barriers, 2u);', owner)
+        hook = owner[owner.index('static unsigned owner_batch_kind(unsigned kind) {'):]
+        self.assertLess(hook.index('if (!owner_cross_depth) {\n    AgxD3d12JobCrossBreak(&owner_job_barriers, 1u);'),
+                        hook.index('if (kind == 2u && AgxWin32Ov2Feature) {'))
+        self.assertIn('AgxWin32AsahiContextOpenRenders(owner_cross_owner->Context) == 1u', hook)
+        self.assertIn('BITSET_TEST(native->batches.active,i) && slot->vdm.bo && (slot->draws || slot->clear)',
+                      scene[scene.index('unsigned AgxWin32AsahiContextOpenRenders('):])
+        # the replay: begin right after the tracker's own boundary, end after the submission
+        self.assertLess(ddi.index('AgxD3d12OwnerJobExecution(known);'), ddi.index('AgxD3d12OwnerJobCrossBegin('))
+        self.assertLess(ddi.index('AgxD3d12OwnerJobCrossBegin('), ddi.index(
+            'AgxD3d12OwnerResolveExecution(static_cast<AGX_D3D12_OWNER *>(queue->device->owner), 1, known);'))
+        self.assertLess(ddi.index('AgxD3d12OwnerSubmitForQueue(owner, queue->context)'),
+                        ddi.index('AgxD3d12OwnerJobCrossEnd('))
+        self.assertIn('queue, SUCCEEDED(hr) ? 1u : 0u);', ddi)
+        # heap-table accesses are in no range set: they refuse (11)
+        self.assertIn('if (JobStageHeapTable(dispatch)) AgxD3d12OwnerJobUnplaced(1u);', ddi)
+        self.assertIn('if (JobStageHeapTable(d.vs_bind) || JobStageHeapTable(d.ps_bind)) AgxD3d12OwnerJobUnplaced(0u);', ddi)
+
 if __name__ == '__main__':
     unittest.main()

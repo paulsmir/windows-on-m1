@@ -51,6 +51,29 @@ typedef struct AGX_D3D12_JOB_RANGE_SET {
   AGX_D3D12_JOB_RANGE R[AGX_D3D12_JOB_RANGES];
   unsigned At[AGX_D3D12_JOB_RANGES]; /* Post: dispatches ended before the entry */
 } AGX_D3D12_JOB_RANGE_SET;
+/* OV2 cross-execution (receipt, R9 B.4): what survives ExecuteCommandLists
+ * for the execution-first compute batch. Kept 0 = the previous execution of
+ * this owner ended with a render whose accesses (KeptRender) and the
+ * barriers since its last draw (KeptPost) are fully known; else the refusal
+ * reason (1, 2, 6, 11) with KeptDetail (bits 0-3 sub-cause, 4-7 break cause).
+ * Render collects the accesses of every draw ended since the last render
+ * submission that left no other render batch open (a superset of the batch
+ * being submitted, exact when one batch is open); Last is its value at the
+ * last render submission; Tail the barriers since that render's last draw;
+ * Pre the barriers of this execution before its first batch, PreCommitted
+ * of them before the last dispatch ended. Foreign counts the non-draw,
+ * non-dispatch commands like ForeignSince, but is only reset by such a
+ * render submission. Table*: accesses through a descriptor-heap table,
+ * which the range sinks do not see. */
+#define AGX_D3D12_JOB_RANGE_TABLE 4u
+typedef struct AGX_D3D12_JOB_CROSS {
+  unsigned InExecution, Broken, Batches, LastKind, Dirty;
+  unsigned Foreign, ForeignKinds, LastForeign, LastForeignKinds;
+  unsigned TableDraw, TableDispatch, TableCompute;
+  unsigned Kept, KeptDetail, KeptKinds;
+  unsigned PreCommitted, PreCommittedOverflow;
+  AGX_D3D12_JOB_RANGE_SET Render, Last, Tail, Pre, KeptRender, KeptPost;
+} AGX_D3D12_JOB_CROSS;
 typedef struct AGX_D3D12_JOB_BARRIERS {
   AGX_D3D12_JOB_BARRIER_SET Before; /* the gap before the active command */
   AGX_D3D12_JOB_BARRIER_SET Open;   /* since the last command's Begin */
@@ -99,6 +122,7 @@ typedef struct AGX_D3D12_JOB_BARRIERS {
    * first barrier that orders a compute write */
   unsigned DrawsSinceDispatch, LastBarrierType, LastBarrierId, LastBarrierBefore, LastBarrierAfter;
   unsigned GlobalUavSinceDispatch;
+  AGX_D3D12_JOB_CROSS Cross;
 } AGX_D3D12_JOB_BARRIERS;
 #define AGX_D3D12_JOB_VERTEX 4u
 /* OV6b (receipt only): where a range came from; verdicts read bits 0 and 2 only */
@@ -196,6 +220,19 @@ static inline void AgxD3d12JobBarriersInit(AGX_D3D12_JOB_BARRIERS *j) {
   j->ActiveLocal = 0u;
   j->ComputeForeign = j->ForeignKinds = j->DispatchesSince = 0u;
   AgxD3d12JobRangesReset(j);
+  j->Cross.InExecution = j->Cross.Broken = j->Cross.Batches = j->Cross.LastKind = j->Cross.Dirty = 0u;
+  j->Cross.Foreign = j->Cross.ForeignKinds = j->Cross.LastForeign = j->Cross.LastForeignKinds = 0u;
+  j->Cross.TableDraw = j->Cross.TableDispatch = j->Cross.TableCompute = 0u;
+  j->Cross.Kept = 2u; /* no previous execution */
+  j->Cross.KeptDetail = 1u;
+  j->Cross.KeptKinds = 0u;
+  j->Cross.PreCommitted = j->Cross.PreCommittedOverflow = 0u;
+  AgxD3d12JobRangeClear(&j->Cross.Render);
+  AgxD3d12JobRangeClear(&j->Cross.Last);
+  AgxD3d12JobRangeClear(&j->Cross.Tail);
+  AgxD3d12JobRangeClear(&j->Cross.Pre);
+  AgxD3d12JobRangeClear(&j->Cross.KeptRender);
+  AgxD3d12JobRangeClear(&j->Cross.KeptPost);
 }
 
 /* type 0 transition, 1 aliasing, 2 UAV (id 0 = global), 3 0022 ranged
@@ -245,7 +282,10 @@ static inline void AgxD3d12JobBarrierBegin(AGX_D3D12_JOB_BARRIERS *j, unsigned k
   else if (kind != 5u) {
     ++j->ForeignSince;
     j->ForeignKinds |= 1u << (kind & 31u);
+    ++j->Cross.Foreign;
+    j->Cross.ForeignKinds |= 1u << (kind & 31u);
   }
+  j->Cross.TableDraw = j->Cross.TableDispatch = 0u;
 }
 
 static inline void AgxD3d12JobBarrierEnd(AGX_D3D12_JOB_BARRIERS *j) {
@@ -255,6 +295,19 @@ static inline void AgxD3d12JobBarrierEnd(AGX_D3D12_JOB_BARRIERS *j) {
    * later work, not that batch) */
   /* (an ExecuteIndirect expansion counts only when it replayed draws: a
    * dispatch expansion must not drop the barriers before it) */
+  /* cross-execution receipt: the same accesses, kept past render
+   * submissions that leave another render batch open */
+  if (j->Active == 5u || j->RangeDraw.Count || j->RangeDraw.Overflow) {
+    AgxD3d12JobRangeMerge(&j->Cross.Render, &j->RangeDraw);
+    AgxD3d12JobRangeMerge(&j->Cross.Render, &j->Resolved);
+  }
+  if (j->Cross.TableDraw) j->Cross.Render.Overflow |= AGX_D3D12_JOB_RANGE_TABLE;
+  if (j->Cross.TableDispatch) j->Cross.TableCompute = 1u;
+  if (j->Active == 2u || j->RangeDispatch.Count || j->RangeDispatch.Overflow) {
+    j->Cross.PreCommitted = j->Cross.Pre.Count;
+    j->Cross.PreCommittedOverflow = j->Cross.Pre.Overflow;
+  }
+  j->Cross.TableDraw = j->Cross.TableDispatch = 0u;
   if (j->Active == 5u || j->RangeDraw.Count || j->RangeDraw.Overflow) {
     ++j->DrawsSinceDispatch;
     AgxD3d12JobRangeMerge(&j->RangeRender, &j->RangeDraw);
@@ -315,6 +368,11 @@ static inline void AgxD3d12JobBarrierRange(AGX_D3D12_JOB_BARRIERS *j, unsigned t
     const unsigned before = j->Post.Count;
     AgxD3d12JobRangeAdd(&j->Post, heap, lo, hi, type == 2u ? (id ? 1u : 2u) : 0u);
     if (j->Post.Count > before) j->Post.At[before] = j->DispatchesSince;
+    /* cross-execution receipt: every barrier since the kept render's last
+     * draw, and those of this execution before its first batch */
+    AgxD3d12JobRangeAdd(&j->Cross.Tail, heap, lo, hi, type == 2u ? (id ? 1u : 2u) : 0u);
+    if (j->Cross.InExecution && !j->Cross.Batches)
+      AgxD3d12JobRangeAdd(&j->Cross.Pre, heap, lo, hi, type == 2u ? (id ? 1u : 2u) : 0u);
   }
 }
 
@@ -329,6 +387,7 @@ static inline void AgxD3d12JobBarrierLocal(AGX_D3D12_JOB_BARRIERS *j) {
   if (!AgxD3d12JobBarrierForeignActive(j)) return;
   j->ActiveLocal = 1u;
   if (j->ForeignSince) --j->ForeignSince;
+  if (j->Cross.Foreign) --j->Cross.Foreign;
 }
 
 /* OV3: owner work outside any command (a deferred resolve copied the
@@ -650,4 +709,238 @@ static inline unsigned AgxD3d12JobRenderTaConflict(const AGX_D3D12_JOB_BARRIERS 
 static inline unsigned AgxD3d12JobBarrierIndependent(const AGX_D3D12_JOB_BARRIERS *j) {
   return AgxD3d12JobBarrierRefusal(j) == 0u ? 1u : 0u;
 }
+/* OV2 cross-execution (receipt; R9 B.4: AgxD3d12JobBarrierExecution forgets
+ * the previous batch, so the execution-first compute batch is always
+ * refused with 2 whatever it touches). The functions below keep the last
+ * render of an execution across the boundary and give a second, shadow
+ * verdict for that one compute batch from exact ranges only; the coarse
+ * counters (GapAfterRender, RenderUav, EarlyDispatch) are never read. */
+
+/* the active draw (dispatch 0) or dispatch (dispatch 1) reaches resources
+ * through a descriptor-heap table: accesses no range set holds */
+static inline void AgxD3d12JobCrossUnplaced(AGX_D3D12_JOB_BARRIERS *j, unsigned dispatch) {
+  if (dispatch) j->Cross.TableDispatch = 1u;
+  else j->Cross.TableDraw = 1u;
+}
+/* owner work the tracker cannot attribute; cause 1 a batch submitted
+ * outside an execution, 2 driver work outside one, 3 the newest fence moved
+ * between two executions, 4 pending owner work at the begin, 5 a deferred
+ * upload, 6 deferred resolves, 7 another owner or queue, 8 nested or
+ * unfinished executions, 9 a batch from another thread. Nothing is kept
+ * past it. */
+static inline void AgxD3d12JobCrossBreak(AGX_D3D12_JOB_BARRIERS *j, unsigned cause) {
+  AGX_D3D12_JOB_CROSS *c = &j->Cross;
+  cause &= 0xfu;
+  if (!cause) cause = 0xfu;
+  if (c->InExecution) {
+    if (!c->Broken) c->Broken = cause;
+    return;
+  }
+  if (c->Kept) return; /* already refused for an earlier cause */
+  c->Kept = 6u;
+  c->KeptDetail = 1u | (cause << 4);
+}
+/* an ExecuteCommandLists starts (after AgxD3d12JobBarrierExecution); cause
+ * != 0: the owner saw work between the two executions (CrossBreak codes) */
+static inline void AgxD3d12JobCrossBegin(AGX_D3D12_JOB_BARRIERS *j, unsigned cause) {
+  AGX_D3D12_JOB_CROSS *c = &j->Cross;
+  if (c->InExecution) { /* the previous one never ended */
+    c->InExecution = 0u;
+    c->Kept = 6u;
+    c->KeptDetail = 1u | (8u << 4);
+  }
+  if (cause) AgxD3d12JobCrossBreak(j, cause);
+  c->InExecution = 1u;
+  c->Broken = c->Batches = c->LastKind = c->Dirty = 0u;
+  c->Foreign = c->ForeignKinds = c->LastForeign = c->LastForeignKinds = 0u;
+  c->TableDraw = c->TableDispatch = c->TableCompute = 0u;
+  c->PreCommitted = c->PreCommittedOverflow = 0u;
+  AgxD3d12JobRangeClear(&c->Render);
+  AgxD3d12JobRangeClear(&c->Last);
+  AgxD3d12JobRangeClear(&c->Tail);
+  AgxD3d12JobRangeClear(&c->Pre);
+}
+/* the compute batch now being submitted is the first batch of its execution */
+static inline unsigned AgxD3d12JobCrossFirst(const AGX_D3D12_JOB_BARRIERS *j) {
+  return j->Cross.InExecution && !j->Cross.Batches && j->PreviousKind == 0u ? 1u : 0u;
+}
+/* a batch of kind is submitted (call before AgxD3d12JobBarrierBatch);
+ * clean: no other render batch holding work stays open, so every draw ended
+ * so far is in a submitted batch or in this one */
+static inline void AgxD3d12JobCrossBatch(AGX_D3D12_JOB_BARRIERS *j, unsigned kind, unsigned clean) {
+  AGX_D3D12_JOB_CROSS *c = &j->Cross;
+  const unsigned active = AgxD3d12JobBarrierForeignActive(j);
+  ++c->Batches;
+  c->LastKind = kind;
+  if (kind != 1u) {
+    c->TableCompute = 0u;
+    return;
+  }
+  c->Last = c->Render;
+  /* the command whose owner work submits the render comes after it */
+  c->LastForeign = c->Foreign - (active && c->Foreign ? 1u : 0u);
+  c->LastForeignKinds = c->ForeignKinds;
+  if (clean && !c->Dirty) c->Tail = j->Post;
+  c->Dirty = clean ? 0u : 1u;
+  if (clean) {
+    AgxD3d12JobRangeClear(&c->Render);
+    c->Foreign = active;
+    c->ForeignKinds = active ? 1u << (j->Active & 31u) : 0u;
+  }
+}
+/* the execution ended and everything was submitted (ok = 0: it failed):
+ * decide what the next execution's first compute may be compared with */
+static inline void AgxD3d12JobCrossEnd(AGX_D3D12_JOB_BARRIERS *j, unsigned ok) {
+  AGX_D3D12_JOB_CROSS *c = &j->Cross;
+  unsigned kept = 0u, detail = 0u;
+  if (!c->InExecution) { /* an end without its begin */
+    c->Kept = 6u;
+    c->KeptDetail = 1u | (8u << 4);
+    return;
+  }
+  c->InExecution = 0u;
+  c->KeptKinds = c->LastForeignKinds | c->ForeignKinds | (j->ComputeForeign ? 1u << 31 : 0u);
+  if (j->Unknown) {
+    kept = 1u;
+    detail = 2u;
+  } else if (!ok) {
+    kept = 6u;
+    detail = 4u;
+  } else if (c->Broken) {
+    kept = 6u;
+    detail = 1u | (c->Broken << 4);
+  } else if (c->LastKind != 1u) {
+    kept = 2u;
+    detail = c->LastKind == 2u ? 2u : 1u;
+  } else if (c->LastForeign || c->Foreign || j->ComputeForeign) {
+    kept = 6u;
+    detail = 2u;
+  } else if (c->Last.Overflow) {
+    kept = 11u;
+    detail = c->Last.Overflow & AGX_D3D12_JOB_RANGE_TABLE ? 2u : 1u;
+  }
+  c->Kept = kept;
+  c->KeptDetail = detail;
+  if (!kept) {
+    c->KeptRender = c->Last;
+    c->KeptPost = c->Tail;
+  } else {
+    AgxD3d12JobRangeClear(&c->KeptRender);
+    AgxD3d12JobRangeClear(&c->KeptPost);
+  }
+}
+/* a kept render access the compute batch must not overlap with a write on
+ * either side: 1 the render may write it (a UAV, a target, a clear, stream
+ * output, a resolve destination or an unclassified access), 0 it only
+ * reads it */
+static inline unsigned AgxD3d12JobCrossRenderWrites(const AGX_D3D12_JOB_RANGE *r) {
+  if (r->Uav & 1u) return 1u;
+  if (r->Uav & (AGX_D3D12_JOB_SRC_TARGET | AGX_D3D12_JOB_SRC_CLEAR | AGX_D3D12_JOB_SRC_SO)) return 1u;
+  return r->Uav & AGX_D3D12_JOB_SRC_MASK ? 0u : 1u;
+}
+/* a barrier range b since the kept render: 3 it names a range the compute
+ * batch accesses, 4 it is a global UAV barrier and the compute batch
+ * accesses a UAV, 0 neither. (A barrier naming only what the render
+ * accessed, e.g. the back buffer's transition to PRESENT, orders nothing
+ * the compute touches: the direct comparison covers every shared range.) */
+static inline unsigned AgxD3d12JobCrossBarrier(const AGX_D3D12_JOB_BARRIERS *j, const AGX_D3D12_JOB_RANGE *b) {
+  unsigned i;
+  if (b->Uav == 2u) return j->RangeCompute.Uav ? 4u : 0u;
+  for (i = 0; i < j->RangeCompute.Count; ++i) {
+    const AGX_D3D12_JOB_RANGE *x = &j->RangeCompute.R[i];
+    if (x->Heap == b->Heap && b->Lo < x->Hi && x->Lo < b->Hi) return 3u;
+  }
+  return 0u;
+}
+/* shadow verdict for the execution-first compute batch now being submitted
+ * (AgxD3d12JobCrossFirst): 0 independent of the kept render, 1 barriers not
+ * all known (detail 1 this execution, 2 the previous one), 2 the previous
+ * execution did not end with a render (1 no execution or no batch, 2 it
+ * ended with a compute batch), 6 other owner work (1 between the
+ * executions or unattributable, bits 4-7 the CrossBreak cause; 2 in or
+ * after the kept render; 3 before this batch; 4 the previous execution
+ * failed), 8 the ranges order the two (1 the compute accesses what the
+ * render may write, 2 it writes what the render reads, 3 a barrier since
+ * the render names a range the compute accesses, 4 a global UAV barrier
+ * since the render and the compute accesses a UAV), 11 an access cannot
+ * be placed (1 kept set, 2 a heap table in the kept render, 3 the compute
+ * set, 4 a heap table in the compute, 5 a barrier, 6 a compute batch
+ * without a tracked dispatch). First match. */
+static inline unsigned AgxD3d12JobCrossRefusal(const AGX_D3D12_JOB_BARRIERS *j, unsigned *detail) {
+  const AGX_D3D12_JOB_CROSS *c = &j->Cross;
+  unsigned foreign, i, k, named = 0u;
+  *detail = 0u;
+  if (j->Unknown) {
+    *detail = 1u;
+    return 1u;
+  }
+  if (c->Kept) {
+    *detail = c->KeptDetail;
+    return c->Kept;
+  }
+  if (c->Broken) {
+    *detail = 1u | (c->Broken << 4);
+    return 6u;
+  }
+  foreign = c->Foreign;
+  if (AgxD3d12JobBarrierForeignActive(j) && foreign) --foreign;
+  if (foreign || j->ComputeForeign) {
+    *detail = 3u;
+    return 6u;
+  }
+  if (j->RangeCompute.Overflow) {
+    *detail = 3u;
+    return 11u;
+  }
+  if (c->TableCompute) {
+    *detail = 4u;
+    return 11u;
+  }
+  if (c->KeptPost.Overflow || c->PreCommittedOverflow) {
+    *detail = 5u;
+    return 11u;
+  }
+  if (!j->DispatchesSince) {
+    *detail = 6u;
+    return 11u;
+  }
+  for (i = 0; i < j->RangeCompute.Count; ++i) {
+    const AGX_D3D12_JOB_RANGE *x = &j->RangeCompute.R[i];
+    for (k = 0; k < c->KeptRender.Count; ++k) {
+      const AGX_D3D12_JOB_RANGE *y = &c->KeptRender.R[k];
+      if (y->Heap != x->Heap || x->Lo >= y->Hi || y->Lo >= x->Hi) continue;
+      if (AgxD3d12JobCrossRenderWrites(y)) {
+        *detail = 1u;
+        return 8u;
+      }
+      if (x->Uav & 1u) {
+        *detail = 2u;
+        return 8u;
+      }
+    }
+  }
+  for (i = 0; i < c->KeptPost.Count; ++i) {
+    const unsigned n = AgxD3d12JobCrossBarrier(j, &c->KeptPost.R[i]);
+    if (n && (!named || n < named)) named = n;
+  }
+  for (i = 0; i < c->PreCommitted && i < c->Pre.Count; ++i) {
+    const unsigned n = AgxD3d12JobCrossBarrier(j, &c->Pre.R[i]);
+    if (n && (!named || n < named)) named = n;
+  }
+  if (named) {
+    *detail = named;
+    return 8u;
+  }
+  return 0u;
+}
+/* the receipt's histogram of shadow reasons, saturating nibbles: bits 0-3
+ * independent, 4-7 reason 1, 8-11 reason 2, 12-15 reason 6, 16-19 reason 8,
+ * 20-23 any other */
+static inline unsigned AgxD3d12JobCrossCount(unsigned histogram, unsigned reason) {
+  const unsigned slot = reason == 0u ? 0u : reason == 1u ? 1u : reason == 2u ? 2u : reason == 6u ? 3u
+                        : reason == 8u ? 4u : 5u;
+  if (((histogram >> (slot * 4u)) & 0xfu) != 0xfu) histogram += 1u << (slot * 4u);
+  return histogram;
+}
+
 #endif

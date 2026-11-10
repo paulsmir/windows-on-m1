@@ -663,6 +663,20 @@ void AgxWin32AsahiBatchWriteResources(struct pipe_context *pctx, struct pipe_res
 APPLE_AGX_U64 AgxWin32AsahiContextNewestFence(struct pipe_context *ctx) {
   return ctx ? AgxWin32AsahiNewestFence(agx_context(ctx)) : 0u;
 }
+/* OV2 cross-execution receipt: render batches not yet submitted that hold
+ * work (a draw or a clear). A batch being submitted is still active while
+ * AgxWin32BatchKindHook runs, so the count there is 1 exactly when no other
+ * render batch stays open; ~0u without a context. Reads only. */
+unsigned AgxWin32AsahiContextOpenRenders(struct pipe_context *ctx) {
+  if(!ctx) return ~0u;
+  struct agx_context *native=agx_context(ctx);
+  unsigned count=0;
+  for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
+    struct agx_batch *slot=&native->batches.slots[i];
+    if(BITSET_TEST(native->batches.active,i) && slot->vdm.bo && (slot->draws || slot->clear)) ++count;
+  }
+  return count;
+}
 /* rc101 receipt-only: the lean CDM barrier mode and word, and the barriers
  * left lean and full since the last call (agx_win32_cdm_barrier.h). */
 void AgxWin32AsahiContextCdmBarriers(struct pipe_context *ctx, APPLE_AGX_U32 out[4]) {
