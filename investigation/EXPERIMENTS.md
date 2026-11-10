@@ -76747,3 +76747,15 @@ EXP2316 HARDWARE ACTUAL 2026-11-10T04:28:00Z:
 - Evidence: .local/experiments/EXP2316-n4b-requeue/evidence/EXP2316 (submit-path-{post-gm,post-x,final}.txt, xproc-rx-*.txt, kmd-receipts-*.txt, gm2316{w,r2,r3,x}-umd.log, perf-gate.txt, wer-final.txt), full.log.
 - Verdict: confirmed as a mechanism (requeue acts, the 1.9 ms wait is gone, no accept item violated). The FPS step is an indication from separate boots. The default stays 0; the architect records the class-I verdict and the CHANGES row.
 - Next: ANSQ-T5c in the bench gap (started 04:27:27Z), then EXP2317 (N4c) with Wom1SubmitRequeue=1 as the base (architect decision), variable = APPLE_AGX_D3D12_OV2_CROSS_EXECUTION per arm.
+
+### ANSQ-T5c — ACTUAL (2026-11-10T04:44:00Z)
+
+- Run 04:27:27Z..04:40:42Z (run-t5c.out, 115 lines). Sequence: ImagePath -> 0.4.7 store (appleans.inf_arm64_62c12175c51fd95d, sha256 DE910A08...), UnmapMode=2, restart (load047), then three cycles of full `Optimize-Volume -ReTrim` + restart.
+- Restarts: 4/4 reached SSH, RESTART_SENT -> SSH_UP about 65 s each (04:27:27 -> 04:28:30, 04:34:19 -> 04:35:24, 04:37:57 -> 04:39:02; the boot1 pair was not timed separately). No stall at "IRQ route enabled vINTID=960 AIC=590".
+- ReTrim: 143 / 148 / 149 DSM commands (about 6500 ranges, 8.7-9.16 M blocks each); every report mode=2, rejected=0, completed_error=0, not_sent=0, last_status=0x0, fenced 0; TRIM_BOUNDS_PASS 3/3. Post-boot trims 22 / 23 / 23 / 14 commands, all status 0.
+- Integrity: VERIFY_MANIFEST_OK 6/6 (checked=330 bad=0), chkdsk without problems and C: not dirty before and after every restart.
+- Diagnostic records, every boot (load047, boot1-3): one 0xA9 = 0xa9020004, two 0xA6 (0xa6000101, 0xa6000102); no 0xAA, 0xA4 or 0xA5 record.
+- BUGCHECK: the normal-profile m1n1 prints no BUGCHECK line (0 matches in each normal-prev-full.log; only the PSCI RESET STACK dump); code not observable in this profile (known gap, queue item "recovery/normal profile onto a BUGCHECK-printing m1n1").
+- End state: UnmapMode=1 and ImagePath -> 0.4.5 store (appleans.inf_arm64_20a748c874b1e861, signature Valid, sha256 4AF699F4...) written without a further restart; effective from the next boot (the EXP2317 launch).
+- Verdict: confirmed as expected (3/3 cycles clean). Reading per BEFORE: clean without 0xAA -> the ANSQ-T4 stall is not reproduced and stays an open single event; no evidence of a missed interrupt absorbed by the reap.
+- Next: EXP2317 (N4c) on the freed bench; AppleAns session decides on further trim work.
