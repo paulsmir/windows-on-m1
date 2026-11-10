@@ -77068,3 +77068,17 @@ EXP2319 CORRECTION 2026-11-10T14:38:43Z (append only, references EXP2319 HARDWAR
 - architect correction 2026-11-10T14:35Z: 'b5 is the first non-empty launch' in BEFORE was wrong; b4 (2 groups, direct) is the only launch readable in the 7aa43c6c cut arms.
 - Architect reading of the arms: handoff section "EXP2319 (N6) reading", script .local/night-20261110/n6-reading/n6read.py, state update a92c7eac7. The offline cut table of this entry was built without the production root-view masks (fixture flags --root-views=<uav>,<cbv> --soft-fault-loads); ruling on ab2/bb1/bb2/bl still pending.
 - architect final ruling 2026-11-10T14:50Z (appended 2026-11-10T14:45:23Z): arms ae/ab2/be/bb1/bb2/bl valid; BEFORE table (12406/14460, B1 162, B2 582, B1 6338, B2 7602, L 7794) rejected as a flag-less fixture compile; production offsets 97efffb3 main 5272, B1 64, B2 164, no L; 7aa43c6c main 7770, B1 2844, B2 3922, L 3976; source .local/night-20261110/r20-n6-cut-table/REPORT.md. This supersedes "void by the letter". Until branch gpu/fixture-production-shape is merged, no offset, instruction, register or code-size number from tests/dxil_agx_cost_fixture is pre-registered; such numbers come from guest measure-d3d12-shader-stats / receipt lines.
+
+EXP2320 ACTUAL 2026-11-10T14:55:27Z:
+- Phases: launch, package install and first start normal; EXP2320_PIPELINE_RC 0; no hang, TDR, GPU reset or stop (STOPS 0, GPU_RESET none, CM_PROB_NONE). Display, SSH, storage (AppleAns 0.4.8) and 8 CPUs alive throughout.
+- Suite: TOOL_SUITE PASS=119 FAIL=0.
+- GM HD PERF 100k -temporal 0 fps_frames: w 48.491 / r2 50.515 / r3 49.645 (frames 2637/2713/2691), 8.0 jobs/frame. Expected 49.6-50.4: w is 1.1 below the band, above the 48.0 floor; r2/r3 inside or above it. Boot-to-boot spread of w on this package is therefore at least about 2 % (EXP2319 w 49.616).
+- JOB_WINDOW v4 final: RefusedGate/GateHolds/GateSettled/GateTimeout 0/0/0/0 (expected 0: the gate path is dormant with the switch unset).
+- PERF_TGT: 85/85, decoder verdict "profile" (applied bit clear), as expected.
+- GM FULL f0 Score 7888 (expected about 7900; boot B pass line stays 7923).
+- CS 1.6 warm/r2/r3 48.856/51.967/52.036; PERF_GATE cs16 PASS (+4.05 %), gravitymark_hd_perf PASS (worst 44.860 vs baseline 40.770), PERF_GATE_PASS.
+- WER_REPORTS 2 (same count as EXP2318/EXP2319, every GM arm reports wer 0: pre-existing reports, not identified yet).
+- m1n1 at the ordered restart: "BUGCHECK ok base=0xfffff80294a00000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0" (full.log). No AppleAns 0xAA/0xA4/0xA5 record seen.
+- Rollback rec2320h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE; package and devnode switches removed.
+- Verdict: confirmed (the default path is dormant; this boot is the same-package control for EXP2321 and EXP2322). Evidence .local/experiments/EXP2320-r14-pt1-gate/evidence/EXP2320.
+- Next: EXP2321 (boot B, Wom1PreludeNotifyGate=1), read against this boot: mean of w/r2/r3 here 49.550.
