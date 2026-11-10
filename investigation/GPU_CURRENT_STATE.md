@@ -2853,3 +2853,45 @@ Lever ranking by size at HD (ms per frame, upper bounds; none validated on hardw
   and gets its own experiment before it rides in any GM package.
 - In work offline: source cause of the "in time, never prebound" boundaries (chain refusal 38) and of the
   cross-frame pair C0(N+1) beside 3D(R7,N) never firing (r9-window-misses).
+
+## UPDATE 2026-11-10T01:12:00Z -- N2 verdict (EXP2310): C0 excess sits in two variant kernels
+
+Run: EXP2310, four arms on one boot, all valid (a/a2 controls fps_frames 48.843 / 48.839; P6 mid->post 98.5-100 %;
+wer 0, STOPS 0; BUGCHECK ok code=0x0 at the ordered restart). Split cost: arm b 23 jobs/frame, fps_frames
+43.933, +2.3 ms for 15 extra jobs = 0.155 ms wall per extra job. Analysis: 3541 (arm b) / 3534 (arm c) frames,
+37 two-second bins on Apple's split2 scene clock (lag 10.6 / 11.0 s, corr 0.9996 / 0.9998); piece -> kernel
+mapping verified from the measure-d3d12-dispatch tag sequence of a frame. "slope" = Theil slope ours/Apple.
+Scripts and tables: `.local/night-20261110/r8-work-deficit/n2_map.py`, `out-n2-map.txt`.
+
+| kernel (ours) | Apple dispatch | ours ms | Apple ms | slope |
+|---|---|---|---|---|
+| C0 traversal 7aa43c6c x5 | e7 d22-26 | 1.737 | 1.427 | 1.250 [1.239,1.258] |
+| C2 traversal fc968f7a x5 | e11 d0-4 | 1.509 | 1.370 | 1.101 [1.094,1.108] |
+| C0 97efffb3 | e7 d48 | 0.870 | 0.656 | 1.357 [1.345,1.367] |
+| C2 f582ac2c | e11 d26 | 0.518 | 0.476 | 1.070 [1.053,1.088] |
+| C0 d27-47 (shared pipelines + d45 variant) | same | | | 1.069 [1.008,1.173] |
+| C2 d5-25 | same | | | 0.977 [0.952,1.005] |
+| C0 d49-56 + e9 | same | 0.629 | 0.746 | 0.997 [0.849,1.141] |
+| C2 d27-33 + e13 | same | 0.461 | 0.614 | 0.997 [0.936,1.060] |
+| C0 const piece | e0+e1+e5 | 2.630 | 2.719 | ratio 0.968 |
+| C4 | e15 | 2.087 | 1.858 | 1.168 |
+
+- Predictions of the BEFORE entry confirmed (trav 1.2-1.3, d48 1.2-1.4, C2 trav 1.09-1.14, C2 d26 1.07); control
+  slopes within 0.05 of R8 (C0 var 1.216, C2 1.071-1.085, C4 1.168-1.175).
+- Verdict by the preregistered rule: cause (a) "generated code of the C0 variants" is favoured. Everything in the
+  chain that is not a C0 variant runs at slope 0.98-1.07 in both encoders; the excess is carried by 7aa43c6c
+  (1.25 against 1.10 for its C2 twin) and 97efffb3 (1.36 against 1.07 for its twin f582ac2c). Excess above the C2
+  level: (1.25-1.10) x 1.427 + (1.357-1.07) x 0.656 = 0.21 + 0.19 = 0.40 ms/frame HD; to Apple parity for the
+  four variant kernels about 0.68 ms.
+- Not excluded: (b) for the heavy kernels' own data footprint (C0 walks a 1.9x larger indirect grid). The small
+  shared kernels cannot test that. If the op-class diff finds the variants equal up to constants, the verdict
+  flips to (b) and the next step is the atomic/chase probe twin of EXP2267 at verified P6.
+- Correction to a working table of this night (never published): "C0 k49 vs e7 d49 = 1.82x" compared a 5-dispatch
+  piece (d49-53) with one Apple dispatch. Only the combined d49-56 + e9 row above is valid.
+- Unverified lead (HYPOTHESIS until the field is decoded): in measure-d3d12-shader-stats the third-from-last
+  field is 0x16-0x52 for every C0 variant and 0x7b-0x8a for every C2 twin.
+- Next causal target (offline, no hardware): op-class and hot-loop diff of 7aa43c6c vs fc968f7a and 97efffb3 vs
+  f582ac2c, each against Apple's twin in `.local/metal-oracle` (r10-variant-opclass). Closed levers stay closed:
+  instruction-count parity, dependent-load latency (EXP2183), wait placement (EXP2124), occupancy, MEMBW.
+- Bench order unchanged: ANSQ-T2 slot -> N3a (EXP2311, Wom1JobDiagnostics=1 as EXP2309, both xproc switches
+  absent) -> N3b -> N3c.
