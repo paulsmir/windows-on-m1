@@ -3047,3 +3047,54 @@ mean 49.292 vs EXP2312 49.267, +0.05 %: the package with all new code off is ide
   cross-process pairs moves nothing. Lever PARKED: not on the critical path for GravityMark; reopen only with the
   prelude class work.
 Next: N5 arms (EXP2315, same boot) -> per-kernel fit; N4b; N4c.
+
+## UPDATE 2026-11-10T03:50:17Z -- N5 verdict (EXP2315): slot policy REJECTED for 97efffb3, small confirmed effect in the traversal, SS1 stays off; submit phase race fixed offline
+
+Source: architect's fit on the three valid arms of EXP2315 (c1 unset, s1/s2 APPLE_AGX_WAIT_SINGLE_SLOT=1; c2 invalid),
+evidence .local/experiments/EXP2314-n4a-n5/evidence/EXP2314/gm2315{c1,s1,s2}-umd.log, method of R8 n2_map.py (tag set b,
+pattern C{15}RCCRCRCR, scene clock by lag against the macOS split2 data, 2-s bins, 37 common bins, lag correlation
+0.9984-0.9996). Variable acted: INSTRS 0x321 -> 0x306 (97efffb3), 0x45e -> 0x450 (7aa43c6c). P6 mid 90.1 / 88.2 / 90.4 %.
+
+| piece (ms, scene-aligned mean) | c1 | s1 | s2 |
+|---|---|---|---|
+| C0 k48 = 97efffb3 | 0.871 | 0.866 (-0.5 %) | 0.865 (-0.6 %) |
+| slope vs Apple e7 d48 | 1.358 [1.346,1.369] | 1.349 [1.332,1.363] | 1.354 [1.344,1.363] |
+| C0 trav = 7aa43c6c x5 | 1.738 | 1.690 (-2.7 %) | 1.689 (-2.8 %) |
+| slope vs Apple e7 d22-26 | 1.253 [1.242,1.261] | 1.210 [1.197,1.220] | 1.221 [1.209,1.229] |
+| C0 (15 jobs) | 6.476 | 6.402 (-1.15 %) | 6.398 (-1.21 %) |
+| all 23 jobs | 19.388 | 19.454 (+0.34 %) | 19.418 (+0.16 %) |
+| R7 span | 0.298 | 0.464 | 0.505 |
+| frame period, scene 10..76 s (33 bins) | 23.407 | 23.847 (+1.9 %) | 23.888 (+2.0 %) |
+
+- VERDICT by the preregistered failure criterion (R10 section, "97efffb3 slope >= 1.33 in both single arms"): wait count
+  and slot policy are REJECTED for good as the cause of the 97efffb3 excess (+0.21 ms). With the option that kernel has
+  fewer waits than Apple's twin (43 vs 47 by the R10 fixture) and still runs at 1.35 x. Do not retry wait variants there.
+- CONFIRMED, small: the traversal 7aa43c6c responds as predicted (slope 1.253 -> 1.21-1.22, inside the expected band
+  1.17-1.22), -0.048 ms per frame; both single arms agree within 0.1 %.
+- SS1 as an optimisation (class O): NOT ACCEPTED, APPLE_AGX_WAIT_SINGLE_SLOT stays unset. The C0 work gain is 0.075 ms
+  (0.3 % of the frame) and the frame period was 1.9-2.0 % LONGER in both single arms (fps_frames 43.908 -> 43.021 /
+  43.005). That period result has one valid control and a fixed order (c1 first), so it is order-confounded:
+  INCONCLUSIVE as a slowdown, sufficient to refuse a default. No further bench slot is planned for it.
+- OBSERVATION (HYPOTHESIS, not pursued): the last render job R7 is bimodal (about 0.16 ms and 0.65 ms). Share of the
+  slow mode: EXP2310 arm b 11 %, c1 34 %, s1/s2 82 %. The period difference between the arms sits in gaps and in this
+  mode, not in job work. Candidate owner: the parked cross-process pair "render -> prelude render" (refusal 55), i.e.
+  a DWM job ahead of R7. Size if it were removed entirely: slow share x 0.49 ms.
+- DEFECT (class C, pre-existing since 2026-10-07): arm c2 lost the device at 26.39 s, Wom1G4SubmitFailure branch 7
+  subsite 0x10D kind 4, total 1. Cause (fork 6, checked by the architect in source): AdmissionPlatformRuntimeAwaitWorkEx
+  read Backend.Phase a second time after AdmissionPlatformRuntimeReadyEx had reported predicate 4; a job completing
+  between the reads turned a healthy runtime into a non-transient refusal. Fix 3f34e22a2 reviewed: one reread into a
+  local, Ready on the reread retests, Failed/Stopping/Starting still refuse at once; predicate 4 implies runtime != NULL
+  (short-circuit order in ReadyEx), the retest advances only on a state change and is bounded by the deadline. Two
+  remarks for the package cherry-pick: the reread should be a volatile/no-fence read so the compiler cannot fold it
+  back into two loads, and the package line 25c1945b6 has no FwRestartActive clause (adapt the hunk). Not in package
+  f84f0d1a2b83; goes into the N4c package. No hardware confirmation possible beyond absence (first sighting).
+
+Lever ranking after N3-N5 (HD, ms per frame; gap to macOS about 4.7 ms; none of these has a proven gain yet):
+1. N4b F-A2 requeue: <= 0.15-0.19 (premise confirmed by receipt, EXP2314). Next boot, EXP2316.
+2. N4c F-B cross-execution lead: <= 0.35. Package = N4 line + the phase fix.
+3. Traversal slot policy: 0.05, not worth a default.
+4. Parked: cross-process render -> prelude render (needs the prelude pair class and a second resident buffer manager).
+5. OPEN, largest identified work item without a lever: 97efffb3 +0.21 ms and the rest of the C0 scene part. Remaining
+   candidates per R10: exec-mask control-flow shape, integer address arithmetic, per-view data effect. Next step is an
+   offline design of the (b) probe (C0 kernel on the C2 view data), no hardware until it is written.
+Identified levers 1-3 sum to at most 0.6 ms of 4.7 ms: they cannot bring the gap under 5 % by themselves.
