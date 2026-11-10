@@ -317,35 +317,32 @@ static int agx_1d(int n) { return n; }
 static void libagx_copy_query_gl(struct agx_batch *b, int g, int bar, uint64_t s, uint64_t d, int t, int x) {
   (void)b; (void)g; (void)bar; (void)s; (void)d; (void)t; (void)x; ++copies; }
 """ + body + r"""
-static int run(int compute, int draws, int has_cdm, int existing) {
+static int run(int compute, int draws, int has_cdm) {
   static struct agx_batch b; struct agx_batch z = {0}; b = z;
   b.compute = compute; b.draws = draws; b.cdm.bo = has_cdm ? &bo : NULL; C.batch = &b;
   struct agx_query q = {PIPE_QUERY_PIPELINE_STATISTICS_SINGLE, &bo, {0x2000}, {0}};
   C.batches.generation[0] = 1;
   struct agx_resource r = {{64}}; allocs = copies = adds = 0;
   int st = AgxWin32AsahiQueryResolveIntoRender((struct pipe_context *)&C, (struct pipe_query *)&q,
-                                               &r.base, 8, existing);
+                                               &r.base, 8);
   printf("%d,%d,%d ", st, allocs, copies);
   return st;
 }
 int main(void) {
-  run(0, 2, 0, 1); run(0, 2, 1, 1); run(1, 0, 1, 1); run(0, 0, 1, 1);
-  run(0, 2, 0, 0); run(0, 2, 1, 0); printf("\n"); return 0;
+  run(0, 2, 0); run(0, 2, 1); run(1, 0, 1); run(0, 0, 1); printf("\n"); return 0;
 }
 """
         ran = build_run(code, [], [])
         self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
         self.assertEqual(ran.stdout.split(), [
-            '0,0,0',   # OV3b, render without prelude: keep pending, no CDM
-            '1,0,1',   # OV3b, render with a prelude: copy into it
+            '0,0,0',   # render without prelude: keep pending, never a new CDM (C-b)
+            '1,0,1',   # render with a prelude: copy into it
             '0,0,0',   # compute batch: never
-            '0,0,0',   # render batch without draws: never
-            '1,1,1',   # OV3 (EXP2197): allocates a new prelude
-            '1,0,1'])
+            '0,0,0'])  # render batch without draws: never
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
-        self.assertIn('owner_resolve_existing_prelude())) == 1)', owner)
-        self.assertIn('GetEnvironmentVariableA("APPLE_AGX_D3D12_OV3B", option, sizeof(option)) == 1 && option[0] == \'1\'',
-                      owner)
+        # C-b: no switch selects the prelude-creating placement any more
+        self.assertNotIn('APPLE_AGX_D3D12_OV3B', owner)
+        self.assertNotIn('existing_prelude', owner)
 
     def test_ov2_ranges_rule(self):
         """EXP2199: C3/C5/C7 were refused only by DrawUav (their render bound

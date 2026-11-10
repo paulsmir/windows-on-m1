@@ -2993,20 +2993,10 @@ static void owner_resolve_drain(AGX_D3D12_OWNER *owner, unsigned reason) {
   ++owner->PendingDispatches;
 }
 
-/* OV3b (opt-in APPLE_AGX_D3D12_OV3B=1, only where OV3 defers at all): the
- * copies wait for a render batch that already has a compute prelude, never
- * creating one (EXP2197); copies that meet none drain the native way. */
-static int owner_resolve_existing_prelude() {
-  static volatile LONG cached = -1;
-  LONG value = cached;
-  if (value < 0) {
-    char option[2] = {};
-    value = GetEnvironmentVariableA("APPLE_AGX_D3D12_OV3B", option, sizeof(option)) == 1 && option[0] == '1';
-    cached = value;
-  }
-  return value ? 1 : 0;
-}
-
+/* OV3b is the only placement (C-b): the copies wait for a render batch that
+ * already has a compute prelude and never create one. A prelude added to a
+ * prelude-free render puts it behind the overlapping compute (EXP2197,
+ * EXP2198, EXP2317); copies that meet no such batch drain the native way. */
 /* OV3 (agx_d3d12_windows.h) */
 extern "C" void AgxD3d12OwnerResolveExecution(AGX_D3D12_OWNER *owner, int begin, unsigned known) {
   OwnerLock lock(owner);
@@ -3019,7 +3009,7 @@ extern "C" void AgxD3d12OwnerResolveExecution(AGX_D3D12_OWNER *owner, int begin,
 #endif
   if (!begin && (owner->ResolveDeferred || owner->ResolveDrained) && AdmissionUmdMeasureEnabled())
     receipt("measure-d3d12-resolve-defer", S_OK, owner->ResolveDeferred, owner->ResolveIntoRender,
-            owner->ResolveDrained, owner->ResolveDrainReasons, static_cast<UINT>(owner_resolve_existing_prelude()));
+            owner->ResolveDrained, owner->ResolveDrainReasons, 1u /* existing prelude only */);
   if (!begin) owner->ResolveDeferred = owner->ResolveIntoRender = owner->ResolveDrained = owner->ResolveDrainReasons = 0;
 }
 
@@ -3042,8 +3032,7 @@ extern "C" void AgxD3d12OwnerResolveAfterDraw(AGX_D3D12_OWNER *owner) {
   while (done < owner->DeferredResolves &&
          (status = AgxWin32AsahiQueryResolveIntoRender(pipe, owner->DeferredResolve[done].Query,
                                                        owner->DeferredResolve[done].Resource,
-                                                       owner->DeferredResolve[done].Offset,
-                                                       owner_resolve_existing_prelude())) == 1)
+                                                       owner->DeferredResolve[done].Offset)) == 1)
     ++done;
 #else
   (void)pipe;
@@ -3052,7 +3041,7 @@ extern "C" void AgxD3d12OwnerResolveAfterDraw(AGX_D3D12_OWNER *owner) {
   for (UINT i = done; i < owner->DeferredResolves; ++i) owner->DeferredResolve[i - done] = owner->DeferredResolve[i];
   owner->DeferredResolves -= done;
   /* status 0: no render batch with a draw now (a dispatch-only
-   * ExecuteIndirect), or under OV3b none with a prelude: the rest waits. -1: this batch cannot take one (a
+   * ExecuteIndirect) or none with a prelude: the rest waits. -1: this batch cannot take one (a
    * user of that query): keep the order, copy the rest the native way. */
   if (status < 0) owner_resolve_drain(owner, kResolveDrainRefused);
 }
