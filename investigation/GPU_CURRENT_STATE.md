@@ -4411,3 +4411,11 @@ Reading rule (written before any census data exists):
 
 EXP2330 (running at this stamp) -> EXP2331 -> EXP2332 -> POOL-PROBE boot with the package rebuilt from the tip
 (census arm last) -> T5b FULL ABBA rerun -> TDR-H0 -> FS-D1.
+
+## UPDATE 2026-11-10T22:44:54Z -- architect: Windows Update pause written on the bench guest; EXP2330 invalid
+
+- The pause approved by the user ("да, на паузу") was written at 2026-11-10T22:42:24Z: two REG_SZ policy values, start date 2026-11-10, read back. Guest is Windows 10 Pro, build 26200. Full record: `investigation/EXPERIMENTS.md`, entry `ENV-CHANGE 2026-11-10T22:42:24Z`. This replaces the "NOT applied yet" line of the 22:33:12Z entry.
+- Effect NOT verified: both client status values were still 0 right after the write. Done means both read 1 at a later boot and the next experiment boot logs no update download. fork 6 saves the status query as `wu-pause-status.txt` at the first quiet gate of the next two boots.
+- The pause ends by itself on 2026-12-15. Undo = delete the two values.
+- EXP2330 is INVALID-ENV (ACTUAL in 7de424a8c): the guest reset itself after the ordered restart, before any arm, with update downloads at 22:37:58-22:39:38Z in the System log. The quiet gate cannot catch this case because it runs only once the experiment boot is reachable. No data from EXP2330 is used.
+- Bench order: EXP2334 (the EXP2330 package again, pinned source 6b6f71668) -> EXP2331 -> EXP2332 -> EXP2333 (package rebuilt from the tip, census launch last) -> T5b FULL rerun -> TDR-H0 -> FS-D1.
