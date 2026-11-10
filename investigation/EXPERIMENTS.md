@@ -76079,3 +76079,76 @@ EXP2308 HARDWARE BEFORE 2026-11-09T23:19:58Z:
   RECOVERY_STORAGE_APPLEANS_OK; guest reachable over SSH, APPL0002 inert, no AppleAgx package.
 - Next: EXP2309 (GM-NIGHT-BASE) on a fresh boot of the same source with Wom1JobDiagnostics=1 set before the
   first start; no adapter cycles.
+
+## ANSQ-S1 — AppleAns 0.4.5 VPD B1h (ACTUAL, 2026-11-10T00:12:00Z)
+
+- Bench window granted by the bench owner (fork 6) after rec2308h; released 00:11Z.
+- Phases: baseline capture 00:07:28Z on 0.4.4 (running hash dac3a772...); ansq-stage.ps1 STAGE_OK (oem15.inf,
+  store appleans.inf_arm64_20a748c874b1e861, stornvme StartOverride absent); ordered `shutdown /r` 00:08:08Z;
+  launcher exit 00:08:26Z; proxy-ready; normal ANS launcher (run_uefi PID 26100); kernel boot 00:08:37Z; SSH up
+  00:09:13Z.
+- Expected vs actual:
+  - boots on 0.4.5: CONFIRMED (running-file hash 4AF699F4...5C6F, service RUNNING).
+  - MediaType SSD: CONFIRMED. `Get-PhysicalDisk` NVMe APPLE SSD AP0256: MediaType Unspecified -> SSD;
+    `fsutil fsinfo sectorinfo C:` "Performs Normal Seeks" -> "No Seek Penalty". BusType stays Fibre Channel:
+    the classification follows the seek-penalty property alone; the bus type does not participate.
+  - "Trim Not Supported" unchanged: CONFIRMED (no B2h in this package).
+  - no AppleAns/disk/storport/Ntfs error or warning records since boot: CONFIRMED (only the two 0xA6 sealed
+    records, as on 0.4.4); C: not dirty; 8 CPUs; no Kernel-Power 41 / 6008 / 1001.
+  - m1n1 BUGCHECK line: not measurable in this profile (0 matches in normal-prev-full.log), as preregistered.
+- Recorded (no criterion): ScheduledDefrag task Ready, last run 2026-11-06T01:03:22Z result 0x0, before and
+  after. `Optimize-Volume -Analyze` before and after: 109.82 GB volume, 31.26 GB free, 20 % fragmented, 6744
+  fragmented files, "It is recommended that you defragment this volume" (the analysis text is the same for the
+  SSD-classified disk). Microsoft-Windows-Defrag history in the Application log holds only analysis records
+  (id 258, 2026-11-09T23:10Z and this run's two); no defragmentation or retrim record is retained, so whether
+  the 2026-11-06 scheduled run moved data while the disk was classified as a hard disk cannot be told from the
+  log. What the Optimize Drives UI offers for the volume was not read (no UI access over SSH).
+- GPT of disk 0 (4 KiB LBAs), for the TRIM stages: p1 6..128006 iBoot system container; p2 128006..30048518 and
+  p3 30048518..30658822 APFS; p4/p5 EFI system; p6 MSR; p7 C: 30916352..59706368; p8 T: 59706368..59968512;
+  p9 59968630..61279339 Apple recovery.
+- Alive: display not checked (SSH session only), SSH, storage (native ANS), 8 CPUs.
+- Verdict: CONFIRMED. S2 (bus type) is not needed for the SSD classification.
+- Next: ANSQ-T2 (TRIM package 0.4.6 in observe mode).
+- Evidence: .local/experiments/ANSS1/evidence/ANSQ-S1/{pre.txt,stage.txt,restart-run.log,normal-prev-full.log,post-after-restart.txt}.
+
+## ANSQ-T2 — AppleAns 0.4.6 TRIM, observe mode: UNMAP validated and recorded, nothing sent (BEFORE, 2026-11-10T00:13:00Z)
+
+- Hypothesis: with VPD B0h/B2h (LBPU) advertised, Windows sends UNMAP for C:; every range it names lies inside a
+  Windows volume of the GPT; in observe mode the driver completes them without any Dataset Management command.
+- WHY THIS HYPOTHESIS: (1) ANSQ-S1: classpnp read the new VPD page B1h through the same INQUIRY path and acted
+  on it, so page 00h listing is honoured for this adapter; (2) `ClasspSupportsUnmap` is LBPU of B2h (Microsoft
+  classpnp sample) and NTFS has DisableDeleteNotify = 0 on the guest; (3) the driver passes the SCSI LBA through
+  unscaled (block size 4096, LBADS 12 enforced at Identify), as READ/WRITE do, so volume-relative ranges become
+  partition-relative namespace LBAs in partmgr/volmgr, not in the driver.
+- WINDOWS CONTRACT / ANS CONTRACT / TRANSLATION: investigation/analysis/ANS-TRIM-UNMAP.md on branch
+  claude/nervous-dewdney-7e71c6 (sections of the same names and "Independent review and qualification gate").
+- WHAT IS STILL UNKNOWN: Identify ONCS of the J313 ANS (bit 2); whether `StorPortRegistryRead` behaves as
+  assumed for an absent value (the effective mode is in diag 0xA9); which ranges Windows really sends.
+- Single variable: AppleAns package 0.4.5 (ANSBUILD015-M) -> 0.4.6 (ANSBUILD016-N). No registry value is written:
+  UnmapMode absent = observe. GPU package absent, m1n1, Mu unchanged.
+- Commit: a85a64e246d4a5ce69576d98eb6b8d81291009c6 (branch claude/nervous-dewdney-7e71c6: f9f03b9a7 UNMAP ->
+  Dataset Management, a85a64e24 policy gate + fence + receipt). Profile: RECANS001 normal ANS.
+- Build: .local/experiments/ANSTRIM1/N.ps1 (MSBuild Release ARM64 /W4 /WX + RunCodeAnalysis 14 files 0 defects,
+  InfVerif, signtool, Inf2Cat).
+- Artifact: .local/experiments/ANSTRIM1/ANSBUILD016-N-package.zip
+  SHA-256 172ed22e54e84b92270836b4110791cff0e3242bdac3dc33e03880206b4bebff;
+  AppleAns.sys efb3c6f417f960c1422f781db9da98e41eda91183ded5637fd2b164958257012;
+  AppleAns.inf 2b48bfe5ad3ee0f209b04da05419ce5990b7b04ab76deba001a19f56dc23573c;
+  appleans.cat 7c2913bb10a7d3655e16d7c383f4ba9f3e67a338b35fc0408a2b9af6adcafc84;
+  source tar 263f42b5f450e35940dc14177639315134b0d7da7295b2d7d02411e66a2058e6.
+- Commands: tools/ansq-stage.ps1, tools/restart-normal.sh, then on the new boot tools/ansq-post.ps1 (receipt
+  before), tools/t2-observe.ps1 (`Optimize-Volume -DriveLetter C -ReTrim -Verbose`, then a 64 MB file written,
+  flushed and deleted), tools/ansq-post.ps1 (receipt after), host tools/trim-bounds.py on that capture.
+- Expected: boots on 0.4.6 (hash efb3c6f4...); AppleAns record 0xA9 with mode 1 and ONCS bit 2 set; "Trim
+  Supported"; MediaType SSD; ReTrim completes without error; receipt: commands > 0, rejected 0, observed =
+  accepted, queued 0, sent_ranges 0, completed 0; TRIM_BOUNDS_PASS (every extent and the hull inside
+  30916352..59968512, C: + T:); no error records; C: not dirty.
+- Failure criteria: any extent outside a Windows volume (TRIM is then not enabled, stop); queued or sent_ranges
+  non-zero in observe mode; rejected > 0 (Windows sent a list the validator refuses: read it before going on);
+  0xA9 mode other than 1; boot failure or storage errors. ONCS bit 2 clear (0xA8, "Trim Not Supported") ends the
+  TRIM stages without a defect: the controller does not offer Dataset Management.
+- Recovery artifact: 0.4.5 store directory appleans.inf_arm64_20a748c874b1e861 (ansq-rollback.ps1), package
+  .local/experiments/ANSS1/ANSBUILD015-M-package.zip (f172cc77...); bridge emergency profile as in ANSQ-S1.
+- Evidence: .local/experiments/ANSTRIM1/evidence/ANSQ-T2/.
+
+CORRECTION to "APPLE OVERLAP STRUCTURE" correction (2026-11-09T04:54:07Z) and to the EXP2298/EXP2299 verdict "Apple's 2.2 ms/frame of compute||render overlap ... the D3D12 port orders those pairs, the Metal port does not" (2026-11-10T00:11:39Z, offline, no hardware; evidence .local/night-20261110/r3-dag-bound/REPORT.md with apple_split_enc_hd.txt, apple_wait_vs_work.txt, metal_access_sets_cb750.txt, abba_xframe_check.txt): (1) The Metal port orders the same two pairs on the same surfaces: c15 writes the 1920x1080 RGBA16F texture that R16/R17 load as colour attachment (hazard-fhd.csv:85317,85334,85345,85416), c19 writes the texture R20 samples in its fragment stage (:85473,:85484); this is the same fragment-stage dependency as the D3D12 receipts of EXP2299 (R5 render target vs compute UAV write, R7 UAV -> PIXEL_SHADER_RESOURCE, 7405568 B). (2) Apple does not run those renders whole ahead of the compute: R16 starts 9 us before c15 (r16start-r14end 0.030 ms, c15start-r14end 0.039 ms, HD medians), so the measured span overlap equals the compute duration by construction; for R20 d(span)/d(compute) = +1.20 HD / +1.04 FHD and d(after)/d(compute) = -0.10 / +0.05 (n 9334 / 7110): the 3D stage waits for the compute. Only the TA runs beside the compute (= our OV5; bound <= 0.22 ms HD). For R16 d(after)/d(compute) is -0.42 HD / -0.26 FHD, not a clean 0: left open (macOS stage-counter run would settle it). (3) Therefore the row "~2.0 ms GravityMark-D3D12 serialization (not recoverable under the contract)" does not exist. Against the per-encoder split of Apple's frame (period 17.86 ms; the per-dispatch split inflates it to 21.76 ms) the same ~2 ms is GPU work: every job of ours is 9-14 % slower at the same scene (+2.25 ms HD on EXP2268; +1.79 ms on the EXP2307 profile), plus per-job launch/detect/idle 0.52 ms and the DWM job 0.85 ms. The EXP2298/EXP2299 measurements themselves stand (fragment-stage dependency, independent TA); only the comparison with Apple was wrong. (4) The only real Apple concurrency not present on our stack is 3D(R7,N) beside C0(N+1): 0.32 ms HD / 0.72 ms FHD on Apple; on ours 0 of 10204 frame boundaries in EXP2294-2297 and 0 of 3451 in EXP2268; the refusing rule is not identified (receipt needed). The statement "aligned, compute is at Apple parity" (2026-11-08) is superseded for the same reason.
