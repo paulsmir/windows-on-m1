@@ -4084,3 +4084,32 @@ UPDATE 2026-11-10T21:01:45Z POOL SLAB STUDY (offline; Opus study, V = re-read by
        allocators; that is a P1 question (locks per chunk).
   (P4) Not pursued: a larger permanent slab cache. It would help a relaunch only, not a first launch after boot,
        and holding gigabytes of system memory idle is not a production design.
+
+UPDATE 2026-11-10T21:11:36Z EXP2328 READING, STATS-NOPS CODE, PROFILE PATH (architect; numbers re-read in the evidence files)
+- EXP2328 control: PERF fps_frames w/r2/r3 49.207/50.246/49.919, FULL f0 7874 (47.1 fps), suite 119/0, perf gate
+  pass. FULL f0 over six boots without the cross-lead switch: 7888 7991 7907 7911 7937 7874, mean 7918 = 79.6 % of
+  macOS 9946.
+- PF1 (APPLE_AGX_D3D12_EXPAND_FOLD): NOT TESTED AS A LEVER. In the fold arm (pf1-rx.txt row f1ar2, 3708 receipt
+  rows) seals 0, folded kernels 0, refusal reason 1 = 7.521 per present, all other reasons 0; envelopes and prelude
+  rows per present unchanged (3.22). SOURCE: reason 1 is AGX_WIN32_FOLD_REFUSE_QUERY, taken from
+  agx_win32_expand_queries_allow (agx_win32_expand_ahead.h), which refuses while any pipeline statistic is active;
+  GravityMark keeps a PIPELINE_STATISTICS query active around its draws. The restriction came from the older
+  expand-ahead mode. fps 45.406 against 45.183/44.984 in that arm is noise of an arm that changed nothing.
+  DECISION PF1b (implementation started offline, UMD only, same switch): with a fold the expansion kernel's statistic
+  addresses are registered on the compute batch that launches it, and the fold is refused only for predication. A
+  statistic value that differs from the unfolded path is not acceptable; if the audit of the resolve paths finds a
+  case that cannot be made exact, that case stays refused. The 0.233 ms non-busy row stays open until a fold arm
+  with seals > 0 has run.
+- k48 grid arm g0: grid_stats.py on gm2328g0-umd.log, 4042 rows: groups per frame x mean 1748.5 (p50 1896) against
+  Apple 1839.6 (p50 1872), ratio 0.950, y = z = 1. VERDICT: the amount of k48 work is equal; the C0 excess
+  (+0.52..0.68 ms per frame) is cost per group. The causes already closed for k48 stay closed; no new k48 step is
+  justified by this result alone.
+- STATS-NOPS: code 5f6b746ab (CHG-20261110-5f6b746a-STATSNOPS), class D, default off, never a default. Deviation
+  from the first sketch, accepted: Begin begins and at once ends slot 7 instead of skipping it, because Asahi zeroes
+  a statistic only in agx_begin_query (agx_query.c:292) and the group storage is not zeroed at creation, so a slot
+  that was never begun would resolve stale data. Hardware arm EXP2331 as specified at 2026-11-10T20:51:35Z.
+- Sampled CPU profile in the guest: NOT AVAILABLE (wpr -start CPU fails with 0x80070032, no profile interrupt source
+  under the hypervisor). The ST-ETW rider is withdrawn. The per-chunk cost of the pool goes through P1 (kernel
+  reading) and then a timing diagnostic inside the KMD.
+- Bench order now: EXP2329 (K1 default-on + T5b FULL ABBA) -> EXP2330 (cross-lead receipts) -> EXP2331 (STATS-NOPS)
+  -> PF1b fold arm when its commit is gated -> TDR-H0.
