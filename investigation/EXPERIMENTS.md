@@ -76314,3 +76314,49 @@ EXP2309 HARDWARE BEFORE 2026-11-10T00:15:48Z:
 - macOS-side integrity cannot be verified from Windows (accepted by the architect); the bound is ANSQ-T2's
   proof plus the fence.
 - Evidence: .local/experiments/ANSTRIM1/evidence/ANSQ-T3/.
+
+## ANSQ-T3 — AppleAns 0.4.6 live deallocate fenced to the scratch file (ACTUAL, 2026-11-10T01:17:00Z)
+
+- Deviation from BEFORE, made before the restart: scratch.bin was allocated in two extents (519163 clusters at
+  LBA 58611418..59130581 and 5125 clusters at 49674986..49680111), so the hull would have spanned 36 GiB of C:
+  including both sentinels' LBAs. The fence was narrowed to the large extent only, 58611418..59130581: every
+  block inside it belonged to the scratch file; the small extent's trim is dropped.
+- Phases: t3-prep.ps1 T3_PREP_OK 01:12Z (manifest 330 files, SHA-256 298fba0f...); registry UnmapMode 2,
+  UnmapFenceStart 58611418, UnmapFenceEnd 59130581; ordered restart 01:12:42Z; boot 01:13:13Z; SSH up 01:13:47Z
+  (launcher wrapper PID 26719); delete 01:15:03Z; receipt 01:15Z; verify 01:16Z.
+- Expected vs actual:
+  - 0xA9 mode 2: CONFIRMED (UniqueId 0xa9020004). StorPortRegistryRead returns the REG_DWORD values as assumed.
+  - receipt before the delete: 14 commands / 559 ranges from ordinary activity, all fenced, sent 0.
+  - delete: CONFIRMED. sent_ranges 2, sent_blocks 519163 (ring: lba 58611418 count 262144 and lba 58873562 count
+    257019 = exactly the fenced extent, split by Windows at 1 GiB); queued 2, completed_ok 2, completed_error 0,
+    not_sent 0, last_status 0. All 755 other ranges (29475 blocks, incl. the 5125-cluster extent) fenced.
+  - no 0xA4/0xA5, no Storport 129 / disk 153, no warnings at all: CONFIRMED.
+  - integrity: VERIFY_MANIFEST_OK (330 files incl. both sentinels unchanged), `chkdsk C: /scan` "found no
+    problems", exit 0, C: not dirty: CONFIRMED.
+- Latency: both commands (1 GiB each) completed inside the 30 s wait without any timeout record; not timed
+  individually.
+- Not verified: macOS-side integrity (not observable from Windows); whether deallocated blocks read as zeros.
+  The post-reboot repeat of the checks is part of ANSQ-T4's entry boot.
+- Verdict: CONFIRMED. The controller accepts AppleAns' Dataset Management deallocate.
+- Evidence: .local/experiments/ANSTRIM1/evidence/ANSQ-T3/{t3-prep.txt,restart-run.log,post-boot.txt,t3-delete.txt,post-after-delete.txt,verify.txt}.
+
+## ANSQ-T4 — AppleAns 0.4.6 full ReTrim of C: with live deallocate (BEFORE, 2026-11-10T01:18:00Z)
+
+- Hypothesis: a full retrim of C: (about 35 GiB in ~8000 ranges, ~180 commands) completes with status 0 on every
+  Dataset Management command, without timeouts, and leaves the file system and the hashed files intact across
+  a restart.
+- WHY THIS HYPOTHESIS: (1) ANSQ-T3: two 1 GiB deallocates completed with status 0; (2) ANSQ-T2: the retrim's
+  ranges are free C: clusters only (8161 ranges, hull inside C:); (3) command shape, tag and ordering path are
+  the ones T3 exercised; the new element is volume: up to 256 ranges per command and many commands in a row.
+- Single variable: registry fence widened from the scratch extent to the C: partition (30916352..59706368);
+  mode 2 and package 0.4.6 unchanged.
+- Commands: tools/t4-prep.ps1, restart-normal.sh, ansq-post.ps1 + ansq-verify.ps1 (T3's post-reboot check),
+  t4-retrim.ps1, ansq-post.ps1, ansq-verify.ps1, restart-normal.sh, ansq-post.ps1, ansq-verify.ps1.
+- Expected: 0xA9 mode 2; fence 30916352..59706368; retrim "successfully completed"; receipt: fenced_ranges 0,
+  sent_ranges = ranges, queued = completed_ok, completed_error 0, not_sent 0; TRIM_BOUNDS_PASS; no 0xA4/0xA5/129/
+  153; VERIFY_MANIFEST_OK and clean chkdsk before and after the final restart; MediaType SSD, "Trim Supported";
+  Defrag id 258 re-trim record (the operation Optimize Drives uses for an SSD).
+- Failure criteria: any completed_error / 0xA4 / reset / timeout; manifest mismatch; chkdsk problem; boot failure.
+  On failure: UnmapMode 1 (observe) and restart, record, report.
+- Recovery: as ANSQ-T3.
+- Evidence: .local/experiments/ANSTRIM1/evidence/ANSQ-T4/.
