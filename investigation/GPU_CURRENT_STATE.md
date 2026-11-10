@@ -3822,3 +3822,26 @@ out-k1-detect-split.txt, out-k1-work-split.txt). Boot A = EXP2325 (switch unset)
   are K1's and get a cause analysis; if not, they were boot variation.
 - Result with a claim is unchanged: EXP2318 FULL 7923 = 79.7 % of macOS (EXP2326 FULL f0 7937 is one run of a
   non-default switch, not a claim).
+
+## UPDATE 2026-11-10T19:21:14Z -- architect: TDR-H0 firmware halt observation integrated (offline, not run)
+
+Commit `119ba99ff` (class D, opt-in). Ledger `CHG-20261110-119ba99f-TDR-H0`. Report `.local/night-20261110/tdr-h0/REPORT.md`.
+
+- Switch: device value `Wom1TdrHaltObserve` REG_DWORD 1, read at runtime start. Unset = the function returns before
+  touching anything.
+- Off-path difference in every package built from this tip: `Wom1GpuReset` is version 6, 1144 bytes (v5 1064-byte
+  prefix + 80-byte halt-observe block, zero when off). `tools/decode_wom1_gpu_fault.py` reads v1..v6.
+- On: at `DxgkDdiResetFromTimeout` entry (PASSIVE, backend started, RTKit running, status block mapped, `Resetting`
+  taken, worker idle within 1000 ms) send RTKit `0x85<<48 | N` once on endpoint 0x21, poll FW status +0x10 every 1 ms
+  up to 1000 ms for N+1, record before/after words (+0x10, +0x14, +0x20, +0x30). No resume, no ring reset; the existing
+  reset follows unchanged.
+- Endpoint 0x21, not 0x20 (deviation from my brief, verified by me): m1n1 `fw/agx/__init__.py` lists HaltMsg 0x85 with
+  DoorbellMsg 0x83 / FWCtlMsg 0x84 on DoorbellEP; Asahi `gpu.rs` sends doorbell and fwctl on EP_DOORBELL 0x21 and
+  keeps MSG_HALT commented out; macOS 15 kext send slot loads the endpoint object at +0x120, which is the 0x21 object.
+- Worst-case time added inside ResetFromTimeout: about 2.1 s (TdrDdiDelay is 5 s).
+- Gates: 11 touched suites 39/0; run_against_baseline = 1195 tests, 1 NEW (the known arch-integrate-only Mu flag test), nothing else.
+- NOT VERIFIED: MSVC /W4 /WX build of the KMD change (first compile = the next package build); every hardware
+  behaviour; that 13.5 firmware accepts 0x85 and counts halt_count as macOS 15 does.
+- Experiment H0 (staged in the handoff, runs after EXP2327, EXP2328 and the K1 default-on package): the EXP2324
+  k4128 arm with the switch set; ends in 0x116 by design. Reading: acked -> implement stage 3H (halt, error-complete,
+  ring reset, resume); not acked with unchanged words -> one repeat on an idle firmware before any stage 3H work.
