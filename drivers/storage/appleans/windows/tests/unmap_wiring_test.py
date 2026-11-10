@@ -54,3 +54,10 @@ lock, over, drain, unlock = (timer.index(x) for x in ('StorPortAcquireSpinLock(a
     'ansd_overdue(&a->Ansd, 1)', '(void)AppleAnsDirectInterrupt(a);', 'StorPortReleaseSpinLock(a, &lock)'))
 assert lock < over < drain < unlock, 'overdue completions are reaped under InterruptLock'
 print('PASS missed_interrupt_wiring')
+# Reject receipt: every refusal of an unknown SRB function, foreign SRB_IO_CONTROL or unknown CDB
+# opcode is recorded before the request is completed.
+for needle in ('ans_reject_note(&a->Rejects,ANS_REJECT_IO_CONTROL,', 'ans_reject_note(&a->Rejects,ANS_REJECT_CDB,x->Cdb[0])',
+               'ans_reject_note(&a->Rejects,ANS_REJECT_SRB_FUNCTION,srb->Function)',
+               'ans_reject_ioctl_reply(srb->DataBuffer,srb->DataTransferLength,&a->Rejects)'):
+    assert needle in NATIVE, needle
+print('PASS reject_receipt_wiring')

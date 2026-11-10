@@ -136,3 +136,13 @@ bytes (28 + 960). Read-only: it never changes the policy. Payload offsets (littl
 | 184, 188 | 4, 4 | extent count, total ranges recorded in the ring |
 | 192 | 16 x 16 | extents (start, end), ascending, disjoint |
 | 448 | 32 x 16 | ring: LBA (8), count (4), sequence (4); slot = sequence mod 32 |
+
+## Reject receipt (control code 0x001b6008)
+
+Same header and signature, total size exactly 324 bytes (28 + 296). Read-only. Counts requests the
+miniport refuses as not implemented since the adapter was found: SRB functions other than the ones
+it serves (kind 1, code = SRB function), SRB_IO_CONTROL requests that are none of its own queries
+(kind 2, code = the request's ControlCode, 0xffffffff if the buffer is too short) and CDBs answered
+ILLEGAL REQUEST / INVALID COMMAND OPERATION CODE (kind 3, code = opcode). Payload offsets
+(little-endian): 0 version = 1, 4 payload size = 296, 8/16/24 totals for kinds 1/2/3, 32 rejects
+that found no free slot, 40 sixteen entries of {kind 4, code 4, count 8} in first-seen order.

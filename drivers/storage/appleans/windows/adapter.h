@@ -8,6 +8,7 @@
 #include "../common/ans_order.h"
 #include "../common/ans_direct.h"
 #include "../common/ans_trim.h"
+#include "../common/ans_reject.h"
 #include "telemetry.h"
 #include "dump.h"
 #ifndef APPLE_ANS_NATIVE_READ_ONLY
@@ -88,6 +89,8 @@ typedef struct _APPLE_ANS_ADAPTER {
     /* UNMAP policy (Parameters\Device: UnmapMode, UnmapFenceStart, UnmapFenceEnd, read in
      * FindAdapter) and receipt. Zero (the dump instance) is ANS_TRIM_OFF. */
     struct ans_trim Trim;
+    /* Requests refused as not implemented (SRB functions, SRB_IO_CONTROL codes, CDB opcodes). */
+    struct ans_rejects Rejects;
 } APPLE_ANS_ADAPTER, *PAPPLE_ANS_ADAPTER;
 BOOLEAN AppleAnsNativeResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config);
 BOOLEAN AppleAnsNativeInitialize(PAPPLE_ANS_ADAPTER a);

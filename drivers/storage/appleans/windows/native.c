@@ -140,8 +140,18 @@ static BOOLEAN telemetry_query(PAPPLE_ANS_ADAPTER a,PSCSI_REQUEST_BLOCK srb)
         }
         AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,ANS_TRIM_IOCTL_TOTAL);return TRUE;
     }
+    /* Reject receipt: a third read-only query. */
+    if(ans_reject_ioctl_validate(srb->DataBuffer,srb->DataTransferLength)) {
+        if(!ans_reject_ioctl_reply(srb->DataBuffer,srb->DataTransferLength,&a->Rejects)) {
+            AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
+        }
+        AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,ANS_REJECT_IOCTL_TOTAL);return TRUE;
+    }
     ans_u32 sources;
     if(!ans_stats_ioctl_validate(srb->DataBuffer,srb->DataTransferLength,&sources)) {
+        /* Not one of ours: record which SRB_IO_CONTROL Windows sent. */
+        ans_reject_note(&a->Rejects,ANS_REJECT_IO_CONTROL,
+                        ans_reject_io_control_code(srb->DataBuffer,srb->DataTransferLength));
         AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
     }
     struct ans_telemetry peer={0};
@@ -486,7 +496,12 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
         if (shutdown) attribute=ANS_ORDER_ORDERED; /* global shutdown fence */
     } else if (srb->Function==SRB_FUNCTION_EXECUTE_SCSI && x && x->Valid) {
         plan=ans_scsi_prepare(&a->Namespace,x->Cdb,x->CdbLength,x->Length,&a->Sense);
+        /* ILLEGAL REQUEST / INVALID COMMAND OPERATION CODE: an opcode the planner does not know. */
+        if (plan.action==ANS_SCSI_CHECK && plan.sense.key==5 && plan.sense.asc==0x20)
+            ans_reject_note(&a->Rejects,ANS_REJECT_CDB,x->Cdb[0]);
     } else {
+        if (srb->Function!=SRB_FUNCTION_EXECUTE_SCSI)
+            ans_reject_note(&a->Rejects,ANS_REJECT_SRB_FUNCTION,srb->Function);
         AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
     }
     if (plan.action==ANS_SCSI_SUBMIT && plan.nvme_opcode!=0 && plan.nvme_opcode!=2 &&
