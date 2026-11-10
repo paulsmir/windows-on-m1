@@ -76360,3 +76360,25 @@ EXP2309 HARDWARE BEFORE 2026-11-10T00:15:48Z:
   On failure: UnmapMode 1 (observe) and restart, record, report.
 - Recovery: as ANSQ-T3.
 - Evidence: .local/experiments/ANSTRIM1/evidence/ANSQ-T4/.
+
+## ANSQ-T4 — full ReTrim with live deallocate (ACTUAL part 1, 2026-11-10T01:31:00Z; verdict open)
+
+- Phases: t4-prep.ps1 01:17Z (fence 30916352..59706368); restart 1 01:17:26Z, boot 01:17:56Z, SSH 01:18:31Z;
+  ReTrim 01:20:18Z; receipt + verify 01:21Z; restart 2 sent 01:21:24Z, launcher exit 01:21:42Z, relaunch
+  (run_uefi PID 29078); SSH did not come back within 420 s (NORMAL_SSH_NOT_UP), host down at 01:29Z.
+- Boot 1 (T3's post-reboot check and T4 entry): 0xA9 = 0xa9020004, fence = C:; 15 commands / 543 ranges from boot
+  activity sent and completed ok; VERIFY_MANIFEST_OK (330), chkdsk clean, C: not dirty: CONFIRMED.
+- ReTrim: CONFIRMED. 5 s, "Allocations trimmed = 7226, Total space trimmed = 34.19 GB", Defrag id 258 "completed
+  re-trim". Receipt: commands 181, ranges 8176, blocks 9712967 (37.1 GiB incl. boot activity), fenced 0,
+  sent_ranges 8176, queued 181, completed_ok 181, completed_error 0, not_sent 0; TRIM_BOUNDS_PASS (hull
+  30917597..59706367); no 0xA4/0xA5/129/153, no warnings; MediaType SSD, "Trim Supported".
+- After the ReTrim, same boot: VERIFY_MANIFEST_OK (330 files), `chkdsk C: /scan` found no problems, not dirty.
+- Restart 2: NOT CONFIRMED. Launcher log (copy: hang-normal-full.log) ends at 01:22Z with all 8 CPUs online, the
+  ANS direct handoff and "IRQ route enabled vINTID=960 AIC=590 count=1", then silence: none of the later IRQ
+  routes of a healthy boot, no PSCI reset, no EL2 exception. Windows stalled early in boot after the storage
+  adapter's interrupt was connected. Cause unknown at this stamp. The identical configuration booted at
+  01:17:56Z; what changed in between is the completed full deallocate (and one more ordered shutdown).
+- Bench owner informed at 01:30Z; no retry by this session; recovery by the bench owner (bounded procedure).
+- Verdict: open (ReTrim itself confirmed; the post-ReTrim restart failed to reach SSH). TRIM is NOT accepted
+  as the installed configuration until the stall is explained.
+- Evidence: .local/experiments/ANSTRIM1/evidence/ANSQ-T4/{t4-prep.txt,restart1-run.log,post-boot1.txt,verify-boot1.txt,t4-retrim.txt,post-after-retrim.txt,verify-after-retrim.txt,restart2-run.log,hang-normal-full.log}.
