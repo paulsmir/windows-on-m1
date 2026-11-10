@@ -6610,12 +6610,20 @@ struct AgxD3d12HeapScratch {
  * descriptors walked, re-packed descriptors and their time (QPC ticks); the
  * replay runs under the owner lock */
 static struct { UINT walks, walked, packs; LONGLONG ticks; } g_heap_walk;
+/* sink: AgxD3d12OwnerJobDrawRange (a render) or AgxD3d12OwnerJobDispatchRange
+ * (OV5: a compute batch); flags bit 0 = may write (UAV), AGX_D3D12_JOB_VERTEX
+ * = a vertex-stage access */
+typedef void (*JobRangeSink)(const void *, unsigned long long, unsigned long long, unsigned);
+static void JobDescriptorRange(JobRangeSink sink, const AgxD3d12Descriptor *v, unsigned flags);
+static void JobHeapRange(JobRangeSink sink, const AgxD3d12Heap *heap, UINT64 offset, UINT64 bytes, unsigned flags);
 static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,
-                                bool *minmax);
+                                bool *minmax, JobRangeSink table);
 /* C65V: *minmax is set when the stage's sampler map holds a MINIMUM or
- * MAXIMUM sampler (the draw then takes the PSO's min/max variant) */
+ * MAXIMUM sampler (the draw then takes the PSO's min/max variant).
+ * N4c-v3: table (AgxD3d12OwnerJobDrawTableRange / ...DispatchTableRange, or
+ * nullptr) receives every access the walk binds through the heap table. */
 static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,
-                            bool *minmax) {
+                            bool *minmax, JobRangeSink table) {
 #ifdef APPLE_AGX_GPUVA_WINSYS
     AgxD3d12OwnerRefRoots(owner,stage,b ? b->ref_cb_root : nullptr,
         b ? b->ref_srv_root : nullptr,b ? b->ref_uav_root : nullptr);
@@ -6624,7 +6632,7 @@ static HRESULT SetStageHeap(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d
         return AgxD3d12OwnerSetHeap(owner, stage, nullptr);
     LARGE_INTEGER t0 = {}, t1 = {};
     QueryPerformanceCounter(&t0);
-    const HRESULT hr = SetStageHeapWalk(owner, stage, b, scratch, minmax);
+    const HRESULT hr = SetStageHeapWalk(owner, stage, b, scratch, minmax, table);
     QueryPerformanceCounter(&t1);
     ++g_heap_walk.walks;
     g_heap_walk.ticks += t1.QuadPart - t0.QuadPart;
@@ -6640,7 +6648,7 @@ static bool HeapSlotReachable(const AgxD3d12Dispatch *b, UINT index) {
     return false;
 }
 static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,
-                                bool *minmax) {
+                                bool *minmax, JobRangeSink table) {
     if (!*scratch) *scratch = static_cast<AgxD3d12HeapScratch *>(HeapAlloc(GetProcessHeap(), 0, sizeof(AgxD3d12HeapScratch)));
     if (!*scratch) return E_OUTOFMEMORY;
     AgxD3d12HeapScratch &h = **scratch;
@@ -6677,6 +6685,9 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
     h.binding.Heap = &h.heap;
     h.binding.RefDescriptorData = b->descriptors->mirror ? b->descriptors->mirror : b->descriptors->cpu;
     const UINT count = static_cast<UINT>(DescriptorHeapBytes(b->descriptors) / kCbvSrvUavDescriptorBytes);
+    /* N4c-v3: the job-range stage flag (as JobStageRanges: vertex-stage
+     * accesses carry AGX_D3D12_JOB_VERTEX) */
+    const unsigned job_stage = stage == AGX_D3D12_HEAP_PS || stage == AGX_D3D12_HEAP_CS ? 0u : AGX_D3D12_JOB_VERTEX;
     for (UINT i = lowest; i < count; ++i) {
         if (!HeapSlotReachable(b, i)) continue;
         auto *view = reinterpret_cast<AgxD3d12Descriptor *>(static_cast<BYTE *>(b->descriptors->cpu) +
@@ -6698,11 +6709,13 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
                 AdmissionUmdDiagnostic("reject-d3d12-heap-textures", E_OUTOFMEMORY, receipt, 3);
                 return E_OUTOFMEMORY;
             }
+            if (table) JobDescriptorRange(table, view, 1u | job_stage | AGX_D3D12_JOB_SRC_VIEW);
             h.write_slots[h.binding.WriteCount] = i;
             h.writes[h.binding.WriteCount++] = texture;
             UINT counter_offset = 0;
             if (AgxD3d12Heap *counter = UavCounter(*view, &counter_offset)) {
                 if (h.binding.WriteCount == kHeapTextures) return E_OUTOFMEMORY;
+                if (table) JobHeapRange(table, counter, counter_offset, 4u, 1u | job_stage | AGX_D3D12_JOB_SRC_VIEW);
                 h.write_slots[h.binding.WriteCount] = i;
                 h.writes[h.binding.WriteCount++] = HeapBuffer(counter);
             }
@@ -6713,15 +6726,13 @@ static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const Ag
             AdmissionUmdDiagnostic("reject-d3d12-heap-textures", E_OUTOFMEMORY, receipt, 3);
             return E_OUTOFMEMORY;
         }
+        if (table) JobDescriptorRange(table, view, job_stage | AGX_D3D12_JOB_SRC_VIEW);
         h.read_slots[h.binding.TextureCount] = i;
         h.textures[h.binding.TextureCount++] = texture;
     }
     return AgxD3d12OwnerSetHeap(owner, stage, &h.binding);
 }
-/* sink: AgxD3d12OwnerJobDrawRange (a render) or AgxD3d12OwnerJobDispatchRange
- * (OV5: a compute batch); flags bit 0 = may write (UAV), AGX_D3D12_JOB_VERTEX
- * = a vertex-stage access */
-typedef void (*JobRangeSink)(const void *, unsigned long long, unsigned long long, unsigned);
+/* (JobRangeSink: declared before SetStageHeap) */
 /* OV6: a sized view is its own range; an unsized one (a root descriptor, a
  * texture view) ends at its placed resource or at the heap (HeapSpanEnd),
  * never at ~0: open ranges made every GravityMark render unprovable (EXP2274). */
@@ -6757,24 +6768,33 @@ static void JobStageRanges(JobRangeSink sink, const AgxD3d12Dispatch &b, unsigne
     }
 }
 /* OV2 cross-execution: the stage reaches resources through a CBV/SRV/UAV
- * heap table (C47); the range sinks above hold none of those accesses */
+ * heap table (C47); the range sinks above hold none of those accesses (with
+ * N4c-v3 table placement the heap walk feeds them to the table sink) */
 static bool JobStageHeapTable(const AgxD3d12Dispatch &b) {
     if (!b.descriptors) return false;
     for (UINT r = 0; r < b.heap_ranges; ++r)
         if (!(b.heap_sampler_mask & (1ull << r))) return true;
     return false;
 }
+/* N4c-v3: the byte size of a tracker heap identity (receipt) */
+static unsigned long long JobHeapBytes(const void *heap) {
+    return heap ? static_cast<const AgxD3d12Heap *>(heap)->bytes : 0ull;
+}
 static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch) {
-    if (AgxD3d12OwnerJobBarriersEnabled()) { /* OV5 receipt: the compute batch's accesses */
+    const bool job = AgxD3d12OwnerJobBarriersEnabled() != FALSE;
+    /* N4c-v3: the heap walk places the table accesses (cross-lead feature) */
+    const JobRangeSink table = job && AgxD3d12OwnerJobTablePlacement() ? AgxD3d12OwnerJobDispatchTableRange : nullptr;
+    if (job) { /* OV5 receipt: the compute batch's accesses */
         JobStageRanges(AgxD3d12OwnerJobDispatchRange, dispatch, 0u);
         JobIndirectRanges(AgxD3d12OwnerJobDispatchRange, dispatch.indirect, 0u);
-        if (JobStageHeapTable(dispatch)) AgxD3d12OwnerJobUnplaced(1u);
     }
     AgxD3d12OwnerBindings bind;
     OwnerBindings(dispatch, &bind);
     AgxD3d12HeapScratch *heap = nullptr;
     bool minmax = false;
-    const HRESULT heap_hr = SetStageHeap(owner, AGX_D3D12_HEAP_CS, &dispatch, &heap, &minmax);
+    const HRESULT heap_hr = SetStageHeap(owner, AGX_D3D12_HEAP_CS, &dispatch, &heap, &minmax, table);
+    /* a table the walk did not place (no sink, or it failed) stays unplaced */
+    if (job && JobStageHeapTable(dispatch) && (!table || FAILED(heap_hr))) AgxD3d12OwnerJobUnplaced(1u);
     if (FAILED(heap_hr)) {
         if (heap) HeapFree(GetProcessHeap(), 0, heap);
         return heap_hr;
@@ -6913,7 +6933,7 @@ static void JobDrawRanges(const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &op
     }
     JobStageRanges(sink, d.vs_bind, vertex);
     JobStageRanges(sink, d.ps_bind, 0u);
-    if (JobStageHeapTable(d.vs_bind) || JobStageHeapTable(d.ps_bind)) AgxD3d12OwnerJobUnplaced(0u);
+    /* VS/PS heap tables: placed by the heap walk or reported unplaced (ReplayDraw) */
 }
 static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional,
                                                 AgxD3d12DrawScratch *scratch, const AgxD3d12Command *clears = nullptr,
@@ -7021,7 +7041,12 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     OwnerBindings(d.ps_bind, &ps_bind);
     /* OV2: a draw that may write a UAV (any graphics UAV slot, or an optional
      * stage) keeps the next compute job dependent on this render. */
-    if (AgxD3d12OwnerJobBarriersEnabled()) {
+    const bool job = AgxD3d12OwnerJobBarriersEnabled() != FALSE;
+    /* N4c-v3: the heap walk places the table accesses (cross-lead feature);
+     * a VS/PS table it did not place (no sink, or a failed walk) is unplaced */
+    const JobRangeSink table = job && AgxD3d12OwnerJobTablePlacement() ? AgxD3d12OwnerJobDrawTableRange : nullptr;
+    const bool heap_tables = job && (JobStageHeapTable(d.vs_bind) || JobStageHeapTable(d.ps_bind));
+    if (job) {
         bool uav = optional.gs || optional.hs || optional.ds;
         for (UINT u = 0; !uav && u < kUavSlots; ++u)
             uav = d.vs_bind.uav_descriptor[u] || d.vs_bind.uav_heap[u] ||
@@ -7042,13 +7067,15 @@ static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const Agx
     const AgxD3d12Dispatch *heaps[AGX_D3D12_HEAP_CS] = {&d.vs_bind, &d.ps_bind, optional.gs, optional.hs, optional.ds};
     bool minmax = false;
     for (unsigned s = 0; s < AGX_D3D12_HEAP_CS; ++s) {
-        const HRESULT hr = SetStageHeap(owner, s, heaps[s], &scratch->heaps[s], &minmax);
+        const HRESULT hr = SetStageHeap(owner, s, heaps[s], &scratch->heaps[s], &minmax, table);
         if (FAILED(hr)) {
+            if (heap_tables) AgxD3d12OwnerJobUnplaced(0u);
             /* rc76: the deferred clears still run, in order, before the failure */
             if (clear_count) (void)AgxD3d12OwnerDrawWithClears(owner, nullptr, scratch->clears, clear_count, nullptr, nullptr);
             return hr;
         }
     }
+    if (heap_tables && !table) AgxD3d12OwnerJobUnplaced(0u);
     /* C65V/C65S: a MINIMUM/MAXIMUM heap or slot sampler draws with a min/max variant */
     AgxD3d12MinmaxKey key = {};
     key.heap = minmax;
@@ -7224,6 +7251,7 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
             if (l && l->job_barriers_lost) known = 0;
         }
         AgxD3d12OwnerJobExecution(known);
+        AgxD3d12OwnerJobHeapBytes(JobHeapBytes); /* N4c-v3 receipt */
         /* OV2 cross-execution (receipt): what the previous execution left */
         AgxD3d12OwnerJobCrossBegin(queue && queue->device ? static_cast<AGX_D3D12_OWNER *>(queue->device->owner) : nullptr,
                                    queue);
@@ -7343,6 +7371,8 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
                 if (q.op == kQueryResolve) {
                     AGX_D3D12_BUFFER dst = HeapBuffer(q.dst);
                     if (job_receipt) AgxD3d12OwnerJobResolveRange(q.dst, q.dst_offset, ~0ull);
+                    /* N4c-v3: the destination's tracker identity, for the placed native copy */
+                    if (job_command) AgxD3d12OwnerJobResolveHeap(q.dst);
                     hr = AgxD3d12OwnerResolveQueries(owner, queries, q.type, q.index, q.count, &dst, q.dst_offset);
                 } else {
                     hr = AgxD3d12OwnerQuery(owner, queries, q.type, q.index, q.op == kQueryBegin);

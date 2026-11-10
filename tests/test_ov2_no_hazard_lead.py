@@ -926,8 +926,9 @@ int main(void) {
                         hook.index('if (!AgxWin32Ov2Feature) independent = 0u;'))
         self.assertLess(hook.index('if (!AgxWin32Ov2Feature) independent = 0u;'),
                         hook.index('independent = AgxD3d12JobCrossApply('))
-        # everything else keyed on the OV2 feature stays on it
-        self.assertEqual(owner.count('AgxWin32Ov2CrossFeature'), 6)
+        # everything else keyed on the OV2 feature stays on it (N4c-v3 adds the table
+        # placement, the resolve staging and the mask receipt under the cross lead)
+        self.assertEqual(owner.count('AgxWin32Ov2CrossFeature'), 9)
         self.assertIn('if (kind == 1u && AgxWin32Ov2Feature && owner_job_barriers.PreviousKind == 2u) {', hook)
         self.assertIn('if (!owner || !AgxWin32Ov2Feature || !owner_ov4()) return;', owner)
         self.assertIn('owner->ResolveDefer = begin && known && AgxWin32Ov2Feature && ', owner)
@@ -1011,9 +1012,13 @@ int main(void) {
         self.assertLess(ddi.index('AgxD3d12OwnerSubmitForQueue(owner, queue->context)'),
                         ddi.index('AgxD3d12OwnerJobCrossEnd('))
         self.assertIn('queue, SUCCEEDED(hr) ? 1u : 0u);', ddi)
-        # heap-table accesses are in no range set: they refuse (11)
-        self.assertIn('if (JobStageHeapTable(dispatch)) AgxD3d12OwnerJobUnplaced(1u);', ddi)
-        self.assertIn('if (JobStageHeapTable(d.vs_bind) || JobStageHeapTable(d.ps_bind)) AgxD3d12OwnerJobUnplaced(0u);', ddi)
+        # heap-table accesses are in no range set: they refuse (11) unless the heap
+        # walk placed them (N4c-v3, cross lead only)
+        self.assertIn('if (job && JobStageHeapTable(dispatch) && (!table || FAILED(heap_hr))) '
+                      'AgxD3d12OwnerJobUnplaced(1u);', ddi)
+        self.assertIn('const bool heap_tables = job && (JobStageHeapTable(d.vs_bind) || JobStageHeapTable(d.ps_bind));',
+                      ddi)
+        self.assertIn('if (heap_tables && !table) AgxD3d12OwnerJobUnplaced(0u);', ddi)
 
     def test_cross_execution_apply_switch(self):
         """With APPLE_AGX_D3D12_OV2_CROSS_EXECUTION off the verdict in use is

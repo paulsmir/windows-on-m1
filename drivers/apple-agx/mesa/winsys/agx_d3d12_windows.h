@@ -77,7 +77,21 @@ void AgxD3d12OwnerJobResolveRange(const void *Heap, unsigned long long Lo, unsig
  * call before its owner work (AgxD3d12JobCrossCopy) */
 void AgxD3d12OwnerJobCopyRange(const void *DstHeap, unsigned long long DstLo, unsigned long long DstHi,
                                const void *SrcHeap, unsigned long long SrcLo, unsigned long long SrcHi);
-/* OV5 receipt: the active dispatch accesses [Lo, Hi) of Heap (Flags bit 0: may write) */
+/* N4c-v3 (only with AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD): TablePlacement
+ * says whether the replay feeds descriptor-table accesses (the heap walk's
+ * reads and writes, Flags as the range sinks) to DrawTableRange /
+ * DispatchTableRange instead of reporting the stage with JobUnplaced;
+ * ResolveHeap names the tracker identity of the next
+ * AgxD3d12OwnerResolveQueries destination (its native copy is placed,
+ * AgxD3d12JobCrossPlace); HeapBytes gives the receipt the byte size of a
+ * tracker heap identity. */
+BOOL AgxD3d12OwnerJobTablePlacement(void);
+void AgxD3d12OwnerJobDrawTableRange(const void *Heap, unsigned long long Lo, unsigned long long Hi, unsigned Flags);
+void AgxD3d12OwnerJobDispatchTableRange(const void *Heap, unsigned long long Lo, unsigned long long Hi,
+                                        unsigned Flags);
+void AgxD3d12OwnerJobResolveHeap(const void *Heap);
+void AgxD3d12OwnerJobHeapBytes(unsigned long long (*Bytes)(const void *Heap));
+/* OV5 receipt:the active dispatch accesses [Lo, Hi) of Heap (Flags bit 0: may write) */
 void AgxD3d12OwnerJobDispatchRange(const void *Heap, unsigned long long Lo, unsigned long long Hi, unsigned Flags);
 /* OV4 (opt-in APPLE_AGX_D3D12_OV4=1 with the OV2 feature): after a barrier
  * is fed between commands, submit the open compute batch when that barrier

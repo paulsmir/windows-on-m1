@@ -28,7 +28,7 @@ class DescriptorHeapGuard(unittest.TestCase):
 
     def test_guard_is_not_an_extra_logical_descriptor(self):
         source = DDI.read_text()
-        walk = block(source, 'static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,\n                                bool *minmax) {')
+        walk = block(source, 'static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,\n                                bool *minmax, JobRangeSink table) {')
         self.assertIn('DescriptorHeapBytes(b->descriptors)', walk)
         self.assertIn('DescriptorHeapBytes(b->sampler_descriptors)', walk)
         for marker in ('static AgxD3d12Heap *HeapAt(', 'static AgxD3d12Heap *MirroredHeapAt(', 'static void MirrorHeapForms('):

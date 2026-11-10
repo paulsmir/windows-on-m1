@@ -26,7 +26,7 @@ class DescriptorShadow(unittest.TestCase):
                      'static VOID APIENTRY CopyDescriptorsSimple(D3D12DDI_HDEVICE handle',
                      'static VOID APIENTRY CopyDescriptors(D3D12DDI_HDEVICE handle'):
             self.assertIn('MirrorHeapForms(MirroredHeapAt(', function(text, head), head)
-        walk = function(text, 'static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,\n                                bool *minmax) {')
+        walk = function(text, 'static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,\n                                bool *minmax, JobRangeSink table) {')
         self.assertRegex(walk, r'PackHeapForm\(owner, view\);\s*MirrorHeapForms\(b->descriptors, view, 1u\);')
         # the view creators reach the heap through FillHeapForm only
         for name in ('CreateShaderResourceViewInHeap', 'CreateConstantBufferViewInHeap',

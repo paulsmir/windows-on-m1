@@ -733,6 +733,92 @@ static UINT owner_cross_applied; /* execution-first compute batches made indepen
  * heap id, offset lo, hi, bytes} and render {Uav, heap id, offset lo, hi,
  * bytes}. Written with measure-d3d12-ov2-refusal as measure-d3d12-ov2-copy. */
 static UINT owner_cross_copy[14], owner_cross_copy_valid;
+/* N4c-v3 refusal mask receipt (only with the cross-lead feature), of the
+ * execution-first compute batch (AgxD3d12JobCrossMask, every condition at
+ * once; the verdict stays AgxD3d12JobCrossRefusal's). Taken when that batch
+ * is submitted (its heaps are live then), written with measure-d3d12-ov2-copy:
+ * measure-d3d12-ov2-mask {mask, conflicting pairs 8/1, 8/2, 8/5, 8/6, kept
+ * LastForeign, LastPlaced, LastForeignKinds, current Foreign, Copies,
+ * ForeignKinds, ShadowRender count, Cross.Compute count, RangeCompute count,
+ * Copy count, overflow bits (ShadowRender | Cross.Compute << 4 |
+ * RangeCompute << 8 | Copy << 12 | ShadowPost << 16), shadow reason | detail
+ * << 8} and, per class with a conflict, measure-d3d12-ov2-mask-pair {class
+ * (1, 2, 5, 6), pairs, then for each of the first two: heap id, heap bytes,
+ * current {flags, offset, bytes}, kept {flags, offset, bytes}} (offsets and
+ * bytes saturate at 0xffffffff). Summary over the run (every 64 masked
+ * executions and when the owner is destroyed): measure-d3d12-ov2-mask-summary
+ * {masked executions, OR of the masks, executions with bit 0 .. bit 22}. */
+static AGX_D3D12_JOB_CROSS_MASK owner_cross_mask;
+static UINT owner_cross_mask_values[17], owner_cross_mask_pairs[AGX_D3D12_JOB_MASK_CLASSES][18];
+static UINT owner_cross_mask_valid;
+static UINT owner_cross_mask_executions, owner_cross_mask_or, owner_cross_mask_bits[AGX_D3D12_JOB_MASK_BITS];
+/* N4c-v3: the byte size of a tracker heap identity (the replay's
+ * AgxD3d12Heap), set by the replay */
+static unsigned long long (*owner_job_heap_bytes)(const void *);
+extern "C" void AgxD3d12OwnerJobHeapBytes(unsigned long long (*bytes)(const void *Heap)) {
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  owner_job_heap_bytes = bytes;
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
+static UINT owner_mask_word(unsigned long long value) {
+  return value > 0xffffffffull ? 0xffffffffu : static_cast<UINT>(value);
+}
+/* the execution-first compute batch's mask into the receipt values (under
+ * owner_job_barriers_lock, before the batch is accounted) */
+static void owner_cross_mask_take(unsigned shadow, unsigned detail) {
+  const AGX_D3D12_JOB_CROSS_MASK &m = owner_cross_mask;
+  const AGX_D3D12_JOB_CROSS &c = owner_job_barriers.Cross;
+  static const UINT classes[AGX_D3D12_JOB_MASK_CLASSES] = {1u, 2u, 5u, 6u};
+  const unsigned mask = AgxD3d12JobCrossMask(&owner_job_barriers, &owner_cross_mask);
+  owner_cross_mask_values[0] = mask;
+  for (unsigned i = 0; i < AGX_D3D12_JOB_MASK_CLASSES; ++i) owner_cross_mask_values[1 + i] = m.Pairs[i];
+  owner_cross_mask_values[5] = m.KeptLastForeign;
+  owner_cross_mask_values[6] = m.KeptLastPlaced;
+  owner_cross_mask_values[7] = m.KeptLastForeignKinds;
+  owner_cross_mask_values[8] = m.Foreign;
+  owner_cross_mask_values[9] = m.Copies;
+  owner_cross_mask_values[10] = m.ForeignKinds;
+  owner_cross_mask_values[11] = m.ShadowRender;
+  owner_cross_mask_values[12] = m.Compute;
+  owner_cross_mask_values[13] = m.RangeCompute;
+  owner_cross_mask_values[14] = m.Copy;
+  owner_cross_mask_values[15] = (c.ShadowRender.Overflow & 0xfu) | ((c.Compute.Overflow & 0xfu) << 4) |
+                                ((owner_job_barriers.RangeCompute.Overflow & 0xfu) << 8) |
+                                ((c.Copy.Overflow & 0xfu) << 12) | ((c.ShadowPost.Overflow & 0xfu) << 16);
+  owner_cross_mask_values[16] = (shadow & 0xffu) | ((detail & 0xffu) << 8);
+  for (unsigned i = 0; i < AGX_D3D12_JOB_MASK_CLASSES; ++i) {
+    UINT *row = owner_cross_mask_pairs[i];
+    memset(row, 0, sizeof(owner_cross_mask_pairs[i]));
+    row[0] = classes[i];
+    row[1] = m.Pairs[i];
+    for (unsigned k = 0; k < 2u && k < m.Pairs[i]; ++k) {
+      const AGX_D3D12_JOB_RANGE &x = m.First[i][k].Current, &y = m.First[i][k].Kept;
+      UINT *at = row + 2u + 8u * k;
+      at[0] = AgxD3d12JobBarrierId(reinterpret_cast<unsigned long long>(x.Heap));
+      /* the current range's heap is referenced by this execution: live */
+      at[1] = owner_job_heap_bytes && x.Heap ? owner_mask_word(owner_job_heap_bytes(x.Heap)) : 0u;
+      at[2] = x.Uav;
+      at[3] = owner_mask_word(x.Lo);
+      at[4] = owner_mask_word(x.Hi - x.Lo);
+      at[5] = y.Uav;
+      at[6] = owner_mask_word(y.Lo);
+      at[7] = owner_mask_word(y.Hi - y.Lo);
+    }
+  }
+  owner_cross_mask_valid = 1u;
+  ++owner_cross_mask_executions;
+  owner_cross_mask_or |= mask;
+  for (unsigned b = 0; b < AGX_D3D12_JOB_MASK_BITS; ++b)
+    if (mask & (1u << b)) ++owner_cross_mask_bits[b];
+}
+static void owner_cross_mask_summary_locked(void) {
+  UINT values[2u + AGX_D3D12_JOB_MASK_BITS];
+  if (!owner_cross_mask_executions || !AdmissionUmdMeasureEnabled()) return;
+  values[0] = owner_cross_mask_executions;
+  values[1] = owner_cross_mask_or;
+  for (unsigned b = 0; b < AGX_D3D12_JOB_MASK_BITS; ++b) values[2u + b] = owner_cross_mask_bits[b];
+  AdmissionUmdDiagnostic("measure-d3d12-ov2-mask-summary", S_OK, values, 25u);
+}
 static void owner_ov2_receipt_locked(void) {
   UINT any = 0;
   for (unsigned i = 0; i < 8u; ++i) any |= owner_ov2_reason[i];
@@ -773,8 +859,16 @@ static void owner_ov2_receipt_locked(void) {
     AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 32u);
     if (AgxWin32Ov2CrossFeature && owner_cross_copy_valid)
       AdmissionUmdDiagnostic("measure-d3d12-ov2-copy", S_OK, owner_cross_copy, 14u);
+    if (AgxWin32Ov2CrossFeature && owner_cross_mask_valid) {
+      AdmissionUmdDiagnostic("measure-d3d12-ov2-mask", S_OK, owner_cross_mask_values, 17u);
+      for (unsigned i = 0; i < AGX_D3D12_JOB_MASK_CLASSES; ++i)
+        if (owner_cross_mask_pairs[i][1])
+          AdmissionUmdDiagnostic("measure-d3d12-ov2-mask-pair", S_OK, owner_cross_mask_pairs[i], 18u);
+      if (!(owner_cross_mask_executions & 63u)) owner_cross_mask_summary_locked();
+    }
   }
   owner_cross_copy_valid = 0;
+  owner_cross_mask_valid = 0;
   owner_cross_histogram = owner_cross_last = owner_cross_renders = owner_cross_clean = owner_cross_applied = 0;
   for (unsigned i = 0; i < 8u; ++i) owner_ov2_reason[i] = 0;
   owner_ov2_sequence = owner_ov2_pairs = owner_ov2_range_sequence = 0;
@@ -814,6 +908,34 @@ extern "C" void AgxD3d12OwnerJobCopyRange(const void *dst_heap, unsigned long lo
   if (!AgxWin32Ov2CrossFeature) return;
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
   AgxD3d12JobCrossCopy(&owner_job_barriers, dst_heap, dlo, dhi, src_heap, slo, shi);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
+/* N4c-v3 table placement: only with the cross-lead feature (like the copy
+ * rule); the replay then feeds a descriptor-table access of the active draw
+ * or dispatch here instead of reporting the stage unplaced */
+extern "C" BOOL AgxD3d12OwnerJobTablePlacement(void) {
+  return AgxWin32Ov2CrossFeature && AgxD3d12OwnerJobBarriersEnabled() ? TRUE : FALSE;
+}
+extern "C" void AgxD3d12OwnerJobDrawTableRange(const void *heap, unsigned long long lo, unsigned long long hi,
+                                               unsigned flags) {
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  AgxD3d12JobCrossTableRange(&owner_job_barriers, 0u, heap, lo, hi, flags);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
+extern "C" void AgxD3d12OwnerJobDispatchTableRange(const void *heap, unsigned long long lo, unsigned long long hi,
+                                                   unsigned flags) {
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  AgxD3d12JobCrossTableRange(&owner_job_barriers, 1u, heap, lo, hi, flags);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
+/* N4c-v3 placed resolve: only with the cross-lead feature; the replay names
+ * the tracker identity of the next resolve's destination, which
+ * AgxD3d12OwnerResolveQueries takes (and forgets) on entry */
+static const void *owner_job_resolve_heap;
+extern "C" void AgxD3d12OwnerJobResolveHeap(const void *heap) {
+  if (!AgxWin32Ov2CrossFeature) return;
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  owner_job_resolve_heap = heap;
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
 }
 extern "C" void AgxD3d12OwnerJobSplit(AGX_D3D12_OWNER *owner) {
@@ -918,6 +1040,22 @@ static void owner_job_local(void) {
   AgxD3d12JobBarrierLocal(&owner_job_barriers);
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
 }
+#if defined(AGX_D3D12_OWNER_OV3)
+static const void *owner_job_resolve_take(void) {
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  const void *heap = owner_job_resolve_heap;
+  owner_job_resolve_heap = NULL;
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+  return heap;
+}
+/* N4c-v3: the active resolve's only work is the native copy into the compute
+ * batch (or the CPU) writing [lo, hi) of heap (AgxD3d12JobCrossPlace) */
+static void owner_job_place(const void *heap, unsigned long long lo, unsigned long long hi) {
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  AgxD3d12JobCrossPlace(&owner_job_barriers, heap, lo, hi);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
+#endif
 static void owner_job_foreign(void) {
   if (!AgxD3d12OwnerJobBarriersEnabled()) return;
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
@@ -1065,6 +1203,8 @@ static unsigned owner_batch_kind(unsigned kind) {
           owner_cross_copy[13] = static_cast<UINT>(render->Hi - render->Lo);
         }
         owner_cross_copy_valid = 1u;
+        /* N4c-v3 (receipt only): every refusal condition at once */
+        owner_cross_mask_take(shadow, detail);
       }
     }
     if (owner_job_barriers.PreviousKind == 1u) {
@@ -1140,6 +1280,7 @@ extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   if (owner == owner_cross_owner) {
     owner_cross_owner = NULL;
     owner_cross_valid = 0u;
+    owner_cross_mask_summary_locked(); /* N4c-v3: the end of the run */
   }
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
   AdmissionUmdScreenCpuAccessSnapshot(&owner->Runtime, S_OK, 3u);
@@ -3098,6 +3239,9 @@ extern "C" HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *owner, AGX_D3D12
                                                unsigned start, unsigned count, const AGX_D3D12_BUFFER *dst,
                                                unsigned long long offset) {
   OwnerLock lock(owner);
+#if defined(AGX_D3D12_OWNER_OV3)
+  const void *job_heap = owner_job_resolve_take(); /* N4c-v3: staged by the replay */
+#endif
   if (!owner || !owner->Context || !heap || !dst || !dst->Resource || start > heap->Count ||
       count > heap->Count - start)
     return E_INVALIDARG;
@@ -3146,7 +3290,12 @@ extern "C" HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *owner, AGX_D3D12
     ++owner->ResolveDeferred;
     return S_OK;
   }
+  const UINT drained = owner->ResolveDrained;
   owner_resolve_drain(owner, kResolveDrainNative);
+  /* N4c-v3: nothing drained (a drain is foreign driver work, ComputeForeign):
+   * this resolve's only work is the native copy below, which Asahi puts into
+   * the compute batch or writes on the CPU -- placed before its writer flush */
+  if (job_heap && owner->ResolveDrained == drained) owner_job_place(job_heap, offset, offset + bytes);
 #endif
   static const UINT64 zero = 0;
   for (unsigned i = 0; i < count; ++i) {

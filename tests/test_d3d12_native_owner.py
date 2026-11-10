@@ -332,7 +332,7 @@ int main() {
         owner = OWNER.read_text()
         self.assertIn('out->Valid = static_cast<uint16_t>(1u | (dxbc_minmax_bits(sampler->Filter) << 8));', owner)
         ddi = (ROOT / 'drivers/apple-agx/d3d12/agx_d3d12_ddi.cpp').read_text()
-        walk = body(ddi, 'static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,\n                                bool *minmax) {')
+        walk = body(ddi, 'static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,\n                                bool *minmax, JobRangeSink table) {')
         self.assertIn('if (((h.samplers[h.binding.SamplerCount].Valid >> 8) & 3u) >= 2u) *minmax = true;', walk)
         variant = body(ddi, 'static void *MinmaxVariant(')
         self.assertIn('same = SUCCEEDED(hr) && SameGraphicsSlots(v->graphics, pso->graphics);', variant)

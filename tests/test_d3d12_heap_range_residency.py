@@ -16,7 +16,7 @@ class HeapRangeResidency(unittest.TestCase):
         marker='static bool HeapSlotReachable('
         self.assertTrue(marker in s)
         fn=block(s,marker)
-        walk=block(s,'static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,\n                                bool *minmax) {')
+        walk=block(s,'static HRESULT SetStageHeapWalk(AGX_D3D12_OWNER *owner, unsigned stage, const AgxD3d12Dispatch *b, AgxD3d12HeapScratch **scratch,\n                                bool *minmax, JobRangeSink table) {')
         self.assertLess(walk.index('if (!HeapSlotReachable(b, i)) continue;'),walk.index('auto *view'))
         code=r'''
 #include <cassert>
