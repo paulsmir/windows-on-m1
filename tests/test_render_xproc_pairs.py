@@ -285,7 +285,7 @@ class CrossProcessPairDecision(unittest.TestCase):
         run = build_run(RECEIPT, [RENDER / 'src/render_job_window.c'], [RENDER / 'include'])
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertEqual(run.stdout.split('\n')[:-1], [
-            'init 3 1 0',
+            'init 4 1 0',   # v4 (K1) appends words; the v3 words keep their place
             'due 17 considered 300 allowed 100',
             'codes 55=100 6=100 sum 200 other 0 last 6 11',
             'overflow table 206 other 6 considered 312',
@@ -503,7 +503,9 @@ class CrossProcessPairWiring(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='xproc-abi-') as tmp:
             src = Path(tmp) / 'abi.c'
             src.write_text('#include "render_job_window.h"\n'
-                           '_Static_assert(sizeof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT) == 240, "size");\n'
+                           '_Static_assert(sizeof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT) == 328, "size");\n'
+                           '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
+                           ' RenderConsidered) == 240, "v4 after v3");\n'
                            '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
                            ' Kicked) == 16, "kicked");\n'
                            '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'

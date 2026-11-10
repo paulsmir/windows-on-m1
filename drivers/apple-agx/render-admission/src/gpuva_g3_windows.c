@@ -4199,9 +4199,14 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
              AdmissionG3OutputAccessibleFor(adapter, &process->Graph, packet)))
     refusal = 7u;
   /* C1: only a compute envelope, in a slot its process already holds and
-   * that is not the running job's; the lease is never taken here. */
-  else if (cross && (!adapter->BackendImage.G4Compute ||
-                     process->Graph.SlotTable == NULL))
+   * that is not the running job's; the lease is never taken here.
+   * K1 (G3CrossProcessRenderPairs): also a native render whose private
+   * scene was found above (the only render with a manager key to prove). */
+  else if (cross && (process->Graph.SlotTable == NULL ||
+                     (!(adapter->G3CrossProcessRenderPairs != 0u &&
+                        adapter->BackendImage.G4Native &&
+                        private_scene != NULL) &&
+                      !adapter->BackendImage.G4Compute)))
     refusal = 10u;
   else if (cross && (process->Graph.LeaseToken == 0ULL ||
                      process->Graph.JobInFlight || process->Graph.Slot == 0u ||

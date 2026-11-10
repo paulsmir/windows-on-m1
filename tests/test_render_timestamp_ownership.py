@@ -55,6 +55,7 @@ typedef struct {
     ULONGLONG ComputeTsCommandVa, ComputeTsWords[4];
     /* fields the sliced KMD functions read since EXP2205/T1 */
     BOOLEAN JobDiagnostics, PresentTsEnabled;
+    ULONG SavedStatsFence; unsigned char *SavedStatsData; /* K1: unset here */
     struct {
       ULONG Version, Bytes, Count, Head;
       struct { ULONG ProcessId, Fence; ULONGLONG Start, End; } Ring[512];

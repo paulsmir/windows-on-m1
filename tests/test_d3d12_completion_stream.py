@@ -161,6 +161,7 @@ typedef struct {
  ADMISSION_JOB_TIMING_STATE JobTiming;ADMISSION_GPU_COMPLETION_RING GpuCompletions;
  int JobTimingLock;APPLE_AGX_EXP208_RELOCATION_OBJECT QueueObjects[32];
  BOOLEAN PresentTsEnabled;
+ ULONG SavedStatsFence;unsigned char *SavedStatsData; /* K1: unset here */
  struct {ULONG Version,Bytes,Head,Count;
   struct {ULONG ProcessId,Fence;ULONGLONG Start,End;} Ring[8];} PresentTs;
 } ADMISSION_PLATFORM_RUNTIME;

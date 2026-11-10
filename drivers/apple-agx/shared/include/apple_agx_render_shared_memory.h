@@ -357,6 +357,23 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
       const APPLE_AGX_RENDER_MANAGER_KEY *Key, APPLE_AGX_U32 Fence,
       const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects);
   void *ManagerEvictContext;
+  /* K1 (REG_DWORD Wom1CrossProcessRenderPairs = 1; default off: every byte
+   * and every decision as before). A render of another process may join a
+   * running managed render as a second live manager: its key is already
+   * bound in ANOTHER slot whose bytes are the firmware's (no InitBM, no
+   * restore, no eviction while a job is live; Asahi: every Queue owns its
+   * buffer slot, and renders of different Queues do not wait for each
+   * other). The record above (ManagerKey/Slot/Fence...) stays the oldest
+   * live manager's; this is the second one's. A terminal of the first
+   * while the second is live promotes the second to the record above.
+   * ManagerOtherTerminal*: the last terminal that was not left in
+   * ManagerTerminalFence under the then current key (exact duplicates). */
+  APPLE_AGX_BOOL ManagerOtherSlot;       /* the switch */
+  APPLE_AGX_U32 ManagerOtherFence;       /* 0 = no second live manager */
+  APPLE_AGX_U32 ManagerOtherIndex;       /* its slot */
+  APPLE_AGX_U32 ManagerOtherBuildCounter;
+  APPLE_AGX_U32 ManagerOtherTerminalFence;
+  APPLE_AGX_RENDER_MANAGER_KEY ManagerOtherTerminalKey;
   /* Q2c H0 (REG_DWORD Wom1ComputeOwnQueue = 1; default off: every byte as
    * before): the compute work queue is its own Asahi Queue (see
    * APPLE_AGX_COMPUTE_OWN_*). Threshold 12 (A) then counts the render
@@ -426,6 +443,41 @@ APPLE_AGX_BOOL AppleAgxRenderManagerCanShare(
 APPLE_AGX_BOOL AppleAgxRenderManagerNeedsBind(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const APPLE_AGX_RENDER_MANAGER_KEY *Key);
+/* K1: may a render with this manager (State, Key) be built NOW as the second
+ * live manager, behind the live one of another key? 0 = yes: the switch is
+ * on, one manager is live with a single user and not poisoned, no second
+ * manager is live, Key is bound in a different managed slot and State is
+ * that slot's resident, valid, idle state. Everything else refuses and
+ * names the reason (stable receipt values); none of them is ever resolved
+ * here by an eviction, a bind or a restore:
+ *   1 not provable (switch off, no live manager, the same slot, a bound
+ *     slot whose state is not resident and valid),
+ *   2 Key is not bound and a managed slot is free (a bind needs InitBM),
+ *   3 Key is not bound and every managed slot is bound (needs an eviction),
+ *   4 poisoned: a fault is in flight in the live slot, or State is the
+ *     invalid terminal record of a dropped job,
+ *   5 a pending fence of another job: the live slot has two users, a second
+ *     manager is already live, or State is pending. */
+#define APPLE_AGX_RENDER_MANAGER_OTHER_OK         0u
+#define APPLE_AGX_RENDER_MANAGER_OTHER_UNPROVEN   1u
+#define APPLE_AGX_RENDER_MANAGER_OTHER_UNBOUND    2u
+#define APPLE_AGX_RENDER_MANAGER_OTHER_ALL_BOUND  3u
+#define APPLE_AGX_RENDER_MANAGER_OTHER_POISONED   4u
+#define APPLE_AGX_RENDER_MANAGER_OTHER_PENDING    5u
+#define APPLE_AGX_RENDER_MANAGER_OTHER_REASONS    6u
+APPLE_AGX_U32 AppleAgxRenderManagerOtherSlotRefusal(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    const APPLE_AGX_RENDER_MANAGER_STATE *State,
+    const APPLE_AGX_RENDER_MANAGER_KEY *Key);
+/* K1: with the switch on, the address of manager object Index (1, 20, 21 or
+ * 22) in the slot of the LIVE manager job Fence (the first or the second
+ * live manager). The caller's object array names the slot of the last
+ * build, which is the other job's once a second manager was built. FALSE
+ * (and *Data untouched) with the switch off, for a fence that is not live,
+ * or for slot 0: the caller then uses its own array, as before. */
+APPLE_AGX_BOOL AppleAgxRenderManagerFenceObject(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 Index, unsigned char **Data);
 /* Caller has observed joined completion and synchronized these shared objects
  * for CPU access. A failure cannot be treated as successful retirement. */
 APPLE_AGX_BOOL AppleAgxRenderManagerSave(

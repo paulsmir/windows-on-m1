@@ -37,6 +37,7 @@ typedef struct {
   APPLE_AGX_RENDER_MANAGER_STATE *AheadManager;
   BOOLEAN AheadG4Native, ManagerSlots;
   unsigned char BuildDirectReads; /* rc83 Wom1BuildDirectReads */
+  unsigned SavedStatsFence; unsigned char *SavedStatsData; /* K1: unset here */
 } ADMISSION_PLATFORM_RUNTIME;
 /* rc83 receipt v3: the save's sub-interval stamp */
 #define AdmissionJobSubSaved 6

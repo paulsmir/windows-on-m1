@@ -269,7 +269,7 @@ unsigned int AdmissionJobWindowOv5WaiverNote(
 unsigned int AdmissionJobWindowKickRefusal(
     const ADMISSION_JOB_WINDOW_KICK_STATE *s) {
   const ADMISSION_JOB_WINDOW_JOB *n, *m;
-  unsigned int nk, mk;
+  unsigned int nk, mk, xr;
   if (!s) return 99u;
   if (!s->Enabled) return 1u;
   if (s->Stopping || s->Resetting) return 2u;
@@ -289,14 +289,19 @@ unsigned int AdmissionJobWindowKickRefusal(
   /* A paging packet between them may change mappings N+1 was bound with. */
   if (s->PagingPending ||
       (s->CpuHeadFence != 0u && s->CpuHeadFence == m->Fence)) return 54u;
+  /* K1 (capability XPROC_RENDER): zero unless the bit is set and the pair
+   * is a render of another process behind a plain render. */
+  xr = AdmissionJobWindowXprocRenderClass(s->Capabilities, n, m);
   if (n->Process == 0ULL || m->Process != n->Process) {
     /* C1: one cross-process class, a compute job behind a plain render
      * (COMPUTE_ON_3D, lead Barrier kept), each in its own VM slot. The raw
-     * kinds: a present is never one, whatever PRESENT_PAIRS says. */
-    if (!(s->Capabilities & ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS) ||
-        n->Process == 0ULL || m->Process == 0ULL ||
-        n->Kind != ADMISSION_JOB_WINDOW_KIND_RENDER ||
-        m->Kind != ADMISSION_JOB_WINDOW_KIND_COMPUTE)
+     * kinds: a present is never one, whatever PRESENT_PAIRS says. K1 adds
+     * its class under the same VM slot rule. */
+    if (!xr &&
+        (!(s->Capabilities & ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS) ||
+         n->Process == 0ULL || m->Process == 0ULL ||
+         n->Kind != ADMISSION_JOB_WINDOW_KIND_RENDER ||
+         m->Kind != ADMISSION_JOB_WINDOW_KIND_COMPUTE))
       return 55u;
     if (n->VmSlot == 0u || m->VmSlot == 0u || n->VmSlot == m->VmSlot)
       return ADMISSION_JOB_WINDOW_REFUSAL_CROSS_PROCESS_INELIGIBLE;
@@ -319,8 +324,12 @@ unsigned int AdmissionJobWindowKickRefusal(
       AdmissionJobWindowUsesManager(m->Kind)) {
     /* Legacy admission uses SceneId. Q6 instead requires the complete
      * resident-slot key and exact pending owner; scene objects are per flight.
-     * Neither path permits restoring another manager while N runs. */
-    if (s->General ? !s->SameManagerSlot :
+     * Neither path permits restoring another manager while N runs.
+     * K1: two processes never share a manager, so the proof asked of the
+     * pair is the other one: M's manager is bound, resident and unpoisoned
+     * in a firmware slot of its own (OtherManagerSlot). The same-slot flag
+     * is not accepted in its place. */
+    if (s->General ? !(xr ? s->OtherManagerSlot : s->SameManagerSlot) :
         (n->SceneId == 0ULL || m->SceneId != n->SceneId)) return 58u;
     if (!(s->Capabilities & ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER))
       return 59u;
@@ -352,6 +361,21 @@ unsigned int AdmissionJobWindowCrossProcess(const ADMISSION_JOB_WINDOW_JOB *Runn
     const ADMISSION_JOB_WINDOW_JOB *Next) {
   return Running != 0 && Next != 0 && Running->Process != 0ULL &&
          Next->Process != 0ULL && Running->Process != Next->Process ? 1u : 0u;
+}
+
+unsigned int AdmissionJobWindowXprocRenderClass(unsigned int Capabilities,
+    const ADMISSION_JOB_WINDOW_JOB *Running, const ADMISSION_JOB_WINDOW_JOB *Next) {
+  /* K1: a render of another process behind a running plain render. The raw
+   * kinds, as in C1: a present is never one. A prelude render may be the
+   * successor (its compute prelude waits on N's 3D stamp, COMPUTE_ON_3D)
+   * but not the running job: nothing has shown a successor kicked under a
+   * foreign prelude, and the R14 gate was built for one process. */
+  if (!(Capabilities & ADMISSION_JOB_WINDOW_CAP_XPROC_RENDER) ||
+      !AdmissionJobWindowCrossProcess(Running, Next))
+    return 0u;
+  return Running->Kind == ADMISSION_JOB_WINDOW_KIND_RENDER &&
+         (Next->Kind == ADMISSION_JOB_WINDOW_KIND_RENDER ||
+          Next->Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE) ? 1u : 0u;
 }
 
 unsigned int AdmissionJobWindowXprocLeadRefusal(unsigned int Enabled,
@@ -402,13 +426,57 @@ void AdmissionJobWindowXprocNote55(ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt,
     unsigned int Capabilities, const ADMISSION_JOB_WINDOW_JOB *Running,
     const ADMISSION_JOB_WINDOW_JOB *Next) {
   if (Receipt == 0 || Running == 0 || Next == 0) return;
-  if (!(Capabilities & ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS))
+  if (!(Capabilities & (ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS |
+                        ADMISSION_JOB_WINDOW_CAP_XPROC_RENDER)))
     ++Receipt->Refused55CapabilityOff;
   else if (Running->Process == 0ULL || Next->Process == 0ULL)
     ++Receipt->Refused55NoProcess;
   else
     ++Receipt->Refused55Kinds[AdmissionJobWindowXprocKindClass(Running->Kind)]
                              [AdmissionJobWindowXprocKindClass(Next->Kind)];
+}
+
+void AdmissionJobWindowXprocRenderNote(ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt,
+    unsigned int Refusal, unsigned int ManagerReason,
+    const ADMISSION_JOB_WINDOW_JOB *Running, const ADMISSION_JOB_WINDOW_JOB *Next) {
+  if (Receipt == 0 || Running == 0 || Next == 0) return;
+  ++Receipt->RenderConsidered;
+  if (Refusal == 0u) {
+    ++Receipt->RenderAllowed;
+    return;
+  }
+  Receipt->RenderLastRefusal = Refusal;
+  Receipt->RenderLastRefusedFence = Next->Fence;
+  if (Refusal == ADMISSION_JOB_WINDOW_REFUSAL_CROSS_PROCESS_INELIGIBLE) {
+    ++Receipt->RenderRefusedSameSlot;
+  } else if (Refusal == 58u) {
+    if (ManagerReason >= ADMISSION_JOB_WINDOW_XPR_MANAGER_REASONS)
+      ManagerReason = ADMISSION_JOB_WINDOW_XPR_MANAGER_UNPROVEN;
+    ++Receipt->RenderRefusedManager[ManagerReason];
+    Receipt->RenderLastManagerReason = ManagerReason;
+  } else {
+    ++Receipt->RenderRefusedOther;
+  }
+}
+
+void AdmissionJobWindowXprocRenderKicked(
+    ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt,
+    const ADMISSION_JOB_WINDOW_JOB *Running, const ADMISSION_JOB_WINDOW_JOB *Next,
+    unsigned int RunningManagerSlot, unsigned int NextManagerSlot) {
+  if (Receipt == 0 || Running == 0 || Next == 0) return;
+  ++Receipt->RenderKicked;
+  Receipt->RenderLastFence = Next->Fence;
+  Receipt->RenderLastRunningFence = Running->Fence;
+  Receipt->RenderLastRunningSlot = Running->VmSlot;
+  Receipt->RenderLastNextSlot = Next->VmSlot;
+  Receipt->RenderLastRunningManagerSlot = RunningManagerSlot;
+  Receipt->RenderLastNextManagerSlot = NextManagerSlot;
+}
+
+void AdmissionJobWindowXprocRenderUndone(
+    ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt, unsigned int FellBack) {
+  if (Receipt == 0) return;
+  if (FellBack) ++Receipt->RenderFellBack; else ++Receipt->RenderFailed;
 }
 
 void AdmissionJobWindowXprocReceiptInitialize(

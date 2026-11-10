@@ -99,6 +99,17 @@ typedef struct _ADMISSION_JOB_WINDOW_JOB {
  * in flight (Asahi: one VM per file, queues of different VMs run
  * concurrently). Every other cross-process pair keeps refusal 55. */
 #define ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS 0x20u
+/* K1 (REG_DWORD Wom1CrossProcessRenderPairs = 1, default unset; its own
+ * bit, independent of 0x20 in this decision): a second cross-process class
+ * joins the window: a render, plain or with a prelude, behind a running
+ * plain render of another process (TA_ON_3D, or COMPUTE_ON_3D for a
+ * prelude; the lead Barrier is kept). Both jobs name their own, different,
+ * nonzero VM slots (else 6), and the caller proves that the successor's
+ * buffer manager is live in its own firmware slot, another one than the
+ * running job's, with nothing to restore, evict or wait for
+ * (OtherManagerSlot, else 58). With the bit clear the decision is the one
+ * before K1 for every state. */
+#define ADMISSION_JOB_WINDOW_CAP_XPROC_RENDER 0x40u
 
 #define ADMISSION_JOB_WINDOW_CAPS_RC98                                       \
   (ADMISSION_JOB_WINDOW_CAP_SECOND_SIDECAR | ADMISSION_JOB_WINDOW_CAP_TA_ON_3D | \
@@ -153,6 +164,12 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
    * threshold) would report N only with N+1. PreludeGateExpired: the caller
    * held N+1 for the bound and gives up (fail-open). */
   unsigned int PreludeNotifyGate, RunningPreludeComplete, PreludeGateExpired;
+  /* K1 (CAP_XPROC_RENDER, general mode): the caller proved that N+1's
+   * manager key is bound, valid and resident in a firmware slot other than
+   * N's, not poisoned, with no pending fence and no eviction needed
+   * (AppleAgxRenderManagerOtherSlotRefusal == OK). Read only for the K1
+   * class, where it replaces SameManagerSlot. */
+  unsigned int OtherManagerSlot;
 } ADMISSION_JOB_WINDOW_KICK_STATE;
 
 /* Previously unused policy reason; keep all existing wire values and layout. */
@@ -177,10 +194,12 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
  *   52 no Prebound successor, 53 successor is not the scheduler's next
  *   fence, 54 a paging/CPU packet runs or heads the queue,
  *   55 another process (one VM slot; C1: every cross-process pair but a
- *   compute job behind a plain render under CAP_CROSS_PROCESS), 56 a present
- *   or legacy job,
+ *   compute job behind a plain render under CAP_CROSS_PROCESS; K1: and but
+ *   a render or prelude render behind a plain render under
+ *   CAP_XPROC_RENDER), 56 a present or legacy job,
  *   57 both use the compute sidecar (U7), 58 render after render with
- *   another manager binding (legacy SceneId; Q6 live-slot key), 59 missing
+ *   another manager binding (legacy SceneId; Q6 live-slot key; K1: the
+ *   successor's own slot is not proven), 59 missing
  *   live-manager capability (U1), 60 the pair's Barrier is not available (TA on a 3D stamp,
  *   or any compute-queue Barrier). The TA Barrier on a compute stamp is
  *   the hardware-validated D3D-G1b one (EXP1279+). */
@@ -200,7 +219,21 @@ unsigned int AdmissionJobWindowCrossProcess(const ADMISSION_JOB_WINDOW_JOB *Runn
  * ones in RefusalOther); the last kicked pair and the last refused and
  * undone successors (LastUndoneDetail: the KMD line in bits 0-15, the
  * BeginSuccessorJob refusal in bits 16-23, as LastKickFailure). */
-#define ADMISSION_JOB_WINDOW_XPROC_RECEIPT_VERSION 3u /* v2: the C2a Lead*, v3: the 55 split */
+/* v2: the C2a Lead*, v3: the 55 split, v4: the K1 Render* (appended; the
+ * first 240 bytes are v3's). */
+#define ADMISSION_JOB_WINDOW_XPROC_RECEIPT_VERSION 4u
+#define ADMISSION_JOB_WINDOW_XPROC_RECEIPT_V3_BYTES 240u
+/* K1: why the successor's own manager slot was not proven (refusal 58 of
+ * the K1 class). The values are APPLE_AGX_RENDER_MANAGER_OTHER_* of
+ * apple_agx_render_shared_memory.h (this header does not include it; a
+ * test pins the equality). 0: no query result was given. */
+#define ADMISSION_JOB_WINDOW_XPR_MANAGER_NONE 0u
+#define ADMISSION_JOB_WINDOW_XPR_MANAGER_UNPROVEN 1u  /* any state not named below */
+#define ADMISSION_JOB_WINDOW_XPR_MANAGER_UNBOUND 2u   /* key in no slot, a slot is free */
+#define ADMISSION_JOB_WINDOW_XPR_MANAGER_ALL_BOUND 3u /* key in no slot, eviction needed */
+#define ADMISSION_JOB_WINDOW_XPR_MANAGER_POISONED 4u
+#define ADMISSION_JOB_WINDOW_XPR_MANAGER_PENDING 5u   /* a pending fence of another job */
+#define ADMISSION_JOB_WINDOW_XPR_MANAGER_REASONS 6u
 /* v3 (receipt-only): which pairs refusal 55 refuses. The kind classes of
  * the Refused55Kinds[running][next] table: */
 #define ADMISSION_JOB_WINDOW_XPROC_KIND_RENDER 0u   /* plain render */
@@ -250,7 +283,42 @@ typedef struct _ADMISSION_JOB_WINDOW_XPROC_RECEIPT {
   unsigned int Refused55CapabilityOff, Refused55NoProcess;
   unsigned int Refused55Kinds[ADMISSION_JOB_WINDOW_XPROC_KINDS]
                              [ADMISSION_JOB_WINDOW_XPROC_KINDS];
+  /* v4 (K1): the cross-process render class under CAP_XPROC_RENDER
+   * (AdmissionJobWindowXprocRenderClass). Every pair of it is also in the
+   * counters above. RenderConsidered == RenderAllowed +
+   * RenderRefusedSameSlot (6) + sum RenderRefusedManager (58, by the
+   * ADMISSION_JOB_WINDOW_XPR_MANAGER_* reason) + RenderRefusedOther (any
+   * other final refusal; the last one is RenderLastRefusal). An allowed
+   * pair ends in exactly one of RenderKicked, RenderFellBack (depth one,
+   * no fault) and RenderFailed. */
+  unsigned int RenderConsidered, RenderAllowed, RenderKicked, RenderFellBack,
+               RenderFailed;
+  unsigned int RenderRefusedSameSlot;
+  unsigned int RenderRefusedManager[ADMISSION_JOB_WINDOW_XPR_MANAGER_REASONS];
+  unsigned int RenderRefusedOther;
+  unsigned int RenderLastRefusal, RenderLastRefusedFence, RenderLastManagerReason;
+  /* the last kicked pair: fences, VM slots, buffer-manager slots */
+  unsigned int RenderLastFence, RenderLastRunningFence;
+  unsigned int RenderLastRunningSlot, RenderLastNextSlot;
+  unsigned int RenderLastRunningManagerSlot, RenderLastNextManagerSlot;
 } ADMISSION_JOB_WINDOW_XPROC_RECEIPT;
+/* K1: 1 for the class CAP_XPROC_RENDER adds (two processes, Running a
+ * plain render, Next a render or a prelude render, by raw kinds); the
+ * 55 branch of AdmissionJobWindowKickRefusal uses the same function. */
+unsigned int AdmissionJobWindowXprocRenderClass(unsigned int Capabilities,
+    const ADMISSION_JOB_WINDOW_JOB *Running, const ADMISSION_JOB_WINDOW_JOB *Next);
+/* K1: counts one final decision of a pair of that class (the caller
+ * checked the class). ManagerReason: the owner query's result, read only
+ * for refusal 58. Receipt only. */
+void AdmissionJobWindowXprocRenderNote(ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt,
+    unsigned int Refusal, unsigned int ManagerReason,
+    const ADMISSION_JOB_WINDOW_JOB *Running, const ADMISSION_JOB_WINDOW_JOB *Next);
+void AdmissionJobWindowXprocRenderKicked(
+    ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt,
+    const ADMISSION_JOB_WINDOW_JOB *Running, const ADMISSION_JOB_WINDOW_JOB *Next,
+    unsigned int RunningManagerSlot, unsigned int NextManagerSlot);
+void AdmissionJobWindowXprocRenderUndone(
+    ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt, unsigned int FellBack);
 /* v3: the kind class of a raw ADMISSION_JOB_WINDOW_KIND_*. */
 unsigned int AdmissionJobWindowXprocKindClass(unsigned int Kind);
 /* v3: counts one kick decision that returned 55 (Capabilities as given to

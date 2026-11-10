@@ -254,6 +254,7 @@ typedef struct {
   APPLE_AGX_SCHEDULER Scheduler, PagingScheduler;
   ULONG LiveAdditivePaging;
   ULONG G3CrossProcessPairs; /* C1: Wom1CrossProcessPairs, off here */
+  ULONG G3CrossProcessRenderPairs; /* K1: off here */
   ADMISSION_RENDER_PACKET RenderPacket;
   ADMISSION_G4_PENDING G4Pending[ADMISSION_G4_PENDING_CAPACITY];
   ULONG G4PendingHead, G4PendingCount, DispatchedFence;
