@@ -76808,3 +76808,14 @@ EXP2317 HARDWARE BEFORE 2026-11-10T04:44:57Z:
   write); rollback = UnmapMode 1, ImagePath -> 0.4.5, restart. The recovery profiles' storage gate checks only
   the APPL0003 device status and the service state (scripts/agx-recover-visible.sh), no driver hash.
 - Evidence: .local/experiments/ANSTRIM2/evidence/ANSQ-T6/.
+
+EXP2317 ACTUAL 2026-11-10T12:26:18Z:
+- Pipeline: launched 2026-11-10T04:46Z, EXP2317_PROBE_DONE / CHAIN2317_DONE about 05:02Z. Guest alive after every phase (GM w, x0, f0, CS). No GPU_RESET, no PREEMPT_REFUSAL, STOPS 0, WER_REPORTS 2 (same count as EXP2316), suite 120 PASS lines / 0 FAIL (EXP2316: 120 / 0), POOL reservefail 0.
+- Lever receipt (x0, shadow arm): OV2RX lines 2621, seen 0, applied 0, shadow_independent 0, shadow reason6 2621 (every pair refused by the KMD with reason 6). Verdict as preregistered: LEVER_CLOSED_BY_RECEIPT; arms x1..x3 were skipped by the probe. N4c (cross-execution no-hazard lead) is closed: the pair it targets never becomes eligible.
+- Performance against the expectation (x0 reproduces EXP2316 traced x 50.334): fps_frames w 42.346, x0 43.678 (EXP2316: w 49.251, x 50.334) = about -13 %. Expected +0.5..1.7 % in x1/x2 and parity in x0; actual: no arm applied the lever and the base configuration itself regressed. FULL HD f0: score 7036, 42.1 fps.
+- Perf gate: PERF_GATE_PASS (GM worst 40.995 vs baseline 40.770, CS 49.713 vs 49.943). NOTE: the gate baseline is EXP2220, so the gate is blind to a regression against the last accepted configuration (EXP2316 about 49-50 fps_frames); it passed while the run lost 13 % against that configuration. The gate needs a second baseline row for the last accepted configuration.
+- Architect's reading (investigation/GPU_CURRENT_STATE.md, commit 33683bdc2, not re-derived here): GPU busy time unchanged (18.45 vs 18.16 ms), non-busy 4.45 vs 1.71 ms; renders R1/R3/R5/R7 started before the KMD saw the previous completion in 3/2/4/1 % of frames (EXP2316: 98/66/55/46 %); compute jobs still pre-kicked. The renders lost depth two.
+- Single difference against EXP2316 at registry level: Wom1Ov2NoHazardLead=1 (plus the b46a092e8f6b package carrying the N4c code). Cause of the regression not yet isolated: EXP2318 = same package with Wom1Ov2NoHazardLead unset.
+- Process defect: the session stopped (model limit) right after launch; the bench stayed on the experiment boot from 05:02Z to 12:27Z without ACTUAL or rollback. Rollback rec2317h started 2026-11-10T12:27Z; BUGCHECK lines of the restarts are recorded with the recovery result below.
+- Verdict: N4c REJECTED (closed by receipt). Configuration regression OPEN (EXP2318 discriminates).
+- Next: rec2317h recovery, ANSQ-T6 slot for the AppleAns session, then EXP2318.
