@@ -205,6 +205,7 @@ typedef struct {
   FAST_MUTEX Lock; KEVENT JobEvent; ADMISSION_G3_PROCESS *ActiveProcess; void *ActiveContext;
   ULONG ActiveFence, LastCompletedFence, PrivateCompletionFence;
   void *SuccessorContext; ULONG SuccessorFence; /* rc102: none here */
+  ADMISSION_G3_PROCESS *SuccessorProcess; /* C1: none here */
 } ADMISSION_G3_STATE;
 typedef struct _ADMISSION_RENDER_CONTEXT {
   struct { unsigned FenceOutstanding; } Object;

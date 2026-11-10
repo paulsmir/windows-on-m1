@@ -1135,6 +1135,11 @@ bool AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
   return true;
 }
 
+bool AppleAgxGpuvaG3GraphBeginLeasedJob(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+  if (!graph || !retained(graph) || !graph->LeaseToken) return false;
+  return begin_retained(graph);
+}
+
 bool AppleAgxGpuvaG3GraphBeginNestedJob(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   if (!graph || !graph->Created || graph->Uncertain || !graph->LeaseToken ||
       !graph->JobInFlight || graph->JobNested) return false;

@@ -114,7 +114,8 @@ def decode(data, pid, qpc_begin=0, qpc_end=(1 << 64)-1):
 
 
 # 1..65 keep the stable render_job_window / Q3 refusal numbering.
-DECISION_NAMES = {0: 'allowed', 5: 'prelude unproven', 66: 'no pending successor',
+DECISION_NAMES = {0: 'allowed', 5: 'prelude unproven',
+    6: 'cross-process pair: zero or equal VM slot (C1)', 66: 'no pending successor',
     67: 'running image not released', 68: 'prebind not ready (see detail)',
     69: 'backend kick guard', 70: 'kick disabled', 71: 'unknown reason'}
 

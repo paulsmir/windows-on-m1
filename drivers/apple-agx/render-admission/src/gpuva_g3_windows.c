@@ -51,7 +51,13 @@ VOID AdmissionGpuvaG3CaptureFaultMapping(ADMISSION_CONTEXT *Adapter,
   if (!ExTryToAcquireFastMutex(&state->Lock)) return;
   Receipt->Status = AdmissionGpuFaultMappingIdentity;
   process = state->ActiveProcess;
-  if (process == NULL || state->ActiveFence != Event->Fence ||
+  /* C1: the fault may name a cross-process successor's fence. */
+  if (process != NULL && state->SuccessorProcess != NULL &&
+      state->SuccessorFence != 0u && state->SuccessorFence == Event->Fence)
+    process = state->SuccessorProcess;
+  else if (process != NULL && state->ActiveFence != Event->Fence)
+    process = NULL;
+  if (process == NULL ||
       !(Event->Flags & ADMISSION_GPU_FAULT_JOB_KNOWN)) goto Done;
   for (context = process->Contexts; context != NULL;
        context = context->GpuvaG3NextContext)
@@ -4014,9 +4020,14 @@ static bool AdmissionG3TimedGraphBeginJob(ADMISSION_G3_STATE *state,
 /* OV2: the compute envelope parser admits VdmBarrier NONE only while the
  * device reports AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE. */
 static unsigned int AdmissionG4ComputeParseFlags(ADMISSION_CONTEXT *adapter) {
-  return adapter != NULL &&
-      InterlockedCompareExchange(&adapter->GpuIndependentSubqueue, 0, 0) != 0
-      ? APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE : 0u;
+  unsigned int flags = 0u;
+  if (adapter == NULL) return 0u;
+  if (InterlockedCompareExchange(&adapter->GpuIndependentSubqueue, 0, 0) != 0)
+    flags |= APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE;
+  /* C2a: the header's private-only verdict, only with the device feature */
+  if (InterlockedCompareExchange(&adapter->GpuPrivateOnlyCompute, 0, 0) != 0)
+    flags |= APPLE_AGX_G4_PARSE_PRIVATE_ONLY;
+  return flags;
 }
 
 /* OV5 step 2: the render parser admits CdmBarrier NONE (a TA-independent
@@ -4046,6 +4057,7 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
   ADMISSION_G3_PROCESS *process;
   APPLE_AGX_G4_SUBMIT_VIEW g4_view = {0};
   BOOLEAN g4_valid = TRUE;
+  BOOLEAN cross = FALSE;
   ADMISSION_G3_PRIVATE_SCENE *private_scene = NULL;
   NTSTATUS status = STATUS_INVALID_DEVICE_STATE;
 #ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
@@ -4149,7 +4161,13 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
 #endif
   /* rc102: a successor joins the active job of its own process. The same
    * checks in the same order as before; the first that fails is noted. */
-  if (!(successor ? state->ActiveProcess == process && state->ActiveFence != 0u &&
+  /* C1: with G3CrossProcessPairs a successor of another process is not
+   * refused here; it begins a job of its own below (refusals 10, 11). */
+  cross = successor && adapter->G3CrossProcessPairs != 0u &&
+      state->ActiveProcess != NULL && state->ActiveProcess != process
+      ? TRUE : FALSE;
+  if (!(successor ? (cross || state->ActiveProcess == process) &&
+                        state->ActiveFence != 0u &&
                         state->ActiveFence != fence && state->SuccessorFence == 0u
                   : state->ActiveProcess == NULL))
     refusal = 1u;
@@ -4178,7 +4196,18 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
   else if (!(adapter->BackendImage.G4Compute || adapter->BackendImage.PresentCompute ||
              AdmissionG3OutputAccessibleFor(adapter, &process->Graph, packet)))
     refusal = 7u;
-  else if (!(successor ? AppleAgxGpuvaG3GraphBeginNestedJob(&process->Graph)
+  /* C1: only a compute envelope, in a slot its process already holds and
+   * that is not the running job's; the lease is never taken here. */
+  else if (cross && (!adapter->BackendImage.G4Compute ||
+                     process->Graph.SlotTable == NULL))
+    refusal = 10u;
+  else if (cross && (process->Graph.LeaseToken == 0ULL ||
+                     process->Graph.JobInFlight || process->Graph.Slot == 0u ||
+                     !state->ActiveProcess->Graph.JobInFlight ||
+                     process->Graph.Slot == state->ActiveProcess->Graph.Slot))
+    refusal = 11u;
+  else if (!(cross ? AppleAgxGpuvaG3GraphBeginLeasedJob(&process->Graph) :
+             successor ? AppleAgxGpuvaG3GraphBeginNestedJob(&process->Graph)
                        : AppleAgxGpuvaG3GraphBeginJob(&process->Graph,
                              ADMISSION_GPUVA_G3_JOB_VM_SLOT)))
     refusal = 8u;
@@ -4216,6 +4245,7 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
     if (successor) {
       state->SuccessorContext = context;
       state->SuccessorFence = fence;
+      state->SuccessorProcess = cross ? process : NULL;
     } else {
       state->ActiveProcess = process;
       state->ActiveContext = context;
@@ -4422,6 +4452,29 @@ BOOLEAN AdmissionGpuvaG3PendingManager(ADMISSION_CONTEXT *adapter,
   return scene != NULL ? TRUE : FALSE;
 }
 
+/* C1: gpuva_g3_private.h. */
+ULONG AdmissionGpuvaG3RetainedSlot(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context) {
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  ULONG slot = 0u;
+  if (adapter == NULL || context == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return 0u;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  process = (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
+  if (state == NULL || process == NULL || process->State != state) return 0u;
+  ExAcquireFastMutex(&state->Lock);
+  if (!process->Poisoned && !process->CpuOnlyMappings &&
+      !process->Graph.Uncertain && process->Graph.SlotTable != NULL &&
+      process->Graph.LeaseToken != 0ULL &&
+      process->Graph.Slot <= APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX &&
+      process->Graph.SlotTable->Count != 0u &&
+      process->Graph.SlotTable->Owner[process->Graph.Slot] == &process->Graph)
+    slot = process->Graph.Slot;
+  ExReleaseFastMutex(&state->Lock);
+  return slot;
+}
+
 /* rc102: the successor is the Kicked head entry; its packet describes it
  * (the render packet still holds the running job). */
 NTSTATUS AdmissionGpuvaG3BeginSuccessorJob(ADMISSION_CONTEXT *adapter,
@@ -4589,6 +4642,11 @@ BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *adapter,
     if (state->SuccessorFence != 0u) {
       /* rc102: the job kicked behind it is the active job now; the graph
        * lease stays with it (GraphEndJob ended only the older job). */
+      /* C1: a cross-process successor holds its own graph job; its
+       * process is the active one now. */
+      if (state->SuccessorProcess != NULL)
+        state->ActiveProcess = state->SuccessorProcess;
+      state->SuccessorProcess = NULL;
       state->ActiveContext = state->SuccessorContext;
       state->ActiveFence = state->SuccessorFence;
       state->SuccessorContext = NULL;
@@ -4626,6 +4684,10 @@ _Use_decl_annotations_ VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *adapter,
   if (process != NULL &&
       (state->SuccessorFence == fence || state->ActiveFence == fence)) {
     ADMISSION_G3_PRIVATE_SCENE *s;
+    /* C1: a cross-process successor's job is on its own process's graph;
+     * the running job's lease is not touched. */
+    if (state->SuccessorFence == fence && state->SuccessorProcess != NULL)
+      process = state->SuccessorProcess;
     /* The reset proved the firmware never received this job (a kicked
      * successor or an active job whose submit failed): its graph job ends
      * unrun and its scene was never started on the GPU. */
@@ -4639,7 +4701,11 @@ _Use_decl_annotations_ VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *adapter,
     if (state->SuccessorFence == fence) {
       state->SuccessorContext = NULL;
       state->SuccessorFence = 0u;
+      state->SuccessorProcess = NULL;
     } else if (state->SuccessorFence != 0u) {
+      if (state->SuccessorProcess != NULL)
+        state->ActiveProcess = state->SuccessorProcess;
+      state->SuccessorProcess = NULL;
       state->ActiveContext = state->SuccessorContext;
       state->ActiveFence = state->SuccessorFence;
       state->SuccessorContext = NULL;

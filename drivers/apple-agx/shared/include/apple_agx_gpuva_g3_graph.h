@@ -263,6 +263,11 @@ bool AppleAgxGpuvaG3SlotsEnable(APPLE_AGX_GPUVA_G3_SLOTS *, unsigned int First,
  * slot (no broker call); EndJob then ends one job, the lease only with the
  * last. At most two jobs. */
 bool AppleAgxGpuvaG3GraphBeginNestedJob(APPLE_AGX_GPUVA_G3_GRAPH *);
+/* C1 (cross-process pairs): BeginJob of a graph that already holds its
+ * retained lease: JOB_BEGIN only. Never a LEASE, so no slot is picked,
+ * activated or stolen while another graph's job runs. false, nothing sent,
+ * without an enabled slot table or a held lease. */
+bool AppleAgxGpuvaG3GraphBeginLeasedJob(APPLE_AGX_GPUVA_G3_GRAPH *);
 bool AppleAgxGpuvaG3GraphDestroy(APPLE_AGX_GPUVA_G3_GRAPH *);
 
 #endif
