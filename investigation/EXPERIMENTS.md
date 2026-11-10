@@ -77283,3 +77283,14 @@ EXP2325 HARDWARE BEFORE 2026-11-10T18:06:42Z:
 - Hashes: sys ece59828085d, UmdArm64 34ace1a530c1, UmdX64 cc94f7a66ad6, Umd32 09d97775c3c5; manifest a1dceffdfc73, hardware-manifest c35dc5444103; probe2325.sh 1ac9bb707345 (PROBE_LINT_OK); visible recovery rec2325h 00358e0668742282; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2325h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2325-k1-xproc-render-a/run2325.sh.
+
+EXP2325 ACTUAL 2026-11-10T18:34:13Z:
+- Phases: launch, package install and first start normal; EXP2325_PIPELINE_RC 0; no hang, TDR, GPU reset or stop (STOPS 0). Display, SSH, storage (AppleAns 0.4.8) and 8 CPUs alive throughout.
+- Suite TOOL_SUITE PASS=119 FAIL=0.
+- GM HD PERF fps_frames: w 49.155 / r2 50.277 / r3 50.292 (frames 2650/2723/2728); mean(r2,r3) 50.285 vs EXP2320 50.08 = +0.41 %: inside -0.7..+0.7 %, the K1 package is neutral with the switch unset. Floor 49.1 met.
+- xproc receipt (final): k1check K1_A "version 4 bytes 328 words60_81_nonzero 0 PASS". Refusals 55: 14185 (render -> render 5815, render -> render+prelude 8370), 6: 30 (whole boot).
+- GM FULL f0 Score 7911. CS 1.6 warm/r2/r3 48.176/51.568/50.982; PERF_GATE cs16 PASS (+2.08 %), gravitymark_hd_perf PASS (worst 45.393 vs 40.770), PERF_GATE_PASS. WER_REPORTS 2 (pre-existing).
+- m1n1 at the ordered restart: "BUGCHECK ok base=0xfffff801c2400000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0".
+- Rollback rec2325h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE.
+- Verdict: confirmed (boot A control; the K1 package is neutral with Wom1CrossProcessRenderPairs unset).
+- Next: EXP2326 (boot B, Wom1CrossProcessRenderPairs=1), same package build commit 9fb13ab25.
