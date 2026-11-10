@@ -53,6 +53,8 @@ def decode(blob):
             "actual": s[2] & 0xff, "target": (s[2] >> 8) & 0xff, "current": (s[2] >> 16) & 0xff,
             "freq_mhz": f32(s[3]), "temp_c": s[4], "avg_power_mw": s[5],
             "cur_power_mw": s[6], "utilization": f32(s[7]), "pwr_status": s[8],
+            "perf_tgt": s[9] & 0xff, "perf_tgt_2": (s[9] >> 8) & 0xff,
+            "perf_tgt_applied": bool(s[9] & 0x10000), "perf_tgt_ignored": bool(s[9] & 0x20000),
         })
     return {
         "version": version, "samples": samples, "invalid": invalid, "gaps": gaps,
@@ -100,6 +102,12 @@ def report(d):
     lines.append(f"temp_c min/max {d['temp_c'][0]}/{d['temp_c'][1]}; avg_power max "
                  f"{d['avg_power_max_mw']} mW; cur_power max {d['cur_power_max_mw']} mW; "
                  f"freq max {d['freq_mhz_max']:.0f} MHz")
+    if d["ring"]:
+        last = d["ring"][-1]
+        verdict = ("applied" if last["perf_tgt_applied"] else
+                   "ignored" if last["perf_tgt_ignored"] else "profile")
+        lines.append(f"perf_tgt_utilization {last['perf_tgt']}/{last['perf_tgt_2']} % "
+                     f"(Wom1PerfTgtUtilization {verdict})")
     for s in d["ring"][-8:]:
         lines.append(f"  qpc {s['qpc']} a/t/c {s['actual']}/{s['target']}/{s['current']} "
                      f"{s['freq_mhz']:.0f} MHz {s['temp_c']} C {s['avg_power_mw']} mW avg "

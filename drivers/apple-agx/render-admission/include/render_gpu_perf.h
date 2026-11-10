@@ -38,6 +38,14 @@
 #define ADMISSION_GPU_PERF_HWDATAA_UPDATE_TS 0x1ccu
 #define ADMISSION_GPU_PERF_HWDATAA_CUR_POWER_MW 0x740u
 #define ADMISSION_GPU_PERF_HWDATAA_PERF_UTIL 0x7e8u
+/* PT1: the pstate controller's set point, u32 percent in both words. */
+#define ADMISSION_GPU_PERF_HWDATAA_PERF_TGT 0x788u
+#define ADMISSION_GPU_PERF_HWDATAA_PERF_TGT_2 0x7ecu
+/* Sample Reserved: perf_tgt low byte | perf_tgt_2 low byte << 8 as read back
+ * from the live HwDataA (0 for an object that ends before the second word),
+ * and the driver's Wom1PerfTgtUtilization verdict. */
+#define ADMISSION_GPU_PERF_TGT_APPLIED 0x00010000u
+#define ADMISSION_GPU_PERF_TGT_IGNORED 0x00020000u
 
 typedef struct _ADMISSION_GPU_PERF_SAMPLE {
   unsigned long long Qpc;
@@ -47,6 +55,7 @@ typedef struct _ADMISSION_GPU_PERF_SAMPLE {
   unsigned int FreqMhzBits;
   unsigned int TempC, AvgPowerMw, CurPowerMw;
   unsigned int UtilBits;
+  /* Reserved: the PT1 word described at ADMISSION_GPU_PERF_TGT_APPLIED. */
   unsigned int PwrStatus, Reserved;
 } ADMISSION_GPU_PERF_SAMPLE;
 
@@ -109,6 +118,10 @@ static inline int AdmissionGpuPerfRead(const volatile void *HwdataA,
   Out->UtilBits = AdmissionGpuPerfLoad32(base, ADMISSION_GPU_PERF_HWDATAA_PERF_UTIL);
   Out->PwrStatus = AdmissionGpuPerfLoad32(base, ADMISSION_GPU_PERF_HWDATAA_PWR_STATUS);
   Out->Reserved = 0u;
+  if (Length >= ADMISSION_GPU_PERF_HWDATAA_PERF_TGT_2 + 4u)
+    Out->Reserved =
+        (AdmissionGpuPerfLoad32(base, ADMISSION_GPU_PERF_HWDATAA_PERF_TGT) & 0xffu) |
+        ((AdmissionGpuPerfLoad32(base, ADMISSION_GPU_PERF_HWDATAA_PERF_TGT_2) & 0xffu) << 8);
   return 1;
 }
 

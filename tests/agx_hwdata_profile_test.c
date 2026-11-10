@@ -78,5 +78,36 @@ int main(void) {
     io.Records[0].Phys++;
     assert(!AgxHwdataMaterialize(&receipt,&io,3,receipt.Root,a,sizeof(a),b,sizeof(b)));
     assert(!memcmp(a,saved_a,sizeof(a)) && !memcmp(b,saved_b,sizeof(b)));
+    /* PT1: absent or refused = the materialized bytes; applied = only the two
+     * u32 words change and both hold the percent. */
+    {
+        static const unsigned int refused[]={0u,1u,49u,86u,100u,0x55000000u,~0u};
+        unsigned int percent,k;
+        assert(a[0x788]==85 && a[0x7ec]==85);
+        for(k=0;k<sizeof(refused)/sizeof(refused[0]);k++) {
+            assert(!AgxHwdataPerfTargetValid(refused[k]));
+            assert(!AgxHwdataPerfTargetApply(a,sizeof(a),refused[k]));
+            assert(!memcmp(a,saved_a,sizeof(a)));
+        }
+        assert(!AgxHwdataPerfTargetApply(0,sizeof(a),60u));
+        assert(!AgxHwdataPerfTargetApply(a,AGX_HWDATA_A_BYTES-1,60u));
+        assert(!memcmp(a,saved_a,sizeof(a)));
+        for(percent=50u;percent<=85u;percent++) {
+            unsigned int different=0;
+            memcpy(a,saved_a,sizeof(a));
+            assert(AgxHwdataPerfTargetValid(percent));
+            assert(AgxHwdataPerfTargetApply(a,sizeof(a),percent));
+            for(i=0;i<sizeof(a);i++) if(a[i]!=saved_a[i]) {
+                assert((i>=0x788u && i<0x78cu) || (i>=0x7ecu && i<0x7f0u));
+                different++;
+            }
+            assert(different==(percent==85u?0u:2u));
+            for(k=0;k<2;k++) {
+                const unsigned char *w=a+(k?0x7ecu:0x788u);
+                assert(w[0]==percent && !w[1] && !w[2] && !w[3]);
+            }
+        }
+        memcpy(a,saved_a,sizeof(a));
+    }
     return 0;
 }

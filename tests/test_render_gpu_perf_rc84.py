@@ -123,6 +123,17 @@ int main(int argc, char **argv) {
          x.Pstates == (6u | 6u << 8 | 6u << 16) && x.FreqMhzBits == 0x449fc000u &&
          x.TempC == 61u && x.AvgPowerMw == 14500u && x.CurPowerMw == 16000u &&
          x.UtilBits == 0x42c80000u && x.PwrStatus == 4u);
+  /* PT1: the set-point words are read back; an object that ends before
+   * the second word reports none. */
+  assert(ADMISSION_GPU_PERF_HWDATAA_PERF_TGT == 0x788u &&
+         ADMISSION_GPU_PERF_HWDATAA_PERF_TGT_2 == 0x7ecu);
+  assert(x.Reserved == 0u);
+  put(0x788, 60u); put(0x7ec, 85u);
+  assert(AdmissionGpuPerfRead(hw, sizeof(hw), 778ull, &x));
+  assert(x.Reserved == (60u | 85u << 8));
+  assert((x.Reserved & (ADMISSION_GPU_PERF_TGT_APPLIED | ADMISSION_GPU_PERF_TGT_IGNORED)) == 0u);
+  assert(AdmissionGpuPerfRead(hw, 0x7ecu + 3u, 778ull, &x) && x.Reserved == 0u);
+  put(0x788, 0u); put(0x7ec, 0u);
 
   AdmissionGpuPerfInitialize(&s, f);
   assert(s.Version == 1u && s.Bytes == sizeof(s) && s.QpcFrequency == f &&

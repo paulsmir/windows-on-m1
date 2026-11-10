@@ -72,4 +72,38 @@ static inline unsigned char AgxHwdataMaterialize(const AGX_HWDATA_RECEIPT *r,
     AgxFwIoPut(b_data+0x28,AGX_HWDATA_TIMESTAMP_BASE,8);
     return AgxFwIoEncodeHwdataB(io,AGX_FW_IO_BYTES,epoch,root,b_data,b_bytes);
 }
+/* PT1: HwDataA perf_tgt_utilization / perf_tgt_utilization_2, both u32
+ * percent (m1n1 fw/agx/initdata.py AGXHWDataA, Asahi fw/initdata.rs HwDataA;
+ * 85 from the J313 ADT gpu-perf-tgt-utilization). The firmware's pstate
+ * controller takes its set point from HwDataA at start, so this runs after
+ * AgxHwdataMaterialize and before the firmware is started. */
+#define AGX_HWDATA_A_PERF_TGT_UTILIZATION 0x788u
+#define AGX_HWDATA_A_PERF_TGT_UTILIZATION_2 0x7ecu
+#define AGX_HWDATA_PERF_TGT_PROFILE 85u
+#define AGX_HWDATA_PERF_TGT_MIN 50u
+static inline unsigned char AgxHwdataPerfTargetValid(unsigned int percent) {
+    return percent>=AGX_HWDATA_PERF_TGT_MIN && percent<=AGX_HWDATA_PERF_TGT_PROFILE;
+}
+/* 1: both words hold percent. 0: nothing was written (percent out of range,
+ * short or missing object, or a profile whose two words are not the ADT
+ * value this lever was derived for). Byte stores only: the object is
+ * firmware-shared write-combined memory (EXP2270). */
+static inline unsigned char AgxHwdataPerfTargetApply(void *a,unsigned long long a_bytes,
+    unsigned int percent) {
+    static const unsigned int offsets[2]={AGX_HWDATA_A_PERF_TGT_UTILIZATION,
+        AGX_HWDATA_A_PERF_TGT_UTILIZATION_2};
+    unsigned char *a_data=a;
+    unsigned int i,j;
+    if(a_data==0 || a_bytes<AGX_HWDATA_A_BYTES || !AgxHwdataPerfTargetValid(percent)) return 0;
+    for(i=0;i<2;i++) {
+        if(offsets[i]>AGX_HWDATA_A_BYTES-4u ||
+           AgxHwdataAProfile[offsets[i]]!=AGX_HWDATA_PERF_TGT_PROFILE) return 0;
+        for(j=1;j<4;j++)if(AgxHwdataAProfile[offsets[i]+j]!=0)return 0;
+    }
+    for(i=0;i<2;i++) {
+        a_data[offsets[i]]=(unsigned char)percent;
+        for(j=1;j<4;j++)a_data[offsets[i]+j]=0;
+    }
+    return 1;
+}
 #endif

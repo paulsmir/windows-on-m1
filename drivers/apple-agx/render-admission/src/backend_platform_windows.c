@@ -415,6 +415,13 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN PreludeGateHeld;
   ULONG PreludeGateFence;
   ULONGLONG PreludeGateStartQpc;
+  /* PT1 (default absent): REG_DWORD Wom1PerfTgtUtilization, 50..85, replaces
+   * the HwDataA pstate-controller set point (apple_agx_hwdata_profile.h
+   * AgxHwdataPerfTargetApply) after the profile copy and before the firmware
+   * starts. PerfTgtReceipt: ADMISSION_GPU_PERF_TGT_APPLIED / _IGNORED, or 0
+   * when the value is absent. */
+  ULONG PerfTgtUtilization;
+  ULONG PerfTgtReceipt;
   ADMISSION_JOB_WINDOW_OV2_RECEIPT Ov2Receipt;
   /* QPC of the last Wom1Ov2Receipt export without Wom1JobDiagnostics. */
   ULONGLONG Ov2ExportQpc;
@@ -1129,6 +1136,7 @@ static VOID AdmissionGpuPerfSampleWindows(ADMISSION_PLATFORM_RUNTIME *runtime) {
   if (!AdmissionGpuPerfRead(hwdata->CpuAddress, hwdata->Length,
                             AdmissionJobQpc(), &sample))
     return;
+  sample.Reserved |= runtime->PerfTgtReceipt;
   KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
   AdmissionGpuPerfRecord(&runtime->GpuPerf, &sample);
   KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
@@ -3559,6 +3567,9 @@ static unsigned char AdmissionRetainedPublishGraph(
         hwdata_b->CpuAddress,hwdata_b->Length);
     AdmissionRecordHwdataProfile(runtime->Adapter,valid?0u:2u,&runtime->HwdataProfileReceipt);
     if(!valid) return 0;
+    if(runtime->PerfTgtUtilization)
+      runtime->PerfTgtReceipt=AgxHwdataPerfTargetApply(hwdata_a->CpuAddress,hwdata_a->Length,
+          runtime->PerfTgtUtilization)?ADMISSION_GPU_PERF_TGT_APPLIED:ADMISSION_GPU_PERF_TGT_IGNORED;
   }
   result=AppleAgxContext0BrokerMap(&runtime->Context0Lease,&runtime->Initdata,&io,
       runtime->RetainedEpoch,runtime->RetainedRoot,AdmissionContext0Ipa,runtime);
@@ -9070,6 +9081,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->PreludeGateHeld = FALSE;
   runtime->PreludeGateFence = 0u;
   runtime->PreludeGateStartQpc = 0ULL;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  /* PT1: read before the firmware provider is started below; a value outside
+   * the accepted range is reported, never applied. */
+  {
+    ULONG percent = 0u;
+    runtime->PerfTgtUtilization = 0u;
+    runtime->PerfTgtReceipt = 0u;
+    if (AdmissionPlatformDwordValue(Context, L"Wom1PerfTgtUtilization",
+                                    &percent)) {
+      if (AgxHwdataPerfTargetValid(percent))
+        runtime->PerfTgtUtilization = percent;
+      else
+        runtime->PerfTgtReceipt = ADMISSION_GPU_PERF_TGT_IGNORED;
+    }
+  }
+#endif
 #if defined(ADMISSION_OV2_ON)
   /* OV2 (default off): REG_DWORD Wom1Ov2NoHazardLead = 1, only on Q2c. The
    * device feature lets the UMD flag independent compute envelopes. */
