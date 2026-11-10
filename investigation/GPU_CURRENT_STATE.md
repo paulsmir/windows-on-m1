@@ -4113,3 +4113,103 @@ UPDATE 2026-11-10T21:11:36Z EXP2328 READING, STATS-NOPS CODE, PROFILE PATH (arch
   reading) and then a timing diagnostic inside the KMD.
 - Bench order now: EXP2329 (K1 default-on + T5b FULL ABBA) -> EXP2330 (cross-lead receipts) -> EXP2331 (STATS-NOPS)
   -> PF1b fold arm when its commit is gated -> TDR-H0.
+
+## UPDATE 2026-11-10T21:27:02Z -- architect: P1 kernel reading (per-chunk attribute conversion), POOL-PROBE specified, PF1b integrated offline
+
+Nothing run on hardware. Sources: static disassembly of the guest's own kernel (ntoskrnl.exe ARM64 10.0.26100.9711,
+ntkrnlmp.pdb {287D4F3D-731D-E7A3-AA2D-C7DD8F8AEF76}, identity checked against guest dumps), listings and scripts in
+`.local/night-20261110/ntos-mdl-alloc/` (out-dis-*.txt, out-evidence.txt, out-dump-kvars.txt). I re-read the key
+listings myself; the items marked SOURCE below are the ones I verified.
+
+**P1 result (answers decision P1 of the 21:01:45Z entry).**
+- SOURCE: with MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS, MiAllocateSkipPagesForMdl (0x39cae8) loops and calls
+  MiFindContiguousPagesEx (0x393550) once per chunk (call at 0x39cbd8, back edge at 0x39cc70). A 32 x 64 KiB slab is
+  32 separate contiguous-memory searches.
+- SOURCE: each MiFindContiguousPagesEx creates and deletes an ultra thread context and, unless flag 0x2000 is set
+  (tbnz w19,#0xd at 0x393b38), calls MiConvertContiguousPages (0x433160) with the requested cache type. The skip path
+  does not set 0x2000 (0x39cb94 sets only 0x60000000); MiAllocateMostlyContiguousPagesForMdl (PREFER_CONTIGUOUS
+  without REQUIRE) sets it (0x39c70c) and converts once per call in the batch.
+- SOURCE: the conversion reaches KxFlushEntireTb (`tlbi vmalle1is`, 0x29c61c) once per chunk and
+  MiFlushCacheForAttributeChange per page (`dc civac` loop at 0x43364c, then `sys #0,c7,c1,#0` = IC IALLUIS at
+  0x43367c).
+- Dump values (MEMORY-2118.DMP, MEMORY-2100.DMP, boots of 2026-11-03): KiTbSendIpiForBroadcastFlushes = 0;
+  entire-TB flushes due to attribute change 29,407 and 29,107; per-page cache flushes 846,398 and 867,987
+  (3.2..3.3 GiB of pages, about one GravityMark load's worth).
+- Subagent report, not re-verified by me: zeroing is once per call (MiInitializeMdlBatchPages, `dc zva`), and a page
+  is zeroed again when its attribute changes to or from non-cached/write-combined (mask MiState+0x1418 = 5); the
+  free path (MiFreePagesFromMdl) leaves the attribute in the PFN; chunk size does not select another algorithm;
+  MmAllocateContiguous* converts once per block and adds a system-VA mapping.
+
+**CORRECTION to the 21:01:45Z entry.** My working guess there that the per-chunk cost is interprocessor interrupts is
+not supported: this kernel does broadcast TLB invalidation in hardware (`tlbi ...is`) and
+KiTbSendIpiForBroadcastFlushes is 0 in both dumps.
+
+**What P1 does not settle (HYPOTHESIS level).** How the ~150 us per chunk splits between (1) the attribute
+conversion (per chunk: entire-TLB flush on all vCPUs; per page: 64 DC CIVAC + one IC IALLUIS, plus re-zeroing),
+(2) ultra context set-up and tear-down, (3) the top-down PFN search with page trades. The cycle cost of
+TLBI VMALLE1IS and IC IALLUIS under m1n1 is not derivable offline. One existing observation argues against a pure
+"conversion" reading: the chunked cost is 4.5..7.5 ms per slab on every load of a boot, not only the first, although
+the free path keeps the write-combined attribute; either the next load does not get the same pages back or the
+conversion is not the dominant part.
+
+**Why not simply allocate MmCached.** The slab MDL is never the CPU view in the demand design (the CPU view maps the
+hypervisor window IPA write-combined), so the PFN cache attribute looks unused. It is not: (a) lease zeroing
+(AdmissionPoolZeroLease) maps the slab pages with MmMapLockedPagesSpecifyCache(MmWriteCombined) "as they were
+allocated" (Microsoft: the mapping cache type must match the allocation); (b) pages Windows zeroed through a cached
+mapping can leave dirty cache lines that are written back after the GPU or the write-combined view wrote the page;
+the per-page flush in the conversion is exactly what removes them. A cached allocation therefore needs its own
+flush design and is not a drop-in change. It stays a measurement arm only (pages never mapped, freed at once).
+
+**POOL-PROBE (class D diagnostic, in implementation by a subagent; own boot; no production behaviour change).**
+REG_DWORD `Wom1PoolAllocProbe`=1: once per boot, at the first production slab that falls to the 64 KiB rung, run 12
+arms of 8 x 2 MiB MmAllocatePagesForMdlEx calls (hold 8, free 8), receipt `Wom1PoolAllocProbe` v1 with per arm
+Calls, Ok, SumUs, MinUs, MaxUs, GranulesOk, Contig2M, Reused (granules whose first frame the previous arm also had),
+FreeUs. Order: B1 B2 (MmCached 64K) | A1 A2 (WC 64K) | B3 | C1 (WC 256K) | B4 | C2 (WC 1M) | B5 | D1 (WC,
+PREFER_CONTIGUOUS without REQUIRE) | B6 | A3. The cached arms between the write-combined arms return reused pages to
+the cached attribute, so every WC arm converts again; their own time, where Reused is high, is the write-combined ->
+cached direction (TLB flush without cache flush).
+
+WHY THIS HYPOTHESIS: (1) the listings show a full conversion per chunk on the production rung and none per chunk on
+the FAST rung, and the FAST rung costs 25..33 us per 2 MiB against 4.5..7.5 ms; (2) the dump counters show the
+conversion count scales with chunks (29 k entire-TB flushes per boot); (3) the per-load repetition of the cost is
+the one observation that does not fit, which is why the probe measures instead of a fix being built.
+
+WINDOWS CONTRACT: MmAllocatePagesForMdlEx returns zeroed pages with the requested cache attribute; with
+REQUIRE_CONTIGUOUS_CHUNKS every chunk is SkipBytes long and SkipBytes-aligned; pages may only be mapped with the
+cache type they were allocated with. Cost of the call is not specified.
+AGX/ASAHI CONTRACT: the GPU needs 16 KiB-aligned contiguous backing per UAT page; the pool hands out 64 KiB
+granules; Asahi takes its memory from shmem and has no equivalent per-chunk cost. No GPU state is touched by the
+probe.
+TRANSLATION: unchanged in the probe. The production choice the probe decides is the request shape of the fallback
+rung (chunk size ladder) and how much allocate-ahead (P3) has to hide.
+WHAT IS STILL UNKNOWN: the split of the per-chunk cost under this hypervisor and memory state, and whether larger
+chunks (256 KiB, 1 MiB) are found at load time without long page trades. Windows-internal, hardware only.
+
+Pre-registered reading (b = mean per-call time of B1,B2; a = A1; c1 = C1; c2 = C2):
+- a >= 2 b: conversion dominates. Then c1 <= 0.5 a means the per-chunk part dominates and the fix is a chunk ladder
+  on the fallback rung (largest size that stays cheap: 1 MiB, 256 KiB, then 64 KiB), built as its own package and
+  judged on FULL with -times (startup window). c1 > 0.75 a means the per-page part dominates: no request shape
+  helps, only P3 (allocate-ahead on a dedicated thread) remains, and a cached-allocation design needs its own
+  four sections.
+- a < 1.3 b: conversion is not the cost; c1 and c2 against a say whether the per-call search cost falls with fewer
+  calls (ladder) or not (P3 only).
+- A2 with Reused >= 50 % and A2 <= 0.5 A1: the attribute is sticky and reuse is cheap; then the per-load repetition
+  means production does not get its pages back, recorded as a finding, no action by itself.
+- A3 against A1 is the drift bracket: if they differ by more than 30 % the boot is not readable and is repeated.
+- D1 is read only for GranulesOk and Contig2M (is a non-REQUIRE result usable at all) and its time.
+Size of the prize: the chunked rung costs 4.0..6.9 s of CPU per GravityMark launch against a startup loss of 247
+frames (about 4.1 s); a 3x cheaper rung is worth roughly +1.5 % of the macOS FULL score, an upper bound until
+measured.
+
+**PF1b integrated offline (code `ea2bb34ba`).** With APPLE_AGX_D3D12_EXPAND_FOLD=1 the launching compute batch Wb is
+registered as a writer of the five IA/VS/clipper statistics (agx_get_query_address on Wb as well as on the render);
+only predication still refuses the fold, as reason 1; EXPAND_AHEAD keeps its restriction; switch off is unchanged
+(existing byte-identity test passes). Review: the resolve paths go through Asahi's writer-generation helpers, which
+do not assume a render writer; no owner or D3D12 code changed. Gate: run_against_baseline 1201 tests, 1 NEW (the standing mu-flag case), new fold test green. The builder syncheck does not compile
+these two headers; their first MSVC compile is the next package build. NOT verified: that GravityMark now takes
+folds, that the statistics read back are exact on the GPU, FPS effect. Bench arm: same table and receipts as
+EXP2328 PF1 (first check seals > 0, refusal reason 1 = 0), plus the statistics values of the fold arm against the
+no-fold arm of the same boot.
+
+Bench order after EXP2329: EXP2330 (cross-lead receipts) -> EXP2331 (STATS-NOPS) -> PF1b fold arm -> POOL-PROBE
+boot (when its commit is gated) -> TDR-H0.
