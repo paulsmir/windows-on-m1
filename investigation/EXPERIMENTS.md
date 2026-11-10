@@ -77179,3 +77179,18 @@ EXP2323 ACTUAL 2026-11-10T17:21:15Z:
 - Recovery after 0x116: the machine came back to m1n1 proxy after PSCI RESET; AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2323h/recover.sh: AT_PROXY, RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, VISIBLE_CODE32_SERVICE_STOPPED, RECOVERY_DONE; GPU-visible recovery guest clean (no AppleAgx package left). VISIBLE_COPY_FAILED app-logs (best effort).
 - Verdict: N4c-v2 apply not testable on GM (kept-side 6/2); K2 PASS; T5 REJECTED (0x116 in t1). The bugcheck code is non-zero: defect class GPU hang under T5 texture-state promotion, reported to the architect and the AppleAns session.
 - Next: EXP2324 (N6b cut ladder, package 7ab0604c1), then EXP2325/EXP2326 (K1).
+
+## ANSQ-T7 — addendum: crash dump on AppleAns 0.4.8 after the EXP2323 bugcheck (2026-11-10, read-only evidence by the bench owner, re-read by the AppleAns session)
+
+- EXP2323 ended with a GPU-side bugcheck 0x116 (VIDEO_TDR_FAILURE; the bench owner's finding, not a storage
+  event). It is the first bugcheck on the TRIM-era driver, i.e. the first use of the dump instance since 0.4.4
+  (EXP2305), now with deallocate mode active in the live instance and BusType NVMe.
+- Observed (EXP2323 evidence/EXP2323/dumpcheck-recovery.txt, ansrec-recovery.txt): volmgr 162 "Dump file
+  generation succeeded" 17:48:50 guest time; WER 1001 for 0x116; C:\Windows\MEMORY.DMP 808091232 bytes and
+  Minidump 111026-5703-01.dmp 6420404 bytes, both new; no volmgr 46/161; C: not dirty; no Ntfs 55/98 or chkdsk
+  record; AppleAns records of the following boots only 0xA9 = 0xa9020004 and the two 0xA6; none of 0xAA/0xA4/
+  0xA5. No 0xA7 (no telemetry query was made in those boots). The dump content was not opened in a debugger by
+  this session.
+- Also reported by the bench owner for EXP2319..2322 (four GPU boots on 0.4.8): every ordered restart
+  "BUGCHECK ok ... code=0x0", no AppleAns error records, RECOVERY_STORAGE_APPLEANS_OK each time.
+- Verdict: the crash-dump path works on 0.4.8 (dump written by the dump instance, volume intact).
