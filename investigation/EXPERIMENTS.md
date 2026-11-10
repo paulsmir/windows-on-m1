@@ -77039,3 +77039,10 @@ EXP2319 ACTUAL 2026-11-10T14:23:07Z:
 - Rollback rec2319h: RECOVERY_DONE 14:22Z, RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, package and devnode removed. BUGCHECK line of the experiment restart: code=0x0 (full.log).
 - Evidence: .local/experiments/EXP2319-n6-diag-cut/evidence/EXP2319 (gm2319*-umd.log, shader-stats-<arm>.txt, kmd-receipts-*.txt), scratchpad newexp2319.log.
 - Next: gate package boots EXP2320 (A, no switch) / EXP2321 (B, Wom1PreludeNotifyGate=1) / EXP2322 (C, Wom1PerfTgtUtilization=60), same commit 3d7e14097.
+
+## ANSQ-T7 — addendum: m1n1 BUGCHECK line on AppleAns 0.4.8 (2026-11-10, reported by the bench owner)
+
+- First GPU boot on 0.4.8 / UnmapMode 2 / BusType NVMe (EXP2319, m1n1 ansdirect-closedv5), ordered restart:
+  "BUGCHECK ok base=0xfffff803ade00000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0". No AppleAns 0xAA/0xA4/0xA5 record
+  in the rec2319h logs; the rollback reported RECOVERY_STORAGE_APPLEANS_OK on 0.4.8. This completes the item
+  ANSQ-T7a/T7b could not measure in the recovery profile. Not re-read by the AppleAns session.
