@@ -3420,3 +3420,24 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
   (R21). No C0 lever chosen yet; no bench action from N6.
 - Sources: handoff sections "EXP2319 (N6) interim ruling" and "EXP2319 (N6) reading" in
   `.local/handoff/OV-ARCHITECT-HANDOFF.md`.
+
+## UPDATE 2026-11-10T14:41:44Z -- architect: EXP2319 (N6) final ruling; cost fixture not production-equal
+
+- Verdict: all six EXP2319 cut arms (ae, ab2, be, bb1, bb2, bl) are VALID. Supersedes the 14:15Z interim ruling
+  ("B/L void by the letter / pending"). The pre-registered offset table was a flag-less fixture compile and is rejected.
+- Basis: independent offline production-shaped compile equals the guest `measure-d3d12-shader-stats` row in all ten
+  values for both kernels and all eight guest `measure-d3d12-diag-cut` values
+  (.local/night-20261110/r20-n6-cut-table/REPORT.md; rows and receipts re-read by the architect).
+- Final offsets: 97efffb3 main 5272, E 0, B1 64, B2 164, no L. 7aa43c6c main 7770, E 0, B1 2844, B2 3922, L 3976.
+- Final section times: 97efffb3 launch 0.0093 ms, E..B2 0.114 ms (61 ns/group, 4 device loads + 2 barriers in 164 bytes),
+  B2..end 0.672 ms. 7aa43c6c single-group latency: E..B1 3.5 us, B1..B2 1.9 us, B2..L 0.2 us, L..end 18.5 us.
+- New fact: production guards every SSBO atomic (97efffb3 +8 instrs / +48 bytes, 7aa43c6c +16 / +98). Apple-side
+  equivalent unknown; in R21 scope.
+- Measurement-tool defect (class D): tests/dxil_agx_cost_fixture.c is not production-equal (missing atomics guard in
+  the robustness filter; stand-ins for Gallium binding / sysval / uniform passes). 24 of 82 GM compute kernels equal
+  the guest with correct masks; 79 of 82 with both fixed. Fix assigned to branch gpu/fixture-production-shape; not merged.
+- Fixture-derived numbers in r10, r11, r17, K1-asteroid-compute.md, K3-c4-kernels.md and the T5 branch test are not
+  production values. T5 is admitted to the bench only after re-measurement on the real passes.
+- Not verified: binary byte identity; timing neutrality of stop at a cut point; three other kernels differ by 2-12 bytes.
+- Active causal target unchanged: dependent load-chain depth per path, ours vs Apple twins (R21, now on
+  production-equal listings). No C0 lever chosen. Bench order unchanged.
