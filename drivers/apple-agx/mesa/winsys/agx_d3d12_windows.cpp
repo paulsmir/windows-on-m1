@@ -1421,6 +1421,53 @@ static void owner_bo_time(unsigned mib, unsigned cls, unsigned create_us, unsign
   const UINT values[] = {mib, cls, create_us, bind_us, associate_us};
   AdmissionUmdDiagnostic("measure-bo-create", S_OK, values, 5u);
 }
+/* BO census (receipt-only; agx_win32_asahi_bo.c census_born and
+ * AgxWin32AsahiCensusRefs; tools/agx_bo_life.py). Set only while
+ * AdmissionUmdMeasureEnabled (APPLE_AGX_UMD_TRACE_FILE). Values (hex words):
+ *   measure-bo-born {serial, handle, size/64K, VA>>16 (low 32 bits),
+ *     VA>>32, winsys class (measure-bo-create's: 1 General, 2 Shader,
+ *     3 Encoder), origin (1 new allocation, 2 BO cache reuse), Mesa BO
+ *     flags, ms since process creation}
+ *     -- one per birth of a BO of at least 1 MiB (AGX_WIN32_CENSUS_LINE_BYTES)
+ *   measure-bo-first-ref {serial, handle, size/64K, batch kind (1 render,
+ *     2 compute), ms since process creation}
+ *     -- at most one per born line: the first batch AgxWin32GpuvaSubmit
+ *        accepted that names the BO; none = never referenced while it lived
+ *   measure-bo-census {BOs under 1 MiB born, their size/64K, those of them
+ *     first referenced, their size/64K, 1 MiB+ BOs born, 1 MiB+ BOs first
+ *     referenced, ms since process creation}
+ *     -- one per completed backend teardown (AgxWin32AsahiDetach), absent
+ *        when the process exits without destroying its device
+ * serial: per process, from 1, unique across the process's devices; the
+ * (pid, serial) pair joins born and first-ref. The class of the D3D12
+ * object is not known at this layer: the tool joins a born line to the
+ * measure-d3d12-heap/-heap-backing row with the same VA and to the
+ * measure-d3d12-create-heap-resource row open on the same thread. */
+extern "C" unsigned (*AgxWin32BoCensusHook)(unsigned event, uint32_t *values, unsigned count);
+static UINT owner_process_ms() {
+  static const ULONGLONG created = [] {
+    FILETIME creation = {}, exited = {}, kernel = {}, user = {};
+    return GetProcessTimes(GetCurrentProcess(), &creation, &exited, &kernel, &user)
+               ? (static_cast<ULONGLONG>(creation.dwHighDateTime) << 32) | creation.dwLowDateTime
+               : 0ull;
+  }();
+  FILETIME now = {};
+  GetSystemTimePreciseAsFileTime(&now);
+  const ULONGLONG t = (static_cast<ULONGLONG>(now.dwHighDateTime) << 32) | now.dwLowDateTime;
+  return created && t > created ? static_cast<UINT>((t - created) / 10000ull) : 0u;
+}
+static unsigned owner_bo_census(unsigned event, uint32_t *values, unsigned count) {
+  static volatile LONG serials;
+  static const char *const names[] = {"measure-bo-born", "measure-bo-first-ref", "measure-bo-census"};
+  if (event < 1u || event > 3u || !values || !count || count > 15u) return 0u;
+  UINT v[16];
+  unsigned serial = 0u;
+  if (event == 1u) values[0] = serial = static_cast<unsigned>(InterlockedIncrement(&serials));
+  memcpy(v, values, count * sizeof(UINT));
+  v[count] = owner_process_ms();
+  AdmissionUmdDiagnostic(names[event - 1u], S_OK, v, count + 1u);
+  return serial;
+}
 /* EXP1875: a D3D9On12 batch reported faulted without a submission and
  * nothing named the Asahi site that marked the context (kind << 16 | line). */
 extern "C" void (*AgxWin32FirstFaultHook)(unsigned site, uintptr_t context, unsigned flags, unsigned draws);
@@ -1660,6 +1707,8 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
     return E_INVALIDARG;
   *out = NULL;
   AgxWin32BoIdentityHook = owner_bo_identity;
+  /* before the screen: its device BOs are census births too */
+  AgxWin32BoCensusHook = AdmissionUmdMeasureEnabled() ? owner_bo_census : NULL;
   auto *owner = static_cast<AGX_D3D12_OWNER *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AGX_D3D12_OWNER)));
   if (!owner) return E_OUTOFMEMORY;
   InitializeCriticalSection(&owner->Lock);

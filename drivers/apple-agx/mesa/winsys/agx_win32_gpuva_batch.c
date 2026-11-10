@@ -1203,6 +1203,10 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   b->Gpuva.Validation=NULL;
   g->Submitted=1;
   if(g->Fence>b->NewestFence) b->NewestFence=g->Fence;
+#ifdef _MSC_VER
+  /* BO census (receipt-only): off = this one branch per batch */
+  if(AgxWin32BoCensusHook) AgxWin32AsahiCensusRefs(b,refs,count,1u);
+#endif
   free(with_compute);
   free(refs);
   return 1;
@@ -1342,6 +1346,10 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   b->Gpuva.Validation=NULL;
   g->Submitted=1;
   if(g->Fence>b->NewestFence) b->NewestFence=g->Fence;
+#ifdef _MSC_VER
+  /* BO census (receipt-only): off = this one branch per batch */
+  if(AgxWin32BoCensusHook) AgxWin32AsahiCensusRefs(b,refs,count,2u);
+#endif
   free(refs);
   return 1;
 fail:

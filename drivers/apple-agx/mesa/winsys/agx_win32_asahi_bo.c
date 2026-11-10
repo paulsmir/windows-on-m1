@@ -26,7 +26,10 @@ extern void (*AgxWin32BatchRefusalHook)(unsigned, unsigned, unsigned, unsigned);
  * owner association. The owner sets the hook (defined in every build). */
 #endif
 void (*AgxWin32BoTimeHook)(unsigned mib, unsigned cls, unsigned create_us, unsigned bind_us, unsigned associate_us);
+/* BO census (receipt-only; agx_win32_asahi_bo.h). Defined in every build. */
+unsigned (*AgxWin32BoCensusHook)(unsigned event, uint32_t *values, unsigned count);
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -68,9 +71,74 @@ struct windows_bo {
    * sparse_ro_offset half): its pages map the same backing read-only, and
    * the tile zero BO where the main range maps the tile scratch */
   AGX_WIN32_GPUVA_BO ReadShadow;
+  /* BO census (receipt-only): 1 from a birth while AgxWin32BoCensusHook was
+   * set until the first submitted batch names the BO; Serial is the
+   * measure-bo-born serial (BOs of at least AGX_WIN32_CENSUS_LINE_BYTES). */
+  unsigned CensusPending;
+  uint32_t CensusSerial;
 #endif
 };
 static void native_map(struct agx_device *,struct agx_bo *,void *);
+
+#ifdef APPLE_AGX_GPUVA_WINSYS
+/* BO census (receipt-only): a birth (origin 1 new allocation, 2 cache reuse)
+ * while the hook is set arms the BO's first-reference stamp. Runs under the
+ * caller's native-device serialization, as agx_bo_create does. Value order:
+ * the owner's measure-bo-born comment (agx_d3d12_windows.cpp). */
+static void census_born(AGX_WIN32_ASAHI_BACKEND *b,struct windows_bo *bo,
+                        unsigned cls,unsigned origin) {
+  unsigned (*hook)(unsigned,uint32_t *,unsigned)=AgxWin32BoCensusHook;
+  if(!hook || bo->Virtual) return;
+  bo->CensusPending=1u;
+  bo->CensusSerial=0u;
+  if(bo->Base.size<AGX_WIN32_CENSUS_LINE_BYTES) {
+    ++b->CensusSmall;
+    b->CensusSmallBytes+=bo->Base.size;
+    return;
+  }
+  ++b->CensusLarge;
+  {
+    const uint64_t va=bo->Coordinate.addr;
+    uint32_t v[8]={0u,bo->Base.handle,(uint32_t)(bo->Base.size>>16),(uint32_t)(va>>16),
+                   (uint32_t)(va>>32),cls,origin,(uint32_t)bo->Base.flags};
+    bo->CensusSerial=hook(1u,v,8u);
+  }
+}
+void AgxWin32AsahiCensusRefs(AGX_WIN32_ASAHI_BACKEND *b,
+    const AGX_WIN32_GPUVA_BO *const *refs,unsigned count,unsigned kind) {
+  unsigned (*hook)(unsigned,uint32_t *,unsigned)=AgxWin32BoCensusHook;
+  if(!b || !refs || !hook) return;
+  for(unsigned i=0;i<count;++i) {
+    /* add_bo stores AgxWin32AsahiGpuvaBo views: &windows_bo.Gpuva */
+    struct windows_bo *bo=(struct windows_bo *)(uintptr_t)
+        ((const char *)refs[i]-offsetof(struct windows_bo,Gpuva));
+    if(!bo->CensusPending) continue;
+    bo->CensusPending=0u;
+    if(bo->Base.size<AGX_WIN32_CENSUS_LINE_BYTES) {
+      ++b->CensusSmallRef;
+      b->CensusSmallRefBytes+=bo->Base.size;
+      continue;
+    }
+    ++b->CensusLargeRef;
+    {
+      uint32_t v[4]={bo->CensusSerial,bo->Base.handle,(uint32_t)(bo->Base.size>>16),kind};
+      (void)hook(2u,v,4u);
+    }
+  }
+}
+/* One aggregate line per completed backend teardown. */
+static void census_teardown(AGX_WIN32_ASAHI_BACKEND *b) {
+  unsigned (*hook)(unsigned,uint32_t *,unsigned)=AgxWin32BoCensusHook;
+  if(!hook || !(b->CensusSmall|b->CensusLarge)) return;
+  {
+    uint32_t v[6]={b->CensusSmall,(uint32_t)(b->CensusSmallBytes>>16),b->CensusSmallRef,
+                   (uint32_t)(b->CensusSmallRefBytes>>16),b->CensusLarge,b->CensusLargeRef};
+    (void)hook(3u,v,6u);
+  }
+  b->CensusSmall=b->CensusSmallRef=b->CensusLarge=b->CensusLargeRef=0u;
+  b->CensusSmallBytes=b->CensusSmallRefBytes=0u;
+}
+#endif
 
 #ifdef APPLE_AGX_GPUVA_WINSYS
 /* EXP1207: an x86 client runs emulated, where each scalar store into the
@@ -452,6 +520,7 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
     AgxWin32PerfNote("BO cache hit");
     bo->Base.refcnt=1; bo->Base.label=label;
     bo_identity(2u,&bo->Base);
+    if(AgxWin32BoCensusHook) census_born(b,bo,cls,2u);
     return &bo->Base;
   }
   /* EXP1081 receipt-only: hit/miss/evict counts in measure-perf-reason. */
@@ -543,6 +612,8 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
       AgxWin32BoTimeHook((unsigned)(bytes>>20),cls,(unsigned)((timed_created-timed_start)/1000),
           (unsigned)((timed_bound-timed_created)/1000),(unsigned)((timed_end-timed_bound)/1000));
   }
+  /* after the C85 timing: its line I/O stays outside measure-bo-create */
+  if(AgxWin32BoCensusHook) census_born(b,bo,cls,1u);
 #endif
   return &bo->Base;
 }
@@ -1112,6 +1183,9 @@ int AgxWin32AsahiDetach(AGX_WIN32_ASAHI_BACKEND *b) {
    * A completed detach may reuse this backend for another native screen. */
   b->BatchOps=NULL;
   b->BatchOwner=NULL;
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  census_teardown(b);
+#endif
   return 1;
 }
 int AgxWin32AsahiIdentity(AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *base,

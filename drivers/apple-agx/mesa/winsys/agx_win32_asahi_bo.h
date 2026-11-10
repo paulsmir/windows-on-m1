@@ -132,6 +132,12 @@ typedef struct {
    * (0 before the first). */
   APPLE_AGX_U64 TimestampFrequency;
   APPLE_AGX_U64 TimestampOffset;
+  /* BO census (receipt-only, AgxWin32BoCensusHook): BOs under
+   * AGX_WIN32_CENSUS_LINE_BYTES born while the hook was set, and how many
+   * of them a submitted batch has referenced since; BOs at or above it
+   * born and first referenced (each of those also has its own lines). */
+  APPLE_AGX_U64 CensusSmallBytes, CensusSmallRefBytes;
+  APPLE_AGX_U32 CensusSmall, CensusSmallRef, CensusLarge, CensusLargeRef;
 #endif
 } AGX_WIN32_ASAHI_BACKEND;
 
@@ -253,7 +259,21 @@ struct agx_bo *AgxWin32AsahiVirtualTable(struct agx_bo *);
  * advancing it: agx_flush_render's 5 + 64 byte stream terminator. */
 #define AGX_WIN32_ENCODER_TAIL 0x100u
 int AgxWin32AsahiShadowPublish(struct agx_bo *, size_t Bytes);
+/* BO census (receipt-only): stamp the first reference of every census BO
+ * named by a batch that AgxWin32GpuvaSubmit accepted (Kind 1 render, 2
+ * compute). Refs are the batch's add_bo views (&windows_bo.Gpuva) of this
+ * backend. The caller calls it only while AgxWin32BoCensusHook is set. */
+void AgxWin32AsahiCensusRefs(AGX_WIN32_ASAHI_BACKEND *,
+    const AGX_WIN32_GPUVA_BO *const *Refs, unsigned Count, unsigned Kind);
 #endif
+/* BO census (receipt-only; the owner formats the lines: agx_d3d12_windows.cpp
+ * owner_bo_census). Event 1 born (returns the serial the line got), 2 first
+ * reference by a submitted batch, 3 backend teardown aggregate. Values are
+ * the line's values without its trailing process-time value; the owner
+ * writes the serial into values[0] of event 1. NULL (the default) = off. */
+#define AGX_WIN32_CENSUS_LINE_BYTES (1ull << 20)
+extern unsigned (*AgxWin32BoCensusHook)(unsigned Event, uint32_t *Values,
+                                        unsigned Count);
 struct agx_bo *AgxWin32AsahiLookupBo(struct agx_device *, uint32_t);
 
 #endif
