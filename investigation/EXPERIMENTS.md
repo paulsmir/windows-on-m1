@@ -77099,3 +77099,17 @@ EXP2321 HARDWARE BEFORE 2026-11-10T14:57:01Z:
 - Hashes: sys 3dceac06b8e6, UmdArm64 b9d256b3cbd9, UmdX64 531bb0e32916, Umd32 41008dc7a73e; manifest a596cc264bcf, hardware-manifest 1246fce7c556; probe2321.sh 77deb68368ce (PROBE_LINT_OK); visible recovery rec2321h a74b109f0697fef1; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1PreludeNotifyGate=1.
 - Recovery rec2321h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2321-r14-pt1-gate-b/run2321.sh.
+
+EXP2321 ACTUAL 2026-11-10T16:17:17Z:
+- Phases: launch, package install and first start normal; EXP2321_PIPELINE_RC 0 (evidence complete 15:18Z); no hang, TDR, GPU reset or stop (STOPS 0, GPU_RESET none, CM_PROB_NONE). Display, SSH, storage (AppleAns 0.4.8) and 8 CPUs alive throughout. The guest then idled until 16:13Z (session usage limit) before the rollback started.
+- Suite: TOOL_SUITE PASS=119 FAIL=0.
+- GM HD PERF 100k -temporal 0 fps_frames: w 49.893 / r2 49.841 / r3 49.868 (frames 2678/2692/2663), 8.0 jobs/frame; receipt arm x fps_presents 45.526. Expected mean w/r2/r3 >= 50.3: observed 49.867. Against the architect's comparison value (EXP2320 mean of r2/r3 50.08): mean(r2,r3) 49.85 = -0.45 %, inside the pre-registered neutral band (-0.7 %..+0.7 %).
+- Mechanism (JOB_WINDOW v4 final, whole boot): refused_gate 44037, gate_holds 11923, gate_settled 11851, gate_timeout 63 (0.53 % of settled; expected <= 1 %, met), gate_hold_sum_us 9903723, mean hold 831.3 us (expected <= 350, failure criterion > 500: FAILED), max hold 7057 us. Invariant GateSettled + GateTimeout == GateHolds: 11914 vs 11923, 9 short (not explained; snapshot taken at idle).
+- Not read by the bench owner: batched R3|C4 / R5|C6 per frame, own idle at R5+R7, pre-kick share (frame decomposition of gm2321x-umd.log; left to the architect).
+- GM FULL f0 Score 7991 (EXP2320 7888, pass line 7923): one sample, recorded as observed, no claim.
+- CS 1.6 warm/r2/r3 48.203/51.762/51.667; PERF_GATE cs16 PASS (+3.45 %), gravitymark_hd_perf PASS (worst 44.399 vs baseline 40.770), PERF_GATE_PASS. Working floor mean(r2,r3) >= 49.1: met.
+- WER_REPORTS 2 (same pre-existing count as EXP2318..EXP2320; every GM arm reports wer 0).
+- m1n1 at the ordered restart: "BUGCHECK ok base=0xfffff8029bc00000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0" (full.log). No AppleAns 0xAA/0xA4/0xA5 record seen.
+- Rollback rec2321h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE; package and devnode switches removed.
+- Verdict: rejected as a default (mean hold 831 us exceeds the 500 us failure criterion and HD fps is neutral, -0.45 %). The gate works functionally (no lost completion, timeouts 0.53 %); Wom1PreludeNotifyGate stays unset. No repeat boot; the fourth boot with both switches is not run.
+- Next: EXP2322 (boot C, Wom1PerfTgtUtilization=60), read against EXP2320 mean(r2,r3) 50.08.
