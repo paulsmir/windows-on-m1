@@ -76759,3 +76759,91 @@ EXP2316 HARDWARE ACTUAL 2026-11-10T04:28:00Z:
 - End state: UnmapMode=1 and ImagePath -> 0.4.5 store (appleans.inf_arm64_20a748c874b1e861, signature Valid, sha256 4AF699F4...) written without a further restart; effective from the next boot (the EXP2317 launch).
 - Verdict: confirmed as expected (3/3 cycles clean). Reading per BEFORE: clean without 0xAA -> the ANSQ-T4 stall is not reproduced and stays an open single event; no evidence of a missed interrupt absorbed by the reap.
 - Next: EXP2317 (N4c) on the freed bench; AppleAns session decides on further trim work.
+
+EXP2317 HARDWARE BEFORE 2026-11-10T04:44:57Z:
+- Package: worktree exp-n4c-phasefix HEAD b46a092e8f6b85c0bbf4ba3759ee4cee184f3a72 = N4 line f84f0d1a2b83 + adapted phase fix (3f34e22a2, class C, accepted) + volatile reread. Source manifest 960aad17a804afdb29fd72e5e612b9d7803df42e28816338b08b764d41cca330, archive 163f137368886a6bc04b3b79a9124513190a678c6fcfdc4a2039cb5125de8b97. The phase fix is part of the base of every arm, not the variable.
+- Base (identical in all arms, set on the staged devnode before the first start of a fresh boot): Wom1JobDiagnostics=1, Wom1CrossProcessPairs=1, Wom1SubmitRequeue=1 (EXP2316 registry, accepted class I, architect decision), plus Wom1Ov2NoHazardLead=1 which only arms the KMD side. Wom1ComputeOwnQueue unset; OV3/OV3B/OV5 off.
+- Single variable (inside the boot): the application environment variable APPLE_AGX_D3D12_OV2_CROSS_EXECUTION -- unset in x0 and x3, =1 in x1 and x2. With it unset the UMD only records the shadow decision (receipt measure-d3d12-ov2-refusal values [29]/[30]/[31]); with it set the UMD marks a render batch independent when no hazard with the other execution exists, and the KMD may waive the OV2 lead barrier for that pair.
+- Hypothesis: AgxD3d12JobBarrierExecution resets PreviousKind and the ranges at every ExecuteCommandLists, so the first compute of a frame always gets refusal 2 and never runs beside the 3D stage of the previous frame's last render; with the carried resource-exact rule that pair is independent in GravityMark, and waiving the lead barrier for it gives about one more waived pair per frame and a higher fps_frames.
+- WHY THIS HYPOTHESIS: (1) R9 report (.local/night-20261110/r9-window-misses/REPORT.md B.1-B.2, lines re-checked by the architect at 42dbf3428): the reset at every execution is in the source, so refusal 2 for the execution-first compute is unconditional, not a measured hazard; upper bound 0.35 ms/frame HD; (2) macOS overlaps exactly this pair (per-encoder split, gm-scene-alignment); (3) the lever is not assumed open: x0 reads the shadow verdict first ([29] histogram, [30] last reason), and x1 is judged by [31] bits 1-7 before x2/x3 are spent. The shadow verdict could not be read earlier: it is computed only with the KMD OV2 feature on (handoff correction 2), i.e. first in this boot.
+- WINDOWS CONTRACT (RENDER_ONLY): fences complete in submission order per context; dxgkrnl promises no cross-context ordering beyond what the application's own synchronisation (fence waits) expresses; D3D12 leaves unsynchronised cross-queue access to the same resource undefined only when a writer is involved, so a pair without a shared written resource may execute in either order or overlapped.
+- AGX/ASAHI CONTRACT: render and compute work items of different queues may run concurrently in the firmware; correctness is the submitter's responsibility (Asahi serialises only through its own resource tracking: a batch is flushed before another context reads what it writes).
+- TRANSLATION: the UMD carries the previous execution's kind and ranges across ExecuteCommandLists and classifies the execution-first batch with the same resource-exact rule used inside an execution (reasons 1/2/6/8/other = dependent, independent otherwise); only with the env switch does it apply that verdict; the KMD waives the OV2 lead barrier for a flagged pair only with Wom1Ov2NoHazardLead=1. Job-window classes, phase handling and fence order are unchanged.
+- WHAT IS STILL UNKNOWN: hardware behaviour only -- whether the firmware shows an ordering dependence between the waived pair that the resource analysis does not see (timing of shared heaps/TVB, firmware fault), and the size of the real gain.
+- Runs (probe2317.sh sha256 prefix c7421ff741e53890): D3D12 suite; GM HD windowed 100k -temporal 0 PERF warm-up w (env unset); arms x0 (unset), x1 (=1), x2 (=1), x3 (unset), each an ordinary 10+60 s PERF run with KMD receipts pre/mid/post, all measure-d3d12-ov2-refusal lines inside the 10+60 s window summed per arm (ov2rx.py: the line is written once per ExecuteCommandLists and its counters reset after each line): line count, applied, shadow nibbles 0-5, refusal [0] and [1..7]; CS 1.6 warm/r2/r3; perf gate on the control arms (x0, x3; w and x0 when the lever is closed); final receipts, WER count.
+- Score reading (measurement only, no variable, not part of the N4c verdict): after the last PERF arm, GravityMark HD windowed 100k -temporal 0 FULL untraced (gm-run-notrace.ps1, as the EXP2309 FULL HD arm): f0 with the env unset and, only when the x1 applied sum is > 0, f1 with APPLE_AGX_D3D12_OV2_CROSS_EXECUTION=1. Read next to the EXP2309 baseline 7784 (macOS 9946); a separate-boot, different-package comparison (C1 + requeue [+ cross-execution]), labelled so in ACTUAL.
+- Validity (architect correction 2026-11-10): the lever exists only if in x0 the shadow verdict is independent in the window (sum of [29] nibble 0 > 0); with that sum 0 or no receipt lines the lever is closed by receipt and x1..x3 are skipped. x1/x2 need the switch seen (sum of [31] bit 0 > 0) and applied sum > 0, otherwise x2/x3 are skipped. Applied also counts a first compute batch that is independent by the ordinary verdict, so applied > 0 alone does not prove a change; the proof is the x0 shadow sum plus the OV2 waived receipt.
+- Expected: x0/x3 shadow histogram shows independent > 0; in x1/x2 OV2 waived rises by about 1 per frame, fps_frames +0.5..1.7 % for (x1, x2) against (x0, x3); x0/x3 reproduce the requeue configuration (EXP2316 traced x 50.334).
+- Accept: suite 119/0, perf gate PASS on the control arms, no GPU_RESET / PREEMPT_REFUSAL / firmware fault, JobWindow kick_failures 0 and reset_aborts 0, GM err logs empty in all arms, refusal 8 on a waived pair = 0, no image defect. The switch pair stays off by default whatever the number.
+- Failure criteria: image defect in GM, WER report from GM or DWM, firmware fault, GPU_RESET, nonzero refusal 8 on a waived pair: stop, the switch stays off. A removal with subsite 0x10D kind 4 is a new finding on this package (phase fix inside), not an excused one.
+- Recovery: rec2317h/recover.sh (visible recovery on the native SSD), bounded notifying waiter, guest watchdog.
+- Hashes: sys 7697c0bfb3d1, UmdArm64 5c1e81941460, UmdX64 9302f21b4e3e, Umd32 e5067d829ab8; manifest 249c81bbc62a, hardware-manifest d472c3ff7fc6; probe2317.sh c7421ff741e5 (PROBE_LINT_OK); visible recovery rec2317h 48bc9ca29383e2da; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1Ov2NoHazardLead=1.
+- Recovery rec2317h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2317-n4c-nohazard/run2317.sh.
+
+## ANSQ-T6 — promote AppleAns 0.4.7 with live deallocate (UnmapMode 2, fence C:) to the installed driver (BEFORE, 2026-11-10T04:58:00Z)
+
+- Architect decision after ANSQ-T5a/b/c (all CONFIRMED; evidence re-read by the AppleAns session: 13 boots and 3
+  ReTrim + restart cycles on 0.4.7, every DSM status 0, no 0xAA, manifests and chkdsk clean). The ANSQ-T4 stall
+  stays a single unexplained event (boot stall with a known recovery) and does not block; any repeat = stop and
+  roll back to 0.4.5.
+- Hypothesis: 0.4.7 in deallocate mode is a stable boot driver and Windows reports the disk as a trimmed SSD.
+- WHY THIS HYPOTHESIS: (1) ANSQ-T5b/T5c: 9 boots in exactly this configuration, all clean; (2) ANSQ-S1/T2: SSD
+  classification and "Trim Supported" follow from VPD B1h/B2h on this adapter; (3) ANSQ-T3/T4/T5c: deallocate
+  completes with status 0 and leaves the hashed files and the file system intact.
+- Single variable: installed driver 0.4.5 -> 0.4.7 (ANSBUILD017-O, sys de910a08..., zip af21c2fc..., commit
+  4f4215569, already in the driver store as appleans.inf_arm64_62c12175c51fd95d) with UnmapMode 2 and the fence
+  recomputed from Get-Partition C. Profile RECANS001; GPU package absent.
+- Commands: ansq-post.ps1 (read-only record on 0.4.5: Get-PhysicalDisk MediaType/BusType/SpindleSpeed, fsutil
+  sectorinfo seek-penalty and trim lines = StorageDeviceSeekPenaltyProperty / StorageDeviceTrimProperty as the
+  file system sees them, DisableDeleteNotify, ScheduledDefrag, Optimize-Volume -Analyze); tools/t6-promote.ps1
+  (SHA-256 6ce97514..., hash + signature check of both stores before any write); restart-normal.sh;
+  ansq-post.ps1; ansq-verify.ps1.
+- Expected / accept: SSH up; running hash de910a08...; 0xA9 = 0xa9020004; no 0xAA/0xA4/0xA5; completed_error 0;
+  VERIFY_MANIFEST_OK; C: not dirty; MediaType SSD, "No Seek Penalty", "Trim Supported". Then 0.4.7 stays.
+- Failure criteria: stall or no SSH in 5 min (two HV snapshots, relaunch, roll back); any storage error record;
+  manifest mismatch; disk still reported with a seek penalty or as Unspecified (then no guest-side patching:
+  find the unanswered query, fix in the driver with host tests, plan to the architect first).
+- Recovery artifact: 0.4.5 store appleans.inf_arm64_20a748c874b1e861 (hash checked by t6-promote.ps1 before the
+  write); rollback = UnmapMode 1, ImagePath -> 0.4.5, restart. The recovery profiles' storage gate checks only
+  the APPL0003 device status and the service state (scripts/agx-recover-visible.sh), no driver hash.
+- Evidence: .local/experiments/ANSTRIM2/evidence/ANSQ-T6/.
+
+EXP2317 ACTUAL 2026-11-10T12:26:18Z:
+- Pipeline: launched 2026-11-10T04:46Z, EXP2317_PROBE_DONE / CHAIN2317_DONE about 05:02Z. Guest alive after every phase (GM w, x0, f0, CS). No GPU_RESET, no PREEMPT_REFUSAL, STOPS 0, WER_REPORTS 2 (same count as EXP2316), suite 120 PASS lines / 0 FAIL (EXP2316: 120 / 0), POOL reservefail 0.
+- Lever receipt (x0, shadow arm): OV2RX lines 2621, seen 0, applied 0, shadow_independent 0, shadow reason6 2621 (every pair refused by the KMD with reason 6). Verdict as preregistered: LEVER_CLOSED_BY_RECEIPT; arms x1..x3 were skipped by the probe. N4c (cross-execution no-hazard lead) is closed: the pair it targets never becomes eligible.
+- Performance against the expectation (x0 reproduces EXP2316 traced x 50.334): fps_frames w 42.346, x0 43.678 (EXP2316: w 49.251, x 50.334) = about -13 %. Expected +0.5..1.7 % in x1/x2 and parity in x0; actual: no arm applied the lever and the base configuration itself regressed. FULL HD f0: score 7036, 42.1 fps.
+- Perf gate: PERF_GATE_PASS (GM worst 40.995 vs baseline 40.770, CS 49.713 vs 49.943). NOTE: the gate baseline is EXP2220, so the gate is blind to a regression against the last accepted configuration (EXP2316 about 49-50 fps_frames); it passed while the run lost 13 % against that configuration. The gate needs a second baseline row for the last accepted configuration.
+- Architect's reading (investigation/GPU_CURRENT_STATE.md, commit 33683bdc2, not re-derived here): GPU busy time unchanged (18.45 vs 18.16 ms), non-busy 4.45 vs 1.71 ms; renders R1/R3/R5/R7 started before the KMD saw the previous completion in 3/2/4/1 % of frames (EXP2316: 98/66/55/46 %); compute jobs still pre-kicked. The renders lost depth two.
+- Single difference against EXP2316 at registry level: Wom1Ov2NoHazardLead=1 (plus the b46a092e8f6b package carrying the N4c code). Cause of the regression not yet isolated: EXP2318 = same package with Wom1Ov2NoHazardLead unset.
+- Process defect: the session stopped (model limit) right after launch; the bench stayed on the experiment boot from 05:02Z to 12:27Z without ACTUAL or rollback. Rollback rec2317h started 2026-11-10T12:27Z; BUGCHECK lines of the restarts are recorded with the recovery result below.
+- Verdict: N4c REJECTED (closed by receipt). Configuration regression OPEN (EXP2318 discriminates).
+- Next: rec2317h recovery, ANSQ-T6 slot for the AppleAns session, then EXP2318.
+
+EXP2317 RECOVERY 2026-11-10T12:30:39Z: rec2317h RECOVERY_DONE (Verdict PASS, package absent, 8 CPU, RECOVERY_STORAGE_APPLEANS_OK). BUGCHECK line of the experiment-boot restart: code=0x0. Recovery guest up, launcher PID 47501; bench handed to the AppleAns session for ANSQ-T6.
+
+## ANSQ-T6 — AppleAns 0.4.7 with live deallocate promoted to the installed driver (ACTUAL, 2026-11-10T12:36:00Z)
+
+- Window granted by the bench owner after the EXP2317 rollback (launcher 47501); released 12:34Z.
+- Phases: read-only record on 0.4.5 12:30:52Z; t6-promote.ps1 T6_PROMOTE_OK 12:31:22Z (both stores hash- and
+  signature-checked, fence recomputed 30916352..59706368, UnmapMode 2, ImagePath ->
+  appleans.inf_arm64_62c12175c51fd95d); ordered restart 12:31:22Z, launcher exit 12:31:35Z, boot 12:31:48Z, SSH
+  up 12:32:25Z (run_uefi PID 47976); post 12:33Z; verify 12:34Z.
+- What Windows reports for the disk, before (0.4.5) -> after (0.4.7): Get-PhysicalDisk MediaType SSD -> SSD,
+  BusType Fibre Channel -> Fibre Channel, SpindleSpeed 0 -> 0; fsutil sectorinfo "No Seek Penalty" -> "No Seek
+  Penalty", "Trim Not Supported" -> "Trim Supported"; DisableDeleteNotify 0 both; ScheduledDefrag Ready, last
+  run 2026-11-06, unchanged; Optimize-Volume -Analyze text unchanged ("recommended that you defragment", the
+  analysis report does not depend on the media type). The seek-penalty and trim lines are the storage
+  properties as fsutil reads them; no separate IOCTL_STORAGE_QUERY_PROPERTY tool was run.
+- Expected vs actual: SSH up: CONFIRMED (37 s after boot); running hash DE910A08...1994: CONFIRMED; 0xA9 =
+  0xa9020004: CONFIRMED; no 0xAA/0xA4/0xA5 (only the two 0xA6): CONFIRMED; receipt 18 commands / 708 ranges
+  sent, completed_ok 18, completed_error 0, fenced 0, TRIM_BOUNDS_PASS: CONFIRMED; VERIFY_MANIFEST_OK (330/330),
+  chkdsk no problems, C: not dirty, 8 CPUs, no warnings: CONFIRMED.
+- m1n1 BUGCHECK line: not printed in this profile; the bench owner reads it on the next GPU boots.
+- Not verified: the Optimize Drives UI text; macOS-side integrity (not observable from Windows); the ANSQ-T4
+  stall stays one unexplained event (0 repeats in 15 boots of 0.4.7).
+- Verdict: CONFIRMED, accepted. Recorded current AppleAns: 0.4.7 ANSBUILD017-O (package zip af21c2fc..., sys
+  de910a08..., commit 4f4215569), registry UnmapMode 2 with fence = C:. Rollback artifact: 0.4.5 store
+  appleans.inf_arm64_20a748c874b1e861 (rollback = UnmapMode 1, ImagePath back, restart). Recovery profiles boot
+  the same installed driver; their storage gate has no driver hash.
+- Evidence: .local/experiments/ANSTRIM2/evidence/ANSQ-T6/{pre-045.txt,promote.txt,restart-run.log,normal-prev-full.log,post-047.txt,verify.txt}.

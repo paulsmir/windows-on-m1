@@ -394,6 +394,10 @@ struct ShaderStatsTag {
   UINT Bytes, Block, Shared;
 };
 static thread_local const ShaderStatsTag *t_stats_tag[MESA_SHADER_COMPUTE + 1];
+/* N6: prefix-cut diagnostic of the projected compiler (agx_compile.c,
+ * mesa/scripts/native-asahi-latency-schedule.py) */
+extern "C" void agx_win32_diag_cut_begin(uint32_t tag);
+extern "C" int agx_win32_diag_cut_end(uint32_t out[4]);
 static ShaderStatsTag shader_stats_tag(const UINT *tokens) {
   ShaderStatsTag tag = {};
   if (tokens && tokens[1] >= 2 && tokens[1] < 0x4000000u) {
@@ -2013,7 +2017,16 @@ extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags(AGX_D3D12_OWNER *owner, const
     const ShaderStatsTag *tags[MESA_SHADER_COMPUTE + 1] = {};
     tags[MESA_SHADER_COMPUTE] = &tag;
     ShaderStatsScope stats(tags);
+    /* N6 (class D diagnostic): APPLE_AGX_DIAG_CUT names a kernel by the low
+     * half of this hash; the compiler reports where it cut it. Without the
+     * variable nothing is compiled differently and no line is written. */
+    agx_win32_diag_cut_begin(static_cast<uint32_t>(tag.Hash));
     compute->State = pipe->create_compute_state(pipe, &state);
+    uint32_t cut[4] = {};
+    if (agx_win32_diag_cut_end(cut)) {
+      const UINT v[6] = {static_cast<UINT>(tag.Hash >> 32), static_cast<UINT>(tag.Hash), cut[0], cut[1], cut[2], cut[3]};
+      AdmissionUmdDiagnostic("measure-d3d12-diag-cut", S_OK, v, 6);
+    }
   }
   const HRESULT hr = compute->State && block[0] && block[1] && block[2] ? S_OK : E_OUTOFMEMORY;
   receipt("measure-d3d12-compute", hr, block[0], block[1], block[2]);

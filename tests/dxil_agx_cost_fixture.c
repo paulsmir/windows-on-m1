@@ -1233,7 +1233,7 @@ int
 main(int argc, char **argv)
 {
    bool d3d_robust = true, print_nir = false, print_lowered = false, in_bounds = false;
-   bool soft_fault = false, soft_fault_loads = false, fs_backend = false, print_selected = false;
+   bool soft_fault = false, soft_fault_loads = false, fs_backend = false, print_selected = false, hex_main = false;
    bool shared_store_oracle = false;
    unsigned root_uavs = 0, root_cbvs = 0;
    for (int a = 2; a < argc; ++a) {
@@ -1242,6 +1242,7 @@ main(int argc, char **argv)
       d3d_robust &= strcmp(argv[a], "--no-d3d-robust") != 0;
       print_nir |= !strcmp(argv[a], "--print-nir");
       print_selected |= !strcmp(argv[a], "--print-selected");
+      hex_main |= !strcmp(argv[a], "--hex-main"); /* N6: the main function's bytes */
       fs_backend |= !strcmp(argv[a], "--fs-backend"); /* rc123: FS through the backend */
       print_lowered |= !strcmp(argv[a], "--print-lowered"); /* after the D3D lowering */
       in_bounds |= !strcmp(argv[a], "--assume-in-bounds");
@@ -1418,6 +1419,12 @@ main(int argc, char **argv)
       puts("SELECTED MAIN BEGIN");
       agx2_disassemble((uint8_t *)part.binary + part.info.main_offset, part.info.main_size, stdout);
       puts("SELECTED MAIN END");
+   }
+   if (hex_main) {
+      printf("MAIN HEX ");
+      for (unsigned i = 0; i < part.info.main_size; ++i)
+         printf("%02x", ((const uint8_t *)part.binary)[part.info.main_offset + i]);
+      putchar('\n');
    }
    const struct agx2_stats *s = &part.info.stats;
    printf("COST stage %s block %ux%ux%u shared %u nir-ifs %u guarded-loads %u loads %u stores %u txf %u mem-blocks %u hot-mem-blocks %u hot-nir %u hot-branches %u "

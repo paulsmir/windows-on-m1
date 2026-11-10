@@ -3190,3 +3190,87 @@ dispatch because 9726b186 at d28 is also a tag.
 - C0 scene excess +0.833 ms, corrected split: traversal 0.31, 97efffb3 0.21, piece d49-d53 0.05-0.09, the rest
   about 0.22-0.26 in pieces that cannot be compared one to one (Apple per-dispatch cost).
 - N6 change: the two 6cf11e8a arms are dropped. Arms: p0, 97efffb3:E, 97efffb3:L, 7aa43c6c:E, :B1, :B2, :L, p1.
+
+## UPDATE 2026-11-10T04:53Z -- R12: gap re-budgeted on EXP2316 x (C1 + N4b on): 3.71 ms = busy +2.48 + non-busy +1.23
+
+Source: /Users/pavel/public_windows/.local/night-20261110/r12-nonbusy-rebudget/REPORT.md (offline, read-only;
+scripts nb.py / split_foreign.py / corr.py / align_nb.py, outputs out-*.txt checked by the architect against the
+report). HD windowed 100k -temporal 0, PERF window; every cross-run delta is SEPARATE BOOTS.
+
+| ms per GravityMark frame | wall | GM busy union | non-busy |
+|---|---|---|---|
+| EXP2311 r2/r3 (no levers) | 20.450 / 20.531 | 18.266 / 18.278 | 2.183 / 2.253 |
+| EXP2314 x (C1) | 20.173 | 18.239 | 1.934 |
+| EXP2316 x (C1 + N4b) | 19.868 | 18.159 | 1.708 |
+| scene-aligned 10..70 s: EXP2316 x | 20.313 | 18.618 | 1.695 |
+| scene-aligned: Apple split2-hd | 16.605 | 16.139 | 0.466 |
+| delta ours - Apple | +3.708 | +2.478 | +1.229 |
+
+- The two levers moved only non-busy time (2.2 -> 1.7 ms); busy union is flat (18.16-18.33). Check: GPU-timeline wall
+  19.868 ms = fps_frames 50.334. Pstate valid (P1 time is start-up only, second half 100 % P6).
+- Non-busy by cause (EXP2316 x, 1.693 ms): DWM job between two GM jobs 0.910 (0.90 per frame: before C2 43 %, R3
+  32 %, R5 9 %; 0.85 / 1.13 / 1.24 ms per occurrence); depth-one launches of R5 and R7 0.47 at those two positions
+  (57-60 % depth-one when the render two jobs back is reported only with the compute in between, 1-5 % otherwise);
+  firmware start floor 0.31 (about 0.05 ms per transition, Apple 0.035-0.045: parity); completion detect 0.10;
+  application/UMD late 0.011. Apple non-busy 0.466 = 16 inter-encoder start gaps only: no foreign job, no depth-one
+  launch in the game's timeline.
+- Frame-level fit of the busy union over the seven scene bins (architect, from out-align.txt): ours = 1.66 + 1.051 x
+  Apple. It does not replace the per-job rows of R8 (lines 2716-2838); it bounds a uniform proportional deficit to
+  about 5 %.
+- This supersedes the sentence "the remaining about 3.3 ms has no lever yet" of the 04:27Z UPDATE: every part of
+  the gap has a row; what is missing is validated levers.
+
+Gap ledger (HD scene-aligned, ms/frame, state = EXP2316 configuration):
+| part | size | lever | status |
+|---|---|---|---|
+| non-busy: DWM job on the GM path | 0.91 (Apple side: 0.05-0.12 foreign per vsync, R5) | MPO second plane, windowed (R7 S2); cross-process render -> prelude render relaunch <= 0.13 is inside it | OPEN, designed by R7, never run; first checkpoint H1 = two-slot DCP swap in m1n1 (needs the operator's eyes) |
+| non-busy: late render completion -> depth-one R5/R7 | <= 0.30 | second firmware queue (own notifier) | line closed 2026-11-04 as architectural (EXP2147-2151); reopened as a DESIGN task only: new evidence is the conditional rate above |
+| busy: C0 scene part | 0.83 (R8: 0.51 against e7+e9, 0.75 against span) | unknown location -> N6 section profiler | in implementation (fork 6) |
+| busy: Apple runs frame N+1 head under frame N tail | 0.27 (+ <= 0.085 non-busy) | N4c cross-execution lead | EXP2317 staged |
+| busy: C4 lighting, R5 3D, C2, R3 fixed | 0.19 / 0.17 / 0.19 / 0.18 (R8) | none; DXIL heavier than Metal for C4/R5 | no lever |
+| busy: Apple TA under C4 | <= 0.21 | closed for us by D3D12 dependencies | closed |
+Reaching a gap below 5 % (0.83 ms) needs about 2.9 of the 3.71 ms: the DWM row, the C0 part and the cross-frame
+part together are 2.0-2.1; the rest must come from the late-completion row and shader work.
+
+HYPOTHESIS items inherited from R12 (not measured): dxgkrnl holds DWM's packet until a GM completion (H1); the
+depth-one mechanism = late report + two-fence limit (H5; refusals 0.67 per frame vs about 1.0 depth-one launches);
+WindowServer does not occupy the GPU between macOS encoders (H6; measurable only with an all-process Metal System
+Trace on macOS = operator).
+Next (offline, parallel to the bench): MPO preparation (Asahi DCP driver facts for slot z-order and blend, two-slot
+swap builder as a patch with host test, H1 spec) and the second-queue design note. No hardware until specs exist.
+
+## UPDATE 2026-11-10T11:17Z -- EXP2317 (N4c) architect reading: lever closed by receipt; the configuration REGRESSED (all renders depth-one)
+
+Source: .local/experiments/EXP2317-n4c-nohazard/evidence/EXP2317 (pipeline finished about 05:02Z; ACTUAL not yet
+written by the bench owner; the guest was still on the experiment boot at this stamp). Architect's decode:
+- Receipt (ov2-refusal-x0.txt, all 2621 lines of the GM pid summed): seen 0, applied 0; every pair refused with KMD
+  reason 6 ("3D stamp unreadable or zero"). By the preregistered rule x1/x2/x3 were not run: N4c LEVER_CLOSED_BY_RECEIPT.
+- fps_frames: w 42.346, x0 (traced) 43.678 against EXP2316 w 49.251, x 50.334 (separate boots, -13 %). FULL f0 untraced
+  score 7036 / 42.1 fps against EXP2309 7784. Perf gate passed only because its baseline is EXP2220 (40.77).
+- R12's nb.py on gm2317x0-umd.log against gm2316x (same tool, ms/frame): busy union 18.448 vs 18.159 (flat); non-busy
+  4.446 vs 1.708. Per-job work identical within 0.07. Every render lost depth two: fraction started before the KMD saw
+  the previous completion R1/R3/R5/R7 = 0.03/0.02/0.04/0.01 (EXP2316: 0.98/0.66/0.55/0.46); the render is submitted to
+  the KMD after the previous compute ENDS (median +0.03..0.05 ms; EXP2316 -0.1..-6.4 ms) and render completion detection
+  became 0.7-6.1 ms. Compute jobs are still pre-kicked (0.96-0.98). Pstate pre->mid P6 86 % (valid).
+- Package differences against EXP2316: (1) the phase fix 7100e2d79 + b46a092e8 (acts only inside the submit wait loop
+  on reason 4); (2) Wom1Ov2NoHazardLead=1, which reports AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE to the UMD; the
+  UMD then logs and feeds job barriers on every replay (agx_d3d12_windows.cpp AgxD3d12OwnerJobBarriersEnabled) and
+  composes compute envelopes through the OV2 hook (agx_win32_gpuva_batch.c ~421).
+- HYPOTHESIS (ranked): the OV2 switch (UMD + KMD side) delays every render submission until the preceding compute
+  has ended, because it changes every replay while the lever itself never applied; the phase fix is second because it
+  can only act on a wait with reason 4. Discriminator: EXP2318 = the EXP2317 package with Wom1Ov2NoHazardLead unset,
+  everything else identical (one variable). Expect fps_frames back at 49.5-50.5 and render depth-two fractions back.
+  If it stays at 42-44, the phase fix is the cause and must be fixed before any further package (it is in all of them).
+- Status of the comparison with macOS (HD windowed, 100k, -temporal 0): best configuration remains EXP2316 (C1 + N4b):
+  GPU-timeline frame 20.31 ms vs Apple 16.61 ms scene-aligned (82 %); last FULL untraced score 7784 / 9946 (78.3 %,
+  EXP2309, without C1/N4b). No FULL score of the EXP2316 configuration exists.
+
+R14 (late render completion, .local/night-20261110/r14-late-completion/REPORT.md): own depth-one cost 0.272 ms/frame;
+0.233 of it because the render prelude's notification is deferred when C4/C6 is kicked onto compute Queue B before the
+prelude ended (99 % vs 0.5 % conditional). Proposed lever (class O, effort S): a retryable kick refusal holding a Queue-B
+compute behind a running prelude render until its prelude completed; bound 0.19-0.23 ms/frame. Open: worker re-poll
+latency after the refusal. Not yet reviewed against source by the architect.
+R13 (MPO second plane, .local/night-20261110/r13-mpo-prep/REPORT.md): J313 DCP has two surface slots, fixed z-order
+(slot 1 on top), premultiplied flag only (no opaque upper plane, no X8). Patch file (not applied) for a two-slot swap
+builder + proxy diagnostic op 0x1106; H1 headless part (swap accepted and latched) needs no photo, visibility does.
+Microsoft's MPO hardware requirements ask for a YUV and a stretching plane: whether DWM uses our two RGB planes is open.
