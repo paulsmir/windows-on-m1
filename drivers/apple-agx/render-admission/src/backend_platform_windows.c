@@ -404,6 +404,17 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * per kick; the receipt is Wom1Ov2Receipt. */
   BOOLEAN Ov2Enabled;
   BOOLEAN Ov2Waive;
+  /* R14 (REG_DWORD Wom1PreludeNotifyGate = 1 on Q2c, default off): a
+   * successor that publishes on Queue B alone is not kicked behind a running
+   * prelude render before that prelude's Queue-B event was drained
+   * (render_job_window.h refusal 7). PreludeGateHeld: the last kick decision
+   * was the gate (the poll plan is capped while it is); PreludeGateFence /
+   * PreludeGateStartQpc: the running fence the hold belongs to and its first
+   * refusal, for the fail-open bound. */
+  BOOLEAN PreludeNotifyGate;
+  BOOLEAN PreludeGateHeld;
+  ULONG PreludeGateFence;
+  ULONGLONG PreludeGateStartQpc;
   ADMISSION_JOB_WINDOW_OV2_RECEIPT Ov2Receipt;
   /* QPC of the last Wom1Ov2Receipt export without Wom1JobDiagnostics. */
   ULONGLONG Ov2ExportQpc;
@@ -2898,6 +2909,9 @@ static APPLE_AGX_ASC_U64 AdmissionAscNow(void *Context) {
 #define ADMISSION_IRQ_RING_SLOTS 64u
 /* Step 2: a planner spin step (20 us) waits this long for the wake instead. */
 #define ADMISSION_IRQ_SPIN_WAIT_US 500u
+/* R14: a head held by the prelude notify gate is released after this long
+ * (fail-open: the pair is then kicked as it is without the gate). */
+#define ADMISSION_PRELUDE_GATE_BOUND_US 1000u
 
 /* DIRQL (ISR, or the worker inside DxgkCbSynchronizeExecution): dismiss the
  * level line by popping the ASC outbox FIFO until EMPTY (the ASC mailbox has
@@ -7077,6 +7091,8 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   BOOLEAN cross = FALSE;
   const ULONG fallbacksBefore = runtime->Depth2Receipt.KickFallbacks;
   KIRQL old_irql;
+  /* R14: the poll cap follows the last decision only. */
+  runtime->PreludeGateHeld = FALSE;
   if (!runtime->JobDepth2Kick || runtime->Depth2KickedFence != 0u ||
       runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted ||
       runtime->Backend.PendingSubmission.Submission.Fence != fence ||
@@ -7187,7 +7203,32 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
         ? AppleAgxRenderSharedMemoryNextJobWordSet(owner, s.Next.Fence, APPLE_AGX_TRUE)
         : APPLE_AGX_COMPUTE_JOB_WORD_SET_A;
   }
+  /* R14: the running job's own record, updated by this worker's progress
+   * query (no new lock). The bound is measured from the first gate refusal
+   * for this running fence. */
+  s.PreludeNotifyGate = runtime->PreludeNotifyGate ? 1u : 0u;
+  s.RunningPreludeComplete =
+      runtime->Provider.QueueProvider.Runtime.ComputeInRender &&
+      runtime->Provider.QueueProvider.Runtime.ComputePending.Complete ? 1u : 0u;
+  s.PreludeGateExpired = 0u;
+  if (runtime->PreludeNotifyGate && runtime->PreludeGateFence == fence) {
+    LARGE_INTEGER gateFrequency;
+    const ULONGLONG gateNow =
+        (ULONGLONG)KeQueryPerformanceCounter(&gateFrequency).QuadPart;
+    /* an unusable clock releases the head (fail-open) */
+    s.PreludeGateExpired = gateFrequency.QuadPart <= 0 ||
+        (gateNow - runtime->PreludeGateStartQpc) * 1000000ULL /
+            (ULONGLONG)gateFrequency.QuadPart >= ADMISSION_PRELUDE_GATE_BOUND_US
+        ? 1u : 0u;
+  }
   refusal = AdmissionJobWindowKickRefusal(&s);
+  if (refusal == ADMISSION_JOB_WINDOW_REFUSAL_PRELUDE_NOTIFY_GATE) {
+    if (runtime->PreludeGateFence != fence) {
+      runtime->PreludeGateFence = fence;
+      runtime->PreludeGateStartQpc = AdmissionJobQpc();
+    }
+    runtime->PreludeGateHeld = TRUE;
+  }
   if (!refusal && !runtime->Depth2General &&
       !AdmissionRcPairAllowed(runtime->RcDepth2, s.Running.Kind, s.Next.Kind))
     refusal = 65u; /* restricted Q3 checkpoint, no new pair classes */
@@ -7229,7 +7270,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   cross = runtime->CrossProcessPairs &&
       AdmissionJobWindowCrossProcess(&s.Running, &s.Next) ? TRUE : FALSE;
   if (cross && refusal != 4u && refusal != 52u && refusal != 53u &&
-      refusal != 54u)
+      refusal != 54u && refusal != ADMISSION_JOB_WINDOW_REFUSAL_PRELUDE_NOTIFY_GATE)
     (void)AdmissionJobWindowXprocNote(&runtime->XprocReceipt,
         (unsigned int)refusal, &s.Running, &s.Next);
   /* v3 (receipt-only): which pairs 55 refuses, a job without a process
@@ -7250,7 +7291,8 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   if (refusal != 0u)
     /* Preemption, paging and a not yet Prebound successor may clear. */
     return refusal == 4u || refusal == 52u || refusal == 53u ||
-           refusal == 54u ? FALSE : TRUE;
+           refusal == 54u ||
+           refusal == ADMISSION_JOB_WINDOW_REFUSAL_PRELUDE_NOTIFY_GATE ? FALSE : TRUE;
   if (runtime->RcReceiptEnabled || runtime->Depth2Drill.Mode) {
     RtlZeroMemory(&runtime->RcCurrent, sizeof(runtime->RcCurrent));
     runtime->RcCurrent.RFence = fence; runtime->RcCurrent.CFence = next;
@@ -7651,6 +7693,7 @@ AdoptedJob:
   prebindRefusal = 0u;
   kickDone = FALSE;
   kickedBehind = FALSE;
+  runtime->PreludeGateHeld = FALSE;
   RtlZeroMemory(&runtime->Depth2Running, sizeof(runtime->Depth2Running));
   runtime->Depth2Noted = FALSE;
   runtime->Depth2Sampled = 0u;
@@ -8204,6 +8247,10 @@ AdoptedKicked:
       if (runtime->JobAhead && !prebindDone)
         sleepCapUs = 250u;
 #endif
+      /* R14: a head held by the prelude notify gate is retried within
+       * 100 us (preludes last 40-90 us). */
+      if (runtime->PreludeGateHeld)
+        sleepCapUs = 100u;
       pollLastUs = elapsedUs;
       action = AdmissionJobPollPlan(&runtime->JobPoll, elapsedUs,
                                     pollPredictedUs, sleepCapUs, &planUs);
@@ -9015,6 +9062,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
    * F1); REG_DWORD Wom1ComputeOwnQueue = 0 restores the shared Queue. */
   runtime->Initdata.RenderSharedMemory.ComputeOwnQueue =
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1ComputeOwnQueue") ? TRUE : FALSE;
+  /* R14 (default off): REG_DWORD Wom1PreludeNotifyGate = 1, only on Q2c
+   * (on the shared Queue a prelude has no event of its own). */
+  runtime->PreludeNotifyGate =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1PreludeNotifyGate") &&
+      runtime->Initdata.RenderSharedMemory.ComputeOwnQueue ? TRUE : FALSE;
+  runtime->PreludeGateHeld = FALSE;
+  runtime->PreludeGateFence = 0u;
+  runtime->PreludeGateStartQpc = 0ULL;
 #if defined(ADMISSION_OV2_ON)
   /* OV2 (default off): REG_DWORD Wom1Ov2NoHazardLead = 1, only on Q2c. The
    * device feature lets the UMD flag independent compute envelopes. */

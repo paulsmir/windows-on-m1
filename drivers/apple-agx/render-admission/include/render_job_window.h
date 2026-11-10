@@ -146,6 +146,13 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
   unsigned int General, SameManagerSlot;
   /* Q14: unproven prelude pairs require Wom1Depth2Prelude=1 in general mode. */
   unsigned int Prelude;
+  /* R14 (Wom1PreludeNotifyGate, with the compute Queue of Q2c): N is a
+   * prelude render whose compute part has not notified on Queue B yet
+   * (RunningPreludeComplete = its ComputePending.Complete). A job published
+   * on B now would raise B's threshold under it and the firmware (count ==
+   * threshold) would report N only with N+1. PreludeGateExpired: the caller
+   * held N+1 for the bound and gives up (fail-open). */
+  unsigned int PreludeNotifyGate, RunningPreludeComplete, PreludeGateExpired;
 } ADMISSION_JOB_WINDOW_KICK_STATE;
 
 /* Previously unused policy reason; keep all existing wire values and layout. */
@@ -154,13 +161,18 @@ typedef struct _ADMISSION_JOB_WINDOW_KICK_STATE {
  * compute) but a VM slot is zero or both are equal. Kick refusals in use:
  * 1-5, 50-62, 63 (KMD KickLocked), 64, 65 (KMD Q3 checkpoint); 66-71 are
  * the decision reasons of render_rc_progress.h, whose histogram ends at 71,
- * so the next free policy number is 6. */
+ * so the next free policy number is 6 (C1), then 7 (R14); 8 is free. */
 #define ADMISSION_JOB_WINDOW_REFUSAL_CROSS_PROCESS_INELIGIBLE 6u
+/* R14: every other guard passed, but N is a prelude render that has not
+ * notified on Queue B and N+1 joins B. Not final: decided again by the
+ * next poll (like 4/52/53/54). */
+#define ADMISSION_JOB_WINDOW_REFUSAL_PRELUDE_NOTIFY_GATE 7u
 
 /* While N runs: may N+1 be kicked now? Refusal values:
  *   1 disabled, 2 stopping/resetting, 3 scheduler faulted, 4 preemption,
  *   5 general-mode prelude pair not explicitly enabled,
  *   6 the admitted cross-process class with a zero or an equal VM slot (C1),
+ *   7 a Queue-B job behind a prelude render that has not notified (R14),
  *   50 window not exactly {N}, 51 window poisoned (a dropped job),
  *   52 no Prebound successor, 53 successor is not the scheduler's next
  *   fence, 54 a paging/CPU packet runs or heads the queue,

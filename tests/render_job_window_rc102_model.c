@@ -82,6 +82,10 @@ typedef struct world {
    * on different ones; each notifier's threshold counts its own jobs. */
   unsigned nthr[2], ncount[2], npend[2], nheld[2][NQ], nheld_valid[2][NQ];
   unsigned jobn[MAXF + 1], lastk;
+  /* MODEL_Q2C (Wom1ComputeOwnQueue): notifier 0 counts TA/3D work, notifier
+   * 1 compute work; a prelude render joins both. R14: notify_gate is
+   * Wom1PreludeNotifyGate, prelude_dur the prelude's compute time. */
+  unsigned notify_gate, prelude_dur, gate_refusals, report_tick[MAXF + 1];
   unsigned depth2;          /* Wom1JobDepth2Kick */
   unsigned caps;
   unsigned faulted, resetting, preempt, paging, prebound_at;
@@ -141,9 +145,14 @@ static void send_event(world *w, unsigned kind, unsigned long long bits) {
   if (kind == (unsigned)AppleAgxG13EventFlag) { put64(m + 4, bits); put64(m + 12, 0ULL); }
   if (kind == (unsigned)AppleAgxG13EventTimeout) { put64(m + 4, ++w->timeout_counter); put32(m + 12, 0u); }
 }
-#ifdef MODEL_OWN_NOTIFY
+#if defined(MODEL_OWN_NOTIFY) || defined(MODEL_Q2C)
 static void notify_own(world *w, unsigned q, unsigned stamp, unsigned fence) {
+#ifdef MODEL_Q2C
+  unsigned k = q == Q_CO ? 1u : 0u;
+  (void)fence;
+#else
   unsigned k = w->jobn[fence] & 1u;
+#endif
   ++w->ncount[k];
   w->npend[k] |= 1u << q;
   if (stamp) { w->nheld[k][q] = stamp; w->nheld_valid[k][q] = 1; }
@@ -175,7 +184,7 @@ __attribute__((unused)) static void notify_shared(world *w, unsigned q, unsigned
     send_event(w, (unsigned)AppleAgxG13EventFlag, bits);
   }
 }
-#ifndef MODEL_OWN_NOTIFY
+#if !defined(MODEL_OWN_NOTIFY) && !defined(MODEL_Q2C)
 #define notify(w, q, s) notify_shared(w, q, s)
 #endif
 static unsigned in_firmware(world *w) {
@@ -379,7 +388,7 @@ static APPLE_AGX_BOOL be_relocate(void *c, void *a, APPLE_AGX_U32 ab,
     if (kind == K_RP) {
       unsigned co = new_item(w, IT_WORK, Q_CO, fence);
       unsigned bar = new_item(w, IT_BARRIER, Q_TA, fence);
-      w->items[co].dur = 1u; w->items[co].notify = 1;
+      w->items[co].dur = w->prelude_dur ? w->prelude_dur : 1u; w->items[co].notify = 1;
       w->items[bar].wait_queue = Q_CO; w->items[bar].wait_value = fence;
       j->ComputeWorkAddresses[0] = item_address(co); j->ComputeWorkAddressCount = 1u;
       j->ComputeEvent = EVENT_NUMBER[Q_CO]; j->ComputeExpectedStamp = fence;
@@ -402,10 +411,21 @@ static APPLE_AGX_BOOL be_relocate(void *c, void *a, APPLE_AGX_U32 ab,
         head->D3ExpectedStamp : head->ComputeExpectedStamp;
     j->LeadBarrierAddress = item_address(b);
     AdmissionJobWindowReceiptKick(&w->rec, fence, barrier, 2u);
+#ifdef MODEL_Q2C
+    /* R14: a Queue-B-only job published behind a prelude whose compute has
+     * not notified raises B's threshold under it (count == threshold). A
+     * prelude successor is not gated: it raises Queue A's threshold too. */
+    if (w->notify_gate && head_kind == K_RP && kind == K_C && w->ncount[1] != w->nthr[1])
+      violate(w, "R14 Queue-B publish before the prelude notified", fence);
+#endif
   }
   /* Asahi run(): the threshold counts every kicked job's notifications. */
   w->notified_total += job_notifications(kind);
   w->threshold = w->notified_total;
+#ifdef MODEL_Q2C
+  w->nthr[0] += kind == K_C ? 0u : 2u;
+  w->nthr[1] += kind == K_R ? 0u : 1u;
+#endif
 #ifdef MODEL_OWN_NOTIFY
   {
     unsigned k = successor ? w->lastk ^ 1u : 0u;
@@ -421,7 +441,7 @@ static void report(world *w, unsigned f, int dropped) {
   if (w->faulted && !w->in_reset_quiesce) violate(w, "W4 report while faulted", f);
   if (w->final_[f]) violate(w, "W5 fence ends twice", f);
   if (w->nr && f < w->rep[w->nr - 1]) violate(w, "W1 report order", f);
-  w->rep[w->nr++] = f; w->repd[f] = dropped; w->final_[f] = 1;
+  w->rep[w->nr++] = f; w->repd[f] = dropped; w->final_[f] = 1; w->report_tick[f] = w->now;
   ++w->reports_this_poll;
 }
 /* AdmissionBackendComplete: a kicked successor whose end came in the
@@ -619,7 +639,13 @@ static void kick_successor(world *w) {
   s.Running.SceneId = s.Next.SceneId = 1;
   s.NextNeedsIdle = w->job[m].kind != K_C &&
       (!w->prov.Runtime.BufferManagerInitialized || w->prov.Runtime.TaFirstRun);
-  if (AdmissionJobWindowKickRefusal(&s) != 0u) return;
+  s.PreludeNotifyGate = w->notify_gate;
+  s.RunningPreludeComplete = w->prov.Runtime.ComputeInRender && w->prov.Runtime.ComputePending.Complete;
+  {
+    unsigned refusal = AdmissionJobWindowKickRefusal(&s);
+    if (refusal == ADMISSION_JOB_WINDOW_REFUSAL_PRELUDE_NOTIFY_GATE) ++w->gate_refusals;
+    if (refusal != 0u) return;
+  }
   if (w->paging || w->preempt || w->faulted || w->resetting)
     violate(w, "W4 kick while paging/preempting/faulted/resetting", m);
   if (w->win.Poisoned) violate(w, "W7 kick into a poisoned window", m);

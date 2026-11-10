@@ -334,6 +334,17 @@ unsigned int AdmissionJobWindowKickRefusal(
     return 64u;
   if (s->NextNeedsIdle) return 61u;
   if (s->SetsValid && s->RunningSet == s->NextSet) return 62u;
+  /* R14, last: only a pair that would be kicked now is held, and only a
+   * successor that publishes on Queue B alone. mk is COMPUTE for a compute
+   * job and for a present under PRESENT_PAIRS (it runs on the compute Queue).
+   * A render successor of any kind, a prelude render included, also raises
+   * Queue A's threshold behind the running render; holding it would not give
+   * the head its own event, so it keeps today's result. */
+  if (s->PreludeNotifyGate &&
+      n->Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE &&
+      !s->RunningPreludeComplete && !s->PreludeGateExpired &&
+      mk == ADMISSION_JOB_WINDOW_KIND_COMPUTE)
+    return ADMISSION_JOB_WINDOW_REFUSAL_PRELUDE_NOTIFY_GATE;
   return 0u;
 }
 
