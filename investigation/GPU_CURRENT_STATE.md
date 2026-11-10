@@ -3976,3 +3976,65 @@ the session umd.log pid 1548; macOS hd.csv 9946 and split2-hd). Raw per-frame fi
 - K1 default-on commit 74469a02c reviewed by the architect: one variable (reader AdmissionPlatformSwitchDisabled:
   absent / malformed = on, DWORD 0 = off), prerequisites unchanged, test tests/test_k1_default_on.py. Hardware check =
   EXP2329 boot 1 as pre-registered.
+
+UPDATE 2026-11-10T20:51:35Z STARTUP STALL ATTRIBUTION AND R5 3D SURVEY (offline, no hardware; two Opus studies, numbers
+re-read by the architect in the out files / source where marked V)
+- STARTUP STALL, scored frame 2 (EXP2309 nhd, pid 1548, execute 64 -> 65, umd.log 2484249..2491796; outputs
+  `.local/night-20261110/startup-stall/out-*.txt`; V = out-analyze-1548-64-65, out-pool-nhd-pre-mid,
+  out-paging-nhd-pre-mid, out-bo-totals, out-procs):
+  - MEASURED (V): 4.554 s wall = BO creation 3.071 s (32 BOs, 569 MiB: `create us` = pfnAllocateCb 2.014 s,
+    `bind us` 1.057 s) + one scene ACQUIRE escape 0.884 s + counted path outside BO creation 0.038 s + no receipt
+    0.561 s. GPU work in the window 0.132 s (62 jobs), not on the critical path.
+  - MEASURED (V), KMD pool over the load (pre -> mid snapshot): ReserveUs 3.346 s for 573 reservations (2742 MiB)
+    against UMD create 3.408 s (95 BOs) -> the create time is the KMD segment-3 reservation (aggregate match 2 %).
+    1452 new 2 MiB slabs: 675 from the fast large-page cache in 17.1 ms total (25 us each), 777 by the chunked
+    fallback (32 x 64 KiB, after 777 FAST_LARGE_PAGES misses) in 3.921 s (5.05 ms each). Whole boot before this
+    run: 6496 chunked slabs, 36.1 s (5.56 ms each).
+  - MEASURED (V), bind over the load: UMD bind 4.399 s against KMD UPDATE_PAGE_TABLE build 4.313 s (2349 ops,
+    2.54 M entries); inside the build REGISTER_SHARED_BACKING 189428 calls 1.236 s, UPDATE_LEAF 215112 calls
+    0.653 s, MAP_AT commits 44950 granules 0.848 s. The split inside the stall window is HYPOTHESIS (scaled).
+  - ACQUIRE 0.884 s: MEASURED as the escape's own us field, no GravityMark job in flight. pid 1548 TVB grew once,
+    32 -> 1043 blocks (leaseBlocks 1011, V). "The growth takes chunked slabs under the G3 lock" is HYPOTHESIS
+    (SlabAllocUs 3.947 s exceeds ReserveUs by 0.60 s).
+  - FHD (pid 10436, execute 62 -> 63) has the same shape: create 2.017, bind 1.180, ACQUIRE 0.827, no receipt
+    0.623 of 4.696 s.
+  - CONTRACT (V, wdk26100 d3dukmdt.h:1484-1486): the MakeResident paging fence is to be synchronized on "before
+    submitting the command that uses above resources to the GPU"; a CPU wait at creation is our choice.
+  - ARCHITECT READING: one root for the 2.0 s of create and probably most of the ACQUIRE: the chunked slab path at
+    5 ms per 2 MiB. The rc93 note measured 0.4 ms per slab call at boot and the cache path costs 25 us, so zeroing
+    2 MiB is not the 5 ms; the cost is inside MmAllocatePagesForMdlEx for 32 aligned 64 KiB chunks. Whether it is
+    per call or per chunk is NOT separable from the data in hand (HYPOTHESIS either way; Windows-internal).
+  - VALUE (55 fps): chunked-slab part 2.0..2.6 s = about +110..+145 frames (+1.1..+1.4 % of the macOS score), bind
+    1.06 s about +58 frames, no receipt 0.56 s. Whole stall as before +237 frames.
+  - DECISIONS: (S1) offline study started (ledger evidence per call vs per byte, pool locks, rc88 prefill and rc86
+    cache behaviour during this load, sketch of a multi-slab MDL allocation, TVB target rule against Asahi's 3x
+    used pages, why the granule is 64 KiB). (S2) one driver-neutral measurement specified in the handoff: kernel
+    CPU sampling with stacks over the first 25 s of a GravityMark HD launch, after all scored arms of a boot; first
+    a 5 s idle pre-check that sampled profiling delivers samples in this guest (PMU under the hypervisor: unknown).
+    (S3) candidate, not started: move the UMD bind paging-fence wait (site 1: 0.552 s in the stall, 2.83 s over the
+    load) to before the first submit that uses the BO. Upper bound about +0.3 % score, so it comes after the pool.
+    The residency wait (site 2) stays as it is: EXP1004 history.
+- R5 3D SURVEY (evidence `.local/night-20261110/r5-3d-cause/out-*.txt`; the study's report file was not written,
+  its findings are recorded here):
+  - Configuration parity with Apple (survey reading, not re-checked): same BC1/BC4/BC7/BC6H assets sampled natively
+    and GPU-tiled, colour target uncompressed RGBA16F on both sides, compressed D32 depth loaded, no MSAA, partial
+    renders 0, 4 counted ExecuteIndirect draws. R5 3D is the planet PS 428487dae22a5191 (5860 instructions against
+    Apple m245 3494: static ratio 1.68, time ratio 1.18). R5 3D = -0.11 + 1.183 x Apple; TA + prelude flat
+    0.29..0.31 ms. Closed for R5 with evidence: anisotropy (EXP2048), bind form (T5b), texture format / compression
+    / layout, load / store parity.
+  - CORRECTION to the R6 note (survey reading): R5 = `dfew c- lZa` (no clear, loads colour and Z), R7 = `dfew cZSa`.
+  - NEW CANDIDATE CAUSE. Presence MEASURED / SOURCE (V): GravityMark has one PIPELINE_STATISTICS heap with 3 Begin /
+    3 End / 3 Resolve per execution; our owner begins all 11 statistics singles per D3D12 Begin
+    (agx_d3d12_windows.cpp AgxD3d12OwnerQuery, heap type 2), slot 7 = PS_INVOCATIONS = D3D12 PSInvocations. While
+    that query is active Asahi links a statistics prolog into every fragment shader (agx_state.c:2289;
+    agx_nir_prolog_epilog.c:722-741: helper test + one global atomic add), which sets writes_memory, so tag writes
+    stay on and triangle merging is off (agx_compile.c:3695, 3807-3810; agx_linker.c:91,115,217). Apple's m245 has
+    no atomic. Cost on this GPU: NOT measured -> HYPOTHESIS. Not verified: that the three Begin/End pairs bracket
+    R1, R3 and R5 (survey reading of the command order); the arm's reject rule covers it.
+  - DECISION: diagnostic arm STATS-NOPS (`APPLE_AGX_D3D12_STATS_NO_PS=1`, opt-in, default off: slot 7 never begun,
+    resolve reports PSInvocations 0, nothing else). Implementation started (Opus subagent, own worktree); spec with
+    the four sections in the handoff. The switch is a measurement only: reporting 0 breaks the D3D12 contract, so
+    it never becomes a default. The production design (exact PSInvocations at lower cost, or none) is decided
+    after the cost is known. Per the process rule this lever gets no production package before that number.
+- RANKING unchanged in order; row 2 (startup stall) now has an owner: KMD admission pool (chunked slab path), then
+  KMD G3 paging + m1n1 broker (per-16 KiB calls), then UMD gpuva (site 1 wait).
