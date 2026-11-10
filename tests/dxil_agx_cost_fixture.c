@@ -7,6 +7,19 @@
  * by stand-ins with the same shape (uniform loads for buffer bases, sizes
  * and texture handles), so instruction counts, GPRs, scratch and spills are
  * the backend's own; uniform numbering is not.
+ * --production (compute) replaces the stand-ins by the passes themselves
+ * (dxil_agx_cost_gallium.c: agx_nir_lower_bindings, the serialized NIR round
+ * trip between agx_shader_initialize and agx_compile_variant, then
+ * agx_nir_lower_sysvals with the D3D12 C47 projection and
+ * agx_nir_layout_uniforms, whose result is the key's reserved_preamble):
+ * the compile of the guest's D3D12 owner, comparable with its
+ * measure-d3d12-shader-stats row.  It needs the shader's own
+ * --root-views masks (its measure-d3d12-root-views receipt; 0,0 when the
+ * receipt says none were applied) and refuses --no-d3d-robust,
+ * --assume-in-bounds, --soft-fault and --fs-backend, which leave that shape;
+ * --soft-fault-loads stays a flag because it is the device's feature
+ * (measure-soft-faults).  The COST line ends in "shape production" or
+ * "shape stand-in": only the former may be compared with guest receipts.
  *
  * usage: dxil_agx_cost_fixture <dxil>|--synthetic-uav-reads=K|--synthetic-local-array=N|
  *        --synthetic-array-samples=N[,heap]|--synthetic-break-loops=N|--synthetic-shared-reads=K
@@ -33,6 +46,7 @@
  *        code <n> preamble <n> nir-alu <n> nir-mem <n> nir-tex <n>
  *        nir-shared <n> barriers <n> atomics <n> root-marked <n>
  *        crawl-speculated <n> tex-speculated <n> binary-fnv <hex>
+ *        shape production|stand-in
  * (RC75 op classes of the final NIR handed to the backend: ALU, device
  * memory, texture/image, threadgroup memory, workgroup barriers, atomics;
  * RC78 crawl-speculated: texture descriptor loads that
@@ -59,6 +73,11 @@
 #include "agx_win32_soft_fault.h"
 #include "asahi/lib/agx_abi.h"
 #include "genxml/agx_pack.h"
+
+/* --production: dxil_agx_cost_gallium.c */
+void agx_cost_production_bindings(nir_shader *nir);
+nir_shader *agx_cost_production_round_trip(nir_shader *nir);
+unsigned agx_cost_production_sysvals(nir_shader *nir);
 
 /* Gallium agx_state.c should_lower_robustness for a robust context, minus
  * UBO/SSBO accesses (agx_win32_should_lower_robustness_d3d); data: the
@@ -1245,11 +1264,15 @@ binary_fnv(const void *data, unsigned size)
 int
 main(int argc, char **argv)
 {
+   bool production = false, root_views = false;
    bool d3d_robust = true, print_nir = false, print_lowered = false, in_bounds = false;
    bool soft_fault = false, soft_fault_loads = false, fs_backend = false, print_selected = false, hex_main = false;
    bool shared_store_oracle = false, promote_tex = false, print_preamble = false;
    unsigned root_uavs = 0, root_cbvs = 0;
    for (int a = 2; a < argc; ++a) {
+      unsigned uav, cbv;
+      production |= !strcmp(argv[a], "--production");
+      root_views |= sscanf(argv[a], "--root-views=%x,%x", &uav, &cbv) == 2;
       if (sscanf(argv[a], "--root-views=%x,%x", &root_uavs, &root_cbvs) == 2)
          continue;
       d3d_robust &= strcmp(argv[a], "--no-d3d-robust") != 0;
@@ -1271,6 +1294,12 @@ main(int argc, char **argv)
       return selftest_index_masks();
    if (argc > 1 && !strcmp(argv[1], "--selftest-max-layer"))
       return selftest_max_layer();
+   if (production && (!root_views || !d3d_robust || in_bounds || soft_fault || fs_backend)) {
+      fprintf(stderr, "--production: %s\n",
+              !root_views ? "--root-views=UAV,CBV is required (the shader's measure-d3d12-root-views masks, 0,0 for none)"
+                          : "--no-d3d-robust, --assume-in-bounds, --soft-fault and --fs-backend are not the production shape");
+      return 2;
+   }
    nir_shader *nir = NULL;
    void *bytes = NULL;
    unsigned reads = 0;
@@ -1312,6 +1341,10 @@ main(int argc, char **argv)
          return 0;
       }
       nir = r.nir;
+   }
+   if (production && nir->info.stage != MESA_SHADER_COMPUTE) {
+      fprintf(stderr, "--production: compute shaders only (stage %s)\n", mesa_shader_stage_name(nir->info.stage));
+      return 2;
    }
    const bool fragment = fs_backend && nir->info.stage == MESA_SHADER_FRAGMENT;
    if (nir->info.stage != MESA_SHADER_COMPUTE && !fragment) {
@@ -1368,9 +1401,15 @@ main(int argc, char **argv)
       NIR_PASS(_, nir, nir_lower_mediump_io, nir_var_shader_in | nir_var_shader_out,
                ~(flat | agx_gather_texcoords(nir)), false);
    }
+   if (production) {
+      /* agx_shader_initialize: agx_nir_lower_bindings (its own nir_lower_tex
+       * and constant folding included) */
+      agx_cost_production_bindings(nir);
+   } else {
    NIR_PASS(_, nir, nir_lower_tex, &(nir_lower_tex_options){.lower_index_to_offset = true});
    NIR_PASS(_, nir, nir_opt_constant_folding);
    NIR_PASS(_, nir, nir_shader_instructions_pass, bind_resources, nir_metadata_control_flow, NULL);
+   }
    /* agx_shader_initialize: so->info.nr_bindful_textures / _images */
    const unsigned descriptors = BITSET_LAST_BIT(nir->info.textures_used) + 2 * BITSET_LAST_BIT(nir->info.images_used);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
@@ -1414,6 +1453,11 @@ main(int argc, char **argv)
    }
 
    /* agx_compile_nir */
+   unsigned reserved_preamble = 0;
+   if (production) {
+      nir = agx_cost_production_round_trip(nir);
+      reserved_preamble = agx_cost_production_sysvals(nir);
+   } else
    NIR_PASS(_, nir, nir_shader_instructions_pass, lower_sysvals, nir_metadata_control_flow, NULL);
    if (print_nir)
       nir_print_shader(nir, stdout);
@@ -1429,6 +1473,8 @@ main(int argc, char **argv)
    /* T5: agx_compile_nir's key for the application's CS/FS */
    key.promote_textures = agx_win32_d3d_promote_textures(promote_tex, nir->info.stage, false, false);
    struct agx_shader_part part = {0};
+   if (production)
+      key.reserved_preamble = reserved_preamble; /* agx_nir_layout_uniforms */
    agx_compile_shader_nir(nir, &key, &part);
    if (shared_store_oracle)
       print_shared_oracle(nir);
@@ -1459,12 +1505,13 @@ main(int argc, char **argv)
    printf("COST stage %s block %ux%ux%u shared %u nir-ifs %u guarded-loads %u loads %u stores %u txf %u mem-blocks %u hot-mem-blocks %u hot-nir %u hot-branches %u "
           "instrs %u alu %u fscib %u ic %u gprs %u threads %u scratch %u spills %u fills %u loops %u code %u "
           "preamble %u nir-alu %u nir-mem %u nir-tex %u nir-shared %u barriers %u atomics %u root-marked %u "
-          "crawl-speculated %u tex-speculated %u binary-fnv %08x\n",
+          "crawl-speculated %u tex-speculated %u binary-fnv %08x shape %s\n",
           mesa_shader_stage_name(fragment ? MESA_SHADER_FRAGMENT : MESA_SHADER_COMPUTE), block[0], block[1], block[2], shared, counts.ifs,
           counts.guarded_loads, counts.loads, counts.stores, counts.txf, mem_blocks, hot.memory_blocks, hot.instrs, hot.branches, s->instrs, s->alu, s->fscib, s->ic,
           s->gprs, s->threads, s->scratch, s->spills, s->fills, s->loops, s->code_size, s->preamble_inst,
           classes.alu, classes.mem, classes.tex, classes.shared, classes.barriers, classes.atomics, marked,
-          speculated, tex_speculated, binary_fnv(part.binary, part.info.binary_size));
+          speculated, tex_speculated, binary_fnv(part.binary, part.info.binary_size),
+          production ? "production" : "stand-in");
    free(part.binary);
    ralloc_free(nir);
    glsl_type_singleton_decref();

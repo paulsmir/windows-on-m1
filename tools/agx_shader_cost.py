@@ -30,6 +30,19 @@ Usage:
       RC82: --soft-fault asahi compiles with Asahi's soft-fault compiler key
       (every access-qualified intrinsic and texture speculatable);
       --soft-fault loads with the Windows projection (memory loads only).
+      --production (with --root-views, optionally --soft-fault loads): the
+      fixture's production shape, the real Gallium binding / sysval / uniform
+      layout passes instead of the stand-ins. Every row carries "shape":
+      only "production" rows are comparable with guest receipts.
+  agx_shader_cost.py verify UMD.log --captures DIR [HASH...]
+      Is the offline compile the guest's compile? For every compute shader
+      of the log (or the named 16-digit hashes or low-32-bit tags) with a
+      capture DIR/<hash>-s5-r0.bin: compile it in the production shape with
+      the masks of its measure-d3d12-root-views receipt and the device's
+      measure-soft-faults feature, and compare with its
+      measure-d3d12-shader-stats row. Prints EQUAL or the differing fields
+      (offline-guest) per shader and the totals; exit 0 only when at least
+      one shader was compared and none differs.
 JSON or a table on stdout; nothing is written elsewhere except the fixture
 build directory (--build-dir, default a temporary one).
 """
@@ -146,6 +159,49 @@ def projected_compiler(build_tree, mesa, out, flags):
     return objects
 
 
+def production_objects(build_tree, mesa, out):
+    """dxil_agx_cost_fixture --production: the Gallium Asahi sources the
+    Windows build compiles for these steps. agx_nir_lower_bindings.c is the
+    pinned file; agx_nir_lower_sysvals.c (agx_nir_layout_uniforms lives
+    there too) is projected exactly as build-native-asahi-state.py projects
+    it (D3D12 C47: the pin and the replacements are read from that script,
+    so a changed projection changes this compile or stops it)."""
+    import hashlib
+    from test_dxbc_to_nir import host_flags
+    from test_agx_heap_handle_lowering import sysvals_change
+    path, sha, replacements = sysvals_change()
+    raw = (mesa / path).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != sha:
+        raise RuntimeError(f'{path}: not the source build-native-asahi-state.py pins')
+    text = raw.decode()
+    for old, new in replacements:
+        if text.count(old) != 1:
+            raise RuntimeError(f'{path}: projection anchor matches {text.count(old)} times')
+        text = text.replace(old, new)
+    gallium = out / 'production-gallium'
+    (gallium / 'stub').mkdir(parents=True, exist_ok=True)
+    (gallium / 'stub/xf86drm.h').write_text('')  # libdrm: not on the host, nothing of it is used
+    sysvals = gallium / 'agx_nir_lower_sysvals.c'
+    sysvals.write_text(text)
+    dirs = [gallium / 'stub'] + [mesa / d for d in (
+        'src/gallium/drivers/asahi', 'src/gallium/include', 'src/gallium/auxiliary', 'src/asahi', 'src/asahi/lib',
+        'src/asahi/libagx', 'src/asahi/layout', 'src/asahi/compiler', 'src', 'include', 'include/drm-uapi',
+        'src/virtio/vdrm')] + [build_tree / d for d in (
+            'src/asahi', 'src/asahi/lib', 'src/asahi/genxml', 'src/asahi/libagx', 'src/asahi/compiler',
+            'src/gallium/drivers/asahi')]
+    objects = []
+    for source in (TESTS / 'dxil_agx_cost_gallium.c', mesa / 'src/gallium/drivers/asahi/agx_nir_lower_bindings.c',
+                   sysvals):
+        obj = gallium / (source.stem + '.o')
+        r = subprocess.run(['clang', '-std=c11', '-Wno-c23-extensions', *host_flags(build_tree),
+                            *['-I' + str(d) for d in dirs], '-c', str(source), '-o', str(obj)],
+                           capture_output=True, text=True)
+        if r.returncode:
+            raise RuntimeError(f'{source.name}: ' + r.stderr[-3000:])
+        objects.append(str(obj))
+    return objects
+
+
 def build(out_dir, pinned=False):
     """Build tests/dxil_agx_cost_fixture.c against the host Mesa and
     dxil-spirv trees (the test_dxil_to_nir layout); None without them.
@@ -172,6 +228,7 @@ def build(out_dir, pinned=False):
     link = ['-L/opt/homebrew/opt/zstd/lib', '-lzstd', '-lz', '-lpthread', *HOST_LIBS]
     binary = out / 'dxil_agx_cost_fixture'
     compiler = [] if pinned else projected_compiler(build_tree, mesa, out, common)
+    compiler += production_objects(build_tree, mesa, out)
     subprocess.run(['clang', *common, str(TESTS / 'dxil_agx_cost_fixture.c'), *compiler, str(DXIL / 'agx_dxil_to_nir.c'),
                     str(DXIL / 'agx_dxil_program.c'), str(DXBC / 'dxbc_to_nir.c'), str(DXBC / 'dxbc_parse.c'),
                     str(DXBC / 'dxbc_minmax.c'), str(out / 'checked.o'), '-o', str(binary), *libs, *dlibs, *dlibs,
@@ -193,6 +250,77 @@ def cost(binary, source, *flags, env=None):
         return {}
     fields = dict(re.findall(r'([a-z-]+) (\S+)', line[5:]))
     return {k: (int(v) if v.isdigit() else v) for k, v in fields.items()}
+
+
+# the measure-d3d12-shader-stats values the backend reports (STATS slots 4..13)
+GUEST_FIELDS = STATS[4:14]
+
+
+def guest_compiles(lines):
+    """What a guest UMD log says about its compute shader compiles:
+    ({hash: {'stats': rows, 'views': masks}}, soft-fault features).
+    measure-d3d12-shader-stats: STATS. measure-d3d12-root-views
+    (agx_d3d12_windows.cpp): stage, the CS hash's low 32 bits, root CBV
+    slots, root UAV slots, CBV slots, UAV slots, applied (1: marked, 2: kept
+    checked by APPLE_AGX_D3D12_ROOT_BOUNDS=1, 0: nothing to mark).
+    measure-soft-faults (agx_d3d12_ddi.cpp): info valid, version, features
+    (bit 0: DRM_ASAHI_FEATURE_SOFT_FAULTS, the Windows projection's load
+    speculation = the fixture's --soft-fault-loads)."""
+    shaders, views, features = {}, {}, set()
+    for name, _, v in receipts(lines, ('measure-d3d12-shader-stats', 'measure-d3d12-root-views',
+                                       'measure-soft-faults')):
+        if name == 'measure-d3d12-shader-stats' and len(v) >= len(STATS) and v[2] == COMPUTE:
+            row = tuple(v[4:14])
+            rows = shaders.setdefault(f'{v[0]:08x}{v[1]:08x}', [])
+            if row not in rows:
+                rows.append(row)
+        elif name == 'measure-d3d12-root-views' and len(v) >= 7 and v[0] == COMPUTE:
+            # kept checked: the guest compiled without marks
+            masks = (0, 0) if v[6] == 2 else (v[3], v[2])
+            if masks not in views.setdefault(v[1], []):
+                views[v[1]].append(masks)
+        elif name == 'measure-soft-faults' and len(v) >= 3:
+            features.add(v[2] if v[0] else 0)
+    return ({h: dict(stats=rows, views=views.get(int(h[8:], 16), [])) for h, rows in shaders.items()}, features)
+
+
+def verify(binary, lines, captures, wanted=(), out=sys.stdout):
+    """Compare the production-shape offline compile with the guest's rows;
+    (equal, different, not compared)."""
+    shaders, features = guest_compiles(lines)
+    if len(features) != 1:
+        raise RuntimeError('the log needs exactly one measure-soft-faults feature set, found '
+                           f'{sorted(features)}: the device feature decides the compile')
+    soft = ('--soft-fault-loads',) if features.pop() & 1 else ()
+    wanted = [w.lower() for w in wanted]
+    missing = [w for w in wanted if not any(h == w or h[8:] == w for h in shaders)]
+    if missing:
+        raise RuntimeError(f'no compute measure-d3d12-shader-stats row for {missing}')
+    equal = different = skipped = 0
+    for h, guest in sorted(shaders.items()):
+        if wanted and h not in wanted and h[8:] not in wanted:
+            continue
+        blob = Path(captures) / f'{h}-s5-r0.bin'
+        why = (None if blob.exists() else 'no capture') if guest['views'] else 'no measure-d3d12-root-views receipt'
+        if why:
+            skipped += 1
+            print(h, f'NOT COMPARED ({why})', file=out)
+            continue
+        for uav, cbv in guest['views']:
+            c = cost(binary, blob, '--production', f'--root-views={uav:x},{cbv:x}', *soft)
+            if c.get('shape') != 'production':
+                raise RuntimeError(f'{h}: the fixture did not compile the production shape: {c or "refused"}')
+            offline = tuple(c[k] for k in GUEST_FIELDS)
+            # one receipt per compile: several rows only when the shader was
+            # compiled in several shapes; report against the nearest one
+            row = min(guest['stats'], key=lambda g: sum(a != b for a, b in zip(offline, g)))
+            diff = ' '.join(f'{k}{a - b:+d}' for k, a, b in zip(GUEST_FIELDS, offline, row) if a != b)
+            equal += not diff
+            different += bool(diff)
+            print(h, f'root-views={uav:x},{cbv:x}', ' '.join(soft), 'EQUAL' if not diff else 'DIFF offline-guest: ' + diff,
+                  '| guest', '/'.join(map(str, row)), file=out)
+    print(f'{"/".join(GUEST_FIELDS)}: equal {equal} different {different} not-compared {skipped}', file=out)
+    return equal, different, skipped
 
 
 def inputs(paths):
@@ -218,8 +346,20 @@ def main(argv=None):
     comp.add_argument('--soft-fault', choices=('asahi', 'loads'),
                       help='RC82: compile as with GPU soft faults (asahi: Mesa set_speculate; '
                            'loads: the Windows projection, memory loads only)')
+    comp.add_argument('--production', action='store_true',
+                      help='the production shape (real Gallium passes); needs --root-views')
     comp.add_argument('--build-dir')
+    ver = sub.add_parser('verify')
+    ver.add_argument('umd_log')
+    ver.add_argument('hashes', nargs='*', help='16-digit shader hashes or their low 32 bits (default: all)')
+    ver.add_argument('--captures', required=True, help='directory of <hash>-s5-r0.bin captures')
+    ver.add_argument('--build-dir')
     args = parser.parse_args(argv)
+    if args.mode == 'compile' and args.production and (
+            args.compare or args.no_d3d_robust or args.assume_in_bounds or args.soft_fault == 'asahi'
+            or not args.root_views):
+        parser.error('--production needs --root-views and excludes --compare, --no-d3d-robust, '
+                     '--assume-in-bounds and --soft-fault asahi')
     if args.mode == 'log':
         with open(args.umd_log, errors='replace') as f:
             result = rank_log(f)
@@ -232,6 +372,14 @@ def main(argv=None):
         if not binary:
             print('host Mesa / dxil-spirv trees not available', file=sys.stderr)
             return 2
+        if args.mode == 'verify':
+            try:
+                with open(args.umd_log, errors='replace') as f:
+                    equal, different, _ = verify(binary, f, args.captures, args.hashes)
+            except RuntimeError as e:
+                print(f'verify: {e}', file=sys.stderr)
+                return 2
+            return 0 if equal and not different else 1
         variants = ([('robust', ()), ('in-bounds', ('--assume-in-bounds',)), ('unchecked', ('--no-d3d-robust',))]
                     if args.compare else
                     [('cost', tuple(f for f, on in (('--no-d3d-robust', args.no_d3d_robust),
@@ -241,6 +389,8 @@ def main(argv=None):
         if args.soft_fault:
             sf = '--soft-fault' if args.soft_fault == 'asahi' else '--soft-fault-loads'
             variants = [(name, flags + (sf,)) for name, flags in variants]
+        if args.production:
+            variants = [(name, flags + ('--production',)) for name, flags in variants]
         rows = []
         for path in inputs(args.paths):
             row = {'shader': path.name}
@@ -252,7 +402,7 @@ def main(argv=None):
                                                'hot-mem-blocks', 'hot-branches', 'block', 'shared', 'loops',
                                                'nir-alu', 'nir-mem', 'nir-tex', 'nir-shared', 'barriers',
                                                'atomics', 'root-marked', 'preamble', 'ic',
-                                               'crawl-speculated', 'tex-speculated') if k in c}
+                                               'crawl-speculated', 'tex-speculated', 'shape') if k in c}
             if len(row) > 1:
                 rows.append(row)
         rows.sort(key=lambda r: r[variants[0][0]]['instrs'], reverse=True)
