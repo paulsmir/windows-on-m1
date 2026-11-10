@@ -76382,3 +76382,12 @@ EXP2309 HARDWARE BEFORE 2026-11-10T00:15:48Z:
 - Verdict: open (ReTrim itself confirmed; the post-ReTrim restart failed to reach SSH). TRIM is NOT accepted
   as the installed configuration until the stall is explained.
 - Evidence: .local/experiments/ANSTRIM1/evidence/ANSQ-T4/{t4-prep.txt,restart1-run.log,post-boot1.txt,verify-boot1.txt,t4-retrim.txt,post-after-retrim.txt,verify-after-retrim.txt,restart2-run.log,hang-normal-full.log}.
+
+## ANSQ-T4-R1 — bench recovery after the ANSQ-T4 boot stall, attempt 1 (BEFORE)
+
+- Stamp: 2026-11-10T01:31:15Z. Owner of the recovery: GPU bench session; cause analysis stays with the AppleAns session (ANSQ-T4 entry).
+- Observed: the ANSQ-T4 final ordered restart (launch 01:21Z, RECANS001 normal profile, m1n1 882985fb, Mu G2 7c283fb1, AppleAns 0.4.6 UnmapMode=2 fence = C:) never reached SSH. Launcher run_uefi PID 29078 alive. Log stops after "HV: IRQ route enabled vINTID=960 AIC=590 count=1". Two HV WATCHDOG snapshots 25 s apart (`.local/experiments/ANSTRIM1/evidence/ANSQ-T4/hang-normal-full-snapshots.log`, sha256 3a2c63fd856f1437): all 8 CPUs at pc=0xfffff800f24811ac in both, tick_fire advancing (cpu0 2371033 -> 2495129), no EL2 exception. Windows is idle with timer ticks alive, i.e. waiting for something that does not complete; no CPU is spinning.
+- WHY THIS HYPOTHESIS: (1) idle CPUs + live ticks right after the storage interrupt was connected fit an outstanding boot-disk request that never completes; (2) the previous boot with the same driver, mode and fence came up, and the only new state is the completed 37 GiB deallocate, so a transient controller-side condition (background work after mass deallocate) and a persistent driver/controller state are both open.
+- Single variable / discriminator: relaunch the identical profile once (kill -TERM exact PID 29078, wait for both proxy endpoints, `RECANS001-normal-ans/launch-normal-ans.sh`). Nothing in the guest or launcher changes; only time and a fresh m1n1/RTKit bring-up differ.
+- Expected if transient: SSH within 5 min, AppleAns 0.4.6 healthy. Failure criterion: no SSH after 6 min or the same last log line -> persistent; next step is the bridge emergency profile (EXP950 launch-normal2.sh) and AppleAns UnmapMode=1 from inside the guest, chkdsk read-only first.
+- Recovery artifact: bridge emergency profile; GPU state is already the recovery state (inert APPL0002, no AppleAgx package), EXP2311 package untouched on the Mac.
