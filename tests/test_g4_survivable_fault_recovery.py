@@ -108,6 +108,7 @@ typedef struct {
   unsigned SchedulerLock, BackendImage, BackendSnapshot;
   PACKET RenderPacket;
   LONG RenderDpcFence, SchedulerDpcPending;
+  LONG SubmitReportedFence; /* SubmitPath v2: reported, retire pending */
 } ADMISSION_CONTEXT;
 typedef struct {
   ADMISSION_CONTEXT *Adapter;

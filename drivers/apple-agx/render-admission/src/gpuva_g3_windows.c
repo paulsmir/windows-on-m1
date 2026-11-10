@@ -5220,25 +5220,58 @@ static VOID AdmissionG4ObserveEnvelopeReject(ADMISSION_CONTEXT *adapter,
  * is only busy: another job bound or running, entries queued, or (EXP1135)
  * the worker still finishing the previous job with the slot already empty,
  * the most frequent wait in EXP1130 (ReadyEx predicate 8). */
+/* The predicates in code order; *Reason is ADMISSION_SUBMIT_ADMISSIBLE or
+ * the first one that fails (ADMISSION_SUBMIT_NOT_*). *OldestReported
+ * (receipt-only): the context limit failed while the completion worker had
+ * already reported the context's oldest fence to dxgkrnl and not yet
+ * retired it. No side effect. */
+static BOOLEAN AdmissionG4PendingAdmissibleWhy(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG *Reason, BOOLEAN *OldestReported) {
+  KIRQL old_irql;
+  BOOLEAN worker_busy = FALSE, reported = FALSE;
+  ULONG reason = ADMISSION_SUBMIT_ADMISSIBLE;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL) {
+    reason = ADMISSION_SUBMIT_NOT_IRQL;
+  } else if (!AdmissionPlatformRuntimeQueueable(adapter, &worker_busy)) {
+    reason = ADMISSION_SUBMIT_NOT_QUEUEABLE;
+  } else {
+    KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+    /* Phase 5b: up to two jobs per context (oldest + second). */
+    if (!(context->Object.FenceOutstanding == 0u ||
+          context->GpuvaG3SecondFence == 0u)) {
+      reason = ADMISSION_SUBMIT_NOT_CONTEXT_LIMIT;
+      reported = context->Object.FenceOutstanding == (ULONG)
+          InterlockedCompareExchange(&adapter->SubmitReportedFence, 0, 0)
+          ? TRUE : FALSE;
+    } else if (!(adapter->G4PendingCount < ADMISSION_G4_PENDING_CAPACITY)) {
+      reason = ADMISSION_SUBMIT_NOT_CAPACITY;
+    } else if (!(AdmissionRenderPacketState(&adapter->RenderPacket) !=
+                     AdmissionRenderPacketEmpty ||
+                 adapter->G4PendingCount != 0u || worker_busy)) {
+      reason = ADMISSION_SUBMIT_NOT_IDLE;
+    } else if (InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) != 0) {
+      reason = ADMISSION_SUBMIT_NOT_FAULTED;
+    }
+    KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  }
+  if (Reason != NULL) *Reason = reason;
+  if (OldestReported != NULL) *OldestReported = reported;
+  return reason == ADMISSION_SUBMIT_ADMISSIBLE ? TRUE : FALSE;
+}
+
+/* The one admission decision of a submission. SubmitPath v2 (receipt-only):
+ * a refusal counts its first failing predicate. */
 static BOOLEAN AdmissionG4PendingAdmissible(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context) {
-  KIRQL old_irql;
-  BOOLEAN admissible, worker_busy = FALSE;
-  if (KeGetCurrentIrql() != PASSIVE_LEVEL ||
-      !AdmissionPlatformRuntimeQueueable(adapter, &worker_busy))
-    return FALSE;
-  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
-  /* Phase 5b: up to two jobs per context (oldest + second). */
-  admissible = (context->Object.FenceOutstanding == 0u ||
-                context->GpuvaG3SecondFence == 0u) &&
-      adapter->G4PendingCount < ADMISSION_G4_PENDING_CAPACITY &&
-      (AdmissionRenderPacketState(&adapter->RenderPacket) !=
-           AdmissionRenderPacketEmpty || adapter->G4PendingCount != 0u ||
-       worker_busy) &&
-      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) == 0
-      ? TRUE : FALSE;
-  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
-  return admissible;
+  ULONG reason = ADMISSION_SUBMIT_ADMISSIBLE;
+  BOOLEAN reported = FALSE;
+  if (AdmissionG4PendingAdmissibleWhy(adapter, context, &reason, &reported))
+    return TRUE;
+  if (reason >= 1u && reason <= ADMISSION_SUBMIT_NOT_REASONS)
+    InterlockedIncrement(&adapter->SubmitPath.NotAdmissible[reason - 1u]);
+  if (reported)
+    InterlockedIncrement(&adapter->SubmitPath.ContextLimitReported);
+  return FALSE;
 }
 
 /* Receipt only. Caller holds SchedulerLock at the failing decision, before

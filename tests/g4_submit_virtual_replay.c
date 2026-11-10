@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "apple_agx_g4_submit.h"
+#include "render_submit_path.h"
 #include "apple_agx_g4_preflight.h"
 #include <stddef.h>
 #include "apple_agx_scheduler.h"
@@ -258,7 +259,11 @@ typedef struct {
   ULONG G4PendingHead, G4PendingCount, DispatchedFence;
   ULONG G4PrebindFence; /* rc90 */
   volatile int PagingPending;
-  struct { volatile int Immediate, Deferred, Binds; } SubmitPath;
+  struct { volatile int Immediate, Deferred, Binds;
+           /* v2 (render_submit_path.h) */
+           volatile int NotAdmissible[ADMISSION_SUBMIT_NOT_REASONS], ContextLimitReported, Requeued;
+  } SubmitPath;
+  volatile int SubmitReportedFence; /* reported to dxgkrnl, retire pending */
   ADMISSION_BACKEND_IMAGE BackendImage;
   ADMISSION_BACKEND_IMAGE_SNAPSHOT BackendSnapshot;
 } ADMISSION_CONTEXT;
@@ -620,10 +625,23 @@ static void phase5a_cases(ADMISSION_CONTEXT *adapter,
   b.GpuvaG3DmaBufferVa = 0ULL;
   b.GpuvaG3DmaBufferBytes = 0u;
   other.hContext = &b;
+  /* SubmitPath v2 (receipt-only): every refused decision counts its first
+   * failing predicate in code order, and nothing else. WHAT REAL BUG OR
+   * INVARIANT WILL THIS TEST CATCH? A receipt that blames the wrong
+   * predicate for a blocked submit thread (R9 A.6 decides the F-A2 fix on
+   * it), or one that counts admissible submissions. */
+  memset((void *)adapter->SubmitPath.NotAdmissible, 0, sizeof(adapter->SubmitPath.NotAdmissible));
+  adapter->SubmitPath.ContextLimitReported = 0;
   /* Not queueable (runtime stopping/failed): today's path, slot busy -> refused. */
   other.SubmissionFenceId = 8u;
   assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) != STATUS_SUCCESS);
   assert(adapter->G4PendingCount == 0u && b.Object.FenceOutstanding == 0u);
+  assert(adapter->SubmitPath.NotAdmissible[ADMISSION_SUBMIT_NOT_QUEUEABLE - 1u] == 1);
+  replay_irql = 2; /* above PASSIVE: the first predicate in code order */
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) != STATUS_SUCCESS);
+  replay_irql = 0;
+  assert(adapter->SubmitPath.NotAdmissible[ADMISSION_SUBMIT_NOT_IRQL - 1u] == 1 &&
+         adapter->SubmitPath.NotAdmissible[ADMISSION_SUBMIT_NOT_QUEUEABLE - 1u] == 1);
   adapter->RuntimeQueueable = 1;
   assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) == STATUS_SUCCESS);
   assert(adapter->G4PendingCount == 1u && dispatches == before + 1);
@@ -639,7 +657,35 @@ static void phase5a_cases(ADMISSION_CONTEXT *adapter,
   assert(adapter->G4PendingCount == 2u && b.Object.FenceOutstanding == 8u &&
          b.GpuvaG3SecondFence == 9u);
   other.SubmissionFenceId = 10u;
+  /* two admissible decisions counted nothing */
+  assert(adapter->SubmitPath.NotAdmissible[ADMISSION_SUBMIT_NOT_CONTEXT_LIMIT - 1u] == 0 &&
+         adapter->SubmitPath.NotAdmissible[ADMISSION_SUBMIT_NOT_CAPACITY - 1u] == 0);
   assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) != STATUS_SUCCESS);
+  assert(adapter->G4PendingCount == 2u && b.GpuvaG3SecondFence == 9u);
+  /* the context limit comes before the (also full) pending queue */
+  assert(adapter->SubmitPath.NotAdmissible[ADMISSION_SUBMIT_NOT_CONTEXT_LIMIT - 1u] == 1 &&
+         adapter->SubmitPath.NotAdmissible[ADMISSION_SUBMIT_NOT_CAPACITY - 1u] == 0 &&
+         adapter->SubmitPath.ContextLimitReported == 0);
+  /* the same refusal while the context's oldest fence (8) is reported to
+   * dxgkrnl and not yet retired: the R9 class; another fence is not */
+  adapter->SubmitReportedFence = 9;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) != STATUS_SUCCESS);
+  assert(adapter->SubmitPath.ContextLimitReported == 0);
+  adapter->SubmitReportedFence = 8;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &b, &other) != STATUS_SUCCESS);
+  adapter->SubmitReportedFence = 0;
+  assert(adapter->SubmitPath.NotAdmissible[ADMISSION_SUBMIT_NOT_CONTEXT_LIMIT - 1u] == 3 &&
+         adapter->SubmitPath.ContextLimitReported == 1);
+  /* a full queue for a context with room: capacity */
+  {
+    static ADMISSION_RENDER_CONTEXT c;
+    DXGKARG_SUBMITCOMMANDVIRTUAL third = other;
+    c = b; c.Object.FenceOutstanding = 0u; c.GpuvaG3SecondFence = 0u;
+    third.hContext = &c;
+    assert(AdmissionG4SubmitVirtualEnvelope(adapter, &c, &third) != STATUS_SUCCESS);
+    assert(adapter->SubmitPath.NotAdmissible[ADMISSION_SUBMIT_NOT_CAPACITY - 1u] == 1 &&
+           c.Object.FenceOutstanding == 0u);
+  }
   assert(adapter->G4PendingCount == 2u && b.GpuvaG3SecondFence == 9u);
   /* Nothing binds while A's job still owns the slot. */
   assert(AdmissionG4PendingBindHead(adapter));

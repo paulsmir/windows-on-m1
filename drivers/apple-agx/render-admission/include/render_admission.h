@@ -585,12 +585,23 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
  * SubmitCommandVirtual waited for the render slot, by the first busy
  * ReadyEx predicate: [0] 4 backend submitted, [1] 8 worker finishing,
  * [2] 16 slot occupied, [3] other. QPC units. */
+/* v2 (receipt-only, R9 A.6): why a G4 submission was not admissible to the
+ * pending queue at its one decision (AdmissionG4PendingAdmissible), the
+ * first failing predicate in code order, and how often the context limit
+ * failed while the context's oldest fence had already been reported to
+ * dxgkrnl but not yet retired (ADMISSION_CONTEXT.SubmitReportedFence).
+ * Requeued: waits that ended on the deferred path (Wom1SubmitRequeue). */
+#include "render_submit_path.h"
 typedef struct _ADMISSION_SUBMIT_PATH {
   ULONG Version, Bytes;
   volatile LONG Immediate, Deferred, Binds, Reserved;
   volatile LONG Waits[4];
   volatile LONG64 WaitQpc[4];
   volatile LONG64 MaxWaitQpc;
+  /* v2: [reason - 1] */
+  volatile LONG NotAdmissible[ADMISSION_SUBMIT_NOT_REASONS];
+  volatile LONG ContextLimitReported;
+  volatile LONG Requeued;
 } ADMISSION_SUBMIT_PATH;
 #define ADMISSION_G4_PENDING_CAPACITY 2u
 typedef enum _ADMISSION_G4_PENDING_STATE {
@@ -896,6 +907,11 @@ typedef struct _ADMISSION_CONTEXT {
    * under SchedulerLock. */
   ULONG G4PrebindFence;
   ADMISSION_SUBMIT_PATH SubmitPath;
+  /* Receipt-only (SubmitPath v2): the fence the completion worker has
+   * reported to dxgkrnl and not yet retired from its context; 0 = none.
+   * Written by the worker (cleared under SchedulerLock with the retire),
+   * compared under SchedulerLock by the submit decision. */
+  volatile LONG SubmitReportedFence;
   ADMISSION_BACKEND_IMAGE BackendImage;
   /* EXP1105: Prepare image of the objects a G4 job changes. */
   ADMISSION_BACKEND_IMAGE_SNAPSHOT BackendSnapshot;

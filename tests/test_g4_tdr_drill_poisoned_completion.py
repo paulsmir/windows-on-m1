@@ -234,6 +234,7 @@ typedef struct _ADMISSION_CONTEXT {
   /* rc102: the pending head a kicked successor would be (none here) */
   struct { unsigned State, Fence; ADMISSION_RENDER_CONTEXT *Context; } G4Pending[2];
   ULONG G4PendingHead, G4PendingCount;
+  LONG SubmitReportedFence; /* SubmitPath v2: reported, retire pending */
 } ADMISSION_CONTEXT;
 typedef struct {
   ADMISSION_CONTEXT *Adapter;

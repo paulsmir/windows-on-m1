@@ -5968,6 +5968,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
         adapter, Fence, sync_status, reported);
     if (!NT_SUCCESS(sync_status) || !reported)
       return APPLE_AGX_BACKEND_FALSE;
+    /* SubmitPath v2 (receipt-only): dxgkrnl knows this fence completed and
+     * may submit the next packet; its context still counts it. */
+    InterlockedExchange(&adapter->SubmitReportedFence, (LONG)Fence);
     AdmissionGdiReceiptCompleteWindows(adapter, Fence,
         (ULONG)Status, TRUE);
   }
@@ -6006,6 +6009,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   if (runtime->CompletionContext != NULL)
     AdmissionContextRetireFence(runtime->CompletionContext, Fence);
   runtime->CompletionContext = NULL;
+  InterlockedExchange(&adapter->SubmitReportedFence, 0);
   KeReleaseSpinLock(&adapter->SchedulerLock,old_irql);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (!AdmissionCompletedOutputMarkNotified(
