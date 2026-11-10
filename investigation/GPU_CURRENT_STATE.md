@@ -4265,3 +4265,86 @@ AMENDMENT to the pre-registered POOL-PROBE reading (entry 21:27:02Z; made before
 Next offline step (no hardware): account for the ~1450 slabs (2.9 GiB) of one GravityMark HD load from existing
 receipts and logs -- which allocation classes ask for them and whether any class is backed at creation without
 being used. Read-only study started; result will be recorded here.
+
+## UPDATE 2026-11-10T21:56:52Z -- architect: EXP2329 read (K1 default-on rows, late-boot out-of-memory = guest servicing, not a pool leak); slab demand accounted; quiet-guest validity gate
+
+Evidence dir `.local/experiments/EXP2329-k1on-a/evidence/EXP2329/`; raw result in EXP2329 ACTUAL (bench owner).
+Receipt fields read with the v15 layout of `render_pool_demand.h`; xproc receipts parsed as JSON.
+
+### K1 default-on check (74469a02c) -- rows against the pre-registered text of EXP2329 BEFORE
+- RenderKicked > 0, RenderFailed 0: MET. b0 considered 787, kicked 760, failed 0; whole boot considered 21448,
+  kicked 21322, failed 0, fell_back 0, refused_other 0, refused_same_vm_slot 123.
+- "refusal 55 = 0", receipts "as EXP2326" (EXP2326 method, entry 2026-11-10T18:45:23Z, "K1 boot A": per PERF arm from pre/post receipts):
+  MET for the PERF arms w/r2/r3 (count 1 at post-b0 and still 1 at post-gm, post-x and final = 0 per PERF arm).
+  Whole boot: 1, in arm b0 (last_refusal code 55, fence 18658), kind "compute -> render", capability_off 0,
+  no_process 0. That pair kind is outside K1's class and keeps refusal 55 by design (render_job_window.h:100).
+  It is recorded as a fact, not as a K1 failure and not as a pass of a whole-boot row.
+- fps_frames mean(r2,r3) within +-0.7 % of 50.33: NOT MET by the letter. w/r2/r3 50.688 / 50.941 / 50.472,
+  mean(r2,r3) 50.707 = +0.748 %, on the fast side.
+- suite 119/0: MET. BUGCHECK 0: MET (STOPS 0).
+- Verdict by the pre-registered rule ("Fail of any = the K1 default flip is reverted (new row), not patched"): one
+  row is not met, so the default flip 74469a02c is REVERTED (bench owner: git revert, new CHANGES rows). K1 stays
+  the accepted opt-in (`Wom1CrossProcessRenderPairs`=1), contract-safe and FPS-neutral as recorded at EXP2326.
+  No second default-on attempt is planned: the flip has no measured gain, so it returns only when a lever needs it.
+- The rule is not reinterpreted. Process finding for future default flips: the band was narrower than the spread of
+  the control boots (mean(r2,r3) 50.08 EXP2320, 50.285 EXP2325, 50.330 EXP2326, 50.08 EXP2328, 50.707 here =
+  1.25 % range). A band for a default flip is derived from the measured spread of at least three control boots and
+  is written one-sided when only a loss is a failure.
+- Packages already built with K1 default on (EXP2330, EXP2331, EXP2332) run as built; each BEFORE states the K1
+  state of its package. Comparisons inside one boot are unaffected.
+
+### Late-boot defect: device removed at 24 s of FULL ft5b -- cause is memory pressure from guest servicing
+- Sequence: f0a 7977 (uptime 13m29s), ft5a 7678 (17m50s), ft5b "D3D12::error(): out of memory" at 23.9-24.0 s then
+  device removed (22m21s), f0b 7246 (24m29s); CS warm/r2/r3 35.659 / 44.808 / 49.208 -> perf gate cs16 FAIL -10.28 %.
+- Pool receipt Wom1M2PoolDemand at pre-b0 / post-b0 / pre-gm / post-gm / post-x / final: Slabs 82 / 92 / 89 / 89 /
+  102 / 100, ReservedBytes 162 / 165 / 157 / 153 / 167 / 167 MiB, PeakReserved 2979 MiB. The pool returns to the
+  same level after every process: NO leak between process lifetimes.
+- Final receipt: ReserveFailures 5, FloorRefusals 5, all reason 1 (LOW_MEMORY); PressureWaits 1 (2050 ms, failed),
+  PressureFastFails 4; HeadroomRefusals 0, NewSlabFailures 0, CommitFailures 0. LastReserveFailure: request 49 MiB at
+  2709 MiB reserved, LowMemory 1, HighMemory 0, TimeMs 1363949. So the memory floor (rc104/rc109/rc115) refused
+  growth under the system low-memory condition, the application got E_OUTOFMEMORY and removed the device. The driver
+  followed its contract; no bugcheck, no hang.
+- procs-final: process sum 3821 MB with TiWorker 920 MB (15855 handles), TrustedInstaller, wuaucltcore and
+  MoUsoCoreWorker present. EXP2328 (2820 MB) had none of them; EXP2327 (2898 MB) had MoUsoCoreWorker only;
+  TiWorker is absent in EXP2322..EXP2328. One GravityMark load needs about 2.9 GiB of pool on a 6.69 GB guest.
+- Reading: Windows Update servicing started in the guest during the boot and took about 1 GB plus CPU and disk.
+  This is an inference from the end-of-boot process list and the LOW_MEMORY refusals; the start time of servicing
+  inside the boot is not yet read (bench owner fetches the event-log times read-only).
+- Under that pressure the chunked slab cost rose from 5.7-7.4 ms to 11.7 ms per slab, SlabAllocUsMax 64 ms -> 2.5 s,
+  ReserveUsMax 0.76 s -> 4.9 s.
+- NOT judged from this boot: the T5b FULL rule (one ft5 lost, ft5a and f0b under pressure), any FULL baseline
+  (f0a 7977 is inside the 7874..7991 range but its quietness is unproven; it is not added to the mean), the CS gate
+  of the package (FAIL stands as recorded; rerun = the CS gate of EXP2330, same package, on a quiet guest; a second
+  FAIL on a quiet guest stops the package).
+
+### Process rule (new): quiet-guest validity gate, from EXP2330 on
+- Before the first arm and before every FULL arm the probe saves a process snapshot (`procs-<tag>.txt`, format of
+  procs-final) and the available physical memory.
+- An arm is valid only when none of TiWorker, TrustedInstaller, wuauclt*, MoUsoCoreWorker, usoclient, DismHost,
+  msiexec, CompatTelRunner is running. Otherwise the probe waits (60 s steps, 20 min bound). Still present after
+  the bound: the FULL and gate arms are skipped, the boot is recorded INVALID-ENV and is not counted. The probe
+  never kills servicing processes and never changes update settings.
+- Pausing Windows Update on the bench guest is a system setting of the user's machine: offered to the user, not
+  changed by the sessions.
+
+### Slab demand of one GravityMark HD FULL launch (offline, EXP2329 arm x; closes the "slab count" question of 21:43:37Z)
+- Reservation +2756.1 MiB in 571 allocations; slabs 89 -> 1528 (643 contiguous, 825 chunked).
+- The application's own D3D12 objects are 2627.4 MiB = 1314 slabs = 91 % of the 1439 new slabs: committed buffers
+  1409.3 MiB in 67 objects (largest 256, 2 x 210.9, 128, 109.9, 2 x 85.4, 60.3, 49.1 MiB), upload buffers 480 MiB in
+  6 objects, committed textures 565.3 MiB in 27 objects, placed textures 110.1 MiB in 32 objects, shader-visible
+  descriptor heaps 60.75 MiB, readback 2.1 MiB. FULL arms run -Asteroids 100000.
+- Driver-internal: UMD-internal about 128.7 MiB (64 slabs), TVB private leases 126.4 MiB (63 slabs; TvbMaxPages
+  peaks once at 1390 pages, steady 769 pages = 24 MiB, growth rule is Asahi's), free slots 10 slabs.
+- No object is backed twice. Everything is reserved and committed at creation (WDDM residency at creation).
+- Reading: the slab count is the application's request; there is no driver-side double count to remove. TVB lease
+  trimming is worth at most about 50 slabs (3 %) and gets no package of its own.
+- Still open on this line: (a) cost per slab = POOL-PROBE (staged); (b) HYPOTHESIS, not measured: part of the
+  1409 MiB of committed buffers is never referenced by a GPU batch in the first seconds or at all (the largest
+  buffers do not scale with the asteroid count), and macOS backs buffers by demand-zero pages. The measurement is a
+  per-BO first-GPU-reference census (class D receipt, UMD winsys, rides on a later package, no boot of its own).
+  A deferred-commit lever is designed only if the census shows a large never-referenced or late-referenced share.
+
+### Bench order now
+EXP2330 (same package, Wom1Ov2CrossLead=1: s1 PERF r1 + FULL f0 + CS gate; GO behind the quiet-guest gate) ->
+EXP2331 (STATS-NOPS) -> EXP2332 (PF1b) -> POOL-PROBE boot -> T5b FULL ABBA rerun (f0 ft5 ft5 f0 with -times on a
+quiet all-default boot; may share the POOL-PROBE package as a separate boot) -> TDR-H0 -> FS-D1.
