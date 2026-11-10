@@ -3441,3 +3441,43 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
 - Not verified: binary byte identity; timing neutrality of stop at a cut point; three other kernels differ by 2-12 bytes.
 - Active causal target unchanged: dependent load-chain depth per path, ours vs Apple twins (R21, now on
   production-equal listings). No C0 lever chosen. Bench order unchanged.
+
+## UPDATE 2026-11-10T16:20:04Z -- architect: R21 verdict, EXP2321 reading, K2 / T5 / production fixture landed
+
+- R21 (serial load-chain depth, ours vs Apple twins, production-equal listings; `.local/night-20261110/r21-load-chain-depth/REPORT.md`):
+  ACCEPTED as analysis. 97efffb3 (b12, 0.798 ms/job) equals Apple m208 in everything kernel-specific; its two surplus
+  round trips (one before the plane tests, one store drain per loop iteration) also exist in its 1.07x sibling.
+  Verdict: chain depth does NOT explain the 97efffb3 excess (+0.21 ms/frame). Traversal 7aa43c6c is deeper by 5-8
+  round trips but only on thread 0 of a 0.027 ms job: rejected as a lever. 6cf11e8a (b13, 0.343 ms/job) carries
+  surplus loads against m207: mask words loaded separately, 9 extra in the 16 plane tests, 2 loop-invariant constant
+  buffer loads per iteration; `APPLE_AGX_D3D_LICM_CONST=1` does not remove them. Bound of its whole surplus
+  <= 0.14 ms/frame (HYPOTHESIS, derived group count). SSBO atomic guards add 0 round trips.
+- Anti-loop decision: no wait-placement / slot / serialisation variants (R21 candidates 5-7): EXP2315 already showed
+  97efffb3 does not respond to fewer waits. Open are only loads that should not execute per iteration (candidates 3-4).
+- HYPOTHESIS (architect, not measured): the 97efffb3 prefix [0,164) costs 0.114 ms for two all-thread load levels,
+  about five times the average later load level; a cold first-touch cost per thread group would fit. Path
+  frequencies inside [164,5272) are unknown, so the next discriminator is a nested cut ladder (offline staging:
+  sub-agent n6b-cut-ladder -> `.local/handoff/N6B-CUT-LADDER.md`). Scope of in-loop invariant loads over all GM kernels:
+  sub-agent t6-invariant-loads -> `.local/handoff/T6-INVARIANT-LOADS.md`. Neither has reported.
+- EXP2321 (boot B, Wom1PreludeNotifyGate=1; ACTUAL in the ledger, f33a873dd): REJECTED as a default. HD PERF
+  fps_frames r2 49.841 / r3 49.868, mean 49.85 against EXP2320 50.08 = -0.45 % (neutral band of the pre-registered
+  rule); the gate acted (holds 11923, settled 11851, timeout 63, refused 44037) but the mean hold 831 us fails the
+  <= 500 us criterion. No default flip, no repeat boot, no fourth (both-switches) boot. FULL f0 7991 (EXP2320 7888,
+  EXP2318 7923) is one sample outside the decision metric: no claim. Best result with a claim unchanged: EXP2318
+  FULL 7923 = 79.7 % of macOS 9946. Architect reading: holding a prelude 0.83 ms to save one notify costs what it
+  saves; the prelude lever is the cross-execution lead (N4c-v2), not a gate.
+- Landed on gpu/memory-latency (software only, status implemented): K2 timing ring v5 (f2ad4db4a, class D);
+  T5 texture-state promotion, opt-in `APPLE_AGX_D3D_PROMOTE_TEX=1`, default off (60daee99e, class O);
+  cost fixture atomics filter (8a89c06a5) and `--production` shape + `agx_shader_cost.py verify` (bd74069a4).
+  The rule "no stand-in fixture number as a production value" stays: use `--production` / `verify` (79 of 82 GM
+  compute kernels equal the guest row; 2308298b, 9aa3f9aa, e415b41e differ by <= 2 instrs / 12 bytes, cause open;
+  fragment shaders are not covered by `--production`).
+- T5 offline result (production-shaped harness, `.local/handoff/T5-TEXSTATE.md`): switch off = guest rows; switch on
+  changes only lighting CS 806ee7b1bdb1944a (3450 -> 3424 instrs, code 23978 -> 23820) and planet PS
+  428487dae22a5191 (5791 instrs, code ~39830); no GPR / thread-count gain; bindless samples in innermost loops
+  16 -> 0 and 33 -> 0. ACCEPTED FOR THE BENCH; expected C4 -0.10..-0.30 ms and R5 3D -0.08..-0.17 ms per frame are
+  estimates. Unknown on hardware: preamble texture-state stores to registers 16..20.
+- Bench order: EXP2322 (C, launched 16:20Z) -> N4c-v2 package from the new HEAD (x0 shadow / x1 apply / x2 apply / x3 shadow, then
+  T5 arms t0 off / t1 on / t1 / t0 if the builder gates pass) -> K1 package -> FS-D1 / MPO H1.
+- Not verified: MSVC /W4 /WX of K2 and T5 (builder gate at package time); nothing of this update ran on hardware
+  except EXP2321.
