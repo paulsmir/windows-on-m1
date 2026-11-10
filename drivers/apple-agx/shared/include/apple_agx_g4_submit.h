@@ -387,7 +387,13 @@ static inline int AppleAgxG4ComposeHeaderV2(
   return 1;
 }
 
-/* G2: the compute envelope header; Base.Reserved stays 0. */
+/* C2a: the one value a compute envelope's header Base.Reserved may carry
+ * besides 0 (the UMD-KMD envelope, not a firmware field): every allocation
+ * the job references is private to its device. Admitted only under
+ * APPLE_AGX_G4_PARSE_PRIVATE_ONLY. */
+#define APPLE_AGX_G4_COMPUTE_PRIVATE_ONLY 0x1u
+/* G2: the compute envelope header; Base.Reserved stays 0 (C2a: the UMD sets
+ * APPLE_AGX_G4_COMPUTE_PRIVATE_ONLY afterwards, under the device feature). */
 static inline int AppleAgxG4ComposeHeaderCompute(
     APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE *header,
     unsigned long long command_va, unsigned int command_bytes,
@@ -531,6 +537,9 @@ typedef struct {
   /* OV2: the command named no render-subqueue wait (VdmBarrier NONE),
    * admitted only under APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE. */
   int Independent;
+  /* C2a: the header carried APPLE_AGX_G4_COMPUTE_PRIVATE_ONLY, admitted
+   * only under APPLE_AGX_G4_PARSE_PRIVATE_ONLY. */
+  int PrivateOnly;
 } APPLE_AGX_G4_COMPUTE_VIEW;
 
 /* G2: validate a compute envelope: header, the native compute command
@@ -554,6 +563,11 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeEx(
  * and only one; CdmBarrier stays 0) and sets View->Independent. Unknown
  * flags are invalid. AppleAgxG4ParseComputeEx is this with Flags 0. */
 #define APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE 0x1u
+/* C2a: PRIVATE_ONLY (passed only while the KMD reports
+ * AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE) admits header Base.Reserved
+ * = APPLE_AGX_G4_COMPUTE_PRIVATE_ONLY and sets View->PrivateOnly; any other
+ * nonzero value stays invalid. (0x2 is a render parse flag.) */
+#define APPLE_AGX_G4_PARSE_PRIVATE_ONLY 0x4u
 /* The KMD maps this to its device-feature state (render_ov2.h); elsewhere
  * (host replays of single KMD functions) no flag is passed. */
 #ifndef ADMISSION_G4_COMPUTE_PARSE_FLAGS

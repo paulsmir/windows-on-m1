@@ -108,7 +108,12 @@ typedef struct {
   unsigned SchedulerLock, BackendImage, BackendSnapshot;
   PACKET RenderPacket;
   LONG RenderDpcFence, SchedulerDpcPending;
+  LONG SubmitReportedFence; /* SubmitPath v2: reported, retire pending */
+  ULONG SubmitRequeue; /* F-A2: Wom1SubmitRequeue, off here */
 } ADMISSION_CONTEXT;
+/* F-A2: SlotEvent after the context retire, only with the switch */
+static unsigned slot_changed_calls;
+static void AdmissionPlatformRuntimeSlotChanged(ADMISSION_CONTEXT *c) { (void)c; ++slot_changed_calls; }
 typedef struct {
   ADMISSION_CONTEXT *Adapter;
   APPLE_AGX_COMPLETION_TRANSACTION Completion;

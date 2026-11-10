@@ -861,6 +861,17 @@ int AgxWin32AsahiMapVirtualTiles(struct agx_bo *base,unsigned first,unsigned cou
   return AgxWin32AsahiMapVirtualPages(base,first*per,count*per,backing_base,backing_tile*per);
 }
 
+int AgxWin32AsahiBoPrivate(const AGX_WIN32_ASAHI_BACKEND *b,
+                           const struct agx_bo *base) {
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  const struct windows_bo *bo=(const struct windows_bo *)base;
+  return b && bo && bo->Backend==b && !bo->Imported;
+#else
+  (void)b;(void)base;
+  return 0;
+#endif
+}
+
 unsigned AgxWin32AsahiVirtualBackingCount(struct agx_bo *base) {
   const struct windows_bo *bo=(const struct windows_bo *)base;
   return bo && bo->Virtual ? bo->BackingCount : 0u;

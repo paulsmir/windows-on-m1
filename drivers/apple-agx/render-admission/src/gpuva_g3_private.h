@@ -94,6 +94,10 @@ typedef struct _ADMISSION_G3_STATE {
    * becomes the active job when that one completes. */
   ADMISSION_RENDER_CONTEXT *SuccessorContext;
   ULONG SuccessorFence;
+  /* C1: the successor's process when it is not ActiveProcess (a compute
+   * job with its own graph job on its own retained lease); NULL for a
+   * same-process successor. Set and cleared with SuccessorFence. */
+  struct _ADMISSION_G3_PROCESS *SuccessorProcess;
   ULONG LastCompletedFence;
   ULONG PrivateCompletionFence;
   ADMISSION_OMITTED_LEAVES OmittedLeaves;
@@ -413,10 +417,20 @@ BOOLEAN AdmissionGpuvaG3CompleteJob(ADMISSION_CONTEXT *Adapter, ULONG Fence);
  * active job's process lease (AppleAgxGpuvaG3GraphBeginNestedJob) as its
  * successor, with its output proven from its own (kicked) entry's packet.
  * Refused for another process or with a successor already. *Refusal: the
- * failed check (AdmissionGpuvaG3BeginJobAs; 9 = no kicked entry). */
+ * failed check (AdmissionGpuvaG3BeginJobAs; 9 = no kicked entry).
+ * C1 (Adapter->G3CrossProcessPairs): a compute successor of another
+ * process begins its own graph job instead, JOB_BEGIN on the retained
+ * lease its process already holds (AppleAgxGpuvaG3GraphBeginLeasedJob);
+ * 10 = not a compute envelope or no slot table, 11 = no held lease, a job
+ * of its own, or the active job's slot. */
 NTSTATUS AdmissionGpuvaG3BeginSuccessorJob(ADMISSION_CONTEXT *Adapter,
                                            ADMISSION_RENDER_CONTEXT *Context,
                                            ULONG Fence, ULONG *Refusal);
+/* C1: the retained VM slot the context's process holds now (its lease,
+ * not a job's); 0 without a slot table, a lease, or for a poisoned,
+ * uncertain or CPU-only process. PASSIVE, takes the graph lock. */
+ULONG AdmissionGpuvaG3RetainedSlot(ADMISSION_CONTEXT *Adapter,
+                                   ADMISSION_RENDER_CONTEXT *Context);
 /* rc102 (EXP2051): the buffer-manager binding BeginJob will give the bound
  * native render of Fence (its private scene's: the process manager, its
  * key from the scene's lists, heap window and backed blocks). TRUE with

@@ -475,7 +475,7 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeFlagsEx(
     APPLE_AGX_G4_ACCESS_EX access, void *context,
     APPLE_AGX_G4_COMPUTE_VIEW *view, APPLE_AGX_G4_FAILURE *failure) {
   AGX4_ACCESS_STATE state = {0};
-  int independent = 0;
+  int independent = 0, private_only = 0;
   APPLE_AGX_G4_PRIVATE_HEADER_COMPUTE header;
   APPLE_AGX_G4_NATIVE_HEADER native_header;
   APPLE_AGX_G4_NATIVE_COMPUTE compute;
@@ -486,15 +486,21 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeFlagsEx(
   if (view != 0) memset(view, 0, sizeof(*view));
   if (failure) memset(failure, 0, sizeof(*failure));
   if (!private_data || !view || !access || !preempt_bytes ||
-      (flags & ~APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE) != 0u ||
+      (flags & ~(APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE |
+                 APPLE_AGX_G4_PARSE_PRIVATE_ONLY)) != 0u ||
       private_capacity < sizeof(header) || umd_private_bytes < sizeof(header) ||
       umd_private_bytes > private_capacity ||
       dma_bytes == 0u || dma_bytes > APPLE_AGX_G4_NATIVE_MAX_BYTES ||
       !valid_va(dma_va, dma_bytes)) return AppleAgxG4ParseInvalid;
   memcpy(&header, bytes, sizeof(header));
+  /* C2a: the private-only verdict, only under the flag and only this value */
+  if (header.Base.Reserved == APPLE_AGX_G4_COMPUTE_PRIVATE_ONLY &&
+      (flags & APPLE_AGX_G4_PARSE_PRIVATE_ONLY) != 0u)
+    private_only = 1;
   if (header.Base.Magic != APPLE_AGX_G4_PRIVATE_MAGIC ||
       header.Base.Version != APPLE_AGX_G4_PRIVATE_VERSION_COMPUTE ||
-      header.Base.HeaderBytes != sizeof(header) || header.Base.Reserved != 0u ||
+      header.Base.HeaderBytes != sizeof(header) ||
+      (header.Base.Reserved != 0u && !private_only) ||
       header.Base.CommandVa != dma_va || header.Base.CommandBytes != dma_bytes ||
       umd_private_bytes != (unsigned int)sizeof(header) + dma_bytes ||
       dma_bytes != sizeof(native_header) + sizeof(compute))
@@ -527,5 +533,6 @@ APPLE_AGX_G4_PARSE_RESULT AppleAgxG4ParseComputeFlagsEx(
   view->CommandBytes = dma_bytes;
   view->CommandVa = dma_va;
   view->Independent = independent;
+  view->PrivateOnly = private_only;
   return AppleAgxG4ParseOk;
 }

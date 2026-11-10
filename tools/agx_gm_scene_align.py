@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """Align a GravityMark D3D12 UMD log with Apple's mtlsplitd CSV by scene and compare per-job GPU time.
 
-GravityMark's camera path advances per frame, not per second, so a run at a lower frame rate
-reaches each scene segment later.  Comparing run medians therefore compares different scenes
-(EXP2268 offline: our C2 looked 2x slower than Apple's c11 until the series were aligned).
+GravityMark's camera path advances with benchmark time, not per frame: two runs show the same
+scene at the same time after the benchmark start whatever their frame rates (EXP2196 FHD 34 fps
+against HD 43 fps: C2 series corr 0.98 by time with a 1 s lag, 0.14 by frame index).  The two
+captures start at different points before the benchmark, so their time axes differ by a constant
+lag; unaligned run medians compare different scenes (EXP2268 offline: our C2 looked 2x slower
+than Apple's c11 until the series were aligned).  Alignment is therefore a time lag, never a
+frame index.
 
   export-ours  UMD.log out.csv      per-frame CRCRCRCR position times (C0/C2/C4/C6 exact, R spans) + t
   export-apple splitd.csv out.csv   per-frame Apple encoder-group sums (C0blk=enc 0-9, C2=11+13, C4=15,
-                                    C6=18+19, R1=16+17, R3=20, R5=10, R7=14) + t
+                                    C6=18+19, R1=10, R3=14, R5=16+17, R7=20: the encoder order
+                                    C0blk R1 C2 R3 C4 R5 C6 R7 is our CRCRCRCR order) + t
   compare      ours.csv apple.csv [mtltime-hd.csv]
                                     best time lag by C2 cross-correlation, then per-10-s ratios and,
                                     with the mtltime CSV, our wall vs Apple's unsplit GPU frame.
@@ -16,7 +21,7 @@ import bisect, collections, csv, math, statistics as st, sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 GROUPS = {'C0blk': [0, 1, 3, 5, 7, 9], 'C2': [11, 13], 'C4': [15], 'C6': [18, 19],
-          'R1': [16, 17], 'R3': [20], 'R5': [10], 'R7': [14]}
+          'R1': [10], 'R3': [14], 'R5': [16, 17], 'R7': [20]}
 
 
 def export_ours(log, out):

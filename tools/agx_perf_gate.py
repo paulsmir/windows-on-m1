@@ -14,6 +14,12 @@ metric present in the baseline is compared: a measurement more than
 --tolerance percent below its baseline is a FAIL; a missing measurement for a
 metric that was requested is a FAIL. Prints one PERF_GATE line per metric and
 a final PERF_GATE_PASS or PERF_GATE_FAIL; exit 0 / 1.
+
+The gated GravityMark value is agx_gm_perf's present-row rate, the definition
+of the baseline. It under-reports frames faster than 16.67 ms (see
+agx_gm_perf), so each --gm log also gets one PERF_INFO line with the rate of
+GravityMark frames (fps_frames, what the score counts). PERF_INFO is not
+gated and does not change the exit code.
 """
 import argparse
 import json
@@ -40,12 +46,29 @@ def cs_fps(path):
     return float(hits[-1][2]) if hits else None
 
 
-def gm_fps(path):
+def gm_summary(path):
     with open(path, "r", encoding="utf-8", errors="replace") as handle:
         try:
-            return agx_gm_perf.summarize(handle)["fps"]
+            return agx_gm_perf.summarize(handle)
         except ValueError:
             return None
+
+
+def gm_fps(path):
+    summary = gm_summary(path)
+    return summary["fps"] if summary else None
+
+
+def gm_info(path, summary):
+    """Informational line: the frame-based rate next to the gated one."""
+    if not summary:
+        return f"PERF_INFO gravitymark_hd_perf no-window log={path}"
+    if summary.get("fps_frames") is None:
+        return (f"PERF_INFO gravitymark_hd_perf fps_presents={summary['fps']:.3f} "
+                f"fps_frames=n/a (no measure-d3d12-execute rows) log={path}")
+    return (f"PERF_INFO gravitymark_hd_perf fps_frames={summary['fps_frames']:.3f} "
+            f"fps_presents={summary['fps']:.3f} presents_per_frame={summary['presents_per_frame']:.4f} "
+            f"jobs_per_frame={summary['jobs_per_frame']:.3f} (not gated) log={path}")
 
 
 def gate(baseline, measured, tolerance):
@@ -79,13 +102,15 @@ def main(argv=None):
     ap.add_argument("--tolerance", type=float, default=2.0)
     a = ap.parse_args(argv)
     baseline = json.loads(Path(a.baseline).read_text(encoding="utf-8"))
-    measured = {}
+    measured, info = {}, []
     if a.gm:
-        measured["gravitymark_hd_perf"] = [gm_fps(p) for p in a.gm]
+        summaries = [gm_summary(p) for p in a.gm]
+        measured["gravitymark_hd_perf"] = [s["fps"] if s else None for s in summaries]
+        info = [gm_info(p, s) for p, s in zip(a.gm, summaries)]
     if a.cs:
         measured["cs16_benchmark"] = [cs_fps(p) for p in a.cs]
     ok, lines = gate(baseline, measured, a.tolerance)
-    print("\n".join(lines))
+    print("\n".join(info + lines))
     return 0 if ok else 1
 
 

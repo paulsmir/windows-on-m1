@@ -692,11 +692,37 @@ static BOOL owner_compute_first_enabled(void) {
   return enabled;
 }
 static UINT owner_compute_first_flushes;
+/* OV2 cross-execution (receipt; agx_d3d12_job_barriers.h AgxD3d12JobCross*):
+ * the owner, queue and thread of the execution being replayed and the
+ * owner's newest fence when the previous one ended; per execution the
+ * histogram of the shadow verdict of its first compute batch, that verdict
+ * with its detail, and the render batches submitted (and of them those that
+ * left no other render batch open). Under owner_job_barriers_lock. */
+static AGX_D3D12_OWNER *owner_cross_owner;
+static const void *owner_cross_queue;
+static DWORD owner_cross_thread;
+static UINT owner_cross_depth, owner_cross_nested, owner_cross_valid;
+static unsigned long long owner_cross_fence;
+static UINT owner_cross_histogram, owner_cross_last, owner_cross_renders, owner_cross_clean;
+/* OV2 cross-execution apply (opt-in APPLE_AGX_D3D12_OV2_CROSS_EXECUTION=1,
+ * only with the OV2 feature): the shadow verdict is the verdict of the
+ * execution-first compute batch (AgxD3d12JobCrossApply). Off, nothing the
+ * owner submits changes. */
+static BOOL owner_ov2_cross_execution(void) {
+  static const BOOL enabled = [] {
+    char value[2] = {};
+    return GetEnvironmentVariableA("APPLE_AGX_D3D12_OV2_CROSS_EXECUTION", value, sizeof(value)) == 1 && value[0] == '1'
+               ? TRUE
+               : FALSE;
+  }();
+  return enabled;
+}
+static UINT owner_cross_applied; /* execution-first compute batches made independent by it */
 static void owner_ov2_receipt_locked(void) {
   UINT any = 0;
   for (unsigned i = 0; i < 8u; ++i) any |= owner_ov2_reason[i];
   if (any && AdmissionUmdMeasureEnabled()) {
-    UINT values[29];
+    UINT values[32];
     for (unsigned i = 0; i < 8u; ++i) values[i] = owner_ov2_reason[i];
     values[8] = owner_ov2_sequence;
     values[9] = owner_ov2_pairs;
@@ -719,8 +745,19 @@ static void owner_ov2_receipt_locked(void) {
     values[26] = owner_ov5_noprelude_sequence;
     values[27] = owner_ov5_overflow_sequence;
     values[28] = owner_compute_first_flushes;
-    AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 29u);
+    /* OV2 cross-execution: shadow reasons of the execution-first compute as
+     * saturating nibbles (independent, 1, 2, 6, 8, other); its last shadow
+     * reason | detail << 8 | foreign command kinds << 16 (bit 15 driver
+     * work); the apply switch | batches it made independent << 1 | render
+     * batches << 8 | clean ones << 20 */
+    values[29] = owner_cross_histogram;
+    values[30] = owner_cross_last;
+    values[31] = (owner_ov2_cross_execution() ? 1u : 0u) | (owner_cross_applied << 1) |
+                 ((owner_cross_renders > 0xfffu ? 0xfffu : owner_cross_renders) << 8) |
+                 ((owner_cross_clean > 0xfffu ? 0xfffu : owner_cross_clean) << 20);
+    AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 32u);
   }
+  owner_cross_histogram = owner_cross_last = owner_cross_renders = owner_cross_clean = owner_cross_applied = 0;
   for (unsigned i = 0; i < 8u; ++i) owner_ov2_reason[i] = 0;
   owner_ov2_sequence = owner_ov2_pairs = owner_ov2_range_sequence = 0;
   for (unsigned i = 0; i < 4u; ++i) owner_ov2_prefix[i] = owner_ov2_kinds[i] = 0;
@@ -778,6 +815,64 @@ extern "C" void AgxD3d12OwnerJobExecution(unsigned known) {
   AgxD3d12JobBarrierExecution(&owner_job_barriers, known);
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
 }
+/* OV2 cross-execution (receipt): the replay of an ExecuteCommandLists of
+ * queue begins (after AgxD3d12OwnerJobExecution). The previous execution's
+ * last render stays comparable only when it was this owner's and queue's,
+ * nothing was submitted on the context since it ended and no owner work is
+ * pending that would join this execution's first batch. */
+extern "C" void AgxD3d12OwnerJobCrossBegin(AGX_D3D12_OWNER *owner, const void *queue) {
+  OwnerLock lock(owner);
+  if (!AgxD3d12OwnerJobBarriersEnabled()) return;
+  unsigned cause = 0u;
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  if (owner_cross_depth++) {
+    owner_cross_nested = 1u;
+    cause = 8u;
+  } else if (!owner || !owner->Context || !owner_cross_valid || owner != owner_cross_owner ||
+             queue != owner_cross_queue) {
+    cause = 7u;
+  } else if (AgxWin32AsahiContextNewestFence(owner->Context) != owner_cross_fence) {
+    cause = 3u;
+  } else if (owner->PendingDraws || owner->PendingCopies || owner->PendingDispatches) {
+    cause = 4u;
+  } else if (owner->UploadDeferred) {
+    cause = 5u;
+  } else if (owner->DeferredResolves) {
+    cause = 6u;
+  }
+  owner_cross_owner = owner;
+  owner_cross_queue = queue;
+  owner_cross_thread = GetCurrentThreadId();
+  AgxD3d12JobCrossBegin(&owner_job_barriers, cause);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
+/* ... and ends, after its submission (ok = 0: the replay or the submission
+ * failed) */
+extern "C" void AgxD3d12OwnerJobCrossEnd(AGX_D3D12_OWNER *owner, const void *queue, unsigned ok) {
+  OwnerLock lock(owner);
+  if (!AgxD3d12OwnerJobBarriersEnabled()) return;
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  if (owner_cross_depth) --owner_cross_depth;
+  if (owner_cross_depth || owner_cross_nested || owner != owner_cross_owner || queue != owner_cross_queue ||
+      GetCurrentThreadId() != owner_cross_thread)
+    AgxD3d12JobCrossBreak(&owner_job_barriers, 8u);
+  if (!owner_cross_depth) {
+    owner_cross_nested = 0u;
+    /* a render batch still open after the final flush is pending owner work */
+    if (!owner || !owner->Context || AgxWin32AsahiContextOpenRenders(owner->Context))
+      AgxD3d12JobCrossBreak(&owner_job_barriers, 4u);
+    AgxD3d12JobCrossEnd(&owner_job_barriers, ok);
+    owner_cross_valid = 1u;
+    owner_cross_fence = owner && owner->Context ? AgxWin32AsahiContextNewestFence(owner->Context) : 0ull;
+  }
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
+/* the active draw (dispatch 0) or dispatch (1) binds a descriptor-heap table */
+extern "C" void AgxD3d12OwnerJobUnplaced(unsigned dispatch) {
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  AgxD3d12JobCrossUnplaced(&owner_job_barriers, dispatch);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
 extern "C" void AgxD3d12OwnerJobBarrier(unsigned type, unsigned flags, unsigned before, unsigned after,
                                         unsigned id) {
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
@@ -801,6 +896,7 @@ static void owner_job_foreign(void) {
   if (!AgxD3d12OwnerJobBarriersEnabled()) return;
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
   AgxD3d12JobBarrierForeign(&owner_job_barriers);
+  if (!owner_cross_depth) AgxD3d12JobCrossBreak(&owner_job_barriers, 2u); /* e.g. a drain at Present */
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
 }
 /* OV1/OV2: every submitted batch (winsys AgxWin32BatchKindHook, before a
@@ -868,6 +964,7 @@ static void owner_ov6b_conflict_receipt(void) {
 }
 static unsigned owner_batch_kind(unsigned kind) {
   unsigned independent = 0u;
+  unsigned cross_clean = 0u;
   /* winsys: kind | 0x100 for a render batch with a CDM prelude */
   const unsigned prelude = (kind >> 8) & 1u;
   kind &= 0xffu;
@@ -888,11 +985,38 @@ static unsigned owner_batch_kind(unsigned kind) {
     }
     ++owner_ov5_renders;
   }
+  /* OV2 cross-execution (receipt): a batch nobody replays (Present, a
+   * destroy, another thread) ends what is kept; a render batch is clean
+   * when it is the only render batch holding work */
+  if (!owner_cross_depth) {
+    AgxD3d12JobCrossBreak(&owner_job_barriers, 1u);
+  } else if (GetCurrentThreadId() != owner_cross_thread) {
+    AgxD3d12JobCrossBreak(&owner_job_barriers, 9u);
+  } else if (kind == 1u && owner_cross_owner && owner_cross_owner->Context) {
+    cross_clean = AgxWin32AsahiContextOpenRenders(owner_cross_owner->Context) == 1u ? 1u : 0u;
+  }
+  if (kind == 1u) {
+    ++owner_cross_renders;
+    owner_cross_clean += cross_clean;
+  }
   if (kind == 2u && AgxWin32Ov2Feature) {
     const unsigned reason = AgxD3d12JobBarrierRefusal(&owner_job_barriers);
     const unsigned ranged = AgxD3d12JobBarrierRefusalRanges(&owner_job_barriers);
     independent = (owner_ov2_ranges() ? ranged : reason) == 0u ? 1u : 0u;
     ++owner_ov2_reason[reason & 7u];
+    /* OV2 cross-execution: the shadow verdict of the execution-first compute */
+    if (AgxD3d12JobCrossFirst(&owner_job_barriers)) {
+      unsigned detail = 0u;
+      const unsigned shadow = AgxD3d12JobCrossRefusal(&owner_job_barriers, &detail);
+      const unsigned kinds = owner_job_barriers.Cross.KeptKinds | owner_job_barriers.Cross.ForeignKinds |
+                             owner_job_barriers.ForeignKinds;
+      owner_cross_histogram = AgxD3d12JobCrossCount(owner_cross_histogram, shadow);
+      owner_cross_last = (shadow & 0xffu) | ((detail & 0xffu) << 8) | ((kinds & 0x7fffu) << 16) |
+                         ((kinds >> 31) << 31);
+      /* apply (opt-in): this batch takes the shadow verdict */
+      independent = AgxD3d12JobCrossApply(owner_ov2_cross_execution() ? 1u : 0u, 1u, shadow, independent);
+      if (owner_ov2_cross_execution() && independent && owner_cross_applied < 0x7fu) ++owner_cross_applied;
+    }
     if (owner_job_barriers.PreviousKind == 1u) {
       if (owner_ov2_pairs < 8u) {
         owner_ov2_sequence |= (reason & 0xfu) << (4u * owner_ov2_pairs);
@@ -908,6 +1032,7 @@ static unsigned owner_batch_kind(unsigned kind) {
       ++owner_ov2_pairs;
     }
   }
+  AgxD3d12JobCrossBatch(&owner_job_barriers, kind, cross_clean);
   AgxD3d12JobBarrierBatch(&owner_job_barriers, kind, owner_job_values);
   owner_job_values_valid = 1u;
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
@@ -959,6 +1084,14 @@ static void release_compute_samplers(AGX_D3D12_OWNER *owner) {
 
 extern "C" HRESULT AgxD3d12OwnerDestroy(AGX_D3D12_OWNER *owner) {
   if (!owner) return S_OK;
+  /* OV2 cross-execution: nothing is kept past its owner (the address of a
+   * destroyed owner can be the next one's) */
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  if (owner == owner_cross_owner) {
+    owner_cross_owner = NULL;
+    owner_cross_valid = 0u;
+  }
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
   AdmissionUmdScreenCpuAccessSnapshot(&owner->Runtime, S_OK, 3u);
   owner_perf_flush(); /* C82: the tail of a short run */
   BOOL consumed = FALSE;

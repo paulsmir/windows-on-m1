@@ -424,6 +424,9 @@ void (*AgxWin32BatchDepsHook)(const uint32_t *values, unsigned count);
  * AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE). */
 unsigned (*AgxWin32BatchKindHook)(unsigned kind);
 extern volatile unsigned AgxWin32Ov2Feature;
+/* C2a: the KMD reports AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE
+ * (MSVC only, like the hooks: the host models extract the submit bodies). */
+extern volatile unsigned AgxWin32PrivateOnlyFeature;
 /* OV5: read-only, before the render packet is built: nonzero when the
  * D3D12 owner proved the render's vertex/TA work independent of the compute
  * batch submitted just before it (prelude: the packet has a compute command;
@@ -746,6 +749,9 @@ static int add_bo(AGX_WIN32_ASAHI_BACKEND *b,
     if(refs[i]->Allocation==view->Allocation) return 1;
   if(*count==limit) return 0;
   refs[(*count)++]=view;
+#ifdef _MSC_VER /* C2a; the host models extract this body with their own backend */
+  AgxWin32PrivateOnlyAdd(&b->PrivateOnly,AgxWin32AsahiBoPrivate(b,bo));
+#endif
   /* C53 B1: a virtual BO's tiles read and write its backing BOs (B4: each
    * distinct one, the tile scratch included) */
   for(unsigned i=0,n=AgxWin32AsahiVirtualBackingCount(bo);i<n;++i)
@@ -1266,6 +1272,9 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   memcpy(cpu,&envelope.Native,command_bytes);
   refs=calloc(limit,sizeof(*refs));
   if(!refs) { fail_site=__LINE__; goto fail; }
+#ifdef _MSC_VER
+  AgxWin32PrivateOnlyBegin(&b->PrivateOnly); /* C2a: every add_bo below counts */
+#endif
   if(!add_bo(b,refs,&count,limit,g->Timestamp) ||
      !add_written(b,written,&written_count,g->Timestamp) ||
      !add_bo(b,refs,&count,limit,g->Command) ||
@@ -1290,6 +1299,12 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
   util_dynarray_foreach(&batch->pipeline_pool.bos,struct agx_bo *,bo) {
     if(!*bo || !add_bo(b,refs,&count,limit,*bo)) { fail_site=__LINE__; goto fail; }
   }
+  /* C2a: the reference list is complete: every allocation the KMD binds for
+   * this job. Private-only (and only with the device feature) goes into the
+   * envelope header; the command in the DMA buffer is unchanged. */
+#ifdef _MSC_VER
+  envelope.Header.Base.Reserved=AgxWin32PrivateOnlyFlag(&b->PrivateOnly,AgxWin32PrivateOnlyFeature);
+#endif
   if(!publish_shadows(batch)) { fail_site=__LINE__; goto fail; }
 #ifdef _MSC_VER
   note_batch_deps(batch,2u);

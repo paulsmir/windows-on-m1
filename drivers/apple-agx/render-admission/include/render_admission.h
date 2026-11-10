@@ -585,12 +585,23 @@ typedef struct _ADMISSION_G3_LEAF_HISTORY_SNAPSHOT {
  * SubmitCommandVirtual waited for the render slot, by the first busy
  * ReadyEx predicate: [0] 4 backend submitted, [1] 8 worker finishing,
  * [2] 16 slot occupied, [3] other. QPC units. */
+/* v2 (receipt-only, R9 A.6): why a G4 submission was not admissible to the
+ * pending queue at its one decision (AdmissionG4PendingAdmissible), the
+ * first failing predicate in code order, and how often the context limit
+ * failed while the context's oldest fence had already been reported to
+ * dxgkrnl but not yet retired (ADMISSION_CONTEXT.SubmitReportedFence).
+ * Requeued: waits that ended on the deferred path (Wom1SubmitRequeue). */
+#include "render_submit_path.h"
 typedef struct _ADMISSION_SUBMIT_PATH {
   ULONG Version, Bytes;
   volatile LONG Immediate, Deferred, Binds, Reserved;
   volatile LONG Waits[4];
   volatile LONG64 WaitQpc[4];
   volatile LONG64 MaxWaitQpc;
+  /* v2: [reason - 1] */
+  volatile LONG NotAdmissible[ADMISSION_SUBMIT_NOT_REASONS];
+  volatile LONG ContextLimitReported;
+  volatile LONG Requeued;
 } ADMISSION_SUBMIT_PATH;
 #define ADMISSION_G4_PENDING_CAPACITY 2u
 typedef enum _ADMISSION_G4_PENDING_STATE {
@@ -877,6 +888,10 @@ typedef struct _ADMISSION_CONTEXT {
   /* V1 (experiment): Wom1G3RetainedSlots = 1 (REG_DWORD), read once at
    * start: per-process VM slots kept between jobs (gpuva_g3_private.h). */
   ULONG G3RetainedSlots;
+  /* C1: Wom1CrossProcessPairs = 1 and its prerequisites, set at start with
+   * ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS: BeginSuccessorJob may begin a
+   * compute successor of another process on its own retained lease. */
+  ULONG G3CrossProcessPairs;
   volatile LONG PagingAdapterResetting;
   ULONG PagingNodeHead, PagingNodeCount, PagingNodeDispatchedFence;
   ADMISSION_CPU_PACKET PagingNodeQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
@@ -892,6 +907,16 @@ typedef struct _ADMISSION_CONTEXT {
    * under SchedulerLock. */
   ULONG G4PrebindFence;
   ADMISSION_SUBMIT_PATH SubmitPath;
+  /* Receipt-only (SubmitPath v2): the fence the completion worker has
+   * reported to dxgkrnl and not yet retired from its context; 0 = none.
+   * Written by the worker (cleared under SchedulerLock with the retire),
+   * compared under SchedulerLock by the submit decision. */
+  volatile LONG SubmitReportedFence;
+  /* F-A2 (R9 A.8): REG_DWORD Wom1SubmitRequeue = 1, read at start, default
+   * 0. A submission that was not admissible keeps testing admissibility
+   * while it waits and then takes the deferred path
+   * (AdmissionG4SubmitAwait); 0: it waits for "ready and empty" only. */
+  ULONG SubmitRequeue;
   ADMISSION_BACKEND_IMAGE BackendImage;
   /* EXP1105: Prepare image of the objects a G4 job changes. */
   ADMISSION_BACKEND_IMAGE_SNAPSHOT BackendSnapshot;
@@ -916,6 +941,10 @@ typedef struct _ADMISSION_CONTEXT {
    * Q2c (AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE): the compute parser
    * then admits a VdmBarrier NONE envelope. */
   volatile LONG GpuIndependentSubqueue;
+  /* C2a: nonzero while the started runtime runs Wom1CrossProcessPrivateLead
+   * = 1 (AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE): the compute parser
+   * then admits APPLE_AGX_G4_COMPUTE_PRIVATE_ONLY in the envelope header. */
+  volatile LONG GpuPrivateOnlyCompute;
   /* OV5 step 2: nonzero while the started runtime runs Wom1Ov5TaWaiver = 1
    * with the 3D-queue Barrier path available
    * (AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT): the render parser
@@ -2123,6 +2152,17 @@ VOID AdmissionPlatformRuntimeSlotChanged(_In_opt_ ADMISSION_CONTEXT *Context);
 BOOLEAN AdmissionPlatformRuntimeAwaitWork(
     _In_ ADMISSION_CONTEXT *Context, _In_ ULONG TimeoutMs,
     _Out_opt_ ULONG *FailedPredicate);
+/* F-A2: the same bounded wait with an optional predicate, tested on every
+ * pass after SlotEvent was cleared (PASSIVE_LEVEL, no lock held): TRUE with
+ * *Admitted set when it holds, although the runtime is not "ready and
+ * empty". Admissible NULL is AdmissionPlatformRuntimeAwaitWork. */
+typedef BOOLEAN (*ADMISSION_AWAIT_ADMISSIBLE)(ADMISSION_CONTEXT *Context,
+                                              PVOID Argument);
+BOOLEAN AdmissionPlatformRuntimeAwaitWorkEx(
+    _In_ ADMISSION_CONTEXT *Context, _In_ ULONG TimeoutMs,
+    _Out_opt_ ULONG *FailedPredicate,
+    _In_opt_ ADMISSION_AWAIT_ADMISSIBLE Admissible, _In_opt_ PVOID Argument,
+    _Out_opt_ BOOLEAN *Admitted);
 BOOLEAN AdmissionPlatformRuntimeSubmit(
     _Inout_ ADMISSION_CONTEXT *Context);
 /* Phase 5a: the runtime can take work later (started, not stopping,

@@ -1,7 +1,8 @@
 """EXP1328: the WDDM 2.0 DXGI entries are filled after the DXGI 1.1 ones.
 
 Invariant caught: AgxWddm2_0FillDxgiFuncs keeps a copy of the DXGI 1.1
-entries (pfnPresent, pfnBlt) that Present1 and Blt1 forward to. The projected
+entries; Present1 forwards to its pfnPresent (Blt1 also forwarded to pfnBlt
+until FS-F1 gave it a direct call). The projected
 CreateDevice called it in the WDDM 2.0 block, before the frontend wrote those
 entries, so the copy held NULL and every Present1 on a WDDM 2.0 device (the
 interface the runtime uses at FL 11_0) called address 0: dwm.exe restarted

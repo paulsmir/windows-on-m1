@@ -6755,10 +6755,19 @@ static void JobStageRanges(JobRangeSink sink, const AgxD3d12Dispatch &b, unsigne
         JobHeapRange(sink, b.cb_heap[c], b.cb_offset[c], 0, stage | AGX_D3D12_JOB_SRC_ROOT);
     }
 }
+/* OV2 cross-execution: the stage reaches resources through a CBV/SRV/UAV
+ * heap table (C47); the range sinks above hold none of those accesses */
+static bool JobStageHeapTable(const AgxD3d12Dispatch &b) {
+    if (!b.descriptors) return false;
+    for (UINT r = 0; r < b.heap_ranges; ++r)
+        if (!(b.heap_sampler_mask & (1ull << r))) return true;
+    return false;
+}
 static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch) {
     if (AgxD3d12OwnerJobBarriersEnabled()) { /* OV5 receipt: the compute batch's accesses */
         JobStageRanges(AgxD3d12OwnerJobDispatchRange, dispatch, 0u);
         JobIndirectRanges(AgxD3d12OwnerJobDispatchRange, dispatch.indirect, 0u);
+        if (JobStageHeapTable(dispatch)) AgxD3d12OwnerJobUnplaced(1u);
     }
     AgxD3d12OwnerBindings bind;
     OwnerBindings(dispatch, &bind);
@@ -6903,6 +6912,7 @@ static void JobDrawRanges(const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &op
     }
     JobStageRanges(sink, d.vs_bind, vertex);
     JobStageRanges(sink, d.ps_bind, 0u);
+    if (JobStageHeapTable(d.vs_bind) || JobStageHeapTable(d.ps_bind)) AgxD3d12OwnerJobUnplaced(0u);
 }
 static __declspec(noinline) HRESULT ReplayDraw(AGX_D3D12_OWNER *owner, const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional,
                                                 AgxD3d12DrawScratch *scratch, const AgxD3d12Command *clears = nullptr,
@@ -7213,6 +7223,9 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
             if (l && l->job_barriers_lost) known = 0;
         }
         AgxD3d12OwnerJobExecution(known);
+        /* OV2 cross-execution (receipt): what the previous execution left */
+        AgxD3d12OwnerJobCrossBegin(queue && queue->device ? static_cast<AGX_D3D12_OWNER *>(queue->device->owner) : nullptr,
+                                   queue);
         /* OV3: resolves defer only when every barrier is replayed */
         if (queue && queue->device)
             AgxD3d12OwnerResolveExecution(static_cast<AGX_D3D12_OWNER *>(queue->device->owner), 1, known);
@@ -7401,6 +7414,10 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
     }
     if (FAILED(hr) && device && device->callbacks && device->callbacks->pfnSetErrorCb)
         device->callbacks->pfnSetErrorCb(device->runtime, hr);
+    /* OV2 cross-execution (receipt): the execution is over and submitted */
+    if (job_receipt)
+        AgxD3d12OwnerJobCrossEnd(queue && queue->device ? static_cast<AGX_D3D12_OWNER *>(queue->device->owner) : nullptr,
+                                 queue, SUCCEEDED(hr) ? 1u : 0u);
 #endif
     QueryPerformanceCounter(&submitted);
     const LONGLONG hz = frequency.QuadPart ? frequency.QuadPart : 1;

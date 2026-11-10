@@ -149,10 +149,25 @@ HRESULT AgxD3d10WindowsQueryResourceResidency(
     AGX_D3D10_WINDOWS_DEVICE *,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *, struct pipe_resource *,
     DXGI_DDI_RESIDENCY *);
+/* One DXGI Blt rectangle in texels of subresource 0: Left/Top is the
+ * upper-left corner, Right/Bottom the lower-right corner (exclusive), as in
+ * DXGI_DDI_ARG_BLT (Dst*) and DXGI_DDI_ARG_BLT1 (Src*). */
+typedef struct _AGX_D3D10_WINDOWS_BLT_RECT {
+  UINT Left;
+  UINT Top;
+  UINT Right;
+  UINT Bottom;
+} AGX_D3D10_WINDOWS_BLT_RECT;
+/* Copies SourceRect of Source to DestinationRect of Destination. A NULL
+ * rectangle is the whole subresource. Each rectangle must be non-empty and
+ * inside its own resource; E_INVALIDARG otherwise. Rectangles of different
+ * size are scaled with a bilinear filter. */
 HRESULT AgxD3d10WindowsPresentationBlt(
     AGX_D3D10_WINDOWS_DEVICE *,
-    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *,
-    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *);
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Destination,
+    const AGX_D3D10_WINDOWS_BLT_RECT *DestinationRect,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Source,
+    const AGX_D3D10_WINDOWS_BLT_RECT *SourceRect);
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
 struct _ADMISSION_UMD_DEVICE;
 struct _ADMISSION_UMD_DEVICE *AgxD3d10WindowsRuntimeForTest(AGX_D3D10_WINDOWS_DEVICE *);

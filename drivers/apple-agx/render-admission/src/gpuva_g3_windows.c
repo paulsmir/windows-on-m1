@@ -51,7 +51,13 @@ VOID AdmissionGpuvaG3CaptureFaultMapping(ADMISSION_CONTEXT *Adapter,
   if (!ExTryToAcquireFastMutex(&state->Lock)) return;
   Receipt->Status = AdmissionGpuFaultMappingIdentity;
   process = state->ActiveProcess;
-  if (process == NULL || state->ActiveFence != Event->Fence ||
+  /* C1: the fault may name a cross-process successor's fence. */
+  if (process != NULL && state->SuccessorProcess != NULL &&
+      state->SuccessorFence != 0u && state->SuccessorFence == Event->Fence)
+    process = state->SuccessorProcess;
+  else if (process != NULL && state->ActiveFence != Event->Fence)
+    process = NULL;
+  if (process == NULL ||
       !(Event->Flags & ADMISSION_GPU_FAULT_JOB_KNOWN)) goto Done;
   for (context = process->Contexts; context != NULL;
        context = context->GpuvaG3NextContext)
@@ -4014,9 +4020,14 @@ static bool AdmissionG3TimedGraphBeginJob(ADMISSION_G3_STATE *state,
 /* OV2: the compute envelope parser admits VdmBarrier NONE only while the
  * device reports AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE. */
 static unsigned int AdmissionG4ComputeParseFlags(ADMISSION_CONTEXT *adapter) {
-  return adapter != NULL &&
-      InterlockedCompareExchange(&adapter->GpuIndependentSubqueue, 0, 0) != 0
-      ? APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE : 0u;
+  unsigned int flags = 0u;
+  if (adapter == NULL) return 0u;
+  if (InterlockedCompareExchange(&adapter->GpuIndependentSubqueue, 0, 0) != 0)
+    flags |= APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE;
+  /* C2a: the header's private-only verdict, only with the device feature */
+  if (InterlockedCompareExchange(&adapter->GpuPrivateOnlyCompute, 0, 0) != 0)
+    flags |= APPLE_AGX_G4_PARSE_PRIVATE_ONLY;
+  return flags;
 }
 
 /* OV5 step 2: the render parser admits CdmBarrier NONE (a TA-independent
@@ -4046,6 +4057,7 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
   ADMISSION_G3_PROCESS *process;
   APPLE_AGX_G4_SUBMIT_VIEW g4_view = {0};
   BOOLEAN g4_valid = TRUE;
+  BOOLEAN cross = FALSE;
   ADMISSION_G3_PRIVATE_SCENE *private_scene = NULL;
   NTSTATUS status = STATUS_INVALID_DEVICE_STATE;
 #ifdef ADMISSION_G3_BEGIN_SPLIT_RECEIPT
@@ -4149,7 +4161,13 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
 #endif
   /* rc102: a successor joins the active job of its own process. The same
    * checks in the same order as before; the first that fails is noted. */
-  if (!(successor ? state->ActiveProcess == process && state->ActiveFence != 0u &&
+  /* C1: with G3CrossProcessPairs a successor of another process is not
+   * refused here; it begins a job of its own below (refusals 10, 11). */
+  cross = successor && adapter->G3CrossProcessPairs != 0u &&
+      state->ActiveProcess != NULL && state->ActiveProcess != process
+      ? TRUE : FALSE;
+  if (!(successor ? (cross || state->ActiveProcess == process) &&
+                        state->ActiveFence != 0u &&
                         state->ActiveFence != fence && state->SuccessorFence == 0u
                   : state->ActiveProcess == NULL))
     refusal = 1u;
@@ -4178,7 +4196,18 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
   else if (!(adapter->BackendImage.G4Compute || adapter->BackendImage.PresentCompute ||
              AdmissionG3OutputAccessibleFor(adapter, &process->Graph, packet)))
     refusal = 7u;
-  else if (!(successor ? AppleAgxGpuvaG3GraphBeginNestedJob(&process->Graph)
+  /* C1: only a compute envelope, in a slot its process already holds and
+   * that is not the running job's; the lease is never taken here. */
+  else if (cross && (!adapter->BackendImage.G4Compute ||
+                     process->Graph.SlotTable == NULL))
+    refusal = 10u;
+  else if (cross && (process->Graph.LeaseToken == 0ULL ||
+                     process->Graph.JobInFlight || process->Graph.Slot == 0u ||
+                     !state->ActiveProcess->Graph.JobInFlight ||
+                     process->Graph.Slot == state->ActiveProcess->Graph.Slot))
+    refusal = 11u;
+  else if (!(cross ? AppleAgxGpuvaG3GraphBeginLeasedJob(&process->Graph) :
+             successor ? AppleAgxGpuvaG3GraphBeginNestedJob(&process->Graph)
                        : AppleAgxGpuvaG3GraphBeginJob(&process->Graph,
                              ADMISSION_GPUVA_G3_JOB_VM_SLOT)))
     refusal = 8u;
@@ -4216,6 +4245,7 @@ static NTSTATUS AdmissionGpuvaG3BeginJobAs(ADMISSION_CONTEXT *adapter,
     if (successor) {
       state->SuccessorContext = context;
       state->SuccessorFence = fence;
+      state->SuccessorProcess = cross ? process : NULL;
     } else {
       state->ActiveProcess = process;
       state->ActiveContext = context;
@@ -4422,6 +4452,29 @@ BOOLEAN AdmissionGpuvaG3PendingManager(ADMISSION_CONTEXT *adapter,
   return scene != NULL ? TRUE : FALSE;
 }
 
+/* C1: gpuva_g3_private.h. */
+ULONG AdmissionGpuvaG3RetainedSlot(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context) {
+  ADMISSION_G3_STATE *state;
+  ADMISSION_G3_PROCESS *process;
+  ULONG slot = 0u;
+  if (adapter == NULL || context == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return 0u;
+  state = (ADMISSION_G3_STATE *)adapter->GpuvaG3State;
+  process = (ADMISSION_G3_PROCESS *)context->GpuvaG3Process;
+  if (state == NULL || process == NULL || process->State != state) return 0u;
+  ExAcquireFastMutex(&state->Lock);
+  if (!process->Poisoned && !process->CpuOnlyMappings &&
+      !process->Graph.Uncertain && process->Graph.SlotTable != NULL &&
+      process->Graph.LeaseToken != 0ULL &&
+      process->Graph.Slot <= APPLE_AGX_GPUVA_G3_RETAINED_SLOTS_MAX &&
+      process->Graph.SlotTable->Count != 0u &&
+      process->Graph.SlotTable->Owner[process->Graph.Slot] == &process->Graph)
+    slot = process->Graph.Slot;
+  ExReleaseFastMutex(&state->Lock);
+  return slot;
+}
+
 /* rc102: the successor is the Kicked head entry; its packet describes it
  * (the render packet still holds the running job). */
 NTSTATUS AdmissionGpuvaG3BeginSuccessorJob(ADMISSION_CONTEXT *adapter,
@@ -4589,6 +4642,11 @@ BOOLEAN AdmissionGpuvaG3CompleteJobTimestamp(ADMISSION_CONTEXT *adapter,
     if (state->SuccessorFence != 0u) {
       /* rc102: the job kicked behind it is the active job now; the graph
        * lease stays with it (GraphEndJob ended only the older job). */
+      /* C1: a cross-process successor holds its own graph job; its
+       * process is the active one now. */
+      if (state->SuccessorProcess != NULL)
+        state->ActiveProcess = state->SuccessorProcess;
+      state->SuccessorProcess = NULL;
       state->ActiveContext = state->SuccessorContext;
       state->ActiveFence = state->SuccessorFence;
       state->SuccessorContext = NULL;
@@ -4626,6 +4684,10 @@ _Use_decl_annotations_ VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *adapter,
   if (process != NULL &&
       (state->SuccessorFence == fence || state->ActiveFence == fence)) {
     ADMISSION_G3_PRIVATE_SCENE *s;
+    /* C1: a cross-process successor's job is on its own process's graph;
+     * the running job's lease is not touched. */
+    if (state->SuccessorFence == fence && state->SuccessorProcess != NULL)
+      process = state->SuccessorProcess;
     /* The reset proved the firmware never received this job (a kicked
      * successor or an active job whose submit failed): its graph job ends
      * unrun and its scene was never started on the GPU. */
@@ -4639,7 +4701,11 @@ _Use_decl_annotations_ VOID AdmissionGpuvaG3AbortJob(ADMISSION_CONTEXT *adapter,
     if (state->SuccessorFence == fence) {
       state->SuccessorContext = NULL;
       state->SuccessorFence = 0u;
+      state->SuccessorProcess = NULL;
     } else if (state->SuccessorFence != 0u) {
+      if (state->SuccessorProcess != NULL)
+        state->ActiveProcess = state->SuccessorProcess;
+      state->SuccessorProcess = NULL;
       state->ActiveContext = state->SuccessorContext;
       state->ActiveFence = state->SuccessorFence;
       state->SuccessorContext = NULL;
@@ -5154,25 +5220,91 @@ static VOID AdmissionG4ObserveEnvelopeReject(ADMISSION_CONTEXT *adapter,
  * is only busy: another job bound or running, entries queued, or (EXP1135)
  * the worker still finishing the previous job with the slot already empty,
  * the most frequent wait in EXP1130 (ReadyEx predicate 8). */
+/* The predicates in code order; *Reason is ADMISSION_SUBMIT_ADMISSIBLE or
+ * the first one that fails (ADMISSION_SUBMIT_NOT_*). *OldestReported
+ * (receipt-only): the context limit failed while the completion worker had
+ * already reported the context's oldest fence to dxgkrnl and not yet
+ * retired it. No side effect. */
+static BOOLEAN AdmissionG4PendingAdmissibleWhy(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG *Reason, BOOLEAN *OldestReported) {
+  KIRQL old_irql;
+  BOOLEAN worker_busy = FALSE, reported = FALSE;
+  ULONG reason = ADMISSION_SUBMIT_ADMISSIBLE;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL) {
+    reason = ADMISSION_SUBMIT_NOT_IRQL;
+  } else if (!AdmissionPlatformRuntimeQueueable(adapter, &worker_busy)) {
+    reason = ADMISSION_SUBMIT_NOT_QUEUEABLE;
+  } else {
+    KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+    /* Phase 5b: up to two jobs per context (oldest + second). */
+    if (!(context->Object.FenceOutstanding == 0u ||
+          context->GpuvaG3SecondFence == 0u)) {
+      reason = ADMISSION_SUBMIT_NOT_CONTEXT_LIMIT;
+      reported = context->Object.FenceOutstanding == (ULONG)
+          InterlockedCompareExchange(&adapter->SubmitReportedFence, 0, 0)
+          ? TRUE : FALSE;
+    } else if (!(adapter->G4PendingCount < ADMISSION_G4_PENDING_CAPACITY)) {
+      reason = ADMISSION_SUBMIT_NOT_CAPACITY;
+    } else if (!(AdmissionRenderPacketState(&adapter->RenderPacket) !=
+                     AdmissionRenderPacketEmpty ||
+                 adapter->G4PendingCount != 0u || worker_busy)) {
+      reason = ADMISSION_SUBMIT_NOT_IDLE;
+    } else if (InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) != 0) {
+      reason = ADMISSION_SUBMIT_NOT_FAULTED;
+    }
+    KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  }
+  if (Reason != NULL) *Reason = reason;
+  if (OldestReported != NULL) *OldestReported = reported;
+  return reason == ADMISSION_SUBMIT_ADMISSIBLE ? TRUE : FALSE;
+}
+
+/* The one admission decision of a submission. SubmitPath v2 (receipt-only):
+ * a refusal counts its first failing predicate. */
 static BOOLEAN AdmissionG4PendingAdmissible(ADMISSION_CONTEXT *adapter,
     ADMISSION_RENDER_CONTEXT *context) {
-  KIRQL old_irql;
-  BOOLEAN admissible, worker_busy = FALSE;
-  if (KeGetCurrentIrql() != PASSIVE_LEVEL ||
-      !AdmissionPlatformRuntimeQueueable(adapter, &worker_busy))
+  ULONG reason = ADMISSION_SUBMIT_ADMISSIBLE;
+  BOOLEAN reported = FALSE;
+  if (AdmissionG4PendingAdmissibleWhy(adapter, context, &reason, &reported))
+    return TRUE;
+  if (reason >= 1u && reason <= ADMISSION_SUBMIT_NOT_REASONS)
+    InterlockedIncrement(&adapter->SubmitPath.NotAdmissible[reason - 1u]);
+  if (reported)
+    InterlockedIncrement(&adapter->SubmitPath.ContextLimitReported);
+  return FALSE;
+}
+
+/* F-A2: the predicate of a waiting submission; no receipt, no side effect. */
+static BOOLEAN AdmissionG4RequeueAdmissible(ADMISSION_CONTEXT *adapter,
+                                            PVOID context) {
+  return AdmissionG4PendingAdmissibleWhy(adapter,
+      (ADMISSION_RENDER_CONTEXT *)context, NULL, NULL);
+}
+
+/* The wait of a submission that was not admissible at its decision
+ * (PASSIVE_LEVEL, no lock held; at most 10 s, EXP1014/EXP1021). Without
+ * Wom1SubmitRequeue: until the runtime is ready and the render slot and the
+ * pending queue are empty, then the immediate path. F-A2 (R9 A.8), with the
+ * switch: the wait also ends as soon as the submission is admissible; it
+ * then takes the deferred path (*Deferred = TRUE) and joins the tail of the
+ * pending queue, behind everything queued before it; dxgkrnl issues the
+ * next submission of the node only after this call returned, so nothing
+ * overtakes it. "Ready and empty" keeps the immediate path, which by its
+ * own condition overtakes nothing. */
+static BOOLEAN AdmissionG4SubmitAwait(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG *FailedPredicate,
+    BOOLEAN *Deferred) {
+  BOOLEAN admitted = FALSE;
+  if (adapter->SubmitRequeue == 0u)
+    return AdmissionPlatformRuntimeAwaitWork(adapter, 10000u, FailedPredicate);
+  if (!AdmissionPlatformRuntimeAwaitWorkEx(adapter, 10000u, FailedPredicate,
+          AdmissionG4RequeueAdmissible, context, &admitted))
     return FALSE;
-  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
-  /* Phase 5b: up to two jobs per context (oldest + second). */
-  admissible = (context->Object.FenceOutstanding == 0u ||
-                context->GpuvaG3SecondFence == 0u) &&
-      adapter->G4PendingCount < ADMISSION_G4_PENDING_CAPACITY &&
-      (AdmissionRenderPacketState(&adapter->RenderPacket) !=
-           AdmissionRenderPacketEmpty || adapter->G4PendingCount != 0u ||
-       worker_busy) &&
-      InterlockedCompareExchange(&adapter->SchedulerFaulted, 0, 0) == 0
-      ? TRUE : FALSE;
-  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
-  return admissible;
+  if (admitted) {
+    *Deferred = TRUE;
+    InterlockedIncrement(&adapter->SubmitPath.Requeued);
+  }
+  return TRUE;
 }
 
 /* Receipt only. Caller holds SchedulerLock at the failing decision, before
@@ -6026,7 +6158,7 @@ static NTSTATUS AdmissionG3SubmitPresentComputeInner(ADMISSION_CONTEXT *adapter,
       ADMISSION_PRESENT_CPU(4u);
   }
   deferred = AdmissionG4PendingAdmissible(adapter, context);
-  if (!deferred && !AdmissionPlatformRuntimeAwaitWork(adapter, 10000u, NULL))
+  if (!deferred && !AdmissionG4SubmitAwait(adapter, context, NULL, &deferred))
     ADMISSION_PRESENT_CPU(5u);
   ExAcquireFastMutex(&state->Lock);
   /* The arena is made once and never moves until the process ends. */
@@ -6205,11 +6337,11 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
 /* EXP1014/EXP1021: wait at most 10 s for the previous job (EXP1020: backend
  * jobs outlived 1 s); stopping and resetting (TDR) still refuse at once. */
 #define ADMISSION_G4_RUNTIME_READY() \
-  AdmissionPlatformRuntimeAwaitWork(adapter, 10000u, &runtimePredicate)
+  AdmissionG4SubmitAwait(adapter, context, &runtimePredicate, &deferred)
 #else
 #define ADMISSION_G4_REJECTS(id, expression) (expression)
 #define ADMISSION_G4_RUNTIME_READY() \
-  AdmissionPlatformRuntimeAwaitWork(adapter, 10000u, NULL)
+  AdmissionG4SubmitAwait(adapter, context, NULL, &deferred)
 #endif
   /* Phase 5a: while the render slot holds another context's job, queue
    * instead of waiting on dxgkrnl's VidSch worker thread. */

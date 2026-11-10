@@ -2662,3 +2662,531 @@ no code. F0 outcome selects: cross-process depth-2 pairs (C1 then C2a), display 
 - **Next causal target:** performance unchanged (EXP2307B -> IRQD2 rerun on MUIRQ001 with m1n1 e6ac18bb if
   confirmed -> scaled-source checkpoint, which needs 06616be7 on its m1n1 line before any adapter disable ->
   F0 repeat at real 1280x720). Recovery: the three-step order above.
+
+## UPDATE 2026-11-09T23:40:00Z -- night plan: the GravityMark gap vs macOS becomes the only performance target
+
+- **User order:** approach macOS as closely as possible this night (FULL scores: FHD 69 %, HD 68 %; HD PERF ~74 %);
+  the architect decides and starts work without asking. Bench order: GM-gap experiments first; H1/TDR drills, IRQD2
+  and ANS-S1 only when the bench would otherwise idle.
+- **Why the plan changes:** the FHD frame was never decomposed although its gap is larger (ours ~31.0 ms vs Apple
+  21.4 ms; HD ~22.5 vs 17.4). The closed same-frame overlap line (EXP2298/2299) and the known HD overhead rows
+  (~2.0 ms) together reach only ~86-89 % of macOS at HD, so a cause outside those rows must exist or the job
+  structure itself must change.
+- **Open hypotheses, ranked (all labelled HYPOTHESIS until a report cites evidence):**
+  H-A FHD-only cost on the render/present side (load/store, compression, partial renders, DWM copy size);
+  H-B dxgkrnl queue contract / late submission owns launch + detect + idle + the wait behind DWM;
+  H-C a legal overlap we do not use (cross-process DWM||compute; cross-frame or next-compute-behind-render pairs);
+  H-D GPU runs below its maximum (P6 residency 86-87 %, firmware power inputs), or mapping granularity;
+  H-E macOS queues the frame ahead in firmware and has no compositor job on the critical path.
+- **Running offline (read-only subagents, reports in /Users/pavel/public_windows/.local/night-20261110/):**
+  r1-fhd-budget, r2-dxgk-queue, r3-dag-bound, r4-compute-levers, r5-macos-submission, r6-render-scaling.
+- **Decision (architect):** mechanism C of DWM-COMPOSITION-LEVER.md is unparked. C1 (class I, opt-in
+  `Wom1CrossProcessPairs`) and C2a (class O) are being implemented offline in a separate worktree session; F0 is
+  not a precondition any more because the cross-process boundary is also the first step towards per-process
+  firmware queues (the Asahi structure), whatever the size of the DWM row.
+- **Bench item N1 (fork 6):** GM-NIGHT-BASE, measurement only: FHD and HD with the job-timing ring, PERF runs,
+  mid-run pstate residency. Staged in .local/handoff/OV-ARCHITECT-HANDOFF.md (2026-11-09T23:35Z).
+- **Next causal target:** the largest FHD row by (ours - Apple) from r1 + N1; one lever per experiment after it.
+
+## UPDATE 2026-11-09T23:49:25Z -- full-screen at other resolutions: owner order and staged checkpoint FS-D1
+
+User order: full-screen mode at different resolutions must work as on an ordinary Windows PC. Priority stays below
+the GravityMark gap (the user repeated that the windowed macOS score is already ~30 % above ours, so the windowed
+comparison is the target; full-screen is not the explanation of the gap).
+
+Proven boundary (EXP2301): the bench m1n1 line has no CAP_SCALED_SOURCE (BrokerCaps 0xff, ScaledModes 0), the KMD
+exposes 1 of 11 modes, ChangeDisplaySettingsExW fails. Nothing above that boundary was ever exercised on the
+ANS-direct line.
+
+Decision (owner-layer order, DISPLAY_ONLY first):
+1. FS-D1: scaled source on the current bench m1n1 source (closedv5, with 06616be7). The old offline port
+   (b87eda82..., base 83a9cf74) is superseded before any run because the bench moved to e6ac18bb; the m1n1 port
+   session rebuilds it in `.local/experiments/m1n1-ansdirect-closedv5-scaled1/`. Checkpoint staged in the
+   architect handoff (one variable = m1n1; mode list, every mode set and back, GravityMark full-screen at two
+   sizes, adapter disable/enable in a scaled mode, perf gate). Not run yet; hash pending.
+2. Windows-side audit (read-only agent, `.local/night-20261110/fs-windows-audit/REPORT.md`): VidPn scaling types,
+   primaries at non-native sizes, DXGI blt-model exclusive and flip-model full-screen in the D3D11/D3D12 UMDs,
+   GL ICD, pointer in scaled modes, mode restore; plus the specification of a full-screen conformance probe
+   (`AGX_FS_<step>: PASS|FAIL`). Defects are fixed in the owning layer, one per experiment.
+3. Direct flip P1 (segment DirectFlip flag + UMD CheckDirectFlipSupport rule, atomic companion) only after a real
+   mode set exists; unchanged from DIRECT-FLIP-CONTRACT.md.
+
+Next causal target for this line: FS-D1 receipt (BrokerCaps 0x1ff, ScaledModes 1, 11 modes) on hardware.
+
+## UPDATE 2026-11-10T00:04:40Z -- GravityMark gap: offline budget from five reports (no hardware), hypotheses re-ranked
+
+Sources (read-only agents, /Users/pavel/public_windows/.local/night-20261110/): r1-fhd-budget, r2-dxgk-queue,
+r4-compute-levers, r5-macos-submission, r6-render-scaling. Reports are model output; rows below marked (checked)
+were spot-checked by the architect against the cited tables, the rest are as reported.
+
+- **Corrected size of the gap (r1, HD, PERF scene window, current profile EXP2307/2308):** ours 20.7 ms per
+  GravityMark frame vs Apple 16.6 ms = 80 % of macOS, gap 4.1 ms = GPU work +1.8 (like-for-like ~+2.3) and
+  non-busy +2.3. The "~74 %" figure came from counting present rows: at HD two 8-job frames can lie between two
+  present rows (gate 44.39 fps, frames ~48.1 fps). Tool correction in progress (new frame-based field; gate metric
+  unchanged until a baseline exists).
+- **H-A (FHD-only cost) REJECTED as stated:** same boot/package (EXP2196a/b) ours grows HD->FHD +5.70 ms, Apple
+  +4.75; FHD-only extra +0.95 ms. r6: render configuration at Asahi parity, 8 jobs CRCRCRCR at both sizes, 0
+  partial renders, no extra copy. The earlier "+5 ms only at FHD" mixed the 11-05 profile (FHD) with the current
+  one (HD). Current-profile FHD is unmeasured (N1).
+- **H-B (dxgkrnl queue contract) REJECTED at HD (r2, checked):** dxgkrnl refills the cap-2 queue in 24 us median;
+  per-frame pre-start gaps K 0.459 (firmware floor, Apple parity), F 1.16 (DWM job between GM jobs), D 0.111
+  (late render completion behind a pre-kicked compute), U 0.002. HwQueuePacketCap 3 alone ~0: not to be run alone.
+- **H-D (clock) mostly REJECTED (r4, r5):** same 1278 MHz P6; one reproducible dip per run (58-72 s, P6 59-80 %)
+  worth 0.1-0.3 ms, explained as a consequence of GPU starvation in that scene (HYPOTHESIS).
+- **H-E (frame-ahead queuing) TRUE on Apple's side, small for us:** Apple queues 1-2 frames ahead and starts the
+  next frame's c0 before R20 ends: 0.27-0.33 ms HD, 0.6 ms FHD.
+- **Apple "overlap" re-read (r5 + r6):** c15 lies inside r16 and c19 inside r20 because the render span includes
+  its wait for the compute; our R5 TA is 0.2 ms, so running it under C4 gains <= 0.2 ms. The lighting stage
+  C4+R5 vs r16 is still the largest job-level row (+0.66 HD current, +1.4..2.4 on the 11-05 profile HD..FHD);
+  whether that is dependency structure or work is open (r3 pending).
+- **Ranked open rows at HD (ms per frame, ours - Apple):** (1) GPU work across all jobs +1.8..2.3: C0 +0.51,
+  R5 +0.48, R1/C2/R3 +0.22 each, C4 +0.18 -- three jobs of different size with the same +0.22 suggest a fixed
+  per-job cost (HYPOTHESIS; r8-work-deficit running); (2) DWM job in front of a GM job 0.86 (current) .. 1.16
+  (r7-dwm-row running: cheaper DWM job vs windowed overlay plane; mechanism C covers only the launch part);
+  (3) own launch + late submit + unattributed ~1.2 of which ~0.45 is firmware floor; (4) cross-frame overlap 0.3.
+- **Also found:** hitch frames > 45 ms (3..25 per run, 205..1770 ms per run, not explained by switches; r4);
+  after a second DxgkDdiStartDevice in one boot dxgkrnl fails AddAdapter with 0xC0000017 (EXP2308 toggles,
+  event 549, Problem 43): same-boot adapter toggles are still invalid, so diagnostics values must be set before
+  first start (recorded as a separate class C item, not chased tonight).
+- **Next causal target:** N1/EXP2309 on a fresh boot (FHD+HD, per-job rows, pstate mid-run) to confirm the budget
+  on the current profile; r8 decides fixed-vs-proportional for row (1); r3 and r7 decide rows (1)/(2) designs.
+
+## UPDATE 2026-11-10T00:11:39Z -- H-C REJECTED: Apple's compute||render overlap is waiting, not work; top row = uniform GPU work deficit
+- Source: .local/night-20261110/r3-dag-bound/REPORT.md (offline; spot-checked: apple_split_enc_hd.txt, apple_wait_vs_work.txt,
+  abba_xframe_check.txt). Ledger correction appended to EXPERIMENTS.md at the same stamp.
+- Apple's R16/R20 start with the paired compute (TA only); their 3D stage waits for it. The Metal port has the same
+  fragment-stage edges as D3D12 (same ping-pong RGBA16F surfaces). Bound for matching Apple on those pairs: <= 0.22 ms HD
+  (= OV5, already built, ABBA neutral). The row "~2.0 ms D3D12 serialization, not recoverable" is WITHDRAWN.
+- That ~2 ms is GPU work: against Apple's per-encoder split every job of ours is 9-14 % slower at the same scene (+2.25 ms HD
+  EXP2268; +1.79 ms EXP2307 profile; compute delta fits ~9 % proportional with ~0 fixed part: C0 +0.51 of 5.84, C6 +0.03 of 0.68).
+  "Compute at Apple parity" came from the per-dispatch split (inflates Apple's frame 17.86 -> 21.76 ms) and is superseded.
+  Cause = OPEN (r8-work-deficit in progress). Already measured and not the cause by themselves: SLC ways (EXP2242/2243),
+  DRAMCFG (EXP2245), kernel code (metal oracle, lighting 1.13x only).
+- Dependency-driven scheduling ceiling at HD (simulator dag_sim.py): serial today 82.0 % of macOS; Apple's structure 84.1 %;
+  full legal DAG 85.1 %; plus DWM beside a GM compute 88.6 % (87.9 % with contention). Parity needs the work deficit closed.
+- Only real Apple concurrency we lack: 3D(R7,N) beside C0(N+1), 0.35 ms HD / ~0.6 ms FHD; never fires on our stack even with
+  OV2+OV3B on (0 of 10204 boundaries, EXP2294-2297); refusing rule unknown -> receipt-only run (pair conflict resource,
+  KMD arrival vs completion QPC, pair-refusal code), to be bundled with the R6 receipts (store masks, DiscardResource count).
+- Ranked open rows at HD now: (1) uniform work deficit 1.8-2.25 ms; (2) DWM job between GM jobs 0.85 (C1/C2a in work);
+  (3) per-job launch/detect/idle 0.5; (4) cross-frame C0||3D(R7) 0.35; (5) TA5 beside C4 <= 0.22 (OV5).
+- NEXT CAUSAL TARGET: cause of the uniform work deficit (r8); EXP2309 (N1) for the current-profile HD/FHD budget with pstate.
+
+## UPDATE 2026-11-10T00:34:02Z -- GravityMark HD rate was undercounted: count frames, not present rows
+
+- **Source:** tool change 7b7151e6b (CHG-20261110-7b7151e6-GM-FRAME-RATE), re-run by the architect on
+  `EXP2307/gm2307a1r3-umd.log` (10+60 s window): present rows 2662 = 44.392 fps = mean 22.53 ms; GravityMark frames
+  (execute rows of the benchmark process) 2947 = **49.145 fps = mean 20.35 ms**; presents_per_frame 0.903,
+  jobs_per_frame 8.0. Full run gm2196b: score 6713 = 6712 execute rows, 6510 present rows.
+- **Cause (observed):** no Present DDI call for a frame that ends <= 16.53 ms after the previous present (1021 of 1021
+  skipped frames in three runs). The limiter sits above the UMD; GravityMark vs DXGI is unproven. Not a driver defect.
+- **Corrections:** the night plan line "HD ~22.5 vs 17.4 ms" (2026-11-09T23:40Z) is present-based; frame-based HD is
+  20.35 ms. FHD is affected by < 1 %. The perf gate and perf-baseline.json stay present-based (history-compatible);
+  judge HD levers by `fps_frames` (PERF_INFO line). A lever that shortens frames below 16.7 ms does not show in the
+  present-based number.
+- **Open tool item:** `agx_gm_scene_align export_ours` and `agx_gpu_frame_breakdown` still drop double-frame present
+  intervals, i.e. the fastest frames.
+- **HYPOTHESIS (one coarse pass, 10 s bins, lag by eye ~10 s, EXP2196 HD full run vs macOS hd.csv):** our share of the
+  macOS rate is lowest in the fast scenes (macOS 76-85 fps, ours 42-54: 55-67 %) and highest in the heavy scenes
+  (77-83 %). To be checked on the EXP2309 FULL logs with fps_frames and a fitted lag before it is used.
+
+## UPDATE 2026-11-10T00:46:28Z -- R8: the HD work deficit is job-specific; the frame gap is mostly a fixed offset
+
+Source: offline analysis .local/night-20261110/r8-work-deficit/REPORT.md (scripts and out-*.txt beside it)
+on EXP2307 a1r3 / EXP2308 a1r3 against the macOS per-encoder split (MACOS-20261105-metal-timing) and
+the per-dispatch split EXP2226. No hardware run. Frames = execute rows.
+
+- Frame level: ours wall = 3.16 + 1.057 [1.023,1.102] x Apple wall (EXP2308 a1r3); 4.18 + 1.002
+  [0.970,1.042] (EXP2307 a1r3). wall - work = 2.1-2.3 ms in every scene class. The gap to macOS is
+  mostly a fixed 3.2-4.4 ms per frame, not a rate ratio.
+- CORRECTION to the HYPOTHESIS in the previous update ("our share is lowest in fast scenes, 55-67 %"):
+  the fitted shares are 78 % (fast third of the bins), 80 % (middle), 82-83 % (heavy), 71 % in the two
+  fastest bins (scene 48-52 s). Lower in fast scenes because of the fixed offset, by 4-11 points.
+- Work deficit +1.87 ms (vs Apple completion increments; +2.2 ms vs Apple GPU spans). "Uniform ~9 %"
+  holds only as an aggregate (job sum = 0.22 + 1.107 x Apple) and is REFUTED as a mechanism:
+  C0 = 2.70 + 1.258 [1.230,1.281] x Apple(e7+e9), constant part (67 dispatches) at parity 0.99-1.00;
+  C2 slope 1.066; R3 slope 0.98 plus fixed 0.22-0.31 ms; C4 1.167; R5 3D 1.16-1.19; R1 1.13-1.17.
+  Split: C0 scene part 0.51 (0.75 vs spans, ~1.0 in heavy scenes), C4 0.19, C2 0.19, R3 0.18,
+  R5 3D 0.17, R1 0.16, three render compute preludes 0.195 fixed (R1 0.063, R3 0.040, R5 0.092; ours
+  only, UMD batch design), R5 TA ordering 0.21 (Apple runs e16's vertex phase under c15).
+- REJECTED (architect hypothesis of 2026-11-09 night plan): firmware idle exit / clock ramp /
+  context-switch cost per job. Job-time residual vs pre-job idle and vs a foreign (DWM) job right
+  before is flat, <= 0.01-0.02 ms (out-idle.txt). Also excluded for C0: clock (parity constant part in
+  the same job), static code size, per-dispatch overhead, submission.
+- R4's "compute at parity" came from the per-dispatch Apple split, which adds a fixed +0.68 ms to
+  encoder 7 and +0.39 ms to encoder 11. Use the per-encoder split for totals; per-dispatch only for
+  large single launches.
+- C0 kernels behind the 1.26 slope: hierarchy traversal 97ae4b027aa43c6c (= Apple e7 d24/d25, about half
+  of the scene slope) and a8260e4297efffb3 (= e7 d48, about a quarter). The same chain in C2 (variant
+  fc968f7a) runs at 1.05-1.075. OPEN between (a) generated code of the C0 variants and (b)
+  data-dependent memory cost (1.9x indirect grid, atomics). HYPOTHESIS (cross-profile hint only): (b).
+- NOT VERIFIED by R8: pstate residency for EXP2307/2308 (no receipt); piece-to-dispatch mapping is by
+  order and pipeline identity (+-0.05 per row).
+
+Next causal target (one run, no package change): N2 SPLIT-TAGS, spec in
+.local/handoff/OV-ARCHITECT-HANDOFF.md (arms: control / EXP2078 C0 list / EXP2211 C2 list / control on
+one boot, P6 residency >= 95 % required). Decision rule: C0 ratio within +-0.05 of the C2 ratio on
+shared pipelines -> (a), Metal-oracle op-class diff; higher by >= 0.10 -> (b), atomic/chase probe at P6.
+
+Lever ranking by size at HD (ms per frame, upper bounds; none validated on hardware yet):
+1. wall - work 2.1-2.3: DWM job between GM jobs 0.85 (cross-process pairs C1/C2a in work), launch +
+   detect about 0.5 (KMD prebind miss -> on-time completion -> depth 3), cross-frame C0(N+1) beside
+   3D(R7,N) 0.35 (never fires; needs a refusal-reason receipt).
+2. C0 scene part 0.5-1.0 (cause open, N2).
+3. Render compute preludes 0.195 (UMD batch design) and R5 TA under C4 <= 0.21 (OV5, neutral so far).
+4. C4 / R5 3D / C2 shader work 0.17-0.19 each (DXIL heavier than Metal for C4 and the planet PS: not
+   equal work; no driver lever identified).
+
+## UPDATE 2026-11-10T00:58:50Z -- night baseline EXP2309, queue N2 (EXP2310) and N3 (cross-process pairs)
+
+- EXP2309 (package unchanged, Wom1JobDiagnostics=1, one boot): HD PERF fps_frames 48.97 / 48.99 / 49.15
+  (present-based 44.2-44.5), FHD PERF fps_frames 39.60 / 39.71 / 39.86; FULL untraced HD 7784 = 78.3 % of macOS
+  9946, FHD 6066 = 77.2 % of 7853. P6 residency 99.4 % mid->post (the pre->mid window holds ~5.3 s of P1 at
+  launch). R1's offline FHD model CONFIRMED (wall 26.2-26.6 ms against 26.6-27.3 predicted, score inside
+  6000-6200); HD FULL 7784 is slightly above its 7500-7700. This is the base for every lever below.
+- N2 = EXP2310 (running): SPLIT_TAGS arms a / b (C0 list of EXP2078) / c (C2 list of EXP2211) / a2; decides whether
+  the C0 scene-dependent deficit (0.5-1.0 ms) is generated code or data-dependent memory cost.
+- N3 staged: cross-process pairs merged default off (4a83e3a36; C1 Wom1CrossProcessPairs, C2a
+  Wom1CrossProcessPrivateLead). Target: the DWM composition render between two GM jobs (0.85 ms/frame HD).
+  Experiments N3a (package equivalence) -> N3b (C1) -> N3c (C2a), one variable each; package = EXP2309 source +
+  the four commits, without FS-F1.
+- FS-F1 (3952f9ad5, size-generic D3D10/11 DXGI Blt) is on the branch, software-only; it is a DWM-visible UMD path
+  and gets its own experiment before it rides in any GM package.
+- In work offline: source cause of the "in time, never prebound" boundaries (chain refusal 38) and of the
+  cross-frame pair C0(N+1) beside 3D(R7,N) never firing (r9-window-misses).
+
+## UPDATE 2026-11-10T01:12:00Z -- N2 verdict (EXP2310): C0 excess sits in two variant kernels
+
+Run: EXP2310, four arms on one boot, all valid (a/a2 controls fps_frames 48.843 / 48.839; P6 mid->post 98.5-100 %;
+wer 0, STOPS 0; BUGCHECK ok code=0x0 at the ordered restart). Split cost: arm b 23 jobs/frame, fps_frames
+43.933, +2.3 ms for 15 extra jobs = 0.155 ms wall per extra job. Analysis: 3541 (arm b) / 3534 (arm c) frames,
+37 two-second bins on Apple's split2 scene clock (lag 10.6 / 11.0 s, corr 0.9996 / 0.9998); piece -> kernel
+mapping verified from the measure-d3d12-dispatch tag sequence of a frame. "slope" = Theil slope ours/Apple.
+Scripts and tables: `.local/night-20261110/r8-work-deficit/n2_map.py`, `out-n2-map.txt`.
+
+| kernel (ours) | Apple dispatch | ours ms | Apple ms | slope |
+|---|---|---|---|---|
+| C0 traversal 7aa43c6c x5 | e7 d22-26 | 1.737 | 1.427 | 1.250 [1.239,1.258] |
+| C2 traversal fc968f7a x5 | e11 d0-4 | 1.509 | 1.370 | 1.101 [1.094,1.108] |
+| C0 97efffb3 | e7 d48 | 0.870 | 0.656 | 1.357 [1.345,1.367] |
+| C2 f582ac2c | e11 d26 | 0.518 | 0.476 | 1.070 [1.053,1.088] |
+| C0 d27-47 (shared pipelines + d45 variant) | same | | | 1.069 [1.008,1.173] |
+| C2 d5-25 | same | | | 0.977 [0.952,1.005] |
+| C0 d49-56 + e9 | same | 0.629 | 0.746 | 0.997 [0.849,1.141] |
+| C2 d27-33 + e13 | same | 0.461 | 0.614 | 0.997 [0.936,1.060] |
+| C0 const piece | e0+e1+e5 | 2.630 | 2.719 | ratio 0.968 |
+| C4 | e15 | 2.087 | 1.858 | 1.168 |
+
+- Predictions of the BEFORE entry confirmed (trav 1.2-1.3, d48 1.2-1.4, C2 trav 1.09-1.14, C2 d26 1.07); control
+  slopes within 0.05 of R8 (C0 var 1.216, C2 1.071-1.085, C4 1.168-1.175).
+- Verdict by the preregistered rule: cause (a) "generated code of the C0 variants" is favoured. Everything in the
+  chain that is not a C0 variant runs at slope 0.98-1.07 in both encoders; the excess is carried by 7aa43c6c
+  (1.25 against 1.10 for its C2 twin) and 97efffb3 (1.36 against 1.07 for its twin f582ac2c). Excess above the C2
+  level: (1.25-1.10) x 1.427 + (1.357-1.07) x 0.656 = 0.21 + 0.19 = 0.40 ms/frame HD; to Apple parity for the
+  four variant kernels about 0.68 ms.
+- Not excluded: (b) for the heavy kernels' own data footprint (C0 walks a 1.9x larger indirect grid). The small
+  shared kernels cannot test that. If the op-class diff finds the variants equal up to constants, the verdict
+  flips to (b) and the next step is the atomic/chase probe twin of EXP2267 at verified P6.
+- Correction to a working table of this night (never published): "C0 k49 vs e7 d49 = 1.82x" compared a 5-dispatch
+  piece (d49-53) with one Apple dispatch. Only the combined d49-56 + e9 row above is valid.
+- Unverified lead (HYPOTHESIS until the field is decoded): in measure-d3d12-shader-stats the third-from-last
+  field is 0x16-0x52 for every C0 variant and 0x7b-0x8a for every C2 twin.
+- Next causal target (offline, no hardware): op-class and hot-loop diff of 7aa43c6c vs fc968f7a and 97efffb3 vs
+  f582ac2c, each against Apple's twin in `.local/metal-oracle` (r10-variant-opclass). Closed levers stay closed:
+  instruction-count parity, dependent-load latency (EXP2183), wait placement (EXP2124), occupancy, MEMBW.
+- Bench order unchanged: ANSQ-T2 slot -> N3a (EXP2311, Wom1JobDiagnostics=1 as EXP2309, both xproc switches
+  absent) -> N3b -> N3c.
+
+## UPDATE 2026-11-10T01:20:00Z -- R9: source cause of two depth-two window misses (offline, no hardware)
+
+Report: `.local/night-20261110/r9-window-misses/REPORT.md`; cited lines re-checked at 42dbf3428.
+- "In time, never prebound" (0.4-0.5 jobs/frame, chain refusal 38): the successor is not in the KMD queue.
+  `AdmissionG4PendingAdmissible` is sampled once (gpuva_g3_windows.c:6282); on FALSE the dxgkrnl submit thread
+  sleeps in `AdmissionPlatformRuntimeAwaitWork` until the window is empty and never re-checks. Receipt agreement:
+  Wom1SubmitPath Waits[1] 0.53-0.66 per present, mean wait 1.7-2.3 ms. Which predicate fails is a HYPOTHESIS
+  (context two-fence limit: dxgkrnl is notified before the context retires the fence, resubmits ~20 us later).
+  Fix F-A2 (KMD, class I): the wait re-evaluates admissibility; upper bound 0.15-0.19 ms/frame HD.
+- Cross-frame pair C0(N+1) beside the 3D stage of R7(N) never fires: a refusal, not arrival (C0 reaches the KMD
+  before R7's end in 99.5-99.8 % of frames). `AgxD3d12JobBarrierExecution` (agx_d3d12_job_barriers.h:408-412)
+  resets PreviousKind and the ranges at every ExecuteCommandLists, so the frame-first compute always gets refusal
+  2. Fix F-B (UMD owner, class O): carry the last render's exact write ranges across the execution boundary,
+  resource-exact rule only; upper bound 0.35 ms/frame HD. Shadow-verdict receipt first.
+- Validity note: the "0 of 10204" cross-frame check of the OV2+OV3B ABBA arms compared an intra-execution pair
+  (OV3B appends a trailing drain job); it holds only for the default arm.
+- Next: implement both default-off with receipts (two sessions), bench as N4a (receipts) -> N4b -> N4c after N3.
+
+## UPDATE 2026-11-10T01:30:51Z -- R10: C0 variant kernels differ by a dynamic constant-buffer index; scoreboard slot policy is the first code-level candidate (offline, no hardware)
+
+Source: `/Users/pavel/public_windows/.local/night-20261110/r10-variant-opclass/REPORT.md` (208 lines). Checked by
+the architect against files: stats column order (`drivers/apple-agx/mesa/winsys/agx_win32_shader_stats.h`), the slot
+rule in the projection (`native-asahi-latency-schedule.py`, `agx_win32_wait_block`), Apple's listing
+(`.local/metal-oracle/m208_13b1c0.s` 0x262-0x288: four device loads on slot 0, one `wait 0`), our listing
+(`ours/97efffb3.skel`: `wait a` + `wait b` pairs), packaged stats rows (EXP2310 gm2310a-umd.log).
+
+Established (static, high confidence):
+- Source difference inside our own pair of encoders: the C0 variants read the constant buffer at a DYNAMIC register
+  index (cb[view*57+k]) and use no texture; the C2 variants use constant indices and 4 texture ops.
+  cbufferLoadLegacy total/dynamic/texture ops: 97efffb3 64/54/0, f582ac2c 60/0/4, 7aa43c6c 31/20/0, fc968f7a 55/1/4.
+- The third-from-last shader-stats column is PREAMBLE (instruction count). C2 variants hoist the constant-buffer reads
+  into the preamble (0x7b, 0x8a); C0 variants cannot (0x16, 0x1e). This closes the "unverified shader-stats lead" of
+  the N2 entry: the column is not a defect, it is this source difference.
+- Lowering difference against Apple: in 97efffb3 each of the 16 frustum plane tests issues 2 per-thread device loads.
+  Ours puts them into scoreboard slots a and b and pays two waits; Apple puts both into slot 0 and pays one. Loads are
+  at parity (56 vs 59 before the loop); waits are not (51 vs 31 before the loop, 70 vs 47 in main). In the C2 pair
+  (f582ac2c vs m201) waits are at parity (19 vs 17).
+- Cause in our source: the upstream Asahi slot choice "first slot with nr_pending == 0" (agx_insert_waits.c:97-103),
+  kept in our W1 projection. W1 (EXP2124) left every a/b pair in place, so it never tested this pattern.
+- Twin table (by skeleton): 7aa43c6c = m183, fc968f7a = m187 (high); 97efffb3 = m208 (medium-high, alternative m196);
+  f582ac2c = m201 (medium, alternative m202).
+
+CORRECTION to the "C4 offline levers closed" bullet of the 2026-11-05 section above (text left as written): that
+bullet compares the traversal with Apple's m187. By R10's skeleton match m187 is the twin of the C2 traversal
+fc968f7a, and the twin of 7aa43c6c is m183. What stays closed: static instruction parity of the traversal, L4
+(EXP2183), W1 as implemented (EXP2124), MEMBW. What is reopened, narrowly: wait placement, only as the slot choice
+for paired loads, because no experiment has covered it and EXP2310 split tags now resolve 0.004-0.008 ms per kernel
+(EXP2124/EXP2183 judged whole-frame FPS with ~1 % noise against an expected effect <= 0.5 %). Occupancy with the
+corrected pairing: C0 kernels sit on the same tier as their twins (1024/1024, 832/832); Apple's thread count is
+inferred from the highest register, HYPOTHESIS.
+
+Not established (HYPOTHESIS, confidence medium-low): that the extra waits cost the measured time. 27 removable waits
+are 3.4 % of the static instructions of 97efffb3, the excess is 36 %; the hypothesis needs a `wait` to cost about
+5 ns per group (a reschedule point, not an ALU op). For it: Apple pays the same per group in C0 and C2 (340 vs
+344 ns/group), ours 461 vs 368; the fits are linear with zero intercept and overlapping group ranges, which argues
+against a pure data-size cause (b); excess ratio k48:p10 = 5.0 vs removable-wait ratio 4.0 (four points, correlation).
+
+Implemented (class O, opt-in, default byte-identical): SS1, `APPLE_AGX_WAIT_SINGLE_SLOT=1` queues every asynchronous
+op on slot 0; hazard rules, barrier drains and the 8-pending overflow wait are unchanged. Two sites: the upstream
+local pass and `agx_win32_wait_block`. Test `tests/test_d3d12_wait_single_slot.py` (four captured kernels; default
+identical for absent/""/0/2/true with and without W1; with the option: only waits removed, no slot b, operands
+otherwise equal). Wait counts in the test fixture, default / W1 / single / single+W1: 7aa43c6c 119/110/90/89,
+fc968f7a 126/118/96/96, 97efffb3 144/141/109/106, f582ac2c 133/130/107/105. R10's fixture (closer to the package:
+793 instructions for 97efffb3 against 801 in the packaged stats row): 54/45/40/34, 39/31/29/23, 70/65/43/41,
+38/34/29/27; Apple 32, 25, 47, 32. The offline fixtures do not reproduce the packaged compile options, so the
+packaged counts are read from the shader-stats rows of the run itself.
+
+Next (N5, after N3/N4, one variable = slot policy): split-tags ABBA control / single / single / control, HD windowed
+100k -temporal 0, traced PERF 10+60 s, tag set b of EXP2310. Expected if the hypothesis holds: 97efffb3 slope against
+e7 d48 from 1.357 [1.345,1.367] to <= 1.20 (0.870 -> <= 0.77 ms), 7aa43c6c x5 from 1.250 to 1.17-1.22; bound of the
+gain 0.2-0.4 ms/frame HD. Failure: 97efffb3 slope >= 1.33 in both single arms -> slot and wait-count policy rejected
+for good; next is the (b) probe (C0 kernel on the C2 view data). Arm validity: INSTRS of 97efffb3 in the stats row
+below the control's 801 and equal P6 residency across arms.
+
+## UPDATE 2026-11-10T02:22:53Z -- N3a/N3b verdict (EXP2311, EXP2312): cross-process pairs C1 accepted by the firmware
+
+- EXP2311 (N3a, package 25c1945b6, both switches off): CONFIRMED equal to the EXP2309 baseline (suite 119/0,
+  no xproc receipt, HD fps_frames 48.521 / 48.901 / 48.708 at back-to-back cadence).
+- EXP2312 (N3b, Wom1CrossProcessPairs=1): CONFIRMED. The hardware unknown of C1 is resolved: the firmware accepts
+  a compute work item of one VM slot queued behind a running 3D work item of another slot. Receipt v2 at post-gm:
+  considered 10662, kicked 5652, fell_back 0, failed 0; no GPU_RESET, no PREEMPT_REFUSAL, kick_failures 0;
+  suite 119/0; perf gate PASS. Window effect: compute_on_3d kicks 35468 -> 41175, about 0.7 extra prebound
+  kicks per GravityMark frame.
+- C1 is class I: accepted on receipts and a clean run. HD fps_frames 49.051 / 49.417 / 49.333 against EXP2311 is
+  +1.14 % mean, but the two arms are separate boots (the switch is read at adapter start; a same-boot adapter
+  cycle is invalid since EXP2308), and EXP2309 with a different cadence sits between them. Bounded statement:
+  gain between 0 and about 1.1 %, not claimed. No default flip from this boot.
+- New observation, not yet a lever: refusal 55 (render_job_window.c:296-300, a cross-process pair that is not
+  "running RENDER -> next COMPUTE") fired 4987 times in the same GravityMark window, about 0.62 per frame, the
+  same order as the admitted class. The receipt does not split 55 by kind pair. HYPOTHESIS (medium): most of
+  them are the DWM render queued behind a running GravityMark compute or render (the mirror pair). Deciding it
+  needs a receipt-only split of code 55 by (running kind, next kind, present or not), class D.
+- Next: EXP2313 (N3c, C1 + C2a). C2a is class O: kept only with a mean fps_frames gain >= 1.0 % over EXP2312,
+  otherwise default off and the bench moves on. Then N5 (SS1, package 25c1945b6 + 0cd63ef87) unless F-A2 and
+  F-B are merged first (N4).
+
+## UPDATE 2026-11-10T02:41:47Z -- N3c (EXP2313): C2a private lead accepted by the firmware, no gain, KEEP-OFF; N4/N5 code merged (no hardware)
+
+N3c, GM arms read by the architect from the evidence directory with tools/agx_gm_perf.py summary (run-health items
+beyond those listed here are in fork 6's EXP2313 ACTUAL):
+- fps_frames HD PERF, same cadence, separate boots: EXP2312 (C1) w 49.051 / r2 49.417 / r3 49.333, mean 49.267;
+  EXP2313 (C1 + Wom1CrossProcessPrivateLead=1) w 49.425 / r2 49.173 / r3 49.147, mean 49.248. Difference -0.04 %.
+- Receipt v2 post-gm: considered 10569, kicked 5597, fell_back 0, failed 0, refusals {55: 4956, 6: 16};
+  lead considered = waived (post-x 7618 / 7618), refused none. No GPU_RESET / PREEMPT_REFUSAL in the receipts.
+- Verdict by the rule fixed before the run (gain >= 1.0 % needed): C2a is class O without a gain -> default off,
+  no closing boot, line closed for GravityMark. The firmware accepts the private lead (kept as a proven option).
+- C1 stays as recorded (class I, accepted, default off until a same-boot comparison form exists for registry
+  switches; EXP2308 forbids adapter cycles).
+
+Merged to gpu/memory-latency after review, gate BASELINE_OK twice in the main checkout (0 NEW), software only:
+- ebfb0fa80 / 236d61b52  OV2 cross-execution: shadow verdict receipt (class D) and apply switch (class O, process
+  environment APPLE_AGX_D3D12_OV2_CROSS_EXECUTION=1). The shadow verdict exists only with the KMD OV2 feature
+  (Wom1Ov2NoHazardLead=1) in a measured run.
+- 3e19cb440  Wom1SubmitPath v2 (class D): first failing predicate of a non-admissible submission.
+- 53956af4d  F-A2 Wom1SubmitRequeue (class I, default 0): the waiting submission re-tests admissibility.
+- 53237bfd6  Wom1CrossProcessPairsReceipt v3 (class D): refusal 55 split by running/next kind.
+Review notes: default-off identity checked in the diff for both switches (AgxD3d12JobCrossApply returns the old
+verdict; AdmissionG4SubmitAwait calls the old wait); the F-A2 predicate has the same sample-then-queue window as the
+existing deferred path. Not MSVC-built yet.
+
+Next causal targets (bench, one package = package line 25c1945b6 + 0cd63ef87 + the five commits, all off by default):
+1. N4a: package identity against EXP2312 + SubmitPath v2 (F-A2 premise) + refusal-55 split; N5 arms (SS1,
+   per-process, split tags) in the same boot.
+2. N4b: Wom1SubmitRequeue=1, only if the premise holds.
+3. N4c: OV2 feature on; shadow verdict read (x0), then per-process arms of the apply switch in the same boot.
+Still true: no proven score gain this night; HD 78.3 % / FHD 77.2 % of macOS (EXP2309).
+
+## UPDATE 2026-11-10T03:23:10Z -- N4a (EXP2314) receipts: F-A2 premise CONFIRMED, refusal 55 is render -> prelude render
+
+Read by the architect from evidence/EXP2314 (submit-path-post-gm.fixed.txt, submit-path-x.fixed.txt,
+xproc-rx-*.txt); run health and identity are in fork 6's EXP2314 ACTUAL (fps_frames 49.205 / 49.100 / 49.572,
+mean 49.292 vs EXP2312 49.267, +0.05 %: the package with all new code off is identical in performance).
+- Wom1SubmitPath v2, GM block (pre-gm -> post-gm): not admissible by the context two-fence limit 5819, of these
+  the context's oldest fence was already REPORTED by the firmware in 4739 (81 %); idle 12680; irql, not queueable,
+  pending capacity, faulted all 0. Waits "worker finishing" 5654, mean 1.9 ms. Traced run x: context limit 2036,
+  reported 1713 (84 %), 0.56 / 0.47 per present. Requeued 0 (switch off).
+  Verdict: the R9 premise holds (rule: >= 0.05 per present; measured ~0.5). In about half of the frames one
+  submission is refused only because the worker has not yet retired a fence the firmware already reported, and
+  then waits for the whole pending queue to drain: the pipeline falls to depth one for that job.
+  -> N4b (Wom1SubmitRequeue=1) GO. Class I: accepted on receipts (Requeued > 0, wait count and mean drop) and a
+  clean run; a default flip needs more than a separate-boot comparison.
+- Wom1CrossProcessPairsReceipt v3, GM block: refusal 55 = 4427, of which running render -> next render with
+  prelude 4342 (98 %), render -> render 85; no compute on either side, capability_off 0, no_process 0.
+  The earlier hypothesis (a compute or render of GravityMark with a DWM render behind it) is REJECTED in its
+  compute half. The remaining cross-process volume is two renders of different processes. Admitting it needs two
+  things the same-process window does not have either: the prelude pair class (EXP2100: unproven, firmware
+  faults, gated) and a second resident buffer manager (refusal 58). Its gain is bounded by the TA/3D overlap with
+  a DWM render (DWM 3D ~0.85 ms per frame) and EXP2313 showed that removing the lead wait of the admitted
+  cross-process pairs moves nothing. Lever PARKED: not on the critical path for GravityMark; reopen only with the
+  prelude class work.
+Next: N5 arms (EXP2315, same boot) -> per-kernel fit; N4b; N4c.
+
+## UPDATE 2026-11-10T03:50:17Z -- N5 verdict (EXP2315): slot policy REJECTED for 97efffb3, small confirmed effect in the traversal, SS1 stays off; submit phase race fixed offline
+
+Source: architect's fit on the three valid arms of EXP2315 (c1 unset, s1/s2 APPLE_AGX_WAIT_SINGLE_SLOT=1; c2 invalid),
+evidence .local/experiments/EXP2314-n4a-n5/evidence/EXP2314/gm2315{c1,s1,s2}-umd.log, method of R8 n2_map.py (tag set b,
+pattern C{15}RCCRCRCR, scene clock by lag against the macOS split2 data, 2-s bins, 37 common bins, lag correlation
+0.9984-0.9996). Variable acted: INSTRS 0x321 -> 0x306 (97efffb3), 0x45e -> 0x450 (7aa43c6c). P6 mid 90.1 / 88.2 / 90.4 %.
+
+| piece (ms, scene-aligned mean) | c1 | s1 | s2 |
+|---|---|---|---|
+| C0 k48 = 97efffb3 | 0.871 | 0.866 (-0.5 %) | 0.865 (-0.6 %) |
+| slope vs Apple e7 d48 | 1.358 [1.346,1.369] | 1.349 [1.332,1.363] | 1.354 [1.344,1.363] |
+| C0 trav = 7aa43c6c x5 | 1.738 | 1.690 (-2.7 %) | 1.689 (-2.8 %) |
+| slope vs Apple e7 d22-26 | 1.253 [1.242,1.261] | 1.210 [1.197,1.220] | 1.221 [1.209,1.229] |
+| C0 (15 jobs) | 6.476 | 6.402 (-1.15 %) | 6.398 (-1.21 %) |
+| all 23 jobs | 19.388 | 19.454 (+0.34 %) | 19.418 (+0.16 %) |
+| R7 span | 0.298 | 0.464 | 0.505 |
+| frame period, scene 10..76 s (33 bins) | 23.407 | 23.847 (+1.9 %) | 23.888 (+2.0 %) |
+
+- VERDICT by the preregistered failure criterion (R10 section, "97efffb3 slope >= 1.33 in both single arms"): wait count
+  and slot policy are REJECTED for good as the cause of the 97efffb3 excess (+0.21 ms). With the option that kernel has
+  fewer waits than Apple's twin (43 vs 47 by the R10 fixture) and still runs at 1.35 x. Do not retry wait variants there.
+- CONFIRMED, small: the traversal 7aa43c6c responds as predicted (slope 1.253 -> 1.21-1.22, inside the expected band
+  1.17-1.22), -0.048 ms per frame; both single arms agree within 0.1 %.
+- SS1 as an optimisation (class O): NOT ACCEPTED, APPLE_AGX_WAIT_SINGLE_SLOT stays unset. The C0 work gain is 0.075 ms
+  (0.3 % of the frame) and the frame period was 1.9-2.0 % LONGER in both single arms (fps_frames 43.908 -> 43.021 /
+  43.005). That period result has one valid control and a fixed order (c1 first), so it is order-confounded:
+  INCONCLUSIVE as a slowdown, sufficient to refuse a default. No further bench slot is planned for it.
+- OBSERVATION (HYPOTHESIS, not pursued): the last render job R7 is bimodal (about 0.16 ms and 0.65 ms). Share of the
+  slow mode: EXP2310 arm b 11 %, c1 34 %, s1/s2 82 %. The period difference between the arms sits in gaps and in this
+  mode, not in job work. Candidate owner: the parked cross-process pair "render -> prelude render" (refusal 55), i.e.
+  a DWM job ahead of R7. Size if it were removed entirely: slow share x 0.49 ms.
+- DEFECT (class C, pre-existing since 2026-10-07): arm c2 lost the device at 26.39 s, Wom1G4SubmitFailure branch 7
+  subsite 0x10D kind 4, total 1. Cause (fork 6, checked by the architect in source): AdmissionPlatformRuntimeAwaitWorkEx
+  read Backend.Phase a second time after AdmissionPlatformRuntimeReadyEx had reported predicate 4; a job completing
+  between the reads turned a healthy runtime into a non-transient refusal. Fix 3f34e22a2 reviewed: one reread into a
+  local, Ready on the reread retests, Failed/Stopping/Starting still refuse at once; predicate 4 implies runtime != NULL
+  (short-circuit order in ReadyEx), the retest advances only on a state change and is bounded by the deadline. Two
+  remarks for the package cherry-pick: the reread should be a volatile/no-fence read so the compiler cannot fold it
+  back into two loads, and the package line 25c1945b6 has no FwRestartActive clause (adapt the hunk). Not in package
+  f84f0d1a2b83; goes into the N4c package. No hardware confirmation possible beyond absence (first sighting).
+
+Lever ranking after N3-N5 (HD, ms per frame; gap to macOS about 4.7 ms; none of these has a proven gain yet):
+1. N4b F-A2 requeue: <= 0.15-0.19 (premise confirmed by receipt, EXP2314). Next boot, EXP2316.
+2. N4c F-B cross-execution lead: <= 0.35. Package = N4 line + the phase fix.
+3. Traversal slot policy: 0.05, not worth a default.
+4. Parked: cross-process render -> prelude render (needs the prelude pair class and a second resident buffer manager).
+5. OPEN, largest identified work item without a lever: 97efffb3 +0.21 ms and the rest of the C0 scene part. Remaining
+   candidates per R10: exec-mask control-flow shape, integer address arithmetic, per-view data effect. Next step is an
+   offline design of the (b) probe (C0 kernel on the C2 view data), no hardware until it is written.
+Identified levers 1-3 sum to at most 0.6 ms of 4.7 ms: they cannot bring the gap under 5 % by themselves.
+
+## UPDATE 2026-11-10T04:27:19Z -- N4b verdict (EXP2316): requeue ACCEPTED as class I, +1.05 % separate-boot indication; R11: C0 excess is a fixed cost per thread group; next target N6 section profiler
+
+Sources: EXP2316 evidence .local/experiments/EXP2316-n4b-requeue/evidence/EXP2316 (gm2316{w,r2,r3,x}-umd.log,
+submit-path-*.txt, perf-gate.txt), read by the architect; R11 offline report
+.local/night-20261110/r11-c0-dynload/REPORT.md with out-r11-map-2310.txt (EXP2310 arm b against the macOS split data).
+EXP2316 ACTUAL (rollback, BUGCHECK line) is recorded by the implementer; this section holds the architect's verdict.
+
+N4b = Wom1SubmitRequeue=1 on package f84f0d1a2b83, registry as EXP2314 (C1 on), HD windowed 100k -temporal 0, PERF.
+
+| fps_frames | warm | r2 | r3 | mean |
+|---|---|---|---|---|
+| EXP2314 (requeue 0) | 49.205 | 49.100 | 49.572 | 49.292 |
+| EXP2316 (requeue 1) | 49.251 | 49.886 | 50.285 | 49.807 (+1.05 %) |
+
+- Receipts (GM block): requeued 7493 = context limit 7493; "worker finishing" waits 6346 with mean 27 us (EXP2314:
+  5654 waits, mean 1907 us); backend-submitted waits 0. GM error logs empty, no device removal, no GPU_RESET or
+  PREEMPT_REFUSAL, kick failures 0, PERF_GATE_PASS.
+- VERDICT: mechanism CONFIRMED by receipt, class I, ACCEPTED as an opt-in switch. The FPS step is a SEPARATE-BOOT
+  comparison: three earlier boots of the same registry (EXP2312 49.267, EXP2313 49.248, EXP2314 49.292) agree within
+  0.1 %, so +1.05 % is about ten times the boot spread, but it is an indication, not a same-boot proof. Default stays 0.
+- Two preregistered expectations were NOT met and are recorded as such: the context-limit count rose (5819 -> 7493)
+  and the wait count did not fall; only the wait duration fell (70 x). Reading (HYPOTHESIS): a requeued submission
+  retests the limit instead of sleeping through the window, so the same limit is counted more often.
+- N4c (EXP2317, package b46a092e8f6b = N4 line + phase fix with the volatile read) runs with Wom1SubmitRequeue=1 as
+  the base; its variable is the env APPLE_AGX_D3D12_OV2_CROSS_EXECUTION inside the boot (arms x0..x3). x0/x3 are a
+  second boot of the requeue configuration (compare with EXP2316 x 50.334).
+
+R11 (offline) on the open C0 item:
+- REJECTED: the architect's four-point model "excess = 25 + 1.8 x dynamic CB loads x threads/256 ns per group". The
+  kernel 6cf11e8a (54 dynamic CB loads, 256 threads) measures +53.6 ns per group against 122 predicted, and is the
+  worst ratio in the frame: 0.348 ms against Apple 0.191 ms (1.82 x). Its C2 sibling 2286332c is at 1.11 x.
+- No static count explains all rows: dynamic CB loads fail on 6cf11e8a, integer-op difference has the wrong sign on
+  both traversal variants, waits were rejected by EXP2315.
+- NEW FACT: the excess is a fixed amount per thread group, not a rate. Traversal 7aa43c6c launches b5/b6/b7 have
+  slopes 1.14 / 1.215 / 1.41 but excess 35.1 / 43.4 / 37.7 ns per group (Apple 249 / 202 / 92 ns per group); the C2
+  traversal 24.8 / 15.5; 97efffb3 119.5 on Apple's 335.
+- Code difference found: we form the row address as register index (iadd idx, k, view x 57; load with lsl 2), Apple
+  folds view x 912 into the base once and uses immediate rows. Offline prototype reaches Apple's shape for 97efffb3
+  (793 -> 739 instructions, local loads 10 -> 3; Apple 745 / 3) but is worse for 7aa43c6c until the view load is
+  hoisted. Upper bound if both kernels reached 1.07 x: 0.378 ms per frame. Kept offline: it is one candidate location
+  of the fixed cost, not a measured one.
+- CLOSED without a run: scalar shared stores in thread-0 sections. APPLE_AGX_SHARED_STORE_VECTORIZE already exists
+  and was measured (pairs c->d -0.24 %, f->e -0.09 %, stays off); the fixture shows it does remove them
+  (7aa43c6c local stores 79 -> 37, fc968f7a 64 -> 23), so the removal was tested and gave nothing.
+
+WHY CONTINUE COMPARISON: not applicable. Static comparison of our and Apple's code for the C0 kernels is STOPPED
+(three candidate counts excluded, a fourth has only an upper bound). The next step is a measurement.
+
+Next causal target: N6 = prefix-cut section profiler (class D, opt-in env APPLE_AGX_DIAG_CUT=<hash8>:<E|B1|B2|L>,
+`stop` placed after register allocation so the prefix is byte-identical). Ten HD PERF arms in one boot on 97efffb3,
+6cf11e8a, 7aa43c6c. It separates group launch cost / pre-loop path / loop with device stores / thread-0 sections.
+Spec with the four sections: .local/handoff/OV-ARCHITECT-HANDOFF.md, section "N6 SPEC". Runs after N4c.
+
+Lever ranking (HD, ms per frame; gap to macOS about 4.7 ms):
+1. N4b requeue: accepted class I; indication about 0.2 ms (separate boots).
+2. N4c cross-execution lead: <= 0.35, EXP2317 pending.
+3. Traversal slot policy: 0.05, closed as a default.
+4. Parked: cross-process render -> prelude render.
+5. OPEN: C0 scene excess +0.833 ms (traversal 0.31, 97efffb3 0.21, 6cf11e8a 0.157, rest) -- location unknown, N6.
+Levers 1-2 and item 5 together are at most 1.4 ms of 4.7 ms. The remaining about 3.3 ms has no lever yet.
+
+## CORRECTION 2026-11-10T04:30:46Z -- to the UPDATE above (R11 part): "6cf11e8a = 1.82 x Apple" is a piece-mapping error
+
+Refers to the R11 statements in the previous section and in .local/night-20261110/r11-c0-dynload/REPORT.md
+(rows "b13 6cf11e8a vs d49", "+53.6 ns per group", "k49 +0.157 ms", "worst ratio in the frame"). The same error was
+already noted in the UPDATE of 2026-11-10T01:12:00Z and was repeated by the R11 script; the architect did not catch it
+when checking the report.
+
+Evidence (dispatch tag sequence of frame 2000 in EXP2310 gm2310b-umd.log, split tags of arm b): the job that starts
+at 6cf11e8a (tag b1db88bf, d49) runs until the next tag a4452d43 at d54, so it holds FIVE dispatches d49-d53
+(b1db88bf, 520e6881, 546c0c9a, 05a37650, c4d44596). In arm c the sibling 2286332c (tag 1f20788f, d27) is a single
+dispatch because 9726b186 at d28 is also a tag.
+
+| piece | ours ms | Apple ms | ratio |
+|---|---|---|---|
+| C0 d49-d53 (6cf11e8a + four) | 0.348 | 0.303 (d49 0.191 + d50 0.014 + d51 0.003 + d52 0.003 + d53 0.092) | 1.15 |
+| C2 d27 (2286332c alone) | 0.200 | 0.181 | 1.11 |
+
+- 6cf11e8a is NOT an outlier: its piece is +0.045 ms (at most about 15 ns per group if all of it were 6cf11e8a),
+  the same level as its C2 sibling. It is not measured alone in any run so far.
+- Apple's per-dispatch rows carry a fixed cost (empty dispatches read 0.014-0.016 ms), so sums of several Apple
+  dispatches are inflated against one job of ours; with that the piece excess is at most about 0.09 ms.
+- The rejection of the four-point model STANDS and is stronger: 54 dynamic CB loads at 256 threads predict 122 ns
+  per group, the piece allows at most 15-30.
+- Consequence for the address-form candidate (register index against base + immediate): 6cf11e8a has the same form
+  as 97efffb3 and no comparable excess, so the form alone is a WEAKER candidate than stated. It stays offline.
+- "Fixed excess per thread group" now rests on the traversal launches only (b6 43 ns and b7 38 ns per group at
+  Apple 202 and 92 ns per group; b5 is too small to weigh). HYPOTHESIS level, to be measured by N6.
+- C0 scene excess +0.833 ms, corrected split: traversal 0.31, 97efffb3 0.21, piece d49-d53 0.05-0.09, the rest
+  about 0.22-0.26 in pieces that cannot be compared one to one (Apple per-dispatch cost).
+- N6 change: the two 6cf11e8a arms are dropped. Arms: p0, 97efffb3:E, 97efffb3:L, 7aa43c6c:E, :B1, :B2, :L, p1.

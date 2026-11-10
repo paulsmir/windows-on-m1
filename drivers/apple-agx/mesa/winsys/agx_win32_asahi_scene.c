@@ -20,6 +20,8 @@
 volatile unsigned AgxWin32Ov2Feature;
 /* OV5: AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT of that device */
 volatile unsigned AgxWin32Ov5Feature;
+/* C2a: AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE of that device */
+volatile unsigned AgxWin32PrivateOnlyFeature;
 
 struct pipe_screen *AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *,AGX_WIN32_SCREEN *,
     const AGX_WIN32_ASAHI_OWNER_OPS *,void *,const AGX_WIN32_ASAHI_BATCH_OPS *,
@@ -87,6 +89,8 @@ struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(AGX_WIN32_ASAHI_BACKEND 
       DRM_ASAHI_FEATURE_SOFT_FAULTS : 0;
   /* OV2: the KMD admits independent compute envelopes (VdmBarrier NONE) */
   AgxWin32Ov2Feature=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE) ? 1u : 0u;
+  /* C2a: the KMD admits private-only compute envelopes */
+  AgxWin32PrivateOnlyFeature=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE) ? 1u : 0u;
   /* OV5: the KMD admits TA-independent renders (render CdmBarrier NONE) */
   AgxWin32Ov5Feature=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT) ? 1u : 0u;
   if(windows->Info.PageBytes!=AIL_PAGESIZE) return NULL;
@@ -658,6 +662,20 @@ void AgxWin32AsahiBatchWriteResources(struct pipe_context *pctx, struct pipe_res
  * accepted submission; fences increase with every submission. */
 APPLE_AGX_U64 AgxWin32AsahiContextNewestFence(struct pipe_context *ctx) {
   return ctx ? AgxWin32AsahiNewestFence(agx_context(ctx)) : 0u;
+}
+/* OV2 cross-execution receipt: render batches not yet submitted that hold
+ * work (a draw or a clear). A batch being submitted is still active while
+ * AgxWin32BatchKindHook runs, so the count there is 1 exactly when no other
+ * render batch stays open; ~0u without a context. Reads only. */
+unsigned AgxWin32AsahiContextOpenRenders(struct pipe_context *ctx) {
+  if(!ctx) return ~0u;
+  struct agx_context *native=agx_context(ctx);
+  unsigned count=0;
+  for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
+    struct agx_batch *slot=&native->batches.slots[i];
+    if(BITSET_TEST(native->batches.active,i) && slot->vdm.bo && (slot->draws || slot->clear)) ++count;
+  }
+  return count;
 }
 /* rc101 receipt-only: the lean CDM barrier mode and word, and the barriers
  * left lean and full since the last call (agx_win32_cdm_barrier.h). */

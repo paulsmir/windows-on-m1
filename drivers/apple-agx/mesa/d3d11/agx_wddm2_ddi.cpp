@@ -949,6 +949,11 @@ AgxWddm2_0FillDeviceFuncs(D3DWDDM2_0DDI_DEVICEFUNCS *f, const D3D10DDI_DEVICEFUN
  * the WDDM 2.0 interface; the first eight entries are the DXGI 1.1 ones
  * the frontend already wrote into the same table) ----- */
 
+/* Defined in the projected DxgiFns.cpp (build-native-asahi-state.py): the
+ * one DXGI Blt implementation; SourceRect NULL is the whole source. */
+HRESULT APIENTRY AgxDxgiBltRect(DXGI_DDI_ARG_BLT *Blt,
+                                const AGX_D3D10_WINDOWS_BLT_RECT *SourceRect);
+
 namespace {
 
 DXGI1_4_DDI_BASE_FUNCTIONS dxgi11;
@@ -961,24 +966,14 @@ dxgi_receipt(const char *stage, HRESULT hr, UINT a, UINT b)
    AgxD3d10WindowsDiagnostic(stage, hr, values, 2u);
 }
 
-/* Blt1 adds a source rectangle; the whole source subresource is Blt. */
+/* Blt1 is Blt with a source rectangle (DXGI_DDI_ARG_BLT1: Src* is "typically
+ * a dirty subrectangle"). The projected frontend validates both rectangles
+ * against the real resource sizes and scales when they differ (FS-F1). */
 HRESULT APIENTRY
 Blt1(DXGI_DDI_ARG_BLT1 *args)
 {
    if (!args)
       return E_INVALIDARG;
-   D3D10DDI_HRESOURCE hSrc = {(void *)args->hSrcResource};
-   Resource *src = CastResource(hSrc);
-   struct pipe_resource *res = src ? src->resource : NULL;
-   const UINT level = res ? args->SrcSubresource % (res->last_level + 1u) : 0u;
-   const bool whole = res && args->SrcLeft == 0 && args->SrcTop == 0 &&
-                      args->SrcRight == u_minify(res->width0, level) &&
-                      args->SrcBottom == u_minify(res->height0, level);
-   if (!whole) {
-      dxgi_receipt("reject-dxgi-blt1-subrect", E_NOTIMPL, args->SrcRight - args->SrcLeft,
-                   args->SrcBottom - args->SrcTop);
-      return E_NOTIMPL;
-   }
    DXGI_DDI_ARG_BLT blt = {};
    blt.hDevice = args->hDevice;
    blt.hDstResource = args->hDstResource;
@@ -991,7 +986,17 @@ Blt1(DXGI_DDI_ARG_BLT1 *args)
    blt.SrcSubresource = args->SrcSubresource;
    blt.Flags = args->Flags;
    blt.Rotate = args->Rotate;
-   return dxgi11.pfnBlt(&blt);
+   AGX_D3D10_WINDOWS_BLT_RECT source = {};
+   source.Left = args->SrcLeft;
+   source.Top = args->SrcTop;
+   source.Right = args->SrcRight;
+   source.Bottom = args->SrcBottom;
+   const HRESULT hr = AgxDxgiBltRect(&blt, &source);
+   if (FAILED(hr)) {
+      UINT values[4] = {args->SrcLeft, args->SrcTop, args->SrcRight, args->SrcBottom};
+      AgxD3d10WindowsDiagnostic("reject-dxgi-blt1-source", hr, values, 4u);
+   }
+   return hr;
 }
 
 /* Present1 presents one or more surfaces; one surface is Present. EXP1328:

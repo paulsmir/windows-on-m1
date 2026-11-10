@@ -6,3 +6,6 @@ test_g4_r105_open_normalization.R105OpenNormalization.test_r105_request_parses_t
 test_g3_private_request_policy  # import error, pre-existing on 2026-10-22
 test_apple_agx_win32_screen.AppleAgxWin32ScreenTests.test_device_query_classed_buffers_and_reset_are_fail_closed  # pre-existing on 2026-10-22
 test_apple_agx_d3d10_frontend_prepare.FrontendPrepareTests.test_derived_source_is_reproducible_and_cannot_overwrite_control  # the reference Mesa d3d10umd checkout is patched in place (pinned frontend is dirty), pre-existing on 2026-10-22
+test_g4_live_activation.LiveActivation.test_real_startup_reports_discovery_before_process_negotiation  # compiles m1n1 sources; needs hv_agx_gpuva_v5_process.live_additive from m1n1 branch codex/m1n1-q22 (7cce5a0e), absent in the m1n1_windows checkout (0d3a75b3) and in the bench m1n1 line; observed 2026-11-10
+test_g4_live_publication.LivePublication.test_actual_build_paging_with_live_broker  # same m1n1 Q22 source dependency; host binary exits -6 against 0d3a75b3; observed 2026-11-10
+test_g4_live_wait_receipt.LiveWaitReceipt.test_actual_wait_records_reason_and_range  # same m1n1 Q22 source dependency; host binary exits -6 after its PASS lines against 0d3a75b3; observed 2026-11-10

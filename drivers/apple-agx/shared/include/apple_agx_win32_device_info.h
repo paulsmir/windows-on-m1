@@ -55,9 +55,19 @@ typedef enum _AGX_WIN32_BUFFER_FLAGS {
  * head of the render's 3D ring entry (the 3D still waits). Published only
  * behind its own KMD switch; the parser refuses the flag without it. */
 #define AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT 0x4u
+/* C2a (investigation/analysis/DWM-COMPOSITION-LEVER.md): a compute envelope
+ * may carry APPLE_AGX_G4_COMPUTE_PRIVATE_ONLY in its header when every
+ * allocation the job references is a BO this device allocated itself (no
+ * runtime resource, never opened): no other process can reach its memory,
+ * so the KMD may waive the depth-two lead Barrier's wait on another
+ * process's render. Set only with REG_DWORD Wom1CrossProcessPrivateLead = 1
+ * on top of Wom1CrossProcessPairs and Q2c; the KMD parser refuses the flag
+ * without it. */
+#define AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE 0x8u
 #define AGX_WIN32_DEVICE_FEATURES_KNOWN \
   (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS | AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE | \
-   AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT)
+   AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT | \
+   AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE)
 
 typedef struct _AGX_WIN32_BUFFER_CLASS_INFO {
   APPLE_AGX_U32 ClassId;
