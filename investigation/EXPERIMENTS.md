@@ -77002,3 +77002,25 @@ EXP2319 HARDWARE BEFORE 2026-11-10T13:35:23Z:
 - Hashes: sys 2b96f0b9ebaf, UmdArm64 161a18683237, UmdX64 c5b9a3b17e93, Umd32 d6f94880db99; manifest cdc432e7e1da, hardware-manifest 538f2820e691; probe2319.sh ef671062b14b (PROBE_LINT_OK); visible recovery rec2319h 77b56988c1d64ba5; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2319h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2319-n6-diag-cut/run2319.sh.
+
+## EXP2317 — CORRECTION: "reason 6" was the UMD shadow verdict, not a KMD refusal; N4c is not closed (2026-11-10T13:38:42Z, offline reading, no hardware)
+
+Corrects the EXP2317 ACTUAL line "shadow reason6 2621 (every pair refused by the KMD with reason 6). Verdict as
+preregistered: LEVER_CLOSED_BY_RECEIPT ... N4c ... is closed". The original entry stays as written.
+- The 2621 count comes from the UMD cross-execution shadow verdict (AgxD3d12JobCrossRefusal in
+  drivers/apple-agx/d3d12/agx_d3d12_job_barriers.h): verdict 6 detail 3 = "foreign command before this batch",
+  last_v30 00020306, kind bit 1 = kCommandCopy (CopyBufferRegion). GravityMark issues such a copy before C0's batch in
+  every execution and the tracker counts every non-draw, non-dispatch command as foreign.
+- The KMD never evaluated a stamp: Wom1Ov2Receipt of the same boot (kmd-receipts-post-x0.txt:183) has Considered
+  26686, Waived 0, Refused[6] 0. No stamp defect exists.
+- The 13 % loss of that boot is explained by the profile, not by the lever: (1) the feature bit implies OV3 resolve
+  deferral (owner->ResolveDefer) and APPLE_AGX_D3D12_OV3B was not set, so R5's query resolve became a compute prelude of
+  R7 (3477 resolve-defer lines `3 0x21 0 0 0`, R7 header 00d80005 instead of 00c80003, prelude-free renders 8 of 12653
+  against 3948 of 15705 in EXP2318, pre-submitted renders 0.093 against 0.735); (2) every counted OV2 note set
+  RcExportPending, which is never cleared when the RC receipt is disabled, so the worker did registry export work
+  after every job. The split between (1) and (2) is a HYPOTHESIS and was not measured.
+- Verdict of EXP2317 becomes: INCONCLUSIVE for the N4c lever (0 applied, by construction of the shadow arm and the
+  Copy rule); CONFIRMED as a regression of the Wom1Ov2NoHazardLead=1 profile without OV3B (EXP2318 control).
+- Evidence and tables: .local/night-20261110/r15-n4c-reason6/ (REPORT.md, agg_gap.txt, submit_agg.txt, ring_gap.txt).
+- Next: N4c-v2 (own capability bit, no OV3 side effects, copies placed as ranges) and class C fixes C-a / C-b, spec in
+  .local/handoff/OV-ARCHITECT-HANDOFF.md; Wom1Ov2NoHazardLead stays unset in every package.

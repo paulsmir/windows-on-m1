@@ -3323,3 +3323,32 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
   input, 1000 us fail-open) and Wom1PerfTgtUtilization=60 (PT1: HwDataA floats 0x788/0x7ec; r4). Not run yet.
 - Storage base: AppleAns 0.4.8 (bus type NVMe) installed, ANSQ-T7a/T7b confirmed (ledger b9aa05837).
 - Specs and decisions: .local/handoff/OV-ARCHITECT-HANDOFF.md (sections of this date).
+
+## UPDATE 2026-11-10T13:38Z -- architect: R15 reopens N4c (EXP2317 misread corrected), R17 adds T5 texture-state promotion, R14 gate final form
+
+- CORRECTION to the 11:17Z update: "every pair refused with KMD reason 6 (3D stamp unreadable)" was a misreading.
+  The count is the UMD shadow verdict 6 detail 3 (CopyBufferRegion before C0's batch counted as a foreign command);
+  the KMD stamp path never ran (Wom1Ov2Receipt Waived 0, Refused[6] 0). N4c is NOT closed. EXPERIMENTS.md carries the
+  EXP2317 correction entry.
+- EXP2317's -13 % = profile side effects: OV3 deferral without OV3B gave R7 a prelude (no prelude-free render left,
+  pre-submitted renders 0.093 vs 0.735), plus RcExportPending stuck TRUE (registry export work after every job).
+  Split not measured (HYPOTHESIS). Wom1Ov2NoHazardLead stays unset in every package.
+- Accepted: C-a (class C, KMD: the export flag must always have an export that clears it), C-b (class C, UMD: OV3
+  never creates a prelude on a prelude-free render), N4c-v2 (class O, effort M: REG_DWORD Wom1Ov2CrossLead -> own
+  feature bit; tracking + cross-execution only; copies placed as ranges; receipt of the first conflicting pair).
+  Bound 0.27-0.35 ms/frame HD, realistic 0.20-0.33 (+1.0..1.6 %). Open before the copy rule is implemented: how our
+  CopyBufferRegion executes (job member / separate job / CPU copy with a map wait) -- R15 follow-up, offline.
+- R17 (shader rows): Apple loads constant-handle textures into texture-state registers once in the preamble; our
+  D3D12 UMD never sets key->promote_textures, so every shadow-loop sample of C4 (lighting) and R5 (planet PS) is
+  bindless. T5 = promotion behind env APPLE_AGX_D3D_PROMOTE_TEX (default off), accepted as class O, effort M, bound
+  0..0.36 ms/frame HD (time effect is a HYPOTHESIS; structure verified). Built on branch gpu/t5-texstate-promotion in
+  its own worktree, merged into a package by the bench owner. T1/T2 (ALU count) not built (EXP2188). R3, R1, C2 keep
+  no shader lever.
+- R14 gate final form (implemented by 32597a428, default off): refusal constant 7, event-based input only, applies
+  only to successors that join Queue B and not Queue A, fail-open after 1000 us.
+- EXP2319 (N6): untagged w/r2/r3 run first, w carries the 48.0 floor; tagged arms are N6 controls only.
+- Builder as MPO reference, completed: RX 7900 XT (monitor attached) reports MPO MaxPlanes 1; the Ryzen iGPU
+  (0x164E, no monitor) reports 0. Plane counts are per adapter output and do not add up. No DWM OverlayTestMode
+  value is set there. The Windows-side MPO package stays parked.
+- Lever queue for the bench: EXP2319 (N6) -> gate package (R14 gate, PT1) -> package with N4c-v2 + T5 (one variable
+  per boot) -> FS-D1 / MPO H1.
