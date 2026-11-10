@@ -76497,3 +76497,59 @@ EXP2311 HARDWARE BEFORE 2026-11-10T01:36:25Z:
   mode boots, (2) deallocate-mode boots without ReTrim, (3) ReTrim + restart. 0xAA records decide for
   candidate 1; a stall with Storport timeouts and no 0xAA decides for the controller.
 - Installed driver stays 0.4.5; TRIM stays unmerged.
+
+## ANSQ-T5 — AppleAns 0.4.7 (TRIM 0.4.6 + timer CQ reap): package and common part of T5a/T5b/T5c (2026-11-10T02:05:00Z)
+
+- Purpose: discriminate the ANSQ-T4 boot stall (analysis note above; .local/experiments/ANSTRIM1/analysis/
+  ANSQ-T4-BOOT-STALL.md). Run by the bench owner in gaps after EXP2311; runbook .local/experiments/ANSTRIM2/RUNBOOK.md
+  (SHA-256 3401c9b1...). Nothing installed yet.
+- Commit: 4f4215569192c908743e614682e1e1722033fe77 (branch claude/nervous-dewdney-7e71c6, local: f9f03b9a7,
+  a85a64e24, 15e6d6c28 timer reap, 4f4215569 exact overdue mark after architect review). Profile RECANS001.
+- Build: .local/experiments/ANSTRIM2/O.ps1 (MSBuild Release ARM64 /W4 /WX, code analysis 14 files 0 defects,
+  InfVerif, signtool, Inf2Cat). Artifact .local/experiments/ANSTRIM2/ANSBUILD017-O-package.zip
+  SHA-256 af21c2fc6540803f893b29fc7552a42289724c8bf7726fec6f5e4607c585fb96;
+  AppleAns.sys de910a08604f3d85f2097dcc03ca71a52d061db273c94da886feddba39d71994;
+  AppleAns.inf 0bb927fe26dd6cfeabc8fe14a44a48337acc03c6ade903f4de78f01ebd6a45f3;
+  appleans.cat 234600e74845e6c004b658f4f1181f618ebddcb9a7a17fd7079e1bb69618cb12;
+  source tar ad1c2f04aff042c57cbd080d6d4c0ebbb5983831a757d6a5b870cb19a4a0ca40.
+- WHY THIS HYPOTHESIS (common): (1) ANSQ-T4: stall right after the AppleAns interrupt connect, all CPUs idle, no
+  recovery in 9 min, no record; (2) source: completions were visible only through the interrupt, and the
+  Storport reset path recovers nothing while the interrupt stays silent; (3) Asahi polls the CQ on timeout.
+- Discriminator in every step: AppleAns diag 0xAA (completions reaped by the timer) and poll_recovered.
+- Recovery artifact (all steps): 0.4.5 store directory appleans.inf_arm64_20a748c874b1e861 (ImagePath back +
+  restart), package .local/experiments/ANSS1/ANSBUILD015-M-package.zip (f172cc77...); stall: two HV snapshots,
+  kill the exact launcher PID, relaunch; bridge emergency profile if native boot fails twice.
+- Installed default stays 0.4.5 and TRIM stays unmerged until all three steps pass.
+
+## ANSQ-T5a — 0.4.7, observe mode, 5 boots (BEFORE, 2026-11-10T02:05:00Z)
+
+- Hypothesis: boots of the TRIM driver are stall-free when nothing is sent to the controller, or a lost
+  interrupt shows as 0xAA without any deallocate.
+- Single variable: package 0.4.5 -> 0.4.7 with UnmapMode=1. Commands: runbook T5a.
+- Expected: 5/5 boots reach SSH; 0xA9 = 0xa9010004; receipt observed = accepted, queued 0; no 0xAA, no 0xA4/0xA5,
+  no Storport 129 / disk 153; C: not dirty.
+- Reading: 0xAA on a healthy-looking boot -> candidate 1 (interrupt route) confirmed independent of TRIM, owner
+  m1n1; a stall here with no deallocate ever sent -> not deallocate (driver or platform). Failure criteria: stall,
+  storage errors, queued > 0.
+- Evidence: .local/experiments/ANSTRIM2/evidence/ANSQ-T5a/.
+
+## ANSQ-T5b — 0.4.7, deallocate mode fenced to C:, 5 boots without ReTrim (BEFORE, 2026-11-10T02:05:00Z)
+
+- Precondition: ANSQ-T5a verdict. Hypothesis: boot-time Dataset Management commands complete and do not stall
+  the boot.
+- Single variable: registry UnmapMode 1 -> 2 (fence 30916352..59706368). Commands: runbook T5b.
+- Expected: 5/5 boots reach SSH; 0xA9 = 0xa9020004; queued = completed_ok > 0, completed_error 0, fenced 0 or
+  only non-C: ranges; no 0xAA/0xA4/0xA5; VERIFY_MANIFEST_OK and clean chkdsk after the last boot.
+- Reading: stall with Storport timeouts and no 0xAA after relaunch -> boot-time DSM / controller (candidate 2).
+- Evidence: .local/experiments/ANSTRIM2/evidence/ANSQ-T5b/.
+
+## ANSQ-T5c — 0.4.7, full ReTrim then restart, 3 times (BEFORE, 2026-11-10T02:05:00Z)
+
+- Precondition: ANSQ-T5b verdict. Hypothesis: the restart after a mass deallocate is stall-free with the reap in
+  place (repeat of the ANSQ-T4 sequence).
+- Single variable: a full `Optimize-Volume -ReTrim` before each restart. Commands: runbook T5c.
+- Expected: 3/3 ReTrim + restart cycles reach SSH; every DSM command status 0; TRIM_BOUNDS_PASS;
+  VERIFY_MANIFEST_OK and clean chkdsk before and after each restart; record whether 0xAA appears.
+- Reading: clean with 0xAA records -> the ANSQ-T4 stall was a missed interrupt now absorbed (m1n1 route work
+  follows); clean without 0xAA -> ANSQ-T4 not reproduced (stays an open single event); stall -> controller.
+- Evidence: .local/experiments/ANSTRIM2/evidence/ANSQ-T5c/.
