@@ -2712,3 +2712,41 @@ Decision (owner-layer order, DISPLAY_ONLY first):
    mode set exists; unchanged from DIRECT-FLIP-CONTRACT.md.
 
 Next causal target for this line: FS-D1 receipt (BrokerCaps 0x1ff, ScaledModes 1, 11 modes) on hardware.
+
+## UPDATE 2026-11-10T00:04:40Z -- GravityMark gap: offline budget from five reports (no hardware), hypotheses re-ranked
+
+Sources (read-only agents, /Users/pavel/public_windows/.local/night-20261110/): r1-fhd-budget, r2-dxgk-queue,
+r4-compute-levers, r5-macos-submission, r6-render-scaling. Reports are model output; rows below marked (checked)
+were spot-checked by the architect against the cited tables, the rest are as reported.
+
+- **Corrected size of the gap (r1, HD, PERF scene window, current profile EXP2307/2308):** ours 20.7 ms per
+  GravityMark frame vs Apple 16.6 ms = 80 % of macOS, gap 4.1 ms = GPU work +1.8 (like-for-like ~+2.3) and
+  non-busy +2.3. The "~74 %" figure came from counting present rows: at HD two 8-job frames can lie between two
+  present rows (gate 44.39 fps, frames ~48.1 fps). Tool correction in progress (new frame-based field; gate metric
+  unchanged until a baseline exists).
+- **H-A (FHD-only cost) REJECTED as stated:** same boot/package (EXP2196a/b) ours grows HD->FHD +5.70 ms, Apple
+  +4.75; FHD-only extra +0.95 ms. r6: render configuration at Asahi parity, 8 jobs CRCRCRCR at both sizes, 0
+  partial renders, no extra copy. The earlier "+5 ms only at FHD" mixed the 11-05 profile (FHD) with the current
+  one (HD). Current-profile FHD is unmeasured (N1).
+- **H-B (dxgkrnl queue contract) REJECTED at HD (r2, checked):** dxgkrnl refills the cap-2 queue in 24 us median;
+  per-frame pre-start gaps K 0.459 (firmware floor, Apple parity), F 1.16 (DWM job between GM jobs), D 0.111
+  (late render completion behind a pre-kicked compute), U 0.002. HwQueuePacketCap 3 alone ~0: not to be run alone.
+- **H-D (clock) mostly REJECTED (r4, r5):** same 1278 MHz P6; one reproducible dip per run (58-72 s, P6 59-80 %)
+  worth 0.1-0.3 ms, explained as a consequence of GPU starvation in that scene (HYPOTHESIS).
+- **H-E (frame-ahead queuing) TRUE on Apple's side, small for us:** Apple queues 1-2 frames ahead and starts the
+  next frame's c0 before R20 ends: 0.27-0.33 ms HD, 0.6 ms FHD.
+- **Apple "overlap" re-read (r5 + r6):** c15 lies inside r16 and c19 inside r20 because the render span includes
+  its wait for the compute; our R5 TA is 0.2 ms, so running it under C4 gains <= 0.2 ms. The lighting stage
+  C4+R5 vs r16 is still the largest job-level row (+0.66 HD current, +1.4..2.4 on the 11-05 profile HD..FHD);
+  whether that is dependency structure or work is open (r3 pending).
+- **Ranked open rows at HD (ms per frame, ours - Apple):** (1) GPU work across all jobs +1.8..2.3: C0 +0.51,
+  R5 +0.48, R1/C2/R3 +0.22 each, C4 +0.18 -- three jobs of different size with the same +0.22 suggest a fixed
+  per-job cost (HYPOTHESIS; r8-work-deficit running); (2) DWM job in front of a GM job 0.86 (current) .. 1.16
+  (r7-dwm-row running: cheaper DWM job vs windowed overlay plane; mechanism C covers only the launch part);
+  (3) own launch + late submit + unattributed ~1.2 of which ~0.45 is firmware floor; (4) cross-frame overlap 0.3.
+- **Also found:** hitch frames > 45 ms (3..25 per run, 205..1770 ms per run, not explained by switches; r4);
+  after a second DxgkDdiStartDevice in one boot dxgkrnl fails AddAdapter with 0xC0000017 (EXP2308 toggles,
+  event 549, Problem 43): same-boot adapter toggles are still invalid, so diagnostics values must be set before
+  first start (recorded as a separate class C item, not chased tonight).
+- **Next causal target:** N1/EXP2309 on a fresh boot (FHD+HD, per-job rows, pstate mid-run) to confirm the budget
+  on the current profile; r8 decides fixed-vs-proportional for row (1); r3 and r7 decide rows (1)/(2) designs.
