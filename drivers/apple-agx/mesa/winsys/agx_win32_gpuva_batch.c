@@ -417,6 +417,11 @@ void (*AgxWin32TileLayoutHook)(const uint32_t *values, unsigned count);
  * conflict mask, reads, writes} per submitted batch (MSVC only, like the
  * render trace: the host models extract the submit bodies alone). */
 void (*AgxWin32BatchDepsHook)(const uint32_t *values, unsigned count);
+/* N4c-v4 receipt-only: measure-batch-deps-exact (agx_win32_batch_deps.h
+ * AgxWin32BatchExactCommit, AGX_WIN32_BATCH_EXACT_VALUES values) of every
+ * submitted batch, only with the OV2 cross-lead feature; the owner keeps
+ * the rows it asked for. */
+void (*AgxWin32BatchDepsExactHook)(const uint32_t *values, unsigned count);
 /* OV1/OV2 (agx_d3d12_job_barriers.h): every submitted batch, kind 1 render /
  * 2 compute, before a compute envelope is composed; nonzero for a compute
  * batch the D3D12 owner proved independent of the render submitted just
@@ -443,17 +448,27 @@ extern volatile unsigned AgxWin32Ov5Feature;
 #ifdef _MSC_VER
 #include "agx_win32_batch_deps.h"
 static AGX_WIN32_BATCH_DEPS batch_deps;
+static AGX_WIN32_BATCH_EXACT batch_exact;
 static void note_batch_deps(struct agx_batch *batch, unsigned kind) {
   int h;
+  const int exact=AgxWin32BatchDepsExactHook && AgxWin32Ov2CrossFeature;
   if(!AgxWin32BatchDepsHook) return;
   AgxWin32BatchDepsBegin(&batch_deps,kind);
-  AGX_BATCH_FOREACH_BO_HANDLE(batch,h)
-    AgxWin32BatchDepsAdd(&batch_deps,(unsigned)h,
-        agx_writer_get(batch->ctx,(unsigned)h)==batch);
+  if(exact) AgxWin32BatchExactBegin(&batch_exact);
+  AGX_BATCH_FOREACH_BO_HANDLE(batch,h) {
+    const int writer=agx_writer_get(batch->ctx,(unsigned)h)==batch;
+    AgxWin32BatchDepsAdd(&batch_deps,(unsigned)h,writer);
+    if(exact) AgxWin32BatchExactAdd(&batch_exact,(unsigned)h,writer);
+  }
   {
     const unsigned reads=batch_deps.Current.Reads,writes=batch_deps.Current.Writes;
     const uint32_t values[4]={kind,AgxWin32BatchDepsCommit(&batch_deps),reads,writes};
     AgxWin32BatchDepsHook(values,4u);
+  }
+  if(exact) {
+    uint32_t values[AGX_WIN32_BATCH_EXACT_VALUES];
+    AgxWin32BatchExactCommit(&batch_exact,kind,values);
+    AgxWin32BatchDepsExactHook(values,AGX_WIN32_BATCH_EXACT_VALUES);
   }
 }
 #endif

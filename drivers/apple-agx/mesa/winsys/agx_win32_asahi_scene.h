@@ -95,6 +95,9 @@ int AgxWin32AsahiClearRenderTargetRect(
     unsigned width, unsigned height);
 int AgxWin32AsahiResourceIdentity(
     struct pipe_resource *, AGX_WIN32_RELOC_ALLOCATION *);
+/* N4c-v4 receipt: the Mesa BO handle of a resource's storage (the handle
+ * measure-batch-deps-exact reports), 0 when it has none */
+unsigned AgxWin32AsahiResourceBoHandle(struct pipe_resource *);
 struct pipe_resource *AgxWin32AsahiCreateUncompressedDepthStencil(
     struct pipe_screen *,const struct pipe_resource *);
 /* False retains caller storage; retry only after pending ownership is resolved.

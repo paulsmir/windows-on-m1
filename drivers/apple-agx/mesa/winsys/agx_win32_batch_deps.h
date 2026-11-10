@@ -97,4 +97,98 @@ AgxWin32BatchDepsCommit(AGX_WIN32_BATCH_DEPS *d)
    return mask;
 }
 
+/* N4c-v4 receipt (measure-batch-deps-exact, only with the OV2 cross-lead
+ * feature): the exact BO handle lists of the current and the previous
+ * submitted batch next to the Bloom sets, so a Bloom conflict can be told
+ * from a real one. Reads holds every handle of the batch, Writes those it is
+ * the Mesa writer of; a list that fills sets Overflow (1 reads, 2 writes),
+ * after which conflicts are a lower bound. */
+#define AGX_WIN32_BATCH_EXACT_READS 256u
+#define AGX_WIN32_BATCH_EXACT_WRITES 64u
+#define AGX_WIN32_BATCH_EXACT_SHOWN 4u
+#define AGX_WIN32_BATCH_EXACT_VALUES 11u
+
+typedef struct AGX_WIN32_BATCH_EXACT_LIST {
+   unsigned Read[AGX_WIN32_BATCH_EXACT_READS];
+   unsigned Write[AGX_WIN32_BATCH_EXACT_WRITES];
+   unsigned Reads, Writes, Overflow, Valid;
+} AGX_WIN32_BATCH_EXACT_LIST;
+
+typedef struct AGX_WIN32_BATCH_EXACT {
+   AGX_WIN32_BATCH_EXACT_LIST Previous, Current;
+} AGX_WIN32_BATCH_EXACT;
+
+static inline void
+AgxWin32BatchExactBegin(AGX_WIN32_BATCH_EXACT *e)
+{
+   e->Current.Reads = e->Current.Writes = e->Current.Overflow = 0u;
+   e->Current.Valid = 1u;
+}
+
+static inline void
+AgxWin32BatchExactAdd(AGX_WIN32_BATCH_EXACT *e, unsigned handle, int write)
+{
+   AGX_WIN32_BATCH_EXACT_LIST *c = &e->Current;
+   if (c->Reads < AGX_WIN32_BATCH_EXACT_READS)
+      c->Read[c->Reads++] = handle;
+   else
+      c->Overflow |= 1u;
+   if (!write)
+      return;
+   if (c->Writes < AGX_WIN32_BATCH_EXACT_WRITES)
+      c->Write[c->Writes++] = handle;
+   else
+      c->Overflow |= 2u;
+}
+
+static inline int
+AgxWin32BatchExactHas(const unsigned *list, unsigned count, unsigned handle)
+{
+   unsigned i;
+   for (i = 0; i < count; ++i)
+      if (list[i] == handle)
+         return 1;
+   return 0;
+}
+
+/* values {kind, exact conflicts with the previous batch, the first
+ * AGX_WIN32_BATCH_EXACT_SHOWN conflicting handles, their directions (1 the
+ * current batch writes what the previous one read, 2 it reads what the
+ * previous one wrote, 3 both wrote), overflow (current Overflow | previous
+ * Overflow << 2 | 16 no previous batch)}; unused slots 0. Then the current
+ * batch becomes the previous one. */
+static inline void
+AgxWin32BatchExactCommit(AGX_WIN32_BATCH_EXACT *e, unsigned kind,
+                         uint32_t values[AGX_WIN32_BATCH_EXACT_VALUES])
+{
+   const AGX_WIN32_BATCH_EXACT_LIST *c = &e->Current, *p = &e->Previous;
+   unsigned i, n = 0u;
+   for (i = 0; i < AGX_WIN32_BATCH_EXACT_VALUES; ++i)
+      values[i] = 0u;
+   values[0] = kind;
+   for (i = 0; p->Valid && i < c->Reads; ++i) {
+      const unsigned h = c->Read[i];
+      const int cw = AgxWin32BatchExactHas(c->Write, c->Writes, h);
+      const int pw = AgxWin32BatchExactHas(p->Write, p->Writes, h);
+      unsigned direction = 0u;
+      if (cw && pw)
+         direction = 3u;
+      else if (pw)
+         direction = 2u;
+      else if (cw && AgxWin32BatchExactHas(p->Read, p->Reads, h))
+         direction = 1u;
+      if (!direction)
+         continue;
+      if (n < AGX_WIN32_BATCH_EXACT_SHOWN) {
+         values[2u + n] = h;
+         values[2u + AGX_WIN32_BATCH_EXACT_SHOWN + n] = direction;
+      }
+      ++n;
+   }
+   values[1] = n;
+   values[2u + 2u * AGX_WIN32_BATCH_EXACT_SHOWN] =
+      c->Overflow | (p->Overflow << 2) | (p->Valid ? 0u : 16u);
+   e->Previous = e->Current;
+}
+
 #endif

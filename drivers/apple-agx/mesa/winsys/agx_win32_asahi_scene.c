@@ -196,6 +196,10 @@ int AgxWin32AsahiResourceIdentity(
   return backend && native->bo &&
       AgxWin32AsahiIdentity(backend,native->bo,identity);
 }
+unsigned AgxWin32AsahiResourceBoHandle(struct pipe_resource *resource) {
+  struct agx_resource *native=resource ? agx_resource(resource) : NULL;
+  return native && native->bo ? (unsigned)native->bo->handle : 0u;
+}
 struct pipe_resource *AgxWin32AsahiCreateUncompressedDepthStencil(
     struct pipe_screen *screen,const struct pipe_resource *templ) {
   if(!screen||!templ||!screen->resource_create_with_modifiers||

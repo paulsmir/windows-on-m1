@@ -282,6 +282,7 @@ static void run(int mode) {
   if (mode == 3) { begin(CLEAR); end(); }       /* before the kept render's submission */
   if (mode == 14) barrier(TRANSITION, 9, 0, 0, 0);
   if (mode == 21) barrier(TRANSITION, 9, &A, 0, 64);
+  if (mode == 121) barrier(TRANSITION, 9, &V, 0, 64);
   if (mode == 22) barrier(UAV, 0, 0, 0, 0);
   if (mode == 4) { begin(CLEAR); batch(1u, 1); end(); } /* the clear submits the render */
   else if (mode == 2) { batch(1u, 1); }
@@ -312,6 +313,7 @@ static void run(int mode) {
     if (mode == 117) AgxD3d12JobCrossTableRange(&j, 1, &RT, 100, 200, VIEW);
     if (mode == 18) AgxD3d12JobBarrierDispatchRange(&j, &V, 0, 16, 1u | VIEW);
     if (mode == 118) AgxD3d12JobCrossTableRange(&j, 1, &V, 0, 16, 1u | VIEW);
+    if (mode == 121) AgxD3d12JobBarrierDispatchRange(&j, &V, 0, 16, VIEW);
     end();
   }
   begin(DRAW);
@@ -319,7 +321,8 @@ static void run(int mode) {
   mask = AgxD3d12JobCrossMask(&j, &m);
   shadow2 = AgxD3d12JobCrossRefusal(&j, &detail2);
   if (shadow != shadow2 || detail != detail2) verdict_changed = 1u;
-  if (!j.Cross.Kept && (mask == 0u) != (shadow == 0u)) contract_broken = 1u;
+  /* N4c-v4: bit 23 (the N4c-v3 8/3 rule) is receipt only */
+  if (!j.Cross.Kept && ((mask & ~AGX_D3D12_JOB_MASK_NAMED) == 0u) != (shadow == 0u)) contract_broken = 1u;
   if (shadow && !mask) refusal_hidden = 1u;
   printf("%d %u.%u %x", mode, shadow, detail, mask);
   for (k = 0; k < AGX_D3D12_JOB_MASK_CLASSES; ++k)
@@ -334,7 +337,7 @@ static void run(int mode) {
 }
 int main(void) {
   static const int modes[] = {0, 1, 100, 102, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 112, 13, 14, 15, 16,
-                              17, 117, 18, 118, 19, 20, 21, 22};
+                              17, 117, 18, 118, 19, 20, 21, 121, 22};
   for (unsigned i = 0; i < sizeof(modes) / sizeof(modes[0]); ++i) run(modes[i]);
   /* the counts and sets of the receipt */
   run(0);
@@ -390,7 +393,7 @@ class N4cV3Placement(unittest.TestCase):
         self.assertEqual(verdicts['0'], '0.0')
         expected = {'1': 0, '100': 0, '102': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8,
                     '9': 9, '10': 10, '11': 11, '12': 12, '112': 12, '13': 13, '14': 14, '15': 15, '16': 16,
-                    '17': 17, '117': 17, '18': 18, '118': 18, '19': 19, '20': 20, '21': 21, '22': 22}
+                    '17': 17, '117': 17, '18': 18, '118': 18, '19': 19, '20': 20, '121': 21, '22': 22}
         for mode, bit in expected.items():
             self.assertTrue(bits[mode] & (1 << bit), (mode, bit, lines))
             self.assertNotEqual(verdicts[mode], '0.0', mode)
@@ -398,8 +401,13 @@ class N4cV3Placement(unittest.TestCase):
         # boundary (5) and leaves its writes unplaced (11))
         self.assertEqual(bits['5'], (1 << 5) | (1 << 11))
         self.assertEqual(bits['11'], (1 << 11) | (1 << 12))
-        for mode in ('3', '4', '9', '10', '13', '15', '16', '17', '18', '19', '20', '21', '22'):
+        for mode in ('3', '4', '9', '10', '13', '15', '16', '17', '18', '19', '20', '22'):
             self.assertEqual(bits[mode], 1 << expected[mode], (mode, lines))
+        # N4c-v4: a barrier on a range only the compute uses orders nothing (receipt bit 23 only);
+        # one on a range the kept render accessed too is 8/3 (bit 21, and 23)
+        self.assertEqual(bits['21'], 1 << 23, lines)
+        self.assertEqual(verdicts['21'], '0.0')
+        self.assertEqual(bits['121'], (1 << 21) | (1 << 23), lines)
         self.assertIn('p0=1 RT100-200/RT0-4096', [line for line in lines if line.startswith('17 ')][0])
         self.assertIn('p1=1 V0-16/V0-256', [line for line in lines if line.startswith('18 ')][0])
         self.assertIn('p2=1 RT4000-4064/RT0-4096', [line for line in lines if line.startswith('19 ')][0])

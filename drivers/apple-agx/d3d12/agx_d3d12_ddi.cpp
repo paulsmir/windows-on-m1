@@ -6782,6 +6782,10 @@ static bool JobStageHeapTable(const AgxD3d12Dispatch &b) {
 static unsigned long long JobHeapBytes(const void *heap) {
     return heap ? static_cast<const AgxD3d12Heap *>(heap)->bytes : 0ull;
 }
+/* N4c-v4: the owner resource of a tracker heap identity (receipt) */
+static void *JobHeapResource(const void *heap) {
+    return heap ? static_cast<const AgxD3d12Heap *>(heap)->native : nullptr;
+}
 /* K48G (class D diagnostic): APPLE_AGX_D3D12_DIAG_INDIRECT_ARGS=<hex cs_tag>
  * (the 6th value of measure-d3d12-dispatch) writes one receipt
  * measure-d3d12-indirect-args {cs_tag, x, y, z, source, lag} per replayed
@@ -6971,10 +6975,23 @@ struct AgxD3d12ClearAbsorbStats {
  * access -- targets, absorbed clears, vertex/index/indirect/stream-output
  * buffers, the VS/PS views (UAVs marked); root views and buffers without a
  * size run to the heap's end; optional stages are not placed (unknown). */
+/* N4c-v4 (cross-lead feature only): a vertex buffer bound in a slot the
+ * pipeline's input layout does not name is not read by the draw
+ * (AgxD3d12JobVbSlots); it is left out, and the skipped bound slots are
+ * reported once per draw (AgxD3d12OwnerJobVbDraw). Without the feature, or
+ * without a pipeline, every slot as before. */
 static void JobDrawRanges(const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &optional, const AgxD3d12Command *clears,
                           UINT clear_count) {
     const JobRangeSink sink = AgxD3d12OwnerJobDrawRange;
     const unsigned vertex = AGX_D3D12_JOB_VERTEX;
+    const unsigned cross = AgxD3d12OwnerJobTablePlacement() ? 1u : 0u;
+    const unsigned elements = d.pso ? d.pso->elements : 0u;
+    unsigned slot[kPipelineElements] = {}, reg[kPipelineElements] = {};
+    for (UINT i = 0; cross && d.pso && i < elements && i < kPipelineElements; ++i) {
+        slot[i] = d.pso->element[i].InputSlot;
+        reg[i] = d.pso->element[i].InputRegister;
+    }
+    const unsigned vb_slots = AgxD3d12JobVbSlots(cross, d.pso ? 1u : 0u, elements, kPipelineElements, slot, reg);
     if (optional.gs || optional.hs || optional.ds) sink(nullptr, 0, 0, 1u | vertex);
     for (UINT r = 0; r < d.rtvs && r < 8u; ++r) JobDescriptorRange(sink, &d.rtv[r], AGX_D3D12_JOB_SRC_TARGET);
     if (d.dsv.kind) JobDescriptorRange(sink, &d.dsv, AGX_D3D12_JOB_SRC_TARGET);
@@ -6984,7 +7001,18 @@ static void JobDrawRanges(const AgxD3d12Draw &d, const AgxD3d12OptionalBinds &op
         else if (clears[k].kind == kCommandClearUav) JobDescriptorRange(sink, &clears[k].clear_uav.view, 1u | AGX_D3D12_JOB_SRC_CLEAR); /* OV6 */
         else sink(nullptr, 0, 0, 0u);
     }
-    for (UINT v = 0; v < kVertexBuffers; ++v) JobHeapRange(sink, d.vb[v].heap, d.vb[v].offset, d.vb[v].size, vertex | AGX_D3D12_JOB_SRC_VB);
+    unsigned skipped = 0u, skipped_slot = 0u;
+    const AgxD3d12Heap *skipped_heap = nullptr;
+    for (UINT v = 0; v < kVertexBuffers; ++v) {
+        if (vb_slots & (1u << v)) JobHeapRange(sink, d.vb[v].heap, d.vb[v].offset, d.vb[v].size, vertex | AGX_D3D12_JOB_SRC_VB);
+        else if (d.vb[v].heap && !skipped++) {
+            skipped_heap = d.vb[v].heap;
+            skipped_slot = v;
+        }
+    }
+    if (cross)
+        AgxD3d12OwnerJobVbDraw(skipped, skipped_heap, skipped_slot, elements,
+                               skipped_slot < AgxD3d12JobVbCount(vb_slots) ? 1u : 0u);
     if (d.index_size) JobHeapRange(sink, d.index_heap, d.index_offset, d.index_bytes, vertex | AGX_D3D12_JOB_SRC_IB);
     JobIndirectRanges(sink, d.indirect, vertex);
     for (UINT t = 0; t < kSoTargets; ++t) {
@@ -7314,6 +7342,7 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
         }
         AgxD3d12OwnerJobExecution(known);
         AgxD3d12OwnerJobHeapBytes(JobHeapBytes); /* N4c-v3 receipt */
+        AgxD3d12OwnerJobHeapResource(JobHeapResource); /* N4c-v4 receipt */
         /* OV2 cross-execution (receipt): what the previous execution left */
         AgxD3d12OwnerJobCrossBegin(queue && queue->device ? static_cast<AGX_D3D12_OWNER *>(queue->device->owner) : nullptr,
                                    queue);

@@ -91,6 +91,15 @@ void AgxD3d12OwnerJobDispatchTableRange(const void *Heap, unsigned long long Lo,
                                         unsigned Flags);
 void AgxD3d12OwnerJobResolveHeap(const void *Heap);
 void AgxD3d12OwnerJobHeapBytes(unsigned long long (*Bytes)(const void *Heap));
+/* N4c-v4 (receipts, only with AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD):
+ * HeapResource gives the receipt the pipe resource of a tracker heap
+ * identity (measure-d3d12-ov2-heap-bo); VbDraw: the active draw left Skipped
+ * bound vertex-buffer slots its input layout does not name out of its
+ * accesses, the first of them Slot of Heap, the draw has Elements input
+ * elements, Below: that slot is below its Gallium vertex-buffer count
+ * (AgxD3d12JobCrossVbDraw; once per draw). */
+void AgxD3d12OwnerJobHeapResource(void *(*Resource)(const void *Heap));
+void AgxD3d12OwnerJobVbDraw(unsigned Skipped, const void *Heap, unsigned Slot, unsigned Elements, unsigned Below);
 /* OV5 receipt:the active dispatch accesses [Lo, Hi) of Heap (Flags bit 0: may write) */
 void AgxD3d12OwnerJobDispatchRange(const void *Heap, unsigned long long Lo, unsigned long long Hi, unsigned Flags);
 /* OV4 (opt-in APPLE_AGX_D3D12_OV4=1 with the OV2 feature): after a barrier

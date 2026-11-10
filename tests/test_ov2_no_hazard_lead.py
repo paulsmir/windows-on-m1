@@ -674,6 +674,7 @@ static void run(int mode) {
   if (mode == 6) { AgxD3d12JobBarrierBegin(&j, COPY); AgxD3d12JobBarrierEnd(&j); }
   if (mode == 7) { AgxD3d12JobBarrierBegin(&j, DISPATCH); AgxD3d12JobBarrierEnd(&j); }
   if (mode == 13) barrier(TRANSITION, 9, &A, 0, 64);
+  if (mode == 29) barrier(TRANSITION, 9, &V, 0, 256);
   if (mode == 22) barrier(UAV, 0, 0, 0, 0);
   if (mode == 23) barrier(TRANSITION, 9, 0, 0, 0); /* a resource the tracker cannot place */
   if (mode == 24) AgxD3d12JobBarrierForeign(&j);  /* a resolve drained at the replay's end */
@@ -690,6 +691,7 @@ static void run(int mode) {
   AgxD3d12JobBarrierExecution(&j, mode != 3);
   AgxD3d12JobCrossBegin(&j, mode == 8 ? 5u : 0u);
   if (mode == 14) barrier(TRANSITION, 9, &A, 0, 64);
+  if (mode == 30) barrier(TRANSITION, 9, &V, 0, 256);
   if (mode == 9) { AgxD3d12JobBarrierBegin(&j, COPY); AgxD3d12JobBarrierEnd(&j); }
   if (mode == 26) AgxD3d12JobCrossBreak(&j, 9);
   if (mode != 27) {
@@ -698,7 +700,7 @@ static void run(int mode) {
     AgxD3d12JobBarrierDispatchRange(&j, &B, 0, 64, VIEW);
     if (mode == 1) AgxD3d12JobBarrierDispatchRange(&j, &RT, 100, 200, VIEW);
     if (mode == 2) AgxD3d12JobBarrierDispatchRange(&j, &V, 0, 16, 1u | VIEW);
-    if (mode == 10) AgxD3d12JobBarrierDispatchRange(&j, &V, 0, 16, VIEW);
+    if (mode == 10 || mode == 29 || mode == 30) AgxD3d12JobBarrierDispatchRange(&j, &V, 0, 16, VIEW);
     if (mode == 15) AgxD3d12JobCrossUnplaced(&j, 1);
     if (mode == 17) AgxD3d12JobBarrierDispatchRange(&j, 0, 0, 0, VIEW);
     if (mode == 18 || mode == 19) AgxD3d12JobBarrierDispatchRange(&j, &W, 0, 16, 1u | VIEW);
@@ -717,7 +719,7 @@ static void run(int mode) {
 }
 int main(void) {
   unsigned h = 0, i;
-  for (int m = 0; m <= 28; ++m) run(m);
+  for (int m = 0; m <= 30; ++m) run(m);
   h = AgxD3d12JobCrossCount(h, 0); h = AgxD3d12JobCrossCount(h, 1); h = AgxD3d12JobCrossCount(h, 2);
   h = AgxD3d12JobCrossCount(h, 6); h = AgxD3d12JobCrossCount(h, 8); h = AgxD3d12JobCrossCount(h, 11);
   h = AgxD3d12JobCrossCount(h, 8);
@@ -743,8 +745,8 @@ int main(void) {
             '10 1 2 2 0.0',    # both only read the range
             '11 1 2 2 6.4',    # the previous execution failed
             '12 1 2 2 11.2',   # a heap-table access in the kept render
-            '13 1 2 2 8.3',    # a barrier after the render names a compute range
-            '14 1 2 2 8.3',    # so does one before the compute's dispatch
+            '13 1 2 2 0.0',    # N4c-v4: a barrier after the render on a range only the compute uses
+            '14 1 2 2 0.0',    # nor does one before the compute's dispatch: it orders nothing
             '15 1 2 2 11.4',   # a heap-table access in the compute
             '16 1 2 2 0.0',    # after the compute's last dispatch: orders later work
             '17 1 2 2 11.3',   # a compute access the tracker cannot place
@@ -759,6 +761,8 @@ int main(void) {
             '26 1 2 2 6.145',  # a batch from another thread in this execution
             '27 1 2 2 11.6',   # a compute batch without a tracked dispatch
             '28 1 2 2 0.0',    # the same heap, a disjoint range
+            '29 1 2 2 8.3',    # a barrier after the render names a range both access
+            '30 1 2 2 8.3',    # so does one before the compute's dispatch
             'histogram 121111', 'saturated 12f111'])
 
     def test_cross_execution_copy_rule(self):
@@ -930,7 +934,7 @@ int main(void) {
                         hook.index('independent = AgxD3d12JobCrossApply('))
         # everything else keyed on the OV2 feature stays on it (N4c-v3 adds the table
         # placement, the resolve staging and the mask receipt under the cross lead)
-        self.assertEqual(owner.count('AgxWin32Ov2CrossFeature'), 9)
+        self.assertEqual(owner.count('AgxWin32Ov2CrossFeature'), 10)
         self.assertIn('if (kind == 1u && AgxWin32Ov2Feature && owner_job_barriers.PreviousKind == 2u) {', hook)
         self.assertIn('if (!owner || !AgxWin32Ov2Feature || !owner_ov4()) return;', owner)
         self.assertIn('owner->ResolveDefer = begin && known && AgxWin32Ov2Feature && ', owner)

@@ -83,6 +83,17 @@ typedef struct AGX_D3D12_JOB_RANGE_SET {
  * kept verdict refused, KeptMask the kept-side conditions of that end
  * (AgxD3d12JobCrossMask bits 0-8) and KeptLast* LastForeign, LastPlaced
  * and LastForeignKinds then (receipt only). */
+/* N4c-v4 (EXP2327 s0, receipt only): vertex-buffer slots a draw left out of
+ * its accesses because its input layout names none of their elements
+ * (AgxD3d12JobVbSlots): draws fed, slots skipped, and the first skipped
+ * slot's heap, slot, the draw's element count and Below = 1 when that slot
+ * is below the draw's Gallium vertex-buffer count (handed to Gallium all
+ * the same). VbDraw is the active draw's (staged until its end), VbRender,
+ * VbLast and VbShadow follow Render, Last and ShadowRender. */
+typedef struct AGX_D3D12_JOB_VB_SKIP {
+  unsigned Draws, Skipped, Slot, Elements, Below;
+  const void *Heap;
+} AGX_D3D12_JOB_VB_SKIP;
 #define AGX_D3D12_JOB_RANGE_TABLE 4u
 #define AGX_D3D12_JOB_KIND_COPY 1u
 typedef struct AGX_D3D12_JOB_CROSS {
@@ -96,6 +107,7 @@ typedef struct AGX_D3D12_JOB_CROSS {
   unsigned KeptMask, KeptLastForeign, KeptLastPlaced, KeptLastForeignKinds;
   AGX_D3D12_JOB_RANGE_SET Render, Last, Tail, Pre, KeptRender, KeptPost, Copy;
   AGX_D3D12_JOB_RANGE_SET PlacedDst, TableDrawSet, TableDispatchSet, Compute, ShadowRender, ShadowPost;
+  AGX_D3D12_JOB_VB_SKIP VbDraw, VbRender, VbLast, VbShadow;
 } AGX_D3D12_JOB_CROSS;
 typedef struct AGX_D3D12_JOB_BARRIERS {
   AGX_D3D12_JOB_BARRIER_SET Before; /* the gap before the active command */
@@ -196,6 +208,59 @@ static inline void AgxD3d12JobRangeMerge(AGX_D3D12_JOB_RANGE_SET *to, const AGX_
   for (i = 0; i < from->Count; ++i)
     AgxD3d12JobRangeAdd(to, from->R[i].Heap, from->R[i].Lo, from->R[i].Hi, from->R[i].Uav);
 }
+/* N4c-v4: whether s holds a range of b's heap overlapping b */
+static inline unsigned AgxD3d12JobRangeSetOverlaps(const AGX_D3D12_JOB_RANGE_SET *s, const AGX_D3D12_JOB_RANGE *b) {
+  unsigned i;
+  for (i = 0; i < s->Count; ++i)
+    if (s->R[i].Heap == b->Heap && b->Lo < s->R[i].Hi && s->R[i].Lo < b->Hi) return 1u;
+  return 0u;
+}
+/* N4c-v4 (D3D12 input assembler: a draw reads vertex data only through its
+ * input layout's InputSlot; Asahi fetches only the attributes' buffers): the
+ * vertex-buffer slots (bit v = slot v of 16) a draw reads. cross 0 (the
+ * cross-lead switch off), no layout known (layout 0: no pipeline) or more
+ * elements than the pipeline tracks: every slot, as before. A slot or
+ * register the tracker cannot represent: every slot. A register hole
+ * (registers not 0..n-1) reads slot 0 (the owner's vertex elements fill a
+ * hole from slot 0). */
+#define AGX_D3D12_JOB_VB_SLOTS 16u
+#define AGX_D3D12_JOB_VB_ALL 0xffffu
+static inline unsigned AgxD3d12JobVbSlots(unsigned cross, unsigned layout, unsigned elements, unsigned tracked,
+                                          const unsigned *slot, const unsigned *reg) {
+  unsigned i, mask = 0u, regs = 0u, count = 0u;
+  if (!cross || !layout || elements > tracked) return AGX_D3D12_JOB_VB_ALL;
+  for (i = 0; i < elements; ++i) {
+    if (slot[i] >= AGX_D3D12_JOB_VB_SLOTS || reg[i] >= 32u) return AGX_D3D12_JOB_VB_ALL;
+    mask |= 1u << slot[i];
+    regs |= 1u << reg[i];
+    if (reg[i] + 1u > count) count = reg[i] + 1u;
+  }
+  if (count && regs != (count >= 32u ? ~0u : (1u << count) - 1u)) mask |= 1u;
+  return mask;
+}
+/* the Gallium vertex-buffer count of a slot mask: highest slot + 1 */
+static inline unsigned AgxD3d12JobVbCount(unsigned mask) {
+  unsigned n = 0u;
+  while (mask) {
+    ++n;
+    mask >>= 1;
+  }
+  return n;
+}
+static inline void AgxD3d12JobVbSkipClear(AGX_D3D12_JOB_VB_SKIP *s) {
+  s->Draws = s->Skipped = s->Slot = s->Elements = s->Below = 0u;
+  s->Heap = 0;
+}
+static inline void AgxD3d12JobVbSkipMerge(AGX_D3D12_JOB_VB_SKIP *to, const AGX_D3D12_JOB_VB_SKIP *from) {
+  to->Draws += from->Draws;
+  if (!to->Skipped && from->Skipped) {
+    to->Slot = from->Slot;
+    to->Elements = from->Elements;
+    to->Below = from->Below;
+    to->Heap = from->Heap;
+  }
+  to->Skipped += from->Skipped;
+}
 static inline void AgxD3d12JobRangesReset(AGX_D3D12_JOB_BARRIERS *j) {
   AgxD3d12JobRangeClear(&j->RangeDraw);
   AgxD3d12JobRangeClear(&j->RangeRender);
@@ -267,6 +332,10 @@ static inline void AgxD3d12JobBarriersInit(AGX_D3D12_JOB_BARRIERS *j) {
   AgxD3d12JobRangeClear(&j->Cross.Pre);
   AgxD3d12JobRangeClear(&j->Cross.KeptRender);
   AgxD3d12JobRangeClear(&j->Cross.KeptPost);
+  AgxD3d12JobVbSkipClear(&j->Cross.VbDraw);
+  AgxD3d12JobVbSkipClear(&j->Cross.VbRender);
+  AgxD3d12JobVbSkipClear(&j->Cross.VbLast);
+  AgxD3d12JobVbSkipClear(&j->Cross.VbShadow);
 }
 
 /* type 0 transition, 1 aliasing, 2 UAV (id 0 = global), 3 0022 ranged
@@ -325,6 +394,7 @@ static inline void AgxD3d12JobBarrierBegin(AGX_D3D12_JOB_BARRIERS *j, unsigned k
   AgxD3d12JobRangeClear(&j->Cross.PlacedDst);
   AgxD3d12JobRangeClear(&j->Cross.TableDrawSet);
   AgxD3d12JobRangeClear(&j->Cross.TableDispatchSet);
+  AgxD3d12JobVbSkipClear(&j->Cross.VbDraw);
 }
 
 static inline void AgxD3d12JobBarrierEnd(AGX_D3D12_JOB_BARRIERS *j) {
@@ -351,6 +421,9 @@ static inline void AgxD3d12JobBarrierEnd(AGX_D3D12_JOB_BARRIERS *j) {
   if (j->Cross.TableDispatchSet.Count || j->Cross.TableDispatchSet.Overflow)
     AgxD3d12JobRangeMerge(&j->Cross.Compute, &j->Cross.TableDispatchSet);
   if (j->Cross.PlacedActive) AgxD3d12JobRangeMerge(&j->Cross.Render, &j->Cross.PlacedDst);
+  /* N4c-v4 receipt: with the draw's accesses */
+  if (j->Cross.VbDraw.Draws) AgxD3d12JobVbSkipMerge(&j->Cross.VbRender, &j->Cross.VbDraw);
+  AgxD3d12JobVbSkipClear(&j->Cross.VbDraw);
   j->Cross.PlacedActive = 0u;
   AgxD3d12JobRangeClear(&j->Cross.PlacedDst);
   AgxD3d12JobRangeClear(&j->Cross.TableDrawSet);
@@ -842,6 +915,8 @@ static inline void AgxD3d12JobCrossBegin(AGX_D3D12_JOB_BARRIERS *j, unsigned cau
   AgxD3d12JobRangeClear(&c->Last);
   AgxD3d12JobRangeClear(&c->Tail);
   AgxD3d12JobRangeClear(&c->Pre);
+  AgxD3d12JobVbSkipClear(&c->VbRender);
+  AgxD3d12JobVbSkipClear(&c->VbLast);
 }
 /* N4c-v2: the active command is a buffer copy dst[dlo, dhi) <- src[slo, shi)
  * that joins the open compute batch. Before the execution's first batch
@@ -884,6 +959,21 @@ static inline void AgxD3d12JobCrossTableRange(AGX_D3D12_JOB_BARRIERS *j, unsigne
   if (dispatch) AgxD3d12JobRangeAdd(&j->Cross.TableDispatchSet, heap, lo, hi, flags & (1u | AGX_D3D12_JOB_SRC_MASK));
   else AgxD3d12JobRangeAdd(&j->Cross.TableDrawSet, heap, lo, hi, flags);
 }
+/* N4c-v4 receipt: the active draw left skipped bound vertex-buffer slots out
+ * of its accesses (AgxD3d12JobVbSlots), the first of them slot of heap; the
+ * draw has elements input elements, below: that slot is below its Gallium
+ * vertex-buffer count. Once per draw, also with nothing skipped (it counts
+ * the draw); staged until the draw ends. */
+static inline void AgxD3d12JobCrossVbDraw(AGX_D3D12_JOB_BARRIERS *j, unsigned skipped, const void *heap,
+                                          unsigned slot, unsigned elements, unsigned below) {
+  AGX_D3D12_JOB_VB_SKIP *s = &j->Cross.VbDraw;
+  s->Draws = 1u;
+  s->Skipped = skipped;
+  s->Heap = skipped ? heap : 0;
+  s->Slot = skipped ? slot : 0u;
+  s->Elements = skipped ? elements : 0u;
+  s->Below = skipped && below ? 1u : 0u;
+}
 /* the compute batch now being submitted is the first batch of its execution */
 static inline unsigned AgxD3d12JobCrossFirst(const AGX_D3D12_JOB_BARRIERS *j) {
   return j->Cross.InExecution && !j->Cross.Batches && j->PreviousKind == 0u ? 1u : 0u;
@@ -902,6 +992,7 @@ static inline void AgxD3d12JobCrossBatch(AGX_D3D12_JOB_BARRIERS *j, unsigned kin
     return;
   }
   c->Last = c->Render;
+  c->VbLast = c->VbRender;
   /* the command whose owner work submits the render comes after it */
   c->LastForeign = c->Foreign - (active && c->Foreign ? 1u : 0u);
   c->LastForeignKinds = c->ForeignKinds;
@@ -912,6 +1003,7 @@ static inline void AgxD3d12JobCrossBatch(AGX_D3D12_JOB_BARRIERS *j, unsigned kin
   c->Dirty = clean ? 0u : 1u;
   if (clean) {
     AgxD3d12JobRangeClear(&c->Render);
+    AgxD3d12JobVbSkipClear(&c->VbRender);
     c->Foreign = active;
     c->ForeignKinds = active ? 1u << (j->Active & 31u) : 0u;
     c->Placed = placed;
@@ -928,6 +1020,7 @@ static inline void AgxD3d12JobCrossEnd(AGX_D3D12_JOB_BARRIERS *j, unsigned ok) {
     c->KeptMask |= 4u;
     AgxD3d12JobRangeClear(&c->ShadowRender);
     AgxD3d12JobRangeClear(&c->ShadowPost);
+    AgxD3d12JobVbSkipClear(&c->VbShadow);
     return;
   }
   c->InExecution = 0u;
@@ -942,6 +1035,7 @@ static inline void AgxD3d12JobCrossEnd(AGX_D3D12_JOB_BARRIERS *j, unsigned ok) {
                 (j->ComputeForeign ? 0x20u : 0u) | ((c->Last.Overflow & 7u) << 6);
   c->ShadowRender = c->Last;
   c->ShadowPost = c->Tail;
+  c->VbShadow = c->VbLast;
   if (j->Unknown) {
     kept = 1u;
     detail = 2u;
@@ -1013,17 +1107,19 @@ static inline unsigned AgxD3d12JobCrossCopyConflicts(const AGX_D3D12_JOB_BARRIER
  * the compute touches: the direct comparison covers every shared range.) */
 /* (N4c-v3: the compute batch's accesses are RangeCompute and its
  * descriptor-table accesses Cross.Compute) */
-static inline unsigned AgxD3d12JobCrossBarrier(const AGX_D3D12_JOB_BARRIERS *j, const AGX_D3D12_JOB_RANGE *b) {
-  unsigned i, s;
+/* N4c-v4 (EXP2327 s0: the application's transition of a buffer only C0
+ * uses refused every execution): a barrier is a declaration, not an access.
+ * With kept (the kept render's accesses) 3 needs the barrier range to
+ * overlap a compute range AND a kept render range: a barrier on a range the
+ * kept render never touched orders nothing between that render and the
+ * compute (what they share is compared directly: 8/1, 8/2). kept NULL: the
+ * N4c-v3 rule (receipt only, AgxD3d12JobCrossMask bit 23). 4 unchanged. */
+static inline unsigned AgxD3d12JobCrossBarrier(const AGX_D3D12_JOB_BARRIERS *j, const AGX_D3D12_JOB_RANGE *b,
+                                               const AGX_D3D12_JOB_RANGE_SET *kept) {
   if (b->Uav == 2u) return j->RangeCompute.Uav || j->Cross.Compute.Uav ? 4u : 0u;
-  for (s = 0; s < 2u; ++s) {
-    const AGX_D3D12_JOB_RANGE_SET *set = s ? &j->Cross.Compute : &j->RangeCompute;
-    for (i = 0; i < set->Count; ++i) {
-      const AGX_D3D12_JOB_RANGE *x = &set->R[i];
-      if (x->Heap == b->Heap && b->Lo < x->Hi && x->Lo < b->Hi) return 3u;
-    }
-  }
-  return 0u;
+  if (!AgxD3d12JobRangeSetOverlaps(&j->RangeCompute, b) && !AgxD3d12JobRangeSetOverlaps(&j->Cross.Compute, b))
+    return 0u;
+  return !kept || AgxD3d12JobRangeSetOverlaps(kept, b) ? 3u : 0u;
 }
 /* shadow verdict for the execution-first compute batch now being submitted
  * (AgxD3d12JobCrossFirst): 0 independent of the kept render, 1 barriers not
@@ -1034,7 +1130,8 @@ static inline unsigned AgxD3d12JobCrossBarrier(const AGX_D3D12_JOB_BARRIERS *j, 
  * after the kept render; 3 before this batch; 4 the previous execution
  * failed), 8 the ranges order the two (1 the compute accesses what the
  * render may write, 2 it writes what the render reads, 3 a barrier since
- * the render names a range the compute accesses, 4 a global UAV barrier
+ * the render names a range the compute accesses and the render accessed
+ * (N4c-v4), 4 a global UAV barrier
  * since the render and the compute accesses a UAV), 11 an access cannot
  * be placed (1 kept set, 2 a heap table in the kept render, 3 the compute
  * set, 4 a heap table in the compute, 5 a barrier, 6 a compute batch
@@ -1115,11 +1212,11 @@ static inline unsigned AgxD3d12JobCrossRefusal(const AGX_D3D12_JOB_BARRIERS *j, 
       }
     }
   for (i = 0; i < c->KeptPost.Count; ++i) {
-    const unsigned n = AgxD3d12JobCrossBarrier(j, &c->KeptPost.R[i]);
+    const unsigned n = AgxD3d12JobCrossBarrier(j, &c->KeptPost.R[i], &c->KeptRender);
     if (n && (!named || n < named)) named = n;
   }
   for (i = 0; i < c->PreCommitted && i < c->Pre.Count; ++i) {
-    const unsigned n = AgxD3d12JobCrossBarrier(j, &c->Pre.R[i]);
+    const unsigned n = AgxD3d12JobCrossBarrier(j, &c->Pre.R[i], &c->KeptRender);
     if (n && (!named || n < named)) named = n;
   }
   if (named) {
@@ -1141,8 +1238,15 @@ static inline unsigned AgxD3d12JobCrossRefusal(const AGX_D3D12_JOB_BARRIERS *j, 
  * 12 RangeCompute or Cross.Compute overflow, 13 a heap table in the compute
  * (TableCompute), 14 a barrier set overflow, 15 no tracked dispatch, 16
  * Copy overflow; ranges: 17 8/1, 18 8/2, 19 8/5, 20 8/6, 21 8/3, 22 8/4.
- * Contract: with the kept verdict 0, mask 0 exactly when the verdict is 0. */
-#define AGX_D3D12_JOB_MASK_BITS 23u
+ * N4c-v4: 21 is the narrowed 8/3 (the barrier range overlaps a compute
+ * range and a ShadowRender range); 23 (receipt only, never a refusal) the
+ * N4c-v3 rule: a barrier names a compute range. The first barrier setting
+ * 23: Barrier, BarrierWhere (0 ShadowPost, 1 Pre), BarrierKept (1 it
+ * overlaps ShadowRender); BarrierNamed counts them.
+ * Contract: with the kept verdict 0, (mask & ~bit 23) is 0 exactly when the
+ * verdict is 0. */
+#define AGX_D3D12_JOB_MASK_BITS 24u
+#define AGX_D3D12_JOB_MASK_NAMED (1u << 23)
 #define AGX_D3D12_JOB_MASK_CLASSES 4u /* Pairs/First: 8/1, 8/2, 8/5, 8/6 */
 typedef struct AGX_D3D12_JOB_CROSS_CONFLICT {
   AGX_D3D12_JOB_RANGE Current; /* the compute (8/1, 8/2) or copy (8/5, 8/6) range */
@@ -1155,7 +1259,21 @@ typedef struct AGX_D3D12_JOB_CROSS_MASK {
   unsigned Foreign, Copies, ForeignKinds;                         /* current side */
   unsigned ShadowRender, Compute, RangeCompute, Copy;             /* set counts */
   AGX_D3D12_JOB_CROSS_CONFLICT First[AGX_D3D12_JOB_MASK_CLASSES][2];
+  AGX_D3D12_JOB_RANGE Barrier; /* N4c-v4: the first barrier setting bit 23 */
+  unsigned BarrierWhere, BarrierKept, BarrierNamed;
 } AGX_D3D12_JOB_CROSS_MASK;
+static inline void AgxD3d12JobCrossMaskBarrier(const AGX_D3D12_JOB_BARRIERS *j, AGX_D3D12_JOB_CROSS_MASK *m,
+                                               unsigned *mask, const AGX_D3D12_JOB_RANGE *b, unsigned where) {
+  const unsigned n = AgxD3d12JobCrossBarrier(j, b, &j->Cross.ShadowRender);
+  if (n) *mask |= 1u << (n == 3u ? 21u : 22u);
+  if (AgxD3d12JobCrossBarrier(j, b, 0) != 3u) return;
+  *mask |= AGX_D3D12_JOB_MASK_NAMED;
+  if (!m->BarrierNamed++) {
+    m->Barrier = *b;
+    m->BarrierWhere = where;
+    m->BarrierKept = AgxD3d12JobRangeSetOverlaps(&j->Cross.ShadowRender, b);
+  }
+}
 static inline void AgxD3d12JobCrossMaskPair(AGX_D3D12_JOB_CROSS_MASK *m, unsigned cls, const AGX_D3D12_JOB_RANGE *x,
                                             const AGX_D3D12_JOB_RANGE *y) {
   if (m->Pairs[cls] < 2u) {
@@ -1176,6 +1294,9 @@ static inline unsigned AgxD3d12JobCrossMask(const AGX_D3D12_JOB_BARRIERS *j, AGX
       m->First[i][k].Current.Uav = m->First[i][k].Kept.Uav = 0u;
     }
   }
+  m->Barrier.Heap = 0;
+  m->Barrier.Lo = m->Barrier.Hi = 0ull;
+  m->Barrier.Uav = m->BarrierWhere = m->BarrierKept = m->BarrierNamed = 0u;
   m->KeptLastForeign = c->KeptLastForeign;
   m->KeptLastPlaced = c->KeptLastPlaced;
   m->KeptLastForeignKinds = c->KeptLastForeignKinds;
@@ -1216,14 +1337,8 @@ static inline unsigned AgxD3d12JobCrossMask(const AGX_D3D12_JOB_BARRIERS *j, AGX
     }
   for (i = 0; i < AGX_D3D12_JOB_MASK_CLASSES; ++i)
     if (m->Pairs[i]) mask |= 1u << (17u + i);
-  for (i = 0; i < c->ShadowPost.Count; ++i) {
-    n = AgxD3d12JobCrossBarrier(j, &c->ShadowPost.R[i]);
-    if (n) mask |= 1u << (n == 3u ? 21u : 22u);
-  }
-  for (i = 0; i < c->PreCommitted && i < c->Pre.Count; ++i) {
-    n = AgxD3d12JobCrossBarrier(j, &c->Pre.R[i]);
-    if (n) mask |= 1u << (n == 3u ? 21u : 22u);
-  }
+  for (i = 0; i < c->ShadowPost.Count; ++i) AgxD3d12JobCrossMaskBarrier(j, m, &mask, &c->ShadowPost.R[i], 0u);
+  for (i = 0; i < c->PreCommitted && i < c->Pre.Count; ++i) AgxD3d12JobCrossMaskBarrier(j, m, &mask, &c->Pre.R[i], 1u);
   m->Mask = mask;
   return mask;
 }
