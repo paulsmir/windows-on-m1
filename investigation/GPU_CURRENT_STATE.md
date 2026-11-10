@@ -3352,3 +3352,29 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
   value is set there. The Windows-side MPO package stays parked.
 - Lever queue for the bench: EXP2319 (N6) -> gate package (R14 gate, PT1) -> package with N4c-v2 + T5 (one variable
   per boot) -> FS-D1 / MPO H1.
+
+## UPDATE 2026-11-10T13:52Z -- architect: N4c-v2 copy rule settled offline; PT1 field type corrected
+
+- N4c-v2 change 4 is no longer contingent. A D3D12 CopyBufferRegion (kCommandCopy) is replayed through
+  resource_copy_region, which for buffer->buffer is two compute kernels inside the context's compute batch
+  (reference mesa agx_blit.c:618-655), with no map, no CPU wait and no job of its own. Rule: under the
+  Wom1Ov2CrossLead feature bit a kCommandCopy adds WRITE {dst heap, offset, bytes} and READ {src heap,
+  offset, bytes} to the open compute batch's cross-execution shadow and is not a foreign command;
+  intersection with KeptRender -> reason 8, unplaceable -> reason 11; other non-dispatch kinds stay foreign.
+- Legality evidence (existing receipts, no hardware): measure-batch-deps at position C0, conflict with
+  the previous batch (R7 of the previous frame) = 0 of 4004 / 3475 / 3940 pairs (EXP2316 x, EXP2317 x0,
+  EXP2318 x); Bloom sets cannot miss a conflict. C0 does conflict with C6, R5, C4 of the previous frame.
+  New failure criterion for the N4c-v2 run: any copy conflict in the shadow arm stops before apply.
+- C0's 1.5 ms pre-submit wait (EXP2318 submit table) is the 16-deep submission window (retire_held on the
+  job 16 submissions back), i.e. UMD pacing two frames ahead; it does not block the waive. C0's KMD submit
+  is 0.024 ms after C6(N) completes and 0.541 ms (p10 0.244, p90 0.713) before R7(N) completes.
+  N4c-v2 bound unchanged: 0.27-0.35 ms/frame HD. HYPOTHESIS: the share above R7's 3D stage.
+- Side observation, not scheduled: window 16 = 35-41 ms between UMD submit and firmware kick (two frames
+  of latency, FPS-neutral). Class C/latency candidate after the GM levers; Apple's frames-in-flight first.
+- PT1 correction (found by the implementer, verified in m1n1 initdata.py:471/:500 and Asahi
+  initdata.rs:345/:370): perf_tgt_utilization and perf_tgt_utilization_2 (HwDataA 0x788, 0x7ec) are u32,
+  not floats. Wom1PerfTgtUtilization writes the percent as two little-endian u32 words, guarded by
+  "current word == 85" at both offsets. Expected values and failure criteria of the PT1 boot unchanged.
+- Sources: .local/night-20261110/r15-n4c-reason6/FOLLOWUP.md; handoff sections "N4c-v2 addendum" and
+  "PT1 correction accepted" in .local/handoff/OV-ARCHITECT-HANDOFF.md.
+- Order unchanged: EXP2319 (N6) close-out -> gate package boots A/B/C -> N4c-v2 + T5 package -> FS-D1.
