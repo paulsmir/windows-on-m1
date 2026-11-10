@@ -10650,15 +10650,24 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWorkEx(
         break;
       }
       reason = 16u; /* render slot still owned by the previous job */
-    } else if (!(reason == 8u ||
-                 (reason == 4u &&
-                  runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted) ||
-                 /* A firmware restart ends by itself: its refusals are
-                  * transient for a submitter, like a busy worker. */
-                 (runtime != NULL &&
-                  InterlockedCompareExchange(&runtime->FwRestartActive, 0, 0) !=
-                      0))) {
-      break;
+    } else {
+      /* EXP2315: one read. The readiness test saw "not Ready"; the worker
+       * may have completed the job since (Submitted -> Ready). Reading the
+       * phase again per comparison refused a healthy runtime, and
+       * STATUS_INVALID_PARAMETER removed the device. */
+      ULONG phase = reason == 4u ? (ULONG)runtime->Backend.Phase : 0u;
+      if (reason == 4u && phase == (ULONG)AppleAgxBackendRuntimeReady &&
+          KeQueryInterruptTime() < deadline)
+        continue; /* completed meanwhile: retest, nothing to wait for */
+      if (!(reason == 8u ||
+            (reason == 4u &&
+             phase == (ULONG)AppleAgxBackendRuntimeSubmitted) ||
+            /* A firmware restart ends by itself: its refusals are
+             * transient for a submitter, like a busy worker. */
+            (runtime != NULL &&
+             InterlockedCompareExchange(&runtime->FwRestartActive, 0, 0) !=
+                 0)))
+        break;
     }
     if (KeGetCurrentIrql() != PASSIVE_LEVEL ||
         KeQueryInterruptTime() >= deadline)

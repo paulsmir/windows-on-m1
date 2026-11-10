@@ -28,6 +28,13 @@ Invariants:
   waits past the bound. Without this, DWM's submission during the H1 drill
   fails and the run cannot tell that from a firmware that did not come back;
 - Phase 5a: queued (deferred-bind) submissions keep the slot busy;
+- EXP2315 (GravityMark control arm, device removed at 26 s; Wom1G4SubmitFailure
+  branch 7 subsite 0x10D kind 4, one failure, no wait near the bound, runtime
+  healthy afterwards): the backend phase was read twice, once by the readiness
+  test (Submitted, so predicate 4) and again to decide whether predicate 4 is
+  transient. A job that completed between the two reads (Submitted -> Ready)
+  made a healthy runtime look like a non-transient refusal. A phase that is
+  Ready on the second look is retested, never refused;
 - the G4 envelope uses the bounded wait.
 """
 from pathlib import Path
@@ -66,7 +73,12 @@ enum { AppleAgxBackendRuntimeReady = 3, AppleAgxBackendRuntimeSubmitted = 4, App
 enum { AdmissionRenderPacketEmpty = 0, AdmissionRenderPacketActive = 3 };
 struct LARGE_INTEGER { long long QuadPart; };
 static LONG InterlockedCompareExchange(volatile LONG *p, LONG, LONG){ return *p; }
-struct BACKEND { int Phase; };
+/* Every read of the phase is observable: flip_on_read models the worker
+ * completing the job between two reads of the submitter. */
+static int phase_reads, flip_on_read;
+struct PHASE { int v; PHASE(int x=0):v(x){} PHASE &operator=(int x){ v=x; return *this; }
+  operator int(){ int seen=v; if(flip_on_read && ++phase_reads==flip_on_read) v=3 /* Ready */; return seen; } };
+struct BACKEND { PHASE Phase; };
 struct KEVENT { int x; };
 struct ADMISSION_PLATFORM_RUNTIME { BOOLEAN ProviderReady, BackendStarted; BACKEND Backend; void *WorkItem;
   volatile LONG Stopping, Resetting, WorkScheduled; KEVENT WorkIdle, SlotEvent;
@@ -173,6 +185,15 @@ int main(){
     r.WorkScheduled=0; r.Backend.Phase=AppleAgxBackendRuntimeReady; c.RenderPacket.State=AdmissionRenderPacketEmpty;
     /* no predicate: the old entry point is the same loop */
     assert(AdmissionPlatformRuntimeAwaitWork(&c,1000,&why) && why==0); }
+  /* EXP2315: the job completes between the readiness test's read of the
+   * phase (Submitted) and the next read. Admitted, not refused. */
+  r.WorkScheduled=0; r.Backend.Phase=AppleAgxBackendRuntimeSubmitted; c.RenderPacket.State=AdmissionRenderPacketEmpty;
+  c.G4PendingCount=0; finish_after=0; now=0; phase_reads=0; flip_on_read=1;
+  if(!AdmissionPlatformRuntimeAwaitWork(&c,1000,&why)){printf("job completing between two phase reads refused the next submission (%lu)\n",why);return 1;}
+  assert(why==0); flip_on_read=0;
+  /* a failed backend is still refused at once */
+  waits=0; r.Backend.Phase=AppleAgxBackendRuntimeFailed; assert(!AdmissionPlatformRuntimeAwaitWork(&c,1000,&why) && why==4 && waits==0);
+  r.Backend.Phase=AppleAgxBackendRuntimeReady;
   /* EXP1135: every wait is counted under its first busy predicate. */
   assert(c.SubmitPath.Waits[1]>=1 && c.SubmitPath.Waits[0]>=1 && c.SubmitPath.Waits[2]>=1);
   assert(c.SubmitPath.WaitQpc[1]>0 && c.SubmitPath.MaxWaitQpc>0);
