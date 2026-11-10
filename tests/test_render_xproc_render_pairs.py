@@ -728,7 +728,7 @@ class CrossProcessRenderWiring(unittest.TestCase):
         self.assertEqual(code.count('L"Wom1CrossProcessPairs"'), 1)
         read = ('  runtime->CrossProcessRenderPairs = runtime->CrossProcessPairs &&\n'
                 '      runtime->ManagerSlots &&\n'
-                '      !AdmissionPlatformSwitchDisabled(Context, L"Wom1CrossProcessRenderPairs")'
+                '      AdmissionPlatformSwitchEnabled(Context, L"Wom1CrossProcessRenderPairs")'
                 ' ? TRUE : FALSE;\n'
                 '  if (runtime->CrossProcessRenderPairs)\n'
                 '    runtime->Depth2Capabilities |= ADMISSION_JOB_WINDOW_CAP_XPROC_RENDER;\n')

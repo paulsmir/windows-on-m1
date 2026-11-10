@@ -99,7 +99,7 @@ typedef struct _ADMISSION_JOB_WINDOW_JOB {
  * in flight (Asahi: one VM per file, queues of different VMs run
  * concurrently). Every other cross-process pair keeps refusal 55. */
 #define ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS 0x20u
-/* K1 (REG_DWORD Wom1CrossProcessRenderPairs, default on, 0 = off; its own
+/* K1 (REG_DWORD Wom1CrossProcessRenderPairs = 1, default unset; its own
  * bit, independent of 0x20 in this decision): a second cross-process class
  * joins the window: a render, plain or with a prelude, behind a running
  * plain render of another process (TA_ON_3D, or COMPUTE_ON_3D for a

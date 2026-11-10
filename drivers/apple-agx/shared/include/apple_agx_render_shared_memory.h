@@ -357,7 +357,7 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
       const APPLE_AGX_RENDER_MANAGER_KEY *Key, APPLE_AGX_U32 Fence,
       const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects);
   void *ManagerEvictContext;
-  /* K1 (REG_DWORD Wom1CrossProcessRenderPairs, default on, 0 = off: every byte
+  /* K1 (REG_DWORD Wom1CrossProcessRenderPairs = 1; default off: every byte
    * and every decision as before). A render of another process may join a
    * running managed render as a second live manager: its key is already
    * bound in ANOTHER slot whose bytes are the firmware's (no InitBM, no

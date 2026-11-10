@@ -370,7 +370,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * waits on the 3D stamp already in memory (AdmissionJobWindowXprocLead
    * Refusal). XprocLeadWaive is decided per kick. */
   BOOLEAN XprocLeadEnabled, XprocLeadWaive;
-  /* K1 (REG_DWORD Wom1CrossProcessRenderPairs, default on, 0 = off, needs C1):
+  /* K1 (REG_DWORD Wom1CrossProcessRenderPairs = 1, default off, needs C1):
    * the window also declares ADMISSION_JOB_WINDOW_CAP_XPROC_RENDER and the
    * manager owner keeps a second live slot (ManagerOtherSlot).
    * XprocRenderKick marks the kick in progress as one of that class. */
@@ -9575,14 +9575,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->XprocLeadEnabled = runtime->CrossProcessPairs &&
       runtime->Initdata.RenderSharedMemory.ComputeOwnQueue &&
       AdmissionPlatformSwitchEnabled(Context, L"Wom1CrossProcessPrivateLead") ? TRUE : FALSE;
-  /* K1 (class C, default on since EXP2325/EXP2326; REG_DWORD
-   * Wom1CrossProcessRenderPairs = 0 turns it off), its own switch on top of
-   * C1 and its own capability bit: a render of another process may also
-   * follow a running render when each has a managed buffer manager slot of
-   * its own (render_job_window.h). */
+  /* K1 (default off): REG_DWORD Wom1CrossProcessRenderPairs = 1, its own
+   * switch on top of C1 and its own capability bit: a render of another
+   * process may also follow a running render when each has a managed buffer
+   * manager slot of its own (render_job_window.h). */
   runtime->CrossProcessRenderPairs = runtime->CrossProcessPairs &&
       runtime->ManagerSlots &&
-      !AdmissionPlatformSwitchDisabled(Context, L"Wom1CrossProcessRenderPairs") ? TRUE : FALSE;
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1CrossProcessRenderPairs") ? TRUE : FALSE;
   if (runtime->CrossProcessRenderPairs)
     runtime->Depth2Capabilities |= ADMISSION_JOB_WINDOW_CAP_XPROC_RENDER;
 #else
