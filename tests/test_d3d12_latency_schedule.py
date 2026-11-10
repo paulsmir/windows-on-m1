@@ -74,7 +74,9 @@ class Projection(unittest.TestCase):
     def test_context_fields_are_appended(self):
         header = self.module.project_compiler_h((self.mesa / 'src/asahi/compiler/agx_compiler.h').read_text())
         body = header[header.index('typedef struct {\n   nir_shader *nir;'):header.index('} agx_context;')]
-        self.assertTrue(body.rstrip().endswith('unsigned windows_latency_blocks;'))
+        # the N6 diagnostic fields (APPLE_AGX_DIAG_CUT) follow the schedule fields; nothing precedes Mesa's own
+        self.assertTrue(body.rstrip().endswith('unsigned windows_diag_code;  /* packed code bytes */'))
+        self.assertLess(body.index('unsigned windows_latency_blocks;'), body.index('windows_diag_barrier'))
 
     def test_closure_projects_the_units_beside_the_header(self):
         closure = load(CLOSURE, 'closure_latency')

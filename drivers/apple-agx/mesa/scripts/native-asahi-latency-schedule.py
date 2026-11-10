@@ -388,6 +388,19 @@ CONTEXT = '''   /* Promoted constants. These will be appended to the binary at t
     * blocks it reordered. Appended: existing field offsets are unchanged. */
    unsigned windows_latency_target;
    unsigned windows_latency_blocks;
+
+   /* N6 (class D diagnostic, APPLE_AGX_DIAG_CUT): emit-time marks of the
+    * prefix-cut points. Recorded always, read only when the cut is requested;
+    * no instruction is added or changed. */
+   agx_instr *windows_diag_barrier[2]; /* first top-level threadgroup barriers */
+   unsigned windows_diag_barriers;
+   agx_block *windows_diag_loop; /* header of the first loop, when top-level */
+   bool windows_diag_loop_seen;
+   unsigned windows_diag_start; /* binary size at function entry */
+   unsigned windows_diag_pending; /* located cut offset from the code start; ~0u: none */
+   unsigned windows_diag_offset;  /* code start in the binary */
+   unsigned windows_diag_cut;     /* applied cut offset; ~0u: none */
+   unsigned windows_diag_code;  /* packed code bytes */
 } agx_context;
 
 #define AGX_WIN32_LATENCY_DISTANCE 0xffu
@@ -406,13 +419,285 @@ def project_compiler_h(text):
     return once(text, CONTEXT_ANCHOR, CONTEXT)
 
 
+# N6 (class D diagnostic): prefix-cut section profiler. Opt-in
+# APPLE_AGX_DIAG_CUT=<hash8>:<E|B1|B2|L> ends one compute kernel at a chosen
+# point so that the difference of two cut arms is the GPU time of the section
+# between the points. hash8 = low 32 bits of the D3D shader hash (the split
+# tag), given to the compiler by the D3D12 owner around create_compute_state
+# (agx_win32_diag_cut_begin/end); "any" instead of the hash cuts every compute
+# main function (offline fixture only). Points: E = first instruction of the
+# main function; B<n> = first instruction after the n-th threadgroup barrier
+# emitted at nesting 0; L = header block of the first loop when that loop is
+# top-level. No instruction is inserted: the compile, its statistics and the
+# variant selection are those of the uncut build; after agx_pack_binary the two
+# bytes at the cut (an instruction boundary: the pack offset of a block) are
+# overwritten with `stop`. A point that does not exist leaves the binary
+# unchanged and reports offset ~0u. Absent variable: nothing happens.
+DIAG_CUT = r'''#ifdef _MSC_VER
+#define AGX_WIN32_DIAG_TLS __declspec(thread)
+#else
+#define AGX_WIN32_DIAG_TLS _Thread_local
+#endif
+
+struct agx_win32_diag_cut_entry {
+   uint32_t fnv, bytes, cut, code;
+};
+
+static AGX_WIN32_DIAG_TLS uint32_t agx_win32_diag_cut_tag;
+static AGX_WIN32_DIAG_TLS int agx_win32_diag_cut_tagged;
+static AGX_WIN32_DIAG_TLS struct agx_win32_diag_cut_entry agx_win32_diag_cut_entries[16];
+static AGX_WIN32_DIAG_TLS unsigned agx_win32_diag_cut_count;
+static AGX_WIN32_DIAG_TLS int agx_win32_diag_cut_selected;
+
+/* The requested point for the function being compiled on this thread:
+ * 0 E, 1 B1, 2 B2, 3 L; -1 none. The variable is read once per process. */
+static int
+agx_win32_diag_cut_point(void)
+{
+   static int parsed = -1, point = -1, any = 0;
+   static uint32_t hash = 0;
+   if (parsed < 0) {
+      const char *env = getenv("APPLE_AGX_DIAG_CUT");
+      const char *colon = env ? strchr(env, ':') : NULL;
+      int p = -1, a = 0;
+      uint32_t h = 0;
+      if (colon) {
+         const char *name = colon + 1;
+         if (!strcmp(name, "E"))
+            p = 0;
+         else if (!strcmp(name, "B1"))
+            p = 1;
+         else if (!strcmp(name, "B2"))
+            p = 2;
+         else if (!strcmp(name, "L"))
+            p = 3;
+         if (colon - env == 3 && !strncmp(env, "any", 3)) {
+            a = 1;
+         } else if (colon - env == 8) {
+            for (unsigned i = 0; i < 8 && p >= 0; ++i) {
+               const char c = env[i];
+               const int digit = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1;
+               if (digit < 0)
+                  p = -1;
+               else
+                  h = (h << 4) | (uint32_t)digit;
+            }
+         } else {
+            p = -1;
+         }
+      }
+      hash = h;
+      any = a;
+      point = p;
+      parsed = 1;
+   }
+   if (point < 0)
+      return -1;
+   if (!any && (!agx_win32_diag_cut_tagged || agx_win32_diag_cut_tag != hash))
+      return -1;
+   return point;
+}
+
+static bool
+agx_win32_diag_cut_applies(const agx_context *ctx)
+{
+   return ctx->stage == MESA_SHADER_COMPUTE && !ctx->is_preamble && agx_win32_diag_cut_point() >= 0;
+}
+
+/* The cut offset from the start of the packed code, ~0u when the point does
+ * not exist. Offsets are block offsets of a trial pack into a scratch buffer;
+ * a cut inside a block splits the block for that trial only. */
+static unsigned
+agx_win32_diag_cut_locate(agx_context *ctx)
+{
+   const int point = agx_win32_diag_cut_point();
+   agx_block *cut = NULL, *split_from = NULL, *tail = NULL;
+   if (point == 0) {
+      return 0;
+   } else if (point == 3) {
+      agx_foreach_block(ctx, block) {
+         if (block == ctx->windows_diag_loop)
+            cut = block;
+      }
+   } else {
+      const unsigned n = (unsigned)point - 1u;
+      const agx_instr *mark = n < ctx->windows_diag_barriers ? ctx->windows_diag_barrier[n] : NULL;
+      agx_foreach_block(ctx, block) {
+         agx_foreach_instr_in_block(block, I) {
+            if (mark && I == mark && !cut && !split_from) {
+               if (I->link.next != &block->instructions)
+                  split_from = block;
+               else if (block->link.next != &ctx->blocks)
+                  cut = agx_next_block(block);
+            }
+         }
+      }
+      if (split_from) {
+         tail = rzalloc(ctx, agx_block);
+         list_inithead(&tail->instructions);
+         util_dynarray_init(&tail->predecessors, tail);
+         struct list_head *item = ((agx_instr *)mark)->link.next;
+         while (item != &split_from->instructions) {
+            struct list_head *next = item->next;
+            list_del(item);
+            list_addtail(item, &tail->instructions);
+            item = next;
+         }
+         list_add(&tail->link, &split_from->link);
+         cut = tail;
+      }
+   }
+   if (!cut)
+      return ~0u;
+   struct util_dynarray trial;
+   util_dynarray_init(&trial, ctx);
+   agx_pack_binary(ctx, &trial);
+   const unsigned offset = (unsigned)cut->offset;
+   util_dynarray_fini(&trial);
+   if (tail) {
+      struct list_head *item = tail->instructions.next;
+      while (item != &tail->instructions) {
+         struct list_head *next = item->next;
+         list_del(item);
+         list_addtail(item, &split_from->instructions);
+         item = next;
+      }
+      list_del(&tail->link);
+   }
+   return offset;
+}
+
+/* After the function's own checks of the packed code (statistics, the debug
+ * build's disassembly of every instruction): the bytes after a cut inside a
+ * longer instruction are no longer an instruction stream. */
+static void
+agx_win32_diag_cut_apply(agx_context *ctx, struct util_dynarray *binary)
+{
+   const uint16_t stop = (uint16_t)agx_opcodes_info[AGX_OPCODE_STOP].encoding.exact;
+   const unsigned cut = ctx->windows_diag_pending;
+   if (cut == ~0u || cut + sizeof(stop) > ctx->windows_diag_code)
+      return;
+   memcpy((uint8_t *)binary->data + ctx->windows_diag_offset + cut, &stop, sizeof(stop));
+   ctx->windows_diag_cut = cut;
+}
+
+static uint32_t
+agx_win32_diag_cut_fnv(const uint8_t *data, unsigned bytes)
+{
+   uint32_t fnv = 2166136261u;
+   for (unsigned i = 0; i < bytes; ++i)
+      fnv = (fnv ^ data[i]) * 16777619u;
+   return fnv;
+}
+
+/* One entry per compiled candidate of the function; the last one is the
+ * result unless agx_win32_compile_function restores an earlier candidate. */
+static void
+agx_win32_diag_cut_record(agx_context *ctx, struct util_dynarray *binary)
+{
+   if (!agx_win32_diag_cut_applies(ctx))
+      return;
+   agx_win32_diag_cut_apply(ctx, binary);
+   if (agx_win32_diag_cut_count == ARRAY_SIZE(agx_win32_diag_cut_entries)) {
+      agx_win32_diag_cut_selected = -1;
+      return;
+   }
+   struct agx_win32_diag_cut_entry *entry = &agx_win32_diag_cut_entries[agx_win32_diag_cut_count];
+   entry->bytes = binary->size - ctx->windows_diag_start;
+   entry->fnv = agx_win32_diag_cut_fnv((const uint8_t *)binary->data + ctx->windows_diag_start, entry->bytes);
+   entry->cut = ctx->windows_diag_cut;
+   entry->code = ctx->windows_diag_code;
+   agx_win32_diag_cut_selected = (int)agx_win32_diag_cut_count++;
+}
+
+static void
+agx_win32_diag_cut_select(const uint8_t *data, unsigned bytes)
+{
+   if (!agx_win32_diag_cut_count)
+      return;
+   const uint32_t fnv = agx_win32_diag_cut_fnv(data, bytes);
+   agx_win32_diag_cut_selected = -1;
+   for (unsigned i = agx_win32_diag_cut_count; i-- > 0;) {
+      if (agx_win32_diag_cut_entries[i].bytes == bytes && agx_win32_diag_cut_entries[i].fnv == fnv) {
+         agx_win32_diag_cut_selected = (int)i;
+         break;
+      }
+   }
+}
+
+/* D3D12 owner interface (agx_d3d12_windows.cpp), around create_compute_state. */
+void agx_win32_diag_cut_begin(uint32_t tag);
+int agx_win32_diag_cut_end(uint32_t out[4]);
+
+void
+agx_win32_diag_cut_begin(uint32_t tag)
+{
+   agx_win32_diag_cut_tag = tag;
+   agx_win32_diag_cut_tagged = 1;
+   agx_win32_diag_cut_count = 0;
+   agx_win32_diag_cut_selected = -1;
+}
+
+/* 0: no cut requested for this kernel (nothing to report). Otherwise out =
+ * {point, cut offset from the code start or ~0u, code bytes, applications}:
+ * applications is 1 when the kept binary carries the cut. */
+int
+agx_win32_diag_cut_end(uint32_t out[4])
+{
+   const int point = agx_win32_diag_cut_point();
+   const int selected = agx_win32_diag_cut_selected;
+   const unsigned count = agx_win32_diag_cut_count;
+   agx_win32_diag_cut_tagged = 0;
+   agx_win32_diag_cut_count = 0;
+   agx_win32_diag_cut_selected = -1;
+   if (point < 0)
+      return 0;
+   out[0] = (uint32_t)point;
+   out[1] = ~0u;
+   out[2] = 0;
+   out[3] = 0;
+   if (selected >= 0 && (unsigned)selected < count) {
+      out[1] = agx_win32_diag_cut_entries[selected].cut;
+      out[2] = agx_win32_diag_cut_entries[selected].code;
+      out[3] = out[1] != ~0u;
+   }
+   return 1;
+}
+
+'''
+DIAG_CUT_MARKS = (
+    ('''         agx_threadgroup_barrier(b);
+''', '''         agx_instr *windows_diag_barrier = agx_threadgroup_barrier(b);
+         /* N6: top-level barriers are prefix-cut points */
+         if (b->shader->total_nesting == 0 && !b->shader->is_preamble && b->shader->windows_diag_barriers < 2)
+            b->shader->windows_diag_barrier[b->shader->windows_diag_barriers++] = windows_diag_barrier;
+'''),
+    ('''   loop_header->loop_header = true;
+''', '''   loop_header->loop_header = true;
+   /* N6: the first loop, when top-level, is a prefix-cut point */
+   if (!ctx->windows_diag_loop_seen) {
+      ctx->windows_diag_loop_seen = true;
+      if (ctx->total_nesting == 1)
+         ctx->windows_diag_loop = loop_header;
+   }
+'''),
+    ('''   agx_pack_binary(ctx, binary);
+''', '''   const unsigned windows_diag_cut = agx_win32_diag_cut_applies(ctx) ? agx_win32_diag_cut_locate(ctx) : ~0u;
+   agx_pack_binary(ctx, binary);
+   ctx->windows_diag_pending = windows_diag_cut;
+   ctx->windows_diag_offset = offset;
+   ctx->windows_diag_code = binary->size - offset;
+'''),
+)
+
+
 FUNCTION_ANCHOR = '''static unsigned
 agx_compile_function_nir(nir_shader *nir, nir_function_impl *impl,
                          struct agx_shader_key *key,
                          struct util_dynarray *binary,
                          struct agx_shader_info *out)
 {'''
-FUNCTION = '''static unsigned
+FUNCTION = DIAG_CUT + '''static unsigned
 agx_compile_function_nir(nir_shader *nir, nir_function_impl *impl,
                          struct agx_shader_key *key,
                          struct util_dynarray *binary,
@@ -424,6 +709,9 @@ CTX_ANCHOR = '''   ctx->allocated_vec = _mesa_hash_table_u64_create(ctx);
 '''
 CTX = '''   ctx->allocated_vec = _mesa_hash_table_u64_create(ctx);
    ctx->windows_latency_target = windows_latency_target;
+   ctx->windows_diag_start = binary->size;
+   ctx->windows_diag_cut = ~0u;
+   ctx->windows_diag_pending = ~0u;
 '''
 RETURN_ANCHOR = '''   ralloc_free(ctx);
    return offset;
@@ -431,6 +719,7 @@ RETURN_ANCHOR = '''   ralloc_free(ctx);
 '''
 RETURN = '''   if (windows_latency_blocks)
       *windows_latency_blocks = ctx->windows_latency_blocks;
+   agx_win32_diag_cut_record(ctx, binary);
    ralloc_free(ctx);
    return offset;
 }
@@ -648,6 +937,7 @@ agx_win32_compile_function(nir_shader *nir, nir_function_impl *impl, struct agx_
 
    binary->size = start;
    memcpy(util_dynarray_grow_bytes(binary, 1, bytes), code, bytes);
+   agx_win32_diag_cut_select((const uint8_t *)binary->data + start, bytes);
    *out = chosen;
    free(code);
    return offset;
@@ -961,6 +1251,8 @@ def project_compile(text):
     text = once(text, CTX_ANCHOR, CTX)
     text = once(text, RETURN_ANCHOR, RETURN)
     text = once(text, CALL_ANCHOR, CALL)
+    for anchor, new in DIAG_CUT_MARKS:
+        text = once(text, anchor, new)
     text = once(text, 'static void\nagx_optimize_nir(',
                 SHARED_VECTORIZE + REMAT + 'static void\nagx_optimize_nir(')
     text = once(text, REMAT_PASS_ANCHOR, REMAT_PASS)
