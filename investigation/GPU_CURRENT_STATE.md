@@ -4446,3 +4446,35 @@ Consequences already fixed:
 - The FULL baseline mean 7918 and the control fps rows were measured on the old Windows build. The first FULL f0 on the new build is a new control and is not averaged into the old mean.
 - Process: after SSH_NEVER_UP the launcher log is copied to `evidence/full-at-reset.log` before any recovery (it was overwritten in EXP2330).
 - m1n1 diagnostics, two defects for the m1n1 line, no package depends on them: (1) the bugcheck reader must verify the kernel identity (PE TimeDateStamp and SizeOfImage) and print "unknown kernel" instead of a code; (2) in a boot with the GPU powered down the reset handler takes a data abort in m1n1 reading the ASC outbox at 0x206408114 and loses the stack print (EXP2330 recovery log).
+
+## UPDATE 2026-11-10T23:29:49Z -- architect: EXP2330 and EXP2334 are both 0x116; the hung job follows the last cross-process render pair; next boot = same package line with K1 off by registry
+
+Evidence read: `.local/experiments/EXP2334-k1on-s1-rerun/evidence/{sys-reset-events.txt,dumps.txt,kernel-id.txt,rec2334h/kmd-receipts-pre-disable.txt}`, `.local/experiments/EXP2330-k1on-s1/evidence/rec2330h/kmd-receipts-pre-disable.txt`, `.local/experiments/EXP2329-k1on-a/evidence/EXP2329/kmd-receipts-{pre-b0,pre-suite,pre-gm,final}.txt`, `git show 6b6f71668:drivers/apple-agx/render-admission/src/backend_platform_windows.c` (K1 reader), `render_job_timing.h` (slot layout and flags).
+
+Verdicts:
+- Hypothesis C (servicing restart) is REJECTED for both boots. WER 1001 records a bugcheck each time: EXP2334 `0x116 (0xffff978310627010, 0xfffff803e8a41ec0, 0xffffffffc0000483, 0x3)`, EXP2330 `0x116 (0xffffaa828b2aa2d0, 0xfffff8031fac1ec0, 0xffffffffc0000483, 0x3)`. The "invalid: servicing reset" reading in the EXP2330 ACTUAL (7de424a8c) is wrong; fork 6 appends the correction. The m1n1 log of the EXP2330 experiment boot is lost; the guest minidump `C:\Windows\Minidump\111026-6750-01.dmp` still exists.
+- P2 is AppleAgxRenderAdmission.sys+0x1ec0 in every 0x116 of this project: it does not discriminate. P3 = 0xc0000483: the reset failed because the KMD quiesce timed out. Firmware alive and silent in both boots (three resets each, all 0xc0000483).
+- The guest runs ntoskrnl 10.0.26100.9974 (KB5132688 and KB5132061 installed 2026-11-10). Two package boots on this kernel, two 0x116.
+- Event-log `Date:` values are guest local time printed with a "Z"; not usable for sub-minute timing.
+
+Decoded job-timing rings (QPC 24 MHz, times relative to the oldest slot of the ring):
+- EXP2334: 262 timed jobs in the boot. Fences 0x30f (pid 1268, the DWM-like process) + 0x310 (pid 5392) are the single K1 pair of the boot; both complete (147.39 / 147.62 ms). Then only submit-only slots, about 53 ms with no firmware job, then 0x31d (pid 1268): submit 200.82, worker 205.31, kick 205.41, no first progress, never completes. Its successor 0x31e is the SAME process and context: begin 4.85 ms (normal about 0.03 ms), kicked, never completes. The hung pair is not a K1 pair.
+- EXP2330: 1395 timed jobs. K1 class considered 30, kicked 11, refused same-vm-slot 19. Last K1 pair 0x849 (pid 1284, DWM-like) + 0x84a (pid 5800), completes. Three more jobs of pid 5800 complete (last at 294.44 ms), about 41 ms idle, then 0x877 (pid 1284): submit 335.36, kick 336.01, never completes; lone head, no successor.
+- Common shape: the hung job is the first render of the DWM-like process after the last K1 pair in which that process was the lead, after an idle gap of 40 ms or more. First ResetEngine failure at 14.8 s (EXP2334) and 19.2 s (EXP2330) of boot QPC.
+- Correction to the hand-over wording "hung right at the first GPU work of the boot": the receipts show fence 797 after 86 depth-two kicks in EXP2334 and fence 2167 in EXP2330. Not the first GPU work.
+- Old kernel 26100.9711, EXP2329 (K1 default on, Wom1Ov2CrossLead unset): K1 pairs kicked 9 at the idle desktop (pre-b0), 762 pre-suite, 763 pre-gm, 21,322 at the end, no hang. K1 alone on the old kernel survives desktop pairs followed by idle.
+
+Open causes (labelled hypotheses):
+- A': K1 pairs on the new kernel. A'': K1 pairs together with Wom1Ov2CrossLead=1 (its receipt is all zeros in the EXP2334 boot, so the switch never acted). B: the new kernel alone, K1 proximity a coincidence.
+- No mechanism is derived for A'. `decode_ddi_status.py` is a failure-status table and shows no power-transition evidence. Offline pass on B stopped (anti-loop).
+
+Decision:
+- EXP2331 as staged (K1 on, CrossLead off) does NOT separate A' from B: both predict the hang. It is not run in that form.
+- Next boot: the EXP2331 package (pinned source 6b6f71668) with `Wom1CrossProcessRenderPairs = 0` (REG_DWORD) set at staging and `Wom1Ov2CrossLead` unset. The 6b6f71668 reader is `!AdmissionPlatformSwitchDisabled(Context, L"Wom1CrossProcessRenderPairs")`, so the value 0 turns K1 off in that package. Against the last known-good configuration (K1 off, CrossLead off, old kernel) the single changed variable is the Windows build.
+- Pre-registered reading. (a) Boot, suite and GravityMark complete with `Wom1GpuReset` resets 0 and xproc `render_pairs.kicked` 0: B is rejected, K1 is a necessary condition for the hang on this kernel, K1 stays off (already REJECTED as a default, the tip is opt-in), the STATS-NOPS arm proceeds in that boot and its FULL f0 is the first control on the new build. EXP2332 (same pinned source) gets the same value. The value is removed in rollback. (b) 0x116 again with `render_pairs.kicked` 0: K1 is not necessary, the cause is B or another one; no further package, the target becomes "first render after idle hangs on the new kernel".
+- The K1+CrossLead package gets no third run. K1 default-on gets no second attempt unless a lever needs it; the K1 after-effect mechanism is therefore not pursued now.
+- In-run checks: at the first qgate read `Wom1GpuReset` and `Wom1CrossProcessPairsReceipt`; on any failed boot save kmd-receipts and copy full.log before recovery.
+
+Other facts:
+- The kept `C:\Windows\MEMORY.DMP` of EXP2324 was overwritten by Windows when the new bugchecks wrote their dumps. The EXP2323/EXP2324 minidumps are on the Mac.
+- Bench order after this boot: EXP2332 (K1=0) -> EXP2333 (rebuilt from the tip, K1 opt-in unset, census launch last) -> T5b FULL rerun -> TDR-H0 -> FS-D1.
