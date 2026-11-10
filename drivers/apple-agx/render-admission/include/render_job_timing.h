@@ -4,8 +4,12 @@
 /* v2 (rc81): CpuBuild/CpuComplete/Flags per slot, WorkerFlags in the
  * header (was Reserved). v3 (rc83): Sub[] build/completion sub-interval
  * stamps appended to each slot, build flags in Flags. v4 (rc95): five more
- * Sub stamps (the depth-2 receipts below) appended; v3 offsets unchanged. */
-#define ADMISSION_JOB_TIMING_VERSION 4u
+ * Sub stamps (the depth-2 receipts below) appended; v3 offsets unchanged.
+ * v5 (K2): the firmware 3D pair and compute/prelude block stamps of every
+ * job, with their mask, appended to each slot; v4 offsets and values
+ * unchanged (a v4 reader that takes the slot stride from the header's
+ * Bytes decodes the same fields). */
+#define ADMISSION_JOB_TIMING_VERSION 5u
 #define ADMISSION_JOB_TIMING_CAPACITY 64u
 
 typedef enum _ADMISSION_JOB_PHASE {
@@ -81,7 +85,24 @@ typedef struct _ADMISSION_JOB_TIMING_SLOT {
   unsigned int AheadRefusals;
   /* v3: ADMISSION_JOB_SUB stamps. */
   unsigned long long Sub[ADMISSION_JOB_SUB_COUNT];
+  /* v5 (K2, R19): firmware stamps (firmware clock ticks) of the job, read
+   * at its completion for every process, so a foreign job (DWM) splits like
+   * an application's. Firmware3dStart/End above hold the pstate words since
+   * EXP1101 and keep doing so. Stamp3d: the render's 3D timestamp pair
+   * (objects 28/29); the start is refreshed by the firmware only into a
+   * zeroed object (EXP2126), so it is stale unless the build zeroes it.
+   * StampBlock: the job's compute timestamp block (0x00/0x08): a compute
+   * job's own start/end, a render's compute prelude start/end.
+   * FirmwareStamps: ADMISSION_JOB_FW_STAMP_*, which storage was read. */
+  unsigned long long FirmwareStamp3dStart, FirmwareStamp3dEnd;
+  unsigned long long FirmwareStampBlockStart, FirmwareStampBlockEnd;
+  unsigned int FirmwareStamps, FirmwareStampsReserved;
 } ADMISSION_JOB_TIMING_SLOT;
+
+#define ADMISSION_JOB_FW_STAMP_3D 0x1u
+#define ADMISSION_JOB_FW_STAMP_BLOCK 0x2u
+/* the block belongs to an envelope compute job, not to a render prelude */
+#define ADMISSION_JOB_FW_STAMP_COMPUTE 0x4u
 
 /* Set by BeginJob: BEGIN_JOB always; MAPPING_UNCHANGED when the process
  * graph's MappingGeneration still equals the one the submission was parsed

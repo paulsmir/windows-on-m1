@@ -83,8 +83,17 @@ int main(void) {
   unsigned i;
   /* decoder '<IIIIQQ12Q4QIIIIII8Q' (v3), rc95 v4 '...13Q': the v3 stamps
    * keep their indices, five are appended */
-  assert(ADMISSION_JOB_TIMING_VERSION == 4u && ADMISSION_JOB_SUB_COUNT == 13);
-  assert(sizeof(ADMISSION_JOB_TIMING_SLOT) == 288u);
+  assert(ADMISSION_JOB_TIMING_VERSION == 5u && ADMISSION_JOB_SUB_COUNT == 13);
+  /* K2 v5 '...13Q4QII': the firmware stamps follow the v4 slot (288 bytes),
+   * every v4 offset below is unchanged */
+  assert(sizeof(ADMISSION_JOB_TIMING_SLOT) == 328u);
+  assert(offsetof(ADMISSION_JOB_TIMING_SLOT, FirmwareStamp3dStart) == 288u);
+  assert(offsetof(ADMISSION_JOB_TIMING_SLOT, FirmwareStampBlockStart) == 304u);
+  assert(offsetof(ADMISSION_JOB_TIMING_SLOT, FirmwareStamps) == 320u);
+  assert(offsetof(ADMISSION_JOB_TIMING_SLOT, FirmwareTaStart) == 128u);
+  assert(offsetof(ADMISSION_JOB_TIMING_SLOT, Firmware3dStart) == 144u);
+  assert(offsetof(ADMISSION_JOB_TIMING_SLOT, FirmwareValid) == 160u);
+  assert(sizeof(ADMISSION_JOB_TIMING_STATE) == 32u + 64u * 328u);
   assert(AdmissionJobSubSuccessorBound == 8 && AdmissionJobSubTaDone == 9 &&
          AdmissionJobSubTaStamp == 10 && AdmissionJobSubPreludeDone == 11 &&
          AdmissionJobSubPreludeStamp == 12);

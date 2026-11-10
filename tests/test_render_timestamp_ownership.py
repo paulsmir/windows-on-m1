@@ -133,6 +133,13 @@ EXERCISE = r'''
       assert(timing->FirmwareTaStart==query.Record[0].TaStart &&
              timing->FirmwareTaEnd==query.Record[0].TaEnd && timing->FirmwareValid==3u);
       assert(timing->Firmware3dEnd==0x80010203ULL);
+      /* K2 (ring v5): the slot of any process keeps the job's own 3D pair
+       * (the predecessor's parity, not the successor's rebound objects);
+       * a plain render has no block. The v4 fields above are unchanged. */
+      assert(timing->FirmwareStamp3dStart==query.Record[0].Start &&
+             timing->FirmwareStamp3dEnd==query.Record[0].End);
+      assert(timing->FirmwareStamps==ADMISSION_JOB_FW_STAMP_3D &&
+             !timing->FirmwareStampBlockStart && !timing->FirmwareStampBlockEnd);
       /* Retry uses retained end even if firmware storage is no longer read. */
       runtime.Backend.PendingJob.TimestampEndNs=123456789ULL;
       assert(AdmissionGpuTimestampEndNanoseconds(&runtime,&end_ns) && end_ns==123456789ULL);
@@ -186,6 +193,36 @@ EXERCISE = r'''
       AdmissionJobTimingFirmwareWindows(&runtime,84);
       assert(timing->Firmware3dEnd==0x80010203ULL);
       assert(!timing->FirmwareValid && !timing->FirmwareTaStart && !timing->FirmwareTaEnd);
+      /* K2: a compute job's own block start/end, no 3D pair. */
+      assert(timing->FirmwareStamps==(ADMISSION_JOB_FW_STAMP_BLOCK|ADMISSION_JOB_FW_STAMP_COMPUTE));
+      assert(timing->FirmwareStampBlockStart==96000000ULL &&
+             timing->FirmwareStampBlockEnd==98400000ULL);
+      assert(!timing->FirmwareStamp3dStart && !timing->FirmwareStamp3dEnd);
+    }
+    /* K2: a render with a compute prelude keeps both; a missing 3D end
+     * leaves no half pair and no mask bit. */
+    {
+      ULONGLONG block[4]={120000000ULL,120000600ULL,0,0};
+      runtime.Backend.PendingJob=first;
+      runtime.Backend.PendingJob.CommandVa=0x1500050000ULL;
+      runtime.Backend.PendingJob.ComputeTimestampBlock=block;
+      timing=&runtime.JobTiming.Slot[85%ADMISSION_JOB_TIMING_CAPACITY];
+      memset(timing,0,sizeof(*timing));timing->Fence=85;timing->ProcessId=77;
+      AdmissionJobTimingFirmwareWindows(&runtime,85);
+      assert(timing->FirmwareStamps==(ADMISSION_JOB_FW_STAMP_3D|ADMISSION_JOB_FW_STAMP_BLOCK));
+      assert(timing->FirmwareStampBlockStart==120000000ULL &&
+             timing->FirmwareStampBlockEnd==120000600ULL);
+      /* first's parity was rebuilt as N+2 above: its own objects' words */
+      assert(timing->FirmwareStamp3dStart==72000000ULL && timing->FirmwareStamp3dEnd==74400000ULL);
+      assert(timing->FirmwareValid==3u && timing->ProcessId==77);
+      runtime.Backend.PendingJob.RenderTimestampPointers[1]=NULL;
+      runtime.Backend.PendingJob.ComputeTimestampBlock=NULL;
+      timing=&runtime.JobTiming.Slot[86%ADMISSION_JOB_TIMING_CAPACITY];
+      memset(timing,0,sizeof(*timing));timing->Fence=86;timing->ProcessId=77;
+      AdmissionJobTimingFirmwareWindows(&runtime,86);
+      assert(!(timing->FirmwareStamps&ADMISSION_JOB_FW_STAMP_3D) &&
+             !timing->FirmwareStamp3dStart && !timing->FirmwareStamp3dEnd);
+      assert(timing->FirmwareValid==3u);
     }
 #undef BUILD
   }

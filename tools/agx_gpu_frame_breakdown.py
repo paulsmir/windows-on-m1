@@ -94,6 +94,12 @@ rc98 (Wom1JobDepth2Caps): depth2.with_caps counts decisions taken with the
 rc98 capabilities (second sidecar set, compute-queue and TA-on-3D
 Barriers), sidecar_set_b the jobs whose compute work used job-word set B,
 sidecar_set_a the v5 preludes that used set A.
+Version 5 (K2) appends per slot the firmware 3D pair, the compute/prelude
+block pair and a mask of what was read, for every process's jobs; firmware
+gives, per process id and kind, the medians of the job's firmware split
+(see _firmware: kick -> start where the start stamp is fresh, TA end ->
+3D end, last firmware stamp -> completion seen). Fields of older versions
+keep their offsets and meaning.
 The KMD also exports Wom1JobTiming971Hot, the same layout, only
 from a ring whose 64 submissions fall within 500 ms (an application's
 steady state, not the idle desktop after it).
@@ -351,6 +357,11 @@ KMD_SLOT_V3 = struct.Struct('<IIIIQQ12Q4QIIIIII8Q')
 KMD_SUBS_V4 = KMD_SUBS + ('successor_bound', 'ta_done', 'ta_stamp', 'prelude_done',
                           'prelude_stamp')
 KMD_SLOT_V4 = struct.Struct('<IIIIQQ12Q4QIIIIII13Q')
+# K2 v5: the firmware 3D pair, the compute/prelude block pair and their mask
+# appended (render_job_timing.h FirmwareStamp*); v4 offsets kept.
+KMD_SLOT_V5 = struct.Struct('<IIIIQQ12Q4QIIIIII13Q4QII')
+KMD_LAYOUTS = {1: KMD_SLOT, 2: KMD_SLOT_V2, 3: KMD_SLOT_V3, 4: KMD_SLOT_V4, 5: KMD_SLOT_V5}
+FW_STAMP_3D, FW_STAMP_BLOCK, FW_STAMP_COMPUTE = 1, 2, 4
 KMD_SLOTS = 64
 FLAG_MAPPING_UNCHANGED, FLAG_PRIVATE_SCENE, FLAG_BEGIN_JOB = 1, 2, 4
 BUILD_FLAGS = dict(init_bm=0x8, init_queues=0x10, prelude=0x20, slot1=0x40, manager_restored=0x80,
@@ -409,10 +420,10 @@ def _medians(spans):
 def kmd_job_timing(data):
     """Median microseconds per KMD interval of a Wom1JobTiming971 snapshot."""
     version, size, count, worker, hz, _ = KMD_HEADER.unpack_from(data, 0)
-    layout = {1: KMD_SLOT, 2: KMD_SLOT_V2, 3: KMD_SLOT_V3, 4: KMD_SLOT_V4}.get(version)
+    layout = KMD_LAYOUTS.get(version)
     if (layout is None or size != KMD_HEADER.size + KMD_SLOTS * layout.size or
             len(data) < size or not hz):
-        raise ValueError('not an ADMISSION_JOB_TIMING_STATE v1/v2/v3/v4 snapshot')
+        raise ValueError('not an ADMISSION_JOB_TIMING_STATE v1..v5 snapshot')
     sub_names = KMD_SUBS_V4 if version >= 4 else KMD_SUBS
     slots = []
     for i in range(KMD_SLOTS):
@@ -422,8 +433,15 @@ def kmd_job_timing(data):
             cpu_build, cpu_complete, flags, ahead = fields[24:28] if version >= 2 else (0, 0, 0, 0)
             subs = (dict(zip(('sub_' + n for n in sub_names), fields[28:28 + len(sub_names)]))
                     if version >= 3 else {})
+            fw = {}
+            if version >= 5:
+                fw = dict(fw_ta_start=fields[18], fw_ta_end=fields[19], fw_valid=fields[22],
+                          fw_3d_start=fields[41], fw_3d_end=fields[42],
+                          fw_block_start=fields[43], fw_block_end=fields[44],
+                          fw_stamps=fields[45])
             slots.append(dict(fence=fields[0], pid=fields[1], cpu_build=cpu_build,
-                              cpu_complete=cpu_complete, flags=flags, ahead=ahead, **q, **subs))
+                              cpu_complete=cpu_complete, flags=flags, ahead=ahead, **q, **subs,
+                              **fw))
     slots.sort(key=lambda s: s['submit'])
     us = lambda a, b: (b - a) * 1e6 / hz
     spans = {k: [] for k in ('begin_job', 'build', 'worker_to_kick', 'kick_to_progress',
@@ -497,7 +515,83 @@ def kmd_job_timing(data):
         out['ahead_refusals'] = refusals
     if version >= 4:
         out['depth2'] = _depth2(slots, us)
+    if version >= 5:
+        out['firmware'] = _firmware(slots, us)
     return out
+
+
+def _firmware(slots, us):
+    """K2 v5: every job's firmware stamps, by process and kind, so a foreign
+    process's job (DWM) splits like the application's.
+
+    The firmware clock ticks at the QPC frequency with a constant offset.
+    The offset is taken as the largest (last firmware stamp - Complete QPC)
+    of the snapshot: the job whose completion was seen soonest. Every
+    firmware time is therefore late by that job's (unknown, smallest)
+    detection latency, and end_to_complete reads 0 for it.
+
+    A start stamp counts only when it is fresh: not before the job's own
+    Submit and not after its end. Render starts are stale on G13 unless the
+    build zeroes the object (TA: Wom1TaStartTimestamps, EXP2126; 3D: never),
+    so their spans are simply absent then; stale_starts counts them.
+
+    render: kick_to_prelude_start, prelude, kick_to_ta_start, ta,
+    kick_to_ta_end, ta_end_to_3d_end, 3d, end_to_complete (3D end ->
+    Complete seen). compute: kick_to_start, run, end_to_complete. kick is
+    BackendAfter; for a job kicked behind its predecessor (depth two) the
+    kick_to_* spans include the predecessor's remaining run, so those jobs
+    are counted under 'kicked_behind' and kept out of the kick_to_* spans."""
+    def last(s):
+        if s['kick_ta']:
+            return s['fw_3d_end'] if s['fw_stamps'] & FW_STAMP_3D else 0
+        return s['fw_block_end'] if s['fw_stamps'] & FW_STAMP_BLOCK else 0
+    seen = [s for s in slots if last(s)]
+    if not seen:
+        return dict(offset_ticks=None, by_pid={})
+    offset = max(last(s) - s['complete'] for s in seen)
+    by_pid = {}
+    for s in seen:
+        render = bool(s['kick_ta'])
+        to_qpc = lambda ticks: ticks - offset
+        fresh = lambda start, end: bool(start and end and
+                                        s['submit'] <= to_qpc(start) and start <= end)
+        behind = bool(s['flags'] & FLAG_DEPTH2_KICKED)
+        row = by_pid.setdefault(s['pid'], {}).setdefault(
+            'render' if render else 'compute',
+            dict(jobs=0, kicked_behind=0, stale_starts=dict(ta=0, d3=0, block=0), spans={}))
+        row['jobs'] += 1
+        row['kicked_behind'] += behind
+        def add(name, a, b, from_kick=False):
+            if from_kick and behind:
+                return
+            row['spans'].setdefault(name, []).append(us(a, b))
+        kick, end = s['backend_after'], last(s)
+        block = s['fw_stamps'] & FW_STAMP_BLOCK and s['fw_block_end']
+        if block and fresh(s['fw_block_start'], s['fw_block_end']):
+            add('kick_to_prelude_start' if render else 'kick_to_start',
+                kick, to_qpc(s['fw_block_start']), True)
+            add('prelude' if render else 'run', s['fw_block_start'], s['fw_block_end'])
+        elif block:
+            row['stale_starts']['block'] += 1
+        if render:
+            if s['fw_valid'] & 2:
+                add('kick_to_ta_end', kick, to_qpc(s['fw_ta_end']), True)
+                add('ta_end_to_3d_end', s['fw_ta_end'], end)
+                if fresh(s['fw_ta_start'], s['fw_ta_end']):
+                    add('kick_to_ta_start', kick, to_qpc(s['fw_ta_start']), True)
+                    add('ta', s['fw_ta_start'], s['fw_ta_end'])
+                else:
+                    row['stale_starts']['ta'] += 1
+            if fresh(s['fw_3d_start'], end):
+                add('3d', s['fw_3d_start'], end)
+            else:
+                row['stale_starts']['d3'] += 1
+        add('end_to_complete', to_qpc(end), s['complete'])
+        add('kick_to_complete', kick, s['complete'], True)
+    for kinds in by_pid.values():
+        for row in kinds.values():
+            row.update(_medians(row.pop('spans')))
+    return dict(offset_ticks=offset, by_pid=dict(sorted(by_pid.items())))
 
 
 def _depth2(slots, us):

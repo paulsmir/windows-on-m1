@@ -1402,21 +1402,46 @@ static VOID AdmissionGpuCompletionCaptureWindows(
 
 static VOID AdmissionJobTimingFirmwareWindows(
     ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
+  const APPLE_AGX_BACKEND_JOB_IMAGE *job = &runtime->Backend.PendingJob;
   ADMISSION_JOB_TIMING_SLOT *slot;
   KIRQL oldIrql;
-  ULONGLONG taStart, taEnd;
+  ULONGLONG taStart = 0u, taEnd = 0u, d3Start = 0u, d3End = 0u;
+  ULONGLONG blockStart = 0u, blockEnd = 0u;
+  ULONG stamps = 0u;
+  BOOLEAN ta;
   AdmissionGpuTimestampCaptureWindows(runtime, fence);
   if (!runtime->JobDiagnostics) return;
-  if (AdmissionRenderTimestampPair(&runtime->Backend.PendingJob, 2u,
-                                   &taStart, &taEnd)) {
+  ta = AdmissionRenderTimestampPair(job, 2u, &taStart, &taEnd);
+  /* K2 (ring v5): the same stamps the completion ring keeps per process,
+   * for every job with a slot, so a foreign process's job (DWM) splits
+   * into firmware stages too. Reads only; PendingJob still owns its
+   * pointers here, as for AdmissionGpuCompletionCaptureWindows above. */
+  if (AdmissionRenderTimestampPair(job, 0u, &d3Start, &d3End))
+    stamps |= ADMISSION_JOB_FW_STAMP_3D;
+  if (job->ComputeTimestampBlock != NULL) {
+    RtlCopyMemory(&blockStart, job->ComputeTimestampBlock, sizeof(blockStart));
+    RtlCopyMemory(&blockEnd, (const UCHAR *)job->ComputeTimestampBlock + 8u,
+                  sizeof(blockEnd));
+    stamps |= ADMISSION_JOB_FW_STAMP_BLOCK;
+    if (job->Kind == AppleAgxBackendJobCompute)
+      stamps |= ADMISSION_JOB_FW_STAMP_COMPUTE;
+  }
+  if (ta || stamps != 0u) {
     KeAcquireSpinLock(&runtime->JobTimingLock, &oldIrql);
     slot = (ADMISSION_JOB_TIMING_SLOT *)AdmissionJobTimingFind(
         &runtime->JobTiming, fence);
     if (slot != NULL) {
-      slot->FirmwareTaStart = taStart;
-      slot->FirmwareTaEnd = taEnd;
-      slot->FirmwareValid = (taStart != 0u ? 1u : 0u) |
-          (taEnd != 0u ? 2u : 0u);
+      if (ta) {
+        slot->FirmwareTaStart = taStart;
+        slot->FirmwareTaEnd = taEnd;
+        slot->FirmwareValid = (taStart != 0u ? 1u : 0u) |
+            (taEnd != 0u ? 2u : 0u);
+      }
+      slot->FirmwareStamp3dStart = d3Start;
+      slot->FirmwareStamp3dEnd = d3End;
+      slot->FirmwareStampBlockStart = blockStart;
+      slot->FirmwareStampBlockEnd = blockEnd;
+      slot->FirmwareStamps = stamps;
     }
     KeReleaseSpinLock(&runtime->JobTimingLock, oldIrql);
   }

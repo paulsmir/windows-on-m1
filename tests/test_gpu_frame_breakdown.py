@@ -359,11 +359,114 @@ class KmdJobTiming(unittest.TestCase):
         with self.assertRaises(ValueError):
             b.kmd_job_timing(kmd_snapshot([], version=2, size=32 + 64 * 168))
         with self.assertRaises(ValueError):
-            b.kmd_job_timing(kmd_snapshot([], version=5))
+            b.kmd_job_timing(kmd_snapshot([], version=5))   # v5 header, v4 stride
+        with self.assertRaises(ValueError):
+            b.kmd_job_timing(kmd_snapshot([], version=6))
         with self.assertRaises(ValueError):
             b.kmd_job_timing(kmd_snapshot([], version=3, size=32 + 64 * 184))
         with self.assertRaises(ValueError):
             b.kmd_job_timing(kmd_snapshot([])[:100])
+
+
+def v5_snapshot(v4, firmware=None):
+    """A v4 snapshot re-laid as v5: every slot keeps its 288 v4 bytes and
+    gets the K2 tail. firmware: {fence: dict(ta=(start, end), d3=(start,
+    end), block=(start, end), stamps=mask)}; ta also sets FirmwareValid."""
+    firmware = firmware or {}
+    head = list(struct.unpack_from('<IIIIQQ', v4, 0))
+    head[0], head[1] = 5, 32 + 64 * 328
+    data = bytearray(struct.pack('<IIIIQQ', *head))
+    for i in range(64):
+        slot = bytearray(v4[32 + i * 288:32 + (i + 1) * 288])
+        fw = firmware.get(struct.unpack_from('<I', slot, 0)[0], {})
+        if 'ta' in fw:
+            struct.pack_into('<QQ', slot, 128, *fw['ta'])
+            struct.pack_into('<I', slot, 160, (1 if fw['ta'][0] else 0) | (2 if fw['ta'][1] else 0))
+        data += slot + struct.pack('<4QII', *fw.get('d3', (0, 0)), *fw.get('block', (0, 0)),
+                                   fw.get('stamps', 0), 0)
+    return bytes(data)
+
+
+class KmdJobTimingV5(unittest.TestCase):
+    """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+    K2 appends firmware stamps to the ring slot. (1) A decoder that moved or
+    reinterpreted a v4 field would silently change every existing interval:
+    the same jobs decoded from a v4 and a v5 snapshot must give identical v4
+    results. (2) The foreign-job split must use each job's own stamps on one
+    clock mapping and must not present a stale start stamp (render starts are
+    not rewritten by the G13 firmware unless the object was zeroed) as a
+    firmware start latency."""
+
+    def jobs(self):
+        def job(at, render, complete):
+            q = dict(submit=at, worker=at + 10, begin_before=at + 11, begin_after=at + 50,
+                     backend_before=at + 51, backend_after=at + 100, first_progress=at + 200,
+                     complete=at + complete, job_end=at + complete + 20, notify=at + complete + 40)
+            if render:
+                q.update(kick_ta=at + 95, kick_3d=at + 90)
+            return q
+        # hz 1e6: QPC ticks are microseconds. Firmware clock = QPC + 5000.
+        return [(1, 900, job(1000, True, 654), (0, 0, 4)),     # foreign (DWM) plain render
+                (2, 77, job(3000, False, 400), (0, 0, 4)),     # application compute
+                (3, 77, job(5000, True, 700), (0, 0, 4 | 0x20)),  # render with prelude
+                (4, 77, job(5200, False, 900), (0, 0, 4 | 0x4000))]  # kicked behind job 3
+
+    def test_v4_fields_decode_identically_from_v5(self):
+        b = load()
+        v4 = kmd_snapshot(self.jobs(), version=4)
+        old = b.kmd_job_timing(v4)
+        new = b.kmd_job_timing(v5_snapshot(v4, {1: dict(ta=(1, 6500), d3=(2, 6654), stamps=1)}))
+        self.assertEqual(old.pop('version'), 4)
+        self.assertEqual(new.pop('version'), 5)
+        self.assertNotIn('firmware', old)
+        new.pop('firmware')
+        self.assertEqual(old, new)
+        self.assertEqual(b.KMD_SLOT_V5.size, 328)
+        self.assertEqual(b.KMD_SLOT_V5.format[:len(b.KMD_SLOT_V4.format)], b.KMD_SLOT_V4.format)
+
+    def test_firmware_split_per_process(self):
+        b = load()
+        off = 5000
+        fw = {
+            # DWM: TA end 300 us after the kick, 3D end 250 us later, seen 4 us
+            # after that; both start stamps are old values (stale).
+            1: dict(ta=(40, off + 1100 + 300), d3=(41, off + 1100 + 550), stamps=1),
+            # compute: starts 60 us after its kick, runs 240, seen at once (the
+            # snapshot's soonest detection defines the clock offset).
+            2: dict(block=(off + 3100 + 60, off + 3400), stamps=2 | 4),
+            # prelude render with fresh TA start (object zeroed by the build).
+            3: dict(block=(off + 5100 + 70, off + 5100 + 130),
+                    ta=(off + 5100 + 190, off + 5100 + 380), d3=(42, off + 5700 - 30), stamps=3),
+            4: dict(block=(off + 5700, off + 6100 - 12), stamps=2 | 4)}
+        out = b.kmd_job_timing(v5_snapshot(kmd_snapshot(self.jobs(), version=4), fw))['firmware']
+        self.assertEqual(out['offset_ticks'], off)
+        dwm = out['by_pid'][900]['render']
+        self.assertEqual(dwm['jobs'], 1)
+        self.assertEqual(dwm['stale_starts'], dict(ta=1, d3=1, block=0))
+        self.assertEqual(dwm['median_us'], dict(kick_to_ta_end=300, ta_end_to_3d_end=250,
+                                                end_to_complete=4, kick_to_complete=554))
+        app = out['by_pid'][77]
+        self.assertEqual(app['compute']['jobs'], 2)
+        self.assertEqual(app['compute']['kicked_behind'], 1)
+        # the job kicked behind its predecessor has no kick_to_* span
+        self.assertEqual(app['compute']['samples']['kick_to_start'], 1)
+        self.assertEqual(app['compute']['median_us']['kick_to_start'], 60)
+        self.assertEqual(app['compute']['samples']['run'], 2)
+        self.assertEqual(app['compute']['median_us']['end_to_complete'], (0 + 12) / 2)
+        render = app['render']['median_us']
+        self.assertEqual(render['kick_to_prelude_start'], 70)
+        self.assertEqual(render['prelude'], 60)
+        self.assertEqual(render['kick_to_ta_start'], 190)
+        self.assertEqual(render['ta'], 190)
+        self.assertEqual(render['ta_end_to_3d_end'], 190)
+        self.assertEqual(render['end_to_complete'], 30)
+        self.assertNotIn('3d', render)                      # 3D start stale
+        self.assertEqual(app['render']['stale_starts'], dict(ta=0, d3=1, block=0))
+
+    def test_snapshot_without_stamps(self):
+        b = load()
+        out = b.kmd_job_timing(v5_snapshot(kmd_snapshot(self.jobs(), version=4)))
+        self.assertEqual(out['firmware'], dict(offset_ticks=None, by_pid={}))
 
 
 if __name__ == '__main__':
