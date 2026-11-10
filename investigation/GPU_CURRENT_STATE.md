@@ -3398,3 +3398,25 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
   HYPOTHESIS). Rejected: K5 (depth three). HAGS stays last.
 - Implementation of K2 then K1: offline, branch `gpu/k1-xproc-render-pairs`; bench order
   EXP2319 -> gate package -> N4c-v2 + T5 package -> K1 package (two boots) -> FS-D1 / MPO H1.
+
+## UPDATE 2026-11-10T14:35Z -- architect: EXP2319 (N6) reading; group launch excluded, cut table defect
+
+- Run: EXP2319 (ACTUAL in EXPERIMENTS.md, commit 5d71558e7), rolled back, package floor and perf gate PASS.
+  Best result unchanged: EXP2318 FULL 7923 = 79.7 % of macOS 9946.
+- Preregistration defect: the offline cut table came from the cost fixture's default compile (12406 / 14460 bytes),
+  not the production compile (guest 5272 / 7770). Ruling: E arms valid (offset 0 is the entry in any binary; this
+  is an architect correction of the void rule, not a relaxation by result). B and L arms stay void by the letter
+  until an independent offline compile reproduces the guest (R20: all four offsets reproduced with the production
+  root-view masks; main code residual +48 / +98 bytes after the last cut offset, cause open).
+- Reading (`.local/night-20261110/n6-reading/n6read.py`, scene window 10-84 s, controls p0/p1 within 0.8 %):
+  97efffb3 stop at entry 0.0093 ms against 0.798 whole = about 5 ns per group. Group launch is not the item
+  (spec decision row 1 rejected). PROVISIONAL: its first 164 bytes (four dependent device loads + two barriers)
+  cost 0.114 ms = 61 ns per group; Apple's twin has the same prefix structure, so the 0.142 ms excess sits after it.
+- Spec correction: the traversal 7aa43c6c's first launch is a direct 2-group dispatch and the later launches are
+  sized by its output, so cut arms empty them. Only single-group latency is readable: launch <= 1.7 us, thread-0
+  sections 3.5 + 1.9 us (PROVISIONAL), loop 18.5 us. Throughput per section of the traversal was not measured.
+- Consequence: kernel time follows chains of dependent loads and barriers, not instruction count (consistent with
+  the null results of SSV and W1). Next causal target, offline: chain depth per path, ours against Apple's twins
+  (R21). No C0 lever chosen yet; no bench action from N6.
+- Sources: handoff sections "EXP2319 (N6) interim ruling" and "EXP2319 (N6) reading" in
+  `.local/handoff/OV-ARCHITECT-HANDOFF.md`.
