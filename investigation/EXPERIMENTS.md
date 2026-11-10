@@ -76476,3 +76476,24 @@ EXP2311 HARDWARE BEFORE 2026-11-10T01:36:25Z:
 ## EXP2311 — correction to BEFORE (2026-11-10T01:36:36Z)
 
 - The storage-baseline item of the EXP2311 BEFORE entry (AppleAns 0.4.6, UnmapMode=1) is superseded before the experiment boot: at 2026-11-10T01:36:06Z, while staging ran and before the install restart, the AppleAns session pointed Services\AppleAns ImagePath back to appleans.inf_arm64_20a748c874b1e861 (0.4.5, AppleAns.sys SHA-256 4AF699F474CB4A4DE8A45C699B3AE21E51FA7FB206E5FC15248A0687E3F95C6F) as its rollback after the ANSQ-T4 stall. The EXP2311 boot is therefore expected on AppleAns 0.4.5 with no UNMAP advertised, i.e. the EXP2309 storage driver; the remaining storage difference is the 37 GiB deallocate already performed on C:. The running-file hash is verified in ACTUAL.
+
+## ANSQ-T4 — analysis note: boot stall, offline pass (2026-11-10T01:50:00Z, no hardware)
+
+- Full note: .local/experiments/ANSTRIM1/analysis/ANSQ-T4-BOOT-STALL.md.
+- Source facts: AppleAns sees I/O completions only through the level interrupt (the 50 ms timer serviced the
+  mailbox, never the CQ); Asahi's apple_nvme_timeout reaps the CQ before it resets ("missed an interrupt");
+  the interrupt reaches the guest through m1n1's software vGIC route with a mask/unmask-on-EOI step; a Storport
+  timeout leads to HwResetBus -> AppleAnsDirectReset, which succeeds with polled admin commands even when the
+  interrupt is silent, so a permanently lost interrupt yields endless timeout/reset cycles with idle CPUs, no
+  bugcheck and no persisted record: the picture observed. A silent controller looks the same from outside.
+- Ranking (hypotheses, one event): 1. lost completion interrupt, independent of TRIM; 2. controller silent
+  after the mass deallocate or a boot-time Dataset Management command not completing (against: 219 commands
+  completed promptly, relaunch fine, T3 entry boot fine); 3. unrelated guest hang. 1 vs 2 is not decidable
+  offline. The guest's disk TimeOutValue was not read (60 s is Microsoft's documented default).
+- Implemented offline (branch claude/nervous-dewdney-7e71c6, 15e6d6c28 + ledger row 5th commit on that branch):
+  the timer reaps a CQE that is still pending after a full period, counts it (poll_recovered_completions) and
+  logs diag 0xAA; host tests pass; not MSVC-built.
+- Hardware plan (bench gaps, after EXP2311, own BEFORE entries): package 0.4.6 + 15e6d6c28 as 0.4.7; (1) observe
+  mode boots, (2) deallocate-mode boots without ReTrim, (3) ReTrim + restart. 0xAA records decide for
+  candidate 1; a stall with Storport timeouts and no 0xAA decides for the controller.
+- Installed driver stays 0.4.5; TRIM stays unmerged.
