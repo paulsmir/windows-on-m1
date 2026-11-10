@@ -61,12 +61,17 @@
 #include "genxml/agx_pack.h"
 
 /* Gallium agx_state.c should_lower_robustness for a robust context, minus
- * UBO/SSBO accesses (agx_win32_should_lower_robustness_d3d) */
+ * UBO/SSBO accesses (agx_win32_should_lower_robustness_d3d); data: the
+ * context's robustness (false with --no-d3d-robust) */
 static bool
 gl_part_of_d3d_robustness(const nir_intrinsic_instr *intr, const void *data)
 {
-   (void)data;
    switch (intr->intrinsic) {
+   /* agx_win32_should_lower_robustness_d3d excludes load_ubo, load_ssbo and
+    * store_ssbo only: the atomics keep should_lower_robustness's *gl_robust */
+   case nir_intrinsic_ssbo_atomic:
+   case nir_intrinsic_ssbo_atomic_swap:
+      return *(const bool *)data;
    case nir_intrinsic_image_load:
    case nir_intrinsic_image_store:
       return nir_intrinsic_image_dim(intr) == GLSL_SAMPLER_DIM_BUF;
@@ -1352,7 +1357,7 @@ main(int argc, char **argv)
       nir_print_shader(nir, stdout);
    struct hot hot = {0};
    count_hot(&nir_shader_get_entrypoint(nir)->body, &hot);
-   NIR_PASS(_, nir, nir_lower_robust_access, gl_part_of_d3d_robustness, NULL);
+   NIR_PASS(_, nir, nir_lower_robust_access, gl_part_of_d3d_robustness, &d3d_robust);
    NIR_PASS(_, nir, agx_nir_lower_texture_early, true);
    if (fragment) {
       /* agx_shader_initialize: I/O lowering (fp16 varyings: see rc123) */
