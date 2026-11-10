@@ -76780,3 +76780,31 @@ EXP2317 HARDWARE BEFORE 2026-11-10T04:44:57Z:
 - Hashes: sys 7697c0bfb3d1, UmdArm64 5c1e81941460, UmdX64 9302f21b4e3e, Umd32 e5067d829ab8; manifest 249c81bbc62a, hardware-manifest d472c3ff7fc6; probe2317.sh c7421ff741e5 (PROBE_LINT_OK); visible recovery rec2317h 48bc9ca29383e2da; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1Ov2NoHazardLead=1.
 - Recovery rec2317h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2317-n4c-nohazard/run2317.sh.
+
+## ANSQ-T6 — promote AppleAns 0.4.7 with live deallocate (UnmapMode 2, fence C:) to the installed driver (BEFORE, 2026-11-10T04:58:00Z)
+
+- Architect decision after ANSQ-T5a/b/c (all CONFIRMED; evidence re-read by the AppleAns session: 13 boots and 3
+  ReTrim + restart cycles on 0.4.7, every DSM status 0, no 0xAA, manifests and chkdsk clean). The ANSQ-T4 stall
+  stays a single unexplained event (boot stall with a known recovery) and does not block; any repeat = stop and
+  roll back to 0.4.5.
+- Hypothesis: 0.4.7 in deallocate mode is a stable boot driver and Windows reports the disk as a trimmed SSD.
+- WHY THIS HYPOTHESIS: (1) ANSQ-T5b/T5c: 9 boots in exactly this configuration, all clean; (2) ANSQ-S1/T2: SSD
+  classification and "Trim Supported" follow from VPD B1h/B2h on this adapter; (3) ANSQ-T3/T4/T5c: deallocate
+  completes with status 0 and leaves the hashed files and the file system intact.
+- Single variable: installed driver 0.4.5 -> 0.4.7 (ANSBUILD017-O, sys de910a08..., zip af21c2fc..., commit
+  4f4215569, already in the driver store as appleans.inf_arm64_62c12175c51fd95d) with UnmapMode 2 and the fence
+  recomputed from Get-Partition C. Profile RECANS001; GPU package absent.
+- Commands: ansq-post.ps1 (read-only record on 0.4.5: Get-PhysicalDisk MediaType/BusType/SpindleSpeed, fsutil
+  sectorinfo seek-penalty and trim lines = StorageDeviceSeekPenaltyProperty / StorageDeviceTrimProperty as the
+  file system sees them, DisableDeleteNotify, ScheduledDefrag, Optimize-Volume -Analyze); tools/t6-promote.ps1
+  (SHA-256 6ce97514..., hash + signature check of both stores before any write); restart-normal.sh;
+  ansq-post.ps1; ansq-verify.ps1.
+- Expected / accept: SSH up; running hash de910a08...; 0xA9 = 0xa9020004; no 0xAA/0xA4/0xA5; completed_error 0;
+  VERIFY_MANIFEST_OK; C: not dirty; MediaType SSD, "No Seek Penalty", "Trim Supported". Then 0.4.7 stays.
+- Failure criteria: stall or no SSH in 5 min (two HV snapshots, relaunch, roll back); any storage error record;
+  manifest mismatch; disk still reported with a seek penalty or as Unspecified (then no guest-side patching:
+  find the unanswered query, fix in the driver with host tests, plan to the architect first).
+- Recovery artifact: 0.4.5 store appleans.inf_arm64_20a748c874b1e861 (hash checked by t6-promote.ps1 before the
+  write); rollback = UnmapMode 1, ImagePath -> 0.4.5, restart. The recovery profiles' storage gate checks only
+  the APPL0003 device status and the service state (scripts/agx-recover-visible.sh), no driver hash.
+- Evidence: .local/experiments/ANSTRIM2/evidence/ANSQ-T6/.
