@@ -3159,3 +3159,34 @@ Lever ranking (HD, ms per frame; gap to macOS about 4.7 ms):
 4. Parked: cross-process render -> prelude render.
 5. OPEN: C0 scene excess +0.833 ms (traversal 0.31, 97efffb3 0.21, 6cf11e8a 0.157, rest) -- location unknown, N6.
 Levers 1-2 and item 5 together are at most 1.4 ms of 4.7 ms. The remaining about 3.3 ms has no lever yet.
+
+## CORRECTION 2026-11-10T04:30:46Z -- to the UPDATE above (R11 part): "6cf11e8a = 1.82 x Apple" is a piece-mapping error
+
+Refers to the R11 statements in the previous section and in .local/night-20261110/r11-c0-dynload/REPORT.md
+(rows "b13 6cf11e8a vs d49", "+53.6 ns per group", "k49 +0.157 ms", "worst ratio in the frame"). The same error was
+already noted in the UPDATE of 2026-11-10T01:12:00Z and was repeated by the R11 script; the architect did not catch it
+when checking the report.
+
+Evidence (dispatch tag sequence of frame 2000 in EXP2310 gm2310b-umd.log, split tags of arm b): the job that starts
+at 6cf11e8a (tag b1db88bf, d49) runs until the next tag a4452d43 at d54, so it holds FIVE dispatches d49-d53
+(b1db88bf, 520e6881, 546c0c9a, 05a37650, c4d44596). In arm c the sibling 2286332c (tag 1f20788f, d27) is a single
+dispatch because 9726b186 at d28 is also a tag.
+
+| piece | ours ms | Apple ms | ratio |
+|---|---|---|---|
+| C0 d49-d53 (6cf11e8a + four) | 0.348 | 0.303 (d49 0.191 + d50 0.014 + d51 0.003 + d52 0.003 + d53 0.092) | 1.15 |
+| C2 d27 (2286332c alone) | 0.200 | 0.181 | 1.11 |
+
+- 6cf11e8a is NOT an outlier: its piece is +0.045 ms (at most about 15 ns per group if all of it were 6cf11e8a),
+  the same level as its C2 sibling. It is not measured alone in any run so far.
+- Apple's per-dispatch rows carry a fixed cost (empty dispatches read 0.014-0.016 ms), so sums of several Apple
+  dispatches are inflated against one job of ours; with that the piece excess is at most about 0.09 ms.
+- The rejection of the four-point model STANDS and is stronger: 54 dynamic CB loads at 256 threads predict 122 ns
+  per group, the piece allows at most 15-30.
+- Consequence for the address-form candidate (register index against base + immediate): 6cf11e8a has the same form
+  as 97efffb3 and no comparable excess, so the form alone is a WEAKER candidate than stated. It stays offline.
+- "Fixed excess per thread group" now rests on the traversal launches only (b6 43 ns and b7 38 ns per group at
+  Apple 202 and 92 ns per group; b5 is too small to weigh). HYPOTHESIS level, to be measured by N6.
+- C0 scene excess +0.833 ms, corrected split: traversal 0.31, 97efffb3 0.21, piece d49-d53 0.05-0.09, the rest
+  about 0.22-0.26 in pieces that cannot be compared one to one (Apple per-dispatch cost).
+- N6 change: the two 6cf11e8a arms are dropped. Arms: p0, 97efffb3:E, 97efffb3:L, 7aa43c6c:E, :B1, :B2, :L, p1.
