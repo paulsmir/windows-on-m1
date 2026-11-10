@@ -3334,6 +3334,27 @@ extern "C" HRESULT AgxD3d12OwnerClearUav(AGX_D3D12_OWNER *owner, const AGX_D3D12
   return S_OK;
 }
 
+/* STATS-NOPS (class D diagnostic, APPLE_AGX_D3D12_STATS_NO_PS, exactly "1",
+ * read once per process, default off): the PS_INVOCATIONS statistic (slot 7,
+ * D3D12_QUERY_DATA_PIPELINE_STATISTICS::PSInvocations) is never active while
+ * a draw is recorded, so Asahi never gives a fragment shader its statistics
+ * prolog (agx_state.c ctx->pipeline_statistics[PIPE_STAT_QUERY_PS_INVOCATIONS]).
+ * Asahi zeroes a statistic only in agx_begin_query and a resolve copies the
+ * storage as is, so a never-begun slot would resolve stale BO contents: Begin
+ * begins and at once ends slot 7 (no draw in between, result 0 through the
+ * unchanged resolve paths) and End skips it. Receipt measure-d3d12-stats-no-ps
+ * {1, query index}, once per process, at the first such Begin. */
+static bool owner_stats_no_ps() {
+  static const bool on = t5b_switch("APPLE_AGX_D3D12_STATS_NO_PS");
+  return on;
+}
+static volatile LONG owner_stats_no_ps_reported;
+static void owner_stats_no_ps_receipt(unsigned index) {
+  if (InterlockedCompareExchange(&owner_stats_no_ps_reported, 1, 0) != 0) return;
+  const UINT values[] = {1u, index};
+  AdmissionUmdDiagnostic("measure-d3d12-stats-no-ps", S_OK, values, 2u);
+}
+
 /* C11: query heaps. Resolve emits GPU work; the native query implementation
  * retains each result generation until its producers and readers retire. */
 struct AGX_D3D12_QUERY_HEAP {
@@ -3341,6 +3362,7 @@ struct AGX_D3D12_QUERY_HEAP {
   struct pipe_query *Query[1]; /* Count * Slots */
 };
 static const unsigned kQueryStatistics = 11; /* D3D12_QUERY_DATA_PIPELINE_STATISTICS */
+static const unsigned kQueryStatisticPsInvocations = 7; /* PSInvocations, PIPE_STAT_QUERY_PS_INVOCATIONS */
 
 extern "C" HRESULT AgxD3d12OwnerCreateQueryHeap(AGX_D3D12_OWNER *owner, unsigned type, unsigned count,
                                                 AGX_D3D12_QUERY_HEAP **heap) {
@@ -3409,6 +3431,14 @@ extern "C" HRESULT AgxD3d12OwnerQuery(AGX_D3D12_OWNER *owner, AGX_D3D12_QUERY_HE
 #endif
     for (unsigned s = 0; s < kQueryStatistics; ++s) {
       struct pipe_query *q = heap_query(pipe, heap, index, s, PIPE_QUERY_PIPELINE_STATISTICS_SINGLE, s);
+      if (q && s == kQueryStatisticPsInvocations && owner_stats_no_ps()) {
+        /* STATS-NOPS: zeroed and inactive before any draw; End skips it */
+        if (begin) {
+          if (!pipe->begin_query(pipe, q) || !pipe->end_query(pipe, q)) return E_FAIL;
+          owner_stats_no_ps_receipt(index);
+        }
+        continue;
+      }
       if (!q || !(begin ? pipe->begin_query(pipe, q) : pipe->end_query(pipe, q))) return E_FAIL;
     }
     return S_OK;

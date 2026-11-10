@@ -51,6 +51,8 @@ struct AGX_D3D12_BUFFER {void *Resource;uint64_t Bytes;};
 struct OwnerLock {OwnerLock(AGX_D3D12_OWNER *){}};
 static int AgxWin32AsahiContextFaulted(pipe_context *) {return faulted;}
 static HRESULT owner_failure(AGX_D3D12_OWNER *,HRESULT hr){return hr;}
+static bool owner_stats_no_ps(){return false;} /* STATS-NOPS diagnostic: default off */
+static void owner_stats_no_ps_receipt(unsigned){}
 static void run_gpu(){for(auto &op:gpu){uint64_t v=op.query?op.query->result:0; if(op.query&&op.query->type==PIPE_QUERY_OCCLUSION_PREDICATE)v=uint32_t(v)!=0;memcpy((char *)op.dst->data+op.at,&v,8);}gpu.clear();}
 '''
 
