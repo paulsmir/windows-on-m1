@@ -3602,3 +3602,41 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
   until the mapping is derived and reviewed.
 - Bench order now: EXP2324 (N6b ladder, running) -> EXP2325 / EXP2326 (K1) -> N4c-v3 shadow boot after review ->
   FS-D1 / MPO H1.
+
+## UPDATE 2026-11-10T18:08:56Z -- architect: N4c-v3 integrated; T5b and PF1 in implementation; EXP2324 partial reading; hung-job 0x116 is its own defect
+
+- N4c-v3 (kept-side placed resolve, descriptor-table placement, 23-bit refusal mask receipt; all behind
+  Wom1Ov2CrossLead, default unset): reviewed against `.local/handoff/N4C-V3.md`, integrated as bde539eb8, ledger
+  row a256fe466, status implemented. Gates: baseline 1179 tests, 1 NEW = the known mu-gitlink one; builder syncheck
+  SYNCHECK_OK. Hardware: one class-D boot after EXP2326, shadow arm first, stop rule "any mask bit in more than 1 %
+  of executions -> no apply arms". Not verified: lock cost of the table sink with the feature on.
+- T5b (bindful texture remap for constant handles below 16, plus static SRVs before arrays): facts accepted, spec
+  `.local/handoff/T5B-BINDFUL.md`, implementation in progress (sub-agent), nothing on the bench yet.
+- PF1 expand fold (a'): UNPARKED, because EXP2321 rejected the prelude notify gate and the three render compute
+  preludes (0.195 ms busy + 0.47 ms launches per frame) have no other lever. Spec `.local/handoff/PF1-EXPAND-FOLD.md`,
+  switch APPLE_AGX_D3D12_EXPAND_FOLD default off, implementation in progress (sub-agent).
+- EXP2324 (N6b cut ladder; ACTUAL in the ledger, 91e34dce1): PARTIAL. k48 (97efffb3) 7 of 8 arms, k49 NOT RUN.
+  b12 ms per job, window 10-84 s, recomputed by the architect from the arm logs:
+  p0 0.7940; B2 (164) 0.1182; @210 0.1322; @1110 0.4214; @2118 0.5194; @2776 0.5999; @3228 0.6394.
+  Intervals: [0,164) 0.118; [164,210) 0.014; [210,1110) 0.289; [1110,2118) 0.098; [2118,2776) 0.081;
+  [2776,3228) 0.040; [3228,end) 0.155 (pre-loop + loop, not split). Other pieces unchanged in every arm.
+  - Ladder question 1 (nested `stop`): six nested cuts at nest 1-4 ran clean and monotone; the cut at the loop
+    header @4128 (nest 8) hung the job. A loop-header cut is NOT usable; k49 @4120 is withdrawn.
+  - Reading by the pre-registered decision table: [164,210) = 0.014 for one all-thread load, so the prefix cost
+    (0.118) is not a rate per load (barrier or first touch); [210,1110) is the largest interval while Apple executes
+    MORE loads there (19 vs 14), so its cost is not a load count; the plane groups sum to 0.218 (> 0.21); pre-loop
+    plus loop is only 0.155, so the loop cannot hold the whole excess against Apple.
+  - HYPOTHESIS (architect, not measured): time follows load levels with per-thread addresses (about 0.026 ms per
+    level in [210,1110) against 0.005-0.008 per constant-buffer level in the plane groups), not ALU count.
+    Whether [210,1110) is at a hardware bound that Apple also pays is being computed offline (thread count per job,
+    bytes per thread, latency / bandwidth / ALU bounds: sub-agent k48-throughput). No C0 lever chosen.
+  - EXP2324b (k49 half, k48 tail split) is not staged; its arm list waits for the offline reading of the hang.
+- 0x116 on a hung GPU job: EXP2323 arm t1 and EXP2324 arm k4128 ended in the same bugcheck (0x116,
+  p3 0xC0000483, p4 3). CORRECTION to the 17:24Z section, which read the EXP2323 crash as specific to the T5 texture
+  state promotion: the common factor of both runs is a job that never finishes followed by a failed TDR recovery.
+  This is a KMD defect of its own (an application shader that hangs must not take Windows down). T5 stays removed:
+  its hang cause is still unexplained. Offline diagnosis of the reset path in progress (sub-agent tdr-0x116; both
+  minidumps exist). No hardware run until the fix is specified.
+- K1 (Wom1CrossProcessRenderPairs): EXP2325 (boot A) launched by the bench owner, EXP2326 (boot B) follows.
+- Bench order: EXP2325 -> EXP2326 -> N4c-v3 shadow boot -> T5b / PF1 arms when implemented -> EXP2324b -> FS-D1 / MPO H1.
+- Best result with a claim unchanged: EXP2318 FULL 7923 = 79.7 % of macOS 9946.
