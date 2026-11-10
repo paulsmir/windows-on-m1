@@ -3552,3 +3552,53 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
   content (DWM 3D slots carry bit 0x1 and a non-zero 3D end stamp; bit 0x1 is the right test for a render without
   a prelude block). Next for N4c: a kept-side placement rule (v3) is being derived offline; no hardware until then.
 - Bench order now: EXP2323 (T arms) -> EXP2324 (N6b ladder) -> EXP2325/EXP2326 (K1) -> FS-D1 / MPO H1.
+
+## UPDATE 2026-11-10T17:24:14Z -- architect: EXP2323 closed (T5 rejected and removed, N4c-v2 kept side refuses, K2 ring PASS), N4c-v3 specified
+
+- Result with a claim is unchanged: EXP2318 FULL f0 7923 / 47.4 fps = 79.7 % of macOS HD (9946).
+- T5 (`APPLE_AGX_D3D_PROMOTE_TEX`, 60daee99e): REJECTED. EXP2323 arm t1 (switch 1) ended in guest bugcheck 0x116
+  (p3 0xC0000483, p4 3) within the first ~55 s; t0 (switch unset, same boot) was clean. The measured production
+  effect was -26 instructions (lighting CS 806ee7b1bdb1944a) and -69 (planet PS 428487dae22a5191) with no register
+  gain; the larger figures quoted earlier came from the stand-in fixture shape and are withdrawn. No retry, no t2/t3.
+  The code is removed (revert of 60daee99e = commit 2b33fb096); with the switch unset the binaries were byte-identical, so packages
+  built from 7ab0604c1 / 9fb13ab25 (EXP2324, EXP2325, EXP2326) are unaffected. The minidump
+  (.local/experiments/EXP2323-n4c2-k2-t5/evidence/EXP2323/exp2323-0x116-mini.dmp) is not analysed.
+  What is rejected is this implementation: it wrote texture-state registers 16..20 from the shader preamble, which
+  neither upstream Asahi / Honeykrisp (registers 0..15 only) nor our driver had ever exercised, and the pre-run
+  record listed exactly that as unknown. What is NOT decided: the time effect of register-indexed against bindless
+  sampling. t1 produced no timing, so that hypothesis is untested, neither confirmed nor rejected.
+- Correction of the 17:06:14Z update (EXP2323 x0): "0 conflicts" was vacuous. KeptRender / KeptPost are cleared when
+  the kept verdict refuses, so no range was ever compared. What x0 shows: 3006 executions, independent 0, all
+  refusal 6 detail 2; copies placed 48096 (16 per execution), copy overflow 0; conflict count NOT testable.
+  Second correction: command kind 9 is kCommandQuery (BeginQuery, EndQuery and ResolveQueryData), not the resolve
+  alone.
+- N4c cause, derived offline from the x0 log and source (spec `.local/handoff/N4C-V3.md`):
+  - GravityMark submits C0 R1 C2 R3 C4 R5 C6 R7 per execution; it has one PIPELINE_STATISTICS heap with 3 Begin /
+    3 End / 3 Resolve per execution. `Wom1Ov2NoHazardLead` is unset on the bench, so ResolveDefer is false and
+    every resolve takes the native path of AgxD3d12OwnerResolveQueries.
+  - The one kept-side foreign command that reaches R7's LastForeign is the third resolve: it is the active command
+    while its writer flush submits R5. After Asahi's contract the copy job of that resolve goes to the compute
+    batch (or the CPU), never to a render batch, and writes only [dst_offset, dst_offset + 8*values*count) of the
+    destination buffer. It is therefore placeable as a write range, like the N4c-v2 copies.
+  - The next refusals are deterministic and were hidden behind 6/2: 11/2 and 11/4 (descriptor tables). Any stage
+    with a non-sampler heap range marks the batch "table" and the cross verdict refuses although the walk in
+    SetStageHeapWalk already knows every view it binds.
+- N4c-v3 (class C/I, under the existing `Wom1Ov2CrossLead` switch, default unset): A. kept-side placed resolve;
+  B. descriptor-table placement into cross-only range sets (same-execution verdict inputs stay bit-identical);
+  C. a full refusal-mask receipt (`measure-d3d12-ov2-mask`: every refusal class per execution, not only the
+  first), so one shadow arm shows all remaining stops at once. Status: specified; implementation in progress in a
+  separate worktree; not reviewed, not built, no hardware.
+  WHAT IS STILL UNKNOWN (hardware justified after review): whether the 16 copies of C0(N+1) conflict with the
+  ranges of R7(N) (refusal 8), and whether R7's ranges fit the 128-entry set.
+  Pre-registered: one class-D boot, shadow arm first; any mask bit in more than 1 % of executions -> no apply arms.
+- K2 (ring v5): PASS by content in EXP2323 (bit 0x1 test). K1: first MSVC /W4 /WX compile clean (bench owner,
+  EXP2325 package from 9fb13ab25); hardware not run.
+- Gap ledger change: C4 (0.19-0.30 ms) and R5 (0.17 ms) have no lever in the tree after the T5 removal.
+  WHY THE HYPOTHESIS STAYS OPEN: C4 and R5 are the two jobs whose hot loops sample the shadow map bindless, and
+  both run at slope 1.16-1.19 against Apple, while the texture-free chains run at 1.05-1.07 (C2) or parity (C0
+  constant part); Apple's twins sample the same textures through registers. Candidate T5b (not specified yet,
+  facts being collected offline): map the hot constant descriptor-table entries to the bindful registers 0..15
+  that the USC TEXTURE word already loads for every draw, no preamble store, no register above 15. No hardware
+  until the mapping is derived and reviewed.
+- Bench order now: EXP2324 (N6b ladder, running) -> EXP2325 / EXP2326 (K1) -> N4c-v3 shadow boot after review ->
+  FS-D1 / MPO H1.
