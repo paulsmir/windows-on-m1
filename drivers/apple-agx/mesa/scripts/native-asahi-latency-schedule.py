@@ -1197,7 +1197,8 @@ agx_win32_wait_block(agx_context *ctx, agx_block *block, struct slot *slots,
 
       if (instr_is_async(I)) {
          for (unsigned slot = 0; slot < 2; ++slot) {
-            if (slots[slot].nr_pending == 0) {
+            if (slots[slot].nr_pending == 0 ||
+                agx_win32_wait_single_slot()) {
                I->scoreboard = slot;
                break;
             }
@@ -1294,9 +1295,39 @@ agx_insert_waits(agx_context *ctx)
 }'''
 
 
+# SS1 (R10, night 2026-11-10): the upstream slot choice is "first slot with
+# nr_pending == 0", so two loads issued back to back land in slots 0 and 1 and
+# their consumers pay two waits. Apple's compiler issues several loads on
+# slot 0 and one wait (metal-oracle m208: four device loads, one wait).
+# Opt-in APPLE_AGX_WAIT_SINGLE_SLOT=1 queues every asynchronous op on slot 0;
+# every hazard rule (read or overwrite of a pending register, barriers, the
+# AGX_MAX_PENDING overflow wait) is unchanged. Variable absent or any other
+# value: the slot choice is the upstream one.
+SINGLE_SLOT_ANCHOR = '#define AGX_MAX_PENDING (8)\n'
+SINGLE_SLOT = r'''#define AGX_MAX_PENDING (8)
+
+/* SS1: opt-in single scoreboard slot (APPLE_AGX_WAIT_SINGLE_SLOT=1). */
+static bool
+agx_win32_wait_single_slot(void)
+{
+   static int enabled = -1;
+   if (enabled < 0) {
+      const char *env = getenv("APPLE_AGX_WAIT_SINGLE_SLOT");
+      enabled = env && env[0] == '1' && !env[1];
+   }
+   return enabled != 0;
+}
+'''
+LOCAL_SLOT_ANCHOR = '            if (slots[slot].nr_pending == 0) {\n'
+LOCAL_SLOT = ('            if (slots[slot].nr_pending == 0 ||\n'
+              '                agx_win32_wait_single_slot()) {\n')
+
+
 def project_waits(text):
     if '#include <stdlib.h>' not in text:
         text = text.replace('#include "agx_builder.h"', '#include <stdlib.h>\n#include <string.h>\n#include "agx_builder.h"', 1)
+    text = once(text, LOCAL_SLOT_ANCHOR, LOCAL_SLOT)
+    text = once(text, SINGLE_SLOT_ANCHOR, SINGLE_SLOT)
     return once(text, WAITS_ANCHOR, WAITS)
 
 
