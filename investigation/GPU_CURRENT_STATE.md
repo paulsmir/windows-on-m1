@@ -3509,3 +3509,22 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
   T arms run after a fault-free x0 stop with the cross-lead in one non-apply state in all four t arms; no bit-exact
   frame is available (animated scene), so T5 correctness = shader rows + zero faults + 45 s shots of t0/t1, any
   visible difference in planet texturing or lighting rejects T5.
+
+## UPDATE 2026-11-10T16:44:43Z -- architect: N6b cut ladder accepted, queued as EXP2324 (class D)
+
+- N6b (`.local/night-20261110/n6b-cut-ladder/REPORT.md`, `.local/handoff/N6B-CUT-LADDER.md`): ACCEPTED. Code landed
+  as 21753fed2: `APPLE_AGX_DIAG_CUT=<hash8>:@<decimal byte offset>`, accepted only where a block of the packed main
+  function begins, receipt point code 4; absent variable leaves every binary unchanged (offline: uncut k48 and k49
+  byte-identical to the base build). Status implemented; MSVC /W4 /WX not run.
+- Ladder (production-equal compile, rows equal the guest rows of EXP2319): k48 tag 97efffb3: B2 (164), @210, @1110,
+  @2118, @2776, @3228, @4128 (loop header); k49 tag b1db88bf: B1 (176), @364, @1086, @2128, @2792, @3254, @4120.
+  Correction of earlier notes: k49's cut tag is b1db88bf (6cf11e8a is the high hash word); k49 has never been cut,
+  the 0.0074 ms figure is k49 uncut on an empty input.
+- Static counts against the Apple twins: plane groups identical (12 / 12 / 8 constant-buffer loads); ours has fewer
+  loads before the planes (15 vs 20) and more before the loop (9 vs 7) and in the loop (k48 9 vs 8; k49 11 vs 8).
+- WHAT IS STILL UNKNOWN (why hardware is justified): what `stop` does to a SIMD group with a partial execution mask
+  (Apple: 0 of 299 stops nested; Asahi only on abort paths), and the hardware cost of each section (thread
+  population per exit, loop trip counts are in no receipt). First nested arm 97efffb3:@210 answers the former; a
+  fault there closes the ladder as "not usable".
+- Bench order now: EXP2322 ACTUAL -> EXP2323 (N4c-v2 + K2 + T5) -> EXP2324 (N6b ladder, 16 arms, one boot, read
+  against EXP2319) -> K1 package (two boots) when its hand-off is ready -> FS-D1 / MPO H1.
