@@ -892,7 +892,7 @@ typedef struct _ADMISSION_CONTEXT {
    * ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS: BeginSuccessorJob may begin a
    * compute successor of another process on its own retained lease. */
   ULONG G3CrossProcessPairs;
-  /* K1: Wom1CrossProcessRenderPairs = 1 on top of C1, set at start with
+  /* K1: Wom1CrossProcessRenderPairs (default on, 0 = off) on top of C1, set at start with
    * ADMISSION_JOB_WINDOW_CAP_XPROC_RENDER: the successor of another process
    * may also be a native render with a private scene. */
   ULONG G3CrossProcessRenderPairs;
