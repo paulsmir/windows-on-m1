@@ -3640,3 +3640,17 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
 - K1 (Wom1CrossProcessRenderPairs): EXP2325 (boot A) launched by the bench owner, EXP2326 (boot B) follows.
 - Bench order: EXP2325 -> EXP2326 -> N4c-v3 shadow boot -> T5b / PF1 arms when implemented -> EXP2324b -> FS-D1 / MPO H1.
 - Best result with a claim unchanged: EXP2318 FULL 7923 = 79.7 % of macOS 9946.
+
+## UPDATE 2026-11-10T18:12:22Z -- architect: hung-job 0x116 is the open timeout-only TDR item (addition to the 18:0xZ update)
+
+- Addition, not a new defect: the 0x116 of EXP2323 t1 and EXP2324 k4128 (p3 0xC0000483, same as EXP2286) is the
+  already recorded open item "timeout-only TDR recovery". Design: investigation/analysis/TDR-FIRMWARE-RESTART-RECOVERY.md
+  (7bedfb1fa). Merged: stage 2a (shared-layer warm restart) and stage 2b + receipt v5 (e6fb8736e). Not done: hardware
+  checkpoint H1 (restart drill behind `Wom1FwRestartDrillAllowed`) and the wiring of the warm restart into
+  ResetFromTimeout / RestartFromTimeout / ResetEngine ("No TDR DDI wiring before H1" still holds).
+- In progress (offline): comparison of the two new minidumps with EXP2286 and the list of what is missing between the
+  merged code and working TDR DDIs for a hung application job; whether a looping shader with a live firmware needs the
+  full restart is NOT decided. Report: .local/night-20261110/tdr-0x116/REPORT.md (not written yet).
+- T5b (offline, uncommitted in .worktrees/t5b-impl, gate running): step A alone regresses shader 144a46deb6ed2427
+  offline (+137 instructions, spills 106 -> 118). That hash has 0 rows in gm2319p0-umd.log, so the GravityMark arms are
+  not affected; a default-on decision for step A needs a spill guard first. No hardware number yet.
