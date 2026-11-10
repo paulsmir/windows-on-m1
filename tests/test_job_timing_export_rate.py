@@ -43,9 +43,15 @@ typedef struct { unsigned short Length, MaximumLength; const wchar_t *Buffer; } 
 #define RtlCopyMemory(d,s,n) (++copies, memcpy(d,s,n))
 typedef struct { ULONGLONG QpcFrequency, LastExportQpcTicks; int Slot[4]; } JOB_TIMING;
 typedef struct { ULONG Version, Bytes, Count, Reserved; } FW_TIMING;
-typedef struct { PDEVICE_OBJECT PhysicalDeviceObject; } ADMISSION_CONTEXT;
+typedef struct { PDEVICE_OBJECT PhysicalDeviceObject; ULONG MailboxInterruptVector; } ADMISSION_CONTEXT;
+typedef struct { long long QuadPart; } LARGE_INTEGER;
+typedef struct { ULONG Version, Bytes; } ADMISSION_JOB_WINDOW_XPROC_RECEIPT, ADMISSION_IRQ_RX_RECEIPT, PRESENT_TS;
+typedef struct { ULONG Samples; } APPLE_AGX_FW_RX_RECEIPT;
 typedef struct {
   int JobDiagnostics, RcReceiptEnabled, RcExportPending, JobDepth2Kick;
+  /* receipts added after rc83; all off here (their own suites cover them) */
+  int CrossProcessPairs, PresentTsEnabled, Ov2Enabled, Ov5Waiver, Ov5DrillEnabled;
+  ULONGLONG XprocExportQpc, IrqRxExportQpc; ADMISSION_JOB_WINDOW_XPROC_RECEIPT XprocReceipt; PRESENT_TS PresentTs; APPLE_AGX_FW_RX_RECEIPT FwRx;
   struct { unsigned Mode; } Depth2Drill;
   struct { unsigned Samples; } GpuPerf, GpuPerfSnapshot;
   struct { unsigned Version; } JobPoll, JobPollSnapshot;
@@ -56,6 +62,7 @@ typedef struct {
 } ADMISSION_PLATFORM_RUNTIME;
 static ULONGLONG qpc = 1; static int sets, flushes, opens, clocks, locks, rcExports, copies;
 static ULONGLONG AdmissionJobQpc(void) { ++clocks; return qpc; }
+static LARGE_INTEGER KeQueryPerformanceCounter(LARGE_INTEGER *f) { ++clocks; f->QuadPart = 24000000; LARGE_INTEGER n = {(long long)qpc}; return n; }
 static KIRQL KeGetCurrentIrql(void) { return PASSIVE_LEVEL; }
 static void KeAcquireSpinLock(int *, KIRQL *p) { ++locks; *p = 0; }
 static void KeReleaseSpinLock(int *, KIRQL) {}
@@ -70,6 +77,8 @@ static int AdmissionJobTimingDense(const JOB_TIMING *) { return dense; }
 static void AdmissionRcExportWindows(ADMISSION_PLATFORM_RUNTIME *r, HANDLE) {
   ++rcExports; r->RcExportPending = 0;
 }
+static void AdmissionIrqRxSnapshotWindows(ADMISSION_PLATFORM_RUNTIME *, ADMISSION_IRQ_RX_RECEIPT *rx) { memset(rx, 0, sizeof(*rx)); }
+static void AdmissionFwRxSampleWindows(ADMISSION_PLATFORM_RUNTIME *, ULONGLONG) {}
 @@FUNC@@
 int main() {
   ADMISSION_CONTEXT adapter = {(PDEVICE_OBJECT)1};

@@ -25,7 +25,10 @@ DEFAULT = ['test_d3d12_*', 'test_umd*', 'test_g4*', 'test_d3dg1*', 'test_r149*',
            # 2026-11-07: the KMD window/scheduler/receipt suites had rotted unnoticed
            # (4 slicer fixtures broken since 2026-11-03) because no gate ran them.
            'test_render_*', 'test_depth2_*', 'test_apple_agx_scheduler', 'test_fw_rx_*',
-           'test_notifier_*']
+           'test_notifier_*',
+           # 2026-11-10: test_job_timing_export_rate had rotted (harness lacked the receipts
+           # added since rc83) because no gate ran it.
+           'test_job_*', 'test_rc_*']
 
 
 def modules(patterns):
