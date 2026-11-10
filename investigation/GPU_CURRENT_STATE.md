@@ -2788,3 +2788,50 @@ were spot-checked by the architect against the cited tables, the rest are as rep
 - **HYPOTHESIS (one coarse pass, 10 s bins, lag by eye ~10 s, EXP2196 HD full run vs macOS hd.csv):** our share of the
   macOS rate is lowest in the fast scenes (macOS 76-85 fps, ours 42-54: 55-67 %) and highest in the heavy scenes
   (77-83 %). To be checked on the EXP2309 FULL logs with fps_frames and a fitted lag before it is used.
+
+## UPDATE 2026-11-10T00:46:28Z -- R8: the HD work deficit is job-specific; the frame gap is mostly a fixed offset
+
+Source: offline analysis .local/night-20261110/r8-work-deficit/REPORT.md (scripts and out-*.txt beside it)
+on EXP2307 a1r3 / EXP2308 a1r3 against the macOS per-encoder split (MACOS-20261105-metal-timing) and
+the per-dispatch split EXP2226. No hardware run. Frames = execute rows.
+
+- Frame level: ours wall = 3.16 + 1.057 [1.023,1.102] x Apple wall (EXP2308 a1r3); 4.18 + 1.002
+  [0.970,1.042] (EXP2307 a1r3). wall - work = 2.1-2.3 ms in every scene class. The gap to macOS is
+  mostly a fixed 3.2-4.4 ms per frame, not a rate ratio.
+- CORRECTION to the HYPOTHESIS in the previous update ("our share is lowest in fast scenes, 55-67 %"):
+  the fitted shares are 78 % (fast third of the bins), 80 % (middle), 82-83 % (heavy), 71 % in the two
+  fastest bins (scene 48-52 s). Lower in fast scenes because of the fixed offset, by 4-11 points.
+- Work deficit +1.87 ms (vs Apple completion increments; +2.2 ms vs Apple GPU spans). "Uniform ~9 %"
+  holds only as an aggregate (job sum = 0.22 + 1.107 x Apple) and is REFUTED as a mechanism:
+  C0 = 2.70 + 1.258 [1.230,1.281] x Apple(e7+e9), constant part (67 dispatches) at parity 0.99-1.00;
+  C2 slope 1.066; R3 slope 0.98 plus fixed 0.22-0.31 ms; C4 1.167; R5 3D 1.16-1.19; R1 1.13-1.17.
+  Split: C0 scene part 0.51 (0.75 vs spans, ~1.0 in heavy scenes), C4 0.19, C2 0.19, R3 0.18,
+  R5 3D 0.17, R1 0.16, three render compute preludes 0.195 fixed (R1 0.063, R3 0.040, R5 0.092; ours
+  only, UMD batch design), R5 TA ordering 0.21 (Apple runs e16's vertex phase under c15).
+- REJECTED (architect hypothesis of 2026-11-09 night plan): firmware idle exit / clock ramp /
+  context-switch cost per job. Job-time residual vs pre-job idle and vs a foreign (DWM) job right
+  before is flat, <= 0.01-0.02 ms (out-idle.txt). Also excluded for C0: clock (parity constant part in
+  the same job), static code size, per-dispatch overhead, submission.
+- R4's "compute at parity" came from the per-dispatch Apple split, which adds a fixed +0.68 ms to
+  encoder 7 and +0.39 ms to encoder 11. Use the per-encoder split for totals; per-dispatch only for
+  large single launches.
+- C0 kernels behind the 1.26 slope: hierarchy traversal 97ae4b027aa43c6c (= Apple e7 d24/d25, about half
+  of the scene slope) and a8260e4297efffb3 (= e7 d48, about a quarter). The same chain in C2 (variant
+  fc968f7a) runs at 1.05-1.075. OPEN between (a) generated code of the C0 variants and (b)
+  data-dependent memory cost (1.9x indirect grid, atomics). HYPOTHESIS (cross-profile hint only): (b).
+- NOT VERIFIED by R8: pstate residency for EXP2307/2308 (no receipt); piece-to-dispatch mapping is by
+  order and pipeline identity (+-0.05 per row).
+
+Next causal target (one run, no package change): N2 SPLIT-TAGS, spec in
+.local/handoff/OV-ARCHITECT-HANDOFF.md (arms: control / EXP2078 C0 list / EXP2211 C2 list / control on
+one boot, P6 residency >= 95 % required). Decision rule: C0 ratio within +-0.05 of the C2 ratio on
+shared pipelines -> (a), Metal-oracle op-class diff; higher by >= 0.10 -> (b), atomic/chase probe at P6.
+
+Lever ranking by size at HD (ms per frame, upper bounds; none validated on hardware yet):
+1. wall - work 2.1-2.3: DWM job between GM jobs 0.85 (cross-process pairs C1/C2a in work), launch +
+   detect about 0.5 (KMD prebind miss -> on-time completion -> depth 3), cross-frame C0(N+1) beside
+   3D(R7,N) 0.35 (never fires; needs a refusal-reason receipt).
+2. C0 scene part 0.5-1.0 (cause open, N2).
+3. Render compute preludes 0.195 (UMD batch design) and R5 TA under C4 <= 0.21 (OV5, neutral so far).
+4. C4 / R5 3D / C2 shader work 0.17-0.19 each (DXIL heavier than Metal for C4 and the planet PS: not
+   equal work; no driver lever identified).
