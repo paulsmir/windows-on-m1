@@ -76233,3 +76233,21 @@ EXP2309 HARDWARE BEFORE 2026-11-10T00:15:48Z:
 - Evidence: `.local/experiments/EXP2309-gm-night-base/evidence/EXP2309` (gm2309<run>-umd.log, -out/-err/-done/-mode,
   kmd-receipts-{pre,mid,post}-<run>.txt, gpuperf-{mid,post}-<run>.txt, wer-final.txt).
 - Next: EXP2310 (N2 split tags) on this boot; budget analysis of these logs is the architect's.
+
+## EXP2310 — N2 SPLIT-TAGS per-kernel run (ACTUAL)
+
+- Stamp: 2026-11-10T01:06:48Z. Same boot and package as EXP2309 (no reinstall, no restart between them); probe2310.sh sha256 prefix 9c0e47b2aca1611a; output `.local/experiments/EXP2310-gm-split-tags/probe2310.out`, evidence `.local/experiments/EXP2310-gm-split-tags/evidence/EXP2310`.
+- Arms (GM HD 1280x720 windowed 100k -temporal 0 PERF, 10+60 s window, 60 s cool-down; fps / fps_frames / gm_frame_ms median / jobs_per_frame / frames):
+  - a (no tags): 44.274 / 48.843 / 21.280 / 8.0 / 2655
+  - b (tag set 1): 41.133 / 43.933 / 23.610 / 23.0 / 2466
+  - c (tag set 2): 41.095 / 43.613 / 23.676 / 22.0 / 2465
+  - a2 (no tags): 44.354 / 48.839 / 21.163 / 8.0 / 2660
+- Tag rows in the UMD logs — b: 53aff18d 3550, a4452d43 10636, 7aa43c6c 17718, 9e9aea5a 7093, 9f0d0b9d 3546, b74fd86e 3546, 97efffb3 3546, b1db88bf 3546; c: fc968f7a 17698, 9e9aea5a 7077, cfb56a6a 7077, 369f607b 3542, 52716231 3542, f582ac2c 3542, 1f20788f 3542, 9726b186 3542.
+- Wom1GpuPerf P6 residency mid→post: a 100.0 %, b 98.7 %, c 98.5 %, a2 99.1 % (pre→mid 89.5–90.1 %, the usual launch ramp); all arms satisfy the ≥ 95 % steady-state criterion.
+- Health: wer 0 and err_bytes 0 on every arm, STOPS 0 in the run window, WER_REPORTS 2 are the pre-existing October dumps (same count as before EXP2309). Display, SSH and storage alive throughout; no reset.
+- UMD logs (uncompressed, 189–222 MB each): `gm2310a-umd.log`, `gm2310a2-umd.log`, `gm2310b-umd.log`, `gm2310c-umd.log` in the evidence directory.
+- Control arms a/a2 agree with each other (48.843 / 48.839) and with EXP2309 phd1/phd2 (48.986 / 49.146, −0.3..−0.6 %), so the boot did not drift; the split arms cost ~10 % fps_frames, as expected for 22–23 jobs per frame.
+- Rollback (shared with EXP2309): `EXP2309-gm-night-base/evidence/rec2309h/recover.sh` RECOVER_RC 0, RECOVERY_DONE (Verdict PASS, package absent, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_STORAGE_APPLEANS_OK; boot 01:04:01Z → 01:06:05Z). This also closes the rollback item of EXP2309.
+- m1n1 BUGCHECK line at the ordered restart: `BUGCHECK ok base=0xfffff8009b800000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0` (`EXP2309-gm-night-base/full.log` line 106813; first GPU-boot ordered restart with AppleAns 0.4.5).
+- Verdict: confirmed as a measurement (all four arms valid, steady-state P6 criterion met). The per-kernel analysis (pieces.py / c2pieces.py, verdict a/b of the N2 question) belongs to the architect session and is not concluded here.
+- Next: EXP2311 (N3a, cross-process pair code dark, package equivalence).
