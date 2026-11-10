@@ -76454,3 +76454,21 @@ EXP2311 HARDWARE BEFORE 2026-11-10T01:36:25Z:
 - Hashes: sys d8ff9235904b, UmdArm64 58dd2b3bf1e9, UmdX64 f73e5b724590, Umd32 73b085cfe539; manifest 5cbed1378190, hardware-manifest 1c495f5c0bda; probe2311.sh da3e334db22b (PROBE_LINT_OK); visible recovery rec2311h 926c24cc7a0658f1; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1.
 - Recovery rec2311h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2311-xproc-n3a/run2311.sh.
+
+## ANSQ-T4 — rollback to the last qualified package (2026-11-10T01:37:30Z)
+
+- Rule applied: a failed stage rolls back to the previous qualified package. With the bench owner's consent
+  (no restart by this session), Services\AppleAns ImagePath was written at 01:36:06Z back to
+  appleans.inf_arm64_20a748c874b1e861\AppleAns.sys (0.4.5 ANSBUILD015-M; file SHA-256 4af699f4...5c6f and the
+  signature checked before the write). The 0.4.6 image stays loaded until the bench owner's next restart
+  (EXP2311 install restart); that boot is the rollback verification (running-file hash, BUGCHECK line), to be
+  reported by the bench owner.
+- Recorded current AppleAns from that boot on: 0.4.5 (ANSBUILD015-M, package zip f172cc77...0368, source
+  cc2b6e476): VPD B1h, disk classified as SSD, no UNMAP advertised. Recovery does not reinstall a storage
+  driver: every profile boots the ImagePath in the registry, so no recovery artifact pins an older build.
+  Driver-store copies kept on the guest: 0.4.4 (cdca66c5acb2980a), 0.4.5 (20a748c874b1e861), 0.4.6
+  (4134b51e9de8e05f). Registry values UnmapMode=1 / UnmapFenceStart / UnmapFenceEnd remain under
+  Parameters\Device; 0.4.5 does not read them.
+- Guest leftovers of the qualification (inside C:\Users\pavel\ANSQ and ANSS1): packages, scripts, two 16 MB
+  sentinel files, manifest-before.txt. No scratch file remains.
+- Evidence: .local/experiments/ANSTRIM1/evidence/ANSQ-T4/rollback-045.txt.
