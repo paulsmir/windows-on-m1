@@ -76251,3 +76251,66 @@ EXP2309 HARDWARE BEFORE 2026-11-10T00:15:48Z:
 - m1n1 BUGCHECK line at the ordered restart: `BUGCHECK ok base=0xfffff8009b800000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0` (`EXP2309-gm-night-base/full.log` line 106813; first GPU-boot ordered restart with AppleAns 0.4.5).
 - Verdict: confirmed as a measurement (all four arms valid, steady-state P6 criterion met). The per-kernel analysis (pieces.py / c2pieces.py, verdict a/b of the N2 question) belongs to the architect session and is not concluded here.
 - Next: EXP2311 (N3a, cross-process pair code dark, package equivalence).
+
+## ANSQ-T2 — AppleAns 0.4.6 TRIM observe mode (ACTUAL, 2026-11-10T01:13:00Z)
+
+- Window granted by the bench owner (one ordered restart approved). m1n1 BUGCHECK line for 0.4.5, read by the
+  bench owner on the first GPU boot with it (EXP2309 restart): "BUGCHECK ok base=0xfffff8009b800000 code=0x0
+  p1=0x0 p2=0x0 p3=0x0 p4=0x0" (completes ANSQ-S1's not-measurable item).
+- Phases: baseline 01:07:37Z on 0.4.5; ansq-stage.ps1 STAGE_OK (oem16.inf, store
+  appleans.inf_arm64_4134b51e9de8e05f); ordered restart 01:08:13Z; launcher exit 01:08:31Z; boot 01:08:42Z; SSH up
+  01:09:18Z (run_uefi PID 25460); t2-observe.ps1 01:10:35Z; receipt capture 01:11Z.
+- Expected vs actual:
+  - boots on 0.4.6: CONFIRMED (running hash EFB3C6F4...7012), MediaType SSD, No Seek Penalty.
+  - 0xA9 mode 1 with ONCS bit 2: CONFIRMED. Record UniqueId 0xa9010004: mode 1 (observe, no registry value: the
+    absent-value path of StorPortRegistryRead resolves to observe as designed), ONCS 0x0004 (Dataset
+    Management is the only optional NVM command the controller reports). No 0xA8.
+  - "Trim Supported": CONFIRMED (was "Trim Not Supported").
+  - ReTrim completes: CONFIRMED. "Allocations trimmed = 7242, Total space trimmed = 34.23 GB", Defrag id 258
+    "successfully completed re-trim on Windows (C:)".
+  - receipt: commands 178, accepted 178, empty 0, rejected 0, ranges 8161, blocks 9286134 (35.4 GiB), observed
+    178, queued 0, sent_ranges 0, completed 0, not_sent 0: CONFIRMED, nothing reached the controller. 15 of the
+    commands (544 ranges) arrived before the retrim, from ordinary file-system activity after boot.
+  - partition bounds: TRIM_BOUNDS_PASS. Hull 30917597..59706367, 16 covering extents, all inside C:
+    (30916352..59706368); nothing in the APFS containers, EFI, MSR, T: or the Apple recovery partition.
+  - LBA translation, direct check: the 64 MB file at LCN 0x1a022d1 (16384 clusters) was deleted; the ring holds
+    lba=58188241 count=16384 = 30916352 + 0x1a022d1. Volume cluster -> namespace LBA is exact.
+  - no error or warning records (AppleAns: 0xA9 and the two 0xA6 only), C: not dirty, 8 CPUs.
+- Tooling note: the first version of trim-bounds.py took the NUL "letter" of unlettered partitions as a drive
+  letter and would have allowed every partition; found by a self-test on the real GPT before the run and fixed
+  (only A-Z letters count; boundary cases one block outside C:/T: fail).
+- Verdict: CONFIRMED. The gate for live deallocate is met.
+- Next: ANSQ-T3.
+- Evidence: .local/experiments/ANSTRIM1/evidence/ANSQ-T2/{pre.txt,stage.txt,restart-run.log,post-boot.txt,t2-observe.txt,post-after-t2.txt}.
+
+## ANSQ-T3 — AppleAns 0.4.6 live deallocate, fenced to one scratch file (BEFORE, 2026-11-10T01:14:00Z)
+
+- Hypothesis: the J313 ANS controller accepts the Dataset Management deallocate built by AppleAns (as Linux
+  sends it) and completes it with status 0; data outside the deallocated scratch clusters is unchanged.
+- WHY THIS HYPOTHESIS: (1) ANSQ-T2: ONCS = 0x0004, the controller itself reports Dataset Management; (2)
+  ANSQ-T2: the driver's ranges are exact namespace LBAs (delete of a known file observed at partition base +
+  LCN) and confined to C:; (3) Asahi enables discard on ANS from ONCS alone with the same command and TCB shape
+  (apple.c / core.c, read 2026-11-09).
+- WINDOWS CONTRACT / ANS CONTRACT / TRANSLATION: ANS-TRIM-UNMAP.md (TRIM branch).
+- WHAT IS STILL UNKNOWN: command acceptance and latency on this controller; whether the registry values are
+  read as REG_DWORD by StorPortRegistryRead (0xA9 must show mode 2).
+- Single variable: registry policy `Services\AppleAns\Parameters\Device`: UnmapMode 2, UnmapFenceStart /
+  UnmapFenceEnd = the LBA hull of C:\Users\pavel\ANSQ\scratch.bin (2 GiB, created for this run inside C:). Same
+  package 0.4.6 (ANSBUILD016-N, sys efb3c6f4...), same profile. Everything Windows trims outside the scratch
+  hull is dropped by the driver (counted as fenced).
+- Commands: tools/t3-prep.ps1 (16 MB sentinel before and after the scratch file, SHA-256 manifest of
+  System32\drivers\*.sys + ntoskrnl/hal/kernel32/ntdll/winload + sentinels, registry), restart-normal.sh,
+  ansq-post.ps1, t3-delete.ps1 (delete scratch.bin, flush, wait 30 s), ansq-post.ps1, ansq-verify.ps1.
+- Expected: 0xA9 = 0xa9020004 (mode 2); receipt fence = scratch hull; after the delete sent_ranges >= 1 with
+  sent_blocks <= 524288 and every sent range inside the fence by construction, queued = completed_ok >= 1,
+  completed_error 0, not_sent 0; fenced_ranges counts all other trims; no 0xA4/0xA5 records, no Storport 129 /
+  disk 153; manifest unchanged incl. both sentinels (VERIFY_MANIFEST_OK); `chkdsk C: /scan` finds no problems;
+  C: not dirty. The post-reboot repeat of these checks is the entry boot of ANSQ-T4.
+- Failure criteria: 0xA4 with opcode 09h (controller rejected the command), 0xA5 reset, timeout, any manifest
+  mismatch, chkdsk problem, mode not 2 with the values present (registry path defect: stop, no deallocate ran).
+- Recovery: set UnmapMode 1 (or delete the three values) and restart = back to ANSQ-T2 behaviour; package
+  rollback ansq-rollback.ps1 to 0.4.5; bridge emergency profile as before. A deallocate itself cannot be undone;
+  that is why it is fenced to the scratch file.
+- macOS-side integrity cannot be verified from Windows (accepted by the architect); the bound is ANSQ-T2's
+  proof plus the fence.
+- Evidence: .local/experiments/ANSTRIM1/evidence/ANSQ-T3/.
