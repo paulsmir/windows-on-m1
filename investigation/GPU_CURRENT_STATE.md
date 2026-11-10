@@ -2750,3 +2750,23 @@ were spot-checked by the architect against the cited tables, the rest are as rep
   first start (recorded as a separate class C item, not chased tonight).
 - **Next causal target:** N1/EXP2309 on a fresh boot (FHD+HD, per-job rows, pstate mid-run) to confirm the budget
   on the current profile; r8 decides fixed-vs-proportional for row (1); r3 and r7 decide rows (1)/(2) designs.
+
+## UPDATE 2026-11-10T00:11:39Z -- H-C REJECTED: Apple's compute||render overlap is waiting, not work; top row = uniform GPU work deficit
+- Source: .local/night-20261110/r3-dag-bound/REPORT.md (offline; spot-checked: apple_split_enc_hd.txt, apple_wait_vs_work.txt,
+  abba_xframe_check.txt). Ledger correction appended to EXPERIMENTS.md at the same stamp.
+- Apple's R16/R20 start with the paired compute (TA only); their 3D stage waits for it. The Metal port has the same
+  fragment-stage edges as D3D12 (same ping-pong RGBA16F surfaces). Bound for matching Apple on those pairs: <= 0.22 ms HD
+  (= OV5, already built, ABBA neutral). The row "~2.0 ms D3D12 serialization, not recoverable" is WITHDRAWN.
+- That ~2 ms is GPU work: against Apple's per-encoder split every job of ours is 9-14 % slower at the same scene (+2.25 ms HD
+  EXP2268; +1.79 ms EXP2307 profile; compute delta fits ~9 % proportional with ~0 fixed part: C0 +0.51 of 5.84, C6 +0.03 of 0.68).
+  "Compute at Apple parity" came from the per-dispatch split (inflates Apple's frame 17.86 -> 21.76 ms) and is superseded.
+  Cause = OPEN (r8-work-deficit in progress). Already measured and not the cause by themselves: SLC ways (EXP2242/2243),
+  DRAMCFG (EXP2245), kernel code (metal oracle, lighting 1.13x only).
+- Dependency-driven scheduling ceiling at HD (simulator dag_sim.py): serial today 82.0 % of macOS; Apple's structure 84.1 %;
+  full legal DAG 85.1 %; plus DWM beside a GM compute 88.6 % (87.9 % with contention). Parity needs the work deficit closed.
+- Only real Apple concurrency we lack: 3D(R7,N) beside C0(N+1), 0.35 ms HD / ~0.6 ms FHD; never fires on our stack even with
+  OV2+OV3B on (0 of 10204 boundaries, EXP2294-2297); refusing rule unknown -> receipt-only run (pair conflict resource,
+  KMD arrival vs completion QPC, pair-refusal code), to be bundled with the R6 receipts (store masks, DiscardResource count).
+- Ranked open rows at HD now: (1) uniform work deficit 1.8-2.25 ms; (2) DWM job between GM jobs 0.85 (C1/C2a in work);
+  (3) per-job launch/detect/idle 0.5; (4) cross-frame C0||3D(R7) 0.35; (5) TA5 beside C4 <= 0.22 (OV5).
+- NEXT CAUSAL TARGET: cause of the uniform work deficit (r8); EXP2309 (N1) for the current-profile HD/FHD budget with pstate.
