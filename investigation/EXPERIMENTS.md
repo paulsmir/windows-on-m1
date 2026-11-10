@@ -76043,3 +76043,39 @@ EXP2308 HARDWARE BEFORE 2026-11-09T23:19:58Z:
   (SHA-256 4802befb...). No native boot: kill the exact launcher PID, AGX_RECOVERY_STORAGE=bridge AT_PROXY
   recovery, ImagePath back, delete Services\stornvme\StartOverride if set, chkdsk read-only before any repair.
 - Evidence: .local/experiments/ANSS1/evidence/ANSQ-S1/.
+
+## EXP2308 — scanout sequence resume on a re-armed start (ACTUAL) 2026-11-10T00:07:44Z
+
+- Boot: package 1d054a31f, m1n1 closedv5 e6ac18bb, Mu MUANSCPPC002, expanded RAM, native SSD. Problem
+  CM_PROB_NONE, SSH/display/storage alive, 8 CPUs. Tool suite PASS 119 FAIL 0.
+- Expected vs actual:
+  - arm a1 PERF_GATE_PASS: INCOMPLETE (tooling, not driver). The GravityMark template gm-d3d12d-2308.ps1 was
+    missing at probe start, so gm2308a1w and gm2308a1r2 never ran; agx_perf_gate.py stopped with
+    FileNotFoundError on gm2308a1r2-umd.log. The only valid GM run a1r3 = 44.311 fps (2657 frames, HD PERF
+    10+60 s; baseline 40.77). CS 1.6: warm 48.556, r2 51.727, r3 51.824 (baseline 49.943, warm runs above).
+    launch-exp.sh now derives the template when the probe references gm-repeat.sh.
+  - three TOGGLE lines "status OK": REJECTED at cycle 1. "TOGGLE cycle 1 armed 1 after consumed disabled
+    CM_PROB_DISABLED enabled CM_PROB_FAILED_POST_START status Error seconds 122".
+  - Receipts after the failed cycle: Wom1StartStage 12, Wom1StartStatus 0 (the second DxgkDdiStartDevice
+    completed; stage 10, where EXP2307B stopped with 0xC0000483, is passed), then stop receipts
+    (Wom1Context0Stage 3, MemoryStopOutstandingBefore 17 / After 0, ProviderBootCleanupSucceeded 1).
+  - DxgKrnl-Admin event 549 at 2026-11-09T23:50:06Z: adapter start failed, VendorId 0x4C505041, status
+    0xC0000017 (STATUS_NO_MEMORY, shown as "Not Enough Quota"), reason StartAdapter_AddAdapterFailed
+    (properties 1280331841 ; 3221225495 ; 3). Kernel-PnP 1011 "surprise removed as it was reported to be
+    failing"; ProblemCode 43, ProblemStatus 0. No GPU reset, no EL2 exception line in full.log.
+  - Toggle cycles 2/3 and arm a2 were not run (probe aborted on the failed cycle, as preregistered).
+  - No new Windows stop, minidump or application error in the experiment window (the 22:07 and 22:53 local
+    entries belong to EXP2305 and the earlier dump validation). Ordered restart of the rollback:
+    "BUGCHECK ok base=0xfffff80130000000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0".
+- Verdict: fix 041495ca7 CONFIRMED for the scanout sequence (stage 10). Hypothesis "a re-armed adapter
+  cycle returns to Status OK" REJECTED: the next boundary is inside dxgkrnl, AddAdapter 0xC0000017 after a
+  successful second StartDevice. Same-boot disable/enable cycles (irq-toggle-rearm.ps1, switch-toggle-rearm.ps1)
+  stay INVALID as an A/B method; switches are set before the first start of a fresh boot.
+- New contract item (class C, not investigated here): "AddAdapter 0xC0000017 after a second StartDevice in one
+  boot". Evidence: .local/experiments/EXP2308-scanout-seq/evidence/EXP2308/{toggle.txt,
+  kmd-receipts-toggle-fail.txt, kmd-receipts-after-toggle-diag.txt, dxgkrnl-admin-549.txt,
+  events-after-toggle.txt, events-after-toggle-b.txt}.
+- Recovery: rec2308h/recover.sh RC 0, RECOVERY_DONE, VISIBLE_INERT_PACKAGE_ABSENT_8CPU,
+  RECOVERY_STORAGE_APPLEANS_OK; guest reachable over SSH, APPL0002 inert, no AppleAgx package.
+- Next: EXP2309 (GM-NIGHT-BASE) on a fresh boot of the same source with Wom1JobDiagnostics=1 set before the
+  first start; no adapter cycles.
