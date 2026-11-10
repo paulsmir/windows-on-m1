@@ -3307,3 +3307,19 @@ Bound 0.19-0.23 ms/frame. Spec: .local/handoff/OV-ARCHITECT-HANDOFF.md section "
 Research lines started 2026-11-10T13:03Z (read-only, reports under .local/night-20261110/): R15 N4c reason 6 + switch side
 effect; R16 prelude-free renders (ledger rows 0.195 busy + 0.233 notify batching + <= 0.13 cross-process relaunch);
 R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without a lever today).
+
+## UPDATE 2026-11-10T13:25Z -- architect: R16/R18 verdicts, DWM row route changed, gate package gains PT1
+
+- R16 (prelude-free renders): the three render preludes are our expansion of counted ExecuteIndirect; design (a')
+  (kernels appended to the still-open application compute batch, UMD only) targets the same 0.233 ms row as the R14
+  kick gate. PARKED: built only if the R14 gate is rejected on hardware (gate confirmed -> (a') is worth ~0.06 ms).
+- R18 (DWM plane policy): DWM acceptance of our truthful MPO caps (RGB only, no stretch, software cursor) is a
+  HYPOTHESIS judged 0.3; the D3D11 UMD PresentMultiplaneOverlay1 and CheckDirectFlipSupport would be mandatory.
+  A reference observation is not available: the builder's RX 7900 XT reports "MPO MaxPlanes: 1" (console-session
+  dxdiag, 2026-11-10T13:25Z). Windows-side MPO work is PARKED. The m1n1 DCP two-slot diagnostic (H1) stays queued.
+- DWM row (0.91 ms non-busy): macOS shows no serial compositor gap in GravityMark's timeline, so the route to parity
+  is concurrency of DWM's render with GravityMark's jobs (cross-process refusals 55/58), researched as R19.
+- Gate package: two default-absent switches, one per boot: Wom1PreludeNotifyGate (refusal constant 7, event-based
+  input, 1000 us fail-open) and Wom1PerfTgtUtilization=60 (PT1: HwDataA floats 0x788/0x7ec; r4). Not run yet.
+- Storage base: AppleAns 0.4.8 (bus type NVMe) installed, ANSQ-T7a/T7b confirmed (ledger b9aa05837).
+- Specs and decisions: .local/handoff/OV-ARCHITECT-HANDOFF.md (sections of this date).
