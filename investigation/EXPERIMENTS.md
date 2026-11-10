@@ -76472,3 +76472,7 @@ EXP2311 HARDWARE BEFORE 2026-11-10T01:36:25Z:
 - Guest leftovers of the qualification (inside C:\Users\pavel\ANSQ and ANSS1): packages, scripts, two 16 MB
   sentinel files, manifest-before.txt. No scratch file remains.
 - Evidence: .local/experiments/ANSTRIM1/evidence/ANSQ-T4/rollback-045.txt.
+
+## EXP2311 — correction to BEFORE (2026-11-10T01:36:36Z)
+
+- The storage-baseline item of the EXP2311 BEFORE entry (AppleAns 0.4.6, UnmapMode=1) is superseded before the experiment boot: at 2026-11-10T01:36:06Z, while staging ran and before the install restart, the AppleAns session pointed Services\AppleAns ImagePath back to appleans.inf_arm64_20a748c874b1e861 (0.4.5, AppleAns.sys SHA-256 4AF699F474CB4A4DE8A45C699B3AE21E51FA7FB206E5FC15248A0687E3F95C6F) as its rollback after the ANSQ-T4 stall. The EXP2311 boot is therefore expected on AppleAns 0.4.5 with no UNMAP advertised, i.e. the EXP2309 storage driver; the remaining storage difference is the 37 GiB deallocate already performed on C:. The running-file hash is verified in ACTUAL.
