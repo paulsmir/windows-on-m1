@@ -93,6 +93,8 @@ static LONG64 InterlockedCompareExchange64(volatile LONG64 *p, LONG64 x, LONG64 
 static ULONGLONG now; static int waits, delays, finish_after, restart_after, restart_fails;
 static ADMISSION_PLATFORM_RUNTIME *rt; static ADMISSION_CONTEXT *ctx;
 static ULONGLONG KeQueryInterruptTime(void){ return now; }
+/* Stands in for the driver's volatile single load (outside the sliced function). */
+static ULONG AdmissionBackendPhaseOnce(ADMISSION_PLATFORM_RUNTIME *r){ return (ULONG)(int)r->Backend.Phase; }
 static LARGE_INTEGER KeQueryPerformanceCounter(void*){ LARGE_INTEGER q; q.QuadPart=(long long)now+1; return q; }
 static KIRQL KeGetCurrentIrql(void){ return PASSIVE_LEVEL; }
 static void KeAcquireSpinLock(int*, KIRQL*){} static void KeReleaseSpinLock(int*, KIRQL){}

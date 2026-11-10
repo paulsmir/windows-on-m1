@@ -10611,6 +10611,14 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeQueueable(
  * bounded backpressure instead: wait (PASSIVE_LEVEL, no lock held) until the
  * runtime is ready and the render slot is empty.  Non-transient refusals
  * (stopping, resetting, failed, missing provider) return immediately. */
+/* EXP2315: exactly one load of the backend phase for a submitter that does not
+ * hold the worker's ownership. The volatile access forbids the compiler from
+ * loading the field again for a second comparison. */
+static ULONG AdmissionBackendPhaseOnce(const ADMISSION_PLATFORM_RUNTIME *runtime) {
+  return (ULONG)*(const volatile APPLE_AGX_BACKEND_RUNTIME_PHASE *)&runtime
+                     ->Backend.Phase;
+}
+
 _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWorkEx(
     ADMISSION_CONTEXT *Context, ULONG TimeoutMs, ULONG *FailedPredicate,
     ADMISSION_AWAIT_ADMISSIBLE Admissible, PVOID Argument, BOOLEAN *Admitted) {
@@ -10655,7 +10663,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWorkEx(
        * may have completed the job since (Submitted -> Ready). Reading the
        * phase again per comparison refused a healthy runtime, and
        * STATUS_INVALID_PARAMETER removed the device. */
-      ULONG phase = reason == 4u ? (ULONG)runtime->Backend.Phase : 0u;
+      ULONG phase = reason == 4u ? AdmissionBackendPhaseOnce(runtime) : 0u;
       if (reason == 4u && phase == (ULONG)AppleAgxBackendRuntimeReady &&
           KeQueryInterruptTime() < deadline)
         continue; /* completed meanwhile: retest, nothing to wait for */
