@@ -3654,3 +3654,55 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
 - T5b (offline, uncommitted in .worktrees/t5b-impl, gate running): step A alone regresses shader 144a46deb6ed2427
   offline (+137 instructions, spills 106 -> 118). That hash has 0 rows in gm2319p0-umd.log, so the GravityMark arms are
   not affected; a default-on decision for step A needs a spill guard first. No hardware number yet.
+
+## UPDATE 2026-11-10T18:25:57Z -- architect: T5b integrated (offline); k48 excess narrowed to an unmeasured grid; 0x116 = our ResetFromTimeout returns failure
+
+- T5b is on the branch, default off, NOT run on hardware: step A c115ced95 (`APPLE_AGX_D3D12_CRAWL_BINDFUL=1`),
+  step B2 5bf3f567d (`APPLE_AGX_D3D12_SRV_STATIC_FIRST=1`), ledger rows in 287a403f6. Gates: baseline suite with
+  only the known NEW failure, builder syncheck SYNCHECK_OK (after an `#ifdef APPLE_AGX_D3D12_DXIL` guard for C4505).
+  Offline numbers (cost fixture, not a production value): lighting CS 806ee bindless samples 29 -> 4 under A+B2
+  (-25 instructions), planet PS 4284 75 -> 6 (-69). Receipt `measure-d3d12-bindful` {hash hi, hash lo,
+  stage | reordered << 8, samples moved, switches}; expected on GravityMark: 806ee moved 1 (A) / 25 (A+B2),
+  4284 moved 50 / 50. Not verified: the projected agx_state.c was never compiled (first compile = package build).
+  Hardware arms and accept / reject rule: .local/handoff/T5B-BINDFUL.md "NEEDED RUN" (t0 tA tAB tAB tA t0, same boot).
+  Step A default-on needs a spill guard first (144a46deb6ed2427: spills 106 -> 118).
+- k48 (97efffb3) excess, offline report .local/night-20261110/k48-throughput/REPORT.md (sub-agent; scripts
+  apple_d48.py, bounds.py). Checked by the architect against the log: all 3528 k48 dispatch receipts of
+  gm2324p0-umd.log carry x = y = z = 0 (the kernel is launched through ExecuteIndirect, RecordDispatch(list,0,0,0,
+  &indirect) at agx_d3d12_ddi.cpp:6299), so OUR grid was never measured.
+  - CORRECTION to "equal work" for this kernel (earlier sections compare ms per job as if the grids were equal):
+    that is an assumption. Apple's twin (d48 / m208) launches 256x1x1 groups with a mean of 1839.6 groups per frame
+    (p10 696, p50 1872, p90 3128), 0.6515 ms per job = 44.3 ns per SIMD32 group. Ours would be 53.95 ns per group
+    IF the grid is equal.
+  - Ruled out for [210,1110) (0.289 ms, the largest interval): a different read set (per-path loads 12/12, 11/11,
+    9/9 against m208), duplicate reads, ALU count (1.28x the single-issue ALU bound). Left: more groups on our
+    side, per-group stall time, the unsplit loop. Closed lines stay closed (chain depth, slot policy, hierarchy).
+  - Cut safety (hang reading): `stop` ends only the active threads (by elimination, medium-low confidence).
+    k48: last safe cut @3446, nothing in (3446,4128) is safe. k49: @176 safe; @364, @1086, @4120 unsafe;
+    @2128, @2792, @3254 uncertain. EXP2324b may use safe cuts only and only if it still changes a decision.
+  - NEXT (smallest discriminator, diagnostic not implemented yet): read back the ExecuteIndirect dispatch
+    arguments of 97efffb3 per frame (`measure-d3d12-indirect-args`), one p0 arm, GravityMark HD windowed 100k
+    -temporal 0 PERF. Mean x within 5 % of 1840 -> the work is equal and the excess is per-group cost; mean
+    x >= 2100 -> the excess is work and the owner is the producing kernel / its culling input.
+- 0x116 on a hung job, offline report .local/night-20261110/tdr-0x116/REPORT.md (sub-agent; cdb outputs beside it).
+  EXP2323 t1 and EXP2324 k4128 are the EXP2286 condition: dxgkrnl TdrResetFromTimeoutWorkItem -> DXGADAPTER::Reset
+  -> PrepareToReset -> TdrBugcheckOnTimeout, p4 = 3, p2 inside our status wrapper of DxgkDdiResetFromTimeout. Our
+  DDI returns 0xC0000483 from AdmissionResetEngineInternal (scheduler_windows.c: quiesce of the active job fails
+  after 1000 ms at :731, or AdmissionGpuvaG3PrivateReset has no stop / TLB proof at :749, or the later branch); the
+  minidumps cannot tell which. RestartFromTimeout never ran. The crashing tree already contained stage 2b (e6fb8736e).
+  - Missing, in order: (1) MSVC build + inert checkpoint of the merged 2b tree; (2) H1, three idle warm restarts;
+    (3) stage 3 wiring: a restart entry that accepts in-flight work (freeze dispatch, stop firmware, prove RUN = 0,
+    end + release every in-flight job, complete the fences of aborted work on both nodes, release private scenes
+    under the stop proof, return success) and RestartFromTimeout (ISR reopen, warm start, clear the fault latch);
+    (4) stage 4 cold path (SGX power / reset cycle) -- HYPOTHESIS that a firmware stop does not stop shader-core
+    threads, so a looping shader needs it; (5) SupportPerEngineTDR stays TRUE, nothing new advertised.
+  - New unknown U10: whether the firmware has a host-requested kill of a running context (Asahi has none, only a
+    scheduler timeout). One bounded behaviour-only reading of the macOS driver is started.
+  - Step 0 (no GPU risk, bench idle only, if the file still exists): decode the Wom1GpuReset v5 record from the
+    guest C:\Windows\MEMORY.DMP of EXP2324 (which branch failed, whether ResetEngine ran first, whether the
+    firmware raised a timeout event); delete the dump afterwards (disk gate).
+  - Hardware order after that: inert -> H1 -> stage 3 + withheld-kick drill H2 -> stage 4 -> H3 (the @4128 arm).
+    "No TDR DDI wiring before H1" still holds.
+- PF1 expand fold: implementer still running, nothing integrated.
+- Bench: EXP2325 / EXP2326 (K1) in progress at the bench owner; no ACTUAL on origin yet.
+- Best result with a claim unchanged: EXP2318 FULL 7923 = 79.7 % of macOS 9946. Nothing new measured on hardware.
