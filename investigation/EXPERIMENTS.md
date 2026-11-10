@@ -77399,3 +77399,19 @@ EXP2328 ACTUAL 2026-11-10T21:09:22Z:
 - Rollback rec2328h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE.
 - Verdict: PF1 inconclusive for the lever: switch acted, 0 seals, 7.52 statistics refusals per present (PF1b in implementation). g0: the k48 work equals Apple's (x 1748.5 vs 1839.6); the C0 excess is per-group cost; the g0 diagnostic is not needed in later packages.
 - Next: EXP2329 (K1 default-on boot 1).
+
+EXP2329 HARDWARE BEFORE 2026-11-10T21:10:56Z:
+- Kind: K1 default-on check (class C) + T5b FULL ABBA env arms (architect section 2026-11-10T20:14:34Z). ATOMIC CONTRACT: none -- the FULL arms are env arms after the K1 measurements, same-boot ABBA.
+- Package: gpu/memory-latency 6b6f7166848fac83874ad143894750fb19ebe0f6 = 74469a02c (K1 default on: absent = on, 0 = off) + CHANGES row, on top of b622fad33. It also carries, inert / default off: N4c-v3 + N4c-v4 (3e07a3bdc, behind Wom1Ov2CrossLead), T5b (env), PF1 (env), K48G (env), N6b diag cut (env), the TDR-H0 code (119ba99ff, Wom1TdrHaltObserve unset) and the Wom1GpuReset v6 record (1144 bytes, v5 prefix + zero tail with H0 off). EXP2329 and EXP2330 are two builds of this one commit (same manifest 86f8696c01c45a94 / archive 7296ddc66bfa55ba).
+- Registry: Wom1JobDiagnostics=1, Wom1CrossProcessPairs=1, Wom1SubmitRequeue=1; Wom1CrossProcessRenderPairs ABSENT (default on); unset: Wom1Ov2CrossLead, Wom1Ov2NoHazardLead, Wom1Ov5TaWaiver, Wom1CrossProcessPrivateLead, Wom1PreludeNotifyGate, Wom1PerfTgtUtilization, Wom1TaStartTimestamps, Wom1TdrHaltObserve; env APPLE_AGX_D3D12_OV2_CROSS_EXECUTION, APPLE_AGX_D3D12_EXPAND_FOLD, APPLE_AGX_D3D12_DIAG_INDIRECT_ARGS, APPLE_AGX_DIAG_CUT unset; T5b env only in the ft5 FULL arms. Storage AppleAns 0.4.8.
+- Hypothesis (K1): with the value absent K1 is active exactly as with =1 in EXP2326.
+- WHY THIS HYPOTHESIS: (1) tests/test_k1_default_on.py runs the production reader: absent -> on, 0 -> off; (2) EXP2326 with =1: 16689 kicked, 0 failed, refusal 55 -> 0, gaps 0.83-0.86 ms, FPS neutral.
+- WINDOWS CONTRACT: unchanged (as EXP2326). AGX/ASAHI CONTRACT: unchanged (as EXP2326). TRANSLATION: default of one REG_DWORD. WHAT IS STILL UNKNOWN: nothing for K1 beyond boot-to-boot variation; T5b: whether its FULL difference (+1.59 % in the single EXP2327 pair) is real.
+- Runs (probe2329.sh): b0 20 s FAST gate arm (k1check b0 before any other arm), suite, HD PERF w/r2/r3 (w = r1), arm x (receipts, two screenshots at 45 s), FULL f0a, ft5a, ft5b, f0b (ft5 = APPLE_AGX_D3D12_CRAWL_BINDFUL=1 + APPLE_AGX_D3D12_SRV_STATIC_FIRST=1; every FULL with -times, the times files fetched), CS warm/r2/r3, perf gate.
+- K1 check (pre-registered): receipts as EXP2326 (RenderKicked > 0, RenderFailed 0, refusal 55 = 0), fps_frames mean(r2,r3) within +-0.7 % of 50.33, suite 119/0, BUGCHECK 0. Fail of any = the K1 default flip is reverted (new row), not patched.
+- T5b FULL rule (pre-registered): mean(ft5) - mean(f0) >= +1.0 % AND both ft5 above both f0 -> T5b gets a default-flip package with the 144a46 spill guard; otherwise T5b closed for FULL too.
+- Failure criteria: K1 rows above; b0 gate STOP (RenderFailed > 0, fault, WER) -> recovery; DWM WER, hang, bugcheck, TDR.
+- Recovery: rec2329h/recover.sh with the bounded notifying waiter and the guest watchdog; package and devnode removed. BUGCHECK line read at the restart.
+- Hashes: sys f018a916042d, UmdArm64 9926658dc7a6, UmdX64 0a995a0b42ef, Umd32 cf3514fc6938; manifest 0a41e14c329d, hardware-manifest 9ce998bcdc5b; probe2329.sh dce01adfb8df (PROBE_LINT_OK); visible recovery rec2329h bb5998f29cae08fe; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
+- Recovery rec2329h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2329-k1on-a/run2329.sh.
