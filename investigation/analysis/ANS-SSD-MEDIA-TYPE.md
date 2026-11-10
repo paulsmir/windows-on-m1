@@ -51,7 +51,7 @@ ILLEGAL REQUEST/20h; no NVMe Dataset Management translation exists.
 | --- | --- | --- | --- |
 | S1 | VPD 00h lists {00h, B1h}; VPD B1h = 64 bytes, PAGE LENGTH 003Ch, MEDIUM ROTATION RATE 0001h, all other fields "not reported" | `ans_scsi.c` | implemented, host RED/GREEN |
 | S2 | INF service `Parameters\BusType` = 0x11 (`BusTypeNvme`) | `AppleAns.inf` | not implemented; separate variable |
-| S3 | UNMAP -> NVMe Dataset Management (deallocate), then VPD B0h + B2h (LBPU) | `ans_scsi.c` + wrappers | not designed |
+| S3 | UNMAP -> NVMe Dataset Management (deallocate), then VPD B0h + B2h (LBPU) | `ans_scsi.c` + wrappers | designed and implemented offline 2026-11-09, gated on Identify ONCS: `ANS-TRIM-UNMAP.md` |
 
 S1 advertises a fact about the medium, not a command capability. B0h/B2h stay
 absent until S3 exists: a capability is advertised only when implemented.

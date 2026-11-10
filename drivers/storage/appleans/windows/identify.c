@@ -33,6 +33,8 @@ int ans_identify_namespace(const ans_u8 c[4096], const ans_u8 n[4096],
         if (ch >= 0x21 && ch <= 0x7e) out->revision[3-found++] = (char)ch;
     }
     if (found != 4) { *out = (struct ans_namespace){0}; return 0; }
+    /* ONCS bit 2: Dataset Management. The transport decides whether it may be used. */
+    out->deallocate = (ans_u8)((le(c + 520, 2) >> 2) & 1);
     /* Identify VWC is presence, not the current feature setting. */
     out->cache_known = 0;
     return 1;

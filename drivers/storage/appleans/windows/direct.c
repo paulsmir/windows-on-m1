@@ -178,6 +178,15 @@ BOOLEAN AppleAnsDirectInitialize(PAPPLE_ANS_ADAPTER a)
     if (!direct_admin(a, 6, 1, 0, 0, a->PageDma[ANS_QUEUE_DEPTH + 1], NULL) ||
         !ans_identify_namespace(a->Pages[ANS_QUEUE_DEPTH], a->Pages[ANS_QUEUE_DEPTH + 1], &a->Namespace))
         goto failure;
+    /* UNMAP is advertised from ONCS alone. A controller without Dataset Management is
+     * recorded once per start so an absent TRIM can be told from an unread VPD page. */
+    if (!a->Namespace.deallocate)
+        AppleAnsDiag(a, NULL, 0xA8, (ULONG)a->Pages[ANS_QUEUE_DEPTH][520] |
+                                    ((ULONG)a->Pages[ANS_QUEUE_DEPTH][521] << 8));
+    /* Policy: OFF withdraws the capability; the effective mode is recorded once per start. */
+    a->Trim.oncs = (ULONG)a->Pages[ANS_QUEUE_DEPTH][520] | ((ULONG)a->Pages[ANS_QUEUE_DEPTH][521] << 8);
+    if (a->Trim.config.mode == ANS_TRIM_OFF) a->Namespace.deallocate = 0;
+    AppleAnsDiag(a, NULL, 0xA9, (a->Trim.config.mode << 16) | a->Trim.oncs);
     a->Stage = AppleAnsStageCache;
     if (a->Pages[ANS_QUEUE_DEPTH][525] & 1) {
         if (!direct_admin(a, 0x0a, 0, 6, 0, 0, &dw0) || (dw0 & ~1u)) goto failure;
@@ -280,6 +289,7 @@ static VOID complete_tag(PAPPLE_ANS_ADAPTER a, const struct ansd_cqe *e)
     ans_stats_add(&a->Stats, ANS_TELEM_CQES, 1);
     ans_stats_complete(&a->Stats, 1, slot->Request.sqe[0], slot->Length, (status >> 1) == 0);
     if (status >> 1) AppleAnsDiag(a, slot->Srb, 0xA4, ((ULONG)(status >> 1) << 8) | slot->Request.sqe[0]);
+    if (slot->Request.sqe[0] == ANS_NVME_DSM) ans_trim_done(&a->Trim, (ULONG)(status >> 1));
     if (slot->Shutdown) {
         a->ShutdownTag = tag; a->ShutdownFlushOk = (status >> 1) == 0;
         (void)StorPortIssueDpc(a, &a->ShutdownDpc, NULL, NULL);
@@ -330,6 +340,16 @@ VOID AppleAnsDirectTimer(PVOID DeviceExtension)
     BOOLEAN rearm = a->Direct && a->Ansd.enabled && !a->Ansd.faulted;
     if (rearm) {
         if (ansd_mbox_service(&a->Ansd, 32) == ANSD_CRASHED) { direct_fault(a); rearm = FALSE; }
+    }
+    /* Missed-interrupt recovery: a CQE that has waited a whole timer period was not delivered
+     * by the level interrupt. Reap it here (same drain as the ISR) instead of leaving the
+     * request to a Storport timeout and a controller reset. Counted and logged (0xAA). */
+    if (rearm && !a->DumpMode && ansd_overdue(&a->Ansd, 1)) {
+        ans_u64 before = a->Ansd.stats.cqes;
+        (void)AppleAnsDirectInterrupt(a);
+        a->Ansd.stats.poll_recovered += a->Ansd.stats.cqes - before;
+        AppleAnsDiag(a, NULL, 0xAA, (ULONG)(a->Ansd.stats.poll_recovered & 0xffffff));
+        rearm = a->Direct && a->Ansd.enabled && !a->Ansd.faulted;
     }
     StorPortReleaseSpinLock(a, &lock);
     if (rearm) StorPortNotification(RequestTimerCall, a, AppleAnsDirectTimer, DIRECT_TIMER_US);
@@ -389,7 +409,8 @@ VOID AppleAnsDirectPeer(PAPPLE_ANS_ADAPTER a, struct ans_telemetry *peer)
     peer->generation = 0x544345524944ULL; /* "DIRECT" */
     peer->valid_fields = ANS_TELEM_PHYSICAL_IRQS | ANS_TELEM_GUEST_IRQ_INJECTIONS |
         ANS_TELEM_BROKER_REJECTIONS | ANS_TELEM_TCB_INVAL_FAILURES | ANS_TELEM_CQES |
-        ANS_TELEM_INVALID_CQE;
+        ANS_TELEM_INVALID_CQE | ANS_TELEM_POLL_RECOVERED_COMPLETIONS;
+    peer->poll_recovered_completions = a->Ansd.stats.poll_recovered;
     peer->physical_irqs = a->Ansd.stats.mbox_messages;
     peer->guest_irq_injections = a->Ansd.stats.mbox_echoes;
     peer->broker_rejections = a->Ansd.stats.mbox_unknown;

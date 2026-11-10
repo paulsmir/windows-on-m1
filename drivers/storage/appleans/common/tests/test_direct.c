@@ -290,6 +290,54 @@ static void test_io_path(void)
     freeq(&qs[0]); freeq(&qs[1]);
 }
 
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * A completion whose interrupt never arrives must be noticed by the periodic check within two
+ * periods, and a completion that is merely in flight to the interrupt routine must not be
+ * taken for a missed one (ANSQ-T4: a boot stalled with every CPU idle and no recovery). */
+static void test_overdue(void)
+{
+    struct sim s; struct ansd_ctrl c; struct ansd_queue qs[2]; ans_u8 sqe[64]; struct ansd_cqe e;
+    setup(&s, &c, qs);
+    assert(!ansd_overdue(&c, 1) && !ansd_overdue(NULL, 1) && !ansd_overdue(&c, 2)); /* not enabled */
+    assert(ansd_enable(&c) == ANSD_OK);
+    sqe_rw(sqe, 2, 0, 0, 0x851000000ULL, 0);
+    assert(!ansd_overdue(&c, 1) && !ansd_overdue(&c, 1)); /* idle queue is never overdue */
+    assert(ansd_submit(&c, 1, 5, sqe, ANSD_DMA_FROM_DEVICE) == ANSD_OK);
+    assert(!ansd_overdue(&c, 1) && !ansd_overdue(&c, 1)); /* outstanding, nothing posted */
+    post(&s, 1, 5, 0);
+    assert(!ansd_overdue(&c, 1));      /* first sighting: the interrupt may still be on its way */
+    assert(ansd_overdue(&c, 1) == 1);  /* still there one period later: missed */
+    assert(ansd_poll(&c, 1, &e) == ANSD_OK && ansd_cqe_tag(&e) == 5);
+    assert(!ansd_overdue(&c, 1));
+    /* Seen once, then taken by the interrupt routine: the next completion starts afresh. */
+    assert(ansd_submit(&c, 1, 6, sqe, ANSD_DMA_FROM_DEVICE) == ANSD_OK); post(&s, 1, 6, 0);
+    assert(!ansd_overdue(&c, 1));
+    assert(ansd_poll(&c, 1, &e) == ANSD_OK);
+    assert(ansd_submit(&c, 1, 7, sqe, ANSD_DMA_FROM_DEVICE) == ANSD_OK); post(&s, 1, 7, 0);
+    assert(!ansd_overdue(&c, 1) && ansd_overdue(&c, 1) == 1);
+    assert(!ansd_overdue(&c, 1));      /* reported once, re-armed from scratch */
+    assert(ansd_overdue(&c, 1) == 1);  /* and again while it stays unreaped */
+    assert(ansd_poll(&c, 1, &e) == ANSD_OK);
+    /* Ring wrap: pending at one tick, 128 completions consumed by the interrupt routine, pending
+     * again at the same head and phase at the next tick. Interrupts are fine: not overdue. */
+    ans_u32 head = c.q[1].head, phase = c.q[1].phase;
+    assert(ansd_submit(&c, 1, 8, sqe, ANSD_DMA_FROM_DEVICE) == ANSD_OK); post(&s, 1, 8, 0);
+    assert(!ansd_overdue(&c, 1));
+    assert(ansd_poll(&c, 1, &e) == ANSD_OK);
+    s.autocomplete = 1;
+    for (unsigned i = 0; i < 127; i++) {
+        assert(ansd_submit(&c, 1, i % 64, sqe, ANSD_DMA_FROM_DEVICE) == ANSD_OK);
+        assert(ansd_poll(&c, 1, &e) == ANSD_OK);
+    }
+    s.autocomplete = 0;
+    assert(c.q[1].head == head && c.q[1].phase == phase);
+    assert(ansd_submit(&c, 1, 8, sqe, ANSD_DMA_FROM_DEVICE) == ANSD_OK); post(&s, 1, 8, 0);
+    assert(!ansd_overdue(&c, 1));      /* same ring position, different entry */
+    assert(ansd_overdue(&c, 1) == 1);  /* that entry left alone for a period: overdue */
+    assert(ansd_poll(&c, 1, &e) == ANSD_OK);
+    c.faulted = 1; assert(!ansd_overdue(&c, 1));
+    freeq(&qs[0]); freeq(&qs[1]);
+}
 static void test_mailbox(void)
 {
     struct sim s; struct ansd_ctrl c; struct ansd_queue qs[2];
@@ -444,6 +492,7 @@ int main(void)
     test_enable_order();
     test_handoff_contract();
     test_io_path();
+    test_overdue();
     test_mailbox();
     test_shutdown();
     test_takeover();

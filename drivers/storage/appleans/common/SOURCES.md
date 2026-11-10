@@ -31,6 +31,15 @@ storage path. All fixtures are synthetic. No machine access is required.
   decoding. A valid SCSI synchronization range maps to a full-namespace Flush.
   It always returns SUBMIT and must wait for actual successful completion.
 
+- [NVMe-SCSI Translation Reference 1.5](https://nvmexpress.org/wp-content/uploads/NVM_Express_-_SCSI_Translation_Reference-1_5_20150624_Gold.pdf),
+  5.6 UNMAP, 6.1.6 Block Limits, 6.1.8 Logical Block Provisioning; Microsoft
+  classpnp sample (`ClasspDeviceGetBlockLimitsVPDPage`,
+  `ClasspDeviceGetLBProvisioningVPDPage`, `DeviceProcessDsmTrimRequest`); Linux
+  `drivers/nvme/host/core.c` discard path (behaviour only): UNMAP becomes one
+  Dataset Management deallocate command, at most 256 ranges in one zeroed 4 KiB
+  page, advertised only when Identify ONCS reports the command. Design and
+  limits: `investigation/analysis/ANS-TRIM-UNMAP.md`.
+
 No external implementation code was copied. Linux is not a source for the
 Windows-facing CDB ABI. These helpers own only deterministic parsing, response
 metadata and logical address representation. EL2 must independently authorize

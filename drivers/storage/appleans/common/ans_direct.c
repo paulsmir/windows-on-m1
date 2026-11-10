@@ -247,6 +247,21 @@ int ansd_peek(const struct ansd_ctrl *c, unsigned queue)
     return ((q->cq[q->head].tail >> 16) & 1u) == q->phase;
 }
 
+int ansd_overdue(struct ansd_ctrl *c, unsigned queue)
+{
+    if (!c || queue > 1 || !c->enabled || c->faulted) return 0;
+    const struct ansd_queue *q = &c->q[queue];
+    ans_u32 mark = 0x80000000u | (q->head << 1) | q->phase;
+    if (!ansd_peek(c, queue)) { c->overdue_mark[queue] = 0; return 0; }
+    if (c->overdue_mark[queue] == mark && c->overdue_cqes[queue] == c->stats.cqes) {
+        c->overdue_mark[queue] = 0;
+        return 1;
+    }
+    c->overdue_mark[queue] = mark;
+    c->overdue_cqes[queue] = c->stats.cqes;
+    return 0;
+}
+
 int ansd_poll(struct ansd_ctrl *c, unsigned queue, struct ansd_cqe *out)
 {
     if (!c || queue > 1 || !out) return ANSD_INVALID;
