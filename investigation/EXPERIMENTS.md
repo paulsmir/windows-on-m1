@@ -76588,3 +76588,17 @@ EXP2312 HARDWARE BEFORE 2026-11-10T01:57:35Z:
 - Hashes: sys 196d5505f3de, UmdArm64 29f467c8b6a1, UmdX64 74d54bb8490f, Umd32 02bebe5f1523; manifest 52749ffe1166, hardware-manifest 1a21b11a28d5; probe2312.sh a704dc557a4c (PROBE_LINT_OK); visible recovery rec2312h 5d34023a72b9b528; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1.
 - Recovery rec2312h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2312-xproc-n3b-on/run2312.sh.
+
+EXP2312 — ACTUAL 2026-11-10T02:20:34Z:
+- Verdict: CONFIRMED (hardware unknown of C1 resolved: the firmware accepts a compute work item of one VM slot queued behind a running 3D work item of another slot; class I, receipts + clean run; no default flip from this boot, architect records the CHANGES verdict).
+- Boot: Problem CM_PROB_NONE; switches Wom1CrossProcessPairs 0x1, Wom1CrossProcessPrivateLead absent, Wom1JobDiagnostics 0x1. Display, SSH, storage (AppleAns 0.4.5), 8 CPUs alive throughout; pipeline RC 0.
+- Suite: PASS=119 FAIL=0. GPU_RESET none, PREEMPT_REFUSAL none at every checkpoint; Wom1SoftFaultState identical to EXP2311 final; Wom1JobWindow kick_failures 0, reset_aborts 0, kick_fallbacks 0.
+- Wom1CrossProcessPairsReceipt v2: post-gm considered 10662, allowed 5652, kicked 5652, fell_back 0, failed 0, refusals {55: 4987, 6: 23}, last kicked fence 124615 behind 124614, running slot 2, next slot 5; mid-x 12643/6754/6754/0/0 {55: 5859, 6: 30} (slots 2 -> 4); post-x 14244/7626/7626/0/0 {55: 6588, 6: 30}; final (after CS 1.6) considered 19678, kicked 7626, refusals {55: 12022, 6: 30}; last_undone zero; lead considered 0 (C2a off). Every kick is a pair of two different nonzero slots (the admitted class); the 55 refusals are the cross-process classes C1 does not admit.
+- Window opened by C1 (Wom1JobWindow barrier-class kick histogram at post-gm, off = EXP2311 / on = EXP2312): compute_on_3d 35468 / 41175 (+5707, receipt kicked 5652), compute_on_compute 23556 / 24124, ta_on_3d 2896 / 2943, ta_on_compute 8562 / 8370; kicks 70482 / 76612; batch sizes {1: 91199, 2: 9966} / {1: 91342, 2: 9832}. About 0.7 additional prebound kicks per GM frame (5652 over about 7980 frames).
+- GM HD windowed 100k -temporal 0 PERF (10+60 s), fps_frames (fps): w 49.051 (43.932), r2 49.417 (44.466), r3 49.333 (44.632), x 49.118 (44.333); jobs_per_frame 8.0; err_bytes 0, wer 0. Against EXP2311 w/r2/r3 48.521/48.901/48.708: +1.09/+1.06/+1.28 %, mean +1.14 %. Expected +0.2..0.5 %; the difference is between two separate boots and is not a proven gain (no closing off boot by the architect's rule).
+- Wom1GpuPerf mid-x: 88.9 % of the time at state 6 (1278 MHz), 10.4 % at state 1; below target 0.8 %.
+- CS 1.6: warm 47.883, r2 51.627, r3 50.673. PERF_GATE_PASS (cs16 worst 50.673 vs 49.943, +1.46 %; gravitymark_hd_perf worst 44.466 vs 40.770).
+- WER_REPORTS 2 (the old 2026-10-06 dumps, as EXP2311), STOPS 0.
+- Rollback: rec2312h/recover.sh RC 0 at 02:20:09Z (Verdict PASS, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_STORAGE_APPLEANS_OK, RECOVERY_DONE). BUGCHECK ok base=0xfffff800e2600000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0.
+- Evidence: .local/experiments/EXP2312-xproc-n3b-on/evidence/EXP2312 (gm2312{w,r2,r3,x}-umd.log, kmd-receipts-*.txt, xproc-rx-*.txt, gpuperf-*-x.txt, perf-gate.txt), full.log; probe2312.sh sha256 prefix a704dc557a4c1a07.
+- Next: EXP2313 (N3c), same source, Wom1CrossProcessPrivateLead=1 on top of C1, fresh boot, same cadence; decision rule fixed in its BEFORE.
