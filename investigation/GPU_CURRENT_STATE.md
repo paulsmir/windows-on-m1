@@ -3773,3 +3773,52 @@ Plan change (design note investigation/analysis/TDR-FIRMWARE-RESTART-RECOVERY.md
    request, poll the acknowledgement for at most 1 s, record the result in the Wom1GpuReset record. No
    acknowledgement -> only cold can work; acknowledgement -> stage 3H is worth implementing. H1 (three idle warm
    ASC restarts) drops behind H0.
+
+## UPDATE 2026-11-10T19:05:18Z -- architect: k48 grid diagnostic integrated (offline); EXP2326 K1 gap row read
+
+K48G (class D diagnostic, commits ee05c125c + 19de509d8, ledger CHG-20261110-ee05c125-K48G-ARGS and
+CHG-20261110-19de509d-K48G-RING):
+- Switch APPLE_AGX_D3D12_DIAG_INDIRECT_ARGS=97efffb3 (hex cs_tag, read once; unset = one cached check per
+  indirect dispatch, no buffer, copy or receipt).
+- Receipt measure-d3d12-indirect-args {cs_tag, x, y, z, source, lag}. source 4 lag 7 = GPU copy of the 12-byte
+  argument record, read seven tagged dispatches later without waiting; source 0 = not available, lag is the reason
+  (1 slot not written or copy skipped, 2 slot's batch not complete, 3 no ring); 1/2 CPU-mapped heap; 3 CPU expansion.
+- Gates on the integrated tree (run before the rebases onto a85dedac2 and ffc730dc8, which changed
+  investigation/EXPERIMENTS.md only): baseline only the known NEW; SYNCHECK_OK (syncheck defines
+  APPLE_AGX_GPUVA_WINSYS, so the guarded call is compiled). No hardware run yet.
+- Arm: one GravityMark HD windowed 100k -temporal 0 PERF arm with the switch; FPS of that arm is not a result.
+  Analysis: .local/night-20261110/k48-grid-diag/grid_stats.py <umd log> --tag 97efffb3.
+- Verdict rule (unchanged): mean x within 5 % of 1840 groups/frame -> work equals Apple's, the C0 excess is
+  per-group cost; at or above 2100 -> the excess is work (owner: producing kernel / culling input).
+- NOT VERIFIED: native staging of the slots on hardware; coherent CPU view of the GPU write; copy in the same batch
+  as k48; the ring counts tagged dispatches, not executions.
+
+EXP2326 (K1 boot B, Wom1CrossProcessRenderPairs=1) -- gap row of the decision rule, read with the R19 method
+(nb.py --dump, q1pos.py; outputs .local/night-20261110/r19-dwm-concurrent/out-q1pos-k1.txt,
+out-k1-detect-split.txt, out-k1-work-split.txt). Boot A = EXP2325 (switch unset).
+
+| arm | C2>D>R3 gap p50 A -> B | C4>D>R5 gap p50 A -> B | DWM row excess ms/frame A -> B |
+| x   | 1.168 -> 0.831 | 1.171 -> 0.836 | 0.854 -> 0.710 |
+| r2  | 1.172 -> 0.846 | 1.219 -> 0.848 | 0.863 -> 0.715 |
+| r3  | 1.164 -> 0.843 | 1.153 -> 0.856 | 0.857 -> 0.711 |
+
+- Rule row "gap p50 at or below 1.05 ms": PASS in all three arms (0.83-0.86 ms; predicted 0.83 +- 0.05).
+  R1>D>C2 stays 0.87-0.88 ms as predicted.
+- Timeline, mean of r2 and r3, A -> B (ms/frame): wall 19.887 -> 19.869 (-0.018); non-busy 1.732 -> 1.632
+  (-0.100); busy union 18.156 -> 18.238 (+0.082). Gap by position: R3 0.395 -> 0.297, R5 0.256 -> 0.147
+  (K1's target, -0.21 together); C0 0.082 -> 0.127, C2 0.415 -> 0.456, C6 0.058 -> 0.073, R7 0.337 -> 0.362
+  (+0.125 together, in components d and c1). Busy: C0 6.184 -> 6.231, the rest within +-0.02.
+- Reading: the K1 mechanism works as designed (refusal 55 gone, target gaps -0.21 ms/frame), but the frame does
+  not get shorter: +0.125 ms of scattered idle and +0.08 ms of busy appear elsewhere. With one boot per arm
+  neither is separable from boot-to-boot variation (C0 busy and component d differ by similar amounts between
+  EXP2316, EXP2318 and EXP2325). NOT a measured K1 cost, NOT a measured K1 gain.
+- Per-group comparison by DWM position is confounded: GPU work per frame follows the scene (frames without a
+  DWM job 12.0 ms busy, D before C2 20.8 ms), so the groups are scene classes. Only the whole-arm numbers are used.
+- Decision rule state: suite 119/0, no fault, refusal 55 = 0 per arm, gap p50 PASS, mean(r2,r3) 50.330 vs 50.285
+  (+0.09 %), CS gate PASS, m1n1 BUGCHECK code=0x0 at the ordered restart (EXP2326 ACTUAL). Every row of the rule is met.
+- Decision: K1 is accepted as FPS-neutral and contract-safe; the default-on flip is a single-variable package of
+  its own AFTER EXP2327 and EXP2328 (both already built with the switch unset; they stay as built). That boot is
+  also the second K1-on boot: if busy +0.08 and the scattered idle repeat against a same-package unset boot, they
+  are K1's and get a cause analysis; if not, they were boot variation.
+- Result with a claim is unchanged: EXP2318 FULL 7923 = 79.7 % of macOS (EXP2326 FULL f0 7937 is one run of a
+  non-default switch, not a claim).
