@@ -76819,3 +76819,5 @@ EXP2317 ACTUAL 2026-11-10T12:26:18Z:
 - Process defect: the session stopped (model limit) right after launch; the bench stayed on the experiment boot from 05:02Z to 12:27Z without ACTUAL or rollback. Rollback rec2317h started 2026-11-10T12:27Z; BUGCHECK lines of the restarts are recorded with the recovery result below.
 - Verdict: N4c REJECTED (closed by receipt). Configuration regression OPEN (EXP2318 discriminates).
 - Next: rec2317h recovery, ANSQ-T6 slot for the AppleAns session, then EXP2318.
+
+EXP2317 RECOVERY 2026-11-10T12:30:39Z: rec2317h RECOVERY_DONE (Verdict PASS, package absent, 8 CPU, RECOVERY_STORAGE_APPLEANS_OK). BUGCHECK line of the experiment-boot restart: code=0x0. Recovery guest up, launcher PID 47501; bench handed to the AppleAns session for ANSQ-T6.
