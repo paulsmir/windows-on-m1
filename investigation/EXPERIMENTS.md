@@ -77040,6 +77040,13 @@ EXP2319 ACTUAL 2026-11-10T14:23:07Z:
 - Evidence: .local/experiments/EXP2319-n6-diag-cut/evidence/EXP2319 (gm2319*-umd.log, shader-stats-<arm>.txt, kmd-receipts-*.txt), scratchpad newexp2319.log.
 - Next: gate package boots EXP2320 (A, no switch) / EXP2321 (B, Wom1PreludeNotifyGate=1) / EXP2322 (C, Wom1PerfTgtUtilization=60), same commit 3d7e14097.
 
+## ANSQ-T7 — addendum: m1n1 BUGCHECK line on AppleAns 0.4.8 (2026-11-10, reported by the bench owner)
+
+- First GPU boot on 0.4.8 / UnmapMode 2 / BusType NVMe (EXP2319, m1n1 ansdirect-closedv5), ordered restart:
+  "BUGCHECK ok base=0xfffff803ade00000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0". No AppleAns 0xAA/0xA4/0xA5 record
+  in the rec2319h logs; the rollback reported RECOVERY_STORAGE_APPLEANS_OK on 0.4.8. This completes the item
+  ANSQ-T7a/T7b could not measure in the recovery profile. Not re-read by the AppleAns session.
+
 EXP2320 HARDWARE BEFORE 2026-11-10T14:26:27Z:
 - Package: worktree exp-r14-pt1-gate HEAD 3d7e140974f0d044b195d7cd0cb77b21c2c565f9 = EXP2319 source 1a2cd106c + 9eec56145 (R14 prelude notify gate, opt-in Wom1PreludeNotifyGate, default unset) + 4158a52b0 (PT1 perf target utilization, opt-in Wom1PerfTgtUtilization, default unset = profile value 85) + 3d7e14097 (R14 receipt: gate counters in Wom1JobWindow v4; cherry-picks of 99791b376 / 8e7eafd95 line). EXP2320, EXP2321 and EXP2322 are three builds of this one commit (the package version carries the experiment number; no source differs), one registry switch per boot, set on the staged devnode before the first start of a fresh boot. A same-boot adapter cycle is not used as an A/B method.
 - Registry in every boot as EXP2319: Wom1JobDiagnostics=1, Wom1CrossProcessPairs=1, Wom1SubmitRequeue=1; Wom1Ov2NoHazardLead unset. Storage base AppleAns 0.4.8 (as EXP2319).
