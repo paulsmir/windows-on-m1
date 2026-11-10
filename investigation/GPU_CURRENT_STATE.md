@@ -3939,3 +3939,40 @@ Read after the 20:12Z note (evidence .local/experiments/EXP2327-n4c3-t5b/evidenc
   FULL f0 on a boot of the same package with the cross switch unset.
 - Next package (K1 default-on, built from the origin tip): boot 1 cross switch unset = K1 default check, then FULL
   f0 ft5 ft5 f0; boot 2 Wom1Ov2CrossLead = 1 = s1 (PERF r1 + FULL f0).
+
+UPDATE 2026-11-10T20:29:01Z WHOLE-RUN MAP OF THE FULL SCORE (offline, no hardware; report
+`.local/night-20261110/full-scene-map/REPORT.md`, raw data EXP2309 nhd FULL HD 7784 with `gm2309nhd-times.txt` and
+the session umd.log pid 1548; macOS hd.csv 9946 and split2-hd). Raw per-frame file checked by the architect.
+- CORRECTION to the line "GravityMark's camera path advances per FRAME" above: the camera follows benchmark WALL time.
+  Three of our runs with 6577..7784 frames switch scene at the same times (30.0 / 59.0 / 89.1 / 111.1 / 139.1 s);
+  lag ours vs macOS on the benchmark clock is 0.00 s (correlation 0.964 at 0.25-s bins). R8's 13.6 s lag was our load
+  time before the benchmark starts. Scene-aligned comparison = same benchmark second, no shift.
+- Where the 2162 lost frames are (9946 - 7784, residual 0): 0..10 s 368 (17.0 %), 10..70 s (PERF window) 736 (34.0 %),
+  70 s..end 1058 (48.9 %). Split by kind: steady per-frame gap 2039, ONE startup stall of ours 247, macOS mid-run stalls
+  (0.99 s at 123 s, 1.49 s at 131 s) -124.
+- NEW ROW, startup stall: benchmark frame 2 takes 4.444 s (frame 3 0.636 s; macOS 0.21 s). Present in all 40 newest runs
+  with per-frame data (5.2-10 s of frames >= 100 ms in the first 10 s). In those 4.55 s the GPU ran 62 jobs / 0.13 s.
+  Intervals end in measure-gpuva-map-time 1.45 s, measure-gpuva-paging-wait 1.13 s, one measure-scene-escape 0.88 s,
+  measure-bo-create 0.48 s. Cause: HYPOTHESIS (resource creation / GPU VA mapping / paging-fence waits in the UMD-KMD
+  allocation path). Value if cut to macOS size: +237 frames = +2.4 % of the macOS score, as much as 0.5 ms on every
+  frame. The PERF window cannot see it; only a FULL score can. Attribution agent started (`startup-stall/`).
+- Shape of the steady gap: 10..70 s is a fixed +4.0 ms (b 1.00); 70..130 s is nearly proportional (a +0.36, b 1.21);
+  130 s..end is a larger fixed offset (+4.95). Per scene: s3 +3.1 ms, s0-s2 +4.0, s4/s5 +5.0. The PERF window gives the
+  right MEAN gap (+4.04 vs +4.26 ms/frame over 5 s..end) and extrapolates a uniform lever within 2-5 %, but it
+  under-weights the render-heavy jobs.
+- Per-job excess over Apple, ms/frame, 10..70 / 70..130 / 130..end (EXP2309 package; compare only within one package):
+  R5 +0.50 / +0.69 / +1.03; C0 +0.52 / +0.51 / +0.68; R1 +0.24 / +0.32 / +0.45; R3 +0.26 / +0.20 / +0.14;
+  C2 +0.24 / +0.16 / +0.11; C4 +0.17 / +0.14 / +0.09; non-busy +1.91 / +1.71 / +1.94 (flat).
+  R5 over the three ranges fits ours = 0.22 + 1.185 x Apple (2.003/1.503, 3.553/2.868, 5.417/4.384), nearly all in R5 3D.
+- Whole-run lever arithmetic (frames): fixed -0.5 ms/frame +218; -3 % of frame time +244; startup stall to macOS size +237.
+- Ranking change (whole run, ms/frame or frames): (1) non-busy ~1.9 ms flat (K1 / PF1 / depth-one rows act here);
+  (2) startup stall 247 frames (new, no lever yet); (3) R5 3D +0.72 whole-run, proportional 18.5 % (no lever; bind form
+  closed by T5b in the PERF window; survey agent started, `r5-3d-cause/`); (4) C0 +0.56 (grid arm g0 pending);
+  (5) R1 +0.31; (6) R3 / C2 / C4 0.14-0.19 each.
+- FULL f0 across five boots is 7888..7991 (mean 7927 = 79.7 % of macOS); the single best is 7991 (EXP2321 f0, 80.3 %).
+- PROCESS: every FULL run gets `-times <tag>-times.txt` from EXP2329 on, so a FULL score always comes with per-frame
+  data (lost frames per range, startup stall length). A lever that acts on startup or on scenes after 70 s is judged on
+  FULL (same-boot ABBA), not on the PERF window.
+- K1 default-on commit 74469a02c reviewed by the architect: one variable (reader AdmissionPlatformSwitchDisabled:
+  absent / malformed = on, DWORD 0 = off), prerequisites unchanged, test tests/test_k1_default_on.py. Hardware check =
+  EXP2329 boot 1 as pre-registered.
