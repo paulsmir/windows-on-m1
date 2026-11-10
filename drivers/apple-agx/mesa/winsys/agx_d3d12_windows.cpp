@@ -382,6 +382,10 @@ static void receipt(PCSTR stage, HRESULT status, UINT a, UINT b, UINT c, UINT d,
   const UINT values[] = {a, b, c, d, e};
   AdmissionUmdDiagnostic(stage, status, values, 5u);
 }
+static void receipt(PCSTR stage, HRESULT status, UINT a, UINT b, UINT c, UINT d, UINT e, UINT f) {
+  const UINT values[] = {a, b, c, d, e, f};
+  AdmissionUmdDiagnostic(stage, status, values, 6u);
+}
 
 /* T5b switches, each exactly "1", read once per process, default off:
  * APPLE_AGX_D3D12_CRAWL_BINDFUL (step A, the screen's backend flag
@@ -1122,11 +1126,15 @@ extern "C" unsigned (*AgxWin32BatchKindHook)(unsigned kind);
 extern "C" unsigned (*AgxWin32RenderTaHook)(unsigned prelude);
 /* OV5 (winsys AgxWin32RenderTaHook): the render about to be submitted may
  * run its TA while the compute batch before it runs (read-only) */
+/* PF1 (agx_d3d12_job_barriers.h AGX_D3D12_JOB_FOLDED): verdicts the fold
+ * mark refused, for measure-d3d12-counted-fold (OV5 renders, OV2 computes) */
+static UINT owner_fold_refused[2];
 static unsigned owner_render_ta(unsigned prelude) {
   unsigned ta = 0u;
   if (!AgxWin32Ov5Feature || !AgxD3d12OwnerJobBarriersEnabled()) return 0u;
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
   ta = AgxD3d12JobRenderTaRefusal(&owner_job_barriers, prelude) == 0u ? 1u : 0u;
+  if (AgxD3d12JobFoldRefusal(prelude)) ++owner_fold_refused[0];
   if (ta) ++owner_ov5_flagged;
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
   return ta;
@@ -1177,13 +1185,15 @@ static void owner_ov6b_conflict_receipt(void) {
 static unsigned owner_batch_kind(unsigned kind) {
   unsigned independent = 0u;
   unsigned cross_clean = 0u;
-  /* winsys: kind | 0x100 for a render batch with a CDM prelude */
+  /* winsys: kind | 0x100 for a render batch with a CDM prelude, | 0x200
+   * (PF1, AGX_D3D12_JOB_FOLDED << 8) for a batch that took part in a fold */
   const unsigned prelude = (kind >> 8) & 1u;
+  const unsigned folded = (kind >> 8) & AGX_D3D12_JOB_FOLDED;
   kind &= 0xffu;
   if (!AgxD3d12OwnerJobBarriersEnabled()) return 0u;
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
   if (kind == 1u && AgxWin32Ov2Feature && owner_job_barriers.PreviousKind == 2u) {
-    const unsigned ta = AgxD3d12JobRenderTaRefusal(&owner_job_barriers, prelude);
+    const unsigned ta = AgxD3d12JobRenderTaRefusal(&owner_job_barriers, prelude | folded);
     if (owner_ov5_renders < 8u) {
       owner_ov5_sequence |= (ta & 0xfu) << (4u * owner_ov5_renders);
       owner_ov5_noprelude_sequence |= (AgxD3d12JobRenderTaRefusal(&owner_job_barriers, 0u) & 0xfu) << (4u * owner_ov5_renders);
@@ -1254,6 +1264,12 @@ static unsigned owner_batch_kind(unsigned kind) {
         /* N4c-v3 (receipt only): every refusal condition at once */
         owner_cross_mask_take(shadow, detail);
       }
+    }
+    /* PF1: a compute batch holding folded stream kernels never leads the
+     * render before it (OV2, ranges rule, cross lead all end here) */
+    if (AgxD3d12JobFoldRefusal(folded)) {
+      if (independent) ++owner_fold_refused[1];
+      independent = 0u;
     }
     if (owner_job_barriers.PreviousKind == 1u) {
       if (owner_ov2_pairs < 8u) {
@@ -3381,6 +3397,27 @@ extern "C" HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *owner, AGX_D3D12
 /* C7c: the D3D12 present hands the runtime the allocation; rendering on
  * the owner context must be flushed and the direct map published first
  * (AgxD3d10WindowsPresentationSubmitSurfaces before AdmissionUmdSubmitPresent) */
+/* PF1 (APPLE_AGX_D3D12_EXPAND_FOLD=1 only): one measure-d3d12-counted-fold
+ * line per present, the counters since the previous one {presents, seals,
+ * folded kernels, deferred hazard flushes, refusals 1..9 (QUERY,
+ * NO_COMPUTE, NOT_WRITER, PRELUDE, CAPACITY, OTHER_RENDER, ORDER, LOST,
+ * DRAW), flushes of a sealed batch by cause 0..7 (OTHER, RENDER = the
+ * expected end, DISPATCH, EVICT, FLUSH_ALL, RESOURCE, HAZARD, RESET), OV5
+ * renders and OV2 computes the fold mark refused}; slot numbers as
+ * agx_win32_expand_ahead.h AGX_WIN32_FOLD_*. */
+static void owner_fold_receipt(AGX_D3D12_OWNER *owner) {
+  UINT values[24] = {};
+  unsigned counts[AGX_WIN32_FOLD_COUNTERS] = {};
+  if (!AgxWin32AsahiFoldCounters(owner->Context, counts)) return;
+  values[0] = static_cast<UINT>(owner_presents);
+  for (unsigned i = 0; i < AGX_WIN32_FOLD_COUNTERS; ++i) values[1 + i] = counts[i];
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  values[1 + AGX_WIN32_FOLD_COUNTERS] = owner_fold_refused[0];
+  values[2 + AGX_WIN32_FOLD_COUNTERS] = owner_fold_refused[1];
+  owner_fold_refused[0] = owner_fold_refused[1] = 0;
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+  AdmissionUmdDiagnostic("measure-d3d12-counted-fold", S_OK, values, 3u + AGX_WIN32_FOLD_COUNTERS);
+}
 extern "C" HRESULT AgxD3d12OwnerPreparePresent(AGX_D3D12_OWNER *owner, void *presentation, UINT *allocation) {
   OwnerLock lock(owner);
   auto *record = static_cast<struct AGX_D3D12_PRESENTATION *>(presentation);
@@ -3405,6 +3442,7 @@ extern "C" HRESULT AgxD3d12OwnerPreparePresent(AGX_D3D12_OWNER *owner, void *pre
   owner_resolve_drain(owner, kResolveDrainPresent); /* OV3 */
 #endif
   InterlockedIncrement(&owner_presents);
+  owner_fold_receipt(owner);
   HRESULT hr = AgxWin32AsahiContextFlushForPresent(owner->Context) ? S_OK : owner_failure(owner, E_FAIL);
 #ifdef APPLE_AGX_GPUVA_WINSYS
   if (SUCCEEDED(hr) && record->RenderBuffer.Transport.Token &&
@@ -5787,13 +5825,16 @@ extern "C" HRESULT AgxD3d12OwnerDraw(AGX_D3D12_OWNER *owner, const AGX_D3D12_DRA
   if (in->Buffer && (in->CountBuffer || in->MaxCount > 1)) {
     /* Per successful call, independent of the capped perf-reason table:
      * path (2 CPU count fallback, 3 GPU stream; 1 retired), MaxCount,
-     * total draw_vbo us, native state/stream encode us, fallback reason.
-     * Get the path actually emitted: topology alone cannot identify queries,
-     * passthrough GS or other native lowering. Zero means ordinary uncounted. */
-    unsigned metrics[3] = {};
+     * total draw_vbo us, native state/stream encode us, fallback reason,
+     * PF1 fold outcome (0 none or switch off, 1 the kernel joined the open
+     * compute batch, 0x100 | refusal reason; appended, the first five keep
+     * their places). Get the path actually emitted: topology alone cannot
+     * identify queries, passthrough GS or other native lowering. Zero means
+     * ordinary uncounted. */
+    unsigned metrics[4] = {};
     AgxWin32AsahiIndirectMetrics(pipe, metrics);
     receipt("measure-d3d12-counted-path", S_OK, metrics[0], in->MaxCount,
-            qpc_us(drawn - bound), metrics[1], metrics[2]);
+            qpc_us(drawn - bound), metrics[1], metrics[2], metrics[3]);
   }
   ++owner->PendingDraws;
   owner->TimeBind += bound - entered;

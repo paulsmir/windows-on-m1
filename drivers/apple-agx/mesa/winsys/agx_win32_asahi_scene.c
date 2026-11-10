@@ -517,16 +517,27 @@ void AgxWin32AsahiSetIndirectIndexBuffer(struct pipe_context *pctx,
   ctx->windows_indirect_index_resource=resource;
   ctx->windows_indirect_index_offset=resource ? offset : 0;
 }
-void AgxWin32AsahiIndirectMetrics(struct pipe_context *pctx, unsigned out[3]) {
+void AgxWin32AsahiIndirectMetrics(struct pipe_context *pctx, unsigned out[4]) {
 #ifdef APPLE_AGX_GPUVA_WINSYS
   struct agx_context *ctx=agx_context(pctx);
   out[0]=ctx->windows_indirect_path;
   out[1]=ctx->windows_indirect_encode_us;
   out[2]=ctx->windows_indirect_reason;
+  out[3]=ctx->windows_indirect_fold;
+  ctx->windows_indirect_fold=0;
 #else
   (void)pctx;
-  out[0]=2;out[1]=out[2]=0;
+  out[0]=2;out[1]=out[2]=out[3]=0;
 #endif
+}
+typedef char agx_win32_fold_counters_match[
+  AGX_WIN32_FOLD_COUNTERS==AGX_WIN32_FOLD_COUNTS ? 1 : -1];
+int AgxWin32AsahiFoldCounters(struct pipe_context *pctx, unsigned out[AGX_WIN32_FOLD_COUNTERS]) {
+  struct agx_context *ctx=pctx ? agx_context(pctx) : NULL;
+  if(!ctx || !agx_win32_expand_fold_enabled()) return 0;
+  memcpy(out,ctx->windows_fold_counts,sizeof(ctx->windows_fold_counts));
+  memset(ctx->windows_fold_counts,0,sizeof(ctx->windows_fold_counts));
+  return 1;
 }
 /* rc76: whether pipe->clear(Buffers) on the bound framebuffer clears every
  * buffer fast (load-op clear): agx_clear (agx_pipe.c) clears fast exactly

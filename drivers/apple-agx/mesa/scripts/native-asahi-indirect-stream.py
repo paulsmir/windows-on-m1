@@ -62,7 +62,154 @@ agx_win32_expand_template_cpu(struct agx_batch *render, uint64_t va, size_t byte
    return NULL;
 }
 
+/* PF1 (agx_win32_expand_ahead.h): the context's open application compute
+ * batch, looked up by agx_get_compute_batch's key and never created. */
+struct agx_batch *
+agx_win32_fold_compute(struct agx_context *ctx)
+{
+   const struct pipe_framebuffer_state key = {.width = AGX_COMPUTE_BATCH_WIDTH};
+   unsigned i;
+   foreach_active(ctx, i) {
+      struct agx_batch *batch = &ctx->batches.slots[i];
+      if (util_framebuffer_state_equal(&batch->key, &key))
+         return agx_batch_is_submitted(batch) ? NULL : batch;
+   }
+   return NULL;
+}
+
+/* PF1: wb is the recorded writer of the resource (or of its stencil). */
+bool
+agx_win32_fold_writer(struct agx_context *ctx, struct agx_batch *wb,
+                      struct pipe_resource *resource)
+{
+   struct agx_resource *rsrc = resource ? agx_resource(resource) : NULL;
+   if (!rsrc || !rsrc->bo)
+      return false;
+   if (agx_writer_get(ctx, rsrc->bo->handle) == wb)
+      return true;
+   return rsrc->separate_stencil && rsrc->separate_stencil->bo &&
+          agx_writer_get(ctx, rsrc->separate_stencil->bo->handle) == wb;
+}
+
+/* PF1: wb is the recorded writer of a target of the bound framebuffer. */
+bool
+agx_win32_fold_target(struct agx_context *ctx, struct agx_batch *wb)
+{
+   for (unsigned i = 0; i < ctx->framebuffer.nr_cbufs; ++i)
+      if (agx_win32_fold_writer(ctx, wb, ctx->framebuffer.cbufs[i].texture))
+         return true;
+   return agx_win32_fold_writer(ctx, wb, ctx->framebuffer.zsbuf.texture);
+}
+
+/* PF1: render is the recorded writer of a BO wb uses; the rc105 scan
+ * (agx_win32_submit_order.h) would then submit render before wb. */
+bool
+agx_win32_fold_render_writes(struct agx_context *ctx, struct agx_batch *wb,
+                             struct agx_batch *render)
+{
+   uint8_t writers[AGX_MAX_BATCHES];
+   const unsigned found = agx_win32_submit_order_writers(
+      (const uint32_t *)wb->bo_list.set, wb->bo_list.bit_count,
+      (const uint8_t *)ctx->writer.data, ctx->writer.size,
+      (const uint32_t *)ctx->batches.active, AGX_MAX_BATCHES,
+      agx_batch_idx(wb), writers);
+   for (unsigned i = 0; i < found; ++i)
+      if (writers[i] == agx_batch_idx(render))
+         return true;
+   return false;
+}
+
+/* PF1: a render reset while its sealed compute batch may still write the
+ * render's stream outputs gives them to that batch, which retires them
+ * (RC71 agx_win32_stream_scratch_retire) only after its kernels ran. */
+void
+agx_win32_fold_adopt(struct agx_batch *wb, struct agx_batch *render)
+{
+   struct agx_pool *from[2] = {&render->windows_stream_pool, &render->windows_stream_usc_pool};
+   struct agx_pool *to[2] = {&wb->windows_stream_pool, &wb->windows_stream_usc_pool};
+   for (unsigned kind = 0; kind < 2; ++kind) {
+      util_dynarray_foreach(&from[kind]->bos, struct agx_bo *, entry)
+         util_dynarray_append_typed(&to[kind]->bos, struct agx_bo *, *entry);
+      util_dynarray_clear(&from[kind]->bos);
+   }
+}
+
 '''
+
+
+# PF1 (agx_win32_expand_ahead.h): every agx_batch.c flush that can reach a
+# sealed compute batch. A hazard flush the render itself requests is
+# deferred (agx_win32_fold_defers); every other one is labelled with its
+# cause and goes through the seal-drop point at the top of agx_flush_batch.
+# With the switch off no batch is sealed: every hook below is a no-op.
+FOLD_FLUSHES = (
+    # agx_flush_readers_except: readers before a write; except = the writer
+    ('''      if (agx_batch_uses_bo(batch, rsrc->bo)) {
+         perf_debug_ctx(ctx, "Flush reader due to: %s\\n", reason);''',
+     '''      if (agx_batch_uses_bo(batch, rsrc->bo) &&
+          !agx_win32_fold_defers(ctx, batch, except,
+             except ? AGX_WIN32_FOLD_CAUSE_HAZARD : AGX_WIN32_FOLD_CAUSE_RESOURCE)) {
+         perf_debug_ctx(ctx, "Flush reader due to: %s\\n", reason);'''),
+    # agx_flush_writer_except: read-after-write; except = the reader
+    ('''   if (writer && writer != except &&
+       (agx_batch_is_active(writer) || agx_batch_is_submitted(writer))) {''',
+     '''   if (writer && writer != except &&
+       (agx_batch_is_active(writer) || agx_batch_is_submitted(writer)) &&
+       !(agx_batch_is_active(writer) &&
+         agx_win32_fold_defers(ctx, writer, except,
+            except ? AGX_WIN32_FOLD_CAUSE_HAZARD : AGX_WIN32_FOLD_CAUSE_RESOURCE))) {'''),
+    # agx_batch_writes_internal: write-after-write by the writing batch
+    ('''   if (writer)
+      agx_flush_writer(ctx, rsrc, "Multiple writers");''',
+     '''   if (writer && !agx_win32_fold_defers(ctx, writer, batch, AGX_WIN32_FOLD_CAUSE_HAZARD))
+      agx_flush_writer(ctx, rsrc, "Multiple writers");'''),
+    ('''   assert(!writer || agx_batch_is_submitted(writer));''',
+     '''   assert(!writer || agx_batch_is_submitted(writer) ||
+          agx_win32_fold_owner(writer) == batch);'''),
+    # agx_get_batch_for_framebuffer: batch-slot eviction
+    ('''   agx_sync_batch_for_reason(ctx, batch, "Too many batches");''',
+     '''   agx_win32_fold_cause(batch, AGX_WIN32_FOLD_CAUSE_EVICT);
+   agx_sync_batch_for_reason(ctx, batch, "Too many batches");'''),
+    # agx_flush_all
+    ('''      if (reason)
+         perf_debug_ctx(ctx, "Flushing due to: %s\\n", reason);
+
+      agx_flush_batch(ctx, &ctx->batches.slots[idx]);''',
+     '''      if (reason)
+         perf_debug_ctx(ctx, "Flushing due to: %s\\n", reason);
+
+      agx_win32_fold_cause(&ctx->batches.slots[idx], AGX_WIN32_FOLD_CAUSE_FLUSH_ALL);
+      agx_flush_batch(ctx, &ctx->batches.slots[idx]);'''),
+    # agx_sync_all
+    ('''   foreach_active(ctx, idx) {
+      agx_flush_batch(ctx, &ctx->batches.slots[idx]);
+   }''',
+     '''   foreach_active(ctx, idx) {
+      agx_win32_fold_cause(&ctx->batches.slots[idx], AGX_WIN32_FOLD_CAUSE_FLUSH_ALL);
+      agx_flush_batch(ctx, &ctx->batches.slots[idx]);
+   }'''),
+    # agx_get_compute_batch: new work never joins a sealed compute batch
+    ('''agx_get_compute_batch(struct agx_context *ctx)
+{
+   if (ctx->any_faults)
+      return NULL;
+''',
+     '''agx_get_compute_batch(struct agx_context *ctx)
+{
+   if (ctx->any_faults)
+      return NULL;
+   agx_win32_fold_dispatch(ctx);
+   if (ctx->any_faults)
+      return NULL;
+'''),
+)
+
+
+def project_fold_flushes(s):
+    s=once(s,'#include "agx_state.h"\n','#include "agx_state.h"\n#include "agx_win32_submit_order.h"\n')
+    for old,new in FOLD_FLUSHES:
+        s=once(s,old,new)
+    return s
 
 
 def once(text, old, new):
@@ -123,6 +270,9 @@ def project_sources(out, project, overlays):
    struct agx_win32_indirect_stream *windows_indirect_stream;
    unsigned windows_indirect_path, windows_indirect_reason;
    unsigned windows_indirect_encode_us;
+   /* PF1 (agx_win32_expand_ahead.h): this counted draw's fold outcome, and
+    * the fold counters since the last present */
+   unsigned windows_indirect_fold, windows_fold_counts[20];
    /* RC71: idle stream outputs of retired batches (agx_win32_stream_scratch.h) */
    struct agx_bo *windows_stream_spare[2][16];
    /* rc88: stream output bytes held by unretired batches, and their peak */
@@ -139,7 +289,11 @@ def project_sources(out, project, overlays):
    /* IE1a (agx_win32_expand_ahead.h): a render's open expansion batch, an
     * expansion batch's render, and its stream dispatches. */
    struct agx_batch *windows_expand, *windows_expand_owner;
-   unsigned windows_expand_dispatches;''')
+   unsigned windows_expand_dispatches;
+   /* PF1 (same header): sealed as its render's expansion batch; the fold
+    * marks, kept until reuse; the cause labelling its next flush. */
+   bool windows_expand_fold;
+   unsigned windows_fold_marks, windows_fold_cause;''')
     h=once(h,'''void agx_decompress_inplace(struct agx_batch *batch, struct pipe_surface *surf,
                             const char *reason);''','''void agx_decompress_inplace(struct agx_batch *batch, struct pipe_surface *surf,
                             const char *reason);
@@ -164,6 +318,9 @@ def project_sources(out, project, overlays):
            '''   batch->windows_expand = NULL;
    batch->windows_expand_owner = NULL;
    batch->windows_expand_dispatches = 0;
+   batch->windows_expand_fold = false;
+   batch->windows_fold_marks = 0;
+   batch->windows_fold_cause = 0;
    batch->incoherent_writes = false;
 ''')
     # IE1a: unlink; a render reset with an open expansion batch aborts it.
@@ -173,6 +330,7 @@ def project_sources(out, project, overlays):
    agx_bo_unreference(dev, batch->vdm.bo);''')
     s=once(s,'void\nagx_flush_all(struct agx_context *ctx, const char *reason)\n', EXPAND_OPEN+
            'void\nagx_flush_all(struct agx_context *ctx, const char *reason)\n')
+    s=project_fold_flushes(s)
     # RC71: the retired batch gives its stream outputs back to the context.
     s=once(s,'   agx_pool_cleanup(&batch->pipeline_pool);',
            '''   agx_pool_cleanup(&batch->pipeline_pool);

@@ -74,7 +74,14 @@ void AgxWin32AsahiSetDrawBindings(struct pipe_context *, int (*)(void *), void *
 /* Exclusive owner scopes the IB view base to draw_vbo, then clears it.
  * Resource identity keeps native replacement index buffers unmodified. */
 void AgxWin32AsahiSetIndirectIndexBuffer(struct pipe_context *, struct pipe_resource *, unsigned);
-void AgxWin32AsahiIndirectMetrics(struct pipe_context *, unsigned out[3]);
+/* {path, encode us, fallback reason, PF1 fold outcome}; the outcome is
+ * read once (the next counted draw sets it again). */
+void AgxWin32AsahiIndirectMetrics(struct pipe_context *, unsigned out[4]);
+/* PF1 (agx_win32_expand_ahead.h AGX_WIN32_FOLD_COUNTS): the context's fold
+ * counters since the previous call, then zeroed; 0 (nothing written) when
+ * APPLE_AGX_D3D12_EXPAND_FOLD is off or there is no context. */
+#define AGX_WIN32_FOLD_COUNTERS 20u
+int AgxWin32AsahiFoldCounters(struct pipe_context *, unsigned out[AGX_WIN32_FOLD_COUNTERS]);
 struct pipe_resource *AgxWin32AsahiImportLinearColor32(
     struct pipe_screen *, const AGX_WIN32_SCREEN_BUFFER *,
     APPLE_AGX_U32 Width, APPLE_AGX_U32 Height, APPLE_AGX_U32 Pitch,

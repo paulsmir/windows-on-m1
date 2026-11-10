@@ -34,6 +34,9 @@ ORDER = '''   if (!agx_batch_is_active(batch) || agx_batch_is_submitted(batch)) 
          struct agx_batch *writer = &ctx->batches.slots[writers[i]];
          if (!agx_batch_is_active(writer) || agx_batch_is_submitted(writer))
             continue;
+         /* PF1: the render that depends on this folded compute batch */
+         if (agx_win32_fold_follows(batch, writer))
+            continue;
          AgxWin32PerfNote(enforce ? "Submit order: writer flushed first"
                                   : "Submit order: inversion kept");
          if (enforce)

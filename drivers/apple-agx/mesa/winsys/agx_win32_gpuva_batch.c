@@ -421,7 +421,9 @@ void (*AgxWin32BatchDepsHook)(const uint32_t *values, unsigned count);
  * 2 compute, before a compute envelope is composed; nonzero for a compute
  * batch the D3D12 owner proved independent of the render submitted just
  * before it (only while the KMD reports
- * AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE). */
+ * AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE). PF1: kind carries
+ * AGX_WIN32_FOLD_KIND_FLAG for a batch that took part in a fold
+ * (agx_win32_expand_ahead.h); the owner never flags such a compute batch. */
 unsigned (*AgxWin32BatchKindHook)(unsigned kind);
 extern volatile unsigned AgxWin32Ov2Feature;
 /* N4c-v2: or AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD */
@@ -433,7 +435,9 @@ extern volatile unsigned AgxWin32PrivateOnlyFeature;
  * D3D12 owner proved the render's vertex/TA work independent of the compute
  * batch submitted just before it (prelude: the packet has a compute command;
  * the owner never flags those) -- only while the KMD reports
- * AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT. */
+ * AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT. PF1: the render passes
+ * AGX_D3D12_JOB_FOLDED (2) when it reads a stream a compute batch wrote
+ * (agx_win32_fold_kind >> 8); the owner then refuses (reason 13). */
 unsigned (*AgxWin32RenderTaHook)(unsigned prelude);
 extern volatile unsigned AgxWin32Ov5Feature;
 #ifdef _MSC_VER
@@ -1059,7 +1063,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
    * (the KMD moves that wait to its 3D ring) */
   command_header=compute ? agx_cmd_header(false,DRM_ASAHI_BARRIER_NONE,1) :
 #ifdef _MSC_VER
-                 AgxWin32Ov5Feature && AgxWin32RenderTaHook && AgxWin32RenderTaHook(0u) ?
+                 AgxWin32Ov5Feature && AgxWin32RenderTaHook &&
+                 AgxWin32RenderTaHook(agx_win32_fold_kind(batch) >> 8) ?
                            agx_cmd_header(false,0,DRM_ASAHI_BARRIER_NONE) :
 #endif
                            agx_cmd_header(false,0,0);
@@ -1167,8 +1172,10 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *batch,
   if(!publish_shadows(batch)) { fail_site=__LINE__; goto fail; }
   capture_render_addresses(batch,render);
 #ifdef _MSC_VER
-  /* OV5 receipt: 0x100 = the render has a CDM prelude (it queues on compute) */
-  if(AgxWin32BatchKindHook) (void)AgxWin32BatchKindHook(1u | (batch->cdm.bo ? 0x100u : 0u));
+  /* OV5 receipt: 0x100 = the render has a CDM prelude (it queues on compute);
+   * PF1: AGX_WIN32_FOLD_KIND_FLAG = it reads a stream a compute batch wrote */
+  if(AgxWin32BatchKindHook)
+    (void)AgxWin32BatchKindHook(1u | (batch->cdm.bo ? 0x100u : 0u) | agx_win32_fold_kind(batch));
   note_batch_deps(batch,1u);
 #endif
   capture_native_refs(batch);
@@ -1255,7 +1262,7 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
    * feature and then waives its depth-two lead Barrier's wait. */
 #ifdef _MSC_VER
   command_header=agx_cmd_header(true,
-      AgxWin32BatchKindHook && AgxWin32BatchKindHook(2u) &&
+      AgxWin32BatchKindHook && AgxWin32BatchKindHook(2u | agx_win32_fold_kind(batch)) &&
       (AgxWin32Ov2Feature || AgxWin32Ov2CrossFeature) ? DRM_ASAHI_BARRIER_NONE : 0,0);
 #else
   command_header=agx_cmd_header(true,0,0);

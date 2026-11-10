@@ -107,6 +107,9 @@ static void agx_batch_init(struct agx_context *c,const struct pipe_framebuffer_s
  /* Existing BatchBegin cleanup occurs AFTER pool/encoder allocation. */
  while(agx_cleanup_batches(c)>=0){}
 }
+/* PF1 (agx_win32_expand_ahead.h): no batch is sealed in this model */
+#define AGX_WIN32_FOLD_CAUSE_EVICT 3u
+static void agx_win32_fold_cause(struct agx_batch *b,unsigned k){(void)b;(void)k;}
 static void agx_sync_batch_for_reason(struct agx_context *c,struct agx_batch *b,const char *s){
  (void)c;(void)b;(void)s;++syncs;
 }

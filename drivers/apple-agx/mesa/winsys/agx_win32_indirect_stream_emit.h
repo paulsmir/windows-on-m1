@@ -139,6 +139,109 @@ agx_win32_expand_prepare(struct agx_context *ctx)
       (void)agx_win32_expand_open(ctx, render);
 }
 
+/* PF1 (agx_win32_expand_ahead.h): a refusal, counted; and this counted
+ * draw's outcome for the measure-d3d12-counted-path row (0x100 | reason). */
+static void
+agx_win32_fold_refused(struct agx_context *ctx, unsigned reason)
+{
+   agx_win32_fold_count(ctx, AGX_WIN32_FOLD_REFUSED + reason);
+   ctx->windows_indirect_fold = 0x100u | reason;
+}
+
+/* PF1: the open compute batch Wb that may take this counted draw's kernel,
+ * decided before the inputs' writers are flushed: Wb wrote the arguments or
+ * the count, or writes the bound render target, and has room. NULL (and
+ * every writer is flushed as before) otherwise, or with the switch off.
+ * Whether Wb is sealed for another render is decided with the render batch
+ * itself (agx_win32_fold_prepare). */
+static struct agx_batch *
+agx_win32_fold_candidate(struct agx_context *ctx,
+                         const struct pipe_draw_indirect_info *in)
+{
+   struct agx_batch *wb;
+   unsigned reason = 0;
+   if (!agx_win32_expand_fold_enabled())
+      return NULL;
+   ctx->windows_indirect_fold = 0;
+   wb = ctx->any_faults ? NULL : agx_win32_fold_compute(ctx);
+   if (ctx->any_faults)
+      reason = AGX_WIN32_FOLD_REFUSE_LOST;
+   else if (!agx_win32_expand_queries_allow(ctx))
+      reason = AGX_WIN32_FOLD_REFUSE_QUERY;
+   else if (!wb)
+      reason = AGX_WIN32_FOLD_REFUSE_NO_COMPUTE;
+   else if (!agx_win32_fold_writer(ctx, wb, in->buffer) &&
+            !(in->indirect_draw_count &&
+              agx_win32_fold_writer(ctx, wb, in->indirect_draw_count)) &&
+            !agx_win32_fold_target(ctx, wb))
+      reason = AGX_WIN32_FOLD_REFUSE_NOT_WRITER;
+   else if (!agx_win32_expand_room(wb))
+      reason = AGX_WIN32_FOLD_REFUSE_CAPACITY;
+   if (reason) {
+      agx_win32_fold_refused(ctx, reason);
+      return NULL;
+   }
+   return wb;
+}
+
+/* PF1, after the other writers were flushed: take the render batch the
+ * draw will use (agx_get_batch, as IE1a does; it may evict) and seal Wb as
+ * its expansion batch. A refusal flushes the writers the candidate skipped,
+ * so the draw keeps today's in-render prelude behind a submitted Wb. */
+static void
+agx_win32_fold_prepare(struct agx_context *ctx, struct agx_batch *wb,
+                       const struct pipe_draw_indirect_info *in)
+{
+   unsigned reason = 0;
+   struct agx_batch *render = ctx->any_faults ? NULL : agx_get_batch(ctx);
+   if (!render || ctx->any_faults || !agx_batch_is_active(wb) ||
+       agx_batch_is_submitted(wb) || !agx_win32_expand_room(wb))
+      reason = AGX_WIN32_FOLD_REFUSE_LOST;
+   else if (render->cdm.bo)
+      reason = AGX_WIN32_FOLD_REFUSE_PRELUDE;
+   else if (agx_win32_fold_owner(wb) && agx_win32_fold_owner(wb) != render)
+      reason = AGX_WIN32_FOLD_REFUSE_OTHER_RENDER;
+   else if (agx_win32_fold_render_writes(ctx, wb, render))
+      reason = AGX_WIN32_FOLD_REFUSE_ORDER;
+   if (reason) {
+      agx_win32_fold_refused(ctx, reason);
+      if (!ctx->any_faults && agx_win32_fold_writer(ctx, wb, in->buffer))
+         agx_flush_writer(ctx, agx_resource(in->buffer), "Indirect stream arguments");
+      if (in->indirect_draw_count && !ctx->any_faults &&
+          agx_win32_fold_writer(ctx, wb, in->indirect_draw_count))
+         agx_flush_writer(ctx, agx_resource(in->indirect_draw_count),
+                          "Indirect stream count");
+      return;
+   }
+   if (agx_win32_fold_owner(wb) == render)
+      return;
+   wb->windows_expand_fold = true;
+   wb->windows_fold_cause = 0;
+   wb->windows_expand_owner = render;
+   render->windows_expand = wb;
+   wb->windows_fold_marks |= AGX_WIN32_FOLD_MARK_COMPUTE;
+   render->windows_fold_marks |= AGX_WIN32_FOLD_MARK_RENDER;
+   agx_win32_fold_count(ctx, AGX_WIN32_FOLD_SEALS);
+   AgxWin32PerfNote("Expand fold: compute batch sealed");
+}
+
+/* PF1, at the draw: R's sealed expansion batch with room, else NULL (the
+ * prelude stays in R's CDM). Switch off: NULL, nothing else. */
+static struct agx_batch *
+agx_win32_fold_linked(struct agx_context *ctx, struct agx_batch *render)
+{
+   struct agx_batch *wb;
+   if (!agx_win32_expand_fold_enabled())
+      return NULL;
+   wb = agx_win32_expand_queries_allow(ctx) ? agx_win32_expand_linked(render) : NULL;
+   if (wb && wb->windows_expand_fold && agx_win32_expand_room(wb))
+      return wb;
+   /* a refusal before entry already names this draw's reason */
+   if (!ctx->windows_indirect_fold)
+      agx_win32_fold_refused(ctx, AGX_WIN32_FOLD_REFUSE_DRAW);
+   return NULL;
+}
+
 /* The generated stream is not CPU-readable by the KMD validator. Prove the
  * complete writable output, including VDM fetch padding, before launching its
  * producer. Windows process mappings use 39 bits even though VDM links encode
@@ -183,8 +286,12 @@ static void
 agx_win32_stream_flush_inputs(struct agx_context *ctx,
                                const struct pipe_draw_indirect_info *in)
 {
-   agx_flush_writer(ctx, agx_resource(in->buffer), "Indirect stream arguments");
-   if (in->indirect_draw_count && !ctx->any_faults)
+   /* PF1: a fold candidate is not flushed for the inputs it wrote. */
+   struct agx_batch *fold = agx_win32_fold_candidate(ctx, in);
+   if (!fold || !agx_win32_fold_writer(ctx, fold, in->buffer))
+      agx_flush_writer(ctx, agx_resource(in->buffer), "Indirect stream arguments");
+   if (in->indirect_draw_count && !ctx->any_faults &&
+       (!fold || !agx_win32_fold_writer(ctx, fold, in->indirect_draw_count)))
       agx_flush_writer(ctx, agx_resource(in->indirect_draw_count),
                        "Indirect stream count");
    /* rc89: a BO creation and CPU map, outside graphics batch entry. */
@@ -198,6 +305,8 @@ agx_win32_stream_flush_inputs(struct agx_context *ctx,
       agx_flush_batch_for_reason(ctx, batch, "Indirect stream CDM capacity");
    if (!ctx->any_faults && agx_win32_expand_ahead_allowed(ctx))
       agx_win32_expand_prepare(ctx);
+   if (fold)
+      agx_win32_fold_prepare(ctx, fold, in);
 }
 
 /* The captured block must be the complete native VS update that
@@ -255,9 +364,10 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
       goto fail;
 
    /* IE1a (agx_win32_expand_ahead.h): the expansion batch opened before
-    * entry, if any; without one, or without room, the prelude stays. */
+    * entry, if any; without one, or without room, the prelude stays.
+    * PF1: the sealed compute batch takes the kernel as its last dispatch. */
    struct agx_batch *expand = agx_win32_expand_ahead_allowed(ctx) ?
-      agx_win32_expand_linked(batch) : NULL;
+      agx_win32_expand_linked(batch) : agx_win32_fold_linked(ctx, batch);
    if (expand && !agx_win32_expand_room(expand))
       expand = NULL;
    struct agx_batch *const launcher = expand ? expand : batch;
@@ -383,7 +493,13 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
       return NULL;
    if (expand) {
       ++expand->windows_expand_dispatches;
-      AgxWin32PerfNote("GPU stream expand ahead");
+      if (expand->windows_expand_fold) {
+         agx_win32_fold_count(ctx, AGX_WIN32_FOLD_KERNELS);
+         ctx->windows_indirect_fold = 1u;
+         AgxWin32PerfNote("GPU stream expand fold");
+      } else {
+         AgxWin32PerfNote("GPU stream expand ahead");
+      }
    }
 
    ctx->windows_indirect_path = 3;

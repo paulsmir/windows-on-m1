@@ -39,6 +39,15 @@ static struct agx_bo bo = {64};
 static unsigned char encoder[64];
 static unsigned acquisitions, dirty, initializations, reads, writes, fault_site, mode;
 static void agx_dirty_all(struct agx_context *c) {(void)c; ++dirty;}
+/* PF1 (agx_win32_expand_ahead.h): nothing is sealed in these harnesses */
+static void agx_win32_fold_dispatch(struct agx_context *c) {(void)c;}
+static bool agx_win32_fold_defers(struct agx_context *c, struct agx_batch *b, struct agx_batch *r, unsigned k) {
+  (void)c; (void)b; (void)r; (void)k; return false;
+}
+static struct agx_batch *agx_win32_fold_owner(struct agx_batch *b) {(void)b; return NULL;}
+static void agx_win32_fold_cause(struct agx_batch *b, unsigned k) {(void)b; (void)k;}
+#define AGX_WIN32_FOLD_CAUSE_HAZARD 6u
+#define AGX_WIN32_FOLD_CAUSE_RESOURCE 5u
 static void AgxWin32AsahiMarkContextFault(struct agx_context *c, unsigned site) {
   c->any_faults = true; fault_site = site;
 }

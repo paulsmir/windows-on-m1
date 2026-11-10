@@ -227,7 +227,8 @@ class Ov2NoHazardLead(unittest.TestCase):
         self.assertEqual(backend.count('runtime->Ov2Waive = TRUE;'), 1)
         batch = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c').read_text()
         self.assertEqual(batch.count('DRM_ASAHI_BARRIER_NONE : 0,0);'), 1)
-        self.assertIn('AgxWin32BatchKindHook(2u) &&\n      (AgxWin32Ov2Feature || AgxWin32Ov2CrossFeature) ?', batch)
+        self.assertIn('AgxWin32BatchKindHook(2u | agx_win32_fold_kind(batch)) &&\n'
+                      '      (AgxWin32Ov2Feature || AgxWin32Ov2CrossFeature) ?', batch)
 
     def test_start_publishes_feature_after_reset(self):
         """EXP2196: RuntimeStart set GpuIndependentSubqueue from Ov2Enabled and
@@ -601,13 +602,14 @@ int main(void) {
             '8 0',    # EXP2203 R8: driver work in the compute batch after R
             '9 9'])   # a compute prelude
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
-        self.assertIn('const unsigned ta = AgxD3d12JobRenderTaRefusal(&owner_job_barriers, prelude);', owner)
+        self.assertIn('const unsigned ta = AgxD3d12JobRenderTaRefusal(&owner_job_barriers, prelude | folded);', owner)
         batch = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c').read_text()
-        self.assertIn('AgxWin32BatchKindHook(1u | (batch->cdm.bo ? 0x100u : 0u));', batch)
+        self.assertIn('AgxWin32BatchKindHook(1u | (batch->cdm.bo ? 0x100u : 0u) | agx_win32_fold_kind(batch));', batch)
         # the flag: only a plain render (no compute command), only with the KMD feature
         self.assertIn('command_header=compute ? agx_cmd_header(false,DRM_ASAHI_BARRIER_NONE,1) :\n'
                       '#ifdef _MSC_VER\n'
-                      '                 AgxWin32Ov5Feature && AgxWin32RenderTaHook && AgxWin32RenderTaHook(0u) ?\n'
+                      '                 AgxWin32Ov5Feature && AgxWin32RenderTaHook &&\n'
+                      '                 AgxWin32RenderTaHook(agx_win32_fold_kind(batch) >> 8) ?\n'
                       '                           agx_cmd_header(false,0,DRM_ASAHI_BARRIER_NONE) :', batch)
         self.assertIn('ta = AgxD3d12JobRenderTaRefusal(&owner_job_barriers, prelude) == 0u ? 1u : 0u;', owner)
         info = (SHARED / 'include/apple_agx_win32_device_info.h').read_text()
