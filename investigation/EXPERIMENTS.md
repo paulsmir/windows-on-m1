@@ -77320,3 +77320,16 @@ EXP2326 HARDWARE BEFORE 2026-11-10T18:35:43Z:
 - Hashes: sys 4715dbcd056a, UmdArm64 296381e0fd61, UmdX64 4168b0181748, Umd32 dc86fa372142; manifest 26094a0d6b37, hardware-manifest 2fc96d1bd977; probe2326.sh bbd14bfe5da1 (PROBE_LINT_OK); visible recovery rec2326h 68de12c393aebf3a; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1CrossProcessRenderPairs=1.
 - Recovery rec2326h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2326-k1-xproc-render-b/run2326.sh.
+
+EXP2326 ACTUAL 2026-11-10T19:05:03Z:
+- Phases: launch, package install and first start normal with Wom1CrossProcessRenderPairs=1; EXP2326_PIPELINE_RC 0; no hang, TDR, GPU reset or stop (STOPS 0). Display, SSH, storage (AppleAns 0.4.8) and 8 CPUs alive throughout.
+- b0 (20 s FAST, receipt gate before any other arm): K1_B0 version 4 bytes 328, RenderConsidered 844, allowed 809, RenderKicked 809, fell_back 0, RenderFailed 0, words 65..73 [35,0,0,0,0,0,0,0,6] -> CONTINUE; GM wer 0, no fault.
+- Suite TOOL_SUITE PASS=119 FAIL=0.
+- GM HD PERF fps_frames: w 50.423 / r2 50.526 / r3 50.134 (frames 2727/2723/2706); mean(r2,r3) 50.330 vs EXP2325 (boot A) 50.285 = +0.09 % (decision row "not below A by more than 0.7 %": met). wer 0 in every GM arm.
+- K1 receipt (whole boot): considered 16820, kicked 16689, fell_back 0, failed 0; refused same VM slot 127, manager-slot proof 'poisoned' 4, other 6. Refusal totals {6: 91, 58: 3}: refusal 55 absent (boot A 14185). Arm x pre/post deltas: render pairs considered 1571, kicked 1560, failed 0; refusal 6 +21; refusal 55 +0 (decision row "below 300 per PERF arm": met).
+- Screenshots arm x at 45 s: evidence/EXP2326/shots/gm2326x-000.jpg, -001.jpg: desktop and GM window render normally (bench owner's visual check).
+- GM FULL f0 Score 7937 (EXP2325 7911). CS 1.6 warm/r2/r3 48.848/51.813/51.644; PERF_GATE cs16 PASS (+3.41 %), gravitymark_hd_perf PASS (worst 45.131 vs 40.770), PERF_GATE_PASS. WER_REPORTS 2 (pre-existing).
+- m1n1 at the ordered restart: "BUGCHECK ok base=0xfffff801d8400000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0".
+- Rollback rec2326h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE.
+- Open row of the pre-registered decision rule: gap p50 at C2>D>R3 and C4>D>R5 (<= 1.05 ms) from the timeline of gm2326x / r2 / r3 umd logs, read by the architect. All other rows met. Verdict pending that row (default flip is the architect's follow-up commit).
+- Next: EXP2327 (N4c-v3 shadow + T5b arms, package 0eb337508).
