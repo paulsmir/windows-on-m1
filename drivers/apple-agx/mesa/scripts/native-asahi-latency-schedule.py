@@ -410,17 +410,7 @@ CONTEXT = '''   /* Promoted constants. These will be appended to the binary at t
 /* RC123: reserve pending phi-web registers (agx_register_allocate.c) */
 #define AGX_WIN32_RA_WEB           0x400u
 /* O1: bound a compute function to one more resident workgroup */
-#define AGX_WIN32_RA_GROUPS        0x800u
-
-/* T5: first texture-state register of a promoted constant texture handle.
- * The USC TEXTURE word loads registers [0, min(descriptors, 16)) from the
- * bindful table (AGX_NUM_TEXTURE_STATE_REGS), so 16 is the first register no
- * batch loads; the preamble's tex_state_store owns every register from it. */
-#define AGX_WIN32_PROMOTE_TEXTURE_BASE 16u
-/* T5: image-class preamble storage in 16-bit units, two per texture state.
- * Encoding limits only: the tex_state_store register immediate has 7 bits
- * (agx_pack.c) and agx_shader_info::texture_state_count is a uint8_t. */
-#define AGX_WIN32_TEXTURE_STATE_UNITS  254u'''
+#define AGX_WIN32_RA_GROUPS        0x800u'''
 
 
 def project_compiler_h(text):
@@ -1287,181 +1277,6 @@ REMAT_PASS = '''   NIR_PASS(_, nir, nir_opt_move, move_all);
    NIR_PASS(progress, nir, nir_lower_all_phis_to_scalar);'''
 
 
-# T5 (r17-shader-rows, 2026-11-10): texture-state promotion of constant texture
-# handles. The gallium rule keeps a texture bindful only for table index < 16
-# without a descriptor crawl; every other texture is sampled bindless, and the
-# pinned compiler promotes a bindless handle to a texture-state register only
-# with agx_shader_key::promote_textures, which the gallium driver never sets.
-# GravityMark's lighting kernel (806ee7b1bdb1944a) then samples the shadow map
-# bindless 16 times inside its filter loops (29 of 50 samples), the planet PS
-# (428487dae22a5191) 75 of 79; Apple's binaries load the same handles once into
-# texture state in the preamble and keep only the dynamic handles bindless.
-#
-# In this compiler projection promote_textures means the D3D12 form (the only
-# setter in the projected driver is agx_compile_nir,
-# native-asahi-batch-lifecycle.py project_texture_promotion, under
-# APPLE_AGX_D3D_PROMOTE_TEX=1):
-#  - gate: only a shader that samples a constant handle inside a loop is
-#    promoted (144a46deb6ed2427, 255 GPRs, constant handles only outside
-#    loops, grew by 137 instructions and 12 spills in the ungated r17
-#    prototype); every other shader takes the unpromoted path and compiles
-#    byte-identical to the key bit being clear;
-#  - merge: bindless_image_agx definitions with one constant offset and heap
-#    become one definition at the function start, so one table entry takes
-#    one register (unmerged: 26 states for the lighting kernel, merged 3);
-#  - registers: the image-class cursor starts at AGX_WIN32_PROMOTE_TEXTURE_BASE
-#    registers, after the bindful ones; agx_shader_info::texture_state_count
-#    returns the end cursor in 16-bit units (two per register), 0 when nothing
-#    was promoted; the driver emits max(bindful descriptors, end / 2);
-#  - samplers are never promoted (the sampler-state registers are bindful).
-# Without the key bit nothing here runs and the image-class limit is not
-# reached (the cursor of an unpromoted compile is 1000 units).
-PROMOTE_TEXTURES = r'''/* T5 (native-asahi-latency-schedule.py): texture-state promotion of constant
- * texture handles for agx_shader_key::promote_textures. */
-static bool
-agx_win32_constant_texture_handle(nir_def *def)
-{
-   nir_intrinsic_instr *intr = nir_def_as_intrinsic_or_null(def);
-
-   /* a heap uniform from 32 up cannot be encoded in tex_state_store
-    * (agx_nir_opt_preamble.c preamble_class) */
-   return intr && intr->intrinsic == nir_intrinsic_bindless_image_agx &&
-          nir_intrinsic_desc_set(intr) < 32 && nir_src_is_const(intr->src[0]);
-}
-
-static bool
-agx_win32_loop_samples_constant_handle(struct exec_list *list, bool in_loop)
-{
-   foreach_list_typed(nir_cf_node, node, node, list) {
-      switch (node->type) {
-      case nir_cf_node_block:
-         if (!in_loop)
-            break;
-         nir_foreach_instr(instr, nir_cf_node_as_block(node)) {
-            if (instr->type != nir_instr_type_tex)
-               continue;
-            nir_tex_instr *tex = nir_instr_as_tex(instr);
-            const int handle =
-               nir_tex_instr_src_index(tex, nir_tex_src_texture_handle);
-            if (handle >= 0 && !nir_tex_instr_is_query(tex) &&
-                agx_win32_constant_texture_handle(tex->src[handle].src.ssa))
-               return true;
-         }
-         break;
-      case nir_cf_node_if: {
-         nir_if *nif = nir_cf_node_as_if(node);
-         if (agx_win32_loop_samples_constant_handle(&nif->then_list, in_loop) ||
-             agx_win32_loop_samples_constant_handle(&nif->else_list, in_loop))
-            return true;
-         break;
-      }
-      case nir_cf_node_loop: {
-         nir_loop *loop = nir_cf_node_as_loop(node);
-         if (agx_win32_loop_samples_constant_handle(&loop->body, true) ||
-             agx_win32_loop_samples_constant_handle(&loop->continue_list, true))
-            return true;
-         break;
-      }
-      default:
-         break;
-      }
-   }
-   return false;
-}
-
-/* One definition per (heap, constant offset), at the function start: it
- * dominates every use, and nir_opt_preamble sees one candidate per table
- * entry instead of one per sibling block. Entries past the table stay as
- * they are (still promotable, one register each). */
-static bool
-agx_win32_merge_constant_texture_handles(nir_shader *nir)
-{
-   struct agx_win32_handle {
-      uint32_t offset, heap;
-      nir_def *def;
-   } seen[128];
-   unsigned count = 0;
-   bool progress = false;
-   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
-   nir_builder b = nir_builder_at(nir_before_impl(impl));
-
-   nir_foreach_block(block, impl) {
-      nir_foreach_instr_safe(instr, block) {
-         if (instr->type != nir_instr_type_intrinsic)
-            continue;
-         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-         if (!agx_win32_constant_texture_handle(&intr->def))
-            continue;
-
-         const uint32_t offset = (uint32_t)nir_src_as_uint(intr->src[0]);
-         const uint32_t heap = (uint32_t)nir_intrinsic_desc_set(intr);
-         unsigned slot = 0;
-         while (slot < count &&
-                (seen[slot].offset != offset || seen[slot].heap != heap))
-            ++slot;
-         if (slot == count) {
-            if (count == ARRAY_SIZE(seen))
-               continue;
-            /* the builder stays at the function start, before this block */
-            seen[count].offset = offset;
-            seen[count].heap = heap;
-            seen[count].def = nir_bindless_image_agx(
-               &b, nir_imm_intN_t(&b, offset, intr->src[0].ssa->bit_size),
-               .desc_set = heap);
-            ++count;
-         }
-         nir_def_replace(&intr->def, seen[slot].def);
-         progress = true;
-      }
-   }
-   return nir_progress(progress, impl, nir_metadata_control_flow);
-}
-
-/* The gate; a promoted shader gets its handles merged. */
-static bool
-agx_win32_promote_texture_states(nir_shader *nir)
-{
-   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
-
-   if (!agx_win32_loop_samples_constant_handle(&impl->body, false))
-      return false;
-
-   NIR_PASS(_, nir, agx_win32_merge_constant_texture_handles);
-   return true;
-}
-
-'''
-PROMOTE_SIZES_ANCHOR = '''      unsigned sizes[] = {
-         *preamble_size,
-'''
-PROMOTE_SIZES = '''      /* T5: a shader without a constant-handle sample in a loop compiles as
-       * if promote_textures were clear */
-      if (ts_count && !agx_win32_promote_texture_states(nir))
-         ts_count = NULL;
-
-''' + PROMOTE_SIZES_ANCHOR
-PROMOTE_CALL_ANCHOR = '''   agx_optimize_nir(
-      nir, key->dev.soft_fault, key->secondary ? NULL : &info->push_count,
-      (key->secondary || !key->promote_textures) ? NULL
-                                                 : &info->texture_state_count,
-      (key->secondary || !key->promote_textures) ? NULL
-                                                 : &info->sampler_state_count);
-'''
-PROMOTE_CALL = '''   /* T5: promoted texture states start after the bindful registers; the
-    * count returns the end of the promoted range in 16-bit units and 0 when
-    * nothing was promoted. Samplers stay bindful. */
-   const bool windows_promote = !key->secondary && key->promote_textures;
-   const uint8_t windows_promote_base = (uint8_t)(2u * AGX_WIN32_PROMOTE_TEXTURE_BASE);
-   if (windows_promote)
-      info->texture_state_count = windows_promote_base;
-   agx_optimize_nir(
-      nir, key->dev.soft_fault, key->secondary ? NULL : &info->push_count,
-      windows_promote ? &info->texture_state_count : NULL, NULL);
-   if (windows_promote && info->texture_state_count == windows_promote_base)
-      info->texture_state_count = 0;
-'''
-
-
 def project_compile(text):
     if 'agx_win32_compile_function' in text:
         raise RuntimeError('agx_compile.c already projected')
@@ -1472,10 +1287,8 @@ def project_compile(text):
     for anchor, new in DIAG_CUT_MARKS:
         text = once(text, anchor, new)
     text = once(text, 'static void\nagx_optimize_nir(',
-                SHARED_VECTORIZE + REMAT + PROMOTE_TEXTURES + 'static void\nagx_optimize_nir(')
+                SHARED_VECTORIZE + REMAT + 'static void\nagx_optimize_nir(')
     text = once(text, REMAT_PASS_ANCHOR, REMAT_PASS)
-    text = once(text, PROMOTE_SIZES_ANCHOR, PROMOTE_SIZES)
-    text = once(text, PROMOTE_CALL_ANCHOR, PROMOTE_CALL)
     text = once(text, '''               .modes = nir_var_mem_global | nir_var_mem_constant |
                         nir_var_shader_temp,
                .callback = agx_mem_vectorize_cb,''',
@@ -1843,29 +1656,12 @@ def project_waits(text):
     return once(text, WAITS_ANCHOR, WAITS)
 
 
-PREAMBLE_ANCHOR = '''   /* We have at least 32 texture state registers. TODO: check for more? */
-   .preamble_storage_size[nir_preamble_class_image] = 32,
-'''
-PREAMBLE = '''   /* T5 (native-asahi-latency-schedule.py): the pinned limit of 32 units is
-    * the 16 bindful registers; promoted handles start after them
-    * (AGX_WIN32_PROMOTE_TEXTURE_BASE), up to the encodable register range. */
-   .preamble_storage_size[nir_preamble_class_image] = AGX_WIN32_TEXTURE_STATE_UNITS,
-'''
-
-
-def project_preamble(text):
-    """agx_nir_opt_preamble.c: T5 image-class storage (an unpromoted compile
-    passes a cursor of 1000 units and is past either limit)."""
-    return once(text, PREAMBLE_ANCHOR, PREAMBLE)
-
-
 FILES = {
     'src/asahi/compiler/agx_compiler.h': project_compiler_h,
     'src/asahi/compiler/agx_pressure_schedule.c': project_schedule,
     'src/asahi/compiler/agx_compile.c': project_compile,
     'src/asahi/compiler/agx_register_allocate.c': project_ra,
     'src/asahi/compiler/agx_insert_waits.c': project_waits,
-    'src/asahi/compiler/agx_nir_opt_preamble.c': project_preamble,
 }
 
 
@@ -1883,7 +1679,7 @@ def project_bytes(function, data):
 
 
 def project_directory(directory):
-    """Project every FILES entry (agx_compiler.h and the compiler units) of
+    """Project agx_compiler.h, agx_pressure_schedule.c and agx_compile.c of
     one directory in place (build-asahi-runtime-closure.py: the
     compiler-evidence directory, where every compiler unit is compiled beside
     the one agx_compiler.h). Returns {name: (before_sha256, after_sha256)}."""

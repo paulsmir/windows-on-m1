@@ -1415,14 +1415,6 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
      * refuses multisampled formats and u_blitter's resolve hits
      * UNREACHABLE("Unsupported blit") in agx_blit */
     owner->Backend.Multisample = 1;
-    /* T5: exact 1 promotes constant texture handles of CS/FS that sample one
-     * inside a loop to texture-state registers
-     * (agx_win32_d3d_texture_promote.h); every other value keeps today's
-     * binaries. */
-    char promote_textures[2] = {};
-    owner->Backend.D3dPromoteTextures =
-        GetEnvironmentVariableA("APPLE_AGX_D3D_PROMOTE_TEX", promote_textures,
-                                sizeof(promote_textures)) == 1 && promote_textures[0] == '1';
     owner->Screen = AgxWin32AsahiScreenCreateForWindows(&owner->Backend, &owner->Runtime.Screen,
                                                        &owner->OwnerOperations, &owner->Owner,
                                                        AdmissionUmdAsahiBatchOperations());

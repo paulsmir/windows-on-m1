@@ -277,18 +277,16 @@ def prepare_unsigned_bitfield_header(units, out):
 
 
 def prepare_latency_schedule(units, include):
-    """RC96: project agx_compiler.h and the compiler units of
-    native-asahi-latency-schedule.py FILES in the compiler-evidence directory
-    (APPLE_AGX_LATENCY_SCHED=0 restores the pinned compiler at run time).
-    Every projected unit must be one the closure compiles from that
-    directory."""
+    """RC96: project agx_compiler.h, agx_pressure_schedule.c and agx_compile.c
+    in the compiler-evidence directory (APPLE_AGX_LATENCY_SCHED=0 restores the
+    pinned compiler at run time). Both units must be ones the closure
+    compiles from that directory."""
     script = Path(__file__).with_name('native-asahi-latency-schedule.py')
     spec = importlib.util.spec_from_file_location('native_latency_schedule', script)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     names = {p.name: p for p in units}
-    for name in ('agx_pressure_schedule.c', 'agx_compile.c', 'agx_register_allocate.c', 'agx_insert_waits.c',
-                 'agx_nir_opt_preamble.c'):
+    for name in ('agx_pressure_schedule.c', 'agx_compile.c', 'agx_register_allocate.c', 'agx_insert_waits.c'):
         if names.get(name) != include / name:
             raise RuntimeError('RC96 latency schedule: ' + name + ' is not compiled beside the projected header')
     hashes = module.project_directory(include)

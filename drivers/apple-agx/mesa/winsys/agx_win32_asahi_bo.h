@@ -70,10 +70,6 @@ typedef struct {
    * semantics (D3D UMD only; the OpenGL ICD keeps the robustness its
    * contexts ask for). */
   int D3dRobustness;
-  /* T5: the screen's compute and fragment shaders are compiled with
-   * agx_shader_key::promote_textures (D3D12 owner only, under
-   * APPLE_AGX_D3D_PROMOTE_TEX=1; agx_win32_d3d_texture_promote.h). */
-  int D3dPromoteTextures;
   int Failed;
   struct pipe_context *(*ContextCreate)(struct pipe_screen *, void *, unsigned);
   void (*ContextDestroy)(struct pipe_context *);
