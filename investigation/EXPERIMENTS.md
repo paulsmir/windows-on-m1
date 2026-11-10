@@ -76708,3 +76708,14 @@ ANSQ-T5b HARDWARE BEFORE 2026-11-10T03:48:11Z:
 - Expected (AppleAns session): every boot 0xA9 = 0xa9020004; queued = completed_ok > 0, completed_error 0; fenced 0 or only non-C ranges; no 0xAA / 0xA4 / 0xA5; 0xA6 records present; VERIFY_MANIFEST_OK and clean chkdsk.
 - Failure criteria: any completed_error, 0xAA/0xA4/0xA5, manifest mismatch, dirty volume, or a boot without SSH in 5 minutes (then two HV snapshots + AIC 590 mask, relaunch, ansq-post.ps1). Rollback: ImagePath -> 0.4.5 store and restart; UnmapMode=1 first.
 - Evidence .local/experiments/ANSTRIM2/evidence/ANSQ-T5b. Partitions, T: and the Transcend stick are not touched.
+
+ANSQ-T5b HARDWARE ACTUAL 2026-11-10T04:00:48Z:
+- Verdict: CONFIRMED against the T5b expectations. Evidence .local/experiments/ANSTRIM2/evidence/ANSQ-T5b (prep.txt, imagepath-047.txt, post-before.txt, boot1..boot5, verify-after.txt, restore-045.txt, run-t5b.out).
+- Pre-checks: t4-prep.ps1 gave UnmapFenceStart=30916352 UnmapFenceEnd=59706368 (unchanged) before UnmapMode=2 was set; ImagePath -> appleans.inf_arm64_62c12175c51fd95d (0.4.7), signature Valid, sha256 DE910A08...
+- Five ordered restarts, all reached SSH: restart sent -> SSH up 66 / 62 / 62 / 62 / 57 s (03:48:49Z-03:58:24Z). No stall at "IRQ route enabled vINTID=960 AIC=590".
+- Every boot: one 0xA9 record with value 0xa9020004; two 0xA6 records (0xa6000101, 0xa6000102); no 0xAA, 0xA4 or 0xA5 record; C: not dirty; 8 CPUs.
+- Unmap receipt per boot (mode=2, oncs=0x4, fence 30916352..59706368; commands = accepted = queued = completed_ok, completed_error 0, rejected 0, not_sent 0, observed 0, fenced_ranges 0, last_status 0x0): 14 / 23 / 25 / 15 / 14 commands; sent ranges 549 / 920 / 961 / 508 / 676; sent blocks 22987 / 25262 / 25932 / 22093 / 23698.
+- ansq-verify.ps1 after boot 5: manifest checked=330 bad=0 (VERIFY_MANIFEST_OK); chkdsk found no problems, 0 KB in bad sectors, exit 0; volume not dirty.
+- After the step (in this order): UnmapMode=1, then ImagePath back to the 0.4.5 store (signature Valid, sha256 4AF699F474CB4A4D...); T5B_DONE 04:00:05Z. The 0.4.5 binary loads at the next boot (the EXP2316 ordered restart).
+- BUGCHECK line: not available in the recovery-profile m1n1 (known gap); no crash event in the guest logs of any boot.
+- Next: ANSQ-T5c in the next bench gap.
