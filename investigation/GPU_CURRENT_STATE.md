@@ -3871,3 +3871,51 @@ Evidence: `.local/experiments/EXP2327-n4c3-t5b/evidence/EXP2327/gm2327s0-umd.log
   the reachable ledger. No third range-model variant without new evidence.
 - NOT VERIFIED: the slot hypothesis; which BO sets the Bloom bit; anything on hardware. Implementation in progress
   on branch `gpu/n4c-v4` (not integrated).
+
+## UPDATE 2026-11-10T20:12:07Z -- architect: N4c-v4 integrated offline (3e07a3bdc); EXP2327 T5b verdict (not a lever)
+
+N4c-v4 (spec .local/handoff/N4C-V4.md), commit 3e07a3bdc, everything behind Wom1Ov2CrossLead:
+- a draw records only the vertex-buffer slots its input layout names (AgxD3d12JobVbSlots; unknown layout keeps all
+  16; a register hole keeps slot 0);
+- 8/3 needs the barrier range to overlap a compute range AND a kept-render range; the old rule = receipt-only mask
+  bit 23; contract: with the kept verdict 0, (mask & ~bit23) == 0 iff the verdict is 0;
+- receipts: measure-d3d12-ov2-vb-skip (6), measure-d3d12-ov2-mask-barrier (9, only with bit 23),
+  measure-batch-deps-exact (11, execution-first compute batch), measure-d3d12-ov2-heap-bo (3) + summary (2);
+  measure-d3d12-ov2-mask-summary now 26 values; measure-batch-deps stays 4.
+- Verified offline: run_against_baseline.py (only the known mailbox NEW failure in this worktree), UMD syncheck
+  SYNCHECK_OK. NOT verified: MSVC compile of agx_win32_gpuva_batch.c / agx_win32_asahi_scene.c (first package
+  build), hardware.
+- Consumer note: with the cross switch on the same-execution draw sets are narrower too. The OV5 render-TA verdict
+  acts only under Wom1Ov5TaWaiver and the OV2 verdict only under Wom1Ov2NoHazardLead; both stay unset, so arm s1
+  is still a pure shadow arm. s1 is invalid if either is set.
+- Next: arm s1 (Wom1Ov2CrossLead=1, apply off, HD PERF 10+60 s) in the first package built from a tree that
+  contains 3e07a3bdc; stop rule and criterion (g') as in N4C-V4.md section 5. No apply arm before s1 is read.
+
+EXP2327 T5b ABBA, architect reading (tools/agx_gm_perf.py summary, fps_frames; arms t0 tA tAB tAB tA t0, HD PERF
+10+60 s; evidence .local/experiments/EXP2327-n4c3-t5b/evidence/EXP2327/gm2327<arm><r>-umd.log):
+  arm   r1      r2      r3      mean(r2,r3)
+  t0a   49.852  50.008  49.622  49.815
+  tAa   50.031  49.919  49.634  49.777
+  tABa  49.807  50.592  49.894  50.243
+  tABb  50.363  50.083  49.862  49.973
+  tAb   49.729  50.246  49.985  50.116
+  t0b   49.874  49.924  49.620  49.772
+- mean(r2,r3) over both blocks: t0 49.794, tA 49.946 (+0.31 %), tAB 50.108 (+0.63 %). All six runs per arm:
+  t0 49.817, tA 49.924 (+0.21 %), tAB 50.100 (+0.57 %). GM frame mean 20.07 -> 19.96 ms (tAB).
+- Mechanism receipt moved (t5b-rows.txt: hash 806ee7b1bdb1944a (1,1) -> (25,3) under A+B2).
+- Per-job split of the warm runs (.local/night-20261110/t5b-split/REPORT.md, nb.py unchanged, 4 runs per arm,
+  ms/frame, tAB - t0; wall = busy + gaps with residual 0.000):
+    wall 20.083 -> 19.958 (-0.125) = busy union -0.092 + non-busy -0.034
+    C4 busy 2.024 -> 2.009 (-0.015; predicted 0.19-0.30)    R5 busy 1.935 -> 1.906 (-0.029, all in the 3D part;
+    predicted 0.17)    C0 -0.025, C2 -0.014, R1 -0.007, R3 -0.007; no row grew beyond its run-to-run range.
+- VERDICT T5b (A = CRAWL_BINDFUL, B2 = SRV_STATIC_FIRST): mechanism present (receipt), effect real but 0.044 ms of
+  the predicted 0.36-0.47 ms in C4+R5; fps +0.6 % < the 0.7 % flip rule. Class O without the required gain: both
+  switches stay opt-in, default off; no default-flip package; T5b is CLOSED as a lever for the macOS gap. The frame
+  followed the busy time exactly, so nothing absorbed a saving: the saving itself is not there.
+- Consequence for the gap ledger: the rows "C4 0.19-0.30" and "R5 0.17" go back to "no lever" (R8 wording: DXIL
+  heavier than Metal, not equal work). The bind-path difference (bindless crawl vs static bind) explains about a
+  tenth of them. Do not design a second variant of the same lever (texture/sampler bind form) for C4/R5.
+- Rule derived (process): an instruction-form difference against the Metal oracle is not a time prediction. Before a
+  shader-form lever gets a package, its size must come from a measured cost of that op class on this GPU (cost
+  fixture with the production shape, or a diagnostic arm), not from the oracle diff.
+- Result with a claim unchanged: EXP2318 FULL f0 7923 = 79.7 % of macOS 9946.
