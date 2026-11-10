@@ -4022,7 +4022,9 @@ static bool AdmissionG3TimedGraphBeginJob(ADMISSION_G3_STATE *state,
 static unsigned int AdmissionG4ComputeParseFlags(ADMISSION_CONTEXT *adapter) {
   unsigned int flags = 0u;
   if (adapter == NULL) return 0u;
-  if (InterlockedCompareExchange(&adapter->GpuIndependentSubqueue, 0, 0) != 0)
+  if (InterlockedCompareExchange(&adapter->GpuIndependentSubqueue, 0, 0) != 0 ||
+      /* N4c-v2: the cross-execution lead sends the same envelope */
+      InterlockedCompareExchange(&adapter->GpuOv2CrossLead, 0, 0) != 0)
     flags |= APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE;
   /* C2a: the header's private-only verdict, only with the device feature */
   if (InterlockedCompareExchange(&adapter->GpuPrivateOnlyCompute, 0, 0) != 0)

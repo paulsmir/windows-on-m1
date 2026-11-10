@@ -424,6 +424,8 @@ void (*AgxWin32BatchDepsHook)(const uint32_t *values, unsigned count);
  * AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE). */
 unsigned (*AgxWin32BatchKindHook)(unsigned kind);
 extern volatile unsigned AgxWin32Ov2Feature;
+/* N4c-v2: or AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD */
+extern volatile unsigned AgxWin32Ov2CrossFeature;
 /* C2a: the KMD reports AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE
  * (MSVC only, like the hooks: the host models extract the submit bodies). */
 extern volatile unsigned AgxWin32PrivateOnlyFeature;
@@ -1254,7 +1256,7 @@ int AgxWin32AsahiBatchFinishCompute(struct agx_batch *batch,
 #ifdef _MSC_VER
   command_header=agx_cmd_header(true,
       AgxWin32BatchKindHook && AgxWin32BatchKindHook(2u) &&
-      AgxWin32Ov2Feature ? DRM_ASAHI_BARRIER_NONE : 0,0);
+      (AgxWin32Ov2Feature || AgxWin32Ov2CrossFeature) ? DRM_ASAHI_BARRIER_NONE : 0,0);
 #else
   command_header=agx_cmd_header(true,0,0);
 #endif

@@ -50,7 +50,7 @@ typedef struct { ULONG Samples; } APPLE_AGX_FW_RX_RECEIPT;
 typedef struct {
   int JobDiagnostics, RcReceiptEnabled, RcExportPending, JobDepth2Kick;
   /* receipts added after rc83; all off here (their own suites cover them) */
-  int CrossProcessPairs, PresentTsEnabled, Ov2Enabled, Ov5Waiver, Ov5DrillEnabled;
+  int CrossProcessPairs, PresentTsEnabled, Ov2Enabled, Ov2CrossLead, Ov5Waiver, Ov5DrillEnabled;
   ULONGLONG XprocExportQpc, IrqRxExportQpc; ADMISSION_JOB_WINDOW_XPROC_RECEIPT XprocReceipt; PRESENT_TS PresentTs; APPLE_AGX_FW_RX_RECEIPT FwRx;
   struct { unsigned Mode; } Depth2Drill;
   struct { unsigned Samples; } GpuPerf, GpuPerfSnapshot;

@@ -152,6 +152,9 @@ int main(void) {
   fake.Info.Features = AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS |
                        AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE;
   assert(AgxWin32DeviceInfoValid(&fake.Info));
+  /* N4c-v2: and the cross-execution lead */
+  fake.Info.Features = AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD;
+  assert(AgxWin32DeviceInfoValid(&fake.Info));
   fake.Info.Features = AGX_WIN32_DEVICE_FEATURES_KNOWN + 1u;
   assert(!AgxWin32DeviceInfoValid(&fake.Info));
   fake.Info = make_info();

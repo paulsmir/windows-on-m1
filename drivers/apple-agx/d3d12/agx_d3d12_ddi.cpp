@@ -7287,6 +7287,10 @@ static HRESULT ReplayAndSubmit(AgxD3d12CommandQueue *queue, UINT count, const D3
             } else if (command.kind == kCommandCopy) {
                 const AgxD3d12Copy &copy = command.copy;
                 AGX_D3D12_BUFFER dst = HeapBuffer(copy.dst), src = HeapBuffer(copy.src);
+                /* N4c-v2: the copy's ranges, compared with the kept render */
+                if (job_command)
+                    AgxD3d12OwnerJobCopyRange(copy.dst, copy.dst_offset, copy.dst_offset + copy.bytes, copy.src,
+                                              copy.src_offset, copy.src_offset + copy.bytes);
                 hr = AgxD3d12OwnerCopy(owner, &dst, copy.dst_offset, &src, copy.src_offset, copy.bytes);
             } else if (command.kind == kCommandClear) {
                 const AgxD3d12Clear &clear = command.clear;

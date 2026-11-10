@@ -18,6 +18,8 @@
 /* OV2: AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE of the device the
  * screen was created for (read by the D3D12 owner and the batch submit). */
 volatile unsigned AgxWin32Ov2Feature;
+/* N4c-v2: AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD of that device */
+volatile unsigned AgxWin32Ov2CrossFeature;
 /* OV5: AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT of that device */
 volatile unsigned AgxWin32Ov5Feature;
 /* C2a: AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE of that device */
@@ -89,6 +91,8 @@ struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(AGX_WIN32_ASAHI_BACKEND 
       DRM_ASAHI_FEATURE_SOFT_FAULTS : 0;
   /* OV2: the KMD admits independent compute envelopes (VdmBarrier NONE) */
   AgxWin32Ov2Feature=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE) ? 1u : 0u;
+  /* N4c-v2: the same envelope, for the cross-execution verdict alone */
+  AgxWin32Ov2CrossFeature=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD) ? 1u : 0u;
   /* C2a: the KMD admits private-only compute envelopes */
   AgxWin32PrivateOnlyFeature=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE) ? 1u : 0u;
   /* OV5: the KMD admits TA-independent renders (render CdmBarrier NONE) */

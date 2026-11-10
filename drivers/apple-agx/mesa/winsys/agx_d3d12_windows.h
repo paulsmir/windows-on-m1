@@ -72,6 +72,11 @@ void AgxD3d12OwnerJobDrawRange(const void *Heap, unsigned long long Lo, unsigned
 void AgxD3d12OwnerJobBarrierRange(unsigned Type, unsigned Id, const void *Heap, unsigned long long Lo,
                                   unsigned long long Hi);
 void AgxD3d12OwnerJobResolveRange(const void *Heap, unsigned long long Lo, unsigned long long Hi);
+/* N4c-v2 copy rule (only with AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD): the
+ * active buffer copy writes Dst[DstLo, DstHi) and reads Src[SrcLo, SrcHi);
+ * call before its owner work (AgxD3d12JobCrossCopy) */
+void AgxD3d12OwnerJobCopyRange(const void *DstHeap, unsigned long long DstLo, unsigned long long DstHi,
+                               const void *SrcHeap, unsigned long long SrcLo, unsigned long long SrcHi);
 /* OV5 receipt: the active dispatch accesses [Lo, Hi) of Heap (Flags bit 0: may write) */
 void AgxD3d12OwnerJobDispatchRange(const void *Heap, unsigned long long Lo, unsigned long long Hi, unsigned Flags);
 /* OV4 (opt-in APPLE_AGX_D3D12_OV4=1 with the OV2 feature): after a barrier

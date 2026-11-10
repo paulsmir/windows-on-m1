@@ -750,6 +750,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     /* OV2: Wom1Ov2NoHazardLead = 1 with Q2c (backend start). */
     if (InterlockedCompareExchange(&context->GpuIndependentSubqueue, 0, 0) != 0)
       info->Features |= AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE;
+    /* N4c-v2: Wom1Ov2CrossLead = 1 with Q2c (backend start). */
+    if (InterlockedCompareExchange(&context->GpuOv2CrossLead, 0, 0) != 0)
+      info->Features |= AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD;
     /* C2a: Wom1CrossProcessPrivateLead = 1 with C1 and Q2c (backend start). */
     if (InterlockedCompareExchange(&context->GpuPrivateOnlyCompute, 0, 0) != 0)
       info->Features |= AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE;

@@ -227,7 +227,7 @@ class Ov2NoHazardLead(unittest.TestCase):
         self.assertEqual(backend.count('runtime->Ov2Waive = TRUE;'), 1)
         batch = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_gpuva_batch.c').read_text()
         self.assertEqual(batch.count('DRM_ASAHI_BARRIER_NONE : 0,0);'), 1)
-        self.assertIn('AgxWin32BatchKindHook(2u) &&\n      AgxWin32Ov2Feature', batch)
+        self.assertIn('AgxWin32BatchKindHook(2u) &&\n      (AgxWin32Ov2Feature || AgxWin32Ov2CrossFeature) ?', batch)
 
     def test_start_publishes_feature_after_reset(self):
         """EXP2196: RuntimeStart set GpuIndependentSubqueue from Ov2Enabled and
@@ -759,6 +759,188 @@ int main(void) {
             '28 1 2 2 0.0',    # the same heap, a disjoint range
             'histogram 121111', 'saturated 12f111'])
 
+    def test_cross_execution_copy_rule(self):
+        """N4c-v2: GravityMark's execution-first compute batch holds 1..19
+        buffer copies before its dispatches, so the cross-execution shadow
+        refused every frame with 6 detail 3. With the cross-lead feature the
+        owner places such a copy (AgxD3d12JobCrossCopy): it stops counting
+        as other owner work and its ranges are compared with the kept
+        render. A copy that writes what that render accesses, or reads what
+        it writes, must still refuse (8) -- else the copy runs beside the
+        render it depends on; a copy the tracker cannot place refuses (11);
+        without the feature nothing changes."""
+        code = r"""
+#include <stdio.h>
+#include "agx_d3d12_job_barriers.h"
+enum { DRAW = 5, DISPATCH = 2, COPY = 1, CLEAR = 3 };
+#define VIEW AGX_D3D12_JOB_SRC_VIEW
+#define TARGET AGX_D3D12_JOB_SRC_TARGET
+static AGX_D3D12_JOB_BARRIERS j;
+static unsigned values[AGX_D3D12_JOB_BARRIER_VALUES];
+static int A, B, RT, V, S, D;
+static char many[130 * 64];
+static void batch(unsigned kind, unsigned clean) {
+  AgxD3d12JobCrossBatch(&j, kind, clean);
+  AgxD3d12JobBarrierBatch(&j, kind, values);
+}
+static void copy(int feature, const void *dst, unsigned long long dlo, const void *src, unsigned long long slo,
+                 unsigned long long bytes) {
+  AgxD3d12JobBarrierBegin(&j, COPY);
+  if (feature) AgxD3d12JobCrossCopy(&j, dst, dlo, dlo + bytes, src, slo, slo + bytes);
+  AgxD3d12JobBarrierEnd(&j);
+}
+/* execution N: R (target RT, reads V); execution N+1: copies, then C0
+ * (writes A, reads B), submitted by the next render's first draw */
+static void run(int mode) {
+  const int feature = mode != 0;
+  const AGX_D3D12_JOB_RANGE *x, *y;
+  unsigned detail = 0, shadow, conflicts, i;
+  AgxD3d12JobBarriersInit(&j);
+  AgxD3d12JobBarrierExecution(&j, 1);
+  AgxD3d12JobCrossBegin(&j, 0);
+  AgxD3d12JobBarrierBegin(&j, DRAW);
+  AgxD3d12JobBarrierDrawRange(&j, &RT, 0, 4096, TARGET);
+  AgxD3d12JobBarrierDrawRange(&j, &V, 0, 256, VIEW | AGX_D3D12_JOB_VERTEX);
+  AgxD3d12JobBarrierEnd(&j);
+  if (mode == 12) copy(1, &D, 0, &S, 0, 64); /* after the kept render's last draw */
+  batch(1u, 1);
+  AgxD3d12JobCrossEnd(&j, 1);
+  AgxD3d12JobBarrierExecution(&j, 1);
+  AgxD3d12JobCrossBegin(&j, 0);
+  if (mode <= 1 || mode == 12) copy(feature, &D, 0, &S, 0, 64);   /* disjoint */
+  if (mode == 2) copy(1, &V, 128, &S, 0, 64);    /* writes what the render reads */
+  if (mode == 3) copy(1, &RT, 4000, &S, 0, 64);  /* writes the render's target */
+  if (mode == 4) copy(1, &D, 0, &RT, 0, 64);     /* reads the render's target */
+  if (mode == 5) copy(1, &D, 0, &V, 0, 256);     /* both only read the range */
+  if (mode == 6) copy(1, 0, 0, &S, 0, 64);       /* a destination the tracker cannot place */
+  if (mode == 7) { /* another command beside the copy */
+    copy(1, &D, 0, &S, 0, 64);
+    AgxD3d12JobBarrierBegin(&j, CLEAR);
+    AgxD3d12JobBarrierEnd(&j);
+  }
+  if (mode == 8) { /* the copy was moved out of the compute batch, another command follows */
+    AgxD3d12JobBarrierBegin(&j, COPY);
+    AgxD3d12JobCrossCopy(&j, &D, 0, 64, &S, 0, 64);
+    AgxD3d12JobBarrierLocal(&j);
+    AgxD3d12JobBarrierEnd(&j);
+    AgxD3d12JobBarrierBegin(&j, CLEAR);
+    AgxD3d12JobBarrierEnd(&j);
+  }
+  if (mode == 9) for (i = 0; i < 19; ++i) copy(1, &D, i * 64ull, &S, i * 64ull, 64); /* touching: merged */
+  if (mode == 10) for (i = 0; i < 65; ++i) copy(1, &many[i * 128], 0, &many[i * 128 + 64], 0, 64);
+  if (mode == 11) { /* two conflicts: the receipt names the first */
+    copy(1, &D, 0, &S, 0, 64);
+    copy(1, &V, 0, &S, 64, 16);
+    copy(1, &D, 64, &RT, 16, 32);
+  }
+  if (mode == 14) { /* one command reports twice: counted once */
+    AgxD3d12JobBarrierBegin(&j, COPY);
+    AgxD3d12JobCrossCopy(&j, &D, 0, 64, &S, 0, 64);
+    AgxD3d12JobCrossCopy(&j, &V, 0, 64, &S, 0, 64);
+    AgxD3d12JobBarrierEnd(&j);
+  }
+  AgxD3d12JobBarrierBegin(&j, DISPATCH);
+  AgxD3d12JobBarrierDispatchRange(&j, &A, 0, 64, 1u | VIEW);
+  AgxD3d12JobBarrierDispatchRange(&j, &B, 0, 64, VIEW);
+  AgxD3d12JobBarrierEnd(&j);
+  if (mode == 13) { /* the copy's own owner work submits the batch */
+    AgxD3d12JobBarrierBegin(&j, COPY);
+    AgxD3d12JobCrossCopy(&j, &D, 0, 64, &S, 0, 64);
+  } else {
+    AgxD3d12JobBarrierBegin(&j, DRAW);
+  }
+  shadow = AgxD3d12JobCrossRefusal(&j, &detail);
+  conflicts = AgxD3d12JobCrossCopyConflicts(&j, &x, &y);
+  printf("%d %u %u.%u copies %u ranges %u conflicts %u", mode, AgxD3d12JobCrossFirst(&j), shadow, detail,
+         j.Cross.Copies, j.Cross.Copy.Count, conflicts);
+  if (x) printf(" first %s %llu-%llu w%u vs %s %llu-%llu", x->Heap == &V ? "V" : x->Heap == &RT ? "RT" : "?",
+                x->Lo, x->Hi, x->Uav & 1u, y->Heap == &V ? "V" : y->Heap == &RT ? "RT" : "?", y->Lo, y->Hi);
+  printf("\n");
+  batch(2u, 0);
+  AgxD3d12JobBarrierEnd(&j);
+  /* after the first batch a copy is other owner work again */
+  copy(1, &D, 0, &S, 0, 64);
+  if (j.Cross.CopyActive || j.Cross.Copies > 65u) printf("late copy placed\n");
+}
+int main(void) {
+  for (int m = 0; m <= 14; ++m) run(m);
+  return 0;
+}
+"""
+        ran = build_run(code, [], [D3D12])
+        self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
+        self.assertEqual(ran.stdout.split('\n')[:-1], [
+            '0 1 6.3 copies 0 ranges 0 conflicts 0',    # no feature: other owner work, as before
+            '1 1 0.0 copies 1 ranges 2 conflicts 0',    # a disjoint copy is placed
+            '2 1 8.6 copies 1 ranges 2 conflicts 1 first V 128-192 w1 vs V 0-256',
+            '3 1 8.5 copies 1 ranges 2 conflicts 1 first RT 4000-4064 w1 vs RT 0-4096',
+            '4 1 8.5 copies 1 ranges 2 conflicts 1 first RT 0-64 w0 vs RT 0-4096',
+            '5 1 0.0 copies 1 ranges 2 conflicts 0',    # both only read the range
+            '6 1 11.7 copies 1 ranges 1 conflicts 0',   # an unplaceable copy range
+            '7 1 6.3 copies 1 ranges 2 conflicts 0',    # any other command still refuses
+            '8 1 6.3 copies 0 ranges 2 conflicts 0',    # a copy marked local leaves the count
+            '9 1 0.0 copies 19 ranges 2 conflicts 0',   # GravityMark's 19 copies
+            '10 1 11.7 copies 65 ranges 128 conflicts 0',  # more ranges than the set holds
+            '11 1 8.6 copies 3 ranges 4 conflicts 2 first V 0-16 w1 vs V 0-256',
+            '12 1 6.2 copies 1 ranges 2 conflicts 0',   # a copy after the kept render stays foreign
+            '13 1 0.0 copies 1 ranges 2 conflicts 0',   # the submitting copy is not counted twice
+            '14 1 0.0 copies 1 ranges 2 conflicts 0'])
+
+    def test_cross_lead_feature_wiring(self):
+        """N4c-v2: Wom1Ov2CrossLead publishes its own device feature. Under it
+        alone the compute envelope may be NONE only through the cross-execution
+        verdict: the same-execution verdict is dropped, and the OV3 resolve
+        deferral, the OV4 split and the OV5 receipts stay with the OV2 feature.
+        A cross lead that inherited any of those would change what GravityMark
+        submits (R7 prelude, split compute) or let a compute run beside a
+        render of its own execution it depends on."""
+        info = (ROOT / 'drivers/apple-agx/shared/include/apple_agx_win32_device_info.h').read_text()
+        self.assertIn('#define AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD 0x10u', info)
+        known = info[info.index('#define AGX_WIN32_DEVICE_FEATURES_KNOWN'):]
+        self.assertIn('AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD)', known[:400])
+        backend = (RENDER / 'src/backend_platform_windows.c').read_text()
+        self.assertIn('runtime->Ov2CrossLead = runtime->Initdata.RenderSharedMemory.ComputeOwnQueue &&\n'
+                      '      AdmissionPlatformSwitchEnabled(Context, L"Wom1Ov2CrossLead")', backend)
+        # published at the end of start, after every reset, like the OV2 word
+        tail = backend[backend.rindex('InterlockedExchange(&Context->GpuSoftFaults, 0);\n#if defined(ADMISSION_OV2_ON)'):]
+        self.assertIn('InterlockedExchange(&Context->GpuOv2CrossLead, runtime->Ov2CrossLead ? 1 : 0);',
+                      tail[:tail.index('#else')])
+        self.assertEqual(backend.count('InterlockedExchange(&Context->GpuOv2CrossLead, 0);'), 3)
+        self.assertIn('if (runtime->Ov2Enabled || runtime->Ov2CrossLead) {\n'
+                      '    unsigned int ov2 = AdmissionJobWindowOv2Refusal(', backend)
+        self.assertIn('if (NT_SUCCESS(status) && (runtime->Ov2Enabled || runtime->Ov2CrossLead)) {', backend)
+        lifecycle = (RENDER / 'src/lifecycle.c').read_text()
+        self.assertIn('if (InterlockedCompareExchange(&context->GpuOv2CrossLead, 0, 0) != 0)\n'
+                      '      info->Features |= AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD;', lifecycle)
+        g3 = (RENDER / 'src/gpuva_g3_windows.c').read_text()
+        self.assertIn('InterlockedCompareExchange(&adapter->GpuOv2CrossLead, 0, 0) != 0)\n'
+                      '    flags |= APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE;', g3)
+        scene = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_asahi_scene.c').read_text()
+        self.assertIn('AgxWin32Ov2CrossFeature=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD) ? 1u : 0u;',
+                      scene)
+        owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
+        hook = owner[owner.index('static unsigned owner_batch_kind(unsigned kind) {'):]
+        hook = hook[:hook.index('static void owner_batch_deps(')]
+        # the same-execution verdict is dropped before the cross apply
+        self.assertLess(hook.index('independent = (owner_ov2_ranges() ? ranged : reason) == 0u ? 1u : 0u;'),
+                        hook.index('if (!AgxWin32Ov2Feature) independent = 0u;'))
+        self.assertLess(hook.index('if (!AgxWin32Ov2Feature) independent = 0u;'),
+                        hook.index('independent = AgxD3d12JobCrossApply('))
+        # everything else keyed on the OV2 feature stays on it
+        self.assertEqual(owner.count('AgxWin32Ov2CrossFeature'), 6)
+        self.assertIn('if (kind == 1u && AgxWin32Ov2Feature && owner_job_barriers.PreviousKind == 2u) {', hook)
+        self.assertIn('if (!owner || !AgxWin32Ov2Feature || !owner_ov4()) return;', owner)
+        self.assertIn('owner->ResolveDefer = begin && known && AgxWin32Ov2Feature && ', owner)
+        # copy rule: fed before the copy's owner work, inert without the feature
+        copy = owner[owner.index('extern "C" void AgxD3d12OwnerJobCopyRange('):]
+        self.assertLess(copy.index('if (!AgxWin32Ov2CrossFeature) return;'), copy.index('AgxD3d12JobCrossCopy('))
+        ddi = (D3D12 / 'agx_d3d12_ddi.cpp').read_text()
+        replay = ddi[ddi.index('if (job_command) AgxD3d12OwnerJobCommand(command.kind);'):]
+        self.assertLess(replay.index('AgxD3d12OwnerJobCopyRange(copy.dst, copy.dst_offset, copy.dst_offset + copy.bytes, copy.src,'),
+                        replay.index('hr = AgxD3d12OwnerCopy(owner, &dst,'))
+        self.assertEqual(ddi.count('AgxD3d12OwnerJobCopyRange('), 1)
+        self.assertIn('AdmissionUmdDiagnostic("measure-d3d12-ov2-copy", S_OK, owner_cross_copy, 14u);', owner)
+
     def test_cross_execution_receipt_wiring(self):
         """The shadow verdict is recorded and never used: the row grows by
         three values behind the old 29, and every condition that ends what is
@@ -818,7 +1000,7 @@ int main(void) {
         self.assertIn('if (!owner_cross_depth) AgxD3d12JobCrossBreak(&owner_job_barriers, 2u);', owner)
         hook = owner[owner.index('static unsigned owner_batch_kind(unsigned kind) {'):]
         self.assertLess(hook.index('if (!owner_cross_depth) {\n    AgxD3d12JobCrossBreak(&owner_job_barriers, 1u);'),
-                        hook.index('if (kind == 2u && AgxWin32Ov2Feature) {'))
+                        hook.index('if (kind == 2u && (AgxWin32Ov2Feature || AgxWin32Ov2CrossFeature)) {'))
         self.assertIn('AgxWin32AsahiContextOpenRenders(owner_cross_owner->Context) == 1u', hook)
         self.assertIn('BITSET_TEST(native->batches.active,i) && slot->vdm.bo && (slot->draws || slot->clear)',
                       scene[scene.index('unsigned AgxWin32AsahiContextOpenRenders('):])

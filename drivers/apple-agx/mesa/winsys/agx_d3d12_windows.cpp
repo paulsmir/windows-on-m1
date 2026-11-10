@@ -616,6 +616,10 @@ static BOOL CALLBACK owner_job_barriers_init(PINIT_ONCE, PVOID, PVOID *) {
 /* OV2: set by the screen when the KMD reports
  * AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE (agx_win32_asahi_scene.c) */
 extern "C" volatile unsigned AgxWin32Ov2Feature;
+/* N4c-v2: AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD (Wom1Ov2CrossLead): the
+ * cross-execution verdict alone decides; OV3 deferral, the OV4 split, the
+ * OV5 receipts and the same-execution verdict stay with the OV2 feature. */
+extern "C" volatile unsigned AgxWin32Ov2CrossFeature;
 static BOOL owner_job_receipt_enabled(void) {
   static const BOOL enabled = [] {
     char value[2] = {};
@@ -629,7 +633,7 @@ static BOOL owner_job_receipt_enabled(void) {
 /* OV1 receipt or OV2 pairing: barriers are logged and fed */
 extern "C" BOOL AgxD3d12OwnerJobBarriersEnabled(void) {
   InitOnceExecuteOnce(&owner_job_barriers_once, owner_job_barriers_init, NULL, NULL);
-  return owner_job_receipt_enabled() || AgxWin32Ov2Feature ? TRUE : FALSE;
+  return owner_job_receipt_enabled() || AgxWin32Ov2Feature || AgxWin32Ov2CrossFeature ? TRUE : FALSE;
 }
 extern "C" void AgxD3d12OwnerJobDrawUav(void) {
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
@@ -722,6 +726,13 @@ static BOOL owner_ov2_cross_execution(void) {
   return enabled;
 }
 static UINT owner_cross_applied; /* execution-first compute batches made independent by it */
+/* N4c-v2 copy rule receipt (only with the cross-lead feature), of the
+ * execution-first compute batch: copies placed before it; their ranges |
+ * range-set overflow << 16; copy ranges conflicting with the kept render;
+ * shadow reason | detail << 8; the first conflicting pair as copy {writes,
+ * heap id, offset lo, hi, bytes} and render {Uav, heap id, offset lo, hi,
+ * bytes}. Written with measure-d3d12-ov2-refusal as measure-d3d12-ov2-copy. */
+static UINT owner_cross_copy[14], owner_cross_copy_valid;
 static void owner_ov2_receipt_locked(void) {
   UINT any = 0;
   for (unsigned i = 0; i < 8u; ++i) any |= owner_ov2_reason[i];
@@ -760,7 +771,10 @@ static void owner_ov2_receipt_locked(void) {
                  ((owner_cross_renders > 0xfffu ? 0xfffu : owner_cross_renders) << 8) |
                  ((owner_cross_clean > 0xfffu ? 0xfffu : owner_cross_clean) << 20);
     AdmissionUmdDiagnostic("measure-d3d12-ov2-refusal", S_OK, values, 32u);
+    if (AgxWin32Ov2CrossFeature && owner_cross_copy_valid)
+      AdmissionUmdDiagnostic("measure-d3d12-ov2-copy", S_OK, owner_cross_copy, 14u);
   }
+  owner_cross_copy_valid = 0;
   owner_cross_histogram = owner_cross_last = owner_cross_renders = owner_cross_clean = owner_cross_applied = 0;
   for (unsigned i = 0; i < 8u; ++i) owner_ov2_reason[i] = 0;
   owner_ov2_sequence = owner_ov2_pairs = owner_ov2_range_sequence = 0;
@@ -792,6 +806,14 @@ extern "C" void AgxD3d12OwnerJobDispatchRange(const void *heap, unsigned long lo
 extern "C" void AgxD3d12OwnerJobResolveRange(const void *heap, unsigned long long lo, unsigned long long hi) {
   AcquireSRWLockExclusive(&owner_job_barriers_lock);
   AgxD3d12JobBarrierResolveRange(&owner_job_barriers, heap, lo, hi);
+  ReleaseSRWLockExclusive(&owner_job_barriers_lock);
+}
+/* N4c-v2 copy rule: only with the cross-lead feature */
+extern "C" void AgxD3d12OwnerJobCopyRange(const void *dst_heap, unsigned long long dlo, unsigned long long dhi,
+                                          const void *src_heap, unsigned long long slo, unsigned long long shi) {
+  if (!AgxWin32Ov2CrossFeature) return;
+  AcquireSRWLockExclusive(&owner_job_barriers_lock);
+  AgxD3d12JobCrossCopy(&owner_job_barriers, dst_heap, dlo, dhi, src_heap, slo, shi);
   ReleaseSRWLockExclusive(&owner_job_barriers_lock);
 }
 extern "C" void AgxD3d12OwnerJobSplit(AGX_D3D12_OWNER *owner) {
@@ -1003,10 +1025,12 @@ static unsigned owner_batch_kind(unsigned kind) {
     ++owner_cross_renders;
     owner_cross_clean += cross_clean;
   }
-  if (kind == 2u && AgxWin32Ov2Feature) {
+  if (kind == 2u && (AgxWin32Ov2Feature || AgxWin32Ov2CrossFeature)) {
     const unsigned reason = AgxD3d12JobBarrierRefusal(&owner_job_barriers);
     const unsigned ranged = AgxD3d12JobBarrierRefusalRanges(&owner_job_barriers);
     independent = (owner_ov2_ranges() ? ranged : reason) == 0u ? 1u : 0u;
+    /* N4c-v2: the cross lead alone never uses the same-execution verdict */
+    if (!AgxWin32Ov2Feature) independent = 0u;
     ++owner_ov2_reason[reason & 7u];
     /* OV2 cross-execution: the shadow verdict of the execution-first compute */
     if (AgxD3d12JobCrossFirst(&owner_job_barriers)) {
@@ -1020,6 +1044,28 @@ static unsigned owner_batch_kind(unsigned kind) {
       /* apply (opt-in): this batch takes the shadow verdict */
       independent = AgxD3d12JobCrossApply(owner_ov2_cross_execution() ? 1u : 0u, 1u, shadow, independent);
       if (owner_ov2_cross_execution() && independent && owner_cross_applied < 0x7fu) ++owner_cross_applied;
+      if (AgxWin32Ov2CrossFeature) {
+        const AGX_D3D12_JOB_RANGE *copy, *render;
+        memset(owner_cross_copy, 0, sizeof(owner_cross_copy));
+        owner_cross_copy[0] = owner_job_barriers.Cross.Copies;
+        owner_cross_copy[1] = (owner_job_barriers.Cross.Copy.Count & 0xffffu) |
+                              ((owner_job_barriers.Cross.Copy.Overflow & 0xffffu) << 16);
+        owner_cross_copy[2] = AgxD3d12JobCrossCopyConflicts(&owner_job_barriers, &copy, &render);
+        owner_cross_copy[3] = (shadow & 0xffu) | ((detail & 0xffu) << 8);
+        if (copy && render) {
+          owner_cross_copy[4] = copy->Uav & 1u;
+          owner_cross_copy[5] = AgxD3d12JobBarrierId(reinterpret_cast<unsigned long long>(copy->Heap));
+          owner_cross_copy[6] = static_cast<UINT>(copy->Lo);
+          owner_cross_copy[7] = static_cast<UINT>(copy->Lo >> 32);
+          owner_cross_copy[8] = static_cast<UINT>(copy->Hi - copy->Lo);
+          owner_cross_copy[9] = render->Uav;
+          owner_cross_copy[10] = AgxD3d12JobBarrierId(reinterpret_cast<unsigned long long>(render->Heap));
+          owner_cross_copy[11] = static_cast<UINT>(render->Lo);
+          owner_cross_copy[12] = static_cast<UINT>(render->Lo >> 32);
+          owner_cross_copy[13] = static_cast<UINT>(render->Hi - render->Lo);
+        }
+        owner_cross_copy_valid = 1u;
+      }
     }
     if (owner_job_barriers.PreviousKind == 1u) {
       if (owner_ov2_pairs < 8u) {

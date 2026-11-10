@@ -65,14 +65,20 @@ typedef struct AGX_D3D12_JOB_RANGE_SET {
  * non-dispatch commands like ForeignSince, but is only reset by such a
  * render submission. Table*: accesses through a descriptor-heap table,
  * which the range sinks do not see. */
+/* N4c-v2 (OV2 cross lead): Copies counts the buffer copies of this
+ * execution before its first batch whose ranges are in Copy (write = Uav 1
+ * the destination, 0 the source); they are in Foreign too. CopyActive: the
+ * active command is such a copy. */
 #define AGX_D3D12_JOB_RANGE_TABLE 4u
+#define AGX_D3D12_JOB_KIND_COPY 1u
 typedef struct AGX_D3D12_JOB_CROSS {
   unsigned InExecution, Broken, Batches, LastKind, Dirty;
   unsigned Foreign, ForeignKinds, LastForeign, LastForeignKinds;
   unsigned TableDraw, TableDispatch, TableCompute;
   unsigned Kept, KeptDetail, KeptKinds;
   unsigned PreCommitted, PreCommittedOverflow;
-  AGX_D3D12_JOB_RANGE_SET Render, Last, Tail, Pre, KeptRender, KeptPost;
+  unsigned Copies, CopyActive;
+  AGX_D3D12_JOB_RANGE_SET Render, Last, Tail, Pre, KeptRender, KeptPost, Copy;
 } AGX_D3D12_JOB_CROSS;
 typedef struct AGX_D3D12_JOB_BARRIERS {
   AGX_D3D12_JOB_BARRIER_SET Before; /* the gap before the active command */
@@ -227,6 +233,8 @@ static inline void AgxD3d12JobBarriersInit(AGX_D3D12_JOB_BARRIERS *j) {
   j->Cross.KeptDetail = 1u;
   j->Cross.KeptKinds = 0u;
   j->Cross.PreCommitted = j->Cross.PreCommittedOverflow = 0u;
+  j->Cross.Copies = j->Cross.CopyActive = 0u;
+  AgxD3d12JobRangeClear(&j->Cross.Copy);
   AgxD3d12JobRangeClear(&j->Cross.Render);
   AgxD3d12JobRangeClear(&j->Cross.Last);
   AgxD3d12JobRangeClear(&j->Cross.Tail);
@@ -277,6 +285,7 @@ static inline void AgxD3d12JobBarrierBegin(AGX_D3D12_JOB_BARRIERS *j, unsigned k
   AgxD3d12JobBarrierSetClear(&j->Open);
   j->Active = kind ? kind : 0xffu;
   j->ActiveLocal = 0u;
+  j->Cross.CopyActive = 0u;
   /* OV2: command kinds 2 dispatch, 5 draw (agx_d3d12_ddi.cpp kCommand*) */
   if (kind == 2u) ++j->DispatchesPending;
   else if (kind != 5u) {
@@ -388,6 +397,10 @@ static inline void AgxD3d12JobBarrierLocal(AGX_D3D12_JOB_BARRIERS *j) {
   j->ActiveLocal = 1u;
   if (j->ForeignSince) --j->ForeignSince;
   if (j->Cross.Foreign) --j->Cross.Foreign;
+  if (j->Cross.CopyActive) { /* no longer in Foreign: its ranges stay */
+    j->Cross.CopyActive = 0u;
+    if (j->Cross.Copies) --j->Cross.Copies;
+  }
 }
 
 /* OV3: owner work outside any command (a deferred resolve copied the
@@ -755,10 +768,28 @@ static inline void AgxD3d12JobCrossBegin(AGX_D3D12_JOB_BARRIERS *j, unsigned cau
   c->Foreign = c->ForeignKinds = c->LastForeign = c->LastForeignKinds = 0u;
   c->TableDraw = c->TableDispatch = c->TableCompute = 0u;
   c->PreCommitted = c->PreCommittedOverflow = 0u;
+  c->Copies = c->CopyActive = 0u;
+  AgxD3d12JobRangeClear(&c->Copy);
   AgxD3d12JobRangeClear(&c->Render);
   AgxD3d12JobRangeClear(&c->Last);
   AgxD3d12JobRangeClear(&c->Tail);
   AgxD3d12JobRangeClear(&c->Pre);
+}
+/* N4c-v2: the active command is a buffer copy dst[dlo, dhi) <- src[slo, shi)
+ * that joins the open compute batch. Before the execution's first batch
+ * its ranges are compared with the kept render (AgxD3d12JobCrossRefusal)
+ * instead of refusing as other owner work; once per command, and never for
+ * a command already marked local. A NULL heap cannot be placed. */
+static inline void AgxD3d12JobCrossCopy(AGX_D3D12_JOB_BARRIERS *j, const void *dst, unsigned long long dlo,
+                                        unsigned long long dhi, const void *src, unsigned long long slo,
+                                        unsigned long long shi) {
+  AGX_D3D12_JOB_CROSS *c = &j->Cross;
+  if (!c->InExecution || c->Batches || j->Active != AGX_D3D12_JOB_KIND_COPY || j->ActiveLocal || c->CopyActive)
+    return;
+  c->CopyActive = 1u;
+  ++c->Copies;
+  AgxD3d12JobRangeAdd(&c->Copy, dst, dlo, dhi, 1u);
+  AgxD3d12JobRangeAdd(&c->Copy, src, slo, shi, 0u);
 }
 /* the compute batch now being submitted is the first batch of its execution */
 static inline unsigned AgxD3d12JobCrossFirst(const AGX_D3D12_JOB_BARRIERS *j) {
@@ -838,6 +869,30 @@ static inline unsigned AgxD3d12JobCrossRenderWrites(const AGX_D3D12_JOB_RANGE *r
   if (r->Uav & (AGX_D3D12_JOB_SRC_TARGET | AGX_D3D12_JOB_SRC_CLEAR | AGX_D3D12_JOB_SRC_SO)) return 1u;
   return r->Uav & AGX_D3D12_JOB_SRC_MASK ? 0u : 1u;
 }
+/* N4c-v2: a placed copy range x against a kept render range y: 5 the
+ * render may write what the copy reads or writes, 6 the copy writes what
+ * the render reads, 0 they do not order each other */
+static inline unsigned AgxD3d12JobCrossCopyPair(const AGX_D3D12_JOB_RANGE *x, const AGX_D3D12_JOB_RANGE *y) {
+  if (y->Heap != x->Heap || x->Lo >= y->Hi || y->Lo >= x->Hi) return 0u;
+  if (AgxD3d12JobCrossRenderWrites(y)) return 5u;
+  return x->Uav & 1u ? 6u : 0u;
+}
+/* the receipt: the number of conflicting {copy, kept render} range pairs
+ * and the first of them (NULL when none) */
+static inline unsigned AgxD3d12JobCrossCopyConflicts(const AGX_D3D12_JOB_BARRIERS *j,
+                                                     const AGX_D3D12_JOB_RANGE **copy,
+                                                     const AGX_D3D12_JOB_RANGE **render) {
+  const AGX_D3D12_JOB_CROSS *c = &j->Cross;
+  unsigned i, k, n = 0u;
+  *copy = *render = 0;
+  for (i = 0; i < c->Copy.Count; ++i)
+    for (k = 0; k < c->KeptRender.Count; ++k)
+      if (AgxD3d12JobCrossCopyPair(&c->Copy.R[i], &c->KeptRender.R[k]) && !n++) {
+        *copy = &c->Copy.R[i];
+        *render = &c->KeptRender.R[k];
+      }
+  return n;
+}
 /* a barrier range b since the kept render: 3 it names a range the compute
  * batch accesses, 4 it is a global UAV barrier and the compute batch
  * accesses a UAV, 0 neither. (A barrier naming only what the render
@@ -865,7 +920,11 @@ static inline unsigned AgxD3d12JobCrossBarrier(const AGX_D3D12_JOB_BARRIERS *j, 
  * since the render and the compute accesses a UAV), 11 an access cannot
  * be placed (1 kept set, 2 a heap table in the kept render, 3 the compute
  * set, 4 a heap table in the compute, 5 a barrier, 6 a compute batch
- * without a tracked dispatch). First match. */
+ * without a tracked dispatch, 7 a placed copy's range). First match.
+ * N4c-v2: the copies placed by AgxD3d12JobCrossCopy are not other owner
+ * work here; their ranges order the two like the compute's (8: 5 the
+ * render may write what a copy accesses, 6 a copy writes what the render
+ * reads). */
 static inline unsigned AgxD3d12JobCrossRefusal(const AGX_D3D12_JOB_BARRIERS *j, unsigned *detail) {
   const AGX_D3D12_JOB_CROSS *c = &j->Cross;
   unsigned foreign, i, k, named = 0u;
@@ -882,8 +941,9 @@ static inline unsigned AgxD3d12JobCrossRefusal(const AGX_D3D12_JOB_BARRIERS *j, 
     *detail = 1u | (c->Broken << 4);
     return 6u;
   }
-  foreign = c->Foreign;
-  if (AgxD3d12JobBarrierForeignActive(j) && foreign) --foreign;
+  foreign = c->Foreign - (c->Copies < c->Foreign ? c->Copies : c->Foreign);
+  /* an active placed copy is already taken out */
+  if (AgxD3d12JobBarrierForeignActive(j) && !c->CopyActive && foreign) --foreign;
   if (foreign || j->ComputeForeign) {
     *detail = 3u;
     return 6u;
@@ -904,6 +964,10 @@ static inline unsigned AgxD3d12JobCrossRefusal(const AGX_D3D12_JOB_BARRIERS *j, 
     *detail = 6u;
     return 11u;
   }
+  if (c->Copy.Overflow) {
+    *detail = 7u;
+    return 11u;
+  }
   for (i = 0; i < j->RangeCompute.Count; ++i) {
     const AGX_D3D12_JOB_RANGE *x = &j->RangeCompute.R[i];
     for (k = 0; k < c->KeptRender.Count; ++k) {
@@ -919,6 +983,14 @@ static inline unsigned AgxD3d12JobCrossRefusal(const AGX_D3D12_JOB_BARRIERS *j, 
       }
     }
   }
+  for (i = 0; i < c->Copy.Count; ++i)
+    for (k = 0; k < c->KeptRender.Count; ++k) {
+      const unsigned n = AgxD3d12JobCrossCopyPair(&c->Copy.R[i], &c->KeptRender.R[k]);
+      if (n) {
+        *detail = n;
+        return 8u;
+      }
+    }
   for (i = 0; i < c->KeptPost.Count; ++i) {
     const unsigned n = AgxD3d12JobCrossBarrier(j, &c->KeptPost.R[i]);
     if (n && (!named || n < named)) named = n;

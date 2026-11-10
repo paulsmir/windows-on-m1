@@ -403,6 +403,10 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * (render_job_window.h AdmissionJobWindowOv2Refusal). Ov2Waive is decided
    * per kick; the receipt is Wom1Ov2Receipt. */
   BOOLEAN Ov2Enabled;
+  /* N4c-v2 (REG_DWORD Wom1Ov2CrossLead = 1 on Q2c, default off): the same
+   * waiver and receipt, for a UMD that proves independence across
+   * executions only (AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD). */
+  BOOLEAN Ov2CrossLead;
   BOOLEAN Ov2Waive;
   /* R14 (REG_DWORD Wom1PreludeNotifyGate = 1 on Q2c, default off): a
    * successor that publishes on Queue B alone is not kicked behind a running
@@ -1575,6 +1579,7 @@ static VOID AdmissionJobTimingExportWindows(
        runtime->Adapter->MailboxInterruptVector == 0u &&
        !runtime->CrossProcessPairs &&
        !runtime->PresentTsEnabled && !runtime->Ov2Enabled &&
+       !runtime->Ov2CrossLead &&
        !runtime->Ov5Waiver && !runtime->Ov5DrillEnabled) ||
       runtime->Adapter->PhysicalDeviceObject == NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL) return;
@@ -1587,7 +1592,7 @@ static VOID AdmissionJobTimingExportWindows(
   /* EXP2197: without Wom1JobDiagnostics the OV2 receipt was never written.
    * Export it on its own at most every two seconds, never flushed (the
    * worker owns the receipt; EXP1117: an export costs ~1 ms). */
-  if (!runtime->JobDiagnostics && runtime->Ov2Enabled) {
+  if (!runtime->JobDiagnostics && (runtime->Ov2Enabled || runtime->Ov2CrossLead)) {
     LARGE_INTEGER frequency;
     const ULONGLONG now = (ULONGLONG)KeQueryPerformanceCounter(&frequency).QuadPart;
     if (runtime->Ov2ExportQpc == 0ULL ||
@@ -1811,7 +1816,7 @@ static VOID AdmissionJobTimingExportWindows(
     }
 #if defined(ADMISSION_OV2_ON)
     /* OV2: waived / refused lead Barrier waits (worker-owned). */
-    if (NT_SUCCESS(status) && runtime->Ov2Enabled) {
+    if (NT_SUCCESS(status) && (runtime->Ov2Enabled || runtime->Ov2CrossLead)) {
       ADMISSION_JOB_WINDOW_OV2_RECEIPT ov2 = runtime->Ov2Receipt;
       RtlInitUnicodeString(&name, L"Wom1Ov2Receipt");
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY, &ov2, sizeof(ov2));
@@ -7345,7 +7350,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
    * (counted here when refused; a waiver is counted where the Barrier is
    * built). */
   runtime->Ov2Waive = FALSE;
-  if (runtime->Ov2Enabled) {
+  if (runtime->Ov2Enabled || runtime->Ov2CrossLead) {
     unsigned int ov2 = AdmissionJobWindowOv2Refusal(1u, (unsigned int)barrier,
         &s.Running, &s.Next);
     if (ov2 == ADMISSION_JOB_WINDOW_OV2_WAIVE)
@@ -8424,7 +8429,8 @@ AdoptedKicked:
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (runtime->FwRxDrain) AdmissionFwRxDrainWindows(runtime);
   if (runtime->JobDiagnostics || runtime->RcReceiptEnabled || runtime->Depth2Drill.Mode ||
-      runtime->PresentTsEnabled || runtime->Ov2Enabled || runtime->Ov5DrillEnabled ||
+      runtime->PresentTsEnabled || runtime->Ov2Enabled || runtime->Ov2CrossLead ||
+      runtime->Ov5DrillEnabled ||
       runtime->Ov5Waiver ||
       /* default-on plan: Wom1IrqRx / Wom1JobPoll whenever the line is listed */
       adapter->MailboxInterruptVector != 0u)
@@ -9123,9 +9129,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
    * device feature lets the UMD flag independent compute envelopes. */
   runtime->Ov2Enabled = runtime->Initdata.RenderSharedMemory.ComputeOwnQueue &&
       AdmissionPlatformSwitchEnabled(Context, L"Wom1Ov2NoHazardLead") ? TRUE : FALSE;
+  /* N4c-v2 (default off): REG_DWORD Wom1Ov2CrossLead = 1, only on Q2c. Its
+   * own device feature: the UMD then flags a compute envelope independent
+   * only across executions. */
+  runtime->Ov2CrossLead = runtime->Initdata.RenderSharedMemory.ComputeOwnQueue &&
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1Ov2CrossLead") ? TRUE : FALSE;
   runtime->Ov2Waive = FALSE;
   AdmissionJobWindowOv2ReceiptInitialize(&runtime->Ov2Receipt);
   InterlockedExchange(&Context->GpuIndependentSubqueue, runtime->Ov2Enabled ? 1 : 0);
+  InterlockedExchange(&Context->GpuOv2CrossLead, runtime->Ov2CrossLead ? 1 : 0);
 #endif
 #if defined(ADMISSION_OV5_ON)
   /* OV5 drill (default off): REG_DWORD Wom1Ov5FragWaitDrill = 1. A drill:
@@ -9572,10 +9584,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   /* EXP2196: this reset ran after the OV2 enable above and hid the
    * device feature from the UMD; publish it here, at the end of start. */
   InterlockedExchange(&Context->GpuIndependentSubqueue, runtime->Ov2Enabled ? 1 : 0);
+  InterlockedExchange(&Context->GpuOv2CrossLead, runtime->Ov2CrossLead ? 1 : 0);
   /* C2a: likewise, after every reset of the feature words above. */
   InterlockedExchange(&Context->GpuPrivateOnlyCompute, runtime->XprocLeadEnabled ? 1 : 0);
 #else
   InterlockedExchange(&Context->GpuIndependentSubqueue, 0);
+  InterlockedExchange(&Context->GpuOv2CrossLead, 0);
   InterlockedExchange(&Context->GpuPrivateOnlyCompute, 0);
 #endif
   RtlZeroMemory(&runtime->PostResume, sizeof(runtime->PostResume));
@@ -9672,6 +9686,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
 Fail:
   InterlockedExchange(&Context->GpuSoftFaults, 0);
   InterlockedExchange(&Context->GpuIndependentSubqueue, 0);
+  InterlockedExchange(&Context->GpuOv2CrossLead, 0);
   InterlockedExchange(&Context->GpuPrivateOnlyCompute, 0);
   InterlockedExchange(&Context->GpuRenderTaIndependent, 0);
   {
@@ -9700,6 +9715,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStop(
     return STATUS_SUCCESS;
   InterlockedExchange(&Context->GpuSoftFaults, 0);
   InterlockedExchange(&Context->GpuIndependentSubqueue, 0);
+  InterlockedExchange(&Context->GpuOv2CrossLead, 0);
   InterlockedExchange(&Context->GpuPrivateOnlyCompute, 0);
   InterlockedExchange(&Context->GpuRenderTaIndependent, 0);
   status = AdmissionPlatformDestroy(runtime);

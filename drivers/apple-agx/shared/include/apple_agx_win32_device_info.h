@@ -64,10 +64,18 @@ typedef enum _AGX_WIN32_BUFFER_FLAGS {
  * on top of Wom1CrossProcessPairs and Q2c; the KMD parser refuses the flag
  * without it. */
 #define AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE 0x8u
+/* N4c-v2 (investigation/analysis/OV1-render-compute-overlap.md): the OV2
+ * envelope and KMD waiver, published alone. The D3D12 UMD then proves a
+ * compute batch independent only of the render the previous
+ * ExecuteCommandLists left running (cross-execution shadow / apply, with
+ * the ranges of the copies recorded before the batch); it neither defers
+ * resolves, splits compute, nor uses the same-execution verdict. Set only
+ * with REG_DWORD Wom1Ov2CrossLead = 1 and Q2c. */
+#define AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD 0x10u
 #define AGX_WIN32_DEVICE_FEATURES_KNOWN \
   (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS | AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE | \
    AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT | \
-   AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE)
+   AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE | AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD)
 
 typedef struct _AGX_WIN32_BUFFER_CLASS_INFO {
   APPLE_AGX_U32 ClassId;
