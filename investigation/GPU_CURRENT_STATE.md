@@ -3190,3 +3190,51 @@ dispatch because 9726b186 at d28 is also a tag.
 - C0 scene excess +0.833 ms, corrected split: traversal 0.31, 97efffb3 0.21, piece d49-d53 0.05-0.09, the rest
   about 0.22-0.26 in pieces that cannot be compared one to one (Apple per-dispatch cost).
 - N6 change: the two 6cf11e8a arms are dropped. Arms: p0, 97efffb3:E, 97efffb3:L, 7aa43c6c:E, :B1, :B2, :L, p1.
+
+## UPDATE 2026-11-10T04:53Z -- R12: gap re-budgeted on EXP2316 x (C1 + N4b on): 3.71 ms = busy +2.48 + non-busy +1.23
+
+Source: /Users/pavel/public_windows/.local/night-20261110/r12-nonbusy-rebudget/REPORT.md (offline, read-only;
+scripts nb.py / split_foreign.py / corr.py / align_nb.py, outputs out-*.txt checked by the architect against the
+report). HD windowed 100k -temporal 0, PERF window; every cross-run delta is SEPARATE BOOTS.
+
+| ms per GravityMark frame | wall | GM busy union | non-busy |
+|---|---|---|---|
+| EXP2311 r2/r3 (no levers) | 20.450 / 20.531 | 18.266 / 18.278 | 2.183 / 2.253 |
+| EXP2314 x (C1) | 20.173 | 18.239 | 1.934 |
+| EXP2316 x (C1 + N4b) | 19.868 | 18.159 | 1.708 |
+| scene-aligned 10..70 s: EXP2316 x | 20.313 | 18.618 | 1.695 |
+| scene-aligned: Apple split2-hd | 16.605 | 16.139 | 0.466 |
+| delta ours - Apple | +3.708 | +2.478 | +1.229 |
+
+- The two levers moved only non-busy time (2.2 -> 1.7 ms); busy union is flat (18.16-18.33). Check: GPU-timeline wall
+  19.868 ms = fps_frames 50.334. Pstate valid (P1 time is start-up only, second half 100 % P6).
+- Non-busy by cause (EXP2316 x, 1.693 ms): DWM job between two GM jobs 0.910 (0.90 per frame: before C2 43 %, R3
+  32 %, R5 9 %; 0.85 / 1.13 / 1.24 ms per occurrence); depth-one launches of R5 and R7 0.47 at those two positions
+  (57-60 % depth-one when the render two jobs back is reported only with the compute in between, 1-5 % otherwise);
+  firmware start floor 0.31 (about 0.05 ms per transition, Apple 0.035-0.045: parity); completion detect 0.10;
+  application/UMD late 0.011. Apple non-busy 0.466 = 16 inter-encoder start gaps only: no foreign job, no depth-one
+  launch in the game's timeline.
+- Frame-level fit of the busy union over the seven scene bins (architect, from out-align.txt): ours = 1.66 + 1.051 x
+  Apple. It does not replace the per-job rows of R8 (lines 2716-2838); it bounds a uniform proportional deficit to
+  about 5 %.
+- This supersedes the sentence "the remaining about 3.3 ms has no lever yet" of the 04:27Z UPDATE: every part of
+  the gap has a row; what is missing is validated levers.
+
+Gap ledger (HD scene-aligned, ms/frame, state = EXP2316 configuration):
+| part | size | lever | status |
+|---|---|---|---|
+| non-busy: DWM job on the GM path | 0.91 (Apple side: 0.05-0.12 foreign per vsync, R5) | MPO second plane, windowed (R7 S2); cross-process render -> prelude render relaunch <= 0.13 is inside it | OPEN, designed by R7, never run; first checkpoint H1 = two-slot DCP swap in m1n1 (needs the operator's eyes) |
+| non-busy: late render completion -> depth-one R5/R7 | <= 0.30 | second firmware queue (own notifier) | line closed 2026-11-04 as architectural (EXP2147-2151); reopened as a DESIGN task only: new evidence is the conditional rate above |
+| busy: C0 scene part | 0.83 (R8: 0.51 against e7+e9, 0.75 against span) | unknown location -> N6 section profiler | in implementation (fork 6) |
+| busy: Apple runs frame N+1 head under frame N tail | 0.27 (+ <= 0.085 non-busy) | N4c cross-execution lead | EXP2317 staged |
+| busy: C4 lighting, R5 3D, C2, R3 fixed | 0.19 / 0.17 / 0.19 / 0.18 (R8) | none; DXIL heavier than Metal for C4/R5 | no lever |
+| busy: Apple TA under C4 | <= 0.21 | closed for us by D3D12 dependencies | closed |
+Reaching a gap below 5 % (0.83 ms) needs about 2.9 of the 3.71 ms: the DWM row, the C0 part and the cross-frame
+part together are 2.0-2.1; the rest must come from the late-completion row and shader work.
+
+HYPOTHESIS items inherited from R12 (not measured): dxgkrnl holds DWM's packet until a GM completion (H1); the
+depth-one mechanism = late report + two-fence limit (H5; refusals 0.67 per frame vs about 1.0 depth-one launches);
+WindowServer does not occupy the GPU between macOS encoders (H6; measurable only with an all-process Metal System
+Trace on macOS = operator).
+Next (offline, parallel to the bench): MPO preparation (Asahi DCP driver facts for slot z-order and blend, two-slot
+swap builder as a patch with host test, H1 spec) and the second-queue design note. No hardware until specs exist.
