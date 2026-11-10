@@ -2913,3 +2913,59 @@ Report: `.local/night-20261110/r9-window-misses/REPORT.md`; cited lines re-check
 - Validity note: the "0 of 10204" cross-frame check of the OV2+OV3B ABBA arms compared an intra-execution pair
   (OV3B appends a trailing drain job); it holds only for the default arm.
 - Next: implement both default-off with receipts (two sessions), bench as N4a (receipts) -> N4b -> N4c after N3.
+
+## UPDATE 2026-11-10T01:30:51Z -- R10: C0 variant kernels differ by a dynamic constant-buffer index; scoreboard slot policy is the first code-level candidate (offline, no hardware)
+
+Source: `/Users/pavel/public_windows/.local/night-20261110/r10-variant-opclass/REPORT.md` (208 lines). Checked by
+the architect against files: stats column order (`drivers/apple-agx/mesa/winsys/agx_win32_shader_stats.h`), the slot
+rule in the projection (`native-asahi-latency-schedule.py`, `agx_win32_wait_block`), Apple's listing
+(`.local/metal-oracle/m208_13b1c0.s` 0x262-0x288: four device loads on slot 0, one `wait 0`), our listing
+(`ours/97efffb3.skel`: `wait a` + `wait b` pairs), packaged stats rows (EXP2310 gm2310a-umd.log).
+
+Established (static, high confidence):
+- Source difference inside our own pair of encoders: the C0 variants read the constant buffer at a DYNAMIC register
+  index (cb[view*57+k]) and use no texture; the C2 variants use constant indices and 4 texture ops.
+  cbufferLoadLegacy total/dynamic/texture ops: 97efffb3 64/54/0, f582ac2c 60/0/4, 7aa43c6c 31/20/0, fc968f7a 55/1/4.
+- The third-from-last shader-stats column is PREAMBLE (instruction count). C2 variants hoist the constant-buffer reads
+  into the preamble (0x7b, 0x8a); C0 variants cannot (0x16, 0x1e). This closes the "unverified shader-stats lead" of
+  the N2 entry: the column is not a defect, it is this source difference.
+- Lowering difference against Apple: in 97efffb3 each of the 16 frustum plane tests issues 2 per-thread device loads.
+  Ours puts them into scoreboard slots a and b and pays two waits; Apple puts both into slot 0 and pays one. Loads are
+  at parity (56 vs 59 before the loop); waits are not (51 vs 31 before the loop, 70 vs 47 in main). In the C2 pair
+  (f582ac2c vs m201) waits are at parity (19 vs 17).
+- Cause in our source: the upstream Asahi slot choice "first slot with nr_pending == 0" (agx_insert_waits.c:97-103),
+  kept in our W1 projection. W1 (EXP2124) left every a/b pair in place, so it never tested this pattern.
+- Twin table (by skeleton): 7aa43c6c = m183, fc968f7a = m187 (high); 97efffb3 = m208 (medium-high, alternative m196);
+  f582ac2c = m201 (medium, alternative m202).
+
+CORRECTION to the "C4 offline levers closed" bullet of the 2026-11-05 section above (text left as written): that
+bullet compares the traversal with Apple's m187. By R10's skeleton match m187 is the twin of the C2 traversal
+fc968f7a, and the twin of 7aa43c6c is m183. What stays closed: static instruction parity of the traversal, L4
+(EXP2183), W1 as implemented (EXP2124), MEMBW. What is reopened, narrowly: wait placement, only as the slot choice
+for paired loads, because no experiment has covered it and EXP2310 split tags now resolve 0.004-0.008 ms per kernel
+(EXP2124/EXP2183 judged whole-frame FPS with ~1 % noise against an expected effect <= 0.5 %). Occupancy with the
+corrected pairing: C0 kernels sit on the same tier as their twins (1024/1024, 832/832); Apple's thread count is
+inferred from the highest register, HYPOTHESIS.
+
+Not established (HYPOTHESIS, confidence medium-low): that the extra waits cost the measured time. 27 removable waits
+are 3.4 % of the static instructions of 97efffb3, the excess is 36 %; the hypothesis needs a `wait` to cost about
+5 ns per group (a reschedule point, not an ALU op). For it: Apple pays the same per group in C0 and C2 (340 vs
+344 ns/group), ours 461 vs 368; the fits are linear with zero intercept and overlapping group ranges, which argues
+against a pure data-size cause (b); excess ratio k48:p10 = 5.0 vs removable-wait ratio 4.0 (four points, correlation).
+
+Implemented (class O, opt-in, default byte-identical): SS1, `APPLE_AGX_WAIT_SINGLE_SLOT=1` queues every asynchronous
+op on slot 0; hazard rules, barrier drains and the 8-pending overflow wait are unchanged. Two sites: the upstream
+local pass and `agx_win32_wait_block`. Test `tests/test_d3d12_wait_single_slot.py` (four captured kernels; default
+identical for absent/""/0/2/true with and without W1; with the option: only waits removed, no slot b, operands
+otherwise equal). Wait counts in the test fixture, default / W1 / single / single+W1: 7aa43c6c 119/110/90/89,
+fc968f7a 126/118/96/96, 97efffb3 144/141/109/106, f582ac2c 133/130/107/105. R10's fixture (closer to the package:
+793 instructions for 97efffb3 against 801 in the packaged stats row): 54/45/40/34, 39/31/29/23, 70/65/43/41,
+38/34/29/27; Apple 32, 25, 47, 32. The offline fixtures do not reproduce the packaged compile options, so the
+packaged counts are read from the shader-stats rows of the run itself.
+
+Next (N5, after N3/N4, one variable = slot policy): split-tags ABBA control / single / single / control, HD windowed
+100k -temporal 0, traced PERF 10+60 s, tag set b of EXP2310. Expected if the hypothesis holds: 97efffb3 slope against
+e7 d48 from 1.357 [1.345,1.367] to <= 1.20 (0.870 -> <= 0.77 ms), 7aa43c6c x5 from 1.250 to 1.17-1.22; bound of the
+gain 0.2-0.4 ms/frame HD. Failure: 97efffb3 slope >= 1.33 in both single arms -> slot and wait-count policy rejected
+for good; next is the (b) probe (C0 kernel on the C2 view data). Arm validity: INSTRS of 97efffb3 in the stats row
+below the control's 801 and equal P6 residency across arms.
