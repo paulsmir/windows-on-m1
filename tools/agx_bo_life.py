@@ -171,7 +171,7 @@ def main(argv):
     procs = parse(argv[1])
     if not procs:
         print("error: no measure-bo-born lines in %s (the BO census needs a driver with it and "
-              "APPLE_AGX_UMD_TRACE_FILE set for the D3D12 process)" % argv[1], file=sys.stderr)
+              "APPLE_AGX_UMD_TRACE_FILE and APPLE_AGX_D3D12_BO_CENSUS=1 set for the D3D12 process)" % argv[1], file=sys.stderr)
         return 1
     for pid in sorted(procs):
         report(pid, procs[pid])

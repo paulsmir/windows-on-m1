@@ -1423,7 +1423,10 @@ static void owner_bo_time(unsigned mib, unsigned cls, unsigned create_us, unsign
 }
 /* BO census (receipt-only; agx_win32_asahi_bo.c census_born and
  * AgxWin32AsahiCensusRefs; tools/agx_bo_life.py). Set only while
- * AdmissionUmdMeasureEnabled (APPLE_AGX_UMD_TRACE_FILE). Values (hex words):
+ * AdmissionUmdMeasureEnabled (APPLE_AGX_UMD_TRACE_FILE) and the process has
+ * APPLE_AGX_D3D12_BO_CENSUS exactly "1" (default off: a traced launch
+ * without it writes the same lines as before the census existed, so scored
+ * arms stay comparable across packages). Values (hex words):
  *   measure-bo-born {serial, handle, size/64K, VA>>16 (low 32 bits),
  *     VA>>32, winsys class (measure-bo-create's: 1 General, 2 Shader,
  *     3 Encoder), origin (1 new allocation, 2 BO cache reuse), Mesa BO
@@ -1708,7 +1711,8 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
   *out = NULL;
   AgxWin32BoIdentityHook = owner_bo_identity;
   /* before the screen: its device BOs are census births too */
-  AgxWin32BoCensusHook = AdmissionUmdMeasureEnabled() ? owner_bo_census : NULL;
+  AgxWin32BoCensusHook =
+      AdmissionUmdMeasureEnabled() && t5b_switch("APPLE_AGX_D3D12_BO_CENSUS") ? owner_bo_census : NULL;
   auto *owner = static_cast<AGX_D3D12_OWNER *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(AGX_D3D12_OWNER)));
   if (!owner) return E_OUTOFMEMORY;
   InitializeCriticalSection(&owner->Lock);
