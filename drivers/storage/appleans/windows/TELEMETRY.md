@@ -108,6 +108,7 @@ direct-runtime record in the second slot instead: `source = 3` and `generation =
 | `broker_rejections` | unknown mailbox messages (counted, not answered) |
 | `tcb_inval_failures` | nonzero advisory NVMMU TCB_STAT reads |
 | `cqes`, `invalid_cqe` | CQEs consumed and rejected by the direct queue engine |
+| `poll_recovered_completions` | CQEs reaped by the 50 ms timer because their interrupt had not arrived after a full period (missed-interrupt recovery, diag 0xAA) |
 | `last_stage` | `enum ansd_stage` |
 | `last_error` | bit 0 = faulted, bit 1 = IOP crashed |
 

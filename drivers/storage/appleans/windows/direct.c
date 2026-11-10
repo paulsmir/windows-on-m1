@@ -341,6 +341,16 @@ VOID AppleAnsDirectTimer(PVOID DeviceExtension)
     if (rearm) {
         if (ansd_mbox_service(&a->Ansd, 32) == ANSD_CRASHED) { direct_fault(a); rearm = FALSE; }
     }
+    /* Missed-interrupt recovery: a CQE that has waited a whole timer period was not delivered
+     * by the level interrupt. Reap it here (same drain as the ISR) instead of leaving the
+     * request to a Storport timeout and a controller reset. Counted and logged (0xAA). */
+    if (rearm && !a->DumpMode && ansd_overdue(&a->Ansd, 1)) {
+        ans_u64 before = a->Ansd.stats.cqes;
+        (void)AppleAnsDirectInterrupt(a);
+        a->Ansd.stats.poll_recovered += a->Ansd.stats.cqes - before;
+        AppleAnsDiag(a, NULL, 0xAA, (ULONG)(a->Ansd.stats.poll_recovered & 0xffffff));
+        rearm = a->Direct && a->Ansd.enabled && !a->Ansd.faulted;
+    }
     StorPortReleaseSpinLock(a, &lock);
     if (rearm) StorPortNotification(RequestTimerCall, a, AppleAnsDirectTimer, DIRECT_TIMER_US);
 }
@@ -399,7 +409,8 @@ VOID AppleAnsDirectPeer(PAPPLE_ANS_ADAPTER a, struct ans_telemetry *peer)
     peer->generation = 0x544345524944ULL; /* "DIRECT" */
     peer->valid_fields = ANS_TELEM_PHYSICAL_IRQS | ANS_TELEM_GUEST_IRQ_INJECTIONS |
         ANS_TELEM_BROKER_REJECTIONS | ANS_TELEM_TCB_INVAL_FAILURES | ANS_TELEM_CQES |
-        ANS_TELEM_INVALID_CQE;
+        ANS_TELEM_INVALID_CQE | ANS_TELEM_POLL_RECOVERED_COMPLETIONS;
+    peer->poll_recovered_completions = a->Ansd.stats.poll_recovered;
     peer->physical_irqs = a->Ansd.stats.mbox_messages;
     peer->guest_irq_injections = a->Ansd.stats.mbox_echoes;
     peer->broker_rejections = a->Ansd.stats.mbox_unknown;

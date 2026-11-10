@@ -112,7 +112,8 @@ VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a);
  * 0xA6 SRB_FUNCTION_DUMP_POINTERS answered (value = sealed<<8 | count), 0xA7 dump-instance
  * receipt (value = ans_dump_context_receipt_value), 0xA8 Identify ONCS without Dataset
  * Management: UNMAP stays unadvertised (value = ONCS), 0xA9 UNMAP policy at start
- * (value = effective mode<<16 | ONCS). */
+ * (value = effective mode<<16 | ONCS), 0xAA completions reaped by the timer because their
+ * interrupt did not arrive within a timer period (value = running count). */
 #define APPLE_ANS_DIAG_MAX 96
 VOID AppleAnsDiag(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, ULONG code, ULONG value);
 VOID AppleAnsFinish(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, USHORT nvme_status, ULONG length);

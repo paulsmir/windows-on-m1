@@ -47,3 +47,10 @@ assert 'if (a->Trim.config.mode == ANS_TRIM_OFF) a->Namespace.deallocate = 0;' i
 assert 'Trim' not in dump, 'the dump instance has no UNMAP policy'
 assert 'ans_trim_done(&a->Trim' in DIRECT and 'ans_trim_queued(&a->Trim)' in NATIVE
 print('PASS unmap_policy_wiring')
+# Missed-interrupt recovery (ANSQ-T4): the periodic timer reaps an overdue CQE under the same
+# lock and through the same drain as the ISR; the dump instance (no timer) is unaffected.
+timer = DIRECT[DIRECT.index('VOID AppleAnsDirectTimer('):DIRECT.index('static VOID direct_retire(PAPPLE_ANS_ADAPTER a, UCHAR status)\n{')]
+lock, over, drain, unlock = (timer.index(x) for x in ('StorPortAcquireSpinLock(a, InterruptLock',
+    'ansd_overdue(&a->Ansd, 1)', '(void)AppleAnsDirectInterrupt(a);', 'StorPortReleaseSpinLock(a, &lock)'))
+assert lock < over < drain < unlock, 'overdue completions are reaped under InterruptLock'
+print('PASS missed_interrupt_wiring')
