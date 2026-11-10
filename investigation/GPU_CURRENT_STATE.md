@@ -3238,3 +3238,39 @@ WindowServer does not occupy the GPU between macOS encoders (H6; measurable only
 Trace on macOS = operator).
 Next (offline, parallel to the bench): MPO preparation (Asahi DCP driver facts for slot z-order and blend, two-slot
 swap builder as a patch with host test, H1 spec) and the second-queue design note. No hardware until specs exist.
+
+## UPDATE 2026-11-10T11:17Z -- EXP2317 (N4c) architect reading: lever closed by receipt; the configuration REGRESSED (all renders depth-one)
+
+Source: .local/experiments/EXP2317-n4c-nohazard/evidence/EXP2317 (pipeline finished about 05:02Z; ACTUAL not yet
+written by the bench owner; the guest was still on the experiment boot at this stamp). Architect's decode:
+- Receipt (ov2-refusal-x0.txt, all 2621 lines of the GM pid summed): seen 0, applied 0; every pair refused with KMD
+  reason 6 ("3D stamp unreadable or zero"). By the preregistered rule x1/x2/x3 were not run: N4c LEVER_CLOSED_BY_RECEIPT.
+- fps_frames: w 42.346, x0 (traced) 43.678 against EXP2316 w 49.251, x 50.334 (separate boots, -13 %). FULL f0 untraced
+  score 7036 / 42.1 fps against EXP2309 7784. Perf gate passed only because its baseline is EXP2220 (40.77).
+- R12's nb.py on gm2317x0-umd.log against gm2316x (same tool, ms/frame): busy union 18.448 vs 18.159 (flat); non-busy
+  4.446 vs 1.708. Per-job work identical within 0.07. Every render lost depth two: fraction started before the KMD saw
+  the previous completion R1/R3/R5/R7 = 0.03/0.02/0.04/0.01 (EXP2316: 0.98/0.66/0.55/0.46); the render is submitted to
+  the KMD after the previous compute ENDS (median +0.03..0.05 ms; EXP2316 -0.1..-6.4 ms) and render completion detection
+  became 0.7-6.1 ms. Compute jobs are still pre-kicked (0.96-0.98). Pstate pre->mid P6 86 % (valid).
+- Package differences against EXP2316: (1) the phase fix 7100e2d79 + b46a092e8 (acts only inside the submit wait loop
+  on reason 4); (2) Wom1Ov2NoHazardLead=1, which reports AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE to the UMD; the
+  UMD then logs and feeds job barriers on every replay (agx_d3d12_windows.cpp AgxD3d12OwnerJobBarriersEnabled) and
+  composes compute envelopes through the OV2 hook (agx_win32_gpuva_batch.c ~421).
+- HYPOTHESIS (ranked): the OV2 switch (UMD + KMD side) delays every render submission until the preceding compute
+  has ended, because it changes every replay while the lever itself never applied; the phase fix is second because it
+  can only act on a wait with reason 4. Discriminator: EXP2318 = the EXP2317 package with Wom1Ov2NoHazardLead unset,
+  everything else identical (one variable). Expect fps_frames back at 49.5-50.5 and render depth-two fractions back.
+  If it stays at 42-44, the phase fix is the cause and must be fixed before any further package (it is in all of them).
+- Status of the comparison with macOS (HD windowed, 100k, -temporal 0): best configuration remains EXP2316 (C1 + N4b):
+  GPU-timeline frame 20.31 ms vs Apple 16.61 ms scene-aligned (82 %); last FULL untraced score 7784 / 9946 (78.3 %,
+  EXP2309, without C1/N4b). No FULL score of the EXP2316 configuration exists.
+
+R14 (late render completion, .local/night-20261110/r14-late-completion/REPORT.md): own depth-one cost 0.272 ms/frame;
+0.233 of it because the render prelude's notification is deferred when C4/C6 is kicked onto compute Queue B before the
+prelude ended (99 % vs 0.5 % conditional). Proposed lever (class O, effort S): a retryable kick refusal holding a Queue-B
+compute behind a running prelude render until its prelude completed; bound 0.19-0.23 ms/frame. Open: worker re-poll
+latency after the refusal. Not yet reviewed against source by the architect.
+R13 (MPO second plane, .local/night-20261110/r13-mpo-prep/REPORT.md): J313 DCP has two surface slots, fixed z-order
+(slot 1 on top), premultiplied flag only (no opaque upper plane, no X8). Patch file (not applied) for a two-slot swap
+builder + proxy diagnostic op 0x1106; H1 headless part (swap accepted and latched) needs no photo, visibility does.
+Microsoft's MPO hardware requirements ask for a YUV and a stretching plane: whether DWM uses our two RGB planes is open.
