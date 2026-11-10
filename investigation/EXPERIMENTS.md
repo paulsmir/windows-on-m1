@@ -77113,3 +77113,20 @@ EXP2321 ACTUAL 2026-11-10T16:17:17Z:
 - Rollback rec2321h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE; package and devnode switches removed.
 - Verdict: rejected as a default (mean hold 831 us exceeds the 500 us failure criterion and HD fps is neutral, -0.45 %). The gate works functionally (no lost completion, timeouts 0.53 %); Wom1PreludeNotifyGate stays unset. No repeat boot; the fourth boot with both switches is not run.
 - Next: EXP2322 (boot C, Wom1PerfTgtUtilization=60), read against EXP2320 mean(r2,r3) 50.08.
+
+EXP2322 HARDWARE BEFORE 2026-11-10T16:19:08Z:
+- Package: worktree exp-r14-pt1-gate HEAD 3d7e140974f0d044b195d7cd0cb77b21c2c565f9 = EXP2319 source 1a2cd106c + 9eec56145 (R14 prelude notify gate, opt-in Wom1PreludeNotifyGate, default unset) + 4158a52b0 (PT1 perf target utilization, opt-in Wom1PerfTgtUtilization, default unset = profile value 85) + 3d7e14097 (R14 receipt: gate counters in Wom1JobWindow v4; cherry-picks of 99791b376 / 8e7eafd95 line). EXP2320, EXP2321 and EXP2322 are three builds of this one commit (the package version carries the experiment number; no source differs), one registry switch per boot, set on the staged devnode before the first start of a fresh boot. A same-boot adapter cycle is not used as an A/B method.
+- Registry in every boot as EXP2319: Wom1JobDiagnostics=1, Wom1CrossProcessPairs=1, Wom1SubmitRequeue=1; Wom1Ov2NoHazardLead unset. Storage base AppleAns 0.4.8 (as EXP2319).
+- Hypothesis (PT1): lowering the firmware's perf target utilization from 85 to 60 keeps the GPU at P6 through the GravityMark dip frames, so per-job work in those frames falls 5-14 % and FULL f0 rises by at least 0.5 % against boot A.
+- WHY THIS HYPOTHESIS: (1) time-in-pstate snapshots show P6 residency below 95 % in GM windows (EXP2319 N6_P6 mid 86.9-89.8 %); (2) the dip frames' jobs run 5-14 % longer than the same jobs at P6 (r4-compute-levers REPORT.md); (3) the firmware's controller response to a different target is not derivable offline.
+- WINDOWS CONTRACT: none changed.
+- AGX/ASAHI CONTRACT: hwdata-A perf target words at 0x788 and 0x7ec (u32, Asahi/m1n1 initdata, profile value 85) are read by the firmware power controller at init; values 50..85 accepted by AgxHwdataPerfTargetApply, others ignored with the ignored bit in the gpuperf receipt.
+- TRANSLATION: Wom1PerfTgtUtilization=60 -> both words written after AgxHwdataMaterialize, before firmware init; receipt Reserved = value | applied bit 16 | ignored bit 17 (agx_gpu_perf_decode.py PERF_TGT line).
+- WHAT IS STILL UNKNOWN: (1) the firmware controller's residency at target 60 under this workload; (2) temperature and power at that residency. Hardware behaviour.
+- Runs (probe2322.sh): suite; HD PERF w/r2/r3 (same cadence as boots A and B); traced x with gpuperf mid/post snapshots; FULL f0; CS warm/r2/r3; perf gate; final receipts; WER count.
+- Expected (architect): PERF_TGT 60 applied; P6 residency >= 95 % in every GM window; per-job work in dip frames 5-14 % lower; FULL f0 >= boot A + 0.5 %; temperature / power within +5 C / +1 W of boot A.
+- Failure criteria: P6 share in the dip window < 80 %; thermal throttle; firmware timeout or reset; control w below 48.0 -> stop.
+- Recovery: rec2322h/recover.sh, bounded notifying waiter, guest watchdog; package and devnode (with the switch) removed. BUGCHECK line read and reported to the AppleAns session.
+- Hashes: sys 455e691c54a2, UmdArm64 8acec08db535, UmdX64 9cc383f767cb, Umd32 18ccc5254ee9; manifest 629c162eff84, hardware-manifest d001c77a333f; probe2322.sh 914a27113d39 (PROBE_LINT_OK); visible recovery rec2322h 8a270ed59d8587ad; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1PerfTgtUtilization=60.
+- Recovery rec2322h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2322-r14-pt1-gate-c/run2322.sh.
