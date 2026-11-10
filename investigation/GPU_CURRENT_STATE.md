@@ -3274,3 +3274,36 @@ R13 (MPO second plane, .local/night-20261110/r13-mpo-prep/REPORT.md): J313 DCP h
 (slot 1 on top), premultiplied flag only (no opaque upper plane, no X8). Patch file (not applied) for a two-slot swap
 builder + proxy diagnostic op 0x1106; H1 headless part (swap accepted and latched) needs no photo, visibility does.
 Microsoft's MPO hardware requirements ask for a YUV and a stretching plane: whether DWM uses our two RGB planes is open.
+
+## UPDATE 2026-11-10T13:03Z -- EXP2318 architect verdict: the OV2 switch was the EXP2317 regression; first FULL score of C1+N4b = 7923 (79.7 % of macOS)
+
+Source: .local/experiments/EXP2318-n4c-switch-unset/evidence/EXP2318 (EXP2317 package b46a092e8f6b, Wom1Ov2NoHazardLead
+unset, everything else as EXP2317; the bench owner's ACTUAL entry and perf gate were still in progress at this stamp).
+- fps_frames (tools/agx_gm_perf.py, HD windowed 100k -temporal 0): w 49.048, r2 49.808, r3 50.526, x (traced) 49.796
+  against EXP2316 49.251 / 49.886 / 50.285 / 50.334 and EXP2317 w 42.346, x0 43.678. Separate boots, +-1 %: equal to
+  EXP2316. Pstate mid P6 89.2 % (valid).
+- nb.py on gm2318x-umd.log: wall 20.082, busy union 18.281, non-busy 1.801 ms/frame (EXP2316 x: 1.708; EXP2317 x0:
+  4.446). Fraction of renders started before the KMD saw the previous completion R1/R3/R5/R7 = 0.99/0.65/0.59/0.40
+  (EXP2316 0.98/0.66/0.55/0.46; EXP2317 0.03/0.02/0.04/0.01). Render depth two is back.
+- Verdict: CONFIRMED. Wom1Ov2NoHazardLead=1 (the INDEPENDENT_SUBQUEUE feature bit and what the UMD does when it sees
+  it) removes render depth two and costs 13 %; the phase fix 7100e2d79 + b46a092e8 is harmless and stays. The switch
+  stays unset and must not be set in any package until its side effect is removed (research line R15: root cause of
+  KMD OV2 reason 6 and of the submission delay; the cross-frame row 0.27 + <= 0.085 ms stays open behind it).
+- FULL f0 (untraced, HD windowed): Score 7923, 47.4 fps. macOS 9946: 79.7 %. Previous FULL 7784 (EXP2309, without
+  C1/N4b): +1.8 %. This is the first FULL score of the C1 + N4b configuration and the current best.
+- Process defect recorded: the package perf gate compares against EXP2220 (40.77) and passed EXP2317 at -13 %. From
+  now on the close-out of every GM package also compares HD fps_frames of arm w with the EXP2316/EXP2318 level
+  (floor 48.0 = -2.5 % of 49.15); below the floor = stop and discriminate before the next package.
+
+R14 reviewed against source (architect): ACCEPTED as the next KMD change (class O, effort S). flight_on_a/flight_on_b
+(apple_agx_render_shared_memory.c) put a prelude render on both firmware Queues; publish_own raises Queue B's threshold
+when the next compute is published, so the prelude's notification is batched with that compute. Lever: retryable kick
+refusal 66 in AdmissionJobWindowKickRefusal while Running is a prelude render whose prelude has not completed and Next
+joins Queue B; decided before the pending head is claimed (the OV5 defer precedent at backend_platform_windows.c
+~7200, EXP2292 lesson); while it holds the poll plan is capped (sleepCapUs, the existing 250 us "not bound yet" cap at
+~8205), so the compute is still kicked >= 1.5 ms before the render ends. Switch Wom1PreludeNotifyGate, default 0.
+Bound 0.19-0.23 ms/frame. Spec: .local/handoff/OV-ARCHITECT-HANDOFF.md section "R14 kick gate".
+
+Research lines started 2026-11-10T13:03Z (read-only, reports under .local/night-20261110/): R15 N4c reason 6 + switch side
+effect; R16 prelude-free renders (ledger rows 0.195 busy + 0.233 notify batching + <= 0.13 cross-process relaunch);
+R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without a lever today).
