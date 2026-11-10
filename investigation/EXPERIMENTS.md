@@ -77194,3 +77194,48 @@ EXP2323 ACTUAL 2026-11-10T17:21:15Z:
 - Also reported by the bench owner for EXP2319..2322 (four GPU boots on 0.4.8): every ordered restart
   "BUGCHECK ok ... code=0x0", no AppleAns error records, RECOVERY_STORAGE_APPLEANS_OK each time.
 - Verdict: the crash-dump path works on 0.4.8 (dump written by the dump instance, volume intact).
+
+EXP2324 HARDWARE BEFORE 2026-11-10T17:22:51Z:
+- Kind: diagnostic, one boot, 16 GM HD PERF arms, one APPLE_AGX_DIAG_CUT value per arm (architect order 2026-11-10, N6B-CUT-LADDER.md + OV-ARCHITECT-HANDOFF.md "N6b cut ladder accepted"). Text below is the architect's draft BEFORE, used as written, with the rulings in the next bullet.
+- Package: gpu/memory-latency 7ab0604c198c7847686614761777c83eeaa513f9 = e85be170b (21753fed2 diag cut @offset, point code 4, UMD compiler projection only) + EXP2322 ACTUAL / EXP2323 BEFORE ledger commits. KMD source identical to EXP2323 (fb5c37de5 line). Offline: tests/test_d3d12_diag_cut OK; syncheck SYNCHECK_OK; X86B434 + package build gates in the build log.
+- Registry and environment as EXP2319 P0: Wom1JobDiagnostics=1, Wom1CrossProcessPairs=1, Wom1SubmitRequeue=1; Wom1Ov2CrossLead, Wom1PreludeNotifyGate, Wom1PerfTgtUtilization unset; APPLE_AGX_D3D_PROMOTE_TEX and APPLE_AGX_D3D12_OV2_CROSS_EXECUTION removed in every arm; split tags set b. Storage AppleAns 0.4.8.
+- Rulings: all 16 arms, the optional 97efffb3:@5212 arm does not run. Step 0 (probe2324.sh step0, before any cut arm): p0 shader-stats rows {instrs, alu, gprs, threads, loops, code, preamble} k48 801/520/127/832/1/5400/22 and k49 810/504/111/896/1/5434/22; otherwise no cut arm, tell the architect. A fault/timeout/reset/device removal in k210 (or kb2 before it) -> no further nested arm of either kernel, jb1 if healthy, then p1. A second fault on one kernel drops its remaining arms. Cut arms' fps is not read or gated; perf gate on r2/r3 and CS only; one run per arm; an interval below 0.012 ms is reported "not resolved".
+- Hypothesis: the 0.674 ms that 97efffb3 spends behind byte 164 (and what b1db88bf spends behind its prefix) sits in one or two identifiable sections: pre-plane loads, the three plane groups, the pre-loop part, or the loop; a `stop` at a spine block boundary inside nested control flow separates them.
+- WHY THIS HYPOTHESIS:
+  1. EXP2319: 97efffb3 E 0.0093, B2 0.1236, control 0.7981 ms per job: 84 % of the kernel is behind B2, and from byte 198 on everything is inside the first exit `if`, so no further nesting-0 point exists.
+  2. Static counts no longer rank the sections: the plane groups carry the same 12 / 12 / 8 constant-buffer loads as Apple's twin; ours has fewer loads before the planes (15 vs 20) and more before the loop (9 vs 7) and in the loop (9 vs 8; b1db88bf 11 vs 8); wait and slot variants did not move the time (EXP2315). Thread population per section and loop trip counts are not in any receipt.
+  3. A `stop` behind a push_exec with all threads active ran without fault (EXP2319 arm bl); every point here is a spine point, so the reading does not depend on what `stop` does to masked threads as long as it is harmless.
+- WINDOWS CONTRACT: none changed. Without the variable no shader binary differs (offline: both kernels byte-identical to the base build; on the guest: control arms have identical shader-stats rows and no diag-cut row). In cut arms the kernel does not produce its output; those arms are diagnostic only.
+- AGX/ASAHI CONTRACT: `stop` = bytes 88 00, `end_execution()`; one pc and one exec mask per SIMD group; the thread count per group is fixed by the register count of the whole program, so a cut placed after register allocation and packing leaves occupancy, preamble and every byte before the cut identical. Asahi and Apple place `stop` at function ends (Asahi additionally on abort paths).
+- TRANSLATION: `@<offset>` names the pack offset of a block of the main function; it is checked against a trial pack and refused when no block with an instruction begins there; the two bytes at the offset are overwritten with `stop`. Receipt `measure-d3d12-diag-cut` {hash hi, hash lo, point, cut, code bytes, applications}, point 4 for `@`.
+- WHAT IS STILL UNKNOWN:
+  1. What `stop` does when part of the SIMD group is masked off (hardware behaviour; arm 97efffb3:@210 answers it).
+  2. The hardware cost of each section: thread population behind each exit and plane group, loop trip counts.
+  3. Whether a b1db88bf that leaves its outputs unwritten is safe for the rest of the frame (97efffb3 was, arms ae / ab2 of EXP2319).
+- Arms: one boot; each arm = one GravityMark HD PERF run (windowed, 100k, -temporal 0, split tags set b, fresh process, pauses as EXP2319) with exactly one `APPLE_AGX_DIAG_CUT` value; the variable absent in controls and between arms.
+  | # | arm | value | expected diag-cut row (hex, as the guest prints it) |
+  |---|---|---|---|
+  | 1 | p0 | (absent) | no row |
+  | 2 | kb2 | 97efffb3:B2 | a8260e42 97efffb3 00000002 000000a4 00001498 00000001 (seen in EXP2319) |
+  | 3 | k210 | 97efffb3:@210 | a8260e42 97efffb3 00000004 000000d2 00001498 00000001 |
+  | 4 | k1110 | 97efffb3:@1110 | ... 00000004 00000456 00001498 00000001 |
+  | 5 | k2118 | 97efffb3:@2118 | ... 00000004 00000846 00001498 00000001 |
+  | 6 | k2776 | 97efffb3:@2776 | ... 00000004 00000ad8 00001498 00000001 |
+  | 7 | k3228 | 97efffb3:@3228 | ... 00000004 00000c9c 00001498 00000001 |
+  | 8 | k4128 | 97efffb3:@4128 | ... 00000004 00001020 00001498 00000001 |
+  | 9 | jb1 | b1db88bf:B1 | 6cf11e8a b1db88bf 00000001 000000b0 000014ba 00000001 |
+  | 10 | j364 | b1db88bf:@364 | 6cf11e8a b1db88bf 00000004 0000016c 000014ba 00000001 |
+  | 11 | j1086 | b1db88bf:@1086 | ... 00000004 0000043e 000014ba 00000001 |
+  | 12 | j2128 | b1db88bf:@2128 | ... 00000004 00000850 000014ba 00000001 |
+  | 13 | j2792 | b1db88bf:@2792 | ... 00000004 00000ae8 000014ba 00000001 |
+  | 14 | j3254 | b1db88bf:@3254 | ... 00000004 00000cb6 000014ba 00000001 |
+  | 15 | j4120 | b1db88bf:@4120 | ... 00000004 00001018 000014ba 00000001 |
+  | 16 | p1 | (absent) | no row |
+- Optional, placed directly before p1 because it is the riskiest: 97efffb3:@5212 (cut 0000145c; a `stop` in place of the `pop_exec` behind the loop, reached with most or all threads masked; expected equal to control with b13 / b14 as control). Short form if bench time is tight (8 arms): p0, k210, k1110, k3228, k4128, j364, j4120, p1, reading B2 from EXP2319 (cross-boot, weaker).
+- Expected checkpoint: p0 and p1 as EXP2319 p0 / p1 (b12 0.798 / 0.792, b13 0.343 / 0.342); kb2 b12 about 0.124 (EXP2319 ab2 0.1236); k210 between kb2 and control, HYPOTHESIS about 0.17; arms 4-8 non-decreasing and at most control; in arms 2-8 b13 about 0.30 and b14 about 0.05 and b0..b11 as control; jb1 b13 at most about 0.0074 (if the dispatch size is that of the empty-input run, R21 4.3); arms 10-15 non-decreasing and at most 0.343, b0..b12 as control. Total fps of cut arms is not read.
+- Void rules: a cut arm without its row, with another offset, with cut ffffffff or with other code bytes; the cut kernel's shader-stats row different from the control's; a kernel time above control or below the preceding arm of the same kernel by more than 2 % of control; p0 and p1 differing by more than 2 % in that kernel.
+- Stop rules: GPU fault, job timeout, GPU_RESET, G4_SUBMIT_FAILURE or device removal in k210 -> no further nested arm of either kernel runs (jb1 may still run), go to p1 and end: the answer to question 1 is then "not usable". The same in a later nested arm voids that arm; a second one drops the kernel's remaining arms. Failure criteria: WER report from DWM, guest hang, bugcheck, a fault in a control arm: stop and record.
+- Recovery: the variable absent is the default and restores every binary; the package and devnode are removed by the experiment's usual recovery script with the notifying waiter and the guest watchdog.
+- Hashes: sys cb58e0b6c786, UmdArm64 0c74ec89e770, UmdX64 d4c4a0a08de6, Umd32 bebbdfe18495; manifest ecbc30e4f7f8, hardware-manifest ac50af02a830; probe2324.sh 0fa446a5d4bd (PROBE_LINT_OK); visible recovery rec2324h 44a4135a6ed70807; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
+- Recovery rec2324h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2324-n6b-cut-ladder/run2324.sh.
