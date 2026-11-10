@@ -58,6 +58,20 @@
  *   carry a mark until they retire: the D3D12 owner never lets either lead
  *   or overlap across the pair (agx_d3d12_job_barriers.h
  *   AGX_D3D12_JOB_FOLDED, batch-kind flag AGX_WIN32_FOLD_KIND_FLAG).
+ * - PF1b, pipeline statistics: the kernel adds IA_VERTICES, IA_PRIMITIVES,
+ *   VS_INVOCATIONS, C_PRIMITIVES and C_INVOCATIONS. Like every native
+ *   statistic writer (Asahi agx_get_query_address -> agx_add_query_to_batch)
+ *   the batch that launches it, Wb, retains the query BO and is registered
+ *   as a writer of the query (agx_win32_stream_query_address); R keeps its
+ *   own registration (its draw uniforms register R for every active
+ *   statistic, and it writes PS_INVOCATIONS), so a resolve, a GetData or a
+ *   Begin's busy check flushes or waits for both, Wb first (flushing R
+ *   flushes its linked Wb first; flushing Wb drops the seal). Predication
+ *   still refuses (agx_win32_fold_queries_allow).
+ * - A render reset discards no counted draw except on a context fault: an
+ *   agx_flush_batch reset needs a batch without draws, the other resets are
+ *   fault aborts and context teardown. Only then does a kept Wb still add
+ *   the IA/VS counts of a dropped draw, on a device that is already lost.
  */
 #ifndef AGX_WIN32_EXPAND_AHEAD_H
 #define AGX_WIN32_EXPAND_AHEAD_H
@@ -116,6 +130,14 @@ agx_win32_expand_queries_allow(const struct agx_context *ctx)
    return true;
 }
 
+/* PF1b: the fold registers the statistics on the batch that launches the
+ * kernel (Wb), so only predication refuses it. */
+static inline bool
+agx_win32_fold_queries_allow(const struct agx_context *ctx)
+{
+   return !ctx->cond_query;
+}
+
 static inline bool
 agx_win32_expand_ahead_allowed(const struct agx_context *ctx)
 {
@@ -134,7 +156,7 @@ agx_win32_expand_ahead_allowed(const struct agx_context *ctx)
 #define AGX_WIN32_FOLD_CAUSED 12u
 #define AGX_WIN32_FOLD_COUNTS 20u
 /* refusal reasons */
-#define AGX_WIN32_FOLD_REFUSE_QUERY 1u        /* predication / statistics query */
+#define AGX_WIN32_FOLD_REFUSE_QUERY 1u        /* predication */
 #define AGX_WIN32_FOLD_REFUSE_NO_COMPUTE 2u   /* no open compute batch */
 #define AGX_WIN32_FOLD_REFUSE_NOT_WRITER 3u   /* it writes no input nor target */
 #define AGX_WIN32_FOLD_REFUSE_PRELUDE 4u      /* the render already has a CDM */

@@ -92,13 +92,20 @@ agx_win32_stream_capacity_enabled(void)
 }
 
 /* Register the native query writer and retain its BO for both CDM and
- * render submission. Resolve flushes that writer before copying results. */
+ * render submission. Resolve flushes that writer before copying results.
+ * PF1b: a launcher other than the render batch (a folded Wb) writes the
+ * statistic, so it is registered and retains the BO as well; the render
+ * batch keeps its registration. */
 static uint64_t
-agx_win32_stream_query_address(struct agx_batch *batch, unsigned statistic)
+agx_win32_stream_query_address(struct agx_batch *batch, struct agx_batch *launcher,
+                               unsigned statistic)
 {
    struct agx_context *ctx = batch->ctx;
-   return ctx->active_queries && ctx->pipeline_statistics[statistic] ?
-      agx_get_query_address(batch, ctx->pipeline_statistics[statistic]) : 0;
+   if (!ctx->active_queries || !ctx->pipeline_statistics[statistic])
+      return 0;
+   if (launcher != batch)
+      (void)agx_get_query_address(launcher, ctx->pipeline_statistics[statistic]);
+   return agx_get_query_address(batch, ctx->pipeline_statistics[statistic]);
 }
 
 static unsigned
@@ -166,7 +173,7 @@ agx_win32_fold_candidate(struct agx_context *ctx,
    wb = ctx->any_faults ? NULL : agx_win32_fold_compute(ctx);
    if (ctx->any_faults)
       reason = AGX_WIN32_FOLD_REFUSE_LOST;
-   else if (!agx_win32_expand_queries_allow(ctx))
+   else if (!agx_win32_fold_queries_allow(ctx))
       reason = AGX_WIN32_FOLD_REFUSE_QUERY;
    else if (!wb)
       reason = AGX_WIN32_FOLD_REFUSE_NO_COMPUTE;
@@ -233,7 +240,7 @@ agx_win32_fold_linked(struct agx_context *ctx, struct agx_batch *render)
    struct agx_batch *wb;
    if (!agx_win32_expand_fold_enabled())
       return NULL;
-   wb = agx_win32_expand_queries_allow(ctx) ? agx_win32_expand_linked(render) : NULL;
+   wb = agx_win32_fold_queries_allow(ctx) ? agx_win32_expand_linked(render) : NULL;
    if (wb && wb->windows_expand_fold && agx_win32_expand_room(wb))
       return wb;
    /* a refusal before entry already names this draw's reason */
@@ -465,11 +472,11 @@ agx_win32_emit_indirect_stream(struct agx_batch *batch,
       .index_range = draw.index_buffer_range_B,
       .index_size = draw.indexed ? agx_index_size_to_B(draw.index_size) : 0,
       .restart = draw.restart, .topology = topology, .mode = stream->mode,
-      .ia_vertices = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_IA_VERTICES),
-      .ia_primitives = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_IA_PRIMITIVES),
-      .vs_invocations = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_VS_INVOCATIONS),
-      .c_primitives = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_C_PRIMITIVES),
-      .c_invocations = agx_win32_stream_query_address(batch, PIPE_STAT_QUERY_C_INVOCATIONS),
+      .ia_vertices = agx_win32_stream_query_address(batch, launcher, PIPE_STAT_QUERY_IA_VERTICES),
+      .ia_primitives = agx_win32_stream_query_address(batch, launcher, PIPE_STAT_QUERY_IA_PRIMITIVES),
+      .vs_invocations = agx_win32_stream_query_address(batch, launcher, PIPE_STAT_QUERY_VS_INVOCATIONS),
+      .c_primitives = agx_win32_stream_query_address(batch, launcher, PIPE_STAT_QUERY_C_PRIMITIVES),
+      .c_invocations = agx_win32_stream_query_address(batch, launcher, PIPE_STAT_QUERY_C_INVOCATIONS),
       .threads = agx_win32_stream_threads(capacity),
       .capacity = capacity, .feedback = feedback,
    };

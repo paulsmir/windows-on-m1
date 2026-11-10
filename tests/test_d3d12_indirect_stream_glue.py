@@ -453,6 +453,10 @@ FOLD_STUBS = {
     'static struct agx_batch *agx_get_batch(struct agx_context *c){++get_batches;return c->batch;}':
     'static struct agx_batch *render_next;\n'
     'static struct agx_batch *agx_get_batch(struct agx_context *c){++get_batches;if(render_next)c->batch=render_next;return c->batch;}',
+    # PF1b: which batch each statistic address registers as a query writer
+    'static uint64_t agx_get_query_address(struct agx_batch *b,void *q){assert(b->ctx->active_queries&&q);++query_refs;if(fault==11)b->ctx->any_faults=true;return (uintptr_t)q;}':
+    'static struct agx_batch *query_batch[64];static unsigned query_logged;\n'
+    'static uint64_t agx_get_query_address(struct agx_batch *b,void *q){assert(b->ctx->active_queries&&q&&query_logged<64);query_batch[query_logged++]=b;++query_refs;if(fault==11)b->ctx->any_faults=true;return (uintptr_t)q;}',
 }
 FOLD_MAIN = r"""/* PF1 harness main, appended to the glue harness prefix. Built with
  * -DPF1_BASELINE against the base commit's headers it prints the switch-off
@@ -595,7 +599,7 @@ static void fallback(bool on){
   if(k==AGX_WIN32_FOLD_OTHER_RENDER)continue;   /* own scenario below */
   setup();
   uint64_t *stat=(uint64_t *)(fixed_words+128);*stat=0;
-  if(k==1)ctx.pipeline_statistics[PIPE_STAT_QUERY_IA_VERTICES]=stat;   /* QUERY */
+  if(k==1)ctx.cond_query=stat;                                        /* QUERY: predication */
   if(k==2){fold_wb=NULL;fold_writer[0]=NULL;}                        /* NO_COMPUTE */
   if(k==3)fold_writer[0]=NULL;                                        /* NOT_WRITER */
   if(k==4)r.cdm=(struct agx_encoder){cdm,cdm,cdm+sizeof(cdm)};       /* PRELUDE */
@@ -615,7 +619,7 @@ static void fallback(bool on){
   agx_flush_batch(&ctx,&r);
   printf("%s %u %016llx\n",k?"PRELUDE":"FOLDED",k,(unsigned long long)emitted(out));
   if(k)flush_line("FLUSH",k);
-  ctx.pipeline_statistics[PIPE_STAT_QUERY_IA_VERTICES]=NULL;
+  ctx.cond_query=NULL;
  }
  puts("FALLBACK PASS");
 }
@@ -653,6 +657,43 @@ static void reset(void){
 }
 #endif
 
+#ifndef PF1_BASELINE
+/* Test 5 (PF1b): with pipeline statistics active the fold is taken; each of
+ * the kernel's five statistics registers its launching batch (Wb) as a query
+ * writer, R keeps its registration, Wb is still submitted first, and the
+ * counts equal the in-render prelude's (switch off). */
+static unsigned query_count(const struct agx_batch *b){unsigned n=0;for(unsigned i=0;i<query_logged;++i)n+=query_batch[i]==b;return n;}
+static void stats(bool on){
+ static const unsigned kernel_stats[]={PIPE_STAT_QUERY_IA_VERTICES,PIPE_STAT_QUERY_IA_PRIMITIVES,
+  PIPE_STAT_QUERY_VS_INVOCATIONS,PIPE_STAT_QUERY_C_PRIMITIVES,PIPE_STAT_QUERY_C_INVOCATIONS};
+ setup();
+ uint64_t *st=(uint64_t *)(fixed_words+256);memset(st,0,12*sizeof(uint64_t));
+ for(unsigned k=0;k<11;++k)ctx.pipeline_statistics[k]=&st[k];
+ query_logged=0;
+ agx_win32_stream_flush_inputs(&ctx,&in);
+ uint8_t *out=vdm+32;assert(draw(out)==out+8&&!ctx.any_faults);
+ if(on){assert(launch_batch==&wb&&launch_barrier==AGX_BARRIER_ALL&&!r.cdm.bo);
+  assert(COUNT(AGX_WIN32_FOLD_KERNELS)==1&&ctx.windows_indirect_fold==1&&!COUNT(AGX_WIN32_FOLD_REFUSED+AGX_WIN32_FOLD_REFUSE_QUERY));
+  assert(query_logged==10&&query_count(&wb)==5&&query_count(&r)==5);}
+ else{assert(launch_batch==&r&&query_logged==5&&query_count(&r)==5&&!query_count(&wb));}
+ const struct agx_win32_stream_params *p=last_args;
+ assert(p->ia_vertices==(uintptr_t)&st[PIPE_STAT_QUERY_IA_VERTICES]&&p->ia_primitives==(uintptr_t)&st[PIPE_STAT_QUERY_IA_PRIMITIVES]);
+ assert(p->vs_invocations==(uintptr_t)&st[PIPE_STAT_QUERY_VS_INVOCATIONS]&&p->c_primitives==(uintptr_t)&st[PIPE_STAT_QUERY_C_PRIMITIVES]);
+ assert(p->c_invocations==(uintptr_t)&st[PIPE_STAT_QUERY_C_INVOCATIONS]);
+ agx_flush_batch(&ctx,&r);
+ assert(flushes==2&&flush_log[0]==&wb&&flush_log[1]==&r&&!ctx.any_faults);
+ assert(st[PIPE_STAT_QUERY_IA_VERTICES]&&!st[PIPE_STAT_QUERY_PS_INVOCATIONS]);
+ printf("STATS");for(unsigned i=0;i<5;++i)printf(" %llu",(unsigned long long)st[kernel_stats[i]]);puts("");
+ /* predication still refuses, with reason 1 */
+ setup();for(unsigned k=0;k<11;++k)ctx.pipeline_statistics[k]=&st[k];ctx.cond_query=st;
+ agx_win32_stream_flush_inputs(&ctx,&in);assert(draw(vdm+32)&&launch_batch==&r);
+ if(on)assert(COUNT(AGX_WIN32_FOLD_REFUSED+AGX_WIN32_FOLD_REFUSE_QUERY)==1&&ctx.windows_indirect_fold==(0x100u|AGX_WIN32_FOLD_REFUSE_QUERY));
+ agx_flush_batch(&ctx,&r);
+ ctx.cond_query=NULL;for(unsigned k=0;k<11;++k)ctx.pipeline_statistics[k]=NULL;
+ puts("STATS PASS");
+}
+#endif
+
 int main(int argc,char **argv){
  const bool on=argc>2&&!strcmp(argv[1],"on");
  const char *what=argc>2?argv[2]:"";
@@ -676,6 +717,7 @@ int main(int argc,char **argv){
  else if(!strcmp(what,"fallback"))fallback(on);
 #ifndef PF1_BASELINE
  else if(!strcmp(what,"reset")&&on)reset();
+ else if(!strcmp(what,"stats"))stats(on);
 #endif
  else return 2;
  reset_counts();
@@ -793,6 +835,21 @@ class ExpandFold(unittest.TestCase):
         a Wb without kernels must be submitted, never reset, and a second
         render's counted draw must submit Wb rather than share it."""
         self.assertIn('RESET PASS',self.run_mode('on','reset'))
+
+    def test_statistics_writer_is_the_launching_batch(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        PF1b: a folded kernel adds five pipeline statistics from Wb. If only
+        R registered the query, Wb would write a query BO it never listed
+        (not resident for its submission) and would not be a writer that a
+        resolve or GetData flushes and waits for. With statistics active the
+        fold must be taken, each kernel statistic must register Wb as well as
+        R, Wb must still submit first, the counts must equal the in-render
+        prelude's, and predication must still refuse with reason 1."""
+        off=self.run_mode('off','stats').splitlines()
+        on=self.run_mode('on','stats').splitlines()
+        self.assertEqual(off[-1],'STATS PASS')
+        self.assertEqual(on[-1],'STATS PASS')
+        self.assertEqual([l for l in off if l.startswith('STATS ')],[l for l in on if l.startswith('STATS ')])
 
 
 DEPENDENCY = r"""
