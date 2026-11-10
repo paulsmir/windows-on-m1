@@ -76207,3 +76207,29 @@ EXP2309 HARDWARE BEFORE 2026-11-10T00:15:48Z:
   15 (b, C0) / 13 (c, C2); a listed tag absent; fault, TDR, WER, STOP or BUGCHECK code != 0.
 - Recovery: `.local/experiments/EXP2309-gm-night-base/evidence/rec2309h/recover.sh` (visible recovery, same
   boot and package as EXP2309; one rollback covers both experiments).
+
+## EXP2309 — GM-NIGHT-BASE FHD/HD decomposition inputs (ACTUAL)
+
+- UTC: 2026-11-10T00:49:33Z. Verdict: **confirmed** (measurement completed; R1 budget predictions hold). Rollback is shared with
+  EXP2310, which runs on the same boot; restart BUGCHECK line and recovery result are recorded in EXP2310 ACTUAL.
+- Boot: launch ~00:16Z, APPL0002 Problem CM_PROB_NONE, Wom1JobDiagnostics read back 0x1, pipeline RC 0. Display,
+  SSH and native SSD (AppleAns 0.4.5) alive throughout; every run wer 0, err_bytes 0. Final check: C:\CrashDumps
+  holds only the two October files; the single Kernel-Power 41 in the 3 h lookback is stamped 21:53Z 2026-11-09,
+  before this boot.
+- Traced PERF, 10+60 s window (`tools/agx_gm_perf.py summary`): fps (presents) / fps_frames / gm_frame_ms median /
+  presents_per_frame; jobs_per_frame 8.0 in all runs.
+  - HD 1280x720: phdw 44.234 / 48.970 / 21.254 / 0.9033; phd1 44.367 / 48.986 / 21.285 / 0.9057;
+    phd2 44.545 / 49.146 / 21.255 / 0.9064.
+  - FHD 1920x1080: pfhdw 38.932 / 39.599 / 26.618 / 0.9832; pfhd1 38.577 / 39.711 / 26.465 / 0.9714;
+    pfhd2 38.997 / 39.864 / 26.200 / 0.9783.
+- Untraced FULL scores: FHD 6066 (nfhd), HD 7784 (nhd).
+- Expected vs actual (R1): FHD wall 26.6-27.3 ms -> 26.2-26.6 ms (gm_frame_ms median; present median 26.5-26.8);
+  FHD score 6000-6200 -> 6066; HD FULL 7500-7700 -> 7784 (slightly above the band); P6 >= 80 % -> met.
+- Wom1GpuPerf time in P6 (1278 MHz), decoded against the pre snapshot: pre->mid (55 s) 88.1-90.0 % in every run
+  (the window contains ~5.3 s at P1 during launch); mid->post steady state 99.4 % (phd1: 33389 of 33596 ms);
+  FULL runs pre->post 96.6-96.7 %. Temperature max 75-77 C; below-target time 0.2-0.7 %.
+- AppleAns 0.4.5 is an extra variable against EXP2307/EXP2308 absolute numbers; conclusions use the same-boot
+  HD-vs-FHD comparison only.
+- Evidence: `.local/experiments/EXP2309-gm-night-base/evidence/EXP2309` (gm2309<run>-umd.log, -out/-err/-done/-mode,
+  kmd-receipts-{pre,mid,post}-<run>.txt, gpuperf-{mid,post}-<run>.txt, wer-final.txt).
+- Next: EXP2310 (N2 split tags) on this boot; budget analysis of these logs is the architect's.
