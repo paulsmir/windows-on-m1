@@ -3022,3 +3022,28 @@ Next causal targets (bench, one package = package line 25c1945b6 + 0cd63ef87 + t
 2. N4b: Wom1SubmitRequeue=1, only if the premise holds.
 3. N4c: OV2 feature on; shadow verdict read (x0), then per-process arms of the apply switch in the same boot.
 Still true: no proven score gain this night; HD 78.3 % / FHD 77.2 % of macOS (EXP2309).
+
+## UPDATE 2026-11-10T03:23:10Z -- N4a (EXP2314) receipts: F-A2 premise CONFIRMED, refusal 55 is render -> prelude render
+
+Read by the architect from evidence/EXP2314 (submit-path-post-gm.fixed.txt, submit-path-x.fixed.txt,
+xproc-rx-*.txt); run health and identity are in fork 6's EXP2314 ACTUAL (fps_frames 49.205 / 49.100 / 49.572,
+mean 49.292 vs EXP2312 49.267, +0.05 %: the package with all new code off is identical in performance).
+- Wom1SubmitPath v2, GM block (pre-gm -> post-gm): not admissible by the context two-fence limit 5819, of these
+  the context's oldest fence was already REPORTED by the firmware in 4739 (81 %); idle 12680; irql, not queueable,
+  pending capacity, faulted all 0. Waits "worker finishing" 5654, mean 1.9 ms. Traced run x: context limit 2036,
+  reported 1713 (84 %), 0.56 / 0.47 per present. Requeued 0 (switch off).
+  Verdict: the R9 premise holds (rule: >= 0.05 per present; measured ~0.5). In about half of the frames one
+  submission is refused only because the worker has not yet retired a fence the firmware already reported, and
+  then waits for the whole pending queue to drain: the pipeline falls to depth one for that job.
+  -> N4b (Wom1SubmitRequeue=1) GO. Class I: accepted on receipts (Requeued > 0, wait count and mean drop) and a
+  clean run; a default flip needs more than a separate-boot comparison.
+- Wom1CrossProcessPairsReceipt v3, GM block: refusal 55 = 4427, of which running render -> next render with
+  prelude 4342 (98 %), render -> render 85; no compute on either side, capability_off 0, no_process 0.
+  The earlier hypothesis (a compute or render of GravityMark with a DWM render behind it) is REJECTED in its
+  compute half. The remaining cross-process volume is two renders of different processes. Admitting it needs two
+  things the same-process window does not have either: the prelude pair class (EXP2100: unproven, firmware
+  faults, gated) and a second resident buffer manager (refusal 58). Its gain is bounded by the TA/3D overlap with
+  a DWM render (DWM 3D ~0.85 ms per frame) and EXP2313 showed that removing the lead wait of the admitted
+  cross-process pairs moves nothing. Lever PARKED: not on the critical path for GravityMark; reopen only with the
+  prelude class work.
+Next: N5 arms (EXP2315, same boot) -> per-kernel fit; N4b; N4c.
