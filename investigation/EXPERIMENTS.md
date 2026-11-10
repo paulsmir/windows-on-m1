@@ -76821,3 +76821,29 @@ EXP2317 ACTUAL 2026-11-10T12:26:18Z:
 - Next: rec2317h recovery, ANSQ-T6 slot for the AppleAns session, then EXP2318.
 
 EXP2317 RECOVERY 2026-11-10T12:30:39Z: rec2317h RECOVERY_DONE (Verdict PASS, package absent, 8 CPU, RECOVERY_STORAGE_APPLEANS_OK). BUGCHECK line of the experiment-boot restart: code=0x0. Recovery guest up, launcher PID 47501; bench handed to the AppleAns session for ANSQ-T6.
+
+## ANSQ-T6 — AppleAns 0.4.7 with live deallocate promoted to the installed driver (ACTUAL, 2026-11-10T12:36:00Z)
+
+- Window granted by the bench owner after the EXP2317 rollback (launcher 47501); released 12:34Z.
+- Phases: read-only record on 0.4.5 12:30:52Z; t6-promote.ps1 T6_PROMOTE_OK 12:31:22Z (both stores hash- and
+  signature-checked, fence recomputed 30916352..59706368, UnmapMode 2, ImagePath ->
+  appleans.inf_arm64_62c12175c51fd95d); ordered restart 12:31:22Z, launcher exit 12:31:35Z, boot 12:31:48Z, SSH
+  up 12:32:25Z (run_uefi PID 47976); post 12:33Z; verify 12:34Z.
+- What Windows reports for the disk, before (0.4.5) -> after (0.4.7): Get-PhysicalDisk MediaType SSD -> SSD,
+  BusType Fibre Channel -> Fibre Channel, SpindleSpeed 0 -> 0; fsutil sectorinfo "No Seek Penalty" -> "No Seek
+  Penalty", "Trim Not Supported" -> "Trim Supported"; DisableDeleteNotify 0 both; ScheduledDefrag Ready, last
+  run 2026-11-06, unchanged; Optimize-Volume -Analyze text unchanged ("recommended that you defragment", the
+  analysis report does not depend on the media type). The seek-penalty and trim lines are the storage
+  properties as fsutil reads them; no separate IOCTL_STORAGE_QUERY_PROPERTY tool was run.
+- Expected vs actual: SSH up: CONFIRMED (37 s after boot); running hash DE910A08...1994: CONFIRMED; 0xA9 =
+  0xa9020004: CONFIRMED; no 0xAA/0xA4/0xA5 (only the two 0xA6): CONFIRMED; receipt 18 commands / 708 ranges
+  sent, completed_ok 18, completed_error 0, fenced 0, TRIM_BOUNDS_PASS: CONFIRMED; VERIFY_MANIFEST_OK (330/330),
+  chkdsk no problems, C: not dirty, 8 CPUs, no warnings: CONFIRMED.
+- m1n1 BUGCHECK line: not printed in this profile; the bench owner reads it on the next GPU boots.
+- Not verified: the Optimize Drives UI text; macOS-side integrity (not observable from Windows); the ANSQ-T4
+  stall stays one unexplained event (0 repeats in 15 boots of 0.4.7).
+- Verdict: CONFIRMED, accepted. Recorded current AppleAns: 0.4.7 ANSBUILD017-O (package zip af21c2fc..., sys
+  de910a08..., commit 4f4215569), registry UnmapMode 2 with fence = C:. Rollback artifact: 0.4.5 store
+  appleans.inf_arm64_20a748c874b1e861 (rollback = UnmapMode 1, ImagePath back, restart). Recovery profiles boot
+  the same installed driver; their storage gate has no driver hash.
+- Evidence: .local/experiments/ANSTRIM2/evidence/ANSQ-T6/{pre-045.txt,promote.txt,restart-run.log,normal-prev-full.log,post-047.txt,verify.txt}.
