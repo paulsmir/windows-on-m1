@@ -3378,3 +3378,23 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
 - Sources: .local/night-20261110/r15-n4c-reason6/FOLLOWUP.md; handoff sections "N4c-v2 addendum" and
   "PT1 correction accepted" in .local/handoff/OV-ARCHITECT-HANDOFF.md.
 - Order unchanged: EXP2319 (N6) close-out -> gate package boots A/B/C -> N4c-v2 + T5 package -> FS-D1.
+
+## UPDATE 2026-11-10T14:05Z -- architect: R19 verdict, DWM row split; K2 + K1 accepted offline (no hardware)
+
+- Source: `.local/night-20261110/r19-dwm-concurrent/REPORT.md` (main checkout), replays on EXP2316 x / EXP2318 x.
+  No new hardware run. Best result unchanged: EXP2318 FULL 7923 = 79.7 % of macOS 9946.
+- DWM row 0.85 ms/frame HD = 0.48 GPU held by the DWM job (kick -> complete 0.535 ms, 0.90 jobs/frame) + 0.41
+  serial admission (arrival 0.044, depth-one launch 0.169, hand-over to GM compute 0.057, to GM render 0.139).
+- Mechanism of the admission part (observed): dxgkrnl preempts node 0 for dwm.exe (DxgkDdiPreemptCommand 13629
+  per run), withholds GM packets, DWM arrives at an empty KMD and launches depth-one. Correction to
+  `investigation/analysis/DWM-COMPOSITION-LEVER.md` E3: the hold is the preemption handshake, not the present fence.
+- Verdict by the pre-registered rule (concurrency replaces the plane route only with a bound >= 0.5 ms/frame):
+  bound of the concurrency family is <= 0.38 ms/frame, so it does not replace the plane route. The 0.48 held part
+  needs a second plane or direct flip (MPO H1 stays queued, Windows-side MPO stays parked). The routes add up.
+- Accepted: K2 (class D, firmware stamps of foreign jobs in the timing ring); K1 (opt-in
+  `Wom1CrossProcessRenderPairs`, default unset: GM prelude render pre-kicked behind a running DWM render, bound
+  0.125-0.14 ms/frame, firmware acceptance of the cross-VM render pair is HYPOTHESIS until its run).
+  Not standalone: K3 (0.066, below noise). Parked: K4 (second 3D node, 0.29-0.33 total, dxgkrnl delivery is
+  HYPOTHESIS). Rejected: K5 (depth three). HAGS stays last.
+- Implementation of K2 then K1: offline, branch `gpu/k1-xproc-render-pairs`; bench order
+  EXP2319 -> gate package -> N4c-v2 + T5 package -> K1 package (two boots) -> FS-D1 / MPO H1.
