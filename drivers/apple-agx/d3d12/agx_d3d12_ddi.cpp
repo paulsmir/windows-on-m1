@@ -1777,6 +1777,7 @@ struct AgxD3d12Heap {
     UINT64 bytes;
     UINT64 descriptor_bytes; /* guarded heaps: logical extent, excluding backing tail */
     BOOL cpu_visible;
+    UINT cpu_page; /* K48G receipt: the D3D12DDI_CPU_PAGE_PROPERTY of CreateHeap */
     UINT locks;
     void *cpu;
     /* EXP1855: a shader-visible descriptor heap's cpu is a cached shadow of
@@ -2216,6 +2217,7 @@ static HRESULT CreateHeap(AgxD3d12Device *device, const D3D12DDIARG_CREATEHEAP_0
     const D3DDDI_DEVICECALLBACKS *k = device->kernel;
     memset(heap, 0, sizeof(*heap));
     heap->cpu_visible = arg.CPUPageProperty != D3D12DDI_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
+    heap->cpu_page = static_cast<UINT>(arg.CPUPageProperty);
     heap->bytes = arg.ByteSize > kVaLimit ? ~0ULL : (arg.ByteSize + kHeapPage - 1) & ~(kHeapPage - 1);
 #ifdef APPLE_AGX_D3D12_NATIVE_OWNER
     /* C4b: the heap is a buffer of the device's native owner, so copies and
@@ -6780,6 +6782,56 @@ static bool JobStageHeapTable(const AgxD3d12Dispatch &b) {
 static unsigned long long JobHeapBytes(const void *heap) {
     return heap ? static_cast<const AgxD3d12Heap *>(heap)->bytes : 0ull;
 }
+/* K48G (class D diagnostic): APPLE_AGX_D3D12_DIAG_INDIRECT_ARGS=<hex cs_tag>
+ * (the 6th value of measure-d3d12-dispatch) writes one receipt
+ * measure-d3d12-indirect-args {cs_tag, x, y, z, source} per replayed
+ * ExecuteIndirect dispatch of that shader: the first record's
+ * D3D12_DISPATCH_ARGUMENTS read through the argument heap's persistent CPU
+ * mapping on the replay (CPU) timeline, so before the GPU runs this
+ * submission. No GPU work, flush, wait or submission change. source:
+ *   0 the heap has no CPU mapping (NOT_AVAILABLE/DEFAULT heap: GPU-only BO);
+ *     x = y = z = 0xffffffff
+ *   1 WRITE_COMBINE heap (D3D12 UPLOAD: the CPU wrote it, current value)
+ *   2 another CPU-mapped heap (WRITE_BACK/custom: the GPU may write it, so
+ *     a GPU-produced value is the last one before this submission)
+ *   3 C31 CPU expansion (synchronised read, the value this dispatch uses)
+ * Unset: one cached check per indirect dispatch, no receipt. */
+static bool DiagIndirectArgsTag(UINT tag) {
+    static volatile LONG state; /* 0 unread, 1 set, 2 unset */
+    static UINT value;
+    LONG current = state;
+    if (!current) {
+        char text[16] = {};
+        const DWORD n = GetEnvironmentVariableA("APPLE_AGX_D3D12_DIAG_INDIRECT_ARGS", text, sizeof(text));
+        current = 2;
+        if (n && n < sizeof(text)) {
+            char *end = nullptr;
+            const unsigned long v = strtoul(text, &end, 16);
+            if (end != text) {
+                value = static_cast<UINT>(v);
+                current = 1;
+            }
+        }
+        InterlockedExchange(&state, current);
+    }
+    return current == 1 && value == tag;
+}
+static void DiagIndirectArgsReceipt(UINT tag, const UINT args[3], UINT source) {
+    const UINT receipt[] = {tag, args[0], args[1], args[2], source};
+    AdmissionUmdDiagnostic("measure-d3d12-indirect-args", source ? S_OK : S_FALSE, receipt, 5);
+}
+static void DiagIndirectArgs(const AgxD3d12Dispatch &dispatch) {
+    const AgxD3d12Indirect &in = dispatch.indirect;
+    if (!in.args || !dispatch.pso || !DiagIndirectArgsTag(dispatch.pso->cs_tag)) return;
+    UINT args[3] = {0xffffffffu, 0xffffffffu, 0xffffffffu};
+    UINT source = 0u;
+    const AgxD3d12Heap *heap = in.args;
+    if (heap->cpu && in.args_offset <= heap->bytes && heap->bytes - in.args_offset >= sizeof(args)) {
+        memcpy(args, static_cast<const unsigned char *>(heap->cpu) + in.args_offset, sizeof(args));
+        source = heap->cpu_page == static_cast<UINT>(D3D12DDI_CPU_PAGE_PROPERTY_WRITE_COMBINE) ? 1u : 2u;
+    }
+    DiagIndirectArgsReceipt(dispatch.pso->cs_tag, args, source);
+}
 static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const AgxD3d12Dispatch &dispatch) {
     const bool job = AgxD3d12OwnerJobBarriersEnabled() != FALSE;
     /* N4c-v3: the heap walk places the table accesses (cross-lead feature) */
@@ -6810,6 +6862,7 @@ static __declspec(noinline) HRESULT ReplayDispatch(AGX_D3D12_OWNER *owner, const
     AGX_D3D12_BUFFER args = {}, count = {};
     AGX_D3D12_INDIRECT indirect;
     OwnerIndirect(dispatch.indirect, &args, &count, &indirect);
+    DiagIndirectArgs(dispatch);
     if (dispatch.pso && SplitBeforeTag(dispatch.pso->cs_tag)) AgxD3d12OwnerSplitBatch(owner);
     const HRESULT hr = AgxD3d12OwnerDispatch(owner, pipeline, bind.uavs, bind.cbvs, bind.srvs, bind.samplers,
                                              dispatch.groups[0], dispatch.groups[1], dispatch.groups[2],
@@ -7178,6 +7231,8 @@ static HRESULT ReplayIndirectExpand(AGX_D3D12_OWNER *owner, const AgxD3d12Comman
             const unsigned char *op = record + signature.argument[signature.arguments - 1u].offset;
             UINT v[5] = {};
             memcpy(v, op, signature.kind == 2u ? 20u : signature.kind == 1u ? 16u : 12u);
+            if (signature.kind == 3u && !i && state.list.pso && DiagIndirectArgsTag(state.list.pso->cs_tag))
+                DiagIndirectArgsReceipt(state.list.pso->cs_tag, v, 3u);
             if (signature.kind == 3u) RecordDispatch(scratch, v[0], v[1], v[2], nullptr);
             else if (signature.kind == 2u) RecordDraw(scratch, v[0], v[1], v[2], static_cast<INT>(v[3]), v[4], true);
             else RecordDraw(scratch, v[0], v[1], v[2], 0, v[3], false);
