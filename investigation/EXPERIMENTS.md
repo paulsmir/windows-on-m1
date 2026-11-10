@@ -77063,3 +77063,7 @@ EXP2320 HARDWARE BEFORE 2026-11-10T14:26:27Z:
 - Hashes: sys a68c55f49204, UmdArm64 7e1f91b646eb, UmdX64 d01be1d7758d, Umd32 b21d5f15ca28; manifest abf0099003b4, hardware-manifest e35194056551; probe2320.sh 009b62a0e3c4 (PROBE_LINT_OK); visible recovery rec2320h aa789c70c9ae0cf2; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2320h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2320-r14-pt1-gate/run2320.sh.
+
+EXP2319 CORRECTION 2026-11-10T14:38:43Z (append only, references EXP2319 HARDWARE BEFORE):
+- architect correction 2026-11-10T14:35Z: 'b5 is the first non-empty launch' in BEFORE was wrong; b4 (2 groups, direct) is the only launch readable in the 7aa43c6c cut arms.
+- Architect reading of the arms: handoff section "EXP2319 (N6) reading", script .local/night-20261110/n6-reading/n6read.py, state update a92c7eac7. The offline cut table of this entry was built without the production root-view masks (fixture flags --root-views=<uav>,<cbv> --soft-fault-loads); ruling on ab2/bb1/bb2/bl still pending.
