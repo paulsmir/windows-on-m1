@@ -877,6 +877,10 @@ typedef struct _ADMISSION_CONTEXT {
   /* V1 (experiment): Wom1G3RetainedSlots = 1 (REG_DWORD), read once at
    * start: per-process VM slots kept between jobs (gpuva_g3_private.h). */
   ULONG G3RetainedSlots;
+  /* C1: Wom1CrossProcessPairs = 1 and its prerequisites, set at start with
+   * ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS: BeginSuccessorJob may begin a
+   * compute successor of another process on its own retained lease. */
+  ULONG G3CrossProcessPairs;
   volatile LONG PagingAdapterResetting;
   ULONG PagingNodeHead, PagingNodeCount, PagingNodeDispatchedFence;
   ADMISSION_CPU_PACKET PagingNodeQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];

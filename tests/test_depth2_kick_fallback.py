@@ -41,7 +41,9 @@ class Depth2KickFallback(unittest.TestCase):
     def test_only_pre_visibility_refusals_fall_back(self):
         kick = section(WORKER.read_text(), "static BOOLEAN AdmissionJobWindowKickWindows(")
         submit = kick.index("result = AppleAgxBackendRuntimeSubmitSuccessor(")
-        self.assertEqual(kick.count("AdmissionJobWindowKickFallbackWindows("), 4)
+        # C1 adds one before SubmitSuccessor: the cross-process slot re-proof.
+        self.assertEqual(kick.count("AdmissionJobWindowKickFallbackWindows("), 5)
+        self.assertEqual(kick[:submit].count("AdmissionJobWindowKickFallbackWindows("), 4)
         # S4a: the only fallback after SubmitSuccessor; QueueFailed (RunSuccessor
         # was called: S4b/S4c may be visible) and a build not given back reset.
         after = kick[submit:]

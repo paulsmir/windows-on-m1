@@ -57,7 +57,7 @@ typedef const wchar_t *PCWSTR;
 typedef const wchar_t *UNICODE_STRING;
 typedef struct { ULONG TitleIndex, Type, DataLength; UCHAR Data[4]; }
  KEY_VALUE_PARTIAL_INFORMATION, *PKEY_VALUE_PARTIAL_INFORMATION;
-typedef struct { void *PhysicalDeviceObject; ULONG G3RetainedSlots; } ADMISSION_CONTEXT;
+typedef struct { void *PhysicalDeviceObject; ULONG G3RetainedSlots, G3CrossProcessPairs; } ADMISSION_CONTEXT;
 static const wchar_t *selected;
 static int mode;
 static unsigned opened, closed;
@@ -93,6 +93,8 @@ typedef struct {
  unsigned Depth2Capabilities,Depth2KickClasses;
  struct { APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory; } Initdata;
  struct { struct {APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG Config;} QueueProvider;} Provider;
+ unsigned char CrossProcessPairs; /* C1: Wom1CrossProcessPairs, default off */
+ ADMISSION_JOB_WINDOW_XPROC_RECEIPT XprocReceipt; unsigned long long XprocExportQpc;
 } Runtime;
 /* the Wom1Depth2FallbackDrill DWORD reader: absent in every default case */
 static BOOLEAN AdmissionPlatformDwordValue(ADMISSION_CONTEXT *c,PCWSTR n,ULONG *v) {
@@ -105,7 +107,7 @@ int main(int argc,char **argv) {
  (void)AdmissionPlatformSwitchDisabled;
  assert(argc==3);wchar_t name[80];assert(mbstowcs(name,argv[1],80)<80);
  selected=name;mode=atoi(argv[2]);
- ADMISSION_CONTEXT context={(void *)1,0u};if(mode==7)context.PhysicalDeviceObject=NULL;
+ ADMISSION_CONTEXT context={(void *)1,0u,0u};if(mode==7)context.PhysicalDeviceObject=NULL;
  Runtime r={0};configure(&r,&context);
  assert(opened==closed);
  printf("%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n",

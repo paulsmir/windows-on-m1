@@ -351,10 +351,89 @@ static void quarantine(void) {
   assert(!N.lease_slot[1] && N.max_slot <= 5u);
 }
 
+/* C1 (cross-process pairs): B's compute job begins behind A's running
+ * render on the retained lease B already holds: JOB_BEGIN on B's slot and
+ * nothing else; no LEASE, no steal, no invalidation, A's slot untouched.
+ * WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? A slot being leased,
+ * stolen or invalidated while another process's job runs on the firmware,
+ * and a job ending or aborting on the other process's lease. */
+static void cross_process_pair(void) {
+  APPLE_AGX_GPUVA_G3_GRAPH a, b, c, u;
+  APPLE_AGX_GPUVA_G3_SLOTS table;
+  unsigned aslot, bslot, inv_a, inv_b, inv_total;
+  unsigned long long btoken;
+  memset(&table, 0, sizeof(table));
+  assert(AppleAgxGpuvaG3SlotsEnable(&table, 2u, 2u));
+  open_broker();
+  setup(&a, 1u, P_ROOT, P_L1, P_L2, P_DATA, &table);
+  setup(&b, 2u, Q_ROOT, Q_L1, Q_L2, Q_DATA, &table);
+  setup(&c, 3u, P_ROOT2, 0, 0, 0, &table);
+  /* No lease held yet: refused, nothing sent, nothing uncertain. */
+  assert(AppleAgxGpuvaG3GraphBeginJob(&a, 1u));
+  reset_counts();
+  assert(!AppleAgxGpuvaG3GraphBeginLeasedJob(&b) && log_count == 0u);
+  assert(!b.LeaseToken && !b.JobInFlight && !b.Uncertain);
+  assert(!AppleAgxGpuvaG3GraphBeginLeasedJob(0));
+  assert(AppleAgxGpuvaG3GraphEndJob(&a));
+  job(&b);
+  aslot = a.Slot; bslot = b.Slot; btoken = b.LeaseToken;
+  assert(aslot && bslot && aslot != bslot && btoken);
+  /* The pair: A runs, B begins on its held lease. */
+  assert(AppleAgxGpuvaG3GraphBeginJob(&a, 1u));
+  reset_counts();
+  inv_a = F->invalidations[aslot]; inv_b = F->invalidations[bslot];
+  inv_total = total_invalidations();
+  assert(AppleAgxGpuvaG3GraphBeginLeasedJob(&b));
+  assert(log_count == 1u && log_entry[0] == (AGX_GPUVA_V5_JOB_BEGIN | (bslot << 8)));
+  assert(a.JobInFlight && b.JobInFlight && !b.JobNested && !a.JobNested);
+  assert(a.Slot == aslot && b.Slot == bslot && b.LeaseToken == btoken);
+  assert(F->invalidations[aslot] == inv_a && F->invalidations[bslot] == inv_b &&
+         total_invalidations() == inv_total);
+  /* A second job of B, or a job of its own already: refused, nothing sent. */
+  reset_counts();
+  assert(!AppleAgxGpuvaG3GraphBeginLeasedJob(&b) && log_count == 0u && !b.Uncertain);
+  /* With both slots busy a third process gets none: neither is stolen. */
+  assert(!AppleAgxGpuvaG3GraphBeginJob(&c, 1u) && log_count == 0u && !c.Uncertain);
+  assert(!AppleAgxGpuvaG3GraphBeginLeasedJob(&c) && log_count == 0u);
+  /* A ends first (the window reports in order): JOB_END on A's slot only. */
+  assert(AppleAgxGpuvaG3GraphEndJob(&a));
+  assert(log_count == 1u && log_entry[0] == (AGX_GPUVA_V5_JOB_END | (aslot << 8)));
+  assert(!a.JobInFlight && a.LeaseToken && b.JobInFlight);
+  reset_counts();
+  assert(AppleAgxGpuvaG3GraphEndJob(&b));
+  assert(log_count == 1u && log_entry[0] == (AGX_GPUVA_V5_JOB_END | (bslot << 8)));
+  assert(!b.JobInFlight && b.LeaseToken == btoken);
+  /* The kick fallback and a reset abort B's job unrun: JOB_END and RELEASE
+   * of B's slot while A runs; A's lease, job and translation are untouched
+   * and B leases again at depth one. */
+  assert(AppleAgxGpuvaG3GraphBeginJob(&a, 1u));
+  assert(AppleAgxGpuvaG3GraphBeginLeasedJob(&b));
+  reset_counts();
+  inv_a = F->invalidations[aslot];
+  assert(AppleAgxGpuvaG3GraphEndJob(&b) && AppleAgxGpuvaG3GraphReleaseRetained(&b));
+  assert(log_count == 2u && log_entry[0] == (AGX_GPUVA_V5_JOB_END | (bslot << 8)) &&
+         log_entry[1] == (AGX_GPUVA_V5_RELEASE | (bslot << 8)));
+  assert(!b.LeaseToken && !b.Uncertain && a.JobInFlight && a.LeaseToken &&
+         F->invalidations[aslot] == inv_a);
+  assert(!AppleAgxGpuvaG3GraphBeginLeasedJob(&b) && !b.Uncertain);
+  assert(AppleAgxGpuvaG3GraphEndJob(&a));
+  job(&b);
+  assert(b.Slot == bslot);
+  /* Without an enabled table (switch off) the call never begins a job. */
+  assert(AppleAgxGpuvaG3GraphDestroy(&c));
+  setup(&u, 3u, P_ROOT2, 0, 0, 0, NULL);
+  job(&u);
+  reset_counts();
+  assert(!AppleAgxGpuvaG3GraphBeginLeasedJob(&u) && log_count == 0u && !u.Uncertain);
+  assert(AppleAgxGpuvaG3GraphDestroy(&a) && AppleAgxGpuvaG3GraphDestroy(&b) &&
+         AppleAgxGpuvaG3GraphDestroy(&u));
+}
+
 int main(void) {
   switch_off(0);
   switch_off(1);
   retained_two_processes();
+  cross_process_pair();
   allocator();
   quarantine();
   puts("g3_retained_slots_replay: PASS");

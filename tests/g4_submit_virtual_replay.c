@@ -82,6 +82,7 @@ typedef struct {
   ULONGLONG LeaseToken;
   unsigned Slot;
   void *SlotTable;
+  unsigned JobInFlight; /* C1: read for a cross-process successor only */
 } APPLE_AGX_GPUVA_G3_GRAPH;
 #define ADMISSION_G3_ALLOC_TRACK_COUNT 1024u
 /* EXP982: last valid leaf mapping per VidMm allocation handle. */
@@ -105,6 +106,7 @@ typedef struct _ADMISSION_G3_STATE {
   /* rc102: the depth-2 successor (never set in this replay) */
   void *SuccessorContext;
   unsigned SuccessorFence;
+  struct _ADMISSION_G3_PROCESS *SuccessorProcess; /* C1 */
   struct {
     APPLE_AGX_G4_PRIVATE_HEADER_V5 Header;
     unsigned char Command[APPLE_AGX_G4_NATIVE_MAX_BYTES];
@@ -250,6 +252,7 @@ typedef struct {
   int SchedulerLock, SchedulerFaulted, SchedulerInitialized, RuntimeReady, RuntimeQueueable;
   APPLE_AGX_SCHEDULER Scheduler, PagingScheduler;
   ULONG LiveAdditivePaging;
+  ULONG G3CrossProcessPairs; /* C1: Wom1CrossProcessPairs, off here */
   ADMISSION_RENDER_PACKET RenderPacket;
   ADMISSION_G4_PENDING G4Pending[ADMISSION_G4_PENDING_CAPACITY];
   ULONG G4PendingHead, G4PendingCount, DispatchedFence;
@@ -494,6 +497,11 @@ static int AppleAgxGpuvaG3GraphBeginJob(APPLE_AGX_GPUVA_G3_GRAPH *graph,
 static int graph_nested_calls;
 static int AppleAgxGpuvaG3GraphBeginNestedJob(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
   (void)graph; ++graph_nested_calls; return 1; }
+/* C1: a cross-process successor begins on its own held lease. */
+static int graph_leased_calls;
+static int AppleAgxGpuvaG3GraphBeginLeasedJob(APPLE_AGX_GPUVA_G3_GRAPH *graph) {
+  if (!graph->SlotTable || !graph->LeaseToken || graph->JobInFlight) return 0;
+  graph->JobInFlight = 1u; ++graph_leased_calls; return 1; }
 static int AdmissionBackendImageReleaseSubmission(
     ADMISSION_BACKEND_IMAGE *image, unsigned fence) {
   (void)fence;image->G4Native=0;image->G4Compute=0;image->BoundFence=0;return 1;

@@ -33,3 +33,14 @@ fault receipt), gpuva_g3_private.h, shared apple_agx_gpuva_g3_graph.c/.h (slot t
 Not changed on purpose: the admitted class is the raw kinds RENDER -> COMPUTE. A render with a compute prelude as N,
 a present job on either side and every pair with a render as N+1 stay 55 (two renders would share the live
 buffer-manager binding; a present uses the per-process arena).
+
+## Implemented with the wiring commit
+
+Rows 1-5, 7, 8 and 15 are changed as stated; tests/test_render_xproc_pairs.py (decision, receipt, wiring slices) and
+the `cross_process_pair` scenario of tests/g3_retained_slots_replay.c (real graph, real broker client, real m1n1 v5
+broker: JOB_BEGIN on B's slot only while A runs, no LEASE, no steal, no invalidation; abort = JOB_END + RELEASE of
+B's slot with A untouched). Not compiled on the host: the kick function and the worker in backend_platform_windows.c
+(no host harness builds them); BeginJobAs, CompleteJobTimestamp, AbortJob and the fault receipt are built by the
+existing replays with -Wall -Wextra -Werror, with the switch off. Receipt-only side effect with the switch on: the
+early rc95 note (AdmissionJobWindowNoteWindows, diagnostics only) sees no successor slot and writes 6 for a
+cross-process pair; the kick decision overwrites it for the same fence.

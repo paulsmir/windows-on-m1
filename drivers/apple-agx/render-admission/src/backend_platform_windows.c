@@ -357,6 +357,13 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * depth-1 job (a successor shares it), and the slot the template
    * (unmanaged) buffer manager's InitBM context_id last named (0 unknown). */
   APPLE_AGX_U32 RunningVmSlot, UnmanagedInitBmSlot;
+  /* C1 (REG_DWORD Wom1CrossProcessPairs = 1, default off): the window
+   * declares ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS (render_job_window.h);
+   * the worker-owned receipt is Wom1CrossProcessPairsReceipt. */
+  BOOLEAN CrossProcessPairs;
+  ADMISSION_JOB_WINDOW_XPROC_RECEIPT XprocReceipt;
+  /* QPC of its last export without Wom1JobDiagnostics. */
+  ULONGLONG XprocExportQpc;
   /* rc84: device value Wom1GpuPerfReceipt = 0 stops the Wom1GpuPerf
    * sampling (HwDataA loads at each job completion). */
   BOOLEAN GpuPerfOff;
@@ -1531,6 +1538,7 @@ static VOID AdmissionJobTimingExportWindows(
   if (runtime == NULL || runtime->Adapter == NULL ||
       (!runtime->JobDiagnostics && !runtime->RcReceiptEnabled && !runtime->Depth2Drill.Mode &&
        runtime->Adapter->MailboxInterruptVector == 0u &&
+       !runtime->CrossProcessPairs &&
        !runtime->PresentTsEnabled && !runtime->Ov2Enabled &&
        !runtime->Ov5Waiver && !runtime->Ov5DrillEnabled) ||
       runtime->Adapter->PhysicalDeviceObject == NULL ||
@@ -1603,6 +1611,25 @@ static VOID AdmissionJobTimingExportWindows(
     }
   }
 #endif
+  /* C1: the cross-process pair receipt, as the OV2 receipt: at most every
+   * two seconds, never flushed (worker-owned). */
+  if (!runtime->JobDiagnostics && runtime->CrossProcessPairs) {
+    LARGE_INTEGER frequency;
+    const ULONGLONG now = (ULONGLONG)KeQueryPerformanceCounter(&frequency).QuadPart;
+    if (runtime->XprocExportQpc == 0ULL ||
+        now - runtime->XprocExportQpc >= 2ULL * (ULONGLONG)frequency.QuadPart) {
+      ADMISSION_JOB_WINDOW_XPROC_RECEIPT xproc = runtime->XprocReceipt;
+      runtime->XprocExportQpc = now;
+      status = IoOpenDeviceRegistryKey(runtime->Adapter->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key);
+      if (NT_SUCCESS(status)) {
+        RtlInitUnicodeString(&name, L"Wom1CrossProcessPairsReceipt");
+        (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &xproc, sizeof(xproc));
+        ZwClose(key);
+        key = NULL;
+      }
+    }
+  }
   /* Default-on plan (KMD-IRQ-COMPLETION.md): with the mailbox line listed,
    * Wom1IrqRx and Wom1JobPoll are exported without Wom1JobDiagnostics (which
    * changes timing), at most every two seconds and never flushed, as the
@@ -1740,6 +1767,12 @@ static VOID AdmissionJobTimingExportWindows(
       RtlInitUnicodeString(&name, L"Wom1JobWindow");
       status = ZwSetValueKey(key, &name, 0u, REG_BINARY,
           &runtime->Depth2ReceiptSnapshot, sizeof(runtime->Depth2ReceiptSnapshot));
+    }
+    /* C1: cross-process pairs considered / kicked / refused (worker-owned). */
+    if (NT_SUCCESS(status) && runtime->CrossProcessPairs) {
+      ADMISSION_JOB_WINDOW_XPROC_RECEIPT xproc = runtime->XprocReceipt;
+      RtlInitUnicodeString(&name, L"Wom1CrossProcessPairsReceipt");
+      status = ZwSetValueKey(key, &name, 0u, REG_BINARY, &xproc, sizeof(xproc));
     }
 #if defined(ADMISSION_OV2_ON)
     /* OV2: waived / refused lead Barrier waits (worker-owned). */
@@ -6519,6 +6552,19 @@ static VOID AdmissionJobWindowDescribeLocked(const ADMISSION_BACKEND_IMAGE *imag
    * submitted just before it. */
   job->TaIndependent = image->BoundFence == fence && image->G4Native &&
       !image->G4WithCompute && image->G4TaIndependent ? 1u : 0u;
+  /* C1: the slot BeginJob leased for this job (0: not begun yet, or the
+   * baseline slot). A Prebound successor's slot is filled by the kick. */
+  job->VmSlot = image->BoundFence == fence ? image->JobVmSlot : 0u;
+}
+
+/* C1 receipt: a decided cross-process kick that did not reach the firmware;
+ * FallbacksBefore tells a depth-one fallback from a closed failure. */
+static VOID AdmissionXprocUndoneWindows(ADMISSION_PLATFORM_RUNTIME *runtime,
+    BOOLEAN Cross, ULONG FallbacksBefore, ULONG Fence, ULONG Detail) {
+  if (!Cross) return;
+  AdmissionJobWindowXprocUndone(&runtime->XprocReceipt,
+      runtime->Depth2Receipt.KickFallbacks != FallbacksBefore ? 1u : 0u,
+      Fence, Detail);
 }
 
 /* rc95 receipt mode: job Fence runs alone and its successor was just bound
@@ -6991,6 +7037,11 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   APPLE_AGX_RENDER_MANAGER_STATE *pendingManager = NULL;
   APPLE_AGX_RENDER_MANAGER_KEY pendingKey;
   BOOLEAN pendingManagerValid = FALSE;
+  /* C1: the retained slot the Prebound head's process holds, whether the
+   * decided pair is a cross-process one, and the fallback count before it. */
+  ULONG pendingSlot = 0u;
+  BOOLEAN cross = FALSE;
+  const ULONG fallbacksBefore = runtime->Depth2Receipt.KickFallbacks;
   KIRQL old_irql;
   if (!runtime->JobDepth2Kick || runtime->Depth2KickedFence != 0u ||
       runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted ||
@@ -7019,6 +7070,10 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
   if (pendingFence != 0u)
     pendingManagerValid = AdmissionGpuvaG3PendingManager(adapter,
         pendingContext, pendingFence, &pendingManager, &pendingKey);
+  /* C1: read with the graph lock, like the manager above; BeginSuccessorJob
+   * re-proves it (a lease released in between refuses there: refusal 11). */
+  if (pendingFence != 0u && runtime->CrossProcessPairs)
+    pendingSlot = AdmissionGpuvaG3RetainedSlot(adapter, pendingContext);
   AdmissionJobAheadStateWindows(runtime, fence, &ahead);
 #if defined(ADMISSION_OV5_ON)
   if (runtime->Ov5Waiver && runtime->Backend.PendingJob.ComputeTimestampBlock != NULL) {
@@ -7037,6 +7092,10 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     s.NextPrebound = head->State == AdmissionG4PendingPrebound &&
         image->BoundFence == head->Fence ? 1u : 0u;
     AdmissionJobWindowDescribeLocked(image, head->Context, head->Fence, &s.Next);
+    /* C1: not begun yet, so the image names no slot for it. */
+    if (runtime->CrossProcessPairs && head->Fence == pendingFence &&
+        head->Context == pendingContext)
+      s.Next.VmSlot = pendingSlot;
   }
   s.Enabled = 1u;
   s.Stopping = ahead.Stopping;
@@ -7131,6 +7190,14 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     ++runtime->Ov5WaiverReceipt.Deferred;
     return FALSE;
   }
+  /* C1 receipt: every final decision on a cross-process pair (4, 52, 53
+   * and 54 are retried by the next poll and counted when they settle). */
+  cross = runtime->CrossProcessPairs &&
+      AdmissionJobWindowCrossProcess(&s.Running, &s.Next) ? TRUE : FALSE;
+  if (cross && refusal != 4u && refusal != 52u && refusal != 53u &&
+      refusal != 54u)
+    (void)AdmissionJobWindowXprocNote(&runtime->XprocReceipt,
+        (unsigned int)refusal, &s.Running, &s.Next);
   if (runtime->RcReceiptEnabled) {
     AdmissionRcDecisionTyped(&runtime->RcDecisions,(unsigned int)refusal,
         (unsigned int)prebindRefusal,(unsigned int)fence,s.Next.Fence,
@@ -7201,6 +7268,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
                                                next, 0u, 0u, 0u))
       AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next,
                                           0u, 0u, 0u);
+    AdmissionXprocUndoneWindows(runtime, cross, fallbacksBefore, next, __LINE__);
     return TRUE;
   }
   {
@@ -7224,8 +7292,23 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
               __LINE__ | (beginRefusal << 16), next, (ULONG)begin, 0u, 0u))
         AdmissionJobWindowKickFailedWindows(adapter, runtime,
             __LINE__ | (beginRefusal << 16), next, (ULONG)begin, 0u, 0u);
+      AdmissionXprocUndoneWindows(runtime, cross, fallbacksBefore, next,
+          __LINE__ | (beginRefusal << 16));
       return TRUE;
     }
+  }
+  /* C1: the slot BeginSuccessorJob gave the cross-process successor must be
+   * the one the decision saw, and not the running job's (nothing is built
+   * yet: end its G3 job, run it at depth one). */
+  if (cross && (image->JobVmSlot == 0u || image->JobVmSlot != s.Next.VmSlot ||
+                image->JobVmSlot == s.Running.VmSlot)) {
+    AdmissionGpuvaG3AbortJob(adapter, next);
+    if (!AdmissionJobWindowKickFallbackWindows(adapter, runtime, __LINE__,
+            next, 0u, 0u, ADMISSION_KICK_FAIL_G3_ABORTED))
+      AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next, 0u,
+                                          0u, ADMISSION_KICK_FAIL_G3_ABORTED);
+    AdmissionXprocUndoneWindows(runtime, cross, fallbacksBefore, next, __LINE__);
+    return TRUE;
   }
   /* EXP2051: the binding BeginJob just gave must be the one 61 proved
    * (nothing is built yet: end the G3 job, fail closed). */
@@ -7238,6 +7321,7 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
             next, 0u, 0u, ADMISSION_KICK_FAIL_G3_ABORTED))
       AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next, 0u,
                                           0u, ADMISSION_KICK_FAIL_G3_ABORTED);
+    AdmissionXprocUndoneWindows(runtime, cross, fallbacksBefore, next, __LINE__);
     return TRUE;
   }
   AdmissionJobTimingMarkWindows(runtime, next, AdmissionJobPhaseBeginAfter);
@@ -7291,12 +7375,18 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
         (flags & ADMISSION_KICK_FAIL_G3_ABORTED) != 0u &&
         AdmissionJobWindowKickBuildUndoneWindows(runtime, image, owner, next) &&
         AdmissionJobWindowKickFallbackWindows(adapter, runtime, __LINE__, next,
-            0u, (ULONG)result, flags | ADMISSION_KICK_FAIL_BUILD_UNDONE))
+            0u, (ULONG)result, flags | ADMISSION_KICK_FAIL_BUILD_UNDONE)) {
+      AdmissionXprocUndoneWindows(runtime, cross, fallbacksBefore, next, __LINE__);
       return TRUE;
+    }
+    /* no fallback was taken here: counted as failed */
+    AdmissionXprocUndoneWindows(runtime, cross, fallbacksBefore, next, __LINE__);
     AdmissionJobWindowKickFailedWindows(adapter, runtime, __LINE__, next, 0u,
                                         (ULONG)result, flags);
     return TRUE;
   }
+  if (cross)
+    AdmissionJobWindowXprocKicked(&runtime->XprocReceipt, &s.Running, &s.Next);
   AdmissionJobTimingNoteWindows(adapter, next, ADMISSION_JOB_FLAG_DEPTH2_KICKED |
       ((barrier << ADMISSION_JOB_FLAG_DEPTH2_BARRIER_SHIFT) &
        ADMISSION_JOB_FLAG_DEPTH2_BARRIER_MASK));
@@ -7512,6 +7602,13 @@ AdoptedJob:
   RtlZeroMemory(&runtime->Depth2Running, sizeof(runtime->Depth2Running));
   runtime->Depth2Noted = FALSE;
   runtime->Depth2Sampled = 0u;
+  /* C1: an adopted successor of another process runs in its own slot; the
+   * unmanaged-InitBM staleness term (61) compares against the running one.
+   * The same value for a same-process successor. */
+  if (adopted && runtime->CrossProcessPairs && adapter->G3RetainedSlots &&
+      adapter->BackendImage.BoundFence == description.Fence)
+    runtime->RunningVmSlot = adapter->BackendImage.JobVmSlot ?
+        adapter->BackendImage.JobVmSlot : ADMISSION_GPUVA_G3_JOB_VM_SLOT;
   if (adopted)
     goto AdoptedKicked;
 #endif
@@ -9130,6 +9227,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->RcDepth2 = runtime->RcReceiptEnabled = runtime->RcExportPending = FALSE;
   runtime->Depth2General = FALSE;
   runtime->Depth2Prelude = FALSE;
+  runtime->CrossProcessPairs = FALSE;
   /* rc90: on by default since EXP2034 (the G4-r3 drill passed with it);
    * only REG_DWORD 0 turns it off. */
 #if ADMISSION_JOB_AHEAD_BUILD
@@ -9184,12 +9282,27 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
     if (AdmissionPlatformSwitchEnabled(Context, L"Wom1Depth2Present"))
       runtime->Depth2Capabilities |= ADMISSION_JOB_WINDOW_CAP_PRESENT_PAIRS;
   }
+  /* C1 (default off): REG_DWORD Wom1CrossProcessPairs = 1 admits a compute
+   * job behind a running plain render of another process (render_job_
+   * window.h). Only on the general depth-two window with COMPUTE_ON_3D
+   * among its classes and with retained per-process VM slots (V1): without
+   * them every job runs in slot 1 and no pair is eligible. */
+  runtime->CrossProcessPairs = runtime->Depth2General && runtime->JobDepth2Kick &&
+      Context->G3RetainedSlots != 0u &&
+      (runtime->Depth2KickClasses &
+       (1u << ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D)) != 0u &&
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1CrossProcessPairs") ? TRUE : FALSE;
+  if (runtime->CrossProcessPairs)
+    runtime->Depth2Capabilities |= ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS;
 #else
   runtime->JobAhead = FALSE;
   runtime->JobDepth2 = FALSE;
   runtime->Depth2Capabilities = 0u;
   runtime->JobDepth2Kick = FALSE;
 #endif
+  Context->G3CrossProcessPairs = runtime->CrossProcessPairs ? 1u : 0u;
+  AdmissionJobWindowXprocReceiptInitialize(&runtime->XprocReceipt);
+  runtime->XprocExportQpc = 0ULL;
   /* Q23: use one queue event sequence for every compute user from startup.
    * Admission and firmware units share the existing default-off opt-in. */
   runtime->Initdata.RenderSharedMemory.ComputeQueueStamps = runtime->Depth2Prelude;

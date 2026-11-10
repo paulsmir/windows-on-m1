@@ -258,5 +258,181 @@ class CrossProcessPairDecision(unittest.TestCase):
         self.assertIn('66 no pending head', rc)
 
 
+def function(text, name):
+    """The body of the function definition `name(` (first definition)."""
+    at = 0
+    while True:
+        at = text.index(name + '(', at)
+        brace, semi = text.find('{', at), text.find(';', at)
+        if brace != -1 and (semi == -1 or brace < semi):
+            break
+        at += len(name)
+    depth, i = 0, brace
+    while True:
+        depth += {'{': 1, '}': -1}.get(text[i], 0)
+        i += 1
+        if depth == 0:
+            return text[at:i]
+
+
+class CrossProcessPairWiring(unittest.TestCase):
+    """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The capability being
+    declared without its prerequisites or by default; a cross-process
+    successor begun on the running job's lease, with a LEASE while N runs,
+    or built in another slot than the decision saw; a completion or an
+    abort that ends the wrong process's graph job; a receipt that is not
+    written with the diagnostics off."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.backend = (RENDER / 'src/backend_platform_windows.c').read_text()
+        cls.g3 = (RENDER / 'src/gpuva_g3_windows.c').read_text()
+
+    def test_switch_is_opt_in_with_prerequisites(self):
+        text = self.backend
+        at = text.index('runtime->CrossProcessPairs = runtime->Depth2General')
+        stmt = text[at:text.index(';', at)]
+        for term in ('runtime->JobDepth2Kick', 'Context->G3RetainedSlots != 0u',
+                     '1u << ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D',
+                     'AdmissionPlatformSwitchEnabled(Context, L"Wom1CrossProcessPairs")'):
+            self.assertIn(term, stmt)
+        self.assertEqual(text.count('L"Wom1CrossProcessPairs"'), 1)
+        self.assertEqual(text.count('|= ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS'), 1)
+        after = text[at:at + 700]
+        self.assertIn('if (runtime->CrossProcessPairs)\n'
+                      '    runtime->Depth2Capabilities |= ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS;',
+                      after)
+        # the G3 side follows the same decision, on every start
+        self.assertIn('Context->G3CrossProcessPairs = runtime->CrossProcessPairs ? 1u : 0u;', text)
+        self.assertEqual(text.count('G3CrossProcessPairs ='), 1)
+        # the retained-slot switch is read before it
+        self.assertLess(text.index('Context->G3RetainedSlots =\n'), at)
+
+    def test_kick_names_and_reproves_the_successor_slot(self):
+        kick = function(self.backend, 'AdmissionJobWindowKickWindows')
+        slot = kick.index('pendingSlot = AdmissionGpuvaG3RetainedSlot(adapter, pendingContext);')
+        locked = kick.index('KeAcquireSpinLock(&adapter->PagingLock, &old_irql);')
+        fill = kick.index('s.Next.VmSlot = pendingSlot;')
+        decide = kick.index('refusal = AdmissionJobWindowKickRefusal(&s);')
+        begin = kick.index('AdmissionGpuvaG3BeginSuccessorJob(adapter, context, next,')
+        reproof = kick.index('if (cross && (image->JobVmSlot == 0u || image->JobVmSlot != s.Next.VmSlot ||')
+        submit = kick.index('AppleAgxBackendRuntimeSubmitSuccessor(&runtime->Backend, &submission)')
+        kicked = kick.index('AdmissionJobWindowXprocKicked(&runtime->XprocReceipt, &s.Running, &s.Next);')
+        self.assertLess(slot, locked)  # the graph lock is taken at PASSIVE, before the spin locks
+        self.assertLess(locked, fill)
+        self.assertLess(fill, decide)
+        self.assertLess(decide, begin)
+        self.assertLess(begin, reproof)
+        self.assertLess(reproof, submit)
+        self.assertLess(submit, kicked)
+        guard = kick[kick.rindex('if (', 0, fill):fill]
+        self.assertIn('runtime->CrossProcessPairs', guard)
+        self.assertIn('head->Fence == pendingFence', guard)
+        self.assertIn('head->Context == pendingContext', guard)
+        tail = kick[reproof:submit]
+        self.assertIn('image->JobVmSlot == s.Running.VmSlot', tail)
+        self.assertIn('AdmissionGpuvaG3AbortJob(adapter, next);', tail)
+        # every decided-but-undone exit is counted (five exits before the hand-over)
+        self.assertEqual(kick.count('AdmissionXprocUndoneWindows(runtime, cross, fallbacksBefore, next,'), 6)
+        # retried refusals are not counted as decisions
+        note = kick[kick.index('cross = runtime->CrossProcessPairs &&'):]
+        note = note[:note.index('AdmissionJobWindowXprocNote(') + 40]
+        for code in ('4u', '52u', '53u', '54u'):
+            self.assertIn('refusal != ' + code, note)
+
+    def test_describe_and_adoption_carry_the_job_slot(self):
+        describe = function(self.backend, 'AdmissionJobWindowDescribeLocked')
+        self.assertIn('job->VmSlot = image->BoundFence == fence ? image->JobVmSlot : 0u;', describe)
+        worker = function(self.backend, 'AdmissionPlatformWorker')
+        at = worker.index('if (adopted && runtime->CrossProcessPairs && adapter->G3RetainedSlots &&')
+        self.assertLess(at, worker.index('goto AdoptedKicked;'))
+        self.assertIn('runtime->RunningVmSlot = adapter->BackendImage.JobVmSlot ?',
+                      worker[at:at + 300])
+
+    def test_g3_begins_ends_and_aborts_on_the_job_own_process(self):
+        begin = function(self.g3, 'AdmissionGpuvaG3BeginJobAs')
+        cross = begin[begin.index('cross = successor && adapter->G3CrossProcessPairs != 0u &&'):]
+        self.assertIn('state->ActiveProcess != NULL && state->ActiveProcess != process',
+                      cross[:200])
+        lease = begin.index('cross ? AppleAgxGpuvaG3GraphBeginLeasedJob(&process->Graph) :')
+        r10 = begin.index('refusal = 10u;')
+        r11 = begin.index('refusal = 11u;')
+        self.assertLess(r10, r11)
+        self.assertLess(r11, lease)
+        self.assertIn('!adapter->BackendImage.G4Compute', begin[:r10][-200:])
+        guard = begin[r10:r11]
+        for term in ('process->Graph.LeaseToken == 0ULL', 'process->Graph.JobInFlight',
+                     '!state->ActiveProcess->Graph.JobInFlight',
+                     'process->Graph.Slot == state->ActiveProcess->Graph.Slot'):
+            self.assertIn(term, guard)
+        self.assertIn('state->SuccessorProcess = cross ? process : NULL;', begin)
+        # without the switch the successor check is the old one
+        self.assertIn('(cross || state->ActiveProcess == process) &&', begin)
+
+        complete = function(self.g3, 'AdmissionGpuvaG3CompleteJobTimestamp')
+        promote = complete.index('state->ActiveProcess = state->SuccessorProcess;')
+        self.assertLess(complete.index('AppleAgxGpuvaG3GraphEndJob(&process->Graph)'), promote)
+        self.assertLess(promote, complete.index('state->ActiveFence = state->SuccessorFence;'))
+
+        abort = function(self.g3, 'AdmissionGpuvaG3AbortJob')
+        pick = abort.index('if (state->SuccessorFence == fence && state->SuccessorProcess != NULL)\n'
+                           '      process = state->SuccessorProcess;')
+        self.assertLess(pick, abort.index('AppleAgxGpuvaG3GraphEndJob(&process->Graph)'))
+        self.assertEqual(abort.count('state->SuccessorProcess = NULL;'), 2)
+        # nothing else writes the field
+        self.assertEqual(self.g3.count('state->SuccessorProcess ='), 4)
+
+        slot = function(self.g3, 'AdmissionGpuvaG3RetainedSlot')
+        for term in ('ExAcquireFastMutex(&state->Lock);', 'process->Graph.LeaseToken != 0ULL',
+                     'process->Graph.SlotTable->Owner[process->Graph.Slot] == &process->Graph',
+                     '!process->Poisoned', '!process->Graph.Uncertain'):
+            self.assertIn(term, slot)
+
+    def test_receipt_is_exported_with_and_without_diagnostics(self):
+        export = self.backend
+        self.assertEqual(export.count('L"Wom1CrossProcessPairsReceipt"'), 2)
+        off = export.index('if (!runtime->JobDiagnostics && runtime->CrossProcessPairs) {')
+        self.assertIn('2ULL * (ULONGLONG)frequency.QuadPart', export[off:off + 500])
+        gate = export[export.rindex('if (runtime == NULL', 0, off):off]
+        self.assertIn('!runtime->CrossProcessPairs', gate[:gate.index('return;')])
+        self.assertIn('AdmissionJobWindowXprocReceiptInitialize(&runtime->XprocReceipt);', export)
+
+    def test_receipt_decoder_matches_the_layout(self):
+        import importlib.util
+        import struct
+        spec = importlib.util.spec_from_file_location('agx_xproc_receipt',
+                                                      ROOT / 'tools/agx_xproc_receipt.py')
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        words = [1, 128, 9, 5, 4, 1, 0] + [55, 6, 0, 0, 0, 0, 0, 0] + [3, 1, 0, 0, 0, 0, 0, 0] + \
+            [0, 711, 710, 2, 3, 6, 705, 700, 7300 | (11 << 16)]
+        out = tool.decode(struct.pack('<32I', *words))
+        self.assertEqual((out['considered'], out['allowed'], out['kicked'], out['fell_back']), (9, 5, 4, 1))
+        self.assertEqual(out['refusals'], {'55': 3, '6': 1})
+        self.assertEqual(out['last_kicked'], dict(fence=711, running_fence=710, running_slot=2, next_slot=3))
+        self.assertEqual(out['last_undone'], dict(fence=700, line=7300, begin_refusal=11))
+        with self.assertRaises(ValueError):
+            tool.decode(b'\0' * 64)
+
+    def test_receipt_abi(self):
+        with tempfile.TemporaryDirectory(prefix='xproc-abi-') as tmp:
+            src = Path(tmp) / 'abi.c'
+            src.write_text('#include "render_job_window.h"\n'
+                           '_Static_assert(sizeof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT) == 128, "size");\n'
+                           '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
+                           ' Kicked) == 16, "kicked");\n'
+                           '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
+                           ' RefusalCode) == 28, "codes");\n'
+                           '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
+                           ' LastFence) == 96, "last");\n')
+            for target in ('x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc'):
+                for unit in (src, RENDER / 'src/render_job_window.c'):
+                    done = subprocess.run(['clang', '-target', target, '-std=c11', '-Wall', '-Wextra',
+                                           '-Werror', '-Wconversion', '-Wsign-compare', '-fsyntax-only',
+                                           '-I', str(RENDER / 'include'), str(unit)],
+                                          capture_output=True, text=True)
+                    self.assertEqual(done.returncode, 0, done.stderr)
+
+
 if __name__ == '__main__':
     unittest.main()
