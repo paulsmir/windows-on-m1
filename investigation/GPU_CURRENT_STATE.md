@@ -3481,3 +3481,31 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
   T5 arms t0 off / t1 on / t1 / t0 if the builder gates pass) -> K1 package -> FS-D1 / MPO H1.
 - Not verified: MSVC /W4 /WX of K2 and T5 (builder gate at package time); nothing of this update ran on hardware
   except EXP2321.
+
+## UPDATE 2026-11-10T16:36:00Z -- architect: T6 verdict (loop-invariant device loads), EXP2322 provisional, EXP2323 rulings
+
+- T6 (all 211 GravityMark captures, production-shaped compile, 204 equal the guest row;
+  `.local/night-20261110/t6-invariant-loads/REPORT.md`, `.local/handoff/T6-INVARIANT-LOADS.md`): ACCEPTED as analysis,
+  no code. 841 device loads sit in real loops, 78 have a loop-invariant address, 16 are in an innermost loop, 4 execute
+  every iteration (2 in traversal 7aa43c6c, 2 in 85fb7685 which is outside the steady frame). The only kernel
+  >= 0.3 ms/frame with the pattern is the traversal (b4-b8 1.597 ms, 4 constant-buffer reads through a threadgroup
+  index); Apple's twin m183 keeps 3 of the same reads in its loop. k49 (6cf11e8a): 2 conditional reads, whole piece
+  b13 0.343 vs Apple 0.303 ms, so <= 0.040 ms.
+- Verdict: loop-invariant loads are NOT where Apple gains; the class is closed as a lever. R21 candidates 3-4 are
+  closed with it. `APPLE_AGX_D3D_LICM_CONST` stays opt-in and unset (EXP2183). The proposed per-job ABBA of that switch
+  is NOT scheduled: Apple keeps the same reads and EXP2183 was frame-neutral, so no new evidence raises its
+  probability (anti-loop rule). It may ride as a spare arm pair only if K2 per-job data put b4..b8 more than 0.10 ms
+  above its Apple twin for a reason other than the firmware start floor.
+- Side facts (not levers): the LICM switch never reaches k49 because the DXIL one-pass wrapper loop starts with the
+  workgroup barrier and `agx_win32_mark_invariant_shared` skips writer nests (agx_win32_soft_fault.h:196-201); the
+  switch changes 31 binaries, including +12 ffma in the fc968f7a loop (cause open).
+- Remaining unexplained busy excess after R21 + T6: traversal 0.170 ms (1.597 vs 1.427) and 97efffb3 0.21 ms with
+  production-equal or near-equal listings on both sides. HYPOTHESIS: not instruction-level; candidates are per-thread
+  first-touch / cache state and firmware-side scheduling of the compute job. Discriminator in work: N6b cut ladder.
+- EXP2322 (boot C, Wom1PerfTgtUtilization=60) provisional from the bench owner: r2/r3 49.922 / 50.026, mean 49.97 =
+  -0.21 % against 50.08 -> neutral by the rule; the pstate read decides the wording of the verdict (P6 >= 95 % and
+  neutral fps closes dip-frame pstate as an fps lever; P6 unchanged means the target word has no effect at 60).
+- EXP2323 (N4c-v2 + K2 + T5, package built from fb5c37de5, builder gates PASS): rulings given to the bench owner:
+  T arms run after a fault-free x0 stop with the cross-lead in one non-apply state in all four t arms; no bit-exact
+  frame is available (animated scene), so T5 correctness = shader rows + zero faults + 45 s shots of t0/t1, any
+  visible difference in planet texturing or lighting rejects T5.
