@@ -77130,3 +77130,17 @@ EXP2322 HARDWARE BEFORE 2026-11-10T16:19:08Z:
 - Hashes: sys 455e691c54a2, UmdArm64 8acec08db535, UmdX64 9cc383f767cb, Umd32 18ccc5254ee9; manifest 629c162eff84, hardware-manifest d001c77a333f; probe2322.sh 914a27113d39 (PROBE_LINT_OK); visible recovery rec2322h 8a270ed59d8587ad; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1PerfTgtUtilization=60.
 - Recovery rec2322h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2322-r14-pt1-gate-c/run2322.sh.
+
+EXP2322 ACTUAL 2026-11-10T16:46:33Z:
+- Phases: launch, package install and first start normal; EXP2322_PIPELINE_RC 0; no hang, TDR, GPU reset or stop (STOPS 0, GPU_RESET none, CM_PROB_NONE). Display, SSH, storage (AppleAns 0.4.8) and 8 CPUs alive throughout.
+- Suite: TOOL_SUITE PASS=119 FAIL=0.
+- GM HD PERF 100k -temporal 0 fps_frames: w 48.490 / r2 49.922 / r3 50.026 (frames 2635/2695/2707), 8.0 jobs/frame. mean(r2,r3) 49.974 vs EXP2320 50.08 = -0.21 %: neutral band (pre-registered -0.7..+0.7 %). Control floor (w >= 48.0) and working floor (mean(r2,r3) >= 49.1) met.
+- Mechanism: PERF_TGT mid-x / post-x "perf_tgt_utilization 60/60 % (Wom1PerfTgtUtilization applied)" (applied bit set). JOB_WINDOW gate counters 0 (gate switch unset, as expected).
+- Time in pstate (Wom1GpuPerf, arm x): cumulative mid-x P6 90.0 % / P1 9.7 %, post-x P6 94.4 % (EXP2320 control 87.8 / 93.4 %, EXP2321 88.6 / 93.6 %). The P1 time (4696 ms here, 5594 ms EXP2320, 5380 ms EXP2321) is identical in the mid and post snapshots of each boot, i.e. it accrued before the GM window; between mid-x and post-x P6 took 38036.6 of 38036.7 ms here and 39948.6 of 39948.6 ms in EXP2320: the GPU already runs at P6 for ~100 % of the GM window with the profile target 85. "Below target" 0.5 % (EXP2320 0.6 %). Correction of the reading basis: the 86.9-89.8 % P6 shares quoted from EXP2319 are cumulative over the snapshot and include pre-GM idle, not the GM window.
+- GM FULL f0 Score 7907 (EXP2320 7888, EXP2321 7991): one sample, recorded as observed.
+- CS 1.6 warm/r2/r3 48.393/51.908/52.095; PERF_GATE cs16 PASS (+3.93 %), gravitymark_hd_perf PASS (worst 44.952 vs 40.770), PERF_GATE_PASS.
+- WER_REPORTS 2 (pre-existing count; every GM arm reports wer 0).
+- m1n1 at the ordered restart: "BUGCHECK ok base=0xfffff8013da00000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0". No AppleAns 0xAA/0xA4/0xA5 record seen.
+- Rollback rec2322h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE.
+- Verdict: rejected as a default (neutral -0.21 %). The applied target word moves nothing measurable because P6 is already ~100 % of the GM window at target 85: the dip-frame pstate is closed as an fps lever on this workload (not "the word has no effect": there is no below-P6 GM time left for it to act on). Wom1PerfTgtUtilization stays unset. The fourth boot (both switches) is not run.
+- Next: EXP2323 (N4c-v2 + K2 + T5 package, fb5c37de5).
