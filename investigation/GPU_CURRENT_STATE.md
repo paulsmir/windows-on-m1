@@ -2770,3 +2770,21 @@ were spot-checked by the architect against the cited tables, the rest are as rep
 - Ranked open rows at HD now: (1) uniform work deficit 1.8-2.25 ms; (2) DWM job between GM jobs 0.85 (C1/C2a in work);
   (3) per-job launch/detect/idle 0.5; (4) cross-frame C0||3D(R7) 0.35; (5) TA5 beside C4 <= 0.22 (OV5).
 - NEXT CAUSAL TARGET: cause of the uniform work deficit (r8); EXP2309 (N1) for the current-profile HD/FHD budget with pstate.
+
+## UPDATE 2026-11-10T00:34:02Z -- GravityMark HD rate was undercounted: count frames, not present rows
+
+- **Source:** tool change 7b7151e6b (CHG-20261110-7b7151e6-GM-FRAME-RATE), re-run by the architect on
+  `EXP2307/gm2307a1r3-umd.log` (10+60 s window): present rows 2662 = 44.392 fps = mean 22.53 ms; GravityMark frames
+  (execute rows of the benchmark process) 2947 = **49.145 fps = mean 20.35 ms**; presents_per_frame 0.903,
+  jobs_per_frame 8.0. Full run gm2196b: score 6713 = 6712 execute rows, 6510 present rows.
+- **Cause (observed):** no Present DDI call for a frame that ends <= 16.53 ms after the previous present (1021 of 1021
+  skipped frames in three runs). The limiter sits above the UMD; GravityMark vs DXGI is unproven. Not a driver defect.
+- **Corrections:** the night plan line "HD ~22.5 vs 17.4 ms" (2026-11-09T23:40Z) is present-based; frame-based HD is
+  20.35 ms. FHD is affected by < 1 %. The perf gate and perf-baseline.json stay present-based (history-compatible);
+  judge HD levers by `fps_frames` (PERF_INFO line). A lever that shortens frames below 16.7 ms does not show in the
+  present-based number.
+- **Open tool item:** `agx_gm_scene_align export_ours` and `agx_gpu_frame_breakdown` still drop double-frame present
+  intervals, i.e. the fastest frames.
+- **HYPOTHESIS (one coarse pass, 10 s bins, lag by eye ~10 s, EXP2196 HD full run vs macOS hd.csv):** our share of the
+  macOS rate is lowest in the fast scenes (macOS 76-85 fps, ours 42-54: 55-67 %) and highest in the heavy scenes
+  (77-83 %). To be checked on the EXP2309 FULL logs with fps_frames and a fitted lag before it is used.
