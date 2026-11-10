@@ -3528,3 +3528,27 @@ R17 shader work rows C4/R5/R3/R1 against the Metal oracle (0.9 ms/frame without 
   fault there closes the ladder as "not usable".
 - Bench order now: EXP2322 ACTUAL -> EXP2323 (N4c-v2 + K2 + T5) -> EXP2324 (N6b ladder, 16 arms, one boot, read
   against EXP2319) -> K1 package (two boots) when its hand-off is ready -> FS-D1 / MPO H1.
+
+## UPDATE 2026-11-10T17:06:14Z -- architect: EXP2322 closed (pstate is not a lever), K1 accepted (class I opt-in), EXP2323 x0 interim
+
+- EXP2322 (`Wom1PerfTgtUtilization=60`, ACTUAL 29ded3cab): REJECTED as a default, neutral. mean(r2,r3) 49.974 against
+  50.08 (-0.21 %). P6 held 38036.6 of 38036.7 ms between the mid and post snapshots at target 60 and 39948.6 of
+  39948.6 ms at target 85 (EXP2320): the GPU already sits at the top pstate for the whole GravityMark window.
+  Dip-frame pstate is closed as an fps lever; no further target or pstate arm. Correction of my earlier figure: the
+  86.9-89.8 % P6 share read from EXP2319 was cumulative and included idle time before GravityMark.
+- K1 (7b12854de, `Wom1CrossProcessRenderPairs`, default unset): accepted as class I. Offline: the default decision
+  equals the pre-K1 decision for every state and replays the EXP2318 receipt; 49 focused tests OK; full gate has no
+  new failure except the environmental mu test of the integration worktree. Not verified: MSVC /W4 /WX compile,
+  hardware. Runs after EXP2324 as EXP2325 (boot A, switch unset) and EXP2326 (boot B, switch 1), one package.
+  Pre-registered rule: default-on only when boot B has suite 119/0, no fault / timeout / TDR / WER, RenderFailed 0,
+  refusal 55 render -> render+prelude below 300 per arm, gap p50 at C2>D>R3 and C4>D>R5 at or below 1.05 ms,
+  fps not below boot A by more than 0.7 %, CS gate PASS, screenshots correct. An fps gain is not required.
+  Gap staying above 1.05 ms with the class kicked rejects H2; K1 then stays opt-in and is not retried.
+- EXP2323 x0 (N4c-v2 shadow), interim, ACTUAL not yet recorded by the bench owner: 3006 executions, independent 0,
+  all "kept 6 detail 2" with foreign kinds copy and query; copy rule of the current execution works (48096 copies
+  placed, 0 conflicts, 0 overflow). The stop is on the kept side: the previous execution has a ResolveQueryData and
+  a buffer copy between its last two render submissions (4 render batches, 4 clean), and
+  AgxD3d12JobCrossEnd refuses on any such command. x1..x3 skipped by stop (b) as pre-registered. K2 ring v5 PASS by
+  content (DWM 3D slots carry bit 0x1 and a non-zero 3D end stamp; bit 0x1 is the right test for a render without
+  a prelude block). Next for N4c: a kept-side placement rule (v3) is being derived offline; no hardware until then.
+- Bench order now: EXP2323 (T arms) -> EXP2324 (N6b ladder) -> EXP2325/EXP2326 (K1) -> FS-D1 / MPO H1.
