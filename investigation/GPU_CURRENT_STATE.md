@@ -4424,3 +4424,25 @@ EXP2330 (running at this stamp) -> EXP2331 -> EXP2332 -> POOL-PROBE boot with th
 
 - Both client status values read 1 about 12 minutes after the write, same boot. Record: `investigation/EXPERIMENTS.md`, `ENV-CHANGE follow-up 2026-11-10T22:54:29Z`.
 - Still open: no update download in the System log of the EXP2334 boot.
+
+## UPDATE 2026-11-10T23:11:11Z -- architect: EXP2334 reset is undetermined, not servicing-proven and not K1+CrossLead-proven; the Windows kernel changed after EXP2328
+
+Evidence read: `.local/experiments/EXP2334-k1on-s1-rerun/evidence/full-at-reset.log`, the `full.log` of EXP2309..EXP2334, m1n1 `src/hv_exc.c` (bench line, 06616be7).
+
+- The experiment boot of EXP2334 reset about one hypervisor period after the KMD started (retained root active, 32 scanout swaps, three long broker holds at 43998..44701 ms, then silence until the reset). Every hypervisor status before it is 0. The hypervisor side shows no fault.
+- `BUGCHECK ok ... code=0x0` is NOT evidence of a clean restart on the current guest. m1n1 reads KiBugCheckData at a fixed RVA 0xdbc9c0 pinned to ntoskrnl 26100.9711 (`hv_exc.c`, reset handler). The reset call site moved from elr+0x635138 / x30+0x497e04 (every ordered restart EXP2309..EXP2328) to elr+0x6430a8 / x30+0x49bab4 (EXP2329 recovery log, EXP2330, EXP2334): the Windows update replaced the kernel, so the pinned RVA reads an unrelated word.
+- All 21 ordered restarts scanned have an xHCI "IRQ route disabled" line right before the reset. The EXP2334 reset has none. It looks like a bugcheck, not an ordered restart. Labelled inference until the guest log is read.
+- `EXP2330-k1on-s1/full.log` is not the EXP2330 experiment boot (0 retained operations, ordered-restart shape: it is the recovery relaunch). The EXP2330 experiment-boot log is lost. The "servicing" reading in the EXP2330 ACTUAL is therefore unproven, and so is "the same reset twice".
+- EXP2330 and EXP2334 are the first two package boots on the new Windows build. EXP2329's arms ran before the kernel was swapped (inference from the servicing times; to be confirmed from the guest's update history).
+
+Open hypotheses, none ranked above the others without the dump:
+- A: K1 default-on together with Wom1Ov2CrossLead=1 (EXP2327 had the switch without K1 and booted; EXP2329 had K1 without the switch and booted, on the old kernel).
+- B: the new Windows build with our KMD, any package.
+- C: a servicing restart.
+
+Discriminator, offline first: System log events 41 / 1001 / 1074 / 6008 of that boot, dump files and their write times, kernel file version and update history; cdb on a new dump if one exists. Handed to fork 6 (message of 2026-11-10T23:11Z). No package runs until this is read. If the guest holds no bugcheck record, the boot of EXP2331 (K1 on, no CrossLead) is the single discriminator between A and B: reset inside the first 120 s = B, stop every package; clean boot = B rejected.
+
+Consequences already fixed:
+- The FULL baseline mean 7918 and the control fps rows were measured on the old Windows build. The first FULL f0 on the new build is a new control and is not averaged into the old mean.
+- Process: after SSH_NEVER_UP the launcher log is copied to `evidence/full-at-reset.log` before any recovery (it was overwritten in EXP2330).
+- m1n1 diagnostics, two defects for the m1n1 line, no package depends on them: (1) the bugcheck reader must verify the kernel identity (PE TimeDateStamp and SizeOfImage) and print "unknown kernel" instead of a code; (2) in a boot with the GPU powered down the reset handler takes a data abort in m1n1 reading the ASC outbox at 0x206408114 and loses the stack print (EXP2330 recovery log).
