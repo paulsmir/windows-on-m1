@@ -3120,11 +3120,15 @@ _Present('''),
    return result;'''),
         ('''_Blt(DXGI_DDI_ARG_BLT *Blt)
 {
-   LOG_UNSUPPORTED_ENTRYPOINT();''','''_Blt(DXGI_DDI_ARG_BLT *Blt)
+   LOG_UNSUPPORTED_ENTRYPOINT();''','''AgxDxgiBltRect(DXGI_DDI_ARG_BLT *Blt,
+               const AGX_D3D10_WINDOWS_BLT_RECT *SourceRect)
 {
+   /* FS-F1: BltDXGI (SourceRect NULL: the whole source subresource) and
+    * Blt1DXGI (SourceRect: the source rectangle). A presentation resource
+    * has exactly one subresource. The winsys checks both rectangles against
+    * the real size of the resource it blits. */
    if (!Blt || Blt->DstSubresource || Blt->SrcSubresource ||
-       Blt->DstLeft || Blt->DstTop || Blt->DstRight != 2560 ||
-       Blt->DstBottom != 1600 || (Blt->Flags.Value & ~0xfu))
+       (Blt->Flags.Value & ~0xfu))
       return E_INVALIDARG;
    Device *device = CastDevice(Blt->hDevice);
    Resource *destination = CastResource(Blt->hDstResource);
@@ -3133,11 +3137,26 @@ _Present('''),
        destination->owner_device != device || source->owner_device != device ||
        !destination->presentation || !source->presentation)
       return E_INVALIDARG;
-   if (Blt->Flags.Value != 0x8u ||
+   /* Resolve (0x1) needs a multisampled presentable source, which resource
+    * admission never creates. The runtime does not pass Flags 0 with the
+    * identity rotation, and passes no other rotation while CreateResource
+    * does not answer DXGI_DDI_ERR_UNSUPPORTED for a primary (it does not).
+    * Convert (0x2), Stretch (0x4) and Present (0x8) are one pipe blit
+    * between the two resources' own formats. */
+   if (!Blt->Flags.Value || (Blt->Flags.Value & 0x1u) ||
        Blt->Rotate != DXGI_DDI_MODE_ROTATION_IDENTITY)
       return E_NOTIMPL;
+   const AGX_D3D10_WINDOWS_BLT_RECT destinationRect = {
+      Blt->DstLeft, Blt->DstTop, Blt->DstRight, Blt->DstBottom};
    return AgxD3d10WindowsPresentationBlt(device->windows,
-      destination->presentation, source->presentation);''')])
+      destination->presentation, &destinationRect,
+      source->presentation, SourceRect);
+}
+
+HRESULT APIENTRY
+_Blt(DXGI_DDI_ARG_BLT *Blt)
+{
+   return AgxDxgiBltRect(Blt, NULL);''')])
     # Trace the existing DXGI boundary as one unit. Return values and argument
     # guards stay unchanged; the process-local diagnostic preserves last-error.
     dxgi_path = 'src/gallium/frontends/d3d10umd/DxgiFns.cpp'
@@ -3162,7 +3181,7 @@ UnsupportedDxgi''')
     dxgi_target.write_text(dxgi_text)
     for name in ('_Present', '_GetGammaCaps', '_SetDisplayMode',
                  '_SetResourcePriority', '_QueryResourceResidency',
-                 '_RotateResourceIdentities', '_Blt'):
+                 '_RotateResourceIdentities', 'AgxDxgiBltRect'):
         text = dxgi_target.read_text()
         marker = '\n' + name + '('
         if text.count(marker) != 1:
@@ -3196,7 +3215,7 @@ UnsupportedDxgi''')
    AgxD3d10WindowsPresentMeasure(AdmissionUmdMeasureNativePresentEntry,
       pPresentData?S_OK:E_INVALIDARG,presentMeasure,10u);
 '''
-        if name == '_Blt':
+        if name == 'AgxDxgiBltRect':
             entry += '''   UINT values[11] = {
       Blt ? Blt->DstSubresource : ~0u, Blt ? Blt->SrcSubresource : ~0u,
       Blt ? Blt->DstLeft : ~0u, Blt ? Blt->DstTop : ~0u,
@@ -3214,7 +3233,7 @@ UnsupportedDxgi''')
             entry += '''   UINT count = QueryResourceResidency ? QueryResourceResidency->Resources : ~0u;
    AgxD3d10WindowsDiagnostic("dxgi-residency-count", S_OK, &count, 1u);
 '''
-        if name == '_Blt':
+        if name == 'AgxDxgiBltRect':
             body = body.replace('AgxDxgiTraceReturn(__func__, (', 'rejectBlt(')
             body = body.replace('));', ');')
             entry = entry[entry.index('   UINT values[11]'):]
@@ -5297,8 +5316,9 @@ AgxD3d10ResourceWithinRequiredLimits(
    }
    HRESULT result;
    if (destination->presentation && source->presentation) {
+      /* Whole subresource to whole subresource; the sizes are equal here. */
       result=AgxD3d10WindowsPresentationBlt(device->windows,
-         destination->presentation,source->presentation);
+         destination->presentation,NULL,source->presentation,NULL);
    } else {
       /* Copy stored bits independent of any bound view: linear (non-sRGB)
        * views avoid conversion; BGRA also preserves the X byte. */

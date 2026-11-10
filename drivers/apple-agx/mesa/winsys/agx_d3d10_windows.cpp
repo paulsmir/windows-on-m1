@@ -1308,10 +1308,34 @@ HRESULT AgxD3d10WindowsQueryResourceResidency(
   }
 }
 
+/* FS-F1: derives the blit box of one DXGI Blt rectangle on a level-0 surface
+ * of width x height texels. NULL selects the whole surface (BltDXGI always
+ * reads the whole source subresource). An empty, inverted or out-of-bounds
+ * rectangle is rejected; nothing is clamped, so an accepted box is exactly
+ * the rectangle the runtime passed. pipe_box stores int32_t coordinates. */
+static BOOL presentation_blt_box(UINT width,UINT height,
+                                 const AGX_D3D10_WINDOWS_BLT_RECT *rect,
+                                 UINT *x,UINT *y,UINT *boxWidth,UINT *boxHeight) {
+  if(!x || !y || !boxWidth || !boxHeight || !width || !height ||
+     width>0x7fffffffu || height>0x7fffffffu)
+    return FALSE;
+  if(!rect) {
+    *x=0u;*y=0u;*boxWidth=width;*boxHeight=height;return TRUE;
+  }
+  if(rect->Left>=rect->Right || rect->Top>=rect->Bottom ||
+     rect->Right>width || rect->Bottom>height)
+    return FALSE;
+  *x=rect->Left;*y=rect->Top;
+  *boxWidth=rect->Right-rect->Left;*boxHeight=rect->Bottom-rect->Top;
+  return TRUE;
+}
+
 HRESULT AgxD3d10WindowsPresentationBlt(
     AGX_D3D10_WINDOWS_DEVICE *device,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *destination,
-    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *source) {
+    const AGX_D3D10_WINDOWS_BLT_RECT *destinationRect,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *source,
+    const AGX_D3D10_WINDOWS_BLT_RECT *sourceRect) {
   if(!device || device->Stage!=AgxD3d10DeviceReady || !destination || !source ||
      destination==source || destination->Device!=device || source->Device!=device ||
      !destination->RenderResource || !source->RenderResource ||
@@ -1323,14 +1347,30 @@ HRESULT AgxD3d10WindowsPresentationBlt(
   if(!presentation_pipe_format(destination->RenderResource,&destinationFormat) ||
      !presentation_pipe_format(source->RenderResource,&sourceFormat))
     return E_INVALIDARG;
+  UINT dstX,dstY,dstWidth,dstHeight,srcX,srcY,srcWidth,srcHeight;
+  if(!presentation_blt_box(destination->RenderResource->width0,
+                           destination->RenderResource->height0,destinationRect,
+                           &dstX,&dstY,&dstWidth,&dstHeight) ||
+     !presentation_blt_box(source->RenderResource->width0,
+                           source->RenderResource->height0,sourceRect,
+                           &srcX,&srcY,&srcWidth,&srcHeight))
+    return E_INVALIDARG;
   struct pipe_blit_info info={0};
   info.dst.resource=destination->RenderResource;info.dst.level=0;
-  info.dst.box.x=0;info.dst.box.y=0;info.dst.box.z=0;
-  info.dst.box.width=2560;info.dst.box.height=1600;info.dst.box.depth=1;
+  info.dst.box.x=(int32_t)dstX;info.dst.box.y=(int32_t)dstY;info.dst.box.z=0;
+  info.dst.box.width=(int32_t)dstWidth;info.dst.box.height=(int32_t)dstHeight;
+  info.dst.box.depth=1;
   info.dst.format=destinationFormat;
   info.src.resource=source->RenderResource;info.src.level=0;
-  info.src.box=info.dst.box;info.src.format=sourceFormat;
-  info.mask=PIPE_MASK_RGBA;info.filter=PIPE_TEX_FILTER_NEAREST;
+  info.src.box.x=(int32_t)srcX;info.src.box.y=(int32_t)srcY;info.src.box.z=0;
+  info.src.box.width=(int32_t)srcWidth;info.src.box.height=(int32_t)srcHeight;
+  info.src.box.depth=1;
+  info.src.format=sourceFormat;
+  info.mask=PIPE_MASK_RGBA;
+  /* DXGI: a stretch or shrink must be at least as good as a bilinear
+   * filter; a 1:1 copy keeps the stored texels. */
+  info.filter=(srcWidth!=dstWidth || srcHeight!=dstHeight)?
+      PIPE_TEX_FILTER_LINEAR:PIPE_TEX_FILTER_NEAREST;
   device->Context->blit(device->Context,&info);
   return AgxD3d10WindowsFlushStatus(device);
 }
