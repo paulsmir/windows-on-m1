@@ -77387,3 +77387,15 @@ EXP2328 HARDWARE BEFORE 2026-11-10T20:31:06Z:
 - Hashes: sys 22a7ef64316a, UmdArm64 58bc847bad32, UmdX64 d90085af545b, Umd32 9b7151848526; manifest bec013f1a492, hardware-manifest 1aac68374545; probe2328.sh fb9ad18bed98 (PROBE_LINT_OK); visible recovery rec2328h 1b2eb401d484faa4; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2328h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2328-pf1-g0/run2328.sh.
+
+EXP2328 ACTUAL 2026-11-10T21:09:22Z:
+- Phases: launch, package (cc43bef15: PF1 + K48G, default off) install and first start normal; EXP2328_PIPELINE_RC 0; no hang, TDR, GPU reset or stop (STOPS 0); wer 0 in every GM arm. Display, SSH, storage (AppleAns 0.4.8) and 8 CPUs alive throughout.
+- Suite TOOL_SUITE PASS=119 FAIL=0 (suite process with APPLE_AGX_D3D12_EXPAND_FOLD=1). Control w/r2/r3 fps_frames 49.207 / 50.246 / 49.919.
+- PF1: f0r1 (warm-up) fps 44.817; f0a r2 / r3 fps 45.183 / 44.984 (envelopes per present 00280004/00c80003/00d80005 4.31/1.15/3.23 and 4.34/1.15/3.25, measure-gpu-prelude 3.23/3.25); f1a r2 (EXPAND_FOLD=1) fps 45.406: measure-d3d12-counted-fold 3708 rows (one per present), per-row means [1] seals 0, [2] folded 0, [4] refusal 1 (query) 7.521 per present, all other values 0; no folded counted-path row; envelopes 4.30/1.14/3.22, prelude 3.22 (unchanged). Stop rule (no seals / v5 envelope in steady state) -> f1a r3, f1b, f0b and FULL f1 not run. Architect: refusal 1 = AGX_WIN32_FOLD_REFUSE_QUERY (agx_win32_expand_queries_allow): GravityMark keeps a PIPELINE_STATISTICS query active around all its draws.
+- K48G g0 (APPLE_AGX_D3D12_DIAG_INDIRECT_ARGS=97efffb3; FPS not a result): measure-d3d12-indirect-args rows 7 x (source 0, lag 1) then 4042 x (source 4, lag 7), the healthy pattern. Architect (grid_stats.py on gm2328g0-umd.log): x mean 1748.5 vs Apple 1839.6 (ratio 0.950), y = z = 1.
+- FULL f0 7874 (untraced, -times file fetched). CS 1.6 warm/r2/r3 48.647/51.851/51.684; PERF_GATE cs16 PASS (+3.49 %), gravitymark_hd_perf PASS (worst 44.793 vs 40.770), PERF_GATE_PASS. WER_REPORTS 2 (pre-existing).
+- ST-ETW pre-check on the idle guest after the arms: wpr -start CPU -filemode fails ("The request is not supported", 0x80070032); no ETL. Architect: ST-ETW closed.
+- m1n1 at the ordered restart: "BUGCHECK ok base=0xfffff8021bc00000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0".
+- Rollback rec2328h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE.
+- Verdict: PF1 inconclusive for the lever: switch acted, 0 seals, 7.52 statistics refusals per present (PF1b in implementation). g0: the k48 work equals Apple's (x 1748.5 vs 1839.6); the C0 excess is per-group cost; the g0 diagnostic is not needed in later packages.
+- Next: EXP2329 (K1 default-on boot 1).
