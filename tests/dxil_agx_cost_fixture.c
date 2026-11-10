@@ -25,6 +25,13 @@
  *        --synthetic-array-samples=N[,heap]|--synthetic-break-loops=N|--synthetic-shared-reads=K
  *        [--no-d3d-robust] [--assume-in-bounds] [--root-views=UAV,CBV]
  *        [--print-lowered] [--print-nir] [--print-selected] [--soft-fault|--soft-fault-loads]
+ *        [--crawl-bindful] [--print-bindings] [--print-samples]
+ * --crawl-bindful: T5b step A (the owner's APPLE_AGX_D3D12_CRAWL_BINDFUL);
+ * with it or --print-samples a second line follows COST:
+ *   SAMPLES reg <inner> <loop> <other> bindless <inner> <loop> <other> moved <n>
+ * (non-query tex instructions of the NIR handed to the backend, by form and
+ * place: innermost loop, other loop, outside loops; moved: step A's count);
+ * --print-bindings prints the frontend's map, one BINDING line per register
  * --root-views: hex masks of the UAV and constant-buffer slots that are
  * D3D12 root descriptors (RC75 dxbc_nir_mark_root_views: left unchecked) 
  * --soft-fault: Asahi's compiler key with soft faults (set_speculate: every
@@ -402,6 +409,58 @@ count_tex_speculated(nir_shader *nir)
       }
    }
    return speculated;
+}
+
+/* T5b: the shader's samples (tex instructions that are not queries) by
+ * form -- bindless (a texture_handle source) or texture state register --
+ * and place: inside an innermost loop, inside another loop, outside loops */
+struct sample_forms {
+   unsigned reg[3], bindless[3]; /* [0] innermost loop, [1] other loop, [2] no loop */
+};
+
+static bool
+cf_has_loop(struct exec_list *list)
+{
+   foreach_list_typed(nir_cf_node, node, node, list) {
+      if (node->type == nir_cf_node_loop)
+         return true;
+      if (node->type == nir_cf_node_if) {
+         nir_if *nif = nir_cf_node_as_if(node);
+         if (cf_has_loop(&nif->then_list) || cf_has_loop(&nif->else_list))
+            return true;
+      }
+   }
+   return false;
+}
+
+static void
+count_sample_forms(struct exec_list *list, int place, struct sample_forms *f)
+{
+   foreach_list_typed(nir_cf_node, node, node, list) {
+      switch (node->type) {
+      case nir_cf_node_block:
+         nir_foreach_instr(instr, nir_cf_node_as_block(node)) {
+            if (instr->type != nir_instr_type_tex || nir_tex_instr_is_query(nir_instr_as_tex(instr)))
+               continue;
+            const bool handle = nir_tex_instr_src_index(nir_instr_as_tex(instr), nir_tex_src_texture_handle) >= 0;
+            (handle ? f->bindless : f->reg)[place]++;
+         }
+         break;
+      case nir_cf_node_if: {
+         nir_if *nif = nir_cf_node_as_if(node);
+         count_sample_forms(&nif->then_list, place, f);
+         count_sample_forms(&nif->else_list, place, f);
+         break;
+      }
+      case nir_cf_node_loop: {
+         nir_loop *loop = nir_cf_node_as_loop(node);
+         count_sample_forms(&loop->body, cf_has_loop(&loop->body) ? 1 : 0, f);
+         break;
+      }
+      default:
+         break;
+      }
+   }
 }
 
 static void
@@ -1260,6 +1319,7 @@ main(int argc, char **argv)
    bool d3d_robust = true, print_nir = false, print_lowered = false, in_bounds = false;
    bool soft_fault = false, soft_fault_loads = false, fs_backend = false, print_selected = false, hex_main = false;
    bool shared_store_oracle = false;
+   bool crawl_bindful = false, print_bindings = false, print_samples = false;
    unsigned root_uavs = 0, root_cbvs = 0;
    for (int a = 2; a < argc; ++a) {
       unsigned uav, cbv;
@@ -1273,6 +1333,9 @@ main(int argc, char **argv)
       hex_main |= !strcmp(argv[a], "--hex-main"); /* N6: the main function's bytes */
       fs_backend |= !strcmp(argv[a], "--fs-backend"); /* rc123: FS through the backend */
       print_lowered |= !strcmp(argv[a], "--print-lowered"); /* after the D3D lowering */
+      crawl_bindful |= !strcmp(argv[a], "--crawl-bindful"); /* T5b step A */
+      print_bindings |= !strcmp(argv[a], "--print-bindings"); /* T5b: the frontend's slot map */
+      print_samples |= !strcmp(argv[a], "--print-samples"); /* T5b: the SAMPLES line */
       in_bounds |= !strcmp(argv[a], "--assume-in-bounds");
       soft_fault |= !strcmp(argv[a], "--soft-fault");
       soft_fault_loads |= !strcmp(argv[a], "--soft-fault-loads");
@@ -1330,6 +1393,11 @@ main(int argc, char **argv)
          printf("REFUSED %s\n", r.error);
          return 0;
       }
+      if (print_bindings)
+         for (unsigned i = 0; i < r.bindings.count; ++i)
+            printf("BINDING kind %u space %u reg %u slot %u flags %u\n", r.bindings.bindings[i].kind,
+                   r.bindings.bindings[i].space, r.bindings.bindings[i].reg, r.bindings.bindings[i].slot,
+                   r.bindings.bindings[i].flags);
       nir = r.nir;
    }
    if (production && nir->info.stage != MESA_SHADER_COMPUTE) {
@@ -1402,6 +1470,7 @@ main(int argc, char **argv)
    }
    /* agx_shader_initialize: so->info.nr_bindful_textures / _images */
    const unsigned descriptors = BITSET_LAST_BIT(nir->info.textures_used) + 2 * BITSET_LAST_BIT(nir->info.images_used);
+   const unsigned bindful_textures = BITSET_LAST_BIT(nir->info.textures_used);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
    NIR_PASS(_, nir, nir_lower_alu_to_scalar, NULL, NULL);
    NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
@@ -1423,6 +1492,10 @@ main(int argc, char **argv)
    if (d3d_robust)
       NIR_PASS(_, nir, agx_win32_lower_d3d_layer_clamp);
    NIR_PASS(_, nir, agx_nir_lower_texture);
+   /* T5b step A (native projection: project_crawl_bindful) */
+   unsigned bindful_moved = 0;
+   if (crawl_bindful)
+      NIR_PASS(_, nir, agx_win32_d3d_crawl_bindful, bindful_textures, &bindful_moved);
    /* RC78: the D3D context's crawl placement (native projection) */
    if (d3d_robust)
       NIR_PASS(_, nir, agx_win32_speculate_texture_crawls, descriptors);
@@ -1458,6 +1531,8 @@ main(int argc, char **argv)
    if (soft_fault_loads)
       NIR_PASS(_, nir, agx_win32_speculate_soft_fault_loads);
    const unsigned tex_speculated = count_tex_speculated(nir);
+   struct sample_forms forms = {{0}};
+   count_sample_forms(&nir_shader_get_entrypoint(nir)->body, 2, &forms);
    struct agx_shader_key key = {.dev = {.needs_g13x_coherency = U_TRISTATE_NO, .soft_fault = soft_fault},
                                 .has_scratch = true, .promote_constants = true, .reserved_preamble = 240};
    struct agx_shader_part part = {0};
@@ -1488,6 +1563,11 @@ main(int argc, char **argv)
           classes.alu, classes.mem, classes.tex, classes.shared, classes.barriers, classes.atomics, marked,
           speculated, tex_speculated, binary_fnv(part.binary, part.info.binary_size),
           production ? "production" : "stand-in");
+   /* T5b: samples by form (register / bindless) in innermost loops, other
+    * loops, outside loops; step A's moved count */
+   if (print_samples || crawl_bindful)
+      printf("SAMPLES reg %u %u %u bindless %u %u %u moved %u\n", forms.reg[0], forms.reg[1], forms.reg[2],
+          forms.bindless[0], forms.bindless[1], forms.bindless[2], bindful_moved);
    free(part.binary);
    ralloc_free(nir);
    glsl_type_singleton_decref();

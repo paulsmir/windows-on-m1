@@ -1004,6 +1004,7 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
         save(path,text)
     project_query_timeline(out, save)
     project_d3d_robustness(out,save)
+    project_crawl_bindful(out,save)
     project_soft_faults(out,save)
     project_wait_timing(out,save)
 
@@ -1211,6 +1212,51 @@ agx_has_soft_fault(struct agx_device *dev)
 
    agx_compile_shader_nir(nir, &key, &compiled->b);
 ''')+state[b:]
+    save(sp,state)
+
+
+def project_crawl_bindful(out,save):
+    """T5b step A (winsys/agx_win32_d3d_texture_crawl.h
+    agx_win32_d3d_crawl_bindful): after agx_nir_lower_texture has built the
+    descriptor crawls, a sample whose binding-pass handle names table entry
+    c < 16 takes texture state register c again.  Only a backend with
+    D3dCrawlBindful (the D3D12 owner under APPLE_AGX_D3D12_CRAWL_BINDFUL=1)
+    runs it; agx_win32_crawl_bindful_take() returns, and clears, the samples
+    moved on this thread since the last call (the owner's compile receipt).
+    """
+    sp='src/gallium/drivers/asahi/agx_state.c';state=(out/sp).read_text()
+    a,b=function(state,'agx_shader_initialize')
+    state=state[:a]+replace(state[a:b],'''   NIR_PASS(_, nir, agx_nir_lower_texture);
+''','''   NIR_PASS(_, nir, agx_nir_lower_texture);
+   /* T5b step A (agx_win32_d3d_texture_crawl.h) */
+   {
+      const AGX_WIN32_ASAHI_BACKEND *windows_bindful = dev->windows_private;
+      if (windows_bindful && windows_bindful->D3dCrawlBindful)
+         NIR_PASS(_, nir, agx_win32_d3d_crawl_bindful, so->info.nr_bindful_textures,
+                  &agx_win32_crawl_bindful_count);
+   }
+''')+state[b:]
+    sig='\nagx_shader_initialize(struct agx_device *dev'
+    if state.count(sig)!=1: raise RuntimeError('Native lifecycle anchor mismatch: agx_shader_initialize')
+    head=state.rindex('\n\n',0,state.index(sig))+1
+    state=state[:head]+'''
+#ifdef _MSC_VER
+#define AGX_WIN32_BINDFUL_TLS __declspec(thread)
+#else
+#define AGX_WIN32_BINDFUL_TLS _Thread_local
+#endif
+/* T5b step A: samples agx_win32_d3d_crawl_bindful moved on this thread */
+static AGX_WIN32_BINDFUL_TLS unsigned agx_win32_crawl_bindful_count;
+
+unsigned agx_win32_crawl_bindful_take(void);
+unsigned
+agx_win32_crawl_bindful_take(void)
+{
+   const unsigned count = agx_win32_crawl_bindful_count;
+   agx_win32_crawl_bindful_count = 0;
+   return count;
+}
+'''+state[head:]
     save(sp,state)
 
 

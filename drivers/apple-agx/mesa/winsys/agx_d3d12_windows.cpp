@@ -383,6 +383,49 @@ static void receipt(PCSTR stage, HRESULT status, UINT a, UINT b, UINT c, UINT d,
   AdmissionUmdDiagnostic(stage, status, values, 5u);
 }
 
+/* T5b switch, exactly "1", read once per process, default off:
+ * APPLE_AGX_D3D12_CRAWL_BINDFUL (step A, the screen's backend flag
+ * D3dCrawlBindful). */
+static bool t5b_switch(const char *name) {
+  char value[2] = {};
+  return GetEnvironmentVariableA(name, value, sizeof(value)) == 1 && value[0] == '1';
+}
+static bool t5b_crawl_bindful() {
+  static const bool on = t5b_switch("APPLE_AGX_D3D12_CRAWL_BINDFUL");
+  return on;
+}
+/* projected agx_state.c (native-asahi-batch-lifecycle.py
+ * project_crawl_bindful): the samples step A moved on this thread since
+ * the last call */
+extern "C" unsigned agx_win32_crawl_bindful_take(void);
+/* T5b compile receipt "measure-d3d12-bindful" (only while a T5b switch is
+ * set): hash hi, hash lo, stage | SRV slots that B2 moved off their
+ * (space, register) rank << 8, samples step A moved, switches (1 A).
+ * Takes the step A count of the create call it follows. */
+static void t5b_receipt(const UINT *tokens, mesa_shader_stage stage, const struct dxbc_binding_map *map) {
+  const unsigned moved = agx_win32_crawl_bindful_take();
+  const UINT switches = t5b_crawl_bindful() ? 1u : 0u;
+  if (!switches) return;
+  UINT reordered = 0;
+  if (map && map->count <= DXBC_BINDING_MAP_MAX) {
+    for (uint32_t i = 0; i < map->count; ++i) {
+      const struct dxbc_binding &b = map->bindings[i];
+      if (b.kind != DXBC_BINDING_SRV || (b.flags & DXBC_BINDING_HEAP)) continue;
+      UINT rank = 0;
+      for (uint32_t j = 0; j < map->count; ++j) {
+        const struct dxbc_binding &o = map->bindings[j];
+        if (o.kind == DXBC_BINDING_SRV && !(o.flags & DXBC_BINDING_HEAP) &&
+            (o.space < b.space || (o.space == b.space && o.reg < b.reg)))
+          ++rank;
+      }
+      if (rank != b.slot) ++reordered;
+    }
+  }
+  unsigned long long hash = 0;
+  if (tokens && tokens[1] >= 2 && tokens[1] < 0x4000000u) hash = agx_win32_shader_hash(tokens, tokens[1] * 4u);
+  receipt("measure-d3d12-bindful", S_OK, static_cast<UINT>(hash >> 32), static_cast<UINT>(hash),
+          static_cast<UINT>(stage) | (reordered & 0xffffffu) << 8, moved, switches);
+}
 /* RC74 receipt-only: the AGX statistics of every compiled shader part
  * (agx_win32_shader_stats.h), tagged with the D3D shader being compiled:
  * the compute shader around create_compute_state, the pipeline's stages
@@ -1556,6 +1599,8 @@ extern "C" HRESULT AgxD3d12OwnerCreate(const AGX_D3D12_OWNER_ARGS *args, AGX_D3D
      * refuses multisampled formats and u_blitter's resolve hits
      * UNREACHABLE("Unsupported blit") in agx_blit */
     owner->Backend.Multisample = 1;
+    /* T5b step A: exactly "1" (read once per process) */
+    owner->Backend.D3dCrawlBindful = t5b_crawl_bindful() ? 1 : 0;
     owner->Screen = AgxWin32AsahiScreenCreateForWindows(&owner->Backend, &owner->Runtime.Screen,
                                                        &owner->OwnerOperations, &owner->Owner,
                                                        AdmissionUmdAsahiBatchOperations());
@@ -2209,6 +2254,7 @@ extern "C" HRESULT AgxD3d12OwnerCreateComputeFlags(AGX_D3D12_OWNER *owner, const
      * variable nothing is compiled differently and no line is written. */
     agx_win32_diag_cut_begin(static_cast<uint32_t>(tag.Hash));
     compute->State = pipe->create_compute_state(pipe, &state);
+    t5b_receipt(tokens, MESA_SHADER_COMPUTE, &compute->Bindings);
     uint32_t cut[4] = {};
     if (agx_win32_diag_cut_end(cut)) {
       const UINT v[6] = {static_cast<UINT>(tag.Hash >> 32), static_cast<UINT>(tag.Hash), cut[0], cut[1], cut[2], cut[3]};
@@ -4338,10 +4384,13 @@ static void *create_shader(struct pipe_context *pipe, const UINT *tokens, mesa_s
   struct pipe_shader_state state = {};
   state.type = PIPE_SHADER_IR_NIR;
   state.ir.nir = nir;
-  if (stage == MESA_SHADER_GEOMETRY) return pipe->create_gs_state(pipe, &state); /* C27 */
-  if (stage == MESA_SHADER_TESS_CTRL) return pipe->create_tcs_state(pipe, &state); /* C37 */
-  if (stage == MESA_SHADER_TESS_EVAL) return pipe->create_tes_state(pipe, &state);
-  void *cso = stage == MESA_SHADER_VERTEX ? pipe->create_vs_state(pipe, &state) : pipe->create_fs_state(pipe, &state);
+  void *cso = stage == MESA_SHADER_GEOMETRY    ? pipe->create_gs_state(pipe, &state)  /* C27 */
+              : stage == MESA_SHADER_TESS_CTRL ? pipe->create_tcs_state(pipe, &state) /* C37 */
+              : stage == MESA_SHADER_TESS_EVAL ? pipe->create_tes_state(pipe, &state)
+              : stage == MESA_SHADER_VERTEX    ? pipe->create_vs_state(pipe, &state)
+                                               : pipe->create_fs_state(pipe, &state);
+  t5b_receipt(tokens, stage, bindings);
+  if (stage == MESA_SHADER_GEOMETRY || stage == MESA_SHADER_TESS_CTRL || stage == MESA_SHADER_TESS_EVAL) return cso;
   if (!cso) {
     receipt("measure-d3d12-graphics-shader-slots", E_NOTIMPL, static_cast<UINT>(stage), 4u, 0u);
     dump_shader_input(tokens, stage, 4u);

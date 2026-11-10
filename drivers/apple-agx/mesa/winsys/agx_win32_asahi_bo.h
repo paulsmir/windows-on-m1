@@ -70,6 +70,11 @@ typedef struct {
    * semantics (D3D UMD only; the OpenGL ICD keeps the robustness its
    * contexts ask for). */
   int D3dRobustness;
+  /* T5b step A: the screen's shaders take texture state register c again
+   * for samples whose crawl forced the bindless handle of table entry
+   * c < 16 (D3D12 owner only, under APPLE_AGX_D3D12_CRAWL_BINDFUL=1;
+   * agx_win32_d3d_texture_crawl.h agx_win32_d3d_crawl_bindful). */
+  int D3dCrawlBindful;
   int Failed;
   struct pipe_context *(*ContextCreate)(struct pipe_screen *, void *, unsigned);
   void (*ContextDestroy)(struct pipe_context *);

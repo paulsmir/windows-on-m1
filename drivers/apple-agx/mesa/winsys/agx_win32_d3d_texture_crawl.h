@@ -223,6 +223,85 @@ agx_win32_lower_d3d_layer_clamp(nir_shader *nir)
    return nir_shader_instructions_pass(nir, agx_win32_lower_d3d_layer_clamp_instr, nir_metadata_control_flow, NULL);
 }
 
+/* T5b step A: a crawl does not need the bindless form of its sample.
+ *
+ * Gallium's agx_nir_lower_bindings keeps a texture in its texture state
+ * register (register i == descriptor-table entry i, loaded by the stage's
+ * USC TEXTURE word for i < 16) unless the sample needs a descriptor crawl
+ * (agx_nir_needs_texture_crawl: every array sample's layer clamp, txf
+ * robustness), and then gives it the handle load_texture_handle_agx(i), an
+ * index into the same table, because agx_nir_lower_texture builds the crawl
+ * from that handle.  Once agx_nir_lower_texture has run, the crawl loads
+ * hold their own copy of the handle; the sample itself can take the
+ * register again: for i < 16 and i < the shader's texture count (the
+ * table's texture entries, all loaded into registers 0..15) register i
+ * holds exactly the descriptor the handle addresses.  Images, D3D12 heap
+ * handles (bindless_image_agx, DXBC_HEAP_HANDLE_MARK), dynamic indices,
+ * entries >= 16 and queries keep the bindless form.  rewritten counts the
+ * samples moved (compile receipt).  APPLE_AGX_D3D12_CRAWL_BINDFUL=1 (the
+ * D3D12 owner's backend flag D3dCrawlBindful) runs it right after
+ * agx_nir_lower_texture; default off. */
+struct agx_win32_crawl_bindful_state {
+   unsigned textures;
+   unsigned *rewritten;
+};
+
+/* the constant table index of a binding-pass handle: c, or the clamped
+ * umin(c, n - 1) of agx_nir_lower_bindings when it is not folded yet */
+static inline bool
+agx_win32_crawl_bindful_index(nir_def *index, unsigned *out)
+{
+   nir_scalar s = nir_scalar_resolved(index, 0);
+   if (nir_scalar_is_const(s)) {
+      const uint64_t c = nir_scalar_as_uint(s);
+      if (c > 0xffffu)
+         return false;
+      *out = (unsigned)c;
+      return true;
+   }
+   if (!nir_scalar_is_alu(s) || nir_scalar_alu_op(s) != nir_op_umin)
+      return false;
+   nir_scalar a = nir_scalar_chase_alu_src(s, 0), c = nir_scalar_chase_alu_src(s, 1);
+   if (!nir_scalar_is_const(a) || !nir_scalar_is_const(c))
+      return false;
+   const uint64_t x = nir_scalar_as_uint(a), y = nir_scalar_as_uint(c);
+   const uint64_t m = x < y ? x : y;
+   if (m > 0xffffu)
+      return false;
+   *out = (unsigned)m;
+   return true;
+}
+
+static inline bool
+agx_win32_crawl_bindful_instr(nir_builder *b, nir_tex_instr *tex, void *data)
+{
+   (void)b;
+   struct agx_win32_crawl_bindful_state *state = (struct agx_win32_crawl_bindful_state *)data;
+   const int h = nir_tex_instr_src_index(tex, nir_tex_src_texture_handle);
+   if (h < 0 || nir_tex_instr_is_query(tex))
+      return false;
+   nir_intrinsic_instr *handle = nir_src_as_intrinsic(tex->src[h].src);
+   unsigned index = 0;
+   if (!handle || handle->intrinsic != nir_intrinsic_load_texture_handle_agx ||
+       !agx_win32_crawl_bindful_index(handle->src[0].ssa, &index) || index >= 16u ||
+       index >= state->textures)
+      return false;
+   nir_tex_instr_remove_src(tex, h);
+   tex->texture_index = index;
+   if (state->rewritten)
+      ++*state->rewritten;
+   return true;
+}
+
+/* after agx_nir_lower_texture; textures = so->info.nr_bindful_textures
+ * (BITSET_LAST_BIT(textures_used) as the binding pass saw it) */
+static inline bool
+agx_win32_d3d_crawl_bindful(nir_shader *nir, unsigned textures, unsigned *rewritten)
+{
+   struct agx_win32_crawl_bindful_state state = {textures, rewritten};
+   return nir_shader_tex_pass(nir, agx_win32_crawl_bindful_instr, nir_metadata_control_flow, &state);
+}
+
 /* M3: Asahi never runs nir_opt_licm, so a texture descriptor crawl with a
  * loop-invariant handle (load_global_constant, CAN_REORDER by definition)
  * runs on every iteration of the loop around its sample (GravityMark planet
