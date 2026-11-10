@@ -76939,3 +76939,44 @@ EXP2318 ACTUAL 2026-11-10T13:08:34Z:
 - New close-out rule from the architect (answer to the blind gate noted in EXP2317): HD fps_frames of arm w/p0 of every GM package must be >= 48.0 (EXP2316/2318 level 49.15 - 2.5 %), otherwise the next package is not staged.
 - Recovery rec2318h: started 2026-11-10T13:03:21Z, RECOVERY_DONE about 13:08Z; VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_STORAGE_APPLEANS_OK, cleanup verdict PASS. Restart line: BUGCHECK ok base=0xfffff8021c000000 code=0x0 p1=0x0 p2=0x0 p3=0x0 p4=0x0. Display/SSH/storage alive, 8 CPUs.
 - Next: bench slot for ANSQ-T7a/T7b (AppleAns session), then EXP2319 = N6 diagnostic cuts on its own package (eight HD PERF arms, p0 >= 48.0 as package control); offline in parallel the R14 prelude notify gate and PT1.
+
+## ANSQ-T7a — AppleAns 0.4.8 on the default bus type (ACTUAL, 2026-11-10T13:19:00Z)
+
+- Window granted by the bench owner after the EXP2318 rollback (launcher 68625; that rollback's restart line:
+  "BUGCHECK ok base=0xfffff8021c000000 code=0x0 ...", read by the bench owner on 0.4.7).
+- Phases: capture on 0.4.7 13:09:21Z; ansq-stage.ps1 STAGE_OK (oem18.inf, store appleans.inf_arm64_f63f466bf49e4832);
+  restart 13:09:56Z, boot 13:10:25Z, SSH up 13:11:02Z; captures 13:11Z and 13:12:55Z; verify 13:12Z.
+- Expected vs actual: running hash B7D16A0B...8868: CONFIRMED; 0xA9 = 0xa9020004, two 0xA6, no 0xAA/0xA4/0xA5:
+  CONFIRMED; DSM 13/13 status 0: CONFIRMED; VERIFY_MANIFEST_OK (330/330), chkdsk clean, C: not dirty, 8 CPUs, no
+  warnings: CONFIRMED; BusType still Fibre Channel: CONFIRMED.
+- Pre-check for T7b: disk devnode SCSI\DISK&VEN_NVME&PROD_APPLE_SSD_AP0256 InLocalMachineContainer = True,
+  ContainerId {00000000-0000-0000-FFFF-FFFFFFFFFFFF}, RemovalPolicy 1; adapter ACPI\APPL0003\0 the same; volume C
+  DriveType Fixed.
+- Baseline of refused requests under BusTypeFibre (first measurement of what Windows sends that the miniport
+  does not implement): SRB functions 0x25 (3) and 0x17 (2); SRB_IO_CONTROL codes 0x1b0500 (1), 0x1b0501 (1),
+  0x1b0620 (2), 0x1b0720 (11), 0x1b0780 (23, then 51 two minutes later: it grows with each capture, i.e. it is
+  triggered by the storage queries of the capture script itself); CDB opcodes 0. The codes were not decoded
+  against the headers in this step.
+- Verdict: CONFIRMED. 0.4.8 is accepted as the installed driver on the ANSQ-T6 criteria.
+- Evidence: .local/experiments/ANSBUS1/evidence/ANSQ-T7a/{pre-047.txt,stage.txt,restart-run.log,post-048.txt,post-048-b.txt,verify.txt}.
+
+## ANSQ-T7b — bus type NVMe (ACTUAL, 2026-11-10T13:19:00Z)
+
+- Phases: t7-bustype.ps1 T7_BUSTYPE_OK 13:13:15Z (InLocalMachineContainer True, old value absent, new 17 DWord);
+  restart 13:13:16Z, boot 13:13:40Z, SSH up 13:14:18Z (run_uefi PID 77567); captures 13:15Z and 13:17:02Z; verify
+  13:16Z.
+- Expected vs actual: Get-PhysicalDisk BusType NVMe and Get-Disk Bus NVMe: CONFIRMED (was Fibre Channel);
+  MediaType SSD, "No Seek Penalty", "Trim Supported": unchanged, CONFIRMED; volume C DriveType Fixed, disk
+  RemovalPolicy 1, InLocalMachineContainer True: CONFIRMED; no disk/storport/Ntfs warning or error since boot:
+  CONFIRMED; AppleAns records only 0xA9 = 0xa9020004 and two 0xA6: CONFIRMED; DSM 31/31 status 0,
+  TRIM_BOUNDS_PASS: CONFIRMED; VERIFY_MANIFEST_OK (330/330), chkdsk clean, C: not dirty: CONFIRMED.
+- Refused requests: the set of (kind, code) entries is a subset of T7a's (0x25, 0x17; 0x1b0501, 0x1b0620, 0x1b0720,
+  0x1b0780; 0x1b0500 not seen in this boot); no new entry; totals at comparable uptime not above T7a (SRB
+  functions 5 = 5; SRB_IO_CONTROL 40 vs 66). Windows sends this adapter nothing new when it is typed NVMe:
+  CONFIRMED for the first 3.5 minutes of uptime and the queries of the capture script; longer-running
+  consumers (health polling, firmware tools) were not exercised.
+- m1n1 BUGCHECK line: not printed in this profile for either restart; the bench owner reads it on the next GPU boot.
+- Verdict: CONFIRMED. Installed and recorded AppleAns: 0.4.8 ANSBUILD018-P (zip d1595c5a..., sys b7d16a0b...),
+  UnmapMode 2 with fence C:, Parameters\BusType 0x11. Rollback: t7-rollback.ps1 (delete the value) + restart;
+  stores 0.4.7 (62c12175c51fd95d) and 0.4.5 (20a748c874b1e861) kept.
+- Evidence: .local/experiments/ANSBUS1/evidence/ANSQ-T7b/{bustype.txt,restart-run.log,post-nvme.txt,post-nvme-b.txt,verify.txt}.
