@@ -57,7 +57,7 @@ typedef const wchar_t *PCWSTR;
 typedef const wchar_t *UNICODE_STRING;
 typedef struct { ULONG TitleIndex, Type, DataLength; UCHAR Data[4]; }
  KEY_VALUE_PARTIAL_INFORMATION, *PKEY_VALUE_PARTIAL_INFORMATION;
-typedef struct { void *PhysicalDeviceObject; ULONG G3RetainedSlots, G3CrossProcessPairs; } ADMISSION_CONTEXT;
+typedef struct { void *PhysicalDeviceObject; ULONG G3RetainedSlots, G3CrossProcessPairs, SubmitRequeue; } ADMISSION_CONTEXT;
 static const wchar_t *selected;
 static int mode;
 static unsigned opened, closed;
@@ -108,7 +108,7 @@ int main(int argc,char **argv) {
  (void)AdmissionPlatformSwitchDisabled;
  assert(argc==3);wchar_t name[80];assert(mbstowcs(name,argv[1],80)<80);
  selected=name;mode=atoi(argv[2]);
- ADMISSION_CONTEXT context={(void *)1,0u,0u};if(mode==7)context.PhysicalDeviceObject=NULL;
+ ADMISSION_CONTEXT context={(void *)1,0u,0u,0u};if(mode==7)context.PhysicalDeviceObject=NULL;
  Runtime r={0};configure(&r,&context);
  assert(opened==closed);
  printf("%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u\n",

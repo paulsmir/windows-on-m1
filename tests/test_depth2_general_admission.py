@@ -132,7 +132,7 @@ typedef struct {
  unsigned char XprocLeadEnabled, XprocLeadWaive; /* C2a: Wom1CrossProcessPrivateLead, default off */
  ADMISSION_JOB_WINDOW_XPROC_RECEIPT XprocReceipt; unsigned long long XprocExportQpc;
 } Runtime;
-typedef struct { unsigned G3RetainedSlots, G3CrossProcessPairs; } Adapter; /* V1 Wom1G3RetainedSlots */
+typedef struct { unsigned G3RetainedSlots, G3CrossProcessPairs, SubmitRequeue; } Adapter; /* V1 Wom1G3RetainedSlots */
 static unsigned char AdmissionPlatformDwordValue(void *c,const wchar_t *n,unsigned *v) {
  (void)c;(void)n;(void)v;return 0;
 }

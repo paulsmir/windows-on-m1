@@ -264,6 +264,7 @@ typedef struct {
            volatile int NotAdmissible[ADMISSION_SUBMIT_NOT_REASONS], ContextLimitReported, Requeued;
   } SubmitPath;
   volatile int SubmitReportedFence; /* reported to dxgkrnl, retire pending */
+  ULONG SubmitRequeue; /* F-A2: Wom1SubmitRequeue */
   ADMISSION_BACKEND_IMAGE BackendImage;
   ADMISSION_BACKEND_IMAGE_SNAPSHOT BackendSnapshot;
 } ADMISSION_CONTEXT;
@@ -403,6 +404,39 @@ static int AdmissionPlatformRuntimeAwaitWork(ADMISSION_CONTEXT *adapter,
   (void)timeout_ms;
   if (reason) *reason = adapter->RuntimeReady ? 0u : 4u;
   return AdmissionPlatformRuntimeReady(adapter);
+}
+/* F-A2: the wait with an admissibility predicate. A model of the real loop
+ * (tests/test_g4_envelope_backpressure.py runs that one): each pass tests
+ * the predicate, then "ready"; between passes await_hook stands for what
+ * the worker does before it sets SlotEvent. */
+typedef BOOLEAN (*ADMISSION_AWAIT_ADMISSIBLE)(ADMISSION_CONTEXT *, void *);
+static void (*await_hook)(void);
+static int await_predicate_calls, await_passes;
+static int AdmissionPlatformRuntimeAwaitWorkEx(ADMISSION_CONTEXT *adapter,
+    ULONG timeout_ms, ULONG *reason, ADMISSION_AWAIT_ADMISSIBLE admissible,
+    void *argument, BOOLEAN *admitted) {
+  unsigned pass;
+  (void)timeout_ms;
+  if (admitted) *admitted = FALSE;
+  for (pass = 0; pass < 4u; ++pass) {
+    ++await_passes;
+    if (admissible) {
+      ++await_predicate_calls;
+      if (admissible(adapter, argument)) {
+        if (admitted) *admitted = TRUE;
+        if (reason) *reason = 0u;
+        return 1;
+      }
+    }
+    if (AdmissionPlatformRuntimeReady(adapter)) {
+      if (reason) *reason = 0u;
+      return 1;
+    }
+    if (!await_hook) break;
+    await_hook();
+  }
+  if (reason) *reason = 4u;
+  return 0;
 }
 static NTSTATUS AdmissionMemoryRuntimeScanoutView(
     ADMISSION_CONTEXT *adapter, ADMISSION_SCANOUT_MEMORY_VIEW *view) {
@@ -798,6 +832,128 @@ static void phase5a_cases(ADMISSION_CONTEXT *adapter,
   a->Object.FenceOutstanding = 7u;
   a->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
   puts("phase 5a pending submissions: PASS");
+}
+
+/* F-A2 (Wom1SubmitRequeue). dxgkrnl was told fence N of context C completed
+ * and submits S at once; the worker has not retired N from C yet, and C's
+ * second fence P runs. WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * The submit thread sleeping until P completed and nothing is pending (a
+ * whole job, 1.7-2.3 ms) and S missing prebind and kick; with the fix S
+ * must be in G4Pending while P still owns the slot, later submissions must
+ * stay behind it, and with the switch off nothing may change. */
+static ADMISSION_RENDER_CONTEXT *requeue_context;
+static unsigned requeue_retire;
+static void requeue_worker_retires(void) {
+  /* AdmissionBackendComplete: retire under SchedulerLock, then SlotEvent */
+  AdmissionContextRetireFence(requeue_context, requeue_retire);
+}
+static void requeue_cases(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *a, DXGKARG_SUBMITCOMMANDVIRTUAL *args) {
+  static ADMISSION_RENDER_CONTEXT c, d;
+  DXGKARG_SUBMITCOMMANDVIRTUAL s = *args, t = *args;
+  const int deferred = adapter->SubmitPath.Deferred, immediate = adapter->SubmitPath.Immediate;
+  const int binds = adapter->SubmitPath.Binds;
+  const int before = dispatches;
+  enum { N = 40, P = 41, S = 42, T = 43 };
+  c = *a; d = *a;
+  c.GpuvaG3DmaBufferVa = d.GpuvaG3DmaBufferVa = 0ULL;
+  c.GpuvaG3DmaBufferBytes = d.GpuvaG3DmaBufferBytes = 0u;
+  d.Object.FenceOutstanding = 0u; d.GpuvaG3SecondFence = 0u;
+  /* C: N reported and not yet retired, P bound and running in the slot. */
+  a->Object.FenceOutstanding = 0u;
+  c.Object.FenceOutstanding = N; c.GpuvaG3SecondFence = P;
+  AppleAgxSchedulerInitialize(&adapter->Scheduler);
+  assert(AppleAgxSchedulerQueueFence(&adapter->Scheduler, 0u, 0u, P));
+  adapter->RenderPacket.State = AdmissionRenderPacketQueued;
+  adapter->RenderPacket.Description.Fence = P;
+  adapter->RuntimeQueueable = 1; adapter->RuntimeReady = 0;
+  adapter->SubmitReportedFence = N;
+  worker_busy = 1;
+  s.hContext = &c; s.SubmissionFenceId = S;
+  t.hContext = &d; t.SubmissionFenceId = T;
+  requeue_context = &c; requeue_retire = N;
+  memset((void *)adapter->SubmitPath.NotAdmissible, 0, sizeof(adapter->SubmitPath.NotAdmissible));
+  adapter->SubmitPath.ContextLimitReported = adapter->SubmitPath.Requeued = 0;
+  /* Switch off: today's wait, which never looks at admissibility again. It
+   * ends only on "ready and empty", which P's run does not give. */
+  adapter->SubmitRequeue = 0u;
+  await_hook = requeue_worker_retires;
+  await_predicate_calls = await_passes = 0;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &c, &s) != STATUS_SUCCESS);
+  assert(await_predicate_calls == 0 && await_passes == 0 && adapter->G4PendingCount == 0u);
+  assert(c.Object.FenceOutstanding == N && c.GpuvaG3SecondFence == P);
+  assert(adapter->SubmitPath.Requeued == 0 && adapter->SubmitPath.Deferred == deferred);
+  assert(adapter->SubmitPath.NotAdmissible[ADMISSION_SUBMIT_NOT_CONTEXT_LIMIT - 1u] == 1 &&
+         adapter->SubmitPath.ContextLimitReported == 1);
+  /* Switch on: the wait re-evaluates admissibility. The first pass still
+   * refuses (N outstanding); the worker retires N and signals; the second
+   * pass admits S on the deferred path, while P still owns the slot. */
+  adapter->SubmitRequeue = 1u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &c, &s) == STATUS_SUCCESS);
+  assert(await_predicate_calls == 2 && await_passes == 2);
+  assert(adapter->G4PendingCount == 1u && dispatches == before + 1);
+  assert(adapter->G4Pending[adapter->G4PendingHead].State == AdmissionG4PendingQueued &&
+         adapter->G4Pending[adapter->G4PendingHead].Fence == S &&
+         adapter->G4Pending[adapter->G4PendingHead].Context == &c);
+  assert(c.Object.FenceOutstanding == P && c.GpuvaG3SecondFence == S);
+  assert(adapter->RenderPacket.State == AdmissionRenderPacketQueued &&
+         adapter->RenderPacket.Description.Fence == P);
+  assert(adapter->Scheduler.LastSubmittedFence == S);
+  assert(adapter->SubmitPath.Requeued == 1 && adapter->SubmitPath.Deferred == deferred + 1 &&
+         adapter->SubmitPath.Immediate == immediate);
+  /* the refusal was counted once, at the decision, not per wait pass */
+  assert(adapter->SubmitPath.NotAdmissible[ADMISSION_SUBMIT_NOT_CONTEXT_LIMIT - 1u] == 2 &&
+         adapter->SubmitPath.ContextLimitReported == 2);
+  adapter->SubmitReportedFence = 0;
+  /* A later submission T (another context) is admissible at once and
+   * queues behind S, never ahead of it. */
+  await_predicate_calls = 0;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &d, &t) == STATUS_SUCCESS);
+  assert(await_predicate_calls == 0 && adapter->G4PendingCount == 2u);
+  assert(adapter->G4Pending[adapter->G4PendingHead].Fence == S &&
+         adapter->G4Pending[(adapter->G4PendingHead + 1u) % ADMISSION_G4_PENDING_CAPACITY].Fence == T);
+  /* Nothing binds while P runs; then S, then T, in submit order. */
+  assert(AdmissionG4PendingBindHead(adapter));
+  assert(adapter->G4PendingCount == 2u && adapter->RenderPacket.Description.Fence == P);
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  adapter->BackendImage.G4Native = 0u; adapter->BackendImage.BoundFence = 0u;
+  assert(AppleAgxSchedulerActivateFence(&adapter->Scheduler, 0u, 0u, P));
+  assert(AppleAgxSchedulerCompleteActiveFence(&adapter->Scheduler, 0u, 0u, P));
+  AdmissionContextRetireFence(&c, P);
+  assert(AdmissionG4PendingBindHead(adapter));
+  assert(adapter->G4PendingCount == 1u && adapter->RenderPacket.Description.Fence == S &&
+         adapter->SubmitPath.Binds == binds + 1);
+  adapter->RenderPacket.State = AdmissionRenderPacketEmpty;
+  adapter->BackendImage.G4Native = 0u; adapter->BackendImage.BoundFence = 0u;
+  assert(AppleAgxSchedulerActivateFence(&adapter->Scheduler, 0u, 0u, S));
+  assert(AppleAgxSchedulerCompleteActiveFence(&adapter->Scheduler, 0u, 0u, S));
+  AdmissionContextRetireFence(&c, S);
+  assert(AdmissionG4PendingBindHead(adapter));
+  assert(adapter->G4PendingCount == 0u && adapter->RenderPacket.Description.Fence == T);
+  /* Switch on, but the wait ends on a refusal that is not transient (the
+   * runtime stops): refused as today, nothing queued. */
+  adapter->RenderPacket.State = AdmissionRenderPacketQueued; /* T runs */
+  c.Object.FenceOutstanding = N; c.GpuvaG3SecondFence = P;
+  await_hook = NULL; await_predicate_calls = 0;
+  s.SubmissionFenceId = 44u;
+  assert(AdmissionG4SubmitVirtualEnvelope(adapter, &c, &s) != STATUS_SUCCESS);
+  assert(await_predicate_calls == 1 && adapter->G4PendingCount == 0u &&
+         c.GpuvaG3SecondFence == P && adapter->SubmitPath.Requeued == 1);
+  /* Switch on and the slot drains before the context does ("ready and
+   * empty" first): the immediate path, as today. */
+  /* (the immediate bind itself is covered by main(); here only the choice) */
+  /* Restore the caller's state: A's fence 7 queued in the slot. */
+  adapter->SubmitRequeue = 0u;
+  worker_busy = 0;
+  adapter->RuntimeQueueable = 0; adapter->RuntimeReady = 1;
+  adapter->BackendImage.G4Native = 0u; adapter->BackendImage.BoundFence = 0u;
+  AppleAgxSchedulerInitialize(&adapter->Scheduler);
+  assert(AppleAgxSchedulerQueueFence(&adapter->Scheduler, 0u, 0u, 7u));
+  adapter->RenderPacket.State = AdmissionRenderPacketQueued;
+  adapter->RenderPacket.Description.Fence = 7u;
+  a->Object.FenceOutstanding = 7u;
+  a->GpuvaG3DmaBufferVa = args->DmaBufferVirtualAddress;
+  puts("F-A2 submit requeue: PASS");
 }
 
 #ifdef REPLAY_JOB_AHEAD
@@ -1409,6 +1565,7 @@ int main(void) {
   assert(context.Object.FenceOutstanding==7u &&
          context.GpuvaG3DmaBufferVa==args.DmaBufferVirtualAddress);
   phase5a_cases(&adapter, &context, &args);
+  requeue_cases(&adapter, &context, &args);
 #ifdef REPLAY_JOB_AHEAD
   build_ahead_cases(&adapter, &context, &args);
 #endif

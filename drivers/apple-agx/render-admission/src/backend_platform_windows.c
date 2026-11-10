@@ -6011,6 +6011,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   runtime->CompletionContext = NULL;
   InterlockedExchange(&adapter->SubmitReportedFence, 0);
   KeReleaseSpinLock(&adapter->SchedulerLock,old_irql);
+  /* F-A2 (Wom1SubmitRequeue): the context has room again; a submission
+   * waiting for it re-tests admissibility (AdmissionG4SubmitAwait). */
+  if (adapter->SubmitRequeue != 0u)
+    AdmissionPlatformRuntimeSlotChanged(adapter);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (!AdmissionCompletedOutputMarkNotified(
           &runtime->CompletedOutput, Fence) ||
@@ -9267,6 +9271,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
    * keeps one VM slot leased per job and released at its end. */
   Context->G3RetainedSlots =
       !AdmissionPlatformSwitchDisabled(Context, L"Wom1G3RetainedSlots") ? 1u : 0u;
+  /* F-A2 (default off): REG_DWORD Wom1SubmitRequeue = 1. */
+  Context->SubmitRequeue =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1SubmitRequeue") ? 1u : 0u;
   runtime->RcDepth2 = runtime->RcReceiptEnabled = runtime->RcExportPending = FALSE;
   runtime->Depth2General = FALSE;
   runtime->Depth2Prelude = FALSE;
@@ -10599,14 +10606,16 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeQueueable(
  * bounded backpressure instead: wait (PASSIVE_LEVEL, no lock held) until the
  * runtime is ready and the render slot is empty.  Non-transient refusals
  * (stopping, resetting, failed, missing provider) return immediately. */
-_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
-    ADMISSION_CONTEXT *Context, ULONG TimeoutMs, ULONG *FailedPredicate) {
+_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWorkEx(
+    ADMISSION_CONTEXT *Context, ULONG TimeoutMs, ULONG *FailedPredicate,
+    ADMISSION_AWAIT_ADMISSIBLE Admissible, PVOID Argument, BOOLEAN *Admitted) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context != NULL
       ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime : NULL;
   ULONGLONG deadline = KeQueryInterruptTime() + (ULONGLONG)TimeoutMs * 10000ULL;
   LARGE_INTEGER slice;
   ULONG reason = 0u, firstReason = 0u;
   LONGLONG waitStart = 0;
+  BOOLEAN admitted = FALSE;
   slice.QuadPart = -100000LL; /* 10 ms backstop */
 #if defined(ADMISSION_PREEMPT_TRACE_ON)
   AdmissionPreemptTraceAwaitEnter(Context);
@@ -10615,6 +10624,14 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
     /* Clear before testing: a release after the test sets it again. */
     if (runtime != NULL)
       KeClearEvent(&runtime->SlotEvent);
+    /* F-A2: the waiting submission became admissible to the pending queue
+     * (its context's oldest fence was retired): it need not wait for the
+     * running job and an empty slot. */
+    if (Admissible != NULL && Context != NULL && Admissible(Context, Argument)) {
+      admitted = TRUE;
+      reason = 0u;
+      break;
+    }
     if (AdmissionPlatformRuntimeReadyEx(Context, &reason)) {
       KIRQL oldIrql;
       BOOLEAN empty;
@@ -10666,7 +10683,14 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
   AdmissionPreemptTraceAwaitExit(Context, waitStart, firstReason, reason);
 #endif
   if (FailedPredicate != NULL) *FailedPredicate = reason;
+  if (Admitted != NULL) *Admitted = admitted;
   return reason == 0u;
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(
+    ADMISSION_CONTEXT *Context, ULONG TimeoutMs, ULONG *FailedPredicate) {
+  return AdmissionPlatformRuntimeAwaitWorkEx(Context, TimeoutMs,
+                                             FailedPredicate, NULL, NULL, NULL);
 }
 
 #undef ADMISSION_DELEGATE_FENCE

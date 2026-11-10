@@ -912,6 +912,11 @@ typedef struct _ADMISSION_CONTEXT {
    * Written by the worker (cleared under SchedulerLock with the retire),
    * compared under SchedulerLock by the submit decision. */
   volatile LONG SubmitReportedFence;
+  /* F-A2 (R9 A.8): REG_DWORD Wom1SubmitRequeue = 1, read at start, default
+   * 0. A submission that was not admissible keeps testing admissibility
+   * while it waits and then takes the deferred path
+   * (AdmissionG4SubmitAwait); 0: it waits for "ready and empty" only. */
+  ULONG SubmitRequeue;
   ADMISSION_BACKEND_IMAGE BackendImage;
   /* EXP1105: Prepare image of the objects a G4 job changes. */
   ADMISSION_BACKEND_IMAGE_SNAPSHOT BackendSnapshot;
@@ -2147,6 +2152,17 @@ VOID AdmissionPlatformRuntimeSlotChanged(_In_opt_ ADMISSION_CONTEXT *Context);
 BOOLEAN AdmissionPlatformRuntimeAwaitWork(
     _In_ ADMISSION_CONTEXT *Context, _In_ ULONG TimeoutMs,
     _Out_opt_ ULONG *FailedPredicate);
+/* F-A2: the same bounded wait with an optional predicate, tested on every
+ * pass after SlotEvent was cleared (PASSIVE_LEVEL, no lock held): TRUE with
+ * *Admitted set when it holds, although the runtime is not "ready and
+ * empty". Admissible NULL is AdmissionPlatformRuntimeAwaitWork. */
+typedef BOOLEAN (*ADMISSION_AWAIT_ADMISSIBLE)(ADMISSION_CONTEXT *Context,
+                                              PVOID Argument);
+BOOLEAN AdmissionPlatformRuntimeAwaitWorkEx(
+    _In_ ADMISSION_CONTEXT *Context, _In_ ULONG TimeoutMs,
+    _Out_opt_ ULONG *FailedPredicate,
+    _In_opt_ ADMISSION_AWAIT_ADMISSIBLE Admissible, _In_opt_ PVOID Argument,
+    _Out_opt_ BOOLEAN *Admitted);
 BOOLEAN AdmissionPlatformRuntimeSubmit(
     _Inout_ ADMISSION_CONTEXT *Context);
 /* Phase 5a: the runtime can take work later (started, not stopping,

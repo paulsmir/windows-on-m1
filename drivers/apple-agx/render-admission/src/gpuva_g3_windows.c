@@ -5274,6 +5274,39 @@ static BOOLEAN AdmissionG4PendingAdmissible(ADMISSION_CONTEXT *adapter,
   return FALSE;
 }
 
+/* F-A2: the predicate of a waiting submission; no receipt, no side effect. */
+static BOOLEAN AdmissionG4RequeueAdmissible(ADMISSION_CONTEXT *adapter,
+                                            PVOID context) {
+  return AdmissionG4PendingAdmissibleWhy(adapter,
+      (ADMISSION_RENDER_CONTEXT *)context, NULL, NULL);
+}
+
+/* The wait of a submission that was not admissible at its decision
+ * (PASSIVE_LEVEL, no lock held; at most 10 s, EXP1014/EXP1021). Without
+ * Wom1SubmitRequeue: until the runtime is ready and the render slot and the
+ * pending queue are empty, then the immediate path. F-A2 (R9 A.8), with the
+ * switch: the wait also ends as soon as the submission is admissible; it
+ * then takes the deferred path (*Deferred = TRUE) and joins the tail of the
+ * pending queue, behind everything queued before it; dxgkrnl issues the
+ * next submission of the node only after this call returned, so nothing
+ * overtakes it. "Ready and empty" keeps the immediate path, which by its
+ * own condition overtakes nothing. */
+static BOOLEAN AdmissionG4SubmitAwait(ADMISSION_CONTEXT *adapter,
+    ADMISSION_RENDER_CONTEXT *context, ULONG *FailedPredicate,
+    BOOLEAN *Deferred) {
+  BOOLEAN admitted = FALSE;
+  if (adapter->SubmitRequeue == 0u)
+    return AdmissionPlatformRuntimeAwaitWork(adapter, 10000u, FailedPredicate);
+  if (!AdmissionPlatformRuntimeAwaitWorkEx(adapter, 10000u, FailedPredicate,
+          AdmissionG4RequeueAdmissible, context, &admitted))
+    return FALSE;
+  if (admitted) {
+    *Deferred = TRUE;
+    InterlockedIncrement(&adapter->SubmitPath.Requeued);
+  }
+  return TRUE;
+}
+
 /* Receipt only. Caller holds SchedulerLock at the failing decision, before
  * rollback. The Admissible bit records the original path selection; never
  * re-run PendingAdmissible here (it also checks runtime state outside this
@@ -6125,7 +6158,7 @@ static NTSTATUS AdmissionG3SubmitPresentComputeInner(ADMISSION_CONTEXT *adapter,
       ADMISSION_PRESENT_CPU(4u);
   }
   deferred = AdmissionG4PendingAdmissible(adapter, context);
-  if (!deferred && !AdmissionPlatformRuntimeAwaitWork(adapter, 10000u, NULL))
+  if (!deferred && !AdmissionG4SubmitAwait(adapter, context, NULL, &deferred))
     ADMISSION_PRESENT_CPU(5u);
   ExAcquireFastMutex(&state->Lock);
   /* The arena is made once and never moves until the process ends. */
@@ -6304,11 +6337,11 @@ static NTSTATUS AdmissionG4SubmitVirtualEnvelope(
 /* EXP1014/EXP1021: wait at most 10 s for the previous job (EXP1020: backend
  * jobs outlived 1 s); stopping and resetting (TDR) still refuse at once. */
 #define ADMISSION_G4_RUNTIME_READY() \
-  AdmissionPlatformRuntimeAwaitWork(adapter, 10000u, &runtimePredicate)
+  AdmissionG4SubmitAwait(adapter, context, &runtimePredicate, &deferred)
 #else
 #define ADMISSION_G4_REJECTS(id, expression) (expression)
 #define ADMISSION_G4_RUNTIME_READY() \
-  AdmissionPlatformRuntimeAwaitWork(adapter, 10000u, NULL)
+  AdmissionG4SubmitAwait(adapter, context, NULL, &deferred)
 #endif
   /* Phase 5a: while the render slot holds another context's job, queue
    * instead of waiting on dxgkrnl's VidSch worker thread. */

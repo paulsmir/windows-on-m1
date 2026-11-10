@@ -111,5 +111,71 @@ class SubmitPathReceipt(unittest.TestCase):
         self.assertEqual(g3.count('SubmitPath.NotAdmissible['), 1)
 
 
+class SubmitRequeueWiring(unittest.TestCase):
+    """F-A2 (Wom1SubmitRequeue). WHAT REAL BUG OR INVARIANT WILL THIS TEST
+    CATCH? The switch changing anything when it is 0; the wake-up missing
+    after the context retire (the waiter would sleep its 10 ms slice); the
+    retire moved before the dxgkrnl notify (rejected F-A1: the completion
+    retry stages need FenceOutstanding == Fence); a submit site left on the
+    old wait. The state machine itself runs in tests/g4_submit_virtual_
+    replay.c (requeue_cases) and tests/test_g4_envelope_backpressure.py."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.backend = (RENDER / 'src/backend_platform_windows.c').read_text()
+        cls.g3 = (RENDER / 'src/gpuva_g3_windows.c').read_text()
+
+    def test_switch_is_opt_in_and_read_once(self):
+        self.assertEqual(self.backend.count('L"Wom1SubmitRequeue"'), 1)
+        self.assertIn('Context->SubmitRequeue =\n'
+                      '      AdmissionPlatformSwitchEnabled(Context, L"Wom1SubmitRequeue") ? 1u : 0u;',
+                      self.backend)
+        self.assertEqual(self.backend.count('Context->SubmitRequeue ='), 1)
+        self.assertEqual(self.g3.count('adapter->SubmitRequeue'), 1)
+
+    def test_wake_follows_the_retire_and_the_retire_stays_after_the_notify(self):
+        b = self.backend
+        notify = b.index('AdmissionNotifyCompletionAtInterrupt, &notification, 0u,')
+        retire = b.index('AdmissionContextRetireFence(runtime->CompletionContext, Fence);')
+        unlock = b.index('KeReleaseSpinLock(&adapter->SchedulerLock,old_irql);', retire)
+        wake = b.index('if (adapter->SubmitRequeue != 0u)\n    AdmissionPlatformRuntimeSlotChanged(adapter);')
+        self.assertLess(notify, retire)
+        self.assertLess(unlock, wake)
+        self.assertLess(wake - unlock, 400)
+        self.assertEqual(b.count('AdmissionContextRetireFence(runtime->CompletionContext, Fence);'), 1)
+        # the retry guards the rejected F-A1 would break are still there
+        self.assertGreaterEqual(b.count('runtime->CompletionContext->Object.FenceOutstanding != Fence'), 2)
+
+    def test_wait_loop_tests_the_predicate_after_the_clear(self):
+        b = self.backend
+        loop = b[b.index('_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWorkEx('):]
+        loop = loop[:loop.index('\n}\n')]
+        clear = loop.index('KeClearEvent(&runtime->SlotEvent);')
+        test = loop.index('Admissible(Context, Argument)')
+        ready = loop.index('AdmissionPlatformRuntimeReadyEx(Context, &reason)')
+        wait = loop.index('KeWaitForSingleObject(&runtime->SlotEvent')
+        self.assertLess(clear, test)
+        self.assertLess(test, ready)
+        self.assertLess(ready, wait)
+        old = b[b.index('_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeAwaitWork(\n'):]
+        old = old[:old.index('\n}\n')]
+        self.assertIn('FailedPredicate, NULL, NULL, NULL);', old)
+
+    def test_both_submit_sites_use_the_helper(self):
+        g3 = self.g3
+        self.assertEqual(g3.count('AdmissionG4SubmitAwait(adapter, context,'), 3)
+        self.assertEqual(g3.count('AdmissionPlatformRuntimeAwaitWork(adapter, 10000u,'), 1)
+        self.assertEqual(g3.count('AdmissionPlatformRuntimeAwaitWorkEx('), 1)
+        helper = g3[g3.index('static BOOLEAN AdmissionG4SubmitAwait('):]
+        helper = helper[:helper.index('\n}\n')]
+        self.assertLess(helper.index('if (adapter->SubmitRequeue == 0u)'),
+                        helper.index('AdmissionPlatformRuntimeAwaitWorkEx('))
+        self.assertIn('*Deferred = TRUE;', helper)
+        self.assertIn('InterlockedIncrement(&adapter->SubmitPath.Requeued);', helper)
+        predicate = g3[g3.index('static BOOLEAN AdmissionG4RequeueAdmissible('):]
+        predicate = predicate[:predicate.index('\n}\n')]
+        self.assertIn('AdmissionG4PendingAdmissibleWhy(adapter,', predicate)  # no receipt, no side effect
+
+
 if __name__ == '__main__':
     unittest.main()

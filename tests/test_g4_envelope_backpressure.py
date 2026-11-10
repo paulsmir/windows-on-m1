@@ -96,6 +96,12 @@ static void KeClearEvent(KEVENT*){ ++clears; }
 static NTSTATUS KeWaitForSingleObject(KEVENT *e, int, int, BOOLEAN, LARGE_INTEGER*){
   ++waits; if(e==&rt->SlotEvent) ++slot_waits; tick(); return 0; }
 static NTSTATUS KeDelayExecutionThread(int, BOOLEAN, LARGE_INTEGER*){ ++delays; tick(); return 0; }
+/* F-A2: the admissibility predicate of a waiting submission. */
+typedef void *PVOID;
+typedef BOOLEAN (*ADMISSION_AWAIT_ADMISSIBLE)(ADMISSION_CONTEXT *, PVOID);
+static int admit_after, admit_calls, admit_clears;
+static BOOLEAN admit(ADMISSION_CONTEXT *c, PVOID arg){ assert(c==ctx && arg==(PVOID)&admit_after);
+  ++admit_calls; admit_clears=clears; return admit_after && admit_calls>=admit_after; }
 @@FUNCS@@
 int main(){
   ADMISSION_PLATFORM_RUNTIME r={1,1,{AppleAgxBackendRuntimeReady},(void*)1,0,0,0,{0}};
@@ -140,6 +146,33 @@ int main(){
   r.Resetting=1; r.FwRestartActive=1; r.BackendStarted=1; restart_after=0; now=0;
   assert(!AdmissionPlatformRuntimeAwaitWork(&c,50,&why) && why==7);
   r.Resetting=0; r.FwRestartActive=0;
+  /* F-A2: with a predicate the wait also ends when the submission became
+   * admissible, although the job still runs and the slot is not empty; it
+   * is tested on every pass, after the event was cleared (a signal after the
+   * test is not lost), and the wait is still counted. */
+  { BOOLEAN admitted=FALSE; LONG counted=c.SubmitPath.Waits[0];
+    waits=slot_waits=0; admit_calls=0; admit_after=3; finish_after=0; now=0;
+    r.WorkScheduled=1; r.Backend.Phase=AppleAgxBackendRuntimeSubmitted; c.RenderPacket.State=AdmissionRenderPacketActive;
+    { int clears_before=clears;
+      if(!AdmissionPlatformRuntimeAwaitWorkEx(&c,1000,&why,admit,&admit_after,&admitted)){printf("admissible submission kept waiting (%lu)\n",why);return 1;}
+      assert(admitted && why==0 && admit_calls==3 && slot_waits==2 && clears==clears_before+3 && admit_clears==clears); }
+    assert(r.Backend.Phase==AppleAgxBackendRuntimeSubmitted && c.SubmitPath.Waits[0]==counted+1);
+    /* admissible at once: no wait at all */
+    admitted=FALSE; waits=0; admit_calls=0; admit_after=1; counted=c.SubmitPath.Waits[0];
+    assert(AdmissionPlatformRuntimeAwaitWorkEx(&c,1000,&why,admit,&admit_after,&admitted) && admitted && waits==0 && c.SubmitPath.Waits[0]==counted);
+    /* never admissible: "ready and empty" ends the wait as without a predicate */
+    admitted=TRUE; waits=0; admit_calls=0; admit_after=0; finish_after=2;
+    assert(AdmissionPlatformRuntimeAwaitWorkEx(&c,1000,&why,admit,&admit_after,&admitted) && !admitted && why==0 && waits==2 && admit_calls==3);
+    /* a non-transient refusal is not waited on, predicate or not */
+    admitted=TRUE; waits=0; admit_calls=0; r.Stopping=1;
+    assert(!AdmissionPlatformRuntimeAwaitWorkEx(&c,1000,&why,admit,&admit_after,&admitted) && !admitted && why==6 && waits==0);
+    r.Stopping=0;
+    /* the bound still holds */
+    admitted=TRUE; r.WorkScheduled=1; r.Backend.Phase=AppleAgxBackendRuntimeSubmitted; finish_after=0; now=0;
+    assert(!AdmissionPlatformRuntimeAwaitWorkEx(&c,50,&why,admit,&admit_after,&admitted) && !admitted && why==4);
+    r.WorkScheduled=0; r.Backend.Phase=AppleAgxBackendRuntimeReady; c.RenderPacket.State=AdmissionRenderPacketEmpty;
+    /* no predicate: the old entry point is the same loop */
+    assert(AdmissionPlatformRuntimeAwaitWork(&c,1000,&why) && why==0); }
   /* EXP1135: every wait is counted under its first busy predicate. */
   assert(c.SubmitPath.Waits[1]>=1 && c.SubmitPath.Waits[0]>=1 && c.SubmitPath.Waits[2]>=1);
   assert(c.SubmitPath.WaitQpc[1]>0 && c.SubmitPath.MaxWaitQpc>0);
@@ -153,7 +186,8 @@ int main(){
 class EnvelopeBackpressure(unittest.TestCase):
     def test_transient_busy_states_are_waited_out(self):
         text = SRC.read_text()
-        accepts = function(text, 'AdmissionPlatformRuntimeAwaitWork')
+        accepts = function(text, 'AdmissionPlatformRuntimeAwaitWorkEx') + '\n' + \
+            function(text, 'AdmissionPlatformRuntimeAwaitWork')
         self.assertTrue(accepts, 'bounded backpressure for transient busy states is missing')
         ready = function(text, 'AdmissionPlatformRuntimeReadyEx')
         ready = re.sub(r'#if defined\(APPLE_AGX_SUBMIT_QUALIFICATION\).*?#endif\n', '', ready, flags=re.S)
@@ -174,8 +208,14 @@ class EnvelopeBackpressure(unittest.TestCase):
         envelope = g3[start:g3.index('ADMISSION_G4_REJECTS(14u', start)]
         macros = re.findall(r'#define ADMISSION_G4_RUNTIME_READY\(\)(?:[^\n]*\\\n)*[^\n]*', envelope)
         self.assertEqual(len(macros), 2)
+        # F-A2: both go through the one helper, which is the old wait
+        # unless Wom1SubmitRequeue is set
         for macro in macros:
-            self.assertIn('AdmissionPlatformRuntimeAwaitWork(', macro)
+            self.assertIn('AdmissionG4SubmitAwait(adapter, context,', macro)
+        helper = g3[g3.index('static BOOLEAN AdmissionG4SubmitAwait('):]
+        helper = helper[:helper.index('\n}\n')]
+        self.assertIn('if (adapter->SubmitRequeue == 0u)\n'
+                      '    return AdmissionPlatformRuntimeAwaitWork(adapter, 10000u, FailedPredicate);', helper)
 
 
 if __name__ == '__main__':
