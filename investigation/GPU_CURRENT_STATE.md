@@ -2991,3 +2991,34 @@ below the control's 801 and equal P6 residency across arms.
 - Next: EXP2313 (N3c, C1 + C2a). C2a is class O: kept only with a mean fps_frames gain >= 1.0 % over EXP2312,
   otherwise default off and the bench moves on. Then N5 (SS1, package 25c1945b6 + 0cd63ef87) unless F-A2 and
   F-B are merged first (N4).
+
+## UPDATE 2026-11-10T02:41:47Z -- N3c (EXP2313): C2a private lead accepted by the firmware, no gain, KEEP-OFF; N4/N5 code merged (no hardware)
+
+N3c, GM arms read by the architect from the evidence directory with tools/agx_gm_perf.py summary (run-health items
+beyond those listed here are in fork 6's EXP2313 ACTUAL):
+- fps_frames HD PERF, same cadence, separate boots: EXP2312 (C1) w 49.051 / r2 49.417 / r3 49.333, mean 49.267;
+  EXP2313 (C1 + Wom1CrossProcessPrivateLead=1) w 49.425 / r2 49.173 / r3 49.147, mean 49.248. Difference -0.04 %.
+- Receipt v2 post-gm: considered 10569, kicked 5597, fell_back 0, failed 0, refusals {55: 4956, 6: 16};
+  lead considered = waived (post-x 7618 / 7618), refused none. No GPU_RESET / PREEMPT_REFUSAL in the receipts.
+- Verdict by the rule fixed before the run (gain >= 1.0 % needed): C2a is class O without a gain -> default off,
+  no closing boot, line closed for GravityMark. The firmware accepts the private lead (kept as a proven option).
+- C1 stays as recorded (class I, accepted, default off until a same-boot comparison form exists for registry
+  switches; EXP2308 forbids adapter cycles).
+
+Merged to gpu/memory-latency after review, gate BASELINE_OK twice in the main checkout (0 NEW), software only:
+- ebfb0fa80 / 236d61b52  OV2 cross-execution: shadow verdict receipt (class D) and apply switch (class O, process
+  environment APPLE_AGX_D3D12_OV2_CROSS_EXECUTION=1). The shadow verdict exists only with the KMD OV2 feature
+  (Wom1Ov2NoHazardLead=1) in a measured run.
+- 3e19cb440  Wom1SubmitPath v2 (class D): first failing predicate of a non-admissible submission.
+- 53956af4d  F-A2 Wom1SubmitRequeue (class I, default 0): the waiting submission re-tests admissibility.
+- 53237bfd6  Wom1CrossProcessPairsReceipt v3 (class D): refusal 55 split by running/next kind.
+Review notes: default-off identity checked in the diff for both switches (AgxD3d12JobCrossApply returns the old
+verdict; AdmissionG4SubmitAwait calls the old wait); the F-A2 predicate has the same sample-then-queue window as the
+existing deferred path. Not MSVC-built yet.
+
+Next causal targets (bench, one package = package line 25c1945b6 + 0cd63ef87 + the five commits, all off by default):
+1. N4a: package identity against EXP2312 + SubmitPath v2 (F-A2 premise) + refusal-55 split; N5 arms (SS1,
+   per-process, split tags) in the same boot.
+2. N4b: Wom1SubmitRequeue=1, only if the premise holds.
+3. N4c: OV2 feature on; shadow verdict read (x0), then per-process arms of the apply switch in the same boot.
+Still true: no proven score gain this night; HD 78.3 % / FHD 77.2 % of macOS (EXP2309).
