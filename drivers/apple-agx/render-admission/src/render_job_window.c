@@ -376,6 +376,30 @@ unsigned int AdmissionJobWindowXprocLeadNote(
       ? 1u : 0u;
 }
 
+unsigned int AdmissionJobWindowXprocKindClass(unsigned int Kind) {
+  return Kind == ADMISSION_JOB_WINDOW_KIND_RENDER
+             ? ADMISSION_JOB_WINDOW_XPROC_KIND_RENDER :
+         Kind == ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE
+             ? ADMISSION_JOB_WINDOW_XPROC_KIND_PRELUDE :
+         Kind == ADMISSION_JOB_WINDOW_KIND_COMPUTE
+             ? ADMISSION_JOB_WINDOW_XPROC_KIND_COMPUTE
+             : ADMISSION_JOB_WINDOW_XPROC_KIND_OTHER;
+}
+
+/* The order of the 55 branch of AdmissionJobWindowKickRefusal. */
+void AdmissionJobWindowXprocNote55(ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt,
+    unsigned int Capabilities, const ADMISSION_JOB_WINDOW_JOB *Running,
+    const ADMISSION_JOB_WINDOW_JOB *Next) {
+  if (Receipt == 0 || Running == 0 || Next == 0) return;
+  if (!(Capabilities & ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS))
+    ++Receipt->Refused55CapabilityOff;
+  else if (Running->Process == 0ULL || Next->Process == 0ULL)
+    ++Receipt->Refused55NoProcess;
+  else
+    ++Receipt->Refused55Kinds[AdmissionJobWindowXprocKindClass(Running->Kind)]
+                             [AdmissionJobWindowXprocKindClass(Next->Kind)];
+}
+
 void AdmissionJobWindowXprocReceiptInitialize(
     ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt) {
   unsigned char *bytes = (unsigned char *)Receipt;

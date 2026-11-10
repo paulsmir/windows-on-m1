@@ -194,7 +194,7 @@ class PrivateOnlyLead(unittest.TestCase):
         self.assertEqual(ran.stdout.split('\n')[:-1], [
             'waive 0', 'off 1', 'class_cc 2', 'prelude 2', 'present 2', 'same_process 2',
             'no_process 2', 'same_slot 2', 'unflagged 3', 'null 2', 'wait 1024 1280',
-            'receipt v2 bytes 1 considered 20 waived 16 unflagged 3 stamp 1 last 69 1280 1024 due 16',
+            'receipt v3 bytes 1 considered 20 waived 16 unflagged 3 stamp 1 last 69 1280 1024 due 16',
             'null_note 0'])
 
     def test_parser_admits_the_flag_only_under_the_feature(self):

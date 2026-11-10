@@ -180,6 +180,55 @@ int main(void) {
 }
 '''
 
+SPLIT = r'''
+#include <stdio.h>
+#include <string.h>
+#include "render_job_window.h"
+int main(void) {
+  static const unsigned kinds[] = {ADMISSION_JOB_WINDOW_KIND_RENDER,
+      ADMISSION_JOB_WINDOW_KIND_RENDER_PRELUDE, ADMISSION_JOB_WINDOW_KIND_COMPUTE,
+      ADMISSION_JOB_WINDOW_KIND_PRESENT, ADMISSION_JOB_WINDOW_KIND_OTHER};
+  static const unsigned long long procs[][2] = {{100, 200}, {0, 200}, {100, 0}, {0, 0}, {100, 100}};
+  static const unsigned caps[] = {ADMISSION_JOB_WINDOW_CAPS_RC98 | ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER,
+      ADMISSION_JOB_WINDOW_CAPS_RC98 | ADMISSION_JOB_WINDOW_CAP_LIVE_MANAGER |
+      ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS};
+  ADMISSION_JOB_WINDOW_XPROC_RECEIPT r;
+  unsigned a, b, c, p, i, j, refusals = 0, other = 0, cells = 0, kindcells = 0;
+  AdmissionJobWindowXprocReceiptInitialize(&r);
+  /* Every decision of a small state space; a 55 is noted, nothing else. */
+  for (c = 0; c < 2; ++c) for (p = 0; p < 5; ++p) for (a = 0; a < 5; ++a) for (b = 0; b < 5; ++b) {
+    ADMISSION_JOB_WINDOW_KICK_STATE s;
+    unsigned refusal;
+    if (c == 0 && p != 0) continue; /* capability off: one process pair is enough */
+    memset(&s, 0, sizeof(s));
+    s.Enabled = 1u; s.InFlight = 1u; s.NextPrebound = 1u; s.QueuedFence = 11u; s.Capabilities = caps[c];
+    s.General = 1u; s.Prelude = 1u; s.SameManagerSlot = 1u;
+    s.Running.Fence = 10u; s.Running.Kind = kinds[a]; s.Running.Process = procs[p][0]; s.Running.VmSlot = 2u;
+    s.Next.Fence = 11u; s.Next.Kind = kinds[b]; s.Next.Process = procs[p][1]; s.Next.VmSlot = 3u;
+    refusal = AdmissionJobWindowKickRefusal(&s);
+    if (refusal == 55u) { ++refusals; AdmissionJobWindowXprocNote55(&r, s.Capabilities, &s.Running, &s.Next); }
+    else if (p != 4 && !(c == 1 && p == 0 && a == 0 && b == 2)) ++other; /* only the admitted pair escapes 55 */
+  }
+  for (i = 0; i < 4; ++i) for (j = 0; j < 4; ++j) kindcells += r.Refused55Kinds[i][j];
+  cells = r.Refused55CapabilityOff + r.Refused55NoProcess + kindcells;
+  printf("cells %u refusals %u other %u\n", cells, refusals, other);
+  /* off: 25 kind pairs; on: 3 x 25 with a job without a process, and the 25
+   * cross-process kind pairs less the admitted one */
+  printf("off %u noprocess %u kinds %u\n", r.Refused55CapabilityOff, r.Refused55NoProcess, kindcells);
+  printf("admitted cell %u\n", r.Refused55Kinds[ADMISSION_JOB_WINDOW_XPROC_KIND_RENDER]
+                                                [ADMISSION_JOB_WINDOW_XPROC_KIND_COMPUTE]);
+  printf("classes %u %u %u %u %u %u\n", AdmissionJobWindowXprocKindClass(kinds[0]),
+         AdmissionJobWindowXprocKindClass(kinds[1]), AdmissionJobWindowXprocKindClass(kinds[2]),
+         AdmissionJobWindowXprocKindClass(kinds[3]), AdmissionJobWindowXprocKindClass(kinds[4]),
+         AdmissionJobWindowXprocKindClass(ADMISSION_JOB_WINDOW_KIND_NONE));
+  AdmissionJobWindowXprocNote55(0, 0u, 0, 0);
+  AdmissionJobWindowXprocNote55(&r, 0u, 0, 0);
+  printf("after null %u\n", r.Refused55CapabilityOff);
+  puts("null ok");
+  return 0;
+}
+'''
+
 RECEIPT = r'''
 #include <stdio.h>
 #include <string.h>
@@ -236,13 +285,41 @@ class CrossProcessPairDecision(unittest.TestCase):
         run = build_run(RECEIPT, [RENDER / 'src/render_job_window.c'], [RENDER / 'include'])
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertEqual(run.stdout.split('\n')[:-1], [
-            'init 2 1 0',
+            'init 3 1 0',
             'due 17 considered 300 allowed 100',
             'codes 55=100 6=100 sum 200 other 0 last 6 11',
             'overflow table 206 other 6 considered 312',
             'kicked 2 fellback 1 failed 1 last 11 10 2 3 undone 12 32',
             'null 0',
         ])
+
+    def test_refusal_55_split(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? The split
+        decides which cross-process class is worth admitting next. It must
+        put every 55 of the kick decision in exactly one cell, by the same
+        order of causes as the decision, and nothing that is not a 55."""
+        run = build_run(SPLIT, [RENDER / 'src/render_job_window.c'], [RENDER / 'include'])
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual(run.stdout.strip().split('\n'), [
+            'cells 124 refusals 124 other 0',
+            'off 25 noprocess 75 kinds 24',
+            'admitted cell 0',
+            'classes 0 1 2 3 3 3',
+            'after null 25',
+            'null ok'])
+
+    def test_refusal_55_split_is_receipt_only(self):
+        backend = (RENDER / 'src/backend_platform_windows.c').read_text()
+        self.assertEqual(backend.count('AdmissionJobWindowXprocNote55('), 1)
+        at = backend.index('AdmissionJobWindowXprocNote55(')
+        guard = backend[backend.rindex('if (', 0, at):at]
+        self.assertEqual(guard.strip(), 'if (runtime->CrossProcessPairs && refusal == 55u)')
+        self.assertGreater(at, backend.index('refusal = AdmissionJobWindowKickRefusal(&s);',
+                                             backend.index('static BOOLEAN AdmissionJobWindowKickWindows(')))
+        source = (RENDER / 'src/render_job_window.c').read_text()
+        decision = source[source.index('unsigned int AdmissionJobWindowKickRefusal('):]
+        decision = decision[:decision.index('\n}\n')]
+        self.assertNotIn('Receipt', decision)
 
     def test_refusal_number_is_free(self):
         """6 must not collide with a kick refusal or a decision reason."""
@@ -404,10 +481,15 @@ class CrossProcessPairWiring(unittest.TestCase):
                                                       ROOT / 'tools/agx_xproc_receipt.py')
         tool = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(tool)
-        words = [2, 168, 9, 5, 4, 1, 0] + [55, 6, 0, 0, 0, 0, 0, 0] + [3, 1, 0, 0, 0, 0, 0, 0] + \
+        kinds = [0] * 16
+        kinds[4 * 2 + 0] = 2   # compute -> render
+        kinds[4 * 1 + 2] = 1   # render+prelude -> compute
+        words = [3, 240, 9, 5, 4, 1, 0] + [55, 6, 0, 0, 0, 0, 0, 0] + [3, 1, 0, 0, 0, 0, 0, 0] + \
             [0, 711, 710, 2, 3, 6, 705, 700, 7300 | (11 << 16)] + \
-            [4, 3, 0, 0, 0, 1, 0, 711, 0x500, 0x400]
-        out = tool.decode(struct.pack('<42I', *words))
+            [4, 3, 0, 0, 0, 1, 0, 711, 0x500, 0x400] + [0, 7] + kinds
+        out = tool.decode(struct.pack('<60I', *words))
+        self.assertEqual(out['refused_55'], dict(capability_off=0, no_process=7, kinds={
+            'compute -> render': 2, 'render+prelude -> compute': 1}))
         self.assertEqual(out['lead'], dict(considered=4, waived=3, refused={'3': 1},
                                            last=dict(fence=711, expected=0x500, wait_value=0x400)))
         self.assertEqual((out['considered'], out['allowed'], out['kicked'], out['fell_back']), (9, 5, 4, 1))
@@ -421,7 +503,7 @@ class CrossProcessPairWiring(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='xproc-abi-') as tmp:
             src = Path(tmp) / 'abi.c'
             src.write_text('#include "render_job_window.h"\n'
-                           '_Static_assert(sizeof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT) == 168, "size");\n'
+                           '_Static_assert(sizeof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT) == 240, "size");\n'
                            '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
                            ' Kicked) == 16, "kicked");\n'
                            '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
@@ -429,7 +511,11 @@ class CrossProcessPairWiring(unittest.TestCase):
                            '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
                            ' LastFence) == 96, "last");\n'
                            '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
-                           ' LeadConsidered) == 128, "lead");\n')
+                           ' LeadConsidered) == 128, "lead");\n'
+                           '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
+                           ' Refused55CapabilityOff) == 168, "off");\n'
+                           '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
+                           ' Refused55Kinds) == 176, "kinds");\n')
             for target in ('x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc'):
                 for unit in (src, RENDER / 'src/render_job_window.c'):
                     done = subprocess.run(['clang', '-target', target, '-std=c11', '-Wall', '-Wextra',

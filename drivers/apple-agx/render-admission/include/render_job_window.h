@@ -188,7 +188,14 @@ unsigned int AdmissionJobWindowCrossProcess(const ADMISSION_JOB_WINDOW_JOB *Runn
  * ones in RefusalOther); the last kicked pair and the last refused and
  * undone successors (LastUndoneDetail: the KMD line in bits 0-15, the
  * BeginSuccessorJob refusal in bits 16-23, as LastKickFailure). */
-#define ADMISSION_JOB_WINDOW_XPROC_RECEIPT_VERSION 2u /* v2: the C2a Lead* fields */
+#define ADMISSION_JOB_WINDOW_XPROC_RECEIPT_VERSION 3u /* v2: the C2a Lead*, v3: the 55 split */
+/* v3 (receipt-only): which pairs refusal 55 refuses. The kind classes of
+ * the Refused55Kinds[running][next] table: */
+#define ADMISSION_JOB_WINDOW_XPROC_KIND_RENDER 0u   /* plain render */
+#define ADMISSION_JOB_WINDOW_XPROC_KIND_PRELUDE 1u  /* render with a compute prelude */
+#define ADMISSION_JOB_WINDOW_XPROC_KIND_COMPUTE 2u  /* compute envelope */
+#define ADMISSION_JOB_WINDOW_XPROC_KIND_OTHER 3u    /* present, legacy, none */
+#define ADMISSION_JOB_WINDOW_XPROC_KINDS 4u
 #define ADMISSION_JOB_WINDOW_XPROC_CODES 8u
 /* C2a (REG_DWORD Wom1CrossProcessPrivateLead = 1 on top of
  * Wom1CrossProcessPairs and Q2c, default off): the kicked cross-process
@@ -224,7 +231,21 @@ typedef struct _ADMISSION_JOB_WINDOW_XPROC_RECEIPT {
   unsigned int LeadConsidered, LeadWaived;
   unsigned int LeadRefused[ADMISSION_JOB_WINDOW_XPL_REASONS];
   unsigned int LastLeadFence, LastLeadExpected, LastLeadWaitValue;
+  /* v3: the three causes inside the 55 branch of the kick decision, each
+   * refusal in exactly one place: the capability was off; a job named no
+   * process (not a cross-process pair: not in Considered); or two processes
+   * with a kind pair that is not plain render -> compute, by raw kinds. */
+  unsigned int Refused55CapabilityOff, Refused55NoProcess;
+  unsigned int Refused55Kinds[ADMISSION_JOB_WINDOW_XPROC_KINDS]
+                             [ADMISSION_JOB_WINDOW_XPROC_KINDS];
 } ADMISSION_JOB_WINDOW_XPROC_RECEIPT;
+/* v3: the kind class of a raw ADMISSION_JOB_WINDOW_KIND_*. */
+unsigned int AdmissionJobWindowXprocKindClass(unsigned int Kind);
+/* v3: counts one kick decision that returned 55 (Capabilities as given to
+ * AdmissionJobWindowKickRefusal). Receipt only. */
+void AdmissionJobWindowXprocNote55(ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt,
+    unsigned int Capabilities, const ADMISSION_JOB_WINDOW_JOB *Running,
+    const ADMISSION_JOB_WINDOW_JOB *Next);
 /* C2a: counts one kicked cross-process pair (Refusal as above; Fence N+1,
  * Expected N's 3D stamp, WaitValue the Barrier's). Returns 1 when an export
  * is due: the first 16 considered pairs, then every 256th. */

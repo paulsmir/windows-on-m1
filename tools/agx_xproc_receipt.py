@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Decode Wom1CrossProcessPairsReceipt (C1/C2a, ADMISSION_JOB_WINDOW_XPROC_RECEIPT v2).
+"""Decode Wom1CrossProcessPairsReceipt (C1/C2a, ADMISSION_JOB_WINDOW_XPROC_RECEIPT v3).
 
 Usage: agx_xproc_receipt.py <hex string | file with the REG_BINARY bytes>
-The value is 42 little-endian u32 (render_job_window.h).
+The value is 60 little-endian u32 (render_job_window.h); v3 adds the split of
+refusal 55: capability off, a job without a process, and the refused kind
+pairs (running -> next).
 """
 import json
 import struct
@@ -10,15 +12,16 @@ import sys
 from pathlib import Path
 
 CODES = 8
-SIZE = 168
+SIZE = 240
 LEAD_REASONS = 5
+KINDS = ('render', 'render+prelude', 'compute', 'other')
 
 
 def decode(data):
     if len(data) < SIZE:
         raise ValueError(f'receipt is {len(data)} bytes, expected {SIZE}')
-    w = struct.unpack_from('<42I', data)
-    if w[0] != 2 or w[1] != SIZE:
+    w = struct.unpack_from('<60I', data)
+    if w[0] != 3 or w[1] != SIZE:
         raise ValueError(f'unknown receipt version {w[0]} / bytes {w[1]}')
     refusals = {str(w[7 + i]): w[15 + i] for i in range(CODES) if w[15 + i]}
     return dict(version=w[0], considered=w[2], allowed=w[3], kicked=w[4], fell_back=w[5],
@@ -28,7 +31,10 @@ def decode(data):
                 last_undone=dict(fence=w[30], line=w[31] & 0xffff, begin_refusal=(w[31] >> 16) & 0xff),
                 lead=dict(considered=w[32], waived=w[33],
                           refused={str(i): w[34 + i] for i in range(LEAD_REASONS) if w[34 + i]},
-                          last=dict(fence=w[39], expected=w[40], wait_value=w[41])))
+                          last=dict(fence=w[39], expected=w[40], wait_value=w[41])),
+                refused_55=dict(capability_off=w[42], no_process=w[43],
+                                kinds={f'{KINDS[r]} -> {KINDS[n]}': w[44 + 4 * r + n]
+                                       for r in range(4) for n in range(4) if w[44 + 4 * r + n]}))
 
 
 def main(argv):

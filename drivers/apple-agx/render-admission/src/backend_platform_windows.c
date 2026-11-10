@@ -7232,6 +7232,11 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
       refusal != 54u)
     (void)AdmissionJobWindowXprocNote(&runtime->XprocReceipt,
         (unsigned int)refusal, &s.Running, &s.Next);
+  /* v3 (receipt-only): which pairs 55 refuses, a job without a process
+   * included (that one is not a cross-process pair above). */
+  if (runtime->CrossProcessPairs && refusal == 55u)
+    AdmissionJobWindowXprocNote55(&runtime->XprocReceipt, s.Capabilities,
+                                  &s.Running, &s.Next);
   if (runtime->RcReceiptEnabled) {
     AdmissionRcDecisionTyped(&runtime->RcDecisions,(unsigned int)refusal,
         (unsigned int)prebindRefusal,(unsigned int)fence,s.Next.Fence,
