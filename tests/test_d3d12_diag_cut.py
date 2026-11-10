@@ -9,6 +9,16 @@ instructions, registers), and the cut points ordered E < B1 < B2 < L in the
 program. A cut that moved code, changed the variant selection or landed inside
 an instruction would attribute time to the wrong section. Without the variable
 (or with a malformed one) the compiler must produce the same bytes.
+
+N6b, point `@<offset>` (a byte offset of the main function, so that a block
+inside an `if` or a loop can be named): an offset accepted anywhere but at the
+start of a block would write `stop` into operand bytes or into the trailing
+padding; the kernel would then run a different instruction instead of a
+prefix, and the receipt would still report a cut. A parser that accepted
+`@12x` or overflowed on a long number would cut somewhere else than the arm
+names. So: an accepted offset changes exactly the two bytes at that offset,
+which is an instruction of the uncut listing; every other spelling or offset
+leaves the binary untouched.
 """
 import importlib.util
 import os
@@ -98,6 +108,59 @@ class DiagCut(unittest.TestCase):
             present = [offsets[p] for p in POINTS if offsets[p] is not None]
             self.assertEqual(present, sorted(set(present)), (kernel, offsets))
             self.assertGreater(len(present), 1, (kernel, offsets))
+
+    def at(self, kernel, offset):
+        """True: `stop` at exactly that offset, nothing else changed. False: binary unchanged."""
+        full, lines, stats = self.compile(kernel, None)
+        cut, _, cut_stats = self.compile(kernel, f'any:@{offset}')
+        self.assertEqual(cut_stats, stats, (kernel, offset))
+        if cut == full:
+            return False
+        self.assertEqual(cut, full[:offset] + b'\x88\x00' + full[offset + 2:], (kernel, offset))
+        self.assertIn(offset + lines[0][0], {o for o, _ in lines}, (kernel, offset))
+        return True
+
+    def test_offset_point_is_refused_unless_it_spells_a_decimal_offset(self):
+        for kernel in KERNELS:
+            full = self.compile(kernel, None)[0]
+            for value in ('any:@', 'any:@-1', 'any:@+4', 'any:@4x', 'any:@ 4', 'any:@0x0', 'any:@00000000',
+                          'any:@4294967296', 'any:@@0', 'any:@0:E', '97efffb3:@0', '7aa43c6c:@0'):
+                self.assertEqual(self.compile(kernel, value)[0], full, (kernel, value))
+
+    def test_offset_point_cuts_only_where_a_block_begins(self):
+        for kernel in KERNELS:
+            full, lines, _ = self.compile(kernel, None)
+            base = lines[0][0]
+            order = [o - base for o, _ in lines]
+            ops = {o - base: op for o, op in lines}
+            # byte by byte over the head of the function: never inside an instruction
+            head = [n for n in range(order[12]) if self.at(kernel, n)]
+            self.assertTrue(set(head) <= set(order), (kernel, head))
+            # the function entry is a block: the same build as E
+            self.assertEqual(head[0], 0, kernel)
+            self.assertEqual(self.compile(kernel, 'any:@0')[0], self.compile(kernel, 'any:E')[0], kernel)
+            # the loop header named by L is a block: the same build as L
+            loop = self.cut_offset(kernel, 'L')
+            if loop is not None:
+                self.assertEqual(self.compile(kernel, f'any:@{loop}')[0], self.compile(kernel, 'any:L')[0], kernel)
+            # B<n> cuts behind a barrier inside its block; when that is not the
+            # start of a block the offset form refuses it instead of splitting
+            for point in ('B1', 'B2'):
+                barrier = self.cut_offset(kernel, point)
+                if barrier is not None and self.at(kernel, barrier):
+                    self.assertEqual(self.compile(kernel, f'any:@{barrier}')[0],
+                                     self.compile(kernel, f'any:{point}')[0], (kernel, point))
+            # a block inside an `if` can be named: the body behind the first
+            # skip-if-no-thread jump begins a block
+            skip = next(i for i, o in enumerate(order) if ops[o] == 'jmp_none')
+            nested = order[skip + 1]
+            self.assertTrue(self.at(kernel, nested), (kernel, nested))
+            self.assertNotIn(nested, [self.cut_offset(kernel, p) for p in POINTS], kernel)
+            # the instruction behind it, the middle of an instruction, the last
+            # instruction's tail, the padding and anything past the code
+            end = order[-1]
+            for n in (order[skip + 2], nested + 1, end + 1, len(full) - 2, len(full) - 1, len(full), 9999999):
+                self.assertFalse(self.at(kernel, n), (kernel, n))
 
     def test_points_follow_the_marked_instructions(self):
         for kernel in KERNELS:

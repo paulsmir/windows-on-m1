@@ -430,7 +430,7 @@ def project_compiler_h(text):
 
 
 # N6 (class D diagnostic): prefix-cut section profiler. Opt-in
-# APPLE_AGX_DIAG_CUT=<hash8>:<E|B1|B2|L> ends one compute kernel at a chosen
+# APPLE_AGX_DIAG_CUT=<hash8>:<E|B1|B2|L|@offset> ends one compute kernel at a chosen
 # point so that the difference of two cut arms is the GPU time of the section
 # between the points. hash8 = low 32 bits of the D3D shader hash (the split
 # tag), given to the compiler by the D3D12 owner around create_compute_state
@@ -438,7 +438,13 @@ def project_compiler_h(text):
 # main function (offline fixture only). Points: E = first instruction of the
 # main function; B<n> = first instruction after the n-th threadgroup barrier
 # emitted at nesting 0; L = header block of the first loop when that loop is
-# top-level. No instruction is inserted: the compile, its statistics and the
+# top-level; @<offset> (N6b, decimal bytes from the start of the main function's
+# code) = the block that begins at exactly that pack offset, refused when no
+# block with an instruction begins there, so a cut can never land inside an
+# instruction or on the trailing padding. A block inside an `if` or a loop is
+# accepted: what a `stop` does to a SIMD group with a partial execution mask is
+# hardware behaviour the ladder's first nested arm has to show.
+# No instruction is inserted: the compile, its statistics and the
 # variant selection are those of the uncut build; after agx_pack_binary the two
 # bytes at the cut (an instruction boundary: the pack offset of a block) are
 # overwritten with `stop`. A point that does not exist leaves the binary
@@ -458,9 +464,12 @@ static AGX_WIN32_DIAG_TLS int agx_win32_diag_cut_tagged;
 static AGX_WIN32_DIAG_TLS struct agx_win32_diag_cut_entry agx_win32_diag_cut_entries[16];
 static AGX_WIN32_DIAG_TLS unsigned agx_win32_diag_cut_count;
 static AGX_WIN32_DIAG_TLS int agx_win32_diag_cut_selected;
+/* The byte offset named by point 4 (@<offset>); written with the parse. */
+static unsigned agx_win32_diag_cut_at;
 
 /* The requested point for the function being compiled on this thread:
- * 0 E, 1 B1, 2 B2, 3 L; -1 none. The variable is read once per process. */
+ * 0 E, 1 B1, 2 B2, 3 L, 4 @<offset>; -1 none. The variable is read once per
+ * process. */
 static int
 agx_win32_diag_cut_point(void)
 {
@@ -471,6 +480,7 @@ agx_win32_diag_cut_point(void)
       const char *colon = env ? strchr(env, ':') : NULL;
       int p = -1, a = 0;
       uint32_t h = 0;
+      unsigned at = 0;
       if (colon) {
          const char *name = colon + 1;
          if (!strcmp(name, "E"))
@@ -481,6 +491,18 @@ agx_win32_diag_cut_point(void)
             p = 2;
          else if (!strcmp(name, "L"))
             p = 3;
+         else if (name[0] == '@') {
+            /* one to seven decimal digits and nothing else */
+            const char *c = name + 1;
+            unsigned digits = 0;
+            while (*c >= '0' && *c <= '9' && digits < 7) {
+               at = at * 10u + (unsigned)(*c - '0');
+               ++c;
+               ++digits;
+            }
+            if (digits && !*c)
+               p = 4;
+         }
          if (colon - env == 3 && !strncmp(env, "any", 3)) {
             a = 1;
          } else if (colon - env == 8) {
@@ -498,6 +520,7 @@ agx_win32_diag_cut_point(void)
       }
       hash = h;
       any = a;
+      agx_win32_diag_cut_at = at;
       point = p;
       parsed = 1;
    }
@@ -516,7 +539,9 @@ agx_win32_diag_cut_applies(const agx_context *ctx)
 
 /* The cut offset from the start of the packed code, ~0u when the point does
  * not exist. Offsets are block offsets of a trial pack into a scratch buffer;
- * a cut inside a block splits the block for that trial only. */
+ * a cut inside a block splits the block for that trial only. @<offset> names
+ * no block in advance: it is accepted when a block that holds an instruction
+ * begins at that offset of the trial pack. */
 static unsigned
 agx_win32_diag_cut_locate(agx_context *ctx)
 {
@@ -524,6 +549,8 @@ agx_win32_diag_cut_locate(agx_context *ctx)
    agx_block *cut = NULL, *split_from = NULL, *tail = NULL;
    if (point == 0) {
       return 0;
+   } else if (point == 4) {
+      /* resolved against the trial pack below */
    } else if (point == 3) {
       agx_foreach_block(ctx, block) {
          if (block == ctx->windows_diag_loop)
@@ -557,12 +584,18 @@ agx_win32_diag_cut_locate(agx_context *ctx)
          cut = tail;
       }
    }
-   if (!cut)
+   if (!cut && point != 4)
       return ~0u;
    struct util_dynarray trial;
    util_dynarray_init(&trial, ctx);
    agx_pack_binary(ctx, &trial);
-   const unsigned offset = (unsigned)cut->offset;
+   if (point == 4) {
+      agx_foreach_block(ctx, block) {
+         if (!cut && (unsigned)block->offset == agx_win32_diag_cut_at && !list_is_empty(&block->instructions))
+            cut = block;
+      }
+   }
+   const unsigned offset = cut ? (unsigned)cut->offset : ~0u;
    util_dynarray_fini(&trial);
    if (tail) {
       struct list_head *item = tail->instructions.next;
