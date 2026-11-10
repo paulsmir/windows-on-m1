@@ -318,6 +318,23 @@ static void test_overdue(void)
     assert(!ansd_overdue(&c, 1));      /* reported once, re-armed from scratch */
     assert(ansd_overdue(&c, 1) == 1);  /* and again while it stays unreaped */
     assert(ansd_poll(&c, 1, &e) == ANSD_OK);
+    /* Ring wrap: pending at one tick, 128 completions consumed by the interrupt routine, pending
+     * again at the same head and phase at the next tick. Interrupts are fine: not overdue. */
+    ans_u32 head = c.q[1].head, phase = c.q[1].phase;
+    assert(ansd_submit(&c, 1, 8, sqe, ANSD_DMA_FROM_DEVICE) == ANSD_OK); post(&s, 1, 8, 0);
+    assert(!ansd_overdue(&c, 1));
+    assert(ansd_poll(&c, 1, &e) == ANSD_OK);
+    s.autocomplete = 1;
+    for (unsigned i = 0; i < 127; i++) {
+        assert(ansd_submit(&c, 1, i % 64, sqe, ANSD_DMA_FROM_DEVICE) == ANSD_OK);
+        assert(ansd_poll(&c, 1, &e) == ANSD_OK);
+    }
+    s.autocomplete = 0;
+    assert(c.q[1].head == head && c.q[1].phase == phase);
+    assert(ansd_submit(&c, 1, 8, sqe, ANSD_DMA_FROM_DEVICE) == ANSD_OK); post(&s, 1, 8, 0);
+    assert(!ansd_overdue(&c, 1));      /* same ring position, different entry */
+    assert(ansd_overdue(&c, 1) == 1);  /* that entry left alone for a period: overdue */
+    assert(ansd_poll(&c, 1, &e) == ANSD_OK);
     c.faulted = 1; assert(!ansd_overdue(&c, 1));
     freeq(&qs[0]); freeq(&qs[1]);
 }

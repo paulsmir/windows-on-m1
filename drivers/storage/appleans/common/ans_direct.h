@@ -115,7 +115,10 @@ struct ansd_ctrl {
     struct ansd_stats stats;
     ans_u32 cap_timeout_ms, last_csts, stage;
     int enabled, crashed, faulted;
-    ans_u32 overdue_mark[2]; /* ansd_overdue: head/phase seen pending at the previous call */
+    /* ansd_overdue: head/phase seen pending at the previous call and the consumed-CQE count
+     * at that moment (the ring position alone repeats every 2 x depth completions). */
+    ans_u32 overdue_mark[2];
+    ans_u64 overdue_cqes[2];
 };
 enum ansd_result {
     ANSD_OK = 0, ANSD_EMPTY = 1, ANSD_INVALID = -1, ANSD_BUSY = -2,
@@ -152,8 +155,8 @@ int ansd_poll(struct ansd_ctrl *c, unsigned queue, struct ansd_cqe *out);
 int ansd_peek(const struct ansd_ctrl *c, unsigned queue);
 /* Missed-interrupt detector for a periodic caller (Asahi polls the CQ in its timeout handler
  * for the same reason). Returns 1 when the CQE at the head was already pending, at the same
- * head and phase, at the previous call: the level interrupt has had a whole period to deliver
- * it. The caller then drains the queue exactly as its interrupt routine does. */
+ * head and phase, at the previous call and no CQE was consumed in between: the level interrupt
+ * has had a whole period to deliver that very entry. The caller then drains the queue exactly as its interrupt routine does. */
 int ansd_overdue(struct ansd_ctrl *c, unsigned queue);
 /* Drains at most budget IOP mailbox messages with the post-boot RTKit responder. */
 int ansd_mbox_service(struct ansd_ctrl *c, unsigned budget);
