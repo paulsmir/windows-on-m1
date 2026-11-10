@@ -2835,3 +2835,21 @@ Lever ranking by size at HD (ms per frame, upper bounds; none validated on hardw
 3. Render compute preludes 0.195 (UMD batch design) and R5 TA under C4 <= 0.21 (OV5, neutral so far).
 4. C4 / R5 3D / C2 shader work 0.17-0.19 each (DXIL heavier than Metal for C4 and the planet PS: not
    equal work; no driver lever identified).
+
+## UPDATE 2026-11-10T00:58:50Z -- night baseline EXP2309, queue N2 (EXP2310) and N3 (cross-process pairs)
+
+- EXP2309 (package unchanged, Wom1JobDiagnostics=1, one boot): HD PERF fps_frames 48.97 / 48.99 / 49.15
+  (present-based 44.2-44.5), FHD PERF fps_frames 39.60 / 39.71 / 39.86; FULL untraced HD 7784 = 78.3 % of macOS
+  9946, FHD 6066 = 77.2 % of 7853. P6 residency 99.4 % mid->post (the pre->mid window holds ~5.3 s of P1 at
+  launch). R1's offline FHD model CONFIRMED (wall 26.2-26.6 ms against 26.6-27.3 predicted, score inside
+  6000-6200); HD FULL 7784 is slightly above its 7500-7700. This is the base for every lever below.
+- N2 = EXP2310 (running): SPLIT_TAGS arms a / b (C0 list of EXP2078) / c (C2 list of EXP2211) / a2; decides whether
+  the C0 scene-dependent deficit (0.5-1.0 ms) is generated code or data-dependent memory cost.
+- N3 staged: cross-process pairs merged default off (4a83e3a36; C1 Wom1CrossProcessPairs, C2a
+  Wom1CrossProcessPrivateLead). Target: the DWM composition render between two GM jobs (0.85 ms/frame HD).
+  Experiments N3a (package equivalence) -> N3b (C1) -> N3c (C2a), one variable each; package = EXP2309 source +
+  the four commits, without FS-F1.
+- FS-F1 (3952f9ad5, size-generic D3D10/11 DXGI Blt) is on the branch, software-only; it is a DWM-visible UMD path
+  and gets its own experiment before it rides in any GM package.
+- In work offline: source cause of the "in time, never prebound" boundaries (chain refusal 38) and of the
+  cross-frame pair C0(N+1) beside 3D(R7,N) never firing (r9-window-misses).
