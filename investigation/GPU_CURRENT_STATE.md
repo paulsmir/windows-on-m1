@@ -4478,3 +4478,8 @@ Decision:
 Other facts:
 - The kept `C:\Windows\MEMORY.DMP` of EXP2324 was overwritten by Windows when the new bugchecks wrote their dumps. The EXP2323/EXP2324 minidumps are on the Mac.
 - Bench order after this boot: EXP2332 (K1=0) -> EXP2333 (rebuilt from the tip, K1 opt-in unset, census launch last) -> T5b FULL rerun -> TDR-H0 -> FS-D1.
+
+## UPDATE 2026-11-10T23:33:48Z -- architect: correction to the UPDATE of 2026-11-10T23:28Z (package source of EXP2331 / EXP2332)
+
+- The EXP2331 package is built from f5a3fc4b1 and the EXP2332 package from 05afd0ee6, not from 6b6f71668 as written there. Checked: 6b6f71668 is an ancestor of both, `git diff 6b6f71668 <commit> -- drivers/apple-agx/render-admission drivers/apple-agx/windows` is empty for both, and both carry the reader `!AdmissionPlatformSwitchDisabled(Context, L"Wom1CrossProcessRenderPairs")` (line 9585). The decision and the reading rules are unchanged.
+- EXP2331 is launched with `Wom1CrossProcessRenderPairs = 0` (BEFORE 72b4affc3). EXP2330 correction and EXP2334 ACTUAL are in 081c068c7; the EXP2330 minidump is at `.local/experiments/EXP2330-k1on-s1/evidence/exp2330-0x116-mini.dmp`.
