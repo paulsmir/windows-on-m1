@@ -3845,3 +3845,29 @@ Commit `119ba99ff` (class D, opt-in). Ledger `CHG-20261110-119ba99f-TDR-H0`. Rep
 - Experiment H0 (staged in the handoff, runs after EXP2327, EXP2328 and the K1 default-on package): the EXP2324
   k4128 arm with the switch set; ends in 0x116 by design. Reading: acked -> implement stage 3H (halt, error-complete,
   ring reset, resume); not acked with unchanged words -> one repeat on an idle firmware before any stage 3H work.
+
+## UPDATE 2026-11-10T19:41:14Z -- architect: EXP2327 arm s0 read; N4c-v4 specified (offline, nothing run)
+
+Evidence: `.local/experiments/EXP2327-n4c3-t5b/evidence/EXP2327/gm2327s0-umd.log`, `n4c3-s0.txt`. Spec:
+`.local/handoff/N4C-V4.md`. EXP2327's own ACTUAL stays with the bench session.
+
+- N4c-v3 did its job: reason 6 is gone (2996 executions, all reason 8 detail 2; 47936 copies placed, overflow 0).
+- Every execution is still refused: mask bit 18 (8/2) 3985 and bit 21 (8/3) 3986 of 3989; all other bits <= 8.
+- The 8/2 pair is one and the same: heap 172aa119 (44.7 MB), compute flags 0x101 (C0 root UAV) vs kept render
+  flags 0x0c = a vertex-buffer BINDING during R7.
+- SOURCE: `JobDrawRanges` records all 16 IA slots of a draw; the owner's draw path and the hardware read only the
+  slots the PSO input layout names (`vb_count` = highest referenced slot + 1; Asahi uploads attrib_base only for
+  layout buffers). A barrier replay does no GPU work with `Wom1Ov2NoHazardLead` unset.
+- HYPOTHESIS (about 90 %, the s0 log has no per-draw slot receipt): the buffer is the asteroid vertex/instance
+  buffer left bound in a slot R7's 3-element canvas layout does not name; R7 never reads it. Metal's access sets
+  show no R7 -> C0 edge. 8/3 is the application's transition of the same buffer before C0.
+- N4c-v4 (class C + D, UMD only, behind the cross switch): (A) the draw access set takes only layout-named VB
+  slots; (B) 8/3 narrowed to barriers whose range both the compute and the kept render access, old rule kept as
+  receipt-only bit 23; (C) receipts vb-skip, mask-barrier, batch-deps-exact, heap-bo.
+- Criterion (g) is replaced by (g'): the Bloom receipt `measure-batch-deps` has bit 0 set for C0 in every s0
+  frame, so (g) as written would always stop. (g') uses exact BO handles joined to heap ids.
+- Next: one shadow arm s1 in the next package that boots anyway. Mask clean in >= 99 % and (g') clean -> apply arms.
+  8/2 persisting with the slot named by the layout -> N4c CLOSED as a true D3D12 dependency, 0.27-0.35 ms leaves
+  the reachable ledger. No third range-model variant without new evidence.
+- NOT VERIFIED: the slot hypothesis; which BO sets the Bloom bit; anything on hardware. Implementation in progress
+  on branch `gpu/n4c-v4` (not integrated).
