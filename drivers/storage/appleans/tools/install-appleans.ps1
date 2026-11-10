@@ -59,6 +59,11 @@ if (-not (Test-Path $svcKey)) {
 }
 Set-ItemProperty $svcKey -Name ImagePath -Value "\SystemRoot\System32\DriverStore\FileRepository\$($store[0].Name)\AppleAns.sys"
 "IMAGEPATH $((Get-ItemProperty $svcKey).ImagePath) PUBLISHED $published"
+# This install path binds the service by ImagePath and never runs the INF's service AddReg, so the
+# Storport bus type (INF AppleAnsService.AddReg: BusTypeNvme, default would be Fibre Channel) is set here.
+if (-not (Test-Path "$svcKey\Parameters")) { New-Item "$svcKey\Parameters" -Force | Out-Null }
+Set-ItemProperty "$svcKey\Parameters" -Name BusType -Value 0x11 -Type DWord
+"BUSTYPE $((Get-ItemProperty "$svcKey\Parameters").BusType)"
 
 # 3. records + devnode (SYSTEM-owned keys), only when missing
 $cmds = @()

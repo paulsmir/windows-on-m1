@@ -39,6 +39,11 @@ StartType=0
 ErrorControl=1
 ServiceBinary=%13%\AppleAns.sys
 LoadOrderGroup=SCSI Miniport
+AddReg=AppleAnsService.AddReg
+
+; Storport reports BusTypeFibre (6) for a miniport without this value. The device is NVMe (0x11).
+[AppleAnsService.AddReg]
+HKR,Parameters,BusType,0x00010001,0x00000011
 
 [Strings]
 Provider="J313 Native ANS Project"
