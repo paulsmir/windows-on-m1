@@ -2969,3 +2969,25 @@ e7 d48 from 1.357 [1.345,1.367] to <= 1.20 (0.870 -> <= 0.77 ms), 7aa43c6c x5 fr
 gain 0.2-0.4 ms/frame HD. Failure: 97efffb3 slope >= 1.33 in both single arms -> slot and wait-count policy rejected
 for good; next is the (b) probe (C0 kernel on the C2 view data). Arm validity: INSTRS of 97efffb3 in the stats row
 below the control's 801 and equal P6 residency across arms.
+
+## UPDATE 2026-11-10T02:22:53Z -- N3a/N3b verdict (EXP2311, EXP2312): cross-process pairs C1 accepted by the firmware
+
+- EXP2311 (N3a, package 25c1945b6, both switches off): CONFIRMED equal to the EXP2309 baseline (suite 119/0,
+  no xproc receipt, HD fps_frames 48.521 / 48.901 / 48.708 at back-to-back cadence).
+- EXP2312 (N3b, Wom1CrossProcessPairs=1): CONFIRMED. The hardware unknown of C1 is resolved: the firmware accepts
+  a compute work item of one VM slot queued behind a running 3D work item of another slot. Receipt v2 at post-gm:
+  considered 10662, kicked 5652, fell_back 0, failed 0; no GPU_RESET, no PREEMPT_REFUSAL, kick_failures 0;
+  suite 119/0; perf gate PASS. Window effect: compute_on_3d kicks 35468 -> 41175, about 0.7 extra prebound
+  kicks per GravityMark frame.
+- C1 is class I: accepted on receipts and a clean run. HD fps_frames 49.051 / 49.417 / 49.333 against EXP2311 is
+  +1.14 % mean, but the two arms are separate boots (the switch is read at adapter start; a same-boot adapter
+  cycle is invalid since EXP2308), and EXP2309 with a different cadence sits between them. Bounded statement:
+  gain between 0 and about 1.1 %, not claimed. No default flip from this boot.
+- New observation, not yet a lever: refusal 55 (render_job_window.c:296-300, a cross-process pair that is not
+  "running RENDER -> next COMPUTE") fired 4987 times in the same GravityMark window, about 0.62 per frame, the
+  same order as the admitted class. The receipt does not split 55 by kind pair. HYPOTHESIS (medium): most of
+  them are the DWM render queued behind a running GravityMark compute or render (the mirror pair). Deciding it
+  needs a receipt-only split of code 55 by (running kind, next kind, present or not), class D.
+- Next: EXP2313 (N3c, C1 + C2a). C2a is class O: kept only with a mean fps_frames gain >= 1.0 % over EXP2312,
+  otherwise default off and the bench moves on. Then N5 (SS1, package 25c1945b6 + 0cd63ef87) unless F-A2 and
+  F-B are merged first (N4).
