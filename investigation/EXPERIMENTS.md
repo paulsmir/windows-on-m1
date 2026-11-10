@@ -76867,3 +76867,63 @@ EXP2318 HARDWARE BEFORE 2026-11-10T12:40:58Z:
 - Hashes: sys 3d618a5ae5c4, UmdArm64 727c621494ab, UmdX64 610b3c2847a7, Umd32 920125bab284; manifest c2fc4db0aecf, hardware-manifest 274c362a5e6c; probe2318.sh b3e7b957d112 (PROBE_LINT_OK); visible recovery rec2318h 494a0c94dfc1c0db; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2318h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2318-n4c-switch-unset/run2318.sh.
+
+## ANSQ-T7 — bus type NVMe: package 0.4.8 and common part of T7a/T7b (2026-11-10T13:20:00Z)
+
+- Architect-approved plan with conditions (slot after the EXP2318 rollback; stop unless the disk is in the local
+  machine container; accept only with no new disk/storport/Ntfs warning and no new refused request). Deviation
+  from the approved single step: the installed 0.4.7 has no counter of refused requests, so the step is split:
+  T7a installs 0.4.8 (= 0.4.7 + reject receipt; the INF's BusType AddReg is not applied by the ImagePath flow)
+  and records the baseline of refused requests under the default bus type; T7b then changes only the registry
+  value.
+- Commit 0cd52c6a1b512d47704e68aee850bad522756be6 (a12e4583b BusType in INF + install tool, 0cd52c6a1 reject
+  receipt). Build .local/experiments/ANSBUS1/P.ps1: MSBuild Release ARM64 /W4 /WX, code analysis 15 files 0
+  defects, InfVerif "INF is VALID", signtool, Inf2Cat. Artifact .local/experiments/ANSBUS1/ANSBUILD018-P-package.zip
+  SHA-256 d1595c5a5799f6e11863e812460277aeefd0fab697e2756c96f994d4ecf8194c; AppleAns.sys
+  b7d16a0b812908d1b15a8ac0e91813265dbb0c7e21af8405fa0b04bca9748868; AppleAns.inf
+  d567904bfa1d2a6dfe9096af7885c8db7d5f87c976b13f8e8bee5b642fbc97d0; appleans.cat
+  11c7e7a068cdb6f2aa1ec30361a2c3a460c14c95f4526275456c34034f6983e0; source tar 211de632...f222.
+- WINDOWS CONTRACT: Storport reports STORAGE_BUS_TYPE from Services\<miniport>\Parameters\BusType (REG_DWORD,
+  default 6 BusTypeFibre, values above 0x7f treated as default; Microsoft "Registry entries for Storport miniport
+  drivers"). Public classpnp sample: the bus type is read for surprise-removal logging (USB/1394/VHD), ATAPI
+  autorun and ClasspIsPortable (Fibre/iSCSI/RAID never portable; otherwise only a disk outside the local machine
+  container is portable). ANS CONTRACT: the device is an NVMe controller behind Apple's ANS2 front end.
+  TRANSLATION: the value 0x11 (BusTypeNvme); no command path changes.
+- WHAT IS STILL UNKNOWN: which requests the shipped Windows 11 stack sends to a non-stornvme adapter typed NVMe
+  (protocol-specific property queries, firmware/health IOCTLs); the live InLocalMachineContainer value.
+- Recovery artifacts: 0.4.7 store appleans.inf_arm64_62c12175c51fd95d (accepted in ANSQ-T6), 0.4.5 store
+  20a748c874b1e861; T7b rollback = delete the BusType value (t7-rollback.ps1) and restart.
+
+## ANSQ-T7a — AppleAns 0.4.8 (reject receipt) on the default bus type (BEFORE, 2026-11-10T13:20:00Z)
+
+- Hypothesis: 0.4.8 behaves as 0.4.7 and its receipt gives the baseline of refused requests under BusTypeFibre.
+- WHY THIS HYPOTHESIS: (1) the diff 0.4.7 -> 0.4.8 adds counters on paths that already completed with
+  INVALID_REQUEST / CHECK CONDITION, no command path changes; (2) host suites and code analysis pass.
+- Single variable: package 0.4.7 -> 0.4.8 (ansq-stage.ps1, ImagePath); UnmapMode 2 and the fence unchanged.
+- Commands: tools/ansq-post.ps1 (pre), ansq-stage.ps1, restart-normal.sh, ansq-post.ps1, ansq-verify.ps1; a second
+  ansq-post.ps1 after 3 minutes of uptime (the reject baseline must be stable enough to compare).
+- Expected: SSH up; running hash b7d16a0b...; 0xA9 = 0xa9020004; no 0xAA/0xA4/0xA5; DSM completed_error 0;
+  VERIFY_MANIFEST_OK; BusType still Fibre Channel; reject receipt readable (expected entries: CDB opcodes the
+  planner refuses, e.g. 1Bh START STOP UNIT; recorded, no criterion); InLocalMachineContainer recorded.
+- Failure criteria: stall, storage error records, manifest mismatch. Rollback: ImagePath -> 0.4.7 store, restart.
+- Evidence: .local/experiments/ANSBUS1/evidence/ANSQ-T7a/.
+
+## ANSQ-T7b — Services\AppleAns\Parameters\BusType = 0x11 (BusTypeNvme) (BEFORE, 2026-11-10T13:20:00Z)
+
+- Precondition: ANSQ-T7a passed and its capture shows InLocalMachineContainer = True for the Apple disk devnode
+  (t7-bustype.ps1 refuses otherwise).
+- Hypothesis: with the documented registry value Windows reports the disk as NVMe and sends nothing new that the
+  miniport refuses; SSD classification and TRIM are unchanged.
+- WHY THIS HYPOTHESIS: (1) Microsoft documents this value as the source of the reported bus type; (2) in the
+  public class driver the bus type gates only the three paths listed above, none of which applies to an
+  internal fixed disk; (3) ANSQ-S1/T2 showed seek penalty and TRIM follow the VPD pages, not the bus type.
+- Single variable: the registry value (tools/t7-bustype.ps1); package 0.4.8, UnmapMode 2, fence unchanged.
+- Commands: t7-bustype.ps1, restart-normal.sh, ansq-post.ps1, ansq-verify.ps1, ansq-post.ps1 again after 3
+  minutes of uptime.
+- Expected / accept: SSH up; Get-PhysicalDisk and Get-Disk BusType NVMe; MediaType SSD, "No Seek Penalty", "Trim
+  Supported"; volume C DriveType Fixed; no disk/storport/Ntfs warning or error since boot; no AppleAns record
+  beyond 0xA9/0xA6; reject receipt: no (kind, code) entry that ANSQ-T7a did not have and no total above the
+  T7a values at equal uptime; DSM completed_error 0; VERIFY_MANIFEST_OK; C: not dirty.
+- Failure criteria / stop: any new refused request (record kind and code, roll back; answering it is a separate
+  design step); new warnings; BusType not NVMe; the volume reported removable; stall.
+- Evidence: .local/experiments/ANSBUS1/evidence/ANSQ-T7b/.
