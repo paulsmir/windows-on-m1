@@ -20,6 +20,8 @@
 volatile unsigned AgxWin32Ov2Feature;
 /* OV5: AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT of that device */
 volatile unsigned AgxWin32Ov5Feature;
+/* C2a: AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE of that device */
+volatile unsigned AgxWin32PrivateOnlyFeature;
 
 struct pipe_screen *AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *,AGX_WIN32_SCREEN *,
     const AGX_WIN32_ASAHI_OWNER_OPS *,void *,const AGX_WIN32_ASAHI_BATCH_OPS *,
@@ -87,6 +89,8 @@ struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(AGX_WIN32_ASAHI_BACKEND 
       DRM_ASAHI_FEATURE_SOFT_FAULTS : 0;
   /* OV2: the KMD admits independent compute envelopes (VdmBarrier NONE) */
   AgxWin32Ov2Feature=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE) ? 1u : 0u;
+  /* C2a: the KMD admits private-only compute envelopes */
+  AgxWin32PrivateOnlyFeature=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE) ? 1u : 0u;
   /* OV5: the KMD admits TA-independent renders (render CdmBarrier NONE) */
   AgxWin32Ov5Feature=(windows->Info.Features & AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT) ? 1u : 0u;
   if(windows->Info.PageBytes!=AIL_PAGESIZE) return NULL;

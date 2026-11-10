@@ -1,6 +1,7 @@
 #ifndef AGX_WIN32_ASAHI_BO_H
 #define AGX_WIN32_ASAHI_BO_H
 
+#include "agx_win32_private_only.h"
 #include "agx_win32_native_device.h"
 #include "agx_win32_wait.h"
 #include "agx_win32_reloc_capture.h"
@@ -83,6 +84,9 @@ typedef struct {
   /* Q21: D3D12 opt-in; return completed batch BOs before new allocations. */
   unsigned ReclaimBeforeBatch;
   unsigned ValidateRefs;
+  /* C2a: the private-only verdict of the compute job being submitted
+   * (agx_win32_private_only.h); every reference added counts. */
+  AGX_WIN32_PRIVATE_ONLY PrivateOnly;
   AGX_WIN32_REF RefOrigin;
   unsigned char RefRoots[6][3][128]; /* Mesa stage, CBV/SRV/UAV, shader slot; root+1 */
   int GpuvaReady;
@@ -212,6 +216,9 @@ int AgxWin32AsahiMapVirtualPages(struct agx_bo *Virtual, unsigned FirstPage,
  * included (0 for an ordinary BO); IsTileScratch tells the scratch and the
  * shadow zero BO apart (never CPU-read, so never marked written). */
 unsigned AgxWin32AsahiVirtualBackingCount(struct agx_bo *);
+/* C2a: 1 only for a BO this backend allocated itself (never imported: no
+ * runtime resource, not opened); 0 for anything else or unknown. */
+int AgxWin32AsahiBoPrivate(const AGX_WIN32_ASAHI_BACKEND *, const struct agx_bo *);
 int AgxWin32AsahiVirtualContains(struct agx_bo *, uint64_t Va, uint64_t Bytes);
 struct agx_bo *AgxWin32AsahiVirtualBacking(struct agx_bo *, unsigned Index);
 int AgxWin32AsahiIsTileScratch(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *);

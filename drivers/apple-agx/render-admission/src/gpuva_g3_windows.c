@@ -4020,9 +4020,14 @@ static bool AdmissionG3TimedGraphBeginJob(ADMISSION_G3_STATE *state,
 /* OV2: the compute envelope parser admits VdmBarrier NONE only while the
  * device reports AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE. */
 static unsigned int AdmissionG4ComputeParseFlags(ADMISSION_CONTEXT *adapter) {
-  return adapter != NULL &&
-      InterlockedCompareExchange(&adapter->GpuIndependentSubqueue, 0, 0) != 0
-      ? APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE : 0u;
+  unsigned int flags = 0u;
+  if (adapter == NULL) return 0u;
+  if (InterlockedCompareExchange(&adapter->GpuIndependentSubqueue, 0, 0) != 0)
+    flags |= APPLE_AGX_G4_PARSE_INDEPENDENT_SUBQUEUE;
+  /* C2a: the header's private-only verdict, only with the device feature */
+  if (InterlockedCompareExchange(&adapter->GpuPrivateOnlyCompute, 0, 0) != 0)
+    flags |= APPLE_AGX_G4_PARSE_PRIVATE_ONLY;
+  return flags;
 }
 
 /* OV5 step 2: the render parser admits CdmBarrier NONE (a TA-independent

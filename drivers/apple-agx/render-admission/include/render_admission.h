@@ -920,6 +920,10 @@ typedef struct _ADMISSION_CONTEXT {
    * Q2c (AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE): the compute parser
    * then admits a VdmBarrier NONE envelope. */
   volatile LONG GpuIndependentSubqueue;
+  /* C2a: nonzero while the started runtime runs Wom1CrossProcessPrivateLead
+   * = 1 (AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE): the compute parser
+   * then admits APPLE_AGX_G4_COMPUTE_PRIVATE_ONLY in the envelope header. */
+  volatile LONG GpuPrivateOnlyCompute;
   /* OV5 step 2: nonzero while the started runtime runs Wom1Ov5TaWaiver = 1
    * with the 3D-queue Barrier path available
    * (AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT): the render parser

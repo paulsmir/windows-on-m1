@@ -343,6 +343,39 @@ unsigned int AdmissionJobWindowCrossProcess(const ADMISSION_JOB_WINDOW_JOB *Runn
          Next->Process != 0ULL && Running->Process != Next->Process ? 1u : 0u;
 }
 
+unsigned int AdmissionJobWindowXprocLeadRefusal(unsigned int Enabled,
+    unsigned int Barrier, const ADMISSION_JOB_WINDOW_JOB *Running,
+    const ADMISSION_JOB_WINDOW_JOB *Next) {
+  if (!Enabled) return ADMISSION_JOB_WINDOW_XPL_OFF;
+  /* exactly the class C1 admits; a same-process pair is OV2's */
+  if (Barrier != ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D ||
+      !AdmissionJobWindowCrossProcess(Running, Next) ||
+      Running->Kind != ADMISSION_JOB_WINDOW_KIND_RENDER ||
+      Next->Kind != ADMISSION_JOB_WINDOW_KIND_COMPUTE ||
+      Running->VmSlot == 0u || Next->VmSlot == 0u ||
+      Running->VmSlot == Next->VmSlot)
+    return ADMISSION_JOB_WINDOW_XPL_CLASS;
+  if (!Next->PrivateOnly) return ADMISSION_JOB_WINDOW_XPL_NOT_FLAGGED;
+  return ADMISSION_JOB_WINDOW_XPL_WAIVE;
+}
+
+unsigned int AdmissionJobWindowXprocLeadNote(
+    ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt, unsigned int Refusal,
+    unsigned int Fence, unsigned int Expected, unsigned int WaitValue) {
+  if (Receipt == 0) return 0u;
+  ++Receipt->LeadConsidered;
+  if (Refusal == ADMISSION_JOB_WINDOW_XPL_WAIVE) {
+    ++Receipt->LeadWaived;
+    Receipt->LastLeadFence = Fence;
+    Receipt->LastLeadExpected = Expected;
+    Receipt->LastLeadWaitValue = WaitValue;
+  } else if (Refusal < ADMISSION_JOB_WINDOW_XPL_REASONS) {
+    ++Receipt->LeadRefused[Refusal];
+  }
+  return Receipt->LeadConsidered <= 16u || (Receipt->LeadConsidered & 0xffu) == 0u
+      ? 1u : 0u;
+}
+
 void AdmissionJobWindowXprocReceiptInitialize(
     ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt) {
   unsigned char *bytes = (unsigned char *)Receipt;

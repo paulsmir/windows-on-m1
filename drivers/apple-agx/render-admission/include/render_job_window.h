@@ -65,6 +65,10 @@ typedef struct _ADMISSION_JOB_WINDOW_JOB {
    * for N+1 the slot its process holds when the kick is decided. Read
    * only for a cross-process pair. */
   unsigned int VmSlot;
+  /* C2a (Wom1CrossProcessPrivateLead): a compute envelope the parser
+   * admitted with APPLE_AGX_G4_COMPUTE_PRIVATE_ONLY (only under the device
+   * feature): every allocation it references is private to its device. */
+  unsigned int PrivateOnly;
 } ADMISSION_JOB_WINDOW_JOB;
 
 /* Firmware-side features the window needs for some pairs (rc95: all 0).
@@ -184,8 +188,27 @@ unsigned int AdmissionJobWindowCrossProcess(const ADMISSION_JOB_WINDOW_JOB *Runn
  * ones in RefusalOther); the last kicked pair and the last refused and
  * undone successors (LastUndoneDetail: the KMD line in bits 0-15, the
  * BeginSuccessorJob refusal in bits 16-23, as LastKickFailure). */
-#define ADMISSION_JOB_WINDOW_XPROC_RECEIPT_VERSION 1u
+#define ADMISSION_JOB_WINDOW_XPROC_RECEIPT_VERSION 2u /* v2: the C2a Lead* fields */
 #define ADMISSION_JOB_WINDOW_XPROC_CODES 8u
+/* C2a (REG_DWORD Wom1CrossProcessPrivateLead = 1 on top of
+ * Wom1CrossProcessPairs and Q2c, default off): the kicked cross-process
+ * compute successor carries the UMD's private-only verdict, so it cannot
+ * conflict with the other process's render N. Its lead Barrier keeps its
+ * queue, slot and address but waits on the 3D stamp value already in
+ * memory (the OV2 construct, AdmissionJobWindowOv2WaitValue): satisfied on
+ * arrival, the compute overlaps N. Refusals (stable receipt values):
+ *   1 switch off, 2 not the cross-process plain render -> compute
+ *   COMPUTE_ON_3D pair with two different nonzero slots, 3 the compute is
+ *   not flagged private-only, 4 the 3D stamp was unreadable or zero (KMD). */
+#define ADMISSION_JOB_WINDOW_XPL_WAIVE 0u
+#define ADMISSION_JOB_WINDOW_XPL_OFF 1u
+#define ADMISSION_JOB_WINDOW_XPL_CLASS 2u
+#define ADMISSION_JOB_WINDOW_XPL_NOT_FLAGGED 3u
+#define ADMISSION_JOB_WINDOW_XPL_STAMP 4u
+#define ADMISSION_JOB_WINDOW_XPL_REASONS 5u
+unsigned int AdmissionJobWindowXprocLeadRefusal(unsigned int Enabled,
+    unsigned int Barrier, const ADMISSION_JOB_WINDOW_JOB *Running,
+    const ADMISSION_JOB_WINDOW_JOB *Next);
 typedef struct _ADMISSION_JOB_WINDOW_XPROC_RECEIPT {
   unsigned int Version, Bytes;
   unsigned int Considered, Allowed, Kicked, FellBack, Failed;
@@ -195,7 +218,19 @@ typedef struct _ADMISSION_JOB_WINDOW_XPROC_RECEIPT {
   unsigned int LastFence, LastRunningFence, LastRunningSlot, LastNextSlot;
   unsigned int LastRefusal, LastRefusedFence;
   unsigned int LastUndoneFence, LastUndoneDetail;
+  /* v2 (C2a): kicked cross-process pairs considered for the lead waiver
+   * (switch on), waived, the refusal per reason, the last waived successor
+   * with N's 3D end and the Barrier's wait value. */
+  unsigned int LeadConsidered, LeadWaived;
+  unsigned int LeadRefused[ADMISSION_JOB_WINDOW_XPL_REASONS];
+  unsigned int LastLeadFence, LastLeadExpected, LastLeadWaitValue;
 } ADMISSION_JOB_WINDOW_XPROC_RECEIPT;
+/* C2a: counts one kicked cross-process pair (Refusal as above; Fence N+1,
+ * Expected N's 3D stamp, WaitValue the Barrier's). Returns 1 when an export
+ * is due: the first 16 considered pairs, then every 256th. */
+unsigned int AdmissionJobWindowXprocLeadNote(
+    ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt, unsigned int Refusal,
+    unsigned int Fence, unsigned int Expected, unsigned int WaitValue);
 void AdmissionJobWindowXprocReceiptInitialize(
     ADMISSION_JOB_WINDOW_XPROC_RECEIPT *Receipt);
 /* Counts one final decision (Refusal as AdmissionJobWindowKickRefusal or

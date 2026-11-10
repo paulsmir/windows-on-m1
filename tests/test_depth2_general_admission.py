@@ -129,6 +129,7 @@ typedef struct {
  struct { APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory; } Initdata;
  struct { struct {APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG Config;} QueueProvider;} Provider;
  unsigned char CrossProcessPairs; /* C1: Wom1CrossProcessPairs, default off */
+ unsigned char XprocLeadEnabled, XprocLeadWaive; /* C2a: Wom1CrossProcessPrivateLead, default off */
  ADMISSION_JOB_WINDOW_XPROC_RECEIPT XprocReceipt; unsigned long long XprocExportQpc;
 } Runtime;
 typedef struct { unsigned G3RetainedSlots, G3CrossProcessPairs; } Adapter; /* V1 Wom1G3RetainedSlots */

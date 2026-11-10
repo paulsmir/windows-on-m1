@@ -361,6 +361,11 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
    * declares ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS (render_job_window.h);
    * the worker-owned receipt is Wom1CrossProcessPairsReceipt. */
   BOOLEAN CrossProcessPairs;
+  /* C2a (REG_DWORD Wom1CrossProcessPrivateLead = 1, default off, needs C1
+   * and Q2c): a private-only cross-process compute successor's lead Barrier
+   * waits on the 3D stamp already in memory (AdmissionJobWindowXprocLead
+   * Refusal). XprocLeadWaive is decided per kick. */
+  BOOLEAN XprocLeadEnabled, XprocLeadWaive;
   ADMISSION_JOB_WINDOW_XPROC_RECEIPT XprocReceipt;
   /* QPC of its last export without Wom1JobDiagnostics. */
   ULONGLONG XprocExportQpc;
@@ -4495,6 +4500,22 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBuildLeadBarrier(
         runtime->RcExportPending = TRUE;
       runtime->Ov2Waive = FALSE;
     }
+    /* C2a: likewise for a private-only compute successor of another
+     * process; counted in Wom1CrossProcessPairsReceipt. */
+    if (runtime->XprocLeadWaive && cls == ADMISSION_JOB_WINDOW_BARRIER_COMPUTE_ON_3D) {
+      APPLE_AGX_U32 now = 0u;
+      unsigned int refusal = ADMISSION_JOB_WINDOW_XPL_STAMP;
+      if (AppleAgxRenderSharedMemoryReadFirmwareStamp(owner,
+              APPLE_AGX_RENDER_STAMP_QUEUE_3D, &now) && now != 0u) {
+        barrier.WaitValue = AdmissionJobWindowOv2WaitValue(cls,
+            running->D3ExpectedStamp, now);
+        refusal = ADMISSION_JOB_WINDOW_XPL_WAIVE;
+      }
+      (void)AdmissionJobWindowXprocLeadNote(&runtime->XprocReceipt, refusal,
+          runtime->Depth2KickedFence, running->D3ExpectedStamp,
+          barrier.WaitValue);
+      runtime->XprocLeadWaive = FALSE;
+    }
 #endif
   } else {
     if (running->Kind != AppleAgxBackendJobCompute) return APPLE_AGX_BACKEND_FALSE;
@@ -6555,6 +6576,10 @@ static VOID AdmissionJobWindowDescribeLocked(const ADMISSION_BACKEND_IMAGE *imag
   /* C1: the slot BeginJob leased for this job (0: not begun yet, or the
    * baseline slot). A Prebound successor's slot is filled by the kick. */
   job->VmSlot = image->BoundFence == fence ? image->JobVmSlot : 0u;
+  /* C2a: the parser admitted the header value only under the device feature. */
+  job->PrivateOnly = image->BoundFence == fence && image->G4Compute &&
+      image->G4ComputeEnvelope.Header.Base.Reserved ==
+          APPLE_AGX_G4_COMPUTE_PRIVATE_ONLY ? 1u : 0u;
 }
 
 /* C1 receipt: a decided cross-process kick that did not reach the firmware;
@@ -6909,6 +6934,7 @@ static BOOLEAN AdmissionJobWindowKickFallbackWindows(ADMISSION_CONTEXT *adapter,
   runtime->Depth2KickBarrier = 0u;
 #if defined(ADMISSION_OV2_ON)
   runtime->Ov2Waive = FALSE;
+  runtime->XprocLeadWaive = FALSE;
 #endif
 #if defined(ADMISSION_OV5_ON)
   runtime->Ov5Waive = FALSE;
@@ -7240,6 +7266,19 @@ static BOOLEAN AdmissionJobWindowKickWindows(ADMISSION_CONTEXT *adapter,
     else if (ov2 != ADMISSION_JOB_WINDOW_OV2_CLASS &&
              AdmissionJobWindowOv2Note(&runtime->Ov2Receipt, ov2, next, 0u, 0u))
       runtime->RcExportPending = TRUE;
+  }
+  /* C2a: waive the lead Barrier's wait for a private-only compute successor
+   * of another process (a refusal is counted here, a waiver where the
+   * Barrier is built). */
+  runtime->XprocLeadWaive = FALSE;
+  if (runtime->XprocLeadEnabled && cross) {
+    unsigned int lead = AdmissionJobWindowXprocLeadRefusal(1u, (unsigned int)barrier,
+        &s.Running, &s.Next);
+    if (lead == ADMISSION_JOB_WINDOW_XPL_WAIVE)
+      runtime->XprocLeadWaive = TRUE;
+    else
+      (void)AdmissionJobWindowXprocLeadNote(&runtime->XprocReceipt, lead, next,
+                                            0u, 0u);
   }
 #endif
 #if defined(ADMISSION_OV5_ON)
@@ -9228,6 +9267,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->Depth2General = FALSE;
   runtime->Depth2Prelude = FALSE;
   runtime->CrossProcessPairs = FALSE;
+  runtime->XprocLeadEnabled = runtime->XprocLeadWaive = FALSE;
   /* rc90: on by default since EXP2034 (the G4-r3 drill passed with it);
    * only REG_DWORD 0 turns it off. */
 #if ADMISSION_JOB_AHEAD_BUILD
@@ -9294,6 +9334,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       AdmissionPlatformSwitchEnabled(Context, L"Wom1CrossProcessPairs") ? TRUE : FALSE;
   if (runtime->CrossProcessPairs)
     runtime->Depth2Capabilities |= ADMISSION_JOB_WINDOW_CAP_CROSS_PROCESS;
+  /* C2a (default off): REG_DWORD Wom1CrossProcessPrivateLead = 1, its own
+   * switch on top of C1; Q2c as OV2 (the compute may end before the render:
+   * it must signal its own Queue's notifier). The device feature is
+   * published at the end of start. */
+  runtime->XprocLeadEnabled = runtime->CrossProcessPairs &&
+      runtime->Initdata.RenderSharedMemory.ComputeOwnQueue &&
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1CrossProcessPrivateLead") ? TRUE : FALSE;
 #else
   runtime->JobAhead = FALSE;
   runtime->JobDepth2 = FALSE;
@@ -9406,8 +9453,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   /* EXP2196: this reset ran after the OV2 enable above and hid the
    * device feature from the UMD; publish it here, at the end of start. */
   InterlockedExchange(&Context->GpuIndependentSubqueue, runtime->Ov2Enabled ? 1 : 0);
+  /* C2a: likewise, after every reset of the feature words above. */
+  InterlockedExchange(&Context->GpuPrivateOnlyCompute, runtime->XprocLeadEnabled ? 1 : 0);
 #else
   InterlockedExchange(&Context->GpuIndependentSubqueue, 0);
+  InterlockedExchange(&Context->GpuPrivateOnlyCompute, 0);
 #endif
   RtlZeroMemory(&runtime->PostResume, sizeof(runtime->PostResume));
   KeInitializeEvent(&runtime->WorkIdle, NotificationEvent, TRUE);
@@ -9503,6 +9553,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
 Fail:
   InterlockedExchange(&Context->GpuSoftFaults, 0);
   InterlockedExchange(&Context->GpuIndependentSubqueue, 0);
+  InterlockedExchange(&Context->GpuPrivateOnlyCompute, 0);
   InterlockedExchange(&Context->GpuRenderTaIndependent, 0);
   {
     NTSTATUS cleanup=AdmissionPlatformDestroy(runtime);
@@ -9530,6 +9581,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStop(
     return STATUS_SUCCESS;
   InterlockedExchange(&Context->GpuSoftFaults, 0);
   InterlockedExchange(&Context->GpuIndependentSubqueue, 0);
+  InterlockedExchange(&Context->GpuPrivateOnlyCompute, 0);
   InterlockedExchange(&Context->GpuRenderTaIndependent, 0);
   status = AdmissionPlatformDestroy(runtime);
   if (!NT_SUCCESS(status))

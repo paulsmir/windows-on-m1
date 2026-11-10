@@ -44,3 +44,39 @@ B's slot with A untouched). Not compiled on the host: the kick function and the 
 existing replays with -Wall -Wextra -Werror, with the switch off. Receipt-only side effect with the switch on: the
 early rc95 note (AdmissionJobWindowNoteWindows, diagnostics only) sees no successor slot and writes 6 for a
 cross-process pair; the kick decision overwrites it for the same fence.
+
+## C2a: the offline unknown (how a shared or primary allocation is recognised) and its resolution
+
+Question (DWM-COMPOSITION-LEVER.md, unknown 3 and section 6): the pinned D3D12 DDI has no shared heap flag; how can
+the UMD prove that a compute job binds only allocations no other process can reach?
+
+Sources: `.local/reference/wdk26100/d3d12umddi.h` (D3D12DDI_HEAP_FLAGS: no shared bit; D3D12DDICB_ALLOCATE_0022:
+hResource in, hKMResource out; D3D12DDIARG_OPENHEAP_0003); Microsoft Learn, D3DDDICB_ALLOCATE (read 2026-11-10):
+"The driver must assign a non-NULL value for allocations that are created in response to shared resources", and the
+runtime "creates and returns a kernel-mode resource handle only if the user-mode display driver sets the hResource
+member"; our UMD: `render-admission/umd/src/umd_win32_screen.c` (every winsys BO: `allocate.hResource = NULL`),
+`umd.c` AdmissionUmdCreateResourceWithMetadata / AdmissionUmdOpenResource (the only callers that pass a runtime
+resource), `mesa/winsys/agx_win32_asahi_bo.c` AgxWin32AsahiImportBo (the only place a runtime-resource allocation
+becomes a BO; sets `Imported`, and an imported BO is never cached or recycled), its three users (D3D12 presentation
+texture, D3D12 opened shared texture, D3D10/11 presentation/primary), investigation/analysis/D3D12-C76-shared-open.md.
+
+Resolution: the runtime does not tell the driver that a heap is shared, and it does not need to. Cross-process
+visibility of an allocation requires a kernel resource handle, which exists only for allocations the UMD itself
+attached to a runtime resource, or received through the open DDI. In this UMD both enter the winsys through one
+function and are marked `Imported`. Every other BO is allocated with hResource NULL: device-associated, no kernel
+resource, not openable. So "private" = a BO of this backend that is not imported; no hypothesis about hKMResource
+values is needed. A D3D12_HEAP_FLAG_SHARED heap this UMD backs with private BOs cannot be shared at all (C76:
+explicit shared heaps stay fail-closed), which is a missing feature, not a hole in the rule.
+
+Verdict (agx_win32_private_only.h): private-only when every entry of the job's reference list (the complete set of
+allocations the KMD binds for the job, built by add_bo) is private; an imported or unknown BO, an empty list or a
+missing device feature clears it. Carried as APPLE_AGX_G4_COMPUTE_PRIVATE_ONLY in the compute envelope header's
+reserved word (UMD-KMD ABI, not a firmware field), admitted by the parser only under
+APPLE_AGX_G4_PARSE_PRIVATE_ONLY = device feature AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE (0x8).
+
+Trust: as OV2, the KMD takes the UMD's verdict. A wrong verdict can only reorder two jobs on memory both processes
+may already access; it grants no access. Not covered by the rule and left as stated: the KMD does not re-derive the
+verdict from its own allocation records (it could: every allocation of the job's reference list is known to it).
+
+Hardware unknown of C2a (beyond C1): with the wait waived the firmware really executes a compute work item of one
+VM slot while a 3D work item of another slot runs; under C1 they are only queued together.

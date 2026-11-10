@@ -236,7 +236,7 @@ class CrossProcessPairDecision(unittest.TestCase):
         run = build_run(RECEIPT, [RENDER / 'src/render_job_window.c'], [RENDER / 'include'])
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertEqual(run.stdout.split('\n')[:-1], [
-            'init 1 1 0',
+            'init 2 1 0',
             'due 17 considered 300 allowed 100',
             'codes 55=100 6=100 sum 200 other 0 last 6 11',
             'overflow table 206 other 6 considered 312',
@@ -404,9 +404,12 @@ class CrossProcessPairWiring(unittest.TestCase):
                                                       ROOT / 'tools/agx_xproc_receipt.py')
         tool = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(tool)
-        words = [1, 128, 9, 5, 4, 1, 0] + [55, 6, 0, 0, 0, 0, 0, 0] + [3, 1, 0, 0, 0, 0, 0, 0] + \
-            [0, 711, 710, 2, 3, 6, 705, 700, 7300 | (11 << 16)]
-        out = tool.decode(struct.pack('<32I', *words))
+        words = [2, 168, 9, 5, 4, 1, 0] + [55, 6, 0, 0, 0, 0, 0, 0] + [3, 1, 0, 0, 0, 0, 0, 0] + \
+            [0, 711, 710, 2, 3, 6, 705, 700, 7300 | (11 << 16)] + \
+            [4, 3, 0, 0, 0, 1, 0, 711, 0x500, 0x400]
+        out = tool.decode(struct.pack('<42I', *words))
+        self.assertEqual(out['lead'], dict(considered=4, waived=3, refused={'3': 1},
+                                           last=dict(fence=711, expected=0x500, wait_value=0x400)))
         self.assertEqual((out['considered'], out['allowed'], out['kicked'], out['fell_back']), (9, 5, 4, 1))
         self.assertEqual(out['refusals'], {'55': 3, '6': 1})
         self.assertEqual(out['last_kicked'], dict(fence=711, running_fence=710, running_slot=2, next_slot=3))
@@ -418,13 +421,15 @@ class CrossProcessPairWiring(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='xproc-abi-') as tmp:
             src = Path(tmp) / 'abi.c'
             src.write_text('#include "render_job_window.h"\n'
-                           '_Static_assert(sizeof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT) == 128, "size");\n'
+                           '_Static_assert(sizeof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT) == 168, "size");\n'
                            '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
                            ' Kicked) == 16, "kicked");\n'
                            '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
                            ' RefusalCode) == 28, "codes");\n'
                            '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
-                           ' LastFence) == 96, "last");\n')
+                           ' LastFence) == 96, "last");\n'
+                           '_Static_assert(__builtin_offsetof(ADMISSION_JOB_WINDOW_XPROC_RECEIPT,'
+                           ' LeadConsidered) == 128, "lead");\n')
             for target in ('x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc'):
                 for unit in (src, RENDER / 'src/render_job_window.c'):
                     done = subprocess.run(['clang', '-target', target, '-std=c11', '-Wall', '-Wextra',
