@@ -4419,3 +4419,8 @@ EXP2330 (running at this stamp) -> EXP2331 -> EXP2332 -> POOL-PROBE boot with th
 - The pause ends by itself on 2026-12-15. Undo = delete the two values.
 - EXP2330 is INVALID-ENV (ACTUAL in 7de424a8c): the guest reset itself after the ordered restart, before any arm, with update downloads at 22:37:58-22:39:38Z in the System log. The quiet gate cannot catch this case because it runs only once the experiment boot is reachable. No data from EXP2330 is used.
 - Bench order: EXP2334 (the EXP2330 package again, pinned source 6b6f71668) -> EXP2331 -> EXP2332 -> EXP2333 (package rebuilt from the tip, census launch last) -> T5b FULL rerun -> TDR-H0 -> FS-D1.
+
+## UPDATE 2026-11-10T22:54:29Z -- architect: update pause taken by the client
+
+- Both client status values read 1 about 12 minutes after the write, same boot. Record: `investigation/EXPERIMENTS.md`, `ENV-CHANGE follow-up 2026-11-10T22:54:29Z`.
+- Still open: no update download in the System log of the EXP2334 boot.

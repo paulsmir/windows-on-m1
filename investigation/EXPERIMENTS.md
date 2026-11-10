@@ -77460,3 +77460,8 @@ ENV-CHANGE 2026-11-10T22:42:24Z -- bench guest: Windows Update paused (not an ex
 - Undo: reg delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" /v PauseQualityUpdatesStartTime /f, and the same for PauseFeatureUpdatesStartTime.
 - Evidence (Mac, outside the repository): /Users/pavel/public_windows/.local/experiments/ENV-wu-pause-20261110/wu-pause-before.txt sha256 69fba7f23df393ef8beee0c27fc0d487837dfc9a0fac4ae31b443cf4c9ff2acf, wu-pause-after.txt sha256 e4782fab7d71c93000285ed20394df88599f928512458e94014e8a4bafed63a9.
 - Effect on comparability: experiments from EXP2334 on run on a guest with the pause policy written. Earlier boots ran without it. The quiet-guest gate stays in force unchanged.
+
+ENV-CHANGE follow-up 2026-11-10T22:54:29Z (refers to ENV-CHANGE 2026-11-10T22:42:24Z):
+- Read-only query in the same boot (guest up since 22:40:53Z, no restart, no forced scan): PausedQualityStatus = 1, PausedFeatureStatus = 1, PausedQualityDate and PausedFeatureDate = "2026-11-10 00:00:00". The client has taken the policy. TiWorker and TrustedInstaller were not running.
+- First half of the done criterion is met. Second half is still open: the System log of the next experiment boot (EXP2334) must show no update download.
+- Evidence: /Users/pavel/public_windows/.local/experiments/ENV-wu-pause-20261110/wu-pause-status-1.txt sha256 d36b7c8adf70eb959cff04abd82028abed3a800dd0b035fc2d0865c0563f4c2c.
