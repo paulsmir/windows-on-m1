@@ -3919,3 +3919,23 @@ EXP2327 T5b ABBA, architect reading (tools/agx_gm_perf.py summary, fps_frames; a
   shader-form lever gets a package, its size must come from a measured cost of that op class on this GPU (cost
   fixture with the production shape, or a diagnostic arm), not from the oracle diff.
 - Result with a claim unchanged: EXP2318 FULL f0 7923 = 79.7 % of macOS 9946.
+
+## UPDATE 2026-11-10T20:14:34Z -- architect: CORRECTION to the 20:12Z T5b verdict scope; EXP2327 FULL f0 below the history range
+
+Read after the 20:12Z note (evidence .local/experiments/EXP2327-n4c3-t5b/evidence/EXP2327/gm2327{ft5,f0}-out.txt):
+- FULL pair of EXP2327, same boot, adjacent, order ft5 then f0: ft5 (A+B2) 7811, f0 7689 = +1.59 % for T5b.
+  One pair, no ABBA, order not controlled, no UMD log (no per-scene split). The 20:12Z verdict stands for the PERF
+  window (10..70 s, both pre-registered rules not met). "CLOSED as a lever for the macOS gap" is NARROWED to that
+  window: the FULL score (the claim metric) is OPEN until a same-boot FULL ABBA f0 ft5 ft5 f0. HYPOTHESIS, not
+  shown: the scenes after 70 s weigh the planet PS / lighting more. No default flip from one pair.
+- FULL f0 of this boot is 7689. Earlier FULL f0 on five boots (EXP2320..EXP2326 packages): 7888, 7991, 7907, 7911,
+  7937. So this boot is 2.5-3.8 % below that range, while PERF t0 is only 0.57 % below EXP2320 (49.794 vs 50.08).
+  Observed difference of the boot: Wom1Ov2CrossLead = 1 for the whole boot (64 measure-d3d12-ov2-mask-summary rows
+  in the t0 logs too), i.e. the N4c-v3 shadow range tracking ran in every arm. HYPOTHESIS: the tracking costs CPU
+  where the frame is CPU-bound (fast scenes outside the PERF window). Not separated from other package content.
+  7689 is NOT a baseline and not a regression claim; the T5b ABBA is unaffected (same state in every arm).
+- Consequence for N4c: the lever is worth 0.27-0.35 ms (about 1.5 %); if the tracking costs 2.5 % of FULL, an
+  apply arm cannot win before the tracking cost is removed. s1 therefore also needs FULL f0 on its boot and a
+  FULL f0 on a boot of the same package with the cross switch unset.
+- Next package (K1 default-on, built from the origin tip): boot 1 cross switch unset = K1 default check, then FULL
+  f0 ft5 ft5 f0; boot 2 Wom1Ov2CrossLead = 1 = s1 (PERF r1 + FULL f0).
