@@ -4348,3 +4348,66 @@ Receipt fields read with the v15 layout of `render_pool_demand.h`; xproc receipt
 EXP2330 (same package, Wom1Ov2CrossLead=1: s1 PERF r1 + FULL f0 + CS gate; GO behind the quiet-guest gate) ->
 EXP2331 (STATS-NOPS) -> EXP2332 (PF1b) -> POOL-PROBE boot -> T5b FULL ABBA rerun (f0 ft5 ft5 f0 with -times on a
 quiet all-default boot; may share the POOL-PROBE package as a separate boot) -> TDR-H0 -> FS-D1.
+
+## UPDATE 2026-11-10T22:33:12Z -- architect: EXP2329 servicing times confirmed; Windows Update pause approved by the user; buffer first-reference census (receipt-only, own switch) and its reading rule
+
+### EXP2329 follow-up (bench owner, EXPERIMENTS.md "EXP2329 ACTUAL 2026-11-10T22:24:43Z")
+
+- The servicing reading of the late-boot out-of-memory is now timed, not inferred: guest System log shows Windows
+  Update downloads at 21:29:40Z-21:29:54Z and Windows Modules Installer activity 21:30:41Z-21:44:27Z, inside the
+  FULL arms; again 22:21Z-22:24Z after the restart. Pending-reboot keys after recovery: all False.
+- The first rollback was preempted by a servicing restart; the rerun at the proxy ended RECOVERY_DONE; package,
+  service absent, devnode inert (read-only check by the bench owner).
+- K1 default flip reverted as its rule requires: b81265c7d (code), 80736842a (CHANGES rows). Reviewed: the revert
+  restores `AdmissionPlatformSwitchEnabled(Wom1CrossProcessRenderPairs)`; K1 stays opt-in.
+
+### Bench environment: Windows Update pause (user decision)
+
+- Asked: «Поставить Windows Update на паузу в стендовом госте?». User: "да, на паузу".
+- Mechanism (Microsoft Learn, Update Policy CSP and Windows Update client policies): string values
+  `PauseQualityUpdatesStartTime` / `PauseFeatureUpdatesStartTime` (yyyy-mm-dd) under
+  `HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate`; 35 days or until cleared; Pro / Enterprise / Education.
+- Handed to the bench owner (handoff 2026-11-10T22:26:49Z). NOT applied yet at this stamp. Applied only on an idle
+  guest, verified by `PausedQualityStatus` / `PausedFeatureStatus` at a later boot. No process kill, no service
+  change. The quiet-guest gate stays.
+
+### Buffer first-reference census (class D, receipt-only)
+
+- Code: 127a235a7 (receipts `measure-bo-born`, `measure-bo-first-ref`, `measure-bo-census`; tool
+  `tools/agx_bo_life.py`; test `tests/test_umd_bo_census.py`) and 1b9f68f6f (own switch).
+- On only when the process has both `APPLE_AGX_UMD_TRACE_FILE` and `APPLE_AGX_D3D12_BO_CENSUS=1`. Default off: a
+  traced launch without the switch writes the same trace lines as before, so scored arms stay comparable across
+  packages. Off cost: one branch per accepted batch and one per buffer creation.
+- Verified: builder compile gate SYNCHECK_OK for the owner file; test gate 1203 tests, 1 NEW = the Mu-flag test that fails only in this checkout (known, unrelated), 0 other NEW; the three winsys C files
+  are compiled by MSVC for the first time in the next package build (NOT verified here; the same initializer and
+  container-of forms already exist in agx_win32_gpuva_batch.c).
+- Review notes: every batch reference comes from `add_bo` and is `&windows_bo.Gpuva`, so the container-of in
+  `AgxWin32AsahiCensusRefs` is valid; buffers are zero-allocated, so a buffer born with the hook unset is never
+  pending.
+
+WHY THIS HYPOTHESIS (deferred backing): (1) the startup stall (247 frames) is owned by the pool's slab path and 91 %
+of the 2756 MiB reserved at startup is the application's own objects, 1409 MiB of it in 67 committed buffers
+(accounting of 2026-11-10T21:56:52Z); (2) macOS backs such buffers with demand-zero pages, so memory a GPU job never
+names costs it nothing at creation. Unknown: how much of our startup reservation no GPU batch ever names.
+
+Reading rule (written before any census data exists):
+- Arm: one extra GravityMark launch in the FULL configuration (-Asteroids 100000, HD), with the trace and the
+  census switch, run after every scored arm of its boot, behind the quiet-guest gate. Its score is not used.
+- N = MiB of buffers of at least 1 MiB with origin 1 (new allocation; cache reuse lines are excluded) whose class
+  is an application object (committed buffer / committed texture / heap / placed or reserved) and that have no
+  first-reference line while the process lived.
+- N is an upper bound of what deferred backing could save: a buffer no batch names may still be written by the CPU
+  or read by the kernel copy path, and then it needs its pages anyway.
+- Estimate of the bound, labelled as an estimate (uniform cost per MiB assumed): frames = 247 * N / 2756.
+- N < 550 MiB (bound under 50 frames, about 0.5 % of the macOS score): the deferred-backing hypothesis is CLOSED.
+- N >= 550 MiB: no design yet. Next step is offline: for the ten largest never-referenced objects read the existing
+  map / upload / copy receipts to see whether the CPU or the copy path touches them. A deferred-commit design is
+  written only for the part that nothing touches, and only if that part alone is >= 550 MiB.
+- Buffers first referenced late (any bucket) are NOT a gain: deferring them moves the same slab cost into the
+  scored scenes (allocate-ahead of unchanged slabs is closed, EXP2022 / EXP2060).
+- Whatever N is, the per-class table goes into the ledger as recorded; no other conclusion is drawn from it.
+
+### Bench order
+
+EXP2330 (running at this stamp) -> EXP2331 -> EXP2332 -> POOL-PROBE boot with the package rebuilt from the tip
+(census arm last) -> T5b FULL ABBA rerun -> TDR-H0 -> FS-D1.
