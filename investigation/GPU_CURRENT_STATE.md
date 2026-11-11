@@ -5563,3 +5563,18 @@ file. `Wom1ComputeEncoderMask` joins the opt-in list (default off, unset in ever
   CheckMultiPlaneOverlaySupport3 for our adapter from the interactive and the service session, with the receipt
   deltas (no driver change, EXP2349 package). An offline follow-up on the dxgkrnl / dwmcore readings (R22, R25)
   runs in parallel. Spec in the handoff file.
+
+## UPDATE 2026-11-11T19:48Z (architect): S2-1c (EXP2350): dxgkrnl's DirectFlip and MPO support read 0; our staging sets DisableDDisplay
+
+- EXP2350 console-session probe on our adapter: KMTQAITYPE_MULTIPLANEOVERLAY_SUPPORT 0 and DIRECTFLIP_SUPPORT 0
+  although DRIVERCAPS reported both as 1; HUD 0, STRETCH 0, SECONDARY 1, MPO3DDI 1. GetMultiPlaneOverlayCaps for
+  source 0 returns MaxPlanes 1 without bit 0x800 and without a miniport call. No DisableOverlays /
+  OverlayTestMode value exists.
+- The guest's only non-default DWM value is ours: every stage script since EXP952 (2026-10-03) writes
+  HKLM\SOFTWARE\Microsoft\Windows\Dwm\DisableDDisplay = 1 (reason then: DDisplay needs a FL 11_0 render device,
+  the UMD was FL 10_0). EXP951 recorded that it moves DWM to its legacy output path.
+- HYPOTHESIS (not shown by EXP2350): on the legacy path DWM never enables DirectFlip or overlays for the output,
+  which is why the kernel-side support reads 0 and nobody asks the miniport. If so, every GravityMark number of
+  this project since EXP952 was measured with DWM on its legacy path.
+- Decision: S2-1d = the EXP2350 boot with that staging line skipped (single variable), health check first, then
+  the probe, then measured runs only if the desktop is healthy. Spec in the handoff file.
