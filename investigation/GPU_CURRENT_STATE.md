@@ -4992,3 +4992,68 @@ the EXP2337 default arms; (2) R5 3D; (3) C0; (4) R1; (5) R3/C2/C4; harness item:
 Backlog (not GravityMark): BROKER-RANGE, live additive paging at creation, slab part.
 
 Bench order unchanged: EXP2337 + EXP2338 -> T5b FULL boot -> TDR-H0 -> FS-D1.
+
+
+## UPDATE 2026-11-11T04:25:32Z -- EXP2337 verdict: PF1 fold default-on KEEP (FULL +3.2 %, PERF +3.1 %; 80.2 % of macOS)
+
+Read by the architect from `.local/experiments/EXP2337-pf1-default-on/evidence/EXP2337` (package 7f7f88ce1, build 1764,
+boot 2026-11-11T03:06Z; fork 6's ACTUAL in EXPERIMENTS.md follows; EXP2338 arms run in the same boot and are not read
+here). Registry switches of the boot (kmd-receipts-final.txt): Wom1JobDiagnostics, Wom1CrossProcessPairs,
+Wom1SubmitRequeue = 1; nothing else.
+
+| arm | env | fps_frames / score | validity (pf1-rx.txt) |
+| --- | --- | --- | --- |
+| w / r2 / r3 | default | 50.021 / 49.736 / 50.237 (mean r2,r3 49.99) | -- |
+| p1a, p1b | default | 49.839, 49.640 | seals 3.239 / 3.236, folded 7.557 / 7.551, refusal 7 = 0, cause 5 = 0, v5 = 0 |
+| p0a, p0b | FOLD=0 | 48.086, 48.430 | seals 0, v5 3.215 / 3.210 |
+| fpa, fpb | default | 8006, 7938 (mean 7972) | err files empty |
+| f0a, f0b | FOLD=0 | 7729, 7719 (mean 7724) | err files empty |
+
+PERF default 49.740 against 48.258 = +3.07 %; FULL +3.21 %. FULL default mean 7972 = 80.2 % of macOS 9946.
+
+KEEP lines (UPDATE 02:41:07Z), each checked against a file:
+- suite under the fold: tool-suite-std.txt 119 PASS / 0 FAIL;
+- no fault / 0x116 / TDR: full.log has no bugcheck line; Wom1SoftFaultState is byte-identical to the control boots
+  EXP2333 and EXP2335; no reset receipt;
+- screenshots: gm2337fpa-001.jpg and gm2337f0a-001.jpg show the same scene and content class (asteroid field, planet,
+  HUD; score 6665 against 6569 at 132 s remaining). The f0b / fpb shots are not on the Mac; not looked at;
+- this boot's PERF gain not negative (+3.07 %); pooled with EXP2335 (+2.22 %) = +2.65 %, above 0.7 %;
+- FULL mean(default) 7972 above mean(FOLD=0) 7724;
+- CS r2 50.924, r3 50.618 against baseline 49.943 (both runs valid by the mid-run rows of cs-bench-mem.csv: pages_in
+  0-16 per s, no foreign process above 10000 faults per s); perf-gate.txt PERF_GATE_PASS;
+- stop lines: no FULL arm below 7538; PERF mean(r2,r3) 49.99 above 48.65.
+
+VERDICT: CONFIRMED. The fold stays on by default (52c897c59); `APPLE_AGX_D3D12_EXPAND_FOLD=0` remains the opt-out.
+
+Quiet-guest note: before arm f0b the gate held the run for 11 minutes on MoUsoCoreWorker / UsoClient although the
+update pause reads PausedQualityStatus = PausedFeatureStatus = 1. The arm started only after the row went quiet; the
+pause stops installs, not the scan.
+
+Per-job split (nb.py on the four PERF arms, hitch frames above 45 ms excluded; ms per frame, a / b arms):
+- FOLD=0: wall 20.634 / 20.504, busy union 18.512 / 18.444, non-busy 2.122 / 2.060 (UMD not yet submitted 0.053 /
+  0.035, in dxgkrnl 0.295 / 0.274, foreign job 0.748 / 0.734, completion not yet seen 0.234 / 0.225, depth-one launch
+  0.503 / 0.510, start floor 0.290 / 0.281). The old build had 1.693 (EXP2316).
+- default: wall 19.961 / 19.994. Compute time is unchanged within 0.1 ms (C0 6.31, C2 2.59, C4 2.11, C6 0.72); 3D
+  parts R1 0.75, R3 0.94-0.98, R5 1.60, R7 0.27-0.28. Completion-detect delay falls at the three renders that lost
+  their prelude: R1 0.37 -> 0.08-0.11, R3 1.02 -> 0.18-0.20, R5 0.54 -> 0.32.
+- nb.py prints 4.60 / 4.58 non-busy for the default arms; that figure is NOT valid: without a prelude row the script
+  takes the end of the vertex phase as the busy start of R1 / R3 / R5 and counts the vertex phase as idle. ESTIMATE
+  under the assumption "vertex-phase time is unchanged by the fold" (FOLD=0 arms: 1.513 + 1.129 + 0.210 = 2.852):
+  non-busy about 1.74 ms, which is 0.35 below the FOLD=0 arms of the same boot; the other 0.24 of the 0.59 ms wall
+  gain is busy time. Apple non-busy 0.466 -> excess about 1.27 ms. The script needs the vertex-phase start row before
+  this figure is quoted as measured.
+
+Steady-state gap after the fold on this build: wall 19.98 against Apple 16.605 = +3.37 ms, about 1.27 non-busy
+(estimate) and 2.10 busy. Largest single item with a full-removal mechanism: the desktop compositor's job per
+application present (foreign-job class about 0.75 + in-dxgkrnl class about 0.22 = about 0.95 ms).
+
+Bands: this is fold-on control boot 1 of 3 (FULL default arms 8006 / 7938, PERF mean(r2,r3) 49.99). Until three
+exist, levers are judged by same-boot ABBA only and the stop lines stay 7538 / 48.65.
+
+Ranking after this verdict: (1) non-busy about 1.7 ms, first target the compositor row (plane route S2; its gate is the
+dxgkrnl / DWM policy unknowns U-A and U-B of the R18 report -- to be read offline from the binaries with public
+symbols, which need the operator's permission to download; no package and no "advertise and always refuse" boot);
+(2) R5 3D +0.72; (3) C0 +0.56; (4) R1 +0.31; (5) R3 / C2 / C4; harness item: poll-induced long frames (EXP2338).
+Backlog (not GravityMark): BROKER-RANGE, live additive paging at creation, slab part.
+
+Bench order unchanged: EXP2338 (running) -> T5b FULL boot -> TDR-H0 -> FS-D1.
