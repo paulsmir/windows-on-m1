@@ -4668,3 +4668,15 @@ unknown; the ladder boot shows it in measure-bo-create of the traced r2 launch. 
 ACCEPT / REJECT lines of the 01:45:42Z entry are unchanged.
 EXP2335 keeps no post-f0 receipt dump (probe already running when asked); the fourth control for
 M1 comes from its final dump only as a per-slab rate, for M2/M3 from gm2335f0a/f0b-times.txt.
+
+## UPDATE 2026-11-11T02:06:04Z -- architect: POOL-LADDER implemented (098a9c60b), software-verified, default off
+
+Commit 098a9c60b: `Wom1PoolLadder=1` adds the 256 KiB rung (2 MiB fast -> 256 KiB -> 64 KiB), back-off 16 slab
+allocations after a failed 256 KiB attempt, receipt `Wom1M2PoolDemand` v16 (808 bytes; decoder reads v7-v16).
+Switch off = the previous attempts exactly. Reviewed by the architect: attempt order, both call sites update the
+back-off under the pool lock, the POOL-PROBE trigger ignores 256 KiB slabs. Tests: pool suites pass except one
+checkout-only error, baseline gate 1 NEW = the known checkout-only case. Not verified: MSVC /W4 /WX compile
+(package build), any hardware effect.
+Decoder fields for the boot: `pool_ladder.nonfast_ms_per_slab` is cumulative; M1 of the 01:45:42Z entry is the
+same formula on the pre-gm -> post-f0 deltas: (delta SlabChunkedUs + delta Rung256FailUs) / delta SlabChunked.
+Bench order: after EXP2335 -> POOL-LADDER boot (switch on for the whole boot, deleted in rollback) -> T5b FULL boot.
