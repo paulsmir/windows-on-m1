@@ -5597,3 +5597,22 @@ file. `Wom1ComputeEncoderMask` joins the opt-in list (default off, unset in ever
   a visible plane), not the DWM process.
 - Offline analysis running (Set3 forms against the pinned WDK, the DWM events, what KMTQAITYPE 19/20 return in
   dxgkrnl). No further boot until it names the defect.
+
+## UPDATE 2026-11-11T20:37Z (architect): correction to the EXP2351 entry: the Set3 handling is not the defect
+
+Refers to the previous update ("The defect is in our KMD's Set3 handling"), which stays as written and is wrong on
+that point. Source: .local/night-20261110/s2-ddisplay-black/REPORT.md (display ring receipt decoded).
+- Every Set3 call the miniport received in EXP2351 really asked for plane 0 disabled (ring entries Flags 0x0,
+  PlaneCount 1), in a cycle of about 2.2 s: SetVidPnSourceAddress with ModeChange and a new primary -> visible ->
+  Set3 plane off -> SetVidPnSourceVisibility(FALSE). No 60 Hz flip reached the driver; the panel is black because
+  the cycle ends invisible. The driver did what it was asked.
+- DWM on its normal path asked for overlay caps (event 215: MaxPlanes 1, caps 0x40000, miniport not called) and
+  issued enabled full-screen plane presents (events 223/224) that never reached the miniport; about 0.15..0.2 s
+  after each, dxgkrnl ran the cycle above. INFERENCE: dxgkrnl refuses DWM's presents and DWM rebuilds its output.
+- KMTQAITYPE 19 and 20 read 0 on the legacy path too (EXP2350), so the zeros are older than this experiment.
+  In dxgkrnl, type 19 returns 0 when a display-adapter flag ([+0x1bc] bit 8, meaning unknown) is set, else the
+  DRIVERCAPS copy's SupportDirectFlip; type 20 reads the MPO byte, which only DisableOverlays, the kernel block
+  list and the paravirtual flag can clear after DRIVERCAPS. No single condition explains both zeros.
+- Standing decisions: DisableDDisplay=1 stays in every bench profile until the cycle is explained; the Set3
+  classification is not changed; the health-check rule (picture, not process) stands.
+- Next: offline, the writers of that flag bit and of the two bytes, and which input of our driver sets them.
