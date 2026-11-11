@@ -5668,3 +5668,21 @@ that point. Source: .local/night-20261110/s2-ddisplay-black/REPORT.md (display r
   a flipped allocation is scanned with the committed mode's geometry).
 - Next: DF-1b = S2 receipts package (0fc7218a8) + the flag, s2v3, `Wom1MpoTwoPlanes=1`, legacy path. Expected:
   type 20 = 1, caps reach the miniport (bit 0x800, MaxPlanes 2), then U-1. DF-1c (normal DWM path) after it.
+
+## UPDATE 2026-11-11T23:12Z (architect): DF-1b (EXP2355): MPO is live in dxgkrnl and DWM; plane presents fail before the miniport
+
+- EXP2355 = S2 receipts package + DirectFlip segment flag, s2v3, `Wom1MpoTwoPlanes=1`, legacy DWM path.
+  KMTQAITYPE 20 = 1 for the first time, 19 = 1, 38 = 1, 23 kernel 1 / HUD 0, 46 = 0; the caps call reaches the
+  miniport (MaxPlanes 2, bit 0x800; hundreds of calls). DWM now marks the windowed application DirectFlip- and
+  overlay-compatible and reports the overlay as applied. U-1 passes on DWM's side.
+- FAILURE: Check3 is never called, no Set3 with an enabled plane arrives (277 Set3, all plane 0 off), and dxgkrnl
+  runs the ModeChange / new primary / plane-off / invisible cycle about once per second - the EXP2351 cycle, now
+  on the legacy path. GravityMark falls to about 27.8 fps (stop line). All driver refusal counters 0. The run
+  was stopped; recovery in progress. DF-1c not run.
+- Reading: the EXP2351 black panel and this loop are one defect - the kernel fails DWM's plane present before
+  the miniport once planes are in play. EXP2351 had planes off in dxgkrnl and failed every non-identity form;
+  here planes are on and the failing check is not yet identified.
+- `Wom1MpoTwoPlanes` together with the DirectFlip flag is therefore NOT usable; neither is merged. The flag alone
+  (EXP2354) is harmless.
+- Next: offline reading of the guest dxgkrnl's Check3 / PresentMultiPlaneOverlay3 path against DWM's event
+  payloads and the caps we return; then one trace-only boot (DxgKrnl ETW level 5 over two cycles).
