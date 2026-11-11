@@ -5249,3 +5249,49 @@ Decisions:
   events cannot fire at MaxPlanes = 1. The same capture is the acceptance diagnostic of any later S2 package.
 - Real-hardware reference (builder PC, MaxPlanes > 1) would show the plane order DWM asks for, but needs a window
   on the user's console session: left to the user's decision, not started.
+
+
+## UPDATE 2026-11-11T11:54Z -- R25: Dwm-Core overlay event payloads and DWM's plane order read statically; one correction to the report
+
+Source: static read of the guest dwmcore.dll (ARM64 26200.9974, no symbols), report and tables in
+`.local/night-20261110/r25-dwmcore-overlay-events/` (REPORT.md, decoder.tsv, desc.tsv, refs2.tsv). Items marked
+"verified" were re-read by the architect in `r23-dwmcore-mpo-policy/full.dis`; the rest is the report's reading.
+
+Observed:
+- Plane order DWM builds (resolves U-A offline). Desktop/composed plane: LayerIndex 0 (verified, `str wzr,[x26]` at
+  0x1800a47dc), attribute block at ctx+0x4a20 with Flags 0, Rotation 1, Blend = 1 exactly when there is at least one
+  candidate plane (verified, `cset w9,hi` -> [ctx+0x4a58] at 0x1800a5c58), Src = Dst = full output. Candidate planes:
+  LayerIndex from 1, Blend 0 (verified form at 0x18025b734), Src = content bounds, Dst = bounds on screen,
+  Clip = clip within the monitor. With LayerIndex 0 = top (d3dkmddi.h, R18 section 3) this is "desktop ABOVE with
+  alpha, game BELOW opaque": the one arrangement R18 found truthful for DCP. Kill criterion (a) of R18 ("GM at
+  LayerIndex 0 opaque") does not occur by construction.
+- Plane-count limits (verified, fn 0x1800a7238): total against MaxPlanes; RGB candidates against MaxRGBPlanes; YUV
+  against MaxYUVPlanes.
+- CORRECTION to the R25 report (it has this branch reversed). Windowed-candidate gate at 0x18025be6c: the content
+  is queried for IID 51e2a1f0-4a0d-4788-800f-3cee7a2512a6 (bytes at 0x18031ca20). Interface PRESENT -> candidate
+  proceeds only if MPO is usable AND MaxYUVPlanes != 0. Interface ABSENT -> proceeds if MPO is usable (or the
+  fullscreen class case). So MaxYUVPlanes = 0 blocks only content that exposes this interface (inference: YUV/video
+  content); ordinary RGB content needs only MaxPlanes > 1. Whether GravityMark's D3D12 flip swapchain content
+  exposes the interface is not proven (inference: no).
+- Reject reasons of event 290: 8 (content predicate, vtbl 0xb8, meaning unknown), 1 (transform not axis-aligned),
+  2 (non-rectangular clip), 3 (fully clipped), 4 (stretch outside [MaxShrink, MaxStretch]: with 1.0/1.0 any
+  source size != destination size is rejected), 5 (frame-rate gate), 9 (transient list mismatch), 10 (surface bind
+  failed, vtbl 0x108), 11 (overlap with another candidate). Event 217 fires when the candidate is not fully inside
+  the visible region. No reject condition reads the hardware-cursor rectangle; whether a software-cursor visual
+  counts as occlusion is UNKNOWN (U-C stays).
+- Visible in a keyword-0x200 level-5 trace with the current driver (MaxPlanes = 1): 215 (on init only), 221, 222,
+  289, 291 and the early 290 reasons (8/1/2/3). NOT visible: 216, 217, 218-220, 223-225 and 290 reasons
+  4/5/9/10/11 (a windowed candidate is dropped silently at the gate above).
+
+Gate status of plane route S2 after R22 + R23 + R25:
+- not ruled out by dxgkrnl (R22), not ruled out by dwmcore's capability path (R23), plane order is the truthful one
+  (R25). R18's judgement of 0.3 was dominated by U-A; it is now higher (judgement, no number claimed).
+- still open, all per-surface runtime decisions: reason-8 predicate, bind result (reason 10), software-cursor
+  occlusion (U-C), source size == destination size on the guest (U-D, DPI), success of the COM capability call.
+
+Decisions:
+- DWM-TRACE at the end of band boot 2 STAYS (the cancel condition of the previous note is not met): it answers
+  U-D from the 291 Src/Dst rectangles and shows the early rejects. Expected events are 221/222/289/291, not 216.
+- Next architect item: the S2 specification (four sections + ATOMIC CONTRACT), written offline in parallel with
+  band boot 2. The trace gates the first S2 hardware run, not the specification.
+- No advertise-and-refuse boot (capability rule unchanged).
