@@ -538,11 +538,12 @@ def decode_pool(data):
     v12 (rc88) appends the background slab prefill and failed-attempt time;
     v13 (rc93) appends the large-page cache misses and the per-shape slab time;
     v14 (rc104) appends the floor wait and the live promised allocations;
-    v15 (rc109) appends the graphics policy segment 3 was sized from."""
+    v15 (rc109) appends the graphics policy segment 3 was sized from;
+    v16 (POOL-LADDER) appends the opt-in 256 KiB slab rung."""
     if len(data) < 16:
         raise ValueError('truncated Wom1M2PoolDemand header')
     version, size, granule, last_window = struct.unpack_from('<4I', data)
-    if size != {7: 304, 8: 360, 9: 432, 10: 448, 11: 576, 12: 608, 13: 640, 14: 704, 15: 752}.get(version) or len(data) != size or granule != 65536:
+    if size != {7: 304, 8: 360, 9: 432, 10: 448, 11: 576, 12: 608, 13: 640, 14: 704, 15: 752, 16: 808}.get(version) or len(data) != size or granule != 65536:
         raise ValueError('unsupported Wom1M2PoolDemand version, length or granule')
     names = (
         'segment_bytes', 'committed_granules', 'peak_granules', 'commits',
@@ -565,7 +566,8 @@ def decode_pool(data):
                   event_sample={7: None, 8: 'post_failure', 9: 'admission_decision',
                                 10: 'admission_decision', 11: 'admission_decision',
                                 12: 'admission_decision', 13: 'admission_decision',
-                                14: 'admission_decision', 15: 'admission_decision'}[version])
+                                14: 'admission_decision', 15: 'admission_decision',
+                                16: 'admission_decision'}[version])
     if version >= 8:
         result['floor_refusals'], = struct.unpack_from('<Q', data, 304)
         fields = ('request_bytes', 'reserved_bytes', 'held_bytes', 'committed_bytes',
@@ -652,6 +654,25 @@ def decode_pool(data):
                      'reserve, capped by window/broker; base_segment_bytes = the default-formula '
                      'size (Wom1PoolPercent=0); growth past it needs HighMemoryCondition '
                      '(headroom_refusals)'))
+    result['pool_ladder'] = None
+    if version >= 16:
+        names = ('rung256_calls', 'rung256_ok', 'rung256_us', 'rung256_us_max',
+                 'rung256_fail_us', 'rung256_skipped', 'enabled')
+        ladder = dict(zip(names, struct.unpack_from('<7Q', data, 752)))
+        ladder['enabled'] = bool(ladder['enabled'])
+        large = result['large_pages']
+        chunked = result['slab_chunked']
+        ladder['rung256_ms_per_slab'] = (round((ladder['rung256_us'] - ladder['rung256_fail_us'])
+                                               / ladder['rung256_ok'] / 1000, 3)
+                                         if ladder['rung256_ok'] else None)
+        ladder['nonfast_ms_per_slab'] = (round((large['chunked_us'] + ladder['rung256_fail_us'])
+                                               / chunked / 1000, 3) if chunked else None)
+        ladder['meaning'] = ('POOL-LADDER (Wom1PoolLadder=1): 256 KiB rung between the 2 MiB and '
+                             '64 KiB slab attempts; rung256_us = all its calls, rung256_fail_us = '
+                             'unusable ones; rung256_skipped = slabs that reached 64 KiB in '
+                             'back-off; nonfast_ms_per_slab = (chunked_us + rung256_fail_us) / '
+                             'slab_chunked (failed 64 KiB attempts end the slab and are not in it)')
+        result['pool_ladder'] = ladder
     return result
 
 

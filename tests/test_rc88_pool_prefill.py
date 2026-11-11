@@ -164,7 +164,7 @@ class PoolPrefill(unittest.TestCase):
         source = POOL.read_text()
         work = function(source, 'AdmissionPoolPrefillWork')
         released = work.index('ExReleaseFastMutex(&pool->Lock);\n    if (!wanted) break;')
-        alloc = work.index('slab = AdmissionPoolAllocSlab(&cost, pool->ConstructLargePages);')
+        alloc = work.index('slab = AdmissionPoolAllocSlab(&cost, pool->ConstructLargePages, ladder);')
         reacquired = work.index('ExAcquireFastMutex(&pool->Lock);', alloc)
         self.assertLess(released, alloc)
         self.assertLess(alloc, reacquired)

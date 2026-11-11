@@ -274,6 +274,16 @@ typedef struct _ADMISSION_POOL_RUNTIME {
    * first AdmissionPoolNewSlab slab from the 64 KiB rung. */
   BOOLEAN AllocProbe, AllocProbeDone;
   ULONGLONG SlabFastMisses, SlabContiguousUs, SlabChunkedUs;
+  /* POOL-LADDER: REG_DWORD Wom1PoolLadder=1 (PoolLadder) inserts the
+   * 256 KiB rung between the 2 MiB and 64 KiB slab attempts; Ladder holds
+   * its back-off (render_pool_ladder.h). Ladder and the Rung256* totals are
+   * read and written under Lock. Rung256Us: every 256 KiB call, Rung256FailUs
+   * the failed ones; Rung256Skipped: allocations that reached the 64 KiB
+   * rung while the 256 KiB rung was backed off. */
+  BOOLEAN PoolLadder;
+  ADMISSION_POOL_LADDER Ladder;
+  ULONGLONG Rung256Calls, Rung256Ok, Rung256Us, Rung256UsMax, Rung256FailUs;
+  ULONGLONG Rung256Skipped;
   /* rc104: the floor wait (AdmissionMemoryPoolReserve; budget from
    * Wom1PoolPressureWaitMs), live allocations holding a segment-3 promise,
    * and receipt staging: the pressure counters last staged, the slabs last
@@ -299,6 +309,10 @@ typedef struct _ADMISSION_POOL_SLAB_COST {
   ULONGLONG Calls, Us, UsMax, CheckUs, FailUs;
   ULONGLONG Contiguous, Chunked;
   ULONGLONG FastMisses, ContiguousUs, ChunkedUs;
+  /* POOL-LADDER: the 256 KiB rung of this call (all zero with the switch
+   * off). Calls/Us/UsMax/FailUs/Chunked/ChunkedUs above include it. */
+  ULONGLONG Rung256Calls, Rung256Ok, Rung256Us, Rung256UsMax, Rung256FailUs;
+  ULONGLONG Rung256Skipped;
 } ADMISSION_POOL_SLAB_COST;
 
 static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
@@ -313,6 +327,9 @@ static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
 #define ADMISSION_POOL_MAX_RUN 1024ULL
 #define ADMISSION_POOL_SLAB_BYTES \
   ((ULONGLONG)ADMISSION_POOL_SLAB_SLOTS * ADMISSION_POOL_DEMAND_GRANULE)
+/* POOL-LADDER: SkipBytes of the opt-in 256 KiB rung (8 chunks per slab). */
+#define ADMISSION_POOL_LADDER_CHUNK_BYTES (4u * ADMISSION_POOL_DEMAND_GRANULE)
+C_ASSERT(ADMISSION_POOL_SLAB_BYTES % ADMISSION_POOL_LADDER_CHUNK_BYTES == 0ULL);
 /* Empty slabs kept for the next commit. */
 #define ADMISSION_POOL_SPARE_SLABS 1ULL
 /* rc86 (EXP2015b: 3116 slabs taken from and 3030 returned to Windows for a
@@ -331,13 +348,15 @@ static ULONGLONG AdmissionPoolElapsedUs(LARGE_INTEGER Start) {
 C_ASSERT(ADMISSION_POOL_MAX_RUN <= 1024ULL);
 
 /* rc93: MmAllocatePagesForMdlEx flags of slab attempt `Attempt` (0: one
- * 2 MiB chunk, 1: 32 x 64 KiB chunks). A 2 MiB-aligned 2 MiB chunk is an
+ * 2 MiB chunk, 1: 32 x 64 KiB chunks, 2: POOL-LADDER 8 x 256 KiB chunks;
+ * ADMISSION_POOL_RUNG_* in render_pool_ladder.h). A 2 MiB-aligned 2 MiB chunk is an
  * ARM64 large page. Microsoft (MmAllocatePagesForMdlEx, Flags): without
  * MM_ALLOCATE_FAST_LARGE_PAGES, once the large page cache is exhausted the
  * call "attempts to construct additional large pages, which may take a long
  * time"; with it the call is served from that cache or fails. The flag must
  * come with MM_ALLOCATE_REQUIRE_CONTIGUOUS_CHUNKS and SkipBytes a multiple of
- * the large page size, so only attempt 0 carries it. EXP2028 arm a (first
+ * the large page size, so only attempt 0 carries it (256 KiB is not a
+ * multiple of the 2 MiB large page). EXP2028 arm a (first
  * app after boot): 1402 slab calls, 29.2 s, 20.8 ms each, against 0.4 ms at
  * boot and 1.7 ms for the next app reusing returned 2 MiB runs. A refused
  * attempt 0 falls back to attempt 1 as before (EXP2028: 86 chunked slabs).
@@ -349,11 +368,22 @@ static ULONG AdmissionPoolSlabAttemptFlags(ULONG Attempt,
   return flags;
 }
 
+/* SkipBytes of slab attempt `Attempt` (ADMISSION_POOL_RUNG_*). */
+static ULONGLONG AdmissionPoolSlabAttemptSkip(ULONG Attempt) {
+  if (Attempt == ADMISSION_POOL_RUNG_LARGE) return ADMISSION_POOL_SLAB_BYTES;
+  if (Attempt == ADMISSION_POOL_RUNG_256K) return ADMISSION_POOL_LADDER_CHUNK_BYTES;
+  return ADMISSION_POOL_DEMAND_GRANULE;
+}
+
 /* A 2 MiB slab of fresh zeroed pages: one contiguous 2 MiB chunk when
  * Windows has one (EXP1259: one contiguous 1 GiB took 374 ms), else 32
- * 64 KiB-aligned 64 KiB chunks (EXP1246). */
+ * 64 KiB-aligned 64 KiB chunks (EXP1246). POOL-LADDER: with Ladder
+ * ADMISSION_POOL_LADDER_TRY (AdmissionPoolLadderBegin, under the pool lock)
+ * 8 x 256 KiB chunks are tried between the two, with the same per-granule
+ * check; ADMISSION_POOL_LADDER_OFF is the pre-POOL-LADDER sequence. */
 static ADMISSION_POOL_SLAB *AdmissionPoolAllocSlab(ADMISSION_POOL_SLAB_COST *Cost,
-                                                   BOOLEAN ConstructLargePages) {
+                                                   BOOLEAN ConstructLargePages,
+                                                   ULONG Ladder) {
   const ULONGLONG pages = ADMISSION_POOL_DEMAND_GRANULE / PAGE_SIZE;
   PHYSICAL_ADDRESS low, high, skip;
   ADMISSION_POOL_SLAB *slab;
@@ -363,15 +393,18 @@ static ADMISSION_POOL_SLAB *AdmissionPoolAllocSlab(ADMISSION_POOL_SLAB_COST *Cos
   if (slab == NULL) return NULL;
   low.QuadPart = 0;
   high.QuadPart = (LONGLONG)(ADMISSION_HVC_PHYSICAL_LIMIT - 1ULL);
-  for (attempt = 0u; attempt < 2u; ++attempt) {
+  for (attempt = ADMISSION_POOL_RUNG_LARGE; attempt != ADMISSION_POOL_RUNG_END;
+       attempt = AdmissionPoolLadderNextRung(attempt, Ladder)) {
     ULONGLONG i, j;
     PMDL mdl;
     /* Initialized for MSVC /W4 C4701: Next is reached only after the
      * check started, but by goto. */
     LARGE_INTEGER start = {0};
     ULONGLONG us = 0ULL;
-    skip.QuadPart = (LONGLONG)(attempt == 0u ? ADMISSION_POOL_SLAB_BYTES
-                                             : ADMISSION_POOL_DEMAND_GRANULE);
+    if (attempt == ADMISSION_POOL_RUNG_64K &&
+        Ladder == ADMISSION_POOL_LADDER_BACKED_OFF)
+      ++Cost->Rung256Skipped;
+    skip.QuadPart = (LONGLONG)AdmissionPoolSlabAttemptSkip(attempt);
     start = KeQueryPerformanceCounter(NULL);
     mdl = MmAllocatePagesForMdlEx(low, high, skip,
         (SIZE_T)ADMISSION_POOL_SLAB_BYTES, MmWriteCombined,
@@ -380,8 +413,14 @@ static ADMISSION_POOL_SLAB *AdmissionPoolAllocSlab(ADMISSION_POOL_SLAB_COST *Cos
     ++Cost->Calls;
     Cost->Us += us;
     if (us > Cost->UsMax) Cost->UsMax = us;
+    if (attempt == ADMISSION_POOL_RUNG_256K) {
+      ++Cost->Rung256Calls;
+      Cost->Rung256Us += us;
+      if (us > Cost->Rung256UsMax) Cost->Rung256UsMax = us;
+    }
     if (mdl == NULL) {
       Cost->FailUs += us;
+      if (attempt == ADMISSION_POOL_RUNG_256K) Cost->Rung256FailUs += us;
       if (attempt == 0u && !ConstructLargePages) ++Cost->FastMisses;
       continue;
     }
@@ -403,13 +442,16 @@ static ADMISSION_POOL_SLAB *AdmissionPoolAllocSlab(ADMISSION_POOL_SLAB_COST *Cos
       ++Cost->Contiguous;
       Cost->ContiguousUs += us;
     } else {
+      /* Either chunked rung (256 KiB or 64 KiB): the slab missed 2 MiB. */
       ++Cost->Chunked;
       Cost->ChunkedUs += us;
+      if (attempt == ADMISSION_POOL_RUNG_256K) ++Cost->Rung256Ok;
     }
     return slab;
 Next:
     Cost->CheckUs += AdmissionPoolElapsedUs(start);
     Cost->FailUs += us;
+    if (attempt == ADMISSION_POOL_RUNG_256K) Cost->Rung256FailUs += us;
     MmFreePagesFromMdl(mdl);
     ExFreePool(mdl);
   }
@@ -430,6 +472,15 @@ static VOID AdmissionPoolAddSlabCost(ADMISSION_POOL_RUNTIME *Pool,
   Pool->SlabFastMisses += Cost->FastMisses;
   Pool->SlabContiguousUs += Cost->ContiguousUs;
   Pool->SlabChunkedUs += Cost->ChunkedUs;
+  Pool->Rung256Calls += Cost->Rung256Calls;
+  Pool->Rung256Ok += Cost->Rung256Ok;
+  Pool->Rung256Us += Cost->Rung256Us;
+  if (Cost->Rung256UsMax > Pool->Rung256UsMax) Pool->Rung256UsMax = Cost->Rung256UsMax;
+  Pool->Rung256FailUs += Cost->Rung256FailUs;
+  Pool->Rung256Skipped += Cost->Rung256Skipped;
+  /* POOL-LADDER back-off: a failed 256 KiB attempt starts it. */
+  AdmissionPoolLadderEnd(&Pool->Ladder, Cost->Rung256Calls != 0ULL,
+                         Cost->Rung256Ok != 0ULL);
 }
 
 /* POOL-PROBE diagnostic (receipt Wom1PoolAllocProbe; layout, arm order and
@@ -566,12 +617,16 @@ static VOID AdmissionPoolAllocProbeLocked(ADMISSION_POOL_RUNTIME *Pool) {
 static ADMISSION_POOL_SLAB *AdmissionPoolNewSlab(void *Opaque) {
   ADMISSION_POOL_RUNTIME *pool = (ADMISSION_POOL_RUNTIME *)Opaque;
   ADMISSION_POOL_SLAB_COST cost = {0};
-  ADMISSION_POOL_SLAB *slab = AdmissionPoolAllocSlab(&cost, pool->ConstructLargePages);
+  ULONG ladder = AdmissionPoolLadderBegin(&pool->Ladder, pool->PoolLadder);
+  ADMISSION_POOL_SLAB *slab =
+      AdmissionPoolAllocSlab(&cost, pool->ConstructLargePages, ladder);
   AdmissionPoolAddSlabCost(pool, &cost);
   /* POOL-PROBE: once per boot, still under the pool lock, when this slab
    * came from the 64 KiB rung. Switch off: one boolean test. The unlocked
-   * prefill (AdmissionPoolPrefillWork) never triggers it. */
-  if (pool->AllocProbe && !pool->AllocProbeDone && cost.Chunked != 0ULL) {
+   * prefill (AdmissionPoolPrefillWork) never triggers it. A POOL-LADDER
+   * 256 KiB slab (Rung256Ok) is not from the 64 KiB rung. */
+  if (pool->AllocProbe && !pool->AllocProbeDone &&
+      cost.Chunked > cost.Rung256Ok) {
     pool->AllocProbeDone = TRUE;
     AdmissionPoolAllocProbeLocked(pool);
   }
@@ -850,6 +905,13 @@ _Use_decl_annotations_ VOID AdmissionMemoryPoolUnlock(ADMISSION_CONTEXT *Context
     receipt.PolicyCpuOnlyMiB = pool->Policy.CpuOnlyMiB;
     receipt.PolicyFlags = pool->PolicyFlags;
     receipt.HeadroomRefusals = pool->HeadroomRefusals;
+    receipt.Rung256Calls = pool->Rung256Calls;
+    receipt.Rung256Ok = pool->Rung256Ok;
+    receipt.Rung256Us = pool->Rung256Us;
+    receipt.Rung256UsMax = pool->Rung256UsMax;
+    receipt.Rung256FailUs = pool->Rung256FailUs;
+    receipt.Rung256Skipped = pool->Rung256Skipped;
+    receipt.PoolLadder = pool->PoolLadder ? 1ULL : 0ULL;
     pool->StagedPressure = pressure;
     pool->StagedSlabs = pool->Slabs.Stats.Slabs;
     pool->StagedGranules = stats->CommittedGranules;
@@ -1330,15 +1392,20 @@ static VOID AdmissionPoolPrefillWork(_In_ PDEVICE_OBJECT Device,
     ADMISSION_POOL_SLAB *slab;
     BOOLEAN wanted, adopted = FALSE;
     LARGE_INTEGER start;
+    ULONG ladder = ADMISSION_POOL_LADDER_OFF;
     /* Stop drains WorkPending before it frees the runtime or clears
      * Context->PoolDemand, so the raw lock stays valid here. Release it
-     * without AdmissionMemoryPoolUnlock: no receipt and no re-queue. */
+     * without AdmissionMemoryPoolUnlock: no receipt and no re-queue.
+     * POOL-LADDER: the rung plan is taken under the lock and the back-off
+     * updated under it again (AdmissionPoolAddSlabCost); only the
+     * allocation runs without it. */
     ExAcquireFastMutex(&pool->Lock);
     wanted = AdmissionPoolPrefillWanted(pool);
+    if (wanted) ladder = AdmissionPoolLadderBegin(&pool->Ladder, pool->PoolLadder);
     ExReleaseFastMutex(&pool->Lock);
     if (!wanted) break;
     start = KeQueryPerformanceCounter(NULL);
-    slab = AdmissionPoolAllocSlab(&cost, pool->ConstructLargePages);
+    slab = AdmissionPoolAllocSlab(&cost, pool->ConstructLargePages, ladder);
     ExAcquireFastMutex(&pool->Lock);
     AdmissionPoolAddSlabCost(pool, &cost);
     pool->PrefillUs += AdmissionPoolElapsedUs(start);
@@ -1654,6 +1721,34 @@ static BOOLEAN AdmissionPoolConstructLargePagesEnabled(ADMISSION_CONTEXT *Contex
   return enabled;
 }
 
+/* POOL-LADDER: only REG_DWORD Wom1PoolLadder=1 inserts the 256 KiB slab
+ * rung (render_pool_ladder.h); absent or other values keep the 2 MiB then
+ * 64 KiB attempts exactly. */
+static BOOLEAN AdmissionPoolLadderEnabled(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  BOOLEAN enabled = FALSE;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return FALSE;
+  RtlInitUnicodeString(&name, L"Wom1PoolLadder");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
+      *(const ULONG *)value->Data == 1u)
+    enabled = TRUE;
+  ZwClose(key);
+  return enabled;
+}
+
 /* POOL-PROBE: only REG_DWORD Wom1PoolAllocProbe=1 arms the one-shot
  * allocation probe (AdmissionPoolAllocProbeLocked); absent or other values
  * leave it off. */
@@ -1917,6 +2012,7 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   /* rc88: without its work item the pool runs as before, unprefilled. */
   pool->PrefillEnabled = AdmissionPoolPrefillEnabled(Context);
   pool->ConstructLargePages = AdmissionPoolConstructLargePagesEnabled(Context);
+  pool->PoolLadder = AdmissionPoolLadderEnabled(Context);
   pool->AllocProbe = AdmissionPoolAllocProbeEnabled(Context);
   pool->Pressure.BudgetMs = AdmissionPoolPressureBudgetMs(Context);
   if (pool->PrefillEnabled)

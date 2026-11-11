@@ -111,7 +111,7 @@ typedef struct _ADMISSION_POOL_RESERVE_FAILURE {
   unsigned long long PrivateGranules;
 } ADMISSION_POOL_RESERVE_FAILURE;
 
-#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 15u /* v15: graphics policy */
+#define ADMISSION_POOL_DEMAND_RECEIPT_VERSION 16u /* v16: POOL-LADDER rung */
 #define ADMISSION_POOL_DEMAND_RECEIPT_STEP 256u /* 16 MiB */
 typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int Version, Bytes, GranuleBytes, LastWindowResult;
@@ -187,6 +187,17 @@ typedef struct _ADMISSION_POOL_DEMAND_RECEIPT {
   unsigned int PoolPercent, PolicyPercent, PolicyMaxPercent, PolicyCpuOnlyMiB;
   unsigned int PolicyFlags, PolicyReserved;
   unsigned long long HeadroomRefusals;
+  /* v16 (POOL-LADDER, render_pool_ladder.h): the opt-in 256 KiB slab rung.
+   * Rung256Calls/Rung256Ok: its MmAllocatePagesForMdlEx calls and the slabs
+   * it produced; Rung256Us/Rung256UsMax: time of all its calls (sum, largest
+   * single call), Rung256FailUs: the part whose result was not a usable slab
+   * (refused, short or failing the per-granule check). Rung256Skipped: slab
+   * allocations that reached the 64 KiB rung while the 256 KiB rung was
+   * backed off. PoolLadder: 1 when Wom1PoolLadder=1. All counted in the v11
+   * SlabAlloc* and v12 SlabFailUs totals too; a slab from the 256 KiB rung
+   * counts in SlabChunked/SlabChunkedUs (any slab that missed 2 MiB). */
+  unsigned long long Rung256Calls, Rung256Ok, Rung256Us, Rung256UsMax;
+  unsigned long long Rung256FailUs, Rung256Skipped, PoolLadder;
 } ADMISSION_POOL_DEMAND_RECEIPT;
 
 /* POOL-PROBE diagnostic receipt Wom1PoolAllocProbe (pool_windows.c,
