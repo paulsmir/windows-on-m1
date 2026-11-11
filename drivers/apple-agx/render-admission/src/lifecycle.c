@@ -818,6 +818,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         caps->SupportSmoothRotation = TRUE;
         caps->SupportPerEngineTDR = TRUE;
         caps->SupportDirectFlip = TRUE;
+        /* S2 ATOMIC CONTRACT (specification v1): only while the
+         * Wom1MpoTwoPlanes switch is effective (switch, broker bit 9 and
+         * the V3 negotiation read back).  Field names and members: WDK
+         * 26100 d3dkmddi.h DXGK_DRIVERCAPS (SupportMultiPlaneOverlay,
+         * MaxOverlayPlanes, SupportMultiPlaneOverlayImmediateFlip,
+         * CursorScaledWithMultiPlaneOverlayPlane0,
+         * MaxQueuedMultiPlaneOverlayFlipVSync).  SupportDirectFlip stays
+         * TRUE (dxgkrnl refuses MPO without it, R22). */
+        if (AdmissionScanoutMpoEffective(context)) {
+          caps->SupportMultiPlaneOverlay = TRUE;
+          caps->MaxOverlayPlanes = 2u;
+          caps->SupportMultiPlaneOverlayImmediateFlip = FALSE;
+          caps->CursorScaledWithMultiPlaneOverlayPlane0 = FALSE;
+          caps->MaxQueuedMultiPlaneOverlayFlipVSync = 1u;
+        }
         /* The current RenderKm path implements ColorFill only and the GPU
          * aperture is not declared cache-coherent.  Keep CDD GDI command
          * buffers disabled until both requirements are met. */

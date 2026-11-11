@@ -196,6 +196,7 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutInitialize(
   Client->PresentDestOrigin = 0u;
   Client->PresentDestSize = APPLE_AGX_SCANOUT_J313_WIDTH |
                             (APPLE_AGX_SCANOUT_J313_HEIGHT << 16u);
+  Client->TwoLayers = APPLE_AGX_SCANOUT_FALSE;
   return AppleAgxScanoutOk;
 }
 
@@ -430,7 +431,162 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutRelease(
       !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_COMMAND,
                               APPLE_AGX_SCANOUT_CMD_RELEASE))
     return AppleAgxScanoutTransportFailed;
-  return AppleAgxScanoutWaitForReceipt(Client, sequence,
-                                       AppleAgxScanoutWaitRelease, 0ULL,
-                                       DeadlineMs, APPLE_AGX_SCANOUT_NULL);
+  result = AppleAgxScanoutWaitForReceipt(Client, sequence,
+                                         AppleAgxScanoutWaitRelease, 0ULL,
+                                         DeadlineMs, APPLE_AGX_SCANOUT_NULL);
+  /* V3: a successful RELEASE clears REG_NEGOTIATED; the next owner
+   * negotiates again before its REGISTER_POOL. */
+  if (result == AppleAgxScanoutOk)
+    Client->TwoLayers = APPLE_AGX_SCANOUT_FALSE;
+  return result;
+}
+
+/* ---- S2 ABI V3 (two display layers) ---- */
+
+APPLE_AGX_SCANOUT_BOOL AppleAgxScanoutTwoLayersAdvertised(
+    const APPLE_AGX_SCANOUT_CLIENT *Client) {
+  return Client != APPLE_AGX_SCANOUT_NULL && Client->Qualified &&
+                 Client->AbiVersion == APPLE_AGX_SCANOUT_ABI_VERSION_V2 &&
+                 (Client->Capabilities &
+                  APPLE_AGX_SCANOUT_V2_PRESENT_CAPABILITIES) ==
+                     APPLE_AGX_SCANOUT_V2_PRESENT_CAPABILITIES &&
+                 (Client->Capabilities & APPLE_AGX_SCANOUT_CAP_TWO_LAYERS) !=
+                     0u
+             ? APPLE_AGX_SCANOUT_TRUE
+             : APPLE_AGX_SCANOUT_FALSE;
+}
+
+APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutNegotiateTwoLayers(
+    APPLE_AGX_SCANOUT_CLIENT *Client) {
+  APPLE_AGX_SCANOUT_U32 negotiated = 0u;
+
+  if (Client == APPLE_AGX_SCANOUT_NULL)
+    return AppleAgxScanoutInvalidArgument;
+  Client->TwoLayers = APPLE_AGX_SCANOUT_FALSE;
+  if (!Client->Qualified)
+    return AppleAgxScanoutNotQualified;
+  /* Without the bit every offset from 0xa8 up is refused: no access. */
+  if (!AppleAgxScanoutTwoLayersAdvertised(Client))
+    return AppleAgxScanoutMissingCapabilities;
+  if (!AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_NEGOTIATED,
+                              APPLE_AGX_SCANOUT_CAP_TWO_LAYERS) ||
+      !AppleAgxScanoutRead32(Client, APPLE_AGX_SCANOUT_REG_NEGOTIATED,
+                             &negotiated))
+    return AppleAgxScanoutTransportFailed;
+  /* The broker ignores the write outside UNREGISTERED: only the read-back
+   * proves the negotiation. */
+  if (negotiated != APPLE_AGX_SCANOUT_CAP_TWO_LAYERS)
+    return AppleAgxScanoutNotNegotiated;
+  Client->TwoLayers = APPLE_AGX_SCANOUT_TRUE;
+  return AppleAgxScanoutOk;
+}
+
+/* One record at Base, in the broker report's order (steps 4/5). */
+static APPLE_AGX_SCANOUT_BOOL AppleAgxScanoutWriteLayer(
+    APPLE_AGX_SCANOUT_CLIENT *Client, APPLE_AGX_SCANOUT_U32 Base,
+    const APPLE_AGX_SCANOUT_LAYER *Layer) {
+  return AppleAgxScanoutWrite64(
+             Client, Base + APPLE_AGX_SCANOUT_LAYER_SURFACE_OFFSET,
+             Layer->SurfaceOffset) &&
+         AppleAgxScanoutWrite64(
+             Client, Base + APPLE_AGX_SCANOUT_LAYER_SURFACE_SIZE,
+             Layer->SurfaceSize) &&
+         AppleAgxScanoutWrite32(Client, Base + APPLE_AGX_SCANOUT_LAYER_WIDTH,
+                                Layer->Width) &&
+         AppleAgxScanoutWrite32(Client, Base + APPLE_AGX_SCANOUT_LAYER_HEIGHT,
+                                Layer->Height) &&
+         AppleAgxScanoutWrite32(Client, Base + APPLE_AGX_SCANOUT_LAYER_STRIDE,
+                                Layer->Stride) &&
+         AppleAgxScanoutWrite32(Client, Base + APPLE_AGX_SCANOUT_LAYER_FORMAT,
+                                Layer->Format) &&
+         AppleAgxScanoutWrite32(
+             Client, Base + APPLE_AGX_SCANOUT_LAYER_SRC_ORIGIN,
+             Layer->SrcOrigin) &&
+         AppleAgxScanoutWrite32(Client,
+                                Base + APPLE_AGX_SCANOUT_LAYER_SRC_SIZE,
+                                Layer->SrcSize) &&
+         AppleAgxScanoutWrite32(
+             Client, Base + APPLE_AGX_SCANOUT_LAYER_DST_ORIGIN,
+             Layer->DstOrigin) &&
+         AppleAgxScanoutWrite32(Client,
+                                Base + APPLE_AGX_SCANOUT_LAYER_DST_SIZE,
+                                Layer->DstSize) &&
+         AppleAgxScanoutWrite32(Client, Base + APPLE_AGX_SCANOUT_LAYER_FLAGS,
+                                Layer->Flags) &&
+         AppleAgxScanoutWrite32(
+             Client, Base + APPLE_AGX_SCANOUT_LAYER_RESERVED0, 0u) &&
+         AppleAgxScanoutWrite64(
+             Client, Base + APPLE_AGX_SCANOUT_LAYER_RESERVED1, 0ULL);
+}
+
+APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutQueueCommitLayers(
+    APPLE_AGX_SCANOUT_CLIENT *Client, const APPLE_AGX_SCANOUT_LAYER *Layers,
+    APPLE_AGX_SCANOUT_U32 Count, APPLE_AGX_SCANOUT_U64 *Sequence) {
+  APPLE_AGX_SCANOUT_U64 sequence;
+  APPLE_AGX_SCANOUT_U64 receipt = 0ULL;
+  APPLE_AGX_SCANOUT_U32 broker_result = 0u;
+  APPLE_AGX_SCANOUT_RESULT result;
+
+  if (Client == APPLE_AGX_SCANOUT_NULL || Sequence == APPLE_AGX_SCANOUT_NULL ||
+      Layers == APPLE_AGX_SCANOUT_NULL || Count == 0u ||
+      Count > APPLE_AGX_SCANOUT_V3_LAYERS)
+    return AppleAgxScanoutInvalidArgument;
+  *Sequence = 0ULL;
+  if (!Client->Qualified)
+    return AppleAgxScanoutNotQualified;
+  if (!Client->TwoLayers)
+    return AppleAgxScanoutNotNegotiated;
+  if (Client->PresentPending)
+    return AppleAgxScanoutBusy;
+  result = AppleAgxScanoutTakeSequence(Client, &sequence);
+  if (result != AppleAgxScanoutOk)
+    return result;
+  if (!AppleAgxScanoutWriteLayer(Client, APPLE_AGX_SCANOUT_REG_LAYER0,
+                                 &Layers[0]) ||
+      (Count == 2u &&
+       !AppleAgxScanoutWriteLayer(Client, APPLE_AGX_SCANOUT_REG_LAYER1,
+                                  &Layers[1])) ||
+      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_LAYER_COUNT,
+                              Count) ||
+      !AppleAgxScanoutWrite64(Client, APPLE_AGX_SCANOUT_REG_REQUEST_SEQUENCE,
+                              sequence) ||
+      !AppleAgxScanoutWrite32(Client, APPLE_AGX_SCANOUT_REG_COMMAND,
+                              APPLE_AGX_SCANOUT_CMD_COMMIT_LAYERS))
+    return AppleAgxScanoutTransportFailed;
+  /* The broker validates the records when COMMAND is written: a refusal is
+   * terminal (RECEIPT_SEQUENCE == this sequence, RESULT = its code), BUSY
+   * leaves the receipt alone.  RESULT OK means pending until the latch. */
+  if (!AppleAgxScanoutRead32(Client, APPLE_AGX_SCANOUT_REG_RESULT,
+                             &broker_result) ||
+      !AppleAgxScanoutRead64(Client, APPLE_AGX_SCANOUT_REG_RECEIPT_SEQUENCE,
+                             &receipt))
+    return AppleAgxScanoutTransportFailed;
+  Client->LastBrokerResult = broker_result;
+  if (broker_result != APPLE_AGX_SCANOUT_BROKER_OK) {
+    if (receipt == sequence)
+      return AppleAgxScanoutBrokerRejected;
+    if (broker_result == APPLE_AGX_SCANOUT_BROKER_BUSY)
+      return AppleAgxScanoutBusy;
+    return AppleAgxScanoutMapBrokerResult(broker_result);
+  }
+  Client->PendingPresentSequence = sequence;
+  Client->PresentPending = APPLE_AGX_SCANOUT_TRUE;
+  *Sequence = sequence;
+  return AppleAgxScanoutOk;
+}
+
+APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutReadActiveLayers(
+    APPLE_AGX_SCANOUT_CLIENT *Client, APPLE_AGX_SCANOUT_U32 *ActiveLayers) {
+  if (Client == APPLE_AGX_SCANOUT_NULL ||
+      ActiveLayers == APPLE_AGX_SCANOUT_NULL)
+    return AppleAgxScanoutInvalidArgument;
+  *ActiveLayers = 0u;
+  if (!Client->Qualified)
+    return AppleAgxScanoutNotQualified;
+  if (!Client->TwoLayers)
+    return AppleAgxScanoutNotNegotiated;
+  return AppleAgxScanoutRead32(Client, APPLE_AGX_SCANOUT_REG_ACTIVE_LAYERS,
+                               ActiveLayers)
+             ? AppleAgxScanoutOk
+             : AppleAgxScanoutTransportFailed;
 }

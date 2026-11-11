@@ -7,9 +7,12 @@
  * file compiles in the kernel (MSVC /W4 /WX) and in a host C test; no
  * Windows header is included.
  *
- * NOT WIRED: nothing in the driver calls this table yet.  It does not
- * advertise MPO, change MaxOverlayPlanes, register a caps DDI or change the
- * answers of AdmissionDdiSetVidPnSourceAddressWithMultiPlaneOverlay3.
+ * Wired (S2 step 4, contract version 2): DxgkDdiCheckMultiPlaneOverlaySupport3
+ * answers with this table, and the two-plane form of
+ * DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3 re-evaluates it with
+ * the known placement before it sends records (mpo_layers.h) to the
+ * scanout broker.  Both run only while the Wom1MpoTwoPlanes switch is
+ * effective (scanout_windows.c AdmissionScanoutMpoEffective).
  *
  * Windows numbering: LayerIndex 0 is the TOP plane.  Display slot 0 is the
  * bottom slot, slot 1 the top slot.
@@ -22,16 +25,32 @@
  * handler's VidPnSourceId == 0 and "enabled plane carries context data"
  * rules have no field in this neutral input and stay in the handler.
  *
- * Two planes: see ADMISSION_MPO_REASON; each rule is checked in that
- * numeric order.  The failing plane is the first plane in array order that
- * violates any rule; the reason is that plane's first violated rule. */
+ * Two planes: see ADMISSION_MPO_REASON.  Order: first the input rule
+ * PanelGeometry (24, no failing plane); then, per plane in array order, the
+ * per-plane rules 3..21 and 25 in numeric order (the failing plane is the
+ * first plane that violates any of them, the reason its first violated
+ * rule); then the pair rules SameSurface (22) and SurfaceOverlap (23),
+ * charged to array index 1.
+ *
+ * Version 2 adds the scanout broker's surface rules (ABI V3 refusals
+ * 16/17/18/22/23 of m1n1 gpu/s2-broker-v3) as explicit inputs, so a
+ * configuration the table supports with a known placement is one the broker
+ * accepts (tests/mpo_broker_reference_test.c).  Check3 has no placement
+ * (PlacementKnown 0): it can only require the allocation class that lives
+ * in the scanout pool and the 64 KiB placement alignment CreateAllocation
+ * requests; Set3 evaluates again with the actual offset. */
 
-#define ADMISSION_MPO_CONTRACT_VERSION 1u
+#define ADMISSION_MPO_CONTRACT_VERSION 2u
 #define ADMISSION_MPO_MAX_PLANES 2u
 #define ADMISSION_MPO_SLOT_COUNT 2u
 #define ADMISSION_MPO_MIN_EXTENT 32u
 #define ADMISSION_MPO_STRIDE_ALIGNMENT 64u
 #define ADMISSION_MPO_NO_PLANE 0xffffffffu
+/* Scanout broker geometry (J313 panel, 4-byte pixels, pool alignment). */
+#define ADMISSION_MPO_SCANOUT_WIDTH 2560u
+#define ADMISSION_MPO_SCANOUT_HEIGHT 1600u
+#define ADMISSION_MPO_BYTES_PER_PIXEL 4u
+#define ADMISSION_MPO_POOL_ALIGNMENT 0x10000ULL
 
 /* Stable numeric values; receipts and tests depend on them.  Never
  * renumber; append new codes at the end. */
@@ -73,6 +92,25 @@ typedef enum _ADMISSION_MPO_REASON {
   AdmissionMpoReasonUnsupportedFlags = 16,
   /* Two planes: clip neither equals nor contains the destination. */
   AdmissionMpoReasonClip = 17,
+  /* ---- version 2: the scanout broker's surface rules ---- */
+  /* Two planes: the allocation cannot live in the scanout pool, or (known
+   * placement) its bytes do not lie inside the pool. */
+  AdmissionMpoReasonSurfaceNotInPool = 18,
+  /* Two planes: known pool offset not a multiple of 64 KiB. */
+  AdmissionMpoReasonSurfaceAlignment = 19,
+  /* Two planes: SurfaceBytes != SurfaceStride * SurfaceHeight. */
+  AdmissionMpoReasonSurfaceSize = 20,
+  /* Two planes: surface width/height 0 or larger than the scanout panel. */
+  AdmissionMpoReasonSurfaceLargerThanPanel = 21,
+  /* Two planes: both planes name one surface (identity or pool offset). */
+  AdmissionMpoReasonSameSurface = 22,
+  /* Two planes: the two surfaces' pool byte ranges overlap. */
+  AdmissionMpoReasonSurfaceOverlap = 23,
+  /* Two planes: the source mode is not the scanout panel geometry, so
+   * Windows destination coordinates are not panel coordinates. */
+  AdmissionMpoReasonPanelGeometry = 24,
+  /* Two planes: stride smaller than SurfaceWidth * 4 bytes. */
+  AdmissionMpoReasonStrideBelowRow = 25,
   ADMISSION_MPO_REASON_COUNT
 } ADMISSION_MPO_REASON;
 
@@ -114,6 +152,16 @@ typedef struct _ADMISSION_MPO_PLANE_INPUT {
   unsigned int SurfaceWidth;
   unsigned int SurfaceHeight;
   unsigned int SurfaceStride;    /* bytes */
+  /* ---- version 2 ---- */
+  /* Nonzero: the allocation can only be resident in the scanout pool. */
+  unsigned int InScanoutPool;
+  /* Nonzero: PoolOffset is the plane's actual pool offset (Set3). */
+  unsigned int PlacementKnown;
+  unsigned long long PoolOffset;      /* bytes from the pool start */
+  unsigned long long SurfaceBytes;    /* the allocation's linear size */
+  /* Distinct per allocation (the KMD allocation handle); equal values
+   * name one surface. */
+  unsigned long long SurfaceIdentity;
 } ADMISSION_MPO_PLANE_INPUT;
 
 typedef struct _ADMISSION_MPO_INPUT {
@@ -121,6 +169,8 @@ typedef struct _ADMISSION_MPO_INPUT {
   unsigned int PanelHeight;
   unsigned int PlaneCount;
   const ADMISSION_MPO_PLANE_INPUT *Planes;
+  /* ---- version 2 ---- */
+  unsigned long long PoolBytes;       /* registered scanout pool size */
 } ADMISSION_MPO_INPUT;
 
 typedef struct _ADMISSION_MPO_SLOT {
@@ -129,6 +179,13 @@ typedef struct _ADMISSION_MPO_SLOT {
   unsigned int Premultiplied;
   ADMISSION_MPO_RECT Source;
   ADMISSION_MPO_RECT Destination;
+  /* ---- version 2: copied from the plane for the broker record ---- */
+  unsigned int FormatClass;
+  unsigned int SurfaceWidth;
+  unsigned int SurfaceHeight;
+  unsigned int SurfaceStride;
+  unsigned long long PoolOffset;
+  unsigned long long SurfaceBytes;
 } ADMISSION_MPO_SLOT;
 
 typedef struct _ADMISSION_MPO_RESULT {

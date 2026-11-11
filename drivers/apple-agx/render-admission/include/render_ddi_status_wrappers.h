@@ -348,6 +348,16 @@ ADMISSION_STATUS_WRAP(66, AdmissionDdiCalibrateGpuClock,
     (HANDLE Adapter, UINT32 NodeOrdinal, UINT32 EngineOrdinal, DXGKARG_CALIBRATEGPUCLOCK *ClockCalibration),
     (Adapter, NodeOrdinal, EngineOrdinal, ClockCalibration), Adapter, 0, MAXULONG,
     (void)0; if (first) AdmissionQueueDdiStatus((ADMISSION_CONTEXT *)Adapter))
+/* 67: DxgkDdiCheckMultiPlaneOverlaySupport3 (S2) */
+ADMISSION_STATUS_WRAP(67, AdmissionDdiCheckMultiPlaneOverlaySupport3,
+    (CONST HANDLE hAdapter, DXGKARG_CHECKMULTIPLANEOVERLAYSUPPORT3 *Args),
+    (hAdapter, Args), hAdapter, 0, MAXULONG,
+    (void)0; if (first) AdmissionQueueDdiStatus((ADMISSION_CONTEXT *)hAdapter))
+/* 68: DxgkDdiGetMultiPlaneOverlayCaps (S2) */
+ADMISSION_STATUS_WRAP(68, AdmissionDdiGetMultiPlaneOverlayCaps,
+    (CONST HANDLE hAdapter, DXGKARG_GETMULTIPLANEOVERLAYCAPS *Caps),
+    (hAdapter, Caps), hAdapter, 0, MAXULONG,
+    (void)0; if (first) AdmissionQueueDdiStatus((ADMISSION_CONTEXT *)hAdapter))
 
 #undef ADMISSION_STATUS_WRAP
 
@@ -419,4 +429,6 @@ static void AdmissionInstallStatusReceipts(DRIVER_INITIALIZATION_DATA *Init) {
   Init->DxgkDdiCreateProcess = AdmissionDdiCreateProcessStatus;
   Init->DxgkDdiDestroyProcess = AdmissionDdiDestroyProcessStatus;
   Init->DxgkDdiCalibrateGpuClock = AdmissionDdiCalibrateGpuClockStatus;
+  Init->DxgkDdiCheckMultiPlaneOverlaySupport3 = AdmissionDdiCheckMultiPlaneOverlaySupport3Status;
+  Init->DxgkDdiGetMultiPlaneOverlayCaps = AdmissionDdiGetMultiPlaneOverlayCapsStatus;
 }
