@@ -92,10 +92,15 @@ static VOID AdmissionMpoPlaneInput(
    * sizes are rounded up to 128 bytes, umd.c AdmissionUmdDescribePrimary),
    * so the scanned extent is the surface; an invalid description keeps its
    * own size and fails the table's size rule. */
+  Plane->DescriptionValid =
+      AdmissionAllocationDescriptionValid(description) ? 1u : 0u;
   Plane->SurfaceBytes =
-      AdmissionAllocationDescriptionValid(description)
+      Plane->DescriptionValid != 0u
           ? (unsigned long long)description->Pitch * description->Height
           : description->Size;
+  /* Version 3 (one-plane V2 rule): the raw allocation facts. */
+  Plane->ScanoutCapable = allocation->ScanoutCapable != 0u ? 1u : 0u;
+  Plane->AllocationBytes = description->Size;
   /* allocation_windows.c: a scanout-capable (linear, GPU-only, 32 bpp GDI
    * surface texture) allocation without a Mesa class is placed only in
    * the local segment (ADMISSION_LOCAL_SEGMENT_SET), which is the scanout
@@ -118,6 +123,7 @@ static VOID AdmissionMpoPlaneInput(
     Plane->InScanoutPool = 0u;
     return;
   }
+  Plane->PlacementInPool = 1u;
   Plane->PoolOffset = offset;
 }
 
@@ -134,6 +140,16 @@ static VOID AdmissionMpoInput(ADMISSION_CONTEXT *Context,
   Input->Planes = Planes;
   if (AdmissionScanoutMpoPool(Context, &segment_base, &pool_bytes))
     Input->PoolBytes = pool_bytes;
+  /* The V2 gate of AdmissionDdiSetVidPnSourceAddress (display.c). */
+  Input->PanelStride = Context->CommittedStride;
+  Input->PanelModeSupported =
+      AdmissionScanoutSourceModeSupported(Context, Context->CommittedWidth,
+                                          Context->CommittedHeight,
+                                          Context->CommittedStride) &&
+              AdmissionScanoutFormatSupported(Context,
+                                              Context->CommittedFormat)
+          ? 1u
+          : 0u;
 }
 
 /* ---- DxgkDdiGetMultiPlaneOverlayCaps ---- */
@@ -269,7 +285,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCheckMultiPlaneOverlaySupport3(
     return STATUS_SUCCESS;
   }
   AdmissionMpoInput(context, planes, Args->PlaneCount, &input);
-  (void)AdmissionMpoEvaluate(&input, &result);
+  /* A1.1: while effective, one plane is answered with the V2 path's own
+   * acceptance rule, so Check3 never promises a flip Set3 refuses.  Not
+   * effective: the version-1 answer, unchanged. */
+  if (effective && Args->PlaneCount == 1u)
+    (void)AdmissionMpoEvaluatePrimary(&input, &result);
+  else
+    (void)AdmissionMpoEvaluate(&input, &result);
   AdmissionMpoCheckAnswer(context, effective, Args, result.Reason,
                           result.FailingPlane);
   return STATUS_SUCCESS;
@@ -411,7 +433,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     return status;
   }
   if (next[0].Enabled && listed[0]) {
-    /* One plane, slot 1 not on screen: today's V2 PRESENT, same bytes. */
+    /* One plane, slot 1 not on screen: today's V2 PRESENT, same bytes,
+     * after the same rule one-plane Check3 answered with (A1.1). */
+    pair[0] = next[0].Input;
+    AdmissionMpoInput(Context, pair, 1u, &input);
+    if (AdmissionMpoEvaluatePrimary(&input, &result) != AdmissionMpoSupported) {
+      InterlockedIncrement(&Context->Mpo.Set3TableRefusals);
+      InterlockedExchange(&Context->Mpo.LastSet3TableReason,
+                          (LONG)result.Reason);
+      return STATUS_INVALID_PARAMETER;
+    }
     RtlZeroMemory(&legacy, sizeof(legacy));
     legacy.VidPnSourceId = 0;
     legacy.PrimarySegment = next[0].PrimarySegment;

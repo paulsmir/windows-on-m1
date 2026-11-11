@@ -52,6 +52,49 @@ class RenderMpoWiringTests(unittest.TestCase):
             self.assertEqual(run.returncode, 0, run.stderr)
             self.assertIn("mpo_broker_reference_test: OK", run.stdout)
 
+    def _primary_run(self, contract_source):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "mpo_primary_test"
+            source = Path(directory) / "mpo_contract.c"
+            source.write_text(contract_source)
+            subprocess.run([
+                os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
+                "-Werror", "-Wconversion", "-Wsign-conversion", "-pedantic",
+                "-fsanitize=address,undefined",
+                "-I", str(DRIVER / "include"),
+                str(DRIVER / "tests/mpo_primary_test.c"), str(source),
+                "-o", str(binary),
+            ], cwd=ROOT, check=True)
+            return subprocess.run([str(binary)], cwd=ROOT,
+                                  capture_output=True, text=True)
+
+    def test_one_plane_check3_never_promises_what_set3_refuses(self):
+        # A1.1 invariant: Check3 TRUE for one plane => the V2 path accepts it.
+        run = self._primary_run((DRIVER / "src/mpo_contract.c").read_text())
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn("mpo_primary_test: OK", run.stdout)
+
+    def test_mutant_without_a_check3_rule_is_caught(self):
+        text = (DRIVER / "src/mpo_contract.c").read_text()
+        rule = "  if (Plane->AllocationBytes != (unsigned long long)Input->PanelStride *"
+        self.assertEqual(text.count(rule), 1)
+        mutant = text.replace(rule, "  if (0 && Plane->AllocationBytes != "
+                                    "(unsigned long long)Input->PanelStride *")
+        run = self._primary_run(mutant)
+        self.assertNotEqual(run.returncode, 0)
+
+    def test_one_plane_rule_is_wired_into_check3_and_set3(self):
+        mpo = (DRIVER / "src/mpo_windows.c").read_text()
+        check = function(mpo, "_Use_decl_annotations_ NTSTATUS "
+                              "AdmissionDdiCheckMultiPlaneOverlaySupport3(")
+        self.assertIn("if (effective && Args->PlaneCount == 1u)\n"
+                      "    (void)AdmissionMpoEvaluatePrimary(&input, &result);",
+                      check)
+        set3 = function(mpo, "_Use_decl_annotations_ NTSTATUS "
+                             "AdmissionMpoSetVidPnSourceAddress3(")
+        self.assertLess(set3.index("AdmissionMpoEvaluatePrimary"),
+                        set3.index("AdmissionDdiSetVidPnSourceAddress(Context"))
+
     def test_pure_layers_file_has_no_windows_dependency(self):
         for path in (DRIVER / "src/mpo_layers.c",
                      DRIVER / "include/mpo_layers.h"):

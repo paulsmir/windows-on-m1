@@ -8,6 +8,8 @@
 static KDEFERRED_ROUTINE AdmissionScanoutTimerDpc;
 static KSYNCHRONIZE_ROUTINE AdmissionScanoutVsyncControl;
 static ULONGLONG AdmissionScanoutTime100ns(void);
+static VOID AdmissionScanoutMpoRetireSlot1(ADMISSION_CONTEXT *Context,
+                                           ULONG Stage);
 
 typedef struct _ADMISSION_SCANOUT_RUNTIME {
   ADMISSION_CONTEXT *Adapter;
@@ -754,6 +756,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStop(
       !AdmissionDisplayOutputLeaseRetire(&runtime->FallbackLease))
     return STATUS_DEVICE_BUSY;
 #endif
+  /* A1.2: RELEASE removed slot 1 itself (broker.c:328, :838-841). */
+  RtlZeroMemory(Context->MpoPlanes, sizeof(Context->MpoPlanes));
   Context->ScanoutRuntime = NULL;
   ExFreePoolWithTag(runtime, ADMISSION_SCANOUT_TAG);
   return STATUS_SUCCESS;
@@ -1059,6 +1063,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutCommit(
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
   if (runtime == NULL)
     return STATUS_DEVICE_NOT_READY;
+  /* A1.2: slot 1 never survives a source-mode change (rule 24 admits two
+   * planes only at 2560x1600; a new mode must not inherit them). */
+  AdmissionScanoutMpoRetireSlot1(Context, ADMISSION_MPO_RETIRE_STAGE_COMMIT);
 #if !ADMISSION_DISPLAY_SCALED_MODES
   if (Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
       Height != APPLE_AGX_SCANOUT_J313_HEIGHT)
@@ -1081,6 +1088,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutSetVisible(
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
   if (runtime == NULL)
     return STATUS_DEVICE_NOT_READY;
+  /* A1.2: slot 1 never stays on screen once the source is hidden. */
+  if (!Visible)
+    AdmissionScanoutMpoRetireSlot1(Context,
+                                   ADMISSION_MPO_RETIRE_STAGE_HIDE);
   return AppleAgxFixedPanelSetVisible(
              &runtime->Panel, 0u,
              Visible ? APPLE_AGX_SCANOUT_TRUE
@@ -1229,14 +1240,78 @@ _Use_decl_annotations_ BOOLEAN AdmissionScanoutMpoSlot1MayShow(
   return (active & APPLE_AGX_SCANOUT_ACTIVE_SLOT1) != 0u ? TRUE : FALSE;
 }
 
+/* Queue a V3 commit with PresentGate already held.  Releases the gate on
+ * failure; on a terminal refusal keeps the code and records in the receipt
+ * and counts it in *RefusalCounter. */
+static NTSTATUS AdmissionScanoutMpoQueueHeld(
+    ADMISSION_CONTEXT *Context, ADMISSION_SCANOUT_RUNTIME *Runtime,
+    const APPLE_AGX_SCANOUT_LAYER *Records, ULONG Count,
+    const ADMISSION_MPO_COMPLETION *Completion, LONGLONG PrimaryAddress,
+    BOOLEAN RequireVisible, volatile LONG *RefusalCounter) {
+  APPLE_AGX_SCANOUT_RESULT result;
+  APPLE_AGX_U64 sequence = 0ULL;
+  ULONG index;
+
+  InterlockedExchange64(&Runtime->PendingPhysicalAddress, PrimaryAddress);
+  InterlockedExchange64(&Runtime->PendingQueuedTime100ns,
+                        (LONG64)AdmissionScanoutTime100ns());
+  /* AppleAgxFixedPanelQueueCommitLayers's state checks; visibility only
+   * for a flip (the slot-1 retirement runs while the source is hidden). */
+  if (!Runtime->Panel.Started || !Runtime->Panel.Committed ||
+      (RequireVisible && !Runtime->Panel.Visible))
+    result = AppleAgxScanoutNotQualified;
+  else
+    result = AppleAgxScanoutQueueCommitLayers(&Runtime->Panel.Scanout,
+                                              Records, Count, &sequence);
+  if (result != AppleAgxScanoutOk) {
+    InterlockedExchange64(&Runtime->PendingPhysicalAddress, 0);
+    InterlockedExchange(&Runtime->PresentGate, 0);
+    if (result == AppleAgxScanoutBusy) {
+      InterlockedIncrement(&Context->Mpo.Busy);
+      return STATUS_DEVICE_BUSY;
+    }
+    if (result == AppleAgxScanoutBrokerRejected) {
+      /* Contract defect: the table accepted what the broker refuses.
+       * Keep the code and the records; no fallback swap is made. */
+      InterlockedIncrement(RefusalCounter);
+      InterlockedExchange(&Context->Mpo.LastBrokerRefusal,
+                          (LONG)Runtime->Panel.Scanout.LastBrokerResult);
+      InterlockedExchange(&Context->Mpo.LastRefusalCount, (LONG)Count);
+      RtlZeroMemory(Context->Mpo.LastRefusalRecords,
+                    sizeof(Context->Mpo.LastRefusalRecords));
+      for (index = 0u; index < Count; ++index)
+        Context->Mpo.LastRefusalRecords[index] = Records[index];
+      /* Microsoft Learn DXGKDDI_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3:
+       * STATUS_INVALID_PARAMETER when the driver was unable to process a
+       * flip request. */
+      return STATUS_INVALID_PARAMETER;
+    }
+    if (result == AppleAgxScanoutNotQualified) {
+      InterlockedIncrement(&Context->Mpo.NotVisible);
+      return STATUS_INVALID_PARAMETER;
+    }
+    InterlockedIncrement(&Context->Mpo.TransportFailures);
+    return STATUS_DEVICE_HARDWARE_ERROR;
+  }
+  /* Like the broker (slot1_latched at the commit), count slot 1 as shown
+   * from the moment a two-layer commit is accepted. */
+  if (Count == 2u)
+    InterlockedExchange(&Runtime->Slot1Shown, 1);
+  AdmissionScanoutSetNextMpo(Runtime, Completion);
+  InterlockedExchange64(&Runtime->PendingSequence, (LONG64)sequence);
+  InterlockedExchange(&Runtime->PendingValid, 1);
+  AdmissionScanoutTakeNextMpo(Runtime,
+                              Count == 2u
+                                  ? ADMISSION_SCANOUT_MPO_KIND_TWO_LAYERS
+                                  : ADMISSION_SCANOUT_MPO_KIND_REMOVAL);
+  return STATUS_SUCCESS;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutMpoCommit(
     ADMISSION_CONTEXT *Context, const APPLE_AGX_SCANOUT_LAYER *Records,
     ULONG Count, const ADMISSION_MPO_COMPLETION *Completion,
     LONGLONG PrimaryAddress) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
-  APPLE_AGX_FIXED_PANEL_RESULT result;
-  APPLE_AGX_U64 sequence = 0ULL;
-  ULONG index;
 
   if (runtime == NULL || Records == NULL || Completion == NULL ||
       (Count != 1u && Count != 2u) ||
@@ -1256,49 +1331,69 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutMpoCommit(
     InterlockedIncrement(&Context->Mpo.Busy);
     return STATUS_DEVICE_BUSY;
   }
-  InterlockedExchange64(&runtime->PendingPhysicalAddress, PrimaryAddress);
-  InterlockedExchange64(&runtime->PendingQueuedTime100ns,
-                        (LONG64)AdmissionScanoutTime100ns());
-  result = AppleAgxFixedPanelQueueCommitLayers(&runtime->Panel, Records,
-                                               Count, &sequence);
-  if (result != AppleAgxFixedPanelOk) {
-    InterlockedExchange64(&runtime->PendingPhysicalAddress, 0);
-    InterlockedExchange(&runtime->PresentGate, 0);
-    if (result == AppleAgxFixedPanelPresentPending) {
-      InterlockedIncrement(&Context->Mpo.Busy);
-      return STATUS_DEVICE_BUSY;
-    }
-    if (result == AppleAgxFixedPanelBrokerRejected) {
-      /* Contract defect: the table accepted what the broker refuses.
-       * Keep the code and both records; no fallback swap is made. */
-      InterlockedIncrement(&Context->Mpo.BrokerRefusals);
-      InterlockedExchange(&Context->Mpo.LastBrokerRefusal,
-                          (LONG)runtime->Panel.Scanout.LastBrokerResult);
-      InterlockedExchange(&Context->Mpo.LastRefusalCount, (LONG)Count);
-      RtlZeroMemory(Context->Mpo.LastRefusalRecords,
-                    sizeof(Context->Mpo.LastRefusalRecords));
-      for (index = 0u; index < Count; ++index)
-        Context->Mpo.LastRefusalRecords[index] = Records[index];
-      /* Microsoft Learn DXGKDDI_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3:
-       * STATUS_INVALID_PARAMETER when the driver was unable to process a
-       * flip request. */
-      return STATUS_INVALID_PARAMETER;
-    }
-    InterlockedIncrement(&Context->Mpo.TransportFailures);
-    return STATUS_DEVICE_HARDWARE_ERROR;
+  return AdmissionScanoutMpoQueueHeld(Context, runtime, Records, Count,
+                                      Completion, PrimaryAddress, TRUE,
+                                      &Context->Mpo.BrokerRefusals);
+}
+
+/* A1.2: no V2 command the driver issues removes DCP slot 1 except RELEASE
+ * (m1n1 gpu/s2-broker-v3 hv_agx_scanout_broker.c:328, service.c:524-526):
+ * SetVidPnSourceVisibility(FALSE) and a mode commit send nothing to the
+ * broker, and the next V2 PRESENT is refused with SLOT1_LATCHED while slot
+ * 1 is latched (broker.c:253-254).  So before the source is hidden and
+ * before a new source mode is committed, the removal swap (one record, the
+ * stored LayerIndex 0 plane, flags 0) is queued here; its latch clears
+ * Slot1Shown (ISR).  The plane state is cleared at the same point.  A
+ * failure is counted in Wom1MpoReceipt and never fails the hide or the
+ * mode commit.  PASSIVE_LEVEL (both callers). */
+#define ADMISSION_SCANOUT_RETIRE_WAIT_MS 50u
+static VOID AdmissionScanoutMpoRetireSlot1(ADMISSION_CONTEXT *Context,
+                                           ULONG Stage) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  ADMISSION_MPO_COMPLETION completion;
+  APPLE_AGX_SCANOUT_LAYER record;
+  LARGE_INTEGER interval;
+  LONGLONG primary;
+  ULONG built;
+  ULONG waited;
+
+  if (runtime == NULL || !AppleAgxFixedPanelTwoLayers(&runtime->Panel) ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (!AdmissionScanoutMpoSlot1MayShow(Context)) {
+    RtlZeroMemory(Context->MpoPlanes, sizeof(Context->MpoPlanes));
+    return;
   }
-  /* Like the broker (slot1_latched at the commit), count slot 1 as shown
-   * from the moment a two-layer commit is accepted. */
-  if (Count == 2u)
-    InterlockedExchange(&runtime->Slot1Shown, 1);
-  AdmissionScanoutSetNextMpo(runtime, Completion);
-  InterlockedExchange64(&runtime->PendingSequence, (LONG64)sequence);
-  InterlockedExchange(&runtime->PendingValid, 1);
-  AdmissionScanoutTakeNextMpo(runtime,
-                              Count == 2u
-                                  ? ADMISSION_SCANOUT_MPO_KIND_TWO_LAYERS
-                                  : ADMISSION_SCANOUT_MPO_KIND_REMOVAL);
-  return STATUS_SUCCESS;
+  InterlockedExchange(&Context->Mpo.LastSlot1RetireStage, (LONG)Stage);
+  RtlZeroMemory(&record, sizeof(record));
+  RtlZeroMemory(&completion, sizeof(completion));
+  built = Context->MpoPlanes[0].Valid != 0u
+              ? AdmissionMpoBuildRemoval(&Context->MpoPlanes[0].Input, &record)
+              : 0u;
+  primary = Context->MpoPlanes[0].PrimaryAddress;
+  RtlZeroMemory(Context->MpoPlanes, sizeof(Context->MpoPlanes));
+  if (built != 1u) {
+    InterlockedIncrement(&Context->Mpo.Slot1RetireFailures);
+    return;
+  }
+  /* One commit outstanding: wait (bounded) for the pending flip's latch. */
+  interval.QuadPart = -10000LL;
+  for (waited = 0u;
+       InterlockedCompareExchange(&runtime->PresentGate, 1, 0) != 0;
+       ++waited) {
+    if (waited >= ADMISSION_SCANOUT_RETIRE_WAIT_MS ||
+        InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0) {
+      InterlockedIncrement(&Context->Mpo.Slot1RetireFailures);
+      return;
+    }
+    (void)KeDelayExecutionThread(KernelMode, FALSE, &interval);
+  }
+  if (NT_SUCCESS(AdmissionScanoutMpoQueueHeld(
+          Context, runtime, &record, 1u, &completion, primary, FALSE,
+          &Context->Mpo.Slot1RetireRefusals)))
+    InterlockedIncrement(&Context->Mpo.Slot1Retires);
+  else
+    InterlockedIncrement(&Context->Mpo.Slot1RetireFailures);
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueueDeferred(
