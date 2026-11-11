@@ -4680,3 +4680,40 @@ checkout-only error, baseline gate 1 NEW = the known checkout-only case. Not ver
 Decoder fields for the boot: `pool_ladder.nonfast_ms_per_slab` is cumulative; M1 of the 01:45:42Z entry is the
 same formula on the pre-gm -> post-f0 deltas: (delta SlabChunkedUs + delta Rung256FailUs) / delta SlabChunked.
 Bench order: after EXP2335 -> POOL-LADDER boot (switch on for the whole boot, deleted in rollback) -> T5b FULL boot.
+
+## UPDATE 2026-11-11T02:08:20Z -- architect: the 0.76-1.13 s scene escape at launch = one TVB growth step (126 MiB) under the G3 lock
+
+Source of the first long `measure-scene-escape` operation 1 (ACQUIRE) of every GravityMark launch, checked by me
+against code and receipts (research returned as text; no REPORT.md exists, its scripts are in
+`.local/night-20261110/scene-acquire-cost/`):
+- Code: `AdmissionGpuvaG3PrivateEscape` calls `AdmissionG3TvbGrow` (gpuva_g3_windows.c, rc80, Asahi auto_grow) when
+  the process is idle. The render before it overflowed the 8-block tiler heap: `measure-gpu-tvb` row of the census
+  launch shows 53 overflows (partial renders), max_pages 1390 -> target 1043 blocks; the step maps 1011 blocks
+  (126.4 MiB) in this one call. Each block takes 2 pool granules through `AdmissionMemoryPoolTvbTake` ->
+  `AdmissionPoolSlabTakePrivate` -> `AddSlab` -> `AdmissionPoolNewSlab` (about 64 new 2 MiB slabs, past the
+  large-page cache, i.e. chunked) and maps 8 GPU pages through the broker (about 16.2k calls).
+- Receipts: `Wom1G3LockProfile` site gpuva_g3_windows.c:2860 HoldMax 1125.79 ms at pre-gm = the r2 escape of
+  EXP2333 (1125.8 ms); largest wait behind any G3 lock site in the boot 76.65 ms. The escape is lock hold time,
+  not a wait for jobs.
+- Correction to the 01:5x addendum: "longer than ReserveUsMax, so not one pool reserve" compared the wrong path;
+  this path does not use the reserve at all. ReserveUsMax 0.77 s belongs to the reservation that ran the one-shot
+  pool probe.
+- Split (estimate from existing per-unit receipts, not measured inside the call): chunked slabs 64 x 5.6-6.4 ms =
+  0.36-0.41 s; broker grants about 0.09 s; slab-list walks (`TakePrivate` walks the whole list twice per granule,
+  about 1500 slabs) and graph bookkeeping 0.04-0.13 s; sum 0.44-0.86 s against 0.76-1.13 s observed (16 launches,
+  median 0.866 s). About 0.3 s of the median is not attributed.
+- Consequence for POOL-LADDER: these 64 slabs go through the same `AdmissionPoolNewSlab`, so the ladder also acts
+  here. Slabs of the frame-2 gap: about 293 (BO creation) + 64 (TVB) = 357; expected saving 357 x 4.6 ms = about
+  1.6 s (was 1.35 s). ACCEPT / REJECT lines of 01:45:42Z are unchanged.
+- OBSERVATION RULE for the POOL-LADDER boot (written before the run; not part of ACCEPT / REJECT): first
+  operation-1 escape of the traced launches (w, r2, r3), control 0.76-1.13 s, median 0.866 s.
+  If M1 <= 3.2 ms and the boot's median escape <= 0.70 s: slabs own the predicted share; the rest gets the split
+  receipt only if it is still above 0.4 s. If M1 <= 3.2 ms and every escape stays >= 0.76 s: slab cost is not the
+  main part; next step is a receipt-only split of the growth call (stamps around lease takes and page maps,
+  counter deltas), one boot. If M1 > 3.2 ms the escape says nothing.
+- Not pursued now: the 53 partial renders of the overflowing frame (same policy as Asahi: start small, grow 3x
+  after overflow; cost of that frame not measured), and moving the growth off the acquire path (spreads the same
+  work, the score counts total time).
+Ranking unchanged: (1) non-busy about 1.9 ms per frame; (2) startup gap 4.9-5.5 s: chunked slabs about 2.3 s
+(BO 1.97 + TVB about 0.4; POOL-LADDER), bind 1.16 s, TVB growth rest about 0.45 s, remainder; (3) R5 3D;
+(4) C0; (5) R1; (6) R3/C2/C4.
