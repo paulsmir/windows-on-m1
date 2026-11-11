@@ -77854,3 +77854,11 @@ EXP2341 HARDWARE BEFORE 2026-11-11T12:59:53Z:
 - Hashes: sys 102c2263d57c, UmdArm64 0d20884a745c, UmdX64 5825a62ce4cf, Umd32 1183e57fc97b; manifest caf97a1e6c1c, hardware-manifest 5e17c2d94c2a; probe2341.sh d92ef39b7062 (PROBE_LINT_OK); visible recovery rec2341h 51a22b9c56226518; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2341h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2341-fold-band2/run2341.sh.
+
+EXP2341 ACTUAL 2026-11-11T13:57:40Z:
+- Package fd410f54c (pinned worktree, same manifest/archive as EXP2339); normal switch set; ntoskrnl 26100.9974, Windows Update paused (0x1/0x1); cmd waits. EXP2341_PIPELINE_RC 0; STOPS 0, GPU_RESET none, wer 0 in every GM arm; no stop line reached.
+- Suite TOOL_SUITE PASS=119 FAIL=0. PERF w/r2/r3 fps_frames 50.502 / 50.622 / 50.859, mean(r2,r3) 50.740. FULL (-times) f0a 8025, f0b 8170.
+- CS 1.6 warm/r2/r3 48.656/52.169/52.075, both scored runs VALID (pages_in 0/s); PERF_GATE cs16 PASS (+2.45 % against the corrected baseline 50.832), gravitymark_hd_perf PASS (worst 45.787), PERF_GATE_PASS. WER_REPORTS 2 (the 2026-10-06 files).
+- DWM-TRACE (after every measured number; nobody touched the trackpad): logman start/stop "The command completed successfully"; dwmov.etl 811008 bytes, dwmov.xml 9033287 bytes (evidence/EXP2341/dwm-trace/, deleted on the guest). EventID histogram (6764 events): 0: 2, 221: 2085, 222: 2085, 289: 1285, 291: 1285, 458: 2, 459: 2, 460: 9, 461: 9. Five consecutive 291 payloads in dwm-trace/ev291-five.txt (surface 1280x720, PixelFormat 0x1C, Dst 640,457-1920,1177, IsDirectFlipCompatible 0, IsAdvancedDirectFlipCompatible 0, IsOverlayCompatible 0, IsOverlayRequired 0, fNoOverlappingContent 1, Flags 0x8, Rotation 0x1, Blend 0x0).
+- Rollback rec2341h: VISIBLE_INERT_PACKAGE_ABSENT_8CPU RECOVERY_STORAGE_APPLEANS_OK RECOVERY_DONE .
+- Ledger role (architect): fold-on band boot 2 of 3. Verdict / reading: the architect's.
