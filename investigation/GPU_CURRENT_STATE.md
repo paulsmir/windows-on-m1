@@ -4573,3 +4573,77 @@ EXP2333 POOL-PROBE from the tip as specified (K1 opt-in unset, `fcensus` last, f
   with the unchanged v5 stop; validity rows for p1 arms: order refusals 0 per present,
   RESOURCE seal drops 0, v5 prelude envelopes 0 in steady state, seals about 3.28 and
   folded kernels about 7.65 per present. No FPS claim for PF1 exists yet.
+
+## UPDATE 2026-11-11T01:45:42Z -- architect: EXP2333 reading: pool cost is per chunk (256 KiB rung = POOL-LADDER), deferred backing CLOSED, new-build control band, CS valid
+
+Evidence: `.local/experiments/EXP2333-pool-probe/evidence/EXP2333/` (pool-probe-post-f0.txt,
+bo-life.txt, fcensus-umd.log, kmd-receipts-pre-gm/post-f0.txt, gm2333f0-times.txt, perf-gate.txt);
+EXPERIMENTS.md `EXP2333 ACTUAL 2026-11-11T01:42:11Z`.
+
+POOL-PROBE, read by the rule of UPDATE 2026-11-10T21:27:02Z (rule unchanged):
+- Validity met (Version 1, TriggerSlabChunked 1, 8 calls per arm). The probe fired in the warm launch
+  (value already present in kmd-receipts-pre-gm.txt), so FULL f0 7596 did not contain the 0.53 s lock hold.
+- a1/b = 1.00 -> branch "a < 1.3 b": the cached -> write-combined conversion is NOT the cost.
+  Reuse does not matter either: B2 reused 119 pages, A1 took 103 of B2's cached pages, A2 reused 0;
+  all three cost 5.6-5.8 ms per 2 MiB.
+- c1/a1 = 0.31 (256 KiB chunks, 1751 us, all 256 granules pass the slab check), c2/a1 = 0.60 (1 MiB,
+  3332 us, min 66 / max 9892: bimodal, not cheap) -> the cost falls with fewer chunks: about 175 us
+  per 64 KiB chunk, about 219 us per 256 KiB chunk. By the rule this is the chunk ladder, and the
+  largest size that stays cheap is 256 KiB.
+- Drift bracket a3/a1 = 1.27 < 1.30: readable by the rule. The cached arms drift upward through the
+  probe (5610 -> 6532 -> 7084 -> 8601 -> 7607 us); against its neighbours C1 is 0.26, C2 0.42. Same reading.
+- A2 clause (Reused >= 50 %) not applicable (0/256). D1 (PREFER, no REQUIRE) returns no usable granule
+  (GranulesOk 0); its 440 us bounds zeroing plus one conversion per 2 MiB.
+- Verdict: per-chunk search cost CONFIRMED as the owner of the chunked slab cost; conversion and
+  reuse direction REJECTED as owners. Lever: POOL-LADDER (below).
+
+Where the chunked path sits in the scored run (new, from Wom1M2PoolDemand deltas and the census launch):
+- Per FULL f0 launch (pre-gm -> post-f0): 1463 new slabs = 773 fast 2 MiB (20 ms in total) + 690 chunked
+  (4 373 082 us, 6.34 ms each). Every launch gets about 750 fast slabs (1.5 GiB) before the fast path
+  misses; peak 1547 slabs. Chunked ms per slab over the three new-build boots: 5.59 / 6.20 / 6.38.
+- Census launch, same clock for BO births and presents: new BO bytes pass 1.5 GiB at 6.1 s; first
+  benchmark frame at 13.2 s; the gap after it (13.59 -> 18.34 s, 4.75 s) creates 36 BOs / 587 MiB =
+  about 293 chunked slabs = about 1.86 s. The 667 MiB created in the 7.76 -> 13.20 s gap is before the
+  first benchmark frame (not scored).
+- Frame-1 -> frame-2 gap of the scored FULL f0, three control boots: 4.881 / 5.472 / 5.079 s
+  (mean 5.144, sd 0.30).
+- Prize of the ladder: 293 slabs x (6.34 - 1.75) ms = about 1.35 s of the scored window = about 62
+  frames = +0.8 % of our score = about +0.6 % of the macOS score. This replaces the "+1.5 %" upper
+  bound of the 21:27:02Z entry: more than half of the chunked time is before the first benchmark frame.
+- Rest of that gap in the census launch (traced, 383 MB log): intervals ending in gpuva-paging-wait
+  0.82 s, in bo-create 0.49 s, one 854 ms counted-path -> scene-escape interval. Not attributed further.
+
+Census, read by the rule of UPDATE 2026-11-10T22:33:12Z: valid (296 born rows, no out of memory).
+N = never-referenced application classes with origin 1 = committed-buffer 166.6 + committed-texture
+16.1 + placed/reserved-texture 19.1 + heap 60.2 = 262.0 MiB < 550 MiB -> the deferred-backing
+hypothesis is CLOSED. (290.0 MiB in the ACTUAL entry is the all-class total incl. driver General 1.4
+and cache-reuse 26.6; same verdict.) No further hardware on deferred backing or slab count.
+
+New-build control band (ntoskrnl 26100.9974, K1 off, defaults; EXP2331 / EXP2332 / EXP2333):
+- FULL f0 7722 / 7680 / 7596: mean 7666 = 77.1 % of macOS 9946, sample sd 64.
+- PERF mean(r2,r3) 48.910 / 49.445 / 49.189: mean 49.181, sd 0.268.
+- Band (mean +- 2 sd): FULL f0 [7538, 7794], PERF mean(r2,r3) [48.65, 49.72]. Limitation: n = 3; a
+  95 % prediction interval at n = 3 is about +- 5 sd, so the band is a screening line, not a test.
+  One-sided use: a package below 7538 or 48.65 stops for a rerun; a single boot above the band is not
+  a gain without same-boot ABBA or a direct metric.
+- The old-build numbers (7918 mean, 49.1 PERF floor) are not comparable and take no part in verdicts.
+
+CS 1.6: EXP2333 r2 50.979 / r3 50.872, both VALID by the disturbance rule, PERF_GATE PASS (+1.86 %).
+The EXP2332 CS FAIL was the disturbed run; no CS regression, no bisect.
+
+Ranking (whole run) after this entry: (1) non-busy about 1.9 ms per frame; (2) startup: frame-2 gap
+4.9-5.5 s, of it chunked pool about 1.9 s (POOL-LADDER, about +0.6 % of macOS), remainder unattributed;
+(3) R5 3D +0.72; (4) C0 +0.56; (5) R1 +0.31; (6) R3/C2/C4. PF1c (EXP2335) is running next.
+
+POOL-LADDER (class O, KMD, one variable; spec in OV-ARCHITECT-HANDOFF.md, same stamp):
+REG_DWORD Wom1PoolLadder=1 inserts a 256 KiB-chunk attempt between the fast 2 MiB attempt and the
+64 KiB attempt of AdmissionPoolAllocSlab. Default off. Pre-registered metrics for its boot
+(switch on for the whole boot, controls = the three boots above):
+- M1 non-fast cost per slab in FULL f0 = (delta of all non-fast attempt us incl. failed 256 KiB
+  attempts) / (delta of slabs that missed the fast path). Control 5.59 / 6.20 / 6.34-6.38 ms.
+- M2 frame-1 -> frame-2 gap of FULL f0. Control 4.881 / 5.472 / 5.079 s.
+- M3 frames in the first 10 s after the first frame. Control 201 / 179 / 194.
+- ACCEPT (default on in the next package) only if M1 <= 3.2 ms AND M2 <= 4.29 s (control minimum
+  minus the control range 0.59 s) AND FULL f0 >= 7538 AND PERF mean(r2,r3) >= 48.65 AND perf gate
+  PASS AND new_slab_failures 0. REJECT if M1 > 4.7 ms or M2 > 4.88 s. Anything between: one more
+  boot, then decide. FULL score alone decides nothing here (expected +62 frames is under one sd).
