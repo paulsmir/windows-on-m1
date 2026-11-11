@@ -10067,6 +10067,37 @@ static int mpo_kmt(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
             printf("\n");
         }
     }
+    /* Architect after EXP2355: the remaining flip / overlay support queries. */
+    {
+        static const struct { UINT type; const char *name; } bools[] = {
+            {KMTQAITYPE_INDEPENDENTFLIP_SUPPORT, "INDEPENDENTFLIP_SUPPORT(28)"},
+            {KMTQAITYPE_QUERY_MULTIPLANEOVERLAY_DECODE_SUPPORT, "MULTIPLANEOVERLAY_DECODE_SUPPORT(35)"},
+            {KMTQAITYPE_INDEPENDENTFLIP_SECONDARY_SUPPORT, "INDEPENDENTFLIP_SECONDARY_SUPPORT(39)"},
+            {KMTQAITYPE_MPOKERNELCAPS_SUPPORT, "MPOKERNELCAPS_SUPPORT(45)"},
+        };
+        for (UINT r = 0; r < sizeof(bools) / sizeof(bools[0]); ++r) {
+            BOOL supported = FALSE;
+            st = mpokmt_qai(qai, od.hAdapter, bools[r].type, &supported, sizeof(supported));
+            printf("MPOKMT_QAI %s status=0x%08lx Supported=%d\n", bools[r].name, (unsigned long)st, supported);
+        }
+    }
+    {
+        D3DKMT_FLIPQUEUEINFO fq; D3DKMT_CURRENTDISPLAYMODE cm; D3DKMT_QUERY_SCANOUT_CAPS sc; UINT dc[16];
+        memset(&fq, 0, sizeof(fq)); st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_FLIPQUEUEINFO, &fq, sizeof(fq));
+        printf("MPOKMT_QAI FLIPQUEUEINFO(5) status=0x%08lx MaxHardwareFlipQueueLength=%u MaxSoftwareFlipQueueLength=%u FlipFlags=0x%x\n",
+               (unsigned long)st, fq.MaxHardwareFlipQueueLength, fq.MaxSoftwareFlipQueueLength, *(const UINT *)&fq.FlipFlags);
+        memset(&cm, 0, sizeof(cm)); cm.VidPnSourceId = od.VidPnSourceId;
+        st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_CURRENTDISPLAYMODE, &cm, sizeof(cm));
+        printf("MPOKMT_QAI CURRENTDISPLAYMODE(9) status=0x%08lx Source=%u %ux%u fmt=%u refresh=%u/%u scanline=%u rotation=%u\n",
+               (unsigned long)st, cm.VidPnSourceId, cm.DisplayMode.Width, cm.DisplayMode.Height, (UINT)cm.DisplayMode.Format,
+               cm.DisplayMode.IntegerRefreshRate, cm.DisplayMode.RefreshRate.Denominator, cm.DisplayMode.ScanLineOrdering,
+               (UINT)cm.DisplayMode.DisplayOrientation);
+        memset(&sc, 0, sizeof(sc)); sc.VidPnSourceId = od.VidPnSourceId;
+        st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_SCANOUT_CAPS, &sc, sizeof(sc));
+        printf("MPOKMT_QAI SCANOUT_CAPS(67) status=0x%08lx Source=%u Caps=0x%x\n", (unsigned long)st, sc.VidPnSourceId, sc.Caps);
+        memset(dc, 0, sizeof(dc)); st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_DISPLAY_CAPS, dc, 8u);
+        printf("MPOKMT_QAI DISPLAY_CAPS(74) status=0x%08lx words %08x %08x\n", (unsigned long)st, dc[0], dc[1]);
+    }
     printf("MPOKMT_SELFCHECK sizeof(D3DKMT_MULTIPLANEOVERLAY_SUPPORT)=%u (d3dkmthk.h:2048 {BOOL Supported}) sizeof(D3DKMT_DIRECTFLIP_SUPPORT)=%u (d3dkmthk.h {BOOL Supported}) type20=%u type19=%u\n",
            (UINT)sizeof(D3DKMT_MULTIPLANEOVERLAY_SUPPORT), (UINT)sizeof(D3DKMT_DIRECTFLIP_SUPPORT),
            (UINT)KMTQAITYPE_MULTIPLANEOVERLAY_SUPPORT, (UINT)KMTQAITYPE_DIRECTFLIP_SUPPORT);
