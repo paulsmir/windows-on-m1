@@ -77726,3 +77726,12 @@ EXP2339 HARDWARE BEFORE 2026-11-11T10:08:51Z:
 - Hashes: sys 08c354c555b0, UmdArm64 c2f4a9d011c1, UmdX64 4e975e3726db, Umd32 ddc4f7ece41f; manifest 03075d9588d9, hardware-manifest 04fff25ea460; probe2339.sh 0af5e179af66 (PROBE_LINT_OK); visible recovery rec2339h 2803a78a4bc52771; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2339h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2339-t5b-full/run2339.sh.
+
+EXP2339 ACTUAL 2026-11-11T11:17:27Z:
+- Package fd410f54c (PF1 fold default on, ladder rung code removed 8353ddb08, K1 opt-in unset, Wom1PoolLadder absent); ntoskrnl 26100.9974; Windows Update paused (0x1/0x1). First boot with the cmd wait form in every in-run wait. EXP2339_PIPELINE_RC 0; STOPS 0, GPU_RESET none, wer 0 in every GM arm; no stop line reached.
+- Suite TOOL_SUITE PASS=119 FAIL=0. PERF w/r2/r3 fps_frames 50.053 / 50.597 / 50.624, mean(r2,r3) 50.611 (not compared with powershell-wait boots).
+- FULL arms (-times, quiet gate before each): f0a 8047, ft5a (T5b: CRAWL_BINDFUL=1 + SRV_STATIC_FIRST=1) 7969, fna (STATS_NO_PS=1) 8084, fnb (STATS_NO_PS=1) 8026, ft5b (T5b) 8074, f0b 7962. mean(f0) 8004.5, mean(ft5) 8021.5 (+0.21 %; ft5a below both f0), mean(fn) 8055.0 (+0.63 %).
+- CS 1.6 warm/r2/r3 (cmd wait, gated) 48.918/52.214/52.199, both scored runs VALID (pages_in 0 / 16 /s); PERF_GATE cs16 PASS (+4.52 %), gravitymark_hd_perf PASS (worst 45.838), PERF_GATE_PASS. CS r4 with the OLD powershell wait loop (not gated): 51.293 (VALID, pages_in 42 /s) vs mean(r2,r3) 52.206 (-1.75 %).
+- WER_REPORTS 2 (the 2026-10-06 files).
+- Rollback rec2339h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE.
+- Ledger role (architect): fold-on band boot 1 of 3. Verdicts (T5b FULL rule, STATS-NOPS FULL clause, CS artifact size) are the architect's.
