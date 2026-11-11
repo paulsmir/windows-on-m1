@@ -5522,3 +5522,17 @@ file. `Wom1ComputeEncoderMask` joins the opt-in list (default off, unset in ever
   scaled1) -> 7906 (EXP2345, s2v3), PERF means flat (50.75 / 50.46 / 50.63), all inside the historical 7888..8170.
   Not attributed. Discriminator already in the order: band boot 3 on closedv5 directly after S2-1 separates a
   drift of the day (temperature reached 84..88 C in the receipts) from a cost of the two new m1n1 lines.
+
+## UPDATE 2026-11-11T18:05Z (architect): S2-1 (EXP2346): the OS never asked for planes; verdict open
+
+- EXP2346, s2v3 image, `Wom1MpoTwoPlanes=1`: Effective 1 (switch set, broker bit 9, contract V3), no failure
+  criterion hit, FULL 8060, PERF 50.78, CS gate PASS. GetMultiPlaneOverlayCaps calls 0, Check3 calls 0, Set3 calls
+  19615 all single-plane, two-plane commits 0; no `measure-dxgi-mpo-feature` row in any UMD log including DWM's.
+  DWM ETW identical to the switch-off boot (OverlayCompatible 0, DirectFlip 0).
+- The first divergence is before U-1: dxgkrnl never queried the plane capabilities, so DWM never had planes to
+  consider. U-1..U-5 not reached; U-6 not exercised (slot 1 never latched). No FPS claim, no verdict on the lever.
+- NOT VERIFIED: that the driver caps actually reported SupportMultiPlaneOverlay / MaxOverlayPlanes at run time
+  (the caps receipt may not cover these fields); which documented condition dxgkrnl requires before it calls the
+  caps DDI. Offline source/WDK check running; next boot only with a named unmet condition or a receipt that
+  closes one.
+- Three S2 images ran without a DCP error; the scaled and two-layer m1n1 lines are hardware-run now.
