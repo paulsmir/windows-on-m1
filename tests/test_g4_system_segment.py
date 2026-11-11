@@ -56,7 +56,10 @@ typedef struct {void *DeviceHandle; NTSTATUS (*DxgkCbGetDeviceInformation)(void 
     DXGKRNL_INTERFACE, *PDXGKRNL_INTERFACE;
 typedef struct {void *PhysicalDeviceObject; DXGK_START_INFO StartInfo;
  DXGKRNL_INTERFACE Interface; int InterfaceValid, DeviceInformation, Requested;
+ struct {long StartDeviceCount; long long StartEntryQpc;} MpoGate; /* S2-1b receipt */
 } ADMISSION_CONTEXT;
+static long InterlockedIncrement(long *p) {return ++*p;}
+static long long AdmissionMpoGateQpc(ADMISSION_CONTEXT *c) {(void)c; return 1;}
 static unsigned starts, reads, arms, queried;
 static int firmware=1, armed=1, info_status, last_status, irql;
 static int KeGetCurrentIrql(void) {return irql;}

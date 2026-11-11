@@ -159,7 +159,11 @@ static Device *CastDevice(DXGI_DDI_HDEVICE h) { return reinterpret_cast<Device *
 static Resource *CastResource(DXGI_DDI_HRESOURCE h) { return reinterpret_cast<Resource *>(h); }
 struct Receipt { std::string stage; HRESULT hr; UINT a, b; };
 static std::vector<Receipt> receipts;
-static void dxgi_receipt(const char *stage, HRESULT hr, UINT a, UINT b) { receipts.push_back({stage, hr, a, b}); }
+/* S2-1b: diagnostic "measure-*" rows (measure-dxgi-mpo-caps) are not part of
+   the reject contract this harness checks. */
+static void dxgi_receipt(const char *stage, HRESULT hr, UINT a, UINT b) {
+  if (std::string(stage).rfind("measure-", 0) == 0) return;
+  receipts.push_back({stage, hr, a, b}); }
 /* The winsys predicate reads the adapter's AGX_WIN32_DEVICE_INFO.Features and
    asks the header (checked by test_winsys_reads_the_device_feature). */
 static UINT features; static unsigned predicateCalls; static UINT askedSource;

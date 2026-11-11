@@ -1071,9 +1071,25 @@ ReclaimResources(DXGI_DDI_ARG_RECLAIMRESOURCES *args)
 
 /* S2: multiplane overlays follow the kernel (agx_dxgi_mpo.h). Without the
  * kernel's two-plane answer: the primary plane only, as before S2. */
+/* S2-1b: "measure-dxgi-mpo-entries" {mask of MPO entries this process
+ * called at least once, the entry that set a new bit}; one row per new bit.
+ * 0x1 GetMultiplaneOverlayCaps, 0x2 GetMultiplaneOverlayGroupCaps,
+ * 0x4 PresentMultiplaneOverlay, 0x8 PresentMultiplaneOverlay1,
+ * 0x10 CheckMultiplaneOverlayColorSpaceSupport, 0x20 kernel predicate. */
+static UINT mpo_entries_seen;
+static void
+mpo_entry(UINT bit)
+{
+   if (mpo_entries_seen & bit)
+      return;
+   mpo_entries_seen |= bit;
+   dxgi_receipt("measure-dxgi-mpo-entries", S_OK, mpo_entries_seen, bit);
+}
+
 bool
 kernel_two_planes(DXGI_DDI_HDEVICE hDevice, UINT vidPnSourceId)
 {
+   mpo_entry(0x20u);
    Device *device = CastDevice(hDevice);
    return device && device->windows &&
           AgxD3d10WindowsKernelMpoTwoPlanes(device->windows, vidPnSourceId);
@@ -1082,16 +1098,29 @@ kernel_two_planes(DXGI_DDI_HDEVICE hDevice, UINT vidPnSourceId)
 HRESULT APIENTRY
 GetMultiplaneOverlayCaps(DXGI_DDI_ARG_GETMULTIPLANEOVERLAYCAPS *args)
 {
+   mpo_entry(0x1u);
    if (!args)
       return E_INVALIDARG;
    AgxDxgiMpoFillCaps(kernel_two_planes(args->hDevice, args->VidPnSourceId),
                       &args->MultiplaneOverlayCaps);
+   /* S2-1b: "measure-dxgi-mpo-caps" {calls in this process, MaxPlanes |
+    * VidPnSourceId << 16}: the first 8 calls, then power-of-two counts.
+    * Receipt-only counter (a lost increment under a race is harmless). */
+   {
+      static UINT calls;
+      const UINT n = ++calls;
+      if (n <= 8u || (n & (n - 1u)) == 0u)
+         dxgi_receipt("measure-dxgi-mpo-caps", S_OK, n,
+                      args->MultiplaneOverlayCaps.MaxPlanes |
+                          (args->VidPnSourceId << 16));
+   }
    return S_OK;
 }
 
 HRESULT APIENTRY
 GetMultiplaneOverlayGroupCaps(DXGI_DDI_ARG_GETMULTIPLANEOVERLAYGROUPCAPS *args)
 {
+   mpo_entry(0x2u);
    if (args && AgxDxgiMpoFillGroupCaps(kernel_two_planes(args->hDevice, args->VidPnSourceId),
                                        args->GroupIndex, &args->MultiplaneOverlayGroupCaps))
       return S_OK;
@@ -1135,6 +1164,7 @@ present_planes(const char *stage, DXGI_DDI_HDEVICE hDevice, void *dxgiContext, U
 HRESULT APIENTRY
 PresentMultiplaneOverlay(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args)
 {
+   mpo_entry(0x4u);
    if (args && kernel_two_planes(args->hDevice, args->VidPnSourceId))
       return present_planes("reject-dxgi-mpo-present", args->hDevice, args->pDXGIContext,
                             args->PresentPlaneCount, args->pPresentPlanes);
@@ -1145,6 +1175,7 @@ PresentMultiplaneOverlay(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args)
 HRESULT APIENTRY
 PresentMultiplaneOverlay1(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY1 *args)
 {
+   mpo_entry(0x8u);
    if (args && kernel_two_planes(args->hDevice, args->VidPnSourceId))
       return present_planes("reject-dxgi-mpo-present1", args->hDevice, args->pDXGIContext,
                             args->PresentPlaneCount, args->pPresentPlanes);
@@ -1155,6 +1186,7 @@ PresentMultiplaneOverlay1(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY1 *args)
 HRESULT APIENTRY
 CheckMultiplaneOverlayColorSpaceSupport(DXGI_DDI_ARG_CHECKMULTIPLANEOVERLAYCOLORSPACESUPPORT *args)
 {
+   mpo_entry(0x10u);
    if (!args)
       return E_INVALIDARG;
    args->Supported = AgxDxgiMpoColorSpaceSupported(

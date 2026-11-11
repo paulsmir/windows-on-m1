@@ -588,6 +588,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
       Context->ScanoutRuntime != NULL ||
       Context->BrokerBase == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
     return STATUS_INVALID_DEVICE_STATE;
+  InterlockedIncrement(&Context->MpoGate.ScanoutStartCount);
   if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &memory)) ||
       memory.PoolBytes != memory.Bytes ||
       (memory.GuestIpaAddress &
@@ -670,6 +671,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
     Context->Mpo.Effective =
         AppleAgxFixedPanelTwoLayers(&runtime->Panel) ? 1 : 0;
   }
+  /* S2-1b: Effective 0 -> 1 at this scanout start. */
+  if (AppleAgxFixedPanelTwoLayers(&runtime->Panel)) {
+    InterlockedIncrement(&Context->MpoGate.EffectiveTransitions);
+    Context->MpoGate.MpoEffectiveSetQpc = AdmissionMpoGateQpc(Context);
+  }
   Context->ScanoutRuntime = runtime;
   /* Physical latch retirement is an internal runtime requirement, including
    * initial modeset before Windows subscribes to VSync notifications. */
@@ -695,6 +701,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStop(
   ADMISSION_SCANOUT_RUNTIME *runtime;
   APPLE_AGX_SCANOUT_RESULT scanout_result;
   APPLE_AGX_FIXED_PANEL_RESULT result;
+  BOOLEAN wasEffective = FALSE;
   if (Context == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
     return STATUS_INVALID_PARAMETER;
   runtime = (ADMISSION_SCANOUT_RUNTIME *)Context->ScanoutRuntime;
@@ -733,6 +740,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStop(
             runtime, 0u, &done)) || !done)
       return STATUS_DEVICE_BUSY;
   }
+  /* S2-1b: a RELEASE below clears the V3 negotiation (Effective 1 -> 0). */
+  wasEffective = AppleAgxFixedPanelTwoLayers(&runtime->Panel) ? TRUE : FALSE;
   if (runtime->Panel.Ownership == AppleAgxFixedPanelRegistered) {
     result = AppleAgxFixedPanelStop(
         &runtime->Panel,
@@ -756,6 +765,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStop(
       !AdmissionDisplayOutputLeaseRetire(&runtime->FallbackLease))
     return STATUS_DEVICE_BUSY;
 #endif
+  if (wasEffective && !AppleAgxFixedPanelTwoLayers(&runtime->Panel)) {
+    InterlockedIncrement(&Context->MpoGate.EffectiveTransitions);
+    InterlockedExchange(&Context->MpoGate.LastEffectiveClearReason,
+                        (LONG)ADMISSION_MPO_GATE_CLEAR_STOP);
+  }
   /* A1.2: RELEASE removed slot 1 itself (broker.c:328, :838-841). */
   RtlZeroMemory(Context->MpoPlanes, sizeof(Context->MpoPlanes));
   Context->ScanoutRuntime = NULL;

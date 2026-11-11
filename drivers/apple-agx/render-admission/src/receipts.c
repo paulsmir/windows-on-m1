@@ -3012,11 +3012,38 @@ _Use_decl_annotations_ void AdmissionRecordDisplayModes(
   AdmissionRecordMpo(Context);
 }
 
+/* S2-1b: Wom1MpoGateReceipt, written whatever the switch. */
+_Use_decl_annotations_ LONGLONG AdmissionMpoGateQpc(ADMISSION_CONTEXT *Context) {
+  LARGE_INTEGER frequency;
+  LARGE_INTEGER now = KeQueryPerformanceCounter(&frequency);
+  if (Context != NULL)
+    Context->MpoGate.QpcFrequency = frequency.QuadPart;
+  return now.QuadPart;
+}
+
+_Use_decl_annotations_ void AdmissionRecordMpoGate(ADMISSION_CONTEXT *Context) {
+  ADMISSION_MPO_GATE_RECEIPT snapshot;
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  RtlCopyMemory(&snapshot, (const VOID *)&Context->MpoGate, sizeof(snapshot));
+  snapshot.Version = (LONG)ADMISSION_MPO_GATE_RECEIPT_VERSION;
+  snapshot.Bytes = (LONG)sizeof(snapshot);
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+                                          PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1MpoGateReceipt", &snapshot, sizeof(snapshot));
+  ZwClose(key);
+}
+
 /* S2: Wom1MpoReceipt.  Nothing is written unless the Wom1MpoTwoPlanes
  * switch was set at StartDevice (Mpo.Version is then nonzero). */
 _Use_decl_annotations_ void AdmissionRecordMpo(ADMISSION_CONTEXT *Context) {
   ADMISSION_MPO_RECEIPT snapshot;
   HANDLE key = NULL;
+  AdmissionRecordMpoGate(Context);
   if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL ||
       InterlockedCompareExchange(&Context->Mpo.Version, 0, 0) == 0)

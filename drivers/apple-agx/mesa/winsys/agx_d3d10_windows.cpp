@@ -1176,12 +1176,14 @@ BOOL AgxD3d10WindowsKernelMpoTwoPlanes(AGX_D3D10_WINDOWS_DEVICE *Device,
   if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Device->Adapter) return FALSE;
   AGX_D3D10_WINDOWS_ADAPTER *adapter=Device->Adapter;
   const UINT features=adapter->Runtime.DeviceInfo.Features;
-  if(!AgxDxgiMpoFeatureTwoPlanes(features,VidPnSourceId)) return FALSE;
+  const BOOL two=AgxDxgiMpoFeatureTwoPlanes(features,VidPnSourceId) ? TRUE : FALSE;
+  /* S2-1b: once per adapter whatever the bit {Features, two-plane answer,
+   * VidPnSourceId}, so "never asked" and "bit clear" are told apart. */
   if(InterlockedCompareExchange(&adapter->MpoReceipt,1,0)==0) {
-    UINT values[1]={features};
+    UINT values[3]={features,(UINT)two,VidPnSourceId};
     AdmissionUmdDiagnostic("measure-dxgi-mpo-feature",S_OK,values,ARRAYSIZE(values));
   }
-  return TRUE;
+  return two;
 }
 
 /* S2: PresentMultiplaneOverlay(1) after AgxDxgiMpoCheckPlanes: the flush of

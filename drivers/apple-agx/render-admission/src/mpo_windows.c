@@ -176,6 +176,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetMultiPlaneOverlayCaps(
                 sizeof(Caps->MaxShrinkFactor));
   if (effective)
     InterlockedIncrement(&context->Mpo.CapsCalls);
+  /* S2-1b: every call, ungated; persisted on the first calls only. */
+  {
+    const LONG all = InterlockedIncrement(&context->MpoGate.CapsCallsAll);
+    if (all == 1)
+      context->MpoGate.CapsFirstQpc = AdmissionMpoGateQpc(context);
+    InterlockedExchange(&context->MpoGate.CapsLastVidPnSourceId,
+                        (LONG)Caps->VidPnSourceId);
+    InterlockedExchange(&context->MpoGate.CapsLastMaxPlanes,
+                        (LONG)Caps->MaxPlanes);
+    if (all <= 8 || (all & (all - 1)) == 0)
+      AdmissionRecordMpoGate(context);
+  }
   return STATUS_SUCCESS;
 }
 
@@ -251,6 +263,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCheckMultiPlaneOverlaySupport3(
 
   if (context == NULL || Args == NULL)
     return STATUS_INVALID_PARAMETER;
+  /* S2-1b: every Check3 call, ungated. */
+  {
+    const LONG all = InterlockedIncrement(&context->MpoGate.Check3CallsAll);
+    if (all == 1)
+      context->MpoGate.Check3FirstQpc = AdmissionMpoGateQpc(context);
+    if (all <= 8)
+      AdmissionRecordMpoGate(context);
+  }
   effective = AdmissionScanoutMpoEffective(context);
   if (Args->PlaneCount == 0u ||
       Args->PlaneCount > (effective ? ADMISSION_MPO_MAX_PLANES : 1u)) {

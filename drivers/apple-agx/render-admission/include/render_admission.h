@@ -171,6 +171,33 @@ typedef struct _ADMISSION_MPO_RECEIPT {
 #define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
 #define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u
 
+/* S2-1b: Wom1MpoGateReceipt (device key, receipt-only).  Where the plane
+ * capability is lost: every DRIVERCAPS answer (first and last), the MPO
+ * caps / Check3 DDIs counted ungated and never zeroed, StartDevice and
+ * scanout starts, Effective transitions, and every QueryAdapterInfo type.
+ * Lives in the context from AddDevice (zeroed there only). */
+#define ADMISSION_MPO_GATE_RECEIPT_VERSION 1u
+#define ADMISSION_MPO_GATE_QUERY_TYPES 64u
+typedef struct _ADMISSION_MPO_GATE_CAPS {
+  LONG Valid, Mpo, DirectFlip, MaxOverlayPlanes;
+  LONG WddmVersion, Status, Zeroed, Reserved;
+  LONGLONG Qpc;
+} ADMISSION_MPO_GATE_CAPS;
+typedef struct _ADMISSION_MPO_GATE_RECEIPT {
+  volatile LONG Version, Bytes;
+  volatile LONG StartDeviceCount, ScanoutStartCount, DrvCapsQueryCount;
+  volatile LONG EffectiveTransitions, LastEffectiveClearReason;
+  volatile LONG CapsCallsAll, Check3CallsAll, CapsLastVidPnSourceId;
+  volatile LONG CapsLastMaxPlanes, StopDeviceCount;
+  LONGLONG QpcFrequency, StartEntryQpc, StartExitQpc, MpoEffectiveSetQpc;
+  volatile LONGLONG CapsFirstQpc, Check3FirstQpc;
+  ADMISSION_MPO_GATE_CAPS FirstDrvCaps, LastDrvCaps;
+  /* index = DXGKQAITYPE; the last slot counts every type >= 63 */
+  volatile LONG QueryTypeCounts[ADMISSION_MPO_GATE_QUERY_TYPES];
+  volatile LONG QueryRefusalBitmap[2];
+} ADMISSION_MPO_GATE_RECEIPT;
+#define ADMISSION_MPO_GATE_CLEAR_STOP 1u
+
 /* PresentIds to report, with their LayerIndex, at the latch of a flip. */
 typedef struct _ADMISSION_MPO_COMPLETION {
   ULONG Count;
@@ -1047,6 +1074,7 @@ typedef struct _ADMISSION_CONTEXT {
   BOOLEAN FwRestartDrillAllowed;
   /* S2: two-plane MPO (Wom1MpoTwoPlanes); untouched unless effective. */
   ADMISSION_MPO_RECEIPT Mpo;
+  ADMISSION_MPO_GATE_RECEIPT MpoGate;
   ADMISSION_MPO_PLANE_STATE MpoPlanes[2];
 } ADMISSION_CONTEXT;
 
@@ -2421,6 +2449,9 @@ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     _Inout_ DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3 *Args);
 /* Wom1MpoReceipt (PASSIVE_LEVEL; only while effective). */
 void AdmissionRecordMpo(_In_ ADMISSION_CONTEXT *Context);
+/* S2-1b: Wom1MpoGateReceipt (PASSIVE_LEVEL; ignored above). */
+void AdmissionRecordMpoGate(_In_ ADMISSION_CONTEXT *Context);
+LONGLONG AdmissionMpoGateQpc(_In_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutSetTimelinePaused(_Inout_ ADMISSION_CONTEXT *Context,
                                           _In_ BOOLEAN Paused);
 VOID AdmissionScanoutDpc(_Inout_ ADMISSION_CONTEXT *Context);
