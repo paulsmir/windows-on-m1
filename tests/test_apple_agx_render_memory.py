@@ -56,6 +56,17 @@ class AppleAgxRenderMemoryTests(unittest.TestCase):
         self.assertIn("LocalAllocationBytes", windows)
         self.assertIn("ADMISSION_MEMORY_CONTRACT Memory", header)
 
+    def test_scanout_segment_is_directflip_capable(self):
+        """DF-1: dxgkrnl (DXGADAPTER::Initialize, guest 26100.9974) clears SupportDirectFlip and
+        SupportMultiPlaneOverlay when no segment with DXGK_SEGMENTFLAGS.DirectFlip holds enough
+        memory (EXP2350/2352: QAI 19 = 0, 20 = 0). Segment 2 (local, scan-out pool) must carry the
+        flag in both QuerySegment4 and QuerySegment5; the aperture never does."""
+        windows = (RENDER / "src" / "memory_windows.c").read_text()
+        self.assertIn("output->SegmentDescriptors[1].Flags.DirectFlip = 1u;", windows)
+        self.assertIn("local->Flags.DirectFlip = 1u;", windows)
+        self.assertNotIn("SegmentDescriptors[0].Flags.DirectFlip", windows)
+        self.assertNotIn("aperture->Flags.DirectFlip", windows)
+
     def test_backend_view_is_a_tail_slice_of_proven_local_object(self):
         runtime = (RENDER / "src" / "memory_runtime_windows.c").read_text()
         header = (RENDER / "include" / "render_admission.h").read_text()

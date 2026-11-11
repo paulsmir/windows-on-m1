@@ -98,6 +98,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment5(
   local.CpuVisible = APPLE_AGX_TRUE;
 #endif
   AdmissionDescribeSegment5(&local, &output->SegmentDescriptors[1]);
+  /* DF-1 (guest dxgkrnl 0be25a27 reading): DXGADAPTER::Initialize clears
+   * SupportDirectFlip and SupportMultiPlaneOverlay unless the segments with
+   * DXGK_SEGMENTFLAGS.DirectFlip hold enough memory.  Segment 2 is the one
+   * DWM's primaries and scan-out allocations live in (scan-out pool). */
+  output->SegmentDescriptors[1].Flags.DirectFlip = 1u;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   output->SegmentDescriptors[1].CpuTranslatedAddress.QuadPart =
       (LONGLONG)cpuTranslated;
@@ -179,6 +184,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment4(
   local_segment.CpuVisible = APPLE_AGX_TRUE;
 #endif
   AdmissionDescribeSegment(&local_segment, local);
+  local->Flags.DirectFlip = 1u; /* DF-1: segment 2 holds scan-out allocations */
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   local->CpuTranslatedAddress.QuadPart = (LONGLONG)cpuTranslated;
   local->Flags.PopulatedFromSystemMemory = 0u;
