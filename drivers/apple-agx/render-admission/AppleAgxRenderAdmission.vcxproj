@@ -164,6 +164,7 @@
     <ClCompile Include="src\render_backend_image.c" />
     <ClCompile Include="src\render_completed_output.c" />
     <ClCompile Include="src\render_qualification.c" />
+    <ClCompile Include="src\mpo_contract.c" />
     <ClCompile Include="src\standard_present_windows.c" />
     <ClCompile Include="src\dwm_ddi_probe_windows.c" />
     <ClCompile Include="src\blt_probe_windows.c" />
