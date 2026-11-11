@@ -73,6 +73,24 @@ for idx, (t, name) in enumerate(members):
         if lp.endswith('*') and not lp.upper().startswith('CONST') and lp.replace(' ', '').upper() not in ('VOID*', 'VOID**'):
             last = len(args) - 1
             special = '   if (p%d) memset(p%d, 0, sizeof(*p%d));' % (last, last, last)
+    if name == 'pfnGetContentProtectionCaps':
+        # S2-1e step 1 (architect, EXP2352: DWM's only video call): a driver without content protection.
+        # Microsoft documents S_OK, or D3DERR_INVALID_CRYPTO for an unsupported pCryptoType; NULL pCryptoType =
+        # no encryption (ID3D11VideoDevice::GetContentProtectionCaps). D3DERR_INVALID_CRYPTO is absent from the
+        # pinned headers; the pinned d3d9.h defines D3DERR_UNSUPPORTEDCRYPTO = MAKE_D3DHRESULT(2174) = 0x8876087E.
+        body = ['   agx_video_ddi_receipt(%du);' % idx,
+                '   const HRESULT hr = p1 ? (HRESULT)0x8876087EL /* D3DERR_UNSUPPORTEDCRYPTO */ : S_OK;',
+                '   if (p3) memset(p3, 0, sizeof(*p3)); /* Caps 0, KeyExchangeTypeCount 0, BlockAlignmentSize 0, ProtectedMemorySize 0 */',
+                '   {',
+                '      UINT values[6] = {p1 ? 1u : 0u, p1 ? (UINT)p1->Data1 : 0u, p2 ? 1u : 0u, p2 ? (UINT)p2->Data1 : 0u,',
+                '                        p2 ? ((UINT)p2->Data2 | ((UINT)p2->Data3 << 16)) : 0u, (UINT)hr};',
+                '      AgxD3d10WindowsDiagnostic("measure-dxgi-content-protection-caps", hr, values, 6u);',
+                '   }',
+                '   return hr;']
+        unused = '(void)p0;'
+        lines.append('static %s APIENTRY\n%s(%s)\n{\n   %s\n%s\n}' % (ret, fn, sig, unused, '\n'.join(body)))
+        table.append('   f->%s = %s;' % (name, fn))
+        continue
     if special: body.append(special)
     if ret == 'HRESULT': body.append('   return E_NOTIMPL;')
     elif ret == 'SIZE_T': body.append('   return 64u;')

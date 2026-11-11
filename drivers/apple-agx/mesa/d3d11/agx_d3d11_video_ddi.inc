@@ -382,10 +382,16 @@ AgxVideoDdi_VideoProcessorInputViewReadAfterWriteHazard(D3D10DDI_HDEVICE p0, D3D
 static HRESULT APIENTRY
 AgxVideoDdi_GetContentProtectionCaps(D3D10DDI_HDEVICE p0, CONST GUID* p1, CONST GUID* p2, D3D11_1DDI_VIDEO_CONTENT_PROTECTION_CAPS* p3)
 {
-   (void)p0; (void)p1; (void)p2; (void)p3;
+   (void)p0;
    agx_video_ddi_receipt(58u);
-   if (p3) memset(p3, 0, sizeof(*p3));
-   return E_NOTIMPL;
+   const HRESULT hr = p1 ? (HRESULT)0x8876087EL /* D3DERR_UNSUPPORTEDCRYPTO */ : S_OK;
+   if (p3) memset(p3, 0, sizeof(*p3)); /* Caps 0, KeyExchangeTypeCount 0, BlockAlignmentSize 0, ProtectedMemorySize 0 */
+   {
+      UINT values[6] = {p1 ? 1u : 0u, p1 ? (UINT)p1->Data1 : 0u, p2 ? 1u : 0u, p2 ? (UINT)p2->Data1 : 0u,
+                        p2 ? ((UINT)p2->Data2 | ((UINT)p2->Data3 << 16)) : 0u, (UINT)hr};
+      AgxD3d10WindowsDiagnostic("measure-dxgi-content-protection-caps", hr, values, 6u);
+   }
+   return hr;
 }
 static HRESULT APIENTRY
 AgxVideoDdi_GetCryptoKeyExchangeType(D3D10DDI_HDEVICE p0, CONST GUID* p1, CONST GUID* p2, UINT p3, GUID* p4)
