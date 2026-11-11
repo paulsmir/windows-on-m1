@@ -5295,3 +5295,15 @@ Decisions:
 - Next architect item: the S2 specification (four sections + ATOMIC CONTRACT), written offline in parallel with
   band boot 2. The trace gates the first S2 hardware run, not the specification.
 - No advertise-and-refuse boot (capability rule unchanged).
+
+
+## UPDATE 2026-11-11T11:57Z -- plane route S2: H1 moved up, specification v1 written, offline work started
+
+- R25 removed the main reason the Windows-side plane work was parked on 2026-11-10 (unknown plane order, judged
+  0.3). The smallest hardware checkpoint of the route below Windows is H1 (DCP two-slot swap at the proxy stage);
+  its image was built on 2026-11-10 (m1n1 f6176bba, sha256 05325ed7...ec84) and never run. Bench order is now:
+  EXP2340 (running) -> H1 after the EXP2340 rollback -> band boot 2 (+ DWM-TRACE at its end) -> FS-D1.
+- S2 specification v1 (four sections + ATOMIC CONTRACT) is in OV-ARCHITECT-HANDOFF.md, entry 2026-11-11T11:57Z. The capability
+  stays unadvertised until flag + plane count + caps DDI + Check3 + Set3 can ship in one package.
+- Offline in parallel (no bench time): broker ABI V3 in m1n1 and the pure Check3 rule table in the KMD.
+- Open design item: the application surface's alpha byte in the lowest slot (needs a visible check or a guarantee).
