@@ -77660,3 +77660,15 @@ EXP2336 HARDWARE BEFORE 2026-11-11T02:40:18Z:
 - Hashes: sys c9d5dd5a38ac, UmdArm64 689bcf3bdc7b, UmdX64 974031abaf2f, Umd32 103612443271; manifest fc1a4d18be8a, hardware-manifest 944b42255f66; probe2336.sh 105804482f3a (PROBE_LINT_OK); visible recovery rec2336h 05b123b0b3e41991; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1PoolLadder=1.
 - Recovery rec2336h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2336-pool-ladder/run2336.sh.
+
+EXP2336 ACTUAL 2026-11-11T03:07:04Z:
+- Package fb2f7306f (POOL-LADDER 098a9c60b), Wom1PoolLadder=1 for the whole boot; ntoskrnl 26100.9974, Windows Update paused (0x1/0x1). EXP2336_PIPELINE_RC 0; STOPS 0, GPU_RESET none, wer 0 in every GM launch; new_slab_failures 0. Suite TOOL_SUITE PASS=119 FAIL=0.
+- Validity: pool_ladder.enabled true in pre-gm and post-f0; rung256_calls post-f0 2542 (> 0).
+- pool_ladder pre-gm: rung256_calls 1924, ok 1924, us 19519466, us_max 117705, fail_us 0, skipped 0, nonfast_ms_per_slab 10.145; post-f0: 2542 / 2542 / 27706913 / 166970 / 0 / 0, nonfast_ms_per_slab 10.900. Deltas over FULL f0: slab_chunked +618, rung256 calls/ok +618, rung256_us +8187447 (13.25 ms per slab), rung256_fail_us 0, slab_contiguous +843, new_slabs +1461, freed_slabs +1457, commit_us +860688, release_us +1212309 (evidence/EXP2336/pool-demand-*.json).
+- -times of FULL f0: frame-1 -> frame-2 gap 6.841 s, frames in the first 10 s 111 (new-build controls: EXP2333 5.079 s / 194, EXP2335 f0a 5.087 s / 197, EXP2332 5.472 s / 179).
+- FULL f0 7536 (new-build band [7538, 7794]: 2 below the lower edge); PERF w/r2/r3 47.292 / 48.415 / 49.234, mean(r2,r3) 48.825 (band [48.65, 49.72]: inside).
+- Traced r2 measure-bo-create: 97 rows, allocation us sum 3452177, GPU VA bind us sum 4444343.
+- Observation: first measure-scene-escape operation 1 per traced launch: w 1.250 s, r2 0.984 s, r3 1.285 s (control 0.76-1.13 s, median 0.866). Wom1G3LockProfile present in the pre-gm dump, not decoded (no decoder in tools/).
+- CS 1.6 warm/r2/r3 47.997/50.923/50.548, both scored runs VALID (pages_in 0/s); PERF_GATE cs16 PASS (+1.21 %), PERF_GATE_PASS. WER_REPORTS 2.
+- Rollback rec2336h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE (Wom1PoolLadder removed).
+- Verdict (bench owner, numbers only): the direct metrics are worse than every new-build control (frame-2 gap +1.4..1.8 s, first-10-s frames 111 vs 179-197); the pre-registered ACCEPT/REJECT reading is the architect's.
