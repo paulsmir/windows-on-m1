@@ -5633,3 +5633,23 @@ that point. Source: .local/night-20261110/s2-ddisplay-black/REPORT.md (display r
 - Next: guest dxgkrnl.sys and ddisplay.dll copied to the Mac for reading; the loop's DxgKrnl ETL decoded; one
   behavioural variable: GetContentProtectionCaps answered as a driver without content protection must, plus a
   receipt for the ddisplay exception's HRESULT. DisableDDisplay=1 stays in every other profile.
+
+## UPDATE 2026-11-11T21:24Z (architect): cause of the kernel's DirectFlip / MPO "not supported": no DirectFlip segment
+
+- Read on the guest's real dxgkrnl (sha 0be25a27...; .local/night-20261110/guest-dxgkrnl-read/REPORT.md): after the
+  DRIVERCAPS query and ReadConfig, DXGADAPTER::Initialize asks VidMm whether enough DirectFlip-capable segment
+  memory exists and otherwise clears SupportDirectFlip and SupportMultiPlaneOverlay with one store. VidMm (read on
+  the 26200 dxgmms2: INFERENCE for the guest build) sums the Size of segments whose DXGK_SEGMENTFLAGS.DirectFlip is
+  set and compares with DirectFlipMemoryRequirement (default 200 MB).
+- Our QuerySegment4 / QuerySegment5 answers never set that flag (memory_windows.c, re-read by me). This single
+  condition reproduces every probe value of EXP2350..2352 (19 = 0, 20 = 0, 23 = 0, 46 = 0, 38 = 1, 43 = 1, caps
+  call answered by dxgkrnl with MaxPlanes 1) and explains why DWM's normal path loops: with MPO support 0 the
+  kernel fails every plane present except one identity plane.
+- Correction to the earlier follow-up ("nothing clears the DirectFlip byte"): wrong, the writer above was missed;
+  that entry stays as written.
+- The driver has therefore never had DirectFlip or overlays from dxgkrnl's point of view, on any path, in any
+  experiment. S2 (EXP2346) could not engage for this reason; its verdict stays open.
+- Decision: DF-1 (set the flag on the scan-out segment) in three one-variable boots: DF-1a flag only on the legacy
+  path with full measurement, DF-1b with the two-plane switch, DF-1c on DWM's normal path. Spec in the handoff
+  file. NOT VERIFIED until DF-1a: the VidMm half on the guest build, the segment's runtime size against 200 MB,
+  and how DWM and the scan-out path behave once DirectFlip is available.
