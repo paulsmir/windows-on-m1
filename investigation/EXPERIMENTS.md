@@ -77514,3 +77514,14 @@ EXP2331 HARDWARE BEFORE 2026-11-10T23:33:10Z:
 - Hashes: sys b7e98799693e, UmdArm64 946ab4a21011, UmdX64 9c456dc7fa4a, Umd32 305bcb2716a7; manifest f5c211e29ee0, hardware-manifest c45284304aea; probe2331.sh 443ed6a74d97 (PROBE_LINT_OK); visible recovery rec2331h 4096e9d3b44d7e4c; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1CrossProcessRenderPairs=0.
 - Recovery rec2331h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2331-stats-nops/run2331.sh.
+
+EXP2331 ACTUAL 2026-11-11T00:30:25Z:
+- Package f5a3fc4b1 (K1 default on in source), staged Wom1CrossProcessRenderPairs=0 (K1 off), Wom1Ov2CrossLead unset; ntoskrnl 26100.9974; Windows Update paused. Launch, install and first start normal; EXP2331_PIPELINE_RC 0.
+- Original probe: suite TOOL_SUITE PASS=119 FAIL=0; the first-arm quiet gate read "no-answer" for 20 min and ended INVALID-ENV. That verdict is void: gate tool defect (architect: the quoted PowerShell query broke in cmd.exe, the regex "|" became a pipe), guest quiet. Fixed quiet-gate.sh (-EncodedCommand; empty answer now TOOL-FAIL, return 2) reviewed by decoding the command (read-only process/memory query).
+- Continuation in the SAME boot (probe2331b.sh = probe2331.sh without the suite): first gate "BUSY= AVAIL_MB=3725"; WU_PAUSE_STATUS PausedFeatureStatus 0x1, PausedQualityStatus 0x1 (wu-pause-status.txt). Checkpoint: GPU_RESET none, render_pairs considered/kicked "0 0" (K1 off as staged).
+- GM HD PERF fps_frames w/r2/r3 49.537 / 48.894 / 48.927; mean(r2,r3) 48.910, below the 49.1 floor (first data on 26100.9974; not comparable with earlier boots without saying so).
+- STATS-NOPS PERF ABBA (single runs; validity measure-d3d12-stats-no-ps rows t0a 0 / t1a 1 / t1b 1 / t0b 0): fps_frames t0a 47.844, t1a 49.196, t1b 49.693, t0b 49.125 (t1 mean 49.445, t0 mean 48.485; t0a lower than t0b by 2.6 %). Per-job R5/R1/R3 reading by the architect (gm2331t*-umd.log).
+- FULL: the floor rule set the stop flag, so the fna/fnb ABBA was not run; FULL f0 7722 (184 s, -times fetched), the first FULL control on the new Windows build.
+- CS 1.6 warm/r2/r3 47.210/50.684/50.444; PERF_GATE cs16 PASS (+1.00 %), gravitymark_hd_perf PASS (worst 44.243 vs 40.770), PERF_GATE_PASS. GPU_RESET none after every arm, STOPS 0, wer 0 in every GM arm, WER_REPORTS 2.
+- Rollback rec2331h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE (Wom1CrossProcessRenderPairs removed with the devnode).
+- Verdict (kernel-build discriminator, pre-registered reading (a)): with K1 off the boot on ntoskrnl 26100.9974 completed suite, idle desktop, eight GM launches and CS with no GPU reset: hypothesis B (new build alone) rejected; K1 is necessary for the EXP2330/EXP2334 hang on this kernel. STATS-NOPS: inconclusive in this boot (single-run ABBA with one outlying control, FULL pair not run).
