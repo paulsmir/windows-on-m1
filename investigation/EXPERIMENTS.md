@@ -77795,3 +77795,49 @@ EXP2340 VERDICT 2026-11-11T12:42:17Z (architect, pre-registered reading applied)
 - Rollback: verified after the user's power cycle (recover-run.log: AT_PROXY_OWNER_UP, durable preflight Verdict PASS, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_STORAGE_APPLEANS_OK, RECOVERY_DONE).
 - Process note: between the bugcheck and the power cycle the proxy answered a plain NOP but every chainload timed out in bootstrap_port (UartTimeout); cause not established, cleared by the power cycle. Not a driver finding.
 - Next experiment justified by the evidence: TDR-3H-R1 with its R1B amendment (acknowledged halt -> the existing recovery step including the queue runtime's RecoveryPending -> unchanged reset), only after offline verification and an MSVC build; it comes after the GravityMark bench items (MPO H1, band boot 2).
+
+### EXP2342 VERDICT 2026-11-11T12:54:13Z (architect)
+
+Verdict: CONFIRMED for the pre-registered expectation (H1A_RESULT=0, H1B_RESULT=0,
+every swap D589=MATCHED within 17000 us, both restores MATCHED). Checked against
+`.local/experiments/m1n1-ansdirect-closedv5-scaled1-h1/evidence/EXP2342/full.log`:
+baseline one-slot swap_id 8 MATCHED 6553 us; H1a (opaque, flags 0) two-slot swap_id 9
+MATCHED 9233 us, removal swap_id 10 MATCHED 13705 us; H1b (argb 80008000, flags 0x3)
+two-slot swap_id 11 MATCHED 11879 us, removal swap_id 12 MATCHED 13501 us; no D592,
+no refusal, no RTKit crash. So DCP firmware 13.5 accepts and latches a two-slot swap
+and the removal form (slot 1 enabled + null surface) in both alpha forms.
+
+NOT SHOWN: what the panel displayed (z-order, blend) -- nobody looked and there is no
+capture; the two-slot quiesce swap of broker V3; any Windows path.
+
+Separate finding (not part of the H1 expectation): the usual launcher after H1 failed.
+The working m1n1, chainloaded directly over the H1 m1n1, printed `dcp-iomfb:
+initialization timed out` -> `IOMFB single-owner bootstrap failed closed` -> `HV: AGX
+scanout DCP backend unavailable`, and run_uefi stopped with "m1n1 rejected physical
+guest display handoff" (logs: `.local/experiments/EXP2340-tdr-h0/full.log` and
+`full-chainload.log`; these two files were overwritten by that relaunch and are no
+longer the EXP2340 run's own logs).
+Evidence: (a) `dcp_shutdown`/`display_shutdown` and `main.c` are identical in the H1
+tree and the working tree; (b) a guest reset is `hv_psci_reset_system` -> `reboot()`,
+a SoC reset, so every normal launch chainloads the working m1n1 from the freshly reset
+stage-1; (c) of 30 chainload logs since 2026-11-09, the 29 that reach `dcp-iomfb:
+endpoint initialized` all start from a stage whose replayed console tail holds the
+usb_init lines of a fresh boot (`i2c: Error enabling power for /arm-io/i2c0`), the
+H1 chainload included; the one failing log is the only one without them, i.e. the
+only chainload from an IOMFB-owner m1n1 into an IOMFB-owner m1n1; (d) the owner
+build's own `main.c` comment: "Closing and immediately reconstructing it can strand
+the DCP endpoint in the same boot stage."
+Reading: the failing case differs from every passing case in two things at once
+(owner-to-owner chainload without a SoC reset; preceding two-slot use and the diag's
+DART unmap of the slot-1 surface). The logs cannot separate them. HYPOTHESIS, not
+shown: the owner-to-owner re-init alone is the cause.
+Decision: no discriminator run. The product path never chainloads owner-to-owner
+(every Windows restart is a SoC reset), so neither reading changes the S2 design or
+the GravityMark order. Process rule from now on: after any diagnostic m1n1 image that
+owns IOMFB, return through a proxy reboot (P_REBOOT, `proxy-reboot.py`, the ANS001-R4
+precedent), never by chainloading the working image over it.
+Open risk carried into S2: whether a two-slot state at guest shutdown needs the
+removal swap before the SoC reset; broker V3 already does the removal in
+`quiesce_slot1_begin`, to be observed at the first advertised boot.
+Next: band boot 2 (package fd410f54c unchanged). The `keep` variant of H1 (panel
+appearance, needs the operator's eyes) is a later separate item.

@@ -5337,3 +5337,12 @@ Decisions:
    13.5 source. Specification: `.local/handoff/OV-ARCHITECT-HANDOFF.md`, entry of this stamp.
 3. Bench order unchanged (MPO H1 -> band boot 2 -> FS-D1). R1 gets a bench slot only after its code is verified
    offline; it does not move ahead of the GravityMark items.
+
+UPDATE 2026-11-11T12:54:13Z (architect): EXP2342 MPO H1 CONFIRMED -- DCP 13.5 latches a two-slot
+swap and the removal form in both alpha forms (panel appearance not observed). The
+working m1n1 chainloaded directly over the H1 m1n1 failed DCP init (timeout); cause
+not separated between owner-to-owner re-init and the two-slot use, no discriminator
+(product restarts are SoC resets). Rule: leave a diagnostic IOMFB-owner image through
+a proxy reboot. Order now: band boot 2 (fd410f54c) -> band boot 3 -> FS-D1; S2 first
+advertised boot waits for the merged kernel+UMD halves, an MSVC build and an m1n1
+image with AGX_SCANOUT_TWO_LAYERS=1.
