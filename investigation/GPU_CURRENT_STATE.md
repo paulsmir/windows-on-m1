@@ -5346,3 +5346,17 @@ not separated between owner-to-owner re-init and the two-slot use, no discrimina
 a proxy reboot. Order now: band boot 2 (fd410f54c) -> band boot 3 -> FS-D1; S2 first
 advertised boot waits for the merged kernel+UMD halves, an MSVC build and an m1n1
 image with AGX_SCANOUT_TWO_LAYERS=1.
+
+UPDATE 2026-11-11T13:21:10Z (architect): next causal target and bench order changed -- S2 first.
+User instruction: all forces on the plane route to its first boot; design to the full
+production end state, switches and narrowed rules are verification steps only.
+S2 halves + amendments A1 (kernel: one-plane Check3 = V2 path rule, slot 1 retired before
+hide/mode commit; UMD: two-plane predicate from device feature bit 0x20) accepted OFFLINE on
+arch/s2-umd-mpo ee7baea83 (= package fd410f54c + S2 only). NOT VERIFIED: MSVC, hardware.
+Order after EXP2341: S2-0a (new package, working m1n1, switch unset) -> S2-0b (two-layer
+m1n1, switch unset) -> S2-1 (Wom1MpoTwoPlanes=1) -> band boot 3 -> FS-D1 -> TDR-3H-R1.
+BEFORE draft (unknowns U-1..U-6 with receipts) and the end-state list S2-FULL (F-1..F-10:
+default-on, all modes, DCP scaling = the real fullscreen path, any window width, removal
+without stale pixels) are in `.local/handoff/OV-ARCHITECT-HANDOFF.md`, entry 2026-11-11T13:20Z.
+Job rows: the +0.72/+0.56/+0.31 ranking predates the PF1 fold (EXP2309 package); it is being
+recomputed from fold-on FULL runs before any job-row lever is chosen.
