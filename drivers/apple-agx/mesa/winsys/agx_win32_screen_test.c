@@ -155,6 +155,9 @@ int main(void) {
   /* N4c-v2: and the cross-execution lead */
   fake.Info.Features = AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD;
   assert(AgxWin32DeviceInfoValid(&fake.Info));
+  /* S2: and the two-plane overlay state */
+  fake.Info.Features = AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES;
+  assert(AgxWin32DeviceInfoValid(&fake.Info));
   fake.Info.Features = AGX_WIN32_DEVICE_FEATURES_KNOWN + 1u;
   assert(!AgxWin32DeviceInfoValid(&fake.Info));
   fake.Info = make_info();

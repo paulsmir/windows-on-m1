@@ -15,6 +15,8 @@ extern "C" {
 #include "agx_d3d10_windows.h"
 #define AGX_DXGI_MPO_DDI_TYPES
 #include "../d3d11/agx_dxgi_mpo.h"
+static_assert(AGX_DXGI_MPO_FEATURE_TWO_PLANES==AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES,
+              "agx_dxgi_mpo.h names the shared device feature bit");
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 
@@ -288,11 +290,8 @@ struct AGX_D3D10_WINDOWS_ADAPTER {
   ULONG Devices;
   AGX_D3D10_WINDOWS_DEVICE *Owners;
   AGX_D3D10_WINDOWS_TERMINAL *Terminal;
-  /* S2: the kernel's two-plane answer for MpoSource, under Lock
-   * (AgxD3d10WindowsKernelMpoTwoPlanes). */
-  BOOL MpoQueried;
-  UINT MpoSource;
-  BOOL MpoTwoPlanes;
+  /* S2: "measure-dxgi-mpo-feature" written (AgxD3d10WindowsKernelMpoTwoPlanes). */
+  volatile LONG MpoReceipt;
 };
 struct AGX_D3D10_WINDOWS_DEVICE {
   ADMISSION_UMD_DEVICE Runtime;
@@ -1166,98 +1165,23 @@ HRESULT AgxD3d10WindowsPresentationSubmitSurfaces(
   AdmissionUmdDiagnostic("g4-present-exit",result,NULL,0u);
   return result;
 }
-/* S2: the kernel's answer to "two overlay planes" for VidPnSourceId, from
- * the documented D3DKMTGetMultiPlaneOverlayCaps (d3dkmthk.h; gdi32.dll),
- * which dxgkrnl answers from the KMD's DxgkDdiGetMultiPlaneOverlayCaps.
- * The UMD gets no kernel adapter handle (D3D10DDIARG_OPENADAPTER,
- * D3DDDI_ADAPTERCALLBACKS), so it enumerates the adapters
- * (D3DKMTEnumAdapters2) and takes the single one whose KMTQAITYPE_UMDRIVERPRIVATE
- * data equals the AGX_WIN32_DEVICE_INFO its own pfnQueryAdapterInfoCb
- * returned (that query reaches the same DXGKQAITYPE_UMDRIVERPRIVATE answer).
- * Every export is resolved at run time; a missing export, a failed call,
- * no or several matching adapters, or any caps other than MaxPlanes 2 /
- * MaxRGBPlanes 2 is one plane. Every enumerated handle is closed. */
-static BOOL kernel_mpo_two_planes(const AGX_WIN32_DEVICE_INFO *Info,UINT Source,
-                                  UINT Values[4]) {
-  HMODULE gdi=GetModuleHandleW(L"gdi32.dll");
-  if(!gdi) gdi=LoadLibraryExW(L"gdi32.dll",NULL,LOAD_LIBRARY_SEARCH_SYSTEM32);
-  if(!gdi) return FALSE;
-  PFND3DKMT_ENUMADAPTERS2 enumerateAdapters=
-      (PFND3DKMT_ENUMADAPTERS2)(void *)GetProcAddress(gdi,"D3DKMTEnumAdapters2");
-  PFND3DKMT_QUERYADAPTERINFO queryInfo=
-      (PFND3DKMT_QUERYADAPTERINFO)(void *)GetProcAddress(gdi,"D3DKMTQueryAdapterInfo");
-  PFND3DKMT_CLOSEADAPTER closeAdapter=
-      (PFND3DKMT_CLOSEADAPTER)(void *)GetProcAddress(gdi,"D3DKMTCloseAdapter");
-  PFND3DKMT_GETMULTIPLANEOVERLAYCAPS getCaps=
-      (PFND3DKMT_GETMULTIPLANEOVERLAYCAPS)(void *)GetProcAddress(gdi,
-          "D3DKMTGetMultiPlaneOverlayCaps");
-  if(!enumerateAdapters || !queryInfo || !closeAdapter || !getCaps) return FALSE;
-  D3DKMT_ADAPTERINFO *adapters=(D3DKMT_ADAPTERINFO *)HeapAlloc(GetProcessHeap(),
-      HEAP_ZERO_MEMORY,sizeof(D3DKMT_ADAPTERINFO)*MAX_ENUM_ADAPTERS);
-  AGX_WIN32_DEVICE_INFO *other=(AGX_WIN32_DEVICE_INFO *)HeapAlloc(GetProcessHeap(),
-      HEAP_ZERO_MEMORY,sizeof(*other));
-  BOOL two=FALSE;
-  if(adapters && other) {
-    D3DKMT_ENUMADAPTERS2 list;
-    ZeroMemory(&list,sizeof(list));
-    list.NumAdapters=MAX_ENUM_ADAPTERS;
-    list.pAdapters=adapters;
-    if(enumerateAdapters(&list)>=0 && list.NumAdapters<=MAX_ENUM_ADAPTERS) {
-      D3DKMT_HANDLE match=0;UINT matches=0;
-      for(ULONG i=0;i<list.NumAdapters;++i) {
-        D3DKMT_QUERYADAPTERINFO info;
-        ZeroMemory(&info,sizeof(info));ZeroMemory(other,sizeof(*other));
-        info.hAdapter=adapters[i].hAdapter;
-        info.Type=KMTQAITYPE_UMDRIVERPRIVATE;
-        info.pPrivateDriverData=other;
-        info.PrivateDriverDataSize=(UINT)sizeof(*other);
-        if(queryInfo(&info)>=0 && memcmp(other,Info,sizeof(*other))==0) {
-          match=adapters[i].hAdapter;++matches;
-        }
-      }
-      if(matches==1u) {
-        D3DKMT_GET_MULTIPLANE_OVERLAY_CAPS answer;
-        ZeroMemory(&answer,sizeof(answer));
-        answer.hAdapter=match;
-        answer.VidPnSourceId=Source;
-        const NTSTATUS status=getCaps(&answer);
-        two=AgxDxgiMpoKernelTwoPlanes(status>=0,answer.MaxPlanes,answer.MaxRGBPlanes)
-            ? TRUE : FALSE;
-        Values[1]=answer.MaxPlanes;Values[2]=answer.MaxRGBPlanes;
-      }
-      Values[3]=matches;
-      for(ULONG i=0;i<list.NumAdapters;++i) {
-        D3DKMT_CLOSEADAPTER closing;
-        closing.hAdapter=adapters[i].hAdapter;
-        (void)closeAdapter(&closing);
-      }
-    }
-  }
-  if(other) HeapFree(GetProcessHeap(),0,other);
-  if(adapters) HeapFree(GetProcessHeap(),0,adapters);
-  return two;
-}
-
-/* Asked once per adapter and VidPnSourceId (the KMD reads its switch at
- * adapter start); the answer is receipted only when it is two planes, so a
- * one-plane kernel leaves the receipts as they were. */
+/* S2: the kernel's answer to "two overlay planes" is
+ * AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES in the adapter private data
+ * (DXGKQAITYPE_UMDRIVERPRIVATE, read at OpenAdapter): the KMD sets it only
+ * while Wom1MpoTwoPlanes is effective (lifecycle.c,
+ * AdmissionScanoutMpoEffective). Two planes only on VidPnSource 0, the only
+ * source the KMD accepts. The bit is receipted once per adapter. */
 BOOL AgxD3d10WindowsKernelMpoTwoPlanes(AGX_D3D10_WINDOWS_DEVICE *Device,
                                        UINT VidPnSourceId) {
   if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Device->Adapter) return FALSE;
   AGX_D3D10_WINDOWS_ADAPTER *adapter=Device->Adapter;
-  AcquireSRWLockExclusive(&adapter->Lock);
-  if(!adapter->MpoQueried || adapter->MpoSource!=VidPnSourceId) {
-    UINT values[4]={VidPnSourceId,0u,0u,0u};
-    adapter->MpoTwoPlanes=kernel_mpo_two_planes(&adapter->Runtime.DeviceInfo,
-                                                VidPnSourceId,values);
-    adapter->MpoSource=VidPnSourceId;
-    adapter->MpoQueried=TRUE;
-    if(adapter->MpoTwoPlanes)
-      AdmissionUmdDiagnostic("measure-dxgi-mpo-kernel",S_OK,values,ARRAYSIZE(values));
+  const UINT features=adapter->Runtime.DeviceInfo.Features;
+  if(!AgxDxgiMpoFeatureTwoPlanes(features,VidPnSourceId)) return FALSE;
+  if(InterlockedCompareExchange(&adapter->MpoReceipt,1,0)==0) {
+    UINT values[1]={features};
+    AdmissionUmdDiagnostic("measure-dxgi-mpo-feature",S_OK,values,ARRAYSIZE(values));
   }
-  const BOOL two=adapter->MpoTwoPlanes;
-  ReleaseSRWLockExclusive(&adapter->Lock);
-  return two;
+  return TRUE;
 }
 
 /* S2: PresentMultiplaneOverlay(1) after AgxDxgiMpoCheckPlanes: the flush of

@@ -72,10 +72,19 @@ typedef enum _AGX_WIN32_BUFFER_FLAGS {
  * resolves, splits compute, nor uses the same-execution verdict. Set only
  * with REG_DWORD Wom1Ov2CrossLead = 1 and Q2c. */
 #define AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD 0x10u
+/* S2 (second display plane, OV-ARCHITECT-HANDOFF specification v1): the
+ * KMD drives two display planes. Set only while REG_DWORD
+ * Wom1MpoTwoPlanes = 1 is effective: the scanout broker advertised
+ * capability bit 9 (two layers) and the V3 negotiation was read back at
+ * StartDevice (AdmissionScanoutMpoEffective). The D3D11 UMD then answers
+ * the DXGI multiplane-overlay entries for two RGB planes on VidPnSource 0
+ * (agx_dxgi_mpo.h); without it every answer is the one-plane answer. */
+#define AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES 0x20u
 #define AGX_WIN32_DEVICE_FEATURES_KNOWN \
   (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS | AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE | \
    AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT | \
-   AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE | AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD)
+   AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE | AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD | \
+   AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES)
 
 typedef struct _AGX_WIN32_BUFFER_CLASS_INFO {
   APPLE_AGX_U32 ClassId;

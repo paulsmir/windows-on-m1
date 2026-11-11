@@ -1,8 +1,9 @@
 """S2: the D3D11 UMD's DXGI multiplane-overlay answers follow the kernel.
 
 WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
-(1) Predicate off = today's answers: while the kernel does not answer
-    D3DKMTGetMultiPlaneOverlayCaps with two planes, GetMultiplaneOverlayCaps,
+(1) Predicate off = today's answers: while the adapter private data does
+    not carry AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES (or the source is not
+    VidPnSource 0), GetMultiplaneOverlayCaps,
     GetMultiplaneOverlayGroupCaps, PresentMultiplaneOverlay(1) and
     CheckMultiplaneOverlayColorSpaceSupport must return exactly the values,
     return codes and receipts of the pre-S2 driver (MaxPlanes 1, no group,
@@ -94,11 +95,10 @@ typedef struct _DXGI_DDI_ARG_CHECKMULTIPLANEOVERLAYCOLORSPACESUPPORT { DXGI_DDI_
 
 HEADER_PROGRAM = STUBS + r'''
 int main() {
-  /* Predicate: only a successful answer of exactly two RGB-capable planes. */
-  assert(AgxDxgiMpoKernelTwoPlanes(1, 2, 2) == 1);
-  assert(!AgxDxgiMpoKernelTwoPlanes(0, 2, 2) && !AgxDxgiMpoKernelTwoPlanes(1, 1, 1));
-  assert(!AgxDxgiMpoKernelTwoPlanes(1, 2, 1) && !AgxDxgiMpoKernelTwoPlanes(1, 3, 3));
-  assert(!AgxDxgiMpoKernelTwoPlanes(1, 0, 0));
+  /* Predicate: the two-plane feature bit, VidPnSource 0 only; other bits never count. */
+  assert(AgxDxgiMpoFeatureTwoPlanes(0x20u, 0) == 1 && AgxDxgiMpoFeatureTwoPlanes(0x3fu, 0) == 1);
+  assert(!AgxDxgiMpoFeatureTwoPlanes(0u, 0) && !AgxDxgiMpoFeatureTwoPlanes(0x1fu, 0));
+  assert(!AgxDxgiMpoFeatureTwoPlanes(0x20u, 1) && !AgxDxgiMpoFeatureTwoPlanes(0x3fu, 3));
   /* Caps off = today's (MaxPlanes 1, no group); on = 2 and one group. */
   DXGI_DDI_MULTIPLANE_OVERLAY_CAPS caps = {77, 77};
   AgxDxgiMpoFillCaps(0, &caps); assert(caps.MaxPlanes == 1 && caps.NumCapabilityGroups == 0);
@@ -160,9 +160,11 @@ static Resource *CastResource(DXGI_DDI_HRESOURCE h) { return reinterpret_cast<Re
 struct Receipt { std::string stage; HRESULT hr; UINT a, b; };
 static std::vector<Receipt> receipts;
 static void dxgi_receipt(const char *stage, HRESULT hr, UINT a, UINT b) { receipts.push_back({stage, hr, a, b}); }
-static bool kernelTwo; static unsigned predicateCalls; static UINT askedSource;
+/* The winsys predicate reads the adapter's AGX_WIN32_DEVICE_INFO.Features and
+   asks the header (checked by test_winsys_reads_the_device_feature). */
+static UINT features; static unsigned predicateCalls; static UINT askedSource;
 extern "C" BOOL AgxD3d10WindowsKernelMpoTwoPlanes(AGX_D3D10_WINDOWS_DEVICE *, UINT source) {
-  ++predicateCalls; askedSource = source; return kernelTwo ? TRUE : FALSE; }
+  ++predicateCalls; askedSource = source; return AgxDxgiMpoFeatureTwoPlanes(features, source) ? TRUE : FALSE; }
 static unsigned submits; static std::vector<int> submitted; static std::vector<UINT> layers; static void *submittedContext;
 extern "C" HRESULT AgxD3d10WindowsPresentationSubmitPlanes(AGX_D3D10_WINDOWS_DEVICE *,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *const *r, const AGX_DXGI_MPO_PLANE *p, UINT n, void *ctx) {
@@ -180,7 +182,7 @@ int main() {
   Resource rd{&dev, &desk}, ra{&dev, &app}, foreign{&other, &app}, plain{&dev, nullptr};
   int ctx;
   /* ---- Predicate off: the pre-S2 answers, codes and receipts. ---- */
-  kernelTwo = false;
+  features = 0x1fu; /* every other known feature, the two-plane bit clear */
   DXGI_DDI_ARG_GETMULTIPLANEOVERLAYCAPS c{(uintptr_t)&dev, 0, {55, 55}};
   assert(GetMultiplaneOverlayCaps(&c) == S_OK && c.MultiplaneOverlayCaps.MaxPlanes == 1 &&
          c.MultiplaneOverlayCaps.NumCapabilityGroups == 0);
@@ -208,7 +210,7 @@ int main() {
   /* A device without a winsys owner never asks the kernel. */
   Device bare{nullptr}; unsigned asked = predicateCalls;
   DXGI_DDI_ARG_GETMULTIPLANEOVERLAYCAPS cb{(uintptr_t)&bare, 0, {}};
-  kernelTwo = true;
+  features = 0x3fu;
   assert(GetMultiplaneOverlayCaps(&cb) == S_OK && cb.MultiplaneOverlayCaps.MaxPlanes == 1 &&
          predicateCalls == asked);
   receipts.clear();
@@ -227,7 +229,14 @@ int main() {
   cs.Format = 28; assert(CheckMultiplaneOverlayColorSpaceSupport(&cs) == S_OK && cs.Supported == TRUE);
   cs.ColorSpace = 12; assert(CheckMultiplaneOverlayColorSpaceSupport(&cs) == S_OK && cs.Supported == FALSE);
   cs.ColorSpace = 0; cs.Format = 91; assert(CheckMultiplaneOverlayColorSpaceSupport(&cs) == S_OK && cs.Supported == FALSE);
-  cs.VidPnSourceId = 3; cs.Format = 87; assert(CheckMultiplaneOverlayColorSpaceSupport(&cs) == S_OK && askedSource == 3);
+  cs.VidPnSourceId = 3; cs.Format = 87;
+  assert(CheckMultiplaneOverlayColorSpaceSupport(&cs) == S_OK && askedSource == 3 && cs.Supported == FALSE);
+  cs.VidPnSourceId = 0;
+  /* Another source keeps the one-plane answers even with the bit set. */
+  DXGI_DDI_ARG_GETMULTIPLANEOVERLAYCAPS c1{(uintptr_t)&dev, 1, {55, 55}};
+  assert(GetMultiplaneOverlayCaps(&c1) == S_OK && c1.MultiplaneOverlayCaps.MaxPlanes == 1 &&
+         c1.MultiplaneOverlayCaps.NumCapabilityGroups == 0);
+  p1.VidPnSourceId = 1; assert(PresentMultiplaneOverlay1(&p1) == E_NOTIMPL && submits == 0); p1.VidPnSourceId = 0;
   receipts.clear();
   /* Present: planes in DDI order, DXGI context unchanged, callback result returned. */
   assert(PresentMultiplaneOverlay1(&p1) == (HRESULT)0x12345 && submits == 1);
@@ -361,6 +370,27 @@ class Wddm2MpoPlanes(unittest.TestCase):
                               ("AGX_DXGI_MPO_FORMAT_B8G8R8A8_UNORM", "87u"),
                               ("AGX_DXGI_MPO_COLOR_SPACE_SRGB", "0u")):
             self.assertRegex(header, r"#define %s %s\n" % (define, value))
+
+    def test_winsys_reads_the_device_feature(self):
+        """The predicate is the shared device-info bit, read from the adapter private data."""
+        info = (ROOT / "drivers/apple-agx/shared/include/apple_agx_win32_device_info.h").read_text()
+        self.assertIn("#define AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES 0x20u", info)
+        known = info[info.index("#define AGX_WIN32_DEVICE_FEATURES_KNOWN"):]
+        self.assertIn("AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES", known[:known.index(")\n")])
+        self.assertIn("#define AGX_DXGI_MPO_FEATURE_TWO_PLANES 0x20u", (D3D11 / "agx_dxgi_mpo.h").read_text())
+        winsys = (ROOT / "drivers/apple-agx/mesa/winsys/agx_d3d10_windows.cpp").read_text()
+        self.assertIn("static_assert(AGX_DXGI_MPO_FEATURE_TWO_PLANES==AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES,", winsys)
+        body = winsys[winsys.index("BOOL AgxD3d10WindowsKernelMpoTwoPlanes("):]
+        body = body[:body.index("\n}\n")]
+        self.assertIn("adapter->Runtime.DeviceInfo.Features", body)
+        self.assertIn("AgxDxgiMpoFeatureTwoPlanes(features,VidPnSourceId)", body)
+        self.assertIn('"measure-dxgi-mpo-feature"', body)
+        for gone in ("D3DKMTEnumAdapters2", "D3DKMTGetMultiPlaneOverlayCaps", "gdi32", "measure-dxgi-mpo-kernel"):
+            self.assertNotIn(gone, winsys)
+        lifecycle = (ROOT / "drivers/apple-agx/render-admission/src/lifecycle.c").read_text()
+        self.assertIn("    if (AdmissionScanoutMpoEffective(context))\n"
+                      "      info->Features |= AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES;\n"
+                      "    status = STATUS_SUCCESS;", lifecycle)
 
     def test_wddm2_device_uses_the_wddm1_3_callback(self):
         """The present goes through pfnPresentMultiplaneOverlayCb, never the 2.2 callback."""

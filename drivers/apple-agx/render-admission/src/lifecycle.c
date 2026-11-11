@@ -759,6 +759,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     /* OV5 step 2: Wom1Ov5TaWaiver = 1 with the 3D-queue Barrier path. */
     if (InterlockedCompareExchange(&context->GpuRenderTaIndependent, 0, 0) != 0)
       info->Features |= AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT;
+    /* S2: Wom1MpoTwoPlanes effective (broker bit 9 + V3 read back at start). */
+    if (AdmissionScanoutMpoEffective(context))
+      info->Features |= AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES;
     status = STATUS_SUCCESS;
     break;
   }

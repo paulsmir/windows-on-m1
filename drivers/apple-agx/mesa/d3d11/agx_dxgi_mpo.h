@@ -4,11 +4,11 @@
  * test can check them (tests/test_wddm2_mpo_planes.py).
  *
  * One predicate decides everything: "the kernel reports two overlay
- * planes".  Its only source is the kernel's own answer to the documented
- * D3DKMTGetMultiPlaneOverlayCaps (d3dkmthk.h D3DKMT_GET_MULTIPLANE_OVERLAY_CAPS,
- * filled by dxgkrnl from the KMD's DxgkDdiGetMultiPlaneOverlayCaps,
- * d3dkmddi.h DXGKARG_GETMULTIPLANEOVERLAYCAPS); agx_d3d10_windows.cpp
- * queries it.  Predicate FALSE: every answer is the one this driver gave
+ * planes".  Its only source is the kernel: AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES
+ * in the adapter private data (apple_agx_win32_device_info.h), which the KMD
+ * sets only while Wom1MpoTwoPlanes is effective, and then only for
+ * VidPnSource 0 (the only source the KMD accepts).  agx_d3d10_windows.cpp
+ * reads it.  Predicate FALSE: every answer is the one this driver gave
  * before S2 (MaxPlanes 1, no capability group, no colour space, the
  * present entries E_NOTIMPL).
  *
@@ -59,15 +59,15 @@ typedef struct _AGX_DXGI_MPO_PLANE {
   unsigned int SubResourceIndex;
 } AGX_DXGI_MPO_PLANE;
 
-/* The predicate from the kernel's D3DKMT_GET_MULTIPLANE_OVERLAY_CAPS answer:
- * the call succeeded and it reports exactly two planes, both usable for RGB
- * (MaxPlanes and MaxRGBPlanes include DWM's primary, d3dkmddi.h
- * DXGKARG_GETMULTIPLANEOVERLAYCAPS).  Anything else is one plane. */
+/* AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES (apple_agx_win32_device_info.h). */
+#define AGX_DXGI_MPO_FEATURE_TWO_PLANES 0x20u
+
+/* The predicate: the kernel published the two-plane feature bit and the
+ * question is about VidPnSource 0.  Anything else is one plane. */
 static inline int
-AgxDxgiMpoKernelTwoPlanes(int Succeeded, unsigned int MaxPlanes, unsigned int MaxRgbPlanes)
+AgxDxgiMpoFeatureTwoPlanes(unsigned int Features, unsigned int VidPnSourceId)
 {
-  return Succeeded && MaxPlanes == AGX_DXGI_MPO_PLANES &&
-         MaxRgbPlanes == AGX_DXGI_MPO_PLANES;
+  return (Features & AGX_DXGI_MPO_FEATURE_TWO_PLANES) != 0u && VidPnSourceId == 0u;
 }
 
 /* DXGI_DDI_MULTIPLANE_OVERLAY_CAPS: MaxPlanes and NumCapabilityGroups. */

@@ -903,7 +903,8 @@ int main(void) {
         info = (ROOT / 'drivers/apple-agx/shared/include/apple_agx_win32_device_info.h').read_text()
         self.assertIn('#define AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD 0x10u', info)
         known = info[info.index('#define AGX_WIN32_DEVICE_FEATURES_KNOWN'):]
-        self.assertIn('AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD)', known[:400])
+        known = known[:known.index(')\n') + 1]
+        self.assertIn('AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD', known)
         backend = (RENDER / 'src/backend_platform_windows.c').read_text()
         self.assertIn('runtime->Ov2CrossLead = runtime->Initdata.RenderSharedMemory.ComputeOwnQueue &&\n'
                       '      AdmissionPlatformSwitchEnabled(Context, L"Wom1Ov2CrossLead")', backend)
