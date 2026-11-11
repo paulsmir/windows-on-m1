@@ -606,7 +606,7 @@ AgxVideoDdi_VideoProcessorSetOutputShaderUsage(D3D10DDI_HDEVICE p0, D3D11_1DDI_H
    agx_video_ddi_receipt(91u);
 }
 static HRESULT APIENTRY
-AgxVideoDdi_VideoProcessorGetBehaviorHints(D3D10DDI_HDEVICE p0, D3D11_1DDI_HVIDEOPROCESSOR p1, UINT p2, UINT p3, DXGI_FORMAT p4, UINT p5, const D3DWDDM2_0DDI_VIDEO_PROCESSOR_STREAM_BEHAVIOR_HINT *pStreams p6, UINT* p7)
+AgxVideoDdi_VideoProcessorGetBehaviorHints(D3D10DDI_HDEVICE p0, D3D11_1DDI_HVIDEOPROCESSOR p1, UINT p2, UINT p3, DXGI_FORMAT p4, UINT p5, const D3DWDDM2_0DDI_VIDEO_PROCESSOR_STREAM_BEHAVIOR_HINT* p6, UINT* p7)
 {
    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5; (void)p6; (void)p7;
    agx_video_ddi_receipt(92u);

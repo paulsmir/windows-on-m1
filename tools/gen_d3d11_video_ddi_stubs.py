@@ -29,6 +29,11 @@ def typedef(t):
         p = re.sub(r'_\w+_\s*\([^()]*(\([^()]*\))*[^()]*\)', ' ', p)   # _Out_writes_(x) etc.
         p = re.sub(r'\b_(In|Out|Inout)\w*_\b', ' ', p)
         tok = p.split()
+        # "TYPE *pName": the star belongs to the type, the name is dropped
+        if len(tok) >= 2 and re.fullmatch(r'\*+[A-Za-z_]\w*', tok[-1]):
+            stars = re.match(r'\*+', tok[-1]).group(0)
+            tok = tok[:-1]; tok[-1] = tok[-1] + stars
+            clean.append(' '.join(tok)); continue
         # drop a trailing parameter name ("UINT Count", "CONST X* pDesc"); keep "CONST UINT"
         if len(tok) >= 2 and re.fullmatch(r'[A-Za-z_]\w*', tok[-1]) and tok[-2] not in ('CONST', 'const', 'unsigned', 'struct', 'enum'):
             tok = tok[:-1]
