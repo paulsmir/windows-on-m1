@@ -5550,3 +5550,16 @@ file. `Wom1ComputeEncoderMask` joins the opt-in list (default off, unset in ever
   PERF mean(r2,r3) below 49.7 (lowest control mean 50.74 - 2 %). A single FULL arm cannot support a claim
   smaller than 2.6 %; lever verdicts on FULL need two arms per boot or the per-job rows.
 - Best fold-on FULL arm 8170 = 82.1 % of 9946; control mean 8037 = 80.8 %.
+
+## UPDATE 2026-11-11T19:22Z (architect): S2-1b (EXP2349): our caps answer is correct from the first query; S2-1c staged
+
+- EXP2349 receipts: StartDeviceCount 1, StopDeviceCount 0, ScanoutStartCount 1; one DRIVERCAPS query, 0.8 ms after
+  StartDevice returned, with Mpo 1, MaxOverlayPlanes 2, DirectFlip 1, WDDM 0x3200, zeroed path not taken;
+  CapsCallsAll 0 and Check3CallsAll 0 (ungated); no UMD MPO entry called by DWM or the application; no Dwm-Core
+  event 215 (trace began 73 s after DWM start). "Our first DRIVERCAPS answer was wrong" is REJECTED.
+- Open: dxgkrnl refuses the plane-caps path before the miniport, or nobody above asks. PHYSICALADAPTERCAPS and
+  the other refused QueryAdapterInfo types are paging/telemetry types by the pinned header, not overlay leads.
+- Next: S2-1c, a user-mode probe calling D3DKMTGetMultiPlaneOverlayCaps / GetPostCompositionCaps /
+  CheckMultiPlaneOverlaySupport3 for our adapter from the interactive and the service session, with the receipt
+  deltas (no driver change, EXP2349 package). An offline follow-up on the dxgkrnl / dwmcore readings (R22, R25)
+  runs in parallel. Spec in the handoff file.
