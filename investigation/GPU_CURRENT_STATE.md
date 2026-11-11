@@ -5307,3 +5307,33 @@ Decisions:
   stays unadvertised until flag + plane count + caps DDI + Check3 + Set3 can ship in one package.
 - Offline in parallel (no bench time): broker ABI V3 in m1n1 and the pure Check3 rule table in the KMD.
 - Open design item: the application surface's alpha byte in the lowest slot (needs a visible check or a guarantee).
+
+## UPDATE 2026-11-11T12:05:58Z -- EXP2340 TDR-H0 read: firmware 13.5 acknowledges the host halt request; stage 3H gets a first recovery step (offline)
+
+Evidence (read by the architect from the Mac copies; the ACTUAL entry and the WER bugcheck reading stay with the
+bench session and were not yet in the ledger at this stamp):
+`.local/experiments/EXP2340-tdr-h0/evidence/EXP2340/h0-decode.json`, raw `pre-disable/Wom1GpuReset` (1144 bytes,
+version 6; the last 80 bytes decoded by hand match the tool output).
+- OBSERVED: observe ran, skip none, endpoint 0x21, message 0x0085000000000000 (N = 0), send ok, acked 1 after 2 ms
+  (2 polls, first change 2 ms), worker wait 0 ms. Status words before {halt_count 0, halted 0, resume 0}, after
+  {halt_count 1, halted 1, resume 0}.
+- OBSERVED: the reset that followed is unchanged and failed as in EXP2324: three entries (ResetEngine 282717 ms,
+  ResetEngine 283751 ms, ResetFromTimeout 284775 ms), each 0xc0000483 at stage quiesce after 1000 ms; packet
+  active, fence 0xcdd7 (completed 0xcdd6); compute queue done 362 / write 363, stamp 0x3d9f00 (expected 0x3da000),
+  no event seen, identical before and after; RTKit not crashed; Wom1FirmwareRecovery deadline_expiries 1,
+  longest job 3116 ms; Wom1GpuFault empty.
+- Pre-registered reading (EXP2340 BEFORE): Acked 1 with After[0] = Sent + 1 and Before[0] = Sent ->
+  "13.5 implements the host halt". H0: CONFIRMED. The N / N+1 counting rule of macOS 15 holds on 13.5 for N = 0.
+- NOT SHOWN by this run: that the looping kernel stopped executing (the halt left the job unretired and no event
+  arrived within the 1000 ms that followed); what the firmware does with the unretired entry after a resume; the
+  rule for N > 0.
+Decisions:
+1. Stage 3H is worth implementing (U10 plan item 5, "acknowledgement -> stage 3H"). The cold SGX cycle stays the
+   fallback for "halt not acknowledged"; the warm ASC restart stays demoted.
+2. First recovery step TDR-3H-R1 (class C, opt-in switch, default off, offline now): after the acknowledgement
+   apply only what is sourced for 13.5 -- the resume Asahi uses for a halted firmware (halted = 0, resume = 1) --
+   and let the unchanged reset follow, with a receipt that records what the firmware does next. The macOS 15
+   two-phase resume (2 / 3 / 0), ring-index rewrites and channel-table rebuilds are NOT part of R1: none has a
+   13.5 source. Specification: `.local/handoff/OV-ARCHITECT-HANDOFF.md`, entry of this stamp.
+3. Bench order unchanged (MPO H1 -> band boot 2 -> FS-D1). R1 gets a bench slot only after its code is verified
+   offline; it does not move ahead of the GravityMark items.
