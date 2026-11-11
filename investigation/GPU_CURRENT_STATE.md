@@ -5062,3 +5062,50 @@ CORRECTION 2026-11-11T04:26:27Z to the EXP2337 verdict above and to the "Not che
 CHG-20261111-52c897c5-PF1-DEFAULT-ON-EXP2337: no screenshot is missing. By the run plan of 02:48:47Z only the first
 default FULL arm (fpa) and the first FOLD=0 FULL arm (f0a) run with the screenshot option; arms f0b and fpb take none
 by design. The screenshot line of the KEEP rules is met by the four files in evidence/EXP2337/shots. Verdict unchanged.
+
+## UPDATE 2026-11-11T04:35:28Z -- EXP2338 verdict: the periodic long frames are made by the harness poll (powershell start)
+
+Recomputed by the architect with `.local/night-20261110/stall-6s/q2_table.py` and a frame count per arm from the
+`-times` files in `.local/experiments/EXP2337-pf1-default-on/evidence/EXP2337` (and `EXP2338/` there); same boot as
+EXP2337, package 7f7f88ce1, fold on by default in every arm of EXP2338. fork 6's ACTUAL follows.
+
+| arm | wait form | events | excess s | score | first frame s | longest early gap s | frames in [t0+10, t0+170] |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| gm2338sa | A: powershell poll, 29 polls | 23 (grid 6.70 s, fill 1.00) | 2.15 | 7692 | 15.28 | 6.54 | 7589 |
+| gm2338sb1 | B: no SSH during the run | 0 | 0 | 7964 | 12.27 | 4.64 | 7750 |
+| gm2338sc | C: `cmd /c if exist` every 5 s, 35 polls | 0 | 0 | 8101 | 12.99 | 4.36 | 7858 |
+| gm2338sb2 | B | 0 | 0 | 8012 | 11.92 | 4.20 | 7759 |
+| gm2337fpa / fpb (EXP2337, A poll) | A | 24 / 23 | 1.61 / 1.63 | 8006 / 7938 | 12.54 / 11.86 | 4.24 / 3.83 | 7763 / 7667 |
+| gm2337f0a / f0b (EXP2337, A poll, FOLD=0) | A | 24 / 21 | 1.58 / 1.48 | 7729 / 7719 | 12.28 / 13.56 | 4.18 / 4.66 | 7488 / 7493 |
+
+Pre-registered reading (UPDATE with the EXP2338 BEFORE): both B arms at most 3 events and excess below 0.3 s with A at
+least 15 -> HARNESS OWNS IT. C at most 3 -> the powershell process start is the trigger, not the SSH logon. Both
+lines are met (0 / 0 / 0 against 23; every A-poll arm of EXP2337 shows 21-24 events on the same grid).
+
+VERDICT: CONFIRMED. The 6-7 s grid of long frames in FULL runs is a measurement artifact of the done-file poll. It is
+not driver behaviour and leaves the lever list.
+
+Size of the artifact in the score -- NOT +3.8 %. Arm sa is 296 points under the B arms, but about two thirds of that
+is its start: first frame 3 s later and a 6.5 s early gap against 4.2-4.6 s (startup spread, not the poll). On frames
+inside [t0+10, t0+170]: A-poll fold arms 7763 / 7667 / 7589 (mean 7673), poll-free fold arms 7750 / 7759 / 7858 (mean
+7789) = +1.5 %, ranges overlap (fpa 7763 is above both B arms). The excess time predicts 1.0-1.3 %. Stated size:
+about 1 %, not resolved more finely by six arms.
+
+DECISIONS:
+1. Harness: from the next boot every in-run wait on a done file (FULL arms, PERF repeats, CS runs) uses the
+   `cmd /c if exist <file> echo True` form every 5 s. No powershell process is started on the guest between the start
+   and the done file of a measured run. This deviates from the wording of the BEFORE entry ("FULL arms wait B-style"):
+   form C had 0 events over 35 polls and keeps hang detection, which form B gives up for three minutes per arm.
+   One process change, its own CHANGES row (change_type process) by the implementer.
+2. Other guest commands inside a measured window (quiet gate rows, mid-run receipt snapshots, watchdog) are listed by
+   the implementer with their command form; any that starts powershell inside the window is reported, not changed in
+   the same step.
+3. Bands: the fold-on control band is derived from the first three boots that have the fold on AND the new wait form.
+   EXP2337 does not count as one of them (its FULL arms carry the artifact). Until three exist: same-boot ABBA only;
+   stop lines stay 7538 / 48.65 (one-sided, conservative under a wait form that can only raise scores).
+4. Distance to macOS under a wait form comparable to the macOS run (no periodic process start): poll-free fold arms
+   7964 / 8012 / 8101, mean 8026 = 80.7 % of 9946 (three arms of one boot, not a band).
+5. Old FULL scores are not rescaled. Every verdict taken so far used same-boot arms with the same poll form.
+
+Ranking unchanged: (1) non-busy about 1.7 ms, compositor row first; (2) R5 3D; (3) C0; (4) R1; (5) R3 / C2 / C4.
+Bench order: T5b FULL boot (first boot with the new wait form; waits for the builder) -> TDR-H0 -> FS-D1.
