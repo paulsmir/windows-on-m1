@@ -1235,7 +1235,8 @@ HRESULT AgxD3d10WindowsPresentationSubmitPlanes(
     }
   }
   values[3]=(UINT)result;
-  AdmissionUmdDiagnostic("mpo-present-callback",result,values,ARRAYSIZE(values));
+  /* EXP2356: "measure-" so DWM's refusals-only session trace keeps it. */
+  AdmissionUmdDiagnostic("measure-mpo-present-callback",result,values,ARRAYSIZE(values));
   AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,result,NULL,0u);
   return result;
 }

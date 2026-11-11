@@ -1225,8 +1225,19 @@ HRESULT APIENTRY AdmissionUmdSetDisplayMode(
     return E_INVALIDARG;
   ZeroMemory(&setMode, sizeof(setMode));
   setMode.hPrimaryAllocation = resource->KernelAllocation;
-  return device->KernelCallbacks->pfnSetDisplayModeCb(
-      device->RuntimeDevice.handle, &setMode);
+  {
+    /* EXP2356: DWM's single-plane MPO present of a fresh primary fails in
+     * the runtime callback (E_INVALIDARG); whether DXGI set that primary's
+     * mode first is the discriminator. {primary allocation, callback
+     * HRESULT, PrivateDriverFormatAttribute out}. "measure-": DWM's session
+     * trace is refusals-only. */
+    HRESULT result = device->KernelCallbacks->pfnSetDisplayModeCb(
+        device->RuntimeDevice.handle, &setMode);
+    UINT values[3] = {(UINT)setMode.hPrimaryAllocation, (UINT)result,
+        setMode.PrivateDriverFormatAttribute};
+    AdmissionUmdDiagnostic("measure-dxgi-set-display-mode", result, values, 3u);
+    return result;
+  }
 }
 
 static HRESULT APIENTRY AdmissionUmdRotateResourceIdentities(
