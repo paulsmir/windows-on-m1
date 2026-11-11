@@ -5135,3 +5135,28 @@ Consequences:
   NOT measured. Next boot: after the gated warm r2 / r3 (cmd form), one extra CS run r4 with the old powershell
   wait form. r4 against mean(r2, r3) gives the CS artifact; the gate baseline is corrected once from that number
   (appended, the old baseline row is not edited). Until then the gate reads as before.
+
+## UPDATE 2026-11-11T10:45Z -- R22: dxgkrnl half of the plane-route gate (U-B) answered offline
+
+Source: static read of dxgkrnl.sys ARM64 26100.9974 (sha256 3b3ac442...98d0) with its public PDB; report
+`.local/night-20261110/r22-dxgkrnl-mpo-gate/REPORT.md`. Architect spot-checks: `DXGADAPTER::Initialize` reads the
+MPO flag at +0xbf4, then tests interface version >= 0x300b, MaxOverlayPlanes (+0xbf8) != 0 and SupportDirectFlip
+(+0xbf3) != 0, each with its own failure path; the image holds the registry names DisableOverlays, ForceDirectFlip,
+EnableMultiPlaneOverlay3DDIs and the block-list key DISABLE_MPO; OverlayTestMode, OverlayMinFPS and DisableMPO do
+not occur in it.
+
+Result (observed in the code, not on hardware):
+- dxgkrnl has no path that turns MPO off or forces one plane because MaxYUVPlanes == 0, OverlayCaps == 0 or the
+  stretch factors are 1.0. Caps from the miniport pass through (only MaxPlanes == 0 falls back to defaults).
+- Adapter start FAILS (0xC000000D) when SupportMultiPlaneOverlay = 1 and any of: SupportDirectFlip = 0,
+  MaxOverlayPlanes = 0 or above the limit, no SetVidPnSourceAddressWithMultiPlaneOverlay DDI, no
+  CheckMultiPlaneOverlaySupport DDI. The caps DDI is called only with WDDMVersion >= 2.2, Set3 present and
+  DxgkDdiGetMultiPlaneOverlayCaps present. Our KMD already sets SupportDirectFlip (render-admission lifecycle.c).
+- Plane attributes (LayerIndex, blend, rects) are copied unchanged from the caller; dxgkrnl has no software-cursor
+  test on the MPO path.
+
+Gate for plane route S2 now: U-B dxgkrnl half CLOSED (not ruled out). U-A, the DWM half of U-B and U-C are
+decided in dwmcore only; that read is next (dwmcore.dll from the guest after EXP2339 and its rollback, public PDB
+from msdl). No package and no MPO-ASK boot before it. The S2 capability set is one indivisible contract by the
+start checks above (flag + plane count + Set3 + Check3 + caps DDI); it goes into the spec as ATOMIC CONTRACT.
+Ranking unchanged.
