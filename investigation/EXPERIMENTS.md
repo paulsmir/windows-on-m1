@@ -78061,3 +78061,15 @@ EXP2350 HARDWARE BEFORE 2026-11-11T19:42:02Z:
 - Hashes: sys f376696313e9, UmdArm64 9324dbdda055, UmdX64 44d716faa82c, Umd32 17f0bad21867; manifest b6caca03bbaa, hardware-manifest dc822d7c1e81; probe2350.sh 5b894e01683a (PROBE_LINT_OK); visible recovery rec2350h 3741fe4ba1847779; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
 - Recovery rec2350h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2350-s2-1c/run2350.sh.
+
+EXP2350 ACTUAL 2026-11-11T19:47:37Z:
+- Package from 0fc7218a8 (as EXP2349), 30.0.2350.0; m1n1 s2v3; Wom1MpoTwoPlanes=1 + normal switch set. EXP2350_PIPELINE_RC 0; suite 119/0; STOPS 0, GPU_RESET none, WER_REPORTS 2 (old); DCP error lines 0; CAP_TWO_LAYERS line 1. No GM, no DWM restart.
+- MPOKMT (exe dffab4aa, source e936a4e89), interactive console session 1 (scheduled task, Limited): primary display \\.\DISPLAY2 -> hAdapter 0x40000880, LUID 0:000643a6 (= the D3D12 device LUID, "Apple AGX clean WDDM render-admission experiment"), VidPnSourceId 0.
+  - D3DKMTQueryAdapterInfo: MULTIPLANEOVERLAY_SUPPORT(20) status 0 Supported 0; DIRECTFLIP_SUPPORT(19) status 0 Supported 0; MULTIPLANEOVERLAY_HUD_SUPPORT(23) status 0 KernelSupported 0 HudSupported 0; MULTIPLANEOVERLAY_SECONDARY_SUPPORT(38) status 0 Supported 1; MPO3DDI_SUPPORT(43) status 0 Supported 1; MULTIPLANEOVERLAY_STRETCH_SUPPORT(46) status 0 Supported 0.
+  - D3DKMTGetMultiPlaneOverlayCaps source 0: status 0, MaxPlanes 1, MaxRGBPlanes 0, MaxYUVPlanes 0, OverlayCaps 0x0 (no 0x800); sources 1..3: 0xC000000D. D3DKMTGetPostCompositionCaps source 0: status 0, stretch/shrink 1.0; sources 1..3: 0xC000000D.
+  - Wom1MpoGateReceipt unchanged across every call (in-process reads and host snapshots): DrvCapsQueryCount 1, CapsCallsAll 0, Check3CallsAll 0 -> dxgkrnl answered without calling the miniport.
+  - Check3: not constructible (architect amendment).
+  - Registry (read-only): no DisableOverlays / OverlayTestMode value under Control\GraphicsDrivers or Windows\Dwm. Windows\Dwm values: OneCoreNoBootDWM 0, ShaderLinkingGPUBlacklist (string), DwmInitSessionActivityId_00000001/2, DisableDDisplay 1.
+- MPOKMT from the SSH service session (session 0): "no primary display device" (EnumDisplayDevices in session 0), no D3DKMT calls -- second data point not obtained.
+- Kernel receipt as EXP2349: one StartDevice, one DRIVERCAPS (MPO 1, DirectFlip 1, MaxOverlayPlanes 2, not zeroed).
+- Reading (pre-registered, amended): Supported(20) 0 -> dxgkrnl cleared its MPO flag after our DRIVERCAPS; it also reports DirectFlip support 0 although DRIVERCAPS.SupportDirectFlip = 1. Recorded for the architect: our staging (stage<N>.ps1:46-50, since EXP952 2026-10-03, "DDisplay requires a D3D FL 11_0 render device; this UMD is FL 10_0") sets HKLM\SOFTWARE\Microsoft\Windows\Dwm DisableDDisplay=1 on every experiment boot; EXP951 showed it moves DWM to the legacy output path (CLegacyRenderTarget). Whether this setting is what clears the kernel's DirectFlip/MPO support flags is not shown by this boot. Verdict: the architect's.
