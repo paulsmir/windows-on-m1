@@ -144,7 +144,7 @@ typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT {
  * switch is effective (switch = 1 AND broker CAPABILITIES bit 9 AND the
  * REG_NEGOTIATED read-back); all zero otherwise.  Counters are interlocked
  * at any IRQL. */
-#define ADMISSION_MPO_RECEIPT_VERSION 1u
+#define ADMISSION_MPO_RECEIPT_VERSION 2u
 #define ADMISSION_MPO_RECEIPT_REASONS 32u
 typedef struct _ADMISSION_MPO_RECEIPT {
   volatile LONG Version, Bytes;
@@ -164,7 +164,12 @@ typedef struct _ADMISSION_MPO_RECEIPT {
   /* Contract defect: the broker refused a commit the table accepted. */
   volatile LONG BrokerRefusals, LastBrokerRefusal, LastRefusalCount;
   APPLE_AGX_SCANOUT_LAYER LastRefusalRecords[2];
+  /* ---- version 2 (A1.2): slot 1 removed before a hide / mode commit ---- */
+  volatile LONG Slot1Retires, Slot1RetireFailures, Slot1RetireRefusals;
+  volatile LONG LastSlot1RetireStage;  /* ADMISSION_MPO_RETIRE_STAGE_* */
 } ADMISSION_MPO_RECEIPT;
+#define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
+#define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u
 
 /* PresentIds to report, with their LayerIndex, at the latch of a flip. */
 typedef struct _ADMISSION_MPO_COMPLETION {

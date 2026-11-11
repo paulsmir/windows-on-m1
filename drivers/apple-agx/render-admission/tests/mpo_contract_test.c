@@ -478,8 +478,10 @@ static int RuleHolds(const ADMISSION_MPO_PLANE_INPUT *P, unsigned int Index,
   }
 }
 
+/* Two-plane per-plane rules; 26.. belong to AdmissionMpoEvaluatePrimary. */
 static int PerPlaneRule(unsigned int Reason) {
-  return Reason != AdmissionMpoReasonSameSurface &&
+  return Reason < AdmissionMpoReasonPrimaryNotScanoutCapable &&
+         Reason != AdmissionMpoReasonSameSurface &&
          Reason != AdmissionMpoReasonSurfaceOverlap &&
          Reason != AdmissionMpoReasonPanelGeometry;
 }
@@ -637,7 +639,8 @@ static void TestPropertySweep(void) {
        ++rule) {
     if (rule == AdmissionMpoReasonArgument ||
         rule == AdmissionMpoReasonPlaneCount ||
-        rule == AdmissionMpoReasonPanelGeometry)
+        rule == AdmissionMpoReasonPanelGeometry ||
+        rule >= AdmissionMpoReasonPrimaryNotScanoutCapable)
       continue;
     if (reasonSeen[rule] == 0u) {
       fprintf(stderr, "sweep never produced reason %u\n", rule);
@@ -673,8 +676,14 @@ static void TestStableReasonValues(void) {
   CHECK(AdmissionMpoReasonSurfaceOverlap == 23);
   CHECK(AdmissionMpoReasonPanelGeometry == 24);
   CHECK(AdmissionMpoReasonStrideBelowRow == 25);
-  CHECK(ADMISSION_MPO_REASON_COUNT == 26);
-  CHECK(ADMISSION_MPO_CONTRACT_VERSION == 2u);
+  CHECK(AdmissionMpoReasonPrimaryNotScanoutCapable == 26);
+  CHECK(AdmissionMpoReasonPrimarySourceMode == 27);
+  CHECK(AdmissionMpoReasonPrimaryGeometry == 28);
+  CHECK(AdmissionMpoReasonPrimarySize == 29);
+  CHECK(AdmissionMpoReasonPrimaryFormat == 30);
+  CHECK(AdmissionMpoReasonPrimaryPlacement == 31);
+  CHECK(ADMISSION_MPO_REASON_COUNT == 32);
+  CHECK(ADMISSION_MPO_CONTRACT_VERSION == 3u);
 }
 
 /* Version 2 surface rules, each on its role, both orders. */

@@ -217,3 +217,53 @@ unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
   out->FailingPlane = ADMISSION_MPO_NO_PLANE;
   return AdmissionMpoSupported;
 }
+
+/* Version 3: see mpo_contract.h AdmissionMpoEvaluatePrimary. */
+static unsigned int MpoCheckPrimary(const ADMISSION_MPO_INPUT *Input,
+                                    const ADMISSION_MPO_PLANE_INPUT *Plane) {
+  if (Plane->ScanoutCapable == 0u)
+    return AdmissionMpoReasonPrimaryNotScanoutCapable;
+  if (Input->PanelModeSupported == 0u)
+    return AdmissionMpoReasonPrimarySourceMode;
+  if (Plane->DescriptionValid == 0u ||
+      Plane->SurfaceWidth != Input->PanelWidth ||
+      Plane->SurfaceHeight != Input->PanelHeight ||
+      Plane->SurfaceStride != Input->PanelStride)
+    return AdmissionMpoReasonPrimaryGeometry;
+  if (Plane->AllocationBytes != (unsigned long long)Input->PanelStride *
+                                    (unsigned long long)Input->PanelHeight)
+    return AdmissionMpoReasonPrimarySize;
+  if (Plane->FormatClass != AdmissionMpoFormatBgra8 &&
+      Plane->FormatClass != AdmissionMpoFormatRgba8)
+    return AdmissionMpoReasonPrimaryFormat;
+  if (Plane->PlacementKnown != 0u && Plane->PlacementInPool == 0u)
+    return AdmissionMpoReasonPrimaryPlacement;
+  return AdmissionMpoSupported;
+}
+
+unsigned int AdmissionMpoEvaluatePrimary(const ADMISSION_MPO_INPUT *Input,
+                                         ADMISSION_MPO_RESULT *Result) {
+  ADMISSION_MPO_INPUT one;
+  unsigned int reason;
+
+  if (Input == MPO_NULL || Result == MPO_NULL)
+    return AdmissionMpoEvaluate(Input, Result);
+  one = *Input;
+  /* Exactly one plane; any other count is PlaneCount (the v1 answer for a
+   * count of 0, forced for 2). */
+  if (one.PlaneCount != 1u)
+    one.PlaneCount = 0u;
+  /* The v1 one-plane answer (LayerIndex 0, slot fill) comes first. */
+  reason = AdmissionMpoEvaluate(&one, Result);
+  if (one.PlaneCount != 1u)
+    return reason;
+  if (reason != AdmissionMpoSupported || Input->Planes[0].Enabled == 0u)
+    return reason;
+  reason = MpoCheckPrimary(Input, &Input->Planes[0]);
+  if (reason == AdmissionMpoSupported)
+    return reason;
+  Result->Supported = 0u;
+  Result->SlotCount = 0u;
+  Result->Slots[0].PlaneIndex = ADMISSION_MPO_NO_PLANE;
+  return MpoFail(Result, reason, 0u);
+}

@@ -40,7 +40,7 @@
  * in the scanout pool and the 64 KiB placement alignment CreateAllocation
  * requests; Set3 evaluates again with the actual offset. */
 
-#define ADMISSION_MPO_CONTRACT_VERSION 2u
+#define ADMISSION_MPO_CONTRACT_VERSION 3u
 #define ADMISSION_MPO_MAX_PLANES 2u
 #define ADMISSION_MPO_SLOT_COUNT 2u
 #define ADMISSION_MPO_MIN_EXTENT 32u
@@ -111,6 +111,20 @@ typedef enum _ADMISSION_MPO_REASON {
   AdmissionMpoReasonPanelGeometry = 24,
   /* Two planes: stride smaller than SurfaceWidth * 4 bytes. */
   AdmissionMpoReasonStrideBelowRow = 25,
+  /* ---- version 3: one plane, AdmissionMpoEvaluatePrimary only ---- */
+  /* The allocation is not a scanout-capable KMD allocation. */
+  AdmissionMpoReasonPrimaryNotScanoutCapable = 26,
+  /* The committed source mode or its pixel format is not scanned out. */
+  AdmissionMpoReasonPrimarySourceMode = 27,
+  /* Description invalid, or width/height/pitch differ from the committed
+   * source mode. */
+  AdmissionMpoReasonPrimaryGeometry = 28,
+  /* Allocation bytes != committed stride * committed height. */
+  AdmissionMpoReasonPrimarySize = 29,
+  /* Not a 4-byte format the broker scans (BGRA8, or RGBA8 with the cap). */
+  AdmissionMpoReasonPrimaryFormat = 30,
+  /* Known placement that does not translate into the scanout pool. */
+  AdmissionMpoReasonPrimaryPlacement = 31,
   ADMISSION_MPO_REASON_COUNT
 } ADMISSION_MPO_REASON;
 
@@ -162,6 +176,11 @@ typedef struct _ADMISSION_MPO_PLANE_INPUT {
   /* Distinct per allocation (the KMD allocation handle); equal values
    * name one surface. */
   unsigned long long SurfaceIdentity;
+  /* ---- version 3 (AdmissionMpoEvaluatePrimary) ---- */
+  unsigned int ScanoutCapable;        /* KMD allocation ScanoutCapable */
+  unsigned int DescriptionValid;      /* AdmissionAllocationDescriptionValid */
+  unsigned int PlacementInPool;       /* known placement translated */
+  unsigned long long AllocationBytes; /* the description's Size */
 } ADMISSION_MPO_PLANE_INPUT;
 
 typedef struct _ADMISSION_MPO_INPUT {
@@ -171,6 +190,12 @@ typedef struct _ADMISSION_MPO_INPUT {
   const ADMISSION_MPO_PLANE_INPUT *Planes;
   /* ---- version 2 ---- */
   unsigned long long PoolBytes;       /* registered scanout pool size */
+  /* ---- version 3: the committed source mode (one-plane V2 rule) ---- */
+  unsigned int PanelStride;
+  /* Nonzero: the committed mode is an offered scanout source mode and its
+   * pixel format is scanned (display.c AdmissionDdiSetVidPnSourceAddress
+   * gate before AdmissionScanoutQueuePresent). */
+  unsigned int PanelModeSupported;
 } ADMISSION_MPO_INPUT;
 
 typedef struct _ADMISSION_MPO_SLOT {
@@ -199,5 +224,20 @@ typedef struct _ADMISSION_MPO_RESULT {
 /* Fills *Result (when non-NULL) and returns Result->Reason. */
 unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
                                   ADMISSION_MPO_RESULT *Result);
+
+/* Version 3: the acceptance rule of today's one-plane V2 PRESENT path
+ * (display.c AdmissionDdiSetVidPnSourceAddress and scanout_windows.c
+ * AdmissionScanoutQueuePresent), as a pure function of the plane.  Exactly
+ * one plane; LayerIndex 0; a disabled plane is the plane-off path and is
+ * supported.  For an enabled plane, in numeric order: 26 not scanout
+ * capable, 27 committed mode/format not scanned, 28 geometry differs from
+ * the committed mode, 29 size != committed stride * height, 30 format,
+ * 31 known placement outside the pool (PlacementKnown only; Check3 cannot
+ * see placement).  Rectangles, rotation, blend, colour space and flags are
+ * not examined because the V2 path ignores them (it scans the whole
+ * surface).  While Wom1MpoTwoPlanes is effective, one-plane Check3 answers
+ * with this function and Set3 checks it before the V2 path. */
+unsigned int AdmissionMpoEvaluatePrimary(const ADMISSION_MPO_INPUT *Input,
+                                         ADMISSION_MPO_RESULT *Result);
 
 #endif
