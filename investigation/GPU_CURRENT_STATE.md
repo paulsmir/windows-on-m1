@@ -5360,3 +5360,44 @@ default-on, all modes, DCP scaling = the real fullscreen path, any window width,
 without stale pixels) are in `.local/handoff/OV-ARCHITECT-HANDOFF.md`, entry 2026-11-11T13:20Z.
 Job rows: the +0.72/+0.56/+0.31 ranking predates the PF1 fold (EXP2309 package); it is being
 recomputed from fold-on FULL runs before any job-row lever is chosen.
+
+## UPDATE 2026-11-11T13:28Z (architect): per-job gap ranking recomputed on the fold-on package (RANKING-REFRESH)
+
+Source: /Users/pavel/public_windows/.local/night-20261110/ranking-refresh/REPORT.md (out-compare.txt, out-incx.txt,
+out-foreign.txt). Runs: EXP2339 f0a (8047) and f0b (7962), package fd410f54c, control switch set, windowed HD,
+-temporal 0, same Apple capture and same scene mapping as the EXP2309 ranking (lag 0.00 s, execute offset 63).
+EXP2341 and EXP2337 were not used (no ACTUAL yet / old wait form). This supersedes the EXP2309 ranking above as the
+working ranking; the EXP2309 entry is not edited.
+
+Method change (required by the fold): under PF1 the renders have no prelude row, nb.py starts render busy time at
+TA end, so the old "X work" rows of R1/R3/R5 and the old "non-busy" row are NOT comparable any more. Comparable row
+per job: inc = busy + gap (completion to completion), the counterpart of Apple's i_X; it partitions the frame.
+
+Whole run, ms per frame, f0a / f0b:
+
+- Frame: ours 20.136 / 20.308, Apple 16.462 -> gap +3.673 / +3.846 (81.8 % / 81.1 % by frame time). EXP2309: +4.343.
+- Exact partition of the gap:
+  - waiting behind another process's GPU job (class e, the DWM row): 1.014 / 0.945. Upper bound: at render
+    positions the wait now includes TA. EXP2309 value with the old definition: 0.841.
+  - job rows without that wait (inc - e against Apple i_X): R5 +0.650 / +0.723, C0 +0.649 / +0.678,
+    C4 +0.329 / +0.373, C2 +0.294 / +0.321, R1 +0.167 / +0.203, R7 +0.164 / +0.154, C6 +0.104 / +0.123,
+    R3 -0.026 / -0.003. Sum 2.331 / 2.572.
+  - Apple's increments sum to 0.327 more than Apple's frame (i_next -0.327); not attributable to one of our rows.
+- Pure work rows that are still comparable (compute): C0 +0.562 / +0.582 (EXP2309 +0.559, NOT moved), C2 +0.203 /
+  +0.212, C4 +0.233 / +0.236 (EXP2309 +0.135; HYPOTHESIS: the folded R5 expand kernel, about 0.09), C6 +0.03.
+- R5 3D, ours only: 2.743 / 2.860 (EXP2309 3.013); grows with the scene (inc - e +0.43 / +0.66 / +1.09 by range).
+
+Consequences:
+
+1. S2 target confirmed in size: the DWM wait is 0.85-1.0 ms per frame = 23-27 % of the gap. Best case for S2
+   (all of it removed): frame about 19.2-19.4 ms = 85-86 % of macOS. This is a bound, not a prediction.
+2. R3 leaves the lever list: without the DWM wait it is at Apple parity in both runs.
+3. After S2 the order is R5 (+0.69) and C0 (+0.66), then C4 (+0.35), C2 (+0.31), R1 (+0.19), R7 (+0.16), C6 (+0.11).
+   C0 is the largest pure-work row and the only one the fold did not move.
+4. 95 % of macOS needs a frame of 17.33 ms, i.e. 2.9 of the 3.76 ms removed: S2 alone is not enough; R5 and C0
+   both have to close as well.
+5. Single-position rows move up to +-0.2 ms in 130..end from the DWM phase alone (f0a vs f0b); judge levers on
+   pairs (C0+R1, C2+R3, C4+R5) or on inc - e.
+
+NOT VERIFIED: launch and TA cannot be split inside the render gaps under the fold (no TA-start stamp); Apple's
+compositor cost is not measured; EXP2341 not included. Bench order unchanged (S2-0a -> S2-0b -> S2-1).
