@@ -4932,3 +4932,63 @@ Gates: pool modules (3 checkout-only m1n1 failures), baseline 1 NEW (the known m
 MSVC yet; its first package is the one built after the flip boot. EXP2337 (PF1 default flip) was launched on
 package 7f7f88ce1, built before this commit, with the control boots' switch set (JobDiagnostics,
 CrossProcessPairs, SubmitRequeue); EXP2338 arms follow in the same boot.
+
+
+## UPDATE 2026-11-11T03:36:01Z -- architect: GPU VA bind part of buffer creation read (offline study BO-BIND-SPLIT) -- 65 % of it is before the first scored frame; removable part inside the score is about 0.3 % of macOS; startup gap leaves the active lever list
+
+Source: offline study, tables and scripts in `.local/night-20261110/bo-bind-split/` (out-summary.txt, out-q1-table.txt,
+out-kmdprof.txt, out-livewait.txt, out-livematch.txt, out-fit.txt; rows.csv = one line per `measure-bo-create` row).
+Data: 22 traced GM launches of EXP2331/2332/2333/2335 + the EXP2333 fcensus launch + 4 probe-suite logs (EXP2336 not
+used). No hardware run. I checked the summary, the broker counters, the wait histogram and the R155 code against the
+files and `gpuva_g3_paging_windows.c:2034`.
+
+Split of the bind span per launch, mean of the 18 launches that are not the first of their boot [min..max]:
+
+| window | rows | MiB | allocation s | bind s | residency s | paging-fence wait s | rest s |
+| a: before the first scored frame | 34.7 | 2158 | 1.59 | 2.83 | 0.90 | 1.87 | 0.06 |
+| b: frame 1 -> frame 2 gap | 33.5 | 572 | 2.36 [2.12..2.65] | 1.04 [0.94..1.22] | 0.27 | 0.51 | 0.25 |
+| c: about 1.1 s after frame 2 | 26.8 | 50 | 0.17 | 0.48 [0.38..0.57] | 0.05 | 0.30 | 0.13 |
+| launch | 95.1 | 2779 | 4.12 | 4.36 [4.10..4.70] | 1.22 | 2.69 | 0.45 |
+
+- All binds run serialized on the present thread (97.3 s of 97.6 s). "rest" = parts under 10 ms that emit no receipt
+  (rows under 32 MiB only).
+- Window a/b (GPU idle during the wait, 0 % overlap with GM jobs): cost is per MiB, 1.23-1.46 ms per MiB. The KMD
+  counters per launch: 2363-3295 UPDATE_PAGE_TABLE builds, 4.2-5.3 s; broker REGISTER_SHARED_BACKING 189.3k-189.6k
+  calls at 6.0-6.6 us (1.13-1.24 s); broker UPDATE_LEAF 215k-406k calls at 2.8-2.9 us (0.6-1.1 s). 189.4k x 16 KiB =
+  2.96 GiB = the buffers created, so each newly mapped native 16 KiB page costs two trapped broker calls, about
+  0.6 ms per MiB (labelled inference: call counts are measured, their attribution to binds is not).
+- Window c (GM jobs running, 77-82 % overlap): cost is per call, median 16 ms for a sub-MiB buffer (0.4 ms in window a).
+  It is the R155 wait: an UPDATE_PAGE_TABLE build waits for the process's in-flight job because live additive paging
+  is not requested (`Wom1LiveAdditiveState` requested 0); 66-80 waits per launch, all with reason Disabled; the sampled
+  waits equal the bind time minus 0.5-4 ms. It produces 5-12 frames of 50-126 ms among the first ~25 frames.
+  No such row later than 7.5 s after frame 1 in any launch.
+- Reference (Asahi `agx_bo_alloc` -> one synchronous VM_BIND, kernel `map_pages` = one CPU store per 16 KiB page, no
+  TLB invalidate on map, no wait): the native page-table entry count is the same (64 per MiB); ours adds two traps per
+  entry, an asynchronous paging-fence round trip per map, a separate residency step with its own fence wait, and the
+  wait for in-flight work.
+- Probe suite against GM (question left open at 01:48:44Z): same code path; suite wait 0.73 and residency 0.21 ms per
+  MiB against GM 0.82 and 0.41. The residency difference is not explained by these files.
+
+CORRECTION to the ranking line of 03:08:42Z ("GPU VA bind 1.16 s of the gap"): measured 1.04 s inside the
+frame 1 -> frame 2 gap and 0.48 s in the second after it.
+
+READING: bind time inside the scored run is 1.5 s per launch (about 0.65 % of the macOS score at 2.3 s = 1 %). The parts
+with a deterministic owner are the broker traps (about 0.34 s in window b) and the R155 waits (about 0.30 s in
+window c): together about 0.3 % of macOS, below every band of this bench. 2.83 s of bind and 1.59 s of allocation are
+load time before the score starts.
+
+DECISIONS:
+1. No package and no boot for the bind part now. It is not a GravityMark score lever.
+2. Two items go to the load-time / mid-run creation backlog, each its own change when that goal is taken up:
+   (a) BROKER-RANGE: one broker call per run of native entries instead of two per 16 KiB (m1n1 + KMD, one atomic
+   contract; bound about 1.7 s of load per GM launch); (b) live additive paging for maps of fresh ranges, so a buffer
+   created while a job runs does not wait a whole job. The EXP2117 verdict stands for steady state (0.05 waits per
+   frame); the new fact is the first second of a run only. Neither is run for a GravityMark verdict.
+3. Startup gap (4.9-5.5 s) as a whole: slab part parked by EXP2336 (bound about 1 %), bind part removable about 0.3 %,
+   TVB growth rest about 0.2 %. The item leaves the active lever list; the remaining gap to macOS is steady state.
+
+Ranking after this reading: PF1 fold (flip boot EXP2337 running); (1) non-busy about 1.9 ms per frame, re-measured on
+the EXP2337 default arms; (2) R5 3D; (3) C0; (4) R1; (5) R3/C2/C4; harness item: poll-induced long frames (EXP2338).
+Backlog (not GravityMark): BROKER-RANGE, live additive paging at creation, slab part.
+
+Bench order unchanged: EXP2337 + EXP2338 -> T5b FULL boot -> TDR-H0 -> FS-D1.
