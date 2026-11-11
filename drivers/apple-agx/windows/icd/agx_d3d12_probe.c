@@ -9926,6 +9926,160 @@ static int clk_twin(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence
     return SUCCEEDED(hr) && !missing ? 0 : 1;
 }
 
+/* MPOKMT (S2-1c, architect 2026-11-11): ask dxgkrnl directly, from user mode, the three MPO questions DWM never
+ * asks: D3DKMTGetMultiPlaneOverlayCaps, D3DKMTGetPostCompositionCaps and D3DKMTCheckMultiPlaneOverlaySupport3 for
+ * the adapter/source behind the primary GDI display. Check3 needs a device and resource handles: a D3DKMT device on
+ * that adapter and D3D12 shared textures this process creates (D3DKMTOpenResourceFromNtHandle). One full-screen
+ * plane, then the two-plane S2 form (desktop LayerIndex 0 full screen alpha-blended, application LayerIndex 1
+ * 1280x720 opaque at 640,457). Wom1MpoGateReceipt (KMD, device key) is read before/after every call to show whether
+ * dxgkrnl reached the miniport (DrvCapsQueryCount +16, CapsCallsAll +28, Check3CallsAll +32, CapsLastMaxPlanes +40).
+ * Every struct field from the pinned WDK 26100 d3dkmthk.h. No driver change. */
+#pragma comment(lib, "advapi32.lib")
+typedef NTSTATUS (APIENTRY *MPOKMT_FN)(void *);
+static void mpokmt_gate(const char *tag) {
+    BYTE b[512]; DWORD size = sizeof(b);
+    LSTATUS st = RegGetValueW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Enum\\ACPI\\APPL0002\\0\\Device Parameters",
+                              L"Wom1MpoGateReceipt", RRF_RT_REG_BINARY, NULL, b, &size);
+    if (st != ERROR_SUCCESS || size < 48) { printf("MPOKMT_GATE %s unreadable status=%ld size=%lu\n", tag, (long)st, (unsigned long)size); return; }
+    printf("MPOKMT_GATE %s DrvCapsQueryCount=%ld CapsCallsAll=%ld Check3CallsAll=%ld CapsLastVidPnSourceId=%ld CapsLastMaxPlanes=%ld StartDeviceCount=%ld\n",
+           tag, *(LONG *)(b + 16), *(LONG *)(b + 28), *(LONG *)(b + 32), *(LONG *)(b + 36), *(LONG *)(b + 40), *(LONG *)(b + 8));
+}
+static MPOKMT_FN mpokmt_fn(HMODULE gdi, const char *name) {
+    MPOKMT_FN f = (MPOKMT_FN)(void *)GetProcAddress(gdi, name);
+    if (!f) printf("MPOKMT missing export %s\n", name);
+    return f;
+}
+/* Shared committed texture -> NT handle -> D3DKMT resource handle on hDevice. */
+static NTSTATUS mpokmt_resource(ID3D12Device *device, HMODULE gdi, D3DKMT_HANDLE hDevice, UINT width, UINT height,
+                                ID3D12Resource **keep, HANDLE *nt, D3DKMT_HANDLE *hResource, const char *tag) {
+    D3D12_HEAP_PROPERTIES heap = {D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC desc = {D3D12_RESOURCE_DIMENSION_TEXTURE2D, 0, width, height, 1, 1, DXGI_FORMAT_B8G8R8A8_UNORM, {1, 0},
+                                D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET};
+    SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, FALSE};
+    MPOKMT_FN query = mpokmt_fn(gdi, "D3DKMTQueryResourceInfoFromNtHandle"), open = mpokmt_fn(gdi, "D3DKMTOpenResourceFromNtHandle");
+    D3DKMT_QUERYRESOURCEINFOFROMNTHANDLE q; D3DKMT_OPENRESOURCEFROMNTHANDLE o;
+    D3DDDI_OPENALLOCATIONINFO2 *alloc = NULL; void *runtime = NULL, *resdrv = NULL, *total = NULL;
+    NTSTATUS st = (NTSTATUS)0xC0000001L;
+    HRESULT hr = ID3D12Device_CreateCommittedResource(device, &heap, D3D12_HEAP_FLAG_SHARED, &desc, D3D12_RESOURCE_STATE_COMMON,
+                                                      NULL, &IID_ID3D12Resource, (void **)keep);
+    if (SUCCEEDED(hr)) hr = ID3D12Device_CreateSharedHandle(device, (ID3D12DeviceChild *)*keep, &sa, GENERIC_ALL, NULL, nt);
+    printf("MPOKMT resource %s %ux%u B8G8R8A8 shared create+share hr=0x%08lx\n", tag, width, height, (unsigned long)hr);
+    if (FAILED(hr) || !query || !open) return st;
+    memset(&q, 0, sizeof(q)); q.hDevice = hDevice; q.hNtHandle = *nt;
+    st = query(&q);
+    printf("MPOKMT resource %s QueryResourceInfoFromNtHandle status=0x%08lx PrivateRuntimeDataSize=%u TotalPrivateDriverDataSize=%u ResourcePrivateDriverDataSize=%u NumAllocations=%u\n",
+           tag, (unsigned long)st, q.PrivateRuntimeDataSize, q.TotalPrivateDriverDataSize, q.ResourcePrivateDriverDataSize, q.NumAllocations);
+    if (st < 0 || !q.NumAllocations) return st < 0 ? st : (NTSTATUS)0xC0000001L;
+    alloc = (D3DDDI_OPENALLOCATIONINFO2 *)calloc(q.NumAllocations, sizeof(*alloc));
+    runtime = calloc(1, q.PrivateRuntimeDataSize + 16); resdrv = calloc(1, q.ResourcePrivateDriverDataSize + 16);
+    total = calloc(1, q.TotalPrivateDriverDataSize + 16);
+    memset(&o, 0, sizeof(o)); o.hDevice = hDevice; o.hNtHandle = *nt; o.NumAllocations = q.NumAllocations; o.pOpenAllocationInfo2 = alloc;
+    o.PrivateRuntimeDataSize = q.PrivateRuntimeDataSize; o.pPrivateRuntimeData = runtime;
+    o.ResourcePrivateDriverDataSize = q.ResourcePrivateDriverDataSize; o.pResourcePrivateDriverData = resdrv;
+    o.TotalPrivateDriverDataBufferSize = q.TotalPrivateDriverDataSize; o.pTotalPrivateDriverDataBuffer = total;
+    st = alloc && runtime && resdrv && total ? open(&o) : (NTSTATUS)0xC0000017L;
+    *hResource = o.hResource;
+    printf("MPOKMT resource %s OpenResourceFromNtHandle status=0x%08lx hResource=0x%x hAllocation0=0x%x gpuva0=0x%llx hKeyedMutex=0x%x hSyncObject=0x%x\n",
+           tag, (unsigned long)st, o.hResource, alloc ? alloc[0].hAllocation : 0u, alloc ? (unsigned long long)alloc[0].GpuVirtualAddress : 0ull,
+           o.hKeyedMutex, o.hSyncObject);
+    free(alloc); free(runtime); free(resdrv); free(total);
+    return st;
+}
+static void mpokmt_attrs(D3DKMT_MULTIPLANE_OVERLAY_ATTRIBUTES3 *a, LONG sw, LONG sh, LONG dx, LONG dy, LONG dw, LONG dh, UINT blend) {
+    RECT src = {0, 0, sw, sh}, dst = {dx, dy, dx + dw, dy + dh};
+    memset(a, 0, sizeof(*a));
+    a->Flags = 0; a->SrcRect = src; a->DstRect = dst; a->ClipRect = dst; a->Rotation = D3DDDI_ROTATION_IDENTITY;
+    a->Blend = (D3DKMT_MULTIPLANE_OVERLAY_BLEND)blend; a->DirtyRectCount = 0; a->pDirtyRects = NULL;
+    a->ColorSpace = D3DDDI_COLOR_SPACE_RGB_FULL_G22_NONE_P709; a->StretchQuality = DXGKMT_MULTIPLANE_OVERLAY_STRETCH_QUALITY_BILINEAR;
+    a->SDRWhiteLevel = 1000;
+}
+static void mpokmt_check3(MPOKMT_FN check3, D3DKMT_HANDLE hAdapter, D3DKMT_HANDLE hDevice, UINT count,
+                          D3DKMT_CHECK_MULTIPLANE_OVERLAY_PLANE3 *planes, const char *tag) {
+    D3DKMT_CHECK_MULTIPLANE_OVERLAY_PLANE3 *pp[2] = {&planes[0], count > 1 ? &planes[1] : NULL};
+    D3DKMT_CHECKMULTIPLANEOVERLAYSUPPORT3 c;
+    NTSTATUS st;
+    memset(&c, 0, sizeof(c));
+    c.hAdapter = hAdapter; c.hDevice = hDevice; c.PlaneCount = count; c.ppOverlayPlanes = pp; c.PostCompositionCount = 0;
+    c.ppPostComposition = NULL;
+    mpokmt_gate(tag);
+    st = check3(&c);
+    printf("MPOKMT_CHECK3 %s status=0x%08lx Supported=%d ReturnInfo=0x%x FailingPlane=%u TryAgain=%u\n", tag, (unsigned long)st,
+           c.Supported, c.ReturnInfo.Value, c.ReturnInfo.FailingPlane, c.ReturnInfo.TryAgain);
+    mpokmt_gate(tag);
+}
+static int mpo_kmt(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    HMODULE gdi = LoadLibraryW(L"gdi32.dll");
+    MPOKMT_FN open_gdi = gdi ? mpokmt_fn(gdi, "D3DKMTOpenAdapterFromGdiDisplayName") : NULL;
+    MPOKMT_FN create = gdi ? mpokmt_fn(gdi, "D3DKMTCreateDevice") : NULL, destroy = gdi ? mpokmt_fn(gdi, "D3DKMTDestroyDevice") : NULL;
+    MPOKMT_FN caps_fn = gdi ? mpokmt_fn(gdi, "D3DKMTGetMultiPlaneOverlayCaps") : NULL;
+    MPOKMT_FN post_fn = gdi ? mpokmt_fn(gdi, "D3DKMTGetPostCompositionCaps") : NULL;
+    MPOKMT_FN check3 = gdi ? mpokmt_fn(gdi, "D3DKMTCheckMultiPlaneOverlaySupport3") : NULL;
+    MPOKMT_FN close_fn = gdi ? mpokmt_fn(gdi, "D3DKMTCloseAdapter") : NULL;
+    DISPLAY_DEVICEW dd; D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME od; D3DKMT_CREATEDEVICE cd; D3DKMT_GET_MULTIPLANE_OVERLAY_CAPS caps;
+    D3DKMT_GET_POST_COMPOSITION_CAPS post; D3DKMT_CHECK_MULTIPLANE_OVERLAY_PLANE3 planes[2];
+    D3DKMT_MULTIPLANE_OVERLAY_ATTRIBUTES3 attrs[2];
+    ID3D12Resource *desk = NULL, *app = NULL; HANDLE ntDesk = NULL, ntApp = NULL; D3DKMT_HANDLE hDesk = 0, hApp = 0;
+    LUID luid;
+    LONG w = GetSystemMetrics(SM_CXSCREEN), h = GetSystemMetrics(SM_CYSCREEN);
+    DWORD session = 0; NTSTATUS st; int found = 0;
+    (void)queue; (void)fence; (void)base;
+    ID3D12Device_GetAdapterLuid(device, &luid);
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    printf("MPOKMT session=%lu pid=%lu screen=%ldx%ld d3d12_luid=%08lx:%08lx\n", (unsigned long)session,
+           (unsigned long)GetCurrentProcessId(), w, h, (unsigned long)luid.HighPart, (unsigned long)luid.LowPart);
+    if (!open_gdi || !create || !caps_fn || !post_fn || !check3) { puts("AGX_D3D12_MPOKMT: FAIL (exports)"); return 1; }
+    for (DWORD i = 0; !found; ++i) {
+        memset(&dd, 0, sizeof(dd)); dd.cb = sizeof(dd);
+        if (!EnumDisplayDevicesW(NULL, i, &dd, 0)) break;
+        if (dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) found = 1;
+    }
+    if (!found) { puts("MPOKMT no primary display device"); puts("AGX_D3D12_MPOKMT: FAIL"); return 1; }
+    memset(&od, 0, sizeof(od)); wcsncpy(od.DeviceName, dd.DeviceName, 31);
+    st = open_gdi(&od);
+    printf("MPOKMT OpenAdapterFromGdiDisplayName %ls status=0x%08lx hAdapter=0x%x luid=%08lx:%08lx VidPnSourceId=%u same_luid=%d desc=%ls\n",
+           dd.DeviceName, (unsigned long)st, od.hAdapter, (unsigned long)od.AdapterLuid.HighPart, (unsigned long)od.AdapterLuid.LowPart,
+           od.VidPnSourceId, od.AdapterLuid.HighPart == luid.HighPart && od.AdapterLuid.LowPart == luid.LowPart, dd.DeviceString);
+    if (st < 0) { puts("AGX_D3D12_MPOKMT: FAIL"); return 1; }
+    memset(&caps, 0, sizeof(caps)); caps.hAdapter = od.hAdapter; caps.VidPnSourceId = od.VidPnSourceId;
+    mpokmt_gate("caps-before");
+    st = caps_fn(&caps);
+    printf("MPOKMT_CAPS status=0x%08lx MaxPlanes=%u MaxRGBPlanes=%u MaxYUVPlanes=%u OverlayCaps=0x%x (Rotation %u RotationWithoutIndependentFlip %u VerticalFlip %u HorizontalFlip %u StretchRGB %u StretchYUV %u BilinearFilter %u HighFilter %u Shared %u Immediate %u Plane0ForVirtualModeOnly %u Version3DDISupport %u) MaxStretchFactor=%.3f MaxShrinkFactor=%.3f\n",
+           (unsigned long)st, caps.MaxPlanes, caps.MaxRGBPlanes, caps.MaxYUVPlanes, caps.OverlayCaps.Value, caps.OverlayCaps.Rotation,
+           caps.OverlayCaps.RotationWithoutIndependentFlip, caps.OverlayCaps.VerticalFlip, caps.OverlayCaps.HorizontalFlip,
+           caps.OverlayCaps.StretchRGB, caps.OverlayCaps.StretchYUV, caps.OverlayCaps.BilinearFilter, caps.OverlayCaps.HighFilter,
+           caps.OverlayCaps.Shared, caps.OverlayCaps.Immediate, caps.OverlayCaps.Plane0ForVirtualModeOnly,
+           caps.OverlayCaps.Version3DDISupport, caps.MaxStretchFactor, caps.MaxShrinkFactor);
+    mpokmt_gate("caps-after");
+    memset(&post, 0, sizeof(post)); post.hAdapter = od.hAdapter; post.VidPnSourceId = od.VidPnSourceId;
+    mpokmt_gate("post-before");
+    st = post_fn(&post);
+    printf("MPOKMT_POSTCAPS status=0x%08lx MaxStretchFactor=%.3f MaxShrinkFactor=%.3f\n", (unsigned long)st, post.MaxStretchFactor, post.MaxShrinkFactor);
+    mpokmt_gate("post-after");
+    memset(&cd, 0, sizeof(cd)); cd.hAdapter = od.hAdapter;
+    st = create(&cd);
+    printf("MPOKMT CreateDevice status=0x%08lx hDevice=0x%x\n", (unsigned long)st, cd.hDevice);
+    if (st >= 0 && mpokmt_resource(device, gdi, cd.hDevice, (UINT)w, (UINT)h, &desk, &ntDesk, &hDesk, "desktop") >= 0) {
+        memset(planes, 0, sizeof(planes));
+        mpokmt_attrs(&attrs[0], w, h, 0, 0, w, h, D3DKMT_MULTIPLANE_OVERLAY_BLEND_OPAQUE);
+        planes[0].LayerIndex = 0; planes[0].hResource = hDesk; planes[0].VidPnSourceId = od.VidPnSourceId; planes[0].pPlaneAttributes = &attrs[0];
+        mpokmt_check3(check3, od.hAdapter, cd.hDevice, 1, planes, "one-plane");
+        if (mpokmt_resource(device, gdi, cd.hDevice, 1280u, 720u, &app, &ntApp, &hApp, "application") >= 0) {
+            mpokmt_attrs(&attrs[0], w, h, 0, 0, w, h, D3DKMT_MULTIPLANE_OVERLAY_BLEND_ALPHABLEND);
+            mpokmt_attrs(&attrs[1], 1280, 720, 640, 457, 1280, 720, D3DKMT_MULTIPLANE_OVERLAY_BLEND_OPAQUE);
+            planes[1].LayerIndex = 1; planes[1].hResource = hApp; planes[1].VidPnSourceId = od.VidPnSourceId; planes[1].pPlaneAttributes = &attrs[1];
+            mpokmt_check3(check3, od.hAdapter, cd.hDevice, 2, planes, "two-plane-s2");
+        } else puts("MPOKMT two-plane not constructible: application resource open failed (see above)");
+    } else puts("MPOKMT check3 not constructible: device or desktop resource open failed (see above)");
+    if (cd.hDevice && destroy) { D3DKMT_DESTROYDEVICE dd2; memset(&dd2, 0, sizeof(dd2)); dd2.hDevice = cd.hDevice; (void)destroy(&dd2); }
+    if (close_fn) { D3DKMT_CLOSEADAPTER ca; memset(&ca, 0, sizeof(ca)); ca.hAdapter = od.hAdapter; (void)close_fn(&ca); }
+    if (ntDesk) CloseHandle(ntDesk);
+    if (ntApp) CloseHandle(ntApp);
+    if (desk) ID3D12Resource_Release(desk);
+    if (app) ID3D12Resource_Release(app);
+    puts("AGX_D3D12_MPOKMT: PASS (receipt step; the reading is in the MPOKMT_ lines)");
+    return 0;
+}
+
 static const struct { const char *name; probe_step step; } named_steps[] = {
     {"OVPAIR", ov_pair},
     {"OVPAIRH", ov_pair_heavy},
@@ -9936,6 +10090,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"MEMBWLONG", mem_bw_long},
     {"MEMBWATOM", mem_bw_atom},
     {"CLKTWIN", clk_twin},
+    {"MPOKMT", mpo_kmt},
     {"Q3PC", q3_pc}, {"Q3CP", q3_cp},
     {"Q3CR", q3_cr}, {"Q3RC", q3_rc_pair}, {"Q3RCR", q3_rcr}, {"Q3RR", q3_rr},
     {"RC57C", step_rc57c}, {"RC57U", step_rc57u}, {"RC57M", step_rc57m}, {"RC59G", step_rc59g}, {"RC63G", rc63_gravitymark_stream}, {"RC89S", rc89_stream_capacity},
