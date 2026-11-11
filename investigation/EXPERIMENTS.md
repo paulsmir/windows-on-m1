@@ -77781,3 +77781,9 @@ EXP2342 HARDWARE BEFORE 2026-11-11T12:42:53Z: H1 DCP two-slot swap (m1n1 diagnos
 - Failure: -4 (A408/A407 refused), -5 (no D589 within 100 ms), D592 abort, RTKit crash or DCP hang -> S2 rejected on this firmware for this surface form (S1 unaffected). Stop: any result other than 0/0, D592, RTKit crash or a silent proxy -> no retry, report with evidence; a dead proxy needs the operator's power button.
 - Recovery: nothing persistent; afterwards the ordinary GPU-visible guest is booted with the usual launcher (chainloads the working m1n1 again).
 - Evidence: .local/experiments/m1n1-ansdirect-closedv5-scaled1-h1/evidence/EXP2342 (full.log, full-chainload.log).
+
+EXP2342 ACTUAL 2026-11-11T12:44:27Z:
+- h1-run.sh rc 0 at the proxy (hash 05325ed7... verified by the launcher). H1A_RESULT=0, H1B_RESULT=0.
+- vUART (evidence full.log): baseline one-slot swap_id=8 A408 APPLIED, exact D589 latch, D589=MATCHED after 6553 us; H1a two-slot swap_id=9 A408 APPLIED, D589=MATCHED after 9233 us; restore swap_id=10 D589=MATCHED after 13705 us; H1b two-slot swap_id=11 A408 APPLIED, D589=MATCHED after 11879 us; restore swap_id=12 D589=MATCHED after 13501 us. No D592, no "A408 refused", no "failed closed" callback, no RTKit crash (0 matching lines).
+- Usual launcher afterwards: NOT normal. The AT_PROXY owner relaunch chainloaded the working m1n1 (proxy alive again), then run_uefi stopped with "RuntimeError: m1n1 rejected physical guest display handoff"; the m1n1 log of that boot shows "HV: AGX scanout DCP backend unavailable; requests fail closed" (absent in the EXP2339 boot log). Interpretation not made; likely the warm chainload after the H1 m1n1 leaves DCP in a state the working m1n1 does not take over. One attempt only, no retry; the operator's power cycle is requested to restore a cold m1n1 boot.
+- Verdict: the architect's.
