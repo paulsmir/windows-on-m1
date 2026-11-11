@@ -49,6 +49,9 @@ typedef struct _APPLE_AGX_G13_COMPUTE_WORK_INPUT {
    * sampler_count (0x27c) and sampler_max = count + 1 (0x280). */
   APPLE_AGX_BACKEND_U64 SamplerHeap;
   APPLE_AGX_BACKEND_U32 SamplerCount;
+  /* CM-1: EncoderParams unk_mask (0x270). Asahi queue/compute.rs writes
+   * 0xffffffff; 0 keeps the bytes every earlier package submitted. */
+  APPLE_AGX_BACKEND_U32 EncoderMask;
 } APPLE_AGX_G13_COMPUTE_WORK_INPUT;
 
 typedef struct _APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_INPUT {

@@ -1189,6 +1189,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
   work.HelperArgument=Input->HelperArgument;
   work.HelperConfig=Input->HelperConfig;
   work.SamplerHeap=Input->SamplerHeap;work.SamplerCount=Input->SamplerCount;
+  work.EncoderMask=Owner->ComputeEncoderMask ? 0xffffffffu : 0u;
   if(!AppleAgxG13ComputeWorkBuild(&work,
       sidecar+JOB_WORD(APPLE_AGX_COMPUTE_WORK_OFFSET))) return APPLE_AGX_FALSE;
   /* Asahi queue/mod.rs run(): the threshold rises by the job's one

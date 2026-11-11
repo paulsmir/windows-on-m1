@@ -71,6 +71,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeWorkBuild(
   put64(work+0x22cu,i->CdmStreamEnd);
   /* EncoderParams begins at 0x25c: the sampler heap of bindless samplers
    * (sampler-less jobs keep the zero words they always had). */
+  put32(work+0x270u,i->EncoderMask);
   if(i->SamplerCount) {
     put64(work+0x274u,i->SamplerHeap);
     put32(work+0x27cu,i->SamplerCount);

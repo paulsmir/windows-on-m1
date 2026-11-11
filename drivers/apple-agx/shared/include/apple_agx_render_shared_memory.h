@@ -304,6 +304,9 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
    * NotifierComputeStamp and JobWordStamp retain their raw fence identity. */
   APPLE_AGX_BOOL ComputeQueueStamps;
   APPLE_AGX_U32 ComputeQueueStamp;
+  /* CM-1 (opt-in Wom1ComputeEncoderMask, read once at start, default off):
+   * compute work EncoderParams unk_mask 0xffffffff as Asahi; off = 0. */
+  APPLE_AGX_BOOL ComputeEncoderMask;
   /* rc83 receipt: optional progress callback of a render build, Point one
    * of APPLE_AGX_RENDER_BUILD_MARK_*; NULL (zeroed owner) = none. It only
    * timestamps and never changes the build. */

@@ -9597,6 +9597,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   /* Q23: use one queue event sequence for every compute user from startup.
    * Admission and firmware units share the existing default-off opt-in. */
   runtime->Initdata.RenderSharedMemory.ComputeQueueStamps = runtime->Depth2Prelude;
+  /* CM-1 (default off): REG_DWORD Wom1ComputeEncoderMask = 1 sets the
+   * compute EncoderParams unk_mask to 0xffffffff (Asahi compute.rs). */
+  runtime->Initdata.RenderSharedMemory.ComputeEncoderMask =
+      AdmissionPlatformSwitchEnabled(Context, L"Wom1ComputeEncoderMask") ? APPLE_AGX_TRUE : APPLE_AGX_FALSE;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   /* q1 persistence stays serial with legacy kick switches. Q6 owns the
    * explicit same-slot two-user exception and always enables persistence. */

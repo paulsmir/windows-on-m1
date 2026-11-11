@@ -172,6 +172,14 @@ unsigned AppleAgxG13ComputeWorkContractTests(void) {
     assert(AppleAgxG13ComputeWorkBuild(&i,work));
     assert(get64(work+0x274)==0x1500900000ULL && get32(work+0x27c)==3 && get32(work+0x280)==4);
     assert(get32(work+0x270)==0 && get64(work+0x288)==i.StampGpuAddress);
+    /* CM-1: the encoder mask reaches EncoderParams unk_mask and only it. */
+    {
+      unsigned char masked[sizeof(work)];
+      i.EncoderMask=0xffffffffu;assert(AppleAgxG13ComputeWorkBuild(&i,masked));
+      assert(get32(masked+0x270)==0xffffffffu);
+      memset(masked+0x270,0,4);assert(!memcmp(masked,work,sizeof(work)));
+      i.EncoderMask=0u;
+    }
     memcpy(before,work,sizeof(work));
     i.SamplerCount=0;assert(!AppleAgxG13ComputeWorkBuild(&i,work));
     i.SamplerCount=3;i.SamplerHeap=0x1500900008ULL;assert(!AppleAgxG13ComputeWorkBuild(&i,work));
