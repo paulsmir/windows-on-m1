@@ -5578,3 +5578,22 @@ file. `Wom1ComputeEncoderMask` joins the opt-in list (default off, unset in ever
   this project since EXP952 was measured with DWM on its legacy path.
 - Decision: S2-1d = the EXP2350 boot with that staging line skipped (single variable), health check first, then
   the probe, then measured runs only if the desktop is healthy. Spec in the handoff file.
+
+## UPDATE 2026-11-11T20:28Z (architect): S2-1d (EXP2351): black panel on DWM's normal output path; hypothesis not confirmed
+
+- EXP2351 = EXP2350 without DisableDDisplay (verified absent). The operator saw a black panel; the probe was
+  stopped after the windowed GM, no measured runs. DWM stayed alive (same pid, no dump), which the health check
+  wrongly took for a healthy desktop.
+- Receipts at the black panel: Set3Calls 427, V2Presents 0, PlaneOffCompletions 427, two-plane commits 0, refusals
+  0. Every Set3 call on DWM's normal path took our plane-off completion; DCP swaps applied normally. The defect is
+  in our KMD's Set3 handling (owning layer), cause not yet read from source.
+- KMTQAITYPE 19 and 20 still read 0 and the caps call still does not reach the miniport: "DisableDDisplay clears
+  dxgkrnl's support flags" is NOT CONFIRMED. New in the DWM trace on this path: events 215, 223, 224, 225 (18
+  each); candidates still OverlayCompatible 0.
+- Consequences: (1) with the two-plane switch set the driver cannot display DWM's normal path - a correctness
+  defect to fix before anything else on S2; whether the switch-unset driver has the same defect is NOT VERIFIED;
+  (2) all GravityMark numbers since EXP952 are on DWM's legacy path, and the normal path has never been measured;
+  (3) the health check of display experiments must test the picture (a present/scanout counter that advances with
+  a visible plane), not the DWM process.
+- Offline analysis running (Set3 forms against the pinned WDK, the DWM events, what KMTQAITYPE 19/20 return in
+  dxgkrnl). No further boot until it names the defect.
