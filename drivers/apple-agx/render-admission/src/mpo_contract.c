@@ -267,3 +267,14 @@ unsigned int AdmissionMpoEvaluatePrimary(const ADMISSION_MPO_INPUT *Input,
   Result->Slots[0].PlaneIndex = ADMISSION_MPO_NO_PLANE;
   return MpoFail(Result, reason, 0u);
 }
+
+unsigned int AdmissionMpoNoDmaFlipAccepted(unsigned int Flags,
+                                           unsigned int MpoReported) {
+  const unsigned int flip = 0x4u, noWait = 0x8u, mpo = 0x1000u;
+  if ((Flags & ~noWait) == flip)
+    return 1u;
+  return MpoReported != 0u && (Flags & ~(noWait | mpo)) == flip &&
+                 (Flags & mpo) != 0u
+             ? 1u
+             : 0u;
+}

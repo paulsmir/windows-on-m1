@@ -221,8 +221,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
 
   /* EXP956: dxgkrnl issues the FlipOnVSyncMmIo present with no allocation
    * list; there is no DMA to build and SetVidPnSourceAddress flips later. */
+  /* PF-1 (EXP2355/2356): for an MPO present dxgkrnl first calls this DDI
+   * with Flip | FlipWithNoWait | FlipWithMultiPlaneOverlay (0x100c) and
+   * nothing else; the Set3 that follows performs the flip.  Refusing it made
+   * the runtime mark DWM's device in error (ETW 467 reason 6) every cycle.
+   * FlipWithMultiPlaneOverlay only while MPO is reported (DRIVERCAPS). */
   if (device != NULL && Present != NULL && Present->pDmaBuffer == NULL &&
-      (Present->Flags.Value & ~0x8u) == 0x4u &&
+      AdmissionMpoNoDmaFlipAccepted(
+          Present->Flags.Value,
+          adapter != NULL && AdmissionScanoutMpoEffective(adapter) ? 1u : 0u) &&
       Present->NumSrcAllocations == 0u && Present->NumDstAllocations == 0u &&
       Present->pPrivateDriverData == NULL &&
       Present->PrivateDriverDataSize == 0u) {

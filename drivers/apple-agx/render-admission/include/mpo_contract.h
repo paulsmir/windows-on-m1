@@ -240,4 +240,15 @@ unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
 unsigned int AdmissionMpoEvaluatePrimary(const ADMISSION_MPO_INPUT *Input,
                                          ADMISSION_MPO_RESULT *Result);
 
+/* PF-1 (EXP2355/2356): the no-DMA flip DxgkDdiPresent (no DMA buffer, no
+ * source or destination allocation, no private data; SetVidPnSourceAddress
+ * or the Set3 that follows performs the flip).  Accepts DXGK_PRESENTFLAGS
+ * Flip (0x4), optionally with FlipWithNoWait (0x8); FlipWithMultiPlaneOverlay
+ * (0x1000, "a flip operation occurs between an overlay plane and the primary
+ * surface", Microsoft DXGK_PRESENTFLAGS) only while MpoReported is nonzero,
+ * the same live state DRIVERCAPS reports MPO from.  Every other bit refused.
+ * Returns 1 when accepted, else 0. */
+unsigned int AdmissionMpoNoDmaFlipAccepted(unsigned int Flags,
+                                           unsigned int MpoReported);
+
 #endif

@@ -767,6 +767,35 @@ static void TestSurfaceRules(void) {
         result.Slots[1].SurfaceBytes == 2560ULL * 4u * 1600u);
 }
 
+/* PF-1 (EXP2355/2356): the no-DMA flip DdiPresent.  0x4 Flip and 0x4|0x8
+ * FlipWithNoWait as before; 0x1000 FlipWithMultiPlaneOverlay only while the
+ * driver reports MPO; every other bit refused. */
+static void TestNoDmaFlipPresent(void) {
+  unsigned int flags, mpo;
+  for (mpo = 0u; mpo < 2u; ++mpo) {
+    CHECK(AdmissionMpoNoDmaFlipAccepted(0x4u, mpo) == 1u);
+    CHECK(AdmissionMpoNoDmaFlipAccepted(0xcu, mpo) == 1u);
+    CHECK(AdmissionMpoNoDmaFlipAccepted(0x1004u, mpo) == mpo);
+    CHECK(AdmissionMpoNoDmaFlipAccepted(0x100cu, mpo) == mpo);
+    CHECK(AdmissionMpoNoDmaFlipAccepted(0x0u, mpo) == 0u);
+    CHECK(AdmissionMpoNoDmaFlipAccepted(0x8u, mpo) == 0u);
+    CHECK(AdmissionMpoNoDmaFlipAccepted(0x1000u, mpo) == 0u);
+    CHECK(AdmissionMpoNoDmaFlipAccepted(0x1008u, mpo) == 0u);
+    CHECK(AdmissionMpoNoDmaFlipAccepted(0x1u, mpo) == 0u);
+    CHECK(AdmissionMpoNoDmaFlipAccepted(0x5u, mpo) == 0u);
+    CHECK(AdmissionMpoNoDmaFlipAccepted(0x3004u, mpo) == 0u);
+    CHECK(AdmissionMpoNoDmaFlipAccepted(0x104u, mpo) == 0u);
+    /* Exhaustive over the low 16 bits: accepted iff one of the four forms. */
+    for (flags = 0u; flags < 0x10000u; ++flags) {
+      unsigned int expect = flags == 0x4u || flags == 0xcu ||
+          (mpo != 0u && (flags == 0x1004u || flags == 0x100cu));
+      CHECK(AdmissionMpoNoDmaFlipAccepted(flags, mpo) == expect);
+    }
+    CHECK(AdmissionMpoNoDmaFlipAccepted(0x8000100cu, mpo) == 0u);
+  }
+  CHECK(AdmissionMpoNoDmaFlipAccepted(0x100cu, 7u) == 1u);
+}
+
 int main(void) {
   TestStableReasonValues();
   TestArgumentsAndCounts();
@@ -775,6 +804,7 @@ int main(void) {
   TestBoundaries();
   TestSurfaceRules();
   TestPropertySweep();
+  TestNoDmaFlipPresent();
   if (Failures != 0u) {
     fprintf(stderr, "mpo_contract_test: %u failure(s)\n", Failures);
     return EXIT_FAILURE;
