@@ -5536,3 +5536,17 @@ file. `Wom1ComputeEncoderMask` joins the opt-in list (default off, unset in ever
   caps DDI. Offline source/WDK check running; next boot only with a named unmet condition or a receipt that
   closes one.
 - Three S2 images ran without a DCP error; the scaled and two-layer m1n1 lines are hardware-run now.
+
+## UPDATE 2026-11-11T18:53Z (architect): band boot 3 (EXP2348); m1n1 lines cleared; fold-on band and stop lines
+
+- EXP2348, closedv5, package fd410f54c: FULL 7987 / 8032, PERF r2/r3 50.855 / 50.911, CS 53.400 / 53.048, state 6
+  95.7 / 96.1 % of the FULL arms, 46..85 C. The control did not return to 8050..8170, and s2v3 with the switch
+  (EXP2346) gave 8060: the FULL slide 8142 -> 8024 -> 7906 is boot-to-boot spread, not a cost of the scaled or
+  two-layer m1n1 lines. Both lines are CLEARED for use; the default image stays closedv5 until S2 needs s2v3.
+- U-6 closed for the never-latched case: the boot after S2-1 shows a normal DCP init and 0 DCP error lines.
+- Fold-on band from three control boots (same source, closedv5): FULL arms 8047, 7962 (EXP2339), 8025, 8170
+  (EXP2341), 7987, 8032 (EXP2348); boot means 8004 / 8098 / 8010; single arms span 7962..8170 (2.6 %).
+  Stop lines from now on (one-sided, replace 7538 / 48.65): FULL arm below 7880 (lowest control arm - 1 %),
+  PERF mean(r2,r3) below 49.7 (lowest control mean 50.74 - 2 %). A single FULL arm cannot support a claim
+  smaller than 2.6 %; lever verdicts on FULL need two arms per boot or the per-job rows.
+- Best fold-on FULL arm 8170 = 82.1 % of 9946; control mean 8037 = 80.8 %.
