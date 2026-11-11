@@ -54,6 +54,7 @@
 #include "agx_d3d12_probe_cs_texture1d_array_store.h"
 #include "agx_d3d12_probe_cs.h"
 #include "agx_d3d12_probe_q3_compute.h"
+#include "agx_d3d12_probe_cs_clktwin.h"
 #include "agx_d3d12_probe_cs_cb.h"
 #include "agx_d3d12_probe_cs_table.h"
 #include "agx_d3d12_probe_cs_srv.h"
@@ -9702,6 +9703,229 @@ static int ov_pair_heavy(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     return ov_pair_run(device, queue, fence, base, 1);
 }
 
+/* CLKTWIN (architect 2026-11-11T15:35Z; clock-twin REPORT.md Part B): effective parallel width of one compute job.
+ * Arithmetic-only kernel (agx_d3d12_probe_cs_clktwin.h, R from root constants). Shapes: N32 (one 32-thread group),
+ * L(G) numthreads 1024 for G = 1..16 (a 1024-thread group fills one shader core), W(G) for G = 56 and 224. Each case
+ * runs as a list with 1 and with 5 dispatches (UAV barrier between), per-dispatch = (T5 - T1) / 4 on the firmware
+ * compute Start/End of the job (Q3 completion escape, needs Wom1JobDiagnostics), best of 3. A 2 s warm-up of W56
+ * filler lists, and a W56 filler queued behind every timed list, keep the GPU busy while the CPU waits (P6 hold).
+ * Prints the whole ladder; G* = first G whose time steps up (> 1.25 x L1); 224 / (T(W224) / T(L1)) = cores. */
+#define CLKTWIN_R 10000u
+static HRESULT clktwin_pso(ID3D12Device *device, ID3D12RootSignature *root, const char *nt, ID3D12PipelineState **pso) {
+    HMODULE compiler=LoadLibraryExW(L"d3dcompiler_47.dll",NULL,LOAD_LIBRARY_SEARCH_SYSTEM32);
+    pD3DCompile compile=compiler ? (pD3DCompile)(void *)GetProcAddress(compiler,"D3DCompile"):NULL;
+    D3D_SHADER_MACRO defines[2]={{"NT",nt},{NULL,NULL}};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC desc={0};
+    ID3DBlob *shader=NULL, *errors=NULL;
+    HRESULT hr=compile ? compile(clktwin_hlsl,sizeof(clktwin_hlsl)-1,"clktwin",defines,NULL,"main","cs_5_0",
+        D3DCOMPILE_ENABLE_STRICTNESS,0,&shader,&errors):E_FAIL;
+    if (SUCCEEDED(hr)) {
+        desc.pRootSignature=root;
+        desc.CS.pShaderBytecode=ID3D10Blob_GetBufferPointer(shader);
+        desc.CS.BytecodeLength=ID3D10Blob_GetBufferSize(shader);
+        hr=ID3D12Device_CreateComputePipelineState(device,&desc,&IID_ID3D12PipelineState,(void **)pso);
+    }
+    if (errors) { printf("CLKTWIN compiler NT=%s: %s\n",nt,(const char *)ID3D10Blob_GetBufferPointer(errors)); ID3D10Blob_Release(errors); }
+    if (shader) ID3D10Blob_Release(shader);
+    if (compiler) FreeLibrary(compiler);
+    return hr;
+}
+static HRESULT clktwin_record(ID3D12GraphicsCommandList *list, ID3D12CommandAllocator *allocator,
+    ID3D12PipelineState *pso, ID3D12RootSignature *root, ID3D12Resource *outv, UINT groups, UINT dispatches,
+    const UINT constants[3]) {
+    D3D12_RESOURCE_BARRIER uavb={D3D12_RESOURCE_BARRIER_TYPE_UAV};
+    HRESULT hr=ID3D12CommandAllocator_Reset(allocator);
+    if (SUCCEEDED(hr)) hr=ID3D12GraphicsCommandList_Reset(list,allocator,pso);
+    if (FAILED(hr)) return hr;
+    uavb.UAV.pResource=outv;
+    ID3D12GraphicsCommandList_SetComputeRootSignature(list,root);
+    ID3D12GraphicsCommandList_SetComputeRoot32BitConstants(list,0,3,constants,0);
+    ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list,1,ID3D12Resource_GetGPUVirtualAddress(outv));
+    for (UINT d=0;d<dispatches;++d) {
+        if (d) ID3D12GraphicsCommandList_ResourceBarrier(list,1,&uavb);
+        ID3D12GraphicsCommandList_Dispatch(list,groups,1,1);
+    }
+    return ID3D12GraphicsCommandList_Close(list);
+}
+static HRESULT clktwin_exec(ID3D12CommandQueue *queue, ID3D12Fence *fence, ID3D12GraphicsCommandList *list, UINT64 signal) {
+    ID3D12CommandList *lists[]={(ID3D12CommandList *)list};
+    ID3D12CommandQueue_ExecuteCommandLists(queue,1,lists);
+    return ID3D12CommandQueue_Signal(queue,fence,signal);
+}
+static HRESULT clktwin_wait(ID3D12Fence *fence, HANDLE event, UINT64 signal) {
+    if (ID3D12Fence_GetCompletedValue(fence)>=signal) return S_OK;
+    if (FAILED(ID3D12Fence_SetEventOnCompletion(fence,signal,event))) return E_FAIL;
+    return WaitForSingleObject(event,10000)==WAIT_OBJECT_0 && ID3D12Fence_GetCompletedValue(fence)>=signal ? S_OK : E_FAIL;
+}
+/* The timed list is submitted before its filler, so its record is the oldest compute record of this
+ * process submitted after begin (fillers of earlier iterations were submitted before begin). */
+static int clktwin_pick(const Q3_GPU_COMPLETION_QUERY *q, UINT64 cursor, UINT pid, UINT64 begin, double *ms) {
+    const Q3_GPU_COMPLETION *r=NULL;
+    if (!q->Frequency || q->Lost || q->Reset || q->Count>Q3_GPU_COMPLETION_PAGE) return 0;
+    for (UINT i=0;i<q->Count;++i) {
+        const Q3_GPU_COMPLETION *c=&q->Record[i];
+        if (c->Sequence<=cursor || c->ProcessId!=pid || c->Kind!=Q3_GPU_TIMESTAMP_COMPUTE || c->Status || c->SubmitQpc<begin) continue;
+        if (!r || c->Sequence<r->Sequence) r=c;
+    }
+    if (!r || !r->Start || r->End<=r->Start) return 0;
+    *ms=1000.0*(double)(r->End-r->Start)/(double)q->Frequency;
+    return 1;
+}
+static int clk_twin(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    enum { CASES = 19, BYTES = 1u << 20 };
+    static const char *names[CASES]={"N32","L1","L2","L3","L4","L5","L6","L7","L8","L9","L10","L11","L12","L13","L14",
+                                      "L15","L16","W56","W224"};
+    static const UINT groups[CASES]={1,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,56,224};
+    const float a=0.999f, b=0.001f;
+    UINT constants[3];
+    D3D12_ROOT_PARAMETER params[2]={{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS},{D3D12_ROOT_PARAMETER_TYPE_UAV}};
+    D3D12_ROOT_SIGNATURE_DESC root_desc={2,params,0,NULL,D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    ID3DBlob *blob=NULL, *errors=NULL;
+    ID3D12RootSignature *root=NULL;
+    ID3D12PipelineState *pso32=NULL, *pso1024=NULL;
+    ID3D12Resource *outv=c21_buffer(device,D3D12_HEAP_TYPE_DEFAULT,BYTES,D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    ID3D12Resource *readback=c21_buffer(device,D3D12_HEAP_TYPE_READBACK,BYTES,D3D12_RESOURCE_FLAG_NONE,D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *alloc[3]={NULL,NULL,NULL};
+    ID3D12GraphicsCommandList *list[3]={NULL,NULL,NULL}; /* 0 timed, 1/2 alternating W56 fillers */
+    HANDLE event=CreateEventA(NULL,FALSE,FALSE,NULL);
+    Q3_GPU_COMPLETION_QUERY *rec=(Q3_GPU_COMPLETION_QUERY *)calloc(1,sizeof(*rec));
+    double best[CASES][2], wall[CASES][2];
+    UINT64 signal=base, filler_signal[2]={0,0}, cursor=0;
+    UINT fill=0, missing=0;
+    const UINT pid=(UINT)GetCurrentProcessId();
+    HRESULT hr=outv && readback && event && rec ? S_OK : E_FAIL;
+    memcpy(&constants[1],&a,4); memcpy(&constants[2],&b,4); constants[0]=CLKTWIN_R;
+    for (UINT m=0;m<CASES;++m) best[m][0]=best[m][1]=wall[m][0]=wall[m][1]=1e30;
+    params[0].Constants.ShaderRegister=0; params[0].Constants.Num32BitValues=3;
+    params[1].Descriptor.ShaderRegister=0;
+    if (SUCCEEDED(hr)) hr=D3D12SerializeRootSignature(&root_desc,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&errors);
+    if (SUCCEEDED(hr)) hr=ID3D12Device_CreateRootSignature(device,0,ID3D10Blob_GetBufferPointer(blob),ID3D10Blob_GetBufferSize(blob),
+                                                         &IID_ID3D12RootSignature,(void **)&root);
+    if (SUCCEEDED(hr)) hr=clktwin_pso(device,root,"32",&pso32);
+    if (SUCCEEDED(hr)) hr=clktwin_pso(device,root,"1024",&pso1024);
+    for (UINT i=0;i<3 && SUCCEEDED(hr);++i) {
+        hr=ID3D12Device_CreateCommandAllocator(device,D3D12_COMMAND_LIST_TYPE_DIRECT,&IID_ID3D12CommandAllocator,(void **)&alloc[i]);
+        if (SUCCEEDED(hr)) hr=ID3D12Device_CreateCommandList(device,0,D3D12_COMMAND_LIST_TYPE_DIRECT,alloc[i],pso1024,
+                                                             &IID_ID3D12GraphicsCommandList,(void **)&list[i]);
+        if (SUCCEEDED(hr)) hr=ID3D12GraphicsCommandList_Close(list[i]);
+    }
+    for (UINT i=1;i<3 && SUCCEEDED(hr);++i) hr=clktwin_record(list[i],alloc[i],pso1024,root,outv,56,1,constants);
+    printf("CLKTWIN setup R=%u a=%.3f b=%.3f hr=0x%08lx\n",CLKTWIN_R,a,b,(unsigned long)hr);
+    /* Oracle: one L(1) dispatch, read back, compare four lanes with fused and unfused CPU forms. */
+    if (SUCCEEDED(hr)) {
+        hr=ID3D12CommandAllocator_Reset(alloc[0]);
+        if (SUCCEEDED(hr)) hr=ID3D12GraphicsCommandList_Reset(list[0],alloc[0],pso1024);
+        if (SUCCEEDED(hr)) {
+            ID3D12GraphicsCommandList_SetComputeRootSignature(list[0],root);
+            ID3D12GraphicsCommandList_SetComputeRoot32BitConstants(list[0],0,3,constants,0);
+            ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list[0],1,ID3D12Resource_GetGPUVirtualAddress(outv));
+            ID3D12GraphicsCommandList_Dispatch(list[0],1,1,1);
+            transition(list[0],outv,D3D12_RESOURCE_STATE_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_COPY_SOURCE);
+            ID3D12GraphicsCommandList_CopyBufferRegion(list[0],readback,0,outv,0,4096);
+            transition(list[0],outv,D3D12_RESOURCE_STATE_COPY_SOURCE,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            hr=ID3D12GraphicsCommandList_Close(list[0]);
+        }
+        if (SUCCEEDED(hr)) hr=clktwin_exec(queue,fence,list[0],++signal);
+        if (SUCCEEDED(hr)) hr=clktwin_wait(fence,event,signal);
+        if (SUCCEEDED(hr)) {
+            static const UINT lanes[4]={0,1,511,1023};
+            D3D12_RANGE range={0,4096};
+            float *v=NULL;
+            UINT fused=0, unfused=0;
+            hr=ID3D12Resource_Map(readback,0,&range,(void **)&v);
+            for (UINT i=0;i<4 && SUCCEEDED(hr) && v;++i) {
+                const float f=clktwin_expected(lanes[i],CLKTWIN_R,a,b,1), u=clktwin_expected(lanes[i],CLKTWIN_R,a,b,0);
+                UINT gv, fv, uv; memcpy(&gv,&v[lanes[i]],4); memcpy(&fv,&f,4); memcpy(&uv,&u,4);
+                fused+=gv==fv; unfused+=gv==uv;
+                printf("CLKTWIN oracle lane %u gpu 0x%08x fused 0x%08x unfused 0x%08x\n",lanes[i],gv,fv,uv);
+            }
+            if (v) ID3D12Resource_Unmap(readback,0,NULL);
+            printf("CLKTWIN_ORACLE fused_match %u/4 unfused_match %u/4 %s\n",fused,unfused,
+                   fused==4 ? "FFMA" : unfused==4 ? "MUL+ADD" : "NEITHER (reassociated sum or other code)");
+        }
+    }
+    /* Warm-up: 2 s of back-to-back W56 fillers, two in flight. */
+    if (SUCCEEDED(hr)) {
+        LARGE_INTEGER f, t0, t;
+        UINT lists_run=0;
+        QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
+        do {
+            if (filler_signal[fill]) hr=clktwin_wait(fence,event,filler_signal[fill]);
+            if (SUCCEEDED(hr)) hr=clktwin_exec(queue,fence,list[1+fill],filler_signal[fill]=++signal);
+            fill^=1u; ++lists_run;
+            QueryPerformanceCounter(&t);
+        } while (SUCCEEDED(hr) && (t.QuadPart-t0.QuadPart)<2*f.QuadPart);
+        printf("CLKTWIN warm-up lists %u hr=0x%08lx\n",lists_run,(unsigned long)hr);
+        if (SUCCEEDED(hr)) hr=q3_completions(device,0,rec);
+        if (SUCCEEDED(hr)) cursor=rec->Newest;
+    }
+    for (UINT rep=0;rep<3u && SUCCEEDED(hr);++rep)
+        for (UINT m=0;m<CASES && SUCCEEDED(hr);++m)
+            for (UINT k=0;k<2u && SUCCEEDED(hr);++k) {
+                const UINT dispatches=k ? 5u : 1u;
+                LARGE_INTEGER f, t0, t1;
+                UINT64 timed;
+                double ms=0.0;
+                int got=0;
+                hr=clktwin_record(list[0],alloc[0],m ? pso1024 : pso32,root,outv,groups[m],dispatches,constants);
+                if (FAILED(hr)) break;
+                if (filler_signal[fill]) hr=clktwin_wait(fence,event,filler_signal[fill]);
+                QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
+                if (SUCCEEDED(hr)) hr=clktwin_exec(queue,fence,list[0],timed=++signal);
+                if (SUCCEEDED(hr)) hr=clktwin_exec(queue,fence,list[1+fill],filler_signal[fill]=++signal);
+                fill^=1u;
+                if (SUCCEEDED(hr)) hr=clktwin_wait(fence,event,timed);
+                QueryPerformanceCounter(&t1);
+                for (UINT tries=0;tries<4 && SUCCEEDED(hr) && !got;++tries) {
+                    if (tries) Sleep(2);
+                    if (SUCCEEDED(q3_completions(device,cursor,rec))) got=clktwin_pick(rec,cursor,pid,(UINT64)t0.QuadPart,&ms);
+                }
+                if (got) cursor=rec->Cursor; else ++missing;
+                if (got && ms<best[m][k]) best[m][k]=ms;
+                {
+                    const double wms=(double)(t1.QuadPart-t0.QuadPart)*1000.0/(double)f.QuadPart;
+                    if (wms<wall[m][k]) wall[m][k]=wms;
+                    printf("CLKTWIN rep %u case %s groups %u dispatches %u fw_ms %s%.4f wall_ms %.3f hr=0x%08lx\n",rep,names[m],
+                           groups[m],dispatches,got ? "" : "missing ",got ? ms : 0.0,wms,(unsigned long)hr);
+                }
+            }
+    if (filler_signal[0]) (void)clktwin_wait(fence,event,filler_signal[0]);
+    if (filler_signal[1]) (void)clktwin_wait(fence,event,filler_signal[1]);
+    if (SUCCEEDED(hr)) {
+        double per[CASES], l1;
+        UINT gstar=0;
+        for (UINT m=0;m<CASES;++m) {
+            per[m]=best[m][0]<1e29 && best[m][1]<1e29 ? (best[m][1]-best[m][0])/4.0 : -1.0;
+            printf("CLKTWIN_CASE %s groups %u threads %u t1_ms %.4f t5_ms %.4f per_dispatch_ms %.4f wall1_ms %.3f wall5_ms %.3f\n",
+                   names[m],groups[m],m ? groups[m]*1024u : 32u,best[m][0],best[m][1],per[m],wall[m][0],wall[m][1]);
+        }
+        l1=per[1];
+        printf("CLKTWIN_LADDER");
+        for (UINT m=1;m<=16;++m) printf(" L%u=%.4f(%.3f)",groups[m],per[m],l1>0 ? per[m]/l1 : 0.0);
+        printf("\n");
+        for (UINT m=2;m<=16 && !gstar;++m) if (l1>0 && per[m]>1.25*l1) gstar=groups[m];
+        printf("CLKTWIN_GSTAR %u (first G with L(G) > 1.25 x L1; 8 = seven cores in parallel, 7 = six)\n",gstar);
+        printf("CLKTWIN_WIDE W56/L1 %.3f (56/7 = 8) W224/L1 %.3f (224/7 = 32) cores_from_W224 %.3f cores_from_W56 %.3f\n",
+               l1>0 ? per[17]/l1 : 0.0,l1>0 ? per[18]/l1 : 0.0,per[18]>0 ? 224.0*l1/per[18] : 0.0,per[17]>0 ? 56.0*l1/per[17] : 0.0);
+        printf("CLKTWIN_N32 per_dispatch_ms %.4f ns_per_iter %.3f cycles_per_iter_at_1278MHz %.2f (32 FFMA per iteration)\n",
+               per[0],per[0]*1e6/CLKTWIN_R,per[0]*1e6/CLKTWIN_R*1.278);
+        printf("CLKTWIN_RECORDS missing %u\n",missing);
+    }
+    printf("AGX_D3D12_CLKTWIN: %s\n",SUCCEEDED(hr) && !missing ? "PASS" : "FAIL");
+    for (UINT i=0;i<3;++i) { if (list[i]) ID3D12GraphicsCommandList_Release(list[i]); if (alloc[i]) ID3D12CommandAllocator_Release(alloc[i]); }
+    if (pso32) ID3D12PipelineState_Release(pso32);
+    if (pso1024) ID3D12PipelineState_Release(pso1024);
+    if (root) ID3D12RootSignature_Release(root);
+    if (errors) ID3D10Blob_Release(errors);
+    if (blob) ID3D10Blob_Release(blob);
+    if (outv) ID3D12Resource_Release(outv);
+    if (readback) ID3D12Resource_Release(readback);
+    if (event) CloseHandle(event);
+    free(rec);
+    return SUCCEEDED(hr) && !missing ? 0 : 1;
+}
+
 static const struct { const char *name; probe_step step; } named_steps[] = {
     {"OVPAIR", ov_pair},
     {"OVPAIRH", ov_pair_heavy},
@@ -9711,6 +9935,7 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"MEMBWHOT", mem_bw_hot},
     {"MEMBWLONG", mem_bw_long},
     {"MEMBWATOM", mem_bw_atom},
+    {"CLKTWIN", clk_twin},
     {"Q3PC", q3_pc}, {"Q3CP", q3_cp},
     {"Q3CR", q3_cr}, {"Q3RC", q3_rc_pair}, {"Q3RCR", q3_rcr}, {"Q3RR", q3_rr},
     {"RC57C", step_rc57c}, {"RC57U", step_rc57u}, {"RC57M", step_rc57m}, {"RC59G", step_rc59g}, {"RC63G", rc63_gravitymark_stream}, {"RC89S", rc89_stream_capacity},
