@@ -77735,3 +77735,9 @@ EXP2339 ACTUAL 2026-11-11T11:17:27Z:
 - WER_REPORTS 2 (the 2026-10-06 files).
 - Rollback rec2339h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE.
 - Ledger role (architect): fold-on band boot 1 of 3. Verdicts (T5b FULL rule, STATS-NOPS FULL clause, CS artifact size) are the architect's.
+
+EXP2339 VERDICT 2026-11-11T11:22:02Z (architect; details in GPU_CURRENT_STATE.md UPDATE of the same stamp):
+- T5b FULL: CLOSED (mean +0.21 %, ft5a below f0a). Correction to the ACTUAL above: ft5a 7969 is below f0a 8047 only; it is above f0b 7962.
+- STATS-NOPS FULL clause: not met (+0.63 % >= +0.5 %), arm not rejected by the rule; effect inside the control spread (1.06 %), no late-scene growth: INCONCLUSIVE, backlog, no boot of its own.
+- CS wait-form artifact -1.75 % (r4 51.293 vs 52.206); gate baseline corrected to 50.832 (eb0b9c524).
+- Fold-on band boot 1 of 3: FULL 8047 / 7962, PERF mean(r2,r3) 50.611.

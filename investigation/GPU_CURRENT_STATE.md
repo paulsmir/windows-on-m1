@@ -5160,3 +5160,47 @@ decided in dwmcore only; that read is next (dwmcore.dll from the guest after EXP
 from msdl). No package and no MPO-ASK boot before it. The S2 capability set is one indivisible contract by the
 start checks above (flag + plane count + Set3 + Check3 + caps DDI); it goes into the spec as ATOMIC CONTRACT.
 Ranking unchanged.
+
+## UPDATE 2026-11-11T11:22:02Z -- architect: EXP2339 verdicts (T5b FULL closed; STATS-NOPS not established; CS wait-form correction; band boot 1)
+
+Numbers re-read in `.local/experiments/EXP2339-t5b-full/evidence/EXP2339` (out files, umd logs, cs logs, perf-gate.txt).
+Registry of the boot: Wom1JobDiagnostics=1, Wom1CrossProcessPairs=1, Wom1SubmitRequeue=1, every other opt-in unset;
+package fd410f54c; ntoskrnl 26100.9974; quiet gate clean before every FULL arm; cmd wait form in every wait.
+
+FULL (order as run): f0a 8047, ft5a 7969, fna 8084, fnb 8026, ft5b 8074, f0b 7962. Same-boot control spread
+f0a - f0b = 85 points (1.06 %). PERF w / r2 / r3 fps_frames 50.053 / 50.597 / 50.624. FULL arms have no UMD log, so
+there is no per-job split for them; the per-scene frame rates below come from the `-times` files (frames after 20 s).
+
+| arm | sc0 | sc1 | sc2 | sc3 | sc4 | sc5 |
+|---|---|---|---|---|---|---|
+| f0a | 48.77 | 52.56 | 47.41 | 64.22 | 39.71 | 48.45 |
+| f0b | 48.39 | 52.10 | 47.28 | 63.71 | 39.33 | 47.67 |
+| ft5a | 48.65 | 51.82 | 47.34 | 63.85 | 39.28 | 47.61 |
+| ft5b | 49.03 | 53.49 | 48.33 | 65.06 | 39.94 | 46.01 |
+| fna | 49.10 | 53.15 | 47.92 | 64.32 | 39.51 | 47.86 |
+| fnb | 48.70 | 51.75 | 47.95 | 64.39 | 39.37 | 48.31 |
+
+1. T5b FULL (rule of EXP2329 BEFORE: mean +1.0 % AND both ft5 above both f0): mean(ft5) 8021.5 against mean(f0)
+   8004.5 = +0.21 %; ft5a (7969) is below f0a (8047). Both conditions fail. T5b is CLOSED for FULL as well; the two
+   env switches stay opt-in and unset; no default-flip package. Correction to the EXP2339 ACTUAL wording: ft5a is
+   below f0a only; it is 7 points above f0b.
+2. STATS-NOPS (rule of EXP2331: reject when |delta R5 3D| < 0.04 ms in both PERF pairs AND FULL mean(fn) - mean(f0)
+   < +0.5 %): the PERF clause was met in EXP2331; the FULL clause is not: mean(fn) 8055.0 = +0.63 %. By the rule the
+   arm is NOT rejected. It is not established either: +0.63 % is inside the same-boot control spread (fnb 8026 is
+   below f0a 8047), and the predicted growth in the late scenes is absent (sc4 -0.20 %, sc5 +0.05 %); only sc2 has
+   both fn arms above both f0 arms (+1.2 %). Not verified: that the switch was active in the FULL arms (no UMD log
+   there; the probe sets the env per arm). Verdict: INCONCLUSIVE, upper bound about +0.6 % FULL. The production
+   variant (exact PSInvocations at lower cost) goes to the backlog below the active levers; it gets no boot of its
+   own. `APPLE_AGX_D3D12_STATS_NO_PS` stays a diagnostic, never a default.
+3. CS wait-form artifact: r4 with the old powershell loop 51.293 against mean(r2, r3) 52.206 with the cmd form =
+   -1.75 % (one r4 run, all three valid). The gate baseline is corrected once: 49.943 x 52.206 / 51.293 = 50.832
+   (`investigation/perf-baseline.json`, eb0b9c524; the EXP2220 value stays in the source text). The tip is +2.7 %
+   above the corrected baseline. Both gate baselines (CS, and GravityMark 40.770 which the tip passes by 12 %) are
+   re-based to the tip level together with the fold-on bands, after three cmd-form boots.
+4. Fold-on band, boot 1 of 3: FULL f0 8047 / 7962 (mean 8004.5); PERF mean(r2, r3) 50.611. Stop lines stay
+   7538 / 48.65 until boots 2 and 3 exist.
+5. Against macOS (9946): this boot's control mean is 80.5 %. No lever in this boot moved it.
+
+Bench order now: TDR-H0 (own boot, ends in 0x116 by design) -> band boot 2 (package fd410f54c unchanged, control
+arms only) -> FS-D1. The next GravityMark lever (plane route S2) waits for the dwmcore read; msdl has no public
+dwmcore.pdb for 26200.9974 (HTTP 404, also for the builder's x64 build), so that read runs without symbols.
