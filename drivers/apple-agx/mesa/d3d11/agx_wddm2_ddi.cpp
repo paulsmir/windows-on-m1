@@ -33,6 +33,8 @@
 #include "util/format/u_format.h"
 
 #include "agx_d3d11_ddi.h"
+#define AGX_DXGI_MPO_DDI_TYPES
+#include "agx_dxgi_mpo.h"
 
 extern "C" VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
                                           const UINT *Values, UINT Count);
@@ -1067,27 +1069,75 @@ ReclaimResources(DXGI_DDI_ARG_RECLAIMRESOURCES *args)
    return S_OK;
 }
 
-/* No multiplane overlays: the primary plane only. */
+/* S2: multiplane overlays follow the kernel (agx_dxgi_mpo.h). Without the
+ * kernel's two-plane answer: the primary plane only, as before S2. */
+bool
+kernel_two_planes(DXGI_DDI_HDEVICE hDevice, UINT vidPnSourceId)
+{
+   Device *device = CastDevice(hDevice);
+   return device && device->windows &&
+          AgxD3d10WindowsKernelMpoTwoPlanes(device->windows, vidPnSourceId);
+}
+
 HRESULT APIENTRY
 GetMultiplaneOverlayCaps(DXGI_DDI_ARG_GETMULTIPLANEOVERLAYCAPS *args)
 {
    if (!args)
       return E_INVALIDARG;
-   args->MultiplaneOverlayCaps.MaxPlanes = 1;
-   args->MultiplaneOverlayCaps.NumCapabilityGroups = 0;
+   AgxDxgiMpoFillCaps(kernel_two_planes(args->hDevice, args->VidPnSourceId),
+                      &args->MultiplaneOverlayCaps);
    return S_OK;
 }
 
 HRESULT APIENTRY
 GetMultiplaneOverlayGroupCaps(DXGI_DDI_ARG_GETMULTIPLANEOVERLAYGROUPCAPS *args)
 {
+   if (args && AgxDxgiMpoFillGroupCaps(kernel_two_planes(args->hDevice, args->VidPnSourceId),
+                                       args->GroupIndex, &args->MultiplaneOverlayGroupCaps))
+      return S_OK;
    dxgi_receipt("reject-dxgi-mpo-group", E_INVALIDARG, args ? args->GroupIndex : ~0u, 0);
    return E_INVALIDARG;
+}
+
+/* Both DXGI plane forms carry LayerIndex, Enabled, hResource and
+ * SubResourceIndex; the attributes stay with the runtime, which passes them
+ * to the kernel (DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3). Every
+ * plane must be one of this device's presentation resources. */
+template <typename Plane>
+HRESULT
+present_planes(const char *stage, DXGI_DDI_HDEVICE hDevice, void *dxgiContext, UINT count,
+               const Plane *planes)
+{
+   Device *device = CastDevice(hDevice);
+   AGX_DXGI_MPO_PLANE neutral[AGX_DXGI_MPO_PLANES] = {};
+   AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *records[AGX_DXGI_MPO_PLANES] = {};
+   unsigned reason = !planes ? AgxDxgiMpoPlanesArgument :
+                     count == 0u || count > AGX_DXGI_MPO_PLANES ? AgxDxgiMpoPlanesCount :
+                                                                  AgxDxgiMpoPlanesOk;
+   for (UINT i = 0; reason == AgxDxgiMpoPlanesOk && i < count; ++i) {
+      Resource *resource = CastResource(planes[i].hResource);
+      const bool owned = device && resource && resource->owner_device == device &&
+                         resource->presentation;
+      neutral[i] = AgxDxgiMpoPlane(planes[i].LayerIndex, planes[i].Enabled, owned,
+                                   planes[i].SubResourceIndex);
+      records[i] = owned ? resource->presentation : NULL;
+   }
+   if (reason == AgxDxgiMpoPlanesOk)
+      reason = AgxDxgiMpoCheckPlanes(neutral, count);
+   if (reason != AgxDxgiMpoPlanesOk) {
+      dxgi_receipt(stage, E_INVALIDARG, reason, count);
+      return E_INVALIDARG;
+   }
+   return AgxD3d10WindowsPresentationSubmitPlanes(device->windows, records, neutral, count,
+                                                  dxgiContext);
 }
 
 HRESULT APIENTRY
 PresentMultiplaneOverlay(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args)
 {
+   if (args && kernel_two_planes(args->hDevice, args->VidPnSourceId))
+      return present_planes("reject-dxgi-mpo-present", args->hDevice, args->pDXGIContext,
+                            args->PresentPlaneCount, args->pPresentPlanes);
    dxgi_receipt("reject-dxgi-mpo-present", E_NOTIMPL, args ? args->PresentPlaneCount : ~0u, 0);
    return E_NOTIMPL;
 }
@@ -1095,6 +1145,9 @@ PresentMultiplaneOverlay(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args)
 HRESULT APIENTRY
 PresentMultiplaneOverlay1(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY1 *args)
 {
+   if (args && kernel_two_planes(args->hDevice, args->VidPnSourceId))
+      return present_planes("reject-dxgi-mpo-present1", args->hDevice, args->pDXGIContext,
+                            args->PresentPlaneCount, args->pPresentPlanes);
    dxgi_receipt("reject-dxgi-mpo-present1", E_NOTIMPL, args != NULL, 1);
    return E_NOTIMPL;
 }
@@ -1104,7 +1157,9 @@ CheckMultiplaneOverlayColorSpaceSupport(DXGI_DDI_ARG_CHECKMULTIPLANEOVERLAYCOLOR
 {
    if (!args)
       return E_INVALIDARG;
-   args->Supported = FALSE;
+   args->Supported = AgxDxgiMpoColorSpaceSupported(
+                        kernel_two_planes(args->hDevice, args->VidPnSourceId),
+                        (unsigned)args->Format, (unsigned)args->ColorSpace) ? TRUE : FALSE;
    return S_OK;
 }
 

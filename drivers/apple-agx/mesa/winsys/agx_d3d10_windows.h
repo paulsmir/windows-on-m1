@@ -129,6 +129,19 @@ HRESULT AgxD3d10WindowsPresentationSubmitSurfaces(
     AGX_D3D10_WINDOWS_DEVICE *Device,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *const *Resources,
     UINT Count, PVOID DxgiContext);
+/* S2: TRUE only when the kernel answers D3DKMTGetMultiPlaneOverlayCaps for
+ * VidPnSourceId with MaxPlanes 2 and MaxRGBPlanes 2 (agx_dxgi_mpo.h);
+ * FALSE on every failure. Cached per adapter and source. */
+BOOL AgxD3d10WindowsKernelMpoTwoPlanes(AGX_D3D10_WINDOWS_DEVICE *Device,
+                                       UINT VidPnSourceId);
+/* S2: flush, then one pfnPresentMultiplaneOverlayCb with Resources[i] as
+ * plane i (Planes: the neutral planes, AgxDxgiMpoCheckPlanes must accept
+ * them). */
+struct _AGX_DXGI_MPO_PLANE;
+HRESULT AgxD3d10WindowsPresentationSubmitPlanes(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *const *Resources,
+    const struct _AGX_DXGI_MPO_PLANE *Planes, UINT Count, PVOID DxgiContext);
 HRESULT AgxD3d10WindowsPresentationSetDisplayMode(
     AGX_D3D10_WINDOWS_DEVICE *Device,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource);

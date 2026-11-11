@@ -13,6 +13,8 @@ extern "C" {
 }
 #include "agx_win32_asahi_scene.h"
 #include "agx_d3d10_windows.h"
+#define AGX_DXGI_MPO_DDI_TYPES
+#include "../d3d11/agx_dxgi_mpo.h"
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 
@@ -286,6 +288,11 @@ struct AGX_D3D10_WINDOWS_ADAPTER {
   ULONG Devices;
   AGX_D3D10_WINDOWS_DEVICE *Owners;
   AGX_D3D10_WINDOWS_TERMINAL *Terminal;
+  /* S2: the kernel's two-plane answer for MpoSource, under Lock
+   * (AgxD3d10WindowsKernelMpoTwoPlanes). */
+  BOOL MpoQueried;
+  UINT MpoSource;
+  BOOL MpoTwoPlanes;
 };
 struct AGX_D3D10_WINDOWS_DEVICE {
   ADMISSION_UMD_DEVICE Runtime;
@@ -1092,6 +1099,46 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
   return AgxD3d10WindowsPresentationSubmitSurfaces(Device,&Resource,1u,DxgiContext);
 }
 
+/* The flush every native present performs before its present callback: one
+ * flush covers the rendering of all Resources, then each surface's pending
+ * direct map is published. Receipts are the present path's (EXP898/EXP899);
+ * on a failed context flush the caller ends with E_FAIL. */
+static HRESULT flush_for_present(AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *const *Resources,UINT Count) {
+  InterlockedIncrement(&AgxD3d10Presents);
+  InterlockedIncrement(&AgxD3d10DdiWindowPresents);
+  APPLE_AGX_U32 before[16],after[16],bindings[16];
+  AgxWin32AsahiContextDiagnostic(Device->Context,before,bindings);
+  int flushed=AgxWin32AsahiContextFlushForPresent(Device->Context);
+  AgxWin32AsahiContextDiagnostic(Device->Context,after,bindings);
+  UINT contextState[12]={before[0],before[1],before[2],before[3],
+      after[0],after[1],after[2],after[3],
+      (UINT)Device->Runtime.LastScreenError,(UINT)Device->Runtime.DrawTerminal,
+      (UINT)(uintptr_t)Device->Context,
+      (UINT)((uint64_t)(uintptr_t)Device->Context>>32)};
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeContextFlush,
+      flushed?S_OK:E_FAIL,contextState,ARRAYSIZE(contextState));
+  if(!flushed) return E_FAIL;
+  HRESULT result=AgxD3d10WindowsFlushStatus(Device);
+  ADMISSION_UMD_ASAHI_BATCH *activeBatch=
+      (ADMISSION_UMD_ASAHI_BATCH *)Device->Runtime.NativeBatchTransaction;
+  UINT flushState[6]={after[0],after[1],after[2],after[3],
+      activeBatch?(UINT)activeBatch->Submission.RenderStatus:0u,
+      activeBatch?(UINT)activeBatch->Submission.PostStatus:0u};
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeFlushStatus,
+      result,flushState,ARRAYSIZE(flushState));
+#ifdef APPLE_AGX_GPUVA_WINSYS
+  for(UINT i=0;SUCCEEDED(result) && i<Count;++i)
+    if(Resources[i]->RenderBuffer.Transport.Token &&
+       !AdmissionUmdGpuvaPublishDirectMap(&Device->Runtime,
+                                          Resources[i]->RenderBuffer.Transport.Token))
+      result=E_FAIL;
+#else
+  (void)Resources;(void)Count;
+#endif
+  return result;
+}
+
 /* DXGI_DDI_ARG_PRESENT1: with several surfaces (no destination) every one
  * becomes visible, and only the last source is passed to pfnPresentCb. One
  * flush covers their rendering; each surface's pending CPU writes are
@@ -1112,43 +1159,158 @@ HRESULT AgxD3d10WindowsPresentationSubmitSurfaces(
     return E_INVALIDARG;
   }
   AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource=Resources[Count-1u];
-  InterlockedIncrement(&AgxD3d10Presents);
-  InterlockedIncrement(&AgxD3d10DdiWindowPresents);
-  APPLE_AGX_U32 before[16],after[16],bindings[16];
-  AgxWin32AsahiContextDiagnostic(Device->Context,before,bindings);
-  int flushed=AgxWin32AsahiContextFlushForPresent(Device->Context);
-  AgxWin32AsahiContextDiagnostic(Device->Context,after,bindings);
-  UINT contextState[12]={before[0],before[1],before[2],before[3],
-      after[0],after[1],after[2],after[3],
-      (UINT)Device->Runtime.LastScreenError,(UINT)Device->Runtime.DrawTerminal,
-      (UINT)(uintptr_t)Device->Context,
-      (UINT)((uint64_t)(uintptr_t)Device->Context>>32)};
-  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeContextFlush,
-      flushed?S_OK:E_FAIL,contextState,ARRAYSIZE(contextState));
-  if(!flushed) {
-    AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,E_FAIL,NULL,0u);
-    AdmissionUmdDiagnostic("g4-present-exit",E_FAIL,NULL,0u);
-    return E_FAIL;
-  }
-  HRESULT result=AgxD3d10WindowsFlushStatus(Device);
-  ADMISSION_UMD_ASAHI_BATCH *activeBatch=
-      (ADMISSION_UMD_ASAHI_BATCH *)Device->Runtime.NativeBatchTransaction;
-  UINT flushState[6]={after[0],after[1],after[2],after[3],
-      activeBatch?(UINT)activeBatch->Submission.RenderStatus:0u,
-      activeBatch?(UINT)activeBatch->Submission.PostStatus:0u};
-  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeFlushStatus,
-      result,flushState,ARRAYSIZE(flushState));
-#ifdef APPLE_AGX_GPUVA_WINSYS
-  for(UINT i=0;SUCCEEDED(result) && i<Count;++i)
-    if(Resources[i]->RenderBuffer.Transport.Token &&
-       !AdmissionUmdGpuvaPublishDirectMap(&Device->Runtime,
-                                          Resources[i]->RenderBuffer.Transport.Token))
-      result=E_FAIL;
-#endif
+  HRESULT result=flush_for_present(Device,Resources,Count);
   if(SUCCEEDED(result))
     result=AdmissionUmdSubmitPresent(&Device->Runtime,&Resource->Resource,DxgiContext);
   AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,result,NULL,0u);
   AdmissionUmdDiagnostic("g4-present-exit",result,NULL,0u);
+  return result;
+}
+/* S2: the kernel's answer to "two overlay planes" for VidPnSourceId, from
+ * the documented D3DKMTGetMultiPlaneOverlayCaps (d3dkmthk.h; gdi32.dll),
+ * which dxgkrnl answers from the KMD's DxgkDdiGetMultiPlaneOverlayCaps.
+ * The UMD gets no kernel adapter handle (D3D10DDIARG_OPENADAPTER,
+ * D3DDDI_ADAPTERCALLBACKS), so it enumerates the adapters
+ * (D3DKMTEnumAdapters2) and takes the single one whose KMTQAITYPE_UMDRIVERPRIVATE
+ * data equals the AGX_WIN32_DEVICE_INFO its own pfnQueryAdapterInfoCb
+ * returned (that query reaches the same DXGKQAITYPE_UMDRIVERPRIVATE answer).
+ * Every export is resolved at run time; a missing export, a failed call,
+ * no or several matching adapters, or any caps other than MaxPlanes 2 /
+ * MaxRGBPlanes 2 is one plane. Every enumerated handle is closed. */
+static BOOL kernel_mpo_two_planes(const AGX_WIN32_DEVICE_INFO *Info,UINT Source,
+                                  UINT Values[4]) {
+  HMODULE gdi=GetModuleHandleW(L"gdi32.dll");
+  if(!gdi) gdi=LoadLibraryExW(L"gdi32.dll",NULL,LOAD_LIBRARY_SEARCH_SYSTEM32);
+  if(!gdi) return FALSE;
+  PFND3DKMT_ENUMADAPTERS2 enumerateAdapters=
+      (PFND3DKMT_ENUMADAPTERS2)(void *)GetProcAddress(gdi,"D3DKMTEnumAdapters2");
+  PFND3DKMT_QUERYADAPTERINFO queryInfo=
+      (PFND3DKMT_QUERYADAPTERINFO)(void *)GetProcAddress(gdi,"D3DKMTQueryAdapterInfo");
+  PFND3DKMT_CLOSEADAPTER closeAdapter=
+      (PFND3DKMT_CLOSEADAPTER)(void *)GetProcAddress(gdi,"D3DKMTCloseAdapter");
+  PFND3DKMT_GETMULTIPLANEOVERLAYCAPS getCaps=
+      (PFND3DKMT_GETMULTIPLANEOVERLAYCAPS)(void *)GetProcAddress(gdi,
+          "D3DKMTGetMultiPlaneOverlayCaps");
+  if(!enumerateAdapters || !queryInfo || !closeAdapter || !getCaps) return FALSE;
+  D3DKMT_ADAPTERINFO *adapters=(D3DKMT_ADAPTERINFO *)HeapAlloc(GetProcessHeap(),
+      HEAP_ZERO_MEMORY,sizeof(D3DKMT_ADAPTERINFO)*MAX_ENUM_ADAPTERS);
+  AGX_WIN32_DEVICE_INFO *other=(AGX_WIN32_DEVICE_INFO *)HeapAlloc(GetProcessHeap(),
+      HEAP_ZERO_MEMORY,sizeof(*other));
+  BOOL two=FALSE;
+  if(adapters && other) {
+    D3DKMT_ENUMADAPTERS2 list;
+    ZeroMemory(&list,sizeof(list));
+    list.NumAdapters=MAX_ENUM_ADAPTERS;
+    list.pAdapters=adapters;
+    if(enumerateAdapters(&list)>=0 && list.NumAdapters<=MAX_ENUM_ADAPTERS) {
+      D3DKMT_HANDLE match=0;UINT matches=0;
+      for(ULONG i=0;i<list.NumAdapters;++i) {
+        D3DKMT_QUERYADAPTERINFO info;
+        ZeroMemory(&info,sizeof(info));ZeroMemory(other,sizeof(*other));
+        info.hAdapter=adapters[i].hAdapter;
+        info.Type=KMTQAITYPE_UMDRIVERPRIVATE;
+        info.pPrivateDriverData=other;
+        info.PrivateDriverDataSize=(UINT)sizeof(*other);
+        if(queryInfo(&info)>=0 && memcmp(other,Info,sizeof(*other))==0) {
+          match=adapters[i].hAdapter;++matches;
+        }
+      }
+      if(matches==1u) {
+        D3DKMT_GET_MULTIPLANE_OVERLAY_CAPS answer;
+        ZeroMemory(&answer,sizeof(answer));
+        answer.hAdapter=match;
+        answer.VidPnSourceId=Source;
+        const NTSTATUS status=getCaps(&answer);
+        two=AgxDxgiMpoKernelTwoPlanes(status>=0,answer.MaxPlanes,answer.MaxRGBPlanes)
+            ? TRUE : FALSE;
+        Values[1]=answer.MaxPlanes;Values[2]=answer.MaxRGBPlanes;
+      }
+      Values[3]=matches;
+      for(ULONG i=0;i<list.NumAdapters;++i) {
+        D3DKMT_CLOSEADAPTER closing;
+        closing.hAdapter=adapters[i].hAdapter;
+        (void)closeAdapter(&closing);
+      }
+    }
+  }
+  if(other) HeapFree(GetProcessHeap(),0,other);
+  if(adapters) HeapFree(GetProcessHeap(),0,adapters);
+  return two;
+}
+
+/* Asked once per adapter and VidPnSourceId (the KMD reads its switch at
+ * adapter start); the answer is receipted only when it is two planes, so a
+ * one-plane kernel leaves the receipts as they were. */
+BOOL AgxD3d10WindowsKernelMpoTwoPlanes(AGX_D3D10_WINDOWS_DEVICE *Device,
+                                       UINT VidPnSourceId) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Device->Adapter) return FALSE;
+  AGX_D3D10_WINDOWS_ADAPTER *adapter=Device->Adapter;
+  AcquireSRWLockExclusive(&adapter->Lock);
+  if(!adapter->MpoQueried || adapter->MpoSource!=VidPnSourceId) {
+    UINT values[4]={VidPnSourceId,0u,0u,0u};
+    adapter->MpoTwoPlanes=kernel_mpo_two_planes(&adapter->Runtime.DeviceInfo,
+                                                VidPnSourceId,values);
+    adapter->MpoSource=VidPnSourceId;
+    adapter->MpoQueried=TRUE;
+    if(adapter->MpoTwoPlanes)
+      AdmissionUmdDiagnostic("measure-dxgi-mpo-kernel",S_OK,values,ARRAYSIZE(values));
+  }
+  const BOOL two=adapter->MpoTwoPlanes;
+  ReleaseSRWLockExclusive(&adapter->Lock);
+  return two;
+}
+
+/* S2: PresentMultiplaneOverlay(1) after AgxDxgiMpoCheckPlanes: the flush of
+ * every native present, then one pfnPresentMultiplaneOverlayCb (the
+ * callback of IS_DXGI_MULTIPLANE_OVERLAY_FUNCTIONS interfaces, which
+ * includes D3DWDDM2_0; pfnPresentMultiplaneOverlay1Cb needs
+ * IS_DXGI1_6_BASE_FUNCTIONS, WDDM 2.2) with one allocation per plane in the
+ * DDI's plane order. */
+HRESULT AgxD3d10WindowsPresentationSubmitPlanes(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *const *Resources,
+    const AGX_DXGI_MPO_PLANE *Planes, UINT Count, PVOID DxgiContext) {
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitEntry,S_OK,NULL,0u);
+  BOOL valid=Device && Device->Stage==AgxD3d10DeviceReady && Resources && Planes &&
+      AgxDxgiMpoCheckPlanes(Planes,Count)==AgxDxgiMpoPlanesOk;
+  for(UINT i=0;valid && i<Count;++i)
+    valid=Resources[i] && Resources[i]->Device==Device &&
+          Resources[i]->Resource.Magic==ADMISSION_UMD_RESOURCE_MAGIC &&
+          Resources[i]->Resource.KernelAllocation!=0u;
+  if(valid)
+    valid=Device->Runtime.DxgiCallbacks &&
+          Device->Runtime.DxgiCallbacks->pfnPresentMultiplaneOverlayCb &&
+          Device->Runtime.KernelContext;
+  if(!valid) {
+    AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,E_INVALIDARG,NULL,0u);
+    AdmissionUmdDiagnostic("reject-dxgi-mpo-submit",E_INVALIDARG,&Count,1u);
+    return E_INVALIDARG;
+  }
+  HRESULT result=flush_for_present(Device,Resources,Count);
+  UINT values[4]={Count,(UINT)Resources[0]->Resource.KernelAllocation,
+      Count>1u?(UINT)Resources[1]->Resource.KernelAllocation:0u,0u};
+  if(SUCCEEDED(result)) {
+    D3DKMT_HANDLE allocations[AGX_DXGI_MPO_PLANES]={0u,0u};
+    for(UINT i=0;i<Count;++i) allocations[i]=Resources[i]->Resource.KernelAllocation;
+    DXGIDDICB_PRESENT_MULTIPLANE_OVERLAY *present=
+        (DXGIDDICB_PRESENT_MULTIPLANE_OVERLAY *)HeapAlloc(GetProcessHeap(),0,
+            sizeof(DXGIDDICB_PRESENT_MULTIPLANE_OVERLAY));
+    if(!present) {
+      result=E_OUTOFMEMORY;
+    } else {
+      AgxDxgiMpoFillPresentCb(present,DxgiContext,Device->Runtime.KernelContext,
+                              allocations,Planes,Count);
+      AdmissionUmdPresentMeasure(AdmissionUmdMeasurePresentCallbackEnter,S_OK,NULL,0u);
+      result=Device->Runtime.DxgiCallbacks->pfnPresentMultiplaneOverlayCb(
+          Device->Runtime.RuntimeDevice.handle,present);
+      AdmissionUmdPresentMeasure(AdmissionUmdMeasurePresentCallbackReturn,result,
+                                 values,ARRAYSIZE(values));
+      HeapFree(GetProcessHeap(),0,present);
+    }
+  }
+  values[3]=(UINT)result;
+  AdmissionUmdDiagnostic("mpo-present-callback",result,values,ARRAYSIZE(values));
+  AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,result,NULL,0u);
   return result;
 }
 
