@@ -4553,3 +4553,23 @@ Evidence read (files): `.local/experiments/EXP2332-pf1b-fold/evidence/EXP2332/{p
 
 ### Next on the bench (fork 6)
 EXP2333 POOL-PROBE from the tip as specified (K1 opt-in unset, `fcensus` last, floor print-only, w/r2/r3 + FULL f0 controls = third new-build control, CS warm/r2/r3 with the validity rule above) -> PF1c package: PF1 ABBA with the unchanged stop rule -> T5b FULL boot with the two STATS-NOPS FULL arms -> TDR-H0 -> FS-D1.
+
+## UPDATE 2026-11-11T01:32:59Z -- architect: PF1c on origin (8d3f43d32), software-verified only
+
+- PF1c (class O, part of PF1, still behind APPLE_AGX_D3D12_EXPAND_FOLD=1, default off): commit
+  8d3f43d32d8b6491edb6bcf9c1f5448aeede8df0. agx_win32_fold_prepare checks the order
+  (agx_win32_fold_render_writes) only at the first seal of a pair; later counted draws of
+  the same render fold into the sealed compute batch.
+- Verification so far: RED/GREEN case in tests/test_d3d12_indirect_stream_glue.py;
+  run_against_baseline 1204 tests, 1 NEW = the known checkout-only Mu-flag failure; an
+  independent attempt to break the order argument (points a-e of the handoff section
+  2026-11-11T01:09:17Z) found no counter-example. Not checked: MSVC compile of the winsys
+  header (first at the package build); an exhaustive audit of projection scripts that
+  replace rsrc->bo while a pair is sealed (expected harmless: a new handle is not in the
+  sealed batch's list). No hardware result.
+- Still unknown and not needed for the fix: which BO made the repeated check true at the
+  shadow render's second counted draw.
+- Next for PF1: package from this tip after EXP2333; PERF ABBA p0a p1a p1b p0b and FULL ABBA
+  with the unchanged v5 stop; validity rows for p1 arms: order refusals 0 per present,
+  RESOURCE seal drops 0, v5 prelude envelopes 0 in steady state, seals about 3.28 and
+  folded kernels about 7.65 per present. No FPS claim for PF1 exists yet.
