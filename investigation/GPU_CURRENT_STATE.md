@@ -5488,3 +5488,20 @@ file. `Wom1ComputeEncoderMask` joins the opt-in list (default off, unset in ever
   their prior as the owner of a compute-only rate is low (CM-3 is TA only, CM-4 acts through the power controller,
   which is not limiting).
 - Bench order now: S2-0a2 -> S2-0b -> S2-1.
+
+## UPDATE 2026-11-11T15:35Z (architect): compute ratio, what the two offline checks returned; CLKTWIN released
+
+- Real clock: no source documents a readable GPU clock. HwDataA 0x58 (freq_mhz) is the right field per the V13_5
+  layout and neither Asahi nor m1n1 nor this firmware fills it. Nobody on our path, in m1n1 or in Asahi programs a
+  GPU PLL, voltage or DVFS table; the firmware applies the state itself. Evidence against a lower real clock:
+  same-line load latency scales with the clock (3.2x P1 to P6, EXP2265) and equals macOS at P6 (64 vs 62.6 ns,
+  EXP2266/EXP2269). "Lower clock" drops to an unlikely cause; 1278/1128 stays a coincidence.
+- No recording of what macOS gives the firmware exists in the project. The init-data profile and the render
+  template are m1n1 Python output. A hypervisor trace of macOS is blocked: m1n1's structures stop at V13_5, the
+  installed macOS is 15.7.8, and our stub runs firmware 13.5; it would need macOS 13.5, which the user deferred
+  (2026-11-11), together with an Asahi measurement. Asahi is a contract source, not a speed reference.
+- Released: probe step CLKTWIN, ours side (arithmetic kernel, ladder of 1024-thread groups G = 1..16 and wide
+  shapes; reads the effective parallel width of a compute job; no driver or package change; rides at the end of
+  an S2 boot). Spec in the handoff file, design in .local/night-20261110/clock-twin/REPORT.md. The macOS twin is
+  built but waits for the operator.
+- CM-2..CM-4 parked as contract corrections without an FPS expectation.
