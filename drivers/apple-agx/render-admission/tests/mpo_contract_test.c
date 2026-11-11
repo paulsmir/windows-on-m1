@@ -10,6 +10,9 @@
 
 #define PANEL_W 2560u
 #define PANEL_H 1600u
+#define POOL_BYTES 0x3b800000ULL
+#define TOP_OFFSET 0x10000ULL
+#define BOTTOM_OFFSET 0x1000000ULL
 
 static unsigned int Failures;
 
@@ -52,6 +55,11 @@ static ADMISSION_MPO_PLANE_INPUT TopPlane(void) {
   plane.SurfaceWidth = PANEL_W;
   plane.SurfaceHeight = PANEL_H;
   plane.SurfaceStride = PANEL_W * 4u;
+  plane.InScanoutPool = 1u;
+  plane.PlacementKnown = 1u;
+  plane.PoolOffset = TOP_OFFSET;
+  plane.SurfaceBytes = (unsigned long long)PANEL_W * 4u * PANEL_H;
+  plane.SurfaceIdentity = 0x1000u;
   return plane;
 }
 
@@ -71,6 +79,11 @@ static ADMISSION_MPO_PLANE_INPUT BottomPlane(void) {
   plane.SurfaceWidth = 640u;
   plane.SurfaceHeight = 480u;
   plane.SurfaceStride = 640u * 4u;
+  plane.InScanoutPool = 1u;
+  plane.PlacementKnown = 1u;
+  plane.PoolOffset = BOTTOM_OFFSET;
+  plane.SurfaceBytes = 640ULL * 4u * 480u;
+  plane.SurfaceIdentity = 0x2000u;
   return plane;
 }
 
@@ -81,6 +94,7 @@ static unsigned int Eval(const ADMISSION_MPO_PLANE_INPUT *Planes,
   input.PanelHeight = PANEL_H;
   input.PlaneCount = Count;
   input.Planes = Planes;
+  input.PoolBytes = POOL_BYTES;
   return AdmissionMpoEvaluate(&input, Result);
 }
 
@@ -148,6 +162,7 @@ static void TestArgumentsAndCounts(void) {
   input.PanelHeight = PANEL_H;
   input.PlaneCount = 2u;
   input.Planes = planes;
+  input.PoolBytes = POOL_BYTES;
   CHECK(AdmissionMpoEvaluate(&input, NULL) == AdmissionMpoReasonArgument);
   input.Planes = NULL;
   CHECK(AdmissionMpoEvaluate(&input, &result) == AdmissionMpoReasonArgument);
@@ -350,6 +365,8 @@ static void TestBoundaries(void) {
     Pair(p, swap);
     p[bottom].SurfaceWidth = 1000u;
     p[bottom].SurfaceHeight = 800u;
+    p[bottom].SurfaceStride = 4032u;
+    p[bottom].SurfaceBytes = 4032ULL * 800u;
     p[bottom].Source = Rect(360, 320, 1000, 800);
     PAIR_OK(p);
     p[bottom].Source = Rect(361, 320, 1001, 800);
@@ -357,14 +374,19 @@ static void TestBoundaries(void) {
     p[bottom].Source = Rect(-1, 0, 639, 480);
     FAIL_AT(p, 2u, AdmissionMpoReasonSourceOutsideSurface, bottom);
 
-    /* Stride exactly 64 accepted; 64 +/- 1 rejected. */
+    /* A 64-byte multiple accepted; one byte either side rejected. */
     Pair(p, swap);
-    p[bottom].SurfaceStride = 64u;
+    p[bottom].SurfaceStride = 2560u + 64u;
+    p[bottom].SurfaceBytes = (2560ULL + 64u) * 480u;
     PAIR_OK(p);
-    p[bottom].SurfaceStride = 63u;
+    p[bottom].SurfaceStride = 2560u + 63u;
     FAIL_AT(p, 2u, AdmissionMpoReasonStride, bottom);
-    p[bottom].SurfaceStride = 65u;
+    p[bottom].SurfaceStride = 2560u + 65u;
     FAIL_AT(p, 2u, AdmissionMpoReasonStride, bottom);
+    /* Version 2: a 64-byte multiple below one row (640 * 4) is refused. */
+    p[bottom].SurfaceStride = 2560u - 64u;
+    p[bottom].SurfaceBytes = (2560ULL - 64u) * 480u;
+    FAIL_AT(p, 2u, AdmissionMpoReasonStrideBelowRow, bottom);
 
     /* Inverted destination with matching inverted source: not scaling,
      * but not inside the panel either. */
@@ -435,9 +457,45 @@ static int RuleHolds(const ADMISSION_MPO_PLANE_INPUT *P, unsigned int Index,
            x->Clip.Top <= x->Destination.Top &&
            x->Clip.Right >= x->Destination.Right &&
            x->Clip.Bottom >= x->Destination.Bottom;
+  case AdmissionMpoReasonSurfaceNotInPool:
+    return x->InScanoutPool != 0u &&
+           (x->PlacementKnown == 0u ||
+            (x->PoolOffset <= POOL_BYTES &&
+             x->SurfaceBytes <= POOL_BYTES - x->PoolOffset));
+  case AdmissionMpoReasonSurfaceAlignment:
+    return x->PlacementKnown == 0u || x->PoolOffset % 0x10000ULL == 0ULL;
+  case AdmissionMpoReasonSurfaceSize:
+    return x->SurfaceBytes ==
+           (unsigned long long)x->SurfaceStride * x->SurfaceHeight;
+  case AdmissionMpoReasonSurfaceLargerThanPanel:
+    return x->SurfaceWidth >= 1u && x->SurfaceWidth <= PANEL_W &&
+           x->SurfaceHeight >= 1u && x->SurfaceHeight <= PANEL_H;
+  case AdmissionMpoReasonStrideBelowRow:
+    return (unsigned long long)x->SurfaceStride >=
+           4ULL * x->SurfaceWidth;
   default:
     return 0;
   }
+}
+
+static int PerPlaneRule(unsigned int Reason) {
+  return Reason != AdmissionMpoReasonSameSurface &&
+         Reason != AdmissionMpoReasonSurfaceOverlap &&
+         Reason != AdmissionMpoReasonPanelGeometry;
+}
+
+/* Independent pair oracle (both planes already passed every plane rule). */
+static unsigned int PairOracle(const ADMISSION_MPO_PLANE_INPUT *A,
+                               const ADMISSION_MPO_PLANE_INPUT *B) {
+  int known = A->PlacementKnown && B->PlacementKnown;
+  unsigned long long aEnd = A->PoolOffset + A->SurfaceBytes;
+  unsigned long long bEnd = B->PoolOffset + B->SurfaceBytes;
+  if (A->SurfaceIdentity == B->SurfaceIdentity ||
+      (known && A->PoolOffset == B->PoolOffset))
+    return AdmissionMpoReasonSameSurface;
+  if (known && !(aEnd <= B->PoolOffset || bEnd <= A->PoolOffset))
+    return AdmissionMpoReasonSurfaceOverlap;
+  return AdmissionMpoSupported;
 }
 
 static unsigned int Seed = 0x5eed2u;
@@ -454,8 +512,21 @@ static int Jitter(int Value) {
                                             sizeof(deltas[0])))];
 }
 
+static unsigned long long JitterOffset(unsigned long long Value) {
+  static const long long deltas[] = {0, 0x10000, -0x10000, 0x8000, 0x40,
+                                     -0x40, 0x3b800000, 0xfa0000,
+                                     -0xfa0000, 0x12c000};
+  return Value + (unsigned long long)deltas[Next(
+                     (unsigned int)(sizeof(deltas) / sizeof(deltas[0])))];
+}
+
 static void Mutate(ADMISSION_MPO_PLANE_INPUT *X) {
-  switch (Next(17u)) {
+  switch (Next(22u)) {
+  case 17: X->InScanoutPool = Next(4u) != 0u ? 1u : 0u; break;
+  case 18: X->PoolOffset = JitterOffset(X->PoolOffset); break;
+  case 19: X->SurfaceBytes = JitterOffset(X->SurfaceBytes); break;
+  case 20: X->SurfaceWidth = X->SurfaceWidth + Next(3u) * 1024u; break;
+  case 21: X->SurfaceIdentity = Next(3u) * 0x1000u; break;
   case 0: X->LayerIndex = Next(3u); break;
   case 1: X->Enabled = Next(2u); break;
   case 2: X->FormatClass = Next(4u); break;
@@ -524,12 +595,19 @@ static void TestPropertySweep(void) {
          ++index) {
       for (rule = AdmissionMpoReasonLayerIndex;
            rule < ADMISSION_MPO_REASON_COUNT; ++rule) {
+        if (!PerPlaneRule(rule))
+          continue;
         if (!RuleHolds(p, index, rule)) {
           expectedPlane = index;
           expectedReason = rule;
           break;
         }
       }
+    }
+    if (expectedReason == AdmissionMpoSupported) {
+      expectedReason = PairOracle(&p[0], &p[1]);
+      if (expectedReason != AdmissionMpoSupported)
+        expectedPlane = 1u;
     }
     ++reasonSeen[result.Reason < ADMISSION_MPO_REASON_COUNT ?
                  result.Reason : 0u];
@@ -547,7 +625,8 @@ static void TestPropertySweep(void) {
       for (index = 0u; index < 2u; ++index)
         for (rule = AdmissionMpoReasonLayerIndex;
              rule < ADMISSION_MPO_REASON_COUNT; ++rule)
-          CHECK(RuleHolds(p, index, rule));
+          CHECK(!PerPlaneRule(rule) || RuleHolds(p, index, rule));
+      CHECK(PairOracle(&p[0], &p[1]) == AdmissionMpoSupported);
       CHECK(p[result.Slots[0].PlaneIndex].LayerIndex == 1u);
       CHECK(p[result.Slots[1].PlaneIndex].LayerIndex == 0u);
       CHECK(result.Slots[1].Premultiplied == 1u);
@@ -557,7 +636,8 @@ static void TestPropertySweep(void) {
   for (rule = AdmissionMpoSupported; rule < ADMISSION_MPO_REASON_COUNT;
        ++rule) {
     if (rule == AdmissionMpoReasonArgument ||
-        rule == AdmissionMpoReasonPlaneCount)
+        rule == AdmissionMpoReasonPlaneCount ||
+        rule == AdmissionMpoReasonPanelGeometry)
       continue;
     if (reasonSeen[rule] == 0u) {
       fprintf(stderr, "sweep never produced reason %u\n", rule);
@@ -585,7 +665,97 @@ static void TestStableReasonValues(void) {
   CHECK(AdmissionMpoReasonRotation == 15);
   CHECK(AdmissionMpoReasonUnsupportedFlags == 16);
   CHECK(AdmissionMpoReasonClip == 17);
-  CHECK(ADMISSION_MPO_REASON_COUNT == 18);
+  CHECK(AdmissionMpoReasonSurfaceNotInPool == 18);
+  CHECK(AdmissionMpoReasonSurfaceAlignment == 19);
+  CHECK(AdmissionMpoReasonSurfaceSize == 20);
+  CHECK(AdmissionMpoReasonSurfaceLargerThanPanel == 21);
+  CHECK(AdmissionMpoReasonSameSurface == 22);
+  CHECK(AdmissionMpoReasonSurfaceOverlap == 23);
+  CHECK(AdmissionMpoReasonPanelGeometry == 24);
+  CHECK(AdmissionMpoReasonStrideBelowRow == 25);
+  CHECK(ADMISSION_MPO_REASON_COUNT == 26);
+  CHECK(ADMISSION_MPO_CONTRACT_VERSION == 2u);
+}
+
+/* Version 2 surface rules, each on its role, both orders. */
+static void TestSurfaceRules(void) {
+  ADMISSION_MPO_PLANE_INPUT p[2];
+  ADMISSION_MPO_INPUT input;
+  ADMISSION_MPO_RESULT result;
+  int swap;
+  unsigned int top;
+  unsigned int bottom;
+
+  for (swap = 0; swap < 2; ++swap) {
+    top = swap ? 1u : 0u;
+    bottom = top ^ 1u;
+    Pair(p, swap); p[bottom].InScanoutPool = 0u;
+    FAIL_AT(p, 2u, AdmissionMpoReasonSurfaceNotInPool, bottom);
+    Pair(p, swap); p[top].PoolOffset = POOL_BYTES - 0x10000ULL;
+    FAIL_AT(p, 2u, AdmissionMpoReasonSurfaceNotInPool, top);
+    Pair(p, swap); p[top].PoolOffset = POOL_BYTES - p[top].SurfaceBytes;
+    PAIR_OK(p);
+    Pair(p, swap); p[bottom].PoolOffset = 0xffffffffffff0000ULL;
+    FAIL_AT(p, 2u, AdmissionMpoReasonSurfaceNotInPool, bottom);
+    Pair(p, swap); p[bottom].PoolOffset = BOTTOM_OFFSET + 0x8000ULL;
+    FAIL_AT(p, 2u, AdmissionMpoReasonSurfaceAlignment, bottom);
+    /* Unknown placement: no offset rule applies (Check3). */
+    Pair(p, swap); p[bottom].PlacementKnown = 0u;
+    p[bottom].PoolOffset = 0x8001ULL;
+    PAIR_OK(p);
+    Pair(p, swap); p[bottom].SurfaceBytes += 0x10000ULL;
+    FAIL_AT(p, 2u, AdmissionMpoReasonSurfaceSize, bottom);
+    Pair(p, swap); p[top].SurfaceWidth = 2561u;
+    p[top].SurfaceStride = 2624u * 4u;
+    p[top].SurfaceBytes = 2624ULL * 4u * 1600u;
+    FAIL_AT(p, 2u, AdmissionMpoReasonSurfaceLargerThanPanel, top);
+    Pair(p, swap); p[bottom].SurfaceWidth = 700u;
+    FAIL_AT(p, 2u, AdmissionMpoReasonStrideBelowRow, bottom);
+    Pair(p, swap); p[bottom].SurfaceIdentity = p[top].SurfaceIdentity;
+    FAIL_AT(p, 2u, AdmissionMpoReasonSameSurface, 1u);
+    Pair(p, swap); p[bottom].PoolOffset = p[top].PoolOffset;
+    FAIL_AT(p, 2u, AdmissionMpoReasonSameSurface, 1u);
+    /* Overlap by one 64 KiB block either way; touching ranges are fine. */
+    Pair(p, swap);
+    p[bottom].PoolOffset = TOP_OFFSET + p[top].SurfaceBytes - 0x10000ULL;
+    FAIL_AT(p, 2u, AdmissionMpoReasonSurfaceOverlap, 1u);
+    p[bottom].PoolOffset = TOP_OFFSET + p[top].SurfaceBytes;
+    PAIR_OK(p);
+    /* Bottom bytes 0x12c000 rounded up to the 64 KiB placement. */
+    p[top].PoolOffset = p[bottom].PoolOffset + 0x130000ULL;
+    PAIR_OK(p);
+    p[top].PoolOffset = p[bottom].PoolOffset + 0x120000ULL;
+    FAIL_AT(p, 2u, AdmissionMpoReasonSurfaceOverlap, 1u);
+    p[top].PoolOffset = p[bottom].PoolOffset + 0x130000ULL;
+    /* Unknown placement cannot overlap-check; identity still applies. */
+    p[top].PoolOffset = p[bottom].PoolOffset + 0x120000ULL;
+    p[top].PlacementKnown = 0u;
+    PAIR_OK(p);
+  }
+  /* Panel geometry: a non-native source mode is refused first. */
+  Pair(p, 0);
+  input.PanelWidth = 1920u;
+  input.PanelHeight = 1200u;
+  input.PlaneCount = 2u;
+  input.Planes = p;
+  input.PoolBytes = POOL_BYTES;
+  CHECK(AdmissionMpoEvaluate(&input, &result) ==
+        AdmissionMpoReasonPanelGeometry);
+  CHECK(result.FailingPlane == ADMISSION_MPO_NO_PLANE && !result.Supported);
+  /* One plane keeps the version-1 answer whatever the surface says. */
+  p[0].InScanoutPool = 0u;
+  p[0].SurfaceBytes = 1u;
+  input.PlaneCount = 1u;
+  CHECK(AdmissionMpoEvaluate(&input, &result) == AdmissionMpoSupported);
+  /* Slots carry the record inputs. */
+  Pair(p, 1);
+  CHECK(Eval(p, 2u, &result) == AdmissionMpoSupported);
+  CHECK(result.Slots[0].PoolOffset == BOTTOM_OFFSET &&
+        result.Slots[0].SurfaceWidth == 640u &&
+        result.Slots[0].SurfaceStride == 2560u &&
+        result.Slots[0].FormatClass == AdmissionMpoFormatRgba8 &&
+        result.Slots[1].PoolOffset == TOP_OFFSET &&
+        result.Slots[1].SurfaceBytes == 2560ULL * 4u * 1600u);
 }
 
 int main(void) {
@@ -594,6 +764,7 @@ int main(void) {
   TestOnePlaneMirrorsHandler();
   TestEveryReasonBothOrders();
   TestBoundaries();
+  TestSurfaceRules();
   TestPropertySweep();
   if (Failures != 0u) {
     fprintf(stderr, "mpo_contract_test: %u failure(s)\n", Failures);

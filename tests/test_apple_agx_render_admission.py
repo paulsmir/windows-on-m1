@@ -117,7 +117,14 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
                             callbacks.index("AdmissionDdiEscape(")]
         self.assertIn("return STATUS_NOT_SUPPORTED", destroy)
 
-        self.assertNotIn("SupportMultiPlaneOverlay = TRUE", lifecycle)
+        # S2: MPO is advertised only inside the Wom1MpoTwoPlanes-effective
+        # block; the legacy overlay group stays fail-closed regardless.
+        gate = "if (AdmissionScanoutMpoEffective(context)) {"
+        self.assertEqual(lifecycle.count("SupportMultiPlaneOverlay = TRUE"), 1)
+        self.assertLess(lifecycle.index(gate),
+                        lifecycle.index("SupportMultiPlaneOverlay = TRUE"))
+        self.assertLess(lifecycle.index("SupportMultiPlaneOverlay = TRUE"),
+                        lifecycle.index("}", lifecycle.index(gate)))
         self.assertNotIn("SupportOverlay", lifecycle)
 
     def test_post_start_admission_trace_is_receipt_only_and_bounded(self):

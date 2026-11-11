@@ -49,6 +49,15 @@ class AppleAgxRenderType1ReadyTests(unittest.TestCase):
             "caps->PresentationCaps.SupportKernelModeCommandBuffer = 0u",
         ):
             self.assertIn(assignment, caps)
+        # S2: the MPO caps exist only inside the Wom1MpoTwoPlanes-effective
+        # block (ATOMIC CONTRACT); outside it nothing advertises MPO.
+        gate = "if (AdmissionScanoutMpoEffective(context)) {"
+        self.assertEqual(caps.count(gate), 1)
+        gated_start = caps.index(gate)
+        gated_end = caps.index("}", gated_start)
+        self.assertIn("caps->SupportMultiPlaneOverlay = TRUE",
+                      caps[gated_start:gated_end])
+        caps = caps[:gated_start] + caps[gated_end:]
         for unsupported in (
             "SupportKernelModeCommandBuffer = 1",
             "FlipImmediateMmIo = 1",

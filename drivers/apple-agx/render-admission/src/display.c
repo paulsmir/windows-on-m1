@@ -1300,6 +1300,17 @@ AdmissionDdiSetVidPnSourceAddressWithMultiPlaneOverlay3(
   DXGKARG_SETVIDPNSOURCEADDRESS legacy;
   NTSTATUS status;
 
+  /* S2: two planes only while Wom1MpoTwoPlanes is effective; otherwise
+   * everything below is unchanged. */
+  if (context != NULL && Args != NULL &&
+      AdmissionScanoutMpoEffective(context)) {
+    AdmissionDisplayRingRecord(context, 4u,
+        Args->PlaneCount != 0u && Args->ppPlanes != NULL &&
+                Args->ppPlanes[0] != NULL
+            ? Args->ppPlanes[0]->InputFlags.Value : 0u,
+        Args->PlaneCount | 0x1000u, 0ULL, 0ULL);
+    return AdmissionMpoSetVidPnSourceAddress3(context, Args);
+  }
   if (context == NULL || Args == NULL || Args->VidPnSourceId != 0 ||
       Args->PlaneCount > 1u ||
       (Args->PlaneCount != 0u && Args->ppPlanes == NULL))

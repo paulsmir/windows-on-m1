@@ -2,7 +2,8 @@
 
 Catches a two-plane configuration the display slots cannot show being
 answered "supported", and the one-plane answers drifting from the display.c
-one-plane handler.  The table is not wired into the driver yet.
+one-plane handler.  Contract version 2 (S2 step 4) adds the scanout broker's
+surface rules; tests/test_render_mpo_wiring.py checks the wiring.
 """
 from pathlib import Path
 import os
@@ -45,14 +46,13 @@ class RenderMpoContractTests(unittest.TestCase):
             # MSVC C4201: no nameless unions/structs.
             self.assertNotRegex(text, r"\bunion\b", path)
 
-    def test_table_is_not_wired_into_the_driver(self):
+    def test_table_is_wired_only_through_the_mpo_files(self):
+        # S2 step 4: only the effective-only MPO path evaluates the table.
         src = DRIVER / "src"
-        for path in sorted(src.glob("*.c")):
-            if path.name == "mpo_contract.c":
-                continue
-            text = path.read_text(errors="replace")
-            self.assertNotIn("AdmissionMpoEvaluate", text, path.name)
-            self.assertNotIn("mpo_contract.h", text, path.name)
+        users = sorted(path.name for path in src.glob("*.c")
+                       if "AdmissionMpoEvaluate" in
+                       path.read_text(errors="replace"))
+        self.assertEqual(users, ["mpo_contract.c", "mpo_windows.c"])
 
     def test_kernel_project_compiles_the_table(self):
         project = (DRIVER / "AppleAgxRenderAdmission.vcxproj").read_text()

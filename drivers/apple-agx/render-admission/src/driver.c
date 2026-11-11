@@ -61,6 +61,15 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
       AdmissionDdiSetVidPnSourceAddress;
   initialization.DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3 =
       AdmissionDdiSetVidPnSourceAddressWithMultiPlaneOverlay3;
+  /* S2: registered unconditionally (the Wom1MpoTwoPlanes decision is made
+   * at StartDevice).  dxgkrnl calls neither while DRIVERCAPS.SupportMulti
+   * PlaneOverlay is FALSE (R22: GetMultiPlaneOverlayCaps+0x88,
+   * CheckMultiPlaneOverlaySupport3+0x5c); its adapter-start MPO checks
+   * run only when the cap is set (DXGADAPTER::Initialize+0x1838..0x1a98). */
+  initialization.DxgkDdiCheckMultiPlaneOverlaySupport3 =
+      AdmissionDdiCheckMultiPlaneOverlaySupport3;
+  initialization.DxgkDdiGetMultiPlaneOverlayCaps =
+      AdmissionDdiGetMultiPlaneOverlayCaps;
   initialization.DxgkDdiStopDeviceAndReleasePostDisplayOwnership =
       AdmissionDdiStopDeviceAndReleasePostDisplayOwnership;
   initialization.DxgkDdiNotifyAcpiEvent = AdmissionDdiNotifyAcpiEvent;

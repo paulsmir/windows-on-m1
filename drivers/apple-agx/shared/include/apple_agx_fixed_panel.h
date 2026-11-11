@@ -107,6 +107,11 @@ typedef struct _APPLE_AGX_FIXED_PANEL {
   APPLE_AGX_SCANOUT_U64 DeferredOffset;
   APPLE_AGX_SCANOUT_BOOL DeferredValid;
   APPLE_AGX_FIXED_PANEL_OWNERSHIP Ownership;
+  /* S2: set by the owner between Initialize and Start (opt-in switch).
+   * Start then negotiates ABI V3 when the broker advertises
+   * CAP_TWO_LAYERS; FALSE (Initialize's default) never touches a V3
+   * register.  The negotiated state is Scanout.TwoLayers. */
+  APPLE_AGX_SCANOUT_BOOL RequestTwoLayers;
 } APPLE_AGX_FIXED_PANEL;
 
 APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelInitialize(
@@ -148,6 +153,14 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelQueuePresent(
     APPLE_AGX_FIXED_PANEL *Panel, APPLE_AGX_SCANOUT_U32 SegmentId,
     APPLE_AGX_SCANOUT_U64 SegmentOffset,
     APPLE_AGX_SCANOUT_U64 *Sequence);
+/* S2: queue one V3 commit (1 or 2 records) on the started, committed and
+ * visible panel.  BrokerRejected leaves the refusal code in
+ * Scanout.LastBrokerResult. */
+APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelQueueCommitLayers(
+    APPLE_AGX_FIXED_PANEL *Panel, const APPLE_AGX_SCANOUT_LAYER *Layers,
+    APPLE_AGX_SCANOUT_U32 Count, APPLE_AGX_SCANOUT_U64 *Sequence);
+APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelTwoLayers(
+    const APPLE_AGX_FIXED_PANEL *Panel);
 APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelStop(
     APPLE_AGX_FIXED_PANEL *Panel, APPLE_AGX_SCANOUT_U64 DeadlineMs);
 

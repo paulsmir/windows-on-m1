@@ -3009,6 +3009,27 @@ _Use_decl_annotations_ void AdmissionRecordDisplayModes(
     return;
   WriteBinary(key, L"Wom1DisplayModesReceipt", &snapshot, sizeof(snapshot));
   ZwClose(key);
+  AdmissionRecordMpo(Context);
+}
+
+/* S2: Wom1MpoReceipt.  Nothing is written unless the Wom1MpoTwoPlanes
+ * switch was set at StartDevice (Mpo.Version is then nonzero). */
+_Use_decl_annotations_ void AdmissionRecordMpo(ADMISSION_CONTEXT *Context) {
+  ADMISSION_MPO_RECEIPT snapshot;
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedCompareExchange(&Context->Mpo.Version, 0, 0) == 0)
+    return;
+  RtlCopyMemory(&snapshot, (const VOID *)&Context->Mpo, sizeof(snapshot));
+  snapshot.Version = (LONG)ADMISSION_MPO_RECEIPT_VERSION;
+  snapshot.Bytes = (LONG)sizeof(snapshot);
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+                                          PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1MpoReceipt", &snapshot, sizeof(snapshot));
+  ZwClose(key);
 }
 
 _Use_decl_annotations_ void AdmissionRecordDisplayDdi(

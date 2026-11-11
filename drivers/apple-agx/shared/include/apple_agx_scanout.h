@@ -40,6 +40,32 @@ typedef unsigned long long APPLE_AGX_SCANOUT_U64;
   (APPLE_AGX_SCANOUT_REQUIRED_CAPABILITIES |                                 \
    APPLE_AGX_SCANOUT_CAP_REPEATED_PRESENT |                                  \
    APPLE_AGX_SCANOUT_CAP_LATCHED_RECEIPT | APPLE_AGX_SCANOUT_CAP_LATCHED_IRQ)
+/* S2 ABI V3 (m1n1 gpu/s2-broker-v3, src/hv_agx_scanout_broker.h; values
+ * only).  REG_ABI_VERSION stays 2: V3 is this optional capability.  Every
+ * register at or above 0xa8 exists only on a broker that advertises it; a
+ * broker without the bit refuses those accesses, so this client touches
+ * them only after the bit was read set (AppleAgxScanoutTwoLayersAdvertised)
+ * and, past REG_NEGOTIATED, only after the negotiation read back. */
+#define APPLE_AGX_SCANOUT_CAP_TWO_LAYERS (1u << 9u)
+#define APPLE_AGX_SCANOUT_V3_MMIO_SIZE 0x140u
+#define APPLE_AGX_SCANOUT_V3_LAYERS 2u
+#define APPLE_AGX_SCANOUT_V3_LAYER_RECORD_SIZE 0x40u
+/* DCP limits the V3 broker enforces: destination at least 32x32 on the
+ * panel, source/destination within 2x either way. */
+#define APPLE_AGX_SCANOUT_V3_MIN_EXTENT 32u
+#define APPLE_AGX_SCANOUT_V3_MAX_SCALE 2u
+/* Layer record FLAGS: bit 0 = premultiplied alpha; every other bit must
+ * be zero. */
+#define APPLE_AGX_SCANOUT_LAYER_FLAG_PREMULTIPLIED (1u << 0u)
+#define APPLE_AGX_SCANOUT_LAYER_FLAGS_VALID                                  \
+  APPLE_AGX_SCANOUT_LAYER_FLAG_PREMULTIPLIED
+/* REG_ACTIVE_LAYERS bits. */
+#define APPLE_AGX_SCANOUT_ACTIVE_SLOT0 (1u << 0u)
+#define APPLE_AGX_SCANOUT_ACTIVE_SLOT1 (1u << 1u)
+/* X | Y << 16 and Width | Height << 16, as the broker packs them. */
+#define APPLE_AGX_SCANOUT_PACK(Low, High)                                    \
+  (((APPLE_AGX_SCANOUT_U32)(Low) & 0xffffu) |                                \
+   (((APPLE_AGX_SCANOUT_U32)(High) & 0xffffu) << 16u))
 
 #define APPLE_AGX_SCANOUT_J313_WIDTH 2560u
 #define APPLE_AGX_SCANOUT_J313_HEIGHT 1600u
@@ -86,13 +112,46 @@ typedef enum _APPLE_AGX_SCANOUT_REGISTER {
    * panel rectangle the source is scaled into (MMIO size 0xa8). */
   APPLE_AGX_SCANOUT_REG_DEST_ORIGIN = 0xa0u,
   APPLE_AGX_SCANOUT_REG_DEST_SIZE = 0xa4u,
+  /* ---- V3: CAP_TWO_LAYERS only ---- */
+  /* u32 rw: the owner writes CAP_TWO_LAYERS while UNREGISTERED and reads it
+   * back; any other write is ignored.  A successful RELEASE clears it. */
+  APPLE_AGX_SCANOUT_REG_NEGOTIATED = 0xa8u,
+  /* u32 rw: records in the next COMMIT_LAYERS, 1 or 2. */
+  APPLE_AGX_SCANOUT_REG_LAYER_COUNT = 0xacu,
+  /* Record 0 = DCP slot 0 (bottom), record 1 = DCP slot 1 (top). */
+  APPLE_AGX_SCANOUT_REG_LAYER0 = 0xb0u,
+  APPLE_AGX_SCANOUT_REG_LAYER1 = 0xf0u,
+  /* u32 ro: APPLE_AGX_SCANOUT_ACTIVE_SLOT* (bit 1: slot 1 may be shown). */
+  APPLE_AGX_SCANOUT_REG_ACTIVE_LAYERS = 0x130u,
+  /* u64 ro: slot-1 surface offset of the applied two-layer commit. */
+  APPLE_AGX_SCANOUT_REG_ACTIVE_OFFSET_1 = 0x138u,
 } APPLE_AGX_SCANOUT_REGISTER;
+
+/* Field offsets inside one V3 layer record (little-endian). */
+typedef enum _APPLE_AGX_SCANOUT_LAYER_FIELD {
+  APPLE_AGX_SCANOUT_LAYER_SURFACE_OFFSET = 0x00u, /* u64, 64 KiB aligned */
+  APPLE_AGX_SCANOUT_LAYER_SURFACE_SIZE = 0x08u,   /* u64, Stride * Height */
+  APPLE_AGX_SCANOUT_LAYER_WIDTH = 0x10u,          /* u32 */
+  APPLE_AGX_SCANOUT_LAYER_HEIGHT = 0x14u,         /* u32 */
+  APPLE_AGX_SCANOUT_LAYER_STRIDE = 0x18u,         /* u32 */
+  APPLE_AGX_SCANOUT_LAYER_FORMAT = 0x1cu,         /* u32 FORMAT_* */
+  APPLE_AGX_SCANOUT_LAYER_SRC_ORIGIN = 0x20u,     /* u32 X | Y << 16 */
+  APPLE_AGX_SCANOUT_LAYER_SRC_SIZE = 0x24u,       /* u32 W | H << 16 */
+  APPLE_AGX_SCANOUT_LAYER_DST_ORIGIN = 0x28u,     /* u32 X | Y << 16 */
+  APPLE_AGX_SCANOUT_LAYER_DST_SIZE = 0x2cu,       /* u32 W | H << 16 */
+  APPLE_AGX_SCANOUT_LAYER_FLAGS = 0x30u,          /* u32 LAYER_FLAG_* */
+  APPLE_AGX_SCANOUT_LAYER_RESERVED0 = 0x34u,      /* u32, zero */
+  APPLE_AGX_SCANOUT_LAYER_RESERVED1 = 0x38u,      /* u64, zero */
+} APPLE_AGX_SCANOUT_LAYER_FIELD;
 
 typedef enum _APPLE_AGX_SCANOUT_COMMAND {
   APPLE_AGX_SCANOUT_CMD_QUERY = 0u,
   APPLE_AGX_SCANOUT_CMD_REGISTER_POOL = 1u,
   APPLE_AGX_SCANOUT_CMD_PRESENT = 2u,
   APPLE_AGX_SCANOUT_CMD_RELEASE = 3u,
+  /* V3: one DCP swap with LAYER_COUNT records; completion is the V2
+   * receipt and latch of the commit, once for the whole commit. */
+  APPLE_AGX_SCANOUT_CMD_COMMIT_LAYERS = 4u,
 } APPLE_AGX_SCANOUT_COMMAND;
 
 typedef enum _APPLE_AGX_SCANOUT_STATE {
@@ -117,6 +176,20 @@ typedef enum _APPLE_AGX_SCANOUT_BROKER_RESULT {
   APPLE_AGX_SCANOUT_BROKER_MAP_FAILED = 9u,
   APPLE_AGX_SCANOUT_BROKER_PRESENT_FAILED = 10u,
   APPLE_AGX_SCANOUT_BROKER_NOT_QUIESCED = 11u,
+  /* V3 refusals; all terminal (RECEIPT_SEQUENCE takes the commit). */
+  APPLE_AGX_SCANOUT_BROKER_LAYERS_NOT_NEGOTIATED = 12u,
+  APPLE_AGX_SCANOUT_BROKER_LAYER_COUNT = 13u,
+  APPLE_AGX_SCANOUT_BROKER_LAYER_RESERVED = 14u,
+  APPLE_AGX_SCANOUT_BROKER_LAYER_FORMAT = 15u,
+  APPLE_AGX_SCANOUT_BROKER_LAYER_GEOMETRY = 16u,
+  APPLE_AGX_SCANOUT_BROKER_LAYER_STRIDE = 17u,
+  APPLE_AGX_SCANOUT_BROKER_LAYER_OUTSIDE_POOL = 18u,
+  APPLE_AGX_SCANOUT_BROKER_LAYER_SOURCE_RECT = 19u,
+  APPLE_AGX_SCANOUT_BROKER_LAYER_DEST_RECT = 20u,
+  APPLE_AGX_SCANOUT_BROKER_LAYER_SCALE = 21u,
+  APPLE_AGX_SCANOUT_BROKER_LAYER_SAME_SURFACE = 22u,
+  APPLE_AGX_SCANOUT_BROKER_LAYER_OVERLAP = 23u,
+  APPLE_AGX_SCANOUT_BROKER_SLOT1_LATCHED = 24u,
 } APPLE_AGX_SCANOUT_BROKER_RESULT;
 
 typedef enum _APPLE_AGX_SCANOUT_RESULT {
@@ -137,7 +210,25 @@ typedef enum _APPLE_AGX_SCANOUT_RESULT {
   AppleAgxScanoutSequenceExhausted,
   AppleAgxScanoutBusy,
   AppleAgxScanoutNoInterrupt,
+  /* V3: CAP_TWO_LAYERS was not negotiated (no V3 register was touched by
+   * the call that returned it, except the negotiation read-back). */
+  AppleAgxScanoutNotNegotiated,
 } APPLE_AGX_SCANOUT_RESULT;
+
+/* One V3 layer record as the client writes it. */
+typedef struct _APPLE_AGX_SCANOUT_LAYER {
+  APPLE_AGX_SCANOUT_U64 SurfaceOffset;
+  APPLE_AGX_SCANOUT_U64 SurfaceSize;
+  APPLE_AGX_SCANOUT_U32 Width;
+  APPLE_AGX_SCANOUT_U32 Height;
+  APPLE_AGX_SCANOUT_U32 Stride;
+  APPLE_AGX_SCANOUT_U32 Format;
+  APPLE_AGX_SCANOUT_U32 SrcOrigin;
+  APPLE_AGX_SCANOUT_U32 SrcSize;
+  APPLE_AGX_SCANOUT_U32 DstOrigin;
+  APPLE_AGX_SCANOUT_U32 DstSize;
+  APPLE_AGX_SCANOUT_U32 Flags;
+} APPLE_AGX_SCANOUT_LAYER;
 
 typedef struct _APPLE_AGX_SCANOUT_IO {
   void *Context;
@@ -175,6 +266,9 @@ typedef struct _APPLE_AGX_SCANOUT_CLIENT {
   APPLE_AGX_SCANOUT_U64 PresentSurfaceBytes;
   APPLE_AGX_SCANOUT_U32 PresentDestOrigin;
   APPLE_AGX_SCANOUT_U32 PresentDestSize;
+  /* V3: TRUE only after REG_NEGOTIATED read back CAP_TWO_LAYERS; cleared
+   * by a successful RELEASE (the broker clears its register then). */
+  APPLE_AGX_SCANOUT_BOOL TwoLayers;
 } APPLE_AGX_SCANOUT_CLIENT;
 
 APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutInitialize(
@@ -198,6 +292,28 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutDisableInterrupts(
 APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutConsumeInterrupt(
     APPLE_AGX_SCANOUT_CLIENT *Client, APPLE_AGX_SCANOUT_U32 *IrqStatus,
     APPLE_AGX_SCANOUT_U64 *LatchedSequence);
+/* V3.  Advertised: qualified V2 broker with the V2 present capabilities
+ * and CAP_TWO_LAYERS in the capabilities Qualify read; no MMIO. */
+APPLE_AGX_SCANOUT_BOOL AppleAgxScanoutTwoLayersAdvertised(
+    const APPLE_AGX_SCANOUT_CLIENT *Client);
+/* Write REG_NEGOTIATED = CAP_TWO_LAYERS and read it back.  Call after
+ * Qualify and before RegisterPool (the broker takes it only while
+ * UNREGISTERED).  MissingCapabilities without any MMIO when the bit is not
+ * advertised; NotNegotiated when the read-back differs. */
+APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutNegotiateTwoLayers(
+    APPLE_AGX_SCANOUT_CLIENT *Client);
+/* Stage Count (1 or 2) records, LAYER_COUNT, the sequence and command
+ * COMMIT_LAYERS, then read RESULT and RECEIPT_SEQUENCE once.  A terminal
+ * refusal returns BrokerRejected with LastBrokerResult = the refusal code;
+ * BUSY returns Busy.  On Ok the commit is pending until its latch
+ * (ConsumeInterrupt), exactly like QueuePresent; one commit or present is
+ * outstanding at a time. */
+APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutQueueCommitLayers(
+    APPLE_AGX_SCANOUT_CLIENT *Client, const APPLE_AGX_SCANOUT_LAYER *Layers,
+    APPLE_AGX_SCANOUT_U32 Count, APPLE_AGX_SCANOUT_U64 *Sequence);
+/* REG_ACTIVE_LAYERS; NotNegotiated without MMIO unless negotiated. */
+APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutReadActiveLayers(
+    APPLE_AGX_SCANOUT_CLIENT *Client, APPLE_AGX_SCANOUT_U32 *ActiveLayers);
 APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutRelease(
     APPLE_AGX_SCANOUT_CLIENT *Client, APPLE_AGX_SCANOUT_U64 DeadlineMs);
 

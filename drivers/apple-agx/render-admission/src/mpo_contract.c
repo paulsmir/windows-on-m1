@@ -85,6 +85,40 @@ static unsigned int MpoCheckPairPlane(const ADMISSION_MPO_INPUT *Input,
     return AdmissionMpoReasonUnsupportedFlags;
   if (!MpoRectContains(&plane->Clip, &plane->Destination))
     return AdmissionMpoReasonClip;
+  /* Version 2: the scanout broker's surface rules. */
+  if (plane->InScanoutPool == 0u ||
+      (plane->PlacementKnown != 0u &&
+       (plane->PoolOffset > Input->PoolBytes ||
+        plane->SurfaceBytes > Input->PoolBytes - plane->PoolOffset)))
+    return AdmissionMpoReasonSurfaceNotInPool;
+  if (plane->PlacementKnown != 0u &&
+      (plane->PoolOffset & (ADMISSION_MPO_POOL_ALIGNMENT - 1ULL)) != 0ULL)
+    return AdmissionMpoReasonSurfaceAlignment;
+  if (plane->SurfaceBytes != (unsigned long long)plane->SurfaceStride *
+                                 (unsigned long long)plane->SurfaceHeight)
+    return AdmissionMpoReasonSurfaceSize;
+  if (plane->SurfaceWidth == 0u || plane->SurfaceHeight == 0u ||
+      plane->SurfaceWidth > ADMISSION_MPO_SCANOUT_WIDTH ||
+      plane->SurfaceHeight > ADMISSION_MPO_SCANOUT_HEIGHT)
+    return AdmissionMpoReasonSurfaceLargerThanPanel;
+  if ((unsigned long long)plane->SurfaceStride <
+      (unsigned long long)plane->SurfaceWidth * ADMISSION_MPO_BYTES_PER_PIXEL)
+    return AdmissionMpoReasonStrideBelowRow;
+  return AdmissionMpoSupported;
+}
+
+/* Pair rules on two planes that passed every per-plane rule (so a known
+ * range lies inside the pool and its end cannot overflow). */
+static unsigned int MpoCheckPair(const ADMISSION_MPO_PLANE_INPUT *A,
+                                 const ADMISSION_MPO_PLANE_INPUT *B) {
+  unsigned int known = A->PlacementKnown != 0u && B->PlacementKnown != 0u
+                           ? 1u : 0u;
+  if (A->SurfaceIdentity == B->SurfaceIdentity ||
+      (known != 0u && A->PoolOffset == B->PoolOffset))
+    return AdmissionMpoReasonSameSurface;
+  if (known != 0u && A->PoolOffset < B->PoolOffset + B->SurfaceBytes &&
+      B->PoolOffset < A->PoolOffset + A->SurfaceBytes)
+    return AdmissionMpoReasonSurfaceOverlap;
   return AdmissionMpoSupported;
 }
 
@@ -96,6 +130,12 @@ static void MpoFillSlot(ADMISSION_MPO_SLOT *Slot,
   Slot->Premultiplied = Premultiplied;
   Slot->Source = Plane->Source;
   Slot->Destination = Plane->Destination;
+  Slot->FormatClass = Plane->FormatClass;
+  Slot->SurfaceWidth = Plane->SurfaceWidth;
+  Slot->SurfaceHeight = Plane->SurfaceHeight;
+  Slot->SurfaceStride = Plane->SurfaceStride;
+  Slot->PoolOffset = Plane->PoolOffset;
+  Slot->SurfaceBytes = Plane->SurfaceBytes;
 }
 
 static unsigned int MpoFail(ADMISSION_MPO_RESULT *Result, unsigned int Reason,
@@ -126,6 +166,12 @@ unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
     out->Slots[slot].Source.Right = 0;
     out->Slots[slot].Source.Bottom = 0;
     out->Slots[slot].Destination = out->Slots[slot].Source;
+    out->Slots[slot].FormatClass = AdmissionMpoFormatOther;
+    out->Slots[slot].SurfaceWidth = 0u;
+    out->Slots[slot].SurfaceHeight = 0u;
+    out->Slots[slot].SurfaceStride = 0u;
+    out->Slots[slot].PoolOffset = 0ULL;
+    out->Slots[slot].SurfaceBytes = 0ULL;
   }
   if (Input == MPO_NULL || Result == MPO_NULL)
     return MpoFail(out, AdmissionMpoReasonArgument, ADMISSION_MPO_NO_PLANE);
@@ -145,11 +191,18 @@ unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
     MpoFillSlot(&out->Slots[0], &Input->Planes[0], 0u, 1u);
     out->SlotCount = 1u;
   } else {
+    if (Input->PanelWidth != ADMISSION_MPO_SCANOUT_WIDTH ||
+        Input->PanelHeight != ADMISSION_MPO_SCANOUT_HEIGHT)
+      return MpoFail(out, AdmissionMpoReasonPanelGeometry,
+                     ADMISSION_MPO_NO_PLANE);
     for (index = 0u; index < 2u; ++index) {
       reason = MpoCheckPairPlane(Input, index);
       if (reason != AdmissionMpoSupported)
         return MpoFail(out, reason, index);
     }
+    reason = MpoCheckPair(&Input->Planes[0], &Input->Planes[1]);
+    if (reason != AdmissionMpoSupported)
+      return MpoFail(out, reason, 1u);
     for (index = 0u; index < 2u; ++index) {
       /* LayerIndex 1 (bottom) -> slot 0; LayerIndex 0 (top) -> slot 1.
        * OPEN design item: slot 0 premultiplied = 1 is reported but
