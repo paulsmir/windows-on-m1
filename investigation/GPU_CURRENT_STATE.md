@@ -4923,3 +4923,12 @@ DECISIONS:
   (5) R1; (6) R3/C2/C4; harness item: poll-induced long frames (EXP2338).
 
 Bench order: EXP2337 PF1 default-flip boot + EXP2338 STALL-POLL arms -> T5b FULL boot -> TDR-H0 -> FS-D1.
+
+## UPDATE 2026-11-11T03:22:37Z -- architect: POOL-LADDER code removed (8353ddb08); EXP2337 runs on 7f7f88ce1
+
+The opt-in rung is out of the kernel driver: `drivers/apple-agx/render-admission/` is byte-identical to the tree
+before 098a9c60b (pool receipt v15, 752 bytes); the decoder still reads the archived v16 dumps of EXP2336.
+Gates: pool modules (3 checkout-only m1n1 failures), baseline 1 NEW (the known mu-flag test). Not compiled by
+MSVC yet; its first package is the one built after the flip boot. EXP2337 (PF1 default flip) was launched on
+package 7f7f88ce1, built before this commit, with the control boots' switch set (JobDiagnostics,
+CrossProcessPairs, SubmitRequeue); EXP2338 arms follow in the same boot.
