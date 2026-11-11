@@ -5057,3 +5057,8 @@ symbols, which need the operator's permission to download; no package and no "ad
 Backlog (not GravityMark): BROKER-RANGE, live additive paging at creation, slab part.
 
 Bench order unchanged: EXP2338 (running) -> T5b FULL boot -> TDR-H0 -> FS-D1.
+
+CORRECTION 2026-11-11T04:26:27Z to the EXP2337 verdict above and to the "Not checked" clause of row
+CHG-20261111-52c897c5-PF1-DEFAULT-ON-EXP2337: no screenshot is missing. By the run plan of 02:48:47Z only the first
+default FULL arm (fpa) and the first FOLD=0 FULL arm (f0a) run with the screenshot option; arms f0b and fpb take none
+by design. The screenshot line of the KEEP rules is met by the four files in evidence/EXP2337/shots. Verdict unchanged.
