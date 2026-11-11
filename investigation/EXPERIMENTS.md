@@ -77924,3 +77924,10 @@ EXP2344 HARDWARE BEFORE 2026-11-11T15:49:23Z:
 - Hashes: sys 3177be8ebe66, UmdArm64 2616d1aad400, UmdX64 0e7933f4da28, Umd32 745fee2e423f; manifest 11b6ab61e79d, hardware-manifest f1f31c4e00fd; probe2344.sh 3dbabdd92d47 (PROBE_LINT_OK); visible recovery rec2344h ; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2344h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2344-s2-0a2/run2344.sh.
+
+EXP2344 ACTUAL 2026-11-11T16:28:46Z:
+- Package S2 source ee7baea83 (rebuilt as 30.0.2344.0); m1n1 closedv5-scaled1 afd45c3a (first hardware run of the scaled-source commits); Wom1MpoTwoPlanes unset; normal switch set; WU paused; cmd waits. EXP2344_PIPELINE_RC 0; STOPS 0, GPU_RESET none, wer 0 in every GM arm.
+- Suite 119/0. PERF w/r2/r3 fps_frames 50.340 / 50.641 / 50.286, mean(r2,r3) 50.464 (EXP2343 50.754, -0.57 %; worst -0.78 %). FULL (-times) f0a 8024 (EXP2343 8142, -1.45 %; band EXP2341 8025/8170).
+- CS 47.919/51.991/51.405, both VALID; PERF_GATE_PASS (cs16 +1.13 % against 50.832; worst vs EXP2343 worst 52.207: -1.54 %). WER_REPORTS 2 (old files).
+- m1n1 log: M1N1_GEOMETRY_LINES 1 ("display: scanout source 2560x1600 stride 10240 -> panel 2560x1600 at 0,0", the desktop handoff), DCP error/timeout lines 0, CAP_TWO_LAYERS line 0 (expected: not in scaled1). S2_INERT 0/0, mpo-feature rows 0, Wom1WddmDeviceCapsReceipt identical to EXP2343. Display alive (GM presents, CS).
+- Verdict: CONFIRMED -- scaled-source commits inert for a driver that never sets a destination; every number within the -2 % gates against EXP2343 (all slightly lower; same-direction drift recorded, not a stop). Capability bit 8 tolerated (driver started, presents normal). Next: S2-0b (EXP2345, s2v3) with CLKTWIN after its measured runs.
