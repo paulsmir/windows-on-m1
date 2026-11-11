@@ -77688,3 +77688,11 @@ EXP2337 HARDWARE BEFORE 2026-11-11T03:16:46Z:
 - Hashes: sys aaf106119adf, UmdArm64 55f8766c0ac8, UmdX64 25c194694aa9, Umd32 b4947c2aa0e4; manifest 29282391e0fe, hardware-manifest 1a2b62ac70ae; probe2337.sh 2268f361a80f (PROBE_LINT_OK); visible recovery rec2337h 1cfc581bd50a01e5; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2337h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2337-pf1-default-on/run2337.sh.
+
+EXP2338 HARDWARE BEFORE (same boot as EXP2337, harness only; architect entry 2026-11-11T02:58:52Z; state UPDATE 2026-11-11T03:00:12Z):
+- Kind: harness discriminator; no package, registry or driver change; runs after every pre-registered arm of EXP2337 incl. CS and the perf gate; skipped if EXP2337 hits a stop line.
+- Hypothesis: the 21-24 long frames (40-150 ms) on a ~6.5 s grid in every FULL run since EXP2329 f0b follow the Mac-side done-file poll (sleep 5 + one SSH powershell round trip).
+- WHY THIS HYPOTHESIS: period, jitter (sd 0.2-0.5 s) and the iteration-11 shift match the poll and nothing else enumerated; inside a stall only the render thread stops at varied code points with no submit callback in flight (loss of CPU, not a driver wait).
+- Arms (FULL HD, gm-run-notrace -times, 100k, -temporal 0, package default, sleep 60 before each), order A, B, C, B: sa (A) current poll; sb1 (B) no SSH while GravityMark runs: sleep 200 after the task start, then the usual poll; sc (C) 5 s poll through `cmd /c if exist ... echo True`; sb2 (B). Mac-side time.time() before and after each poll SSH in evidence/EXP2337/EXP2338/<tag>-poll.txt. No kmd-receipts, no other SSH, no scp during an arm.
+- Reading (architect, q2_table.py): HARNESS OWNS IT if both B arms <= 3 events and excess < 0.3 s while sa >= 15 events on the poll period; C <= 3 events = powershell start is the trigger, C >= 15 = SSH logon/session; NOT THE HARNESS if a B arm shows >= 15 events on a ~6.5 s grid; anything between = report numbers.
+- Evidence: .local/experiments/EXP2337-pf1-default-on/evidence/EXP2337/EXP2338/ (four -times files, out/score, poll files).
