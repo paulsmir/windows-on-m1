@@ -77877,3 +77877,10 @@ EXP2343 HARDWARE BEFORE 2026-11-11T13:59:31Z:
 - Hashes: sys 51086838e8ba, UmdArm64 95ba4079bdbc, UmdX64 19d42f54da22, Umd32 6846e0627d98; manifest 56ebc125f90d, hardware-manifest 4a1b1e691a14; probe2343.sh 48374d7111b3 (PROBE_LINT_OK); visible recovery rec2343h 26e340d14b2d994c; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2343h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2343-s2-0a/run2343.sh.
+
+EXP2343 ACTUAL 2026-11-11T14:38:52Z:
+- Package S2 source ee7baea83 (arch/s2-umd-mpo); m1n1 closedv5 e6ac18bb; Wom1MpoTwoPlanes unset; normal switch set; ntoskrnl 26100.9974, Windows Update paused (0x1/0x1); cmd waits. EXP2343_PIPELINE_RC 0; STOPS 0, wer 0 in every GM arm; no stop line reached.
+- Suite TOOL_SUITE PASS=119 FAIL=0. PERF w/r2/r3 fps_frames 49.944 / 50.826 / 50.681, mean(r2,r3) 50.754 (EXP2341 50.740). FULL (-times) f0a 8142 (EXP2341 8025/8170).
+- CS 1.6 warm/r2/r3 48.279/52.207/52.265, both scored runs VALID (pages_in 0/s); PERF_GATE cs16 PASS (+2.70 % against 50.832), gravitymark_hd_perf PASS (worst 45.795), PERF_GATE_PASS. WER_REPORTS 2 (the 2026-10-06 files, as every boot).
+- S2_INERT: Wom1MpoReceipt absent (0 lines), Wom1MpoTwoPlanes absent; measure-dxgi-mpo-feature rows 0 in every UMD log; Wom1WddmDeviceCapsReceipt byte-identical to EXP2341 (010000001c0000001d00000000000000040000000400000000320000). Features bit 0x20 by construction (not read directly).
+- Verdict: CONFIRMED -- the S2 code is inert with the switch unset (every pre-registered check and both gates inside the EXP2339/EXP2341 band). Next: CM-1 (EXP2347), then S2-0a2 (EXP2344).
