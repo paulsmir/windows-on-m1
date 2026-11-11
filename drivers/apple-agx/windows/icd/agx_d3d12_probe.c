@@ -10038,6 +10038,53 @@ static int mpo_kmt(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence 
                (unsigned long)st, stretch.VidPnSourceId, stretch.Update, stretch.Supported);
     }
     mpokmt_gate("qai-after");
+    /* Architect follow-up (REPORT-followup.md): adapter type bits, raw DRIVERCAPS_EXT / WDDM_x_x_CAPS words, and a
+     * self-check of types 19/20 (struct size, header line, a second handle from D3DKMTOpenAdapterFromLuid). */
+    {
+        D3DKMT_ADAPTERTYPE at;
+        memset(&at, 0, sizeof(at)); st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_ADAPTERTYPE, &at, sizeof(at));
+        printf("MPOKMT_QAI ADAPTERTYPE(15) status=0x%08lx Value=0x%x RenderSupported=%u DisplaySupported=%u SoftwareDevice=%u PostDevice=%u HybridDiscrete=%u HybridIntegrated=%u IndirectDisplayDevice=%u Paravirtualized=%u ACGSupported=%u SupportSetTimingsFromVidPn=%u Detachable=%u ComputeOnly=%u Prototype=%u RuntimePowerManagement=%u\n",
+               (unsigned long)st, at.Value, at.RenderSupported, at.DisplaySupported, at.SoftwareDevice, at.PostDevice, at.HybridDiscrete,
+               at.HybridIntegrated, at.IndirectDisplayDevice, at.Paravirtualized, at.ACGSupported, at.SupportSetTimingsFromVidPn,
+               at.Detachable, at.ComputeOnly, at.Prototype, at.RuntimePowerManagement);
+    }
+    {
+        static const struct { UINT type; const char *name; UINT size; } raw[] = {
+            {KMTQAITYPE_WDDM_1_2_CAPS, "WDDM_1_2_CAPS(17)", sizeof(D3DKMT_WDDM_1_2_CAPS)},
+            {KMTQAITYPE_WDDM_1_3_CAPS, "WDDM_1_3_CAPS(22)", sizeof(D3DKMT_WDDM_1_3_CAPS)},
+            {KMTQAITYPE_WDDM_2_0_CAPS, "WDDM_2_0_CAPS(24)", sizeof(D3DKMT_WDDM_2_0_CAPS)},
+            {KMTQAITYPE_DRIVERCAPS_EXT, "DRIVERCAPS_EXT(32)", sizeof(D3DKMT_DRIVERCAPS_EXT)},
+            {KMTQAITYPE_WDDM_2_7_CAPS, "WDDM_2_7_CAPS(70)", sizeof(D3DKMT_WDDM_2_7_CAPS)},
+            {KMTQAITYPE_WDDM_2_9_CAPS, "WDDM_2_9_CAPS(75)", sizeof(D3DKMT_WDDM_2_9_CAPS)},
+            {KMTQAITYPE_WDDM_3_0_CAPS, "WDDM_3_0_CAPS(77)", sizeof(D3DKMT_WDDM_3_0_CAPS)},
+            {KMTQAITYPE_WDDM_3_1_CAPS, "WDDM_3_1_CAPS(80)", sizeof(D3DKMT_WDDM_3_1_CAPS)},
+        };
+        for (UINT r = 0; r < sizeof(raw) / sizeof(raw[0]); ++r) {
+            UINT words[16]; memset(words, 0, sizeof(words));
+            st = mpokmt_qai(qai, od.hAdapter, raw[r].type, words, raw[r].size);
+            printf("MPOKMT_QAI %s status=0x%08lx size=%u words", raw[r].name, (unsigned long)st, raw[r].size);
+            for (UINT w = 0; w < (raw[r].size + 3u) / 4u && w < 16u; ++w) printf(" %08x", words[w]);
+            printf("\n");
+        }
+    }
+    printf("MPOKMT_SELFCHECK sizeof(D3DKMT_MULTIPLANEOVERLAY_SUPPORT)=%u (d3dkmthk.h:2048 {BOOL Supported}) sizeof(D3DKMT_DIRECTFLIP_SUPPORT)=%u (d3dkmthk.h {BOOL Supported}) type20=%u type19=%u\n",
+           (UINT)sizeof(D3DKMT_MULTIPLANEOVERLAY_SUPPORT), (UINT)sizeof(D3DKMT_DIRECTFLIP_SUPPORT),
+           (UINT)KMTQAITYPE_MULTIPLANEOVERLAY_SUPPORT, (UINT)KMTQAITYPE_DIRECTFLIP_SUPPORT);
+    {
+        MPOKMT_FN open_luid = mpokmt_fn(gdi, "D3DKMTOpenAdapterFromLuid");
+        D3DKMT_OPENADAPTERFROMLUID ol;
+        memset(&ol, 0, sizeof(ol)); ol.AdapterLuid = od.AdapterLuid;
+        st = open_luid ? open_luid(&ol) : (NTSTATUS)0xC0000001L;
+        printf("MPOKMT_SELFCHECK OpenAdapterFromLuid status=0x%08lx hAdapter=0x%x (display-path hAdapter=0x%x)\n", (unsigned long)st, ol.hAdapter, od.hAdapter);
+        if (st >= 0) {
+            D3DKMT_MULTIPLANEOVERLAY_SUPPORT m2; D3DKMT_DIRECTFLIP_SUPPORT d2;
+            memset(&m2, 0, sizeof(m2)); st = mpokmt_qai(qai, ol.hAdapter, KMTQAITYPE_MULTIPLANEOVERLAY_SUPPORT, &m2, sizeof(m2));
+            printf("MPOKMT_SELFCHECK luid-handle MULTIPLANEOVERLAY_SUPPORT(20) status=0x%08lx Supported=%d\n", (unsigned long)st, m2.Supported);
+            memset(&d2, 0, sizeof(d2)); st = mpokmt_qai(qai, ol.hAdapter, KMTQAITYPE_DIRECTFLIP_SUPPORT, &d2, sizeof(d2));
+            printf("MPOKMT_SELFCHECK luid-handle DIRECTFLIP_SUPPORT(19) status=0x%08lx Supported=%d\n", (unsigned long)st, d2.Supported);
+            if (close_fn) { D3DKMT_CLOSEADAPTER c2; memset(&c2, 0, sizeof(c2)); c2.hAdapter = ol.hAdapter; (void)close_fn(&c2); }
+        }
+    }
     for (UINT source = 0; source < 4u; ++source) {
         D3DKMT_GET_MULTIPLANE_OVERLAY_CAPS caps; D3DKMT_GET_POST_COMPOSITION_CAPS post; char tag[32];
         memset(&caps, 0, sizeof(caps)); caps.hAdapter = od.hAdapter; caps.VidPnSourceId = source;
