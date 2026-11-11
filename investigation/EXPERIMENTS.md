@@ -77899,3 +77899,12 @@ EXP2347 HARDWARE BEFORE 2026-11-11T14:44:29Z:
 - Hashes: sys abfeebe9a041, UmdArm64 4e41bef9f036, UmdX64 4736e2af3b4d, Umd32 cb9af4a4aaa8; manifest 131fd3901de1, hardware-manifest b06de75699c0; probe2347.sh 1a25adf05a58 (PROBE_LINT_OK); visible recovery rec2347h d1668391f4e10d0c; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1ComputeEncoderMask=1.
 - Recovery rec2347h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2347-cm1-encoder-mask/run2347.sh.
+
+EXP2347 ACTUAL 2026-11-11T15:24:01Z:
+- Package a4b2411b1 (exp/cm1-encoder-mask = fd410f54c + compute EncoderParams unk_mask write); m1n1 closedv5; Wom1ComputeEncoderMask=1 (SWITCHES_SET), normal switch set; ntoskrnl 26100.9974, WU paused; cmd waits. EXP2347_PIPELINE_RC 0; STOPS 0, GPU_RESET none, wer 0 in every GM arm; no firmware fault or timeout.
+- Suite 119/0. PERF w/r2/r3 fps_frames 50.702 / 50.839 / 51.990. FULL f0 traced (-times) 8101 (EXP2339 f0a/f0b 7991-band, EXP2341 8025/8170, EXP2343 8142).
+- CS 48.708/51.992/52.297, both VALID; PERF_GATE_PASS (cs16 +2.28 %, GM worst 45.637). WER_REPORTS 2 (old files).
+- Wom1GpuPerf mid-f0 (84.2 s sampled): pstate 6 (1278 MHz) 94.3 % of time, below target 0.3 %.
+- Per-job firmware work, ranking-refresh/nb.py --skip 0 --window 400, all 8093 frames (evidence nb-f0.txt, cm1cmp.txt), against the mean of EXP2339 f0a/f0b: C0 6.381 (-0.31 %), C2 2.107 (-0.45 %), C4 1.708 (-1.19 %), C6 0.725 (-0.21 %). Frame wall 19.968 ms (EXP2339 20.136/20.308).
+- Verdict: REJECTED (pre-registered: any compute row moving less than 2 % = rejected, no second form). EncoderParams.unk_mask = 0 is not the cause of the 1.13x compute excess. Code stays opt-in (default off); next in the family per the architect (CM-2..CM-4).
+- Rollback rec2347h started; next S2-0a2 (EXP2344).
