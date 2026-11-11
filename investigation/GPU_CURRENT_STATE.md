@@ -5471,3 +5471,20 @@ Decision: CM-1 (item 1 behind `Wom1ComputeEncoderMask`, one boot, source fd410f5
 after S2-0a. Pre-registered rule: all four compute work rows down by 2 % or more = confirmed; any row moving
 less than 2 % = rejected, no second form. CM-2..CM-4 wait for that verdict, one boot each. Spec in the handoff
 file. `Wom1ComputeEncoderMask` joins the opt-in list (default off, unset in every other package).
+
+## UPDATE 2026-11-11T15:24Z (architect): CM-1 REJECTED (EXP2347)
+
+- EXP2347, package a4b2411b1, `Wom1ComputeEncoderMask` set (receipt present), m1n1 closedv5. Firmware compute work,
+  whole FULL f0, against the base rows: C0 6.381 (-0.31 %), C2 2.107 (-0.45 %), C4 1.708 (-1.19 %), C6 0.725
+  (-0.21 %); wall 19.968 ms; FULL 8101. Every row moved less than 2 %: REJECTED by the pre-registered rule.
+  `EncoderParams.unk_mask` is not the owner of the 1.13 compute ratio. No second form.
+- The write is contract-correct against Asahi (class C). It becomes unconditional with the next accepted package
+  and the switch is removed; no FPS claim attaches to it.
+- Mid-run Wom1GpuPerf of this FULL arm (first one recorded for a FULL arm): state 6 for 94.3 % of 84.2 s sampled
+  (state 1 5.3 %, launch), below target 0.3 %, temperature 45..84 C, power max 5.9 W, frequency field 0.
+- Next for the compute ratio: (a) offline, a source for the real GPU clock and a twin probe of the total time of a
+  full-width arithmetic dispatch (needs one macOS boot by the operator when ready); (b) CM-2 (queue priority
+  tuple), CM-3 (TA core mask), CM-4 (7-core profile) stay queued as contract corrections after S2-1, one boot each;
+  their prior as the owner of a compute-only rate is low (CM-3 is TA only, CM-4 acts through the power controller,
+  which is not limiting).
+- Bench order now: S2-0a2 -> S2-0b -> S2-1.
