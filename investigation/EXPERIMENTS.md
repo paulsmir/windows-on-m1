@@ -77568,3 +77568,54 @@ EXP2333 HARDWARE BEFORE 2026-11-11T01:12:16Z:
 - Hashes: sys 00faa08c0bef, UmdArm64 305a6238b2f3, UmdX64 e4d3286d9490, Umd32 455d1b78d61b; manifest 65aebd55cf63, hardware-manifest 55e0600a639b; probe2333.sh ed17d2286433 (PROBE_LINT_OK); visible recovery rec2333h b3b449ca3ec57576; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1PoolAllocProbe=1.
 - Recovery rec2333h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2333-pool-probe/run2333.sh.
+
+EXP2333 ACTUAL 2026-11-11T01:42:11Z:
+- Package 15384e2f4 (POOL-PROBE a90f6e193 + decoder f5c6c99fe; buffer census 127a235a7 + 1b9f68f6f; K1 opt-in unset), Wom1PoolAllocProbe=1; ntoskrnl 26100.9974; Windows Update paused (status 0x1/0x1). EXP2333_PIPELINE_RC 0; STOPS 0, GPU_RESET none, wer 0 in every GM launch; quiet gates BUSY= (AVAIL_MB 3910 / 4731 / 4562).
+- Suite TOOL_SUITE PASS=119 FAIL=0. powercfg read before the first GM arm (evidence/EXP2333/powercfg.txt; Balanced, 5 % / 100 %).
+- Third new-build control: w/r2/r3 fps_frames 48.787 / 49.384 / 48.995, mean(r2,r3) 49.189 (floor printed only); FULL f0 7596 (-times). New-build boots EXP2331/2332/2333: mean(r2,r3) 48.910 / 49.445 / 49.189, FULL f0 7722 / 7680 / 7596.
+- POOL-PROBE (valid: value present, Version 1, TriggerSlabChunked 1, every arm Calls 8). agx_pool_alloc_probe.py output:
+  POOL_PROBE TriggerSlabAllocCalls=763 TriggerSlabFastMisses=1 TriggerSlabChunked=1 ProbeUs=526281
+  #  arm            calls  ok   mean_us   min_us   max_us   sum_us   gran   c2m  reuse  free_us
+  0  B1 cached 64K      8   8    5609.8     5364     5912    44878    256     0      0      271
+  1  B2 cached 64K      8   8    5592.4     4891     5981    44739    256     0    119      257
+  2  A1 wc 64K          8   8    5599.4     5172     6053    44795    256     0    103      250
+  3  A2 wc 64K          8   8    5790.0     5395     6342    46320    256     0      0      258
+  4  B3 cached 64K      8   8    6531.8     5997     7279    52254    256     0      0      264
+  5  C1 wc 256K         8   8    1751.5      561     3230    14012    256     0      5      246
+  6  B4 cached 64K      8   8    7083.8     6311     7432    56670    256     0      0      265
+  7  C2 wc 1M           8   8    3332.2       66     9892    26658    256     0      0      270
+  8  B5 cached 64K      8   8    8600.9     7723     9068    68807    256     0      0      271
+  9  D1 wc prefer       8   8     440.4      430      470     3523      0     0      0     1792
+  10 B6 cached 64K      8   8    7606.6     6991     8358    60853    256     0      0      286
+  11 A3 wc 64K          8   8    7111.2     6352     8106    56890    256     0    137      270
+  POOL_PROBE_RATIOS b_us=5601.1 a1/b=1.00 a2/a1=1.03 c1/a1=0.31 c2/a1=0.60 d1/a1=0.08 a3/a1=1.27 a2_reused=0/256
+  POOL_DEMAND post-f0 Wom1M2PoolDemand 0f000000f0020000000001000000000000000000010000005d0900000000000078b90000000000003fdf0200000000000000000000000000e2d5020000000000000000000000000000000000000000004c1
+- fcensus (valid: 296 measure-bo-born lines for GM pid 4164, no out of memory, EXIT 184 s). agx_bo_life.py (evidence/EXP2333/bo-life.txt):
+  PID 4164: 296 BOs >= 1 MiB born 1.6..181.2 s after process start
+    class                                         count       MiB  never           0-1s            1-5s            5-30s           30-70s          >70s          
+    committed-buffer                                 26    1900.3  3/166.6         7/169.1         3/384.0         13/1180.6       0/0.0           0/0.0         
+    committed-texture                                12     552.8  1/16.1          4/37.4          7/499.2         0/0.0           0/0.0           0/0.0         
+    driver General                                   66     310.9  1/1.4           51/205.8        13/101.7        1/2.1           0/0.0           0/0.0         
+    driver General (cache reuse)                    163     247.0  0/0.0           163/247.0       0/0.0           0/0.0           0/0.0           0/0.0         
+    placed/reserved-texture                          18      72.8  5/19.1          5/21.3          8/32.4          0/0.0           0/0.0           0/0.0         
+    heap (outside CreateHeapAndResource)              3      60.2  3/60.2          0/0.0           0/0.0           0/0.0           0/0.0           0/0.0         
+    placed/reserved-texture (cache reuse)             7      33.9  6/26.6          0/0.0           1/7.2           0/0.0           0/0.0           0/0.0         
+    heap (outside CreateHeapAndResource) (cache reuse)      1       2.0  0/0.0           1/2.0           0/0.0           0/0.0           0/0.0           0/0.0         
+    TOTAL                                           296    3179.8  19/290.0        231/682.6       32/1024.6       14/1182.6       0/0.0           0/0.0         
+    (cells: objects/MiB; time buckets = first batch reference minus creation)
+    largest never-referenced:
+      serial     16 handle 0x000000e0     109.9 MiB va 0x1118b40000 born 3.4 s  committed-buffer
+      serial     29 handle 0x0000012c      42.7 MiB va 0x1155bd0000 born 5.9 s  committed-buffer
+      serial      7 handle 0x00000039      20.1 MiB va 0x1107720000 born 2.3 s  heap (outside CreateHeapAndResource)
+      serial      9 handle 0x00000069      20.1 MiB va 0x1109500000 born 2.4 s  heap (outside CreateHeapAndResource)
+      serial     10 handle 0x0000006d      20.1 MiB va 0x110a960000 born 2.4 s  heap (outside CreateHeapAndResource)
+      serial     77 handle 0x00000226      16.1 MiB va 0x11a3580000 born 15.8 s  committed-texture
+      serial    295 handle 0x00000323      14.1 MiB va 0x11b0260000 born 181.1 s  committed-buffer
+      serial     53 handle 0x00000211       7.2 MiB va 0x118c590000 born 13.9 s  placed/reserved-texture
+      serial     55 handle 0x00000211       7.2 MiB va 0x118c590000 born 13.9 s  placed/reserved-texture (cache reuse)
+      serial     60 handle 0x00000216       7.2 MiB va 0x118e2d0000 born 14.0 s  placed/reserved-texture
+    no measure-bo-census line (device not destroyed before exit): BOs < 1 MiB not reported
+  Log 383506966 bytes vs 193897786 bytes of the r2 PERF trace (1.98x; the FULL f0 arm is untraced).
+- CS 1.6 warm/r2/r3 47.631/50.979/50.872 with the disturbance check: r2 mid row pages_in 16/s, foreign max powershell.exe 595 pf/s VALID; r3 pages_in 16/s, foreign max Memory 2433 VALID; PERF_GATE cs16 PASS (+1.86 %), gravitymark_hd_perf PASS (worst 44.226), PERF_GATE_PASS. WER_REPORTS 2 (the two 2026-10-06 files).
+- Rollback rec2333h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE (Wom1PoolAllocProbe removed).
+- Verdict: POOL-PROBE and census data valid; readings are the architect's (pool ratio rules, N against 550 MiB). Third new-build control boot.
