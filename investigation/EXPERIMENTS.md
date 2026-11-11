@@ -78022,3 +78022,8 @@ EXP2348 ACTUAL 2026-11-11T18:53:08Z:
 - FULL series of the day: EXP2341 (closedv5) 8025/8170, EXP2343 (closedv5) 8142, EXP2347 (closedv5, CM-1) 8101, EXP2344 (scaled1) 8024, EXP2345 (s2v3) 7906, EXP2346 (s2v3 + switch) 8060, EXP2348 (closedv5) 7987/8032.
 - Reading by the architect's rule (near 7900 -> drift of the day, m1n1 lines cleared; back in 8050-8170 -> A-B pair): FULL 7987/8032 did not return to 8050-8170 on closedv5 with the accepted package, so the scaled/S2 m1n1 lines are not shown to cost FULL; final verdict the architect's. Temperatures per FULL arm are now recorded (46-85 C).
 - Next: S2-1b (EXP2349) after rollback rec2348h.
+
+GATE RE-BASE 2026-11-11T18:54:41Z (architect verdict after EXP2348, state file 0d40b6a77; no hardware run):
+- FULL slide 8142 -> 7906 = boot-to-boot spread; scaled1 and s2v3 m1n1 lines CLEARED; default image stays closedv5; U-6 closed for the never-latched case.
+- New one-sided stop lines (replace FULL 7538 / PERF 48.65): any FULL arm below 7880; PERF mean(r2,r3) below 49.7. Derived from the fold-on control boots EXP2339/EXP2341/EXP2348 (FULL arms 8047, 7962, 8025, 8170, 7987, 8032). A single FULL arm cannot carry a claim smaller than 2.6 %: lever verdicts need two FULL arms per boot or the per-job rows.
+- investigation/perf-baseline.json re-based on the same three boots (mean of the per-boot worst of r2/r3): cs16_benchmark 50.832 -> 52.441 (per-boot worst 52.199 / 52.075 / 53.048); gravitymark_hd_perf (fps_presents) 40.770 -> 45.865 (45.838 / 45.787 / 45.969). Check: agx_perf_gate.py on each control boot's r2/r3 logs: EXP2339 -0.46 % / -0.06 %, EXP2341 -0.70 % / -0.17 %, EXP2348 +1.16 % / +0.23 %, all PASS (tolerance -2.0 %).
