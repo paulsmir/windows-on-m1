@@ -77634,3 +77634,13 @@ EXP2335 HARDWARE BEFORE 2026-11-11T01:47:23Z:
 - Hashes: sys a2449b721528, UmdArm64 a925649daac6, UmdX64 ade73ceba6c3, Umd32 65e481a59574; manifest dac75abb2996, hardware-manifest c1ee40ff79ae; probe2335.sh 0dfe46d5d32c (PROBE_LINT_OK); visible recovery rec2335h 89ade858a9ac73a0; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2335h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2335-pf1c-fold/run2335.sh.
+
+EXP2335 ACTUAL 2026-11-11T02:38:36Z:
+- Package 30eb52ad4 (PF1c 8d3f43d32, APPLE_AGX_D3D12_EXPAND_FOLD default off; K1 opt-in unset); ntoskrnl 26100.9974; Windows Update paused (0x1/0x1). EXP2335_PIPELINE_RC 0; STOPS 0, GPU_RESET none, wer 0 in every GM arm; quiet gates BUSY=.
+- Suite TOOL_SUITE PASS=119 FAIL=0. Control w/r2/r3 fps_frames 48.415 / 48.320 / 49.165, mean(r2,r3) 48.742 (new-build band [48.65, 49.72]: inside; old floor 49.1 printed only).
+- PF1c p1 validity rows met: p1a seals 3.246, folded 7.574, refusal 7 (order) 0, seal-drop cause 5 RESOURCE 0, v5 prelude envelopes 0; p1b 3.236 / 7.551 / 0 / 0 / 0; every counted-path row folded (28083/28083, 28195/28195). Envelopes per present 00280004/00c80003/00d80005: p0a 4.351/1.157/3.261, p1a 4.327/4.393/0.000, p1b 4.314/4.380/0.000, p0b 4.312/1.148/3.231; measure-gpu-prelude per present p0 3.26/3.23, p1 0.
+- PERF ABBA fps_frames: p0a 49.873, p1a 50.848, p1b 50.454, p0b 49.228; mean(p1) 50.651 vs mean(p0) 49.551 = +2.22 %, both p1 above both p0.
+- FULL ABBA (-times): f0a 7804, fpa 7902, fpb 7924, f0b 7782; mean(fp) 7913 vs mean(f0) 7793 = +1.54 %, both fp above both f0. f0 next to the new-build band [7538, 7794]: 7804 / 7782.
+- CS 1.6 warm/r2/r3 47.256/50.466/49.807, both scored runs VALID (mid pages_in 0/s, foreign max MsMpEng 494 / powershell 589 pf/s); PERF_GATE cs16 PASS (-0.27 %), gravitymark_hd_perf PASS, PERF_GATE_PASS. WER_REPORTS 2 (the 2026-10-06 files).
+- Rollback rec2335h: RECOVERY_STORAGE_APPLEANS_OK, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_DONE.
+- Verdict (bench owner, receipts and FPS only): PF1c mechanism confirmed (all three render preludes folded, 0 v5 envelopes); FPS +2.22 % PERF and +1.54 % FULL in one same-boot ABBA, above the +0.7 % flip threshold. Per-job reading (six-job sum vs p0, 0.03 ms rule) and the default decision are the architect's.
