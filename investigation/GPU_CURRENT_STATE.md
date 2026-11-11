@@ -4717,3 +4717,101 @@ against code and receipts (research returned as text; no REPORT.md exists, its s
 Ranking unchanged: (1) non-busy about 1.9 ms per frame; (2) startup gap 4.9-5.5 s: chunked slabs about 2.3 s
 (BO 1.97 + TVB about 0.4; POOL-LADDER), bind 1.16 s, TVB growth rest about 0.45 s, remainder; (3) R5 3D;
 (4) C0; (5) R1; (6) R3/C2/C4.
+
+
+## UPDATE 2026-11-11T02:41:07Z -- architect: EXP2335 verdict -- PF1 expand fold CONFIRMED (frame -0.52 ms, PERF +2.22 %, FULL +1.54 %); default flip goes to its own boot
+
+Package 30eb52ad4 (PF1c 8d3f43d32), ntoskrnl 26100.9974. Registry of the boot: Wom1JobDiagnostics=1,
+Wom1CrossProcessPairs=1, Wom1SubmitRequeue=1; every other opt-in unset (K1 off). APPLE_AGX_D3D12_EXPAND_FOLD=1
+only in the p1 / fp arms. Bench owner's ACTUAL: EXPERIMENTS.md "EXP2335 ACTUAL 2026-11-11T02:38:36Z"; every number
+below was recomputed by me from evidence/EXP2335 (tools/agx_gm_perf.py summary, gm2335*-out.txt, pf1-rx.txt).
+
+Mechanism (validity rows met): p1a seals 3.246 / folded kernels 7.574 / refusal 7 (order) 0 / seal-drop cause 5 0 /
+v5 prelude envelopes 0 per present; p1b 3.236 / 7.551 / 0 / 0 / 0; every counted-path row folded (28083/28083,
+28195/28195). Envelopes per present 00280004 / 00c80003 / 00d80005: p0 4.33 / 1.15 / 3.25, p1 4.32 / 4.39 / 0.00.
+The compute envelope count is the control's (the "more than 4 compute envelopes" line of the PF1 rule is read
+against the control: no increase).
+
+PERF ABBA (fps_frames, 60 s window, same boot):
+  w 48.415  r2 48.320  r3 49.165  (mean(r2,r3) 48.742, inside the band [48.65, 49.72])
+  p0a 49.873  p1a 50.848  p1b 50.454  p0b 49.228   mean(p1) 50.651 vs mean(p0) 49.551 = +2.22 %
+  both p1 above both p0 and above every fold-off run of the boot (48.32-49.87).
+FULL ABBA (untraced, -times): f0a 7804  fpa 7902  fpb 7924  f0b 7782; mean(fp) 7913 vs mean(f0) 7793 = +1.54 %,
+both fp above both f0. Fold FULL mean 7913 = 79.6 % of macOS 9946 in this boot (its f0 runs sit at the top of the
+band [7538, 7794]); applied to the band mean 7666 the gain gives about 7784 = 78.3 %. No claim above that.
+CS 1.6 r2/r3 50.466 / 49.807, both valid, PERF_GATE_PASS. Suite 119/0 -- run with the fold OFF (probe2335.sh
+line 25 passes an empty environment).
+
+Per-frame split (r12/t5b nb.py unchanged, 10 s skip + 60 s window, frames with wall > 45 ms excluded; ms per
+frame). Render busy start has no prelude stamp in the fold arms (falls back to TA end), so per-render busy/gap
+rows are NOT comparable across arms. Arm-independent decomposition used instead: wall = sum of gap before each
+compute + sum of pair spans, pair span = compute busy + render gap + render busy; residual 0.000 in all four arms
+(scratchpad pf1c-split/agg.py, out-agg.txt).
+  row            p0a     p1a     p1b     p0b  |   p0      p1    p1-p0
+  frames        2991    3046    3017    2953
+  wall        20.032  19.618  19.677  20.304 | 20.168  19.647  -0.521
+  span C0R1    8.676   8.676   8.671   8.685 |  8.680   8.673  -0.007
+  span C2R3    5.082   4.986   5.065   5.217 |  5.150   5.026  -0.124
+  span C4R5    4.264   4.062   4.044   4.219 |  4.242   4.053  -0.189
+  span C6R7    1.337   1.249   1.153   1.389 |  1.363   1.201  -0.162
+  gaps before compute (4)                    |  0.733   0.694  -0.039
+  compute work C0 / C2 / C4 / C6             |  6.237 / 2.557 / 2.018 / 0.713 -> 6.289 / 2.578 / 2.115 / 0.722
+  3D R1 / R3 / R5 / R7                       |  0.757 / 0.971 / 1.622 / 0.298 -> 0.758 / 0.950 / 1.594 / 0.245
+  prelude firmware time (p0 only)            |  R1 0.061, R3 0.038, R5 0.090 (sum 0.189)
+  detect (completion - mapped firmware end)  |  R1 0.292 -> 0.046, R3 0.828 -> 0.119, R5 0.443 -> 0.095;
+                                             |  C0 0.149 -> 0.086, C6 0.103 -> 0.152, R7 0.075 -> 0.086
+  foreign-job fraction 0.895 -> 0.898; join_bad_va 0 in all four.
+Reading:
+- The three folded pairs give -0.320 ms, gaps -0.039, the unfolded pair C6R7 -0.162; sum -0.521 = wall.
+- Compute work grows by 0.170 ms (the folded kernels; C4 +0.097 is the largest) against 0.189 ms of prelude
+  firmware time removed: kernel time is about equal. The gain is the launch / sequencing of the prelude inside
+  the render envelope, not kernel time. C0R1 gains nothing (-0.007) although its prelude is folded as well.
+- The six-job rule (sum above control by more than 0.03 ms = failure) is read on the three folded pair spans:
+  -0.320 ms. PASSED.
+- NOT explained: C6R7 -0.162 ms (R7 has no counted draw; 3D -0.053, the rest is before R7's 3D start). p0a and
+  p0b differ by 0.27 ms of wall, p1a and p1b by 0.06, so about half of this row is inside the control spread.
+- Observation, not explained: completion of a render with a prelude (envelope 00d80005) is seen 0.29-0.83 ms
+  after its mapped firmware end, the same render without prelude (00c80003) 0.05-0.12 ms. The next job does not
+  wait for that completion in most positions (wall moved by 0.52, not by 1.3), gap before C2 -0.077 is the
+  visible part.
+
+Pre-registered criteria (PF1 section "Run and verdict rules", EXP2328 / EXP2335 BEFORE):
+  v5 envelope in steady state: 0 -- passed.   fault / 0x116 / TDR: none (STOPS 0, wer 0) -- passed.
+  fps_frames below control by more than 1 %: +2.22 % -- passed.   six-job sum: passed (above).
+  gain below 0.1 ms -> switch stays off: gain 0.52 ms.   flip rule +0.7 %: met in PERF and FULL.
+  flicker: NOT CHECKED (evidence/EXP2335/shots is empty; no arm was run with the screenshot option).
+  suite with fold=1: NOT RUN (the suite ran fold-off).
+VERDICT: effect CONFIRMED on hardware (class O, measured gain, mechanism receipts + same-boot PERF ABBA + FULL
+ABBA). Expected was +1.0-1.5 % / frame 20.31 -> 20.0-20.1; observed is larger (20.17 -> 19.65). The default is
+NOT flipped by this boot: two pre-registered items are open (screen check, suite under the fold).
+
+DECISION: default flip = next package, one variable (the default of the switch; unset = fold on,
+APPLE_AGX_D3D12_EXPAND_FOLD=0 = off, EXPAND_AHEAD=1 still disables). Rules for its boot, written before the run:
+- Runs: suite under the default (fold on); w/r2/r3 under the default; PERF ABBA in the order default, =0, =0, default
+  (mirror order of EXP2335); FULL ABBA same order with -times; one default arm and one =0 arm with the
+  screenshot option; CS warm/r2/r3 with the disturbance check; perf gate.
+- Validity: default arms show the EXP2335 p1 rows (refusal 7 = 0, cause 5 = 0, v5 envelopes 0, seals about 3.24,
+  folded about 7.56 per present); =0 arms show seals 0 and v5 envelopes about 3.2 per present (opt-out works).
+- KEEP the default if: suite 119/0 under the fold, no fault / 0x116 / TDR, screenshots of the default arm
+  correct and of the same content class as the =0 arm, this boot's PERF gain not negative, pooled PERF gain of
+  EXP2335 + this boot >= 0.7 %, FULL mean(default) >= FULL mean(=0), CS and perf gate PASS.
+- REVERT the flip commit otherwise (the switch stays as opt-in; the failing item decides the follow-up).
+- Bands: [7538, 7794] and [48.65, 49.72] were measured fold-off. After a kept flip they are re-derived from the
+  first three fold-on boots; until then verdicts use same-boot ABBA only and the one-sided stop lines stay
+  7538 / 48.65.
+Still NOT VERIFIED after EXP2335 (carried from the PF1 section): UAV write visibility to the folded kernel
+inside one CDM stream, adoption on render reset (mock only), ordering against K1 / C1 / C2a / depth-two, any
+D3D12 application other than GravityMark and the probe suite.
+
+Second observation of the split (new, not in any earlier record): frames above 30 ms sit on one grid of about
+6.4 s in all four arms (about 28.4, 34.8, 41.3, 47.6, 54.5, 61.0, 67.5, 70.4, 77.0, 83.3 s of the run): p0a 19
+frames (328 ms above 20 ms each), p1a 14 (286), p1b 17 (562, two frames of 93 and 100 ms), p0b 12 (210). Dominant
+gap class a (the UMD has not called the submit callback yet = application / UMD CPU side), typically 8-31 ms.
+Cost 0.07-0.19 ms per frame. Not caused by the fold (same grid in p0). Owner not established; whether it exists
+in untraced runs and on macOS is not known. Goes to a read-only analysis, no bench time.
+
+Ranking (PERF frame, fold-off values unless stated): PF1 fold -0.52 ms (confirmed, flip boot next);
+(1) non-busy about 1.9 ms per frame (to be re-measured on the first fold-on boot); (2) startup gap 4.9-5.5 s
+(POOL-LADDER boot EXP2336 pending); (3) R5 3D; (4) C0; (5) R1; (6) R3/C2/C4; new small item: periodic 6.4 s
+stall 0.07-0.19 ms.
+Bench order: EXP2336 POOL-LADDER -> PF1 default-flip boot -> T5b FULL boot (six centred arms) -> TDR-H0 -> FS-D1.
