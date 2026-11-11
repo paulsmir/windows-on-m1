@@ -5616,3 +5616,20 @@ that point. Source: .local/night-20261110/s2-ddisplay-black/REPORT.md (display r
 - Standing decisions: DisableDDisplay=1 stays in every bench profile until the cycle is explained; the Set3
   classification is not changed; the health-check rule (picture, not process) stands.
 - Next: offline, the writers of that flag bit and of the two bytes, and which input of our driver sets them.
+
+## UPDATE 2026-11-11T21:06Z (architect): S2-1e step 0 (EXP2352): video-processor hypothesis rejected; loop persists
+
+- EXP2352 = EXP2351 plus a complete, nothing-advertising D3D11 video function table. RetrieveSubObject(3) once,
+  S_OK. DWM then called one entry only: GetContentProtectionCaps, 16 times (we return E_NOTIMPL). No enumerator,
+  caps, processor or Blt call. The ModeChange / plane-off / invisible loop persists (V2Presents 0, 34 mode
+  changes), measured runs skipped by the picture check. "DWM's normal path needs a video processor": REJECTED.
+- Probe additions: ADAPTERTYPE 0x10b (render, display, post device, ACG; not indirect, not paravirtual, not
+  software); WDDM_2_0_CAPS 3; DRIVERCAPS_EXT and WDDM_2_7 / 2_9 / 3_0 / 3_1 caps 0; types 19 / 20 self-checked
+  (4-byte structs, two handles): both 0 are dxgkrnl's answers.
+- The guest's dxgkrnl.sys is 10.0.26100.9974, sha256 0be25a27..., 5099392 bytes: NOT the image the static readings
+  used (3b3ac442..., 5092224 bytes). Every dxgkrnl function+offset statement of today (R22 follow-ups) is
+  unverified for the guest until re-read on the guest's file. The dwmcore reading (26200.9974) also needs its
+  hash checked against the guest.
+- Next: guest dxgkrnl.sys and ddisplay.dll copied to the Mac for reading; the loop's DxgKrnl ETL decoded; one
+  behavioural variable: GetContentProtectionCaps answered as a driver without content protection must, plus a
+  receipt for the ddisplay exception's HRESULT. DisableDDisplay=1 stays in every other profile.
