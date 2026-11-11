@@ -5204,3 +5204,48 @@ there is no per-job split for them; the per-scene frame rates below come from th
 Bench order now: TDR-H0 (own boot, ends in 0x116 by design) -> band boot 2 (package fd410f54c unchanged, control
 arms only) -> FS-D1. The next GravityMark lever (plane route S2) waits for the dwmcore read; msdl has no public
 dwmcore.pdb for 26200.9974 (HTTP 404, also for the builder's x64 build), so that read runs without symbols.
+
+
+## UPDATE 2026-11-11T11:35Z -- R23: dwmcore half of the plane-route gate read without symbols; gate status and next discriminator
+
+Source: static read of the guest dwmcore.dll (ARM64 26200.9974, sha256 033a9c65...6496, no public PDB), report
+`.local/night-20261110/r23-dwmcore-mpo-policy/REPORT.md`. Spot-checked by the architect in `full.dis`:
+`0x1800a87f0` (MPO-usable predicate), `0x180170d40` (frame-rate gate), the import table and the registry table.
+
+Observed in the image:
+1. MPO usable = `OverlayTestMode != 5 && MaxPlanes > 1` (caps block at overlay context +0x28). No test on
+   MaxYUVPlanes, MaxRGBPlanes, the stretch/shrink factors or OverlayCaps == 0 was found (offset-pattern search,
+   medium confidence; one predicate on a bit 0x40000 of the caps word is not traced, the bit is clear with our caps).
+2. Per-surface frame-rate gate: promote at >= OverlayMinFPSToEnable (default 20), keep at >= OverlayMinFPSToKeep
+   (10), OverlayDebounceTimeMs 2000 before a promotion. Values live under HKLM\Software\Microsoft\Windows\Dwm.
+   GravityMark at ~50 fps passes. Correction to the report: a threshold of 0 means "eligible" on both paths
+   (the enable path joins the same `cbz` at 0x180170d60).
+3. dwmcore imports no D3DKMT multi-plane / flip-support call; caps and plane calls go through a COM object
+   (vtable slot 0x158 fills the caps). If that call fails the caps stay at MaxPlanes = 1.
+4. Candidates are composition surfaces; no video-only / fullscreen-only / HDR-only gate was found.
+
+Not resolved by the static read: U-A (LayerIndex / blend / source-destination rectangles DWM asks for), U-C
+(cursor rectangle handling: a cursor rectangle is computed per frame in the plane builder, its effect is unknown),
+occlusion by the cursor alone.
+
+Gate status for plane route S2: dxgkrnl half (R22) and dwmcore caps half (R23) do not rule MPO out for
+MaxPlanes 2 / RGB 2 / YUV 0 / stretch 1.0. The open items are internal DWM decisions per surface, so they are
+settled by observation, not by more reading of the caps path.
+
+Observation channel found: provider Microsoft-Windows-Dwm-Core {9e9bba3c-2e38-40cb-99f4-9e8281425164}, keyword
+Overlays 0x200 (Cursor 0x400). Task names from the builder's provider registration
+(`.local/night-20261110/r24-dwmcore-manifest/`, x64 26300, no field templates): 215 OVERLAY_GETCAPS,
+216 OVERLAY_RECORDCANDIDATE, 217 OVERLAY_CHECKOCCLUSION, 218-220 OVERLAY_CHECKSUPPORT, 221-222
+OVERLAY_CANDIDATECOLLECTION, 223-225 OVERLAY_PRESENT, 290 DISPLAYSURFACE_REJECTCANDIDATE,
+291 DISPLAYSURFACE_CANDIDATEATTRIBUTES.
+
+Decisions:
+- No S2 package and no advertise-and-refuse boot (capability rule) -- unchanged.
+- R25 (running, offline): payload layout and call sites of these events in the guest image, the reject/occlusion
+  conditions behind 290/217, the origin of the per-plane fields, and which events fire at MaxPlanes = 1.
+- DWM-TRACE: one diagnostic arm at the END of band boot 2 (after every measured arm, package unchanged): 30 s
+  Dwm-Core trace (keywords 0x600) over a windowed GravityMark run. It tests whether DWM records the GravityMark
+  swapchain as a candidate with the current driver and what it rejects it for. It is cancelled if R25 shows these
+  events cannot fire at MaxPlanes = 1. The same capture is the acceptance diagnostic of any later S2 package.
+- Real-hardware reference (builder PC, MaxPlanes > 1) would show the plane order DWM asks for, but needs a window
+  on the user's console session: left to the user's decision, not started.
