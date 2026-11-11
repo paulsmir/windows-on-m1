@@ -694,6 +694,31 @@ static void stats(bool on){
 }
 #endif
 
+#ifndef PF1_BASELINE
+/* Test 6 (PF1c): after the seal R became the recorded writer of a BO Wb
+ * uses (a deferred hazard: Wb still runs first); R's next candidate-passing
+ * counted draw folds into the same sealed Wb without an ORDER re-check. */
+static void sealed(void){
+ setup();
+ agx_win32_stream_flush_inputs(&ctx,&in);assert(draw(vdm+32)&&launch_batch==&wb);
+ assert(COUNT(AGX_WIN32_FOLD_SEALS)==1&&wb.windows_expand_fold&&r.windows_expand==&wb);
+ fold_render_writes=true;
+ agx_win32_stream_flush_inputs(&ctx,&in);
+ for(unsigned i=1;i<=AGX_WIN32_FOLD_REFUSE_DRAW;++i)assert(!COUNT(AGX_WIN32_FOLD_REFUSED+i));
+ assert(!flushes&&wb.windows_expand_fold&&r.windows_expand==&wb&&wb.windows_expand_owner==&r);
+ assert(COUNT(AGX_WIN32_FOLD_SEALS)==1);
+ assert(draw(vdm+40)&&!ctx.any_faults&&launch_batch==&wb&&!r.cdm.bo);
+ assert(COUNT(AGX_WIN32_FOLD_KERNELS)==2&&ctx.windows_indirect_fold==1&&work_count(&wb,'K')==2);
+ agx_flush_batch(&ctx,&r);
+ assert(flushes==2&&flush_log[0]==&wb&&flush_log[1]==&r&&!ctx.any_faults);
+ /* the first seal keeps the full check: an unsealed Wb is refused */
+ setup();fold_render_writes=true;
+ agx_win32_stream_flush_inputs(&ctx,&in);
+ assert(COUNT(AGX_WIN32_FOLD_REFUSED+AGX_WIN32_FOLD_REFUSE_ORDER)==1&&!wb.windows_expand_fold&&!r.windows_expand);
+ puts("SEALED PASS");
+}
+#endif
+
 int main(int argc,char **argv){
  const bool on=argc>2&&!strcmp(argv[1],"on");
  const char *what=argc>2?argv[2]:"";
@@ -718,6 +743,7 @@ int main(int argc,char **argv){
 #ifndef PF1_BASELINE
  else if(!strcmp(what,"reset")&&on)reset();
  else if(!strcmp(what,"stats"))stats(on);
+ else if(!strcmp(what,"sealed")&&on)sealed();
 #endif
  else return 2;
  reset_counts();
@@ -850,6 +876,16 @@ class ExpandFold(unittest.TestCase):
         self.assertEqual(off[-1],'STATS PASS')
         self.assertEqual(on[-1],'STATS PASS')
         self.assertEqual([l for l in off if l.startswith('STATS ')],[l for l in on if l.startswith('STATS ')])
+
+    def test_sealed_pair_skips_the_order_recheck(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        PF1c (EXP2332): R's second counted draw re-ran the ORDER check
+        against a Wb already sealed for R; R's own writes after the seal are
+        deferred hazards that run after Wb, so the check refused, flushed Wb
+        and dropped the seal. The second draw must fold into the same sealed
+        Wb (no refusal, no flush, one seal), and the first seal must still
+        refuse ORDER."""
+        self.assertIn('SEALED PASS',self.run_mode('on','sealed'))
 
 
 DEPENDENCY = r"""

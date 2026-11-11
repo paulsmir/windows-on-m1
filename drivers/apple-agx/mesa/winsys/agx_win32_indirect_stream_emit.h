@@ -208,7 +208,13 @@ agx_win32_fold_prepare(struct agx_context *ctx, struct agx_batch *wb,
       reason = AGX_WIN32_FOLD_REFUSE_PRELUDE;
    else if (agx_win32_fold_owner(wb) && agx_win32_fold_owner(wb) != render)
       reason = AGX_WIN32_FOLD_REFUSE_OTHER_RENDER;
-   else if (agx_win32_fold_render_writes(ctx, wb, render))
+   /* PF1c: only the first seal checks the order. For a pair already sealed
+    * every write R recorded after the seal is a deferred hazard that runs
+    * after Wb (agx_win32_fold_defers, agx_win32_fold_follows), and another
+    * writer of this kernel's inputs was flushed by
+    * agx_win32_stream_flush_inputs (flushing R drops the seal: LOST). */
+   else if (agx_win32_fold_owner(wb) != render &&
+            agx_win32_fold_render_writes(ctx, wb, render))
       reason = AGX_WIN32_FOLD_REFUSE_ORDER;
    if (reason) {
       agx_win32_fold_refused(ctx, reason);

@@ -47,7 +47,13 @@
  *   so no application work joins it after R --, a CPU map, an eviction,
  *   flush_all, another batch's hazard) goes ahead and passes the one
  *   seal-drop point, agx_win32_fold_drop at the top of agx_flush_batch;
- *   R's later counted draws keep the in-render prelude.
+ *   after a seal drop R's later counted draws keep the in-render prelude.
+ * - PF1c: while the pair stays sealed, R's later counted draws append their
+ *   kernels to Wb without repeating the first seal's order check
+ *   (agx_win32_fold_render_writes): R became a writer of Wb's BOs after the
+ *   seal only through deferred hazards, which run after Wb, and any other
+ *   writer of a kernel's arguments/count is flushed before the draw
+ *   (agx_win32_stream_flush_inputs; flushing R drops the seal first).
  * - agx_flush_batch(R) flushes Wb first (agx_win32_expand_flush_first);
  *   Wb's own rc105 scan skips R, which depends on it (agx_win32_fold_follows).
  *   A Wb without kernels is application work: submitted, never reset.
