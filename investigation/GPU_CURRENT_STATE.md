@@ -4815,3 +4815,57 @@ Ranking (PERF frame, fold-off values unless stated): PF1 fold -0.52 ms (confirme
 (POOL-LADDER boot EXP2336 pending); (3) R5 3D; (4) C0; (5) R1; (6) R3/C2/C4; new small item: periodic 6.4 s
 stall 0.07-0.19 ms.
 Bench order: EXP2336 POOL-LADDER -> PF1 default-flip boot -> T5b FULL boot (six centred arms) -> TDR-H0 -> FS-D1.
+
+
+## UPDATE 2026-11-11T03:00:12Z -- architect: PF1 default flip committed (52c897c59); periodic long frames follow the harness poll (extends the "Second observation" of 2026-11-11T02:41:07Z)
+
+PF1 default flip: code 52c897c59 on origin gpu/memory-latency (unset = fold on, `APPLE_AGX_D3D12_EXPAND_FOLD=0`
+= off, `EXPAND_AHEAD=1` still disables). Status implemented, not validated: the flip boot (rules of
+2026-11-11T02:41:07Z, unchanged) decides KEEP or REVERT. Offline gates: glue test 10/10, baseline 1 NEW (the
+known checkout-only mu-flag test), builder syncheck OK (the winsys header gets its first MSVC compile at the
+package build). Scope read from source: only the D3D12 counted / multi-record ExecuteIndirect path can reach
+the switch (AgxD3d12OwnerDraw is the only caller that sets draw bindings); the D3D10/11 path and the OpenGL ICD
+cannot. Probe coverage: no probe step has a compute or UAV write feeding a counted/indirect draw in the same
+command list; RC59G, RC63G and RC89S write arguments/count with CopyBufferRegion in the same list and may reach
+the fold through the copy kernel (not checked). So GravityMark is the only workload known to exercise the fold.
+
+Periodic long frames (correction and extension of the "Second observation" above; the earlier text said
+0.07-0.19 ms per frame from the traced PERF window and "owner not established"):
+- Measured on the untraced FULL -times files (events = frames above max(45 ms, 2x median) after frame 200,
+  clustered at > 2 s; table .local/night-20261110/stall-6s/q2-table.txt): EXP2331/2332/2333 f0 = 24/23/24
+  events, one-poll interval 6.42/6.62/6.68 s, excess 2.02/1.76/1.95 s; EXP2335 four FULL arms = 21-24 events,
+  6.40-6.54 s, excess 1.36-1.76 s; EXP2336 f0 = 23 events, 6.65 s, 2.11 s. Excess is 0.9-1.3 % of a 157 s run.
+- The grid is not new at EXP2329: runs EXP2309-EXP2328 have 0-12 events of about 50-90 ms whose spacings are
+  multiples of 5.64-5.80 s (EXP2328 f0: four intervals of 22.7 s = 4 x 5.68). EXP2329 f0a had 1 event;
+  EXP2329 ft5a, 4.5 minutes later in the same boot with the same poll code, had 22 (the guest's Windows Update
+  servicing started in that minute, EXPERIMENTS.md EXP2329). Since then every poll produces a stall and the
+  period is about 0.8 s longer.
+- Period = `sleep 5` of the probe's done-file loop + one SSH powershell round trip; jitter sd 0.2-0.5 s (not a
+  timer). Traced PERF arms of EXP2335: one extra stall at 67.1-67.5 s = the kmd-receipts SSH of loop
+  iteration 11, and the grid shifts by that call's ~3 s (61.0 -> 67.4 -> 70.4 -> 77.0 in all four arms).
+- Extent (EXP2335 traced arms, 50 events, q1-table.txt): only the benchmark's render thread stops (gap
+  26-122 ms at varied code points, no submit callback in flight); KMD completions inside the window are
+  detected at normal latency (median 0.055-0.090 ms), another process keeps submitting. No whole-guest pause.
+  13 of 50 events also show a KMD job-thread detect delay above 10 ms (priority 12 thread): not explained.
+- Not periodic actors: driver timers (500 ms pool reclaim, vsync, job poll), m1n1 reports (10 s), the guest
+  watchdog (it starts polling only after RUN_DONE, which is written after the probe). macOS reference runs
+  were started locally with no polling; their command-buffer cadence shows no periodic long frames.
+READING: the trigger is the harness poll (established by period, jitter and the iteration-11 shift, not by a
+common clock). The owner inside the guest -- SSH logon, powershell start, or a platform cost of process
+start under the hypervisor -- is NOT established, and neither is what changed at EXP2329 ft5a.
+CONSEQUENCE for the comparison with macOS: Windows FULL scores since EXP2329 ft5a carry about 1 % of
+harness-induced loss that the macOS runs do not have. No score is corrected by this note; the correction
+needs the measured B-A delta of the discriminator.
+DECISION: discriminator STALL-POLL as extra arms after all pre-registered arms of the PF1 default-flip boot,
+own experiment ID, harness only (spec: handoff entry 2026-11-11T02:58:52Z). Arms A (current poll), B (no SSH
+during the run), C (5 s poll through cmd without powershell), B. Pre-registered reading: both B arms <= 3
+events and excess < 0.3 s with A >= 15 events -> harness owns it, FULL arms wait B-style from the next boot and
+the bands are re-derived once together with the fold-on bands; C <= 3 events -> powershell start is the
+trigger, C >= 15 -> the SSH logon is; a B arm with >= 15 events on the grid -> not the harness, poll unchanged.
+The EXP2336 harness and the flip boot's pre-registered arms keep the current poll.
+Open and not pursued now: a 55-150 ms loss of a render thread on each process start is larger than expected
+on an 8-CPU guest; if B/C show the trigger is process start, this becomes a platform item (guest scheduling
+under the hypervisor), ranked after the fold boot results.
+
+Bench order: EXP2336 POOL-LADDER (running) -> PF1 default-flip boot + STALL-POLL arms -> T5b FULL boot ->
+TDR-H0 -> FS-D1.
