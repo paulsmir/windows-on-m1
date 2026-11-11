@@ -77931,3 +77931,18 @@ EXP2344 ACTUAL 2026-11-11T16:28:46Z:
 - CS 47.919/51.991/51.405, both VALID; PERF_GATE_PASS (cs16 +1.13 % against 50.832; worst vs EXP2343 worst 52.207: -1.54 %). WER_REPORTS 2 (old files).
 - m1n1 log: M1N1_GEOMETRY_LINES 1 ("display: scanout source 2560x1600 stride 10240 -> panel 2560x1600 at 0,0", the desktop handoff), DCP error/timeout lines 0, CAP_TWO_LAYERS line 0 (expected: not in scaled1). S2_INERT 0/0, mpo-feature rows 0, Wom1WddmDeviceCapsReceipt identical to EXP2343. Display alive (GM presents, CS).
 - Verdict: CONFIRMED -- scaled-source commits inert for a driver that never sets a destination; every number within the -2 % gates against EXP2343 (all slightly lower; same-direction drift recorded, not a stop). Capability bit 8 tolerated (driver started, presents normal). Next: S2-0b (EXP2345, s2v3) with CLKTWIN after its measured runs.
+
+EXP2345 HARDWARE BEFORE 2026-11-11T16:35:14Z:
+- Kind: single variable = m1n1 image (architect 13:43Z step 3). Package: S2 source ee7baea83 rebuilt as EXP2345 (DriverVer stamp only). Same switch set as EXP2344. Compare against EXP2344.
+- m1n1: m1n1-ansdirect-closedv5-scaled1-s2v3 sha256 bcb176e6178fd34e5850573304312d8ab4a1733e251b55de4ddb832697169055 (gpu/s2-broker-v3 63c13618 = 14c893b2 + 6906f490 + f6176bba + 63c13618, recipe + AGX_SCANOUT_TWO_LAYERS=1). Same-source control without the knob: b0667afe24b6... (not run; splits bit 9 from the present refactor if this boot diverges).
+- Registry: Wom1JobDiagnostics=1, Wom1CrossProcessPairs=1, Wom1SubmitRequeue=1; Wom1MpoTwoPlanes unset.
+- Hypothesis: the two-layer broker is inert for a guest that never negotiates V3: numbers inside the gates against EXP2344, no new DCP messages, "CAP_TWO_LAYERS (ABI V3) advertised" printed, Wom1MpoReceipt absent (switch unset).
+- WHY THIS HYPOTHESIS: (1) V3 registers are decoded only after NEGOTIATED (hv_agx_scanout_broker.c two_layers_advertised); (2) the present path refactor keeps the A407/A408 sequence (dcp.c:656, by reading); (3) the driver tolerates bit 9 (required-bit masks).
+- WINDOWS CONTRACT: unchanged (no MPO caps). AGX/ASAHI CONTRACT: broker V2 path + bit 9 advertised. TRANSLATION: none. WHAT IS STILL UNKNOWN: hardware behaviour of the refactored present path (build + submit_built).
+- Runs (probe2345.sh): as EXP2344 + M1N1_CAP_TWO_LAYERS_LINES.
+- Expected: GM/CS inside the gates against EXP2344; CAP_TWO_LAYERS line >= 1; geometry lines as EXP2344; zero DCP error lines; S2_INERT 0/0.
+- Failure: as EXP2344; plus a missing CAP_TWO_LAYERS line (wrong image).
+- Recovery: rec2345h/recover.sh (closedv5 pair); DCP problem -> proxy reboot.
+- Hashes: sys 9afae88eca1d, UmdArm64 cc6def090834, UmdX64 a022a64619c3, Umd32 3ea3e3a03702; manifest ffa03cb39c92, hardware-manifest 9bc0795a6621; probe2345.sh d60fdf410987 (PROBE_LINT_OK); visible recovery rec2345h c4185341508113e3; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
+- Recovery rec2345h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2345-s2-0b/run2345.sh.
