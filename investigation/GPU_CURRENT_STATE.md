@@ -4495,3 +4495,33 @@ Evidence read: `.local/experiments/EXP2331-stats-nops/evidence/EXP2331/{qgate.tx
 - Update pause: both Paused*Status values are 1 in this boot (`wu-pause-status.txt`). The System-log half of the criterion is still open.
 - `wer-final.txt` reports 2 files in C:\CrashDumps; their dates are not read yet (fork 6 lists them in the ACTUAL).
 - Next: fork 6 reruns the arms with the fixed gate, same package and the same value 0 (same boot if it is still up, else a new ID). No other change.
+
+## UPDATE 2026-11-11T00:31:12Z -- architect: EXP2331 verdicts: K1 is a necessary condition of the hang on 26100.9974 (B rejected); first control on the new Windows build is lower; STATS-NOPS shows no R5 3D effect in the PERF window
+
+Evidence read (files, not reports): `.local/experiments/EXP2331-stats-nops/evidence/EXP2331/{qgate.txt,kmd-receipts-checkpoint.out,kmd-receipts-post-t0a.out,kmd-receipts-post-t1a.out,kmd-receipts-post-t1b.out,kmd-receipts-post-t0b.out,kmd-receipts-final.txt,wer-final.txt,perf-gate.txt,tool-suite-std.txt,nops-valid.txt,gm2331f0-out.txt}`, the UMD logs `gm2331{w,r2,r3,t0a,t1a,t1b,t0b}-umd.log` through `tools/agx_gm_perf.py summary` and `tools/agx_gpu_frame_breakdown.py --jobs`, and fork 6's EXP2331 ACTUAL (01b58b6d9), which agrees with the files.
+
+### 0x116: pre-registered reading (a) applies
+- K1 off by registry for the whole boot (`K1_CHECKPOINT render_pairs considered/kicked 0 0`). `GPU_RESET none` at the checkpoint and after each of the four PERF arms; no ResetEngine entry in the final receipts; `STOPS 0`; suite 0 FAIL; w/r2/r3, four PERF arms, FULL f0 and the CS bench all completed after the 20 idle minutes.
+- Verdict: hypothesis B (the new build alone hangs the first render after idle) is REJECTED. On ntoskrnl 26100.9974 the K1 cross-process render pair is a necessary condition of the firmware hang seen in EXP2330 and EXP2334. Weight: one clean boot against two hung ones, each hung within 20 s of GPU work.
+- Decision: K1 stays off. The tip already reads it as opt-in (b81265c7d, 80736842a); packages built before the revert (EXP2332 = 05afd0ee6) get `Wom1CrossProcessRenderPairs=0`. The mechanism (what a K1 pair leaves behind for the lead process's next render after idle on the new kernel) is not derived and is not pursued unless a lever needs K1.
+- `wer-final.txt` says `WER_REPORTS 2`, `STOPS 0`; the dates of the two files in C:\CrashDumps are still not read.
+
+### New Windows build: first control numbers (one boot, not averaged with the old build)
+- FULL f0 = 7722 (46.2 fps) = 77.6 % of macOS 9946. Old-build mean of six boots: 7918.
+- Control fps_frames w/r2/r3 = 49.537 / 48.894 / 48.927, mean(r2,r3) = 48.910. Old-build control boots: 50.08 .. 50.71. CS r2/r3 50.684 / 50.444, PERF_GATE_PASS.
+- Where the loss sits (r2/r3 of EXP2325, EXP2326, EXP2328, EXP2329 against EXP2331, same tools):
+  - GravityMark frame time per 7.5 s block of the PERF window: old mean 21.00 21.30 23.28 23.71 12.81 17.23 18.33 21.22 ms; new 21.34 21.73 23.68 24.07 13.93 18.25 18.85 21.67 ms. Every block is above the old maximum; +0.34 .. +0.52 ms in the GPU-bound blocks, +1.0 .. +1.1 ms in the two light blocks (5 and 6).
+  - GPU work per job is unchanged: compute exact 13.46 / 13.48 ms (old 13.45 .. 13.59), main 3D 1.575 / 1.586 (old 1.581 .. 1.611), big 3D 1.796 / 1.797 (old 1.799 .. 1.851).
+  - Median completion-detect per frame 1.319 / 1.404 ms against old 0.887 .. 1.313 (mean 1.107).
+  - Startup anchor 19.0 s / 17.0 s against old 15.7 .. 16.7 s.
+- Reading: the loss is not in GPU work. It is on the CPU / kernel side of the frame (largest where the frame is not GPU-bound). HYPOTHESIS (labelled, not proven): the new kernel build or the state of this one boot changed CPU-side cost or completion-detect latency. One boot cannot separate build from boot. No band, no default flip and no lever verdict is derived from cross-build comparisons; same-boot ABBA stays valid.
+- Rule for the next boots (appended, the old rule is not edited): the 49.1 floor of the probes was derived on the old build. Until three control boots on 26100.9974 exist it is recorded but is not a skip criterion; validity is the quiet gate, `GPU_RESET none` and the arm validity rows. Every next boot runs w/r2/r3 and FULL f0 as new-build controls.
+
+### STATS-NOPS (`APPLE_AGX_D3D12_STATS_NO_PS=1`, class D measurement)
+- Validity: stats-no-ps rows 0/1/1/0. PERF ABBA fps_frames t0a 47.844, t1a 49.196, t1b 49.693, t0b 49.125. t0a is the low outlier of the boot (its detect median is 1.668 ms against 1.020 .. 1.395 in the others).
+- Per-job medians, positions 5 / 3 / 1 = R5 / R3 / R1 3D (t0a, t1a, t1b, t0b): R5 1.698 1.668 1.666 1.676; R3 1.102 1.075 1.078 1.083; R1 0.801 0.800 0.799 0.798. Pair deltas (t1 - t0): R5 -0.031 and -0.010 ms; R3 -0.027 and -0.005 ms; R1 0.000.
+- Against the pre-registered rule: expected -0.1 .. -0.4 ms on R5 3D if the cause were real; both PERF pairs are below the 0.04 ms reject threshold. The second clause (FULL mean(fn) - mean(f0) < +0.5 %) is NOT measured: the probe skipped fna/fnb by the floor rule. Status: first reject clause met, verdict open until the FULL arms run. They get no boot of their own; they ride as two centred FULL arms in the T5b FULL boot (order f0a, ft5a, fna, fnb, ft5b, f0b). The switch stays off by default either way.
+- Side observation, not a lever: R1 span is +0.17 .. +0.22 ms in the NOPS arms with unchanged 3D and TA (its to_ta grows by 0.08 .. 0.11 ms). Not explained; not pursued unless the FULL arms show an effect.
+
+### Next on the bench (fork 6)
+EXP2332 (PF1b, package 05afd0ee6, `Wom1CrossProcessRenderPairs=0`) -> EXP2333 POOL-PROBE rebuilt from the tip (K1 opt-in unset, `fcensus` arm last) -> T5b FULL boot with the two STATS-NOPS FULL arms -> TDR-H0 -> FS-D1. In the next boot one read-only line more: `powercfg /getactivescheme` and the processor min/max state, to exclude a power-policy change by the update.
