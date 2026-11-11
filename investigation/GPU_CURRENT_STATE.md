@@ -4869,3 +4869,57 @@ under the hypervisor), ranked after the fold boot results.
 
 Bench order: EXP2336 POOL-LADDER (running) -> PF1 default-flip boot + STALL-POLL arms -> T5b FULL boot ->
 TDR-H0 -> FS-D1.
+
+## UPDATE 2026-11-11T03:08:42Z -- architect: EXP2336 verdict -- POOL-LADDER REJECTED (256 KiB rung 13.25 ms per slab against 5.6-6.4 ms); slab part of the startup gap parked
+
+Evidence: `.local/experiments/EXP2336-pool-ladder/evidence/EXP2336/` (pool-demand-pre-gm.json,
+pool-demand-post-f0.json, gm2336f0-times.txt, gm2336w/r2/r3-umd.log, perf-gate.txt); numbers below recomputed
+by the architect from these files. Package 098a9c60b, `Wom1PoolLadder=1` for the whole boot. The run entry in
+EXPERIMENTS.md (EXP2336 ACTUAL) is fork 6's and was not yet on origin at this stamp.
+
+Expected (lines of UPDATE 2026-11-11T01:45:42Z, unchanged) against actual, FULL f0:
+- Validity: `pool_ladder.enabled` true in both dumps; rung256_calls 1924 -> 2542 = slab_chunked 1924 -> 2542;
+  rung256 skipped 0, failed 0. Every slab that missed the 2 MiB fast attempt was served by the 256 KiB rung;
+  the 64 KiB attempt was never reached. new_slab_failures 0.
+- M1 non-fast cost per slab: expected <= 3.2 ms (control 5.59 / 6.20 / 6.34-6.38). Actual 8,187,447 us over
+  618 slabs = 13.25 ms. Reject line 4.7 ms crossed. Before the first scored launch the boot's cumulative rate
+  was already 10.15 ms (1924 slabs).
+- M2 frame-1 -> frame-2 gap: expected <= 4.29 s (control 4.881 / 5.472 / 5.079). Actual 6.841 s. Reject line
+  4.88 s crossed.
+- M3 frames in the first 10 s: control 201 / 179 / 194. Actual 111.
+- FULL f0 7536 (stop line 7538, band [7538, 7794]); PERF w/r2/r3 47.292 / 48.415 / 49.234, mean(r2,r3) 48.825
+  (inside [48.65, 49.72]); CS r2/r3 50.923 / 50.548 valid; perf gate PASS; suite 119/0; no fault, no stop.
+- Buffer creation of the traced launches (measure-bo-create sums, field meanings from the emitter comment),
+  ladder against the controls EXP2331/2332/2333/2335: cold launch w allocation 10.04 s (control 5.48-6.79 s);
+  warm r2/r3 allocation 3.45 / 3.88 s (control 3.42-5.49 s), GPU VA bind 4.44 / 4.10 s (control 4.10-4.51 s).
+  The bind part does not fall with fewer physical runs per slab (this answers the question left open in
+  UPDATE 2026-11-11T01:48:44Z).
+- Observation rule (first operation-1 escape): M1 > 3.2 ms, so by the rule the escape values
+  (1.250 / 0.984 / 1.285 s) say nothing.
+
+VERDICT: REJECTED by both pre-registered reject lines. The rung costs about twice the 64 KiB path per slab and
+lengthens the startup gap by 1.4-1.9 s. The FULL value under the stop line belongs to this switch (single
+variable of the boot, removed in rollback); it is not a control value and does not enter any band.
+
+CORRECTION to UPDATE 2026-11-11T01:45:42Z (EXP2333 reading, text there left as written): "per-chunk search
+cost CONFIRMED as the owner" was read from 8 calls per arm of the pool probe (256 KiB arm 1751 us per 2 MiB).
+At launch scale (618 slabs in one FULL launch, 1924 before it) the same request costs 13.25 ms per 2 MiB, so
+the cost per slab does not fall with fewer, larger chunks. The probe's 1 MiB arm was already bimodal
+(66 .. 9892 us). Hypothesis, labelled, not tested and not pursued: the cost is the search for free aligned runs
+of the chunk size, and runs of 256 KiB are scarce after the first few allocations.
+
+DECISIONS:
+- `Wom1PoolLadder` stays off and gets no second boot and no other rung size. No pool-probe boot.
+- The opt-in rung code (098a9c60b) is removed from the tree, as the pool probe was; the removal is a class C
+  cleanup, rides in the first package built after the flip boot, and gets no boot of its own. The EXP2337
+  package stays 7f7f88ce1.
+- Slab part of the startup gap (about 2.3 s of the 4.9-5.5 s gap, bound about +1 % of the macOS score) is
+  PARKED: conversion, reuse direction, deferred backing, allocate-ahead, prefill and now the chunk ladder are
+  all closed for it. It is reopened only by a new primary-source fact about how Windows serves
+  MmAllocatePagesForMdlEx chunk requests, not by another size or flag trial.
+- Ranking: PF1 fold (flip boot EXP2337 next); (1) non-busy about 1.9 ms per frame (re-measured on the first
+  fold-on boot); (2) startup gap, remaining readable parts: GPU VA bind 1.16 s of the gap (1.5-1.7 ms per MiB
+  in every launch, 1.0 ms per MiB in the probe suite), TVB growth rest about 0.45 s; (3) R5 3D; (4) C0;
+  (5) R1; (6) R3/C2/C4; harness item: poll-induced long frames (EXP2338).
+
+Bench order: EXP2337 PF1 default-flip boot + EXP2338 STALL-POLL arms -> T5b FULL boot -> TDR-H0 -> FS-D1.
