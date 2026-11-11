@@ -5443,3 +5443,31 @@ Firmware-timed compute work against Apple's per-encoder time at the same benchma
   DRAMCFG, GPU TLB. Two offline checks are running (definition of both series plus per-second fits and a census of
   the macOS-twin probes; field-by-field comparison of what the driver tells the firmware about core topology and
   the power controller against Asahi). No hardware run and no package until they report.
+
+## UPDATE 2026-11-11T13:52Z (architect): compute ratio re-measured against Apple GPU spans; CM-1 released
+
+Correction of the previous update ("compute rows are proportional at 1.10"), which stays as written:
+- 1.10 was against Apple's completion-to-completion increments, which contain the gaps between Apple's command
+  buffers. Against Apple's summed GPU spans the ratio of means is 1.13..1.14 for all four compute jobs (2309nhd:
+  C0 1.136, C2 1.131, C4 1.129, C6 1.136; fold arms: C4 1.19 with the folded expand), flat per 20-s window.
+- "Proportional with zero intercept" holds for C2 and C4 only (slopes 1.08 and 1.13); C0 fits slope 1.25 with
+  intercept -0.9 ms. The uniform quantity is the ratio of means, not the slope.
+- C4 has 1 dispatch per frame, C0 134 (Apple side): the ratio is not a per-dispatch cost.
+- The macOS capture is this J313 (GPU "Apple M1 7C", macOS 15.7.8).
+- NOT MEASURED, contrary to how "GPU clock" was closed: the real GPU frequency. HwDataA 0x58 reads 0 MHz in every
+  receipt; "state 6 = 1278 MHz" is the ADT table. No twin of the total time of a full-width dispatch exists.
+  1278/1128 = 1.133 is noted as a numerical coincidence only (HYPOTHESIS, no evidence).
+
+Differences from Asahi in what the driver gives the firmware (source comparison, firmware G13 / V13_5):
+1. compute `EncoderParams.unk_mask` (work+0x270): Asahi 0xffffffff, ours 0 (never written). Re-read by me.
+2. QueueInfo priority: ours PRIORITY[0] tuple for TA, 3D and compute (template); Asahi PRIORITY[2] for render at
+   medium priority and (0,2,0xffff000000000000,0,0,1) for compute.
+3. TA `core_mask`: ours {0xffffffff,0xffffffff} (template, never patched); Asahi {0xfe,0} from the registers.
+4. Init-data profile generated with 8-core chip constants: core_leak_coef 1000 vs 890, sram_leak_coef 45 vs 40.5,
+   max_power 19551 vs 19803 and derived values. num_cores / num_frags are 8 on both sides.
+Items 2..4 are from the agent report and not re-read by me.
+
+Decision: CM-1 (item 1 behind `Wom1ComputeEncoderMask`, one boot, source fd410f54c + one write) runs directly
+after S2-0a. Pre-registered rule: all four compute work rows down by 2 % or more = confirmed; any row moving
+less than 2 % = rejected, no second form. CM-2..CM-4 wait for that verdict, one boot each. Spec in the handoff
+file. `Wom1ComputeEncoderMask` joins the opt-in list (default off, unset in every other package).
