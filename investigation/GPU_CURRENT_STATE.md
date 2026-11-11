@@ -4647,3 +4647,24 @@ REG_DWORD Wom1PoolLadder=1 inserts a 256 KiB-chunk attempt between the fast 2 Mi
   minus the control range 0.59 s) AND FULL f0 >= 7538 AND PERF mean(r2,r3) >= 48.65 AND perf gate
   PASS AND new_slab_failures 0. REJECT if M1 > 4.7 ms or M2 > 4.88 s. Anything between: one more
   boot, then decide. FULL score alone decides nothing here (expected +62 frames is under one sd).
+
+## UPDATE 2026-11-11T01:48:44Z -- architect: addendum to UPDATE 2026-11-11T01:45:42Z: frame-2 gap split from the receipts' own durations
+
+The "rest of that gap" line of the 01:45:42Z entry used intervals between rows. The receipts carry
+their own durations (field meanings from the emitter comments: measure-bo-create
+{MiB, class, allocation us, GPU VA bind us, association us}, measure-scene-escape {operation, us, ...});
+this split replaces that line. Census launch of EXP2333, gap 13.59 -> 18.34 s (4.75 s):
+- BO creation, 36 rows / 575 MiB: allocation 1.97 s (3.4 ms per MiB = 6.8 ms per 2 MiB, i.e. the
+  chunked slab rate) + GPU VA bind 1.16 s (2.0 ms per MiB; of it MakeResident residency 0.40 s in
+  10 measure-gpuva-map-time rows, bind paging-fence waits 0.48 s in 14 rows).
+- One scene escape, operation 1, 1280x720: 0.85 s. Present once in every traced launch of the three
+  control boots: 0.76 .. 1.13 s (12 launches). It is longer than the largest single pool reserve of
+  the boot (ReserveUsMax 0.77 s), so it is not one pool reserve; its content is unknown.
+  Research started (read-only): `.local/night-20261110/scene-acquire-cost/REPORT.md`.
+- Remainder about 0.77 s (uploads, copies, 69 submits).
+POOL-LADDER addresses the 1.97 s allocation part (expected saving about 1.4 s, same as the
+01:45:42Z estimate). Whether the bind part also falls with 4x fewer physical runs per slab is
+unknown; the ladder boot shows it in measure-bo-create of the traced r2 launch. Metrics and
+ACCEPT / REJECT lines of the 01:45:42Z entry are unchanged.
+EXP2335 keeps no post-f0 receipt dump (probe already running when asked); the fourth control for
+M1 comes from its final dump only as a per-slab rate, for M2/M3 from gm2335f0a/f0b-times.txt.
