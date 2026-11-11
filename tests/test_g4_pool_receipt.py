@@ -48,11 +48,7 @@ int main(void) {
                    "v14 prefix changed");
     _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, HeadroomRefusals) == 744,
                    "v15 layout changed");
-    _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, Rung256Calls) == 752,
-                   "v15 prefix changed");
-    _Static_assert(offsetof(ADMISSION_POOL_DEMAND_RECEIPT, PoolLadder) == 800,
-                   "v16 layout changed");
-    _Static_assert(sizeof(r) == 808, "v16 wire ABI changed");
+    _Static_assert(sizeof(r) == 752, "v15 wire ABI changed");
     r.Version = ADMISSION_POOL_DEMAND_RECEIPT_VERSION; r.Bytes = sizeof(r);
     r.GranuleBytes = 65536; r.LastWindowResult = 9;
     r.SegmentBytes = 1409286144ULL;
@@ -93,8 +89,6 @@ int main(void) {
     r.PoolPercent = 75; r.PolicyPercent = 75; r.PolicyMaxPercent = 80;
     r.PolicyCpuOnlyMiB = 16384; r.PolicyFlags = 1u | 2u | 8u;
     r.HeadroomRefusals = 6;
-    r.Rung256Calls = 12; r.Rung256Ok = 8; r.Rung256Us = 30000; r.Rung256UsMax = 5000;
-    r.Rung256FailUs = 6000; r.Rung256Skipped = 64; r.PoolLadder = 1;
     return fwrite(&r, sizeof(r), 1, stdout) == 1 ? 0 : 1;
 }
 '''
@@ -106,17 +100,21 @@ int main(void) {
                             str(src), '-o', str(exe)], check=True)
             raw = subprocess.check_output([str(exe)])
         got = decoder.decode_pool(raw)
-        self.assertEqual(got['version'], 16)
-        ladder = {k: v for k, v in got['pool_ladder'].items() if k != 'meaning'}
+        self.assertEqual(got['version'], 15)
+        self.assertIsNone(got['pool_ladder'])
+        # The rejected POOL-LADDER receipt (v16, archived EXP2336 evidence) must
+        # stay decodable after its removal from the KMD: literal v16 layout from
+        # 098a9c60b, Rung256Calls..Rung256Skipped at 752, PoolLadder at 800, 808 bytes.
+        v16 = bytearray(raw) + bytearray(56)
+        struct.pack_into('<II', v16, 0, 16, 808)
+        struct.pack_into('<7Q', v16, 752, 12, 8, 30000, 5000, 6000, 64, 1)
+        ladder = {k: v for k, v in decoder.decode_pool(v16)['pool_ladder'].items()
+                  if k != 'meaning'}
         # nonfast: (chunked_us 90000 + rung256_fail_us 6000) / 30 chunked slabs.
         self.assertEqual(ladder, dict(
             rung256_calls=12, rung256_ok=8, rung256_us=30000, rung256_us_max=5000,
             rung256_fail_us=6000, rung256_skipped=64, enabled=True,
             rung256_ms_per_slab=3.0, nonfast_ms_per_slab=3.2))
-        v15 = bytearray(raw[:752])
-        struct.pack_into('<II', v15, 0, 15, 752)
-        self.assertIsNone(decoder.decode_pool(v15)['pool_ladder'])
-        self.assertEqual(decoder.decode_pool(v15)['graphics_policy']['headroom_refusals'], 6)
         policy = {k: v for k, v in got['graphics_policy'].items() if k != 'meaning'}
         self.assertEqual(policy, dict(
             graphics_share_bytes=5414095872, base_segment_bytes=3288334336,
