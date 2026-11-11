@@ -5505,3 +5505,20 @@ file. `Wom1ComputeEncoderMask` joins the opt-in list (default off, unset in ever
   an S2 boot). Spec in the handoff file, design in .local/night-20261110/clock-twin/REPORT.md. The macOS twin is
   built but waits for the operator.
 - CM-2..CM-4 parked as contract corrections without an FPS expectation.
+
+## UPDATE 2026-11-11T17:16Z (architect): CLKTWIN ours side (EXP2345): seven cores run in parallel; core count excluded
+
+- Ladder of 1024-thread groups, per-dispatch firmware time: L1..L7 2.382..2.420 ms, L8..L14 4.545..4.603,
+  L15..L16 6.743; first step at G = 8. W56 = 7.42 x L1, W224 = 29.32 x L1 (implied cores 7.54 / 7.64). N32 0.526 ms.
+  Oracle FFMA 4/4, 0 missing records. A compute job under our driver uses all seven shader cores:
+  "fewer active cores" is REJECTED as the owner of the 1.13 compute ratio.
+- Validity note: Wom1GpuPerf over the whole step window (5.97 s, includes process start and compile) shows state 6
+  91.7 %; the 99 % rule for the timed block alone is not shown directly. The ladder is flat within 1.6 % on L1..L7
+  and steps by 1.91..1.93, so a mixed state inside the block is unlikely to hide a missing core.
+- What is left for the ratio: per-core rate against macOS (needs the macOS twin, tools/macos/clktwin_metal.m,
+  one macOS boot by the operator; R = 10000, same shapes) or GravityMark's own shader code. No further ours-only
+  hardware step distinguishes these.
+- FULL scores over the three S2 inert boots fell monotonically: 8142 (EXP2343, closedv5) -> 8024 (EXP2344,
+  scaled1) -> 7906 (EXP2345, s2v3), PERF means flat (50.75 / 50.46 / 50.63), all inside the historical 7888..8170.
+  Not attributed. Discriminator already in the order: band boot 3 on closedv5 directly after S2-1 separates a
+  drift of the day (temperature reached 84..88 C in the receipts) from a cost of the two new m1n1 lines.
