@@ -5109,3 +5109,29 @@ DECISIONS:
 
 Ranking unchanged: (1) non-busy about 1.7 ms, compositor row first; (2) R5 3D; (3) C0; (4) R1; (5) R3 / C2 / C4.
 Bench order: T5b FULL boot (first boot with the new wait form; waits for the builder) -> TDR-H0 -> FS-D1.
+
+## UPDATE 2026-11-11T04:47:33Z -- EXP2338 addendum: the 60 s PERF arms carry the same poll artifact (about 1.3 %)
+
+Read from the EXP2337 PERF logs (execute-to-execute intervals inside the 10 + 60 s window, long = above 45 ms,
+excess over the arm median; script: scratchpad perf_long.py on `tools/agx_gm_perf.py` parse()):
+
+| arm | frames | long frames | excess, % of the window |
+| --- | --- | --- | --- |
+| gm2337w / r2 / r3 | 3000 / 2983 / 3013 | 15 / 14 / 13 | 1.14 / 1.50 / 1.05 |
+| gm2337p1a / p1b (default) | 2990 / 2977 | 10 / 11 | 1.08 / 1.41 |
+| gm2337p0a / p0b (FOLD=0) | 2884 / 2904 | 14 / 14 | 1.61 / 1.35 |
+
+Every arm shows the 6.2-6.7 s grid (9-10 poll events per window; the probe-local wait loop was the powershell
+Test-Path form). The four p arms show one more event off the grid at 44.5-47 s of the window (102-116 ms): the
+mid-run kmd-receipts snapshot, about 0.18 % of the window.
+
+Consequences:
+- PERF values rise by about 1.3 % under the cmd wait form (harness commit 1ad9f966b, probe loops from EXP2339 on).
+  PERF numbers of boots before and after the change are not compared; the PERF stop line 48.65 stays (one-sided,
+  conservative) until the fold-on bands with the new form exist.
+- The mid-run receipt snapshot stays where it is: it is the pstate validity evidence, it is one event, equal in
+  every arm. The wait form is the only harness variable of the next boot.
+- The CS perf-gate baseline (49.943, EXP2220) was taken with a powershell wait loop. How much CS loses to it is
+  NOT measured. Next boot: after the gated warm r2 / r3 (cmd form), one extra CS run r4 with the old powershell
+  wait form. r4 against mean(r2, r3) gives the CS artifact; the gate baseline is corrected once from that number
+  (appended, the old baseline row is not edited). Until then the gate reads as before.
