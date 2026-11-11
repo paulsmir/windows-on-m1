@@ -78013,3 +78013,12 @@ EXP2348 HARDWARE BEFORE 2026-11-11T18:08:46Z:
 - Hashes: sys 8fc80e1a41af, UmdArm64 a5016001c910, UmdX64 c4c916091f5d, Umd32 ebd9c4614a05; manifest 582e4b1689a3, hardware-manifest 24ae06db957f; probe2348.sh d6989071f7ca (PROBE_LINT_OK); visible recovery rec2348h b04bfa79874e7988; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2348h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2348-band3/run2348.sh.
+
+EXP2348 ACTUAL 2026-11-11T18:53:08Z:
+- Package fd410f54c (pinned worktree, manifest a9d87881, archive eeea3a0f, as EXP2339/EXP2341), rebuilt 30.0.2348.0; m1n1 closedv5 e6ac18bb; normal switch set; WU paused; cmd waits. First boot after S2-1 (two-layer image, slot 1 never latched): m1n1 log shows a normal DCP init (A408 APPLIED / exact D589 latch), DCP error lines 0 -- U-6 answered for this case. EXP2348_PIPELINE_RC 0; STOPS 0, GPU_RESET none, wer 0.
+- Suite 119/0. PERF w/r2/r3 49.926 / 50.855 / 50.911, mean(r2,r3) 50.883. FULL f0a 7987, f0b 8032 (mean 8010).
+- Wom1GpuPerf: f0a P6 95.7 %, temp 46-85 C, power max 7306 mW; f0b P6 96.1 %, temp 46-85 C, 7339 mW; boot 34-85 C, P6 67.6 %, below target 0.2 %.
+- CS 50.051/53.400/53.048, both VALID; PERF_GATE_PASS (cs16 +4.36 % against 50.832, the highest CS of the day; gravitymark worst 45.969).
+- FULL series of the day: EXP2341 (closedv5) 8025/8170, EXP2343 (closedv5) 8142, EXP2347 (closedv5, CM-1) 8101, EXP2344 (scaled1) 8024, EXP2345 (s2v3) 7906, EXP2346 (s2v3 + switch) 8060, EXP2348 (closedv5) 7987/8032.
+- Reading by the architect's rule (near 7900 -> drift of the day, m1n1 lines cleared; back in 8050-8170 -> A-B pair): FULL 7987/8032 did not return to 8050-8170 on closedv5 with the accepted package, so the scaled/S2 m1n1 lines are not shown to cost FULL; final verdict the architect's. Temperatures per FULL arm are now recorded (46-85 C).
+- Next: S2-1b (EXP2349) after rollback rec2348h.
