@@ -5653,3 +5653,18 @@ that point. Source: .local/night-20261110/s2-ddisplay-black/REPORT.md (display r
   path with full measurement, DF-1b with the two-plane switch, DF-1c on DWM's normal path. Spec in the handoff
   file. NOT VERIFIED until DF-1a: the VidMm half on the guest build, the segment's runtime size against 200 MB,
   and how DWM and the scan-out path behave once DirectFlip is available.
+
+## UPDATE 2026-11-11T22:32Z (architect): DF-1a (EXP2354): DirectFlip segment flag CONFIRMED as the kernel gate
+
+- EXP2354 = fd410f54c + Flags.DirectFlip on segment 2 (local, 312 MiB usable), legacy DWM path, closedv5.
+  KMTQAITYPE_DIRECTFLIP_SUPPORT reads 1 (0 in EXP2350..2352). The VidMm half of the reading holds on the guest
+  build. Type 20 stays 0 and type 38 reads 0 because this package reports no MPO in DRIVERCAPS (expected).
+- No cost and no gain by itself: FULL 8061 / 8083, PERF 51.08 / 51.98, CS 52.42 / 52.22, gates PASS; foreign-job
+  row e 1.120 ms/frame. Only DWM primaries were flipped (3 allocations, all status 0); DWM did not direct-flip the
+  windowed application (DirectFlip-compatible 0, AdvancedDirectFlip-compatible 1 as before). The operator saw a
+  correct picture during the run.
+- Class C (contract correctness): the flag is what a driver that scans out from this segment must report. It joins
+  the next accepted package once the per-allocation geometry check in SetVidPnSourceAddress exists (known gap:
+  a flipped allocation is scanned with the committed mode's geometry).
+- Next: DF-1b = S2 receipts package (0fc7218a8) + the flag, s2v3, `Wom1MpoTwoPlanes=1`, legacy path. Expected:
+  type 20 = 1, caps reach the miniport (bit 0x800, MaxPlanes 2), then U-1. DF-1c (normal DWM path) after it.
