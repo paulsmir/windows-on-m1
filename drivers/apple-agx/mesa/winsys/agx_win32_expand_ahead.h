@@ -33,9 +33,9 @@
  * plain v3 render; the render waits on the preceding compute job (barrier
  * TA_ON_COMPUTE), exactly the job pair of an application compute pass.
  *
- * PF1 "expand fold" (APPLE_AGX_D3D12_EXPAND_FOLD=1; default off, read once;
- * EXPAND_AHEAD=1 wins and turns it off): no batch of its own. The kernel
- * becomes the last dispatches of the context's open application compute
+ * PF1 "expand fold" (default on since EXP2335; APPLE_AGX_D3D12_EXPAND_FOLD=0
+ * turns it off; read once; EXPAND_AHEAD=1 wins and turns it off): no batch
+ * of its own. The kernel becomes the last dispatches of the context's open application compute
  * batch Wb when Wb wrote the arguments/count, or writes the render target,
  * of R's counted draw (handoff PF1-EXPAND-FOLD.md, r16 design a'):
  * - agx_win32_stream_flush_inputs does not flush Wb for those inputs; it
@@ -108,13 +108,22 @@ agx_win32_expand_ahead_enabled(void)
    return mode == 1;
 }
 
-/* PF1: APPLE_AGX_D3D12_EXPAND_FOLD=1, unless EXPAND_AHEAD=1. */
+/* PF1 opt-out: APPLE_AGX_D3D12_EXPAND_FOLD exactly "0". */
+static inline bool
+agx_win32_expand_fold_parse_off(const char *value)
+{
+   return value && value[0] == '0' && !value[1];
+}
+
+/* PF1: on by default (hardware experiment EXP2335 is the evidence);
+ * APPLE_AGX_D3D12_EXPAND_FOLD=0 turns it off, any other value or none
+ * leaves it on. EXPAND_AHEAD=1 wins and turns it off. */
 static inline bool
 agx_win32_expand_fold_enabled(void)
 {
    static int mode = -1;
    if (mode < 0)
-      mode = agx_win32_expand_ahead_parse(getenv("APPLE_AGX_D3D12_EXPAND_FOLD")) &&
+      mode = !agx_win32_expand_fold_parse_off(getenv("APPLE_AGX_D3D12_EXPAND_FOLD")) &&
              !agx_win32_expand_ahead_enabled() ? 1 : 0;
    return mode == 1;
 }

@@ -3660,8 +3660,8 @@ extern "C" HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *owner, AGX_D3D12
 /* C7c: the D3D12 present hands the runtime the allocation; rendering on
  * the owner context must be flushed and the direct map published first
  * (AgxD3d10WindowsPresentationSubmitSurfaces before AdmissionUmdSubmitPresent) */
-/* PF1 (APPLE_AGX_D3D12_EXPAND_FOLD=1 only): one measure-d3d12-counted-fold
- * line per present, the counters since the previous one {presents, seals,
+/* PF1 (fold on, the default; APPLE_AGX_D3D12_EXPAND_FOLD=0 disables): one
+ * measure-d3d12-counted-fold line per present, the counters since the previous one {presents, seals,
  * folded kernels, deferred hazard flushes, refusals 1..9 (QUERY,
  * NO_COMPUTE, NOT_WRITER, PRELUDE, CAPACITY, OTHER_RENDER, ORDER, LOST,
  * DRAW), flushes of a sealed batch by cause 0..7 (OTHER, RENDER = the

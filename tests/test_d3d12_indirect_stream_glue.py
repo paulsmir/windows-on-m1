@@ -720,14 +720,22 @@ static void sealed(void){
 #endif
 
 int main(int argc,char **argv){
- const bool on=argc>2&&!strcmp(argv[1],"on");
+ /* modes: on = FOLD "1", off = FOLD "0" (the opt-out), unset = no FOLD
+  * (the default: on), other = FOLD "2" (on), ahead = FOLD "1" with
+  * EXPAND_AHEAD=1 (off) */
+ const char *mode=argc>2?argv[1]:"";
  const char *what=argc>2?argv[2]:"";
- if(on)setenv("APPLE_AGX_D3D12_EXPAND_FOLD","1",1);else unsetenv("APPLE_AGX_D3D12_EXPAND_FOLD");
- unsetenv("APPLE_AGX_D3D12_EXPAND_AHEAD");
+ const bool ahead=!strcmp(mode,"ahead");
+ const bool on=!strcmp(mode,"on")||!strcmp(mode,"unset")||!strcmp(mode,"other");
+ if(!on&&strcmp(mode,"off")&&!ahead)return 2;
+ if(!strcmp(mode,"unset"))unsetenv("APPLE_AGX_D3D12_EXPAND_FOLD");
+ else setenv("APPLE_AGX_D3D12_EXPAND_FOLD",!strcmp(mode,"off")?"0":!strcmp(mode,"other")?"2":"1",1);
+ if(ahead)setenv("APPLE_AGX_D3D12_EXPAND_AHEAD","1",1);else unsetenv("APPLE_AGX_D3D12_EXPAND_AHEAD");
 #ifndef PF1_BASELINE
- assert(agx_win32_expand_fold_enabled()==on&&!agx_win32_expand_ahead_enabled());
+ assert(agx_win32_expand_fold_enabled()==on&&agx_win32_expand_ahead_enabled()==ahead);
  /* read once */
  setenv("APPLE_AGX_D3D12_EXPAND_FOLD",on?"0":"1",1);assert(agx_win32_expand_fold_enabled()==on);
+ if(!strcmp(what,"switch")){puts("SWITCH PASS");return 0;}
 #endif
  void *page=mmap((void *)0x200000000000ull,4096,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANON,-1,0);
  assert(page==(void *)0x200000000000ull);fixed_words=page;value=3;
@@ -801,6 +809,15 @@ class ExpandFold(unittest.TestCase):
         r=subprocess.run([str(exe or self.exe),mode,what],capture_output=True,text=True)
         self.assertEqual(r.returncode,0,mode+' '+what+': '+r.stdout+r.stderr[-3000:])
         return r.stdout
+
+    def test_switch_is_on_by_default_and_zero_opts_out(self):
+        """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+        The PF1 default (EXP2335): the fold is on with no environment or any
+        value but "0", off only for APPLE_AGX_D3D12_EXPAND_FOLD=0, off
+        whenever APPLE_AGX_D3D12_EXPAND_AHEAD=1, and read once. A parse
+        regression would silently change the production render path."""
+        for mode in ('unset','on','other','off','ahead'):
+            self.assertIn('SWITCH PASS',self.run_mode(mode,'switch'))
 
     def test_order_compute_batch_submits_first_with_the_kernel_last(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
