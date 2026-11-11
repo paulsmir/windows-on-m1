@@ -5401,3 +5401,45 @@ Consequences:
 
 NOT VERIFIED: launch and TA cannot be split inside the render gaps under the fold (no TA-start stamp); Apple's
 compositor cost is not measured; EXP2341 not included. Bench order unchanged (S2-0a -> S2-0b -> S2-1).
+
+## UPDATE 2026-11-11T13:43Z (architect): correction of the working m1n1 image; compute rows are proportional at 1.10
+
+### Correction (refers to the entries of 2026-11-11T13:20Z and RANKING-REFRESH "Bench order unchanged")
+
+- The bench's working m1n1 image is `m1n1-ansdirect-closedv5` (sha256 e6ac18bb1146..., m1n1 06616be7), not
+  `scaled1`. `scaled1` (afd45c3a7125..., 14c893b2 = 06616be7 + 7309f6ad + 1b9f3605 + 99e9dab9 + a host test) has
+  build-info "hardware: not run". Found by the implementer session before S2-0a; checked against both build-info
+  files and the m1n1 log. The earlier entries are left as written.
+- The S2 image (s2v3, bcb176e6178f...) sits on the scaled line, so closedv5 -> s2v3 is two variables. Revised
+  order, one variable per boot, all with package EXP2343: S2-0a (closedv5, switch unset; variable = package) ->
+  S2-0a2 (scaled1, switch unset; variable = the scaled-source commits) -> S2-0b (s2v3, switch unset; variable =
+  the three S2 commits) -> S2-1 (`Wom1MpoTwoPlanes=1`). Recovery stays on the closedv5 pair. No rebuild of s2v3
+  on the closedv5 line: the two-layer commit uses the destination carried into the DCP swap (1b9f3605) and the
+  scaled source is part of the end state (F-3).
+
+### Observation (measured, from ranking-refresh/out-compare.txt; runs 2309nhd / 2339f0a / 2339f0b)
+
+Firmware-timed compute work against Apple's per-encoder time at the same benchmark second, ours / Apple:
+
+| job | 10..70 s | 70..130 s | 130..end | two-point fit (slope, intercept ms) |
+|---|---|---|---|---|
+| C0 | 1.090 / 1.089 / 1.093 | 1.088 / 1.092 / 1.092 | 1.106 / 1.104 / 1.113 | range of Apple values too small |
+| C2 | 1.106 / 1.108 / 1.114 | 1.084 / 1.096 / 1.099 | 1.085 / 1.104 / 1.107 | 1.11..1.14, -0.07..-0.01 |
+| C4 | 1.094 / 1.150 / 1.151 | 1.105 / 1.172 / 1.174 | 1.093 / 1.191 / 1.193 | 1.096..1.099; 0.00 before the fold, +0.09 with it |
+| C6 | 1.046 / 1.044 / 1.053 | 1.052 / 1.043 / 1.055 | 1.039 / 1.036 / 1.053 | - |
+| all compute | 1.092 / 1.101 / 1.105 | 1.087 / 1.101 / 1.102 | 1.097 / 1.109 / 1.117 | excess 0.91 / 1.03 / 1.07 ms per frame (whole run) |
+
+- C2 and C4 change by 1.7x to 1.8x over the run and keep the ratio: the excess is proportional, not a fixed part.
+  The fold adds a constant 0.09 ms to C4 (the expand) and leaves the slope at 1.10.
+- Three different kernel chains carry the same factor 1.09..1.11 in every scene range and in a package built five
+  days earlier. This is 25..28 % of the frame gap from one ratio.
+- This corrects two earlier readings, which stay as written: "C2 near 1.0 plus a fixed part" does not hold for the
+  firmware-timed work row, and "the deficit is job-specific" does not hold between C0, C2 and C4. The frame-level
+  fit (slope 1.051 for the whole frame) is consistent with 1.10 on the compute share of the frame.
+- NOT VERIFIED: that Apple's per-encoder time and our firmware start-to-end time are the same quantity; whether the
+  render 3D parts carry the same factor (Apple's rows cannot be split into TA and 3D); the cause.
+- HYPOTHESIS: a rate-type cause that the latency probes cannot see (they compare time per operation, not the
+  total time of a full-width dispatch). Already closed and not re-opened: pstate, GPU clock, memory hierarchy, SLC,
+  DRAMCFG, GPU TLB. Two offline checks are running (definition of both series plus per-second fits and a census of
+  the macOS-twin probes; field-by-field comparison of what the driver tells the firmware about core topology and
+  the power controller against Asahi). No hardware run and no package until they report.
