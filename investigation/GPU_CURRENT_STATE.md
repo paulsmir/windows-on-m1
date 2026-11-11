@@ -5686,3 +5686,21 @@ that point. Source: .local/night-20261110/s2-ddisplay-black/REPORT.md (display r
   (EXP2354) is harmless.
 - Next: offline reading of the guest dxgkrnl's Check3 / PresentMultiPlaneOverlay3 path against DWM's event
   payloads and the caps we return; then one trace-only boot (DxgKrnl ETW level 5 over two cycles).
+
+## UPDATE 2026-11-11T23:46Z (architect): cause of the plane-present loop: our DxgkDdiPresent rejects the MPO flip flags
+
+- EXP2356 (trace-only DF-1b): DWM's single-plane desktop present passes our UMD and reaches dxgkrnl (ETW 252);
+  the runtime callback returns E_INVALIDARG; the runtime marks the device in error (ETW 467, driver error) and DWM
+  rebuilds its output about once per 0.8 s. "Our UMD's MPO present entry fails" is REJECTED.
+- Cause, read on the guest dxgkrnl and proven by our receipt: for an MPO present dxgkrnl calls the miniport's
+  DxgkDdiPresent before any Set3 with Flags 0x100c (Flip | FlipWithNoWait | FlipWithMultiPlaneOverlay), no DMA
+  buffer and no allocations. AdmissionDdiPresent accepts only (Flags & ~0x8) == 0x4 and returns
+  STATUS_INVALID_PARAMETER (callbacks.c, re-read by me). Wom1PresentReceipt of EXP2356 and EXP2355: branch 1,
+  status 0xC000000D, Flags 0x100c, NumSrc 0, NumDst 0.
+- This is a defect of the S2 contract as specified by me: the ATOMIC CONTRACT listed caps, Check3 and Set3 but
+  not the present-flags form that an MPO-reporting driver must accept. The S2 spec entries stay as written.
+- Decision: PF-1 = accept the no-DMA flip with FlipWithMultiPlaneOverlay while the driver reports MPO; boot in
+  the EXP2355 shape with this one change. Spec in the handoff file. Whether the EXP2351 black panel on DWM's
+  normal path has the same single cause is NOT VERIFIED (planes were off in dxgkrnl then); DF-1c follows PF-1.
+- Chain of gates found today, each confirmed on hardware except the last: DirectFlip segment flag (EXP2354) ->
+  MPO reported by dxgkrnl and used by DWM (EXP2355) -> DdiPresent flags (PF-1, pending).
