@@ -6225,3 +6225,21 @@ boot was run. The previous entry stays as written.
   four times and not received: accepted on receipts, gates and the FULL band.
 - Implemented offline, not on hardware: CUR-1 v2 (rebased on hold1), RQ-1 (failed-swap retry, gate held during
   retry, exhausted ids reported as completed), RQ-2 m1n1 draft (latch deadline + fault injection).
+
+## UPDATE 2026-11-12T23:32:10Z - compute ratio: per-kernel cost prediction from our own OPTWIN prices (offline)
+
+- Report .local/night-20261110/kernel-cost/REPORT.md. Our unit prices from the EXP2373 recompute: 2.0..2.15 us per
+  dispatch (incl. barrier and pipeline switch), ~0.5 us per job, random gather 0.59/1.06/1.38/5.19 ns per load
+  at 1/4/16/64 MB (dependent = independent: throughput bound), coalesced load 0.15 ns, sample 81..92 ps,
+  barrier pair 5.6 ps per thread, dynamic-index constant-buffer row load ~7..9 ps.
+- REJECTED as owner of any kernel's excess: dispatch structure. Apple C0 issues 134 dispatches, ours 128; at
+  2.06 us each the whole per-dispatch cost is 0.26..0.28 ms per frame on OUR side and the bound on a difference
+  per kernel is ~0.01 ms. Group size, indirect launch and barriers are bounded the same way.
+- Countable differences priced with our costs explain only part: k48 <= 0.09 of 0.214 ms; C0 traversal ~0.2 of
+  0.310 (extra waits 54 vs 32 = 0.075, of which 0.048 was measured by EXP2315); C2 traversal ~0.05 of 0.139;
+  C4 <= 0.05 of 0.229; C6 has no Apple twin mapped.
+- Largest candidate that cannot be priced without macOS: the dynamic-index constant-buffer load form (same
+  count, different addressing; our own cost for them is 0.16..0.21 ms in k48 and 0.14..0.18 ms in C0 traversal).
+  Reading order for the macOS twin: C1, then B1/B1b, G1/G1d 16M/64M, T1, S1o, S1_64 vs S1_256, S1n.
+- Unexplained by any countable term: C4 ~0.18 ms, C2 traversal ~0.09 ms, C6. OPTWIN batch 2 (sin, stores,
+  atomics, divergence) covers classes these kernels use.
