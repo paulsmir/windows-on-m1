@@ -6197,3 +6197,18 @@ boot was run. The previous entry stays as written.
 - HOLD-1 (arch/hold1 rebased on FS-1b) next. Its discriminator cannot be full-screen CS any more (lone form);
   it is the scaled-window scene, which showed Busy 196 in ~2700 commits (EXP2375) on every boot of this line,
   plus a windowed CS arm: expect Busy -> ~0 and HoldMerges ~ the former Busy count.
+
+## UPDATE 2026-11-12T22:41:29Z - EXP2379 HOLD-1 confirmed; display line is the merge candidate
+
+- EXP2379 (arch/hold1, SHORT): scaled-window scene Busy +0 against +181/+192/+190/+178 in the four control boots
+  (EXP2375..2378); HoldMerges +186 = HoldCommits +186; HoldDropped 0, no Set3 refusal after support; accepted
+  vs reported PresentIds differ by at most the one in flight. Full-screen CS lone form 48.73 / 52.07 (gate
+  PASS), GM gate PASS (-0.87 %), STRETCHFS 59.99 fps with 2697 of 2700 frames as scaled lone commits. No faults.
+  HOLD-1 CONFIRMED.
+- Windowed CS arm (1600x1000 GL window): composed by DWM (two-plane 0), no bench result (harness); why DWM does
+  not give this window a plane is OPEN, not chased.
+- MERGE CANDIDATE: PITCH-1, STRETCH-1b, S3, FS-1/FS-1b, HOLD-1 on arch/hold1. Still owed before the merge: a
+  FULL-profile band boot on this package and the operator looks (pointer over the full-screen game, stretched
+  full screen, flicker). Not merged.
+- Build lesson: host shims stubbed a function that existed only on another branch (MSVC C4013 stopped the
+  package); test_render_admission_calls_defined now requires every Admission* call to have a definition.
