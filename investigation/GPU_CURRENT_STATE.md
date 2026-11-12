@@ -5939,3 +5939,21 @@ boot was run. The previous entry stays as written.
   of any supported size in user mode; require mode-equal geometry only where an allocation is scanned out
   full-screen, refused cleanly otherwise; plane scan-out uses the allocation's own geometry. Boot before DP-1
   (DP-1 waits for the read of the guest's d3d11 / dxgi).
+
+## UPDATE 2026-11-12T12:32Z (architect): WP-1 (EXP2365) CONFIRMED: first all-valid, all-pass boot with two planes
+
+- EXP2365 = EXP2363 shape + WP-1 (displayable primaries accepted at window size; mode-equal geometry required
+  only where an allocation is scanned out full-screen). Counter-Strike is presented in every process (120 shown
+  / 0 failed per window, no reject-primary) and the operator confirmed the game was visible. CS 52.69 / 52.02
+  (gate PASS, -0.80 %): the first valid CS result with MPO live. GM gate PASS (+1.24 %); PERF 52.64 / 52.80;
+  FULL 8393 / 8367 = 84.4 % / 84.1 % of macOS 9946 (best so far).
+- The lever (application window on its own plane) now stands on two boots: EXP2363 (8320 / 8347, PERF 52.98) and
+  EXP2365 (8393 / 8367, PERF 52.72) against the single-plane normal-path replicates EXP2361 / EXP2362
+  (8050 / 8025 / 8058 / 7977, PERF 49.97 / 49.75): about +4 % FULL, +6 % PERF.
+- Open before it can become the default: DP-1 (blink and black window content at plane removal; cause known,
+  forwarding form now a fact from the guest's d3d11: allocation entries pair with planes by array index, count
+  = all planes, a disabled plane's entry is not read); the frozen MPO receipt during EXP2365's hold (not yet
+  shown that two planes ran for the whole run there); whether CS's window gets a plane; pitch alignment so any
+  window size is plane-eligible; a normal-path control band (three boots) and re-based gates; merge of DF-1,
+  PF-1, PL-1, BP-1, WP-1, DP-1 and removal of DisableDDisplay from the bench profile.
+- Next boot: DP-1 (EXP2366) on top of WP-1.
