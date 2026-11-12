@@ -5979,3 +5979,21 @@ boot was run. The previous entry stays as written.
   1.13x Apple's GPU span (about 1.0..1.4 ms), R5 (about 0.65), hand-over gaps (0.35), Apple's cross-frame
   overlap (0.33). The user's target (within 5 %) needs the compute ratio and R5; the macOS twin of the
   arithmetic probe (operator boot into macOS) is the open discriminator for the compute ratio.
+
+## UPDATE 2026-11-12T13:55Z (architect): CLKTWIN macOS twin: hardware rate at parity; "slower hardware" REJECTED for the compute ratio
+
+- macOS reference run on this J313 (macOS 15.7.8), tools/macos/clktwin_metal.m, three runs, evidence
+  .local/experiments/MACOS-20261112-clktwin/. powermetrics (started by the operator): GPU active 99.9 %, 1278 MHz
+  for 99.8 % of the 79 busy samples.
+- Per-dispatch GPU time, macOS / ours (EXP2345): N32 0.525..0.528 / 0.526; L1 2.464..2.474 / 2.382..2.420;
+  L8 4.673..4.677 / 4.545..4.603; L15 6.917..6.920 / 6.743; W56 18.09 / 17.68; W224 71.64 / 69.82. G* = 8 on
+  both; W224/L1 29.0 / 29.3. Oracle FFMA 4/4 on both.
+- On an arithmetic-bound kernel at every width our driver equals macOS (2..3 % faster). The clock, the per-core
+  rate and the number of active cores are the same. "The hardware runs slower in our environment" is REJECTED
+  as the owner of the 1.13 compute ratio in GravityMark. NOT yet done: the code-equality gate (disassembly of
+  the Metal archive against our 59-instruction form); the verdict is conditional on it.
+- What remains for the compute ratio: GravityMark's own compute kernels as our compiler emits them (memory
+  access forms, atomics, loads through constant buffers, loop structure - the untested differences of the
+  job-row census), or job structure (how the 134 dispatches of C0 are launched). Next step is offline: per-kernel
+  comparison against the Metal oracle on the heaviest kernels, with op-class costs measured by twin probes of
+  this kind (a memory-bound and an atomic-bound full-width twin are the obvious next two).
