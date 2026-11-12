@@ -78346,3 +78346,9 @@ EXP2367 HARDWARE BEFORE 2026-11-12T14:02:57Z:
 - Hashes: sys 11945364c67c, UmdArm64 784dc0fe7dba, UmdX64 433aee8d0a64, Umd32 44661823bd53; manifest 0b0987b287af, hardware-manifest b2177099c896; probe2367.sh 7e54c4e501aa (PROBE_LINT_OK); visible recovery rec2367h 6018cc35bb2e17ae; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
 - Recovery rec2367h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2367-np1a/run2367.sh.
+
+EXP2367 HARDWARE ACTUAL 2026-11-12T14:54:54Z:
+- NP-1 control boot 1/2, package exp/np1 4e231cb19 (DP-1 + Set3-path receipt publish). PIPELINE_RC 0, guest alive, suite 119/0, WER 2 (old), STOPS 0, picture HEALTHY, no operator steps. Launched from the rec2366h AT_PROXY recovery that followed the macOS reference session (MACOS-20261112-clktwin).
+- NP-1 receipt cadence: Wom1MpoReceipt advances through every two-plane phase without DdiPresent: TwoPlaneCommits post-etw 15 -> gm60 1035 -> after-perf 13551 -> after-full 27649 (Set3Calls 1513 -> 15426 -> 30333), then flat 27658 through CS (V2Presents 6623 -> 10543 = CS composited single-plane). Check3Calls 1 for the boot, RemovalCommits 11, Set3Refusals 0, Set3TableRefusals 0, BrokerRefusals 0.
+- Measured: PERF w/r2/r3 fps_frames 53.773 / 53.500 / 52.475; GM gate PASS worst fps_presents 47.057 (+2.60 %); FULL f0a 8402, f0b 8414 (Wom1GpuPerf per arm: P6 96.2 % / 97.0 % of sampled time, below-target 0.1 %, temp max 89 C); nb.py r2 wall 18.692 ms. CS warm/r2/r3 49.414 / 51.761 / 52.579 (51/43/41 C), hl pids 5588/6000/6268 reject-primary 0, Shown 120 / Failed 0; cs16 PASS worst 51.761 (-1.30 %).
+- Verdict: NP-1 receipt change CONFIRMED (receipts advance during Set3-only phases); control-band boot 1/2 valid. Next: EXP2368 (control 2/2, with the OPTWIN batch 1 ours-side tail).
