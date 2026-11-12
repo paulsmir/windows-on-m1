@@ -6028,3 +6028,20 @@ boot was run. The previous entry stays as written.
   verified yet.
 - OPTWIN ours side: first run failed in probe setup (pipeline table cap 24, C1 needs 25..27; probe defect,
   fixed 71d9ced72); no measurement yet; reruns in EXP2369's tail. The macOS twin follows once R values are final.
+
+## UPDATE 2026-11-12T16:45:44Z - EXP2372 HC-1: DCP minimum layer between 32x30 and 40x39; PITCH-1 half shown
+
+- EXP2372 (m1n1 diagnostic, proxy; logs .local/experiments/m1n1-hc1-sp2-diag/evidence/EXP2372): slot-1 layer
+  64x64 and 40x39 APPLIED and latched (also 40x39 flush at all four panel edges); 32x30, 24x27, 16x16, 8x8, 1x1
+  REFUSED before submit (A408 out=00000004), restores clean. 32x32 itself not measured. SP-2 (line-width filter
+  pattern at 2.0x and 1.5x) latched; the filter verdict waits on the operator's macro photos.
+- Consequence for CUR-1: DWM's full-screen top plane carries clips 1x1 (323 of 330 requests in EXP2366, pointer
+  hidden), 24x27, 32x30, 40x39. Only the last can be sent to DCP as a cropped layer. Realisation for smaller
+  clips is OPEN; candidates under offline read (driver-owned transparent 64x64 scratch layer holding the clip
+  pixels; second layer off when the clip pixels are fully transparent). No hardware until the read is back.
+- EXP2369 PITCH-1 (SHORT): rule-14 refusal removed (Check3 supported for a 1682x840 window, no Set3/Table/
+  Broker refusal), gates PASS (GM 52.78/52.40, CS r2 52.32). Plane use NOT shown: in ~30 s of rendering
+  TwoPlaneCommits +17 against single-plane presents +384; DWM went back to composition, cause open. Re-look
+  EXP2373 on the same package: Dwm-Core 218/219/220/290 over a 1280x720 control arm and the 1682x840 arm with
+  window rects. OPTWIN ours side has still not produced a measurement (second miss: stale exe path in the
+  harness); runs in EXP2373's tail behind a sha256 preflight.
