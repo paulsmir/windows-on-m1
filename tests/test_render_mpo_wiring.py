@@ -96,7 +96,12 @@ class RenderMpoWiringTests(unittest.TestCase):
         set3 = function(mpo, "_Use_decl_annotations_ NTSTATUS "
                              "AdmissionMpoSetVidPnSourceAddress3(")
         self.assertNotIn("AdmissionMpoEvaluatePrimary(&", set3)
-        one = set3[set3.index("if (next[0].Enabled && listed[0]) {"):]
+        # HOLD-1: Set3's dispatch lives in AdmissionMpoApply (shared with the
+        # latch handler that commits a held set).
+        apply = function(mpo, "static NTSTATUS AdmissionMpoApply(")
+        self.assertNotIn("AdmissionMpoEvaluatePrimary(&", apply)
+        self.assertIn("AdmissionMpoApply(Context, next, listed, &completion, FALSE)", set3)
+        one = apply[apply.index("if (next[0].Enabled && listed[0]) {"):]
         self.assertLess(one.index("AdmissionMpoEvaluateOne(&input, &result)"),
                         one.index("if (result.OnePlaneRecord != 0u) {"))
         self.assertLess(one.index("if (result.OnePlaneRecord != 0u) {"),

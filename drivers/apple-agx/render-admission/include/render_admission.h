@@ -71,6 +71,7 @@
 #include "j313_agx_abi_admission.generated.h"
 #include "mpo_contract.h"
 #include "mpo_layers.h"
+#include "mpo_hold.h"
 
 #define ADMISSION_POOL_TAG 'mRGA'
 #define ADMISSION_DMA_BUFFER_SIZE 0x50000u
@@ -261,6 +262,12 @@ typedef struct _ADMISSION_MPO_RECEIPT {
    * (ADMISSION_MPO_FORM_*) and transitions into / out of the lone form. */
   volatile LONG LoneChecksSupported, LoneChecksRefused;
   volatile LONG LoneCommits, ScaledLoneCommits, LastForm, ToLone, FromLone;
+  /* HOLD-1: flips merged into the held set (SUCCESS), refused while held
+   * (same layer pending or not acceptable: DEVICE_BUSY), the hold's
+   * try-lock contended, held sets committed by the latch / vertical tick,
+   * commits retried at the next tick, sets dropped (a non-retry failure). */
+  volatile LONG HoldMerges, HoldBusy, HoldContended;
+  volatile LONG HoldCommits, HoldCommitRetries, HoldDropped;
 } ADMISSION_MPO_RECEIPT;
 #define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
 #define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u
@@ -1184,6 +1191,11 @@ typedef struct _ADMISSION_CONTEXT {
    * calls Set3 above DISPATCH_LEVEL there): above DISPATCH_LEVEL the
    * request goes through this DPC, which queues the work item. */
   KDPC MpoPublishDpc;
+  /* HOLD-1: the held plane set (mpo_hold.h) and its plane states; the
+   * try-lock serialises Set3 and the scan-out ISR without waiting. */
+  ADMISSION_MPO_HOLD MpoHold;
+  ADMISSION_MPO_PLANE_STATE MpoHoldNext[2];
+  volatile LONG MpoHoldLock;
   ADMISSION_MPO_PLANE_STATE MpoPlanes[2];
 } ADMISSION_CONTEXT;
 
@@ -2542,6 +2554,8 @@ BOOLEAN AdmissionScanoutMpoPool(_In_ ADMISSION_CONTEXT *Context,
 /* Slot 1 may be on screen: the driver queued a two-layer commit whose
  * removal has not latched, or REG_ACTIVE_LAYERS bit 1 is set. */
 BOOLEAN AdmissionScanoutMpoSlot1MayShow(_In_ ADMISSION_CONTEXT *Context);
+/* HOLD-1: commit the held plane set; scan-out ISR context (device IRQL). */
+VOID AdmissionMpoCommitPending(_In_ ADMISSION_CONTEXT *Context);
 /* Queue one V3 commit (Count 1 = removal, 2 = two planes); Completion is
  * reported at its latch.  PrimaryAddress is the LayerIndex 0 surface
  * (CRTC_VSYNC physical address bookkeeping). */

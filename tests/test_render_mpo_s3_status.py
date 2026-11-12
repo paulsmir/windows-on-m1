@@ -63,16 +63,23 @@ class S3StatusContract(unittest.TestCase):
         sites = re.findall(r"(\w+)\(Context\);\s*return STATUS_INVALID_PARAMETER;", body)
         self.assertEqual(sites, ["AdmissionMpoRefuseSet3"] * 3)
         self.assertEqual(len(re.findall(r"return STATUS_INVALID_PARAMETER;", body)), 3)
-        for bad in ("STATUS_DEVICE_HARDWARE_ERROR", "STATUS_DEVICE_NOT_READY", "STATUS_INVALID_ADDRESS"):
-            self.assertNotIn("return " + bad, body)
+        # HOLD-1: the realisation shared with the latch answers only SUCCESS, DEVICE_BUSY
+        # or the commit helpers' status (no literal failure status).
+        apply = function(self.mpo, "static NTSTATUS AdmissionMpoApply(")
+        self.assertEqual(set(returns(apply)) - {"STATUS_DEVICE_BUSY", "STATUS_SUCCESS", "status"}, set())
+        for bad in ("STATUS_DEVICE_HARDWARE_ERROR", "STATUS_DEVICE_NOT_READY", "STATUS_INVALID_ADDRESS",
+                    "STATUS_INVALID_PARAMETER"):
+            self.assertNotIn("return " + bad, apply)
 
     def test_status_variable_comes_only_from_busy_or_success_helpers(self):
         body = function(self.mpo, "NTSTATUS AdmissionMpoSetVidPnSourceAddress3(")
-        sources = re.findall(r"\bstatus = ([A-Za-z_]+)", body)
-        self.assertTrue(set(sources) <= {"AdmissionScanoutMpoCommit", "AdmissionScanoutMpoPlaneOffSet",
-                                         "AdmissionDdiSetVidPnSourceAddress", "STATUS_DEVICE_BUSY"}, sources)
+        apply = function(self.mpo, "static NTSTATUS AdmissionMpoApply(")
+        sources = set(re.findall(r"\bstatus = ([A-Za-z_]+)", body + apply))
+        allowed = {"AdmissionScanoutMpoCommit", "AdmissionScanoutMpoPlaneOffSet", "AdmissionDdiSetVidPnSourceAddress",
+                   "STATUS_DEVICE_BUSY", "STATUS_SUCCESS", "AdmissionMpoApply", "DryRun"}
+        self.assertTrue(sources <= allowed, sources)
         # H2: the V2 path's failures other than a foreign handle become DEVICE_BUSY.
-        self.assertRegex(body, r"if \(status != STATUS_DEVICE_BUSY && status != STATUS_INVALID_HANDLE\) \{[^}]*status = STATUS_DEVICE_BUSY;")
+        self.assertRegex(apply, r"if \(status != STATUS_DEVICE_BUSY && status != STATUS_INVALID_HANDLE\) \{[^}]*status = STATUS_DEVICE_BUSY;")
 
 
 if __name__ == "__main__":

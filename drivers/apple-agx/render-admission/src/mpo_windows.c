@@ -747,20 +747,192 @@ static VOID AdmissionMpoRefuseSet3(ADMISSION_CONTEXT *Context) {
  *   no plane enabled             -> today's plane-off completion (or the
  *                                   removal while slot 1 may be shown);
  *   LayerIndex 1 alone           -> refused (no Check3 answer admits it). */
-_Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
-    ADMISSION_CONTEXT *Context,
-    DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3 *Args) {
-  ADMISSION_MPO_PLANE_STATE next[2];
+/* HOLD-1: realise a complete plane set (next, the layers it lists, their
+ * completion entries): the dispatch Set3 always did, shared with the latch
+ * handler that commits a held set.  DryRun evaluates and builds every
+ * record without committing or changing state (a set may be held only if
+ * it would be accepted now).  Runs at device IRQL: MMIO and memory only. */
+static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
+                                  ADMISSION_MPO_PLANE_STATE *next,
+                                  const BOOLEAN *listed,
+                                  ADMISSION_MPO_COMPLETION *completion,
+                                  BOOLEAN DryRun) {
   ADMISSION_MPO_PLANE_INPUT pair[2];
-  ADMISSION_MPO_COMPLETION completion;
   ADMISSION_MPO_INPUT input;
   ADMISSION_MPO_RESULT result;
   APPLE_AGX_SCANOUT_LAYER records[2];
   DXGKARG_SETVIDPNSOURCEADDRESS legacy;
+  BOOLEAN slot1;
+  NTSTATUS status;
+
+  if (next[0].Enabled && next[1].Enabled) {
+    pair[0] = next[0].Input;
+    pair[1] = next[1].Input;
+    AdmissionMpoInput(Context, pair, 2u, ADMISSION_MPO_PATH_SET3, &input);
+    if (AdmissionMpoEvaluate(&input, &result) != AdmissionMpoSupported) {
+      /* Check3 cannot see placement; Set3 can.  Do not send records the
+       * table rejects.  S3-A/S3-B: for a configuration Check3 accepted this
+       * is an invariant violation (counted); DEVICE_BUSY either way. */
+      if (!DryRun)
+        AdmissionMpoSet3TableRefusal(Context, result.Reason);
+      return STATUS_DEVICE_BUSY;
+    }
+    if (AdmissionMpoBuildCommit(&result, records) != 2u) {
+      if (!DryRun)
+        InterlockedIncrement(&Context->Mpo.S3BusyBuild); /* D2 invariant */
+      return STATUS_DEVICE_BUSY;
+    }
+    status = DryRun ? STATUS_SUCCESS : AdmissionScanoutMpoCommit(Context, records, 2u, completion,
+                                       next[0].PrimaryAddress);
+    if (NT_SUCCESS(status) && !DryRun) {
+      RtlCopyMemory(Context->MpoPlanes, next, sizeof(Context->MpoPlanes));
+      InterlockedIncrement(&Context->Mpo.TwoPlaneCommits);
+      AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_TWO);
+      if (AdmissionMpoPlaneScaled(&pair[0]) || AdmissionMpoPlaneScaled(&pair[1]))
+        InterlockedIncrement(&Context->Mpo.ScaledTwoPlaneCommits);
+    }
+    return status;
+  }
+  if (!next[0].Enabled && next[1].Enabled) {
+    /* FS-1: the application plane alone (DWM's top plane off): one layer
+     * record in slot 0, slot 1 off; the rule one-plane Check3 answered
+     * with (AdmissionMpoEvaluateOne). */
+    pair[0] = next[1].Input;
+    AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
+    if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
+      if (!DryRun)
+        AdmissionMpoSet3TableRefusal(Context, result.Reason);
+      return STATUS_DEVICE_BUSY;
+    }
+    if (AdmissionMpoBuildLone(&next[1].Input, &records[0]) != 1u) {
+      if (!DryRun)
+        InterlockedIncrement(&Context->Mpo.S3BusyBuild);
+      return STATUS_DEVICE_BUSY;
+    }
+    status = DryRun ? STATUS_SUCCESS : AdmissionScanoutMpoCommit(Context, records, 1u, completion,
+                                       next[1].PrimaryAddress);
+    if (NT_SUCCESS(status) && !DryRun) {
+      RtlCopyMemory(Context->MpoPlanes, next, sizeof(Context->MpoPlanes));
+      InterlockedIncrement(&Context->Mpo.LoneCommits);
+      if (AdmissionMpoPlaneScaled(&next[1].Input))
+        InterlockedIncrement(&Context->Mpo.ScaledLoneCommits);
+      AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_LONE);
+    }
+    return status;
+  }
+  slot1 = AdmissionScanoutMpoSlot1MayShow(Context);
+  if (slot1) {
+    /* Two planes -> one (or none): the removal swap keeps the LayerIndex 0
+     * surface in slot 0 and takes slot 1 off at the same latch. */
+    if (!next[0].Valid ||
+        AdmissionMpoBuildRemoval(&next[0].Input, &records[0]) != 1u) {
+      if (!DryRun)
+        InterlockedIncrement(&Context->Mpo.S3BusyBuild); /* G1 invariant */
+      return STATUS_DEVICE_BUSY;
+    }
+    /* WP-1: after the removal LayerIndex 0 is the full-screen scan-out, so
+     * its allocation must have the committed mode's geometry (the rule the
+     * one-plane path applies through AdmissionMpoEvaluatePrimary).  User
+     * mode no longer refuses non-mode-size primaries at CreateResource.
+     * STRETCH-1: a LayerIndex 0 plane that is not the full-screen primary
+     * (scaled, cropped, positioned) is checked with the layer rules
+     * instead; the removal record carries its rectangles either way. */
+    pair[0] = next[0].Input;
+    AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
+    if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
+      if (!DryRun)
+        AdmissionMpoSet3TableRefusal(Context, result.Reason);
+      return STATUS_DEVICE_BUSY;
+    }
+    status = DryRun ? STATUS_SUCCESS : AdmissionScanoutMpoCommit(Context, records, 1u, completion,
+                                       next[0].PrimaryAddress);
+    if (NT_SUCCESS(status) && !DryRun) {
+      RtlCopyMemory(Context->MpoPlanes, next, sizeof(Context->MpoPlanes));
+      InterlockedIncrement(&Context->Mpo.RemovalCommits);
+      AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_ONE);
+      if (result.OnePlaneRecord != 0u &&
+          AdmissionMpoPlaneScaled(&next[0].Input))
+        InterlockedIncrement(&Context->Mpo.ScaledOnePlaneCommits);
+    }
+    return status;
+  }
+  if (next[0].Enabled && listed[0]) {
+    /* One plane, slot 1 not on screen: the full-screen primary takes
+     * today's V2 PRESENT, same bytes, after the same rule one-plane Check3
+     * answered with (A1.1).  STRETCH-1: any other plane (scaled, cropped,
+     * positioned) goes as one layer record, the rule Check3 answered with
+     * (AdmissionMpoEvaluateOne). */
+    pair[0] = next[0].Input;
+    AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
+    if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
+      if (!DryRun)
+        AdmissionMpoSet3TableRefusal(Context, result.Reason);
+      return STATUS_DEVICE_BUSY;
+    }
+    if (result.OnePlaneRecord != 0u) {
+      if (AdmissionMpoBuildRemoval(&next[0].Input, &records[0]) != 1u) {
+        if (!DryRun)
+          InterlockedIncrement(&Context->Mpo.S3BusyBuild); /* G1 invariant */
+        return STATUS_DEVICE_BUSY;
+      }
+      status = DryRun ? STATUS_SUCCESS : AdmissionScanoutMpoCommit(Context, records, 1u, completion,
+                                         next[0].PrimaryAddress);
+      if (NT_SUCCESS(status) && !DryRun) {
+        RtlCopyMemory(Context->MpoPlanes, next, sizeof(Context->MpoPlanes));
+        InterlockedIncrement(&Context->Mpo.OnePlaneRecordCommits);
+        AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_ONE);
+        if (AdmissionMpoPlaneScaled(&next[0].Input))
+          InterlockedIncrement(&Context->Mpo.ScaledOnePlaneCommits);
+      }
+      return status;
+    }
+    RtlZeroMemory(&legacy, sizeof(legacy));
+    legacy.VidPnSourceId = 0;
+    legacy.PrimarySegment = next[0].PrimarySegment;
+    legacy.PrimaryAddress.QuadPart = next[0].PrimaryAddress;
+    legacy.hAllocation = next[0].hAllocation;
+    legacy.Flags.FlipImmediate = next[0].FlipImmediate & 1u;
+    legacy.Flags.FlipOnNextVSync = next[0].FlipOnNextVSync & 1u;
+    if (DryRun)
+      return STATUS_SUCCESS; /* the V2 path validates at its own call */
+    AdmissionScanoutTagMpoFlipSet(Context, completion);
+    status = AdmissionDdiSetVidPnSourceAddress(Context, &legacy);
+    if (!NT_SUCCESS(status)) {
+      AdmissionScanoutClearMpoFlip(Context);
+      /* S3-B (H2): the V2 path's runtime statuses (mode change in flight,
+       * address outside the view, panel error, lease state) are DEVICE_BUSY
+       * through Set3; only a foreign handle stays a contract failure. */
+      if (status != STATUS_DEVICE_BUSY && status != STATUS_INVALID_HANDLE) {
+        InterlockedIncrement(&Context->Mpo.S3BusyLegacy);
+        InterlockedExchange(&Context->Mpo.LastLegacyStatus, (LONG)status);
+        status = STATUS_DEVICE_BUSY;
+      }
+      return status;
+    }
+    RtlCopyMemory(Context->MpoPlanes, next, sizeof(Context->MpoPlanes));
+    InterlockedIncrement(&Context->Mpo.V2Presents);
+    AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_ONE);
+    return status;
+  }
+  /* Nothing to swap (planes switched off, or only LayerIndex 1 disabled
+   * while it was never on screen): the scanning surface stays and the
+   * listed PresentIds complete on the next vsync, as today's plane-off. */
+  status = DryRun ? STATUS_SUCCESS : AdmissionScanoutMpoPlaneOffSet(Context, completion);
+  if (NT_SUCCESS(status) && !DryRun) {
+    RtlCopyMemory(Context->MpoPlanes, next, sizeof(Context->MpoPlanes));
+    InterlockedIncrement(&Context->Mpo.PlaneOffCompletions);
+  }
+  return status;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
+    ADMISSION_CONTEXT *Context,
+    DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3 *Args) {
+  ADMISSION_MPO_PLANE_STATE next[2];
+  ADMISSION_MPO_COMPLETION completion;
   DXGK_MULTIPLANE_OVERLAY_PLANE3 *plane;
   const DXGK_PRIMARYCONTEXTDATA *primary;
   BOOLEAN listed[2] = {FALSE, FALSE};
-  BOOLEAN slot1;
   NTSTATUS status;
   UINT index;
   UINT layer;
@@ -818,152 +990,82 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     AdmissionMpoCompletionAdd(&completion, 0u, 0ULL);
   }
 
-  if (next[0].Enabled && next[1].Enabled) {
-    pair[0] = next[0].Input;
-    pair[1] = next[1].Input;
-    AdmissionMpoInput(Context, pair, 2u, ADMISSION_MPO_PATH_SET3, &input);
-    if (AdmissionMpoEvaluate(&input, &result) != AdmissionMpoSupported) {
-      /* Check3 cannot see placement; Set3 can.  Do not send records the
-       * table rejects.  S3-A/S3-B: for a configuration Check3 accepted this
-       * is an invariant violation (counted); DEVICE_BUSY either way. */
-      AdmissionMpoSet3TableRefusal(Context, result.Reason);
+  /* HOLD-1: a commit is outstanding (or a held set waits): join the held
+   * set when every listed layer is free there and the merged set would be
+   * accepted (SUCCESS, committed at the latch); otherwise DEVICE_BUSY and
+   * dxgkrnl re-offers the flip (EXP2375). */
+  if (!AdmissionScanoutMpoGateFree(Context) || Context->MpoHold.Valid) {
+    const ULONG mask = (listed[0] ? 1u : 0u) | (listed[1] ? 2u : 0u);
+    ADMISSION_MPO_PLANE_STATE candidate[2];
+    BOOLEAN merged[2];
+    if (InterlockedCompareExchange(&Context->MpoHoldLock, 1, 0) != 0) {
+      InterlockedIncrement(&Context->Mpo.HoldContended);
       return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
     }
-    if (AdmissionMpoBuildCommit(&result, records) != 2u) {
-      InterlockedIncrement(&Context->Mpo.S3BusyBuild); /* D2 invariant */
-      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
-    }
-    status = AdmissionScanoutMpoCommit(Context, records, 2u, &completion,
-                                       next[0].PrimaryAddress);
-    if (NT_SUCCESS(status)) {
-      RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
-      InterlockedIncrement(&Context->Mpo.TwoPlaneCommits);
-      AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_TWO);
-      if (AdmissionMpoPlaneScaled(&pair[0]) || AdmissionMpoPlaneScaled(&pair[1]))
-        InterlockedIncrement(&Context->Mpo.ScaledTwoPlaneCommits);
-    }
-    return AdmissionMpoBusyNote(Context, &completion, status);
-  }
-  if (!next[0].Enabled && next[1].Enabled) {
-    /* FS-1: the application plane alone (DWM's top plane off): one layer
-     * record in slot 0, slot 1 off; the rule one-plane Check3 answered
-     * with (AdmissionMpoEvaluateOne). */
-    pair[0] = next[1].Input;
-    AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
-    if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
-      AdmissionMpoSet3TableRefusal(Context, result.Reason);
-      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
-    }
-    if (AdmissionMpoBuildLone(&next[1].Input, &records[0]) != 1u) {
-      InterlockedIncrement(&Context->Mpo.S3BusyBuild);
-      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
-    }
-    status = AdmissionScanoutMpoCommit(Context, records, 1u, &completion,
-                                       next[1].PrimaryAddress);
-    if (NT_SUCCESS(status)) {
-      RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
-      InterlockedIncrement(&Context->Mpo.LoneCommits);
-      if (AdmissionMpoPlaneScaled(&next[1].Input))
-        InterlockedIncrement(&Context->Mpo.ScaledLoneCommits);
-      AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_LONE);
-    }
-    return AdmissionMpoBusyNote(Context, &completion, status);
-  }
-  slot1 = AdmissionScanoutMpoSlot1MayShow(Context);
-  if (slot1) {
-    /* Two planes -> one (or none): the removal swap keeps the LayerIndex 0
-     * surface in slot 0 and takes slot 1 off at the same latch. */
-    if (!next[0].Valid ||
-        AdmissionMpoBuildRemoval(&next[0].Input, &records[0]) != 1u) {
-      InterlockedIncrement(&Context->Mpo.S3BusyBuild); /* G1 invariant */
-      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
-    }
-    /* WP-1: after the removal LayerIndex 0 is the full-screen scan-out, so
-     * its allocation must have the committed mode's geometry (the rule the
-     * one-plane path applies through AdmissionMpoEvaluatePrimary).  User
-     * mode no longer refuses non-mode-size primaries at CreateResource.
-     * STRETCH-1: a LayerIndex 0 plane that is not the full-screen primary
-     * (scaled, cropped, positioned) is checked with the layer rules
-     * instead; the removal record carries its rectangles either way. */
-    pair[0] = next[0].Input;
-    AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
-    if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
-      AdmissionMpoSet3TableRefusal(Context, result.Reason);
-      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
-    }
-    status = AdmissionScanoutMpoCommit(Context, records, 1u, &completion,
-                                       next[0].PrimaryAddress);
-    if (NT_SUCCESS(status)) {
-      RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
-      InterlockedIncrement(&Context->Mpo.RemovalCommits);
-      AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_ONE);
-      if (result.OnePlaneRecord != 0u &&
-          AdmissionMpoPlaneScaled(&next[0].Input))
-        InterlockedIncrement(&Context->Mpo.ScaledOnePlaneCommits);
-    }
-    return AdmissionMpoBusyNote(Context, &completion, status);
-  }
-  if (next[0].Enabled && listed[0]) {
-    /* One plane, slot 1 not on screen: the full-screen primary takes
-     * today's V2 PRESENT, same bytes, after the same rule one-plane Check3
-     * answered with (A1.1).  STRETCH-1: any other plane (scaled, cropped,
-     * positioned) goes as one layer record, the rule Check3 answered with
-     * (AdmissionMpoEvaluateOne). */
-    pair[0] = next[0].Input;
-    AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
-    if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
-      AdmissionMpoSet3TableRefusal(Context, result.Reason);
-      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
-    }
-    if (result.OnePlaneRecord != 0u) {
-      if (AdmissionMpoBuildRemoval(&next[0].Input, &records[0]) != 1u) {
-        InterlockedIncrement(&Context->Mpo.S3BusyBuild); /* G1 invariant */
-        return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
+    status = STATUS_DEVICE_BUSY;
+    if (Args->PlaneCount != 0u &&
+        AdmissionMpoHoldAdmit(&Context->MpoHold, mask)) {
+      for (layer = 0u; layer < 2u; ++layer) {
+        candidate[layer] = listed[layer] || !Context->MpoHold.Valid
+                               ? next[layer]
+                               : Context->MpoHoldNext[layer];
+        merged[layer] = listed[layer] ||
+                        (Context->MpoHold.Valid &&
+                         (Context->MpoHold.ListedMask & (1u << layer)) != 0u);
       }
-      status = AdmissionScanoutMpoCommit(Context, records, 1u, &completion,
-                                         next[0].PrimaryAddress);
-      if (NT_SUCCESS(status)) {
-        RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
-        InterlockedIncrement(&Context->Mpo.OnePlaneRecordCommits);
-        AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_ONE);
-        if (AdmissionMpoPlaneScaled(&next[0].Input))
-          InterlockedIncrement(&Context->Mpo.ScaledOnePlaneCommits);
+      if (NT_SUCCESS(AdmissionMpoApply(Context, candidate, merged,
+                                       &completion, TRUE))) {
+        unsigned int layers[2];
+        unsigned long long ids[2];
+        for (index = 0u; index < completion.Count && index < 2u; ++index) {
+          layers[index] = (unsigned int)completion.LayerIndex[index];
+          ids[index] = (unsigned long long)completion.PresentId[index];
+        }
+        RtlCopyMemory(Context->MpoHoldNext, candidate, sizeof(candidate));
+        AdmissionMpoHoldMerge(&Context->MpoHold, mask, completion.Count,
+                              layers, ids);
+        InterlockedIncrement(&Context->Mpo.HoldMerges);
+        status = STATUS_SUCCESS;
       }
-      return AdmissionMpoBusyNote(Context, &completion, status);
     }
-    RtlZeroMemory(&legacy, sizeof(legacy));
-    legacy.VidPnSourceId = 0;
-    legacy.PrimarySegment = next[0].PrimarySegment;
-    legacy.PrimaryAddress.QuadPart = next[0].PrimaryAddress;
-    legacy.hAllocation = next[0].hAllocation;
-    legacy.Flags.FlipImmediate = next[0].FlipImmediate & 1u;
-    legacy.Flags.FlipOnNextVSync = next[0].FlipOnNextVSync & 1u;
-    AdmissionScanoutTagMpoFlipSet(Context, &completion);
-    status = AdmissionDdiSetVidPnSourceAddress(Context, &legacy);
-    if (!NT_SUCCESS(status)) {
-      AdmissionScanoutClearMpoFlip(Context);
-      /* S3-B (H2): the V2 path's runtime statuses (mode change in flight,
-       * address outside the view, panel error, lease state) are DEVICE_BUSY
-       * through Set3; only a foreign handle stays a contract failure. */
-      if (status != STATUS_DEVICE_BUSY && status != STATUS_INVALID_HANDLE) {
-        InterlockedIncrement(&Context->Mpo.S3BusyLegacy);
-        InterlockedExchange(&Context->Mpo.LastLegacyStatus, (LONG)status);
-        status = STATUS_DEVICE_BUSY;
-      }
-      return AdmissionMpoBusyNote(Context, &completion, status);
-    }
-    RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
-    InterlockedIncrement(&Context->Mpo.V2Presents);
-    AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_ONE);
+    if (status == STATUS_DEVICE_BUSY)
+      InterlockedIncrement(&Context->Mpo.HoldBusy);
+    InterlockedExchange(&Context->MpoHoldLock, 0);
     return AdmissionMpoBusyNote(Context, &completion, status);
   }
-  /* Nothing to swap (planes switched off, or only LayerIndex 1 disabled
-   * while it was never on screen): the scanning surface stays and the
-   * listed PresentIds complete on the next vsync, as today's plane-off. */
-  status = AdmissionScanoutMpoPlaneOffSet(Context, &completion);
-  if (NT_SUCCESS(status)) {
-    RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
-    InterlockedIncrement(&Context->Mpo.PlaneOffCompletions);
-  }
+  status = AdmissionMpoApply(Context, next, listed, &completion, FALSE);
   return AdmissionMpoBusyNote(Context, &completion, status);
+}
+
+/* HOLD-1: the latch handler (scan-out ISR, the gate just released) and the
+ * vertical tick commit the held set exactly once; a commit that meets the
+ * gate or a runtime obstacle again keeps the set for the next tick. */
+_Use_decl_annotations_ VOID AdmissionMpoCommitPending(ADMISSION_CONTEXT *Context) {
+  ADMISSION_MPO_HOLD taken;
+  ADMISSION_MPO_PLANE_STATE next[2];
+  ADMISSION_MPO_COMPLETION completion;
+  BOOLEAN listed[2];
+  NTSTATUS status;
+  ULONG i;
+  if (Context == NULL || !Context->MpoHold.Valid ||
+      InterlockedCompareExchange(&Context->MpoHoldLock, 1, 0) != 0)
+    return;
+  if (AdmissionMpoHoldTake(&Context->MpoHold, &taken)) {
+    RtlCopyMemory(next, Context->MpoHoldNext, sizeof(next));
+    listed[0] = (taken.ListedMask & 1u) != 0u ? TRUE : FALSE;
+    listed[1] = (taken.ListedMask & 2u) != 0u ? TRUE : FALSE;
+    RtlZeroMemory(&completion, sizeof(completion));
+    for (i = 0u; i < taken.Count && i < 2u; ++i)
+      AdmissionMpoCompletionAdd(&completion, taken.Layer[i], taken.PresentId[i]);
+    status = AdmissionMpoApply(Context, next, listed, &completion, FALSE);
+    if (status == STATUS_DEVICE_BUSY) {
+      AdmissionMpoHoldRestore(&Context->MpoHold, &taken);
+      InterlockedIncrement(&Context->Mpo.HoldCommitRetries);
+    } else if (NT_SUCCESS(status)) {
+      InterlockedIncrement(&Context->Mpo.HoldCommits);
+    } else {
+      InterlockedIncrement(&Context->Mpo.HoldDropped);
+    }
+  }
+  InterlockedExchange(&Context->MpoHoldLock, 0);
 }

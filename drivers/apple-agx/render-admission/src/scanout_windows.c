@@ -682,6 +682,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
             : 0;
     /* NP-1: the Set3-side publish (AdmissionQueueMpoPublish). */
     AdmissionMpoPublishStart(Context);
+    AdmissionMpoHoldClear(&Context->MpoHold);
+    Context->MpoHoldLock = 0;
   }
   /* S2-1b: Effective 0 -> 1 at this scanout start. */
   if (AppleAgxFixedPanelTwoLayers(&runtime->Panel)) {
@@ -742,6 +744,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStop(
   /* NP-1: no Set3 runs once the scanout stops; drain and free the publish
    * work item (its worker touches the context). */
   AdmissionMpoPublishStop(Context);
+  /* HOLD-1: a held set cannot outlive scan-out (counted if dropped). */
+  if (Context->MpoHold.Valid)
+    InterlockedIncrement(&Context->Mpo.HoldDropped);
+  AdmissionMpoHoldClear(&Context->MpoHold);
   if (InterlockedCompareExchange(&runtime->PendingValid, 0, 0) != 0)
     return STATUS_DEVICE_BUSY;
   if (InterlockedExchange(&runtime->IrqEnabled, 0) != 0 &&
@@ -1828,12 +1834,18 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
         InterlockedExchange64(&runtime->PendingSequence, 0);
         InterlockedExchange64(&runtime->PendingPhysicalAddress, 0);
         InterlockedExchange(&runtime->PresentGate, 0);
+        /* HOLD-1: the held set goes out on this latch (its vsync info,
+         * already taken above, belongs to the swap that just latched). */
+        AdmissionMpoCommitPending(Context);
       }
     } else if ((irq_status & APPLE_AGX_SCANOUT_IRQ_LATCHED) != 0u) {
       AdmissionScanoutVsyncRecord(runtime, 4u, STATUS_SUCCESS);
     }
   }
   if (VerticalTick) {
+    /* HOLD-1: a held set whose commit met an obstacle retries per tick. */
+    if (InterlockedCompareExchange(&runtime->PresentGate, 0, 0) == 0)
+      AdmissionMpoCommitPending(Context);
     notify_vsync = AppleAgxVsyncAdvance(&runtime->Timeline, now) != 0;
     AdmissionScanoutVsyncRecord(runtime, 5u, STATUS_SUCCESS);
   }
