@@ -689,7 +689,7 @@ static void TestStableReasonValues(void) {
   CHECK(AdmissionMpoReasonStretchFilter == 34);
   CHECK(AdmissionMpoReasonOnePlaneBlend == 35);
   CHECK(ADMISSION_MPO_REASON_COUNT == 36);
-  CHECK(ADMISSION_MPO_CONTRACT_VERSION == 4u);
+  CHECK(ADMISSION_MPO_CONTRACT_VERSION == 5u);
 }
 
 /* Version 2 surface rules, each on its role, both orders. */
@@ -1151,6 +1151,76 @@ static void TestCapsDerivation(void) {
   AdmissionMpoCapsFor(1u, 1u, 0u, 0u, NULL);
 }
 
+
+/* STRETCH-1b (EXP2374): a configuration Check3 supports is never refused on
+ * the Set3 path by a Check3-only rule.  Walks every reason the table can
+ * return; for the Check3-only ones (ADMISSION_MPO_CHECK3_ONLY_REASONS)
+ * sweeps the inputs that reach them on the Check3 path and asserts the
+ * Set3 path answers supported, and for every sampled configuration asserts
+ * Check3 supported implies Set3 supported (both plane counts). */
+static unsigned int EvalPath(const ADMISSION_MPO_PLANE_INPUT *Planes,
+                             unsigned int Count, unsigned int Filter,
+                             unsigned int Path, ADMISSION_MPO_RESULT *Result) {
+  ADMISSION_MPO_INPUT input;
+  memset(&input, 0, sizeof(input));
+  input.PanelWidth = PANEL_W;
+  input.PanelHeight = PANEL_H;
+  input.PanelStride = PANEL_W * 4u;
+  input.PanelModeSupported = 1u;
+  input.PlaneCount = Count;
+  input.Planes = Planes;
+  input.PoolBytes = POOL_BYTES;
+  input.ScalingSupported = 1u;
+  input.ScalerFilter = Filter;
+  input.Path = Path;
+  memset(Result, 0xa5, sizeof(*Result));
+  return Count == 1u ? AdmissionMpoEvaluateOne(&input, Result)
+                     : AdmissionMpoEvaluate(&input, Result);
+}
+
+static void TestCheck3OnlyRulesNotReachableFromSet3(void) {
+  static const int sizes[][2] = {{640, 480}, {960, 720}, {1280, 960},
+                                 {320, 240}, {1281, 960}, {640, 481}};
+  static const unsigned int filters[] = {AdmissionMpoScalerFilterUnknown,
+                                         AdmissionMpoScalerFilterPoint,
+                                         AdmissionMpoScalerFilterBilinearOrBetter};
+  ADMISSION_MPO_PLANE_INPUT p[2], one;
+  ADMISSION_MPO_RESULT check3, set3;
+  unsigned long long reached = 0u, reason;
+  unsigned int q, f, z, swap, rc, rs;
+
+  CHECK(ADMISSION_MPO_PATH_CHECK3 == 0u); /* a zeroed input is the Check3 path */
+  for (reason = 1u; reason < 64u; ++reason)
+    if ((ADMISSION_MPO_CHECK3_ONLY_REASONS >> reason) & 1ull)
+      CHECK(reason == AdmissionMpoReasonStretchQuality ||
+            reason == AdmissionMpoReasonStretchFilter);
+  for (swap = 0u; swap < 2u; ++swap)
+    for (z = 0u; z < sizeof(sizes) / sizeof(sizes[0]); ++z)
+      for (q = 0u; q < 6u; ++q)
+        for (f = 0u; f < sizeof(filters) / sizeof(filters[0]); ++f) {
+          unsigned int bottom = swap ? 0u : 1u;
+          ScaledPair(p, (int)swap, sizes[z][0], sizes[z][1]);
+          p[bottom].StretchQuality = q;
+          rc = EvalPath(p, 2u, filters[f], ADMISSION_MPO_PATH_CHECK3, &check3);
+          rs = EvalPath(p, 2u, filters[f], ADMISSION_MPO_PATH_SET3, &set3);
+          if ((ADMISSION_MPO_CHECK3_ONLY_REASONS >> rc) & 1ull) reached |= 1ull << rc;
+          CHECK(!((ADMISSION_MPO_CHECK3_ONLY_REASONS >> rs) & 1ull));
+          CHECK(rc != AdmissionMpoSupported || rs == AdmissionMpoSupported);
+          if ((ADMISSION_MPO_CHECK3_ONLY_REASONS >> rc) & 1ull)
+            CHECK(rs == AdmissionMpoSupported);
+          /* The same plane alone through the one-plane record path. */
+          one = p[bottom];
+          one.LayerIndex = 0u;
+          rc = EvalPath(&one, 1u, filters[f], ADMISSION_MPO_PATH_CHECK3, &check3);
+          rs = EvalPath(&one, 1u, filters[f], ADMISSION_MPO_PATH_SET3, &set3);
+          CHECK(!((ADMISSION_MPO_CHECK3_ONLY_REASONS >> rs) & 1ull));
+          CHECK(rc != AdmissionMpoSupported || rs == AdmissionMpoSupported);
+        }
+  /* The sweep did reach both Check3-only reasons on the Check3 path. */
+  CHECK((reached >> AdmissionMpoReasonStretchQuality) & 1ull);
+  CHECK((reached >> AdmissionMpoReasonStretchFilter) & 1ull);
+}
+
 int main(void) {
   TestStableReasonValues();
   TestArgumentsAndCounts();
@@ -1163,6 +1233,7 @@ int main(void) {
   TestScaledPlanes();
   TestEvaluateOne();
   TestCapsDerivation();
+  TestCheck3OnlyRulesNotReachableFromSet3();
   if (Failures != 0u) {
     fprintf(stderr, "mpo_contract_test: %u failure(s)\n", Failures);
     return EXIT_FAILURE;

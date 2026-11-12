@@ -137,10 +137,12 @@ static VOID AdmissionMpoPlaneInput(
 
 static VOID AdmissionMpoInput(ADMISSION_CONTEXT *Context,
                               const ADMISSION_MPO_PLANE_INPUT *Planes,
-                              ULONG Count, ADMISSION_MPO_INPUT *Input) {
+                              ULONG Count, ULONG Path,
+                              ADMISSION_MPO_INPUT *Input) {
   ULONGLONG segment_base = 0ULL;
   ULONGLONG pool_bytes = 0ULL;
   RtlZeroMemory(Input, sizeof(*Input));
+  Input->Path = Path;
   /* Windows plane rectangles are in source-mode pixels. */
   Input->PanelWidth = Context->CommittedWidth;
   Input->PanelHeight = Context->CommittedHeight;
@@ -605,7 +607,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCheckMultiPlaneOverlaySupport3(
                             ADMISSION_MPO_NO_PLANE);
     return STATUS_SUCCESS;
   }
-  AdmissionMpoInput(context, planes, Args->PlaneCount, &input);
+  AdmissionMpoInput(context, planes, Args->PlaneCount,
+                    ADMISSION_MPO_PATH_CHECK3, &input);
   /* A1.1: while effective, one plane is answered with the V2 path's own
    * acceptance rule, so Check3 never promises a flip Set3 refuses.  Not
    * effective: the version-1 answer, unchanged. */
@@ -628,6 +631,71 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCheckMultiPlaneOverlaySupport3(
 }
 
 /* ---- DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3, effective ---- */
+
+/* S3-C receipt (Busy): the PresentIds of the last Set3 the scan-out gate
+ * refused with STATUS_DEVICE_BUSY, the PresentIds of the next successful
+ * Set3, and whether one of the refused ids latched later (dxgkrnl re-issued
+ * the same flip) or not (a later flip superseded it).  Low 32 bits. */
+static NTSTATUS AdmissionMpoBusyNote(ADMISSION_CONTEXT *Context,
+                                     const ADMISSION_MPO_COMPLETION *Completion,
+                                     NTSTATUS Status) {
+  ULONG index, busy;
+  LONG id = Completion->Count != 0u ? (LONG)(ULONG)Completion->PresentId[0] : 0;
+  if (Status == STATUS_DEVICE_BUSY) {
+    InterlockedExchange(&Context->Mpo.LastBusyPresentId, id);
+    InterlockedExchange(&Context->Mpo.LastBusyPresentId1,
+                        Completion->Count > 1u
+                            ? (LONG)(ULONG)Completion->PresentId[1]
+                            : 0);
+    InterlockedExchange(&Context->Mpo.BusyOutstanding, 1);
+    return Status;
+  }
+  if (!NT_SUCCESS(Status) ||
+      InterlockedCompareExchange(&Context->Mpo.BusyOutstanding, 0, 0) == 0)
+    return Status;
+  InterlockedExchange(&Context->Mpo.BusyOutstanding, 0);
+  InterlockedExchange(&Context->Mpo.NextSuccessPresentId, id);
+  busy = 0u;
+  for (index = 0u; index < Completion->Count && index < 2u; ++index) {
+    const LONG next = (LONG)(ULONG)Completion->PresentId[index];
+    if (next != 0 &&
+        (next == Context->Mpo.LastBusyPresentId ||
+         next == Context->Mpo.LastBusyPresentId1))
+      busy = 1u;
+  }
+  InterlockedIncrement(busy ? &Context->Mpo.BusyThenSameLatched
+                            : &Context->Mpo.BusyThenSuperseded);
+  return Status;
+}
+
+/* A Set3 table refusal.  STRETCH-1b: one that follows a supported Check3
+ * answer is a contract defect (Check3 promised what Set3 refuses) and is
+ * counted with its reason. */
+static VOID AdmissionMpoSet3TableRefusal(ADMISSION_CONTEXT *Context,
+                                         ULONG Reason) {
+  InterlockedIncrement(&Context->Mpo.Set3TableRefusals);
+  InterlockedExchange(&Context->Mpo.LastSet3TableReason, (LONG)Reason);
+  if (InterlockedCompareExchange(&Context->Mpo.LastCheck3Reason, 0, 0) ==
+      (LONG)AdmissionMpoSupported) {
+    InterlockedIncrement(&Context->Mpo.Set3RefusedAfterSupport);
+    InterlockedExchange(&Context->Mpo.LastSet3RefusedAfterSupportReason,
+                        (LONG)Reason);
+  }
+}
+
+/* STRETCH-1b receipt: the raw StretchQuality of every scaled plane Set3
+ * evaluates (0, 1, 2, other), the last one, next to Check3's
+ * LastScaledStretchQuality. */
+static VOID AdmissionMpoSet3Quality(ADMISSION_CONTEXT *Context,
+                                    const ADMISSION_MPO_PLANE_INPUT *Plane) {
+  const ULONG q = Plane->StretchQuality;
+  if (!AdmissionMpoPlaneScaled(Plane))
+    return;
+  InterlockedIncrement(&Context->Mpo.Set3StretchQuality[q < 3u ? q : 3u]);
+  InterlockedExchange(&Context->Mpo.LastSet3StretchQuality, (LONG)q);
+}
+
+
 
 static VOID AdmissionMpoCompletionAdd(ADMISSION_MPO_COMPLETION *Completion,
                                       ULONG LayerIndex, ULONGLONG PresentId) {
@@ -714,6 +782,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
                            &plane->PlaneAttributes, TRUE, primary->SegmentId,
                            primary->SegmentAddress.QuadPart,
                            &next[layer].Input);
+    AdmissionMpoSet3Quality(Context, &next[layer].Input);
   }
   if (Args->PlaneCount == 0u) {
     /* dxgkrnl ForcePlanesOff (EXP955): every plane off. */
@@ -725,14 +794,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
   if (next[0].Enabled && next[1].Enabled) {
     pair[0] = next[0].Input;
     pair[1] = next[1].Input;
-    AdmissionMpoInput(Context, pair, 2u, &input);
+    AdmissionMpoInput(Context, pair, 2u, ADMISSION_MPO_PATH_SET3, &input);
     if (AdmissionMpoEvaluate(&input, &result) != AdmissionMpoSupported ||
         AdmissionMpoBuildCommit(&result, records) != 2u) {
       /* Check3 cannot see placement; Set3 can.  Refuse before the broker
        * rather than send records the table rejects. */
-      InterlockedIncrement(&Context->Mpo.Set3TableRefusals);
-      InterlockedExchange(&Context->Mpo.LastSet3TableReason,
-                          (LONG)result.Reason);
+      AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_INVALID_PARAMETER;
     }
     status = AdmissionScanoutMpoCommit(Context, records, 2u, &completion,
@@ -743,7 +810,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
       if (AdmissionMpoPlaneScaled(&pair[0]) || AdmissionMpoPlaneScaled(&pair[1]))
         InterlockedIncrement(&Context->Mpo.ScaledTwoPlaneCommits);
     }
-    return status;
+    return AdmissionMpoBusyNote(Context, &completion, status);
   }
   if (!next[0].Enabled && next[1].Enabled) {
     AdmissionMpoRefuseSet3(Context);
@@ -766,11 +833,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
      * (scaled, cropped, positioned) is checked with the layer rules
      * instead; the removal record carries its rectangles either way. */
     pair[0] = next[0].Input;
-    AdmissionMpoInput(Context, pair, 1u, &input);
+    AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
     if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
-      InterlockedIncrement(&Context->Mpo.Set3TableRefusals);
-      InterlockedExchange(&Context->Mpo.LastSet3TableReason,
-                          (LONG)result.Reason);
+      AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_INVALID_PARAMETER;
     }
     status = AdmissionScanoutMpoCommit(Context, records, 1u, &completion,
@@ -782,7 +847,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
           AdmissionMpoPlaneScaled(&next[0].Input))
         InterlockedIncrement(&Context->Mpo.ScaledOnePlaneCommits);
     }
-    return status;
+    return AdmissionMpoBusyNote(Context, &completion, status);
   }
   if (next[0].Enabled && listed[0]) {
     /* One plane, slot 1 not on screen: the full-screen primary takes
@@ -791,11 +856,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
      * positioned) goes as one layer record, the rule Check3 answered with
      * (AdmissionMpoEvaluateOne). */
     pair[0] = next[0].Input;
-    AdmissionMpoInput(Context, pair, 1u, &input);
+    AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
     if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
-      InterlockedIncrement(&Context->Mpo.Set3TableRefusals);
-      InterlockedExchange(&Context->Mpo.LastSet3TableReason,
-                          (LONG)result.Reason);
+      AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_INVALID_PARAMETER;
     }
     if (result.OnePlaneRecord != 0u) {
@@ -811,7 +874,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
         if (AdmissionMpoPlaneScaled(&next[0].Input))
           InterlockedIncrement(&Context->Mpo.ScaledOnePlaneCommits);
       }
-      return status;
+      return AdmissionMpoBusyNote(Context, &completion, status);
     }
     RtlZeroMemory(&legacy, sizeof(legacy));
     legacy.VidPnSourceId = 0;
@@ -824,11 +887,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     status = AdmissionDdiSetVidPnSourceAddress(Context, &legacy);
     if (!NT_SUCCESS(status)) {
       AdmissionScanoutClearMpoFlip(Context);
-      return status;
+      return AdmissionMpoBusyNote(Context, &completion, status);
     }
     RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
     InterlockedIncrement(&Context->Mpo.V2Presents);
-    return status;
+    return AdmissionMpoBusyNote(Context, &completion, status);
   }
   /* Nothing to swap (planes switched off, or only LayerIndex 1 disabled
    * while it was never on screen): the scanning surface stays and the
@@ -838,5 +901,5 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
     InterlockedIncrement(&Context->Mpo.PlaneOffCompletions);
   }
-  return status;
+  return AdmissionMpoBusyNote(Context, &completion, status);
 }

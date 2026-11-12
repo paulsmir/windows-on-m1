@@ -229,6 +229,18 @@ typedef struct _ADMISSION_MPO_RECEIPT {
    * work item made. */
   volatile LONG PublishAboveDispatch, PublishAtOrBelowDispatch;
   volatile LONG Set3MaxIrql, PublishWorkerRuns;
+  /* STRETCH-1b: Set3's raw StretchQuality per scaled plane (0, 1, 2,
+   * other) and the last value (Check3's is LastScaledStretchQuality);
+   * Set3 table refusals while the last Check3 answer was supported (a
+   * contract defect) and the last such reason. */
+  volatile LONG Set3StretchQuality[4], LastSet3StretchQuality;
+  volatile LONG Set3RefusedAfterSupport, LastSet3RefusedAfterSupportReason;
+  /* S3-C: PresentIds (low 32 bits) of the last Busy Set3 (layer slots 0/1
+   * of its completion list) and of the next successful Set3; per Busy, did
+   * the next success carry one of the refused ids (re-issued) or not
+   * (superseded). */
+  volatile LONG LastBusyPresentId, LastBusyPresentId1, BusyOutstanding;
+  volatile LONG NextSuccessPresentId, BusyThenSameLatched, BusyThenSuperseded;
 } ADMISSION_MPO_RECEIPT;
 #define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
 #define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u

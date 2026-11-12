@@ -74,15 +74,22 @@ static unsigned int MpoCheckLayer(const ADMISSION_MPO_INPUT *Input,
         !MpoScaleOk(MpoHeight(&plane->Source),
                     MpoHeight(&plane->Destination)))
       return AdmissionMpoReasonScaleBeyondLimit;
-    if (plane->StretchQuality != ADMISSION_MPO_STRETCH_QUALITY_BILINEAR &&
-        plane->StretchQuality != ADMISSION_MPO_STRETCH_QUALITY_HIGH)
-      return AdmissionMpoReasonStretchQuality;
-    /* HIGH asks for "the highest quality filtering that it supports"
-     * (Microsoft Learn, DXGK_MULTIPLANE_OVERLAY_STRETCH_QUALITY), which any
-     * scaler honours; BILINEAR needs a filter known to be at least that. */
-    if (plane->StretchQuality == ADMISSION_MPO_STRETCH_QUALITY_BILINEAR &&
-        Input->ScalerFilter != AdmissionMpoScalerFilterBilinearOrBetter)
-      return AdmissionMpoReasonStretchFilter;
+    /* Check3 only (ADMISSION_MPO_CHECK3_ONLY_REASONS): the quality makes
+     * the Check3 answer truthful; DCP has one scaler filter and nothing on
+     * the Set3 path acts on the field, which dxgkrnl need not repeat there
+     * (EXP2374). */
+    if (Input->Path == ADMISSION_MPO_PATH_CHECK3) {
+      if (plane->StretchQuality != ADMISSION_MPO_STRETCH_QUALITY_BILINEAR &&
+          plane->StretchQuality != ADMISSION_MPO_STRETCH_QUALITY_HIGH)
+        return AdmissionMpoReasonStretchQuality;
+      /* HIGH asks for "the highest quality filtering that it supports"
+       * (Microsoft Learn, DXGK_MULTIPLANE_OVERLAY_STRETCH_QUALITY), which
+       * any scaler honours; BILINEAR needs a filter known to be at least
+       * that. */
+      if (plane->StretchQuality == ADMISSION_MPO_STRETCH_QUALITY_BILINEAR &&
+          Input->ScalerFilter != AdmissionMpoScalerFilterBilinearOrBetter)
+        return AdmissionMpoReasonStretchFilter;
+    }
   }
   /* A zero stride cannot address a surface; treated as a stride defect. */
   if (plane->SurfaceStride == 0u ||

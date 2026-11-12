@@ -133,7 +133,8 @@ class Wp1WindowPrimary(unittest.TestCase):
         # (mpo_contract_test.c TestEvaluateOne).
         self.assertLess(removal.index('AdmissionMpoBuildRemoval('), removal.index('AdmissionMpoEvaluateOne('))
         self.assertLess(removal.index('AdmissionMpoEvaluateOne('), removal.index('AdmissionScanoutMpoCommit('))
-        self.assertIn('Set3TableRefusals', removal)
+        # STRETCH-1b: the refusal goes through the counting helper.
+        self.assertIn('AdmissionMpoSet3TableRefusal(Context, result.Reason)', removal)
 
 
 if __name__ == '__main__':

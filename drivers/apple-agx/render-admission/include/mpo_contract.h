@@ -48,7 +48,7 @@
  * in the scanout pool and the 64 KiB placement alignment CreateAllocation
  * requests; Set3 evaluates again with the actual offset. */
 
-#define ADMISSION_MPO_CONTRACT_VERSION 4u
+#define ADMISSION_MPO_CONTRACT_VERSION 5u
 #define ADMISSION_MPO_MAX_PLANES 2u
 #define ADMISSION_MPO_SLOT_COUNT 2u
 #define ADMISSION_MPO_MIN_EXTENT 32u
@@ -254,7 +254,20 @@ typedef struct _ADMISSION_MPO_INPUT {
    * records may carry a source size different from the destination). */
   unsigned int ScalingSupported;
   unsigned int ScalerFilter;          /* ADMISSION_MPO_SCALER_FILTER */
+  /* ---- version 5 (STRETCH-1b) ---- */
+  /* ADMISSION_MPO_PATH_*: which DDI evaluates.  The Check3-only rules
+   * (ADMISSION_MPO_CHECK3_ONLY_REASONS) keep the Check3 answer truthful
+   * and are not applied on the Set3 path: nothing Set3 realises depends on
+   * them, and a Set3 refusal of a configuration Check3 accepted is a
+   * defect (EXP2374: StretchQuality re-judged at Set3, ~450 refused Set3/s). */
+  unsigned int Path;
 } ADMISSION_MPO_INPUT;
+#define ADMISSION_MPO_PATH_CHECK3 0u
+#define ADMISSION_MPO_PATH_SET3 1u
+/* Bit n set: reason n is applied on the Check3 path only. */
+#define ADMISSION_MPO_CHECK3_ONLY_REASONS                                     \
+  ((1ull << AdmissionMpoReasonStretchQuality) |                               \
+   (1ull << AdmissionMpoReasonStretchFilter))
 
 typedef struct _ADMISSION_MPO_SLOT {
   unsigned int PlaneIndex;       /* index into Planes[], or NO_PLANE */
