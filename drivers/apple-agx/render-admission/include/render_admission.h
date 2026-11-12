@@ -1075,6 +1075,8 @@ typedef struct _ADMISSION_CONTEXT {
   /* S2: two-plane MPO (Wom1MpoTwoPlanes); untouched unless effective. */
   ADMISSION_MPO_RECEIPT Mpo;
   ADMISSION_MPO_GATE_RECEIPT MpoGate;
+  /* EXP2357 (a): interrupt time of the last periodic Wom1MpoReceipt publish. */
+  volatile LONG64 MpoPublishTime100ns;
   ADMISSION_MPO_PLANE_STATE MpoPlanes[2];
 } ADMISSION_CONTEXT;
 
@@ -2449,6 +2451,7 @@ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     _Inout_ DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3 *Args);
 /* Wom1MpoReceipt (PASSIVE_LEVEL; only while effective). */
 void AdmissionRecordMpo(_In_ ADMISSION_CONTEXT *Context);
+void AdmissionRecordMpoPeriodic(_In_opt_ ADMISSION_CONTEXT *Context);
 /* S2-1b: Wom1MpoGateReceipt (PASSIVE_LEVEL; ignored above). */
 void AdmissionRecordMpoGate(_In_ ADMISSION_CONTEXT *Context);
 LONGLONG AdmissionMpoGateQpc(_In_ ADMISSION_CONTEXT *Context);

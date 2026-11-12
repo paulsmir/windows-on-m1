@@ -185,6 +185,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     AdmissionFlushPresentTransfer(adapter);
   if (adapter != NULL)
     AdmissionFlushGdiReceipt(adapter);
+  if (adapter != NULL)
+    AdmissionRecordMpoPeriodic(adapter);
   if (device != NULL && Present != NULL && Present->Flags.Value == 1u) {
     status = AdmissionPresentBlt(device, Context, Present);
     if (!NT_SUCCESS(status))

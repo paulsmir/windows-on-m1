@@ -3059,6 +3059,27 @@ _Use_decl_annotations_ void AdmissionRecordMpo(ADMISSION_CONTEXT *Context) {
   ZwClose(key);
 }
 
+/* EXP2357 (a): Set3 never persists Wom1MpoReceipt and in a healthy boot no
+ * VidPn DDI runs after startup, so the registry snapshot froze (Set3Calls /
+ * V2Presents 138) while the live counters kept counting.  DxgkDdiPresent is
+ * PASSIVE_LEVEL and runs for every DWM flip: publish from there at most once
+ * a second.  Receipt-only; nothing is written without the switch. */
+_Use_decl_annotations_ void AdmissionRecordMpoPeriodic(
+    ADMISSION_CONTEXT *Context) {
+  LONG64 now;
+  LONG64 last;
+  if (Context == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedCompareExchange(&Context->Mpo.Version, 0, 0) == 0)
+    return;
+  now = (LONG64)KeQueryInterruptTime();
+  last = InterlockedCompareExchange64(&Context->MpoPublishTime100ns, 0, 0);
+  if (now - last < 10000000LL ||
+      InterlockedCompareExchange64(&Context->MpoPublishTime100ns, now, last) !=
+          last)
+    return;
+  AdmissionRecordMpo(Context);
+}
+
 _Use_decl_annotations_ void AdmissionRecordDisplayDdi(
     PDEVICE_OBJECT DeviceObject, ULONG DdiId, ULONG Phase, NTSTATUS Status) {
   HANDLE key = NULL;
