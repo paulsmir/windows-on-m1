@@ -670,6 +670,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
         AppleAgxScanoutTwoLayersAdvertised(&runtime->Panel.Scanout) ? 1 : 0;
     Context->Mpo.Effective =
         AppleAgxFixedPanelTwoLayers(&runtime->Panel) ? 1 : 0;
+    /* NP-1: the Set3-side publish (AdmissionQueueMpoPublish). */
+    AdmissionMpoPublishStart(Context);
   }
   /* S2-1b: Effective 0 -> 1 at this scanout start. */
   if (AppleAgxFixedPanelTwoLayers(&runtime->Panel)) {
@@ -727,6 +729,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStop(
       return STATUS_DEVICE_BUSY;
   }
   InterlockedExchange(&runtime->PresentGate, 1);
+  /* NP-1: no Set3 runs once the scanout stops; drain and free the publish
+   * work item (its worker touches the context). */
+  AdmissionMpoPublishStop(Context);
   if (InterlockedCompareExchange(&runtime->PendingValid, 0, 0) != 0)
     return STATUS_DEVICE_BUSY;
   if (InterlockedExchange(&runtime->IrqEnabled, 0) != 0 &&

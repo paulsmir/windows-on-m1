@@ -3080,6 +3080,60 @@ _Use_decl_annotations_ void AdmissionRecordMpoPeriodic(
   AdmissionRecordMpo(Context);
 }
 
+static IO_WORKITEM_ROUTINE AdmissionMpoPublishWorker;
+static VOID AdmissionMpoPublishWorker(_In_ PDEVICE_OBJECT DeviceObject,
+                                      _In_opt_ PVOID Parameter) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Parameter;
+  UNREFERENCED_PARAMETER(DeviceObject);
+  if (context == NULL) return;
+  AdmissionRecordMpoPeriodic(context);
+  InterlockedExchange(&context->MpoPublishQueued, 0);
+  KeSetEvent(&context->MpoPublishIdle, IO_NO_INCREMENT, FALSE);
+}
+
+_Use_decl_annotations_ void AdmissionQueueMpoPublish(
+    ADMISSION_CONTEXT *Context) {
+  LONG64 now;
+  PIO_WORKITEM work;
+  if (Context == NULL) return;
+  work = (PIO_WORKITEM)InterlockedCompareExchangePointer(
+      (PVOID volatile *)&Context->MpoPublishWork, NULL, NULL);
+  if (work == NULL || KeGetCurrentIrql() > DISPATCH_LEVEL ||
+      InterlockedCompareExchange(&Context->Mpo.Version, 0, 0) == 0)
+    return;
+  now = (LONG64)KeQueryInterruptTime();
+  if (now - InterlockedCompareExchange64(&Context->MpoPublishTime100ns, 0, 0) <
+          10000000LL ||
+      InterlockedCompareExchange(&Context->MpoPublishQueued, 1, 0) != 0)
+    return;
+  KeClearEvent(&Context->MpoPublishIdle);
+  IoQueueWorkItem(work, AdmissionMpoPublishWorker, DelayedWorkQueue, Context);
+}
+
+_Use_decl_annotations_ void AdmissionMpoPublishStart(
+    ADMISSION_CONTEXT *Context) {
+  if (Context == NULL || Context->MpoPublishWork != NULL ||
+      Context->PhysicalDeviceObject == NULL)
+    return;
+  KeInitializeEvent(&Context->MpoPublishIdle, NotificationEvent, TRUE);
+  Context->MpoPublishQueued = 0;
+  /* Without the item the receipt keeps the DdiPresent-only cadence. */
+  Context->MpoPublishWork = IoAllocateWorkItem(Context->PhysicalDeviceObject);
+}
+
+_Use_decl_annotations_ void AdmissionMpoPublishStop(
+    ADMISSION_CONTEXT *Context) {
+  PIO_WORKITEM work;
+  if (Context == NULL) return;
+  work = (PIO_WORKITEM)InterlockedExchangePointer(
+      (PVOID volatile *)&Context->MpoPublishWork, NULL);
+  if (work == NULL) return;
+  if (InterlockedCompareExchange(&Context->MpoPublishQueued, 0, 0) != 0)
+    (void)KeWaitForSingleObject(&Context->MpoPublishIdle, Executive,
+                                KernelMode, FALSE, NULL);
+  IoFreeWorkItem(work);
+}
+
 _Use_decl_annotations_ void AdmissionRecordDisplayDdi(
     PDEVICE_OBJECT DeviceObject, ULONG DdiId, ULONG Phase, NTSTATUS Status) {
   HANDLE key = NULL;

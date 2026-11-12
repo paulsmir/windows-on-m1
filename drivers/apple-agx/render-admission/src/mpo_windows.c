@@ -367,6 +367,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     return STATUS_INVALID_PARAMETER;
   }
   InterlockedIncrement(&Context->Mpo.Set3Calls);
+  /* NP-1: publish the receipt set from the Set3 path too (rate-limited). */
+  AdmissionQueueMpoPublish(Context);
   Args->OutputFlags.Value = 0u;
   RtlCopyMemory(next, Context->MpoPlanes, sizeof(next));
   RtlZeroMemory(&completion, sizeof(completion));

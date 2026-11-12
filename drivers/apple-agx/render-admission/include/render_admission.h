@@ -1077,6 +1077,15 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_MPO_GATE_RECEIPT MpoGate;
   /* EXP2357 (a): interrupt time of the last periodic Wom1MpoReceipt publish. */
   volatile LONG64 MpoPublishTime100ns;
+  /* NP-1 (EXP2365): while DWM presents only through Set3 (two planes) no
+   * DdiPresent runs, so the periodic publish stalled.  Set3 (IRQL up to
+   * PROFILE_LEVEL - 1) queues this work item at most once a second when it
+   * runs at <= DISPATCH_LEVEL; the item publishes at PASSIVE_LEVEL.
+   * Allocated at scanout start with the MPO receipt, drained and freed at
+   * scanout stop.  Receipt-only. */
+  PIO_WORKITEM MpoPublishWork;
+  volatile LONG MpoPublishQueued;
+  KEVENT MpoPublishIdle;
   ADMISSION_MPO_PLANE_STATE MpoPlanes[2];
 } ADMISSION_CONTEXT;
 
@@ -2452,6 +2461,15 @@ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
 /* Wom1MpoReceipt (PASSIVE_LEVEL; only while effective). */
 void AdmissionRecordMpo(_In_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordMpoPeriodic(_In_opt_ ADMISSION_CONTEXT *Context);
+/* NP-1: queue the periodic MPO publish from a path that may run above
+ * PASSIVE_LEVEL (Set3); no-op above DISPATCH_LEVEL or without the work item. */
+void AdmissionQueueMpoPublish(_In_opt_ ADMISSION_CONTEXT *Context);
+/* NP-1: allocate (scanout start, PASSIVE) / drain and free (scanout stop,
+ * PASSIVE) the Set3-side publish work item. */
+_IRQL_requires_(PASSIVE_LEVEL)
+void AdmissionMpoPublishStart(_In_opt_ ADMISSION_CONTEXT *Context);
+_IRQL_requires_(PASSIVE_LEVEL)
+void AdmissionMpoPublishStop(_In_opt_ ADMISSION_CONTEXT *Context);
 /* S2-1b: Wom1MpoGateReceipt (PASSIVE_LEVEL; ignored above). */
 void AdmissionRecordMpoGate(_In_ ADMISSION_CONTEXT *Context);
 LONGLONG AdmissionMpoGateQpc(_In_ ADMISSION_CONTEXT *Context);
