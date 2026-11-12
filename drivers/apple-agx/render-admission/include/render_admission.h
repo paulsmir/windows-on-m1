@@ -284,6 +284,13 @@ typedef struct _ADMISSION_MPO_RECEIPT {
    * (count, min, max, sum; the read + fill + barrier). */
   volatile LONG ScratchCommits, CropCommits, ScratchSkippedWrites;
   volatile LONG ScratchCopyTicks[4];
+  /* RQ-1: swaps the broker failed after acceptance (IRQ_ERROR, RESULT !=
+   * OK, RECEIPT == the pending sequence), re-submissions, failed swaps that
+   * latched on a retry, failed swaps whose PresentIds were reported after
+   * the last try, the last failure's broker result, and IRQ_ERRORs that were
+   * not about the pending present (a RELEASE failure, a stale error). */
+  volatile LONG SwapFailures, SwapRetries, SwapRetryLatched;
+  volatile LONG SwapRetryExhaustedReported, LastSwapFailureResult, ForeignErrors;
 } ADMISSION_MPO_RECEIPT;
 #define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
 #define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u
