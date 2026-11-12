@@ -5997,3 +5997,34 @@ boot was run. The previous entry stays as written.
   job-row census), or job structure (how the 134 dispatches of C0 are launched). Next step is offline: per-kernel
   comparison against the Metal oracle on the heaviest kernels, with op-class costs measured by twin probes of
   this kind (a memory-bound and an atomic-bound full-width twin are the obvious next two).
+
+## UPDATE 2026-11-12T16:16:07Z - two-plane line accepted and merged; cursor layer refused by DCP; production-first queue
+
+- ACCEPTED PACKAGE: the normal-DWM-path two-plane line (DF-1, PF-1, PL-1, BP-1, WP-1, DP-1, NP-1) is merged
+  (b79100899) after the control band EXP2366/2367/2368: FULL 8424/8256, 8402/8414, 8401/8357 (macOS 9946 ->
+  83.0..84.7 %), PERF ~52.5..53.5, CS ~52.1..52.6. perf-baseline re-based (7bc86c6de): CS 51.991, GM 47.007.
+  Stop lines: FULL 8173, PERF 51.696. Staging default: DisableDDisplay absent; AGX_STAGE_DDISPLAY=legacy is a
+  deliberate opt-in. The legacy DWM path is no longer verified.
+- Boot profiles: SHORT (suite, picture rule, the change's own check, GM PERF w+r2, CS warm+r2; a gate miss
+  triggers FULL once in the same boot) for correctness/display changes; FULL for band boots, speed-relevant
+  changes and merge packages. Harness fix: the CS wait polled findstr on a UTF-16 log (450 s timeout per run);
+  now type|find at the same cadence.
+- Operator rule 2026-11-12: production features are not parked as "later"; full-screen scan-out, stretch and
+  pitch are active work items in parallel with the compute ratio.
+- EXP2371 (m1n1 diagnostic, proxy): a swap carrying a third surface (slot 2 or slot 3, 64x64, with slots 0/1
+  full panel) is refused cleanly by DCP 13.5 (A408 out=000000000004000000, RESULT -11, restore latched). Layer
+  scaling 2.0x / 1.5x / 0.5x latches (RESULT 0). The filter type is NOT determined (phone photos cannot
+  separate replication from bilinear at these ratios). NOT tested: a small layer on slot 1.
+- DECISION CUR-1: no hardware-pointer capability on this firmware (a pointer would take one of only two
+  layers and remove the windowed two-plane gain). Full-screen applications get direct scan-out the way DWM
+  itself asks for it: application plane + DWM's own top cursor plane (full-panel surface with a cursor-sized
+  clip). Work: Check3 accepts the clipped top plane (rule 17 replaced by a measured minimum), broker record
+  carries the clip as source offset/size and destination rect. Unknown, to be measured in one proxy session
+  (HC-1): smallest layer DCP accepts on slot 1 (1, 16, 32, 64 px; at panel edges).
+- SP-2 (same proxy session): filter discrimination with an on-screen reference - unscaled half shows the two
+  predictions (2-px full-contrast stripes; 0.25/0.75 stripes), scaled half shows 1-px stripes at 2.0x, plus an
+  isolated 1-px line (2 px wide = replication, ~4 px gradient = bilinear). Until then STRETCH-1 keeps reason 34.
+- STRETCH-1 (arch/stretch1) and PITCH-1 (arch/pitch1, EXP2369 queued) packages build; neither is hardware
+  verified yet.
+- OPTWIN ours side: first run failed in probe setup (pipeline table cap 24, C1 needs 25..27; probe defect,
+  fixed 71d9ced72); no measurement yet; reruns in EXP2369's tail. The macOS twin follows once R values are final.
