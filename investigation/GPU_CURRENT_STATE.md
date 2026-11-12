@@ -6060,3 +6060,17 @@ boot was run. The previous entry stays as written.
   (quartiles) in every repetition index. Owner of that job not identified (candidates: a foreign client, or the
   probe's own per-repetition job). Several variants (G1 base, G1d 16M/64M, G1c 64M, C1, B1_128) have no clean
   repetition. No ratio against macOS exists yet; the macOS twin waits for a clean ours-side run.
+
+## UPDATE 2026-11-12T17:14:20Z - OPTWIN second job explained; "late completion" is the known notifier batching, not a new lever
+
+- The second job in OPTWIN spans is the probe's own filler (the probe counts only its own compute records).
+  Offline read of the 3350 job records of EXP2373 (.local/night-20261110/completion-latency/REPORT.md):
+  the KMD detects a job 0.04..0.07 ms after its GPU end when it is not batched. jobs=1 repetitions: the timed
+  job waited 7.2..8.5 ms BEFORE its start behind the previous repetition's filler (not after its end).
+  jobs=2 repetitions: the timed job's completion arrives with its successor's (0.036 ms after the filler's end):
+  the single-notifier deferral at depth two (one event ends both; same contract in Asahi queue/mod.rs run()).
+- Verdict: "completion delivered late" as a new defect is REJECTED; it is the known depth-two batching with
+  own-notify / stamp-complete switches off. Size in GravityMark (gm2373t, 21002 completions): 407 batched
+  (1.9 %), extra 0.46..0.87 ms each, ~0.3 s in the whole run - an upper bound, critical-path share unknown.
+  Not a top lever; stays under the hand-over item.
+- Probe fix: span = the oldest compute record submitted after t0; filler kept for the frequency hold.
