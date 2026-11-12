@@ -5785,3 +5785,20 @@ boot was run. The previous entry stays as written.
   its old MPO present callback does). In parallel the scope of advertising D3DWDDM2_1 / 2_2 in the UMD is being
   written from the headers (paper only). A UMD at the 2.0 interface under a WDDM 3.2 kernel driver is itself a
   gap against a production driver, whatever this reading returns.
+
+## UPDATE 2026-11-12T02:21Z (architect): normal-path cycle: DWM's present fails with SETDISPLAYMODE_REQUIRED
+
+- Leads closed offline: ddisplay.dll has no D3D interface-version test (a >= 2.2 UMD is not shown to be
+  required; the 2.0 -> 2.2 scope is written and parked, about 2-3 days); a separate display UMD
+  (DisplayUserModeDriverName / OpenDisplayAdapter1) is not a requirement (two AMD drivers on the reference
+  machine register none).
+- Decoded from our throw receipts in EXP2359: on the normal path only, ddisplay's DisplayTaskPool throws
+  hr 0x887A0065 = DXGI_ERROR_SETDISPLAYMODE_REQUIRED within about 1 ms after our MPO present callback returned
+  S_OK. In the guest dxgkrnl the kernel status behind it (0xC01E0019) has two sources, both in the MPO present
+  path before plane intake and before any miniport call: the presenting kernel device does not hold "primary
+  pinned" or "mode set" for the source. Both bits are per kernel device, set by D3DKMTSetDisplayMode on that
+  device and cleared when its primary is torn down. No miniport DDI or caps value is on this path.
+- Two candidates: (a) SetDisplayMode and the MPO present run on different devices of DWM; (b) same device, the
+  primary is torn down before the present. Next: one receipt-only boot recording device / context / allocation
+  identity in the UMD's SetDisplayMode, MPO present, Create / Destroy / OpenResource rows of DWM, aligned with
+  the kernel events. No behaviour change.
