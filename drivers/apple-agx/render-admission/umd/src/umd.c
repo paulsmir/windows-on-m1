@@ -377,6 +377,89 @@ static LONG CALLBACK AdmissionUmdNullCall(EXCEPTION_POINTERS *Info) {
  * first four stack words that point into a module other than the throw
  * machinery -- and continue the search unchanged. */
 static volatile LONG AdmissionUmdCxxThrows;
+/* EXP2359 (architect 2026-11-12): the first 32 throws ended in DWM's second
+ * output cycle of 91. After them, keep recording ddisplay ResultExceptions and
+ * d3d11 _com_errors (up to 256 more per process), copy the FailureInfo strings,
+ * and count every throw by site (first frame + line) per output cycle; the
+ * counts are written at each SetDisplayMode (AdmissionUmdCxxSiteFlush). */
+static volatile LONG AdmissionUmdCxxExtra;
+#define ADMISSION_UMD_CXX_SITES 16u
+typedef struct _ADMISSION_UMD_CXX_SITE {
+  UINT Name[2];
+  UINT Offset;
+  UINT Line;
+  UINT Count;
+} ADMISSION_UMD_CXX_SITE;
+static SRWLOCK AdmissionUmdCxxSiteLock = SRWLOCK_INIT;
+static ADMISSION_UMD_CXX_SITE AdmissionUmdCxxSites[ADMISSION_UMD_CXX_SITES];
+static UINT AdmissionUmdCxxSiteOverflow;
+static UINT AdmissionUmdCxxCycle;
+
+static void AdmissionUmdCxxSiteCount(const UINT *Frame, UINT Line) {
+  UINT i;
+  AcquireSRWLockExclusive(&AdmissionUmdCxxSiteLock);
+  for (i = 0u; i < ADMISSION_UMD_CXX_SITES; ++i) {
+    ADMISSION_UMD_CXX_SITE *site = &AdmissionUmdCxxSites[i];
+    if (site->Count != 0u && site->Name[0] == Frame[0] &&
+        site->Name[1] == Frame[1] && site->Offset == Frame[2] &&
+        site->Line == Line) {
+      ++site->Count;
+      break;
+    }
+    if (site->Count == 0u) {
+      site->Name[0] = Frame[0];
+      site->Name[1] = Frame[1];
+      site->Offset = Frame[2];
+      site->Line = Line;
+      site->Count = 1u;
+      break;
+    }
+  }
+  if (i == ADMISSION_UMD_CXX_SITES) ++AdmissionUmdCxxSiteOverflow;
+  ReleaseSRWLockExclusive(&AdmissionUmdCxxSiteLock);
+}
+
+/* One row per throw site seen since the previous SetDisplayMode:
+ * {cycle, module name prefix (2 words), first-frame offset, line, count},
+ * then a closing row {cycle, sites, overflow}. */
+static void AdmissionUmdCxxSiteFlush(void) {
+  ADMISSION_UMD_CXX_SITE sites[ADMISSION_UMD_CXX_SITES];
+  UINT overflow, cycle, n = 0u;
+  AcquireSRWLockExclusive(&AdmissionUmdCxxSiteLock);
+  memcpy(sites, AdmissionUmdCxxSites, sizeof(sites));
+  ZeroMemory(AdmissionUmdCxxSites, sizeof(AdmissionUmdCxxSites));
+  overflow = AdmissionUmdCxxSiteOverflow;
+  AdmissionUmdCxxSiteOverflow = 0u;
+  cycle = ++AdmissionUmdCxxCycle;
+  ReleaseSRWLockExclusive(&AdmissionUmdCxxSiteLock);
+  for (UINT i = 0u; i < ADMISSION_UMD_CXX_SITES && sites[i].Count != 0u; ++i) {
+    UINT values[6] = {cycle, sites[i].Name[0], sites[i].Name[1],
+                      sites[i].Offset, sites[i].Line, sites[i].Count};
+    AdmissionUmdDiagnostic("measure-cxx-cycle-site", S_OK, values, 6u);
+    ++n;
+  }
+  {
+    UINT values[3] = {cycle, n, overflow};
+    AdmissionUmdDiagnostic("measure-cxx-cycle-end", S_OK, values, 3u);
+  }
+}
+
+/* Up to 47 characters of a FailureInfo string (narrow, or wide narrowed to
+ * its low byte) as one row {tid, which, 12 words}: 1 pszFile, 2 pszFunction,
+ * 3 pszCode, 4 pszMessage. Caller is inside __try. */
+static void AdmissionUmdCxxString(UINT Tid, UINT Which, const void *Text,
+                                  BOOL Wide) {
+  UINT values[14] = {0};
+  values[0] = Tid;
+  values[1] = Which;
+  if (Text == NULL) return;
+  for (UINT i = 0u; i < 47u; ++i) {
+    UINT c = Wide ? (UINT)((const WCHAR *)Text)[i] : (UINT)((const BYTE *)Text)[i];
+    if (c == 0u) break;
+    values[2u + i / 4u] |= (c & 0xffu) << (8u * (i % 4u));
+  }
+  AdmissionUmdDiagnostic("reject-cxx-string", E_UNEXPECTED, values, 14u);
+}
 
 static BOOLEAN AdmissionUmdThrowMachinery(const UINT *Name) {
   UINT lower = Name[0] | 0x20202020u;
@@ -393,7 +476,8 @@ static void AdmissionUmdCxxThrowReceipt(EXCEPTION_POINTERS *Info) {
    * FailureInfo -- type, flags, hr, status, failureId -- past the first 8). */
   UINT more[16] = {0};
   UINT found = 0u;
-  if (InterlockedIncrement(&AdmissionUmdCxxThrows) > 32) return;
+  const void *strings[4] = {NULL, NULL, NULL, NULL};
+  BOOL record;
   thrown[0] = frames[0] = GetCurrentThreadId();
   __try {
     const BYTE *object = (const BYTE *)record->ExceptionInformation[1];
@@ -416,6 +500,17 @@ static void AdmissionUmdCxxThrowReceipt(EXCEPTION_POINTERS *Info) {
       thrown[3u + i] = ((const UINT *)object)[i];
     for (UINT i = 0u; object != NULL && i < 16u; ++i)
       more[i] = ((const UINT *)object)[8u + i];
+#if defined(_WIN64)
+    /* wil::ResultException FailureInfo (64-bit): pszMessage at object +48,
+     * pszCode +64, pszFunction +72, pszFile +80 (EXP2359 decode: threadId
+     * at word 14 matched every row). */
+    if (object != NULL && thrown[1] == 0x75736552u /* "Resu" */) {
+      strings[0] = *(const void *const *)(object + 80);
+      strings[1] = *(const void *const *)(object + 72);
+      strings[2] = *(const void *const *)(object + 64);
+      strings[3] = *(const void *const *)(object + 48);
+    }
+#endif
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
 #if defined(_M_ARM64)
@@ -434,9 +529,25 @@ static void AdmissionUmdCxxThrowReceipt(EXCEPTION_POINTERS *Info) {
     frames[3u + 3u * found] = offset;
     ++found;
   }
+  AdmissionUmdCxxSiteCount(&frames[1],
+                           thrown[1] == 0x75736552u ? more[14] : 0u);
+  record = InterlockedIncrement(&AdmissionUmdCxxThrows) <= 32;
+  if (!record) {
+    UINT lower = frames[1] | 0x20202020u;
+    BOOL ddisplayResult = thrown[1] == 0x75736552u && lower == 0x70736964u; /* "ddis" */
+    BOOL d3d11Com = thrown[1] == 0x6d6f635fu /* "_com" */ && lower == 0x31643364u; /* "d3d1" */
+    record = (ddisplayResult || d3d11Com) &&
+             InterlockedIncrement(&AdmissionUmdCxxExtra) <= 256;
+  }
+  if (!record) return;
   AdmissionUmdDiagnostic("reject-cxx-throw", E_UNEXPECTED, thrown, 11u);
   AdmissionUmdDiagnostic("reject-cxx-stack", E_UNEXPECTED, frames, 13u);
   AdmissionUmdDiagnostic("reject-cxx-object", E_UNEXPECTED, more, 16u);
+  __try {
+    for (UINT i = 0u; i < 4u; ++i)
+      AdmissionUmdCxxString(thrown[0], i + 1u, strings[i], i == 3u);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
   AdmissionUmdDiagnosticFlush();
 }
 
@@ -1237,7 +1348,9 @@ HRESULT APIENTRY AdmissionUmdSetDisplayMode(
      * mode first is the discriminator. {primary allocation, callback
      * HRESULT, PrivateDriverFormatAttribute out}. "measure-": DWM's session
      * trace is refusals-only. */
-    HRESULT result = device->KernelCallbacks->pfnSetDisplayModeCb(
+    HRESULT result;
+    AdmissionUmdCxxSiteFlush();
+    result = device->KernelCallbacks->pfnSetDisplayModeCb(
         device->RuntimeDevice.handle, &setMode);
     UINT values[3] = {(UINT)setMode.hPrimaryAllocation, (UINT)result,
         setMode.PrivateDriverFormatAttribute};
