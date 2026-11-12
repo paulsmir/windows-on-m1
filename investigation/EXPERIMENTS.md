@@ -78624,3 +78624,10 @@ EXP2381 HARDWARE BEFORE 2026-11-12T23:36:28Z:
 - Hashes: sys 4da9da7bc81b, UmdArm64 f14df24d9690, UmdX64 59777eaeeefb, Umd32 a1a7b4fb700a; manifest 231ed94f79c7, hardware-manifest da7b54728cbc; probe2381.sh f470ba699c3e (PROBE_LINT_OK); visible recovery rec2381h 7242f7adcb789d14; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
 - Recovery rec2381h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2381-cur1/run2381.sh.
+
+EXP2381 HARDWARE ACTUAL 2026-11-12T23:59:16Z:
+- Boot: guest up 2026-11-12T23:37:23Z; CHAIN2381_DONE; STOPS 0; no Application 1000 (1001: AppTermFailureEvent / EdgeUpdate crashpad only); suite PASS=119 FAIL=0.
+- Scratch reservation: ScratchReady 1, ScratchNonZeroBytes 0, VidMmSegment2Kib 319360 = PoolKib 319488 - 128, ScratchOffsetKib 319360.
+- Pointer arm (CS 'ptr', first): CS 48.362 (cold), lone +3983 / two +1 / v2 +83; Check3Calls +2; ScratchCommits 0, CropCommits 0, TopClip(38) 0 -> NO_CLIPPED_PLANE. Dwm-Core window 00:40:48-00:41:04 local: 135x events 221/222, 4x 223/224/225, zero 218/219/220/290. No operator words: the pointer most likely never moved, so the arm is non-discriminating (architect: CS also captures/hides the pointer).
+- Gates: CS warm 51.396, r2 52.004 lone (gate PASS +0.03 %); GM w 52.252, r2 52.683 fps_frames, gate PASS +0.66 % (worst fps_presents 47.315); STRETCHWIN 57.71 fps HoldMerges = HoldCommits +190, HoldDropped 0; STRETCHFS 59.98 fps lone +2699; every HOLD_ line OK.
+- Verdict: CUR-1 v2 regression-free on the accepted line (reservation and code); its scratch path not exercised in this boot. Next: EXP2382, same package, synthetic pointer (ptr-move.ps1) over FULLFS / STRETCHFS / CS. Recovery rec2381h started.
