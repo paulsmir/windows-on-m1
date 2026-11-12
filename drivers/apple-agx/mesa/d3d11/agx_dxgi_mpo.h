@@ -50,7 +50,7 @@
 #define AgxDxgiMpoPlanesDisabled 3u    /* DP-1: no plane enabled (before DP-1: any plane with Enabled FALSE) */
 #define AgxDxgiMpoPlanesResource 4u    /* not a presentation resource of this device */
 #define AgxDxgiMpoPlanesSubresource 5u /* SubResourceIndex != 0 */
-#define AgxDxgiMpoPlanesLayerIndex 6u  /* LayerIndex not a permutation of 0..n-1 */
+#define AgxDxgiMpoPlanesLayerIndex 6u  /* LayerIndex >= MaxPlanes, or listed twice */
 
 typedef struct _AGX_DXGI_MPO_PLANE {
   unsigned int LayerIndex;
@@ -61,6 +61,14 @@ typedef struct _AGX_DXGI_MPO_PLANE {
 
 /* AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES (apple_agx_win32_device_info.h). */
 #define AGX_DXGI_MPO_FEATURE_TWO_PLANES 0x20u
+/* STRETCH-1: AGX_WIN32_DEVICE_FEATURE_MPO_STRETCH (apple_agx_win32_device_info.h). */
+#define AGX_DXGI_MPO_FEATURE_STRETCH 0x40u
+/* STRETCH-1: the kernel's factors (mpo_contract.h AdmissionMpoCapsFor):
+ * "the ratio of the final, stretched overlay plane size to the original
+ * size" and "the ratio of the final, shrunk overlay plane size to the
+ * original size" (DXGI_DDI_MULTIPLANE_OVERLAY_GROUP_CAPS). */
+#define AGX_DXGI_MPO_MAX_STRETCH 2.0f
+#define AGX_DXGI_MPO_MAX_SHRINK 0.5f
 
 /* The predicate: the kernel published the two-plane feature bit and the
  * question is about VidPnSource 0.  Anything else is one plane. */
@@ -68,6 +76,14 @@ static inline int
 AgxDxgiMpoFeatureTwoPlanes(unsigned int Features, unsigned int VidPnSourceId)
 {
   return (Features & AGX_DXGI_MPO_FEATURE_TWO_PLANES) != 0u && VidPnSourceId == 0u;
+}
+
+/* STRETCH-1: the two-plane predicate and the stretch bit. */
+static inline int
+AgxDxgiMpoFeatureStretch(unsigned int Features, unsigned int VidPnSourceId)
+{
+  return AgxDxgiMpoFeatureTwoPlanes(Features, VidPnSourceId) &&
+         (Features & AGX_DXGI_MPO_FEATURE_STRETCH) != 0u;
 }
 
 /* DXGI_DDI_MULTIPLANE_OVERLAY_CAPS: MaxPlanes and NumCapabilityGroups. */
@@ -79,17 +95,19 @@ AgxDxgiMpoCaps(int TwoPlanes, unsigned int *MaxPlanes, unsigned int *Groups)
 }
 
 /* DXGI_DDI_MULTIPLANE_OVERLAY_GROUP_CAPS of group GroupIndex; returns 1 when
- * the group exists (the outputs are written only then). */
+ * the group exists (the outputs are written only then).  Stretch (STRETCH-1,
+ * only with TwoPlanes): factors 2.0 / 0.5, else 1.0 / 1.0.  No filter bit:
+ * the display scaler's filter is not known (the kernel reports none). */
 static inline int
-AgxDxgiMpoGroupCaps(int TwoPlanes, unsigned int GroupIndex, unsigned int *NumPlanes,
-                    float *MaxStretch, float *MaxShrink, unsigned int *OverlayCaps,
-                    unsigned int *StereoCaps)
+AgxDxgiMpoGroupCaps(int TwoPlanes, int Stretch, unsigned int GroupIndex,
+                    unsigned int *NumPlanes, float *MaxStretch, float *MaxShrink,
+                    unsigned int *OverlayCaps, unsigned int *StereoCaps)
 {
   if (!TwoPlanes || GroupIndex != 0u)
     return 0;
   *NumPlanes = AGX_DXGI_MPO_PLANES;
-  *MaxStretch = 1.0f;
-  *MaxShrink = 1.0f;
+  *MaxStretch = Stretch ? AGX_DXGI_MPO_MAX_STRETCH : 1.0f;
+  *MaxShrink = Stretch ? AGX_DXGI_MPO_MAX_SHRINK : 1.0f;
   *OverlayCaps = AGX_DXGI_MPO_FEATURE_CAPS_RGB;
   *StereoCaps = 0u;
   return 1;
@@ -106,9 +124,9 @@ AgxDxgiMpoColorSpaceSupported(int TwoPlanes, unsigned int Format, unsigned int C
 
 /* The plane list of PresentMultiplaneOverlay(1) this driver can hand to
  * pfnPresentMultiplaneOverlayCb: 1..MaxPlanes planes, each enabled, each one
- * of this device's presentation resources at subresource 0, LayerIndex
- * values "sequential from top to bottom" (DXGI_DDI_PRESENT_MULTIPLANE_OVERLAY),
- * i.e. each of 0..Count-1 exactly once.  Whether the configuration can be
+ * of this device's presentation resources at subresource 0, each LayerIndex a
+ * plane of the source (< MaxPlanes) listed once; a list may name any subset
+ * (FS-1b: the lone application plane is { LayerIndex 1 }).  Whether the configuration can be
  * shown is the kernel's decision (DxgkDdiCheckMultiPlaneOverlaySupport3);
  * this is only the translation's precondition. */
 static inline unsigned int
@@ -127,7 +145,13 @@ AgxDxgiMpoCheckPlanes(const AGX_DXGI_MPO_PLANE *Planes, unsigned int Count)
    * every listed plane; at least one plane must be enabled. */
   unsigned int enabled = 0u;
   for (i = 0u; i < Count; ++i) {
-    if (Planes[i].LayerIndex >= Count || (seen & (1u << Planes[i].LayerIndex)) != 0u)
+    /* FS-1b (EXP2377): LayerIndex names a plane of the source (0..MaxPlanes-1),
+     * not a position in this list: the full-screen application plane alone is
+     * one entry at LayerIndex 1, and refusing it (the old 0..Count-1 rule)
+     * failed every independent flip (E_INVALIDARG: DWM churn, app stall,
+     * DEVICE_REMOVED).  Each listed plane once. */
+    if (Planes[i].LayerIndex >= AGX_DXGI_MPO_PLANES ||
+        (seen & (1u << Planes[i].LayerIndex)) != 0u)
       return AgxDxgiMpoPlanesLayerIndex;
     seen |= 1u << Planes[i].LayerIndex;
     if (!Planes[i].Enabled)
@@ -167,13 +191,13 @@ AgxDxgiMpoFillCaps(int TwoPlanes, DXGI_DDI_MULTIPLANE_OVERLAY_CAPS *Caps)
 }
 
 static inline int
-AgxDxgiMpoFillGroupCaps(int TwoPlanes, UINT GroupIndex,
+AgxDxgiMpoFillGroupCaps(int TwoPlanes, int Stretch, UINT GroupIndex,
                         DXGI_DDI_MULTIPLANE_OVERLAY_GROUP_CAPS *Group)
 {
   UINT planes = 0u, overlay = 0u, stereo = 0u;
   float stretch = 0.0f, shrink = 0.0f;
-  if (!AgxDxgiMpoGroupCaps(TwoPlanes, GroupIndex, &planes, &stretch, &shrink, &overlay,
-                           &stereo))
+  if (!AgxDxgiMpoGroupCaps(TwoPlanes, Stretch, GroupIndex, &planes, &stretch, &shrink,
+                           &overlay, &stereo))
     return 0;
   Group->NumPlanes = planes;
   Group->MaxStretchFactor = stretch;

@@ -161,8 +161,8 @@ static BOOLEAN AdmissionUmdDescribePrimary(
        CreateResource->pPrimaryDesc != NULL) ||
       !CreateResource->pMipInfoList[0].TexelWidth ||
       !CreateResource->pMipInfoList[0].TexelHeight ||
-      CreateResource->pMipInfoList[0].TexelWidth > 8192u ||
-      CreateResource->pMipInfoList[0].TexelHeight > 8192u ||
+      CreateResource->pMipInfoList[0].TexelWidth > ADMISSION_PRESENTATION_MAX_EXTENT ||
+      CreateResource->pMipInfoList[0].TexelHeight > ADMISSION_PRESENTATION_MAX_EXTENT ||
       CreateResource->pMipInfoList[0].TexelDepth != 1u ||
       /* WP-1 (EXP2362/EXP2363): the rc106 "a primary must be an offered
        * fixed-panel mode" test no longer sits here.  With DirectFlip/MPO
@@ -911,6 +911,23 @@ VOID AdmissionUmdCreateResourceWithMetadata(
     AdmissionUmdSetError(device, E_INVALIDARG);
     return;
   }
+  /* PITCH-2: the size every open path admits (render_allocation.h), so a
+   * surface this create accepts is one every consumer can open. */
+  {
+    const UINT sizeCheck = AdmissionPresentationSizeCheck(
+        description.Allocation.Width, description.Allocation.Height,
+        description.Allocation.Size,
+        AdmissionUmdPresentationClassMaximumBytes(device));
+    if (sizeCheck != ADMISSION_PRESENTATION_SIZE_OK) {
+      UINT values[4] = {sizeCheck, description.Allocation.Width,
+                        description.Allocation.Height,
+                        (UINT)(description.Allocation.Size >> 16)};
+      AdmissionUmdDiagnostic("reject-primary-size", E_INVALIDARG, values,
+                             ARRAYSIZE(values));
+      AdmissionUmdSetError(device, E_INVALIDARG);
+      return;
+    }
+  }
   retirement = AdmissionUmdRetirementCreate();
   if (retirement == NULL) {
     AdmissionUmdSetError(device, E_OUTOFMEMORY);
@@ -1094,10 +1111,14 @@ VOID APIENTRY AdmissionUmdOpenResource(
       !AdmissionAllocationDescriptionValid(description) ||
       (description->Format != (UINT)D3DDDIFMT_A8R8G8B8 &&
        description->Format != (UINT)D3DDDIFMT_A8B8G8R8) ||
-      description->Width > 8192u || description->Height > 8192u ||
       description->Type != (UINT)D3DKMDT_GDISURFACE_TEXTURE ||
       description->BytesPerPixel != 4u ||
-      description->Size > 0x1000000ULL || info->hAllocation == 0u ||
+      /* PITCH-2: the create path's size rule, not a separate cap */
+      AdmissionPresentationSizeCheck(
+          description->Width, description->Height, description->Size,
+          AdmissionUmdPresentationClassMaximumBytes(device)) !=
+          ADMISSION_PRESENTATION_SIZE_OK ||
+      info->hAllocation == 0u ||
       (resourceData != NULL && resourceData->Format != 0u &&
        !AdmissionUmdSharedFormatStorage(resourceData->Format,
                                         description->Format))) {

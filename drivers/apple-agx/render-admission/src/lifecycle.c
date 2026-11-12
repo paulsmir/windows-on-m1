@@ -773,6 +773,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     /* S2: Wom1MpoTwoPlanes effective (broker bit 9 + V3 read back at start). */
     if (AdmissionScanoutMpoEffective(context))
       info->Features |= AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES;
+    /* STRETCH-1: and broker bit 8 (scaled layer records). */
+    if (AdmissionScanoutMpoScaledSource(context))
+      info->Features |= AGX_WIN32_DEVICE_FEATURE_MPO_STRETCH;
     status = STATUS_SUCCESS;
     break;
   }

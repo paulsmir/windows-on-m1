@@ -32,26 +32,75 @@ void AdmissionPresentResourceRefreshRate(
   *Denominator = 1u;
 }
 
+int AdmissionAllocationDisplayClass(unsigned int Type,
+                                    unsigned int BytesPerPixel,
+                                    unsigned int CpuVisible) {
+  return Type == ADMISSION_ALLOCATION_TYPE_GDI_TEXTURE &&
+         BytesPerPixel == 4u && CpuVisible == 0u;
+}
+
+unsigned int AdmissionAllocationPitchAlignment(unsigned int Type,
+                                               unsigned int BytesPerPixel,
+                                               unsigned int CpuVisible) {
+  return AdmissionAllocationDisplayClass(Type, BytesPerPixel, CpuVisible)
+             ? ADMISSION_ALLOCATION_DISPLAY_PITCH_ALIGNMENT
+             : ADMISSION_ALLOCATION_PITCH_ALIGNMENT;
+}
+
+int AdmissionAllocationPitch(unsigned int Width, unsigned int BytesPerPixel,
+                             unsigned int Type, unsigned int CpuVisible,
+                             unsigned int *Pitch) {
+  unsigned long long mask =
+      (unsigned long long)AdmissionAllocationPitchAlignment(
+          Type, BytesPerPixel, CpuVisible) - 1ULL;
+  unsigned long long pitch;
+  if (Pitch == ADMISSION_ALLOCATION_NULL || Width == 0u ||
+      BytesPerPixel == 0u)
+    return 0;
+  /* At most 0xffffffff * 0xffffffff + mask: no 64-bit overflow. */
+  pitch = ((unsigned long long)Width * BytesPerPixel + mask) & ~mask;
+  if (pitch > ADMISSION_ALLOCATION_U32_MAX)
+    return 0;
+  *Pitch = (unsigned int)pitch;
+  return 1;
+}
+
+unsigned long long AdmissionPresentationMaximumBytes(void) {
+  unsigned int pitch = 0u;
+  if (!AdmissionAllocationPitch(ADMISSION_PRESENTATION_MAX_EXTENT, 4u,
+                                ADMISSION_ALLOCATION_TYPE_GDI_TEXTURE, 0u,
+                                &pitch))
+    return 0ULL;
+  return ((unsigned long long)pitch * ADMISSION_PRESENTATION_MAX_EXTENT +
+          127ULL) & ~127ULL;
+}
+
+unsigned int AdmissionPresentationSizeCheck(
+    unsigned int Width, unsigned int Height, unsigned long long Size,
+    unsigned long long ClassMaximumBytes) {
+  if (Width == 0u || Height == 0u ||
+      Width > ADMISSION_PRESENTATION_MAX_EXTENT ||
+      Height > ADMISSION_PRESENTATION_MAX_EXTENT)
+    return ADMISSION_PRESENTATION_SIZE_EXTENT;
+  if (Size == 0ULL || Size > AdmissionPresentationMaximumBytes() ||
+      Size > ClassMaximumBytes)
+    return ADMISSION_PRESENTATION_SIZE_BYTES;
+  return ADMISSION_PRESENTATION_SIZE_OK;
+}
+
 int AdmissionAllocationDescribe(unsigned int Width, unsigned int Height,
                                 unsigned int BytesPerPixel,
                                 unsigned int Type, unsigned int Format,
                                 unsigned int CpuVisible,
                                 ADMISSION_ALLOCATION_DESCRIPTION *Description) {
   ADMISSION_ALLOCATION_DESCRIPTION candidate;
-  unsigned long long rowBytes;
-  unsigned long long pitch;
+  unsigned int pitch = 0u;
 
   if (Description == ADMISSION_ALLOCATION_NULL || Width == 0u ||
       Height == 0u || BytesPerPixel == 0u || BytesPerPixel > 4u ||
-      Type == 0u || Format == 0u || CpuVisible > 1u)
-    return 0;
-  rowBytes = (unsigned long long)Width * BytesPerPixel;
-  if (rowBytes > ADMISSION_ALLOCATION_U32_MAX ||
-      rowBytes > ADMISSION_ALLOCATION_U64_MAX - 15ULL)
-    return 0;
-  pitch = (rowBytes + 15ULL) & ~15ULL;
-  if (pitch > ADMISSION_ALLOCATION_U32_MAX ||
-      (unsigned long long)Height > ADMISSION_ALLOCATION_U64_MAX / pitch)
+      Type == 0u || Format == 0u || CpuVisible > 1u ||
+      !AdmissionAllocationPitch(Width, BytesPerPixel, Type, CpuVisible,
+                                &pitch))
     return 0;
   candidate.Magic = ADMISSION_ALLOCATION_MAGIC;
   candidate.Version = ADMISSION_ALLOCATION_VERSION;
@@ -59,9 +108,9 @@ int AdmissionAllocationDescribe(unsigned int Width, unsigned int Height,
   candidate.Format = Format;
   candidate.Width = Width;
   candidate.Height = Height;
-  candidate.Pitch = (unsigned int)pitch;
+  candidate.Pitch = pitch;
   candidate.BytesPerPixel = BytesPerPixel;
-  candidate.Size = pitch * Height;
+  candidate.Size = (unsigned long long)pitch * Height;
   candidate.CpuVisible = CpuVisible;
   candidate.Reserved = 0u;
   *Description = candidate;
@@ -80,8 +129,13 @@ int AdmissionAllocationDescriptionValid(
           Description->BytesPerPixel, Description->Type,
           Description->Format, Description->CpuVisible, &expected))
     return 0;
+  /* A larger pitch of the class alignment is admissible (a shared resource
+   * may carry one); a display-class pitch off the 64-byte grid is not. */
   return Description->Pitch >= expected.Pitch &&
-         (Description->Pitch & 15u) == 0u &&
+         Description->Pitch %
+                 AdmissionAllocationPitchAlignment(
+                     Description->Type, Description->BytesPerPixel,
+                     Description->CpuVisible) == 0u &&
          Description->Size >= (unsigned long long)Description->Pitch * Description->Height;
 }
 

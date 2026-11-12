@@ -580,6 +580,13 @@ static const AGX_WIN32_BUFFER_CLASS_INFO *AdmissionUmdScreenClass(
   return NULL;
 }
 
+APPLE_AGX_U64 AdmissionUmdPresentationClassMaximumBytes(
+    const ADMISSION_UMD_DEVICE *Device) {
+  const AGX_WIN32_BUFFER_CLASS_INFO *classInfo =
+      AdmissionUmdScreenClass(Device, AgxWin32BufferClassGeneral);
+  return classInfo != NULL ? classInfo->MaximumBytes : 0ULL;
+}
+
 static int AdmissionUmdScreenQueryDevice(void *Context,
                                          AGX_WIN32_DEVICE_INFO *Info) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)Context;

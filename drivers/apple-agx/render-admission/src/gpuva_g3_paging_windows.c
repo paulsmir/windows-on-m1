@@ -522,6 +522,53 @@ static NTSTATUS AdmissionG3PoolPlace(ADMISSION_CONTEXT *adapter,
   return status;
 }
 
+/* CUR-1 receipt input: a user process's update whose valid PTEs all map
+ * the allocation in the local segment (segment 2) at one base records
+ * that base (1 + offset into the local view); any other valid mapping
+ * clears it.  The paging process maps eviction destinations and is
+ * ignored.  Read only by the Check3 clip receipt; nothing else uses it. */
+static VOID AdmissionG3NoteLocalPlacement(ADMISSION_CONTEXT *adapter,
+    const ADMISSION_G3_PROCESS *process,
+    const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
+    const APPLE_AGX_GPUVA_G3_LOGICAL_PTE *ptes, UINT first, UINT count) {
+  ADMISSION_ALLOCATION_HANDLE *handle =
+      (ADMISSION_ALLOCATION_HANDLE *)update->hAllocation;
+  ULONGLONG key = (ULONGLONG)(ULONG_PTR)update->hAllocation;
+  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  ULONGLONG base = MAXULONGLONG, offset;
+  BOOLEAN local = FALSE, consistent = TRUE;
+  UINT i;
+  /* Only while the receipt switch is on: a boot without it runs none of
+   * this, so a speed difference between the two is attributable. */
+  if (InterlockedCompareExchange(&adapter->Mpo.ClipReadSwitch, 0, 0) == 0 ||
+      handle == NULL || process->CpuOnlyMappings ||
+      (key & (ULONGLONG)(sizeof(ULONG_PTR) - 1u)) != 0ULL ||
+      handle->Object.Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC ||
+      !NT_SUCCESS(AdmissionMemoryRuntimeLocalView(adapter, &view)))
+    return;
+  for (i = first; i < first + count; ++i) {
+    if (!ptes[i].Flags) continue;
+    if (ptes[i].SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT ||
+        ptes[i].GuestIpa < view.GuestIpaAddress) {
+      consistent = FALSE;
+      break;
+    }
+    local = TRUE;
+    offset = ptes[i].GuestIpa - view.GuestIpaAddress;
+    if (ptes[i].AllocationOffset > offset ||
+        (base != MAXULONGLONG && base != offset - ptes[i].AllocationOffset)) {
+      consistent = FALSE;
+      break;
+    }
+    base = offset - ptes[i].AllocationOffset;
+  }
+  if (!local && consistent) return;
+  InterlockedExchange64(&handle->LocalPlacement,
+                        local && consistent && base < view.Bytes
+                            ? (LONG64)(base + 1ULL)
+                            : 0);
+}
+
 /* Called only after successful native publication and logical commit. */
 static VOID AdmissionG3RecordOmitted(ADMISSION_G3_PROCESS *process,
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
@@ -866,6 +913,8 @@ static NTSTATUS AdmissionG3UpdateLeaf(
   status = AdmissionG3PoolPlace(adapter, process, update, candidate, first,
                                 count);
   if (!NT_SUCCESS(status)) goto Done;
+  AdmissionG3NoteLocalPlacement(adapter, process, update, candidate, first,
+                                count);
   status = STATUS_INVALID_PARAMETER;
   if (process->CpuOnlyMappings) {
     /* Only the CPU paging executor reads paging-process VAs (it resolves

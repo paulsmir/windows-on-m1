@@ -37,34 +37,28 @@ static unsigned int MpoRectContains(const ADMISSION_MPO_RECT *Outer,
              ? 1u : 0u;
 }
 
-/* First violated two-plane rule of Planes[Index], or Supported. */
-static unsigned int MpoCheckPairPlane(const ADMISSION_MPO_INPUT *Input,
-                                      unsigned int Index) {
-  const ADMISSION_MPO_PLANE_INPUT *plane = &Input->Planes[Index];
-  const ADMISSION_MPO_PLANE_INPUT *other = &Input->Planes[Index ^ 1u];
+/* Version 4: within ADMISSION_MPO_MAX_SCALE either way on one axis (the
+ * broker's scale_ok, hv_agx_scanout_broker.c:107-110).  Both extents are
+ * non-negative here (rules 11 and 13 passed). */
+static unsigned int MpoScaleOk(long long Source, long long Destination) {
+  return Destination <= (long long)ADMISSION_MPO_MAX_SCALE * Source &&
+                 Source <= (long long)ADMISSION_MPO_MAX_SCALE * Destination
+             ? 1u
+             : 0u;
+}
 
-  if (plane->LayerIndex > 1u || plane->LayerIndex == other->LayerIndex)
-    return AdmissionMpoReasonLayerIndex;
-  if (plane->Enabled == 0u)
-    return AdmissionMpoReasonDisabled;
-  if (plane->FormatClass != AdmissionMpoFormatBgra8 &&
-      plane->FormatClass != AdmissionMpoFormatRgba8)
-    return AdmissionMpoReasonFormat;
-  if (plane->ColorSpaceClass != AdmissionMpoColorSpaceSdrSrgb)
-    return AdmissionMpoReasonColorSpace;
-  if (plane->LayerIndex == 0u) {
-    if (plane->BlendAlpha != 1u)
-      return AdmissionMpoReasonTopBlend;
-    if (!MpoRectIsPanel(&plane->Source, Input->PanelWidth,
-                        Input->PanelHeight) ||
-        !MpoRectIsPanel(&plane->Destination, Input->PanelWidth,
-                        Input->PanelHeight))
-      return AdmissionMpoReasonTopNotFullPanel;
-  } else if (plane->BlendAlpha != 0u) {
-    return AdmissionMpoReasonBottomBlend;
-  }
-  if (MpoWidth(&plane->Source) != MpoWidth(&plane->Destination) ||
-      MpoHeight(&plane->Source) != MpoHeight(&plane->Destination))
+/* The rules every plane sent as a layer record meets (two-plane planes and,
+ * version 4, the one-plane record path): 10..17, 32..34 (scaled only),
+ * 18..21, 25. */
+static unsigned int MpoCheckLayer(const ADMISSION_MPO_INPUT *Input,
+                                  const ADMISSION_MPO_PLANE_INPUT *plane) {
+  const unsigned int scaled =
+      MpoWidth(&plane->Source) != MpoWidth(&plane->Destination) ||
+              MpoHeight(&plane->Source) != MpoHeight(&plane->Destination)
+          ? 1u
+          : 0u;
+
+  if (scaled != 0u && Input->ScalingSupported == 0u)
     return AdmissionMpoReasonScaling;
   if (!MpoRectInside(&plane->Destination, Input->PanelWidth,
                      Input->PanelHeight))
@@ -75,6 +69,28 @@ static unsigned int MpoCheckPairPlane(const ADMISSION_MPO_INPUT *Input,
   if (!MpoRectInside(&plane->Source, plane->SurfaceWidth,
                      plane->SurfaceHeight))
     return AdmissionMpoReasonSourceOutsideSurface;
+  if (scaled != 0u) {
+    if (!MpoScaleOk(MpoWidth(&plane->Source), MpoWidth(&plane->Destination)) ||
+        !MpoScaleOk(MpoHeight(&plane->Source),
+                    MpoHeight(&plane->Destination)))
+      return AdmissionMpoReasonScaleBeyondLimit;
+    /* Check3 only (ADMISSION_MPO_CHECK3_ONLY_REASONS): the quality makes
+     * the Check3 answer truthful; DCP has one scaler filter and nothing on
+     * the Set3 path acts on the field, which dxgkrnl need not repeat there
+     * (EXP2374). */
+    if (Input->Path == ADMISSION_MPO_PATH_CHECK3) {
+      if (plane->StretchQuality != ADMISSION_MPO_STRETCH_QUALITY_BILINEAR &&
+          plane->StretchQuality != ADMISSION_MPO_STRETCH_QUALITY_HIGH)
+        return AdmissionMpoReasonStretchQuality;
+      /* HIGH asks for "the highest quality filtering that it supports"
+       * (Microsoft Learn, DXGK_MULTIPLANE_OVERLAY_STRETCH_QUALITY), which
+       * any scaler honours; BILINEAR needs a filter known to be at least
+       * that. */
+      if (plane->StretchQuality == ADMISSION_MPO_STRETCH_QUALITY_BILINEAR &&
+          Input->ScalerFilter != AdmissionMpoScalerFilterBilinearOrBetter)
+        return AdmissionMpoReasonStretchFilter;
+    }
+  }
   /* A zero stride cannot address a surface; treated as a stride defect. */
   if (plane->SurfaceStride == 0u ||
       plane->SurfaceStride % ADMISSION_MPO_STRIDE_ALIGNMENT != 0u)
@@ -105,6 +121,35 @@ static unsigned int MpoCheckPairPlane(const ADMISSION_MPO_INPUT *Input,
       (unsigned long long)plane->SurfaceWidth * ADMISSION_MPO_BYTES_PER_PIXEL)
     return AdmissionMpoReasonStrideBelowRow;
   return AdmissionMpoSupported;
+}
+
+/* First violated two-plane rule of Planes[Index], or Supported. */
+static unsigned int MpoCheckPairPlane(const ADMISSION_MPO_INPUT *Input,
+                                      unsigned int Index) {
+  const ADMISSION_MPO_PLANE_INPUT *plane = &Input->Planes[Index];
+  const ADMISSION_MPO_PLANE_INPUT *other = &Input->Planes[Index ^ 1u];
+
+  if (plane->LayerIndex > 1u || plane->LayerIndex == other->LayerIndex)
+    return AdmissionMpoReasonLayerIndex;
+  if (plane->Enabled == 0u)
+    return AdmissionMpoReasonDisabled;
+  if (plane->FormatClass != AdmissionMpoFormatBgra8 &&
+      plane->FormatClass != AdmissionMpoFormatRgba8)
+    return AdmissionMpoReasonFormat;
+  if (plane->ColorSpaceClass != AdmissionMpoColorSpaceSdrSrgb)
+    return AdmissionMpoReasonColorSpace;
+  if (plane->LayerIndex == 0u) {
+    if (plane->BlendAlpha != 1u)
+      return AdmissionMpoReasonTopBlend;
+    if (!MpoRectIsPanel(&plane->Source, Input->PanelWidth,
+                        Input->PanelHeight) ||
+        !MpoRectIsPanel(&plane->Destination, Input->PanelWidth,
+                        Input->PanelHeight))
+      return AdmissionMpoReasonTopNotFullPanel;
+  } else if (plane->BlendAlpha != 0u) {
+    return AdmissionMpoReasonBottomBlend;
+  }
+  return MpoCheckLayer(Input, plane);
 }
 
 /* Pair rules on two planes that passed every per-plane rule (so a known
@@ -157,6 +202,7 @@ unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
   out->Reason = AdmissionMpoReasonArgument;
   out->FailingPlane = ADMISSION_MPO_NO_PLANE;
   out->SlotCount = 0u;
+  out->OnePlaneRecord = 0u;
   for (slot = 0u; slot < ADMISSION_MPO_SLOT_COUNT; ++slot) {
     out->Slots[slot].PlaneIndex = ADMISSION_MPO_NO_PLANE;
     out->Slots[slot].Enabled = 0u;
@@ -266,6 +312,102 @@ unsigned int AdmissionMpoEvaluatePrimary(const ADMISSION_MPO_INPUT *Input,
   Result->SlotCount = 0u;
   Result->Slots[0].PlaneIndex = ADMISSION_MPO_NO_PLANE;
   return MpoFail(Result, reason, 0u);
+}
+
+/* Version 4: see mpo_contract.h AdmissionMpoEvaluateOne. */
+unsigned int AdmissionMpoEvaluateOne(const ADMISSION_MPO_INPUT *Input,
+                                     ADMISSION_MPO_RESULT *Result) {
+  const ADMISSION_MPO_PLANE_INPUT *plane;
+  unsigned int reason;
+
+  if (Input == MPO_NULL || Result == MPO_NULL || Input->PlaneCount != 1u ||
+      Input->Planes == MPO_NULL)
+    return AdmissionMpoEvaluatePrimary(Input, Result);
+  plane = &Input->Planes[0];
+  /* FS-1: the application plane alone (DWM's top plane off): a full-panel,
+   * opaque LayerIndex 1 plane, scaled within the layer limits, sent as one
+   * layer record.  The full-screen independent flip of a game. */
+  if (plane->Enabled != 0u && plane->LayerIndex == 1u) {
+    (void)AdmissionMpoEvaluate(Input, Result); /* argument and slot reset */
+    Result->OnePlaneRecord = 0u;
+    if (plane->FormatClass != AdmissionMpoFormatBgra8 &&
+        plane->FormatClass != AdmissionMpoFormatRgba8)
+      reason = AdmissionMpoReasonFormat;
+    else if (plane->ColorSpaceClass != AdmissionMpoColorSpaceSdrSrgb)
+      reason = AdmissionMpoReasonColorSpace;
+    else if (plane->BlendAlpha != 0u)
+      reason = AdmissionMpoReasonLoneBlend;
+    else if (!MpoRectIsPanel(&plane->Destination, Input->PanelWidth,
+                             Input->PanelHeight))
+      reason = AdmissionMpoReasonLoneNotFullPanel;
+    else
+      reason = MpoCheckLayer(Input, plane);
+    if (reason != AdmissionMpoSupported) {
+      Result->Supported = 0u;
+      Result->SlotCount = 0u;
+      Result->Slots[0].PlaneIndex = ADMISSION_MPO_NO_PLANE;
+      return MpoFail(Result, reason, 0u);
+    }
+    Result->Supported = 1u;
+    Result->Reason = AdmissionMpoSupported;
+    Result->FailingPlane = ADMISSION_MPO_NO_PLANE;
+    MpoFillSlot(&Result->Slots[0], plane, 0u, 0u);
+    Result->SlotCount = 1u;
+    Result->OnePlaneRecord = 1u;
+    return AdmissionMpoSupported;
+  }
+  if (plane->Enabled == 0u || plane->LayerIndex != 0u ||
+      (MpoRectIsPanel(&plane->Source, Input->PanelWidth, Input->PanelHeight) &&
+       MpoRectIsPanel(&plane->Destination, Input->PanelWidth,
+                      Input->PanelHeight))) {
+    reason = AdmissionMpoEvaluatePrimary(Input, Result);
+    Result->OnePlaneRecord = 0u;
+    return reason;
+  }
+  /* The v1 one-plane answer (argument and slot reset) first. */
+  (void)AdmissionMpoEvaluate(Input, Result);
+  Result->OnePlaneRecord = 0u;
+  if (plane->FormatClass != AdmissionMpoFormatBgra8 &&
+      plane->FormatClass != AdmissionMpoFormatRgba8)
+    reason = AdmissionMpoReasonFormat;
+  else if (plane->ColorSpaceClass != AdmissionMpoColorSpaceSdrSrgb)
+    reason = AdmissionMpoReasonColorSpace;
+  else if (plane->BlendAlpha > 1u)
+    reason = AdmissionMpoReasonOnePlaneBlend;
+  else
+    reason = MpoCheckLayer(Input, plane);
+  if (reason != AdmissionMpoSupported) {
+    Result->Supported = 0u;
+    Result->SlotCount = 0u;
+    Result->Slots[0].PlaneIndex = ADMISSION_MPO_NO_PLANE;
+    return MpoFail(Result, reason, 0u);
+  }
+  MpoFillSlot(&Result->Slots[0], plane, 0u, 0u);
+  Result->SlotCount = 1u;
+  Result->OnePlaneRecord = 1u;
+  return AdmissionMpoSupported;
+}
+
+void AdmissionMpoCapsFor(unsigned int Effective, unsigned int Scaling,
+                         unsigned int ScalerFilter, unsigned int VidPnSourceId,
+                         ADMISSION_MPO_CAPS *Caps) {
+  const unsigned int two =
+      Effective != 0u && VidPnSourceId == 0u ? 1u : 0u;
+  const unsigned int stretch = two != 0u && Scaling != 0u ? 1u : 0u;
+  if (Caps == MPO_NULL)
+    return;
+  Caps->MaxPlanes = two != 0u ? 2u : 1u;
+  Caps->StretchRgb = stretch;
+  Caps->BilinearFilter =
+      stretch != 0u &&
+              ScalerFilter == (unsigned int)AdmissionMpoScalerFilterBilinearOrBetter
+          ? 1u
+          : 0u;
+  Caps->HighFilter = 0u;
+  Caps->MaxStretchBits =
+      stretch != 0u ? ADMISSION_MPO_FLOAT_BITS_TWO : ADMISSION_MPO_FLOAT_BITS_ONE;
+  Caps->MaxShrinkBits =
+      stretch != 0u ? ADMISSION_MPO_FLOAT_BITS_HALF : ADMISSION_MPO_FLOAT_BITS_ONE;
 }
 
 unsigned int AdmissionMpoNoDmaFlipAccepted(unsigned int Flags,

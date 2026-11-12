@@ -26,7 +26,10 @@ static inline bool AgxD3d12DecodeShared(const void *resource_data, unsigned reso
     if (r.Version != ADMISSION_PRESENT_RESOURCE_VERSION || !AdmissionPresentResourceDataValid(&r) ||
         (r.Flags & ADMISSION_PRESENT_RESOURCE_CONVERTED) || !AdmissionAllocationDescriptionValid(&a) ||
         a.Type != D3DKMDT_GDISURFACE_TEXTURE || a.BytesPerPixel != 4 || a.CpuVisible != 0 ||
-        a.Width > 8192 || a.Height > 8192 || a.Size > 0x1000000ull ||
+        /* PITCH-2: the create path's size rule; the adapter's class limit is
+         * applied by AdmissionUmdOpenResource, which this open calls next. */
+        AdmissionPresentationSizeCheck(a.Width, a.Height, a.Size, AdmissionPresentationMaximumBytes()) !=
+            ADMISSION_PRESENTATION_SIZE_OK ||
         (a.Size & 127ull) != 0) return false;
     const bool bgra = r.Format == DXGI_FORMAT_B8G8R8A8_UNORM || r.Format == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
     if ((!bgra && r.Format != DXGI_FORMAT_R8G8B8A8_UNORM) ||

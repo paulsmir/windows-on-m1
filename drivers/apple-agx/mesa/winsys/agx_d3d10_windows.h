@@ -134,6 +134,10 @@ HRESULT AgxD3d10WindowsPresentationSubmitSurfaces(
  * (agx_dxgi_mpo.h). */
 BOOL AgxD3d10WindowsKernelMpoTwoPlanes(AGX_D3D10_WINDOWS_DEVICE *Device,
                                        UINT VidPnSourceId);
+/* STRETCH-1: TRUE only when the two-plane predicate holds and the adapter
+ * private data also carries AGX_WIN32_DEVICE_FEATURE_MPO_STRETCH. */
+BOOL AgxD3d10WindowsKernelMpoStretch(AGX_D3D10_WINDOWS_DEVICE *Device,
+                                     UINT VidPnSourceId);
 /* S2: flush, then one pfnPresentMultiplaneOverlayCb with Resources[i] as
  * plane i (Planes: the neutral planes, AgxDxgiMpoCheckPlanes must accept
  * them). */

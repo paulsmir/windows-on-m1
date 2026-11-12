@@ -43,7 +43,7 @@ using UINT=unsigned; using BOOLEAN=int;
 #define D3D10_DDI_RESOURCE_MISC_SHARED 2u
 #define D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT 8u
 #define D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE 0x20000u
-#define D3DKMDT_GDISURFACE_TEXTURE 2u
+#define D3DKMDT_GDISURFACE_TEXTURE 1u /* d3dkmdt.h */
 #define D3DDDIFMT_A8R8G8B8 21u
 #define D3DDDIFMT_A8B8G8R8 32u
 struct Mip {unsigned TexelWidth,TexelHeight,TexelDepth;};
@@ -77,7 +77,8 @@ SERIALIZE
   auto parse=[&]() {return AgxD3d12DecodeShared(rw+1,sizeof(resourceData),aw+1,sizeof(description.Allocation),&parsed);};
   if (MetadataFlags) {assert(resourceData.Flags==2); assert(!parse()); continue;}
   assert(parse()); assert(parsed.Format==format && parsed.Width==width && parsed.Height==43);
-  assert(parsed.Pitch==((width*4+15)&~15u));
+  /* PITCH-1: the creator's display pitch survives the open unchanged */
+  assert(parsed.Pitch==description.Allocation.Pitch && parsed.Pitch==((width*4+63)&~63u));
   assert(parsed.Bytes==((static_cast<unsigned long long>(parsed.Pitch)*43+127)&~127ull));
   assert(!AgxD3d12DecodeShared(rw+1,sizeof(resourceData)-1,aw+1,sizeof(description.Allocation),&parsed));
   assert(!AgxD3d12DecodeShared(rw+1,sizeof(resourceData),aw+1,sizeof(description.Allocation)-1,&parsed));

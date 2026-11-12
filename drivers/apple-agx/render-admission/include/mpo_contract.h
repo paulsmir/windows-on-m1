@@ -27,10 +27,18 @@
  *
  * Two planes: see ADMISSION_MPO_REASON.  Order: first the input rule
  * PanelGeometry (24, no failing plane); then, per plane in array order, the
- * per-plane rules 3..21 and 25 in numeric order (the failing plane is the
- * first plane that violates any of them, the reason its first violated
- * rule); then the pair rules SameSurface (22) and SurfaceOverlap (23),
- * charged to array index 1.
+ * per-plane rules 3..17, then (version 4, scaled planes only) 32..34, then
+ * 18..21 and 25 (the failing plane is the first plane that violates any of
+ * them, the reason its first violated rule); then the pair rules
+ * SameSurface (22) and SurfaceOverlap (23), charged to array index 1.
+ *
+ * Version 4 (STRETCH-1): a plane is scaled when its source width or height
+ * differs from its destination's.  Without Input->ScalingSupported a scaled
+ * plane is refused with Scaling (10) exactly as before.  With it, the
+ * scaled plane must be within ADMISSION_MPO_MAX_SCALE on each axis (32) and
+ * carry a StretchQuality this hardware honours (33, 34); every other rule is
+ * unchanged.  The LayerIndex 0 plane stays full panel (8), so at most the
+ * LayerIndex 1 plane is scaled in a two-plane configuration.
  *
  * Version 2 adds the scanout broker's surface rules (ABI V3 refusals
  * 16/17/18/22/23 of m1n1 gpu/s2-broker-v3) as explicit inputs, so a
@@ -40,7 +48,7 @@
  * in the scanout pool and the 64 KiB placement alignment CreateAllocation
  * requests; Set3 evaluates again with the actual offset. */
 
-#define ADMISSION_MPO_CONTRACT_VERSION 3u
+#define ADMISSION_MPO_CONTRACT_VERSION 6u
 #define ADMISSION_MPO_MAX_PLANES 2u
 #define ADMISSION_MPO_SLOT_COUNT 2u
 #define ADMISSION_MPO_MIN_EXTENT 32u
@@ -51,6 +59,21 @@
 #define ADMISSION_MPO_SCANOUT_HEIGHT 1600u
 #define ADMISSION_MPO_BYTES_PER_PIXEL 4u
 #define ADMISSION_MPO_POOL_ALIGNMENT 0x10000ULL
+/* Version 4 (STRETCH-1): the per-axis scale limit the scanout broker and the
+ * DCP swap builder enforce (m1n1 gpu/s2-broker-v3 hv_agx_scanout_broker.h:61
+ * HV_AGX_SCANOUT_V3_MAX_SCALE, hv_agx_scanout_broker.c:107-110 and :156-157,
+ * dcp_iomfb_present.c:176-180): destination <= 2 x source and source <= 2 x
+ * destination on each axis.  A project choice (the conservative intersection
+ * of Asahi plane.c:92-95), not a measured DCP limit. */
+#define ADMISSION_MPO_MAX_SCALE 2u
+/* DXGK_MULTIPLANE_OVERLAY_STRETCH_QUALITY (d3dkmddi.h:368-372). */
+#define ADMISSION_MPO_STRETCH_QUALITY_BILINEAR 1u
+#define ADMISSION_MPO_STRETCH_QUALITY_HIGH 2u
+/* IEEE-754 single bit patterns of the reported factors (the kernel writes
+ * them as bits so no floating-point instruction is generated). */
+#define ADMISSION_MPO_FLOAT_BITS_HALF 0x3f000000u
+#define ADMISSION_MPO_FLOAT_BITS_ONE 0x3f800000u
+#define ADMISSION_MPO_FLOAT_BITS_TWO 0x40000000u
 
 /* Stable numeric values; receipts and tests depend on them.  Never
  * renumber; append new codes at the end. */
@@ -76,7 +99,9 @@ typedef enum _ADMISSION_MPO_REASON {
   AdmissionMpoReasonTopNotFullPanel = 8,
   /* Two planes: LayerIndex 1 (bottom) plane has BlendAlpha != 0. */
   AdmissionMpoReasonBottomBlend = 9,
-  /* Two planes: source size differs from destination size (scaling). */
+  /* Source size differs from destination size while scaling is not
+   * offered (Input->ScalingSupported 0: the scanout broker did not
+   * advertise CAP_SCALED_SOURCE).  Before version 4: any scaling. */
   AdmissionMpoReasonScaling = 10,
   /* Two planes: destination is inverted or not fully inside the panel. */
   AdmissionMpoReasonDestinationOutsidePanel = 11,
@@ -125,6 +150,23 @@ typedef enum _ADMISSION_MPO_REASON {
   AdmissionMpoReasonPrimaryFormat = 30,
   /* Known placement that does not translate into the scanout pool. */
   AdmissionMpoReasonPrimaryPlacement = 31,
+  /* ---- version 4 (STRETCH-1): scaled planes ---- */
+  /* Scaled plane: on one axis the destination is more than
+   * ADMISSION_MPO_MAX_SCALE x the source, or the source more than
+   * ADMISSION_MPO_MAX_SCALE x the destination (broker refusal 21). */
+  AdmissionMpoReasonScaleBeyondLimit = 32,
+  /* Scaled plane: StretchQuality is neither BILINEAR (1) nor HIGH (2). */
+  AdmissionMpoReasonStretchQuality = 33,
+  /* Scaled plane: StretchQuality BILINEAR while the display scaler's filter
+   * is not known to be bilinear or better (Input->ScalerFilter). */
+  AdmissionMpoReasonStretchFilter = 34,
+  /* One plane sent as a layer record (AdmissionMpoEvaluateOne): BlendAlpha
+   * is not 0 or 1. */
+  AdmissionMpoReasonOnePlaneBlend = 35,
+  /* Version 6 (FS-1): the lone application plane (LayerIndex 1 alone) does
+   * not cover the panel, or is blended. */
+  AdmissionMpoReasonLoneNotFullPanel = 36,
+  AdmissionMpoReasonLoneBlend = 37,
   ADMISSION_MPO_REASON_COUNT
 } ADMISSION_MPO_REASON;
 
@@ -138,6 +180,17 @@ typedef enum _ADMISSION_MPO_COLOR_SPACE_CLASS {
   AdmissionMpoColorSpaceOther = 0,
   AdmissionMpoColorSpaceSdrSrgb = 1,
 } ADMISSION_MPO_COLOR_SPACE_CLASS;
+
+/* Version 4: what is known about the filter the display scaler applies.
+ * Unknown until measured on the panel (STRETCH-1 note, WHAT IS STILL
+ * UNKNOWN); neither Asahi nor m1n1 sets or documents a DCP filter. */
+typedef enum _ADMISSION_MPO_SCALER_FILTER {
+  AdmissionMpoScalerFilterUnknown = 0,
+  AdmissionMpoScalerFilterPoint = 1,
+  AdmissionMpoScalerFilterBilinearOrBetter = 2,
+} ADMISSION_MPO_SCALER_FILTER;
+/* The value the kernel passes today. */
+#define ADMISSION_MPO_SCALER_FILTER_CURRENT AdmissionMpoScalerFilterUnknown
 
 typedef enum _ADMISSION_MPO_ROTATION_CLASS {
   AdmissionMpoRotationIdentity = 0,
@@ -181,6 +234,10 @@ typedef struct _ADMISSION_MPO_PLANE_INPUT {
   unsigned int DescriptionValid;      /* AdmissionAllocationDescriptionValid */
   unsigned int PlacementInPool;       /* known placement translated */
   unsigned long long AllocationBytes; /* the description's Size */
+  /* ---- version 4 ---- */
+  /* DXGK_MULTIPLANE_OVERLAY_ATTRIBUTES3.StretchQuality, raw; examined only
+   * when the plane is scaled. */
+  unsigned int StretchQuality;
 } ADMISSION_MPO_PLANE_INPUT;
 
 typedef struct _ADMISSION_MPO_INPUT {
@@ -196,7 +253,25 @@ typedef struct _ADMISSION_MPO_INPUT {
    * pixel format is scanned (display.c AdmissionDdiSetVidPnSourceAddress
    * gate before AdmissionScanoutQueuePresent). */
   unsigned int PanelModeSupported;
+  /* ---- version 4 ---- */
+  /* Nonzero: the scanout broker advertised CAP_SCALED_SOURCE (layer
+   * records may carry a source size different from the destination). */
+  unsigned int ScalingSupported;
+  unsigned int ScalerFilter;          /* ADMISSION_MPO_SCALER_FILTER */
+  /* ---- version 5 (STRETCH-1b) ---- */
+  /* ADMISSION_MPO_PATH_*: which DDI evaluates.  The Check3-only rules
+   * (ADMISSION_MPO_CHECK3_ONLY_REASONS) keep the Check3 answer truthful
+   * and are not applied on the Set3 path: nothing Set3 realises depends on
+   * them, and a Set3 refusal of a configuration Check3 accepted is a
+   * defect (EXP2374: StretchQuality re-judged at Set3, ~450 refused Set3/s). */
+  unsigned int Path;
 } ADMISSION_MPO_INPUT;
+#define ADMISSION_MPO_PATH_CHECK3 0u
+#define ADMISSION_MPO_PATH_SET3 1u
+/* Bit n set: reason n is applied on the Check3 path only. */
+#define ADMISSION_MPO_CHECK3_ONLY_REASONS                                     \
+  ((1ull << AdmissionMpoReasonStretchQuality) |                               \
+   (1ull << AdmissionMpoReasonStretchFilter))
 
 typedef struct _ADMISSION_MPO_SLOT {
   unsigned int PlaneIndex;       /* index into Planes[], or NO_PLANE */
@@ -219,6 +294,10 @@ typedef struct _ADMISSION_MPO_RESULT {
   unsigned int FailingPlane;     /* array index, or NO_PLANE */
   unsigned int SlotCount;        /* 0 when not supported */
   ADMISSION_MPO_SLOT Slots[ADMISSION_MPO_SLOT_COUNT];
+  /* ---- version 4 ---- */
+  /* AdmissionMpoEvaluateOne only: 1 when the supported plane must be sent
+   * as one layer record (COMMIT_LAYERS), 0 for the V2 PRESENT path. */
+  unsigned int OnePlaneRecord;
 } ADMISSION_MPO_RESULT;
 
 /* Fills *Result (when non-NULL) and returns Result->Reason. */
@@ -239,6 +318,43 @@ unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
  * with this function and Set3 checks it before the V2 path. */
 unsigned int AdmissionMpoEvaluatePrimary(const ADMISSION_MPO_INPUT *Input,
                                          ADMISSION_MPO_RESULT *Result);
+
+/* Version 4 (STRETCH-1): one plane while two-layer scan-out is effective.
+ * A plane whose source and destination are both exactly the panel
+ * (0,0,PanelWidth,PanelHeight) is the full-screen primary: the answer is
+ * AdmissionMpoEvaluatePrimary's and OnePlaneRecord is 0 (V2 PRESENT, as
+ * before).  Any other enabled plane (scaled, cropped or positioned) can be
+ * shown only as one layer record, because the V2 PRESENT path scans the
+ * whole surface onto the whole panel: in numeric order Format (5),
+ * ColorSpace (6), OnePlaneBlend (35), then the layer rules every two-plane
+ * plane meets (see AdmissionMpoEvaluate: 10..17, 32..34, 18..21, 25), and
+ * OnePlaneRecord is 1 with Slots[0] filled (Premultiplied 0: nothing lies
+ * beneath slot 0 except the black background).  A disabled plane is the
+ * plane-off path (supported, OnePlaneRecord 0). */
+unsigned int AdmissionMpoEvaluateOne(const ADMISSION_MPO_INPUT *Input,
+                                     ADMISSION_MPO_RESULT *Result);
+
+/* Version 4: the plane capabilities DxgkDdiGetMultiPlaneOverlayCaps and the
+ * D3D11 UMD (DXGI group caps) report.  Pure so the derivation is tested. */
+typedef struct _ADMISSION_MPO_CAPS {
+  unsigned int MaxPlanes;
+  unsigned int StretchRgb;       /* DXGK_MULTIPLANEOVERLAYCAPS.StretchRGB */
+  unsigned int BilinearFilter;   /* .BilinearFilter */
+  unsigned int HighFilter;       /* .HighFilter */
+  unsigned int MaxStretchBits;   /* IEEE-754 single */
+  unsigned int MaxShrinkBits;    /* IEEE-754 single */
+} ADMISSION_MPO_CAPS;
+
+/* Effective: two-layer scan-out effective (AdmissionScanoutMpoEffective).
+ * Scaling: the broker advertised CAP_SCALED_SOURCE.  Without both, or for
+ * another VidPnSource, the version-3 answer: one plane (two when effective
+ * on source 0), no stretch bit, factors 1.0.  With both on source 0:
+ * StretchRGB, MaxStretchFactor 2.0, MaxShrinkFactor 0.5 (the DXGI DDI's
+ * definition: final size / original size), BilinearFilter only when the
+ * filter is known to be bilinear or better, HighFilter never. */
+void AdmissionMpoCapsFor(unsigned int Effective, unsigned int Scaling,
+                         unsigned int ScalerFilter, unsigned int VidPnSourceId,
+                         ADMISSION_MPO_CAPS *Caps);
 
 /* PF-1 (EXP2355/2356): the no-DMA flip DxgkDdiPresent (no DMA buffer, no
  * source or destination allocation, no private data; SetVidPnSourceAddress

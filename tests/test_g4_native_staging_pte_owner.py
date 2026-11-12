@@ -36,6 +36,7 @@ class NativeStagingPteOwner(unittest.TestCase):
 #include <string.h>
 typedef uintptr_t ULONG_PTR;
 typedef unsigned long long ULONGLONG;
+typedef long long LONGLONG;
 typedef unsigned ULONG, UINT;
 typedef void *PVOID, *HANDLE;
 #define APPLE_AGX_NATIVE_STAGING 1

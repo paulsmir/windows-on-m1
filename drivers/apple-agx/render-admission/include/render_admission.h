@@ -71,6 +71,7 @@
 #include "j313_agx_abi_admission.generated.h"
 #include "mpo_contract.h"
 #include "mpo_layers.h"
+#include "mpo_hold.h"
 
 #define ADMISSION_POOL_TAG 'mRGA'
 #define ADMISSION_DMA_BUFFER_SIZE 0x50000u
@@ -144,8 +145,26 @@ typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT {
  * switch is effective (switch = 1 AND broker CAPABILITIES bit 9 AND the
  * REG_NEGOTIATED read-back); all zero otherwise.  Counters are interlocked
  * at any IRQL. */
-#define ADMISSION_MPO_RECEIPT_VERSION 2u
-#define ADMISSION_MPO_RECEIPT_REASONS 32u
+#define ADMISSION_MPO_RECEIPT_VERSION 4u
+#define ADMISSION_MPO_RECEIPT_REASONS 40u
+/* Key: clip width (12 bits) | height << 12 | format class << 24 |
+ * blend << 28; 0 = free row.  Origin/DstSize: x | y << 16. */
+#define ADMISSION_MPO_CLIP_ROWS 12u
+typedef struct _ADMISSION_MPO_CLIP_ROW {
+  volatile LONG Key, Count, Supported, HandleChanges;
+  volatile LONG LastOrigin, LastDstSize;
+} ADMISSION_MPO_CLIP_ROW;
+/* Origin/Size: x | y << 16; Info: format class | blend << 8 |
+ * handle changed << 16 | Check3 reason << 24; Alpha: max alpha | count
+ * of nonzero-alpha pixels << 8; Ticks: the copy pass; Qpc: low 32 bits. */
+#define ADMISSION_MPO_CLIP_SAMPLES 24u
+#define ADMISSION_MPO_CLIP_FIXED 8u
+typedef struct _ADMISSION_MPO_CLIP_SAMPLE {
+  volatile LONG Origin, Size, Info, Alpha, Crc32, Ticks, Qpc;
+} ADMISSION_MPO_CLIP_SAMPLE;
+#define ADMISSION_MPO_FORM_TWO 1
+#define ADMISSION_MPO_FORM_LONE 2
+#define ADMISSION_MPO_FORM_ONE 3   /* DWM-only: one layer record or V2 */
 typedef struct _ADMISSION_MPO_RECEIPT {
   volatile LONG Version, Bytes;
   /* Start: switch value seen, CAP_TWO_LAYERS seen, negotiation read back. */
@@ -167,6 +186,93 @@ typedef struct _ADMISSION_MPO_RECEIPT {
   /* ---- version 2 (A1.2): slot 1 removed before a hide / mode commit ---- */
   volatile LONG Slot1Retires, Slot1RetireFailures, Slot1RetireRefusals;
   volatile LONG LastSlot1RetireStage;  /* ADMISSION_MPO_RETIRE_STAGE_* */
+  /* ---- version 3 (STRETCH-1): scaled planes ---- */
+  /* Start: broker bit 8 with two-layer scan-out effective.  Caps: the last
+   * DxgkDdiGetMultiPlaneOverlayCaps answer (StretchRGB, factor bits). */
+  volatile LONG ScalingSupported, CapsStretchRgb;
+  volatile LONG CapsMaxStretchBits, CapsMaxShrinkBits;
+  /* Check3 answers that involved a scaled plane, and the last one's
+   * reason (0 = supported), StretchQuality, source and destination sizes
+   * (Width | Height << 16) and per-axis factor (destination * 1000 /
+   * source). */
+  volatile LONG Check3ScaledSupported, Check3ScaledRefused;
+  volatile LONG LastScaledReason, LastScaledStretchQuality;
+  volatile LONG LastScaledSourceSize, LastScaledDestinationSize;
+  volatile LONG LastScaledFactorX, LastScaledFactorY;
+  /* Set3: two-plane commits with a scaled plane; one-plane layer-record
+   * commits (AdmissionMpoEvaluateOne), and those of them that scale. */
+  volatile LONG ScaledTwoPlaneCommits, OnePlaneRecordCommits;
+  volatile LONG ScaledOnePlaneCommits;
+  /* ---- version 4 (CUR-1 receipt, behaviour unchanged): Check3 calls
+   * whose top plane (highest LayerIndex of two) is clipped (ClipRect !=
+   * DstRect).  Rows keyed by clip size, format class and blend; per row
+   * the count, supported answers, top-plane allocation changes since the
+   * previous clipped Check3, and the last clip origin and destination
+   * size.  ClipOnePlane: a one-plane Check3 with a clipped plane. */
+  volatile LONG ClipChecks, ClipHandleChanges, ClipOverflow, ClipOnePlane;
+  volatile LONG LastClipHandle;
+  ADMISSION_MPO_CLIP_ROW ClipRows[ADMISSION_MPO_CLIP_ROWS];
+  /* Wom1MpoClipRead = 1 (opt-in): for a refused clipped top plane of at
+   * most 64x64 the clip block is read through the local segment's CPU
+   * view at Check3 (PASSIVE).  NotPlaced: the allocation's local-segment
+   * placement is unknown (no user-process page-table update seen) or
+   * the block lies outside the view; NotEligible: scaled, larger than
+   * 64x64 or not 32 bpp.  Read time (QPC ticks, the copy pass only) for
+   * 1x1 clips and for the other clips separately: count/min/max/sum.
+   * Zero1x1/NonZero1x1: 1x1 reads with alpha 0 / not 0.  Straight: reads
+   * with any colour channel above alpha (straight, not premultiplied). */
+  volatile LONG ClipReadSwitch, ClipReads, ClipNotPlaced, ClipNotEligible;
+  volatile LONG ClipZero1x1, ClipNonZero1x1, ClipStraight, QpcFrequencyKhz;
+  volatile LONG ReadTicks1x1[4], ReadTicksOther[4];
+  /* First ADMISSION_MPO_CLIP_FIXED samples kept, the rest a ring;
+   * at most one sample per 250 ms. */
+  volatile LONG ClipSampleCount, ClipLastSampleMs;
+  ADMISSION_MPO_CLIP_SAMPLE ClipSamples[ADMISSION_MPO_CLIP_SAMPLES];
+  /* NP-2: Set3-side publish requests by the IRQL Set3 ran at (above /
+   * at-or-below DISPATCH_LEVEL), the highest IRQL seen, publishes the
+   * work item made. */
+  volatile LONG PublishAboveDispatch, PublishAtOrBelowDispatch;
+  volatile LONG Set3MaxIrql, PublishWorkerRuns;
+  /* STRETCH-1b: Set3's raw StretchQuality per scaled plane (0, 1, 2,
+   * other) and the last value (Check3's is LastScaledStretchQuality);
+   * Set3 table refusals while the last Check3 answer was supported (a
+   * contract defect) and the last such reason. */
+  volatile LONG Set3StretchQuality[4], LastSet3StretchQuality;
+  volatile LONG Set3RefusedAfterSupport, LastSet3RefusedAfterSupportReason;
+  /* S3-C: PresentIds (low 32 bits) of the last Busy Set3 (layer slots 0/1
+   * of its completion list) and of the next successful Set3; per Busy, did
+   * the next success carry one of the refused ids (re-issued) or not
+   * (superseded). */
+  volatile LONG LastBusyPresentId, LastBusyPresentId1, BusyOutstanding;
+  volatile LONG NextSuccessPresentId, BusyThenSameLatched, BusyThenSuperseded;
+  /* S3-B: Set3 answers DEVICE_BUSY for every runtime obstacle (dxgkrnl's
+   * Set3 thunk retries only SUCCESS/DEVICE_BUSY; anything else is offered
+   * again forever, EXP2374).  Per cause: no runtime / stopping (row I), not
+   * visible (E1), not qualified (E4), transport (E5, last result), broker
+   * rejected (E3, a defect: records kept), table invariant at Set3 counted
+   * by Set3TableRefusals (D1/G2), build invariant (D2/G1), the V2 path's
+   * runtime statuses (H2, last status).  Consecutive Busy answers with no
+   * accepted Set3 between them (current, maximum) are the freeze detector. */
+  volatile LONG S3BusyNoRuntime, S3BusyNotVisible, S3BusyNotQualified;
+  volatile LONG S3BusyTransport, LastTransportResult, S3BusyBrokerRejected;
+  volatile LONG S3BusyBuild, S3BusyLegacy, LastLegacyStatus;
+  volatile LONG ConsecutiveBusy, MaxConsecutiveBusy;
+  /* FS-1: one-plane Check3 answers for LayerIndex 1 alone, lone-plane
+   * commits (scaled), the scan-out form after the last accepted commit
+   * (ADMISSION_MPO_FORM_*) and transitions into / out of the lone form. */
+  volatile LONG LoneChecksSupported, LoneChecksRefused;
+  volatile LONG LoneCommits, ScaledLoneCommits, LastForm, ToLone, FromLone;
+  /* HOLD-1: flips merged into the held set (SUCCESS), refused while held
+   * (same layer pending or not acceptable: DEVICE_BUSY), the hold's
+   * try-lock contended, held sets committed by the latch / vertical tick,
+   * commits retried at the next tick, sets dropped (a non-retry failure). */
+  volatile LONG HoldMerges, HoldBusy, HoldContended;
+  volatile LONG HoldCommits, HoldCommitRetries, HoldDropped;
+  /* HOLD-1: PresentIds per LayerIndex (0/1) in every Set3 answered
+   * SUCCESS, and per LayerIndex reported to dxgkrnl in a
+   * CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2 interrupt.  Accepted - Reported at
+   * the end of an arm is the flips in flight (queued + held) or lost ids. */
+  volatile LONG AcceptedIds0, AcceptedIds1, ReportedIds0, ReportedIds1;
 } ADMISSION_MPO_RECEIPT;
 #define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
 #define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u
@@ -1086,6 +1192,15 @@ typedef struct _ADMISSION_CONTEXT {
   PIO_WORKITEM MpoPublishWork;
   volatile LONG MpoPublishQueued;
   KEVENT MpoPublishIdle;
+  /* NP-2 (EXP2373: no Set3-side publish in steady windowed GM; dxgkrnl
+   * calls Set3 above DISPATCH_LEVEL there): above DISPATCH_LEVEL the
+   * request goes through this DPC, which queues the work item. */
+  KDPC MpoPublishDpc;
+  /* HOLD-1: the held plane set (mpo_hold.h) and its plane states; the
+   * try-lock serialises Set3 and the scan-out ISR without waiting. */
+  ADMISSION_MPO_HOLD MpoHold;
+  ADMISSION_MPO_PLANE_STATE MpoHoldNext[2];
+  volatile LONG MpoHoldLock;
   ADMISSION_MPO_PLANE_STATE MpoPlanes[2];
 } ADMISSION_CONTEXT;
 
@@ -1174,6 +1289,10 @@ typedef struct _ADMISSION_ALLOCATION_HANDLE {
   ADMISSION_POOL_PLACEMENT PoolPlacement;
   /* M2-f5: segment-3 pages reserved for this allocation at creation. */
   ULONGLONG PoolReserved;
+  /* CUR-1 receipt: 1 + the local-segment (segment 2) offset of the
+   * allocation's base from the last user-process page-table update that
+   * mapped it consistently there; 0 unknown.  Receipt input only. */
+  volatile LONGLONG LocalPlacement;
 #ifdef APPLE_AGX_NATIVE_STAGING
   PVOID NativeStagingBinding;
 #endif
@@ -2430,6 +2549,9 @@ NTSTATUS AdmissionScanoutMpoPlaneOff(_Inout_ ADMISSION_CONTEXT *Context,
 /* TRUE iff the Wom1MpoTwoPlanes switch was set at StartDevice, the broker
  * advertised CAPABILITIES bit 9 and REG_NEGOTIATED read back 0x200. */
 BOOLEAN AdmissionScanoutMpoEffective(_In_opt_ ADMISSION_CONTEXT *Context);
+/* STRETCH-1: effective AND the broker advertised CAP_SCALED_SOURCE (bit 8):
+ * a layer record's source size may differ from its destination's. */
+BOOLEAN AdmissionScanoutMpoScaledSource(_In_opt_ ADMISSION_CONTEXT *Context);
 /* Pool view for plane placement: segment base, pool bytes. */
 BOOLEAN AdmissionScanoutMpoPool(_In_ ADMISSION_CONTEXT *Context,
                                 _Out_ ULONGLONG *SegmentBase,
@@ -2437,6 +2559,11 @@ BOOLEAN AdmissionScanoutMpoPool(_In_ ADMISSION_CONTEXT *Context,
 /* Slot 1 may be on screen: the driver queued a two-layer commit whose
  * removal has not latched, or REG_ACTIVE_LAYERS bit 1 is set. */
 BOOLEAN AdmissionScanoutMpoSlot1MayShow(_In_ ADMISSION_CONTEXT *Context);
+/* HOLD-1: no scan-out commit is outstanding (the scan-out gate is free);
+ * readable at any IRQL. */
+BOOLEAN AdmissionScanoutMpoGateFree(_In_ ADMISSION_CONTEXT *Context);
+/* HOLD-1: commit the held plane set; scan-out ISR context (device IRQL). */
+VOID AdmissionMpoCommitPending(_In_ ADMISSION_CONTEXT *Context);
 /* Queue one V3 commit (Count 1 = removal, 2 = two planes); Completion is
  * reported at its latch.  PrimaryAddress is the LayerIndex 0 surface
  * (CRTC_VSYNC physical address bookkeeping). */

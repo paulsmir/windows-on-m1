@@ -80,11 +80,16 @@ typedef enum _AGX_WIN32_BUFFER_FLAGS {
  * the DXGI multiplane-overlay entries for two RGB planes on VidPnSource 0
  * (agx_dxgi_mpo.h); without it every answer is the one-plane answer. */
 #define AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES 0x20u
+/* STRETCH-1: with MPO_TWO_PLANES, the display planes scale (the scanout
+ * broker advertised CAP_SCALED_SOURCE, bit 8; AdmissionScanoutMpoScaledSource).
+ * The D3D11 UMD then reports the kernel's factors in the DXGI group caps:
+ * MaxStretchFactor 2.0, MaxShrinkFactor 0.5 (agx_dxgi_mpo.h). */
+#define AGX_WIN32_DEVICE_FEATURE_MPO_STRETCH 0x40u
 #define AGX_WIN32_DEVICE_FEATURES_KNOWN \
   (AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS | AGX_WIN32_DEVICE_FEATURE_INDEPENDENT_SUBQUEUE | \
    AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT | \
    AGX_WIN32_DEVICE_FEATURE_PRIVATE_ONLY_COMPUTE | AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD | \
-   AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES)
+   AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES | AGX_WIN32_DEVICE_FEATURE_MPO_STRETCH)
 
 typedef struct _AGX_WIN32_BUFFER_CLASS_INFO {
   APPLE_AGX_U32 ClassId;

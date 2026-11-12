@@ -27,7 +27,7 @@ class RgbaBackbufferTests(unittest.TestCase):
 #define DXGI_FORMAT_B8G8R8A8_UNORM 87u
 #define DXGI_FORMAT_R8G8B8A8_UNORM 28u
 #define D3D10_DDI_BIND_PRESENT 0x400u
-#define D3DKMDT_GDISURFACE_TEXTURE 2u
+#define D3DKMDT_GDISURFACE_TEXTURE 1u /* d3dkmdt.h */
 #define D3DDDIFMT_A8R8G8B8 21u
 #define D3DDDIFMT_A8B8G8R8 32u
 struct Mip {unsigned TexelWidth,TexelHeight;};

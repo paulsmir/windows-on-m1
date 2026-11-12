@@ -226,7 +226,8 @@ int main(void) {
  assert(memcmp(&gdi,&gdiBefore,sizeof(gdi))==0);
  a.pAllocationPrivateDriverData=&desc;
  assert(AdmissionDdiGetStandardAllocationDriverData(&adapter,&a)==0);
- assert(gdi.Pitch==80 && desc.Pitch==80 && desc.Size==160);
+ /* PITCH-1: a GPU-only 32-bpp GDI texture is display class: 64-byte pitch */
+ assert(gdi.Pitch==128 && desc.Pitch==128 && desc.Size==256);
  gdi.Flags.Value=1;sentinel=desc;
  assert(AdmissionDdiGetStandardAllocationDriverData(&adapter,&a)==STATUS_INVALID_PARAMETER);
  assert(memcmp(&desc,&sentinel,sizeof(desc))==0);

@@ -37,7 +37,7 @@ using UINT=unsigned; using BOOLEAN=int;
 #define D3D10_DDI_RESOURCE_MISC_SHARED 2u
 #define D3D10_DDI_RESOURCE_MISC_DISCARD_ON_PRESENT 8u
 #define D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE 0x20000u
-#define D3DKMDT_GDISURFACE_TEXTURE 2u
+#define D3DKMDT_GDISURFACE_TEXTURE 1u /* d3dkmdt.h */
 #define D3DDDIFMT_A8R8G8B8 21u
 #define D3DDDIFMT_A8B8G8R8 32u
 struct Mip {unsigned TexelWidth,TexelHeight,TexelDepth;};
@@ -77,6 +77,10 @@ int main() {
     assert(describe(s[0],s[1],DXGI_FORMAT_B8G8R8A8_UNORM,&d));
     assert(d.Allocation.Width==s[0] && d.Allocation.Height==s[1]);
     assert(d.Displayable==1u && d.SegmentId==2u && d.Linear==1u);
+    /* PITCH-1: the scanout broker's 64-byte stride, so the window can be a plane */
+    assert(d.Allocation.Pitch%64u==0u && d.Allocation.Pitch>=s[0]*4u && d.Allocation.Pitch<s[0]*4u+64u);
+    assert(d.Allocation.Size>=(unsigned long long)d.Allocation.Pitch*s[1]);
+    if (s[0]==1682u) assert(d.Allocation.Pitch==6784u);
     /* ... but never become the full-screen scan-out through SetDisplayMode */
     assert(!full_screen(&d));
   }
@@ -123,9 +127,14 @@ class Wp1WindowPrimary(unittest.TestCase):
         mpo = (AGX / 'render-admission/src/mpo_windows.c').read_text()
         start = mpo.index('  if (slot1) {')
         removal = mpo[start:mpo.index('InterlockedIncrement(&Context->Mpo.RemovalCommits);', start)]
-        self.assertLess(removal.index('AdmissionMpoBuildRemoval('), removal.index('AdmissionMpoEvaluatePrimary('))
-        self.assertLess(removal.index('AdmissionMpoEvaluatePrimary('), removal.index('AdmissionScanoutMpoCommit('))
-        self.assertIn('Set3TableRefusals', removal)
+        # STRETCH-1: AdmissionMpoEvaluateOne keeps the mode-geometry rule
+        # (AdmissionMpoEvaluatePrimary) for a full-screen LayerIndex 0 plane
+        # and applies the layer-record rules to a scaled/positioned one
+        # (mpo_contract_test.c TestEvaluateOne).
+        self.assertLess(removal.index('AdmissionMpoBuildRemoval('), removal.index('AdmissionMpoEvaluateOne('))
+        self.assertLess(removal.index('AdmissionMpoEvaluateOne('), removal.index('AdmissionScanoutMpoCommit('))
+        # STRETCH-1b: the refusal goes through the counting helper.
+        self.assertIn('AdmissionMpoSet3TableRefusal(Context, result.Reason)', removal)
 
 
 if __name__ == '__main__':

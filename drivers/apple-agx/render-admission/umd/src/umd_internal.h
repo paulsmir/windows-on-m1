@@ -533,6 +533,10 @@ HRESULT AdmissionUmdScreenAdoptAllocation(
     BOOL WrittenPrimary, BOOL Direct,
 #endif
     AGX_WIN32_SCREEN_BUFFER *Buffer);
+/* PITCH-2: the General class MaximumBytes the KMD reported for this
+ * adapter (the adopt limit); 0 when unknown, so every size check fails. */
+APPLE_AGX_U64 AdmissionUmdPresentationClassMaximumBytes(
+    const ADMISSION_UMD_DEVICE *Device);
 BOOL AdmissionUmdScreenAllocationRegistered(
     ADMISSION_UMD_DEVICE *Device, D3DKMT_HANDLE KernelAllocation);
 HRESULT AdmissionUmdScreenQuerySource(ADMISSION_UMD_DEVICE *Device,
