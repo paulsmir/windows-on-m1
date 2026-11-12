@@ -5957,3 +5957,25 @@ boot was run. The previous entry stays as written.
   window size is plane-eligible; a normal-path control band (three boots) and re-based gates; merge of DF-1,
   PF-1, PL-1, BP-1, WP-1, DP-1 and removal of DisableDDisplay from the bench profile.
 - Next boot: DP-1 (EXP2366) on top of WP-1.
+
+## UPDATE 2026-11-12T13:35Z (architect): DP-1 (EXP2366) CONFIRMED; the two-plane line is complete on hardware; next steps
+
+- EXP2366 = EXP2365 shape + DP-1 (a present listing a disabled plane is accepted and forwarded: one allocation
+  entry per DDI plane by array index, empty at the disabled plane's index). Three GM open/close cycles: every
+  transition is {layer 0 enabled, layer 1 disabled}; no reject, no SetDisplayMode, no ModeChange / hidden;
+  removal commits = latches (19 for the boot); operator: no blink and no black window content. Gates PASS
+  (GM +2.69 %, CS -0.61 %). FULL 8424 / 8256, PERF 52.52 / 52.99.
+- Two-plane FULL arms so far (normal path): 8320, 8347, 8393, 8367, 8424, 8256 = mean 8351 = 84.0 % of macOS
+  9946 (single-plane normal path: 8050, 8025, 8058, 7977 = 8028). Gain about +4.0 % FULL, +6 % PERF.
+- Defects fixed in this series, each confirmed on hardware: DF-1 DirectFlip segment flag (EXP2354), PF-1
+  DdiPresent MPO flip flags (EXP2357), PL-1 mode-setting primary lifetime (EXP2361), BP-1 D3D12 back buffers as
+  primaries (EXP2363), WP-1 window-sized displayable primaries + geometry check (EXP2365), DP-1 disabled planes
+  (EXP2366); the D3D11 video sub-object is served (EXP2359).
+- Next: candidate package NP-1 (DP-1 line + receipt publish from the Set3 path), two more boots for a three-boot
+  band with EXP2366, re-based gates and stop lines, merge into gpu/memory-latency, bench default without
+  DisableDDisplay. Then, each its own item: full-screen application form (Check3 refuses plane B full-screen with
+  reason 17: DWM composites full-screen CS), stretch caps, pitch alignment, switch default-on.
+- Remaining gap to macOS after S2 (from the EXP2339 partition minus the removed DWM wait): compute rows at
+  1.13x Apple's GPU span (about 1.0..1.4 ms), R5 (about 0.65), hand-over gaps (0.35), Apple's cross-frame
+  overlap (0.33). The user's target (within 5 %) needs the compute ratio and R5; the macOS twin of the
+  arithmetic probe (operator boot into macOS) is the open discriminator for the compute ratio.
