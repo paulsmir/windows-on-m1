@@ -230,6 +230,211 @@ static VOID AdmissionMpoRecordScaled(ADMISSION_CONTEXT *Context,
                               plane->Destination.Bottom));
 }
 
+/* CUR-1 receipt (version 4): one Check3 whose top plane is clipped.
+ * Check3 is PASSIVE_LEVEL; rows are claimed lock-free (a lost race only
+ * lands the call in another row or ClipOverflow).  Receipt only. */
+static BOOLEAN AdmissionMpoRectEqual(const ADMISSION_MPO_RECT *A,
+                                     const ADMISSION_MPO_RECT *B) {
+  return A->Left == B->Left && A->Top == B->Top && A->Right == B->Right &&
+                 A->Bottom == B->Bottom
+             ? TRUE
+             : FALSE;
+}
+
+static VOID AdmissionMpoTicks(volatile LONG *Stats, LONG Ticks) {
+  /* Stats: count, min, max, sum (receipt only; races only blur it). */
+  LONG count = InterlockedIncrement(&Stats[0]);
+  if (count == 1 || Ticks < Stats[1]) InterlockedExchange(&Stats[1], Ticks);
+  if (Ticks > Stats[2]) InterlockedExchange(&Stats[2], Ticks);
+  InterlockedExchangeAdd(&Stats[3], Ticks);
+}
+
+static ULONG AdmissionMpoCrc32(ULONG Crc, const UCHAR *Data, ULONG Bytes) {
+  ULONG i, bit;
+  for (i = 0u; i < Bytes; ++i) {
+    Crc ^= Data[i];
+    for (bit = 0u; bit < 8u; ++bit)
+      Crc = (Crc >> 1) ^ (0xedb88320u & (0u - (Crc & 1u)));
+  }
+  return Crc;
+}
+
+/* Wom1MpoClipRead: the clip block of a refused clipped top plane, read
+ * through the local segment's CPU view.  PASSIVE (Check3).  A copy pass
+ * (timed: what a Set3 copy would pay) and an untimed statistics pass. */
+static VOID AdmissionMpoReadClip(ADMISSION_CONTEXT *Context,
+                                 const ADMISSION_MPO_PLANE_INPUT *Top,
+                                 ULONG Reason, BOOLEAN HandleChanged) {
+  const ADMISSION_ALLOCATION_HANDLE *allocation =
+      (const ADMISSION_ALLOCATION_HANDLE *)(ULONG_PTR)Top->SurfaceIdentity;
+  ADMISSION_SCANOUT_MEMORY_VIEW view;
+  UCHAR row[64u * 4u];
+  const UCHAR *base;
+  ULONG width, height, x, y, line, pixel, maxAlpha = 0u, nonZero = 0u;
+  ULONG crc = 0xffffffffu, fold = 0u, frequency, index, nowMs;
+  BOOLEAN straight = FALSE;
+  LONGLONG placement, first, last;
+  ULONGLONG offset, end;
+  LARGE_INTEGER t0, t1, qpf;
+  LONG ticks, count;
+  ADMISSION_MPO_CLIP_SAMPLE *sample;
+
+  width = (ULONG)((LONGLONG)Top->Clip.Right - Top->Clip.Left);
+  height = (ULONG)((LONGLONG)Top->Clip.Bottom - Top->Clip.Top);
+  if (width == 0u || height == 0u || width > 64u || height > 64u ||
+      AdmissionMpoPlaneScaled(Top) ||
+      (Top->FormatClass != AdmissionMpoFormatBgra8 &&
+       Top->FormatClass != AdmissionMpoFormatRgba8) ||
+      Top->Clip.Left < Top->Destination.Left ||
+      Top->Clip.Top < Top->Destination.Top) {
+    InterlockedIncrement(&Context->Mpo.ClipNotEligible);
+    return;
+  }
+  /* Unscaled: surface pixel = source origin + (clip - destination). */
+  x = (ULONG)((LONGLONG)Top->Source.Left + Top->Clip.Left -
+              Top->Destination.Left);
+  y = (ULONG)((LONGLONG)Top->Source.Top + Top->Clip.Top -
+              Top->Destination.Top);
+  placement = allocation != NULL &&
+                      allocation->Object.Magic ==
+                          ADMISSION_ALLOCATION_OBJECT_MAGIC
+                  ? InterlockedCompareExchange64(
+                        (volatile LONGLONG *)&allocation->LocalPlacement, 0, 0)
+                  : 0;
+  if (placement <= 0 || x + width > Top->SurfaceWidth ||
+      y + height > Top->SurfaceHeight ||
+      !NT_SUCCESS(AdmissionMemoryRuntimeLocalView(Context, &view)) ||
+      view.CpuAddress == NULL) {
+    InterlockedIncrement(&Context->Mpo.ClipNotPlaced);
+    return;
+  }
+  offset = (ULONGLONG)(placement - 1) + (ULONGLONG)y * Top->SurfaceStride +
+           (ULONGLONG)x * 4u;
+  end = offset + (ULONGLONG)(height - 1u) * Top->SurfaceStride +
+        (ULONGLONG)width * 4u;
+  if (end > view.Bytes || end > (ULONGLONG)(placement - 1) +
+                                    Top->SurfaceBytes) {
+    InterlockedIncrement(&Context->Mpo.ClipNotPlaced);
+    return;
+  }
+  base = (const UCHAR *)view.CpuAddress + offset;
+  t0 = KeQueryPerformanceCounter(&qpf);
+  for (line = 0u; line < height; ++line) {
+    RtlCopyMemory(row, base + (SIZE_T)line * Top->SurfaceStride,
+                  (SIZE_T)width * 4u);
+    fold ^= row[0];
+  }
+  t1 = KeQueryPerformanceCounter(NULL);
+  ticks = (LONG)(t1.QuadPart - t0.QuadPart);
+  for (line = 0u; line < height; ++line) {
+    RtlCopyMemory(row, base + (SIZE_T)line * Top->SurfaceStride,
+                  (SIZE_T)width * 4u);
+    crc = AdmissionMpoCrc32(crc, row, width * 4u);
+    for (pixel = 0u; pixel < width; ++pixel) {
+      const UCHAR *p = &row[pixel * 4u];
+      if (p[3] > maxAlpha) maxAlpha = p[3];
+      if (p[3] != 0u) ++nonZero;
+      if (p[0] > p[3] || p[1] > p[3] || p[2] > p[3]) straight = TRUE;
+    }
+  }
+  crc = ~crc;
+  UNREFERENCED_PARAMETER(fold);
+  InterlockedIncrement(&Context->Mpo.ClipReads);
+  if (straight) InterlockedIncrement(&Context->Mpo.ClipStraight);
+  frequency = (ULONG)(qpf.QuadPart / 1000);
+  InterlockedExchange(&Context->Mpo.QpcFrequencyKhz, (LONG)frequency);
+  if (width == 1u && height == 1u) {
+    AdmissionMpoTicks(Context->Mpo.ReadTicks1x1, ticks);
+    InterlockedIncrement(maxAlpha == 0u ? &Context->Mpo.ClipZero1x1
+                                        : &Context->Mpo.ClipNonZero1x1);
+  } else {
+    AdmissionMpoTicks(Context->Mpo.ReadTicksOther, ticks);
+  }
+  /* At most one sample per 250 ms. */
+  nowMs = frequency != 0u ? (ULONG)(t1.QuadPart / (LONGLONG)frequency) : 0u;
+  first = InterlockedCompareExchange(&Context->Mpo.ClipSampleCount, 0, 0);
+  last = (LONG)InterlockedCompareExchange(&Context->Mpo.ClipLastSampleMs, 0,
+                                          0);
+  if (first != 0 && (ULONG)(nowMs - (ULONG)last) < 250u)
+    return;
+  InterlockedExchange(&Context->Mpo.ClipLastSampleMs, (LONG)nowMs);
+  count = InterlockedIncrement(&Context->Mpo.ClipSampleCount);
+  index = (ULONG)(count - 1);
+  if (index >= ADMISSION_MPO_CLIP_FIXED)
+    index = ADMISSION_MPO_CLIP_FIXED +
+            (index - ADMISSION_MPO_CLIP_FIXED) %
+                (ADMISSION_MPO_CLIP_SAMPLES - ADMISSION_MPO_CLIP_FIXED);
+  sample = &Context->Mpo.ClipSamples[index];
+  InterlockedExchange(&sample->Origin,
+                      (LONG)(((ULONG)Top->Clip.Left & 0xffffu) |
+                             (((ULONG)Top->Clip.Top & 0xffffu) << 16)));
+  InterlockedExchange(&sample->Size, (LONG)(width | (height << 16)));
+  InterlockedExchange(&sample->Info,
+                      (LONG)((Top->FormatClass & 0xffu) |
+                             ((Top->BlendAlpha & 0xffu) << 8) |
+                             ((HandleChanged ? 1u : 0u) << 16) |
+                             ((Reason & 0xffu) << 24)));
+  InterlockedExchange(&sample->Alpha,
+                      (LONG)(maxAlpha | ((nonZero & 0xffffu) << 8)));
+  InterlockedExchange(&sample->Crc32, (LONG)crc);
+  InterlockedExchange(&sample->Ticks, ticks);
+  InterlockedExchange(&sample->Qpc, (LONG)(ULONG)t1.QuadPart);
+}
+
+static VOID AdmissionMpoRecordClipped(ADMISSION_CONTEXT *Context,
+                                      const ADMISSION_MPO_PLANE_INPUT *Planes,
+                                      ULONG Count, ULONG Reason) {
+  const ADMISSION_MPO_PLANE_INPUT *top;
+  ULONG width, height, key, index;
+  LONG handle;
+  BOOLEAN handleChanged;
+  if (Count == 1u) {
+    if (!AdmissionMpoRectEqual(&Planes[0].Clip, &Planes[0].Destination))
+      InterlockedIncrement(&Context->Mpo.ClipOnePlane);
+    return;
+  }
+  if (Count != 2u)
+    return;
+  top = Planes[1].LayerIndex > Planes[0].LayerIndex ? &Planes[1] : &Planes[0];
+  if (AdmissionMpoRectEqual(&top->Clip, &top->Destination))
+    return;
+  width = (ULONG)((LONGLONG)top->Clip.Right - top->Clip.Left) & 0xfffu;
+  height = (ULONG)((LONGLONG)top->Clip.Bottom - top->Clip.Top) & 0xfffu;
+  key = width | (height << 12) | ((top->FormatClass & 0xfu) << 24) |
+        ((top->BlendAlpha & 0xfu) << 28);
+  if (key == 0u)
+    key = 1u << 31;
+  handle = (LONG)(ULONG_PTR)top->SurfaceIdentity;
+  handleChanged =
+      InterlockedExchange(&Context->Mpo.LastClipHandle, handle) != handle
+          ? TRUE
+          : FALSE;
+  InterlockedIncrement(&Context->Mpo.ClipChecks);
+  if (handleChanged)
+    InterlockedIncrement(&Context->Mpo.ClipHandleChanges);
+  if (Reason != AdmissionMpoSupported &&
+      InterlockedCompareExchange(&Context->Mpo.ClipReadSwitch, 0, 0) != 0)
+    AdmissionMpoReadClip(Context, top, Reason, handleChanged);
+  for (index = 0u; index < ADMISSION_MPO_CLIP_ROWS; ++index) {
+    ADMISSION_MPO_CLIP_ROW *row = &Context->Mpo.ClipRows[index];
+    LONG seen = InterlockedCompareExchange(&row->Key, (LONG)key, 0);
+    if (seen != 0 && seen != (LONG)key)
+      continue;
+    InterlockedIncrement(&row->Count);
+    if (Reason == AdmissionMpoSupported)
+      InterlockedIncrement(&row->Supported);
+    if (handleChanged)
+      InterlockedIncrement(&row->HandleChanges);
+    InterlockedExchange(&row->LastOrigin,
+                        (LONG)(((ULONG)top->Clip.Left & 0xffffu) |
+                               (((ULONG)top->Clip.Top & 0xffffu) << 16)));
+    InterlockedExchange(&row->LastDstSize,
+                        AdmissionMpoPackSize(&top->Destination));
+    return;
+  }
+  InterlockedIncrement(&Context->Mpo.ClipOverflow);
+}
+
 /* ---- DxgkDdiGetMultiPlaneOverlayCaps ---- */
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiGetMultiPlaneOverlayCaps(
@@ -411,9 +616,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCheckMultiPlaneOverlaySupport3(
     (void)AdmissionMpoEvaluateOne(&input, &result);
   else
     (void)AdmissionMpoEvaluate(&input, &result);
-  if (effective)
+  if (effective) {
     AdmissionMpoRecordScaled(context, planes, Args->PlaneCount,
                              result.Reason);
+    AdmissionMpoRecordClipped(context, planes, Args->PlaneCount,
+                              result.Reason);
+  }
   AdmissionMpoCheckAnswer(context, effective, Args, result.Reason,
                           result.FailingPlane);
   return STATUS_SUCCESS;

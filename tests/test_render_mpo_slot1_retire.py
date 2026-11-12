@@ -195,7 +195,12 @@ class RenderMpoSlot1RetireTests(unittest.TestCase):
         code = SHIM
         reasons = re.search(r"^#define ADMISSION_MPO_RECEIPT_REASONS \w+$",
                             header, re.M).group(0)
-        code += reasons + "\n" + receipt + "\n"
+        clip_defines = "\n".join(re.findall(
+            r"^#define ADMISSION_MPO_CLIP_\w+ \w+$", header, re.M))
+        code += reasons + "\n" + clip_defines + "\n"
+        code += typedef(header, "ADMISSION_MPO_CLIP_ROW") + "\n"
+        code += typedef(header, "ADMISSION_MPO_CLIP_SAMPLE") + "\n"
+        code += receipt + "\n"
         code += stages + "\n"
         code += typedef(header, "ADMISSION_MPO_COMPLETION") + "\n"
         code += typedef(header, "ADMISSION_MPO_PLANE_STATE") + "\n"

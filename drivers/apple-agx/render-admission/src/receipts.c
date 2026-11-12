@@ -3086,28 +3086,64 @@ static VOID AdmissionMpoPublishWorker(_In_ PDEVICE_OBJECT DeviceObject,
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Parameter;
   UNREFERENCED_PARAMETER(DeviceObject);
   if (context == NULL) return;
+  InterlockedIncrement(&context->Mpo.PublishWorkerRuns);
   AdmissionRecordMpoPeriodic(context);
   InterlockedExchange(&context->MpoPublishQueued, 0);
   KeSetEvent(&context->MpoPublishIdle, IO_NO_INCREMENT, FALSE);
 }
 
+/* DISPATCH_LEVEL: hand the request to the work item, or drop it while
+ * scan-out stops (the item is gone). */
+static VOID AdmissionMpoPublishKick(ADMISSION_CONTEXT *Context) {
+  PIO_WORKITEM work = (PIO_WORKITEM)InterlockedCompareExchangePointer(
+      (PVOID volatile *)&Context->MpoPublishWork, NULL, NULL);
+  if (work == NULL) {
+    InterlockedExchange(&Context->MpoPublishQueued, 0);
+    return;
+  }
+  KeClearEvent(&Context->MpoPublishIdle);
+  IoQueueWorkItem(work, AdmissionMpoPublishWorker, DelayedWorkQueue, Context);
+}
+
+static KDEFERRED_ROUTINE AdmissionMpoPublishDpcRoutine;
+static VOID AdmissionMpoPublishDpcRoutine(_In_ PKDPC Dpc,
+                                          _In_opt_ PVOID DeferredContext,
+                                          _In_opt_ PVOID Argument1,
+                                          _In_opt_ PVOID Argument2) {
+  UNREFERENCED_PARAMETER(Dpc);
+  UNREFERENCED_PARAMETER(Argument1);
+  UNREFERENCED_PARAMETER(Argument2);
+  if (DeferredContext != NULL)
+    AdmissionMpoPublishKick((ADMISSION_CONTEXT *)DeferredContext);
+}
+
+/* Set3: IRQL up to PROFILE_LEVEL - 1.  At most one request a second and
+ * one in flight; above DISPATCH_LEVEL through the DPC (KeInsertQueueDpc is
+ * callable at any IRQL), otherwise straight to the work item. */
 _Use_decl_annotations_ void AdmissionQueueMpoPublish(
     ADMISSION_CONTEXT *Context) {
   LONG64 now;
-  PIO_WORKITEM work;
+  KIRQL irql;
   if (Context == NULL) return;
-  work = (PIO_WORKITEM)InterlockedCompareExchangePointer(
-      (PVOID volatile *)&Context->MpoPublishWork, NULL, NULL);
-  if (work == NULL || KeGetCurrentIrql() > DISPATCH_LEVEL ||
+  if (InterlockedCompareExchangePointer(
+          (PVOID volatile *)&Context->MpoPublishWork, NULL, NULL) == NULL ||
       InterlockedCompareExchange(&Context->Mpo.Version, 0, 0) == 0)
     return;
+  irql = KeGetCurrentIrql();
+  if ((LONG)irql > Context->Mpo.Set3MaxIrql)
+    InterlockedExchange(&Context->Mpo.Set3MaxIrql, (LONG)irql);
   now = (LONG64)KeQueryInterruptTime();
   if (now - InterlockedCompareExchange64(&Context->MpoPublishTime100ns, 0, 0) <
           10000000LL ||
       InterlockedCompareExchange(&Context->MpoPublishQueued, 1, 0) != 0)
     return;
-  KeClearEvent(&Context->MpoPublishIdle);
-  IoQueueWorkItem(work, AdmissionMpoPublishWorker, DelayedWorkQueue, Context);
+  if (irql > DISPATCH_LEVEL) {
+    InterlockedIncrement(&Context->Mpo.PublishAboveDispatch);
+    (void)KeInsertQueueDpc(&Context->MpoPublishDpc, NULL, NULL);
+  } else {
+    InterlockedIncrement(&Context->Mpo.PublishAtOrBelowDispatch);
+    AdmissionMpoPublishKick(Context);
+  }
 }
 
 _Use_decl_annotations_ void AdmissionMpoPublishStart(
@@ -3116,6 +3152,8 @@ _Use_decl_annotations_ void AdmissionMpoPublishStart(
       Context->PhysicalDeviceObject == NULL)
     return;
   KeInitializeEvent(&Context->MpoPublishIdle, NotificationEvent, TRUE);
+  KeInitializeDpc(&Context->MpoPublishDpc, AdmissionMpoPublishDpcRoutine,
+                  Context);
   Context->MpoPublishQueued = 0;
   /* Without the item the receipt keeps the DdiPresent-only cadence. */
   Context->MpoPublishWork = IoAllocateWorkItem(Context->PhysicalDeviceObject);
@@ -3128,6 +3166,11 @@ _Use_decl_annotations_ void AdmissionMpoPublishStop(
   work = (PIO_WORKITEM)InterlockedExchangePointer(
       (PVOID volatile *)&Context->MpoPublishWork, NULL);
   if (work == NULL) return;
+  /* A queued DPC sees no item and drops the request; one already running
+   * may still queue the old item, which the wait below drains. */
+  if (KeRemoveQueueDpc(&Context->MpoPublishDpc))
+    InterlockedExchange(&Context->MpoPublishQueued, 0);
+  KeFlushQueuedDpcs();
   if (InterlockedCompareExchange(&Context->MpoPublishQueued, 0, 0) != 0)
     (void)KeWaitForSingleObject(&Context->MpoPublishIdle, Executive,
                                 KernelMode, FALSE, NULL);

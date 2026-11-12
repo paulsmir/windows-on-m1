@@ -144,8 +144,23 @@ typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT {
  * switch is effective (switch = 1 AND broker CAPABILITIES bit 9 AND the
  * REG_NEGOTIATED read-back); all zero otherwise.  Counters are interlocked
  * at any IRQL. */
-#define ADMISSION_MPO_RECEIPT_VERSION 3u
+#define ADMISSION_MPO_RECEIPT_VERSION 4u
 #define ADMISSION_MPO_RECEIPT_REASONS 40u
+/* Key: clip width (12 bits) | height << 12 | format class << 24 |
+ * blend << 28; 0 = free row.  Origin/DstSize: x | y << 16. */
+#define ADMISSION_MPO_CLIP_ROWS 12u
+typedef struct _ADMISSION_MPO_CLIP_ROW {
+  volatile LONG Key, Count, Supported, HandleChanges;
+  volatile LONG LastOrigin, LastDstSize;
+} ADMISSION_MPO_CLIP_ROW;
+/* Origin/Size: x | y << 16; Info: format class | blend << 8 |
+ * handle changed << 16 | Check3 reason << 24; Alpha: max alpha | count
+ * of nonzero-alpha pixels << 8; Ticks: the copy pass; Qpc: low 32 bits. */
+#define ADMISSION_MPO_CLIP_SAMPLES 24u
+#define ADMISSION_MPO_CLIP_FIXED 8u
+typedef struct _ADMISSION_MPO_CLIP_SAMPLE {
+  volatile LONG Origin, Size, Info, Alpha, Crc32, Ticks, Qpc;
+} ADMISSION_MPO_CLIP_SAMPLE;
 typedef struct _ADMISSION_MPO_RECEIPT {
   volatile LONG Version, Bytes;
   /* Start: switch value seen, CAP_TWO_LAYERS seen, negotiation read back. */
@@ -184,6 +199,36 @@ typedef struct _ADMISSION_MPO_RECEIPT {
    * commits (AdmissionMpoEvaluateOne), and those of them that scale. */
   volatile LONG ScaledTwoPlaneCommits, OnePlaneRecordCommits;
   volatile LONG ScaledOnePlaneCommits;
+  /* ---- version 4 (CUR-1 receipt, behaviour unchanged): Check3 calls
+   * whose top plane (highest LayerIndex of two) is clipped (ClipRect !=
+   * DstRect).  Rows keyed by clip size, format class and blend; per row
+   * the count, supported answers, top-plane allocation changes since the
+   * previous clipped Check3, and the last clip origin and destination
+   * size.  ClipOnePlane: a one-plane Check3 with a clipped plane. */
+  volatile LONG ClipChecks, ClipHandleChanges, ClipOverflow, ClipOnePlane;
+  volatile LONG LastClipHandle;
+  ADMISSION_MPO_CLIP_ROW ClipRows[ADMISSION_MPO_CLIP_ROWS];
+  /* Wom1MpoClipRead = 1 (opt-in): for a refused clipped top plane of at
+   * most 64x64 the clip block is read through the local segment's CPU
+   * view at Check3 (PASSIVE).  NotPlaced: the allocation's local-segment
+   * placement is unknown (no user-process page-table update seen) or
+   * the block lies outside the view; NotEligible: scaled, larger than
+   * 64x64 or not 32 bpp.  Read time (QPC ticks, the copy pass only) for
+   * 1x1 clips and for the other clips separately: count/min/max/sum.
+   * Zero1x1/NonZero1x1: 1x1 reads with alpha 0 / not 0.  Straight: reads
+   * with any colour channel above alpha (straight, not premultiplied). */
+  volatile LONG ClipReadSwitch, ClipReads, ClipNotPlaced, ClipNotEligible;
+  volatile LONG ClipZero1x1, ClipNonZero1x1, ClipStraight, QpcFrequencyKhz;
+  volatile LONG ReadTicks1x1[4], ReadTicksOther[4];
+  /* First ADMISSION_MPO_CLIP_FIXED samples kept, the rest a ring;
+   * at most one sample per 250 ms. */
+  volatile LONG ClipSampleCount, ClipLastSampleMs;
+  ADMISSION_MPO_CLIP_SAMPLE ClipSamples[ADMISSION_MPO_CLIP_SAMPLES];
+  /* NP-2: Set3-side publish requests by the IRQL Set3 ran at (above /
+   * at-or-below DISPATCH_LEVEL), the highest IRQL seen, publishes the
+   * work item made. */
+  volatile LONG PublishAboveDispatch, PublishAtOrBelowDispatch;
+  volatile LONG Set3MaxIrql, PublishWorkerRuns;
 } ADMISSION_MPO_RECEIPT;
 #define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
 #define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u
@@ -1103,6 +1148,10 @@ typedef struct _ADMISSION_CONTEXT {
   PIO_WORKITEM MpoPublishWork;
   volatile LONG MpoPublishQueued;
   KEVENT MpoPublishIdle;
+  /* NP-2 (EXP2373: no Set3-side publish in steady windowed GM; dxgkrnl
+   * calls Set3 above DISPATCH_LEVEL there): above DISPATCH_LEVEL the
+   * request goes through this DPC, which queues the work item. */
+  KDPC MpoPublishDpc;
   ADMISSION_MPO_PLANE_STATE MpoPlanes[2];
 } ADMISSION_CONTEXT;
 
@@ -1191,6 +1240,10 @@ typedef struct _ADMISSION_ALLOCATION_HANDLE {
   ADMISSION_POOL_PLACEMENT PoolPlacement;
   /* M2-f5: segment-3 pages reserved for this allocation at creation. */
   ULONGLONG PoolReserved;
+  /* CUR-1 receipt: 1 + the local-segment (segment 2) offset of the
+   * allocation's base from the last user-process page-table update that
+   * mapped it consistently there; 0 unknown.  Receipt input only. */
+  volatile LONGLONG LocalPlacement;
 #ifdef APPLE_AGX_NATIVE_STAGING
   PVOID NativeStagingBinding;
 #endif

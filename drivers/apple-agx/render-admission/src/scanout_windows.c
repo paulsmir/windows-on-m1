@@ -666,6 +666,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
     Context->Mpo.Bytes = (LONG)sizeof(Context->Mpo);
     Context->Mpo.ContractVersion = (LONG)ADMISSION_MPO_CONTRACT_VERSION;
     Context->Mpo.SwitchSet = 1;
+    /* CUR-1 receipt (opt-in, receipt only): read refused clip blocks. */
+    Context->Mpo.ClipReadSwitch =
+        AdmissionScanoutSwitchEnabled(Context, L"Wom1MpoClipRead") ? 1 : 0;
     Context->Mpo.BrokerAdvertised =
         AppleAgxScanoutTwoLayersAdvertised(&runtime->Panel.Scanout) ? 1 : 0;
     Context->Mpo.Effective =
