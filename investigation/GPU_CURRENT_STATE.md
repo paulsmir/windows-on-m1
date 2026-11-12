@@ -5802,3 +5802,19 @@ boot was run. The previous entry stays as written.
   primary is torn down before the present. Next: one receipt-only boot recording device / context / allocation
   identity in the UMD's SetDisplayMode, MPO present, Create / Destroy / OpenResource rows of DWM, aligned with
   the kernel events. No behaviour change.
+
+## UPDATE 2026-11-12T03:27Z (architect): EXP2360 (receipt-only): the mode-setting primary is destroyed before the present
+
+- One UMD device and kernel context in DWM does SetDisplayMode and every MPO present ("different devices" is
+  excluded). In all 87 cycles on the normal path: CreateResource of primary P (non-shared) -> SetDisplayMode(P)
+  S_OK -> the runtime's DestroyResource(P) within 0.3 ms -> our UMD deallocates P's kernel allocation about 13 ms
+  later (pfnDeallocateCb S_OK) -> three SHARED displayable buffers created on the same device (also kernel
+  primaries: Flags.Primary, VidPnSourceId 0) -> MPO present of one of them -> DXGI_ERROR_SETDISPLAYMODE_REQUIRED
+  -> new P, and so on. The presented buffer is never P.
+- On the legacy path all primaries are non-shared, the mode-setting one is never destroyed and is among the
+  presented buffers.
+- Cause of the normal-path cycle, as far as established: destroying P's kernel allocation clears the device's
+  per-source mode state before the first present. What a correct driver must do with DestroyResource of the
+  mode-setting primary is NOT yet derived (kernel conditions and Microsoft's lifetime contract being read; three
+  options noted by the implementer: defer the kernel deallocation, decouple the allocation from the runtime
+  resource, or a missing step for the shared buffers). No boot staged.
