@@ -279,6 +279,11 @@ typedef struct _ADMISSION_MPO_RECEIPT {
    * did not read back zero. */
   volatile LONG VidMmSegment2Kib, PoolKib, ScratchOffsetKib;
   volatile LONG ScratchReady, ScratchNonZeroBytes;
+  /* CUR-1 v2 Set3: two-plane commits showing a scratch / a crop, scratch
+   * writes skipped (all-zero over all-zero), copy time in QPC ticks
+   * (count, min, max, sum; the read + fill + barrier). */
+  volatile LONG ScratchCommits, CropCommits, ScratchSkippedWrites;
+  volatile LONG ScratchCopyTicks[4];
 } ADMISSION_MPO_RECEIPT;
 #define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
 #define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u
