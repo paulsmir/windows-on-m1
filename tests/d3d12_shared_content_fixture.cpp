@@ -21,6 +21,7 @@
 #define D3DDDIFMT_A8R8G8B8 21u
 #define D3DDDIFMT_A8B8G8R8 32u
 #include "agx_d3d12_shared_open.h"
+#include "umd_primary_backbuffer.h"
 using UINT=unsigned; using HRESULT=int; using BOOLEAN=int;
 #define TRUE 1
 #define FALSE 0
@@ -131,6 +132,7 @@ int main() {
   ADMISSION_UMD_DIRECT_FLIP_RESOURCE description={};
   assert(AdmissionUmdDescribePrimary(CreateResource,&description));
   ADMISSION_PRESENT_RESOURCE_DATA resourceData={};const UINT MetadataFlags=0;
+  const UINT CreateFlags=0;ADMISSION_UMD_PRIMARY_MAPPING primary={};
   struct {const void *pPrivateDriverData;unsigned PrivateDriverDataSize;} allocate={},allocationInfo={};
 /* ACTUAL_SERIALIZE */
   const auto &a=description.Allocation;const auto &r=resourceData;

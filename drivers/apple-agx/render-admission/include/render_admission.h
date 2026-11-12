@@ -69,6 +69,8 @@
 #include "apple_agx_fixed_panel.h"
 #include "apple_agx_post_display_route.h"
 #include "j313_agx_abi_admission.generated.h"
+#include "mpo_contract.h"
+#include "mpo_layers.h"
 
 #define ADMISSION_POOL_TAG 'mRGA'
 #define ADMISSION_DMA_BUFFER_SIZE 0x50000u
@@ -136,6 +138,87 @@ typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT {
   volatile LONG CommittedWidth, CommittedHeight, CommittedStride, CommittedFormat;
   volatile LONG CommittedScaling, SourceVisible, DisplayActive;
 } ADMISSION_DISPLAY_MODES_RECEIPT;
+
+/* S2 receipt (Wom1MpoReceipt, device key): the two-plane MPO path.  Written
+ * with Wom1DisplayModesReceipt and touched only while the Wom1MpoTwoPlanes
+ * switch is effective (switch = 1 AND broker CAPABILITIES bit 9 AND the
+ * REG_NEGOTIATED read-back); all zero otherwise.  Counters are interlocked
+ * at any IRQL. */
+#define ADMISSION_MPO_RECEIPT_VERSION 2u
+#define ADMISSION_MPO_RECEIPT_REASONS 32u
+typedef struct _ADMISSION_MPO_RECEIPT {
+  volatile LONG Version, Bytes;
+  /* Start: switch value seen, CAP_TWO_LAYERS seen, negotiation read back. */
+  volatile LONG SwitchSet, BrokerAdvertised, Effective, ContractVersion;
+  volatile LONG CapsCalls, Check3Calls, Check3Supported, Check3Unsupported;
+  volatile LONG LastCheck3Reason, LastCheck3FailingPlane, LastCheck3Planes;
+  /* Unsupported Check3 answers by ADMISSION_MPO_REASON (0 unused). */
+  volatile LONG Check3Reasons[ADMISSION_MPO_RECEIPT_REASONS];
+  volatile LONG Set3Calls, TwoPlaneCommits, RemovalCommits, V2Presents;
+  volatile LONG PlaneOffCompletions, TwoPlaneLatches, RemovalLatches;
+  /* Set3 refused before the broker: table (a plane Check3 accepted no
+   * longer qualifies with its placement), or an arrangement no Check3
+   * answer admits (LayerIndex 1 alone, malformed planes). */
+  volatile LONG Set3TableRefusals, LastSet3TableReason, Set3Refusals;
+  volatile LONG Busy, NotVisible, TransportFailures;
+  /* Contract defect: the broker refused a commit the table accepted. */
+  volatile LONG BrokerRefusals, LastBrokerRefusal, LastRefusalCount;
+  APPLE_AGX_SCANOUT_LAYER LastRefusalRecords[2];
+  /* ---- version 2 (A1.2): slot 1 removed before a hide / mode commit ---- */
+  volatile LONG Slot1Retires, Slot1RetireFailures, Slot1RetireRefusals;
+  volatile LONG LastSlot1RetireStage;  /* ADMISSION_MPO_RETIRE_STAGE_* */
+} ADMISSION_MPO_RECEIPT;
+#define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
+#define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u
+
+/* S2-1b: Wom1MpoGateReceipt (device key, receipt-only).  Where the plane
+ * capability is lost: every DRIVERCAPS answer (first and last), the MPO
+ * caps / Check3 DDIs counted ungated and never zeroed, StartDevice and
+ * scanout starts, Effective transitions, and every QueryAdapterInfo type.
+ * Lives in the context from AddDevice (zeroed there only). */
+#define ADMISSION_MPO_GATE_RECEIPT_VERSION 1u
+#define ADMISSION_MPO_GATE_QUERY_TYPES 64u
+typedef struct _ADMISSION_MPO_GATE_CAPS {
+  LONG Valid, Mpo, DirectFlip, MaxOverlayPlanes;
+  LONG WddmVersion, Status, Zeroed, Reserved;
+  LONGLONG Qpc;
+} ADMISSION_MPO_GATE_CAPS;
+typedef struct _ADMISSION_MPO_GATE_RECEIPT {
+  volatile LONG Version, Bytes;
+  volatile LONG StartDeviceCount, ScanoutStartCount, DrvCapsQueryCount;
+  volatile LONG EffectiveTransitions, LastEffectiveClearReason;
+  volatile LONG CapsCallsAll, Check3CallsAll, CapsLastVidPnSourceId;
+  volatile LONG CapsLastMaxPlanes, StopDeviceCount;
+  LONGLONG QpcFrequency, StartEntryQpc, StartExitQpc, MpoEffectiveSetQpc;
+  volatile LONGLONG CapsFirstQpc, Check3FirstQpc;
+  ADMISSION_MPO_GATE_CAPS FirstDrvCaps, LastDrvCaps;
+  /* index = DXGKQAITYPE; the last slot counts every type >= 63 */
+  volatile LONG QueryTypeCounts[ADMISSION_MPO_GATE_QUERY_TYPES];
+  volatile LONG QueryRefusalBitmap[2];
+} ADMISSION_MPO_GATE_RECEIPT;
+#define ADMISSION_MPO_GATE_CLEAR_STOP 1u
+
+/* PresentIds to report, with their LayerIndex, at the latch of a flip. */
+typedef struct _ADMISSION_MPO_COMPLETION {
+  ULONG Count;
+  ULONG LayerIndex[2];
+  ULONGLONG PresentId[2];
+} ADMISSION_MPO_COMPLETION;
+
+/* Current state of one MPO plane (LayerIndex 0 or 1), as the last accepted
+ * Set3 left it.  A Set3 lists only the planes it changes; the others keep
+ * this state (Microsoft Learn, "Hardware flip queue": flips reference a
+ * subset of planes, "planes affected by the flip"). */
+typedef struct _ADMISSION_MPO_PLANE_STATE {
+  ULONG Valid;
+  ULONG Enabled;
+  ADMISSION_MPO_PLANE_INPUT Input;
+  UINT PrimarySegment;
+  LONGLONG PrimaryAddress;
+  HANDLE hAllocation;
+  ULONG FlipImmediate;
+  ULONG FlipOnNextVSync;
+} ADMISSION_MPO_PLANE_STATE;
 
 typedef enum _ADMISSION_START_STAGE {
   AdmissionStartNone = 0,
@@ -989,6 +1072,21 @@ typedef struct _ADMISSION_CONTEXT {
   /* Firmware restart drill (ADMISSION_FW_RESTART_DRILL): device value
    * Wom1FwRestartDrillAllowed = 1, read once at runtime start. */
   BOOLEAN FwRestartDrillAllowed;
+  /* S2: two-plane MPO (Wom1MpoTwoPlanes); untouched unless effective. */
+  ADMISSION_MPO_RECEIPT Mpo;
+  ADMISSION_MPO_GATE_RECEIPT MpoGate;
+  /* EXP2357 (a): interrupt time of the last periodic Wom1MpoReceipt publish. */
+  volatile LONG64 MpoPublishTime100ns;
+  /* NP-1 (EXP2365): while DWM presents only through Set3 (two planes) no
+   * DdiPresent runs, so the periodic publish stalled.  Set3 (IRQL up to
+   * PROFILE_LEVEL - 1) queues this work item at most once a second when it
+   * runs at <= DISPATCH_LEVEL; the item publishes at PASSIVE_LEVEL.
+   * Allocated at scanout start with the MPO receipt, drained and freed at
+   * scanout stop.  Receipt-only. */
+  PIO_WORKITEM MpoPublishWork;
+  volatile LONG MpoPublishQueued;
+  KEVENT MpoPublishIdle;
+  ADMISSION_MPO_PLANE_STATE MpoPlanes[2];
 } ADMISSION_CONTEXT;
 
 typedef struct _ADMISSION_DEVICE {
@@ -2328,6 +2426,53 @@ VOID AdmissionScanoutTagMpoFlip(_Inout_ ADMISSION_CONTEXT *Context,
 VOID AdmissionScanoutClearMpoFlip(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutMpoPlaneOff(_Inout_ ADMISSION_CONTEXT *Context,
                                      _In_ ULONGLONG PresentId);
+/* S2 (all inert unless AdmissionScanoutMpoEffective). */
+/* TRUE iff the Wom1MpoTwoPlanes switch was set at StartDevice, the broker
+ * advertised CAPABILITIES bit 9 and REG_NEGOTIATED read back 0x200. */
+BOOLEAN AdmissionScanoutMpoEffective(_In_opt_ ADMISSION_CONTEXT *Context);
+/* Pool view for plane placement: segment base, pool bytes. */
+BOOLEAN AdmissionScanoutMpoPool(_In_ ADMISSION_CONTEXT *Context,
+                                _Out_ ULONGLONG *SegmentBase,
+                                _Out_ ULONGLONG *PoolBytes);
+/* Slot 1 may be on screen: the driver queued a two-layer commit whose
+ * removal has not latched, or REG_ACTIVE_LAYERS bit 1 is set. */
+BOOLEAN AdmissionScanoutMpoSlot1MayShow(_In_ ADMISSION_CONTEXT *Context);
+/* Queue one V3 commit (Count 1 = removal, 2 = two planes); Completion is
+ * reported at its latch.  PrimaryAddress is the LayerIndex 0 surface
+ * (CRTC_VSYNC physical address bookkeeping). */
+NTSTATUS AdmissionScanoutMpoCommit(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_reads_(Count) const APPLE_AGX_SCANOUT_LAYER *Records,
+    _In_ ULONG Count, _In_ const ADMISSION_MPO_COMPLETION *Completion,
+    _In_ LONGLONG PrimaryAddress);
+/* The PresentIds of the next V2 flip (QueuePresent/QueueDeferred carry
+ * them to its latch); replaces AdmissionScanoutTagMpoFlip's single id. */
+VOID AdmissionScanoutTagMpoFlipSet(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_MPO_COMPLETION *Completion);
+/* Planes switched off without a swap: completes on the next vsync. */
+NTSTATUS AdmissionScanoutMpoPlaneOffSet(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_MPO_COMPLETION *Completion);
+/* mpo_windows.c: the effective-only Set3 path. */
+NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _Inout_ DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3 *Args);
+/* Wom1MpoReceipt (PASSIVE_LEVEL; only while effective). */
+void AdmissionRecordMpo(_In_ ADMISSION_CONTEXT *Context);
+void AdmissionRecordMpoPeriodic(_In_opt_ ADMISSION_CONTEXT *Context);
+/* NP-1: queue the periodic MPO publish from a path that may run above
+ * PASSIVE_LEVEL (Set3); no-op above DISPATCH_LEVEL or without the work item. */
+void AdmissionQueueMpoPublish(_In_opt_ ADMISSION_CONTEXT *Context);
+/* NP-1: allocate (scanout start, PASSIVE) / drain and free (scanout stop,
+ * PASSIVE) the Set3-side publish work item. */
+_IRQL_requires_(PASSIVE_LEVEL)
+void AdmissionMpoPublishStart(_In_opt_ ADMISSION_CONTEXT *Context);
+_IRQL_requires_(PASSIVE_LEVEL)
+void AdmissionMpoPublishStop(_In_opt_ ADMISSION_CONTEXT *Context);
+/* S2-1b: Wom1MpoGateReceipt (PASSIVE_LEVEL; ignored above). */
+void AdmissionRecordMpoGate(_In_ ADMISSION_CONTEXT *Context);
+LONGLONG AdmissionMpoGateQpc(_In_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutSetTimelinePaused(_Inout_ ADMISSION_CONTEXT *Context,
                                           _In_ BOOLEAN Paused);
 VOID AdmissionScanoutDpc(_Inout_ ADMISSION_CONTEXT *Context);
@@ -2417,6 +2562,11 @@ DXGKDDI_QUERYVIDPNHWCAPABILITY AdmissionTraceDdiQueryVidPnHWCapability;
 DXGKDDI_SETVIDPNSOURCEADDRESS AdmissionDdiSetVidPnSourceAddress;
 DXGKDDI_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3
     AdmissionDdiSetVidPnSourceAddressWithMultiPlaneOverlay3;
+/* S2 (mpo_windows.c): registered always; dxgkrnl calls them only while
+ * DRIVERCAPS.SupportMultiPlaneOverlay is TRUE (R22). */
+DXGKDDI_CHECKMULTIPLANEOVERLAYSUPPORT3
+    AdmissionDdiCheckMultiPlaneOverlaySupport3;
+DXGKDDI_GETMULTIPLANEOVERLAYCAPS AdmissionDdiGetMultiPlaneOverlayCaps;
 DXGKDDI_STOP_DEVICE_AND_RELEASE_POST_DISPLAY_OWNERSHIP
 AdmissionDdiStopDeviceAndReleasePostDisplayOwnership;
 DXGKDDI_NOTIFY_ACPI_EVENT AdmissionDdiNotifyAcpiEvent;

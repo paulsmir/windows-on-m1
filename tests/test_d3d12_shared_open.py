@@ -55,6 +55,7 @@ struct D3D11DDIARG_CREATERESOURCE {
 };
 #include "agx_d3d12_shared_open.h"
 #include "direct_flip_contract.h"
+#include "umd_primary_backbuffer.h"
 '''
         main = r'''
 int main() {
@@ -66,6 +67,7 @@ int main() {
   ADMISSION_UMD_DIRECT_FLIP_RESOURCE description={};
   assert(AdmissionUmdDescribePrimary(CreateResource,&description));
   ADMISSION_PRESENT_RESOURCE_DATA resourceData={};
+  const UINT CreateFlags=0; ADMISSION_UMD_PRIMARY_MAPPING primary={};
   struct {const void *pPrivateDriverData; unsigned PrivateDriverDataSize;} allocate={},allocationInfo={};
 SERIALIZE
   unsigned char rw[sizeof(resourceData)+1], aw[sizeof(description.Allocation)+1];

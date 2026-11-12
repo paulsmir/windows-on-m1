@@ -29,10 +29,14 @@ typedef int NTSTATUS,APPLE_AGX_FIXED_PANEL_RESULT;
 #define AppleAgxFixedPanelPresentPending 1
 #define ADMISSION_MEMORY_LOCAL_SEGMENT 2
 typedef struct {int SourceVisible;} ADMISSION_CONTEXT;
-typedef struct {int IrqEnabled,Stopping,PresentGate,Panel,PendingValid,NextMpo,PendingMpo,DeferredFormat;
- LONG64 DeferredPrimaryAddress,PendingPhysicalAddress,PendingSequence,NextMpoPresentId,PendingMpoPresentId,PendingQueuedTime100ns;} ADMISSION_SCANOUT_RUNTIME;
+typedef struct {int IrqEnabled,Stopping,PresentGate,Panel,PendingValid,DeferredFormat;
+ LONG64 DeferredPrimaryAddress,PendingPhysicalAddress,PendingSequence,PendingQueuedTime100ns;} ADMISSION_SCANOUT_RUNTIME;
 static ADMISSION_SCANOUT_RUNTIME r;
-static unsigned calls,clock_calls;
+static unsigned calls,clock_calls,mpo_takes;
+/* S2: the tagged MPO identity moves with the queued flip (V2 kind). */
+#define ADMISSION_SCANOUT_MPO_KIND_V2 0
+static void AdmissionScanoutTakeNextMpo(ADMISSION_SCANOUT_RUNTIME*p,int k){
+ assert(p==&r && k==ADMISSION_SCANOUT_MPO_KIND_V2 && r.PendingValid);++mpo_takes;}
 static ADMISSION_SCANOUT_RUNTIME* AdmissionScanoutGet(ADMISSION_CONTEXT*c){(void)c;return &r;}
 static int InterlockedCompareExchange(int*p,int v,int c){int o=*p;if(o==c)*p=v;return o;}
 static int InterlockedExchange(int*p,int v){int o=*p;*p=v;return o;}
@@ -49,7 +53,7 @@ static int AppleAgxFixedPanelQueuePresent(int*p,int s,APPLE_AGX_U64 o,APPLE_AGX_
 int main(void){
  ADMISSION_CONTEXT c={1}; r.IrqEnabled=1;r.DeferredPrimaryAddress=0x123000;r.DeferredFormat=1;
  assert(AdmissionScanoutQueueDeferred(&c)==0);
- assert(calls==1 && clock_calls==1 && r.PendingSequence==99 && r.PendingValid);
+ assert(calls==1 && clock_calls==1 && r.PendingSequence==99 && r.PendingValid && mpo_takes==1);
  assert(AdmissionScanoutQueueDeferred(&c)==STATUS_DEVICE_BUSY);
  c.SourceVisible=0;assert(AdmissionScanoutQueueDeferred(&c)==0);
  assert(calls==1 && clock_calls==1);

@@ -244,6 +244,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
 
   AdmissionRecordDevice(context == NULL ? NULL : context->PhysicalDeviceObject,
                         AdmissionReceiptStartEntered, STATUS_PENDING);
+  if (context != NULL) {
+    InterlockedIncrement(&context->MpoGate.StartDeviceCount);
+    context->MpoGate.StartEntryQpc = AdmissionMpoGateQpc(context);
+  }
   AdmissionRecordStartStage(context, AdmissionStartEntered, STATUS_PENDING);
   if (context == NULL || DxgkStartInfo == NULL || DxgkInterface == NULL ||
       NumberOfVideoPresentSources == NULL || NumberOfChildren == NULL)
@@ -549,6 +553,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   InterlockedExchange(&context->FeatureReadyMask,
                       APPLE_AGX_WDDM_REQUIRED_READY_MASK);
   AdmissionRecordStartStage(context, AdmissionStartComplete, STATUS_SUCCESS);
+  context->MpoGate.StartExitQpc = AdmissionMpoGateQpc(context);
+  AdmissionRecordMpoGate(context);
   *NumberOfVideoPresentSources = 1;
   *NumberOfChildren = 1;
   AdmissionRecordDevice(context->PhysicalDeviceObject,
@@ -558,6 +564,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceContext) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  if (context != NULL) {
+    InterlockedIncrement(&context->MpoGate.StopDeviceCount);
+    AdmissionRecordMpoGate(context);
+  }
   NTSTATUS status;
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
@@ -701,6 +711,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     HANDLE Adapter, const DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   NTSTATUS status = STATUS_NOT_SUPPORTED;
+  LONG drvCapsZeroed = 0;
   if (context == NULL || QueryAdapterInfo == NULL)
     return STATUS_INVALID_PARAMETER;
 
@@ -759,6 +770,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     /* OV5 step 2: Wom1Ov5TaWaiver = 1 with the 3D-queue Barrier path. */
     if (InterlockedCompareExchange(&context->GpuRenderTaIndependent, 0, 0) != 0)
       info->Features |= AGX_WIN32_DEVICE_FEATURE_RENDER_TA_INDEPENDENT;
+    /* S2: Wom1MpoTwoPlanes effective (broker bit 9 + V3 read back at start). */
+    if (AdmissionScanoutMpoEffective(context))
+      info->Features |= AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES;
     status = STATUS_SUCCESS;
     break;
   }
@@ -789,6 +803,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
           &featureInput, &featureOutput);
       if (featureResult == AppleAgxWddmFeatureContractIncomplete &&
           featureOutput.PublishCapsMask == 0u) {
+        drvCapsZeroed = 1;
         status = STATUS_SUCCESS;
       } else if (featureResult == AppleAgxWddmFeatureContractReady &&
                  featureOutput.PublishCapsMask ==
@@ -818,6 +833,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         caps->SupportSmoothRotation = TRUE;
         caps->SupportPerEngineTDR = TRUE;
         caps->SupportDirectFlip = TRUE;
+        /* S2 ATOMIC CONTRACT (specification v1): only while the
+         * Wom1MpoTwoPlanes switch is effective (switch, broker bit 9 and
+         * the V3 negotiation read back).  Field names and members: WDK
+         * 26100 d3dkmddi.h DXGK_DRIVERCAPS (SupportMultiPlaneOverlay,
+         * MaxOverlayPlanes, SupportMultiPlaneOverlayImmediateFlip,
+         * CursorScaledWithMultiPlaneOverlayPlane0,
+         * MaxQueuedMultiPlaneOverlayFlipVSync).  SupportDirectFlip stays
+         * TRUE (dxgkrnl refuses MPO without it, R22). */
+        if (AdmissionScanoutMpoEffective(context)) {
+          caps->SupportMultiPlaneOverlay = TRUE;
+          caps->MaxOverlayPlanes = 2u;
+          caps->SupportMultiPlaneOverlayImmediateFlip = FALSE;
+          caps->CursorScaledWithMultiPlaneOverlayPlane0 = FALSE;
+          caps->MaxQueuedMultiPlaneOverlayFlipVSync = 1u;
+        }
         /* The current RenderKm path implements ColorFill only and the GPU
          * aperture is not declared cache-coherent.  Keep CDD GDI command
          * buffers disabled until both requirements are met. */
@@ -1150,6 +1180,39 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
   AdmissionRecordQuery(context->PhysicalDeviceObject, QueryAdapterInfo->Type,
                        QueryAdapterInfo->OutputDataSize, status,
                        QueryAdapterInfo->pOutputData);
+  /* S2-1b: per-type counts, refusals, and every DRIVERCAPS answer. */
+  {
+    const ULONG type = (ULONG)QueryAdapterInfo->Type;
+    const ULONG slot = type < ADMISSION_MPO_GATE_QUERY_TYPES - 1u
+                           ? type : ADMISSION_MPO_GATE_QUERY_TYPES - 1u;
+    InterlockedIncrement(&context->MpoGate.QueryTypeCounts[slot]);
+    if (!NT_SUCCESS(status))
+      InterlockedOr(&context->MpoGate.QueryRefusalBitmap[slot / 32u],
+                    (LONG)(1u << (slot % 32u)));
+    if (QueryAdapterInfo->Type == DXGKQAITYPE_DRIVERCAPS) {
+      ADMISSION_MPO_GATE_CAPS answer;
+      const DXGK_DRIVERCAPS *caps =
+          QueryAdapterInfo->pOutputData != NULL &&
+                  QueryAdapterInfo->OutputDataSize >= sizeof(DXGK_DRIVERCAPS)
+              ? (const DXGK_DRIVERCAPS *)QueryAdapterInfo->pOutputData
+              : NULL;
+      RtlZeroMemory(&answer, sizeof(answer));
+      answer.Valid = 1;
+      answer.Status = (LONG)status;
+      answer.Zeroed = drvCapsZeroed;
+      answer.Qpc = AdmissionMpoGateQpc(context);
+      if (caps != NULL) {
+        answer.Mpo = caps->SupportMultiPlaneOverlay ? 1 : 0;
+        answer.DirectFlip = caps->SupportDirectFlip ? 1 : 0;
+        answer.MaxOverlayPlanes = (LONG)caps->MaxOverlayPlanes;
+        answer.WddmVersion = (LONG)caps->WDDMVersion;
+      }
+      if (InterlockedIncrement(&context->MpoGate.DrvCapsQueryCount) == 1)
+        context->MpoGate.FirstDrvCaps = answer;
+      context->MpoGate.LastDrvCaps = answer;
+      AdmissionRecordMpoGate(context);
+    }
+  }
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionRecordGpuvaG3Query(context->PhysicalDeviceObject,
                               QueryAdapterInfo, status,

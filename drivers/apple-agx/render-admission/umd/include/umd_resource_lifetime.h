@@ -17,6 +17,10 @@ struct _ADMISSION_UMD_RETIREMENT {
   ULONG Origin; /* 1=CreateResource, 2=OpenResource; diagnostic only. */
   BOOL Primary;
   BOOL Shared;
+  /* PL-1: allocated with D3DDDICB_ALLOCATE.hResource NULL (a non-shared
+   * resource with pPrimaryDesc); released by HandleList, never by the
+   * runtime resource, so it may outlive the runtime's DestroyResource. */
+  BOOL DeviceAssociated;
 };
 
 typedef struct _ADMISSION_UMD_RETIREMENT_QUEUE {

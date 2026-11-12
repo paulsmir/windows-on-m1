@@ -26,6 +26,7 @@
 #include "gallium/frontends/d3d10umd/State.h"
 
 #include <stddef.h>
+#include <string.h>
 #include <mutex>
 #include <vector>
 
@@ -33,6 +34,8 @@
 #include "util/format/u_format.h"
 
 #include "agx_d3d11_ddi.h"
+#define AGX_DXGI_MPO_DDI_TYPES
+#include "agx_dxgi_mpo.h"
 
 extern "C" VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
                                           const UINT *Values, UINT Count);
@@ -1067,27 +1070,123 @@ ReclaimResources(DXGI_DDI_ARG_RECLAIMRESOURCES *args)
    return S_OK;
 }
 
-/* No multiplane overlays: the primary plane only. */
+/* S2: multiplane overlays follow the kernel (agx_dxgi_mpo.h). Without the
+ * kernel's two-plane answer: the primary plane only, as before S2. */
+/* S2-1b: "measure-dxgi-mpo-entries" {mask of MPO entries this process
+ * called at least once, the entry that set a new bit}; one row per new bit.
+ * 0x1 GetMultiplaneOverlayCaps, 0x2 GetMultiplaneOverlayGroupCaps,
+ * 0x4 PresentMultiplaneOverlay, 0x8 PresentMultiplaneOverlay1,
+ * 0x10 CheckMultiplaneOverlayColorSpaceSupport, 0x20 kernel predicate. */
+static UINT mpo_entries_seen;
+static void
+mpo_entry(UINT bit)
+{
+   if (mpo_entries_seen & bit)
+      return;
+   mpo_entries_seen |= bit;
+   dxgi_receipt("measure-dxgi-mpo-entries", S_OK, mpo_entries_seen, bit);
+}
+
+bool
+kernel_two_planes(DXGI_DDI_HDEVICE hDevice, UINT vidPnSourceId)
+{
+   mpo_entry(0x20u);
+   Device *device = CastDevice(hDevice);
+   return device && device->windows &&
+          AgxD3d10WindowsKernelMpoTwoPlanes(device->windows, vidPnSourceId);
+}
+
 HRESULT APIENTRY
 GetMultiplaneOverlayCaps(DXGI_DDI_ARG_GETMULTIPLANEOVERLAYCAPS *args)
 {
+   mpo_entry(0x1u);
    if (!args)
       return E_INVALIDARG;
-   args->MultiplaneOverlayCaps.MaxPlanes = 1;
-   args->MultiplaneOverlayCaps.NumCapabilityGroups = 0;
+   AgxDxgiMpoFillCaps(kernel_two_planes(args->hDevice, args->VidPnSourceId),
+                      &args->MultiplaneOverlayCaps);
+   /* S2-1b: "measure-dxgi-mpo-caps" {calls in this process, MaxPlanes |
+    * VidPnSourceId << 16}: the first 8 calls, then power-of-two counts.
+    * Receipt-only counter (a lost increment under a race is harmless). */
+   {
+      static UINT calls;
+      const UINT n = ++calls;
+      if (n <= 8u || (n & (n - 1u)) == 0u)
+         dxgi_receipt("measure-dxgi-mpo-caps", S_OK, n,
+                      args->MultiplaneOverlayCaps.MaxPlanes |
+                          (args->VidPnSourceId << 16));
+   }
    return S_OK;
 }
 
 HRESULT APIENTRY
 GetMultiplaneOverlayGroupCaps(DXGI_DDI_ARG_GETMULTIPLANEOVERLAYGROUPCAPS *args)
 {
+   mpo_entry(0x2u);
+   if (args && AgxDxgiMpoFillGroupCaps(kernel_two_planes(args->hDevice, args->VidPnSourceId),
+                                       args->GroupIndex, &args->MultiplaneOverlayGroupCaps))
+      return S_OK;
    dxgi_receipt("reject-dxgi-mpo-group", E_INVALIDARG, args ? args->GroupIndex : ~0u, 0);
    return E_INVALIDARG;
+}
+
+/* Both DXGI plane forms carry LayerIndex, Enabled, hResource and
+ * SubResourceIndex; the attributes stay with the runtime, which passes them
+ * to the kernel (DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3). Every
+ * plane must be one of this device's presentation resources. */
+template <typename Plane>
+HRESULT
+present_planes(const char *stage, DXGI_DDI_HDEVICE hDevice, void *dxgiContext, UINT count,
+               const Plane *planes)
+{
+   Device *device = CastDevice(hDevice);
+   AGX_DXGI_MPO_PLANE neutral[AGX_DXGI_MPO_PLANES] = {};
+   AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *records[AGX_DXGI_MPO_PLANES] = {};
+   unsigned reason = !planes ? AgxDxgiMpoPlanesArgument :
+                     count == 0u || count > AGX_DXGI_MPO_PLANES ? AgxDxgiMpoPlanesCount :
+                                                                  AgxDxgiMpoPlanesOk;
+   /* DP-1: "measure-dxgi-mpo-disabled" for a plane list that names a
+    * disabled plane: {count, plane 0 code | plane 1 code << 16}, code =
+    * LayerIndex | Enabled << 8 | (hResource NULL) << 9; the first 16 such
+    * presents per process (receipt-only counter; a lost increment under a
+    * race is harmless). */
+   if (planes && count >= 1u && count <= AGX_DXGI_MPO_PLANES) {
+      UINT codes = 0u;
+      bool any_disabled = false;
+      for (UINT i = 0; i < count; ++i) {
+         any_disabled = any_disabled || !planes[i].Enabled;
+         codes |= ((planes[i].LayerIndex & 0xffu) | (planes[i].Enabled ? 0x100u : 0u) |
+                   (planes[i].hResource == 0 ? 0x200u : 0u)) << (16u * i);
+      }
+      static UINT disabled_rows;
+      if (any_disabled && ++disabled_rows <= 16u)
+         dxgi_receipt("measure-dxgi-mpo-disabled", S_OK, count, codes);
+   }
+   for (UINT i = 0; reason == AgxDxgiMpoPlanesOk && i < count; ++i) {
+      Resource *resource = CastResource(planes[i].hResource);
+      const bool owned = device && resource && resource->owner_device == device &&
+                         resource->presentation;
+      neutral[i] = AgxDxgiMpoPlane(planes[i].LayerIndex, planes[i].Enabled, owned,
+                                   planes[i].SubResourceIndex);
+      /* DP-1: a disabled plane carries no resource to the submit. */
+      records[i] = owned && planes[i].Enabled ? resource->presentation : NULL;
+   }
+   if (reason == AgxDxgiMpoPlanesOk)
+      reason = AgxDxgiMpoCheckPlanes(neutral, count);
+   if (reason != AgxDxgiMpoPlanesOk) {
+      dxgi_receipt(stage, E_INVALIDARG, reason, count);
+      return E_INVALIDARG;
+   }
+   return AgxD3d10WindowsPresentationSubmitPlanes(device->windows, records, neutral, count,
+                                                  dxgiContext);
 }
 
 HRESULT APIENTRY
 PresentMultiplaneOverlay(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args)
 {
+   mpo_entry(0x4u);
+   if (args && kernel_two_planes(args->hDevice, args->VidPnSourceId))
+      return present_planes("reject-dxgi-mpo-present", args->hDevice, args->pDXGIContext,
+                            args->PresentPlaneCount, args->pPresentPlanes);
    dxgi_receipt("reject-dxgi-mpo-present", E_NOTIMPL, args ? args->PresentPlaneCount : ~0u, 0);
    return E_NOTIMPL;
 }
@@ -1095,6 +1194,10 @@ PresentMultiplaneOverlay(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args)
 HRESULT APIENTRY
 PresentMultiplaneOverlay1(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY1 *args)
 {
+   mpo_entry(0x8u);
+   if (args && kernel_two_planes(args->hDevice, args->VidPnSourceId))
+      return present_planes("reject-dxgi-mpo-present1", args->hDevice, args->pDXGIContext,
+                            args->PresentPlaneCount, args->pPresentPlanes);
    dxgi_receipt("reject-dxgi-mpo-present1", E_NOTIMPL, args != NULL, 1);
    return E_NOTIMPL;
 }
@@ -1102,9 +1205,12 @@ PresentMultiplaneOverlay1(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY1 *args)
 HRESULT APIENTRY
 CheckMultiplaneOverlayColorSpaceSupport(DXGI_DDI_ARG_CHECKMULTIPLANEOVERLAYCOLORSPACESUPPORT *args)
 {
+   mpo_entry(0x10u);
    if (!args)
       return E_INVALIDARG;
-   args->Supported = FALSE;
+   args->Supported = AgxDxgiMpoColorSpaceSupported(
+                        kernel_two_planes(args->hDevice, args->VidPnSourceId),
+                        (unsigned)args->Format, (unsigned)args->ColorSpace) ? TRUE : FALSE;
    return S_OK;
 }
 
@@ -1149,9 +1255,38 @@ AgxWddm2_0FillDxgiFuncs(DXGI1_4_DDI_BASE_FUNCTIONS *f)
 }
 
 /* PFND3D10DDI_RETRIEVESUBOBJECT: no video device (D3D11_1DDI_VIDEO_FUNCTIONS) */
-HRESULT APIENTRY
-AgxWddm2_0RetrieveSubObject(D3D10DDI_HDEVICE, UINT32 id, SIZE_T, void *, SIZE_T, void *)
+/* S2-1e step 0 (receipt-only, EXP2351 offline result): DWM's DDisplay output path asks for the WDDM 2.0
+ * video function table (D3DWDDM2_0DDI_VIDEO_FUNCTIONS, 3) once per set-up attempt and tears the output down
+ * when it is missing.  The table below answers "nothing supported" truthfully (no decoder profiles, no
+ * video-processor formats, creation refused) and records which entries a process calls
+ * ("measure-dxgi-video-ddi" {entry index in D3DWDDM2_0DDI_VIDEODEVICEFUNCS, call count}). */
+static volatile LONG agx_video_ddi_calls[128];
+static void
+agx_video_ddi_receipt(UINT index)
 {
+   const LONG n = InterlockedIncrement(&agx_video_ddi_calls[index & 127u]);
+   if (n <= 8 || (n & (n - 1)) == 0) {
+      UINT values[2] = {index, (UINT)n};
+      AgxD3d10WindowsDiagnostic("measure-dxgi-video-ddi", S_OK, values, 2u);
+   }
+}
+#include "agx_d3d11_video_ddi.inc"
+
+HRESULT APIENTRY
+AgxWddm2_0RetrieveSubObject(D3D10DDI_HDEVICE, UINT32 id, SIZE_T paramSize, void *params, SIZE_T, void *)
+{
+   if (id == D3DWDDM2_0DDI_VIDEO_FUNCTIONS && params && paramSize >= sizeof(D3DWDDM2_0DDI_VIDEO_INPUT)) {
+      D3DWDDM2_0DDI_VIDEO_INPUT *input = (D3DWDDM2_0DDI_VIDEO_INPUT *)params;
+      UINT values[2] = {id, (UINT)input->Relocate};
+      if (!input->pWDDM2_0VideoDeviceFuncs) {
+         AgxD3d10WindowsDiagnostic("measure-wddm2-retrieve-subobject", E_INVALIDARG, values, 2u);
+         return E_INVALIDARG;
+      }
+      if (!input->Relocate)
+         agx_video_ddi_fill(input->pWDDM2_0VideoDeviceFuncs);
+      AgxD3d10WindowsDiagnostic("measure-wddm2-retrieve-subobject", S_OK, values, 2u);
+      return S_OK;
+   }
    UINT values[1] = {id};
    AgxD3d10WindowsDiagnostic("measure-wddm2-retrieve-subobject", E_NOTIMPL, values, 1u);
    return E_NOTIMPL;

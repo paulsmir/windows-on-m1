@@ -52,6 +52,7 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelInitialize(
   Panel->DeferredOffset = 0ULL;
   Panel->DeferredValid = APPLE_AGX_SCANOUT_FALSE;
   Panel->Ownership = AppleAgxFixedPanelUnregistered;
+  Panel->RequestTwoLayers = APPLE_AGX_SCANOUT_FALSE;
   result = AppleAgxScanoutInitialize(&Panel->Scanout, Io, FirstSequence,
                                      MaxPolls);
   return AppleAgxFixedPanelMapScanoutResult(result);
@@ -66,6 +67,13 @@ APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelStart(
   result = AppleAgxScanoutQualify(&Panel->Scanout);
   if (result != AppleAgxScanoutOk)
     return AppleAgxFixedPanelMapScanoutResult(result);
+  /* S2 (broker report steps 1-2): negotiate V3 while UNREGISTERED, before
+   * REGISTER_POOL, and only when asked and advertised.  A refused or
+   * ignored negotiation leaves the panel on V2, exactly as without it. */
+  Panel->Scanout.TwoLayers = APPLE_AGX_SCANOUT_FALSE;
+  if (Panel->RequestTwoLayers &&
+      AppleAgxScanoutTwoLayersAdvertised(&Panel->Scanout))
+    (void)AppleAgxScanoutNegotiateTwoLayers(&Panel->Scanout);
   result = AppleAgxScanoutRegisterPool(&Panel->Scanout, Panel->PoolIpa,
                                        Panel->PoolBytes, DeadlineMs);
   if (result != AppleAgxScanoutOk) {
@@ -382,6 +390,30 @@ APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelTakeDeferred(
   Panel->DeferredOffset = 0ULL;
   Panel->DeferredValid = APPLE_AGX_SCANOUT_FALSE;
   return APPLE_AGX_SCANOUT_TRUE;
+}
+
+APPLE_AGX_SCANOUT_BOOL AppleAgxFixedPanelTwoLayers(
+    const APPLE_AGX_FIXED_PANEL *Panel) {
+  return Panel != APPLE_AGX_FIXED_PANEL_NULL && Panel->Started &&
+                 Panel->Scanout.TwoLayers
+             ? APPLE_AGX_SCANOUT_TRUE
+             : APPLE_AGX_SCANOUT_FALSE;
+}
+
+APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelQueueCommitLayers(
+    APPLE_AGX_FIXED_PANEL *Panel, const APPLE_AGX_SCANOUT_LAYER *Layers,
+    APPLE_AGX_SCANOUT_U32 Count, APPLE_AGX_SCANOUT_U64 *Sequence) {
+  APPLE_AGX_SCANOUT_RESULT result;
+
+  if (Panel == APPLE_AGX_FIXED_PANEL_NULL || Sequence == 0 ||
+      !Panel->Started || !Panel->Committed)
+    return AppleAgxFixedPanelInvalidState;
+  *Sequence = 0ULL;
+  if (!Panel->Visible)
+    return AppleAgxFixedPanelNotVisible;
+  result = AppleAgxScanoutQueueCommitLayers(&Panel->Scanout, Layers, Count,
+                                            Sequence);
+  return AppleAgxFixedPanelMapScanoutResult(result);
 }
 
 APPLE_AGX_FIXED_PANEL_RESULT AppleAgxFixedPanelStop(

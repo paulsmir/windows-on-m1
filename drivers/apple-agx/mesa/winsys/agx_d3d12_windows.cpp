@@ -3084,7 +3084,8 @@ extern "C" HRESULT AgxD3d12OwnerClearRenderTarget(AGX_D3D12_OWNER *owner, const 
 extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *owner, DXGI_FORMAT format, unsigned width,
                                                           unsigned height, int shader_resource, unsigned samples,
                                                           unsigned long long bytes, HANDLE runtime_resource,
-                                                          AGX_D3D12_BUFFER *texture, void **presentation, UINT *allocation) {
+                                                          int runtime_primary, AGX_D3D12_BUFFER *texture,
+                                                          void **presentation, UINT *allocation) {
   OwnerLock lock(owner);
   if (!owner || !owner->Screen || !owner->Context || !runtime_resource || !texture || !presentation || !allocation ||
       (samples != 1u && samples != 2u && samples != 4u))
@@ -3141,10 +3142,12 @@ extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *owner
   device.pDrvPrivate = &owner->Runtime;
   resource.pDrvPrivate = &record->Resource;
   runtime.handle = runtime_resource;
-  if (record->Converted)
-    AdmissionUmdCreateResourceWithMetadata(device, &create, resource, runtime, ADMISSION_PRESENT_RESOURCE_CONVERTED);
-  else
-    AdmissionUmdCreateResource(device, &create, resource, runtime);
+  /* BP-1: the runtime's HEAP_FLAG_PRIMARY reaches the allocation as a kernel
+   * primary; nothing changes for other heaps (CreateFlags 0 is exactly
+   * AdmissionUmdCreateResource). */
+  AdmissionUmdCreateResourceWithMetadata(device, &create, resource, runtime,
+                                         record->Converted ? ADMISSION_PRESENT_RESOURCE_CONVERTED : 0u,
+                                         runtime_primary ? ADMISSION_UMD_CREATE_RUNTIME_PRIMARY : 0u);
   HRESULT hr = record->Resource.Magic == ADMISSION_UMD_RESOURCE_MAGIC && record->Resource.Retirement
                    ? S_OK : (FAILED(owner->Runtime.LastScreenError) ? owner->Runtime.LastScreenError : E_INVALIDARG);
   if (SUCCEEDED(hr)) {

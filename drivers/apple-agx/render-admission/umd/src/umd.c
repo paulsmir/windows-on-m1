@@ -119,6 +119,9 @@ static ADMISSION_UMD_RESOURCE *AdmissionUmdResourceFromDxgi(
 
 
 
+/* BP-1: umd_primary_backbuffer.h names A8R8G8B8 storage without d3dukmdt.h. */
+C_ASSERT(ADMISSION_UMD_STORAGE_A8R8G8B8 == (UINT)D3DDDIFMT_A8R8G8B8);
+
 /* The storage AdmissionUmdDescribePrimary gives each shared DXGI format. */
 static BOOLEAN AdmissionUmdSharedFormatStorage(UINT DxgiFormat,
                                                UINT StorageFormat) {
@@ -161,13 +164,15 @@ static BOOLEAN AdmissionUmdDescribePrimary(
       CreateResource->pMipInfoList[0].TexelWidth > 8192u ||
       CreateResource->pMipInfoList[0].TexelHeight > 8192u ||
       CreateResource->pMipInfoList[0].TexelDepth != 1u ||
-      /* rc106: a primary must be an offered fixed-panel source mode (the
-       * native 2560x1600 one before it); the KMD commits only those. */
-      (CreateResource->pPrimaryDesc != NULL &&
-       AppleAgxFixedPanelModeIndex(
-           CreateResource->pMipInfoList[0].TexelWidth,
-           CreateResource->pMipInfoList[0].TexelHeight) >=
-           APPLE_AGX_FIXED_PANEL_MODE_COUNT) ||
+      /* WP-1 (EXP2362/EXP2363): the rc106 "a primary must be an offered
+       * fixed-panel mode" test no longer sits here.  With DirectFlip/MPO
+       * reported DXGI creates every flip-model back buffer as a displayable
+       * primary of the WINDOW's size (CS 1.6: 640x480); refusing it removed
+       * the application's device.  A primary is accepted at any size the
+       * allocator supports; the mode-equal geometry is required where an
+       * allocation becomes the full-screen scan-out: SetDisplayMode
+       * (AdmissionUmdResourceIsExact) in user mode, and the flip /
+       * SetVidPnSourceAddress / Set3 plane-0 paths in the KMD. */
       CreateResource->Usage != D3D10_DDI_USAGE_DEFAULT || CreateResource->MapFlags ||
       (CreateResource->MiscFlags & ~allowedMiscFlags) ||
       ((CreateResource->MiscFlags &
@@ -309,6 +314,18 @@ static HRESULT AdmissionUmdSubmitClear(
  * into a module, as module-name prefix and offset, flush, and continue the
  * search (the process fails exactly as before). */
 static PVOID AdmissionUmdNullCallHandler;
+/* EXP2360 receipt-only (architect 2026-11-12): which UMD device, runtime
+ * device and kernel context a DWM row belongs to (the kernel D3DKMT device
+ * handle is the runtime's and not visible here). {device pointer low/high,
+ * hRTDevice low, KernelContext low}. */
+static void AdmissionUmdDeviceIds(const ADMISSION_UMD_DEVICE *Device,
+                                  UINT *Ids) {
+  Ids[0] = (UINT)(ULONG_PTR)Device;
+  Ids[1] = (UINT)(((ULONG_PTR)Device >> 16) >> 16);
+  Ids[2] = Device != NULL ? (UINT)(ULONG_PTR)Device->RuntimeDevice.handle : 0u;
+  Ids[3] = Device != NULL ? (UINT)(ULONG_PTR)Device->KernelContext : 0u;
+}
+
 
 static void AdmissionUmdModuleOffset(ULONG_PTR Address, UINT *Name,
                                      UINT *Offset) {
@@ -377,6 +394,89 @@ static LONG CALLBACK AdmissionUmdNullCall(EXCEPTION_POINTERS *Info) {
  * first four stack words that point into a module other than the throw
  * machinery -- and continue the search unchanged. */
 static volatile LONG AdmissionUmdCxxThrows;
+/* EXP2359 (architect 2026-11-12): the first 32 throws ended in DWM's second
+ * output cycle of 91. After them, keep recording ddisplay ResultExceptions and
+ * d3d11 _com_errors (up to 256 more per process), copy the FailureInfo strings,
+ * and count every throw by site (first frame + line) per output cycle; the
+ * counts are written at each SetDisplayMode (AdmissionUmdCxxSiteFlush). */
+static volatile LONG AdmissionUmdCxxExtra;
+#define ADMISSION_UMD_CXX_SITES 16u
+typedef struct _ADMISSION_UMD_CXX_SITE {
+  UINT Name[2];
+  UINT Offset;
+  UINT Line;
+  UINT Count;
+} ADMISSION_UMD_CXX_SITE;
+static SRWLOCK AdmissionUmdCxxSiteLock = SRWLOCK_INIT;
+static ADMISSION_UMD_CXX_SITE AdmissionUmdCxxSites[ADMISSION_UMD_CXX_SITES];
+static UINT AdmissionUmdCxxSiteOverflow;
+static UINT AdmissionUmdCxxCycle;
+
+static void AdmissionUmdCxxSiteCount(const UINT *Frame, UINT Line) {
+  UINT i;
+  AcquireSRWLockExclusive(&AdmissionUmdCxxSiteLock);
+  for (i = 0u; i < ADMISSION_UMD_CXX_SITES; ++i) {
+    ADMISSION_UMD_CXX_SITE *site = &AdmissionUmdCxxSites[i];
+    if (site->Count != 0u && site->Name[0] == Frame[0] &&
+        site->Name[1] == Frame[1] && site->Offset == Frame[2] &&
+        site->Line == Line) {
+      ++site->Count;
+      break;
+    }
+    if (site->Count == 0u) {
+      site->Name[0] = Frame[0];
+      site->Name[1] = Frame[1];
+      site->Offset = Frame[2];
+      site->Line = Line;
+      site->Count = 1u;
+      break;
+    }
+  }
+  if (i == ADMISSION_UMD_CXX_SITES) ++AdmissionUmdCxxSiteOverflow;
+  ReleaseSRWLockExclusive(&AdmissionUmdCxxSiteLock);
+}
+
+/* One row per throw site seen since the previous SetDisplayMode:
+ * {cycle, module name prefix (2 words), first-frame offset, line, count},
+ * then a closing row {cycle, sites, overflow}. */
+static void AdmissionUmdCxxSiteFlush(void) {
+  ADMISSION_UMD_CXX_SITE sites[ADMISSION_UMD_CXX_SITES];
+  UINT overflow, cycle, n = 0u;
+  AcquireSRWLockExclusive(&AdmissionUmdCxxSiteLock);
+  memcpy(sites, AdmissionUmdCxxSites, sizeof(sites));
+  ZeroMemory(AdmissionUmdCxxSites, sizeof(AdmissionUmdCxxSites));
+  overflow = AdmissionUmdCxxSiteOverflow;
+  AdmissionUmdCxxSiteOverflow = 0u;
+  cycle = ++AdmissionUmdCxxCycle;
+  ReleaseSRWLockExclusive(&AdmissionUmdCxxSiteLock);
+  for (UINT i = 0u; i < ADMISSION_UMD_CXX_SITES && sites[i].Count != 0u; ++i) {
+    UINT values[6] = {cycle, sites[i].Name[0], sites[i].Name[1],
+                      sites[i].Offset, sites[i].Line, sites[i].Count};
+    AdmissionUmdDiagnostic("measure-cxx-cycle-site", S_OK, values, 6u);
+    ++n;
+  }
+  {
+    UINT values[3] = {cycle, n, overflow};
+    AdmissionUmdDiagnostic("measure-cxx-cycle-end", S_OK, values, 3u);
+  }
+}
+
+/* Up to 47 characters of a FailureInfo string (narrow, or wide narrowed to
+ * its low byte) as one row {tid, which, 12 words}: 1 pszFile, 2 pszFunction,
+ * 3 pszCode, 4 pszMessage. Caller is inside __try. */
+static void AdmissionUmdCxxString(UINT Tid, UINT Which, const void *Text,
+                                  BOOL Wide) {
+  UINT values[14] = {0};
+  values[0] = Tid;
+  values[1] = Which;
+  if (Text == NULL) return;
+  for (UINT i = 0u; i < 47u; ++i) {
+    UINT c = Wide ? (UINT)((const WCHAR *)Text)[i] : (UINT)((const BYTE *)Text)[i];
+    if (c == 0u) break;
+    values[2u + i / 4u] |= (c & 0xffu) << (8u * (i % 4u));
+  }
+  AdmissionUmdDiagnostic("reject-cxx-string", E_UNEXPECTED, values, 14u);
+}
 
 static BOOLEAN AdmissionUmdThrowMachinery(const UINT *Name) {
   UINT lower = Name[0] | 0x20202020u;
@@ -389,8 +489,12 @@ static void AdmissionUmdCxxThrowReceipt(EXCEPTION_POINTERS *Info) {
   const ULONG_PTR *stack;
   UINT thrown[11] = {0};
   UINT frames[13] = {0};
+  /* S2-1e: words 8..23 of the thrown object (a wil::ResultException keeps its
+   * FailureInfo -- type, flags, hr, status, failureId -- past the first 8). */
+  UINT more[16] = {0};
   UINT found = 0u;
-  if (InterlockedIncrement(&AdmissionUmdCxxThrows) > 32) return;
+  const void *strings[4] = {NULL, NULL, NULL, NULL};
+  BOOL keep;
   thrown[0] = frames[0] = GetCurrentThreadId();
   __try {
     const BYTE *object = (const BYTE *)record->ExceptionInformation[1];
@@ -411,6 +515,19 @@ static void AdmissionUmdCxxThrowReceipt(EXCEPTION_POINTERS *Info) {
       thrown[1u + i / 4u] |= (UINT)(BYTE)name[i] << (8u * (i % 4u));
     for (UINT i = 0u; object != NULL && i < 8u; ++i)
       thrown[3u + i] = ((const UINT *)object)[i];
+    for (UINT i = 0u; object != NULL && i < 16u; ++i)
+      more[i] = ((const UINT *)object)[8u + i];
+#if defined(_WIN64)
+    /* wil::ResultException FailureInfo (64-bit): pszMessage at object +48,
+     * pszCode +64, pszFunction +72, pszFile +80 (EXP2359 decode: threadId
+     * at word 14 matched every row). */
+    if (object != NULL && thrown[1] == 0x75736552u /* "Resu" */) {
+      strings[0] = *(const void *const *)(object + 80);
+      strings[1] = *(const void *const *)(object + 72);
+      strings[2] = *(const void *const *)(object + 64);
+      strings[3] = *(const void *const *)(object + 48);
+    }
+#endif
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
 #if defined(_M_ARM64)
@@ -429,8 +546,25 @@ static void AdmissionUmdCxxThrowReceipt(EXCEPTION_POINTERS *Info) {
     frames[3u + 3u * found] = offset;
     ++found;
   }
+  AdmissionUmdCxxSiteCount(&frames[1],
+                           thrown[1] == 0x75736552u ? more[14] : 0u);
+  keep = InterlockedIncrement(&AdmissionUmdCxxThrows) <= 32;
+  if (!keep) {
+    UINT lower = frames[1] | 0x20202020u;
+    BOOL ddisplayResult = thrown[1] == 0x75736552u && lower == 0x70736964u; /* "ddis" */
+    BOOL d3d11Com = thrown[1] == 0x6d6f635fu /* "_com" */ && lower == 0x31643364u; /* "d3d1" */
+    keep = (ddisplayResult || d3d11Com) &&
+           InterlockedIncrement(&AdmissionUmdCxxExtra) <= 256;
+  }
+  if (!keep) return;
   AdmissionUmdDiagnostic("reject-cxx-throw", E_UNEXPECTED, thrown, 11u);
   AdmissionUmdDiagnostic("reject-cxx-stack", E_UNEXPECTED, frames, 13u);
+  AdmissionUmdDiagnostic("reject-cxx-object", E_UNEXPECTED, more, 16u);
+  __try {
+    for (UINT i = 0u; i < 4u; ++i)
+      AdmissionUmdCxxString(thrown[0], i + 1u, strings[i], i == 3u);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  }
   AdmissionUmdDiagnosticFlush();
 }
 
@@ -739,13 +873,13 @@ VOID APIENTRY AdmissionUmdCreateResource(
     const D3D11DDIARG_CREATERESOURCE *CreateResource,
     D3D10DDI_HRESOURCE ResourceHandle,
     D3D10DDI_HRTRESOURCE RuntimeResource) {
-  AdmissionUmdCreateResourceWithMetadata(DeviceHandle, CreateResource, ResourceHandle, RuntimeResource, 0u);
+  AdmissionUmdCreateResourceWithMetadata(DeviceHandle, CreateResource, ResourceHandle, RuntimeResource, 0u, 0u);
 }
 
 VOID AdmissionUmdCreateResourceWithMetadata(
     D3D10DDI_HDEVICE DeviceHandle, const D3D11DDIARG_CREATERESOURCE *CreateResource,
     D3D10DDI_HRESOURCE ResourceHandle, D3D10DDI_HRTRESOURCE RuntimeResource,
-    UINT MetadataFlags) {
+    UINT MetadataFlags, UINT CreateFlags) {
   ADMISSION_UMD_DEVICE *device = AdmissionUmdDeviceFromHandle(DeviceHandle);
   ADMISSION_UMD_RESOURCE *resource =
       (ADMISSION_UMD_RESOURCE *)ResourceHandle.pDrvPrivate;
@@ -754,6 +888,7 @@ VOID AdmissionUmdCreateResourceWithMetadata(
   ADMISSION_UMD_DIRECT_FLIP_RESOURCE description;
   ADMISSION_PRESENT_RESOURCE_DATA resourceData;
   ADMISSION_UMD_RETIREMENT *retirement;
+  ADMISSION_UMD_PRIMARY_MAPPING primary;
   HRESULT result;
   if (device == NULL || resource == NULL ||
       RuntimeResource.handle == NULL ||
@@ -785,16 +920,24 @@ VOID AdmissionUmdCreateResourceWithMetadata(
   ZeroMemory(&allocate, sizeof(allocate));
   ZeroMemory(&allocationInfo, sizeof(allocationInfo));
   ZeroMemory(&resourceData, sizeof(resourceData));
+  /* BP-1: pPrimaryDesc (D3D10/11) or the D3D12 runtime's HEAP_FLAG_PRIMARY
+   * (CreateFlags) makes the allocation a kernel primary on source 0; only
+   * pPrimaryDesc makes a mode-setting (device-associated, PL-1) primary
+   * (umd_primary_backbuffer.h). */
+  primary = AdmissionUmdPrimaryMap(
+      CreateResource->pPrimaryDesc != NULL,
+      (CreateResource->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u,
+      (CreateResource->MiscFlags &
+       D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE) != 0u,
+      description.Displayable, CreateFlags);
   resourceData.Magic = ADMISSION_PRESENT_RESOURCE_MAGIC;
   resourceData.Version = ADMISSION_PRESENT_RESOURCE_VERSION;
   resourceData.Bytes = sizeof(resourceData);
   resourceData.Format = (UINT)CreateResource->Format;
   /* EXP1038: only scanout-capable (BGRA) resources are written primaries;
-   * the KMD admits that flag for A8R8G8B8 GDI-surface allocations only. */
-  resourceData.Flags = description.Displayable &&
-      (CreateResource->pPrimaryDesc != NULL ||
-       (CreateResource->MiscFlags &
-        D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE) != 0u)
+   * the KMD admits that flag for A8R8G8B8 GDI-surface allocations only
+   * (primary.WrittenPrimary requires description.Displayable). */
+  resourceData.Flags = primary.WrittenPrimary != 0u
       ? ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY : 0u;
   resourceData.Flags |= MetadataFlags;
   if (CreateResource->pPrimaryDesc != NULL &&
@@ -808,9 +951,18 @@ VOID AdmissionUmdCreateResourceWithMetadata(
   allocate.PrivateDriverDataSize = sizeof(resourceData);
   allocationInfo.pPrivateDriverData = &description.Allocation;
   allocationInfo.PrivateDriverDataSize = sizeof(description.Allocation);
-  allocationInfo.VidPnSourceId = 0u;
-  allocationInfo.Flags.Primary = CreateResource->pPrimaryDesc != NULL;
-  allocate.hResource = RuntimeResource.handle;
+  allocationInfo.VidPnSourceId = primary.VidPnSourceId;
+  allocationInfo.Flags.Primary = primary.AllocationPrimary;
+  /* PL-1: a non-shared resource with pPrimaryDesc may become the device's
+   * displayed (mode-setting) primary, whose kernel allocation must outlive
+   * the runtime's DestroyResource (umd_primary_retention.h). Allocate it
+   * device-associated (hResource NULL; Microsoft pfnAllocateCb: "the
+   * allocation is associated with the device instead of with a resource",
+   * "the difference is semantic") so its release names only the allocation
+   * (HandleList), never the runtime resource object (EXP975). Shared
+   * resources keep the runtime-owned KM resource. */
+  allocate.hResource =
+      primary.DeviceAssociated != 0u ? NULL : RuntimeResource.handle;
   allocate.NumAllocations = 1u;
   allocate.pAllocationInfo = &allocationInfo;
   result = device->KernelCallbacks->pfnAllocateCb(
@@ -819,13 +971,41 @@ VOID AdmissionUmdCreateResourceWithMetadata(
   {
     /* EXP1124 measurement (unbudgeted): which D3D resources the app creates
      * as presentation allocations, and how often (EXP1123: ~37/s, 41 ms). */
-    UINT values[8] = {(UINT)CreateResource->Format, CreateResource->BindFlags,
+    UINT values[12] = {(UINT)CreateResource->Format, CreateResource->BindFlags,
         CreateResource->MiscFlags, CreateResource->pMipInfoList[0].TexelWidth,
         CreateResource->pMipInfoList[0].TexelHeight,
         CreateResource->pPrimaryDesc != NULL ? 1u : 0u,
         (UINT)allocationInfo.hAllocation, (UINT)allocate.hKMResource};
+    AdmissionUmdDeviceIds(device, &values[8]); /* EXP2360 */
     AdmissionUmdDiagnostic("measure-present-resource", result, values,
                            (UINT)(sizeof(values) / sizeof(values[0])));
+  }
+  {
+    /* EXP2360 (architect): the primary descriptor the runtime passed and
+     * what this driver put into D3DDDI_ALLOCATIONINFO: {hAllocation, MiscFlags,
+     * pPrimaryDesc present, Flags, VidPnSourceId, ModeDesc Width, Height,
+     * Format, RefreshRate num/den, ScanlineOrdering, Rotation, Scaling,
+     * DriverFlags, AllocationInfo.Flags.Value, AllocationInfo.VidPnSourceId,
+     * device pointer low, BP-1: CreateFlags (1 = D3D12 HEAP_FLAG_PRIMARY),
+     * Displayable, resource-data Flags}. */
+    const DXGI_DDI_PRIMARY_DESC *primaryDesc = CreateResource->pPrimaryDesc;
+    UINT values[20] = {(UINT)allocationInfo.hAllocation,
+        CreateResource->MiscFlags, primaryDesc != NULL ? 1u : 0u,
+        primaryDesc != NULL ? primaryDesc->Flags : 0u,
+        primaryDesc != NULL ? (UINT)primaryDesc->VidPnSourceId : 0u,
+        primaryDesc != NULL ? primaryDesc->ModeDesc.Width : 0u,
+        primaryDesc != NULL ? primaryDesc->ModeDesc.Height : 0u,
+        primaryDesc != NULL ? (UINT)primaryDesc->ModeDesc.Format : 0u,
+        primaryDesc != NULL ? primaryDesc->ModeDesc.RefreshRate.Numerator : 0u,
+        primaryDesc != NULL ? primaryDesc->ModeDesc.RefreshRate.Denominator : 0u,
+        primaryDesc != NULL ? (UINT)primaryDesc->ModeDesc.ScanlineOrdering : 0u,
+        primaryDesc != NULL ? (UINT)primaryDesc->ModeDesc.Rotation : 0u,
+        primaryDesc != NULL ? (UINT)primaryDesc->ModeDesc.Scaling : 0u,
+        primaryDesc != NULL ? primaryDesc->DriverFlags : 0u,
+        allocationInfo.Flags.Value, (UINT)allocationInfo.VidPnSourceId,
+        (UINT)(ULONG_PTR)device, CreateFlags, description.Displayable,
+        resourceData.Flags};
+    AdmissionUmdDiagnostic("measure-present-primary-desc", result, values, 20u);
   }
   if (FAILED(result) || allocationInfo.hAllocation == 0u) {
     AdmissionUmdRetirementFree(retirement);
@@ -843,9 +1023,10 @@ VOID AdmissionUmdCreateResourceWithMetadata(
   retirement->KernelResource = allocate.hKMResource;
   retirement->KernelAllocation = allocationInfo.hAllocation;
   retirement->Origin = 1u;
-  retirement->Primary = CreateResource->pPrimaryDesc != NULL;
+  retirement->Primary = primary.RetirementPrimary != 0u;
   retirement->Shared =
       (CreateResource->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u;
+  retirement->DeviceAssociated = allocate.hResource == NULL;
   resource->Retirement = retirement;
 }
 
@@ -864,8 +1045,10 @@ VOID APIENTRY AdmissionUmdOpenResource(
   if (OpenResource != NULL && OpenResource->NumAllocations != 0u &&
       OpenResource->pOpenAllocationInfo != NULL) {
     const D3DDDI_OPENALLOCATIONINFO *input = OpenResource->pOpenAllocationInfo;
-    UINT values[8] = { OpenResource->NumAllocations,
-                      input->PrivateDriverDataSize, 0u, 0u, 0u, 0u, 0u, 0u };
+    UINT values[13] = { OpenResource->NumAllocations,
+                      input->PrivateDriverDataSize, 0u, 0u, 0u, 0u, 0u, 0u,
+                      (UINT)input->hAllocation };
+    AdmissionUmdDeviceIds(device, &values[9]); /* EXP2360 */
     if (input->pPrivateDriverData != NULL &&
         input->PrivateDriverDataSize == sizeof(ADMISSION_ALLOCATION_DESCRIPTION)) {
       const ADMISSION_ALLOCATION_DESCRIPTION *d =
@@ -873,7 +1056,10 @@ VOID APIENTRY AdmissionUmdOpenResource(
       values[2] = d->Format;values[3] = d->Width;values[4] = d->Height;
       values[5] = d->Pitch;values[6] = d->BytesPerPixel;values[7] = d->Type;
     }
-    AdmissionUmdDiagnostic("presentation-open", S_OK, values, ARRAYSIZE(values));
+    AdmissionUmdDiagnostic("presentation-open", S_OK, values, 8u);
+    /* EXP2360: the same row with the opened allocation and the device ids,
+     * as "measure-" so DWM's refusals-only session trace keeps it. */
+    AdmissionUmdDiagnostic("measure-presentation-open", S_OK, values, ARRAYSIZE(values));
   }
   if (device == NULL || resource == NULL || OpenResource == NULL ||
       RuntimeResource.handle == NULL ||
@@ -928,8 +1114,9 @@ VOID APIENTRY AdmissionUmdOpenResource(
   resource->DirectFlip.Allocation = *description;
   resource->DirectFlip.SegmentId = 2u;
   resource->DirectFlip.Linear = 1u;
+  /* BP-1: the create rule (AdmissionUmdDescribePrimary) by storage format */
   resource->DirectFlip.Displayable =
-      description->Format == (UINT)D3DDDIFMT_A8R8G8B8 ? 1u : 0u;
+      AdmissionUmdStorageDisplayable(description->Format);
   resource->WrittenPrimary = resourceData != NULL &&
       (resourceData->Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u;
   /* Resources created without our resource data (GDI, earlier packages)
@@ -973,7 +1160,21 @@ HRESULT AdmissionUmdReleaseRuntimeResource(
     return S_OK;
   /* The runtime handle dies with this call either way: never retain it. */
   resource->Retirement = NULL;
+  /* PL-1: the displayed primary's device-associated allocation stays. */
+  if (AdmissionUmdRetentionDestroy(&device->PrimaryRetention, retirement,
+                                   (unsigned int)retirement->KernelAllocation,
+                                   retirement->DeviceAssociated)) {
+    UINT values[3] = {(UINT)retirement->KernelAllocation, 1u, 0u};
+    AdmissionUmdDiagnostic("measure-primary-retention", S_OK, values, 3u);
+    return S_OK;
+  }
   result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
+  {
+    /* EXP2360: {allocation, path 1 = runtime release, HRESULT, device}. */
+    UINT values[5] = {(UINT)retirement->KernelAllocation, 1u, (UINT)result,
+        (UINT)(size_t)device, (UINT)((unsigned long long)(size_t)device >> 32)};
+    AdmissionUmdDiagnostic("measure-presentation-dealloc", result, values, 5u);
+  }
   AdmissionUmdRetirementFree(retirement);
   return result;
 }
@@ -990,17 +1191,39 @@ VOID APIENTRY AdmissionUmdDestroyResource(
     return;
   }
   retirement = resource->Retirement;
-  ZeroMemory(resource, sizeof(*resource));
-  if (retirement == NULL)
-    return;
   {
-    UINT values[4] = {(UINT)retirement->KernelAllocation, retirement->Origin,
-        retirement->Shared ? 1u : 0u, retirement->Primary ? 1u : 0u};
+    /* EXP2360: every destroy, also without a retirement record (Origin
+     * 0xffffffff then), with the resource's allocation and the UMD device
+     * pointer (matches the SetDisplayMode / MPO present rows). */
+    UINT values[6] = {retirement != NULL ? (UINT)retirement->KernelAllocation
+                                         : (UINT)resource->KernelAllocation,
+        retirement != NULL ? retirement->Origin : 0xffffffffu,
+        retirement != NULL && retirement->Shared ? 1u : 0u,
+        retirement != NULL && retirement->Primary ? 1u : 0u,
+        (UINT)(size_t)device,
+        (UINT)((unsigned long long)(size_t)device >> 32)};
     AdmissionUmdDiagnostic("measure-present-destroy", S_OK, values,
                            (UINT)(sizeof(values) / sizeof(values[0])));
   }
+  ZeroMemory(resource, sizeof(*resource));
+  if (retirement == NULL)
+    return;
+  /* PL-1: the displayed primary's device-associated allocation stays. */
+  if (AdmissionUmdRetentionDestroy(&device->PrimaryRetention, retirement,
+                                   (unsigned int)retirement->KernelAllocation,
+                                   retirement->DeviceAssociated)) {
+    UINT values[3] = {(UINT)retirement->KernelAllocation, 1u, 0u};
+    AdmissionUmdDiagnostic("measure-primary-retention", S_OK, values, 3u);
+    return;
+  }
   if (AdmissionUmdRetirementNeedsRuntimeResource(retirement)) {
     result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
+    {
+      /* EXP2360: path 2 = destroy, runtime-resource retirement. */
+      UINT values[5] = {(UINT)retirement->KernelAllocation, 2u, (UINT)result,
+          (UINT)(size_t)device, (UINT)((unsigned long long)(size_t)device >> 32)};
+      AdmissionUmdDiagnostic("measure-presentation-dealloc", result, values, 5u);
+    }
     AdmissionUmdRetirementFree(retirement);
     if (FAILED(result))
       AdmissionUmdSetError(device, result);
@@ -1008,6 +1231,12 @@ VOID APIENTRY AdmissionUmdDestroyResource(
   }
   if (retirement->Primary && !retirement->Shared) {
     result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
+    {
+      /* EXP2360: path 3 = destroy of a non-shared primary. */
+      UINT values[5] = {(UINT)retirement->KernelAllocation, 3u, (UINT)result,
+          (UINT)(size_t)device, (UINT)((unsigned long long)(size_t)device >> 32)};
+      AdmissionUmdDiagnostic("measure-presentation-dealloc", result, values, 5u);
+    }
     if (FAILED(result)) {
       AdmissionUmdRetirementQueue(&device->Retirement, retirement);
       AdmissionUmdSetError(device, result);
@@ -1015,6 +1244,13 @@ VOID APIENTRY AdmissionUmdDestroyResource(
     }
     AdmissionUmdRetirementFree(retirement);
   } else {
+    {
+      /* EXP2360: path 4 = shared or non-primary, deallocation deferred to
+       * the retirement queue (no callback yet; HRESULT S_OK). */
+      UINT values[5] = {(UINT)retirement->KernelAllocation, 4u, 0u,
+          (UINT)(size_t)device, (UINT)((unsigned long long)(size_t)device >> 32)};
+      AdmissionUmdDiagnostic("measure-presentation-dealloc", S_OK, values, 5u);
+    }
     AdmissionUmdRetirementQueue(&device->Retirement, retirement);
   }
 }
@@ -1225,8 +1461,40 @@ HRESULT APIENTRY AdmissionUmdSetDisplayMode(
     return E_INVALIDARG;
   ZeroMemory(&setMode, sizeof(setMode));
   setMode.hPrimaryAllocation = resource->KernelAllocation;
-  return device->KernelCallbacks->pfnSetDisplayModeCb(
-      device->RuntimeDevice.handle, &setMode);
+  {
+    /* EXP2356: DWM's single-plane MPO present of a fresh primary fails in
+     * the runtime callback (E_INVALIDARG); whether DXGI set that primary's
+     * mode first is the discriminator. {primary allocation, callback
+     * HRESULT, PrivateDriverFormatAttribute out}. "measure-": DWM's session
+     * trace is refusals-only. */
+    HRESULT result;
+    AdmissionUmdCxxSiteFlush();
+    result = device->KernelCallbacks->pfnSetDisplayModeCb(
+        device->RuntimeDevice.handle, &setMode);
+    UINT values[7] = {(UINT)setMode.hPrimaryAllocation, (UINT)result,
+        setMode.PrivateDriverFormatAttribute};
+    AdmissionUmdDeviceIds(device, &values[3]); /* EXP2360 */
+    AdmissionUmdDiagnostic("measure-dxgi-set-display-mode", result, values, 7u);
+    {
+      /* PL-1: after the callback returned; a retained primary that is no
+       * longer the displayed one is released now (HandleList). */
+      ADMISSION_UMD_RETIREMENT *released = (ADMISSION_UMD_RETIREMENT *)
+          AdmissionUmdRetentionSetDisplayMode(
+              &device->PrimaryRetention,
+              (unsigned int)setMode.hPrimaryAllocation, SUCCEEDED(result));
+      if (released != NULL) {
+        HRESULT freed = AdmissionUmdRetirementDeallocate(&device->Retirement,
+                                                        released);
+        UINT r[3] = {(UINT)released->KernelAllocation, 2u, (UINT)freed};
+        AdmissionUmdDiagnostic("measure-primary-retention", freed, r, 3u);
+        if (FAILED(freed))
+          AdmissionUmdRetirementQueue(&device->Retirement, released);
+        else
+          AdmissionUmdRetirementFree(released);
+      }
+    }
+    return result;
+  }
 }
 
 static HRESULT APIENTRY AdmissionUmdRotateResourceIdentities(

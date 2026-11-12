@@ -78,7 +78,7 @@ static HRESULT de(HANDLE,const D3DDDICB_DEALLOCATE*d){++deallocations; if(deallo
 struct CB { HRESULT(*pfnEvictCb)(HANDLE,const D3DDDICB_EVICT*); HRESULT(*pfnDeallocateCb)(HANDLE,const D3DDDICB_DEALLOCATE*); };
 struct ADMISSION_UMD_DEVICE { ULONGLONG OwnerCookie; ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[4]; SRWLOCK ScreenBufferLock; BOOL DrawTerminal;
   CB *KernelCallbacks; struct { HANDLE handle; } RuntimeDevice; HRESULT LastScreenError; };
-struct ADMISSION_UMD_RETIREMENT { UINT Origin; BOOL Primary,Shared; D3DKMT_HANDLE KernelResource,KernelAllocation; HANDLE RuntimeResource; };
+struct ADMISSION_UMD_RETIREMENT { UINT Origin; BOOL Primary,Shared,DeviceAssociated; D3DKMT_HANDLE KernelResource,KernelAllocation; HANDLE RuntimeResource; };
 static void AdmissionUmdVaRecordDeallocate(const void*,ULONGLONG,D3DKMT_HANDLE,ULONGLONG,HRESULT){}
 static unsigned cpu_receipts;
 static void AdmissionUmdDiagnostic(const char*name,HRESULT,const UINT*v,UINT n){if(strcmp(name,"measure-bo-cpu-access")==0){++cpu_receipts;assert(n==16 && v[0]==0x101 && v[8]==(65u<<20));}}

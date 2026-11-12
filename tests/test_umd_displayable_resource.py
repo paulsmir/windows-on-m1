@@ -17,7 +17,12 @@ class DisplayableResourceTests(unittest.TestCase):
         source = (RENDER / 'umd/src/umd.c').read_text()
         flags = source[source.index('resourceData.Flags ='):]
         flags = flags[:flags.index(';')]
-        self.assertIn('description.Displayable', flags)
+        # BP-1: the gating moved into umd_primary_backbuffer.h, whose host
+        # test (test_umd_primary_backbuffer.py) executes it
+        self.assertIn('primary.WrittenPrimary', flags)
+        mapping = source[source.index('primary = AdmissionUmdPrimaryMap('):]
+        mapping = mapping[:mapping.index(';')]
+        self.assertIn('description.Displayable', mapping)
 
     def test_observed_bgra_displayable_buffer_preserves_storage_contract(self):
         source = (RENDER / 'umd/src/umd.c').read_text()

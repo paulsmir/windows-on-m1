@@ -3009,6 +3009,129 @@ _Use_decl_annotations_ void AdmissionRecordDisplayModes(
     return;
   WriteBinary(key, L"Wom1DisplayModesReceipt", &snapshot, sizeof(snapshot));
   ZwClose(key);
+  AdmissionRecordMpo(Context);
+}
+
+/* S2-1b: Wom1MpoGateReceipt, written whatever the switch. */
+_Use_decl_annotations_ LONGLONG AdmissionMpoGateQpc(ADMISSION_CONTEXT *Context) {
+  LARGE_INTEGER frequency;
+  LARGE_INTEGER now = KeQueryPerformanceCounter(&frequency);
+  if (Context != NULL)
+    Context->MpoGate.QpcFrequency = frequency.QuadPart;
+  return now.QuadPart;
+}
+
+_Use_decl_annotations_ void AdmissionRecordMpoGate(ADMISSION_CONTEXT *Context) {
+  ADMISSION_MPO_GATE_RECEIPT snapshot;
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  RtlCopyMemory(&snapshot, (const VOID *)&Context->MpoGate, sizeof(snapshot));
+  snapshot.Version = (LONG)ADMISSION_MPO_GATE_RECEIPT_VERSION;
+  snapshot.Bytes = (LONG)sizeof(snapshot);
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+                                          PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1MpoGateReceipt", &snapshot, sizeof(snapshot));
+  ZwClose(key);
+}
+
+/* S2: Wom1MpoReceipt.  Nothing is written unless the Wom1MpoTwoPlanes
+ * switch was set at StartDevice (Mpo.Version is then nonzero). */
+_Use_decl_annotations_ void AdmissionRecordMpo(ADMISSION_CONTEXT *Context) {
+  ADMISSION_MPO_RECEIPT snapshot;
+  HANDLE key = NULL;
+  AdmissionRecordMpoGate(Context);
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedCompareExchange(&Context->Mpo.Version, 0, 0) == 0)
+    return;
+  RtlCopyMemory(&snapshot, (const VOID *)&Context->Mpo, sizeof(snapshot));
+  snapshot.Version = (LONG)ADMISSION_MPO_RECEIPT_VERSION;
+  snapshot.Bytes = (LONG)sizeof(snapshot);
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+                                          PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1MpoReceipt", &snapshot, sizeof(snapshot));
+  ZwClose(key);
+}
+
+/* EXP2357 (a): Set3 never persists Wom1MpoReceipt and in a healthy boot no
+ * VidPn DDI runs after startup, so the registry snapshot froze (Set3Calls /
+ * V2Presents 138) while the live counters kept counting.  DxgkDdiPresent is
+ * PASSIVE_LEVEL and runs for every DWM flip: publish from there at most once
+ * a second.  Receipt-only; nothing is written without the switch. */
+_Use_decl_annotations_ void AdmissionRecordMpoPeriodic(
+    ADMISSION_CONTEXT *Context) {
+  LONG64 now;
+  LONG64 last;
+  if (Context == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedCompareExchange(&Context->Mpo.Version, 0, 0) == 0)
+    return;
+  now = (LONG64)KeQueryInterruptTime();
+  last = InterlockedCompareExchange64(&Context->MpoPublishTime100ns, 0, 0);
+  if (now - last < 10000000LL ||
+      InterlockedCompareExchange64(&Context->MpoPublishTime100ns, now, last) !=
+          last)
+    return;
+  AdmissionRecordMpo(Context);
+}
+
+static IO_WORKITEM_ROUTINE AdmissionMpoPublishWorker;
+static VOID AdmissionMpoPublishWorker(_In_ PDEVICE_OBJECT DeviceObject,
+                                      _In_opt_ PVOID Parameter) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Parameter;
+  UNREFERENCED_PARAMETER(DeviceObject);
+  if (context == NULL) return;
+  AdmissionRecordMpoPeriodic(context);
+  InterlockedExchange(&context->MpoPublishQueued, 0);
+  KeSetEvent(&context->MpoPublishIdle, IO_NO_INCREMENT, FALSE);
+}
+
+_Use_decl_annotations_ void AdmissionQueueMpoPublish(
+    ADMISSION_CONTEXT *Context) {
+  LONG64 now;
+  PIO_WORKITEM work;
+  if (Context == NULL) return;
+  work = (PIO_WORKITEM)InterlockedCompareExchangePointer(
+      (PVOID volatile *)&Context->MpoPublishWork, NULL, NULL);
+  if (work == NULL || KeGetCurrentIrql() > DISPATCH_LEVEL ||
+      InterlockedCompareExchange(&Context->Mpo.Version, 0, 0) == 0)
+    return;
+  now = (LONG64)KeQueryInterruptTime();
+  if (now - InterlockedCompareExchange64(&Context->MpoPublishTime100ns, 0, 0) <
+          10000000LL ||
+      InterlockedCompareExchange(&Context->MpoPublishQueued, 1, 0) != 0)
+    return;
+  KeClearEvent(&Context->MpoPublishIdle);
+  IoQueueWorkItem(work, AdmissionMpoPublishWorker, DelayedWorkQueue, Context);
+}
+
+_Use_decl_annotations_ void AdmissionMpoPublishStart(
+    ADMISSION_CONTEXT *Context) {
+  if (Context == NULL || Context->MpoPublishWork != NULL ||
+      Context->PhysicalDeviceObject == NULL)
+    return;
+  KeInitializeEvent(&Context->MpoPublishIdle, NotificationEvent, TRUE);
+  Context->MpoPublishQueued = 0;
+  /* Without the item the receipt keeps the DdiPresent-only cadence. */
+  Context->MpoPublishWork = IoAllocateWorkItem(Context->PhysicalDeviceObject);
+}
+
+_Use_decl_annotations_ void AdmissionMpoPublishStop(
+    ADMISSION_CONTEXT *Context) {
+  PIO_WORKITEM work;
+  if (Context == NULL) return;
+  work = (PIO_WORKITEM)InterlockedExchangePointer(
+      (PVOID volatile *)&Context->MpoPublishWork, NULL);
+  if (work == NULL) return;
+  if (InterlockedCompareExchange(&Context->MpoPublishQueued, 0, 0) != 0)
+    (void)KeWaitForSingleObject(&Context->MpoPublishIdle, Executive,
+                                KernelMode, FALSE, NULL);
+  IoFreeWorkItem(work);
 }
 
 _Use_decl_annotations_ void AdmissionRecordDisplayDdi(
