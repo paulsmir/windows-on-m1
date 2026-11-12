@@ -6212,3 +6212,16 @@ boot was run. The previous entry stays as written.
   full screen, flicker). Not merged.
 - Build lesson: host shims stubbed a function that existed only on another branch (MSVC C4013 stopped the
   package); test_render_admission_calls_defined now requires every Admission* call to have a definition.
+
+## UPDATE 2026-11-12T23:19:14Z - EXP2380 FULL band on the display line; merge approved
+
+- EXP2380 (EXP2379 binaries, FULL profile): suite 119/0, no faults. GM PERF 53.04 / 52.66 (stop 51.696), FULL
+  8330 / 8360 (stop 8173; NP-1 band 8256..8424; macOS 9946 -> 83.8 / 84.1 %). CS full screen lone form
+  52.38 / 52.26. Scaled window Busy +0 with 192 merges; STRETCHFS 59.99 fps.
+- The display line does not move GravityMark (as expected: windowed GM already had its plane). Gap to macOS
+  unchanged at ~16 %; the compute-ratio item (OPTWIN macOS twin) is still waiting for a macOS session.
+- MERGE APPROVED: arch/hold1 (PITCH-1, STRETCH-1b, S3, FS-1/FS-1b, HOLD-1) into gpu/memory-latency once the
+  merged tree's gate is BASELINE_OK; no perf-baseline re-base. Operator looks for FS-1b/HOLD-1 were requested
+  four times and not received: accepted on receipts, gates and the FULL band.
+- Implemented offline, not on hardware: CUR-1 v2 (rebased on hold1), RQ-1 (failed-swap retry, gate held during
+  retry, exhausted ids reported as completed), RQ-2 m1n1 draft (latch deadline + fault injection).
