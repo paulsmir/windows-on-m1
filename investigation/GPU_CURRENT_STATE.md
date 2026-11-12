@@ -6184,3 +6184,16 @@ boot was run. The previous entry stays as written.
 - FS-1b (UMD only): LayerIndex < MaxPlanes and unique among listed planes; regression test on the EXP2377 list.
 - RULE extended: no layer of ours (UMD present path included) may refuse a plane set the KMD's Check3 accepted.
 - FS-1 as built is REJECTED; the kernel part of FS-1 is not yet shown on hardware beyond single commits.
+
+## UPDATE 2026-11-12T21:34:09Z - EXP2378 FS-1b: full-screen applications scan out directly on one plane - CONFIRMED
+
+- EXP2378 (arch/fs1 884c8a8a1 = S3 line + FS-1 + UMD LayerIndex rule fix, SHORT): full-screen CS ran in the lone
+  form (r2: lone +3892, two 0, v2 +40) at 51.90 fps (gate PASS, -0.18 %); warm 48.98 with lone +4044. GM gate
+  PASS. STRETCHFS 1280x800 -> full panel at 2.0x: 59.46 fps, 2669 scaled lone commits of 2676 frames, no device
+  removal. No Set3 refusal after support, S3Busy 0, no dwm fault. Operator look (pointer over the game,
+  stretched full screen) NOT yet received.
+- FS-1 + FS-1b ACCEPTED as behaviour pending the operator look. Direct full-screen scan-out gives CS no speed
+  gain over composition (51.9 vs ~52): its frame time is render-bound.
+- HOLD-1 (arch/hold1 rebased on FS-1b) next. Its discriminator cannot be full-screen CS any more (lone form);
+  it is the scaled-window scene, which showed Busy 196 in ~2700 commits (EXP2375) on every boot of this line,
+  plus a windowed CS arm: expect Busy -> ~0 and HoldMerges ~ the former Busy count.
