@@ -285,6 +285,11 @@ typedef struct _ADMISSION_MPO_RECEIPT {
    * did not read back zero. */
   volatile LONG VidMmSegment2Kib, PoolKib, ScratchOffsetKib;
   volatile LONG ScratchReady, ScratchNonZeroBytes;
+  /* CUR-1 v2 Set3: two-plane commits showing a scratch / a crop, scratch
+   * writes skipped (all-zero over all-zero), copy time in QPC ticks
+   * (count, min, max, sum; the read + fill + barrier). */
+  volatile LONG ScratchCommits, CropCommits, ScratchSkippedWrites;
+  volatile LONG ScratchCopyTicks[4];
 } ADMISSION_MPO_RECEIPT;
 /* HOLD-2 receipt: Wom1MpoTiming, the last ADMISSION_MPO_TIMING_ENTRIES Set3
  * outcomes, commits (by source) and latches with QPC, CPU and IRQL. */

@@ -164,6 +164,9 @@ static VOID AdmissionMpoInput(ADMISSION_CONTEXT *Context,
    * display scaler applies is not known (STRETCH-1 note). */
   Input->ScalingSupported = AdmissionScanoutMpoScaledSource(Context) ? 1u : 0u;
   Input->ScalerFilter = (unsigned int)ADMISSION_MPO_SCALER_FILTER_CURRENT;
+  /* CUR-1 v2: the scan-out scratch was zeroed and read back at start. */
+  Input->ScratchAvailable =
+      InterlockedCompareExchange(&Context->Mpo.ScratchReady, 0, 0) != 0 ? 1u : 0u;
 }
 
 /* STRETCH-1: the plane's source size differs from its destination's. */
@@ -696,6 +699,62 @@ static VOID AdmissionMpoNoteForm(ADMISSION_CONTEXT *Context, LONG Form) {
     InterlockedIncrement(&Context->Mpo.FromLone);
 }
 
+/* CUR-1 v2: fill the free scan-out scratch with the visible block of the
+ * clipped top plane and set Result->ScratchOffset.  Set3 runs up to DIRQL:
+ * only reads through the nonpaged write-combined pool view, writes into the
+ * scratch, no wait, no mapping.  The scratch DCP scans is the last one
+ * committed, because one commit is outstanding until its latch; so the
+ * write waits for the gate to be free (else DEVICE_BUSY, nothing written).
+ * Returns STATUS_SUCCESS with *Index/*Zero for AdmissionMpoScratchCommitted. */
+static NTSTATUS AdmissionMpoScratchPrepare(ADMISSION_CONTEXT *Context,
+                                           const ADMISSION_MPO_PLANE_INPUT *Top,
+                                           ADMISSION_MPO_RESULT *Result,
+                                           ULONG *Index, ULONG *Zero) {
+  const ADMISSION_MPO_SLOT *slot = &Result->Slots[1];
+  const PUCHAR pool = Context->MpoScratchCpu != NULL
+                          ? Context->MpoScratchCpu - Context->MpoScratchPoolOffset
+                          : NULL;
+  ADMISSION_MPO_RECT layer;
+  unsigned int ox, oy, write = 1u;
+  ULONG w, h, index;
+  const UCHAR *source;
+  LARGE_INTEGER t0, t1;
+  LONG ticks;
+
+  if (pool == NULL || Top->PlacementInPool == 0u ||
+      !AdmissionMpoScratchPlace(&slot->Clip, (unsigned int)slot->Destination.Right,
+                                (unsigned int)slot->Destination.Bottom, &layer,
+                                &ox, &oy)) {
+    InterlockedIncrement(&Context->Mpo.S3BusyBuild);
+    return STATUS_DEVICE_BUSY;
+  }
+  if (!AdmissionScanoutMpoGateFree(Context)) {
+    InterlockedIncrement(&Context->Mpo.Busy);
+    return STATUS_DEVICE_BUSY;
+  }
+  w = (ULONG)(slot->Clip.Right - slot->Clip.Left);
+  h = (ULONG)(slot->Clip.Bottom - slot->Clip.Top);
+  /* Src = Dst = panel (rule 8): surface pixel = panel pixel. */
+  source = pool + Top->PoolOffset + (ULONGLONG)(ULONG)slot->Clip.Top * Top->SurfaceStride +
+           (ULONGLONG)(ULONG)slot->Clip.Left * 4u;
+  t0 = KeQueryPerformanceCounter(NULL);
+  *Zero = AdmissionMpoBlockIsZero(source, Top->SurfaceStride, w, h);
+  index = AdmissionMpoScratchSelect(&Context->MpoScratch, *Zero, &write);
+  if (write != 0u)
+    AdmissionMpoScratchFill(Context->MpoScratchCpu + index * ADMISSION_SCANOUT_SCRATCH_STEP,
+                            source, Top->SurfaceStride, w, h, ox, oy);
+  else
+    InterlockedIncrement(&Context->Mpo.ScratchSkippedWrites);
+  KeMemoryBarrier(); /* the scratch bytes before COMMIT_LAYERS */
+  t1 = KeQueryPerformanceCounter(NULL);
+  ticks = (LONG)(t1.QuadPart - t0.QuadPart);
+  AdmissionMpoTicks(Context->Mpo.ScratchCopyTicks, ticks);
+  Result->ScratchOffset = Context->MpoScratchPoolOffset +
+                          (ULONGLONG)index * ADMISSION_SCANOUT_SCRATCH_STEP;
+  *Index = index;
+  return STATUS_SUCCESS;
+}
+
 /* A Set3 table refusal.  STRETCH-1b: one that follows a supported Check3
  * answer is a contract defect (Check3 promised what Set3 refuses) and is
  * counted with its reason. */
@@ -759,6 +818,7 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
                                   ADMISSION_MPO_COMPLETION *completion,
                                   BOOLEAN DryRun) {
   ADMISSION_MPO_PLANE_INPUT pair[2];
+  ULONG scratch_index = 0u, scratch_zero = 0u;
   ADMISSION_MPO_INPUT input;
   ADMISSION_MPO_RESULT result;
   APPLE_AGX_SCANOUT_LAYER records[2];
@@ -778,6 +838,22 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
       AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_DEVICE_BUSY;
     }
+    if (result.Slots[1].ClipMode == AdmissionMpoClipScratch) {
+      /* CUR-1 v2: the clipped top plane through the free scratch.  A dry run
+       * (HOLD-1 merge check) writes nothing: it validates the records with
+       * scratch 0's offset; the real commit prepares the free one. */
+      if (DryRun) {
+        if (Context->MpoScratchCpu == NULL)
+          return STATUS_DEVICE_BUSY;
+        result.ScratchOffset = Context->MpoScratchPoolOffset;
+      } else {
+        status = AdmissionMpoScratchPrepare(
+            Context, &pair[result.Slots[1].PlaneIndex], &result, &scratch_index,
+            &scratch_zero);
+        if (!NT_SUCCESS(status))
+          return status;
+      }
+    }
     if (AdmissionMpoBuildCommit(&result, records) != 2u) {
       if (!DryRun)
         InterlockedIncrement(&Context->Mpo.S3BusyBuild); /* D2 invariant */
@@ -786,6 +862,16 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
     status = DryRun ? STATUS_SUCCESS : AdmissionScanoutMpoCommit(Context, records, 2u, completion,
                                        next[0].PrimaryAddress);
     if (NT_SUCCESS(status) && !DryRun) {
+      /* CUR-1 v2: which scratch DCP scans from this commit on. */
+      if (result.Slots[1].ClipMode == AdmissionMpoClipScratch) {
+        AdmissionMpoScratchCommitted(&Context->MpoScratch, scratch_index,
+                                     scratch_zero);
+        InterlockedIncrement(&Context->Mpo.ScratchCommits);
+      } else {
+        AdmissionMpoScratchReset(&Context->MpoScratch);
+        if (result.Slots[1].ClipMode == AdmissionMpoClipCrop)
+          InterlockedIncrement(&Context->Mpo.CropCommits);
+      }
       RtlCopyMemory(Context->MpoPlanes, next, sizeof(Context->MpoPlanes));
       InterlockedIncrement(&Context->Mpo.TwoPlaneCommits);
       AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_TWO);
@@ -815,6 +901,7 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
     if (NT_SUCCESS(status) && !DryRun) {
       RtlCopyMemory(Context->MpoPlanes, next, sizeof(Context->MpoPlanes));
       InterlockedIncrement(&Context->Mpo.LoneCommits);
+      AdmissionMpoScratchReset(&Context->MpoScratch); /* CUR-1 v2: slot 1 off */
       if (AdmissionMpoPlaneScaled(&next[1].Input))
         InterlockedIncrement(&Context->Mpo.ScaledLoneCommits);
       AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_LONE);
@@ -850,6 +937,7 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
     if (NT_SUCCESS(status) && !DryRun) {
       RtlCopyMemory(Context->MpoPlanes, next, sizeof(Context->MpoPlanes));
       InterlockedIncrement(&Context->Mpo.RemovalCommits);
+      AdmissionMpoScratchReset(&Context->MpoScratch); /* CUR-1 v2: slot 1 off */
       AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_ONE);
       if (result.OnePlaneRecord != 0u &&
           AdmissionMpoPlaneScaled(&next[0].Input))
@@ -881,6 +969,7 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
       if (NT_SUCCESS(status) && !DryRun) {
         RtlCopyMemory(Context->MpoPlanes, next, sizeof(Context->MpoPlanes));
         InterlockedIncrement(&Context->Mpo.OnePlaneRecordCommits);
+        AdmissionMpoScratchReset(&Context->MpoScratch); /* CUR-1 v2: slot 1 off */
         AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_ONE);
         if (AdmissionMpoPlaneScaled(&next[0].Input))
           InterlockedIncrement(&Context->Mpo.ScaledOnePlaneCommits);
@@ -912,6 +1001,7 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
     }
     RtlCopyMemory(Context->MpoPlanes, next, sizeof(Context->MpoPlanes));
     InterlockedIncrement(&Context->Mpo.V2Presents);
+    AdmissionMpoScratchReset(&Context->MpoScratch); /* CUR-1 v2: slot 1 off */
     AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_ONE);
     return status;
   }

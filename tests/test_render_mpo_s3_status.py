@@ -76,8 +76,11 @@ class S3StatusContract(unittest.TestCase):
         apply = function(self.mpo, "static NTSTATUS AdmissionMpoApply(")
         sources = set(re.findall(r"\bstatus = ([A-Za-z_]+)", body + apply))
         allowed = {"AdmissionScanoutMpoCommit", "AdmissionScanoutMpoPlaneOffSet", "AdmissionDdiSetVidPnSourceAddress",
-                   "STATUS_DEVICE_BUSY", "STATUS_SUCCESS", "AdmissionMpoApply", "DryRun"}
+                   "STATUS_DEVICE_BUSY", "STATUS_SUCCESS", "AdmissionMpoApply", "DryRun", "AdmissionMpoScratchPrepare"}
         self.assertTrue(sources <= allowed, sources)
+        # CUR-1 v2: the scratch preparation itself answers only SUCCESS or DEVICE_BUSY.
+        prep = function(self.mpo, "static NTSTATUS AdmissionMpoScratchPrepare(")
+        self.assertEqual(set(returns(prep)), {"STATUS_DEVICE_BUSY", "STATUS_SUCCESS"})
         # H2: the V2 path's failures other than a foreign handle become DEVICE_BUSY.
         self.assertRegex(apply, r"if \(status != STATUS_DEVICE_BUSY && status != STATUS_INVALID_HANDLE\) \{[^}]*status = STATUS_DEVICE_BUSY;")
 
