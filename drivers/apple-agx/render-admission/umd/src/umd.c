@@ -957,6 +957,31 @@ VOID AdmissionUmdCreateResourceWithMetadata(
     AdmissionUmdDiagnostic("measure-present-resource", result, values,
                            (UINT)(sizeof(values) / sizeof(values[0])));
   }
+  {
+    /* EXP2360 (architect): the primary descriptor the runtime passed and
+     * what this driver put into D3DDDI_ALLOCATIONINFO: {hAllocation, MiscFlags,
+     * pPrimaryDesc present, Flags, VidPnSourceId, ModeDesc Width, Height,
+     * Format, RefreshRate num/den, ScanlineOrdering, Rotation, Scaling,
+     * DriverFlags, AllocationInfo.Flags.Value, AllocationInfo.VidPnSourceId,
+     * device pointer low}. */
+    const DXGI_DDI_PRIMARY_DESC *primary = CreateResource->pPrimaryDesc;
+    UINT values[17] = {(UINT)allocationInfo.hAllocation,
+        CreateResource->MiscFlags, primary != NULL ? 1u : 0u,
+        primary != NULL ? primary->Flags : 0u,
+        primary != NULL ? (UINT)primary->VidPnSourceId : 0u,
+        primary != NULL ? primary->ModeDesc.Width : 0u,
+        primary != NULL ? primary->ModeDesc.Height : 0u,
+        primary != NULL ? (UINT)primary->ModeDesc.Format : 0u,
+        primary != NULL ? primary->ModeDesc.RefreshRate.Numerator : 0u,
+        primary != NULL ? primary->ModeDesc.RefreshRate.Denominator : 0u,
+        primary != NULL ? (UINT)primary->ModeDesc.ScanlineOrdering : 0u,
+        primary != NULL ? (UINT)primary->ModeDesc.Rotation : 0u,
+        primary != NULL ? (UINT)primary->ModeDesc.Scaling : 0u,
+        primary != NULL ? primary->DriverFlags : 0u,
+        allocationInfo.Flags.Value, (UINT)allocationInfo.VidPnSourceId,
+        (UINT)(ULONG_PTR)device};
+    AdmissionUmdDiagnostic("measure-present-primary-desc", result, values, 17u);
+  }
   if (FAILED(result) || allocationInfo.hAllocation == 0u) {
     AdmissionUmdRetirementFree(retirement);
     AdmissionUmdSetError(device, FAILED(result) ? result : E_FAIL);
@@ -1109,6 +1134,12 @@ HRESULT AdmissionUmdReleaseRuntimeResource(
   /* The runtime handle dies with this call either way: never retain it. */
   resource->Retirement = NULL;
   result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
+  {
+    /* EXP2360: {allocation, path 1 = runtime release, HRESULT, device}. */
+    UINT values[5] = {(UINT)retirement->KernelAllocation, 1u, (UINT)result,
+        (UINT)(size_t)device, (UINT)((unsigned long long)(size_t)device >> 32)};
+    AdmissionUmdDiagnostic("measure-presentation-dealloc", result, values, 5u);
+  }
   AdmissionUmdRetirementFree(retirement);
   return result;
 }
@@ -1144,6 +1175,12 @@ VOID APIENTRY AdmissionUmdDestroyResource(
     return;
   if (AdmissionUmdRetirementNeedsRuntimeResource(retirement)) {
     result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
+    {
+      /* EXP2360: path 2 = destroy, runtime-resource retirement. */
+      UINT values[5] = {(UINT)retirement->KernelAllocation, 2u, (UINT)result,
+          (UINT)(size_t)device, (UINT)((unsigned long long)(size_t)device >> 32)};
+      AdmissionUmdDiagnostic("measure-presentation-dealloc", result, values, 5u);
+    }
     AdmissionUmdRetirementFree(retirement);
     if (FAILED(result))
       AdmissionUmdSetError(device, result);
@@ -1151,6 +1188,12 @@ VOID APIENTRY AdmissionUmdDestroyResource(
   }
   if (retirement->Primary && !retirement->Shared) {
     result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
+    {
+      /* EXP2360: path 3 = destroy of a non-shared primary. */
+      UINT values[5] = {(UINT)retirement->KernelAllocation, 3u, (UINT)result,
+          (UINT)(size_t)device, (UINT)((unsigned long long)(size_t)device >> 32)};
+      AdmissionUmdDiagnostic("measure-presentation-dealloc", result, values, 5u);
+    }
     if (FAILED(result)) {
       AdmissionUmdRetirementQueue(&device->Retirement, retirement);
       AdmissionUmdSetError(device, result);
@@ -1158,6 +1201,13 @@ VOID APIENTRY AdmissionUmdDestroyResource(
     }
     AdmissionUmdRetirementFree(retirement);
   } else {
+    {
+      /* EXP2360: path 4 = shared or non-primary, deallocation deferred to
+       * the retirement queue (no callback yet; HRESULT S_OK). */
+      UINT values[5] = {(UINT)retirement->KernelAllocation, 4u, 0u,
+          (UINT)(size_t)device, (UINT)((unsigned long long)(size_t)device >> 32)};
+      AdmissionUmdDiagnostic("measure-presentation-dealloc", S_OK, values, 5u);
+    }
     AdmissionUmdRetirementQueue(&device->Retirement, retirement);
   }
 }
