@@ -537,6 +537,69 @@ static void TestCheck3ImpliesSet3AnyLegalPlacement(void) {
   CHECK(accepted > 1000u && placed > 1000u);
 }
 
+
+/* FS-1: records for every form transition DWM-only -> app-only ->
+ * two-plane -> app-only -> DWM-only, each accepted by the broker reference;
+ * the lone record is slot 0, opaque, Src/Dst as given (scaled 2x too). */
+static unsigned int EvalLone(ADMISSION_MPO_PLANE_INPUT *P, ADMISSION_MPO_RESULT *Result) {
+  ADMISSION_MPO_INPUT input;
+  memset(&input, 0, sizeof(input));
+  input.PanelWidth = REF_PANEL_W; input.PanelHeight = REF_PANEL_H;
+  input.PanelStride = REF_PANEL_W * 4u; input.PanelModeSupported = 1u;
+  input.PlaneCount = 1u; input.Planes = P; input.PoolBytes = REF_POOL;
+  input.ScalingSupported = 1u; input.Path = ADMISSION_MPO_PATH_SET3;
+  return AdmissionMpoEvaluateOne(&input, Result);
+}
+
+static void TestLoneTransitions(void) {
+  ADMISSION_MPO_PLANE_INPUT desk = Desktop(), app = Application(), pair[2];
+  ADMISSION_MPO_INPUT input;
+  ADMISSION_MPO_RESULT result;
+  APPLE_AGX_SCANOUT_LAYER records[2], one;
+  unsigned int step;
+  /* The full-screen game: LayerIndex 1, opaque, full panel, 1:1 and 2x. */
+  app.Source = Rect(0, 0, 2560, 1600); app.Destination = app.Source; app.Clip = app.Source;
+  app.SurfaceWidth = 2560u; app.SurfaceHeight = 1600u; app.SurfaceStride = 10240u;
+  app.SurfaceBytes = 10240ULL * 1600u; app.PoolOffset = 0x2000000ULL;
+  for (step = 0u; step < 5u; ++step) {
+    switch (step) {
+    case 0: case 4: /* DWM-only: the desktop as one record */
+      CHECK(AdmissionMpoBuildRemoval(&desk, &one) == 1u);
+      CHECK(one.SurfaceOffset == desk.PoolOffset && RefCommit(&one, 1u, REF_POOL) == 0u);
+      break;
+    case 1: case 3: /* app-only */
+      CHECK(EvalLone(&app, &result) == AdmissionMpoSupported && result.OnePlaneRecord == 1u);
+      CHECK(AdmissionMpoBuildLone(&app, &one) == 1u);
+      CHECK(one.SurfaceOffset == app.PoolOffset && one.Flags == 0u &&
+            one.DstSize == APPLE_AGX_SCANOUT_PACK(2560u, 1600u));
+      CHECK(RefCommit(&one, 1u, REF_POOL) == 0u);
+      break;
+    case 2: /* two-plane: the game under DWM's full-panel top plane */
+      pair[0] = desk; pair[1] = app;
+      memset(&input, 0, sizeof(input));
+      input.PanelWidth = REF_PANEL_W; input.PanelHeight = REF_PANEL_H;
+      input.PlaneCount = 2u; input.Planes = pair; input.PoolBytes = REF_POOL;
+      input.Path = ADMISSION_MPO_PATH_SET3;
+      CHECK(AdmissionMpoEvaluate(&input, &result) == AdmissionMpoSupported);
+      CHECK(AdmissionMpoBuildCommit(&result, records) == 2u);
+      CHECK(records[0].SurfaceOffset == app.PoolOffset && RefCommit(records, 2u, REF_POOL) == 0u);
+      break;
+    }
+  }
+  /* Scaled 2x lone plane (STRETCHFS). */
+  app = Application();
+  app.Source = Rect(0, 0, 1280, 800); app.Destination = Rect(0, 0, 2560, 1600); app.Clip = app.Destination;
+  app.SurfaceWidth = 1280u; app.SurfaceHeight = 800u; app.SurfaceStride = 5120u;
+  app.SurfaceBytes = 5120ULL * 800u; app.StretchQuality = 0u; /* Set3 carries 0 (EXP2375) */
+  CHECK(EvalLone(&app, &result) == AdmissionMpoSupported);
+  CHECK(AdmissionMpoBuildLone(&app, &one) == 1u);
+  CHECK(one.SrcSize == APPLE_AGX_SCANOUT_PACK(1280u, 800u) &&
+        one.DstSize == APPLE_AGX_SCANOUT_PACK(2560u, 1600u) && RefCommit(&one, 1u, REF_POOL) == 0u);
+  /* BuildLone takes only LayerIndex 1; BuildRemoval only LayerIndex 0. */
+  CHECK(AdmissionMpoBuildLone(&desk, &one) == 0u);
+  CHECK(AdmissionMpoBuildRemoval(&app, &one) == 0u);
+}
+
 int main(void) {
   TestUnsupportedWritesNothing();
   TestScaledRecords();
@@ -544,6 +607,7 @@ int main(void) {
   TestRemovalRecord();
   TestSweepTableImpliesBroker();
   TestCheck3ImpliesSet3AnyLegalPlacement();
+  TestLoneTransitions();
   if (Failures != 0u) {
     fprintf(stderr, "mpo_broker_reference_test: %u failure(s)\n", Failures);
     return EXIT_FAILURE;

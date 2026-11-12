@@ -27,4 +27,9 @@ unsigned int AdmissionMpoBuildCommit(const ADMISSION_MPO_RESULT *Result,
 unsigned int AdmissionMpoBuildRemoval(const ADMISSION_MPO_PLANE_INPUT *Plane,
                                       APPLE_AGX_SCANOUT_LAYER *Record);
 
+/* FS-1: the lone application plane (LayerIndex 1, known pool placement)
+ * as the one record of a commit (slot 0; slot 1 off).  1 when written. */
+unsigned int AdmissionMpoBuildLone(const ADMISSION_MPO_PLANE_INPUT *Plane,
+                                   APPLE_AGX_SCANOUT_LAYER *Record);
+
 #endif

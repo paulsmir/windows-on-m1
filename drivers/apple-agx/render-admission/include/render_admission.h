@@ -161,6 +161,9 @@ typedef struct _ADMISSION_MPO_CLIP_ROW {
 typedef struct _ADMISSION_MPO_CLIP_SAMPLE {
   volatile LONG Origin, Size, Info, Alpha, Crc32, Ticks, Qpc;
 } ADMISSION_MPO_CLIP_SAMPLE;
+#define ADMISSION_MPO_FORM_TWO 1
+#define ADMISSION_MPO_FORM_LONE 2
+#define ADMISSION_MPO_FORM_ONE 3   /* DWM-only: one layer record or V2 */
 typedef struct _ADMISSION_MPO_RECEIPT {
   volatile LONG Version, Bytes;
   /* Start: switch value seen, CAP_TWO_LAYERS seen, negotiation read back. */
@@ -253,6 +256,11 @@ typedef struct _ADMISSION_MPO_RECEIPT {
   volatile LONG S3BusyTransport, LastTransportResult, S3BusyBrokerRejected;
   volatile LONG S3BusyBuild, S3BusyLegacy, LastLegacyStatus;
   volatile LONG ConsecutiveBusy, MaxConsecutiveBusy;
+  /* FS-1: one-plane Check3 answers for LayerIndex 1 alone, lone-plane
+   * commits (scaled), the scan-out form after the last accepted commit
+   * (ADMISSION_MPO_FORM_*) and transitions into / out of the lone form. */
+  volatile LONG LoneChecksSupported, LoneChecksRefused;
+  volatile LONG LoneCommits, ScaledLoneCommits, LastForm, ToLone, FromLone;
 } ADMISSION_MPO_RECEIPT;
 #define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
 #define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u

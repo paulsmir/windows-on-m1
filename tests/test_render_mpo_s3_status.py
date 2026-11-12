@@ -58,10 +58,11 @@ class S3StatusContract(unittest.TestCase):
                 continue
             self.assertTrue(v.startswith("AdmissionMpoBusyNote(Context, &completion, "), v)
             self.assertIn(v.split(",")[-1].strip().rstrip(")").strip(), ("STATUS_DEVICE_BUSY", "status"), v)
-        # Every INVALID_PARAMETER follows AdmissionMpoRefuseSet3 (rows A, B, C, F: four sites).
+        # Every INVALID_PARAMETER follows AdmissionMpoRefuseSet3 (rows A, B, C: three sites;
+        # FS-1 turned row F, LayerIndex 1 alone, into the lone application plane).
         sites = re.findall(r"(\w+)\(Context\);\s*return STATUS_INVALID_PARAMETER;", body)
-        self.assertEqual(sites, ["AdmissionMpoRefuseSet3"] * 4)
-        self.assertEqual(len(re.findall(r"return STATUS_INVALID_PARAMETER;", body)), 4)
+        self.assertEqual(sites, ["AdmissionMpoRefuseSet3"] * 3)
+        self.assertEqual(len(re.findall(r"return STATUS_INVALID_PARAMETER;", body)), 3)
         for bad in ("STATUS_DEVICE_HARDWARE_ERROR", "STATUS_DEVICE_NOT_READY", "STATUS_INVALID_ADDRESS"):
             self.assertNotIn("return " + bad, body)
 

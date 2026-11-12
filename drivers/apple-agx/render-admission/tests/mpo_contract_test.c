@@ -688,8 +688,10 @@ static void TestStableReasonValues(void) {
   CHECK(AdmissionMpoReasonStretchQuality == 33);
   CHECK(AdmissionMpoReasonStretchFilter == 34);
   CHECK(AdmissionMpoReasonOnePlaneBlend == 35);
-  CHECK(ADMISSION_MPO_REASON_COUNT == 36);
-  CHECK(ADMISSION_MPO_CONTRACT_VERSION == 5u);
+  CHECK(AdmissionMpoReasonLoneNotFullPanel == 36);
+  CHECK(AdmissionMpoReasonLoneBlend == 37);
+  CHECK(ADMISSION_MPO_REASON_COUNT == 38);
+  CHECK(ADMISSION_MPO_CONTRACT_VERSION == 6u);
 }
 
 /* Version 2 surface rules, each on its role, both orders. */
@@ -1041,10 +1043,11 @@ static void TestEvaluateOne(void) {
   plane.Enabled = 0u;
   CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoSupported &&
         result.OnePlaneRecord == 0u);
-  /* LayerIndex 1 alone: refused as before. */
+  /* FS-1: LayerIndex 1 alone is the lone application plane (TestLonePlane);
+   * blended it is refused. */
   plane = OnePlane(1280, 800, 0, 0, 2560, 1600);
   plane.LayerIndex = 1u;
-  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonLayerIndex);
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonLoneBlend);
 
   /* A 1280x800 full-screen game on the 2560x1600 panel: one layer record,
    * slot 0 = source and destination, not premultiplied. */
@@ -1221,6 +1224,63 @@ static void TestCheck3OnlyRulesNotReachableFromSet3(void) {
   CHECK((reached >> AdmissionMpoReasonStretchFilter) & 1ull);
 }
 
+
+/* FS-1: the application plane alone (EXP2368/2375: DWM asks it for a
+ * full-screen game; refused with reason 3 before).  Full panel yes, partial
+ * no, scaled up to 2x yes, beyond no, blended no, LayerIndex 0 unchanged. */
+static void TestLonePlane(void) {
+  ADMISSION_MPO_PLANE_INPUT plane;
+  ADMISSION_MPO_RESULT result;
+  /* 1:1 full screen (CS at 2560x1600). */
+  plane = OnePlane(2560, 1600, 0, 0, 2560, 1600);
+  plane.LayerIndex = 1u; plane.BlendAlpha = 0u;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoSupported);
+  CHECK(result.OnePlaneRecord == 1u && result.SlotCount == 1u &&
+        result.Slots[0].PlaneIndex == 0u && result.Slots[0].Premultiplied == 0u &&
+        RectEqual(result.Slots[0].Destination, Rect(0, 0, 2560, 1600)));
+  CHECK(EvalOne(&plane, 0u, &result) == AdmissionMpoSupported); /* unscaled needs no scaler */
+  /* Scaled 2x (STRETCHFS 1280x800), and 1.5x. */
+  plane = OnePlane(1280, 800, 0, 0, 2560, 1600);
+  plane.LayerIndex = 1u; plane.BlendAlpha = 0u;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoSupported && result.OnePlaneRecord == 1u);
+  CHECK(EvalOne(&plane, 0u, &result) == AdmissionMpoReasonScaling);
+  plane = OnePlane(1707, 1067, 0, 0, 2560, 1600);
+  plane.LayerIndex = 1u; plane.BlendAlpha = 0u;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoSupported);
+  /* Beyond 2x (1024x768 -> 2560x1600 = 2.5x / 2.08x). */
+  plane = OnePlane(1024, 768, 0, 0, 2560, 1600);
+  plane.LayerIndex = 1u; plane.BlendAlpha = 0u;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonScaleBeyondLimit);
+  /* Partial destination (a window): not the lone form. */
+  plane = OnePlane(1280, 720, 640, 457, 1920, 1177);
+  plane.LayerIndex = 1u; plane.BlendAlpha = 0u;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonLoneNotFullPanel);
+  /* Blended. */
+  plane = OnePlane(2560, 1600, 0, 0, 2560, 1600);
+  plane.LayerIndex = 1u; plane.BlendAlpha = 1u;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonLoneBlend);
+  /* Format and pool rules still apply. */
+  plane.BlendAlpha = 0u; plane.FormatClass = AdmissionMpoFormatOther;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonFormat);
+  plane = OnePlane(2560, 1600, 0, 0, 2560, 1600);
+  plane.LayerIndex = 1u; plane.BlendAlpha = 0u; plane.InScanoutPool = 0u;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonSurfaceNotInPool);
+  /* The same plane in the Set3 rule set. */
+  plane = OnePlane(1280, 800, 0, 0, 2560, 1600);
+  plane.LayerIndex = 1u; plane.BlendAlpha = 0u; plane.StretchQuality = 0u;
+  {
+    ADMISSION_MPO_INPUT input;
+    memset(&input, 0, sizeof(input));
+    input.PanelWidth = PANEL_W; input.PanelHeight = PANEL_H;
+    input.PanelStride = PANEL_W * 4u; input.PanelModeSupported = 1u;
+    input.PlaneCount = 1u; input.Planes = &plane; input.PoolBytes = POOL_BYTES;
+    input.ScalingSupported = 1u; input.Path = ADMISSION_MPO_PATH_SET3;
+    CHECK(AdmissionMpoEvaluateOne(&input, &result) == AdmissionMpoSupported);
+    input.Path = ADMISSION_MPO_PATH_CHECK3;
+    CHECK(AdmissionMpoEvaluateOne(&input, &result) == AdmissionMpoReasonStretchQuality);
+  }
+}
+
 int main(void) {
   TestStableReasonValues();
   TestArgumentsAndCounts();
@@ -1234,6 +1294,7 @@ int main(void) {
   TestEvaluateOne();
   TestCapsDerivation();
   TestCheck3OnlyRulesNotReachableFromSet3();
+  TestLonePlane();
   if (Failures != 0u) {
     fprintf(stderr, "mpo_contract_test: %u failure(s)\n", Failures);
     return EXIT_FAILURE;

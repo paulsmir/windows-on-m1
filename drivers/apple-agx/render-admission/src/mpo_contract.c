@@ -324,6 +324,38 @@ unsigned int AdmissionMpoEvaluateOne(const ADMISSION_MPO_INPUT *Input,
       Input->Planes == MPO_NULL)
     return AdmissionMpoEvaluatePrimary(Input, Result);
   plane = &Input->Planes[0];
+  /* FS-1: the application plane alone (DWM's top plane off): a full-panel,
+   * opaque LayerIndex 1 plane, scaled within the layer limits, sent as one
+   * layer record.  The full-screen independent flip of a game. */
+  if (plane->Enabled != 0u && plane->LayerIndex == 1u) {
+    (void)AdmissionMpoEvaluate(Input, Result); /* argument and slot reset */
+    Result->OnePlaneRecord = 0u;
+    if (plane->FormatClass != AdmissionMpoFormatBgra8 &&
+        plane->FormatClass != AdmissionMpoFormatRgba8)
+      reason = AdmissionMpoReasonFormat;
+    else if (plane->ColorSpaceClass != AdmissionMpoColorSpaceSdrSrgb)
+      reason = AdmissionMpoReasonColorSpace;
+    else if (plane->BlendAlpha != 0u)
+      reason = AdmissionMpoReasonLoneBlend;
+    else if (!MpoRectIsPanel(&plane->Destination, Input->PanelWidth,
+                             Input->PanelHeight))
+      reason = AdmissionMpoReasonLoneNotFullPanel;
+    else
+      reason = MpoCheckLayer(Input, plane);
+    if (reason != AdmissionMpoSupported) {
+      Result->Supported = 0u;
+      Result->SlotCount = 0u;
+      Result->Slots[0].PlaneIndex = ADMISSION_MPO_NO_PLANE;
+      return MpoFail(Result, reason, 0u);
+    }
+    Result->Supported = 1u;
+    Result->Reason = AdmissionMpoSupported;
+    Result->FailingPlane = ADMISSION_MPO_NO_PLANE;
+    MpoFillSlot(&Result->Slots[0], plane, 0u, 0u);
+    Result->SlotCount = 1u;
+    Result->OnePlaneRecord = 1u;
+    return AdmissionMpoSupported;
+  }
   if (plane->Enabled == 0u || plane->LayerIndex != 0u ||
       (MpoRectIsPanel(&plane->Source, Input->PanelWidth, Input->PanelHeight) &&
        MpoRectIsPanel(&plane->Destination, Input->PanelWidth,

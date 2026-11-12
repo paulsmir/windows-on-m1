@@ -619,6 +619,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCheckMultiPlaneOverlaySupport3(
     (void)AdmissionMpoEvaluateOne(&input, &result);
   else
     (void)AdmissionMpoEvaluate(&input, &result);
+  /* FS-1 receipt: one-plane answers for the application plane alone. */
+  if (effective && Args->PlaneCount == 1u && planes[0].LayerIndex == 1u)
+    InterlockedIncrement(result.Reason == AdmissionMpoSupported
+                             ? &context->Mpo.LoneChecksSupported
+                             : &context->Mpo.LoneChecksRefused);
   if (effective) {
     AdmissionMpoRecordScaled(context, planes, Args->PlaneCount,
                              result.Reason);
@@ -676,6 +681,18 @@ static NTSTATUS AdmissionMpoBusyNote(ADMISSION_CONTEXT *Context,
   InterlockedIncrement(busy ? &Context->Mpo.BusyThenSameLatched
                             : &Context->Mpo.BusyThenSuperseded);
   return Status;
+}
+
+/* FS-1 receipt: the scan-out form after an accepted commit, and the
+ * transitions into and out of the lone application plane. */
+static VOID AdmissionMpoNoteForm(ADMISSION_CONTEXT *Context, LONG Form) {
+  const LONG previous = InterlockedExchange(&Context->Mpo.LastForm, Form);
+  if (previous == Form)
+    return;
+  if (Form == ADMISSION_MPO_FORM_LONE)
+    InterlockedIncrement(&Context->Mpo.ToLone);
+  else if (previous == ADMISSION_MPO_FORM_LONE)
+    InterlockedIncrement(&Context->Mpo.FromLone);
 }
 
 /* A Set3 table refusal.  STRETCH-1b: one that follows a supported Check3
@@ -821,14 +838,36 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     if (NT_SUCCESS(status)) {
       RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
       InterlockedIncrement(&Context->Mpo.TwoPlaneCommits);
+      AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_TWO);
       if (AdmissionMpoPlaneScaled(&pair[0]) || AdmissionMpoPlaneScaled(&pair[1]))
         InterlockedIncrement(&Context->Mpo.ScaledTwoPlaneCommits);
     }
     return AdmissionMpoBusyNote(Context, &completion, status);
   }
   if (!next[0].Enabled && next[1].Enabled) {
-    AdmissionMpoRefuseSet3(Context);
-    return STATUS_INVALID_PARAMETER;
+    /* FS-1: the application plane alone (DWM's top plane off): one layer
+     * record in slot 0, slot 1 off; the rule one-plane Check3 answered
+     * with (AdmissionMpoEvaluateOne). */
+    pair[0] = next[1].Input;
+    AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
+    if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
+      AdmissionMpoSet3TableRefusal(Context, result.Reason);
+      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
+    }
+    if (AdmissionMpoBuildLone(&next[1].Input, &records[0]) != 1u) {
+      InterlockedIncrement(&Context->Mpo.S3BusyBuild);
+      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
+    }
+    status = AdmissionScanoutMpoCommit(Context, records, 1u, &completion,
+                                       next[1].PrimaryAddress);
+    if (NT_SUCCESS(status)) {
+      RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
+      InterlockedIncrement(&Context->Mpo.LoneCommits);
+      if (AdmissionMpoPlaneScaled(&next[1].Input))
+        InterlockedIncrement(&Context->Mpo.ScaledLoneCommits);
+      AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_LONE);
+    }
+    return AdmissionMpoBusyNote(Context, &completion, status);
   }
   slot1 = AdmissionScanoutMpoSlot1MayShow(Context);
   if (slot1) {
@@ -857,6 +896,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     if (NT_SUCCESS(status)) {
       RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
       InterlockedIncrement(&Context->Mpo.RemovalCommits);
+      AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_ONE);
       if (result.OnePlaneRecord != 0u &&
           AdmissionMpoPlaneScaled(&next[0].Input))
         InterlockedIncrement(&Context->Mpo.ScaledOnePlaneCommits);
@@ -885,6 +925,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
       if (NT_SUCCESS(status)) {
         RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
         InterlockedIncrement(&Context->Mpo.OnePlaneRecordCommits);
+        AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_ONE);
         if (AdmissionMpoPlaneScaled(&next[0].Input))
           InterlockedIncrement(&Context->Mpo.ScaledOnePlaneCommits);
       }
@@ -913,6 +954,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     }
     RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
     InterlockedIncrement(&Context->Mpo.V2Presents);
+    AdmissionMpoNoteForm(Context, ADMISSION_MPO_FORM_ONE);
     return AdmissionMpoBusyNote(Context, &completion, status);
   }
   /* Nothing to swap (planes switched off, or only LayerIndex 1 disabled

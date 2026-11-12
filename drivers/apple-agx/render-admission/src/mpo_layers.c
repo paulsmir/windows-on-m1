@@ -84,3 +84,21 @@ unsigned int AdmissionMpoBuildRemoval(const ADMISSION_MPO_PLANE_INPUT *Plane,
                &Plane->Destination, 0u);
   return 1u;
 }
+
+/* FS-1: see mpo_layers.h. */
+unsigned int AdmissionMpoBuildLone(const ADMISSION_MPO_PLANE_INPUT *Plane,
+                                   APPLE_AGX_SCANOUT_LAYER *Record) {
+  if (Plane == MPO_LAYERS_NULL || Record == MPO_LAYERS_NULL ||
+      Plane->LayerIndex != 1u || Plane->InScanoutPool == 0u ||
+      Plane->PlacementKnown == 0u ||
+      MpoLayerFormat(Plane->FormatClass) == 0u ||
+      !MpoLayerRectPacks(&Plane->Source) ||
+      !MpoLayerRectPacks(&Plane->Destination))
+    return 0u;
+  /* Nothing beneath: opaque, not premultiplied (as the one-plane swap). */
+  MpoLayerFill(Record, Plane->PoolOffset, Plane->SurfaceBytes,
+               Plane->SurfaceWidth, Plane->SurfaceHeight, Plane->SurfaceStride,
+               MpoLayerFormat(Plane->FormatClass), &Plane->Source,
+               &Plane->Destination, 0u);
+  return 1u;
+}

@@ -48,7 +48,7 @@
  * in the scanout pool and the 64 KiB placement alignment CreateAllocation
  * requests; Set3 evaluates again with the actual offset. */
 
-#define ADMISSION_MPO_CONTRACT_VERSION 5u
+#define ADMISSION_MPO_CONTRACT_VERSION 6u
 #define ADMISSION_MPO_MAX_PLANES 2u
 #define ADMISSION_MPO_SLOT_COUNT 2u
 #define ADMISSION_MPO_MIN_EXTENT 32u
@@ -163,6 +163,10 @@ typedef enum _ADMISSION_MPO_REASON {
   /* One plane sent as a layer record (AdmissionMpoEvaluateOne): BlendAlpha
    * is not 0 or 1. */
   AdmissionMpoReasonOnePlaneBlend = 35,
+  /* Version 6 (FS-1): the lone application plane (LayerIndex 1 alone) does
+   * not cover the panel, or is blended. */
+  AdmissionMpoReasonLoneNotFullPanel = 36,
+  AdmissionMpoReasonLoneBlend = 37,
   ADMISSION_MPO_REASON_COUNT
 } ADMISSION_MPO_REASON;
 
