@@ -78592,3 +78592,15 @@ EXP2379 HARDWARE ACTUAL 2026-11-12T22:40:44Z:
 - STRETCHFS: 2700 frames 59.99 fps (EXP2378 59.46), LoneCommits +2697, HOLD_STRETCHFS OK InFlight 0/1.
 - Operator: no report received at ACTUAL time.
 - Verdict: HOLD-1 confirmed on the primary discriminator (every former Busy answer of the scene became a merged, committed flip; no flip lost; no regression of the FS-1b scenes or the CS/GM gates). Open: operator looks; a windowed scene that DWM actually shows as two planes. Recovery rec2379h started.
+
+EXP2380 HARDWARE BEFORE 2026-11-12T22:47:07Z:
+- Kind: no code change. The EXP2379 package is booted unchanged (arch/hold1 623590848; the builder output EXP2379-hold1 was copied to EXP2380-hold1full, no rebuild; the hashes below must equal EXP2379's). m1n1 s2v3, Mu MUANSCPPC002, switches as EXP2379. ATOMIC CONTRACT: none.
+- WHY THIS HYPOTHESIS: (1) the line PITCH-1 / STRETCH-1b / S3 / FS-1b / HOLD-1 has only SHORT-profile gates (CS/GM r2 against 51.991 / 47.007); the last FULL numbers (8256..8424) are from the NP-1 line (EXP2366-2368); (2) a merge needs the FULL band on the merge package itself; (3) EXP2379 r2 GM fps_presents 46.596 (-0.87 %) is inside the gate but below the NP-1 controls, so the r3 and FULL arms decide whether the band moved.
+- WINDOWS CONTRACT / AGX CONTRACT / TRANSLATION: unchanged from EXP2379. WHAT IS STILL UNKNOWN: the FULL score and PERF band of the HOLD-1 line.
+- Probe: probe2379 with the FULL profile (as EXP2368): suite, GM PERF w/r2/r3 (PERF stop line mean(r2,r3) >= 51.696), two FULL arms f0a/f0b (stop line 8173 per arm), CS warm/r2/r3 form-labelled with HOLD_ lines (gate on the valid r2/r3), STRETCHWIN and STRETCHFS with HOLD_ lines as regression rows. Every OPERATOR_LOOK step kept (PITCH-1, STRETCHWIN, CS pointer in r2, STRETCHFS). Windowed CS arm removed (non-discriminating in EXP2379).
+- Expected: GM PERF mean(r2,r3) >= 51.696; both FULL arms >= 8173 and in the NP-1 band (8256..8424); CS gate PASS on r2/r3 (lone form); GM gate PASS; HOLD_ lines OK (STRETCHWIN Busy ~0, HoldDropped 0, InFlight 0..2); no DWM fault.
+- Failure criteria: any stop line missed (a finding on the line, not a retry), any HOLD_ FAIL, DWM fault, freeze.
+- Recovery: rec2380h visible recovery; a shutdown hang -> exact-PID stop + operator power cycle + AT_PROXY.
+- Hashes: sys 5bf6047b8ed7, UmdArm64 64cc348ff58f, UmdX64 fff2485d95e9, Umd32 40058e33acdf; manifest 3a6167dffd63, hardware-manifest e60791bae0dc; probe2380.sh aa5207aaa48d (PROBE_LINT_OK); visible recovery rec2380h 6f706f919b57bf96; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
+- Recovery rec2380h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2380-hold1full/run2380.sh.
