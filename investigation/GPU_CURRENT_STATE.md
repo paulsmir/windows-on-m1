@@ -5849,3 +5849,22 @@ boot was run. The previous entry stays as written.
   on a visible, stable source; DxgKrnl 315..317 absent. "No mode info during the cycle" is excluded. Who answers
   is being read (ddisplay's check implementation, the kernel's cached shortcut). Measured tail of EXP2361
   running; verdict on speed and on the legacy-path behaviour of this package pending.
+
+## UPDATE 2026-11-12T04:51Z (architect): EXP2361 measured tail (first numbers on DWM's normal path); check refusal narrowed
+
+- Normal path + PL-1, MPO live with one plane: FULL 8050 / 8025 (in band), PERF mean 49.97 (-1.8 % against the
+  closedv5 control EXP2348, above the 49.7 stop line), nb.py wall 19.913 ms, foreign-job row e 0.980 ms/frame
+  (legacy 1.05..1.23). GM gate PASS. Suite 119/0. Temperature up to 90 C in this boot.
+- CS gate FAIL: 50.995 / 50.870 (-3.00 %). With EXP2357 (-3.37 %, legacy path) and EXP2354 (flag only, PASS) the
+  CS cost belongs to "MPO reported and live", independent of DWM's path. During the CS timedemo DxgKrnl shows
+  no DWM present, plane intake or Set3. Cause open; a CS-phase trace with CS's own present path is requested.
+  Nothing of DF-1 / PF-1 / PL-1 / S2 is merged while this stands.
+- Two-plane check, kernel reading (REPORT-check3-resource.md): for our adapter the only "unsupported without
+  miniport" exit left is that a plane's resource does not qualify: it must resolve in DWM's process, its first
+  allocation must belong to the device used for the check, and it must be a primary or carry the kernel's
+  "DirectFlip swap-chain back buffer" flag (set at creation when the runtime creates it shared and as a swap-chain
+  buffer on an adapter reporting DirectFlip). Blend, plane flags, OverlayCaps and stretch are not read there.
+  Candidates: the application's back buffer lacks that flag; device mismatch between DWM's two devices; desktop
+  plane passed without a resource. Receipt-only boot C3R specified in the handoff file.
+- Architect-to-implementer messages are paused by the app until the user types; instructions are in the handoff
+  file (three entries addressed "TO THE IMPLEMENTER").
