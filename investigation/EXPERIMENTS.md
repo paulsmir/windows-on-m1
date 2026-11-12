@@ -78583,3 +78583,12 @@ EXP2379 HARDWARE BEFORE 2026-11-12T22:12:42Z:
 - Hashes: sys 5bf6047b8ed7, UmdArm64 64cc348ff58f, UmdX64 fff2485d95e9, Umd32 40058e33acdf; manifest 2d899abeb39d, hardware-manifest e6629437aaf0; probe2379.sh 4520ae09983c (PROBE_LINT_OK); visible recovery rec2379h 3b5648b175d36ddd; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
 - Recovery rec2379h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2379-hold1/run2379.sh.
+
+EXP2379 HARDWARE ACTUAL 2026-11-12T22:40:44Z:
+- Boot: guest up 2026-11-12T22:13:33Z; EXP2379_PIPELINE_RC 0, CHAIN2379_DONE; STOPS 0, no Application 1000 since boot. The 1001 events are AppTermFailureEvent and Edge setup / MicrosoftEdgeUpdate crashpad logs only; the CrashDumps count of 2 is the two October dumps.
+- STRETCHWIN (primary): HOLD_STRETCHWIN Busy=+0 (control boots EXP2375-2378: +181/+192/+190/+178 per ~2691), HoldMerges=+186, HoldCommits=+186, HoldBusy 0, HoldContended 0, HoldCommitRetries 0, HoldDropped 0, Set3RefusedAfterSupport 0, ScaledTwoPlaneCommits +2693, InFlight0=1 InFlight1=0 at arm end (Accepted0 1111 / Reported0 1110, Accepted1 6029 / Reported1 6029) OK. App rate 57.58 fps, as in every control boot (57.57-57.60): the application paces itself; the merges move the second layer's latch, not the app's frame count.
+- CS full screen: warm 48.728 fps, lone=+4074 two=+8 v2=+94, HOLD_CS_warm OK InFlight 0/0; r2 52.074 fps, lone=+3907 v2=+21, HOLD_CS_r2 OK InFlight 0/1. PERF_GATE cs16 PASS +0.16 %. GM HD PERF_GATE PASS worst 46.596 (-0.87 %).
+- CS windowed (secondary, first reading): not two-plane. DWM composed the window (CS_FORM composed lone=+19 v2=+44 two=+0), so HOLD was not exercised (HoldMerges 0). CS_BENCH_FAIL no-result: the guest cs-bench.log was absent at fetch time (harness defect, cause not established); cs-bench-mem.csv shows hl alive ~75 s. Non-discriminating.
+- STRETCHFS: 2700 frames 59.99 fps (EXP2378 59.46), LoneCommits +2697, HOLD_STRETCHFS OK InFlight 0/1.
+- Operator: no report received at ACTUAL time.
+- Verdict: HOLD-1 confirmed on the primary discriminator (every former Busy answer of the scene became a merged, committed flip; no flip lost; no regression of the FS-1b scenes or the CS/GM gates). Open: operator looks; a windowed scene that DWM actually shows as two planes. Recovery rec2379h started.
