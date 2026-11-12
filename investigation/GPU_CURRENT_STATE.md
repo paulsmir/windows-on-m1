@@ -6108,3 +6108,26 @@ boot was run. The previous entry stays as written.
   BUSY and StopDevice fail. m1n1 has no latch deadline: a lost D589 wedges the broker service. Spec E5-RQ
   (RQ-1 KMD retry and gate release; RQ-2 m1n1 latch deadline + fault injection). Nothing of S3-SAFE / E5-RQ is
   implemented or hardware-verified yet.
+
+## UPDATE 2026-11-12T18:48:32Z - EXP2375 STRETCH-1b: windowed scaling works; CS halves on the two-plane path; not merged
+
+- EXP2375 (arch/stretch1b 0349dcdbd = PITCH-1 + STRETCH-1b + receipt v4/NP-2/S3-C, SHORT): suite 119/0.
+  Windowed 1280x720 shown at 1920x1080: ScaledTwoPlaneCommits 2691, Set3RefusedAfterSupport 0, no freeze.
+  Raw Set3 StretchQuality is 0 on all 2689 scaled Set3 (Check3 saw 2): dxgkrnl does not carry the quality into
+  Set3 - CONFIRMED; quality is a Check3-only decision. 1682x840 window again a plane (+1169 commits / 45 s).
+  GM PERF 53.42 / 53.30 (gate PASS).
+- CS gate FAIL: 28.05 / 28.72 fps against 51.99 (-45 %). In this package CS is admitted as the application
+  plane (TwoPlaneCommits +7743 per run; control EXP2368: 0, all one-plane V2). Per CS frame two Set3 arrive;
+  one meets the held present gate, answers DEVICE_BUSY and is dropped by dxgkrnl (S3-C receipt:
+  BusyThenSuperseded only, never re-issued). GM on the same path: Busy +19 in 8508 Set3. Which change admitted
+  CS (PITCH-1 is doubted: 640x480 pitch is already 64-aligned) and why CS issues two Set3 per frame: OPEN,
+  offline read requested. Scaled window: Busy 196 in ~2700.
+- Proven: STATUS_DEVICE_BUSY from Set3 costs the flip (dxgkrnl moves to the next PresentId), it is not a retry.
+- DECISION HOLD-1: with the present gate held the two-plane path stores the requested plane set as pending
+  (latest wins) and commits it at the latch, as the one-plane V2 path does; BUSY remains for runtime obstacles
+  only. PITCH-1 and STRETCH-1b are NOT merged until HOLD-1 exists and CS is back in its band.
+- STRETCHFS (1280x800 shown full screen at 2.0x): application 60 fps but composited; Check3 refused the offered
+  form with reason 3 (LayerIndex); DWM's row not captured. OPEN.
+- CUR-1 clip receipt: no clipped top plane occurred in this boot (ClipChecks 0); 1x1 alpha and read cost still
+  unmeasured. With CS itself on a plane the EXP2366 scene no longer forms; a scene is needed.
+- Dwm-Core manifest has no value maps: 290 RejectReason values stay undecoded.
