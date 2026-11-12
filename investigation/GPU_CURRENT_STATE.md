@@ -5738,3 +5738,21 @@ that point. Source: .local/night-20261110/s2-ddisplay-black/REPORT.md (display r
   planes at all. S2 can only be judged on the normal path, which therefore has to work first.
 - Next boot: EXP2358 + the video sub-object (complete table, nothing advertised, content-protection caps answered
   as "none") as one ATOMIC CONTRACT. In parallel offline: what answers "unsupported" before the miniport.
+
+## UPDATE 2026-11-12T02:05Z (architect): DF-1d (EXP2359): video sub-object served, normal-path loop persists
+
+- EXP2359 = EXP2358 + the D3D11 video sub-object (table + content-protection answer). The request no longer
+  repeats (RetrieveSubObject(3) S_OK 3x, GetContentProtectionCaps with NULL crypto S_OK 3x, nothing else
+  called), but the output cycle on DWM's normal path is unchanged; measured runs skipped. "The cycle on the normal
+  path is caused by the missing video sub-object" is REJECTED on the PF-1 line as well (EXP2352 was the first).
+- Alignment of Dwm-Core and DxgKrnl (EXP2358 and EXP2359): every two-plane support check of DWM (218/220,
+  unsupported) falls 18..21 ms after the source was hidden and plane 0 disabled; DxgKrnl 315/316/317 never
+  appear. The "unsupported" answers carry no information about the two-plane form on a working output.
+- One cycle on the normal path: DWM's single-plane desktop present reaches our UMD entry and the runtime
+  callback returns S_OK, but no kernel plane intake (252) follows; about 0.13 s later dxgkrnl shows the source
+  with plane 0 enabled and within 5 ms flips plane 0 to disabled (AbortSwQueue + DisableAllPlanes) and hides it;
+  that pair runs twice, then DWM re-initialises the output. The same cycle runs with no application started.
+  On the legacy path the same UMD call gives one 252 per frame and an enabled Set3.
+- Open: what the normal path's present route requires from the adapter / miniport that we do not provide
+  (reading of the guest ddisplay.dll and the matching dxgkrnl handlers running). No boot staged. Bench profile
+  keeps DisableDDisplay=1; nothing of DF-1 / PF-1 / S2 / video is merged.
