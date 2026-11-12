@@ -26,6 +26,7 @@
 #include "gallium/frontends/d3d10umd/State.h"
 
 #include <stddef.h>
+#include <string.h>
 #include <mutex>
 #include <vector>
 
@@ -1236,9 +1237,38 @@ AgxWddm2_0FillDxgiFuncs(DXGI1_4_DDI_BASE_FUNCTIONS *f)
 }
 
 /* PFND3D10DDI_RETRIEVESUBOBJECT: no video device (D3D11_1DDI_VIDEO_FUNCTIONS) */
-HRESULT APIENTRY
-AgxWddm2_0RetrieveSubObject(D3D10DDI_HDEVICE, UINT32 id, SIZE_T, void *, SIZE_T, void *)
+/* S2-1e step 0 (receipt-only, EXP2351 offline result): DWM's DDisplay output path asks for the WDDM 2.0
+ * video function table (D3DWDDM2_0DDI_VIDEO_FUNCTIONS, 3) once per set-up attempt and tears the output down
+ * when it is missing.  The table below answers "nothing supported" truthfully (no decoder profiles, no
+ * video-processor formats, creation refused) and records which entries a process calls
+ * ("measure-dxgi-video-ddi" {entry index in D3DWDDM2_0DDI_VIDEODEVICEFUNCS, call count}). */
+static volatile LONG agx_video_ddi_calls[128];
+static void
+agx_video_ddi_receipt(UINT index)
 {
+   const LONG n = InterlockedIncrement(&agx_video_ddi_calls[index & 127u]);
+   if (n <= 8 || (n & (n - 1)) == 0) {
+      UINT values[2] = {index, (UINT)n};
+      AgxD3d10WindowsDiagnostic("measure-dxgi-video-ddi", S_OK, values, 2u);
+   }
+}
+#include "agx_d3d11_video_ddi.inc"
+
+HRESULT APIENTRY
+AgxWddm2_0RetrieveSubObject(D3D10DDI_HDEVICE, UINT32 id, SIZE_T paramSize, void *params, SIZE_T, void *)
+{
+   if (id == D3DWDDM2_0DDI_VIDEO_FUNCTIONS && params && paramSize >= sizeof(D3DWDDM2_0DDI_VIDEO_INPUT)) {
+      D3DWDDM2_0DDI_VIDEO_INPUT *input = (D3DWDDM2_0DDI_VIDEO_INPUT *)params;
+      UINT values[2] = {id, (UINT)input->Relocate};
+      if (!input->pWDDM2_0VideoDeviceFuncs) {
+         AgxD3d10WindowsDiagnostic("measure-wddm2-retrieve-subobject", E_INVALIDARG, values, 2u);
+         return E_INVALIDARG;
+      }
+      if (!input->Relocate)
+         agx_video_ddi_fill(input->pWDDM2_0VideoDeviceFuncs);
+      AgxD3d10WindowsDiagnostic("measure-wddm2-retrieve-subobject", S_OK, values, 2u);
+      return S_OK;
+   }
    UINT values[1] = {id};
    AgxD3d10WindowsDiagnostic("measure-wddm2-retrieve-subobject", E_NOTIMPL, values, 1u);
    return E_NOTIMPL;

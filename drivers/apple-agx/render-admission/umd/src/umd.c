@@ -389,6 +389,9 @@ static void AdmissionUmdCxxThrowReceipt(EXCEPTION_POINTERS *Info) {
   const ULONG_PTR *stack;
   UINT thrown[11] = {0};
   UINT frames[13] = {0};
+  /* S2-1e: words 8..23 of the thrown object (a wil::ResultException keeps its
+   * FailureInfo -- type, flags, hr, status, failureId -- past the first 8). */
+  UINT more[16] = {0};
   UINT found = 0u;
   if (InterlockedIncrement(&AdmissionUmdCxxThrows) > 32) return;
   thrown[0] = frames[0] = GetCurrentThreadId();
@@ -411,6 +414,8 @@ static void AdmissionUmdCxxThrowReceipt(EXCEPTION_POINTERS *Info) {
       thrown[1u + i / 4u] |= (UINT)(BYTE)name[i] << (8u * (i % 4u));
     for (UINT i = 0u; object != NULL && i < 8u; ++i)
       thrown[3u + i] = ((const UINT *)object)[i];
+    for (UINT i = 0u; object != NULL && i < 16u; ++i)
+      more[i] = ((const UINT *)object)[8u + i];
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
 #if defined(_M_ARM64)
@@ -431,6 +436,7 @@ static void AdmissionUmdCxxThrowReceipt(EXCEPTION_POINTERS *Info) {
   }
   AdmissionUmdDiagnostic("reject-cxx-throw", E_UNEXPECTED, thrown, 11u);
   AdmissionUmdDiagnostic("reject-cxx-stack", E_UNEXPECTED, frames, 13u);
+  AdmissionUmdDiagnostic("reject-cxx-object", E_UNEXPECTED, more, 16u);
   AdmissionUmdDiagnosticFlush();
 }
 
