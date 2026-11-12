@@ -78429,3 +78429,14 @@ EXP2372 HARDWARE BEFORE 2026-11-12T16:39:54Z:
 - Recovery: nothing persistent. Proxy reboot (reboot.py) afterwards (2026-11-11 rule), then AT_PROXY recovery of the last rec (rec2369h) for STRETCH-1.
 - Evidence: .local/experiments/m1n1-hc1-sp2-diag/evidence/EXP2372 (full-chainload.log, hc1.log, sp2.log, photos).
 - Precondition: J313 at Running proxy after the rec2369h guest restart; operator at the screen.
+
+EXP2373 HARDWARE BEFORE 2026-11-12T16:58:02Z:
+- Kind: receipt-only replicate of the EXP2369 package (arch/pitch1 34dcb8a42, manifest 0f15f0ef, rebuilt as EXP2373-pitch1look); m1n1 s2v3, Mu MUANSCPPC002, switches as EXP2369, DisableDDisplay absent. No code change; no speed gates beyond the picture rule.
+- WHY THIS HYPOTHESIS: (1) EXP2369 showed Check3 supported for the 1682x840 window yet DWM kept compositing it; (2) the 1280x720 control window held the plane in EXP2366-2369, so a DWM-side reason (Dwm-Core 290 RejectReason, plane rects vs window rect) separates a DWM policy refusal from a driver refusal; (3) PITCH-1 verdict needs the window case decided before STRETCH-1 builds on it.
+- WINDOWS CONTRACT: DWM issues CheckMultiPlaneOverlaySupport3 (Dwm-Core 218/219/220) and logs overlay rejection (290) with a reason. AGX/ASAHI CONTRACT: unchanged (V3 stride %64, two layers). TRANSLATION: none changed. WHAT IS STILL UNKNOWN: DWM's reason for compositing the 1682x840 window (geometry vs policy vs our Check3 answer).
+- Probe: EXP2369 head (suite, picture rule, MPOKMT, 60 s GM trace), then one Dwm-Core window over two back-to-back GM arms (l = 1280x720 control, k = 1682x840), each: start, 18 s, GetWindowRect/client rect (LOOK_<arm> WINRECT), receipts a, 20 s, receipts b (Check3/Set3/TwoPlane/Removal/refusal counters), stop. DWMLOOK_CHECK/290/RATE lines from the parsed ETL. Tail: OPTWIN batch 1 ours side with sha256 preflight of the eoptwin2 exe (3a1459a8...) locally and on the guest (OPTWIN_PREFLIGHT_FAIL invalidates only the tail).
+- Expected: arm l: 220 fSupported=1 and TwoPlaneCommits growing; arm k: either 220 fSupported=0 (our Check3 answer differs under DWM's real rects) or fSupported=1 with a 290 reason (DWM policy); either outcome names the next change.
+- Failure criteria: picture rule loop, guest unreachable, GM arm not started (no WINRECT). Recovery: rec2373h visible recovery (AT_PROXY if at proxy).
+- Hashes: sys 85cde7286cad, UmdArm64 03c5c769a142, UmdX64 41b7d468a0c3, Umd32 ecb1809577f8; manifest aaac23e85ff8, hardware-manifest a37a6d0cf439; probe2373.sh 46091e776458 (PROBE_LINT_OK); visible recovery rec2373h 44382823db6229de; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
+- Recovery rec2373h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2373-pitch1look/run2373.sh.
