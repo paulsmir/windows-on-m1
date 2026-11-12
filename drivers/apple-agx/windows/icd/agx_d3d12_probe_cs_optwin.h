@@ -27,7 +27,9 @@
 #define OPTWIN_ROWS 912u                     /* C1: cbuffer float4 rows[912] = 16 views x 57 rows */
 #define OPTWIN_ROWS_PER_VIEW 57u
 #define OPTWIN_VIEW 13u                      /* the runtime view index */
-#define OPTWIN_S1O_NV 20u                    /* S1o live float4 (NV in the kernel text) */
+#define OPTWIN_S1O_NV 23u                    /* S1o live float4 (NV in the kernel text): 92 + temporaries
+                                              * = 93..104 32-bit registers = 186..208 half registers, which
+                                              * Asahi agx_performance.c occupancies[] maps to 512 threads/core */
 #define OPTWIN_G1C_STEP 4096u                /* G1c coalesced stride in float4 elements */
 #define OPTWIN_T1_REF 0.5f                   /* T1 compare reference (0.5f in the kernel text) */
 #define OPTWIN_FILL_R 10000u                 /* P6-hold filler: the CLKTWIN W56 list (S1 at 1024, R 10000) */
@@ -69,7 +71,7 @@ static const char optwin_body_s1[] = /* the CLKTWIN body, thread index = row-maj
     "   x0=FMA(x0,P(pA),P(pB)); x1=FMA(x1,P(pA),P(pB)); x2=FMA(x2,P(pA),P(pB)); x3=FMA(x3,P(pA),P(pB));\n"
     "   x4=FMA(x4,P(pA),P(pB)); x5=FMA(x5,P(pA),P(pB)); x6=FMA(x6,P(pA),P(pB)); x7=FMA(x7,P(pA),P(pB)); } }\n"
     " STORE(lin+ALT,x0+x1+x2+x3+x4+x5+x6+x7);\n";
-static const char optwin_body_s1o[] = /* NV live float4 chains: register pressure, ~512 threads per core */
+static const char optwin_body_s1o[] = /* NV live float4 chains: register pressure, ~512 threads per core (OPTWIN_SHADER) */
     " uint lin=gid.y*P(pW)+gid.x;\n"
     " float t=(float)lin;\n"
     " float4 A=float4(P(pA),P(pA),P(pA),P(pA)), B=float4(P(pB),P(pB),P(pB),P(pB));\n"
@@ -162,11 +164,11 @@ static const char optwin_body_c1[] = /* 16 x dot(rows[view*57 + j], p), runtime 
     "  pp=FMA(pp,A,B); }\n"
     " STORE(lin,acc);\n";
 /* Language-neutral defines prepended to every kernel on both sides. */
-static const char optwin_common_src[] = "#define NV 20u\n";
+static const char optwin_common_src[] = "#define NV 23u\n";
 
 static const optwin_kernel optwin_kernels[OPTWIN_KERNELS] = {
     {"S1", 0u, 32u, 0u, "ffma", optwin_body_s1},
-    {"S1o", 0u, 80u, 0u, "ffma", optwin_body_s1o},
+    {"S1o", 0u, 92u, 0u, "ffma", optwin_body_s1o},
     {"ARGS", OPTWIN_RES_ARGS, 0u, 0u, "none", optwin_body_args},
     {"G1", OPTWIN_RES_SRC, 4u, 16u, "load", optwin_body_g1},
     {"G1d", OPTWIN_RES_SRC, 4u, 16u, "load", optwin_body_g1d},
@@ -182,7 +184,9 @@ static const optwin_kernel optwin_kernels[OPTWIN_KERNELS] = {
  * 1024 / 8192 / 57344 / 229376 threads in the variant's group size (8x8 groups: 4x4 / 16x8 / 32x28 / 64x56),
  * plus GM, the GravityMark shape of the class. R per shape: N32/L1/L8 r_lat, W56 r_w56, W224 r_w224, GM r_gm
  * (r_lat chosen so L1 is about 1 ms where the CLKTWIN rate allows an estimate; wide shapes cut so a variant
- * stays near 1.5 s). S1n: two cases N32x9 and N32x33 (1 vs 9 / 33 dispatches, two pipelines alternating). */
+ * stays near 1.5 s). S1n: two cases N32x9 and N32x33 (1 vs 9 / 33 dispatches, two pipelines alternating).
+ * CALIBRATION (architect 2026-11-12): after the first ours run, a variant whose L1 per_dispatch_ms is < 0.3 or
+ * > 5 gets its R columns changed HERE ONLY (this table is shared by both sides); every OPTWIN_CASE line prints R. */
 #define OPTWIN_A 0.999f
 #define OPTWIN_B 0.001f
 static const optwin_variant optwin_variants[] = {
@@ -191,7 +195,7 @@ static const optwin_variant optwin_variants[] = {
     {"S1", "S1_128", OPTWIN_K_S1, 128u, 1u, 0u, 0u, 0u, 4096u, 4096u, 4096u, 1024u, 7200u, 1u, OPTWIN_A, OPTWIN_B, 0.0f},
     {"S1", "S1_256", OPTWIN_K_S1, 256u, 1u, 0u, 0u, 0u, 4096u, 4096u, 4096u, 1024u, 3600u, 1u, OPTWIN_A, OPTWIN_B, 0.0f},
     {"S1", "S1_1024", OPTWIN_K_S1, 1024u, 1u, 0u, 0u, 0u, 4096u, 4096u, 4096u, 1024u, 900u, 1u, OPTWIN_A, OPTWIN_B, 0.0f},
-    {"S1", "S1o", OPTWIN_K_S1O, 8u, 8u, 0u, 0u, 0u, 1600u, 1600u, 1600u, 400u, 160u, 90u, OPTWIN_A, OPTWIN_B, 0.0f},
+    {"S1", "S1o", OPTWIN_K_S1O, 8u, 8u, 0u, 0u, 0u, 1400u, 1400u, 1400u, 350u, 160u, 90u, OPTWIN_A, OPTWIN_B, 0.0f},
     {"S1", "S1i", OPTWIN_K_S1, 1024u, 1u, 0u, 1u, 0u, 4096u, 4096u, 4096u, 1024u, 900u, 1u, OPTWIN_A, OPTWIN_B, 0.0f},
     {"S1", "S1n", OPTWIN_K_S1, 32u, 1u, 0u, 0u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, OPTWIN_A, OPTWIN_B, 0.0f},
     {"G1", "G1_1M", OPTWIN_K_G1, 256u, 1u, 0u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
@@ -446,10 +450,12 @@ static int optwin_oracle_lane(const optwin_variant *v, const optwin_case *c, uns
 
 /* Output lines: identical keys on both sides (fw_ms = firmware compute Start/End on D3D12, GPUEnd - GPUStart on
  * Metal). p6_pct is the Wom1GpuPerf P6 share over the variant's block on D3D12, -1 on macOS (powermetrics). */
+/* span_ms: first job start to last job end of the list (Metal: GPUEndTime - GPUStartTime); jobsum_ms: the sum of
+ * the list's jobs' own start-to-end times (-1 where there is no per-job timing, i.e. Metal). */
 static void optwin_print_rep(unsigned rep, const optwin_variant *v, const optwin_case *c, unsigned dispatches, int got,
-                             double ms, double wall_ms, unsigned jobs) {
-    printf("OPTWIN_REP rep=%u variant=%s shape=%s dispatches=%u fw_ms=%s%.4f wall_ms=%.3f jobs=%u\n", rep, v->variant,
-           c->shape, dispatches, got ? "" : "missing", got ? ms : 0.0, wall_ms, jobs);
+                             double span_ms, double jobsum_ms, double wall_ms, unsigned jobs) {
+    printf("OPTWIN_REP rep=%u variant=%s shape=%s dispatches=%u span_ms=%s%.4f jobsum_ms=%.4f wall_ms=%.3f jobs=%u\n", rep,
+           v->variant, c->shape, dispatches, got ? "" : "missing", got ? span_ms : 0.0, got ? jobsum_ms : -1.0, wall_ms, jobs);
 }
 static void optwin_print_case(const optwin_variant *v, const optwin_case *c, const double best[2], const double wall[2],
                               double p6_pct) {
@@ -466,8 +472,21 @@ static void optwin_print_case(const optwin_variant *v, const optwin_case *c, con
            per > 0.0 && ops > 0.0 ? per * 1e6 / (ops / 32.0) : -1.0,
            per > 0.0 && k->bytes_per_op ? ops * (double)k->bytes_per_op / (per * 1e6) : 0.0, wall[0], wall[1], p6_pct);
 }
-static void optwin_print_p6(const optwin_variant *v, double p6_pct, double sampled_ms, unsigned gaps, int valid) {
-    printf("OPTWIN_P6 variant=%s p6_pct=%.2f sampled_ms=%.1f gaps=%u valid=%d\n", v->variant, p6_pct, sampled_ms, gaps, valid);
+/* busy_ms: the GPU time of the variant's own timed lists (sum of span_ms); block_ms: wall time of the block. The
+ * P6 delta covers sampled_ms, which also holds the W56 fillers around the block. */
+static void optwin_print_p6(const optwin_variant *v, double p6_pct, double sampled_ms, unsigned gaps, int valid,
+                            double busy_ms, double block_ms) {
+    printf("OPTWIN_P6 variant=%s p6_pct=%.2f sampled_ms=%.1f gaps=%u valid=%d busy_ms=%.1f block_ms=%.1f\n", v->variant,
+           p6_pct, sampled_ms, gaps, valid, busy_ms, block_ms);
+}
+/* One line per pipeline. D3D12: hash = FNV-1a 64 of the DXBC program tokens, the key of the UMD's
+ * measure-d3d12-shader-stats row (values 0-1), from which threads_per_core / gprs16 come; -1 when the trace row
+ * is not available (source names where to join). Metal: threads_per_core -1 here; tools/macos/optwin_metal_regs.py
+ * prints the highest register of each --archive-each file. */
+static void optwin_print_shader(const char *kernel, unsigned ntx, unsigned nty, unsigned alt, unsigned long long hash,
+                                int threads_per_core, int gprs16, int instrs, int spills, int fills, const char *source) {
+    printf("OPTWIN_SHADER kernel=%s nt=%ux%u alt=%u hash=%016llx threads_per_core=%d gprs16=%d instrs=%d spills=%d "
+           "fills=%d source=%s\n", kernel, ntx, nty, alt, hash, threads_per_core, gprs16, instrs, spills, fills, source);
 }
 /* OPTWIN-SHARED-END */
 
@@ -495,6 +514,48 @@ static const char optwin_hlsl_preamble[] =
     "#define BARRIER GroupMemoryBarrierWithGroupSync()\n"
     "#define SAMPLE_CMP(uv,layer,ref) shadow.SampleCmpLevelZero(cmp,float3((uv),(float)(layer)),(ref))\n"
     "#define SAMPLE_LIN(uv,layer) color.SampleLevel(lsamp,float3((uv),(float)(layer)),0.0f)\n";
+
+/* The UMD's shader key (agx_win32_shader_stats.h agx_win32_shader_hash over the D3D12 DDI pShaderCode, i.e. the
+ * SHEX/SHDR program tokens, tokens[1] dwords): found in the compiled DXBC container. 0 when absent. */
+static unsigned long long optwin_dxbc_program_hash(const void *blob, size_t size, unsigned *bytes) {
+    const unsigned char *b = (const unsigned char *)blob;
+    unsigned chunks, i;
+    *bytes = 0u;
+    if (size < 32u || memcmp(b, "DXBC", 4)) return 0ull;
+    memcpy(&chunks, b + 28, 4);
+    for (i = 0u; i < chunks && 32u + 4u * (size_t)i + 4u <= size; ++i) {
+        unsigned off, len, tokens;
+        memcpy(&off, b + 32u + 4u * i, 4);
+        if ((size_t)off + 16u > size || (memcmp(b + off, "SHEX", 4) && memcmp(b + off, "SHDR", 4))) continue;
+        memcpy(&len, b + off + 4u, 4);
+        memcpy(&tokens, b + off + 12u, 4);
+        if (tokens < 2u || (size_t)tokens * 4u > len || (size_t)off + 8u + (size_t)tokens * 4u > size) return 0ull;
+        {
+            unsigned long long h = 0xcbf29ce484222325ull;
+            size_t k;
+            for (k = 0u; k < (size_t)tokens * 4u; ++k) h = (h ^ b[off + 8u + k]) * 0x100000001b3ull;
+            *bytes = tokens * 4u;
+            return h;
+        }
+    }
+    return 0ull;
+}
+/* One UMD trace row "measure-d3d12-shader-stats hr=.. pid=.. tid=.. session=.. qpc=.. v0 .. v15" (hex values,
+ * agx_win32_shader_stats.h slots: 0-1 hash, 2 stage, 4 instrs, 6 gprs (16-bit), 7 threads, 9 spills, 10 fills). */
+static int optwin_parse_stats_line(const char *line, unsigned v[16]) {
+    const char *p;
+    unsigned i;
+    if (strncmp(line, "measure-d3d12-shader-stats ", 27) || !(p = strstr(line, " qpc="))) return 0;
+    p = strchr(p + 1, ' ');
+    for (i = 0u; i < 16u; ++i) {
+        char *end;
+        if (!p) return 0;
+        v[i] = (unsigned)strtoul(p, &end, 16);
+        if (end == p) return 0;
+        p = end;
+    }
+    return 1;
+}
 
 /* Wom1GpuPerf (KMD device key, render_gpu_perf.h ADMISSION_GPU_PERF_STATE v1, exported at most every 2 s while
  * Wom1JobDiagnostics is on). The standalone probe build stages probe_*.h only, so the offsets are restated here;

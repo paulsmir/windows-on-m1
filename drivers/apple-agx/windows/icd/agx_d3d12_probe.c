@@ -9942,6 +9942,7 @@ typedef struct {
     ID3D12Device *device; ID3D12CommandQueue *queue; ID3D12Fence *fence; HANDLE event;
     ID3D12RootSignature *root; ID3D12CommandSignature *dispatch_sig; ID3D12DescriptorHeap *heap;
     ID3D12PipelineState *pso[OPTWIN_MAX_PSO]; unsigned pso_key[OPTWIN_MAX_PSO]; unsigned pso_count;
+    unsigned long long pso_hash[OPTWIN_MAX_PSO]; /* the UMD's shader-stats key of each pipeline */
     ID3D12Resource *out, *readback, *data, *rows, *shadow, *color, *args, *upload;
     ID3D12CommandAllocator *alloc[3]; ID3D12GraphicsCommandList *list[3]; /* 0 timed / setup, 1-2 fillers */
     Q3_GPU_COMPLETION_QUERY *rec;
@@ -9950,7 +9951,8 @@ typedef struct {
     LARGE_INTEGER qpf;
 } OptwinCtx;
 static int optwin_selected(const optwin_variant *v, const char *probe) { return !probe || !strcmp(v->probe, probe); }
-static HRESULT optwin_compile(OptwinCtx *x, unsigned kernel, unsigned ntx, unsigned nty, unsigned alt, ID3D12PipelineState **pso) {
+static HRESULT optwin_compile(OptwinCtx *x, unsigned kernel, unsigned ntx, unsigned nty, unsigned alt, ID3D12PipelineState **pso,
+                             unsigned long long *hash) {
     HMODULE compiler=LoadLibraryExW(L"d3dcompiler_47.dll",NULL,LOAD_LIBRARY_SEARCH_SYSTEM32);
     pD3DCompile compile=compiler ? (pD3DCompile)(void *)GetProcAddress(compiler,"D3DCompile"):NULL;
     const optwin_kernel *k=&optwin_kernels[kernel];
@@ -9968,6 +9970,8 @@ static HRESULT optwin_compile(OptwinCtx *x, unsigned kernel, unsigned ntx, unsig
         hr=compile(text,strlen(text),"optwin",defines,NULL,"main","cs_5_0",D3DCOMPILE_ENABLE_STRICTNESS,0,&shader,&errors);
     }
     if (SUCCEEDED(hr)) {
+        unsigned bytes;
+        *hash=optwin_dxbc_program_hash(ID3D10Blob_GetBufferPointer(shader),ID3D10Blob_GetBufferSize(shader),&bytes);
         desc.pRootSignature=x->root;
         desc.CS.pShaderBytecode=ID3D10Blob_GetBufferPointer(shader);
         desc.CS.BytecodeLength=ID3D10Blob_GetBufferSize(shader);
@@ -9985,7 +9989,8 @@ static HRESULT optwin_compile(OptwinCtx *x, unsigned kernel, unsigned ntx, unsig
 static ID3D12PipelineState *optwin_pso(OptwinCtx *x, unsigned kernel, unsigned ntx, unsigned nty, unsigned alt) {
     const unsigned key=kernel+16u*(ntx+2048u*(nty+16u*(alt ? 1u : 0u)));
     for (unsigned i=0;i<x->pso_count;++i) if (x->pso_key[i]==key) return x->pso[i];
-    if (x->pso_count>=OPTWIN_MAX_PSO || FAILED(optwin_compile(x,kernel,ntx,nty,alt,&x->pso[x->pso_count]))) return NULL;
+    if (x->pso_count>=OPTWIN_MAX_PSO || FAILED(optwin_compile(x,kernel,ntx,nty,alt,&x->pso[x->pso_count],&x->pso_hash[x->pso_count])))
+        return NULL;
     x->pso_key[x->pso_count]=key;
     return x->pso[x->pso_count++];
 }
@@ -10156,9 +10161,9 @@ static HRESULT optwin_filler(OptwinCtx *x) {
 /* The timed list's own jobs: compute records of this process submitted after t0 that completed by the time the
  * fence wait returned (plus 3 ms of notification slack; the queued W56 filler runs > 7 ms after the timed list).
  * Pages from the Newest sequence read just before the submission, so ring wrap-around cannot hide a record. */
-static int optwin_collect(OptwinCtx *x, UINT64 cursor, UINT64 t0, UINT64 t1, double *ms, unsigned *jobs) {
+static int optwin_collect(OptwinCtx *x, UINT64 cursor, UINT64 t0, UINT64 t1, double *ms, double *jobsum_ms, unsigned *jobs) {
     const UINT64 slack=(UINT64)x->qpf.QuadPart*3u/1000u;
-    UINT64 start=~0ull, end=0;
+    UINT64 start=~0ull, end=0, sum=0;
     *jobs=0;
     for (unsigned page=0;page<16u;++page) {
         Q3_GPU_COMPLETION_QUERY *q=x->rec;
@@ -10169,23 +10174,25 @@ static int optwin_collect(OptwinCtx *x, UINT64 cursor, UINT64 t0, UINT64 t1, dou
             if (r->Status || !r->Start || r->End<=r->Start) return 0;
             if (r->Start<start) start=r->Start;
             if (r->End>end) end=r->End;
+            sum+=r->End-r->Start;
             ++*jobs;
         }
         cursor=q->Cursor;
         if (cursor>=q->Newest) {
             if (!*jobs) return 0;
             *ms=1000.0*(double)(end-start)/(double)q->Frequency;
+            *jobsum_ms=1000.0*(double)sum/(double)q->Frequency;
             return 1;
         }
     }
     return 0;
 }
 static HRESULT optwin_timed(OptwinCtx *x, const optwin_variant *v, const optwin_case *c, unsigned dispatches,
-                            int *got, double *ms, double *wall_ms, unsigned *jobs) {
+                            int *got, double *ms, double *jobsum_ms, double *wall_ms, unsigned *jobs) {
     LARGE_INTEGER t0, t1;
     UINT64 timed, cursor=0;
     HRESULT hr=optwin_record(x,x->list[0],x->alloc[0],v,c,dispatches,x->out,0);
-    *got=0; *ms=0.0; *jobs=0;
+    *got=0; *ms=0.0; *jobsum_ms=-1.0; *jobs=0;
     if (SUCCEEDED(hr) && x->filler_signal[x->fill]) hr=optwin_wait(x,x->filler_signal[x->fill]);
     if (SUCCEEDED(hr)) hr=q3_completions(x->device,0,x->rec);
     if (SUCCEEDED(hr)) cursor=x->rec->Newest;
@@ -10198,7 +10205,7 @@ static HRESULT optwin_timed(OptwinCtx *x, const optwin_variant *v, const optwin_
     *wall_ms=(double)(t1.QuadPart-t0.QuadPart)*1000.0/(double)x->qpf.QuadPart;
     for (UINT tries=0;tries<4 && SUCCEEDED(hr) && !*got;++tries) {
         if (tries) Sleep(2);
-        *got=optwin_collect(x,cursor,(UINT64)t0.QuadPart,(UINT64)t1.QuadPart,ms,jobs);
+        *got=optwin_collect(x,cursor,(UINT64)t0.QuadPart,(UINT64)t1.QuadPart,ms,jobsum_ms,jobs);
     }
     return hr;
 }
@@ -10246,6 +10253,35 @@ static void optwin_oracle(OptwinCtx *x, const optwin_variant *v, HRESULT *hr) {
     if (words) ID3D12Resource_Unmap(x->readback,0,NULL);
     printf("OPTWIN_ORACLE variant=%s shape=%s match=%u/4 hr=0x%08lx\n",v->variant,c->shape,match,(unsigned long)*hr);
     if (match!=4) ++x->oracle_bad;
+}
+/* OPTWIN_SHADER per pipeline: the UMD writes measure-d3d12-shader-stats rows (threads per core, 16-bit GPRs) to
+ * APPLE_AGX_UMD_TRACE_FILE when its diagnostics are on; read after the oracles so the compiles have been traced.
+ * Without the row the line still carries the hash: join it later with that row's values 0-1 (umd.log). */
+static void optwin_shader_report(OptwinCtx *x) {
+    char path[MAX_PATH];
+    const DWORD length=GetEnvironmentVariableA("APPLE_AGX_UMD_TRACE_FILE",path,sizeof(path));
+    unsigned found[OPTWIN_MAX_PSO][16];
+    int have[OPTWIN_MAX_PSO]={0};
+    FILE *f=NULL;
+    if (length && length<sizeof(path) && !fopen_s(&f,path,"r") && f) {
+        char line[1024];
+        unsigned v[16];
+        while (fgets(line,sizeof(line),f))
+            if (optwin_parse_stats_line(line,v) && (v[2]&0x1ffu)==5u)
+                for (unsigned i=0;i<x->pso_count;++i)
+                    if (x->pso_hash[i] && v[0]==(unsigned)(x->pso_hash[i]>>32) && v[1]==(unsigned)x->pso_hash[i]) {
+                        memcpy(found[i],v,sizeof(v)); have[i]=1;
+                    }
+        fclose(f);
+    }
+    for (unsigned i=0;i<x->pso_count;++i) {
+        const unsigned key=x->pso_key[i], kernel=key%16u, ntx=(key/16u)%2048u, nty=(key/16u/2048u)%16u, alt=key/16u/2048u/16u;
+        optwin_print_shader(optwin_kernels[kernel].name,ntx,nty,alt ? 32u : 0u,x->pso_hash[i],
+                            have[i] ? (int)found[i][7] : -1,have[i] ? (int)found[i][6] : -1,have[i] ? (int)found[i][4] : -1,
+                            have[i] ? (int)found[i][9] : -1,have[i] ? (int)found[i][10] : -1,
+                            have[i] ? "umd-trace" : f ? "umd-trace-row-missing(join-measure-d3d12-shader-stats-values0-1)"
+                                                     : "no-trace-file(join-umd.log-measure-d3d12-shader-stats-values0-1)");
+    }
 }
 static int optwin_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, const char *probe) {
     OptwinCtx ctx, *x=&ctx;
@@ -10322,6 +10358,7 @@ static int optwin_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
            need,(unsigned long)hr);
     for (unsigned i=0;i<OPTWIN_VARIANTS && SUCCEEDED(hr);++i)
         if (optwin_selected(&optwin_variants[i],probe)) optwin_oracle(x,&optwin_variants[i],&hr);
+    if (SUCCEEDED(hr)) optwin_shader_report(x);
     if (SUCCEEDED(hr)) { /* 2 s warm-up, two fillers in flight */
         LARGE_INTEGER t0, t;
         UINT lists_run=0;
@@ -10336,30 +10373,31 @@ static int optwin_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
         const optwin_variant *v=&optwin_variants[i];
         optwin_case cases[OPTWIN_MAX_CASES];
         const unsigned n=optwin_cases(v,cases);
-        double best[OPTWIN_MAX_CASES][2], wall[OPTWIN_MAX_CASES][2], p6=-1.0, sampled=0.0;
+        double best[OPTWIN_MAX_CASES][2], wall[OPTWIN_MAX_CASES][2], p6=-1.0, sampled=0.0, busy=0.0;
         unsigned gaps=0;
         int ok=0, valid=0;
-        LARGE_INTEGER end;
+        LARGE_INTEGER begin, end;
         if (!optwin_selected(v,probe)) continue;
         for (unsigned m=0;m<n;++m) best[m][0]=best[m][1]=wall[m][0]=wall[m][1]=1e30;
+        QueryPerformanceCounter(&begin);
         for (unsigned rep=0;rep<OPTWIN_REPS && SUCCEEDED(hr);++rep)
             for (unsigned m=0;m<n && SUCCEEDED(hr);++m)
                 for (unsigned k=0;k<2u && SUCCEEDED(hr);++k) {
                     const unsigned dispatches=k ? cases[m].nb : cases[m].na;
-                    double ms, wms;
+                    double ms, jobsum, wms;
                     unsigned jobs;
                     int got;
-                    hr=optwin_timed(x,v,&cases[m],dispatches,&got,&ms,&wms,&jobs);
-                    if (!got) ++x->missing;
+                    hr=optwin_timed(x,v,&cases[m],dispatches,&got,&ms,&jobsum,&wms,&jobs);
+                    if (!got) ++x->missing; else busy+=ms;
                     if (got && ms<best[m][k]) best[m][k]=ms;
                     if (wms<wall[m][k]) wall[m][k]=wms;
-                    optwin_print_rep(rep,v,&cases[m],dispatches,got,ms,wms,jobs);
+                    optwin_print_rep(rep,v,&cases[m],dispatches,got,ms,jobsum,wms,jobs);
                 }
         QueryPerformanceCounter(&end);
         if (SUCCEEDED(hr)) hr=optwin_perf_after(x,(UINT64)end.QuadPart,perf[1],&ok);
         if (!ok || !optwin_perf_delta(perf[0],perf[1],&p6,&sampled,&gaps,&valid)) { p6=-1.0; valid=-1; }
         if (ok) memcpy(perf[0],perf[1],OPTWIN_PERF_BYTES); /* the next block's before */
-        optwin_print_p6(v,p6,sampled,gaps,valid);
+        optwin_print_p6(v,p6,sampled,gaps,valid,busy,(double)(end.QuadPart-begin.QuadPart)*1000.0/(double)x->qpf.QuadPart);
         for (unsigned m=0;m<n;++m) optwin_print_case(v,&cases[m],best[m],wall[m],p6);
     }
     if (x->filler_signal[0]) (void)optwin_wait(x,x->filler_signal[0]);

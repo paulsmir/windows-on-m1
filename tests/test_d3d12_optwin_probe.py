@@ -56,8 +56,8 @@ class OptwinProbe(unittest.TestCase):
         self.assertTrue(used)
         self.assertLessEqual(used, defined(hlsl), 'macro missing from the HLSL preamble')
         self.assertLessEqual(used, defined(msl), 'macro missing from the MSL preamble')
-        self.assertIn('#define NV 20u', shared(header))
-        self.assertIn('#define OPTWIN_S1O_NV 20u', shared(header))
+        self.assertIn('#define NV 23u', shared(header))
+        self.assertIn('#define OPTWIN_S1O_NV 23u', shared(header))
         self.assertIn('#include "agx_d3d12_probe_cs_optwin.h"', PROBE.read_text())
         for step in ('OPTWIN', 'OPTWINS1', 'OPTWING1', 'OPTWINT1', 'OPTWINB1', 'OPTWINC1'):
             self.assertIn('{"%s", optwin_' % step, PROBE.read_text())
@@ -158,13 +158,17 @@ int main(void) {
   (void)optwin_cases(&optwin_variants[0], c);
   optwin_print_case(&optwin_variants[0], &c[5], best, wall, 99.5);
   optwin_print_case(&optwin_variants[0], &c[5], missing, wall, -1.0);
-  optwin_print_rep(2, &optwin_variants[0], &c[5], 5, 0, 0.0, 7.0, 0);
-  optwin_print_p6(&optwin_variants[0], 99.5, 2000.0, 0, 1);
+  optwin_print_rep(2, &optwin_variants[0], &c[5], 5, 0, 0.0, 0.0, 7.0, 0);
+  optwin_print_p6(&optwin_variants[0], 99.5, 2000.0, 0, 1, 812.5, 1400.0);
+  optwin_print_shader("S1o", 8, 8, 0, 0x0123456789abcdefull, 512, 200, 300, 0, 0, "umd-trace");
  }
  return 0;
 }''')
         lines = out.splitlines()
-        self.assertEqual(len(lines), 4)
+        self.assertEqual(len(lines), 5)
+        self.assertIn(' span_ms=missing0.0000 jobsum_ms=-1.0000 ', lines[2])
+        self.assertIn(' busy_ms=812.5 block_ms=1400.0', lines[3])
+        self.assertIn('hash=0123456789abcdef threads_per_core=512 gprs16=200', lines[4])
         keys = None
         for line in lines:
             tag, *fields = line.split(' ')
@@ -178,6 +182,56 @@ int main(void) {
         self.assertEqual((first['variant'], first['shape'], first['groups'], first['nt']), ('S1_64', 'GM', '160x90', '8x8'))
         self.assertEqual(first['per_dispatch_ms'], '1.0000')
         self.assertEqual(dict(f.split('=') for f in lines[1].split(' ')[1:])['per_dispatch_ms'], '-1.0000')
+
+
+    def test_shader_stats_join_key_and_row_parser(self):
+        """The OPTWIN_SHADER hash must equal the UMD's key (FNV-1a 64 of the program tokens, not the
+        container), and the trace row parser must read the value slots, or threads_per_core is misjoined."""
+        stats = ROOT / 'drivers/apple-agx/mesa/winsys/agx_win32_shader_stats.h'
+        out = run_c(r'''
+#include <assert.h>
+#include <stdio.h>
+#include "%s"
+#include "agx_d3d12_probe_cs_optwin.h"
+int main(void) {
+ unsigned char blob[32 + 8 + 4 + 8 + 24]; unsigned bytes, v[16], prog[6] = {0x00050050u, 6u, 1u, 2u, 3u, 4u}, x;
+ memset(blob, 0, sizeof(blob)); memcpy(blob, "DXBC", 4);
+ x = 2; memcpy(blob + 28, &x, 4); x = 40; memcpy(blob + 32, &x, 4); x = 60; memcpy(blob + 36, &x, 4);
+ memcpy(blob + 40, "ISGN", 4);
+ memcpy(blob + 60, "SHEX", 4); x = 24; memcpy(blob + 64, &x, 4);
+ {
+  unsigned char full[68 + 24]; memcpy(full, blob, 68); memcpy(full + 68, prog, 24);
+  assert(optwin_dxbc_program_hash(full, sizeof(full), &bytes) == agx_win32_shader_hash(prog, 24) && bytes == 24);
+  full[0] = 'X'; assert(optwin_dxbc_program_hash(full, sizeof(full), &bytes) == 0 && bytes == 0);
+ }
+ assert(optwin_parse_stats_line("measure-d3d12-shader-stats hr=0x00000000 pid=3036 tid=6756 session=1 qpc=9587454224 "
+   "dbb08655 48a92141 00000005 00000428 00000008 00000002 000000c8 00000200 00000000 00000001 00000002 00000000 "
+   "00000032 00000000 00000000 00000000\n", v));
+ assert(v[0] == 0xdbb08655u && v[1] == 0x48a92141u && v[2] == 5 && v[6] == 200 && v[7] == 512 && v[9] == 1 && v[10] == 2);
+ assert(!optwin_parse_stats_line("measure-d3d12-dispatch hr=0 qpc=1 0 0", v));
+ assert(!optwin_parse_stats_line("measure-d3d12-shader-stats hr=0 qpc=1 00000001 00000002", v));
+ puts("ok");
+ return 0;
+}''' % stats)
+        self.assertEqual(out.strip(), 'ok')
+
+    def test_metal_register_count_to_threads_per_core(self):
+        """Highest-register parsing and the Asahi occupancy table: a wrong mapping misreports S1o occupancy."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('regs', ROOT / 'tools/macos/optwin_metal_regs.py')
+        regs = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(regs)
+        listing = ('   0: 0a00  fmadd32  r12, r3.discard, u4, r95h\n'
+                   '   4: 0b00  mov      r0_r1, r2l\n'
+                   '   8: 0c00  device_load 0, i32, xyzw, r40_r41_r42_r43, u2_u3, r1, signed\n')
+        self.assertEqual(regs.halfregs_of(listing), 2 * 95 + 2)
+        self.assertEqual(regs.halfregs_of('   0: 00  mov r7l, r1\n'), 15)
+        self.assertEqual([regs.threads_per_core(h) for h in (104, 105, 184, 185, 208, 209, 256, 257)],
+                         [1024, 896, 576, 512, 512, 448, 384, 0])
+        asahi = Path('/Volumes/pwdev/public_windows/.local/reference/mesa/src/asahi/compiler/agx_performance.c')
+        if asahi.exists():
+            pairs = re.findall(r'\{(\d+),\s*(\d+)\}', asahi.read_text().split('occupancies[] = {', 1)[1].split('};', 1)[0])
+            self.assertEqual([(int(a), int(b)) for a, b in pairs], regs.OCCUPANCY)
 
 
 if __name__ == '__main__':
