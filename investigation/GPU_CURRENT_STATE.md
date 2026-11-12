@@ -6131,3 +6131,22 @@ boot was run. The previous entry stays as written.
 - CUR-1 clip receipt: no clipped top plane occurred in this boot (ClipChecks 0); 1x1 alpha and read cost still
   unmeasured. With CS itself on a plane the EXP2366 scene no longer forms; a scene is needed.
 - Dwm-Core manifest has no value maps: 290 RejectReason values stay undecoded.
+
+## UPDATE 2026-11-12T18:52:36Z - CORRECTION to the EXP2375 entry; cause of the CS halving; FS-1 and HOLD-1
+
+- CORRECTION: "STATUS_DEVICE_BUSY from Set3 costs the flip" is WRONG. DxgKrnl ETW of the CS window (EXP2375): per
+  layer the Set3-level PresentId steps by 2 and FlipPresentId by 1 on 254/254 accepted flips - every Busy flip
+  was re-offered by dxgkrnl (same flip, new Set3 PresentId) and accepted after the next latch. The S3-C counter
+  compared the renumbered Set3 PresentId and miscounted. DEVICE_BUSY = hardware-proven "retry after the latch".
+- Cause of CS 28.7 fps: PITCH-1 is NOT involved (full-screen 2560x1600 surface). For a full-screen game DWM first
+  asks for the application plane alone (one plane, LayerIndex 1); we refuse (reason 3). On the accepted line DWM
+  then composes (52 fps). In EXP2375 DWM went on to the two-plane form and sends each frame as two one-layer
+  Set3 (strictly alternating, one accepted per vsync), so each layer latches at 30 Hz. Why DWM asks for the
+  two-plane form in this package (hypothesis: stretch caps) is not verified.
+- FS-1 (spec in the handoff file): admit the lone application plane covering the panel (scaled within limits) as
+  a single DCP layer - the direct full-screen path; also the STRETCHFS reason-3 case.
+- HOLD-1 (final form): while a swap is outstanding, Set3 merges an incoming flip into the pending set only if that
+  layer has no pending flip (SUCCESS); a second flip for the same layer answers DEVICE_BUSY as today. No flip is
+  superseded inside the driver; every accepted PresentId latches and is reported. The one-plane V2 path has no
+  pending-replace (earlier statement withdrawn).
+- Boot order on the stretch1b line: S3 package -> FS-1 -> HOLD-1 -> CUR-1 v2; merge when CS is back in band.
