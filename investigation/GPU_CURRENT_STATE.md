@@ -5923,3 +5923,19 @@ boot was run. The previous entry stays as written.
   screen. All CS numbers measured on the normal path (EXP2361, 2362, 2363) are NOT VALID as gate results until
   this is settled; the "-3 % CS with MPO live" reading of those boots is withdrawn as a performance statement
   (EXP2357 on the legacy path stands).
+
+## UPDATE 2026-11-12T10:24Z (architect): invisible Counter-Strike: our UMD refuses window-sized displayable primaries; WP-1
+
+- Cause found by the implementer from source and EXP2362's full UMD log: with DirectFlip reported, DXGI creates
+  the OpenGL ICD's flip-model swap-chain back buffers as shared displayable primaries of the WINDOW's size
+  (640x480 for Counter-Strike). AdmissionUmdDescribePrimary refuses any primary that is not a fixed-panel mode
+  (E_INVALIDARG); the runtime removes the device; every later present fails: 0 of about 3960 presents shown in
+  each CS process, rendering continues unseen. The kernel trace agrees (no present, flip or present-history
+  event from the game). GravityMark is unaffected because its D3D12 buffers do not pass that rule.
+- All CS numbers of EXP2361 / 2362 / 2363 are "render without present" and NOT VALID; the earlier "-3 % CS with
+  MPO live" reading is void for them. Whether the legacy-path CS boots since EXP2354 are affected is being
+  checked (the DirectFlip flag changes what DXGI creates on both paths).
+- Decision WP-1 (ATOMIC with the per-allocation geometry check owed since DF-1a): accept displayable primaries
+  of any supported size in user mode; require mode-equal geometry only where an allocation is scanned out
+  full-screen, refused cleanly otherwise; plane scan-out uses the allocation's own geometry. Boot before DP-1
+  (DP-1 waits for the read of the guest's d3d11 / dxgi).
