@@ -87,13 +87,57 @@ class RenderMpoWiringTests(unittest.TestCase):
         mpo = (DRIVER / "src/mpo_windows.c").read_text()
         check = function(mpo, "_Use_decl_annotations_ NTSTATUS "
                               "AdmissionDdiCheckMultiPlaneOverlaySupport3(")
+        # STRETCH-1: AdmissionMpoEvaluateOne answers the full-screen
+        # primary with AdmissionMpoEvaluatePrimary (mpo_contract_test.c
+        # TestEvaluateOne) and anything else with the layer-record rules.
         self.assertIn("if (effective && Args->PlaneCount == 1u)\n"
-                      "    (void)AdmissionMpoEvaluatePrimary(&input, &result);",
+                      "    (void)AdmissionMpoEvaluateOne(&input, &result);",
                       check)
         set3 = function(mpo, "_Use_decl_annotations_ NTSTATUS "
                              "AdmissionMpoSetVidPnSourceAddress3(")
-        self.assertLess(set3.index("AdmissionMpoEvaluatePrimary"),
-                        set3.index("AdmissionDdiSetVidPnSourceAddress(Context"))
+        self.assertNotIn("AdmissionMpoEvaluatePrimary(&", set3)
+        one = set3[set3.index("if (next[0].Enabled && listed[0]) {"):]
+        self.assertLess(one.index("AdmissionMpoEvaluateOne(&input, &result)"),
+                        one.index("if (result.OnePlaneRecord != 0u) {"))
+        self.assertLess(one.index("if (result.OnePlaneRecord != 0u) {"),
+                        one.index("AdmissionDdiSetVidPnSourceAddress(Context"))
+        record = one[one.index("if (result.OnePlaneRecord != 0u) {"):
+                     one.index("AdmissionDdiSetVidPnSourceAddress(Context")]
+        self.assertIn("AdmissionMpoBuildRemoval(&next[0].Input, &records[0])",
+                      record)
+        self.assertIn("AdmissionScanoutMpoCommit(Context, records, 1u,", record)
+
+    def test_stretch_caps_and_table_follow_the_broker_bit(self):
+        """STRETCH-1: no stretch reported or accepted without broker bit 8."""
+        mpo = (DRIVER / "src/mpo_windows.c").read_text()
+        caps = function(mpo, "_Use_decl_annotations_ NTSTATUS "
+                             "AdmissionDdiGetMultiPlaneOverlayCaps(")
+        self.assertIn("AdmissionMpoCapsFor(effective ? 1u : 0u,\n"
+                      "                      AdmissionScanoutMpoScaledSource(context) ? 1u : 0u,\n"
+                      "                      (unsigned int)ADMISSION_MPO_SCALER_FILTER_CURRENT,", caps)
+        for field in ("StretchRGB = derived.StretchRgb",
+                      "BilinearFilter = derived.BilinearFilter",
+                      "HighFilter = derived.HighFilter",
+                      "&derived.MaxStretchBits", "&derived.MaxShrinkBits"):
+            self.assertIn(field, caps)
+        build = function(mpo, "static VOID AdmissionMpoInput(")
+        self.assertIn("Input->ScalingSupported = AdmissionScanoutMpoScaledSource(Context) ? 1u : 0u;",
+                      build)
+        self.assertIn("Input->ScalerFilter = (unsigned int)ADMISSION_MPO_SCALER_FILTER_CURRENT;",
+                      build)
+        plane = function(mpo, "static VOID AdmissionMpoPlaneInput(")
+        self.assertIn("Plane->StretchQuality = (unsigned int)Attributes->StretchQuality;", plane)
+        scanout = (DRIVER / "src/scanout_windows.c").read_text()
+        scaled = function(scanout, "_Use_decl_annotations_ BOOLEAN "
+                                   "AdmissionScanoutMpoScaledSource(")
+        self.assertIn("AppleAgxFixedPanelTwoLayers(&runtime->Panel)", scaled)
+        self.assertIn("APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE", scaled)
+        # The filter stays unknown until measured on the panel.
+        contract = (DRIVER / "include/mpo_contract.h").read_text()
+        self.assertIn("#define ADMISSION_MPO_SCALER_FILTER_CURRENT "
+                      "AdmissionMpoScalerFilterUnknown", contract)
+        shared = (SHARED / "include/apple_agx_scanout.h").read_text()
+        self.assertIn("#define APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE (1u << 8u)", shared)
 
     def test_pure_layers_file_has_no_windows_dependency(self):
         for path in (DRIVER / "src/mpo_layers.c",

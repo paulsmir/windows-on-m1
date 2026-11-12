@@ -1096,6 +1096,15 @@ kernel_two_planes(DXGI_DDI_HDEVICE hDevice, UINT vidPnSourceId)
           AgxD3d10WindowsKernelMpoTwoPlanes(device->windows, vidPnSourceId);
 }
 
+/* STRETCH-1: the kernel's stretch bit (AGX_WIN32_DEVICE_FEATURE_MPO_STRETCH). */
+bool
+kernel_stretch(DXGI_DDI_HDEVICE hDevice, UINT vidPnSourceId)
+{
+   Device *device = CastDevice(hDevice);
+   return device && device->windows &&
+          AgxD3d10WindowsKernelMpoStretch(device->windows, vidPnSourceId);
+}
+
 HRESULT APIENTRY
 GetMultiplaneOverlayCaps(DXGI_DDI_ARG_GETMULTIPLANEOVERLAYCAPS *args)
 {
@@ -1123,6 +1132,7 @@ GetMultiplaneOverlayGroupCaps(DXGI_DDI_ARG_GETMULTIPLANEOVERLAYGROUPCAPS *args)
 {
    mpo_entry(0x2u);
    if (args && AgxDxgiMpoFillGroupCaps(kernel_two_planes(args->hDevice, args->VidPnSourceId),
+                                       kernel_stretch(args->hDevice, args->VidPnSourceId),
                                        args->GroupIndex, &args->MultiplaneOverlayGroupCaps))
       return S_OK;
    dxgi_receipt("reject-dxgi-mpo-group", E_INVALIDARG, args ? args->GroupIndex : ~0u, 0);

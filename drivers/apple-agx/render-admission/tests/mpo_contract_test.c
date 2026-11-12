@@ -90,6 +90,7 @@ static ADMISSION_MPO_PLANE_INPUT BottomPlane(void) {
 static unsigned int Eval(const ADMISSION_MPO_PLANE_INPUT *Planes,
                          unsigned int Count, ADMISSION_MPO_RESULT *Result) {
   ADMISSION_MPO_INPUT input;
+  memset(&input, 0, sizeof(input));
   input.PanelWidth = PANEL_W;
   input.PanelHeight = PANEL_H;
   input.PlaneCount = Count;
@@ -153,6 +154,7 @@ static void TestArgumentsAndCounts(void) {
 
   Pair(planes, 0);
   planes[2] = BottomPlane();
+  memset(&input, 0, sizeof(input));
   memset(&result, 0xa5, sizeof(result));
   CHECK(AdmissionMpoEvaluate(NULL, &result) == AdmissionMpoReasonArgument);
   CHECK(result.Supported == 0u && result.SlotCount == 0u &&
@@ -682,8 +684,12 @@ static void TestStableReasonValues(void) {
   CHECK(AdmissionMpoReasonPrimarySize == 29);
   CHECK(AdmissionMpoReasonPrimaryFormat == 30);
   CHECK(AdmissionMpoReasonPrimaryPlacement == 31);
-  CHECK(ADMISSION_MPO_REASON_COUNT == 32);
-  CHECK(ADMISSION_MPO_CONTRACT_VERSION == 3u);
+  CHECK(AdmissionMpoReasonScaleBeyondLimit == 32);
+  CHECK(AdmissionMpoReasonStretchQuality == 33);
+  CHECK(AdmissionMpoReasonStretchFilter == 34);
+  CHECK(AdmissionMpoReasonOnePlaneBlend == 35);
+  CHECK(ADMISSION_MPO_REASON_COUNT == 36);
+  CHECK(ADMISSION_MPO_CONTRACT_VERSION == 4u);
 }
 
 /* Version 2 surface rules, each on its role, both orders. */
@@ -743,6 +749,7 @@ static void TestSurfaceRules(void) {
   }
   /* Panel geometry: a non-native source mode is refused first. */
   Pair(p, 0);
+  memset(&input, 0, sizeof(input));
   input.PanelWidth = 1920u;
   input.PanelHeight = 1200u;
   input.PlaneCount = 2u;
@@ -796,6 +803,354 @@ static void TestNoDmaFlipPresent(void) {
   CHECK(AdmissionMpoNoDmaFlipAccepted(0x100cu, 7u) == 1u);
 }
 
+
+/* ---- STRETCH-1 (contract version 4) ----
+ * WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?  Check3 answering
+ * "supported" for a scaled plane the scanout broker refuses (beyond 2x on
+ * one axis, below 32x32), a scaled plane accepted without the broker's
+ * scaled-source capability, a filter promise the hardware is not known to
+ * keep, the 1:1 answers changing, and a non-full-screen single plane taking
+ * the V2 PRESENT path (which scans the whole surface onto the whole panel
+ * and would show the wrong picture). */
+
+static unsigned int EvalScaled(const ADMISSION_MPO_PLANE_INPUT *Planes,
+                               unsigned int Count, unsigned int Scaling,
+                               unsigned int Filter,
+                               ADMISSION_MPO_RESULT *Result) {
+  ADMISSION_MPO_INPUT input;
+  memset(&input, 0, sizeof(input));
+  input.PanelWidth = PANEL_W;
+  input.PanelHeight = PANEL_H;
+  input.PlaneCount = Count;
+  input.Planes = Planes;
+  input.PoolBytes = POOL_BYTES;
+  input.ScalingSupported = Scaling;
+  input.ScalerFilter = Filter;
+  return AdmissionMpoEvaluate(&input, Result);
+}
+
+/* The bottom (LayerIndex 1) plane, source 640x480 at (0,0), shown at
+ * (100,200) with the given destination size, HIGH quality. */
+static void ScaledPair(ADMISSION_MPO_PLANE_INPUT *P, int Swap, int DstW,
+                       int DstH) {
+  unsigned int bottom = Swap ? 0u : 1u;
+  Pair(P, Swap);
+  P[bottom].Destination = Rect(100, 200, 100 + DstW, 200 + DstH);
+  P[bottom].Clip = P[bottom].Destination;
+  P[bottom].StretchQuality = ADMISSION_MPO_STRETCH_QUALITY_HIGH;
+}
+
+#define SCALED(P, S, F, R, I) ExpectScaled((P), (S), (F), (R), (I), __LINE__)
+static void ExpectScaled(const ADMISSION_MPO_PLANE_INPUT *P,
+                         unsigned int Scaling, unsigned int Filter,
+                         unsigned int Reason, unsigned int Plane, int Line) {
+  ADMISSION_MPO_RESULT result;
+  unsigned int got = EvalScaled(P, 2u, Scaling, Filter, &result);
+  unsigned int ok = got == Reason && result.Reason == Reason;
+  if (Reason == AdmissionMpoSupported) {
+    unsigned int bottom = P[0].LayerIndex == 1u ? 0u : 1u;
+    ok = ok && result.Supported == 1u && result.SlotCount == 2u &&
+         result.Slots[0].PlaneIndex == bottom &&
+         RectEqual(result.Slots[0].Source, P[bottom].Source) &&
+         RectEqual(result.Slots[0].Destination, P[bottom].Destination) &&
+         result.OnePlaneRecord == 0u;
+  } else {
+    ok = ok && result.Supported == 0u && result.FailingPlane == Plane &&
+         result.SlotCount == 0u;
+  }
+  if (!ok) {
+    fprintf(stderr, "line %d: expected scaled reason %u plane %u, got %u "
+            "plane %u\n", Line, Reason, Plane, result.Reason,
+            result.FailingPlane);
+    ++Failures;
+  }
+}
+
+static void TestScaledPlanes(void) {
+  const unsigned int on = 1u;
+  const unsigned int unknown = AdmissionMpoScalerFilterUnknown;
+  const unsigned int bilinear = AdmissionMpoScalerFilterBilinearOrBetter;
+  ADMISSION_MPO_PLANE_INPUT p[2];
+  int swap;
+  unsigned int bottom, top;
+
+  for (swap = 0; swap < 2; ++swap) {
+    bottom = swap ? 0u : 1u;
+    top = bottom ^ 1u;
+    /* At the limit: exactly 2x up and exactly 2x down, each axis. */
+    ScaledPair(p, swap, 1280, 960);
+    SCALED(p, on, unknown, AdmissionMpoSupported, 0u);
+    ScaledPair(p, swap, 320, 240);
+    SCALED(p, on, unknown, AdmissionMpoSupported, 0u);
+    /* Below the limit, and the axes independent (2x up X, 2x down Y). */
+    ScaledPair(p, swap, 960, 720);
+    SCALED(p, on, unknown, AdmissionMpoSupported, 0u);
+    ScaledPair(p, swap, 1280, 240);
+    SCALED(p, on, unknown, AdmissionMpoSupported, 0u);
+    ScaledPair(p, swap, 640, 481);
+    SCALED(p, on, unknown, AdmissionMpoSupported, 0u);
+    /* One pixel beyond, per axis and per direction. */
+    ScaledPair(p, swap, 1281, 960);
+    SCALED(p, on, unknown, AdmissionMpoReasonScaleBeyondLimit, bottom);
+    ScaledPair(p, swap, 1280, 961);
+    SCALED(p, on, unknown, AdmissionMpoReasonScaleBeyondLimit, bottom);
+    ScaledPair(p, swap, 319, 240);
+    SCALED(p, on, unknown, AdmissionMpoReasonScaleBeyondLimit, bottom);
+    ScaledPair(p, swap, 320, 239);
+    SCALED(p, on, unknown, AdmissionMpoReasonScaleBeyondLimit, bottom);
+    /* Without the broker capability: the version-3 answer (10). */
+    ScaledPair(p, swap, 1280, 960);
+    SCALED(p, 0u, bilinear, AdmissionMpoReasonScaling, bottom);
+    ScaledPair(p, swap, 640, 481);
+    SCALED(p, 0u, unknown, AdmissionMpoReasonScaling, bottom);
+    /* Filter quality. */
+    ScaledPair(p, swap, 960, 720);
+    p[bottom].StretchQuality = 0u;
+    SCALED(p, on, bilinear, AdmissionMpoReasonStretchQuality, bottom);
+    p[bottom].StretchQuality = 3u;
+    SCALED(p, on, bilinear, AdmissionMpoReasonStretchQuality, bottom);
+    p[bottom].StretchQuality = ADMISSION_MPO_STRETCH_QUALITY_BILINEAR;
+    SCALED(p, on, unknown, AdmissionMpoReasonStretchFilter, bottom);
+    SCALED(p, on, AdmissionMpoScalerFilterPoint,
+           AdmissionMpoReasonStretchFilter, bottom);
+    SCALED(p, on, bilinear, AdmissionMpoSupported, 0u);
+    p[bottom].StretchQuality = ADMISSION_MPO_STRETCH_QUALITY_HIGH;
+    SCALED(p, on, AdmissionMpoScalerFilterPoint, AdmissionMpoSupported, 0u);
+    /* An unscaled plane's StretchQuality is never examined (1:1 answers
+     * are those of version 3). */
+    Pair(p, swap);
+    p[bottom].StretchQuality = 0u;
+    SCALED(p, on, unknown, AdmissionMpoSupported, 0u);
+    SCALED(p, 0u, unknown, AdmissionMpoSupported, 0u);
+    /* The panel and minimum-destination rules come before the factor. */
+    ScaledPair(p, swap, 2560, 1500);
+    SCALED(p, on, unknown, AdmissionMpoReasonDestinationOutsidePanel, bottom);
+    Pair(p, swap);
+    p[bottom].Source = Rect(0, 0, 16, 16);
+    p[bottom].Destination = Rect(100, 200, 132, 232);
+    p[bottom].Clip = p[bottom].Destination;
+    p[bottom].StretchQuality = ADMISSION_MPO_STRETCH_QUALITY_HIGH;
+    SCALED(p, on, unknown, AdmissionMpoSupported, 0u);
+    p[bottom].Destination = Rect(100, 200, 131, 232);
+    p[bottom].Clip = p[bottom].Destination;
+    SCALED(p, on, unknown, AdmissionMpoReasonDestinationTooSmall, bottom);
+    p[bottom].Source = Rect(0, 0, 64, 64);
+    SCALED(p, on, unknown, AdmissionMpoReasonDestinationTooSmall, bottom);
+    /* A cropped source inside the surface scales; outside is 13. */
+    ScaledPair(p, swap, 1280, 960);
+    p[bottom].Source = Rect(0, 0, 640, 480);
+    p[bottom].SurfaceHeight = 479u;
+    p[bottom].SurfaceBytes = 640ULL * 4u * 479u;
+    SCALED(p, on, unknown, AdmissionMpoReasonSourceOutsideSurface, bottom);
+    /* An empty source cannot be scaled to a visible destination. */
+    ScaledPair(p, swap, 640, 480);
+    p[bottom].Source = Rect(0, 0, 0, 480);
+    SCALED(p, on, unknown, AdmissionMpoReasonScaleBeyondLimit, bottom);
+    /* Clip: smaller than the scaled destination is refused (the source
+     * would have to be cropped by a fractional amount); larger is fine. */
+    ScaledPair(p, swap, 1280, 960);
+    p[bottom].Clip = Rect(101, 200, 1380, 1160);
+    SCALED(p, on, unknown, AdmissionMpoReasonClip, bottom);
+    p[bottom].Clip = Rect(0, 0, 2560, 1600);
+    SCALED(p, on, unknown, AdmissionMpoSupported, 0u);
+    /* The LayerIndex 0 plane stays full panel: never scaled. */
+    ScaledPair(p, swap, 1280, 960);
+    p[top].Source = Rect(0, 0, 1280, 800);
+    p[top].StretchQuality = ADMISSION_MPO_STRETCH_QUALITY_HIGH;
+    SCALED(p, on, unknown, AdmissionMpoReasonTopNotFullPanel, top);
+    /* With the second layer: pair rules still apply to a scaled pair. */
+    ScaledPair(p, swap, 1280, 960);
+    p[bottom].SurfaceIdentity = p[top].SurfaceIdentity;
+    SCALED(p, on, unknown, AdmissionMpoReasonSameSurface, 1u);
+    ScaledPair(p, swap, 1280, 960);
+    p[bottom].PoolOffset = TOP_OFFSET + 0x10000ULL;
+    SCALED(p, on, unknown, AdmissionMpoReasonSurfaceOverlap, 1u);
+    /* The rules after the scale rules are unchanged for a scaled plane. */
+    ScaledPair(p, swap, 1280, 960);
+    p[bottom].SurfaceStride = 2560u + 4u;
+    SCALED(p, on, unknown, AdmissionMpoReasonStride, bottom);
+    ScaledPair(p, swap, 1280, 960);
+    p[bottom].InScanoutPool = 0u;
+    SCALED(p, on, unknown, AdmissionMpoReasonSurfaceNotInPool, bottom);
+  }
+}
+
+/* One plane through AdmissionMpoEvaluateOne. */
+static ADMISSION_MPO_PLANE_INPUT OnePlane(int SrcW, int SrcH, int DstL,
+                                          int DstT, int DstR, int DstB) {
+  ADMISSION_MPO_PLANE_INPUT plane = BottomPlane();
+  plane.LayerIndex = 0u;
+  plane.BlendAlpha = 1u;
+  plane.SurfaceWidth = (unsigned int)SrcW;
+  plane.SurfaceHeight = (unsigned int)SrcH;
+  plane.SurfaceStride = ((unsigned int)SrcW * 4u + 63u) & ~63u;
+  plane.SurfaceBytes =
+      (unsigned long long)plane.SurfaceStride * (unsigned long long)SrcH;
+  plane.AllocationBytes = plane.SurfaceBytes;
+  plane.Source = Rect(0, 0, SrcW, SrcH);
+  plane.Destination = Rect(DstL, DstT, DstR, DstB);
+  plane.Clip = plane.Destination;
+  plane.StretchQuality = ADMISSION_MPO_STRETCH_QUALITY_HIGH;
+  plane.ScanoutCapable = 1u;
+  plane.DescriptionValid = 1u;
+  plane.PoolOffset = TOP_OFFSET;
+  plane.PlacementInPool = 1u;
+  return plane;
+}
+
+static unsigned int EvalOne(const ADMISSION_MPO_PLANE_INPUT *Plane,
+                            unsigned int Scaling,
+                            ADMISSION_MPO_RESULT *Result) {
+  ADMISSION_MPO_INPUT input;
+  memset(&input, 0, sizeof(input));
+  input.PanelWidth = PANEL_W;
+  input.PanelHeight = PANEL_H;
+  input.PanelStride = PANEL_W * 4u;
+  input.PanelModeSupported = 1u;
+  input.PlaneCount = 1u;
+  input.Planes = Plane;
+  input.PoolBytes = POOL_BYTES;
+  input.ScalingSupported = Scaling;
+  input.ScalerFilter = AdmissionMpoScalerFilterUnknown;
+  memset(Result, 0xa5, sizeof(*Result));
+  return AdmissionMpoEvaluateOne(&input, Result);
+}
+
+static void TestEvaluateOne(void) {
+  ADMISSION_MPO_PLANE_INPUT plane;
+  ADMISSION_MPO_INPUT input;
+  ADMISSION_MPO_RESULT result, primary;
+
+  /* The full-screen primary: exactly AdmissionMpoEvaluatePrimary, V2. */
+  plane = OnePlane((int)PANEL_W, (int)PANEL_H, 0, 0, (int)PANEL_W,
+                   (int)PANEL_H);
+  plane.StretchQuality = 0u;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoSupported);
+  CHECK(result.OnePlaneRecord == 0u && result.SlotCount == 1u);
+  memset(&input, 0, sizeof(input));
+  input.PanelWidth = PANEL_W; input.PanelHeight = PANEL_H;
+  input.PanelStride = PANEL_W * 4u; input.PanelModeSupported = 1u;
+  input.PlaneCount = 1u; input.Planes = &plane; input.PoolBytes = POOL_BYTES;
+  plane.SurfaceStride = PANEL_W * 4u + 64u; /* primary geometry differs */
+  CHECK(AdmissionMpoEvaluatePrimary(&input, &primary) ==
+        AdmissionMpoReasonPrimaryGeometry);
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonPrimaryGeometry);
+  CHECK(result.OnePlaneRecord == 0u && result.FailingPlane == 0u);
+  /* A disabled plane is the plane-off path, as before. */
+  plane = OnePlane(1280, 800, 0, 0, 1280, 800);
+  plane.Enabled = 0u;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoSupported &&
+        result.OnePlaneRecord == 0u);
+  /* LayerIndex 1 alone: refused as before. */
+  plane = OnePlane(1280, 800, 0, 0, 2560, 1600);
+  plane.LayerIndex = 1u;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonLayerIndex);
+
+  /* A 1280x800 full-screen game on the 2560x1600 panel: one layer record,
+   * slot 0 = source and destination, not premultiplied. */
+  plane = OnePlane(1280, 800, 0, 0, 2560, 1600);
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoSupported);
+  CHECK(result.Supported == 1u && result.OnePlaneRecord == 1u &&
+        result.SlotCount == 1u && result.Slots[0].PlaneIndex == 0u &&
+        result.Slots[0].Premultiplied == 0u &&
+        RectEqual(result.Slots[0].Source, Rect(0, 0, 1280, 800)) &&
+        RectEqual(result.Slots[0].Destination, Rect(0, 0, 2560, 1600)) &&
+        result.Slots[0].PoolOffset == TOP_OFFSET &&
+        result.Slots[0].SurfaceStride == 1280u * 4u);
+  /* Same without the broker capability: Scaling, as version 3 would. */
+  CHECK(EvalOne(&plane, 0u, &result) == AdmissionMpoReasonScaling &&
+        result.Supported == 0u && result.SlotCount == 0u &&
+        result.OnePlaneRecord == 0u);
+  /* Letterboxed 16:9 at 2x. */
+  plane = OnePlane(1280, 720, 0, 80, 2560, 1520);
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoSupported &&
+        result.OnePlaneRecord == 1u);
+  /* A 1:1 positioned plane needs no scaling capability. */
+  plane = OnePlane(800, 600, 100, 100, 900, 700);
+  CHECK(EvalOne(&plane, 0u, &result) == AdmissionMpoSupported &&
+        result.OnePlaneRecord == 1u);
+  /* A full-panel surface cropped 1:1 is not the full-screen primary. */
+  plane = OnePlane((int)PANEL_W, (int)PANEL_H, 0, 0, 1280, 800);
+  plane.Source = Rect(0, 0, 1280, 800);
+  CHECK(EvalOne(&plane, 0u, &result) == AdmissionMpoSupported &&
+        result.OnePlaneRecord == 1u);
+  /* Beyond the limit: 854x534 -> 2560x1600 is 2.997x. */
+  plane = OnePlane(854, 534, 0, 0, 2560, 1600);
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonScaleBeyondLimit &&
+        result.FailingPlane == 0u && result.OnePlaneRecord == 0u);
+  /* The one-plane record rules, in order. */
+  plane = OnePlane(1280, 800, 0, 0, 2560, 1600);
+  plane.FormatClass = AdmissionMpoFormatOther;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonFormat);
+  plane = OnePlane(1280, 800, 0, 0, 2560, 1600);
+  plane.ColorSpaceClass = AdmissionMpoColorSpaceOther;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonColorSpace);
+  plane = OnePlane(1280, 800, 0, 0, 2560, 1600);
+  plane.BlendAlpha = 0u;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoSupported);
+  plane.BlendAlpha = 2u;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonOnePlaneBlend);
+  plane = OnePlane(1280, 800, 0, 0, 2560, 1600);
+  plane.StretchQuality = ADMISSION_MPO_STRETCH_QUALITY_BILINEAR;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonStretchFilter);
+  plane = OnePlane(1280, 800, 0, 0, 2560, 1600);
+  plane.InScanoutPool = 0u;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonSurfaceNotInPool);
+  plane = OnePlane(1280, 800, 0, 0, 2560, 1600);
+  plane.Clip = Rect(0, 0, 2560, 1599);
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonClip);
+  plane = OnePlane(1280, 800, 0, 0, 2560, 1600);
+  plane.PlacementKnown = 1u;
+  plane.PoolOffset = TOP_OFFSET + 0x40ULL;
+  CHECK(EvalOne(&plane, 1u, &result) == AdmissionMpoReasonSurfaceAlignment);
+  /* Arguments. */
+  CHECK(AdmissionMpoEvaluateOne(NULL, &result) == AdmissionMpoReasonArgument);
+  memset(&input, 0, sizeof(input));
+  input.PanelWidth = PANEL_W; input.PanelHeight = PANEL_H;
+  input.PlaneCount = 2u; input.Planes = &plane;
+  CHECK(AdmissionMpoEvaluateOne(&input, &result) ==
+        AdmissionMpoReasonPlaneCount);
+}
+
+static float BitsToFloat(unsigned int Bits) {
+  float value;
+  memcpy(&value, &Bits, sizeof(value));
+  return value;
+}
+
+static void TestCapsDerivation(void) {
+  ADMISSION_MPO_CAPS caps;
+  unsigned int effective, scaling, filter, source;
+
+  CHECK(sizeof(float) == sizeof(unsigned int));
+  CHECK(BitsToFloat(ADMISSION_MPO_FLOAT_BITS_ONE) == 1.0f);
+  CHECK(BitsToFloat(ADMISSION_MPO_FLOAT_BITS_TWO) == 2.0f);
+  CHECK(BitsToFloat(ADMISSION_MPO_FLOAT_BITS_HALF) == 0.5f);
+  for (effective = 0u; effective < 2u; ++effective)
+    for (scaling = 0u; scaling < 2u; ++scaling)
+      for (filter = 0u; filter < 3u; ++filter)
+        for (source = 0u; source < 2u; ++source) {
+          unsigned int two = effective != 0u && source == 0u;
+          unsigned int stretch = two && scaling != 0u;
+          memset(&caps, 0xa5, sizeof(caps));
+          AdmissionMpoCapsFor(effective, scaling, filter, source, &caps);
+          CHECK(caps.MaxPlanes == (two ? 2u : 1u));
+          CHECK(caps.StretchRgb == stretch);
+          CHECK(caps.BilinearFilter ==
+                (stretch && filter == AdmissionMpoScalerFilterBilinearOrBetter
+                     ? 1u : 0u));
+          CHECK(caps.HighFilter == 0u);
+          /* The reported factors are exactly the table's limit: Windows is
+           * never promised a factor the table refuses, and every factor
+           * the table accepts is within what Windows was told. */
+          CHECK(BitsToFloat(caps.MaxStretchBits) ==
+                (stretch ? (float)ADMISSION_MPO_MAX_SCALE : 1.0f));
+          CHECK(BitsToFloat(caps.MaxShrinkBits) ==
+                (stretch ? 1.0f / (float)ADMISSION_MPO_MAX_SCALE : 1.0f));
+        }
+  AdmissionMpoCapsFor(1u, 1u, 0u, 0u, NULL);
+}
+
 int main(void) {
   TestStableReasonValues();
   TestArgumentsAndCounts();
@@ -805,6 +1160,9 @@ int main(void) {
   TestSurfaceRules();
   TestPropertySweep();
   TestNoDmaFlipPresent();
+  TestScaledPlanes();
+  TestEvaluateOne();
+  TestCapsDerivation();
   if (Failures != 0u) {
     fprintf(stderr, "mpo_contract_test: %u failure(s)\n", Failures);
     return EXIT_FAILURE;
