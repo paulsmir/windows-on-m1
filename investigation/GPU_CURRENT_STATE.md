@@ -6091,3 +6091,20 @@ boot was run. The previous entry stays as written.
   StretchQuality and for "Set3 refused after support"; contract test Check3-supported => Set3-supported.
 - NP-2 confirmed on hardware: Set3 runs at IRQL 8 (above DISPATCH); receipts publish through a DPC.
 - DWM asks for StretchQuality HIGH for a stretched window (so reason 34 does not block it).
+
+## UPDATE 2026-11-12T18:07:59Z - Set3 status contract from the guest dxgkrnl image; S3-SAFE and E5-RQ specified
+
+- Static read of the guest dxgkrnl/dxgmms2 (26100.9974): the Set3 thunk accepts only SUCCESS, STATUS_DEVICE_BUSY
+  and STATUS_RETRY. On STATUS_INVALID_PARAMETER dxgmms2 logs and never advances the flip entry (the EXP2374
+  loop); DEVICE_BUSY has a defined retry state; there is no MPO-disable or support re-check path. With the MPO3
+  flag latched the flip routine never calls the legacy SetVidPnSourceAddress (whose accepted set is the reverse:
+  SUCCESS, INVALID_PARAMETER, NO_MEMORY).
+- S3-SAFE (spec in the handoff file; package on arch/stretch1b after STRETCH-1b is accepted): for every
+  Check3-accepted configuration Set3 returns SUCCESS or DEVICE_BUSY only; runtime obstacles (not visible, not
+  qualified, transport, no runtime, broker reject) map to DEVICE_BUSY at the Set3 boundary; INVALID_PARAMETER only
+  for dxgkrnl contract violations. Check3 needs no change (class and distinct-surface rules already there).
+- Defect found by source read on the accepted line (not yet seen on hardware): after a broker IRQ_ERROR the KMD
+  marks the scan-out faulted and never releases the present gate - one failed swap makes every later commit
+  BUSY and StopDevice fail. m1n1 has no latch deadline: a lost D589 wedges the broker service. Spec E5-RQ
+  (RQ-1 KMD retry and gate release; RQ-2 m1n1 latch deadline + fault injection). Nothing of S3-SAFE / E5-RQ is
+  implemented or hardware-verified yet.
