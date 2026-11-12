@@ -9937,7 +9937,7 @@ static int clk_twin(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence
  * block and, after it, until an export newer than the block's end arrives (fillers keep running meanwhile); the
  * P6 share of that delta is printed per variant (OPTWIN_P6, valid = >= 99 %) and in every OPTWIN_CASE line.
  * Steps: OPTWIN (S1, G1, T1, B1, C1 in order), OPTWINS1, OPTWING1, OPTWINT1, OPTWINB1, OPTWINC1. */
-#define OPTWIN_MAX_PSO 24u
+#define OPTWIN_MAX_PSO 64u /* EXP2368: 24 was exhausted before the C1 pipelines (batch 1 needs 27+; batch 2 adds more) */
 typedef struct {
     ID3D12Device *device; ID3D12CommandQueue *queue; ID3D12Fence *fence; HANDLE event;
     ID3D12RootSignature *root; ID3D12CommandSignature *dispatch_sig; ID3D12DescriptorHeap *heap;
