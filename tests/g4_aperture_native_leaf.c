@@ -93,6 +93,11 @@ static NTSTATUS AdmissionG3PoolPlace(ADMISSION_CONTEXT *a,
   for (UINT i=first;i<first+count;++i) assert(ptes[i].SegmentId==0u);
   return 0;
 }
+static void AdmissionG3NoteLocalPlacement(ADMISSION_CONTEXT *a,
+    ADMISSION_G3_PROCESS *p, const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *u,
+    APPLE_AGX_GPUVA_G3_LOGICAL_PTE *ptes, UINT first, UINT count) {
+  (void)a; (void)p; (void)u; (void)ptes; (void)first; (void)count;
+}
 static void AdmissionG3PoolPagingRefs(ADMISSION_CONTEXT *a,
     APPLE_AGX_GPUVA_G3_LOGICAL_PTE *old, APPLE_AGX_GPUVA_G3_LOGICAL_PTE *next,
     UINT first, UINT count) { (void)a;(void)old;(void)next;(void)first;(void)count; }
