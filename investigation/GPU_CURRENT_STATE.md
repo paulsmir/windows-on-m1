@@ -5756,3 +5756,19 @@ that point. Source: .local/night-20261110/s2-ddisplay-black/REPORT.md (display r
 - Open: what the normal path's present route requires from the adapter / miniport that we do not provide
   (reading of the guest ddisplay.dll and the matching dxgkrnl handlers running). No boot staged. Bench profile
   keeps DisableDDisplay=1; nothing of DF-1 / PF-1 / S2 / video is merged.
+
+## UPDATE 2026-11-12T02:10Z (architect): normal-path cycle: DWM's present never enters the kernel; CB-1 released
+
+- Reading of the guest ddisplay.dll and the EXP2359 kernel trace (guest-dxgkrnl-read/REPORT-ddisplay.md): on
+  DWM's normal path the D3D runtime for our UMD is ddisplay.dll (Windows.Devices.Display.Core), which calls our
+  PresentMultiplaneOverlay1 entry directly. No present of DWM enters dxgkrnl on this path (no plane intake, no
+  Present event from DWM's thread). The hide is a user-mode teardown: DWM destroys the primary it just made
+  visible, twice, then re-initialises its output. It is not a kernel refusal, a timeout or a missing flip
+  completion; vsync delivery is alive.
+- Candidate in our UMD (source re-read by me): PresentMultiplaneOverlay1 presents through the older callback
+  pfnPresentMultiplaneOverlayCb; the pinned dxgiddi.h pairs that DDI with pfnPresentMultiplaneOverlay1Cb.
+  dxgi.dll's older callback reaches the kernel (legacy path works); ddisplay's returns S_OK without presenting
+  (INFERENCE, not verified inside ddisplay).
+- Decision: CB-1 = present through the newer callback when the runtime provides it; boot = EXP2359 + this one
+  change. Spec in the handoff file. This is a second omission in the S2 contract as I specified it (after the
+  DdiPresent flags): the UMD present entry was specified against dxgi.dll's behaviour only.
