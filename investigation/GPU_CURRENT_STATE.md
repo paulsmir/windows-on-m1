@@ -6045,3 +6045,18 @@ boot was run. The previous entry stays as written.
   EXP2373 on the same package: Dwm-Core 218/219/220/290 over a 1280x720 control arm and the 1682x840 arm with
   window rects. OPTWIN ours side has still not produced a measurement (second miss: stale exe path in the
   harness); runs in EXP2373's tail behind a sha256 preflight.
+
+## UPDATE 2026-11-12T17:07:53Z - EXP2373: 1682x840 window held its plane; OPTWIN ours side ran but 2/3 of reps carry a second job
+
+- EXP2373 (same PITCH-1 package as EXP2369, Dwm-Core look): 1682x840 arm fSupported=1, TwoPlaneCommits +1448 in
+  the arm (control 1280x720 arm +1377), no Set3/Table/Broker refusal, picture rule held. So PITCH-1 removes the
+  refusal AND the window runs as a plane. The EXP2369 arm that fell back to composition (+17 two-plane against
+  +384 single-plane) is NOT reproduced and NOT explained (no Dwm-Core record there). Operator skew look still
+  missing. Dwm-Core 290 reason 5 fires in both arms at equal density (not size dependent, meaning not decoded).
+  Harness: Wom1MpoReceipt snapshots 20 s apart were identical in steady windowed GM (publish cadence defect,
+  under check by the implementer).
+- OPTWIN ours side (probe sha 3a1459a8..., evidence EXP2373/tool-optwin-std.txt): PASS, 140 cases, P6 100 % on
+  all variants. NOT usable yet as a whole: 558 of 840 repetitions report jobs=2; the extra job is 17.2..18.7 ms
+  (quartiles) in every repetition index. Owner of that job not identified (candidates: a foreign client, or the
+  probe's own per-repetition job). Several variants (G1 base, G1d 16M/64M, G1c 64M, C1, B1_128) have no clean
+  repetition. No ratio against macOS exists yet; the macOS twin waits for a clean ours-side run.
