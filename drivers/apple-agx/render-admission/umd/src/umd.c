@@ -164,13 +164,15 @@ static BOOLEAN AdmissionUmdDescribePrimary(
       CreateResource->pMipInfoList[0].TexelWidth > 8192u ||
       CreateResource->pMipInfoList[0].TexelHeight > 8192u ||
       CreateResource->pMipInfoList[0].TexelDepth != 1u ||
-      /* rc106: a primary must be an offered fixed-panel source mode (the
-       * native 2560x1600 one before it); the KMD commits only those. */
-      (CreateResource->pPrimaryDesc != NULL &&
-       AppleAgxFixedPanelModeIndex(
-           CreateResource->pMipInfoList[0].TexelWidth,
-           CreateResource->pMipInfoList[0].TexelHeight) >=
-           APPLE_AGX_FIXED_PANEL_MODE_COUNT) ||
+      /* WP-1 (EXP2362/EXP2363): the rc106 "a primary must be an offered
+       * fixed-panel mode" test no longer sits here.  With DirectFlip/MPO
+       * reported DXGI creates every flip-model back buffer as a displayable
+       * primary of the WINDOW's size (CS 1.6: 640x480); refusing it removed
+       * the application's device.  A primary is accepted at any size the
+       * allocator supports; the mode-equal geometry is required where an
+       * allocation becomes the full-screen scan-out: SetDisplayMode
+       * (AdmissionUmdResourceIsExact) in user mode, and the flip /
+       * SetVidPnSourceAddress / Set3 plane-0 paths in the KMD. */
       CreateResource->Usage != D3D10_DDI_USAGE_DEFAULT || CreateResource->MapFlags ||
       (CreateResource->MiscFlags & ~allowedMiscFlags) ||
       ((CreateResource->MiscFlags &

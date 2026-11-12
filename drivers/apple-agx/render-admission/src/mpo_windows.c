@@ -444,6 +444,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
       AdmissionMpoRefuseSet3(Context);
       return STATUS_INVALID_PARAMETER;
     }
+    /* WP-1: after the removal LayerIndex 0 is the full-screen scan-out, so
+     * its allocation must have the committed mode's geometry (the rule the
+     * one-plane path applies through AdmissionMpoEvaluatePrimary).  User
+     * mode no longer refuses non-mode-size primaries at CreateResource. */
+    pair[0] = next[0].Input;
+    AdmissionMpoInput(Context, pair, 1u, &input);
+    if (AdmissionMpoEvaluatePrimary(&input, &result) != AdmissionMpoSupported) {
+      InterlockedIncrement(&Context->Mpo.Set3TableRefusals);
+      InterlockedExchange(&Context->Mpo.LastSet3TableReason,
+                          (LONG)result.Reason);
+      return STATUS_INVALID_PARAMETER;
+    }
     status = AdmissionScanoutMpoCommit(Context, records, 1u, &completion,
                                        next[0].PrimaryAddress);
     if (NT_SUCCESS(status)) {
