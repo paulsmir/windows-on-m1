@@ -5818,3 +5818,19 @@ boot was run. The previous entry stays as written.
   mode-setting primary is NOT yet derived (kernel conditions and Microsoft's lifetime contract being read; three
   options noted by the implementer: defer the kernel deallocation, decouple the allocation from the runtime
   resource, or a missing step for the shared buffers). No boot staged.
+
+## UPDATE 2026-11-12T03:30Z (architect): PL-1 released: keep the mode-setting primary's kernel allocation alive
+
+- Kernel reading (guest dxgkrnl; REPORT-primary-lifetime.md): SetDisplayMode records the primary as the device's
+  displayed primary for the source and pins the device's primaries of that source; primaries created while that
+  state holds are pinned on creation. Destroying the displayed primary's allocation unpins and clears the
+  per-source mode state; the next MPO present fails with SETDISPLAYMODE_REQUIRED at its first check. The record
+  moves only by a later SetDisplayMode or a successful present of another primary.
+- Microsoft's pages (read by the implementer) set no time for pfnDeallocateCb and allow device-associated
+  allocations. Our UMD releases the kernel allocation at DestroyResource (EXP975 rule), which on DWM's normal
+  path happens 0.3 ms after SetDisplayMode. That is the cause of the normal-path cycle (EXP2351, 2352, 2358, 2359,
+  2360), as far as established offline.
+- Decision: PL-1 = the UMD retains the kernel allocation of the current mode-setting primary past DestroyResource
+  until a later successful SetDisplayMode of another allocation or device destroy. Boot = EXP2360 shape + this
+  one change. Spec in the handoff file. NOT VERIFIED until that boot: that the first present of a shared buffer
+  then succeeds and that DWM's normal path is stable.
