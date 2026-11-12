@@ -2554,6 +2554,9 @@ BOOLEAN AdmissionScanoutMpoPool(_In_ ADMISSION_CONTEXT *Context,
 /* Slot 1 may be on screen: the driver queued a two-layer commit whose
  * removal has not latched, or REG_ACTIVE_LAYERS bit 1 is set. */
 BOOLEAN AdmissionScanoutMpoSlot1MayShow(_In_ ADMISSION_CONTEXT *Context);
+/* HOLD-1: no scan-out commit is outstanding (the scan-out gate is free);
+ * readable at any IRQL. */
+BOOLEAN AdmissionScanoutMpoGateFree(_In_ ADMISSION_CONTEXT *Context);
 /* HOLD-1: commit the held plane set; scan-out ISR context (device IRQL). */
 VOID AdmissionMpoCommitPending(_In_ ADMISSION_CONTEXT *Context);
 /* Queue one V3 commit (Count 1 = removal, 2 = two planes); Completion is

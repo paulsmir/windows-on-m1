@@ -1275,6 +1275,15 @@ _Use_decl_annotations_ BOOLEAN AdmissionScanoutMpoPool(
   return TRUE;
 }
 
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutMpoGateFree(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  return runtime != NULL &&
+                 InterlockedCompareExchange(&runtime->PresentGate, 0, 0) == 0
+             ? TRUE
+             : FALSE;
+}
+
 _Use_decl_annotations_ BOOLEAN AdmissionScanoutMpoSlot1MayShow(
     ADMISSION_CONTEXT *Context) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
