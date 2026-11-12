@@ -644,13 +644,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCheckMultiPlaneOverlaySupport3(
 static NTSTATUS AdmissionMpoBusyNote(ADMISSION_CONTEXT *Context,
                                      const ADMISSION_MPO_COMPLETION *Completion,
                                      NTSTATUS Status) {
-  ULONG index, busy;
   LONG id = Completion->Count != 0u ? (LONG)(ULONG)Completion->PresentId[0] : 0;
   if (Status == STATUS_DEVICE_BUSY) {
-    /* S3-B freeze detector: consecutive Busy answers for one PresentId. */
+    /* S3-B freeze detector: consecutive Busy answers with no accepted Set3
+     * between them (the Set3-level PresentId is renumbered per offer, so
+     * it cannot identify a flip; EXP2375). */
     LONG run = 1;
-    if (InterlockedCompareExchange(&Context->Mpo.BusyOutstanding, 0, 0) != 0 &&
-        Context->Mpo.LastBusyPresentId == id)
+    if (InterlockedCompareExchange(&Context->Mpo.BusyOutstanding, 0, 0) != 0)
       run = InterlockedIncrement(&Context->Mpo.ConsecutiveBusy);
     else
       InterlockedExchange(&Context->Mpo.ConsecutiveBusy, 1);
@@ -670,16 +670,9 @@ static NTSTATUS AdmissionMpoBusyNote(ADMISSION_CONTEXT *Context,
   InterlockedExchange(&Context->Mpo.BusyOutstanding, 0);
   InterlockedExchange(&Context->Mpo.ConsecutiveBusy, 0);
   InterlockedExchange(&Context->Mpo.NextSuccessPresentId, id);
-  busy = 0u;
-  for (index = 0u; index < Completion->Count && index < 2u; ++index) {
-    const LONG next = (LONG)(ULONG)Completion->PresentId[index];
-    if (next != 0 &&
-        (next == Context->Mpo.LastBusyPresentId ||
-         next == Context->Mpo.LastBusyPresentId1))
-      busy = 1u;
-  }
-  InterlockedIncrement(busy ? &Context->Mpo.BusyThenSameLatched
-                            : &Context->Mpo.BusyThenSuperseded);
+  /* BusyThenSameLatched / BusyThenSuperseded stay 0: they compared the
+   * Set3-level PresentId, which dxgkrnl renumbers per offer (EXP2375: the
+   * per-layer flip identity was continuous, every Busy flip re-offered). */
   return Status;
 }
 

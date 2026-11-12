@@ -251,8 +251,8 @@ typedef struct _ADMISSION_MPO_RECEIPT {
    * visible (E1), not qualified (E4), transport (E5, last result), broker
    * rejected (E3, a defect: records kept), table invariant at Set3 counted
    * by Set3TableRefusals (D1/G2), build invariant (D2/G1), the V2 path's
-   * runtime statuses (H2, last status).  Consecutive Busy answers for one
-   * PresentId (current, maximum) are the freeze detector. */
+   * runtime statuses (H2, last status).  Consecutive Busy answers with no
+   * accepted Set3 between them (current, maximum) are the freeze detector. */
   volatile LONG S3BusyNoRuntime, S3BusyNotVisible, S3BusyNotQualified;
   volatile LONG S3BusyTransport, LastTransportResult, S3BusyBrokerRejected;
   volatile LONG S3BusyBuild, S3BusyLegacy, LastLegacyStatus;
