@@ -5884,3 +5884,21 @@ boot was run. The previous entry stays as written.
   the planned C3R folded in. Order: legacy-path boot of the PL-1 package, then BP-1.
 - The bench has been idle since 2026-11-12T05:56Z: architect-to-implementer messages are paused by the app until
   the user types; the instructions wait in the handoff file.
+
+## UPDATE 2026-11-12T10:00Z (architect): BP-1 (EXP2363): the two-plane form is ENGAGED on hardware (U-1, U-2 passed)
+
+- EXP2363 = EXP2361 shape (normal DWM path, PL-1) + BP-1 (D3D12 back buffers from a HEAP_FLAG_PRIMARY heap are
+  created as kernel primaries; arch/bp1 c160c9df2 + MSVC fix 1c237b951). The runtime and dxgkrnl accept the
+  buffers (allocate S_OK x3, DXGKARG_CREATEALLOCATION.Flags 0x1). DWM's two-plane check now reaches the miniport:
+  Check3 calls 2, supported 2. Two-plane commits = latches = 633 after 60 s and 3577 after the operator hold;
+  refusals 0; DWM's single-plane desktop presents stop while the application plane is active.
+- The application window is scanned out on its own DCP layer for the first time. Chain of defects fixed to get
+  here, each confirmed on hardware: DirectFlip segment flag (EXP2354), DdiPresent MPO flip flags (EXP2357),
+  mode-setting primary lifetime (EXP2361), application back buffers as primaries (EXP2363), plus leaving the
+  legacy DWM path. The S2 lever is finally measurable; FPS evidence = the measured tail of this boot (pending).
+- DEFECT observed by the operator: the whole panel blinks for about 0.5 s when the application plane appears and
+  when it disappears; the display ring shows one ModeChange and one hidden entry at each transition, none in
+  steady two-plane state. Adding or removing the second plane goes through a mode-set / blank instead of a
+  plain swap (U-4 / F-7 class). Cause not yet read; a receipt-only re-look in the same boot is planned.
+- Decision recorded on the user's question (2026-11-12): the legacy DWM path is no longer a verification target;
+  the owed legacy-path boot is cancelled; baselines measured on it are reference only for the normal-path line.
