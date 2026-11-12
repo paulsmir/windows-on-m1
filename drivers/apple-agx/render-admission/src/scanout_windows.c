@@ -686,6 +686,34 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
     Context->MpoHoldLock = 0;
     /* HOLD-2: Set3 commits through this DPC. */
     AdmissionMpoCommitDpcStart(Context);
+    /* CUR-1 v2: zero the scan-out scratch (PASSIVE, before any Set3) and
+     * prove it reads back zero; only then may Check3 offer it. */
+    {
+      ADMISSION_SCANOUT_MEMORY_VIEW scratch;
+      ULONGLONG offset = 0ULL, i;
+      LONG nonzero = 0;
+      AdmissionMpoScratchReset(&Context->MpoScratch);
+      Context->MpoScratchCpu = NULL;
+      Context->MpoScratchPoolOffset = 0ULL;
+      Context->Mpo.VidMmSegment2Kib =
+          (LONG)(AdmissionMemoryVidMmLocalBytes(&Context->Memory) >> 10);
+      Context->Mpo.PoolKib = (LONG)(Context->Memory.LocalAllocationBytes >> 10);
+      if (NT_SUCCESS(AdmissionMemoryRuntimeScanoutScratch(Context, &scratch,
+                                                          &offset))) {
+        RtlZeroMemory(scratch.CpuAddress, (SIZE_T)scratch.Bytes);
+        KeMemoryBarrier();
+        for (i = 0ULL; i < scratch.Bytes; ++i)
+          if (((volatile const UCHAR *)scratch.CpuAddress)[i] != 0u)
+            ++nonzero;
+        Context->Mpo.ScratchOffsetKib = (LONG)(offset >> 10);
+        Context->Mpo.ScratchNonZeroBytes = nonzero;
+        if (nonzero == 0) {
+          Context->MpoScratchCpu = (PUCHAR)scratch.CpuAddress;
+          Context->MpoScratchPoolOffset = offset;
+          Context->Mpo.ScratchReady = 1;
+        }
+      }
+    }
   }
   /* S2-1b: Effective 0 -> 1 at this scanout start. */
   if (AppleAgxFixedPanelTwoLayers(&runtime->Panel)) {

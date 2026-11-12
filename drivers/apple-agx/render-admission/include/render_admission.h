@@ -279,6 +279,12 @@ typedef struct _ADMISSION_MPO_RECEIPT {
   volatile LONG H2Set3MergedFirst, H2Set3MergedSecond;
   volatile LONG H2CommitsFromDpc, H2CommitsFromLatch, H2CommitsFromTick;
   volatile LONG H2TwoLayerCommits, H2MaxSet3ToCommitUs;
+  /* CUR-1 v2 scan-out scratch (render_memory.h): segment-2 size VidMm is
+   * told and the DCP pool size (KiB), scratch pool offset (KiB), Ready = the
+   * region was zeroed at scan-out start and read back zero; the bytes that
+   * did not read back zero. */
+  volatile LONG VidMmSegment2Kib, PoolKib, ScratchOffsetKib;
+  volatile LONG ScratchReady, ScratchNonZeroBytes;
 } ADMISSION_MPO_RECEIPT;
 /* HOLD-2 receipt: Wom1MpoTiming, the last ADMISSION_MPO_TIMING_ENTRIES Set3
  * outcomes, commits (by source) and latches with QPC, CPU and IRQL. */
@@ -1236,6 +1242,10 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG MpoCommitDpcReady;
   LONGLONG MpoHoldFirstQpc;
   ADMISSION_MPO_TIMING MpoTiming;
+  /* CUR-1 v2: which scan-out scratch DCP scans (mpo_layers.h). */
+  ADMISSION_MPO_SCRATCH_STATE MpoScratch;
+  ULONGLONG MpoScratchPoolOffset;   /* scratch 0; scratch 1 = + STEP */
+  PUCHAR MpoScratchCpu;             /* write-combined view of scratch 0 */
   ADMISSION_MPO_PLANE_STATE MpoPlanes[2];
 } ADMISSION_CONTEXT;
 
@@ -2373,6 +2383,11 @@ NTSTATUS AdmissionMemoryRuntimeLocalView(
 NTSTATUS AdmissionMemoryRuntimeScanoutView(
     _Inout_ ADMISSION_CONTEXT *Context,
     _Out_ ADMISSION_SCANOUT_MEMORY_VIEW *View);
+/* CUR-1 v2: the driver-owned scan-out scratch (render_memory.h). */
+NTSTATUS AdmissionMemoryRuntimeScanoutScratch(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _Out_ ADMISSION_SCANOUT_MEMORY_VIEW *View,
+    _Out_ ULONGLONG *PoolOffset);
 NTSTATUS AdmissionMemoryRuntimeExecutePaging(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_PAGING_RECORD *Record);
