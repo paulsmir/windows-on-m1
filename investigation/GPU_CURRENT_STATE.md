@@ -6169,3 +6169,18 @@ boot was run. The previous entry stays as written.
   EXP2376/evidence/EXP2376/recovery-guest-shutdown-hang.log. One occurrence.
 - FS-1 (arch/fs1 f19598fb3) and HOLD-1 (arch/hold1 226b6de22 + 74823830b) are implemented, gates clean, not yet
   on hardware.
+
+## UPDATE 2026-11-12T20:52:02Z - EXP2377 FS-1 rejected as built: the D3D UMD refuses a lone LayerIndex-1 present
+
+- EXP2377 (arch/fs1 f19598fb3): GM 53.13 / 52.47 (gate PASS), windowed scaling unchanged. Full-screen CS: both
+  runs never finished (timedemo stalled), screen flicker reported by the operator, dwm.exe crashed
+  (dwmcore.dll, 0x889800d0). Receipts: about every 1.2 s one lone Check3 (supported), exactly one lone commit,
+  then composition again (CS warm: LoneCommits +278, ToLone 278, FromLone 277, no Set3 refusal, Busy 0).
+  STRETCHFS: 9 scaled lone commits latched, then DXGI_ERROR_DEVICE_REMOVED at frame 37.
+- Cause (session UMD log): PresentMultiplaneOverlay1 with one plane at LayerIndex 1 is rejected in our D3D UMD
+  with E_INVALIDARG (reject-dxgi-mpo-present1, reason 6 LayerIndex), because AgxDxgiMpoCheckPlanes demands the
+  LayerIndex values to be a permutation of 0..Count-1. The kernel side accepted the form; the vsync report for
+  the lone commit carries both listed planes (code trace) and is not the defect.
+- FS-1b (UMD only): LayerIndex < MaxPlanes and unique among listed planes; regression test on the EXP2377 list.
+- RULE extended: no layer of ours (UMD present path included) may refuse a plane set the KMD's Check3 accepted.
+- FS-1 as built is REJECTED; the kernel part of FS-1 is not yet shown on hardware beyond single commits.
