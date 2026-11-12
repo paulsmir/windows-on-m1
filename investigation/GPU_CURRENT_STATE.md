@@ -5868,3 +5868,19 @@ boot was run. The previous entry stays as written.
   plane passed without a resource. Receipt-only boot C3R specified in the handoff file.
 - Architect-to-implementer messages are paused by the app until the user types; instructions are in the handoff
   file (three entries addressed "TO THE IMPLEMENTER").
+
+## UPDATE 2026-11-12T05:59Z (architect): application back buffers are not kernel primaries (source reading); BP-1 specified
+
+- Source reading of exp/df1d (swapchain-buffers/REPORT.md): GravityMark's back buffers arrive in the D3D12
+  CreateHeapAndResource with D3D12DDI_HEAP_FLAG_PRIMARY set. Our D3D12 driver ignores the flag and creates them
+  through the D3D11 admission path with no primary / displayable indication: kernel Flags.Primary 0, private
+  data WrittenPrimary 0, RGBA8 marked not displayable on create and on open, no FORMAT_SUPPORT_DISPLAY reported.
+  Each buffer is its own kernel allocation restricted to segment 2 (the DirectFlip segment).
+- Together with the kernel reading (a plane must be a primary or a runtime-flagged shared swap-chain back
+  buffer), this is the leading explanation of the two-plane check being refused before the miniport
+  (HYPOTHESIS until a boot shows Check3 called).
+- BP-1 specified in the handoff file: honour HEAP_FLAG_PRIMARY (kernel primary with the right VidPn source,
+  truthful displayable / display-format answers limited to what the broker can scan out), with the receipts of
+  the planned C3R folded in. Order: legacy-path boot of the PL-1 package, then BP-1.
+- The bench has been idle since 2026-11-12T05:56Z: architect-to-implementer messages are paused by the app until
+  the user types; the instructions wait in the handoff file.
