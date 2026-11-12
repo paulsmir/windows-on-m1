@@ -10,6 +10,11 @@
  * handler in display.c enters AdmissionMpoSetVidPnSourceAddress3 only
  * then.  Not effective, the two DDIs still answer truthfully (one plane). */
 
+/* PITCH-1: Check3/Set3's stride rule is the allocator's display pitch, so
+ * every scan-out-capable allocation passes it (render_allocation.h). */
+C_ASSERT(ADMISSION_MPO_STRIDE_ALIGNMENT ==
+         ADMISSION_ALLOCATION_DISPLAY_PITCH_ALIGNMENT);
+
 /* IEEE-754 single 1.0: written as bits so no floating-point instruction is
  * generated in the kernel. */
 static const ULONG AdmissionMpoFloatOne = 0x3f800000u;

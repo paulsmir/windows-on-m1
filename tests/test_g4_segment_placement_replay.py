@@ -55,7 +55,7 @@ enum { STATUS_SUCCESS=0, STATUS_INVALID_PARAMETER=-1,
        STATUS_NOT_SUPPORTED=-2, STATUS_INSUFFICIENT_RESOURCES=-3,
        STATUS_NO_MEMORY=-4 };
 #define D3DDDIFMT_A8R8G8B8 21u
-#define D3DKMDT_GDISURFACE_TEXTURE 2u
+#define D3DKMDT_GDISURFACE_TEXTURE 1u
 typedef struct { unsigned Type, Format; uint64_t Size; unsigned CpuVisible, Reserved,
                  BytesPerPixel; }
     ADMISSION_ALLOCATION_DESCRIPTION;
@@ -217,6 +217,11 @@ static int AdmissionAllocationCreate(const ADMISSION_ALLOCATION_DESCRIPTION *des
 static int AdmissionAllocationDestroy(ALLOCATION_OBJECT *object) {
   (void)object;
   return 1;
+}
+/* PITCH-1: render_allocation.c's display class (ScanoutCapable). */
+static int AdmissionAllocationDisplayClass(unsigned type, unsigned bpp,
+                                           unsigned cpu_visible) {
+  return type == D3DKMDT_GDISURFACE_TEXTURE && bpp == 4u && cpu_visible == 0u;
 }
 """
 

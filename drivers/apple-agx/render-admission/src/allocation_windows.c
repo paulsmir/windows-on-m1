@@ -121,6 +121,9 @@ static BOOLEAN AdmissionR105ParsePrivate(
 C_ASSERT(D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE ==
          ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE);
 C_ASSERT(D3DDDIFMT_A8 == ADMISSION_WIN32_ALLOCATION_FORMAT_A8);
+/* PITCH-1: the allocator's display class names the WDK GDI texture type. */
+C_ASSERT(D3DKMDT_GDISURFACE_TEXTURE ==
+         ADMISSION_ALLOCATION_TYPE_GDI_TEXTURE);
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 static VOID AdmissionOpenAllocationTraceWrite(
@@ -474,11 +477,15 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   allocation->Presentation = resourceData != NULL && classId == 0u;
   /* rc110 (EXP2049): scanout admits only a plain linear description, never
    * an R105 native resource (its layout is the Mesa layer's), and only a
-   * GPU-only 32-bpp GDI-surface texture in a broker format. */
+   * GPU-only 32-bpp GDI-surface texture in a broker format.  PITCH-1: that
+   * class is the allocator's display class, whose pitch is 64-byte aligned
+   * (render_allocation.h), so no scan-out-capable allocation carries a
+   * stride the broker refuses. */
   allocation->ScanoutCapable =
-      !r105Enabled && description->Type == (UINT)D3DKMDT_GDISURFACE_TEXTURE &&
-              description->CpuVisible == 0u &&
-              description->BytesPerPixel == 4u &&
+      !r105Enabled &&
+              AdmissionAllocationDisplayClass(description->Type,
+                                              description->BytesPerPixel,
+                                              description->CpuVisible) &&
               AdmissionScanoutFormatSupported(
                   context, (D3DDDIFORMAT)description->Format)
           ? 1u

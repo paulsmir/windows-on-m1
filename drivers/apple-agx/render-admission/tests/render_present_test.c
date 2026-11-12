@@ -53,7 +53,9 @@ int main(void) {
   assert(offsetof(ADMISSION_PRESENT_BLT_COMMAND, SourceLocation) == 144);
   assert(offsetof(ADMISSION_PRESENT_BLT_COMMAND, DestinationLocation) == 152);
   assert(AdmissionAllocationDescribe(4,2,4,1,21,1,&input.Command.SourceDescription));
-  assert(AdmissionAllocationDescribe(4,2,4,1,21,0,&input.Command.DestinationDescription));
+  /* SameAllocation: one CPU-visible 4x2 surface (pitch 16) on both sides
+   * (PITCH-1: a GPU-only texture description has a 64-byte pitch). */
+  assert(AdmissionAllocationDescribe(4,2,4,1,21,1,&input.Command.DestinationDescription));
   input.Command.SourceRect=(APPLE_AGX_GDI_RECT){0,0,3,2};
   input.Command.DestinationRect=(APPLE_AGX_GDI_RECT){1,0,4,2};
   input.Command.ContextToken=7; input.Rects=rects;input.RectCount=2;
