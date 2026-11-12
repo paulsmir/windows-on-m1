@@ -1069,6 +1069,18 @@ HRESULT AgxD3d10WindowsPresentationDestroy(
      Device->Stage<AgxD3d10DeviceRuntimeReady ||
      Device->Stage>=AgxD3d10DeviceRuntimeReleased) return E_INVALIDARG;
   AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *record=*Resource;
+  {
+    /* EXP2360: the runtime's DestroyResource of a presentation resource
+     * (the moment it is released, before the deferred native collection):
+     * {kernel allocation, UMD device pointer low/high, hRTDevice low,
+     * KernelContext low}. */
+    UINT values[5]={(UINT)record->Resource.KernelAllocation,
+        (UINT)(ULONG_PTR)&Device->Runtime,
+        (UINT)(((ULONG_PTR)&Device->Runtime>>16)>>16),
+        (UINT)(ULONG_PTR)Device->Runtime.RuntimeDevice.handle,
+        (UINT)(ULONG_PTR)Device->Runtime.KernelContext};
+    AdmissionUmdDiagnostic("measure-presentation-destroy",S_OK,values,5u);
+  }
   if(record->RenderResource) {
     AgxWin32AsahiResourceRelease(&record->RenderResource);
   }
@@ -1235,8 +1247,15 @@ HRESULT AgxD3d10WindowsPresentationSubmitPlanes(
     }
   }
   values[3]=(UINT)result;
+  /* EXP2360: + the presenting UMD device {pointer low/high, hRTDevice low,
+   * KernelContext low}, compared with the SetDisplayMode row's device. */
+  UINT rowValues[8]={values[0],values[1],values[2],values[3],
+      (UINT)(ULONG_PTR)&Device->Runtime,
+      (UINT)(((ULONG_PTR)&Device->Runtime>>16)>>16),
+      (UINT)(ULONG_PTR)Device->Runtime.RuntimeDevice.handle,
+      (UINT)(ULONG_PTR)Device->Runtime.KernelContext};
   /* EXP2356: "measure-" so DWM's refusals-only session trace keeps it. */
-  AdmissionUmdDiagnostic("measure-mpo-present-callback",result,values,ARRAYSIZE(values));
+  AdmissionUmdDiagnostic("measure-mpo-present-callback",result,rowValues,ARRAYSIZE(rowValues));
   AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitReturn,result,NULL,0u);
   return result;
 }
