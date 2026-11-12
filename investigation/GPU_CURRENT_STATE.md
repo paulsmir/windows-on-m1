@@ -5721,3 +5721,20 @@ that point. Source: .local/night-20261110/s2-ddisplay-black/REPORT.md (display r
   flips continue: no conclusion may rest on them until explained.
 - Running offline: dwmcore's promotion gates against the EXP2357 trace; the counter stop and the per-flip cost.
   No boot staged. Nothing of DF-1 / PF-1 / S2 is merged.
+
+## UPDATE 2026-11-12T01:37Z (architect): DF-1c (EXP2358): on DWM's normal path the support check is entered; output still loops
+
+- Offline reading of dwmcore against EXP2357 (dwm-promotion/REPORT.md): on the legacy path the application is a
+  candidate every frame with no rejection logged, yet the plane-assignment / support-check stage is never
+  entered. Hypothesis: the legacy render target has no overlay context.
+- EXP2358 = EXP2357 with DisableDDisplay absent. First half CONFIRMED: DWM enters the stage (218 x7, 219 x14,
+  220 x7) and asks for exactly the S2 two-plane form (desktop plane full screen with blend, application plane
+  1280x720 at 640,457). Answer: fSupported 0, RejectReason 5; our Check3 is not called (Check3CallsAll 0), so
+  "unsupported" is produced above the miniport.
+- The output still loops on this path (ModeChange / plane 0 off / hidden each cycle; SetDisplayMode and the
+  single-plane MPO present callback both S_OK; no device error; DWM requests the D3D11 video sub-object each
+  cycle, E_NOTIMPL). Measured runs skipped by the picture rule.
+- Consequence for the bench profile: with DisableDDisplay=1 (every experiment since EXP952) DWM cannot assign
+  planes at all. S2 can only be judged on the normal path, which therefore has to work first.
+- Next boot: EXP2358 + the video sub-object (complete table, nothing advertised, content-protection caps answered
+  as "none") as one ATOMIC CONTRACT. In parallel offline: what answers "unsupported" before the miniport.
