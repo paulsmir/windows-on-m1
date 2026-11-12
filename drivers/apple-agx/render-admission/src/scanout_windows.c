@@ -1901,6 +1901,13 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
     }
     Context->Interface.DxgkCbNotifyInterrupt(
         Context->Interface.DeviceHandle, &data);
+    if (mpo_flip) {
+      /* HOLD-1 receipt: every PresentId reported, per layer. */
+      for (mpo_index = 0u; mpo_index < mpo_count; ++mpo_index)
+        InterlockedIncrement(mpo_info[mpo_index].LayerIndex != 0u
+                                 ? &Context->Mpo.ReportedIds1
+                                 : &Context->Mpo.ReportedIds0);
+    }
     if (runtime->VsyncReceipt.NotifyCount != APPLE_AGX_VSYNC_MAX)
       runtime->VsyncReceipt.NotifyCount++;
     AdmissionScanoutVsyncRecord(runtime, 6u, STATUS_SUCCESS);

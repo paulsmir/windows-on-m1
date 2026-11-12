@@ -268,6 +268,11 @@ typedef struct _ADMISSION_MPO_RECEIPT {
    * commits retried at the next tick, sets dropped (a non-retry failure). */
   volatile LONG HoldMerges, HoldBusy, HoldContended;
   volatile LONG HoldCommits, HoldCommitRetries, HoldDropped;
+  /* HOLD-1: PresentIds per LayerIndex (0/1) in every Set3 answered
+   * SUCCESS, and per LayerIndex reported to dxgkrnl in a
+   * CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2 interrupt.  Accepted - Reported at
+   * the end of an arm is the flips in flight (queued + held) or lost ids. */
+  volatile LONG AcceptedIds0, AcceptedIds1, ReportedIds0, ReportedIds1;
 } ADMISSION_MPO_RECEIPT;
 #define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
 #define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u

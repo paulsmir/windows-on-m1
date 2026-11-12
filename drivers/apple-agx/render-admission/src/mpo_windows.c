@@ -664,6 +664,14 @@ static NTSTATUS AdmissionMpoBusyNote(ADMISSION_CONTEXT *Context,
     InterlockedExchange(&Context->Mpo.BusyOutstanding, 1);
     return Status;
   }
+  if (NT_SUCCESS(Status)) {
+    /* HOLD-1 receipt: every PresentId of an accepted Set3, per layer. */
+    ULONG index;
+    for (index = 0u; index < Completion->Count && index < 2u; ++index)
+      InterlockedIncrement(Completion->LayerIndex[index] != 0u
+                               ? &Context->Mpo.AcceptedIds1
+                               : &Context->Mpo.AcceptedIds0);
+  }
   if (!NT_SUCCESS(Status) ||
       InterlockedCompareExchange(&Context->Mpo.BusyOutstanding, 0, 0) == 0)
     return Status;
