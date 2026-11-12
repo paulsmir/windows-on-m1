@@ -6150,3 +6150,22 @@ boot was run. The previous entry stays as written.
   superseded inside the driver; every accepted PresentId latches and is reported. The one-plane V2 path has no
   pending-replace (earlier statement withdrawn).
 - Boot order on the stretch1b line: S3 package -> FS-1 -> HOLD-1 -> CUR-1 v2; merge when CS is back in band.
+
+## UPDATE 2026-11-12T20:11:39Z - EXP2376 S3 package accepted as behaviour; PITCH-1 skew look done; DWM query shape varies per boot
+
+- EXP2376 (arch/s3safe-pkg 29aa9d3eb = stretch1b line + S3-A tests + S3-B statuses, SHORT): suite 119/0; GM
+  52.73 / 52.88 (gate PASS); CS r2 51.86 / 52.29 (gate PASS); every S3Busy* counter 0, no Set3 refusal after
+  support, picture rule held. S3 (Set3 answers SUCCESS or DEVICE_BUSY for accepted configurations) ACCEPTED as
+  behaviour; its obstacle paths were not exercised on hardware (no obstacle occurred).
+- PITCH-1: operator look at the 1682x840 window and the 1.5x stretched window - no skew. PITCH-1 verified.
+- Full-screen CS in this boot: 76 Check3 groups, all the lone application plane (one plane, full panel, blend 0),
+  refused with reason 3 -> composed, 52 fps. DWM did NOT go on to the two-plane form that EXP2375 got (same
+  caps): the query shape varies between boots; "stretch caps cause the two-plane form" is weakened, cause
+  unknown. The CS halving of EXP2375 is therefore intermittent on this line; merge still waits for FS-1 + HOLD-1.
+- STRETCHFS: one plane 1280x800 -> full panel, refused (reason 3): exactly FS-1's scaled lone-plane case.
+- No clipped top plane formed in either scene (ClipChecks 0); CUR-1's scene is expected on top of FS-1's form.
+- New fact, unexplained: before this boot the inert recovery guest (no AppleAgx package) hung in an ordered
+  restart (no PSCI reset after 4+ min; HV kept the guest; physical power cycle needed). Log:
+  EXP2376/evidence/EXP2376/recovery-guest-shutdown-hang.log. One occurrence.
+- FS-1 (arch/fs1 f19598fb3) and HOLD-1 (arch/hold1 226b6de22 + 74823830b) are implemented, gates clean, not yet
+  on hardware.
