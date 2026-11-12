@@ -55,6 +55,7 @@
 #include "agx_d3d12_probe_cs.h"
 #include "agx_d3d12_probe_q3_compute.h"
 #include "agx_d3d12_probe_cs_clktwin.h"
+#include "agx_d3d12_probe_cs_optwin.h"
 #include "agx_d3d12_probe_cs_cb.h"
 #include "agx_d3d12_probe_cs_table.h"
 #include "agx_d3d12_probe_cs_srv.h"
@@ -9926,6 +9927,471 @@ static int clk_twin(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence
     return SUCCEEDED(hr) && !missing ? 0 : 1;
 }
 
+/* OPTWIN batch 1 (architect 2026-11-12T14:03Z, OV-ARCHITECT-HANDOFF; design .local/night-20261110/optwin/REPORT.md):
+ * op-class twin probes on the CLKTWIN template. Kernels, constants, shapes, inputs, oracles and output lines live in
+ * agx_d3d12_probe_cs_optwin.h (shared byte for byte with tools/macos/optwin_metal.m); HLSL compiled at run time like
+ * CLKTWIN. Per case one list with na and with nb dispatches (UAV barrier between), per-dispatch = (Tb - Ta) / (nb -
+ * na) on the firmware compute Start/End of the list's jobs (Q3 completion escape, needs Wom1JobDiagnostics), best
+ * of 3. Oracles first (one L1 dispatch per variant), then a 2 s W56 filler warm-up; a W56 filler is queued behind
+ * every timed list. Validity: Wom1GpuPerf (KMD device key, exported at most every 2 s) is read before each variant's
+ * block and, after it, until an export newer than the block's end arrives (fillers keep running meanwhile); the
+ * P6 share of that delta is printed per variant (OPTWIN_P6, valid = >= 99 %) and in every OPTWIN_CASE line.
+ * Steps: OPTWIN (S1, G1, T1, B1, C1 in order), OPTWINS1, OPTWING1, OPTWINT1, OPTWINB1, OPTWINC1. */
+#define OPTWIN_MAX_PSO 24u
+typedef struct {
+    ID3D12Device *device; ID3D12CommandQueue *queue; ID3D12Fence *fence; HANDLE event;
+    ID3D12RootSignature *root; ID3D12CommandSignature *dispatch_sig; ID3D12DescriptorHeap *heap;
+    ID3D12PipelineState *pso[OPTWIN_MAX_PSO]; unsigned pso_key[OPTWIN_MAX_PSO]; unsigned pso_count;
+    ID3D12Resource *out, *readback, *data, *rows, *shadow, *color, *args, *upload;
+    ID3D12CommandAllocator *alloc[3]; ID3D12GraphicsCommandList *list[3]; /* 0 timed / setup, 1-2 fillers */
+    Q3_GPU_COMPLETION_QUERY *rec;
+    float *cpu_data;
+    UINT64 signal, filler_signal[2]; UINT fill, pid, missing, oracle_bad; int perf_live;
+    LARGE_INTEGER qpf;
+} OptwinCtx;
+static int optwin_selected(const optwin_variant *v, const char *probe) { return !probe || !strcmp(v->probe, probe); }
+static HRESULT optwin_compile(OptwinCtx *x, unsigned kernel, unsigned ntx, unsigned nty, unsigned alt, ID3D12PipelineState **pso) {
+    HMODULE compiler=LoadLibraryExW(L"d3dcompiler_47.dll",NULL,LOAD_LIBRARY_SEARCH_SYSTEM32);
+    pD3DCompile compile=compiler ? (pD3DCompile)(void *)GetProcAddress(compiler,"D3DCompile"):NULL;
+    const optwin_kernel *k=&optwin_kernels[kernel];
+    char ntxs[16], ntys[16], alts[16];
+    D3D_SHADER_MACRO defines[4]={{"NTX",ntxs},{"NTY",ntys},{"ALT",alts},{NULL,NULL}};
+    const size_t cap=sizeof(optwin_hlsl_preamble)+sizeof(optwin_common_src)+strlen(k->body)+256u;
+    char *text=(char *)malloc(cap);
+    D3D12_COMPUTE_PIPELINE_STATE_DESC desc={0};
+    ID3DBlob *shader=NULL, *errors=NULL;
+    HRESULT hr=compile && text ? S_OK : E_FAIL;
+    snprintf(ntxs,sizeof(ntxs),"%u",ntx); snprintf(ntys,sizeof(ntys),"%u",nty); snprintf(alts,sizeof(alts),"%uu",alt);
+    if (SUCCEEDED(hr)) {
+        snprintf(text,cap,"%s%s%s[numthreads(NTX,NTY,1)] void main(uint3 gid:SV_DispatchThreadID, uint lidx:SV_GroupIndex) {\n%s}\n",
+                 optwin_hlsl_preamble,optwin_common_src,(k->res & OPTWIN_RES_SHARED) ? "groupshared uint sh[16];\n" : "",k->body);
+        hr=compile(text,strlen(text),"optwin",defines,NULL,"main","cs_5_0",D3DCOMPILE_ENABLE_STRICTNESS,0,&shader,&errors);
+    }
+    if (SUCCEEDED(hr)) {
+        desc.pRootSignature=x->root;
+        desc.CS.pShaderBytecode=ID3D10Blob_GetBufferPointer(shader);
+        desc.CS.BytecodeLength=ID3D10Blob_GetBufferSize(shader);
+        hr=ID3D12Device_CreateComputePipelineState(x->device,&desc,&IID_ID3D12PipelineState,(void **)pso);
+    }
+    printf("OPTWIN pso kernel %s nt %ux%u alt %u bytes %lu hr=0x%08lx\n",k->name,ntx,nty,alt,
+           shader ? (unsigned long)ID3D10Blob_GetBufferSize(shader) : 0ul,(unsigned long)hr);
+    if (errors) { printf("OPTWIN compiler %s: %s\n",k->name,(const char *)ID3D10Blob_GetBufferPointer(errors)); ID3D10Blob_Release(errors); }
+    if (shader) ID3D10Blob_Release(shader);
+    if (compiler) FreeLibrary(compiler);
+    free(text);
+    return hr;
+}
+/* Compiled once in setup; never inside a timed block. */
+static ID3D12PipelineState *optwin_pso(OptwinCtx *x, unsigned kernel, unsigned ntx, unsigned nty, unsigned alt) {
+    const unsigned key=kernel+16u*(ntx+2048u*(nty+16u*(alt ? 1u : 0u)));
+    for (unsigned i=0;i<x->pso_count;++i) if (x->pso_key[i]==key) return x->pso[i];
+    if (x->pso_count>=OPTWIN_MAX_PSO || FAILED(optwin_compile(x,kernel,ntx,nty,alt,&x->pso[x->pso_count]))) return NULL;
+    x->pso_key[x->pso_count]=key;
+    return x->pso[x->pso_count++];
+}
+static HRESULT optwin_wait(OptwinCtx *x, UINT64 signal) { return clktwin_wait(x->fence,x->event,signal); }
+static HRESULT optwin_submit_setup(OptwinCtx *x) {
+    HRESULT hr=ID3D12GraphicsCommandList_Close(x->list[0]);
+    if (SUCCEEDED(hr)) hr=clktwin_exec(x->queue,x->fence,x->list[0],++x->signal);
+    if (SUCCEEDED(hr)) hr=optwin_wait(x,x->signal);
+    return hr;
+}
+static HRESULT optwin_reset(OptwinCtx *x, ID3D12PipelineState *pso) {
+    HRESULT hr=ID3D12CommandAllocator_Reset(x->alloc[0]);
+    return SUCCEEDED(hr) ? ID3D12GraphicsCommandList_Reset(x->list[0],x->alloc[0],pso) : hr;
+}
+static HRESULT optwin_upload_buffer(OptwinCtx *x, ID3D12Resource *dst, const void *bytes, UINT64 size, D3D12_RESOURCE_STATES after) {
+    void *mapped=NULL; D3D12_RANGE none={0,0};
+    HRESULT hr=ID3D12Resource_Map(x->upload,0,&none,&mapped);
+    if (SUCCEEDED(hr) && !mapped) hr=E_FAIL;
+    if (SUCCEEDED(hr)) { memcpy(mapped,bytes,(size_t)size); ID3D12Resource_Unmap(x->upload,0,NULL); hr=optwin_reset(x,NULL); }
+    if (FAILED(hr)) return hr;
+    ID3D12GraphicsCommandList_CopyBufferRegion(x->list[0],dst,0,x->upload,0,size);
+    transition(x->list[0],dst,D3D12_RESOURCE_STATE_COPY_DEST,after);
+    return optwin_submit_setup(x);
+}
+/* T1: a 2048 x 2048 x 6 array, R32_TYPELESS with ALLOW_DEPTH_STENCIL (depth) or R8G8B8A8_UNORM (color), filled by
+ * CopyTextureRegion from the deterministic texel functions. */
+static HRESULT optwin_texture(OptwinCtx *x, int color, int depth_flag, ID3D12Resource **out) {
+    D3D12_HEAP_PROPERTIES heap={D3D12_HEAP_TYPE_DEFAULT};
+    D3D12_RESOURCE_DESC desc={0};
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp[OPTWIN_LAYERS];
+    UINT rows[OPTWIN_LAYERS]; UINT64 row_bytes[OPTWIN_LAYERS], total=0;
+    unsigned char *mapped=NULL; D3D12_RANGE none={0,0};
+    HRESULT hr;
+    desc.Dimension=D3D12_RESOURCE_DIMENSION_TEXTURE2D; desc.Width=OPTWIN_TEX; desc.Height=OPTWIN_TEX;
+    desc.DepthOrArraySize=OPTWIN_LAYERS; desc.MipLevels=1; desc.SampleDesc.Count=1;
+    desc.Format=color ? DXGI_FORMAT_R8G8B8A8_UNORM : DXGI_FORMAT_R32_TYPELESS;
+    desc.Layout=D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    desc.Flags=depth_flag ? D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL : D3D12_RESOURCE_FLAG_NONE;
+    hr=ID3D12Device_CreateCommittedResource(x->device,&heap,D3D12_HEAP_FLAG_NONE,&desc,D3D12_RESOURCE_STATE_COPY_DEST,NULL,
+                                            &IID_ID3D12Resource,(void **)out);
+    if (SUCCEEDED(hr)) ID3D12Device_GetCopyableFootprints(x->device,&desc,0,OPTWIN_LAYERS,0,fp,rows,row_bytes,&total);
+    if (SUCCEEDED(hr) && total>(UINT64)OPTWIN_LAYERS*OPTWIN_TEX_LAYER_BYTES+65536u) hr=E_FAIL;
+    if (SUCCEEDED(hr)) hr=ID3D12Resource_Map(x->upload,0,&none,(void **)&mapped);
+    if (SUCCEEDED(hr) && !mapped) hr=E_FAIL;
+    if (SUCCEEDED(hr)) {
+        for (unsigned l=0;l<OPTWIN_LAYERS;++l)
+            for (unsigned y=0;y<OPTWIN_TEX;++y) {
+                UINT *row=(UINT *)(mapped+fp[l].Offset+(UINT64)y*fp[l].Footprint.RowPitch);
+                for (unsigned t=0;t<OPTWIN_TEX;++t) {
+                    if (color) row[t]=optwin_color(t,y,l);
+                    else { const float d=optwin_depth(t,y,l); memcpy(&row[t],&d,4); }
+                }
+            }
+        ID3D12Resource_Unmap(x->upload,0,NULL);
+        hr=optwin_reset(x,NULL);
+    }
+    if (SUCCEEDED(hr)) {
+        for (UINT l=0;l<OPTWIN_LAYERS;++l) {
+            D3D12_TEXTURE_COPY_LOCATION dst={0}, src={0};
+            dst.pResource=*out; dst.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX; dst.SubresourceIndex=l;
+            src.pResource=x->upload; src.Type=D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT; src.PlacedFootprint=fp[l];
+            ID3D12GraphicsCommandList_CopyTextureRegion(x->list[0],&dst,0,0,0,&src,NULL);
+        }
+        transition(x->list[0],*out,D3D12_RESOURCE_STATE_COPY_DEST,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        hr=optwin_submit_setup(x);
+    }
+    printf("OPTWIN texture %s depth_flag %d bytes %llu hr=0x%08lx\n",color ? "RGBA8" : "R32",depth_flag,
+           (unsigned long long)total,(unsigned long)hr);
+    if (FAILED(hr) && *out) { ID3D12Resource_Release(*out); *out=NULL; }
+    return hr;
+}
+static HRESULT optwin_resources(OptwinCtx *x, unsigned need) {
+    HRESULT hr=S_OK;
+    const UINT64 upload=(need & (OPTWIN_RES_SHADOW|OPTWIN_RES_COLOR)) ? (UINT64)OPTWIN_LAYERS*OPTWIN_TEX_LAYER_BYTES+65536u
+                       : (need & OPTWIN_RES_SRC) ? OPTWIN_DATA_BYTES : 65536u;
+    x->out=c21_buffer(x->device,D3D12_HEAP_TYPE_DEFAULT,OPTWIN_OUT_BYTES,D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    x->readback=c21_buffer(x->device,D3D12_HEAP_TYPE_READBACK,4096,D3D12_RESOURCE_FLAG_NONE,D3D12_RESOURCE_STATE_COPY_DEST);
+    x->args=c21_buffer(x->device,D3D12_HEAP_TYPE_DEFAULT,256,D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    x->upload=c21_buffer(x->device,D3D12_HEAP_TYPE_UPLOAD,upload,D3D12_RESOURCE_FLAG_NONE,D3D12_RESOURCE_STATE_GENERIC_READ);
+    if (!x->out || !x->readback || !x->args || !x->upload) return E_OUTOFMEMORY;
+    if (need & OPTWIN_RES_SRC) {
+        x->cpu_data=(float *)malloc(OPTWIN_DATA_BYTES);
+        x->data=c21_buffer(x->device,D3D12_HEAP_TYPE_DEFAULT,OPTWIN_DATA_BYTES,D3D12_RESOURCE_FLAG_NONE,D3D12_RESOURCE_STATE_COPY_DEST);
+        hr=x->cpu_data && x->data && optwin_fill_data(x->cpu_data) ? S_OK : E_OUTOFMEMORY;
+        if (SUCCEEDED(hr)) hr=optwin_upload_buffer(x,x->data,x->cpu_data,OPTWIN_DATA_BYTES,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        printf("OPTWIN data %u bytes hr=0x%08lx\n",OPTWIN_DATA_BYTES,(unsigned long)hr);
+    }
+    if (SUCCEEDED(hr) && (need & OPTWIN_RES_ROWS)) {
+        float rows[OPTWIN_ROWS*4u];
+        for (unsigned k=0;k<OPTWIN_ROWS;++k) for (unsigned c=0;c<4u;++c) rows[4u*k+c]=optwin_row(k,c);
+        x->rows=c21_buffer(x->device,D3D12_HEAP_TYPE_DEFAULT,sizeof(rows),D3D12_RESOURCE_FLAG_NONE,D3D12_RESOURCE_STATE_COPY_DEST);
+        hr=x->rows ? optwin_upload_buffer(x,x->rows,rows,sizeof(rows),D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER) : E_OUTOFMEMORY;
+    }
+    if (SUCCEEDED(hr) && (need & (OPTWIN_RES_SHADOW|OPTWIN_RES_COLOR))) {
+        D3D12_DESCRIPTOR_HEAP_DESC hd={D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,2,D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,0};
+        D3D12_SHADER_RESOURCE_VIEW_DESC sv={DXGI_FORMAT_R32_FLOAT,D3D12_SRV_DIMENSION_TEXTURE2DARRAY,D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING};
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu;
+        if (FAILED(optwin_texture(x,0,1,&x->shadow))) {
+            /* the depth-flagged copy is refused: the same texels in a plain R32 array, named in the output */
+            printf("OPTWIN_T1_DEPTH_FORM r32-without-depth-flag (the depth-flagged upload failed)\n");
+            hr=optwin_texture(x,0,0,&x->shadow);
+        } else printf("OPTWIN_T1_DEPTH_FORM r32-typeless-depth-stencil\n");
+        if (SUCCEEDED(hr)) hr=optwin_texture(x,1,0,&x->color);
+        if (SUCCEEDED(hr)) hr=ID3D12Device_CreateDescriptorHeap(x->device,&hd,&IID_ID3D12DescriptorHeap,(void **)&x->heap);
+        if (SUCCEEDED(hr)) {
+            const UINT step=ID3D12Device_GetDescriptorHandleIncrementSize(x->device,D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(x->heap,&cpu);
+            sv.Texture2DArray.MipLevels=1; sv.Texture2DArray.ArraySize=OPTWIN_LAYERS;
+            ID3D12Device_CreateShaderResourceView(x->device,x->shadow,&sv,cpu);
+            cpu.ptr+=step; sv.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+            ID3D12Device_CreateShaderResourceView(x->device,x->color,&sv,cpu);
+        }
+    }
+    return hr;
+}
+static HRESULT optwin_record(OptwinCtx *x, ID3D12GraphicsCommandList *list, ID3D12CommandAllocator *alloc,
+                             const optwin_variant *v, const optwin_case *c, unsigned dispatches, ID3D12Resource *out,
+                             int readback) {
+    const optwin_params p=optwin_case_params(v,c);
+    const unsigned res=optwin_kernels[v->kernel].res;
+    ID3D12PipelineState *pso[2]={optwin_pso(x,v->kernel,c->ntx,c->nty,0),
+                                 v->alt ? optwin_pso(x,v->kernel,c->ntx,c->nty,32) : NULL};
+    ID3D12PipelineState *writer=v->indirect ? optwin_pso(x,OPTWIN_K_ARGS,OPTWIN_ARGS_THREADS,1,0) : NULL;
+    D3D12_RESOURCE_BARRIER uavb={D3D12_RESOURCE_BARRIER_TYPE_UAV};
+    HRESULT hr=pso[0] && (!v->alt || pso[1]) && (!v->indirect || writer) ? ID3D12CommandAllocator_Reset(alloc) : E_FAIL;
+    if (SUCCEEDED(hr)) hr=ID3D12GraphicsCommandList_Reset(list,alloc,writer ? writer : pso[0]);
+    if (FAILED(hr)) return hr;
+    uavb.UAV.pResource=out;
+    ID3D12GraphicsCommandList_SetComputeRootSignature(list,x->root);
+    ID3D12GraphicsCommandList_SetComputeRoot32BitConstants(list,0,8,&p,0);
+    ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list,1,ID3D12Resource_GetGPUVirtualAddress(out));
+    if (res & OPTWIN_RES_SRC)
+        ID3D12GraphicsCommandList_SetComputeRootShaderResourceView(list,2,ID3D12Resource_GetGPUVirtualAddress(x->data)+optwin_region_offset(v->region));
+    if (res & OPTWIN_RES_ROWS) ID3D12GraphicsCommandList_SetComputeRootConstantBufferView(list,3,ID3D12Resource_GetGPUVirtualAddress(x->rows));
+    if (res & (OPTWIN_RES_SHADOW|OPTWIN_RES_COLOR)) {
+        D3D12_GPU_DESCRIPTOR_HANDLE gpu;
+        ID3D12GraphicsCommandList_SetDescriptorHeaps(list,1,&x->heap);
+        ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(x->heap,&gpu);
+        ID3D12GraphicsCommandList_SetComputeRootDescriptorTable(list,4,gpu);
+    }
+    if (writer) { /* the GPU writes the arguments, then every dispatch of the list is indirect */
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list,5,ID3D12Resource_GetGPUVirtualAddress(x->args));
+        ID3D12GraphicsCommandList_Dispatch(list,1,1,1);
+        transition(list,x->args,D3D12_RESOURCE_STATE_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+        ID3D12GraphicsCommandList_SetPipelineState(list,pso[0]);
+    }
+    for (unsigned d=0;d<dispatches;++d) {
+        if (d) ID3D12GraphicsCommandList_ResourceBarrier(list,1,&uavb);
+        if (d && v->alt) ID3D12GraphicsCommandList_SetPipelineState(list,pso[d&1u]);
+        if (writer) ID3D12GraphicsCommandList_ExecuteIndirect(list,x->dispatch_sig,1,x->args,0,NULL,0);
+        else ID3D12GraphicsCommandList_Dispatch(list,c->gx,c->gy,1);
+    }
+    if (writer) transition(list,x->args,D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    if (readback) {
+        transition(list,out,D3D12_RESOURCE_STATE_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        ID3D12GraphicsCommandList_CopyBufferRegion(list,x->readback,0,out,0,4096);
+        transition(list,out,D3D12_RESOURCE_STATE_COPY_SOURCE,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    }
+    return ID3D12GraphicsCommandList_Close(list);
+}
+/* One filler behind the GPU (two in flight), as in the CLKTWIN warm-up. */
+static HRESULT optwin_filler(OptwinCtx *x) {
+    HRESULT hr=x->filler_signal[x->fill] ? optwin_wait(x,x->filler_signal[x->fill]) : S_OK;
+    if (SUCCEEDED(hr)) hr=clktwin_exec(x->queue,x->fence,x->list[1+x->fill],x->filler_signal[x->fill]=++x->signal);
+    x->fill^=1u;
+    return hr;
+}
+/* The timed list's own jobs: compute records of this process submitted after t0 that completed by the time the
+ * fence wait returned (plus 3 ms of notification slack; the queued W56 filler runs > 7 ms after the timed list).
+ * Pages from the Newest sequence read just before the submission, so ring wrap-around cannot hide a record. */
+static int optwin_collect(OptwinCtx *x, UINT64 cursor, UINT64 t0, UINT64 t1, double *ms, unsigned *jobs) {
+    const UINT64 slack=(UINT64)x->qpf.QuadPart*3u/1000u;
+    UINT64 start=~0ull, end=0;
+    *jobs=0;
+    for (unsigned page=0;page<16u;++page) {
+        Q3_GPU_COMPLETION_QUERY *q=x->rec;
+        if (FAILED(q3_completions(x->device,cursor,q)) || !q->Frequency || q->Lost || q->Reset || q->Count>Q3_GPU_COMPLETION_PAGE) return 0;
+        for (UINT i=0;i<q->Count;++i) {
+            const Q3_GPU_COMPLETION *r=&q->Record[i];
+            if (r->ProcessId!=x->pid || r->Kind!=Q3_GPU_TIMESTAMP_COMPUTE || r->SubmitQpc<t0 || r->CompleteQpc>t1+slack) continue;
+            if (r->Status || !r->Start || r->End<=r->Start) return 0;
+            if (r->Start<start) start=r->Start;
+            if (r->End>end) end=r->End;
+            ++*jobs;
+        }
+        cursor=q->Cursor;
+        if (cursor>=q->Newest) {
+            if (!*jobs) return 0;
+            *ms=1000.0*(double)(end-start)/(double)q->Frequency;
+            return 1;
+        }
+    }
+    return 0;
+}
+static HRESULT optwin_timed(OptwinCtx *x, const optwin_variant *v, const optwin_case *c, unsigned dispatches,
+                            int *got, double *ms, double *wall_ms, unsigned *jobs) {
+    LARGE_INTEGER t0, t1;
+    UINT64 timed, cursor=0;
+    HRESULT hr=optwin_record(x,x->list[0],x->alloc[0],v,c,dispatches,x->out,0);
+    *got=0; *ms=0.0; *jobs=0;
+    if (SUCCEEDED(hr) && x->filler_signal[x->fill]) hr=optwin_wait(x,x->filler_signal[x->fill]);
+    if (SUCCEEDED(hr)) hr=q3_completions(x->device,0,x->rec);
+    if (SUCCEEDED(hr)) cursor=x->rec->Newest;
+    QueryPerformanceCounter(&t0);
+    if (SUCCEEDED(hr)) hr=clktwin_exec(x->queue,x->fence,x->list[0],timed=++x->signal);
+    if (SUCCEEDED(hr)) hr=clktwin_exec(x->queue,x->fence,x->list[1+x->fill],x->filler_signal[x->fill]=++x->signal);
+    x->fill^=1u;
+    if (SUCCEEDED(hr)) hr=optwin_wait(x,timed);
+    QueryPerformanceCounter(&t1);
+    *wall_ms=(double)(t1.QuadPart-t0.QuadPart)*1000.0/(double)x->qpf.QuadPart;
+    for (UINT tries=0;tries<4 && SUCCEEDED(hr) && !*got;++tries) {
+        if (tries) Sleep(2);
+        *got=optwin_collect(x,cursor,(UINT64)t0.QuadPart,(UINT64)t1.QuadPart,ms,jobs);
+    }
+    return hr;
+}
+static int optwin_perf_read(unsigned char *out) {
+    DWORD size=OPTWIN_PERF_BYTES;
+    const LSTATUS st=RegGetValueW(HKEY_LOCAL_MACHINE,L"SYSTEM\\CurrentControlSet\\Enum\\ACPI\\APPL0002\\0\\Device Parameters",
+                                  L"Wom1GpuPerf",RRF_RT_REG_BINARY,NULL,out,&size);
+    return st==ERROR_SUCCESS && size==OPTWIN_PERF_BYTES;
+}
+/* After a block: keep the fillers going until the KMD exports a Wom1GpuPerf newer than the block's end. */
+static HRESULT optwin_perf_after(OptwinCtx *x, UINT64 block_end, unsigned char *after, int *ok) {
+    LARGE_INTEGER t0, t;
+    HRESULT hr=S_OK;
+    *ok=0;
+    if (!x->perf_live) return S_OK;
+    QueryPerformanceCounter(&t0);
+    do {
+        if (optwin_perf_read(after) && optwin_perf_u64(after,OPTWIN_PERF_OFF_LAST_QPC)>block_end) { *ok=1; break; }
+        hr=optwin_filler(x);
+        QueryPerformanceCounter(&t);
+    } while (SUCCEEDED(hr) && t.QuadPart-t0.QuadPart<6*x->qpf.QuadPart);
+    if (!*ok) { x->perf_live=0; printf("OPTWIN_P6_UNAVAILABLE no Wom1GpuPerf export within 6 s (Wom1JobDiagnostics off?)\n"); }
+    return hr;
+}
+static void optwin_oracle(OptwinCtx *x, const optwin_variant *v, HRESULT *hr) {
+    optwin_case cases[OPTWIN_MAX_CASES];
+    const unsigned n=optwin_cases(v,cases);
+    const optwin_case *c=v->alt ? &cases[0] : &cases[1];
+    static const UINT lanes_l1[4]={0,1,511,1023}, lanes_n32[4]={0,1,17,31};
+    const UINT *lanes=v->alt ? lanes_n32 : lanes_l1;
+    D3D12_RANGE range={0,4096};
+    UINT *words=NULL, match=0;
+    (void)n;
+    *hr=optwin_record(x,x->list[0],x->alloc[0],v,c,1,x->out,1);
+    if (SUCCEEDED(*hr)) *hr=clktwin_exec(x->queue,x->fence,x->list[0],++x->signal);
+    if (SUCCEEDED(*hr)) *hr=optwin_wait(x,x->signal);
+    if (SUCCEEDED(*hr)) *hr=ID3D12Resource_Map(x->readback,0,&range,(void **)&words);
+    for (UINT i=0;i<4 && SUCCEEDED(*hr) && words;++i) {
+        char form[160];
+        const int ok=optwin_oracle_lane(v,c,lanes[i],words[lanes[i]],x->cpu_data,form,sizeof(form));
+        match+=ok ? 1u : 0u;
+        printf("OPTWIN oracle variant %s shape %s lane %u gpu 0x%08x %s %s\n",v->variant,c->shape,lanes[i],words[lanes[i]],
+               ok ? "match" : "MISMATCH",form);
+    }
+    if (words) ID3D12Resource_Unmap(x->readback,0,NULL);
+    printf("OPTWIN_ORACLE variant=%s shape=%s match=%u/4 hr=0x%08lx\n",v->variant,c->shape,match,(unsigned long)*hr);
+    if (match!=4) ++x->oracle_bad;
+}
+static int optwin_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, const char *probe) {
+    OptwinCtx ctx, *x=&ctx;
+    D3D12_ROOT_PARAMETER params[6];
+    D3D12_DESCRIPTOR_RANGE range={D3D12_DESCRIPTOR_RANGE_TYPE_SRV,2,1,0,0};
+    D3D12_STATIC_SAMPLER_DESC samplers[2]={
+        {D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT,D3D12_TEXTURE_ADDRESS_MODE_CLAMP,D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+         D3D12_TEXTURE_ADDRESS_MODE_CLAMP,0.0f,1,D3D12_COMPARISON_FUNC_LESS_EQUAL,D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK,0.0f,
+         D3D12_FLOAT32_MAX,0,0,D3D12_SHADER_VISIBILITY_ALL},
+        {D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT,D3D12_TEXTURE_ADDRESS_MODE_CLAMP,D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+         D3D12_TEXTURE_ADDRESS_MODE_CLAMP,0.0f,1,D3D12_COMPARISON_FUNC_NEVER,D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK,0.0f,
+         D3D12_FLOAT32_MAX,1,0,D3D12_SHADER_VISIBILITY_ALL}};
+    D3D12_ROOT_SIGNATURE_DESC root_desc={6,params,2,samplers,D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    D3D12_INDIRECT_ARGUMENT_DESC arg={D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH};
+    D3D12_COMMAND_SIGNATURE_DESC sd={12,1,&arg,0};
+    ID3DBlob *blob=NULL, *errors=NULL;
+    ID3D12PipelineState *filler=NULL;
+    unsigned char perf[2][OPTWIN_PERF_BYTES];
+    unsigned need=0, variants=0;
+    const optwin_params fp=optwin_filler_params();
+    HRESULT hr;
+    memset(x,0,sizeof(*x)); memset(params,0,sizeof(params));
+    x->device=device; x->queue=queue; x->fence=fence; x->signal=base; x->pid=(UINT)GetCurrentProcessId();
+    x->event=CreateEventA(NULL,FALSE,FALSE,NULL);
+    x->rec=(Q3_GPU_COMPLETION_QUERY *)calloc(1,sizeof(*x->rec));
+    QueryPerformanceFrequency(&x->qpf);
+    for (unsigned i=0;i<OPTWIN_VARIANTS;++i)
+        if (optwin_selected(&optwin_variants[i],probe)) { need|=optwin_kernels[optwin_variants[i].kernel].res; ++variants; }
+    params[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS; params[0].Constants.Num32BitValues=8;
+    params[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_UAV;
+    params[2].ParameterType=D3D12_ROOT_PARAMETER_TYPE_SRV;
+    params[3].ParameterType=D3D12_ROOT_PARAMETER_TYPE_CBV; params[3].Descriptor.ShaderRegister=1;
+    params[4].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    params[4].DescriptorTable.NumDescriptorRanges=1; params[4].DescriptorTable.pDescriptorRanges=&range;
+    params[5].ParameterType=D3D12_ROOT_PARAMETER_TYPE_UAV; params[5].Descriptor.ShaderRegister=1;
+    hr=x->event && x->rec && variants ? S_OK : E_FAIL;
+    if (SUCCEEDED(hr)) hr=D3D12SerializeRootSignature(&root_desc,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&errors);
+    if (SUCCEEDED(hr)) hr=ID3D12Device_CreateRootSignature(device,0,ID3D10Blob_GetBufferPointer(blob),ID3D10Blob_GetBufferSize(blob),
+                                                         &IID_ID3D12RootSignature,(void **)&x->root);
+    if (SUCCEEDED(hr)) hr=ID3D12Device_CreateCommandSignature(device,&sd,NULL,&IID_ID3D12CommandSignature,(void **)&x->dispatch_sig);
+    for (UINT i=0;i<3 && SUCCEEDED(hr);++i) {
+        hr=ID3D12Device_CreateCommandAllocator(device,D3D12_COMMAND_LIST_TYPE_DIRECT,&IID_ID3D12CommandAllocator,(void **)&x->alloc[i]);
+        if (SUCCEEDED(hr)) hr=ID3D12Device_CreateCommandList(device,0,D3D12_COMMAND_LIST_TYPE_DIRECT,x->alloc[i],NULL,
+                                                             &IID_ID3D12GraphicsCommandList,(void **)&x->list[i]);
+        if (SUCCEEDED(hr)) hr=ID3D12GraphicsCommandList_Close(x->list[i]);
+    }
+    if (SUCCEEDED(hr)) hr=optwin_resources(x,need);
+    /* every pipeline before the first timed list */
+    if (SUCCEEDED(hr)) filler=optwin_pso(x,OPTWIN_K_S1,1024,1,0);
+    for (unsigned i=0;i<OPTWIN_VARIANTS && SUCCEEDED(hr) && filler;++i) {
+        const optwin_variant *v=&optwin_variants[i];
+        optwin_case cases[OPTWIN_MAX_CASES];
+        const unsigned n=optwin_cases(v,cases);
+        if (!optwin_selected(v,probe)) continue;
+        for (unsigned k=0;k<n && SUCCEEDED(hr);++k) {
+            if (!optwin_pso(x,v->kernel,cases[k].ntx,cases[k].nty,0)) hr=E_FAIL;
+            if (v->alt && !optwin_pso(x,v->kernel,cases[k].ntx,cases[k].nty,32)) hr=E_FAIL;
+        }
+        if (v->indirect && !optwin_pso(x,OPTWIN_K_ARGS,OPTWIN_ARGS_THREADS,1,0)) hr=E_FAIL;
+    }
+    if (SUCCEEDED(hr) && !filler) hr=E_FAIL;
+    for (UINT i=1;i<3 && SUCCEEDED(hr);++i) { /* W56 fillers: the CLKTWIN W56 list, same output as the timed list */
+        hr=ID3D12CommandAllocator_Reset(x->alloc[i]);
+        if (SUCCEEDED(hr)) hr=ID3D12GraphicsCommandList_Reset(x->list[i],x->alloc[i],filler);
+        if (SUCCEEDED(hr)) {
+            ID3D12GraphicsCommandList_SetComputeRootSignature(x->list[i],x->root);
+            ID3D12GraphicsCommandList_SetComputeRoot32BitConstants(x->list[i],0,8,&fp,0);
+            ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(x->list[i],1,ID3D12Resource_GetGPUVirtualAddress(x->out));
+            ID3D12GraphicsCommandList_Dispatch(x->list[i],OPTWIN_FILL_GROUPS,1,1);
+            hr=ID3D12GraphicsCommandList_Close(x->list[i]);
+        }
+    }
+    printf("OPTWIN setup probe %s variants %u psos %u resources 0x%x hr=0x%08lx\n",probe ? probe : "ALL",variants,x->pso_count,
+           need,(unsigned long)hr);
+    for (unsigned i=0;i<OPTWIN_VARIANTS && SUCCEEDED(hr);++i)
+        if (optwin_selected(&optwin_variants[i],probe)) optwin_oracle(x,&optwin_variants[i],&hr);
+    if (SUCCEEDED(hr)) { /* 2 s warm-up, two fillers in flight */
+        LARGE_INTEGER t0, t;
+        UINT lists_run=0;
+        QueryPerformanceCounter(&t0);
+        do { hr=optwin_filler(x); ++lists_run; QueryPerformanceCounter(&t); }
+        while (SUCCEEDED(hr) && (t.QuadPart-t0.QuadPart)<2*x->qpf.QuadPart);
+        printf("OPTWIN warm-up lists %u hr=0x%08lx\n",lists_run,(unsigned long)hr);
+    }
+    x->perf_live=optwin_perf_read(perf[0]);
+    if (!x->perf_live) printf("OPTWIN_P6_UNAVAILABLE Wom1GpuPerf unreadable before the first block\n");
+    for (unsigned i=0;i<OPTWIN_VARIANTS && SUCCEEDED(hr);++i) {
+        const optwin_variant *v=&optwin_variants[i];
+        optwin_case cases[OPTWIN_MAX_CASES];
+        const unsigned n=optwin_cases(v,cases);
+        double best[OPTWIN_MAX_CASES][2], wall[OPTWIN_MAX_CASES][2], p6=-1.0, sampled=0.0;
+        unsigned gaps=0;
+        int ok=0, valid=0;
+        LARGE_INTEGER end;
+        if (!optwin_selected(v,probe)) continue;
+        for (unsigned m=0;m<n;++m) best[m][0]=best[m][1]=wall[m][0]=wall[m][1]=1e30;
+        for (unsigned rep=0;rep<OPTWIN_REPS && SUCCEEDED(hr);++rep)
+            for (unsigned m=0;m<n && SUCCEEDED(hr);++m)
+                for (unsigned k=0;k<2u && SUCCEEDED(hr);++k) {
+                    const unsigned dispatches=k ? cases[m].nb : cases[m].na;
+                    double ms, wms;
+                    unsigned jobs;
+                    int got;
+                    hr=optwin_timed(x,v,&cases[m],dispatches,&got,&ms,&wms,&jobs);
+                    if (!got) ++x->missing;
+                    if (got && ms<best[m][k]) best[m][k]=ms;
+                    if (wms<wall[m][k]) wall[m][k]=wms;
+                    optwin_print_rep(rep,v,&cases[m],dispatches,got,ms,wms,jobs);
+                }
+        QueryPerformanceCounter(&end);
+        if (SUCCEEDED(hr)) hr=optwin_perf_after(x,(UINT64)end.QuadPart,perf[1],&ok);
+        if (!ok || !optwin_perf_delta(perf[0],perf[1],&p6,&sampled,&gaps,&valid)) { p6=-1.0; valid=-1; }
+        if (ok) memcpy(perf[0],perf[1],OPTWIN_PERF_BYTES); /* the next block's before */
+        optwin_print_p6(v,p6,sampled,gaps,valid);
+        for (unsigned m=0;m<n;++m) optwin_print_case(v,&cases[m],best[m],wall[m],p6);
+    }
+    if (x->filler_signal[0]) (void)optwin_wait(x,x->filler_signal[0]);
+    if (x->filler_signal[1]) (void)optwin_wait(x,x->filler_signal[1]);
+    printf("OPTWIN_RECORDS missing %u oracle_bad %u\n",x->missing,x->oracle_bad);
+    {
+        const int pass=SUCCEEDED(hr) && !x->missing && !x->oracle_bad;
+        printf("AGX_D3D12_OPTWIN%s: %s hr=0x%08lx\n",probe ? probe : "",pass ? "PASS" : "FAIL",(unsigned long)hr);
+        for (UINT i=0;i<3;++i) { if (x->list[i]) ID3D12GraphicsCommandList_Release(x->list[i]); if (x->alloc[i]) ID3D12CommandAllocator_Release(x->alloc[i]); }
+        for (unsigned i=0;i<x->pso_count;++i) ID3D12PipelineState_Release(x->pso[i]);
+        if (x->dispatch_sig) ID3D12CommandSignature_Release(x->dispatch_sig);
+        if (x->root) ID3D12RootSignature_Release(x->root);
+        if (x->heap) ID3D12DescriptorHeap_Release(x->heap);
+        if (errors) ID3D10Blob_Release(errors);
+        if (blob) ID3D10Blob_Release(blob);
+        {
+            ID3D12Resource *resources[8]={x->out,x->readback,x->data,x->rows,x->shadow,x->color,x->args,x->upload};
+            for (unsigned i=0;i<8;++i) if (resources[i]) ID3D12Resource_Release(resources[i]);
+        }
+        if (x->event) CloseHandle(x->event);
+        free(x->rec);
+        free(x->cpu_data);
+        return pass ? 0 : 1;
+    }
+}
+static int optwin_all(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return optwin_run(d, q, f, b, NULL); }
+static int optwin_s1(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return optwin_run(d, q, f, b, "S1"); }
+static int optwin_g1(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return optwin_run(d, q, f, b, "G1"); }
+static int optwin_t1(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return optwin_run(d, q, f, b, "T1"); }
+static int optwin_b1(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return optwin_run(d, q, f, b, "B1"); }
+static int optwin_c1(ID3D12Device *d, ID3D12CommandQueue *q, ID3D12Fence *f, UINT64 b) { return optwin_run(d, q, f, b, "C1"); }
+
 /* MPOKMT (S2-1c, architect 2026-11-11, amended): ask dxgkrnl directly, from user mode, what DWM never asks, for the
  * adapter behind the primary GDI display: D3DKMTQueryAdapterInfo KMTQAITYPE_MULTIPLANEOVERLAY_SUPPORT (20) first,
  * then DIRECTFLIP_SUPPORT (19), MULTIPLANEOVERLAY_HUD_SUPPORT (23), _SECONDARY_SUPPORT (38), MPO3DDI_SUPPORT (43),
@@ -10153,6 +10619,8 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"MEMBWLONG", mem_bw_long},
     {"MEMBWATOM", mem_bw_atom},
     {"CLKTWIN", clk_twin},
+    {"OPTWIN", optwin_all}, {"OPTWINS1", optwin_s1}, {"OPTWING1", optwin_g1}, {"OPTWINT1", optwin_t1},
+    {"OPTWINB1", optwin_b1}, {"OPTWINC1", optwin_c1},
     {"MPOKMT", mpo_kmt},
     {"Q3PC", q3_pc}, {"Q3CP", q3_cp},
     {"Q3CR", q3_cr}, {"Q3RC", q3_rc_pair}, {"Q3RCR", q3_rcr}, {"Q3RR", q3_rr},
