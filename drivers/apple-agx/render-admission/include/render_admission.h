@@ -144,8 +144,8 @@ typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT {
  * switch is effective (switch = 1 AND broker CAPABILITIES bit 9 AND the
  * REG_NEGOTIATED read-back); all zero otherwise.  Counters are interlocked
  * at any IRQL. */
-#define ADMISSION_MPO_RECEIPT_VERSION 2u
-#define ADMISSION_MPO_RECEIPT_REASONS 32u
+#define ADMISSION_MPO_RECEIPT_VERSION 3u
+#define ADMISSION_MPO_RECEIPT_REASONS 40u
 typedef struct _ADMISSION_MPO_RECEIPT {
   volatile LONG Version, Bytes;
   /* Start: switch value seen, CAP_TWO_LAYERS seen, negotiation read back. */
@@ -167,6 +167,23 @@ typedef struct _ADMISSION_MPO_RECEIPT {
   /* ---- version 2 (A1.2): slot 1 removed before a hide / mode commit ---- */
   volatile LONG Slot1Retires, Slot1RetireFailures, Slot1RetireRefusals;
   volatile LONG LastSlot1RetireStage;  /* ADMISSION_MPO_RETIRE_STAGE_* */
+  /* ---- version 3 (STRETCH-1): scaled planes ---- */
+  /* Start: broker bit 8 with two-layer scan-out effective.  Caps: the last
+   * DxgkDdiGetMultiPlaneOverlayCaps answer (StretchRGB, factor bits). */
+  volatile LONG ScalingSupported, CapsStretchRgb;
+  volatile LONG CapsMaxStretchBits, CapsMaxShrinkBits;
+  /* Check3 answers that involved a scaled plane, and the last one's
+   * reason (0 = supported), StretchQuality, source and destination sizes
+   * (Width | Height << 16) and per-axis factor (destination * 1000 /
+   * source). */
+  volatile LONG Check3ScaledSupported, Check3ScaledRefused;
+  volatile LONG LastScaledReason, LastScaledStretchQuality;
+  volatile LONG LastScaledSourceSize, LastScaledDestinationSize;
+  volatile LONG LastScaledFactorX, LastScaledFactorY;
+  /* Set3: two-plane commits with a scaled plane; one-plane layer-record
+   * commits (AdmissionMpoEvaluateOne), and those of them that scale. */
+  volatile LONG ScaledTwoPlaneCommits, OnePlaneRecordCommits;
+  volatile LONG ScaledOnePlaneCommits;
 } ADMISSION_MPO_RECEIPT;
 #define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
 #define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u
@@ -2430,6 +2447,9 @@ NTSTATUS AdmissionScanoutMpoPlaneOff(_Inout_ ADMISSION_CONTEXT *Context,
 /* TRUE iff the Wom1MpoTwoPlanes switch was set at StartDevice, the broker
  * advertised CAPABILITIES bit 9 and REG_NEGOTIATED read back 0x200. */
 BOOLEAN AdmissionScanoutMpoEffective(_In_opt_ ADMISSION_CONTEXT *Context);
+/* STRETCH-1: effective AND the broker advertised CAP_SCALED_SOURCE (bit 8):
+ * a layer record's source size may differ from its destination's. */
+BOOLEAN AdmissionScanoutMpoScaledSource(_In_opt_ ADMISSION_CONTEXT *Context);
 /* Pool view for plane placement: segment base, pool bytes. */
 BOOLEAN AdmissionScanoutMpoPool(_In_ ADMISSION_CONTEXT *Context,
                                 _Out_ ULONGLONG *SegmentBase,

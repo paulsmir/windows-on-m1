@@ -10,9 +10,10 @@
  * handler in display.c enters AdmissionMpoSetVidPnSourceAddress3 only
  * then.  Not effective, the two DDIs still answer truthfully (one plane). */
 
-/* IEEE-754 single 1.0: written as bits so no floating-point instruction is
+/* The reported factors are IEEE-754 singles written as bits
+ * (ADMISSION_MPO_FLOAT_BITS_*) so no floating-point instruction is
  * generated in the kernel. */
-static const ULONG AdmissionMpoFloatOne = 0x3f800000u;
+C_ASSERT(sizeof(float) == sizeof(ULONG));
 
 static ULONG AdmissionMpoFormatClass(ADMISSION_CONTEXT *Context,
                                      const ADMISSION_ALLOCATION_DESCRIPTION
@@ -74,6 +75,8 @@ static VOID AdmissionMpoPlaneInput(
                           : AdmissionMpoRotationOther;
     /* VerticalFlip / HorizontalFlip; StaticCheck (bit 2) is not a flip. */
     Plane->HasUnsupportedFlags = (Attributes->Flags.Value & 3u) != 0u ? 1u : 0u;
+    /* STRETCH-1: examined by the table only for a scaled plane. */
+    Plane->StretchQuality = (unsigned int)Attributes->StretchQuality;
   } else {
     Plane->ColorSpaceClass = AdmissionMpoColorSpaceOther;
     Plane->Rotation = AdmissionMpoRotationOther;
@@ -150,6 +153,76 @@ static VOID AdmissionMpoInput(ADMISSION_CONTEXT *Context,
                                               Context->CommittedFormat)
           ? 1u
           : 0u;
+  /* STRETCH-1: scaled layer records only with broker bit 8; the filter the
+   * display scaler applies is not known (STRETCH-1 note). */
+  Input->ScalingSupported = AdmissionScanoutMpoScaledSource(Context) ? 1u : 0u;
+  Input->ScalerFilter = (unsigned int)ADMISSION_MPO_SCALER_FILTER_CURRENT;
+}
+
+/* STRETCH-1: the plane's source size differs from its destination's. */
+static BOOLEAN AdmissionMpoPlaneScaled(const ADMISSION_MPO_PLANE_INPUT *Plane) {
+  return (LONGLONG)Plane->Source.Right - Plane->Source.Left !=
+                     (LONGLONG)Plane->Destination.Right -
+                         Plane->Destination.Left ||
+                 (LONGLONG)Plane->Source.Bottom - Plane->Source.Top !=
+                     (LONGLONG)Plane->Destination.Bottom -
+                         Plane->Destination.Top
+             ? TRUE
+             : FALSE;
+}
+
+/* destination * 1000 / source on one axis, clamped to LONG; 0 for an empty
+ * or inverted source.  Receipt only. */
+static LONG AdmissionMpoFactorMilli(LONG SourceLow, LONG SourceHigh,
+                                    LONG DestinationLow, LONG DestinationHigh) {
+  const LONGLONG source = (LONGLONG)SourceHigh - SourceLow;
+  const LONGLONG destination = (LONGLONG)DestinationHigh - DestinationLow;
+  LONGLONG factor;
+  if (source <= 0 || destination < 0)
+    return 0;
+  factor = destination * 1000LL / source;
+  return factor > 0x7fffffffLL ? 0x7fffffff : (LONG)factor;
+}
+
+static LONG AdmissionMpoPackSize(const ADMISSION_MPO_RECT *Rect) {
+  const ULONG width = (ULONG)((LONGLONG)Rect->Right - Rect->Left) & 0xffffu;
+  const ULONG height = (ULONG)((LONGLONG)Rect->Bottom - Rect->Top) & 0xffffu;
+  return (LONG)(width | (height << 16));
+}
+
+/* STRETCH-1 receipt: one Check3 answer that involved a scaled plane (the
+ * first scaled plane in array order). */
+static VOID AdmissionMpoRecordScaled(ADMISSION_CONTEXT *Context,
+                                     const ADMISSION_MPO_PLANE_INPUT *Planes,
+                                     ULONG Count, ULONG Reason) {
+  ULONG index;
+  const ADMISSION_MPO_PLANE_INPUT *plane = NULL;
+  for (index = 0u; index < Count && plane == NULL; ++index)
+    if (AdmissionMpoPlaneScaled(&Planes[index]))
+      plane = &Planes[index];
+  if (plane == NULL)
+    return;
+  if (Reason == AdmissionMpoSupported)
+    InterlockedIncrement(&Context->Mpo.Check3ScaledSupported);
+  else
+    InterlockedIncrement(&Context->Mpo.Check3ScaledRefused);
+  InterlockedExchange(&Context->Mpo.LastScaledReason, (LONG)Reason);
+  InterlockedExchange(&Context->Mpo.LastScaledStretchQuality,
+                      (LONG)plane->StretchQuality);
+  InterlockedExchange(&Context->Mpo.LastScaledSourceSize,
+                      AdmissionMpoPackSize(&plane->Source));
+  InterlockedExchange(&Context->Mpo.LastScaledDestinationSize,
+                      AdmissionMpoPackSize(&plane->Destination));
+  InterlockedExchange(
+      &Context->Mpo.LastScaledFactorX,
+      AdmissionMpoFactorMilli(plane->Source.Left, plane->Source.Right,
+                              plane->Destination.Left,
+                              plane->Destination.Right));
+  InterlockedExchange(
+      &Context->Mpo.LastScaledFactorY,
+      AdmissionMpoFactorMilli(plane->Source.Top, plane->Source.Bottom,
+                              plane->Destination.Top,
+                              plane->Destination.Bottom));
 }
 
 /* ---- DxgkDdiGetMultiPlaneOverlayCaps ---- */
@@ -157,25 +230,43 @@ static VOID AdmissionMpoInput(ADMISSION_CONTEXT *Context,
 _Use_decl_annotations_ NTSTATUS AdmissionDdiGetMultiPlaneOverlayCaps(
     CONST HANDLE hAdapter, DXGKARG_GETMULTIPLANEOVERLAYCAPS *Caps) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)hAdapter;
+  ADMISSION_MPO_CAPS derived;
   BOOLEAN effective;
 
   if (context == NULL || Caps == NULL)
     return STATUS_INVALID_PARAMETER;
   effective = AdmissionScanoutMpoEffective(context);
-  /* Specification v1: MaxPlanes 2, MaxRGBPlanes 2, MaxYUVPlanes 0,
-   * OverlayCaps 0, MaxStretchFactor 1.0, MaxShrinkFactor 1.0.  Not
+  /* Specification v1: MaxPlanes 2, MaxRGBPlanes 2, MaxYUVPlanes 0.  Not
    * effective (dxgkrnl does not call then, R22): one plane, the values
-   * dxgkrnl itself substitutes (R22 Q1, defaults at +0x58..+0x78). */
-  Caps->MaxPlanes = effective && Caps->VidPnSourceId == 0 ? 2u : 1u;
+   * dxgkrnl itself substitutes (R22 Q1, defaults at +0x58..+0x78).
+   * STRETCH-1 (AdmissionMpoCapsFor): with broker bit 8, StretchRGB and
+   * factors 2.0 / 0.5 (the broker's per-axis limit); otherwise no stretch
+   * bit and factors 1.0 as before.  No filter bit: the display scaler's
+   * filter is not known. */
+  AdmissionMpoCapsFor(effective ? 1u : 0u,
+                      AdmissionScanoutMpoScaledSource(context) ? 1u : 0u,
+                      (unsigned int)ADMISSION_MPO_SCALER_FILTER_CURRENT,
+                      (unsigned int)Caps->VidPnSourceId, &derived);
+  Caps->MaxPlanes = derived.MaxPlanes;
   Caps->MaxRGBPlanes = Caps->MaxPlanes;
   Caps->MaxYUVPlanes = 0u;
   Caps->OverlayCaps.Value = 0u;
-  RtlCopyMemory(&Caps->MaxStretchFactor, &AdmissionMpoFloatOne,
+  Caps->OverlayCaps.StretchRGB = derived.StretchRgb & 1u;
+  Caps->OverlayCaps.BilinearFilter = derived.BilinearFilter & 1u;
+  Caps->OverlayCaps.HighFilter = derived.HighFilter & 1u;
+  RtlCopyMemory(&Caps->MaxStretchFactor, &derived.MaxStretchBits,
                 sizeof(Caps->MaxStretchFactor));
-  RtlCopyMemory(&Caps->MaxShrinkFactor, &AdmissionMpoFloatOne,
+  RtlCopyMemory(&Caps->MaxShrinkFactor, &derived.MaxShrinkBits,
                 sizeof(Caps->MaxShrinkFactor));
-  if (effective)
+  if (effective) {
     InterlockedIncrement(&context->Mpo.CapsCalls);
+    InterlockedExchange(&context->Mpo.CapsStretchRgb,
+                        (LONG)derived.StretchRgb);
+    InterlockedExchange(&context->Mpo.CapsMaxStretchBits,
+                        (LONG)derived.MaxStretchBits);
+    InterlockedExchange(&context->Mpo.CapsMaxShrinkBits,
+                        (LONG)derived.MaxShrinkBits);
+  }
   /* S2-1b: every call, ungated; persisted on the first calls only. */
   {
     const LONG all = InterlockedIncrement(&context->MpoGate.CapsCallsAll);
@@ -308,10 +399,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCheckMultiPlaneOverlaySupport3(
   /* A1.1: while effective, one plane is answered with the V2 path's own
    * acceptance rule, so Check3 never promises a flip Set3 refuses.  Not
    * effective: the version-1 answer, unchanged. */
+  /* STRETCH-1: a one-plane configuration that is not the full-screen
+   * primary goes as one layer record (AdmissionMpoEvaluateOne); the
+   * full-screen primary keeps the V2 rule. */
   if (effective && Args->PlaneCount == 1u)
-    (void)AdmissionMpoEvaluatePrimary(&input, &result);
+    (void)AdmissionMpoEvaluateOne(&input, &result);
   else
     (void)AdmissionMpoEvaluate(&input, &result);
+  if (effective)
+    AdmissionMpoRecordScaled(context, planes, Args->PlaneCount,
+                             result.Reason);
   AdmissionMpoCheckAnswer(context, effective, Args, result.Reason,
                           result.FailingPlane);
   return STATUS_SUCCESS;
@@ -430,6 +527,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     if (NT_SUCCESS(status)) {
       RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
       InterlockedIncrement(&Context->Mpo.TwoPlaneCommits);
+      if (AdmissionMpoPlaneScaled(&pair[0]) || AdmissionMpoPlaneScaled(&pair[1]))
+        InterlockedIncrement(&Context->Mpo.ScaledTwoPlaneCommits);
     }
     return status;
   }
@@ -449,10 +548,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     /* WP-1: after the removal LayerIndex 0 is the full-screen scan-out, so
      * its allocation must have the committed mode's geometry (the rule the
      * one-plane path applies through AdmissionMpoEvaluatePrimary).  User
-     * mode no longer refuses non-mode-size primaries at CreateResource. */
+     * mode no longer refuses non-mode-size primaries at CreateResource.
+     * STRETCH-1: a LayerIndex 0 plane that is not the full-screen primary
+     * (scaled, cropped, positioned) is checked with the layer rules
+     * instead; the removal record carries its rectangles either way. */
     pair[0] = next[0].Input;
     AdmissionMpoInput(Context, pair, 1u, &input);
-    if (AdmissionMpoEvaluatePrimary(&input, &result) != AdmissionMpoSupported) {
+    if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
       InterlockedIncrement(&Context->Mpo.Set3TableRefusals);
       InterlockedExchange(&Context->Mpo.LastSet3TableReason,
                           (LONG)result.Reason);
@@ -463,19 +565,40 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     if (NT_SUCCESS(status)) {
       RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
       InterlockedIncrement(&Context->Mpo.RemovalCommits);
+      if (result.OnePlaneRecord != 0u &&
+          AdmissionMpoPlaneScaled(&next[0].Input))
+        InterlockedIncrement(&Context->Mpo.ScaledOnePlaneCommits);
     }
     return status;
   }
   if (next[0].Enabled && listed[0]) {
-    /* One plane, slot 1 not on screen: today's V2 PRESENT, same bytes,
-     * after the same rule one-plane Check3 answered with (A1.1). */
+    /* One plane, slot 1 not on screen: the full-screen primary takes
+     * today's V2 PRESENT, same bytes, after the same rule one-plane Check3
+     * answered with (A1.1).  STRETCH-1: any other plane (scaled, cropped,
+     * positioned) goes as one layer record, the rule Check3 answered with
+     * (AdmissionMpoEvaluateOne). */
     pair[0] = next[0].Input;
     AdmissionMpoInput(Context, pair, 1u, &input);
-    if (AdmissionMpoEvaluatePrimary(&input, &result) != AdmissionMpoSupported) {
+    if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
       InterlockedIncrement(&Context->Mpo.Set3TableRefusals);
       InterlockedExchange(&Context->Mpo.LastSet3TableReason,
                           (LONG)result.Reason);
       return STATUS_INVALID_PARAMETER;
+    }
+    if (result.OnePlaneRecord != 0u) {
+      if (AdmissionMpoBuildRemoval(&next[0].Input, &records[0]) != 1u) {
+        AdmissionMpoRefuseSet3(Context);
+        return STATUS_INVALID_PARAMETER;
+      }
+      status = AdmissionScanoutMpoCommit(Context, records, 1u, &completion,
+                                         next[0].PrimaryAddress);
+      if (NT_SUCCESS(status)) {
+        RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
+        InterlockedIncrement(&Context->Mpo.OnePlaneRecordCommits);
+        if (AdmissionMpoPlaneScaled(&next[0].Input))
+          InterlockedIncrement(&Context->Mpo.ScaledOnePlaneCommits);
+      }
+      return status;
     }
     RtlZeroMemory(&legacy, sizeof(legacy));
     legacy.VidPnSourceId = 0;

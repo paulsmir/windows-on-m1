@@ -137,6 +137,7 @@ static ADMISSION_MPO_PLANE_INPUT Application(void) {
   p.InScanoutPool = 1u; p.PlacementKnown = 1u;
   p.PoolOffset = 0x1000000ULL; p.SurfaceBytes = 5120ULL * 720u;
   p.SurfaceIdentity = 0x200u;
+  p.StretchQuality = 2u; /* HIGH; examined only when scaled */
   return p;
 }
 
@@ -160,8 +161,23 @@ static unsigned long long JitterU64(unsigned long long Value) {
                      (unsigned int)(sizeof(d) / sizeof(d[0])))];
 }
 
+/* STRETCH-1: a destination size around the 2x limits, per axis. */
+static int ScaleExtent(int Source) {
+  switch (Next(9u)) {
+  case 0: return Source * 2;
+  case 1: return Source * 2 + 1;
+  case 2: return Source / 2;
+  case 3: return Source / 2 - 1;
+  case 4: return (Source * 3) / 2;
+  case 5: return (Source * 2) / 3;
+  case 6: return Source * 3;
+  case 7: return Source + 1;
+  default: return Source;
+  }
+}
+
 static void Mutate(ADMISSION_MPO_PLANE_INPUT *P, ADMISSION_MPO_PLANE_INPUT *O) {
-  switch (Next(20u)) {
+  switch (Next(23u)) {
   case 0: P->Source.Left = JitterI(P->Source.Left); break;
   case 1: P->Source.Right = JitterI(P->Source.Right); break;
   case 2: P->Source.Bottom = JitterI(P->Source.Bottom); break;
@@ -190,6 +206,16 @@ static void Mutate(ADMISSION_MPO_PLANE_INPUT *P, ADMISSION_MPO_PLANE_INPUT *O) {
   case 17: P->SurfaceBytes = (unsigned long long)P->SurfaceStride *
                              P->SurfaceHeight; break;
   case 18: P->InScanoutPool = Next(5u) != 0u ? 1u : 0u; break;
+  case 19: P->StretchQuality = Next(4u); break;
+  case 20: case 21: { /* scale the destination about its origin */
+    int w = ScaleExtent(P->Source.Right - P->Source.Left);
+    int h = Next(2u) != 0u ? ScaleExtent(P->Source.Bottom - P->Source.Top)
+                           : P->Source.Bottom - P->Source.Top;
+    P->Destination.Right = P->Destination.Left + w;
+    P->Destination.Bottom = P->Destination.Top + h;
+    P->Clip = P->Destination;
+    break;
+  }
   default: { /* a big or small application window */
     unsigned int w = 32u * (1u + Next(80u)), h = 32u * (1u + Next(50u));
     P->Source = Rect(0, 0, (int)w, (int)h);
@@ -231,6 +257,7 @@ static void TestSweepTableImpliesBroker(void) {
   APPLE_AGX_SCANOUT_LAYER raw[2];
   unsigned int iteration, m, code, swap, app;
   unsigned int supported = 0u;
+  unsigned int scaledSupported = 0u;
   unsigned int rawRefused[24];
 
   memset(rawRefused, 0, sizeof(rawRefused));
@@ -243,6 +270,9 @@ static void TestSweepTableImpliesBroker(void) {
       unsigned int which = Next(4u) == 0u ? swap : app;
       Mutate(&p[which], &p[which ^ 1u]);
     }
+    memset(&input, 0, sizeof(input));
+    input.ScalingSupported = Next(4u) != 0u ? 1u : 0u;
+    input.ScalerFilter = Next(3u);
     input.PanelWidth = Next(16u) == 0u ? 1920u : REF_PANEL_W;
     input.PanelHeight = input.PanelWidth == REF_PANEL_W ? REF_PANEL_H : 1200u;
     input.PlaneCount = 2u;
@@ -259,6 +289,13 @@ static void TestSweepTableImpliesBroker(void) {
     if (!result.Supported)
       continue;
     ++supported;
+    if (p[app].Source.Right - p[app].Source.Left !=
+            p[app].Destination.Right - p[app].Destination.Left ||
+        p[app].Source.Bottom - p[app].Source.Top !=
+            p[app].Destination.Bottom - p[app].Destination.Top) {
+      ++scaledSupported;
+      CHECK(input.ScalingSupported != 0u);
+    }
     if (AdmissionMpoBuildCommit(&result, records) != 2u) {
       fprintf(stderr, "sweep %u: supported but no records\n", iteration);
       ++Failures;
@@ -281,9 +318,12 @@ static void TestSweepTableImpliesBroker(void) {
       return;
     }
   }
-  printf("sweep: %u supported of 400000\n", supported);
+  printf("sweep: %u supported of 400000 (%u scaled)\n", supported,
+         scaledSupported);
   CHECK(supported > 1000u);
-  /* The sweep must reach every record/pair refusal the table can meet. */
+  CHECK(scaledSupported > 1000u);
+  /* The sweep must reach every record/pair refusal the table can meet
+   * (21 = beyond 2x, reachable since STRETCH-1). */
   for (code = 15u; code <= 23u; ++code) {
     if (rawRefused[code] == 0u) {
       fprintf(stderr, "sweep never produced broker refusal %u\n", code);
@@ -320,8 +360,113 @@ static void TestUnsupportedWritesNothing(void) {
   CHECK(records[0].Flags == 0x5a5a5a5au);
 }
 
+
+/* STRETCH-1: AdmissionMpoEvaluateOne's record path implies the broker
+ * accepts the one-record commit AdmissionMpoBuildRemoval writes for it. */
+static void TestSweepOnePlaneRecord(void) {
+  ADMISSION_MPO_PLANE_INPUT p[2];
+  ADMISSION_MPO_INPUT input;
+  ADMISSION_MPO_RESULT result;
+  APPLE_AGX_SCANOUT_LAYER record;
+  unsigned int iteration, m, code, records = 0u, scaled = 0u;
+
+  for (iteration = 0u; iteration < 200000u; ++iteration) {
+    p[0] = Application();
+    p[1] = Desktop();
+    p[0].LayerIndex = 0u;
+    p[0].BlendAlpha = Next(3u);
+    p[0].StretchQuality = 2u;
+    if (Next(2u) != 0u) { /* a full-screen game */
+      p[0].Destination = Rect(0, 0, 2560, 1600);
+      p[0].Clip = p[0].Destination;
+    }
+    for (m = Next(4u); m != 0u; --m)
+      Mutate(&p[0], &p[1]);
+    memset(&input, 0, sizeof(input));
+    input.PanelWidth = REF_PANEL_W;
+    input.PanelHeight = REF_PANEL_H;
+    input.PanelStride = REF_PANEL_W * 4u;
+    input.PanelModeSupported = 1u;
+    input.PlaneCount = 1u;
+    input.Planes = p;
+    input.PoolBytes = REF_POOL;
+    input.ScalingSupported = Next(4u) != 0u ? 1u : 0u;
+    input.ScalerFilter = Next(3u);
+    if (AdmissionMpoEvaluateOne(&input, &result) != 0u ||
+        result.OnePlaneRecord == 0u)
+      continue;
+    ++records;
+    if (p[0].Source.Right - p[0].Source.Left !=
+            p[0].Destination.Right - p[0].Destination.Left ||
+        p[0].Source.Bottom - p[0].Source.Top !=
+            p[0].Destination.Bottom - p[0].Destination.Top)
+      ++scaled;
+    memset(&record, 0, sizeof(record));
+    if (AdmissionMpoBuildRemoval(&p[0], &record) != 1u) {
+      fprintf(stderr, "one-plane sweep %u: supported but no record\n",
+              iteration);
+      ++Failures;
+      return;
+    }
+    code = RefCommit(&record, 1u, REF_POOL);
+    if (code != 0u) {
+      fprintf(stderr, "one-plane sweep %u: broker reference refuses %u\n",
+              iteration, code);
+      ++Failures;
+      return;
+    }
+  }
+  printf("one-plane sweep: %u records (%u scaled)\n", records, scaled);
+  CHECK(records > 1000u && scaled > 1000u);
+}
+
+/* STRETCH-1: the records of a scaled pair carry source and destination
+ * separately (V3 layer record SrcSize / DstSize). */
+static void TestScaledRecords(void) {
+  ADMISSION_MPO_PLANE_INPUT p[2];
+  ADMISSION_MPO_INPUT input;
+  ADMISSION_MPO_RESULT result;
+  APPLE_AGX_SCANOUT_LAYER records[2];
+  p[0] = Desktop();
+  p[1] = Application(); /* 1280x720 source */
+  p[1].Destination = Rect(0, 0, 2560, 1440);
+  p[1].Clip = p[1].Destination;
+  p[1].StretchQuality = 2u;
+  memset(&input, 0, sizeof(input));
+  input.PanelWidth = REF_PANEL_W;
+  input.PanelHeight = REF_PANEL_H;
+  input.PlaneCount = 2u;
+  input.Planes = p;
+  input.PoolBytes = REF_POOL;
+  input.ScalingSupported = 1u;
+  CHECK(AdmissionMpoEvaluate(&input, &result) == 0u);
+  CHECK(AdmissionMpoBuildCommit(&result, records) == 2u);
+  CHECK(records[0].SrcOrigin == 0u &&
+        records[0].SrcSize == APPLE_AGX_SCANOUT_PACK(1280u, 720u) &&
+        records[0].DstOrigin == 0u &&
+        records[0].DstSize == APPLE_AGX_SCANOUT_PACK(2560u, 1440u) &&
+        records[0].Width == 1280u && records[0].Height == 720u &&
+        records[0].Stride == 5120u);
+  CHECK(records[1].SrcSize == APPLE_AGX_SCANOUT_PACK(2560u, 1600u) &&
+        records[1].DstSize == APPLE_AGX_SCANOUT_PACK(2560u, 1600u));
+  CHECK(RefCommit(records, 2u, REF_POOL) == 0u);
+  /* A cropped, offset source keeps its origin. */
+  p[1].Source = Rect(64, 32, 704, 512); /* 640x480 */
+  p[1].Destination = Rect(10, 20, 970, 740); /* 960x720 = 1.5x */
+  p[1].Clip = p[1].Destination;
+  CHECK(AdmissionMpoEvaluate(&input, &result) == 0u);
+  CHECK(AdmissionMpoBuildCommit(&result, records) == 2u);
+  CHECK(records[0].SrcOrigin == APPLE_AGX_SCANOUT_PACK(64u, 32u) &&
+        records[0].SrcSize == APPLE_AGX_SCANOUT_PACK(640u, 480u) &&
+        records[0].DstOrigin == APPLE_AGX_SCANOUT_PACK(10u, 20u) &&
+        records[0].DstSize == APPLE_AGX_SCANOUT_PACK(960u, 720u));
+  CHECK(RefCommit(records, 2u, REF_POOL) == 0u);
+}
+
 int main(void) {
   TestUnsupportedWritesNothing();
+  TestScaledRecords();
+  TestSweepOnePlaneRecord();
   TestRemovalRecord();
   TestSweepTableImpliesBroker();
   if (Failures != 0u) {

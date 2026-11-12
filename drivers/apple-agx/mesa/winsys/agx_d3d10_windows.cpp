@@ -17,6 +17,8 @@ extern "C" {
 #include "../d3d11/agx_dxgi_mpo.h"
 static_assert(AGX_DXGI_MPO_FEATURE_TWO_PLANES==AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES,
               "agx_dxgi_mpo.h names the shared device feature bit");
+static_assert(AGX_DXGI_MPO_FEATURE_STRETCH==AGX_WIN32_DEVICE_FEATURE_MPO_STRETCH,
+              "agx_dxgi_mpo.h names the shared stretch feature bit");
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 
@@ -1196,6 +1198,14 @@ BOOL AgxD3d10WindowsKernelMpoTwoPlanes(AGX_D3D10_WINDOWS_DEVICE *Device,
     AdmissionUmdDiagnostic("measure-dxgi-mpo-feature",S_OK,values,ARRAYSIZE(values));
   }
   return two;
+}
+/* STRETCH-1: AGX_WIN32_DEVICE_FEATURE_MPO_STRETCH from the same adapter
+ * private data; meaningful only with the two-plane bit (VidPnSource 0). */
+BOOL AgxD3d10WindowsKernelMpoStretch(AGX_D3D10_WINDOWS_DEVICE *Device,
+                                     UINT VidPnSourceId) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Device->Adapter) return FALSE;
+  return AgxDxgiMpoFeatureStretch(Device->Adapter->Runtime.DeviceInfo.Features,
+                                  VidPnSourceId) ? TRUE : FALSE;
 }
 
 /* S2: PresentMultiplaneOverlay(1) after AgxDxgiMpoCheckPlanes: the flush of

@@ -670,6 +670,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
         AppleAgxScanoutTwoLayersAdvertised(&runtime->Panel.Scanout) ? 1 : 0;
     Context->Mpo.Effective =
         AppleAgxFixedPanelTwoLayers(&runtime->Panel) ? 1 : 0;
+    /* STRETCH-1: what the plane caps derive from (broker bit 8). */
+    Context->Mpo.ScalingSupported =
+        Context->Mpo.Effective != 0 &&
+                (runtime->Panel.Scanout.Capabilities &
+                 APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE) != 0u
+            ? 1
+            : 0;
     /* NP-1: the Set3-side publish (AdmissionQueueMpoPublish). */
     AdmissionMpoPublishStart(Context);
   }
@@ -1222,6 +1229,19 @@ _Use_decl_annotations_ BOOLEAN AdmissionScanoutMpoEffective(
     ADMISSION_CONTEXT *Context) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
   return runtime != NULL && AppleAgxFixedPanelTwoLayers(&runtime->Panel)
+             ? TRUE
+             : FALSE;
+}
+
+/* STRETCH-1: layer records may scale (broker CAPABILITIES bit 8,
+ * CAP_SCALED_SOURCE, read at StartDevice) and two-layer scan-out is
+ * effective (the only path that sends layer records). */
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutMpoScaledSource(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  return runtime != NULL && AppleAgxFixedPanelTwoLayers(&runtime->Panel) &&
+                 (runtime->Panel.Scanout.Capabilities &
+                  APPLE_AGX_SCANOUT_CAP_SCALED_SOURCE) != 0u
              ? TRUE
              : FALSE;
 }

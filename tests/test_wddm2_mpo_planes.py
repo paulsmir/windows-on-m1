@@ -10,7 +10,9 @@ WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
     E_NOTIMPL, Supported FALSE).  A regression there changes what DWM sees
     on every bench boot.
 (2) Predicate on: the two-plane caps of S2 specification v1 (MaxPlanes 2,
-    one RGB group of two unscaled planes), sRGB 8-bit RGB only, and the
+    one RGB group of two planes, unscaled unless the kernel also publishes
+    AGX_WIN32_DEVICE_FEATURE_MPO_STRETCH: then factors 2.0 / 0.5, the
+    kernel's DXGK caps, STRETCH-1), sRGB 8-bit RGB only, and the
     deterministic translation of a DXGI plane list into
     DXGIDDICB_PRESENT_MULTIPLANE_OVERLAY (one allocation per plane in plane
     order, the DXGI context unchanged, the device's kernel context, no
@@ -104,11 +106,20 @@ int main() {
   AgxDxgiMpoFillCaps(0, &caps); assert(caps.MaxPlanes == 1 && caps.NumCapabilityGroups == 0);
   AgxDxgiMpoFillCaps(1, &caps); assert(caps.MaxPlanes == 2 && caps.NumCapabilityGroups == 1);
   DXGI_DDI_MULTIPLANE_OVERLAY_GROUP_CAPS g = {9, 9.0f, 9.0f, 9, 9};
-  assert(!AgxDxgiMpoFillGroupCaps(0, 0, &g) && g.NumPlanes == 9 && g.OverlayCaps == 9);
-  assert(!AgxDxgiMpoFillGroupCaps(1, 1, &g) && g.NumPlanes == 9);
-  assert(AgxDxgiMpoFillGroupCaps(1, 0, &g));
+  assert(!AgxDxgiMpoFillGroupCaps(0, 0, 0, &g) && g.NumPlanes == 9 && g.OverlayCaps == 9);
+  /* STRETCH-1: the stretch bit never creates a group by itself. */
+  assert(!AgxDxgiMpoFillGroupCaps(0, 1, 0, &g) && g.NumPlanes == 9 && g.OverlayCaps == 9);
+  assert(!AgxDxgiMpoFillGroupCaps(1, 0, 1, &g) && g.NumPlanes == 9);
+  assert(AgxDxgiMpoFillGroupCaps(1, 0, 0, &g));
   assert(g.NumPlanes == 2 && g.MaxStretchFactor == 1.0f && g.MaxShrinkFactor == 1.0f);
   assert(g.OverlayCaps == 0x20u && g.StereoCaps == 0);
+  assert(AgxDxgiMpoFillGroupCaps(1, 1, 0, &g));
+  assert(g.NumPlanes == 2 && g.MaxStretchFactor == 2.0f && g.MaxShrinkFactor == 0.5f);
+  assert(g.OverlayCaps == 0x20u && g.StereoCaps == 0);
+  /* Stretch predicate: two-plane bit AND stretch bit, VidPnSource 0 only. */
+  assert(AgxDxgiMpoFeatureStretch(0x60u, 0) == 1 && AgxDxgiMpoFeatureStretch(0x7fu, 0) == 1);
+  assert(!AgxDxgiMpoFeatureStretch(0x40u, 0) && !AgxDxgiMpoFeatureStretch(0x3fu, 0));
+  assert(!AgxDxgiMpoFeatureStretch(0x60u, 1));
   /* Colour space: on, 8-bit BGRA/RGBA UNORM in RGB_FULL_G22_NONE_P709 only. */
   assert(AgxDxgiMpoColorSpaceSupported(1, 87, 0) && AgxDxgiMpoColorSpaceSupported(1, 28, 0));
   for (unsigned f : {87u, 28u}) assert(!AgxDxgiMpoColorSpaceSupported(0, f, 0));
@@ -211,6 +222,8 @@ static void dxgi_receipt(const char *stage, HRESULT hr, UINT a, UINT b) {
 static UINT features; static unsigned predicateCalls; static UINT askedSource;
 extern "C" BOOL AgxD3d10WindowsKernelMpoTwoPlanes(AGX_D3D10_WINDOWS_DEVICE *, UINT source) {
   ++predicateCalls; askedSource = source; return AgxDxgiMpoFeatureTwoPlanes(features, source) ? TRUE : FALSE; }
+extern "C" BOOL AgxD3d10WindowsKernelMpoStretch(AGX_D3D10_WINDOWS_DEVICE *, UINT source) {
+  return AgxDxgiMpoFeatureStretch(features, source) ? TRUE : FALSE; }
 static unsigned submits; static std::vector<int> submitted; static std::vector<UINT> layers; static void *submittedContext;
 extern "C" HRESULT AgxD3d10WindowsPresentationSubmitPlanes(AGX_D3D10_WINDOWS_DEVICE *,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *const *r, const AGX_DXGI_MPO_PLANE *p, UINT n, void *ctx) {
@@ -268,6 +281,13 @@ int main() {
   assert(gc.MultiplaneOverlayGroupCaps.NumPlanes == 2 && gc.MultiplaneOverlayGroupCaps.OverlayCaps == 0x20u &&
          gc.MultiplaneOverlayGroupCaps.MaxStretchFactor == 1.0f &&
          gc.MultiplaneOverlayGroupCaps.MaxShrinkFactor == 1.0f && gc.MultiplaneOverlayGroupCaps.StereoCaps == 0);
+  /* STRETCH-1: the kernel's stretch bit gives the kernel's factors. */
+  features = 0x7fu;
+  assert(GetMultiplaneOverlayGroupCaps(&gc) == S_OK && receipts.empty() &&
+         gc.MultiplaneOverlayGroupCaps.MaxStretchFactor == 2.0f &&
+         gc.MultiplaneOverlayGroupCaps.MaxShrinkFactor == 0.5f &&
+         gc.MultiplaneOverlayGroupCaps.OverlayCaps == 0x20u);
+  features = 0x3fu;
   gc.GroupIndex = 1;
   assert(GetMultiplaneOverlayGroupCaps(&gc) == E_INVALIDARG &&
          same(receipts.back(), "reject-dxgi-mpo-group", E_INVALIDARG, 1, 0));
@@ -450,8 +470,14 @@ class Wddm2MpoPlanes(unittest.TestCase):
             self.assertNotIn(gone, winsys)
         lifecycle = (ROOT / "drivers/apple-agx/render-admission/src/lifecycle.c").read_text()
         self.assertIn("    if (AdmissionScanoutMpoEffective(context))\n"
-                      "      info->Features |= AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES;\n"
+                      "      info->Features |= AGX_WIN32_DEVICE_FEATURE_MPO_TWO_PLANES;\n", lifecycle)
+        # STRETCH-1: the stretch bit follows the kernel's scaled-source predicate.
+        self.assertIn("#define AGX_WIN32_DEVICE_FEATURE_MPO_STRETCH 0x40u", info)
+        self.assertIn("AGX_WIN32_DEVICE_FEATURE_MPO_STRETCH", known[:known.index(")\n")])
+        self.assertIn("    if (AdmissionScanoutMpoScaledSource(context))\n"
+                      "      info->Features |= AGX_WIN32_DEVICE_FEATURE_MPO_STRETCH;\n"
                       "    status = STATUS_SUCCESS;", lifecycle)
+        self.assertIn("static_assert(AGX_DXGI_MPO_FEATURE_STRETCH==AGX_WIN32_DEVICE_FEATURE_MPO_STRETCH,", winsys)
 
     def test_wddm2_device_uses_the_wddm1_3_callback(self):
         """The present goes through pfnPresentMultiplaneOverlayCb, never the 2.2 callback."""

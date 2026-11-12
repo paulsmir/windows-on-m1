@@ -123,8 +123,12 @@ class Wp1WindowPrimary(unittest.TestCase):
         mpo = (AGX / 'render-admission/src/mpo_windows.c').read_text()
         start = mpo.index('  if (slot1) {')
         removal = mpo[start:mpo.index('InterlockedIncrement(&Context->Mpo.RemovalCommits);', start)]
-        self.assertLess(removal.index('AdmissionMpoBuildRemoval('), removal.index('AdmissionMpoEvaluatePrimary('))
-        self.assertLess(removal.index('AdmissionMpoEvaluatePrimary('), removal.index('AdmissionScanoutMpoCommit('))
+        # STRETCH-1: AdmissionMpoEvaluateOne keeps the mode-geometry rule
+        # (AdmissionMpoEvaluatePrimary) for a full-screen LayerIndex 0 plane
+        # and applies the layer-record rules to a scaled/positioned one
+        # (mpo_contract_test.c TestEvaluateOne).
+        self.assertLess(removal.index('AdmissionMpoBuildRemoval('), removal.index('AdmissionMpoEvaluateOne('))
+        self.assertLess(removal.index('AdmissionMpoEvaluateOne('), removal.index('AdmissionScanoutMpoCommit('))
         self.assertIn('Set3TableRefusals', removal)
 
 
