@@ -1211,10 +1211,17 @@ HRESULT AgxD3d10WindowsPresentationSubmitPlanes(
   AdmissionUmdPresentMeasure(AdmissionUmdMeasureNativeSubmitEntry,S_OK,NULL,0u);
   BOOL valid=Device && Device->Stage==AgxD3d10DeviceReady && Resources && Planes &&
       AgxDxgiMpoCheckPlanes(Planes,Count)==AgxDxgiMpoPlanesOk;
-  for(UINT i=0;valid && i<Count;++i)
+  /* DP-1: an enabled plane needs this device's presentation resource; a
+   * disabled plane has none (NULL) and is passed with allocation 0. */
+  AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *shown[AGX_DXGI_MPO_PLANES]={NULL,NULL};
+  UINT shownCount=0u;
+  for(UINT i=0;valid && i<Count;++i) {
+    if(!Planes[i].Enabled) { valid=Resources[i]==NULL; continue; }
     valid=Resources[i] && Resources[i]->Device==Device &&
           Resources[i]->Resource.Magic==ADMISSION_UMD_RESOURCE_MAGIC &&
           Resources[i]->Resource.KernelAllocation!=0u;
+    if(valid) shown[shownCount++]=Resources[i];
+  }
   if(valid)
     valid=Device->Runtime.DxgiCallbacks &&
           Device->Runtime.DxgiCallbacks->pfnPresentMultiplaneOverlayCb &&
@@ -1224,12 +1231,12 @@ HRESULT AgxD3d10WindowsPresentationSubmitPlanes(
     AdmissionUmdDiagnostic("reject-dxgi-mpo-submit",E_INVALIDARG,&Count,1u);
     return E_INVALIDARG;
   }
-  HRESULT result=flush_for_present(Device,Resources,Count);
-  UINT values[4]={Count,(UINT)Resources[0]->Resource.KernelAllocation,
-      Count>1u?(UINT)Resources[1]->Resource.KernelAllocation:0u,0u};
+  HRESULT result=flush_for_present(Device,shown,shownCount);
+  D3DKMT_HANDLE allocations[AGX_DXGI_MPO_PLANES]={0u,0u};
+  for(UINT i=0;i<Count;++i)
+    allocations[i]=Planes[i].Enabled?Resources[i]->Resource.KernelAllocation:0u;
+  UINT values[4]={Count,(UINT)allocations[0],Count>1u?(UINT)allocations[1]:0u,0u};
   if(SUCCEEDED(result)) {
-    D3DKMT_HANDLE allocations[AGX_DXGI_MPO_PLANES]={0u,0u};
-    for(UINT i=0;i<Count;++i) allocations[i]=Resources[i]->Resource.KernelAllocation;
     DXGIDDICB_PRESENT_MULTIPLANE_OVERLAY *present=
         (DXGIDDICB_PRESENT_MULTIPLANE_OVERLAY *)HeapAlloc(GetProcessHeap(),0,
             sizeof(DXGIDDICB_PRESENT_MULTIPLANE_OVERLAY));

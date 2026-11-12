@@ -1144,13 +1144,31 @@ present_planes(const char *stage, DXGI_DDI_HDEVICE hDevice, void *dxgiContext, U
    unsigned reason = !planes ? AgxDxgiMpoPlanesArgument :
                      count == 0u || count > AGX_DXGI_MPO_PLANES ? AgxDxgiMpoPlanesCount :
                                                                   AgxDxgiMpoPlanesOk;
+   /* DP-1: "measure-dxgi-mpo-disabled" for a plane list that names a
+    * disabled plane: {count, plane 0 code | plane 1 code << 16}, code =
+    * LayerIndex | Enabled << 8 | (hResource NULL) << 9; the first 16 such
+    * presents per process (receipt-only counter; a lost increment under a
+    * race is harmless). */
+   if (planes && count >= 1u && count <= AGX_DXGI_MPO_PLANES) {
+      UINT codes = 0u;
+      bool any_disabled = false;
+      for (UINT i = 0; i < count; ++i) {
+         any_disabled = any_disabled || !planes[i].Enabled;
+         codes |= ((planes[i].LayerIndex & 0xffu) | (planes[i].Enabled ? 0x100u : 0u) |
+                   (planes[i].hResource == 0 ? 0x200u : 0u)) << (16u * i);
+      }
+      static UINT disabled_rows;
+      if (any_disabled && ++disabled_rows <= 16u)
+         dxgi_receipt("measure-dxgi-mpo-disabled", S_OK, count, codes);
+   }
    for (UINT i = 0; reason == AgxDxgiMpoPlanesOk && i < count; ++i) {
       Resource *resource = CastResource(planes[i].hResource);
       const bool owned = device && resource && resource->owner_device == device &&
                          resource->presentation;
       neutral[i] = AgxDxgiMpoPlane(planes[i].LayerIndex, planes[i].Enabled, owned,
                                    planes[i].SubResourceIndex);
-      records[i] = owned ? resource->presentation : NULL;
+      /* DP-1: a disabled plane carries no resource to the submit. */
+      records[i] = owned && planes[i].Enabled ? resource->presentation : NULL;
    }
    if (reason == AgxDxgiMpoPlanesOk)
       reason = AgxDxgiMpoCheckPlanes(neutral, count);

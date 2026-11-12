@@ -126,7 +126,19 @@ int main() {
   p[0].LayerIndex = 2; assert(AgxDxgiMpoCheckPlanes(p, 2) == AgxDxgiMpoPlanesLayerIndex);
   p[0].LayerIndex = 1; assert(AgxDxgiMpoCheckPlanes(p, 1) == AgxDxgiMpoPlanesLayerIndex);
   p[0].LayerIndex = 0;
-  p[1].Enabled = 0; assert(AgxDxgiMpoCheckPlanes(p, 2) == AgxDxgiMpoPlanesDisabled); p[1].Enabled = 1;
+  /* DP-1 (EXP2363 blink): a listed disabled plane is legal, in either order,
+   * even with no owned resource or a stale subresource; all-disabled is refused;
+   * LayerIndex uniqueness still covers disabled planes. */
+  p[1].Enabled = 0; assert(AgxDxgiMpoCheckPlanes(p, 2) == AgxDxgiMpoPlanesOk);
+  p[1].HasResource = 0; p[1].SubResourceIndex = 7; assert(AgxDxgiMpoCheckPlanes(p, 2) == AgxDxgiMpoPlanesOk);
+  p[1].HasResource = 1; p[1].SubResourceIndex = 0; p[1].Enabled = 1;
+  p[0].Enabled = 0; p[0].HasResource = 0; assert(AgxDxgiMpoCheckPlanes(p, 2) == AgxDxgiMpoPlanesOk);
+  p[0].HasResource = 1;
+  p[1].Enabled = 0; assert(AgxDxgiMpoCheckPlanes(p, 2) == AgxDxgiMpoPlanesDisabled);
+  assert(AgxDxgiMpoCheckPlanes(p, 1) == AgxDxgiMpoPlanesDisabled);
+  p[1].LayerIndex = 0; assert(AgxDxgiMpoCheckPlanes(p, 2) == AgxDxgiMpoPlanesLayerIndex);
+  p[0].Enabled = 1; assert(AgxDxgiMpoCheckPlanes(p, 2) == AgxDxgiMpoPlanesLayerIndex);
+  p[1].LayerIndex = 1; p[1].Enabled = 1;
   p[1].HasResource = 0; assert(AgxDxgiMpoCheckPlanes(p, 2) == AgxDxgiMpoPlanesResource); p[1].HasResource = 1;
   p[1].SubResourceIndex = 1; assert(AgxDxgiMpoCheckPlanes(p, 2) == AgxDxgiMpoPlanesSubresource);
   p[1].SubResourceIndex = 0;
@@ -138,6 +150,36 @@ int main() {
   assert(cb.AllocationInfoCount == 2);
   assert(cb.AllocationInfo[0].PresentAllocation == 0x40000041u && cb.AllocationInfo[0].SubResourceIndex == 0);
   assert(cb.AllocationInfo[1].PresentAllocation == 0x40000082u && cb.AllocationInfo[1].SubResourceIndex == 0);
+  /* DP-1 (d3d11.dll pairing read: AllocationInfo[i] <-> DDI plane i, count =
+   * PresentPlaneCount, a disabled plane's entry never read): every form in
+   * both array orders keeps DDI order, count 2, {0,0} at a disabled plane. */
+  {
+    const UINT forms[3][2] = {{1, 1}, {1, 0}, {0, 1}}; /* Enabled of layer 0, layer 1 */
+    for (const auto &form : forms)
+      for (int swapped = 0; swapped < 2; ++swapped) {
+        AGX_DXGI_MPO_PLANE q[2];
+        for (int i = 0; i < 2; ++i) {
+          const UINT layer = swapped ? 1u - (UINT)i : (UINT)i;
+          q[i] = AgxDxgiMpoPlane(layer, (int)form[layer], 1, form[layer] ? 0u : 9u);
+        }
+        assert(AgxDxgiMpoCheckPlanes(q, 2) == AgxDxgiMpoPlanesOk);
+        D3DKMT_HANDLE a[2] = {0x40000100u, 0x40000200u};
+        memset(&cb, 0xcd, sizeof(cb));
+        AgxDxgiMpoFillPresentCb(&cb, &dxgi, &kctx, a, q, 2);
+        assert(cb.AllocationInfoCount == 2 && cb.BroadcastContextCount == 0);
+        for (int i = 0; i < 2; ++i) {
+          const bool on = q[i].Enabled != 0u;
+          assert(cb.AllocationInfo[i].PresentAllocation == (on ? a[i] : 0u));
+          assert(cb.AllocationInfo[i].SubResourceIndex == 0u);
+        }
+      }
+  }
+  /* DP-1: a disabled plane keeps its entry, allocation 0, subresource 0. */
+  p[1].Enabled = 0; p[1].SubResourceIndex = 5;
+  AgxDxgiMpoFillPresentCb(&cb, &dxgi, &kctx, allocations, p, 2);
+  assert(cb.AllocationInfoCount == 2 && cb.AllocationInfo[0].PresentAllocation == 0x40000041u);
+  assert(cb.AllocationInfo[1].PresentAllocation == 0u && cb.AllocationInfo[1].SubResourceIndex == 0);
+  p[1].Enabled = 1; p[1].SubResourceIndex = 0;
   for (unsigned i = 0; i < D3DDDI_MAX_BROADCAST_CONTEXT; ++i) assert(cb.BroadcastContext[i] == nullptr);
   for (unsigned i = 2; i < DXGI_DDI_MAX_MULTIPLANE_OVERLAY_ALLOCATIONS; ++i)
     assert(cb.AllocationInfo[i].PresentAllocation == 0 && cb.AllocationInfo[i].SubResourceIndex == 0);
@@ -173,7 +215,7 @@ static unsigned submits; static std::vector<int> submitted; static std::vector<U
 extern "C" HRESULT AgxD3d10WindowsPresentationSubmitPlanes(AGX_D3D10_WINDOWS_DEVICE *,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *const *r, const AGX_DXGI_MPO_PLANE *p, UINT n, void *ctx) {
   ++submits; submitted.clear(); layers.clear();
-  for (UINT i = 0; i < n; ++i) { submitted.push_back(r[i]->id); layers.push_back(p[i].LayerIndex); }
+  for (UINT i = 0; i < n; ++i) { submitted.push_back(r[i] ? r[i]->id : (p[i].Enabled ? -1 : 0)); layers.push_back(p[i].LayerIndex); }
   submittedContext = ctx; return (HRESULT)0x12345; }
 namespace {
 @@FUNCTIONS@@
@@ -260,9 +302,24 @@ int main() {
          same(receipts.back(), "reject-dxgi-mpo-present1", E_INVALIDARG, AgxDxgiMpoPlanesResource, 2));
   planes1[1].hResource = (uintptr_t)&plain; assert(PresentMultiplaneOverlay1(&p1) == E_INVALIDARG);
   planes1[1].hResource = 0; assert(PresentMultiplaneOverlay1(&p1) == E_INVALIDARG);
+  /* DP-1 (EXP2363 blink): a listed disabled plane is submitted in place with
+   * no resource (allocation 0 in the callback), in either position and with
+   * a NULL or foreign handle; all planes disabled stays refused. */
   planes1[1].hResource = (uintptr_t)&ra; planes1[1].Enabled = 0;
+  size_t before = receipts.size();
+  assert(PresentMultiplaneOverlay1(&p1) == (HRESULT)0x12345 && (submitted == std::vector<int>{1, 0}) &&
+         (layers == std::vector<UINT>{0, 1}) && receipts.size() == before);
+  planes1[1].hResource = 0; planes1[1].SubResourceIndex = 3;
+  assert(PresentMultiplaneOverlay1(&p1) == (HRESULT)0x12345 && (submitted == std::vector<int>{1, 0}));
+  planes1[1].hResource = (uintptr_t)&foreign;
+  assert(PresentMultiplaneOverlay1(&p1) == (HRESULT)0x12345 && (submitted == std::vector<int>{1, 0}));
+  planes1[1].hResource = (uintptr_t)&ra; planes1[1].SubResourceIndex = 0;
+  planes1[0].Enabled = 0; planes1[1].Enabled = 1;
+  assert(PresentMultiplaneOverlay1(&p1) == (HRESULT)0x12345 && (submitted == std::vector<int>{0, 2}));
+  planes1[1].Enabled = 0;
   assert(PresentMultiplaneOverlay1(&p1) == E_INVALIDARG &&
          same(receipts.back(), "reject-dxgi-mpo-present1", E_INVALIDARG, AgxDxgiMpoPlanesDisabled, 2));
+  planes1[0].Enabled = 1;
   planes1[1].Enabled = 1; planes1[1].SubResourceIndex = 1;
   assert(PresentMultiplaneOverlay1(&p1) == E_INVALIDARG &&
          same(receipts.back(), "reject-dxgi-mpo-present1", E_INVALIDARG, AgxDxgiMpoPlanesSubresource, 2));
@@ -277,7 +334,7 @@ int main() {
   planes0[1].hResource = (uintptr_t)&foreign;
   assert(PresentMultiplaneOverlay(&p0) == E_INVALIDARG &&
          same(receipts.back(), "reject-dxgi-mpo-present", E_INVALIDARG, AgxDxgiMpoPlanesResource, 2));
-  assert(submits == 4);
+  assert(submits == 8); /* + the four DP-1 disabled-plane submits */
   return 0;
 }
 '''
@@ -403,7 +460,7 @@ class Wddm2MpoPlanes(unittest.TestCase):
         body = body[:body.index("\n}\n")]
         self.assertIn("->pfnPresentMultiplaneOverlayCb(", body)
         self.assertNotIn("->pfnPresentMultiplaneOverlay1Cb(", winsys)
-        self.assertIn("flush_for_present(Device,Resources,Count)", body)
+        self.assertIn("flush_for_present(Device,shown,shownCount)", body)
         self.assertLess(body.index("flush_for_present("), body.index("->pfnPresentMultiplaneOverlayCb("))
 
 

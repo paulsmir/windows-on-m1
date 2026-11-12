@@ -47,7 +47,7 @@
 #define AgxDxgiMpoPlanesOk 0u
 #define AgxDxgiMpoPlanesArgument 1u    /* no plane array */
 #define AgxDxgiMpoPlanesCount 2u       /* 0 planes or more than MaxPlanes */
-#define AgxDxgiMpoPlanesDisabled 3u    /* a plane with Enabled FALSE */
+#define AgxDxgiMpoPlanesDisabled 3u    /* DP-1: no plane enabled (before DP-1: any plane with Enabled FALSE) */
 #define AgxDxgiMpoPlanesResource 4u    /* not a presentation resource of this device */
 #define AgxDxgiMpoPlanesSubresource 5u /* SubResourceIndex != 0 */
 #define AgxDxgiMpoPlanesLayerIndex 6u  /* LayerIndex not a permutation of 0..n-1 */
@@ -119,18 +119,26 @@ AgxDxgiMpoCheckPlanes(const AGX_DXGI_MPO_PLANE *Planes, unsigned int Count)
     return AgxDxgiMpoPlanesArgument;
   if (Count == 0u || Count > AGX_DXGI_MPO_PLANES)
     return AgxDxgiMpoPlanesCount;
+  /* DP-1 (EXP2363): a listed plane with Enabled FALSE is a legal request
+   * ("turn this layer off in this present", DXGI_DDI_PRESENT_MULTIPLANE_OVERLAY
+   * .Enabled, dxgiddi.h); DWM sends it when the plane set changes.  Its
+   * resource, ownership and subresource are not validated (Microsoft gives
+   * no meaning to them for a disabled plane); LayerIndex uniqueness holds for
+   * every listed plane; at least one plane must be enabled. */
+  unsigned int enabled = 0u;
   for (i = 0u; i < Count; ++i) {
+    if (Planes[i].LayerIndex >= Count || (seen & (1u << Planes[i].LayerIndex)) != 0u)
+      return AgxDxgiMpoPlanesLayerIndex;
+    seen |= 1u << Planes[i].LayerIndex;
     if (!Planes[i].Enabled)
-      return AgxDxgiMpoPlanesDisabled;
+      continue;
+    ++enabled;
     if (!Planes[i].HasResource)
       return AgxDxgiMpoPlanesResource;
     if (Planes[i].SubResourceIndex != 0u)
       return AgxDxgiMpoPlanesSubresource;
-    if (Planes[i].LayerIndex >= Count || (seen & (1u << Planes[i].LayerIndex)) != 0u)
-      return AgxDxgiMpoPlanesLayerIndex;
-    seen |= 1u << Planes[i].LayerIndex;
   }
-  return AgxDxgiMpoPlanesOk;
+  return enabled != 0u ? AgxDxgiMpoPlanesOk : AgxDxgiMpoPlanesDisabled;
 }
 
 /* The neutral view of one DXGI plane (DXGI_DDI_PRESENT_MULTIPLANE_OVERLAY and
@@ -194,9 +202,14 @@ AgxDxgiMpoFillPresentCb(DXGIDDICB_PRESENT_MULTIPLANE_OVERLAY *Cb, void *DxgiCont
   Cb->hContext = Context;
   Cb->BroadcastContextCount = 0u;
   Cb->AllocationInfoCount = Count;
+  /* One entry per DDI plane in the DDI's order (AllocationInfoCount =
+   * plane count).  DP-1: a disabled plane keeps its entry with
+   * PresentAllocation 0 and SubResourceIndex 0 (dxgkrnl maps allocation 0
+   * of a disabled plane to "no allocation"); it is never dropped and never
+   * given another plane's allocation. */
   for (i = 0u; i < Count; ++i) {
-    Cb->AllocationInfo[i].PresentAllocation = Allocations[i];
-    Cb->AllocationInfo[i].SubResourceIndex = Planes[i].SubResourceIndex;
+    Cb->AllocationInfo[i].PresentAllocation = Planes[i].Enabled ? Allocations[i] : 0u;
+    Cb->AllocationInfo[i].SubResourceIndex = Planes[i].Enabled ? Planes[i].SubResourceIndex : 0u;
   }
 }
 #endif /* AGX_DXGI_MPO_DDI_TYPES */
