@@ -78541,3 +78541,12 @@ EXP2377 HARDWARE BEFORE 2026-11-12T20:24:34Z:
 - Hashes: sys 5effa116a7fe, UmdArm64 a72592d338a7, UmdX64 34a26bc8b968, Umd32 69119fea0e93; manifest f876feac5f41, hardware-manifest 80b084d60c4b; probe2377.sh f58d260f0892 (PROBE_LINT_OK); visible recovery rec2377h 5e0712042812f27b; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
 - Recovery rec2377h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2377-fs1/run2377.sh.
+
+EXP2377 HARDWARE ACTUAL 2026-11-12T21:00:55Z:
+- Boot and recovery: package staged, guest up, all gates ran; recovery rec2377h RECOVERY_DONE (visible inert package Absent, 8 CPU, AppleAns storage).
+- CS: both runs CS_BENCH_FAIL no-result (demo did not finish); CS_FORM warm composed lone=+278 two=+9 v2=+341, r2 composed lone=+277 two=+0 v2=+293. So the lone form was committed only briefly and DWM fell back to composition. GM HD 52.47 fps_frames, PERF_GATE gravitymark PASS (-0.33 %). The cs16 gate failed on the missing measurement.
+- STRETCHFS: Check3ScaledSupported 1 -> 10 at factor 2000, but ScaledTwoPlaneCommits did not change, the one-plane record did not change, and Present failed at frame 37 with hr 0x887a0005 (DEVICE_REMOVED, reason 0x887a0020) at 4.9 fps.
+- Operator (during CS r2): "Сейчас экран мерцает, и глючит игра." (flicker and a glitching game).
+- DWM: WER AppCrash_dwm.exe, exception 0x889800d0 in dwmcore.dll at offset 0x202c64.
+- Root cause (offline, umd-session-final.log): the UMD precondition AgxDxgiMpoCheckPlanes required LayerIndex < Count. A one-plane present at LayerIndex 1 (the lone form that Check3 had just admitted) was refused in the UMD. DWM saw admitted-then-failed flips and churned between the lone and composed forms (flicker), until DWM faulted. The KMD lone path was never reached with valid presents.
+- Verdict: FS-1 rejected as delivered (UMD contract defect, not a KMD lone-form defect). Next: FS-1b (arch/fs1 884c8a8a1, UMD rule LayerIndex < MaxPlanes, each listed once) as EXP2378 with the same probe.
