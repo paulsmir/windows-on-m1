@@ -273,6 +273,12 @@ typedef struct _ADMISSION_MPO_RECEIPT {
    * CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2 interrupt.  Accepted - Reported at
    * the end of an arm is the flips in flight (queued + held) or lost ids. */
   volatile LONG AcceptedIds0, AcceptedIds1, ReportedIds0, ReportedIds1;
+  /* CUR-1 v2 scan-out scratch (render_memory.h): segment-2 size VidMm is
+   * told and the DCP pool size (KiB), scratch pool offset (KiB), Ready = the
+   * region was zeroed at scan-out start and read back zero; the bytes that
+   * did not read back zero. */
+  volatile LONG VidMmSegment2Kib, PoolKib, ScratchOffsetKib;
+  volatile LONG ScratchReady, ScratchNonZeroBytes;
 } ADMISSION_MPO_RECEIPT;
 #define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
 #define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u
@@ -1201,6 +1207,10 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_MPO_HOLD MpoHold;
   ADMISSION_MPO_PLANE_STATE MpoHoldNext[2];
   volatile LONG MpoHoldLock;
+  /* CUR-1 v2: which scan-out scratch DCP scans (mpo_layers.h). */
+  ADMISSION_MPO_SCRATCH_STATE MpoScratch;
+  ULONGLONG MpoScratchPoolOffset;   /* scratch 0; scratch 1 = + STEP */
+  PUCHAR MpoScratchCpu;             /* write-combined view of scratch 0 */
   ADMISSION_MPO_PLANE_STATE MpoPlanes[2];
 } ADMISSION_CONTEXT;
 
@@ -2338,6 +2348,11 @@ NTSTATUS AdmissionMemoryRuntimeLocalView(
 NTSTATUS AdmissionMemoryRuntimeScanoutView(
     _Inout_ ADMISSION_CONTEXT *Context,
     _Out_ ADMISSION_SCANOUT_MEMORY_VIEW *View);
+/* CUR-1 v2: the driver-owned scan-out scratch (render_memory.h). */
+NTSTATUS AdmissionMemoryRuntimeScanoutScratch(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _Out_ ADMISSION_SCANOUT_MEMORY_VIEW *View,
+    _Out_ ULONGLONG *PoolOffset);
 NTSTATUS AdmissionMemoryRuntimeExecutePaging(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_PAGING_RECORD *Record);

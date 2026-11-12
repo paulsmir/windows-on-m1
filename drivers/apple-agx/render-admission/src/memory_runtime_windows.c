@@ -851,6 +851,44 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeLocalView(
   return STATUS_SUCCESS;
 }
 
+/* CUR-1 v2: the driver-owned scan-out scratch at the top of the
+ * DCP-registered range (render_memory.h).  *View describes the scratch
+ * region; PoolOffset of scratch i is View->GpuVirtualAddress-relative
+ * offset Offset + i * STEP inside the pool. */
+_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutScratch(
+    ADMISSION_CONTEXT *Context, ADMISSION_SCANOUT_MEMORY_VIEW *View,
+    ULONGLONG *PoolOffset) {
+  ADMISSION_SCANOUT_MEMORY_VIEW local;
+  ULONGLONG offset;
+  NTSTATUS status;
+  if (View == NULL || PoolOffset == NULL)
+    return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(View, sizeof(*View));
+  *PoolOffset = 0ULL;
+  status = AdmissionMemoryRuntimeScanoutView(Context, &local);
+  if (!NT_SUCCESS(status))
+    return status;
+  offset = AdmissionMemoryVidMmLocalBytes(&Context->Memory);
+  if (offset == 0ULL || (offset & (ADMISSION_SCANOUT_SCRATCH_STEP - 1ULL)) != 0ULL ||
+      local.Bytes != Context->Memory.LocalAllocationBytes ||
+      offset + ADMISSION_SCANOUT_SCRATCH_BYTES != local.Bytes)
+    return STATUS_INVALID_DEVICE_STATE;
+  View->CpuAddress = (PUCHAR)local.CpuAddress + offset;
+  View->GuestIpaAddress = local.GuestIpaAddress + offset;
+  View->HostPhysicalAddress = local.HostPhysicalAddress + offset;
+  View->GpuVirtualAddress = local.GpuVirtualAddress + offset;
+  View->Bytes = ADMISSION_SCANOUT_SCRATCH_BYTES;
+  View->PoolBytes = local.PoolBytes;
+  *PoolOffset = offset;
+  return STATUS_SUCCESS;
+}
+
+/* CUR-1 v2: pool = VidMm segment 2 + the scan-out scratch, the scratch is
+ * two 64 KiB steps, and the smallest segment keeps room for VidMm. */
+C_ASSERT(ADMISSION_SCANOUT_SCRATCH_BYTES == 2ULL * ADMISSION_SCANOUT_SCRATCH_STEP);
+C_ASSERT(ADMISSION_SCANOUT_SCRATCH_STEP >= ADMISSION_MPO_SCRATCH_BYTES);
+C_ASSERT(APPLE_AGX_LOCAL_RESERVE_MIN_SEGMENT_BYTES > ADMISSION_SCANOUT_SCRATCH_BYTES);
+
 /* EXP953: VidMm may place a primary anywhere in the local allocation range;
  * the DCP-registered scanout pool must cover exactly that range (M2-f2c: the
  * receipt-sized segment 2, at most the J313 maximum). */

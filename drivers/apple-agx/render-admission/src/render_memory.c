@@ -372,3 +372,11 @@ APPLE_AGX_PHYSICAL_PAGING_RESULT AdmissionMemoryPlanDiscard(
   if (result == AppleAgxPhysicalPagingOk) Plan->MemorySegmentId = SegmentId;
   return result;
 }
+
+/* CUR-1 v2: see render_memory.h ADMISSION_SCANOUT_SCRATCH_BYTES. */
+APPLE_AGX_U64 AdmissionMemoryVidMmLocalBytes(const ADMISSION_MEMORY_CONTRACT *Memory) {
+  if (Memory == ADMISSION_MEMORY_NULL ||
+      Memory->LocalAllocationBytes <= ADMISSION_SCANOUT_SCRATCH_BYTES)
+    return 0ULL;
+  return Memory->LocalAllocationBytes - ADMISSION_SCANOUT_SCRATCH_BYTES;
+}
