@@ -5834,3 +5834,18 @@ boot was run. The previous entry stays as written.
   until a later successful SetDisplayMode of another allocation or device destroy. Boot = EXP2360 shape + this
   one change. Spec in the handoff file. NOT VERIFIED until that boot: that the first present of a shared buffer
   then succeeds and that DWM's normal path is stable.
+
+## UPDATE 2026-11-12T04:07Z (architect): PL-1 (EXP2361) CONFIRMED: DWM's normal output path runs on this driver
+
+- EXP2361 = EXP2360 shape + PL-1 (non-shared primaries created device-associated; the mode-setting primary's
+  kernel allocation retained past DestroyResource). Normal path (DisableDDisplay absent) HEALTHY for the whole
+  run: one SetDisplayMode (87 before), retained count 1, 2570 MPO presents S_OK, one kernel plane intake and one
+  enabled flip per present, no SETDISPLAYMODE_REQUIRED throw, no output re-init, no ModeChange / hidden after
+  boot. First time since EXP952 (2026-10-03) that DWM runs without DisableDDisplay on this driver.
+- Chain of defects found and confirmed on hardware in this series: DirectFlip segment flag (EXP2354), DdiPresent
+  MPO flip flags (EXP2357), lifetime of the mode-setting primary (EXP2361). The video sub-object (EXP2359) is
+  served but was not the cause.
+- Still open: DWM's two-plane support check (218/220) is answered "unsupported" before our Check3 (0 calls), now
+  on a visible, stable source; DxgKrnl 315..317 absent. "No mode info during the cycle" is excluded. Who answers
+  is being read (ddisplay's check implementation, the kernel's cached shortcut). Measured tail of EXP2361
+  running; verdict on speed and on the legacy-path behaviour of this package pending.
