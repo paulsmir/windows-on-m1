@@ -5704,3 +5704,20 @@ that point. Source: .local/night-20261110/s2-ddisplay-black/REPORT.md (display r
   normal path has the same single cause is NOT VERIFIED (planes were off in dxgkrnl then); DF-1c follows PF-1.
 - Chain of gates found today, each confirmed on hardware except the last: DirectFlip segment flag (EXP2354) ->
   MPO reported by dxgkrnl and used by DWM (EXP2355) -> DdiPresent flags (PF-1, pending).
+
+## UPDATE 2026-11-12T01:01Z (architect): PF-1 (EXP2357) CONFIRMED; MPO-live costs CS 3.4 %; no promotion yet
+
+- EXP2357 = EXP2355 shape + PF-1 (DdiPresent accepts the no-DMA flip with FlipWithMultiPlaneOverlay while MPO is
+  reported). The loop is gone: no ETW 467, no refusal receipt, no ModeChange / hidden / plane-off after boot,
+  2577 MPO present callbacks all S_OK, one adapter open in DWM. Picture healthy for the whole boot.
+- Three gates of today, all confirmed on hardware: DirectFlip segment flag (EXP2354), MPO reported and used
+  (EXP2355), DdiPresent flags (EXP2357). DWM now presents its desktop as one plane through the MPO path.
+- Measured with MPO live (single plane): FULL 8049 / 8012 (in band), PERF 50.43 (-0.9 % against EXP2348),
+  GM gate PASS, CS 50.95 / 50.67 = gate FAIL (-3.37 % against 52.441; -2.3 % against EXP2346, same m1n1 and
+  switch with the gate closed). The MPO-live configuration is therefore NOT a default candidate; cause of the CS
+  cost open (per-flip path cost, offline).
+- Not reached: Check3 is never called and the windowed application is not promoted to its own plane (U-2).
+  The S2 lever still has no FPS evidence either way. Receipt counters Set3Calls / V2Presents stop at 138 while
+  flips continue: no conclusion may rest on them until explained.
+- Running offline: dwmcore's promotion gates against the EXP2357 trace; the counter stop and the per-flip cost.
+  No boot staged. Nothing of DF-1 / PF-1 / S2 is merged.
