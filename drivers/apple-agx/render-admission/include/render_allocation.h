@@ -81,6 +81,31 @@ unsigned int AdmissionAllocationPitchAlignment(unsigned int Type,
 int AdmissionAllocationPitch(unsigned int Width, unsigned int BytesPerPixel,
                              unsigned int Type, unsigned int CpuVisible,
                              unsigned int *Pitch);
+/* PITCH-2: one size limit for a presentation surface (a linear 32-bpp
+ * texture that D3D11, D3D12 or the GL ICD creates and that another process
+ * may open).  Create and every open path call the same check, so anything
+ * create accepts, open accepts:
+ *  - extent 1..ADMISSION_PRESENTATION_MAX_EXTENT on each axis (the create
+ *    limit of umd.c AdmissionUmdDescribePrimary);
+ *  - Size no larger than the allocator's largest presentation description
+ *    (AdmissionPresentationMaximumBytes: 8192 x 8192 at the display pitch,
+ *    padded to the 128-byte AIL cache line) and no larger than the General
+ *    class MaximumBytes the KMD reports (lifecycle.c QueryAdapterInfo,
+ *    AdmissionGeneralMaximumBytes), the limit under which the render side
+ *    can adopt the allocation (umd_win32_screen.c
+ *    AdmissionUmdScreenAdoptAllocation).
+ * The KMD CreateAllocation / OpenAllocation impose no further size limit on a
+ * plain description (DescriptionValid and the 64 KiB rounding only). */
+#define ADMISSION_PRESENTATION_MAX_EXTENT 8192u
+#define ADMISSION_PRESENTATION_SIZE_OK 0u
+#define ADMISSION_PRESENTATION_SIZE_EXTENT 1u
+#define ADMISSION_PRESENTATION_SIZE_BYTES 2u
+unsigned long long AdmissionPresentationMaximumBytes(void);
+/* ADMISSION_PRESENTATION_SIZE_OK, or the first violated rule. */
+unsigned int AdmissionPresentationSizeCheck(unsigned int Width,
+                                            unsigned int Height,
+                                            unsigned long long Size,
+                                            unsigned long long ClassMaximumBytes);
 int AdmissionAllocationDescribe(unsigned int Width, unsigned int Height,
                                 unsigned int BytesPerPixel,
                                 unsigned int Type, unsigned int Format,

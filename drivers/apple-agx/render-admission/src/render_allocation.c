@@ -65,6 +65,29 @@ int AdmissionAllocationPitch(unsigned int Width, unsigned int BytesPerPixel,
   return 1;
 }
 
+unsigned long long AdmissionPresentationMaximumBytes(void) {
+  unsigned int pitch = 0u;
+  if (!AdmissionAllocationPitch(ADMISSION_PRESENTATION_MAX_EXTENT, 4u,
+                                ADMISSION_ALLOCATION_TYPE_GDI_TEXTURE, 0u,
+                                &pitch))
+    return 0ULL;
+  return ((unsigned long long)pitch * ADMISSION_PRESENTATION_MAX_EXTENT +
+          127ULL) & ~127ULL;
+}
+
+unsigned int AdmissionPresentationSizeCheck(
+    unsigned int Width, unsigned int Height, unsigned long long Size,
+    unsigned long long ClassMaximumBytes) {
+  if (Width == 0u || Height == 0u ||
+      Width > ADMISSION_PRESENTATION_MAX_EXTENT ||
+      Height > ADMISSION_PRESENTATION_MAX_EXTENT)
+    return ADMISSION_PRESENTATION_SIZE_EXTENT;
+  if (Size == 0ULL || Size > AdmissionPresentationMaximumBytes() ||
+      Size > ClassMaximumBytes)
+    return ADMISSION_PRESENTATION_SIZE_BYTES;
+  return ADMISSION_PRESENTATION_SIZE_OK;
+}
+
 int AdmissionAllocationDescribe(unsigned int Width, unsigned int Height,
                                 unsigned int BytesPerPixel,
                                 unsigned int Type, unsigned int Format,

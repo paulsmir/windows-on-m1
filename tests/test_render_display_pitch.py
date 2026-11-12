@@ -52,6 +52,26 @@ class RenderDisplayPitchTests(unittest.TestCase):
                             re.S).group()
         self.assertIn("AdmissionAllocationDisplayClass(", scanout)
 
+    def test_create_and_every_open_use_the_one_size_limit(self):
+        # PITCH-2: a separate open cap (formerly 16 MiB in umd.c and
+        # agx_d3d12_shared_open.h) refused surfaces create had accepted.
+        agx = ROOT / "drivers/apple-agx"
+        umd = (DRIVER / "umd/src/umd.c").read_text()
+        create = re.search(r"VOID AdmissionUmdCreateResourceWithMetadata\([^;]*?\)\s*\{.*?^}",
+                           umd, re.S | re.M).group()
+        opened = re.search(r"VOID APIENTRY AdmissionUmdOpenResource\([^;]*?\)\s*\{.*?^}",
+                           umd, re.S | re.M).group()
+        icd = (agx / "windows/icd/agx_wgl_icd.cpp").read_text()
+        icd_create = re.search(r"static BOOL wgl_kmt_create\(.*?^}", icd,
+                               re.S | re.M).group()
+        icd_open = re.search(r"static UINT wgl_redirect_open\(.*?^}", icd,
+                             re.S | re.M).group()
+        shared = (agx / "d3d12/agx_d3d12_shared_open.h").read_text()
+        for body in (create, opened, icd_create, icd_open, shared):
+            self.assertIn("AdmissionPresentationSizeCheck(", body)
+            self.assertNotIn("0x1000000", body)
+            self.assertNotIn("8192", body)
+
 
 if __name__ == "__main__":
     unittest.main()

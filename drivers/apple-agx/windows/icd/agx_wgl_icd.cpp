@@ -847,6 +847,12 @@ static BOOL wgl_kmt_create(AGX_WGL_KMT_SOURCE *s, HWND window, unsigned width,
     return FALSE;
   }
   description.Size = (description.Size + 127ULL) & ~127ULL;
+  /* PITCH-2: the size rule every open path applies (render_allocation.h) */
+  if (AdmissionPresentationSizeCheck(description.Width, description.Height, description.Size,
+          AdmissionUmdPresentationClassMaximumBytes(&AgxWgl->Device)) != ADMISSION_PRESENTATION_SIZE_OK) {
+    wgl_note("reject-wgl-kmt-size", E_INVALIDARG);
+    return FALSE;
+  }
   ZeroMemory(&info, sizeof(info));
   ZeroMemory(&allocate, sizeof(allocate));
   info.pPrivateDriverData = &description;
@@ -953,7 +959,10 @@ static UINT wgl_redirect_open(AGX_WGL_KMT_SOURCE *s, HANDLE shared, LONG *status
   memcpy(&d, s->Surface.AllocationPrivate, sizeof(d));
   if (s->Surface.AllocationPrivateBytes != sizeof(d) || !AdmissionAllocationDescriptionValid(&d) ||
       d.BytesPerPixel != 4u ||
-      (d.Format != (UINT)D3DDDIFMT_A8R8G8B8 && d.Format != (UINT)D3DDDIFMT_A8B8G8R8)) {
+      (d.Format != (UINT)D3DDDIFMT_A8R8G8B8 && d.Format != (UINT)D3DDDIFMT_A8B8G8R8) ||
+      /* PITCH-2: the create path's size rule */
+      AdmissionPresentationSizeCheck(d.Width, d.Height, d.Size,
+          AdmissionUmdPresentationClassMaximumBytes(&AgxWgl->Device)) != ADMISSION_PRESENTATION_SIZE_OK) {
     *status = (LONG)d.Format;
     return AGX_WGL_REDIRECT_DESCRIPTION;
   }

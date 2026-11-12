@@ -280,12 +280,97 @@ static void test_non_display_unchanged(void) {
                                         4u, 0u));
 }
 
+/* PITCH-2: create (umd.c AdmissionUmdCreateResourceWithMetadata,
+ * wgl_kmt_create) and every open (AdmissionUmdOpenResource,
+ * AgxD3d12DecodeShared, wgl_redirect_open) apply
+ * AdmissionPresentationSizeCheck to the same description fields.
+ * WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?  A surface create accepts
+ * that open refuses (the former 16 MiB open cap refused e.g. 513x8000 once
+ * its pitch grew), or an open limit that admits a surface the render side
+ * cannot adopt (larger than the reported General class maximum). */
+static unsigned int OpenReason(const ADMISSION_ALLOCATION_DESCRIPTION *Created,
+                               unsigned long long ClassMaximum) {
+  ADMISSION_ALLOCATION_DESCRIPTION opened;
+  memcpy(&opened, Created, sizeof(opened)); /* the KMD returns it unchanged */
+  if (!AdmissionAllocationDescriptionValid(&opened))
+    return 0xffffffffu;
+  return AdmissionPresentationSizeCheck(opened.Width, opened.Height,
+                                        opened.Size, ClassMaximum);
+}
+
+static void test_create_and_open_share_the_size_limit(void) {
+  static const unsigned long long classes[] = {
+      0x1000000ULL,  /* AdmissionGeneralMaximumBytes legacy (non-G3) build */
+      0x3b800000ULL, /* a G3 pool (the MPO tests' registered pool) */
+      ~0ULL};
+  static const unsigned int edges[] = {1u,    2u,    15u,   16u,   17u,
+                                       33u,   513u,  640u,  1281u, 1682u,
+                                       2048u, 2049u, 2560u, 4095u, 4096u,
+                                       8000u, 8191u, 8192u};
+  const unsigned long long maximum = AdmissionPresentationMaximumBytes();
+  unsigned int c, w, h;
+  CHECK(maximum == 32768ULL * 8192ULL);
+  for (c = 0u; c < sizeof(classes) / sizeof(classes[0]); ++c) {
+    for (w = 1u; w <= ADMISSION_PRESENTATION_MAX_EXTENT; ++w) {
+      for (h = 0u; h < sizeof(edges) / sizeof(edges[0]); ++h) {
+        unsigned int dims[2][2];
+        unsigned int k;
+        dims[0][0] = w; dims[0][1] = edges[h];
+        dims[1][0] = edges[h]; dims[1][1] = w;
+        for (k = 0u; k < 2u; ++k) {
+          ADMISSION_ALLOCATION_DESCRIPTION created;
+          unsigned int createReason;
+          CHECK(CreatePresentation(dims[k][0], dims[k][1], &created));
+          createReason = AdmissionPresentationSizeCheck(
+              created.Width, created.Height, created.Size, classes[c]);
+          CHECK(OpenReason(&created, classes[c]) == createReason);
+          /* Inside the allocator's own bound only the class limit refuses. */
+          CHECK(createReason == (created.Size > classes[c]
+                                     ? ADMISSION_PRESENTATION_SIZE_BYTES
+                                     : ADMISSION_PRESENTATION_SIZE_OK));
+        }
+      }
+    }
+  }
+  {
+    ADMISSION_ALLOCATION_DESCRIPTION d;
+    /* 513x8000: 2112 * 8000 > 16 MiB; opens wherever it can be created. */
+    CHECK(CreatePresentation(513u, 8000u, &d));
+    CHECK(AdmissionPresentationSizeCheck(d.Width, d.Height, d.Size, ~0ULL) ==
+          ADMISSION_PRESENTATION_SIZE_OK);
+    CHECK(OpenReason(&d, ~0ULL) == ADMISSION_PRESENTATION_SIZE_OK);
+    CHECK(OpenReason(&d, 0x1000000ULL) == ADMISSION_PRESENTATION_SIZE_BYTES);
+    /* 8192 x 8192 is exactly the maximum. */
+    CHECK(CreatePresentation(8192u, 8192u, &d) && d.Size == maximum);
+    CHECK(OpenReason(&d, ~0ULL) == ADMISSION_PRESENTATION_SIZE_OK);
+    /* Above the extent: both refuse with the same reason. */
+    CHECK(CreatePresentation(8193u, 16u, &d));
+    CHECK(AdmissionPresentationSizeCheck(d.Width, d.Height, d.Size, ~0ULL) ==
+          ADMISSION_PRESENTATION_SIZE_EXTENT);
+    CHECK(OpenReason(&d, ~0ULL) == ADMISSION_PRESENTATION_SIZE_EXTENT);
+    CHECK(CreatePresentation(16u, 8193u, &d));
+    CHECK(OpenReason(&d, ~0ULL) == ADMISSION_PRESENTATION_SIZE_EXTENT);
+    /* A larger shared pitch cannot carry Size past the maximum. */
+    CHECK(CreatePresentation(8192u, 8192u, &d));
+    d.Pitch += 64u;
+    d.Size = (unsigned long long)d.Pitch * d.Height;
+    CHECK(AdmissionAllocationDescriptionValid(&d));
+    CHECK(OpenReason(&d, ~0ULL) == ADMISSION_PRESENTATION_SIZE_BYTES);
+    /* Unknown class limit (0): everything refused, create and open alike. */
+    CHECK(CreatePresentation(64u, 64u, &d));
+    CHECK(OpenReason(&d, 0ULL) == ADMISSION_PRESENTATION_SIZE_BYTES);
+    CHECK(AdmissionPresentationSizeCheck(0u, 1u, 64u, ~0ULL) ==
+          ADMISSION_PRESENTATION_SIZE_EXTENT);
+  }
+}
+
 int main(void) {
   test_display_pitch_values();
   test_create_open_import_agree();
   test_display_class_validity();
   test_overlay_accepts_every_allocator_width();
   test_non_display_unchanged();
+  test_create_and_open_share_the_size_limit();
   if (Failures != 0u) {
     fprintf(stderr, "display_pitch_test: %u failure(s)\n", Failures);
     return 1;

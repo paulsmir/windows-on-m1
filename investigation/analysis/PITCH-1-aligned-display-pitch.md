@@ -146,9 +146,7 @@ Render side:
   must; never exercised on J313 because every surface so far had a tight stride). First checkpoint below.
 - Whether 128 (AIL's own "optimal" linear stride, `layout.c:18`) renders measurably faster than 64 for linear render
   targets. Not measured; 64 is the minimum every consumer requires.
-- Pre-existing, not changed: the open paths cap a shared surface at 16 MiB (`umd.c:1100`,
-  `agx_d3d12_shared_open.h:29`) while create allows 8192x8192. With up to 60 extra bytes per row a few surfaces near
-  16 MiB that opened before (e.g. 513x8000) are now refused at open. Missing: one shared size limit for create and open.
+- (Resolved by PITCH-2 below: the former 16 MiB open cap.)
 
 ## First hardware checkpoint (proposal)
 
@@ -158,3 +156,32 @@ shows Check3 supported (no `AdmissionMpoReasonStride`, reason 14), Set3 sends tw
 a skewed / sheared image means the render side and the scan-out side disagree on the stride; black or stale means
 the record was refused. Recovery: the previous package (pitch 16) is behaviourally identical except for refusing
 the plane.
+
+## PITCH-2: one size limit for create and every open
+
+Before: create admitted 1..8192 per axis (`umd.c:164-165`) with no size cap; the D3D11 open
+(`umd.c:1097-1100`) and the D3D12 decode (`agx_d3d12_shared_open.h:29`) refused Size > 16 MiB; the GL ICD open had
+no limit. With the 64-byte pitch a surface like 513x8000 (2112 x 8000 B) was created but refused at open.
+
+Sources of the true limit:
+- Kernel: CreateAllocation / OpenAllocation accept a plain `ADMISSION_ALLOCATION_DESCRIPTION` after
+  `AdmissionAllocationDescriptionValid` and `AdmissionAllocationAlign64K` only
+  (`render_win32_transport.c:62-65`, `allocation_windows.c:430-436, 930-960`); no size cap.
+- Render side: a presentation allocation is usable only once adopted, and adoption refuses
+  `Bytes > General MaximumBytes` (`umd_win32_screen.c:1331`). The KMD reports that limit
+  (`lifecycle.c:741` = `AdmissionGeneralMaximumBytes`, `allocation_windows.c:81-92`: the G3 pool size, or
+  `ADMISSION_WIN32_ALLOCATION_LEGACY_MAX_BYTES` = 16 MiB in the legacy build, `render_win32_transport.h:95` -- the
+  origin of the old 0x1000000 literal). The UMD has it from QueryAdapterInfo (`umd_runtime_device.c:400-406`).
+- Allocator: the largest create is 8192 x 8192 at the display pitch 32768, padded to 128 = 0x10000000 bytes.
+
+Rule (`render_allocation.c AdmissionPresentationSizeCheck`): extent 1..8192 per axis, else reason EXTENT;
+Size <= min(0x10000000, General MaximumBytes), else reason BYTES. Called with the adapter's MaximumBytes
+(`umd_win32_screen.c AdmissionUmdPresentationClassMaximumBytes`, 0 when unknown -> every size refused) by:
+D3D11/D3D12 create (`umd.c AdmissionUmdCreateResourceWithMetadata`), D3D11 open (`umd.c AdmissionUmdOpenResource`,
+also the D3D12 shared open, which calls it), GL ICD create and redirection-surface open (`agx_wgl_icd.cpp`
+`wgl_kmt_create`, `wgl_redirect_open`). The pure D3D12 decoder (`AgxD3d12DecodeShared`, used before a device is at
+hand) applies the allocator bound; the class bound follows in `AdmissionUmdOpenResource`.
+Test: `display_pitch_test.c test_create_and_open_share_the_size_limit` (every width 1..8192 against 18 edge heights,
+both orientations, three class limits: open reason == create reason; above the extent both EXTENT; above the class
+limit both BYTES); `test_render_display_pitch.py` checks every create/open body calls the check and carries no
+separate cap.
