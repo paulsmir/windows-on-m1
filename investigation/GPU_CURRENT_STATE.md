@@ -6074,3 +6074,20 @@ boot was run. The previous entry stays as written.
   (1.9 %), extra 0.46..0.87 ms each, ~0.3 s in the whole run - an upper bound, critical-path share unknown.
   Not a top lever; stays under the hand-over item.
 - Probe fix: span = the oldest compute record submitted after t0; filler kept for the frequency hold.
+
+## UPDATE 2026-11-12T17:48:12Z - EXP2374 STRETCH-1: Set3 refusal after Check3 support freezes the display permanently
+
+- EXP2374 (arch/stretch1 ed8d5aac1, based on NP-1, NOT on PITCH-1 as its BEFORE claimed): Check3 accepted a
+  scaled plane (1280x720 -> 1920x1080, StretchQuality 2 HIGH, factor 1.5); every Set3 was then refused with
+  table reason 33 (stretch quality judged again on the Set3 path; the raw Set3 value was not recorded).
+  ScaledTwoPlaneCommits 0. STRETCH-1 as built is REJECTED.
+- Proven boundary: a Set3 failure for a configuration Check3 accepted is not "compose this frame". dxgkrnl
+  re-submits the same plane set indefinitely (Set3TableRefusals 12740 -> 41484 over ~11 min, no new Check3,
+  no accepted Set3, no fallback); the screen stays on the last latched frame until reboot and presents of
+  other clients time out behind it (suite probe 200 s timeout). Operator saw the freeze.
+- RULE (binding for all plane work incl. CUR-1 v2): no refusal reason may be reachable from Set3 for a
+  configuration Check3 accepted. Decisions about what we are willing to show are made in Check3 only.
+- STRETCH-1b (arch/stretch1b, on PITCH-1): quality rules 33/34 on the Check3 path only; receipts for Set3's raw
+  StretchQuality and for "Set3 refused after support"; contract test Check3-supported => Set3-supported.
+- NP-2 confirmed on hardware: Set3 runs at IRQL 8 (above DISPATCH); receipts publish through a DPC.
+- DWM asks for StretchQuality HIGH for a stretched window (so reason 34 does not block it).
