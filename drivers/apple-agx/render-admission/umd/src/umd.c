@@ -939,7 +939,19 @@ VOID AdmissionUmdCreateResourceWithMetadata(
   allocationInfo.PrivateDriverDataSize = sizeof(description.Allocation);
   allocationInfo.VidPnSourceId = 0u;
   allocationInfo.Flags.Primary = CreateResource->pPrimaryDesc != NULL;
-  allocate.hResource = RuntimeResource.handle;
+  /* PL-1: a non-shared resource with pPrimaryDesc may become the device's
+   * displayed (mode-setting) primary, whose kernel allocation must outlive
+   * the runtime's DestroyResource (umd_primary_retention.h). Allocate it
+   * device-associated (hResource NULL; Microsoft pfnAllocateCb: "the
+   * allocation is associated with the device instead of with a resource",
+   * "the difference is semantic") so its release names only the allocation
+   * (HandleList), never the runtime resource object (EXP975). Shared
+   * resources keep the runtime-owned KM resource. */
+  allocate.hResource =
+      CreateResource->pPrimaryDesc != NULL &&
+              (CreateResource->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) == 0u
+          ? NULL
+          : RuntimeResource.handle;
   allocate.NumAllocations = 1u;
   allocate.pAllocationInfo = &allocationInfo;
   result = device->KernelCallbacks->pfnAllocateCb(
@@ -1001,6 +1013,7 @@ VOID AdmissionUmdCreateResourceWithMetadata(
   retirement->Primary = CreateResource->pPrimaryDesc != NULL;
   retirement->Shared =
       (CreateResource->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u;
+  retirement->DeviceAssociated = allocate.hResource == NULL;
   resource->Retirement = retirement;
 }
 
@@ -1133,6 +1146,14 @@ HRESULT AdmissionUmdReleaseRuntimeResource(
     return S_OK;
   /* The runtime handle dies with this call either way: never retain it. */
   resource->Retirement = NULL;
+  /* PL-1: the displayed primary's device-associated allocation stays. */
+  if (AdmissionUmdRetentionDestroy(&device->PrimaryRetention, retirement,
+                                   (unsigned int)retirement->KernelAllocation,
+                                   retirement->DeviceAssociated)) {
+    UINT values[3] = {(UINT)retirement->KernelAllocation, 1u, 0u};
+    AdmissionUmdDiagnostic("measure-primary-retention", S_OK, values, 3u);
+    return S_OK;
+  }
   result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
   {
     /* EXP2360: {allocation, path 1 = runtime release, HRESULT, device}. */
@@ -1173,6 +1194,14 @@ VOID APIENTRY AdmissionUmdDestroyResource(
   ZeroMemory(resource, sizeof(*resource));
   if (retirement == NULL)
     return;
+  /* PL-1: the displayed primary's device-associated allocation stays. */
+  if (AdmissionUmdRetentionDestroy(&device->PrimaryRetention, retirement,
+                                   (unsigned int)retirement->KernelAllocation,
+                                   retirement->DeviceAssociated)) {
+    UINT values[3] = {(UINT)retirement->KernelAllocation, 1u, 0u};
+    AdmissionUmdDiagnostic("measure-primary-retention", S_OK, values, 3u);
+    return;
+  }
   if (AdmissionUmdRetirementNeedsRuntimeResource(retirement)) {
     result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
     {
@@ -1432,6 +1461,24 @@ HRESULT APIENTRY AdmissionUmdSetDisplayMode(
         setMode.PrivateDriverFormatAttribute};
     AdmissionUmdDeviceIds(device, &values[3]); /* EXP2360 */
     AdmissionUmdDiagnostic("measure-dxgi-set-display-mode", result, values, 7u);
+    {
+      /* PL-1: after the callback returned; a retained primary that is no
+       * longer the displayed one is released now (HandleList). */
+      ADMISSION_UMD_RETIREMENT *released = (ADMISSION_UMD_RETIREMENT *)
+          AdmissionUmdRetentionSetDisplayMode(
+              &device->PrimaryRetention,
+              (unsigned int)setMode.hPrimaryAllocation, SUCCEEDED(result));
+      if (released != NULL) {
+        HRESULT freed = AdmissionUmdRetirementDeallocate(&device->Retirement,
+                                                        released);
+        UINT r[3] = {(UINT)released->KernelAllocation, 2u, (UINT)freed};
+        AdmissionUmdDiagnostic("measure-primary-retention", freed, r, 3u);
+        if (FAILED(freed))
+          AdmissionUmdRetirementQueue(&device->Retirement, released);
+        else
+          AdmissionUmdRetirementFree(released);
+      }
+    }
     return result;
   }
 }

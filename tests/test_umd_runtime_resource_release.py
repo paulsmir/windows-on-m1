@@ -43,19 +43,20 @@ inline void AdmissionUmdDiagnostic(const char*,HRESULT,const UINT*,UINT){}
 @@HEADER@@
 @@LIFETIME@@
 struct ADMISSION_UMD_RESOURCE { ADMISSION_UMD_RETIREMENT* Retirement; unsigned KernelAllocation; };
-struct ADMISSION_UMD_DEVICE {ADMISSION_UMD_RETIREMENT_QUEUE Retirement;HRESULT LastRetirementError;};
+@@RETENTION@@
+struct ADMISSION_UMD_DEVICE {ADMISSION_UMD_RETIREMENT_QUEUE Retirement;HRESULT LastRetirementError;ADMISSION_UMD_PRIMARY_RETENTION PrimaryRetention;};
 struct D3D10DDI_HDEVICE {void*pDrvPrivate;}; struct D3D10DDI_HRESOURCE {void*pDrvPrivate;};
 static ADMISSION_UMD_DEVICE*AdmissionUmdDeviceFromHandle(D3D10DDI_HDEVICE x){return (ADMISSION_UMD_DEVICE*)x.pDrvPrivate;}
 static ADMISSION_UMD_RESOURCE*AdmissionUmdResourceFromHandle(D3D10DDI_HRESOURCE x){return (ADMISSION_UMD_RESOURCE*)x.pDrvPrivate;}
 static unsigned errors,closes,stale;
 static void AdmissionUmdSetError(ADMISSION_UMD_DEVICE*,HRESULT){++errors;}
 /* Runtime resource objects: alive until the runtime's DestroyResource returns. */
-static bool runtime_alive[8];
+static bool runtime_alive[16];
 static HRESULT deallocate(void*,const ADMISSION_UMD_RETIREMENT*r){
- /* Mirrors AdmissionUmdDeallocateResource: only this shape uses HandleList. */
- bool names_runtime=!(r->Origin==1u&&!r->Primary&&!r->Shared&&r->KernelResource==0u);
+ /* Mirrors AdmissionUmdDeallocateResource: only these shapes use HandleList. */
+ bool names_runtime=!(r->DeviceAssociated||(r->Origin==1u&&!r->Primary&&!r->Shared&&r->KernelResource==0u));
  uintptr_t h=(uintptr_t)r->RuntimeResource;
- if(names_runtime && h<8 && !runtime_alive[h]) ++stale;
+ if(names_runtime && h<16 && !runtime_alive[h]) ++stale;
  ++closes;return S_OK;}
 static void report(void*c,HRESULT h){((ADMISSION_UMD_DEVICE*)c)->LastRetirementError=h;}
 @@RELEASE@@
@@ -101,6 +102,21 @@ int main(){
  runtime_alive[6]=false;
  AdmissionUmdDestroyResource(dh,rh);assert(AdmissionUmdRetirementDrain(&d.Retirement));
  if(!(closes==6&&stale==0&&errors==0)){printf("closes=%u stale=%u errors=%u\n",closes,stale,errors);return 1;}
+ /* PL-1: the displayed primary (device-associated, HandleList) survives the
+  * runtime's DestroyResource and is released, without naming the dead
+  * runtime object, after the next SetDisplayMode of another allocation. */
+ ADMISSION_UMD_RESOURCE mode=make(7,1u,TRUE,FALSE,0u);mode.Retirement->DeviceAssociated=TRUE;
+ assert(AdmissionUmdRetentionSetDisplayMode(&d.PrimaryRetention,mode.KernelAllocation,1)==nullptr);
+ unsigned before=closes;runtime_destroy(&d,&mode,7);
+ assert(closes==before&&d.PrimaryRetention.Retained!=nullptr);
+ ADMISSION_UMD_RETIREMENT*rel=(ADMISSION_UMD_RETIREMENT*)AdmissionUmdRetentionSetDisplayMode(&d.PrimaryRetention,0x7777u,1);
+ assert(rel&&AdmissionUmdRetirementDeallocate(&d.Retirement,rel)==S_OK);AdmissionUmdRetirementFree(rel);
+ if(!(closes==before+1&&stale==0)){printf("PL-1 closes=%u stale=%u\n",closes,stale);return 1;}
+ /* A non-mode device-associated primary is released at destroy as before. */
+ ADMISSION_UMD_RESOURCE other=make(8,1u,TRUE,FALSE,0u);other.Retirement->DeviceAssociated=TRUE;
+ before=closes;runtime_destroy(&d,&other,8);assert(AdmissionUmdRetirementDrain(&d.Retirement));
+ if(!(closes==before+1&&stale==0)){printf("PL-1 other closes=%u stale=%u\n",closes,stale);return 1;}
+ assert(AdmissionUmdRetentionDeviceDestroy(&d.PrimaryRetention)==nullptr);
  puts("EXP975 runtime resource release: PASS");
 }
 '''
@@ -113,12 +129,13 @@ class RuntimeResourceRelease(unittest.TestCase):
         lifetime = '\n'.join(x for x in (umd / 'src/umd_resource_lifetime.c').read_text().splitlines()
                              if not x.startswith('#include'))
         header = (umd / 'include/umd_resource_lifetime.h').read_text().replace('#include <windows.h>', '')
+        retention = (umd / 'include/umd_primary_retention.h').read_text()
         needs = function(source.replace('static BOOL AdmissionUmdRetirementNeedsRuntimeResource',
                                         'BOOL AdmissionUmdRetirementNeedsRuntimeResource'),
                          'AdmissionUmdRetirementNeedsRuntimeResource')
         release = function(source, 'AdmissionUmdReleaseRuntimeResource')
         body = BODY
-        for tag, value in [('HEADER', header), ('LIFETIME', lifetime),
+        for tag, value in [('HEADER', header), ('RETENTION', retention), ('LIFETIME', lifetime),
                            ('RELEASE', needs + '\n' + release),
                            ('DESTROY', function(source, 'AdmissionUmdDestroyResource'))]:
             body = body.replace('@@' + tag + '@@', value)

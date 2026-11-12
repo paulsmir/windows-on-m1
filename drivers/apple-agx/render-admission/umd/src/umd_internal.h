@@ -8,6 +8,7 @@
 #include "direct_flip_contract.h"
 #include "render_win32_transport.h"
 #include "umd_resource_lifetime.h"
+#include "umd_primary_retention.h"
 #include "agx_win32_transport.h"
 #include "agx_win32_screen.h"
 #include "agx_win32_construction_address.h"
@@ -305,6 +306,8 @@ typedef struct _ADMISSION_UMD_DEVICE {
   /* Current GPUVA operation failure, separate from screen allocation scratch. */
   HRESULT GpuvaFailure;
   ADMISSION_UMD_RETIREMENT_QUEUE Retirement;
+  /* PL-1: the displayed (mode-setting) primary and the retained one. */
+  ADMISSION_UMD_PRIMARY_RETENTION PrimaryRetention;
   HRESULT LastRetirementError;
   ULONG RetirementErrorCount;
   ULONG RetirementUndeallocated;

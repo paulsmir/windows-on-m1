@@ -348,9 +348,12 @@ static HRESULT APIENTRY AdmissionUmdDeallocateResource(
     return E_INVALIDARG;
   }
   ZeroMemory(&deallocate, sizeof(deallocate));
-  if (Retirement->Origin == 1u && !Retirement->Primary &&
-      !Retirement->Shared && Retirement->KernelResource == 0u &&
-      Retirement->KernelAllocation != 0u) {
+  /* PL-1: a device-associated allocation (hResource NULL at allocate) is
+   * released by HandleList and never names the runtime resource (EXP975). */
+  if ((Retirement->DeviceAssociated && Retirement->KernelAllocation != 0u) ||
+      (Retirement->Origin == 1u && !Retirement->Primary &&
+       !Retirement->Shared && Retirement->KernelResource == 0u &&
+       Retirement->KernelAllocation != 0u)) {
     allocation = Retirement->KernelAllocation;
     deallocate.NumAllocations = 1u;
     deallocate.HandleList = &allocation;
@@ -756,6 +759,22 @@ HRESULT AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *device,
   screenResult = AdmissionUmdScreenFinalize(device, &screenUndeallocated);
   if (FAILED(screenResult) || screenUndeallocated != 0u)
     return FAILED(screenResult) ? screenResult : E_FAIL;
+  {
+    /* PL-1: the retained displayed primary goes before the device's other
+     * retirements and the kernel context. */
+    ADMISSION_UMD_RETIREMENT *retained = (ADMISSION_UMD_RETIREMENT *)
+        AdmissionUmdRetentionDeviceDestroy(&device->PrimaryRetention);
+    if (retained != NULL) {
+      HRESULT released = AdmissionUmdRetirementDeallocate(&device->Retirement,
+                                                          retained);
+      UINT values[3] = {(UINT)retained->KernelAllocation, 3u, (UINT)released};
+      AdmissionUmdDiagnostic("measure-primary-retention", released, values, 3u);
+      if (FAILED(released))
+        AdmissionUmdRetirementQueue(&device->Retirement, retained);
+      else
+        AdmissionUmdRetirementFree(retained);
+    }
+  }
   AdmissionUmdRetirementFinalize(&device->Retirement, &retirement);
   if (retirement.Undeallocated != 0u) {
     device->LastRetirementError = retirement.LastError;
