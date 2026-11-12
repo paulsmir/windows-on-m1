@@ -320,10 +320,84 @@ static void TestUnsupportedWritesNothing(void) {
   CHECK(records[0].Flags == 0x5a5a5a5au);
 }
 
+
+/* S3-A (EXP2374: a Set3 refusal of a Check3-accepted configuration freezes
+ * the desktop): Check3 sees no placement, Set3 does.  For every plane set the
+ * Check3 view (PlacementKnown 0) supports, every placement VidMm can produce
+ * for a segment-2-only, 64 KiB-aligned allocation (inside the pool, the two
+ * allocations disjoint) must be supported on the Set3 view too, its commit
+ * must build two records (D2) the broker reference accepts, and the
+ * LayerIndex 0 plane must build a removal record (G1) the broker accepts. */
+static unsigned long long Align64K(unsigned long long Bytes) {
+  return (Bytes + 0xffffULL) & ~0xffffULL;
+}
+
+static void TestCheck3ImpliesSet3AnyLegalPlacement(void) {
+  ADMISSION_MPO_PLANE_INPUT p[2], set3[2];
+  ADMISSION_MPO_INPUT input;
+  ADMISSION_MPO_RESULT result;
+  APPLE_AGX_SCANOUT_LAYER records[2], removal;
+  unsigned int iteration, m, swap, app, k, accepted = 0u, placed = 0u;
+  unsigned long long a, b, slots, first;
+
+  for (iteration = 0u; iteration < 200000u; ++iteration) {
+    swap = Next(2u);
+    p[swap] = Desktop();
+    p[swap ^ 1u] = Application();
+    app = swap ^ 1u;
+    for (m = Next(4u); m != 0u; --m) {
+      unsigned int which = Next(4u) == 0u ? swap : app;
+      Mutate(&p[which], &p[which ^ 1u]);
+    }
+    p[0].PlacementKnown = 0u; p[1].PlacementKnown = 0u;
+    p[0].PoolOffset = 0ULL; p[1].PoolOffset = 0ULL;
+    memset(&input, 0, sizeof(input));
+    input.PanelWidth = REF_PANEL_W; input.PanelHeight = REF_PANEL_H;
+    input.PlaneCount = 2u; input.Planes = p; input.PoolBytes = REF_POOL;
+    if (AdmissionMpoEvaluate(&input, &result) != AdmissionMpoSupported)
+      continue;
+    ++accepted;
+    a = Align64K(p[0].SurfaceBytes); b = Align64K(p[1].SurfaceBytes);
+    if (a == 0ULL || b == 0ULL || a + b > REF_POOL)
+      continue; /* no segment-2 placement exists: the allocation cannot be resident */
+    for (k = 0u; k < 4u; ++k) {
+      set3[0] = p[0]; set3[1] = p[1];
+      set3[0].PlacementKnown = 1u; set3[1].PlacementKnown = 1u;
+      slots = (REF_POOL - a - b) / 0x10000ULL;
+      first = (slots != 0ULL ? (unsigned long long)Next(1u << 16) % (slots + 1ULL) : 0ULL) * 0x10000ULL;
+      if (k & 1u) { /* plane 0 first, plane 1 anywhere after it */
+        set3[0].PoolOffset = first;
+        set3[1].PoolOffset = REF_POOL - b - (k & 2u ? 0ULL : ((REF_POOL - b - first - a) / 0x10000ULL / 2ULL) * 0x10000ULL);
+      } else {             /* plane 1 first */
+        set3[1].PoolOffset = first;
+        set3[0].PoolOffset = REF_POOL - a - (k & 2u ? 0ULL : ((REF_POOL - a - first - b) / 0x10000ULL / 2ULL) * 0x10000ULL);
+      }
+      CHECK(set3[0].PoolOffset % 0x10000ULL == 0ULL && set3[1].PoolOffset % 0x10000ULL == 0ULL);
+      CHECK(set3[0].PoolOffset + a <= set3[1].PoolOffset || set3[1].PoolOffset + b <= set3[0].PoolOffset);
+      input.Planes = set3;
+      ++placed;
+      if (AdmissionMpoEvaluate(&input, &result) != AdmissionMpoSupported) {
+        fprintf(stderr, "s3a %u/%u: Check3 supported, Set3 view refuses %u (offs 0x%llx 0x%llx bytes 0x%llx 0x%llx)\n",
+                iteration, k, result.Reason, set3[0].PoolOffset, set3[1].PoolOffset,
+                set3[0].SurfaceBytes, set3[1].SurfaceBytes);
+        ++Failures;
+        return;
+      }
+      CHECK(AdmissionMpoBuildCommit(&result, records) == 2u);       /* D2 */
+      CHECK(RefCommit(records, 2u, REF_POOL) == 0u);
+      CHECK(AdmissionMpoBuildRemoval(&set3[swap], &removal) == 1u); /* G1 */
+      CHECK(RefCommit(&removal, 1u, REF_POOL) == 0u);
+    }
+  }
+  printf("s3a: %u Check3-supported, %u placements checked\n", accepted, placed);
+  CHECK(accepted > 1000u && placed > 1000u);
+}
+
 int main(void) {
   TestUnsupportedWritesNothing();
   TestRemovalRecord();
   TestSweepTableImpliesBroker();
+  TestCheck3ImpliesSet3AnyLegalPlacement();
   if (Failures != 0u) {
     fprintf(stderr, "mpo_broker_reference_test: %u failure(s)\n", Failures);
     return EXIT_FAILURE;
