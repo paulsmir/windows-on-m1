@@ -51,7 +51,8 @@ static unsigned int MpoScaleOk(long long Source, long long Destination) {
  * version 4, the one-plane record path): 10..17, 32..34 (scaled only),
  * 18..21, 25. */
 static unsigned int MpoCheckLayer(const ADMISSION_MPO_INPUT *Input,
-                                  const ADMISSION_MPO_PLANE_INPUT *plane) {
+                                  const ADMISSION_MPO_PLANE_INPUT *plane,
+                                  unsigned int TopClip) {
   const unsigned int scaled =
       MpoWidth(&plane->Source) != MpoWidth(&plane->Destination) ||
               MpoHeight(&plane->Source) != MpoHeight(&plane->Destination)
@@ -99,7 +100,9 @@ static unsigned int MpoCheckLayer(const ADMISSION_MPO_INPUT *Input,
     return AdmissionMpoReasonRotation;
   if (plane->HasUnsupportedFlags != 0u)
     return AdmissionMpoReasonUnsupportedFlags;
-  if (!MpoRectContains(&plane->Clip, &plane->Destination))
+  /* CUR-1 v2: the full-panel top plane of a pair may be clipped; its clip
+   * is classified by MpoTopClip instead. */
+  if (TopClip == 0u && !MpoRectContains(&plane->Clip, &plane->Destination))
     return AdmissionMpoReasonClip;
   /* Version 2: the scanout broker's surface rules. */
   if (plane->InScanoutPool == 0u ||
@@ -121,6 +124,43 @@ static unsigned int MpoCheckLayer(const ADMISSION_MPO_INPUT *Input,
       (unsigned long long)plane->SurfaceWidth * ADMISSION_MPO_BYTES_PER_PIXEL)
     return AdmissionMpoReasonStrideBelowRow;
   return AdmissionMpoSupported;
+}
+
+/* CUR-1 v2: the clip of the full-panel top plane.  The visible part is
+ * Dst ∩ Clip (d3dkmddi.h ATTRIBUTES2 ClipRect); Dst is the panel here (rule
+ * 8), so it is Clip ∩ panel.  Clip covering Dst: the plane as given.  A
+ * non-empty visible part <= 64x64: copied into a scratch (needs the
+ * reservation).  Wider or taller than 64 and at least 40x39: the plane
+ * cropped to it.  Anything else: TopClip. */
+static unsigned int MpoTopClip(const ADMISSION_MPO_INPUT *Input,
+                               const ADMISSION_MPO_PLANE_INPUT *Plane,
+                               unsigned int *Mode, ADMISSION_MPO_RECT *Visible) {
+  long long w, h;
+  *Mode = AdmissionMpoClipNone;
+  *Visible = Plane->Destination;
+  if (MpoRectContains(&Plane->Clip, &Plane->Destination))
+    return AdmissionMpoSupported;
+  Visible->Left = Plane->Clip.Left > Plane->Destination.Left ? Plane->Clip.Left : Plane->Destination.Left;
+  Visible->Top = Plane->Clip.Top > Plane->Destination.Top ? Plane->Clip.Top : Plane->Destination.Top;
+  Visible->Right = Plane->Clip.Right < Plane->Destination.Right ? Plane->Clip.Right : Plane->Destination.Right;
+  Visible->Bottom = Plane->Clip.Bottom < Plane->Destination.Bottom ? Plane->Clip.Bottom : Plane->Destination.Bottom;
+  w = (long long)Visible->Right - Visible->Left;
+  h = (long long)Visible->Bottom - Visible->Top;
+  if (w <= 0 || h <= 0)
+    return AdmissionMpoReasonTopClip;
+  if (w <= (long long)ADMISSION_MPO_SCRATCH_EXTENT &&
+      h <= (long long)ADMISSION_MPO_SCRATCH_EXTENT) {
+    if (Input->ScratchAvailable == 0u)
+      return AdmissionMpoReasonTopClip;
+    *Mode = AdmissionMpoClipScratch;
+    return AdmissionMpoSupported;
+  }
+  if (w >= (long long)ADMISSION_MPO_CROP_MIN_WIDTH &&
+      h >= (long long)ADMISSION_MPO_CROP_MIN_HEIGHT) {
+    *Mode = AdmissionMpoClipCrop;
+    return AdmissionMpoSupported;
+  }
+  return AdmissionMpoReasonTopClip;
 }
 
 /* First violated two-plane rule of Planes[Index], or Supported. */
@@ -149,7 +189,7 @@ static unsigned int MpoCheckPairPlane(const ADMISSION_MPO_INPUT *Input,
   } else if (plane->BlendAlpha != 0u) {
     return AdmissionMpoReasonBottomBlend;
   }
-  return MpoCheckLayer(Input, plane);
+  return MpoCheckLayer(Input, plane, plane->LayerIndex == 0u ? 1u : 0u);
 }
 
 /* Pair rules on two planes that passed every per-plane rule (so a known
@@ -197,8 +237,11 @@ unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
   unsigned int index;
   unsigned int reason;
   unsigned int slot;
+  unsigned int clip_mode = AdmissionMpoClipNone;
+  ADMISSION_MPO_RECT visible = {0, 0, 0, 0};
 
   out->Supported = 0u;
+  out->ScratchOffset = ADMISSION_MPO_SCRATCH_NONE;
   out->Reason = AdmissionMpoReasonArgument;
   out->FailingPlane = ADMISSION_MPO_NO_PLANE;
   out->SlotCount = 0u;
@@ -218,6 +261,8 @@ unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
     out->Slots[slot].SurfaceStride = 0u;
     out->Slots[slot].PoolOffset = 0ULL;
     out->Slots[slot].SurfaceBytes = 0ULL;
+    out->Slots[slot].ClipMode = AdmissionMpoClipNone;
+    out->Slots[slot].Clip = out->Slots[slot].Source;
   }
   if (Input == MPO_NULL || Result == MPO_NULL)
     return MpoFail(out, AdmissionMpoReasonArgument, ADMISSION_MPO_NO_PLANE);
@@ -246,6 +291,13 @@ unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
       if (reason != AdmissionMpoSupported)
         return MpoFail(out, reason, index);
     }
+    for (index = 0u; index < 2u; ++index) {
+      if (Input->Planes[index].LayerIndex != 0u)
+        continue;
+      reason = MpoTopClip(Input, &Input->Planes[index], &clip_mode, &visible);
+      if (reason != AdmissionMpoSupported)
+        return MpoFail(out, reason, index);
+    }
     reason = MpoCheckPair(&Input->Planes[0], &Input->Planes[1]);
     if (reason != AdmissionMpoSupported)
       return MpoFail(out, reason, 1u);
@@ -256,6 +308,8 @@ unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
       slot = Input->Planes[index].LayerIndex == 1u ? 0u : 1u;
       MpoFillSlot(&out->Slots[slot], &Input->Planes[index], index, 1u);
     }
+    out->Slots[1].ClipMode = clip_mode;
+    out->Slots[1].Clip = visible;
     out->SlotCount = 2u;
   }
   out->Supported = 1u;
@@ -341,7 +395,7 @@ unsigned int AdmissionMpoEvaluateOne(const ADMISSION_MPO_INPUT *Input,
                              Input->PanelHeight))
       reason = AdmissionMpoReasonLoneNotFullPanel;
     else
-      reason = MpoCheckLayer(Input, plane);
+      reason = MpoCheckLayer(Input, plane, 0u); /* the application plane: rule 17 */
     if (reason != AdmissionMpoSupported) {
       Result->Supported = 0u;
       Result->SlotCount = 0u;
@@ -375,7 +429,7 @@ unsigned int AdmissionMpoEvaluateOne(const ADMISSION_MPO_INPUT *Input,
   else if (plane->BlendAlpha > 1u)
     reason = AdmissionMpoReasonOnePlaneBlend;
   else
-    reason = MpoCheckLayer(Input, plane);
+    reason = MpoCheckLayer(Input, plane, 0u);
   if (reason != AdmissionMpoSupported) {
     Result->Supported = 0u;
     Result->SlotCount = 0u;

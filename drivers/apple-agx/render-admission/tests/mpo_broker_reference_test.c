@@ -600,6 +600,158 @@ static void TestLoneTransitions(void) {
   CHECK(AdmissionMpoBuildRemoval(&app, &one) == 0u);
 }
 
+/* ---- CUR-1 v2: scratch placement, records, fill, double buffering ---- */
+static void ExpectPlace(int L, int T, int W, int H, int LayerX, int LayerY,
+                        unsigned int OffX, unsigned int OffY, int Line) {
+  ADMISSION_MPO_RECT clip = Rect(L, T, L + W, T + H), layer;
+  unsigned int ox = 0u, oy = 0u;
+  if (AdmissionMpoScratchPlace(&clip, REF_PANEL_W, REF_PANEL_H, &layer, &ox, &oy) != 1u ||
+      layer.Left != LayerX || layer.Top != LayerY || layer.Right != LayerX + 64 ||
+      layer.Bottom != LayerY + 64 || ox != OffX || oy != OffY ||
+      ox + (unsigned int)W > 64u || oy + (unsigned int)H > 64u ||
+      layer.Right > (int)REF_PANEL_W || layer.Bottom > (int)REF_PANEL_H) {
+    fprintf(stderr, "line %d: scratch place (%d,%d %dx%d) -> (%d,%d) off %u,%u\n", Line, L, T, W, H,
+            layer.Left, layer.Top, ox, oy);
+    ++Failures;
+  }
+}
+#define PLACE(L, T, W, H, X, Y, OX, OY) ExpectPlace(L, T, W, H, X, Y, OX, OY, __LINE__)
+
+static void TestScratchPlacement(void) {
+  ADMISSION_MPO_RECT layer, clip;
+  unsigned int ox, oy, w, h;
+  static const unsigned int sizes[][2] = {{1, 1}, {24, 27}, {32, 30}, {40, 39}, {64, 64}};
+  PLACE(1280, 800, 1, 1, 1280, 800, 0u, 0u);       /* hidden pointer, panel centre */
+  PLACE(0, 0, 1, 1, 0, 0, 0u, 0u);                 /* top-left corner */
+  PLACE(2559, 0, 1, 1, 2496, 0, 63u, 0u);          /* top-right corner */
+  PLACE(0, 1599, 1, 1, 0, 1536, 0u, 63u);          /* bottom-left corner */
+  PLACE(2559, 1599, 1, 1, 2496, 1536, 63u, 63u);   /* bottom-right corner */
+  PLACE(1000, 0, 24, 27, 1000, 0, 0u, 0u);         /* top edge */
+  PLACE(0, 700, 24, 27, 0, 700, 0u, 0u);           /* left edge */
+  PLACE(2536, 700, 24, 27, 2496, 700, 40u, 0u);    /* right edge */
+  PLACE(1000, 1573, 24, 27, 1000, 1536, 0u, 37u);  /* bottom edge */
+  PLACE(2496, 1536, 64, 64, 2496, 1536, 0u, 0u);   /* full scratch at the corner */
+  /* Every size at every corner keeps the block inside the 64x64 layer. */
+  for (w = 0u; w < sizeof(sizes) / sizeof(sizes[0]); ++w)
+    for (h = 0u; h < 4u; ++h) {
+      int x = (h & 1u) ? (int)REF_PANEL_W - (int)sizes[w][0] : 0;
+      int y = (h & 2u) ? (int)REF_PANEL_H - (int)sizes[w][1] : 0;
+      clip = Rect(x, y, x + (int)sizes[w][0], y + (int)sizes[w][1]);
+      CHECK(AdmissionMpoScratchPlace(&clip, REF_PANEL_W, REF_PANEL_H, &layer, &ox, &oy) == 1u);
+      CHECK(ox + sizes[w][0] <= 64u && oy + sizes[w][1] <= 64u);
+      CHECK(layer.Left + (int)ox == clip.Left && layer.Top + (int)oy == clip.Top);
+    }
+  /* Refused: larger than 64 on an axis, empty, outside the panel. */
+  clip = Rect(0, 0, 65, 40);
+  CHECK(AdmissionMpoScratchPlace(&clip, REF_PANEL_W, REF_PANEL_H, &layer, &ox, &oy) == 0u);
+  clip = Rect(10, 10, 10, 11);
+  CHECK(AdmissionMpoScratchPlace(&clip, REF_PANEL_W, REF_PANEL_H, &layer, &ox, &oy) == 0u);
+  clip = Rect(2550, 10, 2561, 20);
+  CHECK(AdmissionMpoScratchPlace(&clip, REF_PANEL_W, REF_PANEL_H, &layer, &ox, &oy) == 0u);
+  clip = Rect(-1, 10, 5, 20);
+  CHECK(AdmissionMpoScratchPlace(&clip, REF_PANEL_W, REF_PANEL_H, &layer, &ox, &oy) == 0u);
+}
+
+static unsigned int EvalClipped(ADMISSION_MPO_PLANE_INPUT *P, ADMISSION_MPO_RECT Clip,
+                                ADMISSION_MPO_RESULT *Result) {
+  ADMISSION_MPO_INPUT input;
+  P[0] = Desktop();
+  P[1] = Application();
+  P[0].Clip = Clip;
+  memset(&input, 0, sizeof(input));
+  input.PanelWidth = REF_PANEL_W;
+  input.PanelHeight = REF_PANEL_H;
+  input.PlaneCount = 2u;
+  input.Planes = P;
+  input.PoolBytes = REF_POOL;
+  input.ScratchAvailable = 1u;
+  return AdmissionMpoEvaluate(&input, Result);
+}
+
+static void TestClippedRecords(void) {
+  ADMISSION_MPO_PLANE_INPUT p[2];
+  ADMISSION_MPO_RESULT result;
+  APPLE_AGX_SCANOUT_LAYER records[2];
+  const unsigned long long scratch = REF_POOL - 0x20000ULL; /* top 128 KiB, 64 KiB aligned */
+  /* Scratch: 24x27 at the centre. */
+  CHECK(EvalClipped(p, Rect(1280, 800, 1304, 827), &result) == AdmissionMpoSupported);
+  CHECK(result.Slots[1].ClipMode == AdmissionMpoClipScratch);
+  CHECK(AdmissionMpoBuildCommit(&result, records) == 0u); /* no scratch placement yet */
+  result.ScratchOffset = scratch;
+  CHECK(AdmissionMpoBuildCommit(&result, records) == 2u);
+  CHECK(records[1].SurfaceOffset == scratch && records[1].SurfaceSize == 0x4000ULL &&
+        records[1].Width == 64u && records[1].Height == 64u && records[1].Stride == 256u &&
+        records[1].SrcOrigin == 0u && records[1].SrcSize == APPLE_AGX_SCANOUT_PACK(64u, 64u) &&
+        records[1].DstOrigin == APPLE_AGX_SCANOUT_PACK(1280u, 800u) &&
+        records[1].DstSize == APPLE_AGX_SCANOUT_PACK(64u, 64u) &&
+        records[1].Flags == APPLE_AGX_SCANOUT_LAYER_FLAG_PREMULTIPLIED);
+  CHECK(records[0].SurfaceOffset == p[1].PoolOffset); /* the application, unchanged */
+  CHECK(RefCommit(records, 2u, REF_POOL) == 0u);
+  /* Scratch at the bottom-right corner: the layer pulled inside. */
+  CHECK(EvalClipped(p, Rect(2559, 1599, 2560, 1600), &result) == AdmissionMpoSupported);
+  result.ScratchOffset = scratch + 0x10000ULL;
+  CHECK(AdmissionMpoBuildCommit(&result, records) == 2u);
+  CHECK(records[1].DstOrigin == APPLE_AGX_SCANOUT_PACK(2496u, 1536u));
+  CHECK(RefCommit(records, 2u, REF_POOL) == 0u);
+  /* Crop: 65x40, Src = Dst = the visible part of the desktop surface. */
+  CHECK(EvalClipped(p, Rect(100, 200, 165, 240), &result) == AdmissionMpoSupported);
+  CHECK(result.Slots[1].ClipMode == AdmissionMpoClipCrop);
+  CHECK(AdmissionMpoBuildCommit(&result, records) == 2u);
+  CHECK(records[1].SurfaceOffset == p[0].PoolOffset &&
+        records[1].SrcOrigin == APPLE_AGX_SCANOUT_PACK(100u, 200u) &&
+        records[1].SrcSize == APPLE_AGX_SCANOUT_PACK(65u, 40u) &&
+        records[1].DstOrigin == APPLE_AGX_SCANOUT_PACK(100u, 200u) &&
+        records[1].DstSize == APPLE_AGX_SCANOUT_PACK(65u, 40u));
+  CHECK(RefCommit(records, 2u, REF_POOL) == 0u);
+  /* Unclipped: exactly the previous full-panel record. */
+  CHECK(EvalClipped(p, Rect(0, 0, 2560, 1600), &result) == AdmissionMpoSupported);
+  CHECK(result.Slots[1].ClipMode == AdmissionMpoClipNone);
+  CHECK(AdmissionMpoBuildCommit(&result, records) == 2u);
+  CHECK(records[1].DstSize == APPLE_AGX_SCANOUT_PACK(2560u, 1600u));
+}
+
+static void TestScratchFillAndSelect(void) {
+  unsigned char scratch[0x4000], source[3 * 4 * 2 + 64];
+  ADMISSION_MPO_SCRATCH_STATE state;
+  unsigned int i, x, y, write, index, bad = 0u;
+  const unsigned int pitch = 3u * 4u + 8u; /* row padding is skipped */
+  memset(scratch, 0xee, sizeof(scratch));
+  for (i = 0u; i < sizeof(source); ++i) source[i] = (unsigned char)(i + 1u);
+  AdmissionMpoScratchFill(scratch, source, pitch, 3u, 2u, 5u, 7u);
+  for (y = 0u; y < 64u; ++y)
+    for (x = 0u; x < 256u; ++x) {
+      unsigned int px = x / 4u;
+      unsigned char want = (y >= 7u && y < 9u && px >= 5u && px < 8u)
+                               ? source[(y - 7u) * pitch + (px - 5u) * 4u + (x & 3u)] : 0u;
+      if (scratch[y * 256u + x] != want) ++bad;
+    }
+  CHECK(bad == 0u);
+  memset(source, 0, sizeof(source));
+  CHECK(AdmissionMpoBlockIsZero(source, pitch, 3u, 2u) == 1u);
+  source[pitch + 11u] = 1u; /* last byte of the block's second row */
+  CHECK(AdmissionMpoBlockIsZero(source, pitch, 3u, 2u) == 0u);
+  source[pitch + 11u] = 0u; source[12] = 9u; /* row padding is not the block */
+  CHECK(AdmissionMpoBlockIsZero(source, pitch, 3u, 2u) == 1u);
+  /* Double buffering and zero-skip. */
+  AdmissionMpoScratchReset(&state);
+  index = AdmissionMpoScratchSelect(&state, 1u, &write);
+  CHECK(index == 0u && write == 1u);          /* nothing scanned yet: write 0 */
+  AdmissionMpoScratchCommitted(&state, index, 1u);
+  index = AdmissionMpoScratchSelect(&state, 1u, &write);
+  CHECK(index == 0u && write == 0u);          /* zero over zero: keep, no write */
+  index = AdmissionMpoScratchSelect(&state, 0u, &write);
+  CHECK(index == 1u && write == 1u);          /* content: the free one */
+  /* That commit answered Busy: nothing changes, the same free one again. */
+  index = AdmissionMpoScratchSelect(&state, 0u, &write);
+  CHECK(index == 1u && write == 1u);
+  AdmissionMpoScratchCommitted(&state, index, 0u);
+  index = AdmissionMpoScratchSelect(&state, 1u, &write);
+  CHECK(index == 0u && write == 1u);          /* zero over content: clear the free one */
+  AdmissionMpoScratchCommitted(&state, index, 1u);
+  index = AdmissionMpoScratchSelect(&state, 0u, &write);
+  CHECK(index == 1u && write == 1u);          /* never the scanned one */
+}
+
 int main(void) {
   TestUnsupportedWritesNothing();
   TestScaledRecords();
@@ -608,6 +760,9 @@ int main(void) {
   TestSweepTableImpliesBroker();
   TestCheck3ImpliesSet3AnyLegalPlacement();
   TestLoneTransitions();
+  TestScratchPlacement();
+  TestClippedRecords();
+  TestScratchFillAndSelect();
   if (Failures != 0u) {
     fprintf(stderr, "mpo_broker_reference_test: %u failure(s)\n", Failures);
     return EXIT_FAILURE;
