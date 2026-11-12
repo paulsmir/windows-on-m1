@@ -78604,3 +78604,11 @@ EXP2380 HARDWARE BEFORE 2026-11-12T22:47:07Z:
 - Hashes: sys 5bf6047b8ed7, UmdArm64 64cc348ff58f, UmdX64 fff2485d95e9, Umd32 40058e33acdf; manifest 3a6167dffd63, hardware-manifest e60791bae0dc; probe2380.sh aa5207aaa48d (PROBE_LINT_OK); visible recovery rec2380h 6f706f919b57bf96; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
 - Recovery rec2380h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2380-hold1full/run2380.sh.
+
+EXP2380 HARDWARE ACTUAL 2026-11-12T23:18:22Z:
+- Boot: EXP2379 package unchanged (binary hashes equal EXP2379's); guest up 2026-11-12T22:47:57Z; CHAIN2380_DONE; STOPS 0; no Application 1000 since boot (1001: AppTermFailureEvent, Edge setup / EdgeUpdate crashpad only; CrashDumps = the two October dumps).
+- FULL band: suite PASS=119 FAIL=0; GM PERF w 52.979, r2 53.043, r3 52.664 fps_frames, mean(r2,r3) 52.853 >= 51.696; GM gate PASS -0.32 % (worst fps_presents 46.856 vs 47.007); FULL f0a 8330, f0b 8360 (stop line 8173; NP-1 band 8256..8424).
+- CS: warm 48.964, r2 52.375, r3 52.260; every run lone form (lone +4034/+3958/+3944, two +2/0/0, v2 +91/+64/+49, busy 0); cs16 gate PASS +0.52 % (worst 52.260 vs 51.991).
+- HOLD regression rows: STRETCHWIN Busy +0, HoldMerges = HoldCommits +192, HoldDropped 0; CS warm/r2/r3 and STRETCHFS HOLD_ OK, InFlight 0/0 at every arm end; STRETCHFS 59.99 fps, LoneCommits +2699.
+- Operator: no report received at ACTUAL time (looks PITCH-1, STRETCHWIN, CS pointer r2, STRETCHFS were announced and pushed).
+- Verdict: confirmed; the HOLD-1 line (PITCH-1, STRETCH-1b, S3, FS-1b, HOLD-1) holds the FULL band of the NP-1 line (8330/8360 inside 8256..8424) with CS +0.52 % and GM -0.32 %. Merge candidate; merge waits for the architect's word. Recovery rec2380h started.
