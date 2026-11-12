@@ -50,7 +50,7 @@
 #define AgxDxgiMpoPlanesDisabled 3u    /* DP-1: no plane enabled (before DP-1: any plane with Enabled FALSE) */
 #define AgxDxgiMpoPlanesResource 4u    /* not a presentation resource of this device */
 #define AgxDxgiMpoPlanesSubresource 5u /* SubResourceIndex != 0 */
-#define AgxDxgiMpoPlanesLayerIndex 6u  /* LayerIndex not a permutation of 0..n-1 */
+#define AgxDxgiMpoPlanesLayerIndex 6u  /* LayerIndex >= MaxPlanes, or listed twice */
 
 typedef struct _AGX_DXGI_MPO_PLANE {
   unsigned int LayerIndex;
@@ -124,9 +124,9 @@ AgxDxgiMpoColorSpaceSupported(int TwoPlanes, unsigned int Format, unsigned int C
 
 /* The plane list of PresentMultiplaneOverlay(1) this driver can hand to
  * pfnPresentMultiplaneOverlayCb: 1..MaxPlanes planes, each enabled, each one
- * of this device's presentation resources at subresource 0, LayerIndex
- * values "sequential from top to bottom" (DXGI_DDI_PRESENT_MULTIPLANE_OVERLAY),
- * i.e. each of 0..Count-1 exactly once.  Whether the configuration can be
+ * of this device's presentation resources at subresource 0, each LayerIndex a
+ * plane of the source (< MaxPlanes) listed once; a list may name any subset
+ * (FS-1b: the lone application plane is { LayerIndex 1 }).  Whether the configuration can be
  * shown is the kernel's decision (DxgkDdiCheckMultiPlaneOverlaySupport3);
  * this is only the translation's precondition. */
 static inline unsigned int
@@ -145,7 +145,13 @@ AgxDxgiMpoCheckPlanes(const AGX_DXGI_MPO_PLANE *Planes, unsigned int Count)
    * every listed plane; at least one plane must be enabled. */
   unsigned int enabled = 0u;
   for (i = 0u; i < Count; ++i) {
-    if (Planes[i].LayerIndex >= Count || (seen & (1u << Planes[i].LayerIndex)) != 0u)
+    /* FS-1b (EXP2377): LayerIndex names a plane of the source (0..MaxPlanes-1),
+     * not a position in this list: the full-screen application plane alone is
+     * one entry at LayerIndex 1, and refusing it (the old 0..Count-1 rule)
+     * failed every independent flip (E_INVALIDARG: DWM churn, app stall,
+     * DEVICE_REMOVED).  Each listed plane once. */
+    if (Planes[i].LayerIndex >= AGX_DXGI_MPO_PLANES ||
+        (seen & (1u << Planes[i].LayerIndex)) != 0u)
       return AgxDxgiMpoPlanesLayerIndex;
     seen |= 1u << Planes[i].LayerIndex;
     if (!Planes[i].Enabled)

@@ -135,8 +135,14 @@ int main() {
   assert(AgxDxgiMpoCheckPlanes(p, 3) == AgxDxgiMpoPlanesCount);
   p[1].LayerIndex = 1; assert(AgxDxgiMpoCheckPlanes(p, 2) == AgxDxgiMpoPlanesLayerIndex);
   p[0].LayerIndex = 2; assert(AgxDxgiMpoCheckPlanes(p, 2) == AgxDxgiMpoPlanesLayerIndex);
-  p[0].LayerIndex = 1; assert(AgxDxgiMpoCheckPlanes(p, 1) == AgxDxgiMpoPlanesLayerIndex);
-  p[0].LayerIndex = 0;
+  /* FS-1b (EXP2377): the lone application plane is one entry at LayerIndex 1. */
+  p[0].LayerIndex = 1; assert(AgxDxgiMpoCheckPlanes(p, 1) == AgxDxgiMpoPlanesOk);
+  p[0].LayerIndex = 2; assert(AgxDxgiMpoCheckPlanes(p, 1) == AgxDxgiMpoPlanesLayerIndex);
+  /* Lone L1 enabled with a listed disabled DWM layer 0; a lone disabled plane is refused. */
+  p[0].LayerIndex = 1; p[1].LayerIndex = 0; p[1].Enabled = 0;
+  assert(AgxDxgiMpoCheckPlanes(p, 2) == AgxDxgiMpoPlanesOk);
+  p[0] = p[1]; assert(AgxDxgiMpoCheckPlanes(p, 1) == AgxDxgiMpoPlanesDisabled);
+  p[0].LayerIndex = 0; p[0].Enabled = 1; p[1].LayerIndex = 1; p[1].Enabled = 1;
   /* DP-1 (EXP2363 blink): a listed disabled plane is legal, in either order,
    * even with no owned resource or a stale subresource; all-disabled is refused;
    * LayerIndex uniqueness still covers disabled planes. */
