@@ -78550,3 +78550,15 @@ EXP2377 HARDWARE ACTUAL 2026-11-12T21:00:55Z:
 - DWM: WER AppCrash_dwm.exe, exception 0x889800d0 in dwmcore.dll at offset 0x202c64.
 - Root cause (offline, umd-session-final.log): the UMD precondition AgxDxgiMpoCheckPlanes required LayerIndex < Count. A one-plane present at LayerIndex 1 (the lone form that Check3 had just admitted) was refused in the UMD. DWM saw admitted-then-failed flips and churned between the lone and composed forms (flicker), until DWM faulted. The KMD lone path was never reached with valid presents.
 - Verdict: FS-1 rejected as delivered (UMD contract defect, not a KMD lone-form defect). Next: FS-1b (arch/fs1 884c8a8a1, UMD rule LayerIndex < MaxPlanes, each listed once) as EXP2378 with the same probe.
+
+EXP2378 HARDWARE BEFORE 2026-11-12T21:13:17Z:
+- Kind: one behaviour change against EXP2377's package (arch/fs1 f19598fb3): arch/fs1 884c8a8a1, UMD AgxDxgiMpoCheckPlanes rule LayerIndex < MaxPlanes, each listed once (was LayerIndex < Count). KMD source unchanged. m1n1 s2v3, Mu MUANSCPPC002, switches as EXP2377. ATOMIC CONTRACT: none.
+- WHY THIS HYPOTHESIS: (1) EXP2377 umd-session-final.log: one-plane presents at LayerIndex 1 were refused by AgxDxgiMpoCheckPlanes after Check3 admitted the lone form; (2) CS_FORM warm/r2 lone=+278/+277 only, composed otherwise, operator flicker; (3) STRETCHFS Check3ScaledSupported 1->10 but no scaled commit and DEVICE_REMOVED at frame 37.
+- WINDOWS CONTRACT: the DXGI present-multiplane-overlay plane list names each LayerIndex below the driver's MaxPlanes once; a single entry may be any admitted layer (DWM's full-screen lone query uses LayerIndex 1). AGX/DCP CONTRACT: unchanged from EXP2377 (one-record commit, slot 0 the app surface, slot 1 off). TRANSLATION: UMD forwards the lone L1 present to the KMD Set3 lone path. WHAT IS STILL UNKNOWN: the KMD lone path behaviour with valid presents (never reached in EXP2377); scaled lone picture on DCP at 2x; DWM behaviour with the pointer over the lone plane.
+- Probe: probe2377 unchanged (CS_FORM per run, OPERATOR_LOOK_CS_POINTER, Lone receipts, Dwm-Core windows over CS r2 and STRETCHFS).
+- Expected: CS_FORM lone for both CS runs (LoneCommits ~ frames), CS >= 52 fps and the bench finishes; STRETCHFS ScaledLoneCommits growing at factor 2000, no device removal; no DWM AppCrash; operator sees no flicker; GM unchanged; Set3RefusedAfterSupport 0.
+- Failure criteria: CS not in lone form or below band, any DWM fault, device removal, flicker, Set3 refusal after support, freeze.
+- Recovery: rec2378h visible recovery; a shutdown hang -> exact-PID stop + operator power cycle + AT_PROXY.
+- Hashes: sys 835550564a1a, UmdArm64 964fd2651873, UmdX64 7337012bd680, Umd32 4f79eef9a64e; manifest 0fd21b56de02, hardware-manifest ead55d5ec54d; probe2378.sh 999e2d007222 (PROBE_LINT_OK); visible recovery rec2378h d8e8db14a53387c0; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
+- Recovery rec2378h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2378-fs1b/run2378.sh.
