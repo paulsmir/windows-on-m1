@@ -839,7 +839,7 @@ class D3d12AbiGate(unittest.TestCase):
         owner = (ROOT / 'drivers/apple-agx/mesa/winsys/agx_d3d12_windows.cpp').read_text()
         p = owner[owner.index('extern "C" HRESULT AgxD3d12OwnerCreatePresentationTexture('):]
         p = p[:p.index('\n}\n')]
-        for step in ('AdmissionUmdCreateResource(device, &create, resource, runtime);', 'AdmissionUmdScreenAdoptAllocation(',
+        for step in ('AdmissionUmdCreateResourceWithMetadata(device, &create, resource, runtime,', 'AdmissionUmdScreenAdoptAllocation(',
                      'AgxWin32AsahiImportLinearColor32(', 'D3D10_DDI_BIND_PRESENT'):
             self.assertIn(step, p)
         d = owner[owner.index('extern "C" void AgxD3d12OwnerDestroyPresentationTexture('):]

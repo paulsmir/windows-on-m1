@@ -433,10 +433,12 @@ HRESULT AgxD3d12OwnerResolveQueries(AGX_D3D12_OWNER *Owner, AGX_D3D12_QUERY_HEAP
  * 10-bit or multisampled (2x/4x) target renders into its own texture of
  * Bytes, converted or resolved into the allocation at each present.
  * *Allocation receives the D3DKMT allocation, *Presentation the record the
- * destroy call takes. */
+ * destroy call takes. BP-1: RuntimePrimary (the heap carries
+ * D3D12DDI_HEAP_FLAG_PRIMARY) makes that allocation a kernel primary
+ * (umd_primary_backbuffer.h). */
 HRESULT AgxD3d12OwnerCreatePresentationTexture(AGX_D3D12_OWNER *Owner, DXGI_FORMAT Format, unsigned Width,
                                                unsigned Height, int ShaderResource, unsigned Samples,
-                                               unsigned long long Bytes, HANDLE RuntimeResource,
+                                               unsigned long long Bytes, HANDLE RuntimeResource, int RuntimePrimary,
                                                AGX_D3D12_BUFFER *Texture, void **Presentation, UINT *Allocation);
 /* C76: handles have already been opened by the runtime on this device.
  * The returned record uses DestroyPresentationTexture's runtime lifetime. */

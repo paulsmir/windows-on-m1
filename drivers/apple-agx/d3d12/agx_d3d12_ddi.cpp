@@ -2658,6 +2658,10 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
                                   resource_arg->Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
                                   /* C40: an RGBA8 presentation allocation converted at present */
                                   resource_arg->Format == DXGI_FORMAT_R10G10B10A2_UNORM);
+        /* BP-1: a swapchain back buffer's committed heap carries
+         * D3D12DDI_HEAP_FLAG_PRIMARY (EXP2361: Flags 0x30); its kernel
+         * allocation is created as a primary (umd_primary_backbuffer.h). */
+        const bool runtime_primary = presentable && (heap_arg->Flags & D3D12DDI_HEAP_FLAG_PRIMARY) != 0;
         UINT presentation_allocation = 0;
         HRESULT hr = !owner ? E_NOTIMPL
                    : presentable
@@ -2665,7 +2669,8 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
                                                                   static_cast<UINT>(resource_arg->Width), resource_arg->Height,
                                                                   (bind & AGX_D3D12_BIND_SAMPLER) != 0,
                                                                   resource_arg->SampleDesc.Count, bytes,
-                                                                  runtime_resource.handle, &texture, &texture_heap->presentation,
+                                                                  runtime_resource.handle, runtime_primary ? 1 : 0,
+                                                                  &texture, &texture_heap->presentation,
                                                                   &presentation_allocation)
                          : AgxD3d12OwnerCreateTexture2D(owner, resource_arg->Format, static_cast<UINT>(resource_arg->Width),
                                                         resource_arg->Height, resource_arg->DepthOrArraySize,
@@ -2687,7 +2692,8 @@ static HRESULT APIENTRY CreateHeapAndResource(D3D12DDI_HDEVICE handle, const D3D
         }
         const UINT receipt[] = {static_cast<UINT>(resource_arg->Format), static_cast<UINT>(resource_arg->Width),
                                 resource_arg->Height, static_cast<UINT>(bytes >> 16),
-                                bind | (presentable ? 0x100u : 0u) | (placed ? 0x200u : 0u)};
+                                bind | (presentable ? 0x100u : 0u) | (placed ? 0x200u : 0u) |
+                                    (runtime_primary ? 0x400u : 0u)};
         AdmissionUmdDiagnostic("measure-d3d12-committed-texture", hr, receipt, 5);
         if(SUCCEEDED(hr) && AdmissionUmdWatchVa()) {
             const UINT64 native=(UINT64)(uintptr_t)texture_heap->native;

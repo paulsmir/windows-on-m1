@@ -119,6 +119,9 @@ static ADMISSION_UMD_RESOURCE *AdmissionUmdResourceFromDxgi(
 
 
 
+/* BP-1: umd_primary_backbuffer.h names A8R8G8B8 storage without d3dukmdt.h. */
+C_ASSERT(ADMISSION_UMD_STORAGE_A8R8G8B8 == (UINT)D3DDDIFMT_A8R8G8B8);
+
 /* The storage AdmissionUmdDescribePrimary gives each shared DXGI format. */
 static BOOLEAN AdmissionUmdSharedFormatStorage(UINT DxgiFormat,
                                                UINT StorageFormat) {
@@ -868,13 +871,13 @@ VOID APIENTRY AdmissionUmdCreateResource(
     const D3D11DDIARG_CREATERESOURCE *CreateResource,
     D3D10DDI_HRESOURCE ResourceHandle,
     D3D10DDI_HRTRESOURCE RuntimeResource) {
-  AdmissionUmdCreateResourceWithMetadata(DeviceHandle, CreateResource, ResourceHandle, RuntimeResource, 0u);
+  AdmissionUmdCreateResourceWithMetadata(DeviceHandle, CreateResource, ResourceHandle, RuntimeResource, 0u, 0u);
 }
 
 VOID AdmissionUmdCreateResourceWithMetadata(
     D3D10DDI_HDEVICE DeviceHandle, const D3D11DDIARG_CREATERESOURCE *CreateResource,
     D3D10DDI_HRESOURCE ResourceHandle, D3D10DDI_HRTRESOURCE RuntimeResource,
-    UINT MetadataFlags) {
+    UINT MetadataFlags, UINT CreateFlags) {
   ADMISSION_UMD_DEVICE *device = AdmissionUmdDeviceFromHandle(DeviceHandle);
   ADMISSION_UMD_RESOURCE *resource =
       (ADMISSION_UMD_RESOURCE *)ResourceHandle.pDrvPrivate;
@@ -883,6 +886,7 @@ VOID AdmissionUmdCreateResourceWithMetadata(
   ADMISSION_UMD_DIRECT_FLIP_RESOURCE description;
   ADMISSION_PRESENT_RESOURCE_DATA resourceData;
   ADMISSION_UMD_RETIREMENT *retirement;
+  ADMISSION_UMD_PRIMARY_MAPPING primary;
   HRESULT result;
   if (device == NULL || resource == NULL ||
       RuntimeResource.handle == NULL ||
@@ -914,16 +918,24 @@ VOID AdmissionUmdCreateResourceWithMetadata(
   ZeroMemory(&allocate, sizeof(allocate));
   ZeroMemory(&allocationInfo, sizeof(allocationInfo));
   ZeroMemory(&resourceData, sizeof(resourceData));
+  /* BP-1: pPrimaryDesc (D3D10/11) or the D3D12 runtime's HEAP_FLAG_PRIMARY
+   * (CreateFlags) makes the allocation a kernel primary on source 0; only
+   * pPrimaryDesc makes a mode-setting (device-associated, PL-1) primary
+   * (umd_primary_backbuffer.h). */
+  primary = AdmissionUmdPrimaryMap(
+      CreateResource->pPrimaryDesc != NULL,
+      (CreateResource->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u,
+      (CreateResource->MiscFlags &
+       D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE) != 0u,
+      description.Displayable, CreateFlags);
   resourceData.Magic = ADMISSION_PRESENT_RESOURCE_MAGIC;
   resourceData.Version = ADMISSION_PRESENT_RESOURCE_VERSION;
   resourceData.Bytes = sizeof(resourceData);
   resourceData.Format = (UINT)CreateResource->Format;
   /* EXP1038: only scanout-capable (BGRA) resources are written primaries;
-   * the KMD admits that flag for A8R8G8B8 GDI-surface allocations only. */
-  resourceData.Flags = description.Displayable &&
-      (CreateResource->pPrimaryDesc != NULL ||
-       (CreateResource->MiscFlags &
-        D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE) != 0u)
+   * the KMD admits that flag for A8R8G8B8 GDI-surface allocations only
+   * (primary.WrittenPrimary requires description.Displayable). */
+  resourceData.Flags = primary.WrittenPrimary != 0u
       ? ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY : 0u;
   resourceData.Flags |= MetadataFlags;
   if (CreateResource->pPrimaryDesc != NULL &&
@@ -937,8 +949,8 @@ VOID AdmissionUmdCreateResourceWithMetadata(
   allocate.PrivateDriverDataSize = sizeof(resourceData);
   allocationInfo.pPrivateDriverData = &description.Allocation;
   allocationInfo.PrivateDriverDataSize = sizeof(description.Allocation);
-  allocationInfo.VidPnSourceId = 0u;
-  allocationInfo.Flags.Primary = CreateResource->pPrimaryDesc != NULL;
+  allocationInfo.VidPnSourceId = primary.VidPnSourceId;
+  allocationInfo.Flags.Primary = primary.AllocationPrimary;
   /* PL-1: a non-shared resource with pPrimaryDesc may become the device's
    * displayed (mode-setting) primary, whose kernel allocation must outlive
    * the runtime's DestroyResource (umd_primary_retention.h). Allocate it
@@ -948,10 +960,7 @@ VOID AdmissionUmdCreateResourceWithMetadata(
    * (HandleList), never the runtime resource object (EXP975). Shared
    * resources keep the runtime-owned KM resource. */
   allocate.hResource =
-      CreateResource->pPrimaryDesc != NULL &&
-              (CreateResource->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) == 0u
-          ? NULL
-          : RuntimeResource.handle;
+      primary.DeviceAssociated != 0u ? NULL : RuntimeResource.handle;
   allocate.NumAllocations = 1u;
   allocate.pAllocationInfo = &allocationInfo;
   result = device->KernelCallbacks->pfnAllocateCb(
@@ -975,9 +984,10 @@ VOID AdmissionUmdCreateResourceWithMetadata(
      * pPrimaryDesc present, Flags, VidPnSourceId, ModeDesc Width, Height,
      * Format, RefreshRate num/den, ScanlineOrdering, Rotation, Scaling,
      * DriverFlags, AllocationInfo.Flags.Value, AllocationInfo.VidPnSourceId,
-     * device pointer low}. */
+     * device pointer low, BP-1: CreateFlags (1 = D3D12 HEAP_FLAG_PRIMARY),
+     * Displayable, resource-data Flags}. */
     const DXGI_DDI_PRIMARY_DESC *primary = CreateResource->pPrimaryDesc;
-    UINT values[17] = {(UINT)allocationInfo.hAllocation,
+    UINT values[20] = {(UINT)allocationInfo.hAllocation,
         CreateResource->MiscFlags, primary != NULL ? 1u : 0u,
         primary != NULL ? primary->Flags : 0u,
         primary != NULL ? (UINT)primary->VidPnSourceId : 0u,
@@ -991,8 +1001,9 @@ VOID AdmissionUmdCreateResourceWithMetadata(
         primary != NULL ? (UINT)primary->ModeDesc.Scaling : 0u,
         primary != NULL ? primary->DriverFlags : 0u,
         allocationInfo.Flags.Value, (UINT)allocationInfo.VidPnSourceId,
-        (UINT)(ULONG_PTR)device};
-    AdmissionUmdDiagnostic("measure-present-primary-desc", result, values, 17u);
+        (UINT)(ULONG_PTR)device, CreateFlags, description.Displayable,
+        resourceData.Flags};
+    AdmissionUmdDiagnostic("measure-present-primary-desc", result, values, 20u);
   }
   if (FAILED(result) || allocationInfo.hAllocation == 0u) {
     AdmissionUmdRetirementFree(retirement);
@@ -1010,7 +1021,7 @@ VOID AdmissionUmdCreateResourceWithMetadata(
   retirement->KernelResource = allocate.hKMResource;
   retirement->KernelAllocation = allocationInfo.hAllocation;
   retirement->Origin = 1u;
-  retirement->Primary = CreateResource->pPrimaryDesc != NULL;
+  retirement->Primary = primary.RetirementPrimary != 0u;
   retirement->Shared =
       (CreateResource->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u;
   retirement->DeviceAssociated = allocate.hResource == NULL;
@@ -1101,8 +1112,9 @@ VOID APIENTRY AdmissionUmdOpenResource(
   resource->DirectFlip.Allocation = *description;
   resource->DirectFlip.SegmentId = 2u;
   resource->DirectFlip.Linear = 1u;
+  /* BP-1: the create rule (AdmissionUmdDescribePrimary) by storage format */
   resource->DirectFlip.Displayable =
-      description->Format == (UINT)D3DDDIFMT_A8R8G8B8 ? 1u : 0u;
+      AdmissionUmdStorageDisplayable(description->Format);
   resource->WrittenPrimary = resourceData != NULL &&
       (resourceData->Flags & ADMISSION_PRESENT_RESOURCE_WRITTEN_PRIMARY) != 0u;
   /* Resources created without our resource data (GDI, earlier packages)

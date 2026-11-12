@@ -9,6 +9,7 @@
 #include "render_win32_transport.h"
 #include "umd_resource_lifetime.h"
 #include "umd_primary_retention.h"
+#include "umd_primary_backbuffer.h"
 #include "agx_win32_transport.h"
 #include "agx_win32_screen.h"
 #include "agx_win32_construction_address.h"
@@ -368,11 +369,13 @@ VOID APIENTRY AdmissionUmdOpenResource(
     const D3D10DDIARG_OPENRESOURCE *OpenResource,
     D3D10DDI_HRESOURCE ResourceHandle,
     D3D10DDI_HRTRESOURCE RuntimeResource);
-/* Internal creation variant: extra wire flags, never a runtime DDI. */
+/* Internal creation variant: extra wire flags, never a runtime DDI.
+ * CreateFlags are UMD-local requests (ADMISSION_UMD_CREATE_*,
+ * umd_primary_backbuffer.h), never written to the wire. */
 VOID AdmissionUmdCreateResourceWithMetadata(
     D3D10DDI_HDEVICE DeviceHandle, const D3D11DDIARG_CREATERESOURCE *CreateResource,
     D3D10DDI_HRESOURCE ResourceHandle, D3D10DDI_HRTRESOURCE RuntimeResource,
-    UINT MetadataFlags);
+    UINT MetadataFlags, UINT CreateFlags);
 VOID APIENTRY AdmissionUmdCreateResource(
     D3D10DDI_HDEVICE DeviceHandle,
     const D3D11DDIARG_CREATERESOURCE *CreateResource,
