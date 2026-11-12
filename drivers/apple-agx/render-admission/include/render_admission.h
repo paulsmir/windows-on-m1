@@ -241,6 +241,18 @@ typedef struct _ADMISSION_MPO_RECEIPT {
    * (superseded). */
   volatile LONG LastBusyPresentId, LastBusyPresentId1, BusyOutstanding;
   volatile LONG NextSuccessPresentId, BusyThenSameLatched, BusyThenSuperseded;
+  /* S3-B: Set3 answers DEVICE_BUSY for every runtime obstacle (dxgkrnl's
+   * Set3 thunk retries only SUCCESS/DEVICE_BUSY; anything else is offered
+   * again forever, EXP2374).  Per cause: no runtime / stopping (row I), not
+   * visible (E1), not qualified (E4), transport (E5, last result), broker
+   * rejected (E3, a defect: records kept), table invariant at Set3 counted
+   * by Set3TableRefusals (D1/G2), build invariant (D2/G1), the V2 path's
+   * runtime statuses (H2, last status).  Consecutive Busy answers for one
+   * PresentId (current, maximum) are the freeze detector. */
+  volatile LONG S3BusyNoRuntime, S3BusyNotVisible, S3BusyNotQualified;
+  volatile LONG S3BusyTransport, LastTransportResult, S3BusyBrokerRejected;
+  volatile LONG S3BusyBuild, S3BusyLegacy, LastLegacyStatus;
+  volatile LONG ConsecutiveBusy, MaxConsecutiveBusy;
 } ADMISSION_MPO_RECEIPT;
 #define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
 #define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u

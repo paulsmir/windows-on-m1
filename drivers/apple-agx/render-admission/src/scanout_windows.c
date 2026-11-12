@@ -1198,10 +1198,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutMpoPlaneOffSet(
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
   ULONG index;
   ULONG count;
-  if (runtime == NULL)
-    return STATUS_DEVICE_NOT_READY;
   if (Completion == NULL)
     return STATUS_INVALID_PARAMETER;
+  if (runtime == NULL) {
+    InterlockedIncrement(&Context->Mpo.S3BusyNoRuntime); /* S3-B row I */
+    return STATUS_DEVICE_BUSY;
+  }
   count = Completion->Count > 2u ? 2u : Completion->Count;
   /* A fixed scanout plane cannot be detached from DCP; the last latched
    * surface keeps scanning and the request completes at the next vsync. */
@@ -1323,17 +1325,21 @@ static NTSTATUS AdmissionScanoutMpoQueueHeld(
                     sizeof(Context->Mpo.LastRefusalRecords));
       for (index = 0u; index < Count; ++index)
         Context->Mpo.LastRefusalRecords[index] = Records[index];
-      /* Microsoft Learn DXGKDDI_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3:
-       * STATUS_INVALID_PARAMETER when the driver was unable to process a
-       * flip request. */
-      return STATUS_INVALID_PARAMETER;
+      /* S3-B: still a defect to surface (counter, records), but the
+       * session must survive it: DEVICE_BUSY, not a failure dxgkrnl
+       * re-offers forever. */
+      InterlockedIncrement(&Context->Mpo.S3BusyBrokerRejected);
+      return STATUS_DEVICE_BUSY;
     }
     if (result == AppleAgxScanoutNotQualified) {
       InterlockedIncrement(&Context->Mpo.NotVisible);
-      return STATUS_INVALID_PARAMETER;
+      InterlockedIncrement(&Context->Mpo.S3BusyNotQualified);
+      return STATUS_DEVICE_BUSY;
     }
     InterlockedIncrement(&Context->Mpo.TransportFailures);
-    return STATUS_DEVICE_HARDWARE_ERROR;
+    InterlockedIncrement(&Context->Mpo.S3BusyTransport);
+    InterlockedExchange(&Context->Mpo.LastTransportResult, (LONG)result);
+    return STATUS_DEVICE_BUSY;
   }
   /* Like the broker (slot1_latched at the commit), count slot 1 as shown
    * from the moment a two-layer commit is accepted. */
@@ -1355,18 +1361,23 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutMpoCommit(
     LONGLONG PrimaryAddress) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
 
-  if (runtime == NULL || Records == NULL || Completion == NULL ||
-      (Count != 1u && Count != 2u) ||
-      !AppleAgxFixedPanelTwoLayers(&runtime->Panel) ||
+  if (Records == NULL || Completion == NULL || (Count != 1u && Count != 2u))
+    return STATUS_INVALID_PARAMETER;
+  /* S3-B: dxgkrnl's Set3 thunk knows SUCCESS and DEVICE_BUSY (a defined
+   * retry state); any other status leaves the flip entry unadvanced and it
+   * is offered again forever (EXP2374).  A runtime obstacle is DEVICE_BUSY. */
+  if (runtime == NULL || !AppleAgxFixedPanelTwoLayers(&runtime->Panel) ||
       !Context->DisplayActive ||
       InterlockedCompareExchange(&runtime->IrqEnabled, 0, 0) == 0 ||
-      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0)
-    return STATUS_INVALID_PARAMETER;
-  /* A mode set hides the source; a two-plane configuration is not
-   * deferred like the V2 primary (DWM re-checks after a mode set). */
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0) {
+    InterlockedIncrement(&Context->Mpo.S3BusyNoRuntime);
+    return STATUS_DEVICE_BUSY;
+  }
+  /* A mode set hides the source: retried until it is shown again. */
   if (!Context->SourceVisible) {
     InterlockedIncrement(&Context->Mpo.NotVisible);
-    return STATUS_INVALID_PARAMETER;
+    InterlockedIncrement(&Context->Mpo.S3BusyNotVisible);
+    return STATUS_DEVICE_BUSY;
   }
   /* One commit outstanding until its latch (broker BUSY rule). */
   if (InterlockedCompareExchange(&runtime->PresentGate, 1, 0) != 0) {

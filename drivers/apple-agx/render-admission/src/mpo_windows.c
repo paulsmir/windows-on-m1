@@ -642,6 +642,15 @@ static NTSTATUS AdmissionMpoBusyNote(ADMISSION_CONTEXT *Context,
   ULONG index, busy;
   LONG id = Completion->Count != 0u ? (LONG)(ULONG)Completion->PresentId[0] : 0;
   if (Status == STATUS_DEVICE_BUSY) {
+    /* S3-B freeze detector: consecutive Busy answers for one PresentId. */
+    LONG run = 1;
+    if (InterlockedCompareExchange(&Context->Mpo.BusyOutstanding, 0, 0) != 0 &&
+        Context->Mpo.LastBusyPresentId == id)
+      run = InterlockedIncrement(&Context->Mpo.ConsecutiveBusy);
+    else
+      InterlockedExchange(&Context->Mpo.ConsecutiveBusy, 1);
+    if (run > Context->Mpo.MaxConsecutiveBusy)
+      InterlockedExchange(&Context->Mpo.MaxConsecutiveBusy, run);
     InterlockedExchange(&Context->Mpo.LastBusyPresentId, id);
     InterlockedExchange(&Context->Mpo.LastBusyPresentId1,
                         Completion->Count > 1u
@@ -654,6 +663,7 @@ static NTSTATUS AdmissionMpoBusyNote(ADMISSION_CONTEXT *Context,
       InterlockedCompareExchange(&Context->Mpo.BusyOutstanding, 0, 0) == 0)
     return Status;
   InterlockedExchange(&Context->Mpo.BusyOutstanding, 0);
+  InterlockedExchange(&Context->Mpo.ConsecutiveBusy, 0);
   InterlockedExchange(&Context->Mpo.NextSuccessPresentId, id);
   busy = 0u;
   for (index = 0u; index < Completion->Count && index < 2u; ++index) {
@@ -795,12 +805,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     pair[0] = next[0].Input;
     pair[1] = next[1].Input;
     AdmissionMpoInput(Context, pair, 2u, ADMISSION_MPO_PATH_SET3, &input);
-    if (AdmissionMpoEvaluate(&input, &result) != AdmissionMpoSupported ||
-        AdmissionMpoBuildCommit(&result, records) != 2u) {
-      /* Check3 cannot see placement; Set3 can.  Refuse before the broker
-       * rather than send records the table rejects. */
+    if (AdmissionMpoEvaluate(&input, &result) != AdmissionMpoSupported) {
+      /* Check3 cannot see placement; Set3 can.  Do not send records the
+       * table rejects.  S3-A/S3-B: for a configuration Check3 accepted this
+       * is an invariant violation (counted); DEVICE_BUSY either way. */
       AdmissionMpoSet3TableRefusal(Context, result.Reason);
-      return STATUS_INVALID_PARAMETER;
+      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
+    }
+    if (AdmissionMpoBuildCommit(&result, records) != 2u) {
+      InterlockedIncrement(&Context->Mpo.S3BusyBuild); /* D2 invariant */
+      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
     }
     status = AdmissionScanoutMpoCommit(Context, records, 2u, &completion,
                                        next[0].PrimaryAddress);
@@ -822,8 +836,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
      * surface in slot 0 and takes slot 1 off at the same latch. */
     if (!next[0].Valid ||
         AdmissionMpoBuildRemoval(&next[0].Input, &records[0]) != 1u) {
-      AdmissionMpoRefuseSet3(Context);
-      return STATUS_INVALID_PARAMETER;
+      InterlockedIncrement(&Context->Mpo.S3BusyBuild); /* G1 invariant */
+      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
     }
     /* WP-1: after the removal LayerIndex 0 is the full-screen scan-out, so
      * its allocation must have the committed mode's geometry (the rule the
@@ -836,7 +850,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
     if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
       AdmissionMpoSet3TableRefusal(Context, result.Reason);
-      return STATUS_INVALID_PARAMETER;
+      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
     }
     status = AdmissionScanoutMpoCommit(Context, records, 1u, &completion,
                                        next[0].PrimaryAddress);
@@ -859,12 +873,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
     if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
       AdmissionMpoSet3TableRefusal(Context, result.Reason);
-      return STATUS_INVALID_PARAMETER;
+      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
     }
     if (result.OnePlaneRecord != 0u) {
       if (AdmissionMpoBuildRemoval(&next[0].Input, &records[0]) != 1u) {
-        AdmissionMpoRefuseSet3(Context);
-        return STATUS_INVALID_PARAMETER;
+        InterlockedIncrement(&Context->Mpo.S3BusyBuild); /* G1 invariant */
+        return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
       }
       status = AdmissionScanoutMpoCommit(Context, records, 1u, &completion,
                                          next[0].PrimaryAddress);
@@ -887,6 +901,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     status = AdmissionDdiSetVidPnSourceAddress(Context, &legacy);
     if (!NT_SUCCESS(status)) {
       AdmissionScanoutClearMpoFlip(Context);
+      /* S3-B (H2): the V2 path's runtime statuses (mode change in flight,
+       * address outside the view, panel error, lease state) are DEVICE_BUSY
+       * through Set3; only a foreign handle stays a contract failure. */
+      if (status != STATUS_DEVICE_BUSY && status != STATUS_INVALID_HANDLE) {
+        InterlockedIncrement(&Context->Mpo.S3BusyLegacy);
+        InterlockedExchange(&Context->Mpo.LastLegacyStatus, (LONG)status);
+        status = STATUS_DEVICE_BUSY;
+      }
       return AdmissionMpoBusyNote(Context, &completion, status);
     }
     RtlCopyMemory(Context->MpoPlanes, next, sizeof(next));
