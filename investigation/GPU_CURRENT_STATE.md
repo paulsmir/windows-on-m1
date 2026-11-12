@@ -5772,3 +5772,16 @@ that point. Source: .local/night-20261110/s2-ddisplay-black/REPORT.md (display r
 - Decision: CB-1 = present through the newer callback when the runtime provides it; boot = EXP2359 + this one
   change. Spec in the handoff file. This is a second omission in the S2 contract as I specified it (after the
   DdiPresent flags): the UMD present entry was specified against dxgi.dll's behaviour only.
+
+## UPDATE 2026-11-12T02:12Z (architect): correction: CB-1 as specified is withdrawn
+
+Refers to the previous update. The implementer checked the contract before coding: the UMD's highest D3D
+interface is D3DWDDM2_0, and the pinned headers make pfnPresentMultiplaneOverlay1Cb available only for
+interface >= D3DWDDM2_2 (IS_DXGI1_6_BASE_FUNCTIONS). For a 2.0 device the older callback is the contractual one
+(and dxgi.dll honours it). CB-1 as written would be a no-op or an out-of-contract read; it is WITHDRAWN and no
+boot was run. The previous entry stays as written.
+- What stands: on the normal path no present of DWM enters dxgkrnl and DWM tears its primary down itself.
+- Open, offline: what ddisplay.dll does with a 2.0 device (accepted interface versions, its callback table, what
+  its old MPO present callback does). In parallel the scope of advertising D3DWDDM2_1 / 2_2 in the UMD is being
+  written from the headers (paper only). A UMD at the 2.0 interface under a WDDM 3.2 kernel driver is itself a
+  gap against a production driver, whatever this reading returns.
