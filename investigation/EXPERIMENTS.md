@@ -78562,3 +78562,12 @@ EXP2378 HARDWARE BEFORE 2026-11-12T21:13:17Z:
 - Hashes: sys 835550564a1a, UmdArm64 964fd2651873, UmdX64 7337012bd680, Umd32 4f79eef9a64e; manifest 0fd21b56de02, hardware-manifest ead55d5ec54d; probe2378.sh 999e2d007222 (PROBE_LINT_OK); visible recovery rec2378h d8e8db14a53387c0; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
 - Recovery rec2378h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2378-fs1b/run2378.sh.
+
+EXP2378 HARDWARE ACTUAL 2026-11-12T21:32:46Z:
+- Boot: package staged, guest up 2026-11-12 21:13:46Z, pipeline EXP2378_PIPELINE_RC 0, CHAIN2378_DONE; no bugcheck (STOPS 0); SSH alive throughout.
+- CS (lone form): warm CS_BENCH 3771 frames 48.981 fps, CS_FORM lone=+4044 two=+8 v2=+64 busy=+0; r2 51.900 fps, CS_FORM lone=+3892 two=+0 v2=+40 busy=+0. PERF_GATE cs16 PASS worst 51.900 vs 51.991 (-0.18 %). GM HD fps_frames 52.925, PERF_GATE gravitymark PASS 47.023 vs 47.007 (+0.03 %).
+- STRETCHFS: DWM one-plane check fSupported=1 (1280x800 -> 2560x1600 blend 0); 2676 frames in 45.0 s = 59.46 fps, no device removal; ScaledLoneCommits 0 -> 2669, LoneCommits 9309 -> 10625 total, ToLone 3 FromLone 2, LastForm 2 (lone).
+- S3: Set3RefusedAfterSupport 0, every S3Busy* 0, LoneChecksRefused 0.
+- Faults: no Application 1000 since boot; the 1001 reports are Edge setup / MicrosoftEdgeUpdate crashpad logs, Store M365Copilot download failures and AppTermFailureEvent (no driver or DWM entry). The C:\CrashDumps count of 2 is two October dumps (dwm-live983, explorer-live984).
+- Operator: no report received for OPERATOR_LOOK_CS_POINTER / STRETCHFS at ACTUAL time.
+- Verdict: FS-1b confirmed. With the UMD fix, DWM keeps the lone application plane for full-screen CS (about 99 % of commits) and for the scaled 2x STRETCHFS; CS is in band. Open: operator visuals for the pointer over the lone plane. Next: HOLD-1 (arch/hold1 66605c069, rebased on FS-1b) as EXP2379.
