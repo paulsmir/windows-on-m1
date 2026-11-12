@@ -5902,3 +5902,24 @@ boot was run. The previous entry stays as written.
   plain swap (U-4 / F-7 class). Cause not yet read; a receipt-only re-look in the same boot is planned.
 - Decision recorded on the user's question (2026-11-12): the legacy DWM path is no longer a verification target;
   the owed legacy-path boot is cancelled; baselines measured on it are reference only for the normal-path line.
+
+## UPDATE 2026-11-12T10:17Z (architect): EXP2363 measured: two planes give +6.0 % PERF, FULL 8320 / 8347; two defects open
+
+- First FPS evidence for S2 (application window on its own plane, normal DWM path): PERF mean(r2,r3) 52.98
+  against 49.97 (EXP2361) and 49.75 (EXP2362) = +6.0 %; nb.py wall 18.896 ms against 20.064; foreign-job row e
+  0.000 (about 1.0 before); FULL (windowed whole run) 8320 / 8347 against 8050 / 8025 and 8058 / 7977 = +3.7 %.
+  FULL 8347 = 83.9 % of macOS 9946 (previous best 8170 = 82.1 %). Frame time in the PERF window 18.9 ms against
+  Apple's 16.46 whole-run = about 87 % (different windows; not a verdict number).
+  Verdict on the lever: CONFIRMED in direction and size (the removed time matches row e); not accepted as a
+  default until the defects below are fixed and a normal-path control band exists.
+- Defect 1 (cause found, fix DP-1 in work): the UMD refuses a PresentMultiplaneOverlay1 that lists a disabled
+  plane; DWM then destroys its device and sets the mode again: 0.44 s full-panel blank at window appear and
+  close, preceded at close by 1.4 s of black window content (operator's video). Kernel side accepts a disabled
+  plane without an allocation; how the runtime pairs the callback's allocation entries with planes is still to
+  be read from the guest's d3d11 / dxgi.
+- Defect 2 (open): during the Counter-Strike timedemo the operator saw the desktop and no game picture, although
+  the run completed at 48 fps; no flip entered the display ring during it. EXP2361 / EXP2362 already showed no
+  DWM present activity during CS. HYPOTHESIS: on DWM's normal path the OpenGL ICD's frames do not reach the
+  screen. All CS numbers measured on the normal path (EXP2361, 2362, 2363) are NOT VALID as gate results until
+  this is settled; the "-3 % CS with MPO live" reading of those boots is withdrawn as a performance statement
+  (EXP2357 on the legacy path stands).
