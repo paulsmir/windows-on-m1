@@ -9947,7 +9947,7 @@ typedef struct {
     ID3D12CommandAllocator *alloc[3]; ID3D12GraphicsCommandList *list[3]; /* 0 timed / setup, 1-2 fillers */
     Q3_GPU_COMPLETION_QUERY *rec;
     float *cpu_data;
-    UINT64 signal, filler_signal[2]; UINT fill, pid, missing, oracle_bad; int perf_live;
+    UINT64 signal, filler_signal[2]; UINT fill, pid, missing, oracle_bad, filler_in_window; int perf_live;
     LARGE_INTEGER qpf;
 } OptwinCtx;
 static int optwin_selected(const optwin_variant *v, const char *probe) { return !probe || !strcmp(v->probe, probe); }
@@ -10158,19 +10158,24 @@ static HRESULT optwin_filler(OptwinCtx *x) {
     x->fill^=1u;
     return hr;
 }
-/* The timed list's own jobs: compute records of this process submitted after t0 that completed by the time the
- * fence wait returned (plus 3 ms of notification slack; the queued W56 filler runs > 7 ms after the timed list).
+/* The timed list's own jobs: compute records of this process submitted in [t0, tf) that completed by the time the
+ * fence wait returned (plus 3 ms of notification slack); tf is read after the timed list's ExecuteCommandLists
+ * returned and before the filler's, so the filler (submitted at or after tf) is never counted in the span.
+ * EXP2373: the timed fence often completed only when the filler queued behind it finished, and the filler's record
+ * then landed inside the window (558 of 840 reps "jobs=2", +17-19 ms); *others counts those records (diagnostic).
  * Pages from the Newest sequence read just before the submission, so ring wrap-around cannot hide a record. */
-static int optwin_collect(OptwinCtx *x, UINT64 cursor, UINT64 t0, UINT64 t1, double *ms, double *jobsum_ms, unsigned *jobs) {
+static int optwin_collect(OptwinCtx *x, UINT64 cursor, UINT64 t0, UINT64 tf, UINT64 t1, double *ms, double *jobsum_ms,
+                          unsigned *jobs, unsigned *others) {
     const UINT64 slack=(UINT64)x->qpf.QuadPart*3u/1000u;
     UINT64 start=~0ull, end=0, sum=0;
-    *jobs=0;
+    *jobs=0; *others=0;
     for (unsigned page=0;page<16u;++page) {
         Q3_GPU_COMPLETION_QUERY *q=x->rec;
         if (FAILED(q3_completions(x->device,cursor,q)) || !q->Frequency || q->Lost || q->Reset || q->Count>Q3_GPU_COMPLETION_PAGE) return 0;
         for (UINT i=0;i<q->Count;++i) {
             const Q3_GPU_COMPLETION *r=&q->Record[i];
             if (r->ProcessId!=x->pid || r->Kind!=Q3_GPU_TIMESTAMP_COMPUTE || r->SubmitQpc<t0 || r->CompleteQpc>t1+slack) continue;
+            if (r->SubmitQpc>=tf) { ++*others; continue; }
             if (r->Status || !r->Start || r->End<=r->Start) return 0;
             if (r->Start<start) start=r->Start;
             if (r->End>end) end=r->End;
@@ -10189,8 +10194,9 @@ static int optwin_collect(OptwinCtx *x, UINT64 cursor, UINT64 t0, UINT64 t1, dou
 }
 static HRESULT optwin_timed(OptwinCtx *x, const optwin_variant *v, const optwin_case *c, unsigned dispatches,
                             int *got, double *ms, double *jobsum_ms, double *wall_ms, unsigned *jobs) {
-    LARGE_INTEGER t0, t1;
+    LARGE_INTEGER t0, tf, t1;
     UINT64 timed, cursor=0;
+    unsigned others=0;
     HRESULT hr=optwin_record(x,x->list[0],x->alloc[0],v,c,dispatches,x->out,0);
     *got=0; *ms=0.0; *jobsum_ms=-1.0; *jobs=0;
     if (SUCCEEDED(hr) && x->filler_signal[x->fill]) hr=optwin_wait(x,x->filler_signal[x->fill]);
@@ -10198,6 +10204,7 @@ static HRESULT optwin_timed(OptwinCtx *x, const optwin_variant *v, const optwin_
     if (SUCCEEDED(hr)) cursor=x->rec->Newest;
     QueryPerformanceCounter(&t0);
     if (SUCCEEDED(hr)) hr=clktwin_exec(x->queue,x->fence,x->list[0],timed=++x->signal);
+    QueryPerformanceCounter(&tf);
     if (SUCCEEDED(hr)) hr=clktwin_exec(x->queue,x->fence,x->list[1+x->fill],x->filler_signal[x->fill]=++x->signal);
     x->fill^=1u;
     if (SUCCEEDED(hr)) hr=optwin_wait(x,timed);
@@ -10205,7 +10212,9 @@ static HRESULT optwin_timed(OptwinCtx *x, const optwin_variant *v, const optwin_
     *wall_ms=(double)(t1.QuadPart-t0.QuadPart)*1000.0/(double)x->qpf.QuadPart;
     for (UINT tries=0;tries<4 && SUCCEEDED(hr) && !*got;++tries) {
         if (tries) Sleep(2);
-        *got=optwin_collect(x,cursor,(UINT64)t0.QuadPart,(UINT64)t1.QuadPart,ms,jobsum_ms,jobs);
+        *got=optwin_collect(x,cursor,(UINT64)t0.QuadPart,(UINT64)tf.QuadPart,(UINT64)t1.QuadPart,ms,jobsum_ms,jobs,
+                            &others);
+    if (*got && others) ++x->filler_in_window;
     }
     return hr;
 }
@@ -10402,7 +10411,7 @@ static int optwin_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
     }
     if (x->filler_signal[0]) (void)optwin_wait(x,x->filler_signal[0]);
     if (x->filler_signal[1]) (void)optwin_wait(x,x->filler_signal[1]);
-    printf("OPTWIN_RECORDS missing %u oracle_bad %u\n",x->missing,x->oracle_bad);
+    printf("OPTWIN_RECORDS missing %u oracle_bad %u filler_in_window %u\n",x->missing,x->oracle_bad,x->filler_in_window);
     {
         const int pass=SUCCEEDED(hr) && !x->missing && !x->oracle_bad;
         printf("AGX_D3D12_OPTWIN%s: %s hr=0x%08lx\n",probe ? probe : "",pass ? "PASS" : "FAIL",(unsigned long)hr);
