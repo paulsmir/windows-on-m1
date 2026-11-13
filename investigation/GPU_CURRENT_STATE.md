@@ -6260,3 +6260,19 @@ boot was run. The previous entry stays as written.
   an always-updating DWM strip over it hits this. Fix direction (HOLD-2): one DCP swap must carry everything
   flipped for the same vsync; the mechanism depends on when the two Set3 arrive relative to each other and to
   the latch - being read from the EXP2382 trace. Not designed yet.
+
+## UPDATE 2026-11-13T00:34:37Z - CORRECTION (EXP2379 windowed CS arm) and HOLD-2 mechanism
+
+- CORRECTION to the EXP2379 entry: the windowed CS arm never ran (a harness quoting defect wrote a broken guest
+  script); "DWM composed the 1600x1000 GL window" came from the idle desktop and a stale file and is WITHDRAWN.
+  Windowed CS on a plane is untested.
+- Timing facts from existing traces: in the two-plane form dxgkrnl issues the per-layer Set3 from its vsync DPC
+  pass (EXP2375: all on CPU 0, at the vsync); in the lone form a worker issues one Set3 ~0.9 ms after the vsync.
+  A swap submitted as late as 4.1 ms before the vblank latched at that vblank; the floor is unmeasured.
+- HOLD-2 (arch/hold2 aea1ed764 on the accepted package; spec in the handoff file): Set3 only merges into the
+  pending set and queues a driver DPC; the DPC runs after dxgkrnl's pass and issues one swap for everything
+  flipped in it; one commit path (DPC / latch / tick). EXP2383 is its first boot; discriminator = the
+  scaled-window scene (186..192 flips merged behind an outstanding swap per run on HOLD-1). The taskbar-strip
+  scene needs CUR-1 on top and is read in the boot after.
+- SendInput (injected mouse moves) makes the guest cursor visible (verified on the recovery guest); SetCursorPos
+  does not.
