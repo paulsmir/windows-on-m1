@@ -78828,3 +78828,32 @@ MERGE RECORD 2026-11-13T11:34:52Z: arch/hold3 41b21c980 into gpu/memory-latency 
 - The pointer and taskbar-strip scenes were driven by injected mouse input (SendInput). No person has looked at the pointer picture: looks were announced and none were received.
 - Missed-deadline residue at lead 5.0 ms (production default Wom1MpoLeadUs 5000, no lead-step boots): 6 of 47475 deadline commits.
 - Rejected steps that the final design replaced: HOLD-2's pass-end coalescing (EXP2383/2384) and HOLD-3's latch commit (EXP2385).
+
+EXP2389 HARDWARE BEFORE 2026-11-13T11:47:34Z:
+- Kind: one variable per arm against EXP2388.
+  - Package: arch/srv1 b8dfff641 = merged gpu/memory-latency (HOLD-3 line) + SRV-1 (0641fa433 DXBC + owner + root SRV views, 4e5bf1239 DXIL).
+  - Always on, with the switch off too: the owner binds raw/structured SRV slots < 16 as read-only shader buffers 16 + t beside the texel views (set_shader_buffers spans 32 slots), and RootViews lists root SRVs (marked only under the switch).
+  - Arms: suite; GM w/r2 and CS warm/r2 gated with the switch off (that binding must be inert); OPTWIN eoptwin4 with the switch off (plus kernel captures); OPTWIN with APPLE_AGX_D3D12_SRV_SSBO=1 in the probe process only.
+  - ATOMIC CONTRACT: none -- separate arms, separate receipts.
+- WHY THIS HYPOTHESIS:
+  1. EXP2388: root-SRV G1 rows 3.98 / 2.63 / 1.42 / 2.50 x Apple (1/4/16/64 MB) against the raw-UAV G1u rows 1.19 / 1.43 / 0.99 / 1.32: the gap is the per-dword texel form.
+  2. Offline production-shape cost of G1: 317 instructions / 17 texture ops -> 80 / 0 tex / 7 mem with SRV-1 at the root, the same as the root raw-UAV form.
+  3. Translator tests: cs50 gives 4-wide loads at slots 16/17 and no txf; DXIL c44/par_cs texture ops 11 -> 7.
+- WINDOWS CONTRACT: ld_raw/ld_structured on an SRV return 0 per out-of-bounds component; root SRVs carry no size (unchecked, as RC75 root UAVs).
+- AGX/ASAHI CONTRACT: shader-buffer reads are device loads from ssbo_base[slot], 32 Gallium slots.
+- TRANSLATION: SRV slot t < 16 -> load_ssbo(16 + t), D3D-H6 robust pass for table SRVs, ACCESS_IN_BOUNDS for root SRVs.
+- WHAT IS STILL UNKNOWN: the hardware ratio with the switch on, and whether the always-on binding change is inert for GM/CS.
+- Expected:
+  - Switch off: GM and CS gates PASS (as EXP2387); every OPTWIN row equal to EXP2388.
+  - Switch on: G1/G1d/G1c rows fall to the G1u rows (1 MB ~1.2, 64 MB ~1.3); G1u, S1, T1, B1, C1 unchanged; oracle_bad 0.
+  - Per-rep G1u values at 4 and 16 MB reported for both arms (control series).
+- Failure criteria:
+  - a gate miss with the switch off (the binding is not inert);
+  - oracle_bad > 0 with the switch on (wrong SRV reads);
+  - G1u moving with the switch;
+  - missing records repeating (then a receipt-path defect to fix first);
+  - fault or hang.
+- Recovery: rec2389h visible recovery.
+- Hashes: sys a8c044c79a79, UmdArm64 6d1f23fe6780, UmdX64 a342395e9d0c, Umd32 028d7767e7a0; manifest 7510f0991bde, hardware-manifest e3577a10ecaf; probe2389.sh 44244cc84718 (PROBE_LINT_OK); visible recovery rec2389h 214eada9a563d363; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
+- Recovery rec2389h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2389-srv1/run2389.sh.
