@@ -6392,3 +6392,22 @@ boot was run. The previous entry stays as written.
   not the whole excess.
 - Next: SRV buffer reads as device loads in the compiler (production defect regardless of GM), the probe's
   gather rows re-measured in GM's binding form, and shader captures of the probe for offline listings.
+
+## UPDATE 2026-11-13T10:33:55Z - EXP2387 HOLD-3c confirmed, merge approved; SRV-1 is not a GravityMark lever
+
+- EXP2387 (arch/hold3 41b21c980): deadline commits reach the latch with 4.67 ms median / 3.14 ms minimum to
+  spare (EXP2386: 3.92 / 2.25); learned tick-to-latch offset 0.94..1.34 ms; missed deadlines 6 of 47475
+  (0.013 %). Strip-scene CS with a cursor 52.38 / 52.49 (cs16 gate PASS +0.96 %; EXP2386 -2.09 %), GM PASS,
+  windowed CS 54.72, moving pointer 59.92..59.96, scaled window 59.90. No faults. HOLD-3c CONFIRMED.
+- MERGE APPROVED: CUR-1 v2 + CUR-1c + HOLD-2 base + HOLD-3/3b/3c as the accepted package (after the merged-tree
+  gate). Lead stays 5.0 ms; no lead-step boots. No person has seen the pointer picture.
+- Display line summary now: windowed and full-screen applications scan out on their own planes with or
+  without a mouse, stretched, with the pointer and the taskbar strip over them, at their own frame rate; Set3
+  cannot freeze the display for accepted configurations. Open: failed-swap recovery (RQ-1/RQ-2, implemented,
+  not on hardware).
+- SRV-1 fact: all 243 GravityMark shaders are DXIL; no buffer SRVs; 533 raw UAVs (RWByteAddressBuffer) read by
+  device loads vectorised 1..4 wide. The slow per-dword SRV form is NOT used by GravityMark: SRV-1 is a general
+  driver defect, not a GM lever. The probe gains G1u rows in GM's form (raw UAV Load4); the next boot measures
+  them against the macOS table.
+- GravityMark gap unchanged (~16 %); priced so far: constant-buffer row loads ~0.04..0.05 ms in each of k48 and
+  the C0 traversal.

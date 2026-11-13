@@ -3056,6 +3056,10 @@ _Use_decl_annotations_ void AdmissionRecordMpo(ADMISSION_CONTEXT *Context) {
                                           KEY_SET_VALUE, &key)))
     return;
   WriteBinary(key, L"Wom1MpoReceipt", &snapshot, sizeof(snapshot));
+  /* HOLD-2: the timing ring, written in place (receipt-only; an entry being
+   * written at the same time may be torn, the decoder skips Kind 0). */
+  WriteBinary(key, L"Wom1MpoTiming", (const VOID *)&Context->MpoTiming,
+              sizeof(Context->MpoTiming));
   ZwClose(key);
 }
 

@@ -48,7 +48,7 @@
  * in the scanout pool and the 64 KiB placement alignment CreateAllocation
  * requests; Set3 evaluates again with the actual offset. */
 
-#define ADMISSION_MPO_CONTRACT_VERSION 6u
+#define ADMISSION_MPO_CONTRACT_VERSION 7u
 #define ADMISSION_MPO_MAX_PLANES 2u
 #define ADMISSION_MPO_SLOT_COUNT 2u
 #define ADMISSION_MPO_MIN_EXTENT 32u
@@ -167,6 +167,10 @@ typedef enum _ADMISSION_MPO_REASON {
    * not cover the panel, or is blended. */
   AdmissionMpoReasonLoneNotFullPanel = 36,
   AdmissionMpoReasonLoneBlend = 37,
+  /* Version 7 (CUR-1 v2): a clipped top plane (LayerIndex 0, Dst = panel)
+   * whose visible part is neither scratch-realisable (<= 64x64, scratch
+   * reserved) nor crop-realisable (> 64 on an axis and >= 40x39). */
+  AdmissionMpoReasonTopClip = 38,
   ADMISSION_MPO_REASON_COUNT
 } ADMISSION_MPO_REASON;
 
@@ -265,6 +269,10 @@ typedef struct _ADMISSION_MPO_INPUT {
    * them, and a Set3 refusal of a configuration Check3 accepted is a
    * defect (EXP2374: StretchQuality re-judged at Set3, ~450 refused Set3/s). */
   unsigned int Path;
+  /* ---- version 6 (CUR-1 v2) ---- */
+  /* Nonzero: the driver holds two scratch surfaces in the pool (a clipped
+   * top plane <= 64x64 is realisable through them). */
+  unsigned int ScratchAvailable;
 } ADMISSION_MPO_INPUT;
 #define ADMISSION_MPO_PATH_CHECK3 0u
 #define ADMISSION_MPO_PATH_SET3 1u
@@ -272,6 +280,22 @@ typedef struct _ADMISSION_MPO_INPUT {
 #define ADMISSION_MPO_CHECK3_ONLY_REASONS                                     \
   ((1ull << AdmissionMpoReasonStretchQuality) |                               \
    (1ull << AdmissionMpoReasonStretchFilter))
+
+/* Version 6 (CUR-1 v2): how a slot realises a clipped top plane. */
+typedef enum _ADMISSION_MPO_CLIP_MODE {
+  AdmissionMpoClipNone = 0,     /* the plane as given (Clip contains Dst) */
+  AdmissionMpoClipScratch = 1,  /* the visible block copied into a 64x64 scratch */
+  AdmissionMpoClipCrop = 2,     /* the plane cropped: Src = Dst = visible part */
+} ADMISSION_MPO_CLIP_MODE;
+#define ADMISSION_MPO_SCRATCH_EXTENT 64u
+#define ADMISSION_MPO_SCRATCH_STRIDE (ADMISSION_MPO_SCRATCH_EXTENT * 4u)
+#define ADMISSION_MPO_SCRATCH_BYTES \
+  ((unsigned long long)ADMISSION_MPO_SCRATCH_STRIDE * ADMISSION_MPO_SCRATCH_EXTENT)
+/* DCP accepts a 40x39 layer (EXP2372 HC-1) and refuses <= 32x30; a cropped
+ * layer below this is refused (TopClip) until 32x32 is measured. */
+#define ADMISSION_MPO_CROP_MIN_WIDTH 40u
+#define ADMISSION_MPO_CROP_MIN_HEIGHT 39u
+#define ADMISSION_MPO_SCRATCH_NONE 0xffffffffffffffffULL
 
 typedef struct _ADMISSION_MPO_SLOT {
   unsigned int PlaneIndex;       /* index into Planes[], or NO_PLANE */
@@ -286,6 +310,9 @@ typedef struct _ADMISSION_MPO_SLOT {
   unsigned int SurfaceStride;
   unsigned long long PoolOffset;
   unsigned long long SurfaceBytes;
+  /* ---- version 6 (CUR-1 v2): slot 1 only ---- */
+  unsigned int ClipMode;         /* ADMISSION_MPO_CLIP_MODE */
+  ADMISSION_MPO_RECT Clip;       /* visible part (Dst ∩ Clip), panel pixels */
 } ADMISSION_MPO_SLOT;
 
 typedef struct _ADMISSION_MPO_RESULT {
@@ -298,6 +325,10 @@ typedef struct _ADMISSION_MPO_RESULT {
   /* AdmissionMpoEvaluateOne only: 1 when the supported plane must be sent
    * as one layer record (COMMIT_LAYERS), 0 for the V2 PRESENT path. */
   unsigned int OnePlaneRecord;
+  /* ---- version 6 (CUR-1 v2) ---- */
+  /* Pool offset of the scratch surface a ClipScratch slot shows; set by
+   * the caller (Set3) before AdmissionMpoBuildCommit, NONE otherwise. */
+  unsigned long long ScratchOffset;
 } ADMISSION_MPO_RESULT;
 
 /* Fills *Result (when non-NULL) and returns Result->Reason. */

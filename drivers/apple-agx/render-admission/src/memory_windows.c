@@ -92,8 +92,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment5(
   AdmissionDescribeSegment5(&Context->Memory.Topology.Aperture,
                             &output->SegmentDescriptors[0]);
   local = Context->Memory.Topology.Local;
-  local.Size = Context->Memory.LocalAllocationBytes;
-  local.CommitLimit = Context->Memory.LocalAllocationBytes;
+  /* CUR-1 v2: VidMm's segment 2 ends below the scan-out scratch. */
+  local.Size = AdmissionMemoryVidMmLocalBytes(&Context->Memory);
+  local.CommitLimit = local.Size;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   local.CpuVisible = APPLE_AGX_TRUE;
 #endif
@@ -178,8 +179,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment4(
 #endif
   AdmissionDescribeSegment(&Context->Memory.Topology.Aperture, aperture);
   local_segment = Context->Memory.Topology.Local;
-  local_segment.Size = Context->Memory.LocalAllocationBytes;
-  local_segment.CommitLimit = Context->Memory.LocalAllocationBytes;
+  /* CUR-1 v2: VidMm's segment 2 ends below the scan-out scratch. */
+  local_segment.Size = AdmissionMemoryVidMmLocalBytes(&Context->Memory);
+  local_segment.CommitLimit = local_segment.Size;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   local_segment.CpuVisible = APPLE_AGX_TRUE;
 #endif

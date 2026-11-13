@@ -58,3 +58,96 @@ void AdmissionMpoHoldClear(ADMISSION_MPO_HOLD *Hold) {
     Hold->PresentId[i] = 0ULL;
   }
 }
+
+unsigned int AdmissionMpoHoldSet3(ADMISSION_MPO_HOLD *Hold,
+                                  unsigned int ListedMask,
+                                  unsigned int Acceptable, unsigned int Count,
+                                  const unsigned int *Layer,
+                                  const unsigned long long *PresentId,
+                                  unsigned int GateFree,
+                                  unsigned int *QueueCommit) {
+  unsigned int first;
+  if (QueueCommit != 0)
+    *QueueCommit = 0u;
+  if (Hold == 0 || QueueCommit == 0 || Acceptable == 0u ||
+      !AdmissionMpoHoldAdmit(Hold, ListedMask))
+    return ADMISSION_MPO_SET3_BUSY;
+  first = Hold->Valid == 0u ? 1u : 0u;
+  AdmissionMpoHoldMerge(Hold, ListedMask, Count, Layer, PresentId);
+  *QueueCommit = GateFree != 0u ? 1u : 0u;
+  return first != 0u ? ADMISSION_MPO_SET3_MERGED_FIRST
+                     : ADMISSION_MPO_SET3_MERGED_SECOND;
+}
+
+unsigned int AdmissionMpoHoldDeadline(long long Now, long long LastVsync,
+                                      long long Period, long long Lead,
+                                      long long *Deadline, long long *Wait) {
+  long long start, deadline;
+  if (Deadline != 0) *Deadline = 0;
+  if (Wait != 0) *Wait = 0;
+  if (Deadline == 0 || Wait == 0 || LastVsync <= 0 || Period <= 0 ||
+      Lead < 0 || Lead >= Period || Now < LastVsync)
+    return 0u;
+  start = LastVsync + ((Now - LastVsync) / Period) * Period;
+  deadline = start + Period - Lead;
+  *Deadline = deadline;
+  if (Now >= deadline)
+    return 0u;
+  *Wait = deadline - Now;
+  return 1u;
+}
+
+unsigned int AdmissionMpoHoldReferenceFresh(long long Now, long long LastLatch,
+                                            long long Period,
+                                            unsigned int MaxPeriods) {
+  if (LastLatch <= 0 || Period <= 0 || MaxPeriods == 0u || Now < LastLatch)
+    return 0u;
+  return Now - LastLatch <= (long long)MaxPeriods * Period ? 1u : 0u;
+}
+
+unsigned int AdmissionMpoHoldLatchMissed(long long CommitToLatch,
+                                         long long Period, long long Lead) {
+  if (Period <= 0 || Lead < 0)
+    return 0u;
+  return CommitToLatch > Lead + Period / 2 ? 1u : 0u;
+}
+
+void AdmissionMpoPhaseLatch(ADMISSION_MPO_PHASE *Phase, long long Now) {
+  if (Phase == 0 || Now <= 0)
+    return;
+  Phase->LastLatch = Now;
+  Phase->Reference = Now;
+}
+
+unsigned int AdmissionMpoPhaseTick(ADMISSION_MPO_PHASE *Phase, long long Now,
+                                   long long Period) {
+  long long d, sorted[ADMISSION_MPO_PHASE_SAMPLES], t;
+  unsigned int i, j, n;
+  if (Phase == 0 || Period <= 0 || Phase->LastLatch <= 0 || Now < Phase->LastLatch)
+    return 0u;
+  d = Now - Phase->LastLatch;
+  if (d <= Period / 2) {
+    /* A latch in this frame: a pairing sample, never a reference change. */
+    if (d > Period / 4) {
+      Phase->Rejected++;
+      return 0u;
+    }
+    Phase->Sample[Phase->Next] = d;
+    Phase->Next = (Phase->Next + 1u) % ADMISSION_MPO_PHASE_SAMPLES;
+    if (Phase->Samples < ADMISSION_MPO_PHASE_SAMPLES)
+      Phase->Samples++;
+    n = Phase->Samples;
+    for (i = 0u; i < n; ++i)
+      sorted[i] = Phase->Sample[i];
+    for (i = 1u; i < n; ++i)
+      for (j = i; j > 0u && sorted[j - 1u] > sorted[j]; --j) {
+        t = sorted[j]; sorted[j] = sorted[j - 1u]; sorted[j - 1u] = t;
+      }
+    Phase->Offset = sorted[n / 2u];
+    return 0u;
+  }
+  if (Phase->Samples == 0u || Now - Phase->Offset <= Phase->Reference)
+    return 0u;
+  Phase->Reference = Now - Phase->Offset;
+  return 1u;
+}

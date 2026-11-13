@@ -78749,3 +78749,76 @@ EXP2385/EXP2386 CORRECTION 2026-11-13T08:39:40Z (appended; the ACTUAL entries ab
 - The deadline reference was overwritten by the software vertical tick (KTIMER, about 1.07 ms after the latch), so deadline commits reached the latch at a median 3.92 ms with a 5.0 ms lead.
 - Fixed in HOLD-3c, arch/hold3 41b21c980 (counter threshold lead + period/2, split by commit source; latch phase reference). The lead-floor series (lead 3000/2000) was withdrawn by the architect before any boot: the predicted deadline-commit miss share at lead 3000 is 67-71 %.
 - Note to the floor estimate above: one EXP2385 deadline commit missed with 3.17 ms to the latch (a HOLD-3 outlier, latch-commit regime); the other 233 missed commits in both boots lie at or below 2.38 ms.
+
+EXP2387 HARDWARE BEFORE 2026-11-13T09:59:31Z:
+- Kind: one variable against EXP2386's package (arch/hold3 6b55ce6d4): arch/hold3 41b21c980, the frame reference of the HOLD-3 deadline (plus the receipt-only counter fix). The latch sets the reference. A tick within Period/4 after a latch is a pairing sample of the tick-to-latch offset (median of 5, outside pairs rejected). A tick in a frame without a latch sets the reference to tick - offset. A reference older than 4 periods commits at once. H3MissedVblanks threshold: Lead + Period/2 (was 1.5 periods). Receipt v8: H3MissedDeadline, H3StaleReference, H3MadeMinUs, H3MissMaxUs, H3TickReference, H3TickOffsetUs, H3TickPairsRejected. Lead stays 5000 (Wom1MpoLeadUs absent). ATOMIC CONTRACT: none -- the counter fields are receipt-only and change no commit decision.
+- WHY THIS HYPOTHESIS: (1) EXP2386 rings, all snapshots: deadline commits reached the latch at a median 3.92 ms (p1 2.94, min 2.25) with a 5.0 ms lead; 1.08 ms of the lead is lost every frame. (2) The vertical tick is a software KTIMER (scanout_windows.c KeSetTimer). In EXP2385 tick-source commits reached the next latch at P - 1.065 ms median (-1.65..-0.53), so the tick fires ~1.07 ms after the latch, and NoteVsync(FALSE) overwrote the reference with it. (3) The 8 % CS L1 share after the deadline in EXP2386 (phase >= 12 ms 314/3931) is the share HOLD-3b holds a frame. A deadline 1.07 ms later relative to the latch removes part of that share.
+- WINDOWS CONTRACT: unchanged (Set3 at IRQL 8 answers SUCCESS / DEVICE_BUSY; the commit DPC and EX_TIMER_HIGH_RESOLUTION as EXP2385). AGX/ASAHI CONTRACT: the swap latches at the vblank; measured scan-out cutoff 2.2-2.4 ms commit-to-latch-interrupt (EXP2385/2386 rings: made min 2.14-2.25, missed max 2.30-2.38). TRANSLATION: deadline = latch phase + k*P + P - Lead; tick and latch serialized by SynchronizeExecution. WHAT IS STILL UNKNOWN: whether the tick-to-latch offset is stable on hardware (H3TickOffsetUs, H3TickPairsRejected) and how much of the CS late share the 1 ms recovers.
+- Probe: EXP2386's unchanged (controls before any SendInput, pointer arms, PITCH-1, STRETCHWIN, GM w/r2 gated, CS warm/r2 gated in the strip scene, windowed CS, STRETCHFS); H3_ lines carry the v8 fields, TIMING_ lines the ring latch-miss count by commit source.
+- Expected: deadline commits reach the latch at a median ~5.0 ms, min ~3.3 ms (H3MadeMinUs >= 2500 on deadline-dominated arms). Deadline-commit misses ~0 (H3MissedDeadline 0 or within EXP2386's 3/5674; ring commit-deadline misses 0). Late-commit misses counted, not charged to the lead. H3TickOffsetUs ~1000-1100, H3TickPairsRejected small. Pointer arms ~60 fps as EXP2386. CS strip L1 share after the deadline below 8 %. Gated strip CS cs16 PASS (EXP2386 -2.09 %). GM PASS. HoldDropped 0, Set3RefusedAfterSupport 0, no DWM fault.
+- Failure criteria: deadline-commit misses above EXP2386's rate (ring or H3MissedDeadline); H3MadeMinUs below 2200 on a deadline commit; pointer arm fps below EXP2386; any gate miss; H3StaleReference growing during a steady scene; unreported id, HoldDropped > 0, Set3RefusedAfterSupport > 0, DWM fault, freeze. A pointer arm without flags=1 is invalid.
+- Recovery: rec2387h visible recovery; a shutdown hang -> exact-PID stop + operator power cycle + AT_PROXY.
+- Hashes: sys 83db8457179e, UmdArm64 ac95dbbffc8c, UmdX64 52e1dfb39645, Umd32 1beb3c838adb; manifest b8541d7e086f, hardware-manifest 1e5ca011ab48; probe2387.sh 97f215a8cf2e (PROBE_LINT_OK); visible recovery rec2387h 5f7716f188e2f06c; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
+- Recovery rec2387h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2387-hold3c2/run2387.sh.
+
+EXP2387 HARDWARE ACTUAL 2026-11-13T10:32:55Z:
+- Boot and run: AT_PROXY recovery rec2386h (RECOVERY_DONE), then staged arch/hold3 41b21c980 (HOLD-3c). Full probe ran to EXP2387_PROBE_DONE / CHAIN2387_DONE. STOPS 0. WER_REPORTS 2 are the two October dumps (dwm-live983, explorer-live984), the same count as EXP2385/2386. HoldDropped 0, Set3RefusedAfterSupport 0. Cursor flags=1 in every pointer arm (20-21/21). Guest alive after every arm. Recovery rec2387h started.
+- Expected vs actual, deadline commit margin: expected median ~5.0 ms, min ~3.3 ms. Ring, all snapshots pooled: deadline commits reached the latch with median 4.665 ms, p1 4.241, p5 4.383, min 3.139 (n=5935); EXP2386 was median 3.92, p1 2.94, min 2.25.
+- Learned tick-to-latch offset (H3TickOffsetUs): 0.94-1.34 ms during the boot, 1.13 ms at the end. Matches the ~1.07 ms estimate from EXP2385. H3TickPairsRejected 0. H3TickReference 53020 (frames without a latch kept their phase from the tick). H3StaleReference 0.
+- Expected vs actual, deadline-commit misses ~0:
+  - Ring classifier: 0 in every arm window, and 1 in all snapshots pooled (n=5936).
+  - Receipt H3MissedDeadline: 6 of 47475 deadline commits for the whole boot (0.013 %), against EXP2386's ring rate of 0.053 %. All 6 came before the r2 CS run; 2 of them before the first arm.
+  - H3MadeMinUs 2124, H3MissMaxUs 3070: the scan-out floor estimate stands, made at >= 2.12 ms before the latch, missed at <= 3.07 ms.
+  - Not zero: the residue is timer error near the floor (H3DeadlineErrMaxUs 1519).
+  - H3MissedVblanks 2329 for the boot: the new counter (lead + P/2) of all sources. Mostly late commits (H3CommitsLate 5593), i.e. the application's own late frames.
+- Pointer arms: FULLFS 59.92 / 59.96 fps, STRETCHFS 59.94, FULLFS through the bottom edge 59.96 (EXP2386 ~59.9). Controls FULLFS 59.91, STRETCHFS 59.31 (first second 29: window open), STRETCHWIN 59.90. All the same as EXP2386.
+- Gates:
+  - CS cs16 in the strip scene with the cursor: warm 52.384, r2 52.489. PASS +0.96 % against the 51.991 baseline. EXP2386 was -2.09 % FAIL in the same scene.
+  - GravityMark PERF PASS +0.02 % (fps_frames w 52.38, r2 52.37). PERF_GATE_PASS.
+  - Windowed CS 54.72 (not gated; EXP2386 54.35).
+- L1 phase histograms are not comparable with EXP2386: the reference moved from the tick to the latch.
+- Verdict: CONFIRMED. HOLD-3c keeps ~0.75 ms more lead before the latch (median), and the strip-scene CS gate passes. This is the merge-candidate run for CUR-1 v2 + CUR-1c + HOLD-2 base + HOLD-3 + HOLD-3b + HOLD-3c on arch/hold3 41b21c980; the merge decision is the architect's.
+- Next: the lead step (4500, then 4000) is now meaningful, with the ring/receipt deadline-miss count as the criterion.
+
+EXP2388 HARDWARE BEFORE 2026-11-13T11:19:44Z:
+- Kind: measurement boot, no driver change. Package = EXP2387's (arch/hold3 41b21c980, the merged HOLD-3 line), copied, not rebuilt; same device switches. Only arm: the OPTWIN probe exp/optwin 78bf2477d (eoptwin4 arm64 sha 507847e9fced8dadba6b06459da97d96486722ca32e8fe72a2cf68587e67c4f8). Changes against EXP2373's OPTWIN: G1u/G1du/G1cu rows (src as root RWByteAddressBuffer u2 read by Load4, the same G1 shapes and R); the root signature gains that root UAV (the SRV kernels' DXBC is unchanged, SRCU=0); APPLE_AGX_D3D12_SHADER_DUMP_DIR captures every kernel's DXBC.
+- WHY THIS HYPOTHESIS: (1) SRV-1 fact 1 (srv1-fact REPORT): GravityMark declares no buffer SRVs; its buffer reads are register raw UAVs (533 bindings), lowered to vectorized device loads. So the G1 ratio measured on root SRVs (1.45-3.98) does not price GravityMark's gathers. (2) Offline cost of the G1u form: root raw UAV 80 instructions / 7 memory ops, against 317 / 17 texture ops for the SRV form (agx_shader_cost production shape). The hardware ratio of the UAV form against Apple's G1 rows is unknown. (3) The code gate had statistics only, no DXBC of our kernels; the captures make the unexplained rows (G1 64 MB, G1c, C1, T1, B1) listable offline.
+- WINDOWS / AGX / TRANSLATION: unchanged from EXP2373 (OPTWIN batch 1); root UAV reads = load_ssbo marked in-bounds (RC75).
+- WHAT IS STILL UNKNOWN: the ours/macOS ratio of GravityMark's gather form (G1u vs Apple G1, same shapes) and whether the 64 MB growth (ours x3.8 from 16 to 64 MB, Apple x2.2) follows the form or the memory path.
+- Expected: every OPTWIN row as EXP2373 within noise (same compiler and kernels). G1u rows near Apple's G1 (ratio ~1.0-1.5 at 1 MB) if the form explains the G1 gap; G1u 64 MB growth decides the memory-path question. OPTWIN_RECORDS missing 0, oracle_bad 0; >= 30 capture files.
+- Failure criteria: a preflight hash mismatch, oracle_bad > 0 (a G1u row computing a different value), missing records, a fault or hang (exact-PID stop + recovery).
+- Recovery: rec2388h visible recovery.
+- Hashes: sys 83db8457179e, UmdArm64 ac95dbbffc8c, UmdX64 52e1dfb39645, Umd32 1beb3c838adb; manifest dd2f95346057, hardware-manifest 0e7e4f04253a; probe2388.sh e2b8567664ef (PROBE_LINT_OK); visible recovery rec2388h 552dab1804d31605; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
+- Recovery rec2388h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2388-optwin4/run2388.sh.
+
+EXP2388 HARDWARE ACTUAL 2026-11-13T11:27:07Z:
+- Boot and run: reuse of the EXP2387 package (arch/hold3 41b21c980). Staged with the same switches; CM_PROB_NONE.
+  - OPTWIN step: 11:21:34Z-11:23:45Z, probe exp/optwin 78bf2477d. Preflight hash ok local = guest 507847e9...
+  - Guest alive after the step. STOPS 0. WER_REPORTS 2 (the October dumps).
+  - Recovery rec2388h started.
+- Result line: AGX_D3D12_OPTWIN FAIL, because OPTWIN_RECORDS has missing 9 (9 of 564 reps without GPU completion records, scattered: S1_128 L1, S1_256 W56, G1d_64M GM/N32, G1u_64M GM rep 0, T1 W224, ...). oracle_bad 0, so every kernel computed the expected values. filler_in_window 648.
+  - The medians below use the reps that have records (3 per case except those 9).
+  - EXP2373 had missing 0. Cause not investigated.
+- 188 cases; 33 kernel captures (APPLE_AGX_D3D12_SHADER_DUMP_DIR + DUMP_ALL) in evidence/EXP2388/optwin-dump.
+- Reproducibility: the unchanged SRV-form rows equal EXP2373 at the GM shape (G1_1M, G1_64M, T1, C1, S1_256 now/then all 1.00).
+- Expected vs actual, ours/macOS per dispatch at the GM shape (macOS = MACOS-20261113-optwin run1+run2 medians):
+
+  | Variant | Root SRV form (today) | GravityMark form (root raw UAV Load4) |
+  |---|---|---|
+  | G1 1 MB | 3.98 | 1.19 |
+  | G1 4 MB | 2.63 | 1.43 |
+  | G1 16 MB | 1.42 | 0.99 |
+  | G1 64 MB | 2.50 | 1.32 |
+  | G1d 1 MB | 3.98 | 1.21 |
+  | G1d 64 MB | 2.75 | 1.32 |
+  | G1c 1 MB | 1.67 | 0.91 |
+  | G1c 64 MB | 1.24 | 1.41 |
+
+  - N32 shape: G1 10.77 vs G1u 1.24.
+  - Expected G1u ~1.0-1.5 at 1 MB: confirmed (1.19).
+  - The 64 MB growth is much smaller in the UAV form (16 -> 64 MB: 0.99 -> 1.32, against the SRV form's 1.42 -> 2.50). The SRV form's extra growth is the per-dword request count.
+  - What remains for GravityMark's form is 1.2-1.4x at 1, 4 and 64 MB: the memory path, not the code form.
+- Verdict: CONFIRMED (measurement). GravityMark's gather form runs at 0.99-1.43x of Apple. The 2.5-4x G1 gap is the SRV per-dword form only (SRV-1, a general defect, implemented on arch/srv1 0641fa433 + 4e5bf1239, offline G1 317 -> 80 instructions at the root).
+- Next: the SRV-1 boot (switch on vs off in one boot, OPTWIN rows); the captures go to the offline listings of the unexplained rows.
