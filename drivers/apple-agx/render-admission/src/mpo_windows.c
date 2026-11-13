@@ -1,4 +1,5 @@
 #include "render_admission.h"
+#include "apple_agx_vsync.h" /* HOLD-3: panel rate for the frame period */
 
 /* S2 kernel wiring of the two-plane MPO contract (specification v1,
  * amendments 2026-11-11).  Everything here is effective-only: dxgkrnl calls
@@ -738,11 +739,14 @@ static NTSTATUS AdmissionMpoScratchPrepare(ADMISSION_CONTEXT *Context,
   source = pool + Top->PoolOffset + (ULONGLONG)(ULONG)slot->Clip.Top * Top->SurfaceStride +
            (ULONGLONG)(ULONG)slot->Clip.Left * 4u;
   t0 = KeQueryPerformanceCounter(NULL);
-  *Zero = AdmissionMpoBlockIsZero(source, Top->SurfaceStride, w, h);
+  /* CUR-1c: one wide-load pass over the write-combined source into the
+   * cached stage; the zero test and the fill read the stage. */
+  *Zero = AdmissionMpoScratchStage(Context->MpoScratchStage, source,
+                                   Top->SurfaceStride, w, h);
   index = AdmissionMpoScratchSelect(&Context->MpoScratch, *Zero, &write);
   if (write != 0u)
     AdmissionMpoScratchFill(Context->MpoScratchCpu + index * ADMISSION_SCANOUT_SCRATCH_STEP,
-                            source, Top->SurfaceStride, w, h, ox, oy);
+                            Context->MpoScratchStage, w * 4u, w, h, ox, oy);
   else
     InterlockedIncrement(&Context->Mpo.ScratchSkippedWrites);
   KeMemoryBarrier(); /* the scratch bytes before COMMIT_LAYERS */
@@ -834,8 +838,8 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
       /* Check3 cannot see placement; Set3 can.  Do not send records the
        * table rejects.  S3-A/S3-B: for a configuration Check3 accepted this
        * is an invariant violation (counted); DEVICE_BUSY either way. */
-      if (!DryRun)
-        AdmissionMpoSet3TableRefusal(Context, result.Reason);
+      /* HOLD-2: Set3 validates by dry run; its refusal is the Set3 view. */
+      AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_DEVICE_BUSY;
     }
     if (result.Slots[1].ClipMode == AdmissionMpoClipScratch) {
@@ -887,8 +891,8 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
     pair[0] = next[1].Input;
     AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
     if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
-      if (!DryRun)
-        AdmissionMpoSet3TableRefusal(Context, result.Reason);
+      /* HOLD-2: Set3 validates by dry run; its refusal is the Set3 view. */
+      AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_DEVICE_BUSY;
     }
     if (AdmissionMpoBuildLone(&next[1].Input, &records[0]) != 1u) {
@@ -928,8 +932,8 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
     pair[0] = next[0].Input;
     AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
     if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
-      if (!DryRun)
-        AdmissionMpoSet3TableRefusal(Context, result.Reason);
+      /* HOLD-2: Set3 validates by dry run; its refusal is the Set3 view. */
+      AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_DEVICE_BUSY;
     }
     status = DryRun ? STATUS_SUCCESS : AdmissionScanoutMpoCommit(Context, records, 1u, completion,
@@ -954,8 +958,8 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
     pair[0] = next[0].Input;
     AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
     if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
-      if (!DryRun)
-        AdmissionMpoSet3TableRefusal(Context, result.Reason);
+      /* HOLD-2: Set3 validates by dry run; its refusal is the Set3 view. */
+      AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_DEVICE_BUSY;
     }
     if (result.OnePlaneRecord != 0u) {
@@ -1081,21 +1085,36 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     AdmissionMpoCompletionAdd(&completion, 0u, 0ULL);
   }
 
-  /* HOLD-1: a commit is outstanding (or a held set waits): join the held
-   * set when every listed layer is free there and the merged set would be
-   * accepted (SUCCESS, committed at the latch); otherwise DEVICE_BUSY and
-   * dxgkrnl re-offers the flip (EXP2375). */
-  if (!AdmissionScanoutMpoGateFree(Context) || Context->MpoHold.Valid) {
+  if (Args->PlaneCount == 0u) {
+    /* ForcePlanesOff is not a swap (plane-off completion at the next vsync):
+     * direct when nothing is pending, else re-offered. */
+    if (!AdmissionScanoutMpoGateFree(Context) || Context->MpoHold.Valid)
+      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
+    status = AdmissionMpoApply(Context, next, listed, &completion, FALSE);
+    return AdmissionMpoBusyNote(Context, &completion, status);
+  }
+  /* HOLD-2: Set3 never submits.  The flip joins the pending set (HOLD-1
+   * rules: one flip per layer, a same-layer second flip DEVICE_BUSY) when
+   * the merged set passes the Set3 table; the commit is issued by the commit
+   * DPC queued here when no swap is outstanding (it runs after dxgkrnl's
+   * vsync DPC pass, so both layers of a pass travel in one swap), or by the
+   * latch handler when one is. */
+  {
     const ULONG mask = (listed[0] ? 1u : 0u) | (listed[1] ? 2u : 0u);
     ADMISSION_MPO_PLANE_STATE candidate[2];
     BOOLEAN merged[2];
+    unsigned int layers[2] = {0u, 0u};
+    unsigned long long ids[2] = {0ULL, 0ULL};
+    unsigned int acceptable = 0u, queue = 0u, outcome, first;
+    RtlZeroMemory(candidate, sizeof(candidate));
+    RtlZeroMemory(merged, sizeof(merged));
     if (InterlockedCompareExchange(&Context->MpoHoldLock, 1, 0) != 0) {
       InterlockedIncrement(&Context->Mpo.HoldContended);
+      AdmissionMpoTimingRecord(Context, ADMISSION_MPO_TIMING_SET3_BUSY, mask,
+                               completion.Count != 0u ? completion.PresentId[0] : 0ULL);
       return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
     }
-    status = STATUS_DEVICE_BUSY;
-    if (Args->PlaneCount != 0u &&
-        AdmissionMpoHoldAdmit(&Context->MpoHold, mask)) {
+    if (AdmissionMpoHoldAdmit(&Context->MpoHold, mask)) {
       for (layer = 0u; layer < 2u; ++layer) {
         candidate[layer] = listed[layer] || !Context->MpoHold.Valid
                                ? next[layer]
@@ -1104,34 +1123,75 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
                         (Context->MpoHold.Valid &&
                          (Context->MpoHold.ListedMask & (1u << layer)) != 0u);
       }
-      if (NT_SUCCESS(AdmissionMpoApply(Context, candidate, merged,
-                                       &completion, TRUE))) {
-        unsigned int layers[2];
-        unsigned long long ids[2];
-        for (index = 0u; index < completion.Count && index < 2u; ++index) {
-          layers[index] = (unsigned int)completion.LayerIndex[index];
-          ids[index] = (unsigned long long)completion.PresentId[index];
-        }
-        RtlCopyMemory(Context->MpoHoldNext, candidate, sizeof(candidate));
-        AdmissionMpoHoldMerge(&Context->MpoHold, mask, completion.Count,
-                              layers, ids);
-        InterlockedIncrement(&Context->Mpo.HoldMerges);
-        status = STATUS_SUCCESS;
-      }
+      acceptable = NT_SUCCESS(AdmissionMpoApply(Context, candidate, merged,
+                                                &completion, TRUE)) ? 1u : 0u;
     }
-    if (status == STATUS_DEVICE_BUSY)
+    for (index = 0u; index < completion.Count && index < 2u; ++index) {
+      layers[index] = (unsigned int)completion.LayerIndex[index];
+      ids[index] = (unsigned long long)completion.PresentId[index];
+    }
+    first = Context->MpoHold.Valid == 0u ? 1u : 0u;
+    outcome = AdmissionMpoHoldSet3(&Context->MpoHold, mask, acceptable,
+                                   completion.Count, layers, ids,
+                                   AdmissionScanoutMpoGateFree(Context) ? 1u : 0u,
+                                   &queue);
+    if (outcome == ADMISSION_MPO_SET3_BUSY) {
       InterlockedIncrement(&Context->Mpo.HoldBusy);
+      /* HOLD-3b receipt: the layer already had a pending flip. */
+      if ((Context->MpoHold.ListedMask & mask & 1u) != 0u)
+        InterlockedIncrement(&Context->Mpo.H3SameLayerBusyL0);
+      if ((Context->MpoHold.ListedMask & mask & 2u) != 0u)
+        InterlockedIncrement(&Context->Mpo.H3SameLayerBusyL1);
+      status = STATUS_DEVICE_BUSY;
+    } else {
+      RtlCopyMemory(Context->MpoHoldNext, candidate, sizeof(candidate));
+      if (first != 0u)
+        Context->MpoHoldFirstQpc = KeQueryPerformanceCounter(NULL).QuadPart;
+      InterlockedIncrement(&Context->Mpo.HoldMerges);
+      InterlockedIncrement(outcome == ADMISSION_MPO_SET3_MERGED_FIRST
+                               ? &Context->Mpo.H2Set3MergedFirst
+                               : &Context->Mpo.H2Set3MergedSecond);
+      {
+        /* HOLD-3 receipt: the Set3 phase after the last vsync, per layer. */
+        LARGE_INTEGER f;
+        const LONGLONG now = KeQueryPerformanceCounter(&f).QuadPart;
+        const LONGLONG last = InterlockedCompareExchange64(&Context->MpoLastVsyncQpc, 0, 0);
+        if (last != 0 && now >= last && f.QuadPart > 0) {
+          LONGLONG bin = ((now - last) * 1000LL / f.QuadPart) / 2;
+          if (bin > 8) bin = 8;
+          if (listed[0]) InterlockedIncrement(&Context->Mpo.H3PhaseL0[bin]);
+          if (listed[1]) InterlockedIncrement(&Context->Mpo.H3PhaseL1[bin]);
+        }
+      }
+      status = STATUS_SUCCESS;
+    }
     InterlockedExchange(&Context->MpoHoldLock, 0);
+    AdmissionMpoTimingRecord(Context,
+        outcome == ADMISSION_MPO_SET3_BUSY ? ADMISSION_MPO_TIMING_SET3_BUSY
+        : outcome == ADMISSION_MPO_SET3_MERGED_FIRST ? ADMISSION_MPO_TIMING_SET3_FIRST
+                                                     : ADMISSION_MPO_TIMING_SET3_SECOND,
+        mask, ids[0]);
+    if (queue != 0u &&
+        InterlockedCompareExchange(&Context->MpoCommitDpcReady, 0, 0) != 0)
+      (void)KeInsertQueueDpc(&Context->MpoCommitDpc, NULL, NULL);
     return AdmissionMpoBusyNote(Context, &completion, status);
   }
-  status = AdmissionMpoApply(Context, next, listed, &completion, FALSE);
-  return AdmissionMpoBusyNote(Context, &completion, status);
 }
 
 /* HOLD-1: the latch handler (scan-out ISR, the gate just released) and the
  * vertical tick commit the held set exactly once; a commit that meets the
  * gate or a runtime obstacle again keeps the set for the next tick. */
 _Use_decl_annotations_ VOID AdmissionMpoCommitPending(ADMISSION_CONTEXT *Context) {
+  AdmissionMpoCommitPendingSource(Context, ADMISSION_MPO_TIMING_COMMIT_LATCH);
+}
+
+/* HOLD-2: the one commit path.  Source = ADMISSION_MPO_TIMING_COMMIT_DPC
+ * (the commit DPC, through DxgkCbSynchronizeExecution), _LATCH (the latch
+ * handler) or _TICK (the vertical tick, which also drives the retry of a
+ * commit that met an obstacle with nothing outstanding).  Device IRQL,
+ * serialised with the scan-out ISR. */
+_Use_decl_annotations_ VOID AdmissionMpoCommitPendingSource(
+    ADMISSION_CONTEXT *Context, ULONG Source) {
   ADMISSION_MPO_HOLD taken;
   ADMISSION_MPO_PLANE_STATE next[2];
   ADMISSION_MPO_COMPLETION completion;
@@ -1153,10 +1213,289 @@ _Use_decl_annotations_ VOID AdmissionMpoCommitPending(ADMISSION_CONTEXT *Context
       AdmissionMpoHoldRestore(&Context->MpoHold, &taken);
       InterlockedIncrement(&Context->Mpo.HoldCommitRetries);
     } else if (NT_SUCCESS(status)) {
+      LONGLONG frequency = 0, now;
+      LARGE_INTEGER f;
+      now = KeQueryPerformanceCounter(&f).QuadPart;
+      frequency = f.QuadPart;
       InterlockedIncrement(&Context->Mpo.HoldCommits);
+      InterlockedIncrement(Source == ADMISSION_MPO_TIMING_COMMIT_DPC
+                               ? &Context->Mpo.H2CommitsFromDpc
+                           : Source == ADMISSION_MPO_TIMING_COMMIT_TICK
+                               ? &Context->Mpo.H2CommitsFromTick
+                           : Source == ADMISSION_MPO_TIMING_COMMIT_DEADLINE
+                               ? &Context->Mpo.H3CommitsDeadline
+                               : &Context->Mpo.H2CommitsFromLatch);
+      if (Source == ADMISSION_MPO_TIMING_COMMIT_DPC)
+        InterlockedIncrement(&Context->Mpo.H3CommitsLate);
+      InterlockedExchange(&Context->MpoLastCommitSource, (LONG)Source);
+      InterlockedExchange64(&Context->MpoLastCommitQpc, now);
+      if (taken.ListedMask == 3u)
+        InterlockedIncrement(&Context->Mpo.H2TwoLayerCommits);
+      if (frequency > 0 && Context->MpoHoldFirstQpc != 0 &&
+          now > Context->MpoHoldFirstQpc) {
+        const LONGLONG us = (now - Context->MpoHoldFirstQpc) * 1000000LL / frequency;
+        const LONG v = us > 0x7fffffffLL ? 0x7fffffff : (LONG)us;
+        if (v > Context->Mpo.H2MaxSet3ToCommitUs)
+          InterlockedExchange(&Context->Mpo.H2MaxSet3ToCommitUs, v);
+      }
+      Context->MpoHoldFirstQpc = 0;
+      AdmissionMpoTimingRecord(Context, Source, taken.ListedMask,
+                               taken.Count != 0u ? taken.PresentId[0] : 0ULL);
     } else {
       InterlockedIncrement(&Context->Mpo.HoldDropped);
     }
   }
   InterlockedExchange(&Context->MpoHoldLock, 0);
+}
+
+/* HOLD-2 receipt: the Set3 / commit / latch timing ring (receipt-only). */
+_Use_decl_annotations_ VOID AdmissionMpoTimingRecord(ADMISSION_CONTEXT *Context,
+                                                     ULONG Kind, ULONG Mask,
+                                                     ULONGLONG Id) {
+  ADMISSION_MPO_TIMING_ENTRY *e;
+  ULONG slot;
+  if (Context == NULL)
+    return;
+  slot = (ULONG)InterlockedIncrement(&Context->MpoTiming.Next) - 1u;
+  e = &Context->MpoTiming.Entries[slot % ADMISSION_MPO_TIMING_ENTRIES];
+  e->Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  e->Id = (ULONG)Id;
+  e->Kind = (UCHAR)Kind;
+  e->Cpu = (UCHAR)KeGetCurrentProcessorNumber();
+  e->Irql = (UCHAR)KeGetCurrentIrql();
+  e->Mask = (UCHAR)Mask;
+}
+
+static BOOLEAN AdmissionMpoCommitSync(PVOID Opaque) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Opaque;
+  /* A swap outstanding: the latch handler commits the set. */
+  if (context != NULL && AdmissionScanoutMpoGateFree(context))
+    AdmissionMpoCommitPendingSource(context, ADMISSION_MPO_TIMING_COMMIT_DPC);
+  return TRUE;
+}
+
+static BOOLEAN AdmissionMpoCommitSyncDeadline(PVOID Opaque) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Opaque;
+  if (context != NULL && AdmissionScanoutMpoGateFree(context))
+    AdmissionMpoCommitPendingSource(context, ADMISSION_MPO_TIMING_COMMIT_DEADLINE);
+  return TRUE;
+}
+
+/* HOLD-3: the frame deadline fired (DISPATCH_LEVEL). */
+static EXT_CALLBACK AdmissionMpoDeadlineCallback;
+static VOID AdmissionMpoDeadlineCallback(_In_ PEX_TIMER Timer, _In_opt_ PVOID Opaque) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Opaque;
+  LARGE_INTEGER f;
+  LONGLONG now, us;
+  LONG err;
+  BOOLEAN done = FALSE;
+  UNREFERENCED_PARAMETER(Timer);
+  if (context == NULL)
+    return;
+  now = KeQueryPerformanceCounter(&f).QuadPart;
+  InterlockedExchange(&context->MpoDeadlineArmed, 0);
+  if (f.QuadPart > 0) {
+    us = (now - context->MpoDeadlineQpc) * 1000000LL / f.QuadPart;
+    err = us > 0x7fffffffLL ? 0x7fffffff : us < -0x7fffffffLL ? -0x7fffffff : (LONG)us;
+    if (InterlockedIncrement(&context->Mpo.H3DeadlineErrN) == 1 ||
+        err < context->Mpo.H3DeadlineErrMinUs)
+      InterlockedExchange(&context->Mpo.H3DeadlineErrMinUs, err);
+    if (err > context->Mpo.H3DeadlineErrMaxUs)
+      InterlockedExchange(&context->Mpo.H3DeadlineErrMaxUs, err);
+    InterlockedExchangeAdd(&context->Mpo.H3DeadlineErrSumUs, err);
+  }
+  if (InterlockedCompareExchange(&context->MpoCommitDpcReady, 0, 0) == 0 ||
+      !context->InterfaceValid ||
+      context->Interface.DxgkCbSynchronizeExecution == NULL)
+    return;
+  (void)context->Interface.DxgkCbSynchronizeExecution(
+      context->Interface.DeviceHandle, AdmissionMpoCommitSyncDeadline, context,
+      0u, &done);
+}
+
+/* HOLD-3c: a scan-out latch (ISR) is the frame reference (mpo_hold.h phase
+ * tracker).  A latch more than Lead + Period/2 after its commit is a missed
+ * vblank. */
+_Use_decl_annotations_ VOID AdmissionMpoNoteLatch(ADMISSION_CONTEXT *Context) {
+  LARGE_INTEGER f;
+  const LONGLONG now = KeQueryPerformanceCounter(&f).QuadPart;
+  LONGLONG commit;
+  LONG source;
+  if (Context == NULL)
+    return;
+  source = InterlockedExchange(&Context->MpoLastCommitSource, 0);
+  commit = InterlockedExchange64(&Context->MpoLastCommitQpc, 0);
+  if (commit != 0 && now >= commit && f.QuadPart > 0) {
+    const LONGLONG d = now - commit;
+    if (AdmissionMpoHoldLatchMissed(d, Context->MpoPeriodQpc, Context->MpoLeadQpc)) {
+      const LONGLONG us = (d - Context->MpoPeriodQpc) * 1000000LL / f.QuadPart;
+      const LONG v = us > 0x7fffffffLL ? 0x7fffffff : us < -0x7fffffffLL ? -0x7fffffff : (LONG)us;
+      InterlockedIncrement(&Context->Mpo.H3MissedVblanks);
+      if (source == (LONG)ADMISSION_MPO_TIMING_COMMIT_DEADLINE)
+        InterlockedIncrement(&Context->Mpo.H3MissedDeadline);
+      if (v > Context->Mpo.H3MissMaxUs)
+        InterlockedExchange(&Context->Mpo.H3MissMaxUs, v);
+    } else {
+      const LONGLONG us = d * 1000000LL / f.QuadPart;
+      const LONG v = us > 0x7fffffffLL ? 0x7fffffff : (LONG)us;
+      if (Context->Mpo.H3MadeMinUs == 0 || v < Context->Mpo.H3MadeMinUs)
+        InterlockedExchange(&Context->Mpo.H3MadeMinUs, v);
+    }
+  }
+  AdmissionMpoPhaseLatch(&Context->MpoPhase, now);
+  InterlockedExchange64(&Context->MpoLastVsyncQpc, Context->MpoPhase.Reference);
+}
+
+/* HOLD-3c: the software vertical tick (SynchronizeExecution, serialized with
+ * the ISR) learns the tick-to-latch offset after a latch and, in a frame
+ * without one, sets the reference to tick - offset. */
+_Use_decl_annotations_ VOID AdmissionMpoNoteTick(ADMISSION_CONTEXT *Context) {
+  LARGE_INTEGER f;
+  const LONGLONG now = KeQueryPerformanceCounter(&f).QuadPart;
+  if (Context == NULL)
+    return;
+  if (AdmissionMpoPhaseTick(&Context->MpoPhase, now, Context->MpoPeriodQpc)) {
+    InterlockedIncrement(&Context->Mpo.H3TickReference);
+    InterlockedExchange64(&Context->MpoLastVsyncQpc, Context->MpoPhase.Reference);
+  }
+  if (f.QuadPart > 0)
+    InterlockedExchange(&Context->Mpo.H3TickOffsetUs,
+                        (LONG)(Context->MpoPhase.Offset * 1000000LL / f.QuadPart));
+  InterlockedExchange(&Context->Mpo.H3TickPairsRejected,
+                      (LONG)Context->MpoPhase.Rejected);
+}
+
+static KDEFERRED_ROUTINE AdmissionMpoCommitDpcRoutine;
+static VOID AdmissionMpoCommitDpcRoutine(_In_ PKDPC Dpc,
+                                         _In_opt_ PVOID DeferredContext,
+                                         _In_opt_ PVOID Argument1,
+                                         _In_opt_ PVOID Argument2) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)DeferredContext;
+  BOOLEAN done = FALSE;
+  UNREFERENCED_PARAMETER(Dpc);
+  UNREFERENCED_PARAMETER(Argument1);
+  UNREFERENCED_PARAMETER(Argument2);
+  if (context == NULL ||
+      InterlockedCompareExchange(&context->MpoCommitDpcReady, 0, 0) == 0 ||
+      !context->InterfaceValid ||
+      context->Interface.DxgkCbSynchronizeExecution == NULL)
+    return;
+  /* HOLD-3: a swap outstanding -> the latch commits; before this frame's
+   * deadline -> arm the deadline timer (once); after it -> commit now. */
+  if (!AdmissionScanoutMpoGateFree(context) || !context->MpoHold.Valid)
+    return;
+  if (context->MpoDeadlineTimer != NULL) {
+    LARGE_INTEGER f;
+    long long deadline = 0, wait = 0;
+    const LONGLONG now = KeQueryPerformanceCounter(&f).QuadPart;
+    LONGLONG reference = InterlockedCompareExchange64(&context->MpoLastVsyncQpc, 0, 0);
+    /* HOLD-3c: no fresh latch -> no phase: commit now. */
+    if (!AdmissionMpoHoldReferenceFresh(now, reference, context->MpoPeriodQpc,
+                                        ADMISSION_MPO_REFERENCE_MAX_PERIODS)) {
+      if (reference != 0)
+        InterlockedIncrement(&context->Mpo.H3StaleReference);
+      reference = 0;
+    }
+    if (AdmissionMpoHoldDeadline(now, reference,
+                                 context->MpoPeriodQpc, context->MpoLeadQpc,
+                                 &deadline, &wait)) {
+      if (InterlockedCompareExchange(&context->MpoDeadlineArmed, 1, 0) == 0 &&
+          f.QuadPart > 0) {
+        context->MpoDeadlineQpc = deadline;
+        InterlockedIncrement(&context->Mpo.H3TimerArms);
+        (void)ExSetTimer(context->MpoDeadlineTimer,
+                         -(LONGLONG)((wait * 10000000LL) / f.QuadPart), 0LL, NULL);
+      }
+      return;
+    }
+  }
+  (void)context->Interface.DxgkCbSynchronizeExecution(
+      context->Interface.DeviceHandle, AdmissionMpoCommitSync, context, 0u,
+      &done);
+}
+
+_Use_decl_annotations_ VOID AdmissionMpoCommitDpcStart(ADMISSION_CONTEXT *Context) {
+  if (Context == NULL)
+    return;
+  KeInitializeDpc(&Context->MpoCommitDpc, AdmissionMpoCommitDpcRoutine, Context);
+  Context->MpoHoldFirstQpc = 0;
+  /* HOLD-3: the deadline timer; without it Set3 commits through the DPC at
+   * once (HOLD-2 behaviour). */
+  Context->MpoDeadlineArmed = 0;
+  Context->MpoNoLatchRun[0] = Context->MpoNoLatchRun[1] = 0;
+  Context->MpoLastVsyncQpc = 0;
+  Context->MpoLastCommitQpc = 0;
+  Context->MpoLastCommitSource = 0;
+  RtlZeroMemory(&Context->MpoPhase, sizeof(Context->MpoPhase));
+  if (Context->MpoDeadlineTimer == NULL)
+    Context->MpoDeadlineTimer = ExAllocateTimer(AdmissionMpoDeadlineCallback,
+                                                Context, EX_TIMER_HIGH_RESOLUTION);
+  {
+    LARGE_INTEGER f;
+    (void)KeQueryPerformanceCounter(&f);
+    /* Period from the panel rate (fixed 16.16 Hz, apple_agx_vsync.h). */
+    Context->MpoPeriodQpc = (LONGLONG)(((ULONGLONG)f.QuadPart * 65536ULL) /
+                                       APPLE_AGX_VSYNC_RATE_NUMERATOR);
+    Context->MpoLeadQpc = (LONGLONG)(((ULONGLONG)f.QuadPart * Context->MpoLeadUs) /
+                                     1000000ULL);
+    Context->Mpo.H3LeadUs = (LONG)Context->MpoLeadUs;
+  }
+  RtlZeroMemory(&Context->MpoTiming, sizeof(Context->MpoTiming));
+  Context->MpoTiming.Version = ADMISSION_MPO_TIMING_VERSION;
+  {
+    LARGE_INTEGER f;
+    (void)KeQueryPerformanceCounter(&f);
+    Context->MpoTiming.Frequency = f.QuadPart;
+  }
+  InterlockedExchange(&Context->MpoCommitDpcReady, 1);
+}
+
+/* NP-2 order: no new queueing, remove a queued one, drain a running one. */
+_Use_decl_annotations_ VOID AdmissionMpoCommitDpcStop(ADMISSION_CONTEXT *Context) {
+  if (Context == NULL ||
+      InterlockedExchange(&Context->MpoCommitDpcReady, 0) == 0)
+    return;
+  /* HOLD-3: cancel the deadline timer and wait for a running callback. */
+  if (Context->MpoDeadlineTimer != NULL) {
+    (void)ExDeleteTimer(Context->MpoDeadlineTimer, TRUE, TRUE, NULL);
+    Context->MpoDeadlineTimer = NULL;
+  }
+  InterlockedExchange(&Context->MpoDeadlineArmed, 0);
+  (void)KeRemoveQueueDpc(&Context->MpoCommitDpc);
+  KeFlushQueuedDpcs();
+}
+
+/* HOLD-3b: one decision point (the commit DPC's deadline rule) for every
+ * source; a set committed at the latch and one committed at this frame's
+ * deadline reach the screen at the same vblank, so the latch never commits
+ * (EXP2385: latch commits locked an every-other-vsync regime). */
+_Use_decl_annotations_ VOID AdmissionMpoQueueCommit(ADMISSION_CONTEXT *Context,
+                                                    BOOLEAN Latch) {
+  if (Context == NULL || !Context->MpoHold.Valid)
+    return;
+  if (Latch)
+    InterlockedIncrement(&Context->Mpo.H3HeldAtLatch);
+  if (InterlockedCompareExchange(&Context->MpoCommitDpcReady, 0, 0) != 0)
+    (void)KeInsertQueueDpc(&Context->MpoCommitDpc, NULL, NULL);
+}
+
+_Use_decl_annotations_ VOID AdmissionMpoNoteNotify(ADMISSION_CONTEXT *Context) {
+  ULONG layer;
+  if (Context == NULL)
+    return;
+  for (layer = 0u; layer < 2u; ++layer) {
+    const LONG accepted = layer != 0u ? Context->Mpo.AcceptedIds1 : Context->Mpo.AcceptedIds0;
+    const LONG reported = layer != 0u ? Context->Mpo.ReportedIds1 : Context->Mpo.ReportedIds0;
+    if (accepted - reported > 0) {
+      const LONG run = ++Context->MpoNoLatchRun[layer];
+      InterlockedIncrement(layer != 0u ? &Context->Mpo.H3NoLatchFramesL1
+                                       : &Context->Mpo.H3NoLatchFramesL0);
+      if (layer != 0u ? run > Context->Mpo.H3MaxNoLatchRunL1
+                      : run > Context->Mpo.H3MaxNoLatchRunL0)
+        InterlockedExchange(layer != 0u ? &Context->Mpo.H3MaxNoLatchRunL1
+                                        : &Context->Mpo.H3MaxNoLatchRunL0, run);
+    } else {
+      Context->MpoNoLatchRun[layer] = 0;
+    }
+  }
 }

@@ -76,8 +76,21 @@ static APPLE_AGX_SCANOUT_U64 AdmissionScanoutNow(void*p){(void)p;return fakeNow/
 static void AdmissionPagingDpc(ADMISSION_CONTEXT*c){(void)c;}
 static VOID AdmissionPlatformMailboxDpc(ADMISSION_CONTEXT *Context) { (void)Context; } /* IRQ-completion step 2 */
 static VOID AdmissionMpoPublishStop(ADMISSION_CONTEXT *Context) { (void)Context; } /* NP-1: receipt work item (receipts.c) */
-static unsigned commit_pending_calls; /* RQ-1: when the held set may go */
-static VOID AdmissionMpoCommitPending(ADMISSION_CONTEXT *Context) { (void)Context; ++commit_pending_calls; } /* HOLD-1 (mpo_windows.c); the replay holds no set */
+/* HOLD-1/2 (mpo_windows.c); the replay holds no set: the ISR commits through AdmissionMpoCommitPendingSource. */
+/* HOLD-2 (mpo_windows.c / render_admission.h): commit sources and the timing ring. */
+#define ADMISSION_MPO_TIMING_COMMIT_LATCH 5u
+#define ADMISSION_MPO_TIMING_COMMIT_TICK 6u
+#define ADMISSION_MPO_TIMING_LATCH 7u
+static unsigned commit_latch_calls, commit_tick_calls, timing_latches;
+/* HOLD-3b: the ISR hands a held set to the commit DPC; it never commits. */
+static VOID AdmissionMpoQueueCommit(ADMISSION_CONTEXT *Context, BOOLEAN Latch) { (void)Context; if (Latch) ++commit_latch_calls; else ++commit_tick_calls; }
+static unsigned notify_notes;
+static VOID AdmissionMpoNoteNotify(ADMISSION_CONTEXT *Context) { (void)Context; ++notify_notes; }
+static VOID AdmissionMpoTimingRecord(ADMISSION_CONTEXT *Context, ULONG Kind, ULONG Mask, ULONGLONG Id) { (void)Context; (void)Mask; (void)Id; if (Kind == ADMISSION_MPO_TIMING_LATCH) ++timing_latches; }
+static VOID AdmissionMpoCommitDpcStop(ADMISSION_CONTEXT *Context) { (void)Context; }
+static unsigned vsync_notes, latch_notes; /* HOLD-3 */
+static VOID AdmissionMpoNoteLatch(ADMISSION_CONTEXT *Context) { (void)Context; ++vsync_notes; ++latch_notes; }
+static VOID AdmissionMpoNoteTick(ADMISSION_CONTEXT *Context) { (void)Context; ++vsync_notes; }
 static VOID AdmissionMpoHoldClear(void *Hold) { (void)Hold; } /* HOLD-1 (mpo_hold.c) */
 static void AdmissionSchedulerDpc(ADMISSION_CONTEXT*c){(void)c;}
 static void AdmissionRenderCorrelationDpcWindows(ADMISSION_CONTEXT*c,ULONG f,ULONGLONG t){(void)c;(void)f;(void)t;}

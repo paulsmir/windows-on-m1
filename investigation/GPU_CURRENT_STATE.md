@@ -5307,3 +5307,1107 @@ Decisions:
   stays unadvertised until flag + plane count + caps DDI + Check3 + Set3 can ship in one package.
 - Offline in parallel (no bench time): broker ABI V3 in m1n1 and the pure Check3 rule table in the KMD.
 - Open design item: the application surface's alpha byte in the lowest slot (needs a visible check or a guarantee).
+
+## UPDATE 2026-11-11T12:05:58Z -- EXP2340 TDR-H0 read: firmware 13.5 acknowledges the host halt request; stage 3H gets a first recovery step (offline)
+
+Evidence (read by the architect from the Mac copies; the ACTUAL entry and the WER bugcheck reading stay with the
+bench session and were not yet in the ledger at this stamp):
+`.local/experiments/EXP2340-tdr-h0/evidence/EXP2340/h0-decode.json`, raw `pre-disable/Wom1GpuReset` (1144 bytes,
+version 6; the last 80 bytes decoded by hand match the tool output).
+- OBSERVED: observe ran, skip none, endpoint 0x21, message 0x0085000000000000 (N = 0), send ok, acked 1 after 2 ms
+  (2 polls, first change 2 ms), worker wait 0 ms. Status words before {halt_count 0, halted 0, resume 0}, after
+  {halt_count 1, halted 1, resume 0}.
+- OBSERVED: the reset that followed is unchanged and failed as in EXP2324: three entries (ResetEngine 282717 ms,
+  ResetEngine 283751 ms, ResetFromTimeout 284775 ms), each 0xc0000483 at stage quiesce after 1000 ms; packet
+  active, fence 0xcdd7 (completed 0xcdd6); compute queue done 362 / write 363, stamp 0x3d9f00 (expected 0x3da000),
+  no event seen, identical before and after; RTKit not crashed; Wom1FirmwareRecovery deadline_expiries 1,
+  longest job 3116 ms; Wom1GpuFault empty.
+- Pre-registered reading (EXP2340 BEFORE): Acked 1 with After[0] = Sent + 1 and Before[0] = Sent ->
+  "13.5 implements the host halt". H0: CONFIRMED. The N / N+1 counting rule of macOS 15 holds on 13.5 for N = 0.
+- NOT SHOWN by this run: that the looping kernel stopped executing (the halt left the job unretired and no event
+  arrived within the 1000 ms that followed); what the firmware does with the unretired entry after a resume; the
+  rule for N > 0.
+Decisions:
+1. Stage 3H is worth implementing (U10 plan item 5, "acknowledgement -> stage 3H"). The cold SGX cycle stays the
+   fallback for "halt not acknowledged"; the warm ASC restart stays demoted.
+2. First recovery step TDR-3H-R1 (class C, opt-in switch, default off, offline now): after the acknowledgement
+   apply only what is sourced for 13.5 -- the resume Asahi uses for a halted firmware (halted = 0, resume = 1) --
+   and let the unchanged reset follow, with a receipt that records what the firmware does next. The macOS 15
+   two-phase resume (2 / 3 / 0), ring-index rewrites and channel-table rebuilds are NOT part of R1: none has a
+   13.5 source. Specification: `.local/handoff/OV-ARCHITECT-HANDOFF.md`, entry of this stamp.
+3. Bench order unchanged (MPO H1 -> band boot 2 -> FS-D1). R1 gets a bench slot only after its code is verified
+   offline; it does not move ahead of the GravityMark items.
+
+UPDATE 2026-11-11T12:54:13Z (architect): EXP2342 MPO H1 CONFIRMED -- DCP 13.5 latches a two-slot
+swap and the removal form in both alpha forms (panel appearance not observed). The
+working m1n1 chainloaded directly over the H1 m1n1 failed DCP init (timeout); cause
+not separated between owner-to-owner re-init and the two-slot use, no discriminator
+(product restarts are SoC resets). Rule: leave a diagnostic IOMFB-owner image through
+a proxy reboot. Order now: band boot 2 (fd410f54c) -> band boot 3 -> FS-D1; S2 first
+advertised boot waits for the merged kernel+UMD halves, an MSVC build and an m1n1
+image with AGX_SCANOUT_TWO_LAYERS=1.
+
+UPDATE 2026-11-11T13:21:10Z (architect): next causal target and bench order changed -- S2 first.
+User instruction: all forces on the plane route to its first boot; design to the full
+production end state, switches and narrowed rules are verification steps only.
+S2 halves + amendments A1 (kernel: one-plane Check3 = V2 path rule, slot 1 retired before
+hide/mode commit; UMD: two-plane predicate from device feature bit 0x20) accepted OFFLINE on
+arch/s2-umd-mpo ee7baea83 (= package fd410f54c + S2 only). NOT VERIFIED: MSVC, hardware.
+Order after EXP2341: S2-0a (new package, working m1n1, switch unset) -> S2-0b (two-layer
+m1n1, switch unset) -> S2-1 (Wom1MpoTwoPlanes=1) -> band boot 3 -> FS-D1 -> TDR-3H-R1.
+BEFORE draft (unknowns U-1..U-6 with receipts) and the end-state list S2-FULL (F-1..F-10:
+default-on, all modes, DCP scaling = the real fullscreen path, any window width, removal
+without stale pixels) are in `.local/handoff/OV-ARCHITECT-HANDOFF.md`, entry 2026-11-11T13:20Z.
+Job rows: the +0.72/+0.56/+0.31 ranking predates the PF1 fold (EXP2309 package); it is being
+recomputed from fold-on FULL runs before any job-row lever is chosen.
+
+## UPDATE 2026-11-11T13:28Z (architect): per-job gap ranking recomputed on the fold-on package (RANKING-REFRESH)
+
+Source: /Users/pavel/public_windows/.local/night-20261110/ranking-refresh/REPORT.md (out-compare.txt, out-incx.txt,
+out-foreign.txt). Runs: EXP2339 f0a (8047) and f0b (7962), package fd410f54c, control switch set, windowed HD,
+-temporal 0, same Apple capture and same scene mapping as the EXP2309 ranking (lag 0.00 s, execute offset 63).
+EXP2341 and EXP2337 were not used (no ACTUAL yet / old wait form). This supersedes the EXP2309 ranking above as the
+working ranking; the EXP2309 entry is not edited.
+
+Method change (required by the fold): under PF1 the renders have no prelude row, nb.py starts render busy time at
+TA end, so the old "X work" rows of R1/R3/R5 and the old "non-busy" row are NOT comparable any more. Comparable row
+per job: inc = busy + gap (completion to completion), the counterpart of Apple's i_X; it partitions the frame.
+
+Whole run, ms per frame, f0a / f0b:
+
+- Frame: ours 20.136 / 20.308, Apple 16.462 -> gap +3.673 / +3.846 (81.8 % / 81.1 % by frame time). EXP2309: +4.343.
+- Exact partition of the gap:
+  - waiting behind another process's GPU job (class e, the DWM row): 1.014 / 0.945. Upper bound: at render
+    positions the wait now includes TA. EXP2309 value with the old definition: 0.841.
+  - job rows without that wait (inc - e against Apple i_X): R5 +0.650 / +0.723, C0 +0.649 / +0.678,
+    C4 +0.329 / +0.373, C2 +0.294 / +0.321, R1 +0.167 / +0.203, R7 +0.164 / +0.154, C6 +0.104 / +0.123,
+    R3 -0.026 / -0.003. Sum 2.331 / 2.572.
+  - Apple's increments sum to 0.327 more than Apple's frame (i_next -0.327); not attributable to one of our rows.
+- Pure work rows that are still comparable (compute): C0 +0.562 / +0.582 (EXP2309 +0.559, NOT moved), C2 +0.203 /
+  +0.212, C4 +0.233 / +0.236 (EXP2309 +0.135; HYPOTHESIS: the folded R5 expand kernel, about 0.09), C6 +0.03.
+- R5 3D, ours only: 2.743 / 2.860 (EXP2309 3.013); grows with the scene (inc - e +0.43 / +0.66 / +1.09 by range).
+
+Consequences:
+
+1. S2 target confirmed in size: the DWM wait is 0.85-1.0 ms per frame = 23-27 % of the gap. Best case for S2
+   (all of it removed): frame about 19.2-19.4 ms = 85-86 % of macOS. This is a bound, not a prediction.
+2. R3 leaves the lever list: without the DWM wait it is at Apple parity in both runs.
+3. After S2 the order is R5 (+0.69) and C0 (+0.66), then C4 (+0.35), C2 (+0.31), R1 (+0.19), R7 (+0.16), C6 (+0.11).
+   C0 is the largest pure-work row and the only one the fold did not move.
+4. 95 % of macOS needs a frame of 17.33 ms, i.e. 2.9 of the 3.76 ms removed: S2 alone is not enough; R5 and C0
+   both have to close as well.
+5. Single-position rows move up to +-0.2 ms in 130..end from the DWM phase alone (f0a vs f0b); judge levers on
+   pairs (C0+R1, C2+R3, C4+R5) or on inc - e.
+
+NOT VERIFIED: launch and TA cannot be split inside the render gaps under the fold (no TA-start stamp); Apple's
+compositor cost is not measured; EXP2341 not included. Bench order unchanged (S2-0a -> S2-0b -> S2-1).
+
+## UPDATE 2026-11-11T13:43Z (architect): correction of the working m1n1 image; compute rows are proportional at 1.10
+
+### Correction (refers to the entries of 2026-11-11T13:20Z and RANKING-REFRESH "Bench order unchanged")
+
+- The bench's working m1n1 image is `m1n1-ansdirect-closedv5` (sha256 e6ac18bb1146..., m1n1 06616be7), not
+  `scaled1`. `scaled1` (afd45c3a7125..., 14c893b2 = 06616be7 + 7309f6ad + 1b9f3605 + 99e9dab9 + a host test) has
+  build-info "hardware: not run". Found by the implementer session before S2-0a; checked against both build-info
+  files and the m1n1 log. The earlier entries are left as written.
+- The S2 image (s2v3, bcb176e6178f...) sits on the scaled line, so closedv5 -> s2v3 is two variables. Revised
+  order, one variable per boot, all with package EXP2343: S2-0a (closedv5, switch unset; variable = package) ->
+  S2-0a2 (scaled1, switch unset; variable = the scaled-source commits) -> S2-0b (s2v3, switch unset; variable =
+  the three S2 commits) -> S2-1 (`Wom1MpoTwoPlanes=1`). Recovery stays on the closedv5 pair. No rebuild of s2v3
+  on the closedv5 line: the two-layer commit uses the destination carried into the DCP swap (1b9f3605) and the
+  scaled source is part of the end state (F-3).
+
+### Observation (measured, from ranking-refresh/out-compare.txt; runs 2309nhd / 2339f0a / 2339f0b)
+
+Firmware-timed compute work against Apple's per-encoder time at the same benchmark second, ours / Apple:
+
+| job | 10..70 s | 70..130 s | 130..end | two-point fit (slope, intercept ms) |
+|---|---|---|---|---|
+| C0 | 1.090 / 1.089 / 1.093 | 1.088 / 1.092 / 1.092 | 1.106 / 1.104 / 1.113 | range of Apple values too small |
+| C2 | 1.106 / 1.108 / 1.114 | 1.084 / 1.096 / 1.099 | 1.085 / 1.104 / 1.107 | 1.11..1.14, -0.07..-0.01 |
+| C4 | 1.094 / 1.150 / 1.151 | 1.105 / 1.172 / 1.174 | 1.093 / 1.191 / 1.193 | 1.096..1.099; 0.00 before the fold, +0.09 with it |
+| C6 | 1.046 / 1.044 / 1.053 | 1.052 / 1.043 / 1.055 | 1.039 / 1.036 / 1.053 | - |
+| all compute | 1.092 / 1.101 / 1.105 | 1.087 / 1.101 / 1.102 | 1.097 / 1.109 / 1.117 | excess 0.91 / 1.03 / 1.07 ms per frame (whole run) |
+
+- C2 and C4 change by 1.7x to 1.8x over the run and keep the ratio: the excess is proportional, not a fixed part.
+  The fold adds a constant 0.09 ms to C4 (the expand) and leaves the slope at 1.10.
+- Three different kernel chains carry the same factor 1.09..1.11 in every scene range and in a package built five
+  days earlier. This is 25..28 % of the frame gap from one ratio.
+- This corrects two earlier readings, which stay as written: "C2 near 1.0 plus a fixed part" does not hold for the
+  firmware-timed work row, and "the deficit is job-specific" does not hold between C0, C2 and C4. The frame-level
+  fit (slope 1.051 for the whole frame) is consistent with 1.10 on the compute share of the frame.
+- NOT VERIFIED: that Apple's per-encoder time and our firmware start-to-end time are the same quantity; whether the
+  render 3D parts carry the same factor (Apple's rows cannot be split into TA and 3D); the cause.
+- HYPOTHESIS: a rate-type cause that the latency probes cannot see (they compare time per operation, not the
+  total time of a full-width dispatch). Already closed and not re-opened: pstate, GPU clock, memory hierarchy, SLC,
+  DRAMCFG, GPU TLB. Two offline checks are running (definition of both series plus per-second fits and a census of
+  the macOS-twin probes; field-by-field comparison of what the driver tells the firmware about core topology and
+  the power controller against Asahi). No hardware run and no package until they report.
+
+## UPDATE 2026-11-11T13:52Z (architect): compute ratio re-measured against Apple GPU spans; CM-1 released
+
+Correction of the previous update ("compute rows are proportional at 1.10"), which stays as written:
+- 1.10 was against Apple's completion-to-completion increments, which contain the gaps between Apple's command
+  buffers. Against Apple's summed GPU spans the ratio of means is 1.13..1.14 for all four compute jobs (2309nhd:
+  C0 1.136, C2 1.131, C4 1.129, C6 1.136; fold arms: C4 1.19 with the folded expand), flat per 20-s window.
+- "Proportional with zero intercept" holds for C2 and C4 only (slopes 1.08 and 1.13); C0 fits slope 1.25 with
+  intercept -0.9 ms. The uniform quantity is the ratio of means, not the slope.
+- C4 has 1 dispatch per frame, C0 134 (Apple side): the ratio is not a per-dispatch cost.
+- The macOS capture is this J313 (GPU "Apple M1 7C", macOS 15.7.8).
+- NOT MEASURED, contrary to how "GPU clock" was closed: the real GPU frequency. HwDataA 0x58 reads 0 MHz in every
+  receipt; "state 6 = 1278 MHz" is the ADT table. No twin of the total time of a full-width dispatch exists.
+  1278/1128 = 1.133 is noted as a numerical coincidence only (HYPOTHESIS, no evidence).
+
+Differences from Asahi in what the driver gives the firmware (source comparison, firmware G13 / V13_5):
+1. compute `EncoderParams.unk_mask` (work+0x270): Asahi 0xffffffff, ours 0 (never written). Re-read by me.
+2. QueueInfo priority: ours PRIORITY[0] tuple for TA, 3D and compute (template); Asahi PRIORITY[2] for render at
+   medium priority and (0,2,0xffff000000000000,0,0,1) for compute.
+3. TA `core_mask`: ours {0xffffffff,0xffffffff} (template, never patched); Asahi {0xfe,0} from the registers.
+4. Init-data profile generated with 8-core chip constants: core_leak_coef 1000 vs 890, sram_leak_coef 45 vs 40.5,
+   max_power 19551 vs 19803 and derived values. num_cores / num_frags are 8 on both sides.
+Items 2..4 are from the agent report and not re-read by me.
+
+Decision: CM-1 (item 1 behind `Wom1ComputeEncoderMask`, one boot, source fd410f54c + one write) runs directly
+after S2-0a. Pre-registered rule: all four compute work rows down by 2 % or more = confirmed; any row moving
+less than 2 % = rejected, no second form. CM-2..CM-4 wait for that verdict, one boot each. Spec in the handoff
+file. `Wom1ComputeEncoderMask` joins the opt-in list (default off, unset in every other package).
+
+## UPDATE 2026-11-11T15:24Z (architect): CM-1 REJECTED (EXP2347)
+
+- EXP2347, package a4b2411b1, `Wom1ComputeEncoderMask` set (receipt present), m1n1 closedv5. Firmware compute work,
+  whole FULL f0, against the base rows: C0 6.381 (-0.31 %), C2 2.107 (-0.45 %), C4 1.708 (-1.19 %), C6 0.725
+  (-0.21 %); wall 19.968 ms; FULL 8101. Every row moved less than 2 %: REJECTED by the pre-registered rule.
+  `EncoderParams.unk_mask` is not the owner of the 1.13 compute ratio. No second form.
+- The write is contract-correct against Asahi (class C). It becomes unconditional with the next accepted package
+  and the switch is removed; no FPS claim attaches to it.
+- Mid-run Wom1GpuPerf of this FULL arm (first one recorded for a FULL arm): state 6 for 94.3 % of 84.2 s sampled
+  (state 1 5.3 %, launch), below target 0.3 %, temperature 45..84 C, power max 5.9 W, frequency field 0.
+- Next for the compute ratio: (a) offline, a source for the real GPU clock and a twin probe of the total time of a
+  full-width arithmetic dispatch (needs one macOS boot by the operator when ready); (b) CM-2 (queue priority
+  tuple), CM-3 (TA core mask), CM-4 (7-core profile) stay queued as contract corrections after S2-1, one boot each;
+  their prior as the owner of a compute-only rate is low (CM-3 is TA only, CM-4 acts through the power controller,
+  which is not limiting).
+- Bench order now: S2-0a2 -> S2-0b -> S2-1.
+
+## UPDATE 2026-11-11T15:35Z (architect): compute ratio, what the two offline checks returned; CLKTWIN released
+
+- Real clock: no source documents a readable GPU clock. HwDataA 0x58 (freq_mhz) is the right field per the V13_5
+  layout and neither Asahi nor m1n1 nor this firmware fills it. Nobody on our path, in m1n1 or in Asahi programs a
+  GPU PLL, voltage or DVFS table; the firmware applies the state itself. Evidence against a lower real clock:
+  same-line load latency scales with the clock (3.2x P1 to P6, EXP2265) and equals macOS at P6 (64 vs 62.6 ns,
+  EXP2266/EXP2269). "Lower clock" drops to an unlikely cause; 1278/1128 stays a coincidence.
+- No recording of what macOS gives the firmware exists in the project. The init-data profile and the render
+  template are m1n1 Python output. A hypervisor trace of macOS is blocked: m1n1's structures stop at V13_5, the
+  installed macOS is 15.7.8, and our stub runs firmware 13.5; it would need macOS 13.5, which the user deferred
+  (2026-11-11), together with an Asahi measurement. Asahi is a contract source, not a speed reference.
+- Released: probe step CLKTWIN, ours side (arithmetic kernel, ladder of 1024-thread groups G = 1..16 and wide
+  shapes; reads the effective parallel width of a compute job; no driver or package change; rides at the end of
+  an S2 boot). Spec in the handoff file, design in .local/night-20261110/clock-twin/REPORT.md. The macOS twin is
+  built but waits for the operator.
+- CM-2..CM-4 parked as contract corrections without an FPS expectation.
+
+## UPDATE 2026-11-11T17:16Z (architect): CLKTWIN ours side (EXP2345): seven cores run in parallel; core count excluded
+
+- Ladder of 1024-thread groups, per-dispatch firmware time: L1..L7 2.382..2.420 ms, L8..L14 4.545..4.603,
+  L15..L16 6.743; first step at G = 8. W56 = 7.42 x L1, W224 = 29.32 x L1 (implied cores 7.54 / 7.64). N32 0.526 ms.
+  Oracle FFMA 4/4, 0 missing records. A compute job under our driver uses all seven shader cores:
+  "fewer active cores" is REJECTED as the owner of the 1.13 compute ratio.
+- Validity note: Wom1GpuPerf over the whole step window (5.97 s, includes process start and compile) shows state 6
+  91.7 %; the 99 % rule for the timed block alone is not shown directly. The ladder is flat within 1.6 % on L1..L7
+  and steps by 1.91..1.93, so a mixed state inside the block is unlikely to hide a missing core.
+- What is left for the ratio: per-core rate against macOS (needs the macOS twin, tools/macos/clktwin_metal.m,
+  one macOS boot by the operator; R = 10000, same shapes) or GravityMark's own shader code. No further ours-only
+  hardware step distinguishes these.
+- FULL scores over the three S2 inert boots fell monotonically: 8142 (EXP2343, closedv5) -> 8024 (EXP2344,
+  scaled1) -> 7906 (EXP2345, s2v3), PERF means flat (50.75 / 50.46 / 50.63), all inside the historical 7888..8170.
+  Not attributed. Discriminator already in the order: band boot 3 on closedv5 directly after S2-1 separates a
+  drift of the day (temperature reached 84..88 C in the receipts) from a cost of the two new m1n1 lines.
+
+## UPDATE 2026-11-11T18:05Z (architect): S2-1 (EXP2346): the OS never asked for planes; verdict open
+
+- EXP2346, s2v3 image, `Wom1MpoTwoPlanes=1`: Effective 1 (switch set, broker bit 9, contract V3), no failure
+  criterion hit, FULL 8060, PERF 50.78, CS gate PASS. GetMultiPlaneOverlayCaps calls 0, Check3 calls 0, Set3 calls
+  19615 all single-plane, two-plane commits 0; no `measure-dxgi-mpo-feature` row in any UMD log including DWM's.
+  DWM ETW identical to the switch-off boot (OverlayCompatible 0, DirectFlip 0).
+- The first divergence is before U-1: dxgkrnl never queried the plane capabilities, so DWM never had planes to
+  consider. U-1..U-5 not reached; U-6 not exercised (slot 1 never latched). No FPS claim, no verdict on the lever.
+- NOT VERIFIED: that the driver caps actually reported SupportMultiPlaneOverlay / MaxOverlayPlanes at run time
+  (the caps receipt may not cover these fields); which documented condition dxgkrnl requires before it calls the
+  caps DDI. Offline source/WDK check running; next boot only with a named unmet condition or a receipt that
+  closes one.
+- Three S2 images ran without a DCP error; the scaled and two-layer m1n1 lines are hardware-run now.
+
+## UPDATE 2026-11-11T18:53Z (architect): band boot 3 (EXP2348); m1n1 lines cleared; fold-on band and stop lines
+
+- EXP2348, closedv5, package fd410f54c: FULL 7987 / 8032, PERF r2/r3 50.855 / 50.911, CS 53.400 / 53.048, state 6
+  95.7 / 96.1 % of the FULL arms, 46..85 C. The control did not return to 8050..8170, and s2v3 with the switch
+  (EXP2346) gave 8060: the FULL slide 8142 -> 8024 -> 7906 is boot-to-boot spread, not a cost of the scaled or
+  two-layer m1n1 lines. Both lines are CLEARED for use; the default image stays closedv5 until S2 needs s2v3.
+- U-6 closed for the never-latched case: the boot after S2-1 shows a normal DCP init and 0 DCP error lines.
+- Fold-on band from three control boots (same source, closedv5): FULL arms 8047, 7962 (EXP2339), 8025, 8170
+  (EXP2341), 7987, 8032 (EXP2348); boot means 8004 / 8098 / 8010; single arms span 7962..8170 (2.6 %).
+  Stop lines from now on (one-sided, replace 7538 / 48.65): FULL arm below 7880 (lowest control arm - 1 %),
+  PERF mean(r2,r3) below 49.7 (lowest control mean 50.74 - 2 %). A single FULL arm cannot support a claim
+  smaller than 2.6 %; lever verdicts on FULL need two arms per boot or the per-job rows.
+- Best fold-on FULL arm 8170 = 82.1 % of 9946; control mean 8037 = 80.8 %.
+
+## UPDATE 2026-11-11T19:22Z (architect): S2-1b (EXP2349): our caps answer is correct from the first query; S2-1c staged
+
+- EXP2349 receipts: StartDeviceCount 1, StopDeviceCount 0, ScanoutStartCount 1; one DRIVERCAPS query, 0.8 ms after
+  StartDevice returned, with Mpo 1, MaxOverlayPlanes 2, DirectFlip 1, WDDM 0x3200, zeroed path not taken;
+  CapsCallsAll 0 and Check3CallsAll 0 (ungated); no UMD MPO entry called by DWM or the application; no Dwm-Core
+  event 215 (trace began 73 s after DWM start). "Our first DRIVERCAPS answer was wrong" is REJECTED.
+- Open: dxgkrnl refuses the plane-caps path before the miniport, or nobody above asks. PHYSICALADAPTERCAPS and
+  the other refused QueryAdapterInfo types are paging/telemetry types by the pinned header, not overlay leads.
+- Next: S2-1c, a user-mode probe calling D3DKMTGetMultiPlaneOverlayCaps / GetPostCompositionCaps /
+  CheckMultiPlaneOverlaySupport3 for our adapter from the interactive and the service session, with the receipt
+  deltas (no driver change, EXP2349 package). An offline follow-up on the dxgkrnl / dwmcore readings (R22, R25)
+  runs in parallel. Spec in the handoff file.
+
+## UPDATE 2026-11-11T19:48Z (architect): S2-1c (EXP2350): dxgkrnl's DirectFlip and MPO support read 0; our staging sets DisableDDisplay
+
+- EXP2350 console-session probe on our adapter: KMTQAITYPE_MULTIPLANEOVERLAY_SUPPORT 0 and DIRECTFLIP_SUPPORT 0
+  although DRIVERCAPS reported both as 1; HUD 0, STRETCH 0, SECONDARY 1, MPO3DDI 1. GetMultiPlaneOverlayCaps for
+  source 0 returns MaxPlanes 1 without bit 0x800 and without a miniport call. No DisableOverlays /
+  OverlayTestMode value exists.
+- The guest's only non-default DWM value is ours: every stage script since EXP952 (2026-10-03) writes
+  HKLM\SOFTWARE\Microsoft\Windows\Dwm\DisableDDisplay = 1 (reason then: DDisplay needs a FL 11_0 render device,
+  the UMD was FL 10_0). EXP951 recorded that it moves DWM to its legacy output path.
+- HYPOTHESIS (not shown by EXP2350): on the legacy path DWM never enables DirectFlip or overlays for the output,
+  which is why the kernel-side support reads 0 and nobody asks the miniport. If so, every GravityMark number of
+  this project since EXP952 was measured with DWM on its legacy path.
+- Decision: S2-1d = the EXP2350 boot with that staging line skipped (single variable), health check first, then
+  the probe, then measured runs only if the desktop is healthy. Spec in the handoff file.
+
+## UPDATE 2026-11-11T20:28Z (architect): S2-1d (EXP2351): black panel on DWM's normal output path; hypothesis not confirmed
+
+- EXP2351 = EXP2350 without DisableDDisplay (verified absent). The operator saw a black panel; the probe was
+  stopped after the windowed GM, no measured runs. DWM stayed alive (same pid, no dump), which the health check
+  wrongly took for a healthy desktop.
+- Receipts at the black panel: Set3Calls 427, V2Presents 0, PlaneOffCompletions 427, two-plane commits 0, refusals
+  0. Every Set3 call on DWM's normal path took our plane-off completion; DCP swaps applied normally. The defect is
+  in our KMD's Set3 handling (owning layer), cause not yet read from source.
+- KMTQAITYPE 19 and 20 still read 0 and the caps call still does not reach the miniport: "DisableDDisplay clears
+  dxgkrnl's support flags" is NOT CONFIRMED. New in the DWM trace on this path: events 215, 223, 224, 225 (18
+  each); candidates still OverlayCompatible 0.
+- Consequences: (1) with the two-plane switch set the driver cannot display DWM's normal path - a correctness
+  defect to fix before anything else on S2; whether the switch-unset driver has the same defect is NOT VERIFIED;
+  (2) all GravityMark numbers since EXP952 are on DWM's legacy path, and the normal path has never been measured;
+  (3) the health check of display experiments must test the picture (a present/scanout counter that advances with
+  a visible plane), not the DWM process.
+- Offline analysis running (Set3 forms against the pinned WDK, the DWM events, what KMTQAITYPE 19/20 return in
+  dxgkrnl). No further boot until it names the defect.
+
+## UPDATE 2026-11-11T20:37Z (architect): correction to the EXP2351 entry: the Set3 handling is not the defect
+
+Refers to the previous update ("The defect is in our KMD's Set3 handling"), which stays as written and is wrong on
+that point. Source: .local/night-20261110/s2-ddisplay-black/REPORT.md (display ring receipt decoded).
+- Every Set3 call the miniport received in EXP2351 really asked for plane 0 disabled (ring entries Flags 0x0,
+  PlaneCount 1), in a cycle of about 2.2 s: SetVidPnSourceAddress with ModeChange and a new primary -> visible ->
+  Set3 plane off -> SetVidPnSourceVisibility(FALSE). No 60 Hz flip reached the driver; the panel is black because
+  the cycle ends invisible. The driver did what it was asked.
+- DWM on its normal path asked for overlay caps (event 215: MaxPlanes 1, caps 0x40000, miniport not called) and
+  issued enabled full-screen plane presents (events 223/224) that never reached the miniport; about 0.15..0.2 s
+  after each, dxgkrnl ran the cycle above. INFERENCE: dxgkrnl refuses DWM's presents and DWM rebuilds its output.
+- KMTQAITYPE 19 and 20 read 0 on the legacy path too (EXP2350), so the zeros are older than this experiment.
+  In dxgkrnl, type 19 returns 0 when a display-adapter flag ([+0x1bc] bit 8, meaning unknown) is set, else the
+  DRIVERCAPS copy's SupportDirectFlip; type 20 reads the MPO byte, which only DisableOverlays, the kernel block
+  list and the paravirtual flag can clear after DRIVERCAPS. No single condition explains both zeros.
+- Standing decisions: DisableDDisplay=1 stays in every bench profile until the cycle is explained; the Set3
+  classification is not changed; the health-check rule (picture, not process) stands.
+- Next: offline, the writers of that flag bit and of the two bytes, and which input of our driver sets them.
+
+## UPDATE 2026-11-11T21:06Z (architect): S2-1e step 0 (EXP2352): video-processor hypothesis rejected; loop persists
+
+- EXP2352 = EXP2351 plus a complete, nothing-advertising D3D11 video function table. RetrieveSubObject(3) once,
+  S_OK. DWM then called one entry only: GetContentProtectionCaps, 16 times (we return E_NOTIMPL). No enumerator,
+  caps, processor or Blt call. The ModeChange / plane-off / invisible loop persists (V2Presents 0, 34 mode
+  changes), measured runs skipped by the picture check. "DWM's normal path needs a video processor": REJECTED.
+- Probe additions: ADAPTERTYPE 0x10b (render, display, post device, ACG; not indirect, not paravirtual, not
+  software); WDDM_2_0_CAPS 3; DRIVERCAPS_EXT and WDDM_2_7 / 2_9 / 3_0 / 3_1 caps 0; types 19 / 20 self-checked
+  (4-byte structs, two handles): both 0 are dxgkrnl's answers.
+- The guest's dxgkrnl.sys is 10.0.26100.9974, sha256 0be25a27..., 5099392 bytes: NOT the image the static readings
+  used (3b3ac442..., 5092224 bytes). Every dxgkrnl function+offset statement of today (R22 follow-ups) is
+  unverified for the guest until re-read on the guest's file. The dwmcore reading (26200.9974) also needs its
+  hash checked against the guest.
+- Next: guest dxgkrnl.sys and ddisplay.dll copied to the Mac for reading; the loop's DxgKrnl ETL decoded; one
+  behavioural variable: GetContentProtectionCaps answered as a driver without content protection must, plus a
+  receipt for the ddisplay exception's HRESULT. DisableDDisplay=1 stays in every other profile.
+
+## UPDATE 2026-11-11T21:24Z (architect): cause of the kernel's DirectFlip / MPO "not supported": no DirectFlip segment
+
+- Read on the guest's real dxgkrnl (sha 0be25a27...; .local/night-20261110/guest-dxgkrnl-read/REPORT.md): after the
+  DRIVERCAPS query and ReadConfig, DXGADAPTER::Initialize asks VidMm whether enough DirectFlip-capable segment
+  memory exists and otherwise clears SupportDirectFlip and SupportMultiPlaneOverlay with one store. VidMm (read on
+  the 26200 dxgmms2: INFERENCE for the guest build) sums the Size of segments whose DXGK_SEGMENTFLAGS.DirectFlip is
+  set and compares with DirectFlipMemoryRequirement (default 200 MB).
+- Our QuerySegment4 / QuerySegment5 answers never set that flag (memory_windows.c, re-read by me). This single
+  condition reproduces every probe value of EXP2350..2352 (19 = 0, 20 = 0, 23 = 0, 46 = 0, 38 = 1, 43 = 1, caps
+  call answered by dxgkrnl with MaxPlanes 1) and explains why DWM's normal path loops: with MPO support 0 the
+  kernel fails every plane present except one identity plane.
+- Correction to the earlier follow-up ("nothing clears the DirectFlip byte"): wrong, the writer above was missed;
+  that entry stays as written.
+- The driver has therefore never had DirectFlip or overlays from dxgkrnl's point of view, on any path, in any
+  experiment. S2 (EXP2346) could not engage for this reason; its verdict stays open.
+- Decision: DF-1 (set the flag on the scan-out segment) in three one-variable boots: DF-1a flag only on the legacy
+  path with full measurement, DF-1b with the two-plane switch, DF-1c on DWM's normal path. Spec in the handoff
+  file. NOT VERIFIED until DF-1a: the VidMm half on the guest build, the segment's runtime size against 200 MB,
+  and how DWM and the scan-out path behave once DirectFlip is available.
+
+## UPDATE 2026-11-11T22:32Z (architect): DF-1a (EXP2354): DirectFlip segment flag CONFIRMED as the kernel gate
+
+- EXP2354 = fd410f54c + Flags.DirectFlip on segment 2 (local, 312 MiB usable), legacy DWM path, closedv5.
+  KMTQAITYPE_DIRECTFLIP_SUPPORT reads 1 (0 in EXP2350..2352). The VidMm half of the reading holds on the guest
+  build. Type 20 stays 0 and type 38 reads 0 because this package reports no MPO in DRIVERCAPS (expected).
+- No cost and no gain by itself: FULL 8061 / 8083, PERF 51.08 / 51.98, CS 52.42 / 52.22, gates PASS; foreign-job
+  row e 1.120 ms/frame. Only DWM primaries were flipped (3 allocations, all status 0); DWM did not direct-flip the
+  windowed application (DirectFlip-compatible 0, AdvancedDirectFlip-compatible 1 as before). The operator saw a
+  correct picture during the run.
+- Class C (contract correctness): the flag is what a driver that scans out from this segment must report. It joins
+  the next accepted package once the per-allocation geometry check in SetVidPnSourceAddress exists (known gap:
+  a flipped allocation is scanned with the committed mode's geometry).
+- Next: DF-1b = S2 receipts package (0fc7218a8) + the flag, s2v3, `Wom1MpoTwoPlanes=1`, legacy path. Expected:
+  type 20 = 1, caps reach the miniport (bit 0x800, MaxPlanes 2), then U-1. DF-1c (normal DWM path) after it.
+
+## UPDATE 2026-11-11T23:12Z (architect): DF-1b (EXP2355): MPO is live in dxgkrnl and DWM; plane presents fail before the miniport
+
+- EXP2355 = S2 receipts package + DirectFlip segment flag, s2v3, `Wom1MpoTwoPlanes=1`, legacy DWM path.
+  KMTQAITYPE 20 = 1 for the first time, 19 = 1, 38 = 1, 23 kernel 1 / HUD 0, 46 = 0; the caps call reaches the
+  miniport (MaxPlanes 2, bit 0x800; hundreds of calls). DWM now marks the windowed application DirectFlip- and
+  overlay-compatible and reports the overlay as applied. U-1 passes on DWM's side.
+- FAILURE: Check3 is never called, no Set3 with an enabled plane arrives (277 Set3, all plane 0 off), and dxgkrnl
+  runs the ModeChange / new primary / plane-off / invisible cycle about once per second - the EXP2351 cycle, now
+  on the legacy path. GravityMark falls to about 27.8 fps (stop line). All driver refusal counters 0. The run
+  was stopped; recovery in progress. DF-1c not run.
+- Reading: the EXP2351 black panel and this loop are one defect - the kernel fails DWM's plane present before
+  the miniport once planes are in play. EXP2351 had planes off in dxgkrnl and failed every non-identity form;
+  here planes are on and the failing check is not yet identified.
+- `Wom1MpoTwoPlanes` together with the DirectFlip flag is therefore NOT usable; neither is merged. The flag alone
+  (EXP2354) is harmless.
+- Next: offline reading of the guest dxgkrnl's Check3 / PresentMultiPlaneOverlay3 path against DWM's event
+  payloads and the caps we return; then one trace-only boot (DxgKrnl ETW level 5 over two cycles).
+
+## UPDATE 2026-11-11T23:46Z (architect): cause of the plane-present loop: our DxgkDdiPresent rejects the MPO flip flags
+
+- EXP2356 (trace-only DF-1b): DWM's single-plane desktop present passes our UMD and reaches dxgkrnl (ETW 252);
+  the runtime callback returns E_INVALIDARG; the runtime marks the device in error (ETW 467, driver error) and DWM
+  rebuilds its output about once per 0.8 s. "Our UMD's MPO present entry fails" is REJECTED.
+- Cause, read on the guest dxgkrnl and proven by our receipt: for an MPO present dxgkrnl calls the miniport's
+  DxgkDdiPresent before any Set3 with Flags 0x100c (Flip | FlipWithNoWait | FlipWithMultiPlaneOverlay), no DMA
+  buffer and no allocations. AdmissionDdiPresent accepts only (Flags & ~0x8) == 0x4 and returns
+  STATUS_INVALID_PARAMETER (callbacks.c, re-read by me). Wom1PresentReceipt of EXP2356 and EXP2355: branch 1,
+  status 0xC000000D, Flags 0x100c, NumSrc 0, NumDst 0.
+- This is a defect of the S2 contract as specified by me: the ATOMIC CONTRACT listed caps, Check3 and Set3 but
+  not the present-flags form that an MPO-reporting driver must accept. The S2 spec entries stay as written.
+- Decision: PF-1 = accept the no-DMA flip with FlipWithMultiPlaneOverlay while the driver reports MPO; boot in
+  the EXP2355 shape with this one change. Spec in the handoff file. Whether the EXP2351 black panel on DWM's
+  normal path has the same single cause is NOT VERIFIED (planes were off in dxgkrnl then); DF-1c follows PF-1.
+- Chain of gates found today, each confirmed on hardware except the last: DirectFlip segment flag (EXP2354) ->
+  MPO reported by dxgkrnl and used by DWM (EXP2355) -> DdiPresent flags (PF-1, pending).
+
+## UPDATE 2026-11-12T01:01Z (architect): PF-1 (EXP2357) CONFIRMED; MPO-live costs CS 3.4 %; no promotion yet
+
+- EXP2357 = EXP2355 shape + PF-1 (DdiPresent accepts the no-DMA flip with FlipWithMultiPlaneOverlay while MPO is
+  reported). The loop is gone: no ETW 467, no refusal receipt, no ModeChange / hidden / plane-off after boot,
+  2577 MPO present callbacks all S_OK, one adapter open in DWM. Picture healthy for the whole boot.
+- Three gates of today, all confirmed on hardware: DirectFlip segment flag (EXP2354), MPO reported and used
+  (EXP2355), DdiPresent flags (EXP2357). DWM now presents its desktop as one plane through the MPO path.
+- Measured with MPO live (single plane): FULL 8049 / 8012 (in band), PERF 50.43 (-0.9 % against EXP2348),
+  GM gate PASS, CS 50.95 / 50.67 = gate FAIL (-3.37 % against 52.441; -2.3 % against EXP2346, same m1n1 and
+  switch with the gate closed). The MPO-live configuration is therefore NOT a default candidate; cause of the CS
+  cost open (per-flip path cost, offline).
+- Not reached: Check3 is never called and the windowed application is not promoted to its own plane (U-2).
+  The S2 lever still has no FPS evidence either way. Receipt counters Set3Calls / V2Presents stop at 138 while
+  flips continue: no conclusion may rest on them until explained.
+- Running offline: dwmcore's promotion gates against the EXP2357 trace; the counter stop and the per-flip cost.
+  No boot staged. Nothing of DF-1 / PF-1 / S2 is merged.
+
+## UPDATE 2026-11-12T01:37Z (architect): DF-1c (EXP2358): on DWM's normal path the support check is entered; output still loops
+
+- Offline reading of dwmcore against EXP2357 (dwm-promotion/REPORT.md): on the legacy path the application is a
+  candidate every frame with no rejection logged, yet the plane-assignment / support-check stage is never
+  entered. Hypothesis: the legacy render target has no overlay context.
+- EXP2358 = EXP2357 with DisableDDisplay absent. First half CONFIRMED: DWM enters the stage (218 x7, 219 x14,
+  220 x7) and asks for exactly the S2 two-plane form (desktop plane full screen with blend, application plane
+  1280x720 at 640,457). Answer: fSupported 0, RejectReason 5; our Check3 is not called (Check3CallsAll 0), so
+  "unsupported" is produced above the miniport.
+- The output still loops on this path (ModeChange / plane 0 off / hidden each cycle; SetDisplayMode and the
+  single-plane MPO present callback both S_OK; no device error; DWM requests the D3D11 video sub-object each
+  cycle, E_NOTIMPL). Measured runs skipped by the picture rule.
+- Consequence for the bench profile: with DisableDDisplay=1 (every experiment since EXP952) DWM cannot assign
+  planes at all. S2 can only be judged on the normal path, which therefore has to work first.
+- Next boot: EXP2358 + the video sub-object (complete table, nothing advertised, content-protection caps answered
+  as "none") as one ATOMIC CONTRACT. In parallel offline: what answers "unsupported" before the miniport.
+
+## UPDATE 2026-11-12T02:05Z (architect): DF-1d (EXP2359): video sub-object served, normal-path loop persists
+
+- EXP2359 = EXP2358 + the D3D11 video sub-object (table + content-protection answer). The request no longer
+  repeats (RetrieveSubObject(3) S_OK 3x, GetContentProtectionCaps with NULL crypto S_OK 3x, nothing else
+  called), but the output cycle on DWM's normal path is unchanged; measured runs skipped. "The cycle on the normal
+  path is caused by the missing video sub-object" is REJECTED on the PF-1 line as well (EXP2352 was the first).
+- Alignment of Dwm-Core and DxgKrnl (EXP2358 and EXP2359): every two-plane support check of DWM (218/220,
+  unsupported) falls 18..21 ms after the source was hidden and plane 0 disabled; DxgKrnl 315/316/317 never
+  appear. The "unsupported" answers carry no information about the two-plane form on a working output.
+- One cycle on the normal path: DWM's single-plane desktop present reaches our UMD entry and the runtime
+  callback returns S_OK, but no kernel plane intake (252) follows; about 0.13 s later dxgkrnl shows the source
+  with plane 0 enabled and within 5 ms flips plane 0 to disabled (AbortSwQueue + DisableAllPlanes) and hides it;
+  that pair runs twice, then DWM re-initialises the output. The same cycle runs with no application started.
+  On the legacy path the same UMD call gives one 252 per frame and an enabled Set3.
+- Open: what the normal path's present route requires from the adapter / miniport that we do not provide
+  (reading of the guest ddisplay.dll and the matching dxgkrnl handlers running). No boot staged. Bench profile
+  keeps DisableDDisplay=1; nothing of DF-1 / PF-1 / S2 / video is merged.
+
+## UPDATE 2026-11-12T02:10Z (architect): normal-path cycle: DWM's present never enters the kernel; CB-1 released
+
+- Reading of the guest ddisplay.dll and the EXP2359 kernel trace (guest-dxgkrnl-read/REPORT-ddisplay.md): on
+  DWM's normal path the D3D runtime for our UMD is ddisplay.dll (Windows.Devices.Display.Core), which calls our
+  PresentMultiplaneOverlay1 entry directly. No present of DWM enters dxgkrnl on this path (no plane intake, no
+  Present event from DWM's thread). The hide is a user-mode teardown: DWM destroys the primary it just made
+  visible, twice, then re-initialises its output. It is not a kernel refusal, a timeout or a missing flip
+  completion; vsync delivery is alive.
+- Candidate in our UMD (source re-read by me): PresentMultiplaneOverlay1 presents through the older callback
+  pfnPresentMultiplaneOverlayCb; the pinned dxgiddi.h pairs that DDI with pfnPresentMultiplaneOverlay1Cb.
+  dxgi.dll's older callback reaches the kernel (legacy path works); ddisplay's returns S_OK without presenting
+  (INFERENCE, not verified inside ddisplay).
+- Decision: CB-1 = present through the newer callback when the runtime provides it; boot = EXP2359 + this one
+  change. Spec in the handoff file. This is a second omission in the S2 contract as I specified it (after the
+  DdiPresent flags): the UMD present entry was specified against dxgi.dll's behaviour only.
+
+## UPDATE 2026-11-12T02:12Z (architect): correction: CB-1 as specified is withdrawn
+
+Refers to the previous update. The implementer checked the contract before coding: the UMD's highest D3D
+interface is D3DWDDM2_0, and the pinned headers make pfnPresentMultiplaneOverlay1Cb available only for
+interface >= D3DWDDM2_2 (IS_DXGI1_6_BASE_FUNCTIONS). For a 2.0 device the older callback is the contractual one
+(and dxgi.dll honours it). CB-1 as written would be a no-op or an out-of-contract read; it is WITHDRAWN and no
+boot was run. The previous entry stays as written.
+- What stands: on the normal path no present of DWM enters dxgkrnl and DWM tears its primary down itself.
+- Open, offline: what ddisplay.dll does with a 2.0 device (accepted interface versions, its callback table, what
+  its old MPO present callback does). In parallel the scope of advertising D3DWDDM2_1 / 2_2 in the UMD is being
+  written from the headers (paper only). A UMD at the 2.0 interface under a WDDM 3.2 kernel driver is itself a
+  gap against a production driver, whatever this reading returns.
+
+## UPDATE 2026-11-12T02:21Z (architect): normal-path cycle: DWM's present fails with SETDISPLAYMODE_REQUIRED
+
+- Leads closed offline: ddisplay.dll has no D3D interface-version test (a >= 2.2 UMD is not shown to be
+  required; the 2.0 -> 2.2 scope is written and parked, about 2-3 days); a separate display UMD
+  (DisplayUserModeDriverName / OpenDisplayAdapter1) is not a requirement (two AMD drivers on the reference
+  machine register none).
+- Decoded from our throw receipts in EXP2359: on the normal path only, ddisplay's DisplayTaskPool throws
+  hr 0x887A0065 = DXGI_ERROR_SETDISPLAYMODE_REQUIRED within about 1 ms after our MPO present callback returned
+  S_OK. In the guest dxgkrnl the kernel status behind it (0xC01E0019) has two sources, both in the MPO present
+  path before plane intake and before any miniport call: the presenting kernel device does not hold "primary
+  pinned" or "mode set" for the source. Both bits are per kernel device, set by D3DKMTSetDisplayMode on that
+  device and cleared when its primary is torn down. No miniport DDI or caps value is on this path.
+- Two candidates: (a) SetDisplayMode and the MPO present run on different devices of DWM; (b) same device, the
+  primary is torn down before the present. Next: one receipt-only boot recording device / context / allocation
+  identity in the UMD's SetDisplayMode, MPO present, Create / Destroy / OpenResource rows of DWM, aligned with
+  the kernel events. No behaviour change.
+
+## UPDATE 2026-11-12T03:27Z (architect): EXP2360 (receipt-only): the mode-setting primary is destroyed before the present
+
+- One UMD device and kernel context in DWM does SetDisplayMode and every MPO present ("different devices" is
+  excluded). In all 87 cycles on the normal path: CreateResource of primary P (non-shared) -> SetDisplayMode(P)
+  S_OK -> the runtime's DestroyResource(P) within 0.3 ms -> our UMD deallocates P's kernel allocation about 13 ms
+  later (pfnDeallocateCb S_OK) -> three SHARED displayable buffers created on the same device (also kernel
+  primaries: Flags.Primary, VidPnSourceId 0) -> MPO present of one of them -> DXGI_ERROR_SETDISPLAYMODE_REQUIRED
+  -> new P, and so on. The presented buffer is never P.
+- On the legacy path all primaries are non-shared, the mode-setting one is never destroyed and is among the
+  presented buffers.
+- Cause of the normal-path cycle, as far as established: destroying P's kernel allocation clears the device's
+  per-source mode state before the first present. What a correct driver must do with DestroyResource of the
+  mode-setting primary is NOT yet derived (kernel conditions and Microsoft's lifetime contract being read; three
+  options noted by the implementer: defer the kernel deallocation, decouple the allocation from the runtime
+  resource, or a missing step for the shared buffers). No boot staged.
+
+## UPDATE 2026-11-12T03:30Z (architect): PL-1 released: keep the mode-setting primary's kernel allocation alive
+
+- Kernel reading (guest dxgkrnl; REPORT-primary-lifetime.md): SetDisplayMode records the primary as the device's
+  displayed primary for the source and pins the device's primaries of that source; primaries created while that
+  state holds are pinned on creation. Destroying the displayed primary's allocation unpins and clears the
+  per-source mode state; the next MPO present fails with SETDISPLAYMODE_REQUIRED at its first check. The record
+  moves only by a later SetDisplayMode or a successful present of another primary.
+- Microsoft's pages (read by the implementer) set no time for pfnDeallocateCb and allow device-associated
+  allocations. Our UMD releases the kernel allocation at DestroyResource (EXP975 rule), which on DWM's normal
+  path happens 0.3 ms after SetDisplayMode. That is the cause of the normal-path cycle (EXP2351, 2352, 2358, 2359,
+  2360), as far as established offline.
+- Decision: PL-1 = the UMD retains the kernel allocation of the current mode-setting primary past DestroyResource
+  until a later successful SetDisplayMode of another allocation or device destroy. Boot = EXP2360 shape + this
+  one change. Spec in the handoff file. NOT VERIFIED until that boot: that the first present of a shared buffer
+  then succeeds and that DWM's normal path is stable.
+
+## UPDATE 2026-11-12T04:07Z (architect): PL-1 (EXP2361) CONFIRMED: DWM's normal output path runs on this driver
+
+- EXP2361 = EXP2360 shape + PL-1 (non-shared primaries created device-associated; the mode-setting primary's
+  kernel allocation retained past DestroyResource). Normal path (DisableDDisplay absent) HEALTHY for the whole
+  run: one SetDisplayMode (87 before), retained count 1, 2570 MPO presents S_OK, one kernel plane intake and one
+  enabled flip per present, no SETDISPLAYMODE_REQUIRED throw, no output re-init, no ModeChange / hidden after
+  boot. First time since EXP952 (2026-10-03) that DWM runs without DisableDDisplay on this driver.
+- Chain of defects found and confirmed on hardware in this series: DirectFlip segment flag (EXP2354), DdiPresent
+  MPO flip flags (EXP2357), lifetime of the mode-setting primary (EXP2361). The video sub-object (EXP2359) is
+  served but was not the cause.
+- Still open: DWM's two-plane support check (218/220) is answered "unsupported" before our Check3 (0 calls), now
+  on a visible, stable source; DxgKrnl 315..317 absent. "No mode info during the cycle" is excluded. Who answers
+  is being read (ddisplay's check implementation, the kernel's cached shortcut). Measured tail of EXP2361
+  running; verdict on speed and on the legacy-path behaviour of this package pending.
+
+## UPDATE 2026-11-12T04:51Z (architect): EXP2361 measured tail (first numbers on DWM's normal path); check refusal narrowed
+
+- Normal path + PL-1, MPO live with one plane: FULL 8050 / 8025 (in band), PERF mean 49.97 (-1.8 % against the
+  closedv5 control EXP2348, above the 49.7 stop line), nb.py wall 19.913 ms, foreign-job row e 0.980 ms/frame
+  (legacy 1.05..1.23). GM gate PASS. Suite 119/0. Temperature up to 90 C in this boot.
+- CS gate FAIL: 50.995 / 50.870 (-3.00 %). With EXP2357 (-3.37 %, legacy path) and EXP2354 (flag only, PASS) the
+  CS cost belongs to "MPO reported and live", independent of DWM's path. During the CS timedemo DxgKrnl shows
+  no DWM present, plane intake or Set3. Cause open; a CS-phase trace with CS's own present path is requested.
+  Nothing of DF-1 / PF-1 / PL-1 / S2 is merged while this stands.
+- Two-plane check, kernel reading (REPORT-check3-resource.md): for our adapter the only "unsupported without
+  miniport" exit left is that a plane's resource does not qualify: it must resolve in DWM's process, its first
+  allocation must belong to the device used for the check, and it must be a primary or carry the kernel's
+  "DirectFlip swap-chain back buffer" flag (set at creation when the runtime creates it shared and as a swap-chain
+  buffer on an adapter reporting DirectFlip). Blend, plane flags, OverlayCaps and stretch are not read there.
+  Candidates: the application's back buffer lacks that flag; device mismatch between DWM's two devices; desktop
+  plane passed without a resource. Receipt-only boot C3R specified in the handoff file.
+- Architect-to-implementer messages are paused by the app until the user types; instructions are in the handoff
+  file (three entries addressed "TO THE IMPLEMENTER").
+
+## UPDATE 2026-11-12T05:59Z (architect): application back buffers are not kernel primaries (source reading); BP-1 specified
+
+- Source reading of exp/df1d (swapchain-buffers/REPORT.md): GravityMark's back buffers arrive in the D3D12
+  CreateHeapAndResource with D3D12DDI_HEAP_FLAG_PRIMARY set. Our D3D12 driver ignores the flag and creates them
+  through the D3D11 admission path with no primary / displayable indication: kernel Flags.Primary 0, private
+  data WrittenPrimary 0, RGBA8 marked not displayable on create and on open, no FORMAT_SUPPORT_DISPLAY reported.
+  Each buffer is its own kernel allocation restricted to segment 2 (the DirectFlip segment).
+- Together with the kernel reading (a plane must be a primary or a runtime-flagged shared swap-chain back
+  buffer), this is the leading explanation of the two-plane check being refused before the miniport
+  (HYPOTHESIS until a boot shows Check3 called).
+- BP-1 specified in the handoff file: honour HEAP_FLAG_PRIMARY (kernel primary with the right VidPn source,
+  truthful displayable / display-format answers limited to what the broker can scan out), with the receipts of
+  the planned C3R folded in. Order: legacy-path boot of the PL-1 package, then BP-1.
+- The bench has been idle since 2026-11-12T05:56Z: architect-to-implementer messages are paused by the app until
+  the user types; the instructions wait in the handoff file.
+
+## UPDATE 2026-11-12T10:00Z (architect): BP-1 (EXP2363): the two-plane form is ENGAGED on hardware (U-1, U-2 passed)
+
+- EXP2363 = EXP2361 shape (normal DWM path, PL-1) + BP-1 (D3D12 back buffers from a HEAP_FLAG_PRIMARY heap are
+  created as kernel primaries; arch/bp1 c160c9df2 + MSVC fix 1c237b951). The runtime and dxgkrnl accept the
+  buffers (allocate S_OK x3, DXGKARG_CREATEALLOCATION.Flags 0x1). DWM's two-plane check now reaches the miniport:
+  Check3 calls 2, supported 2. Two-plane commits = latches = 633 after 60 s and 3577 after the operator hold;
+  refusals 0; DWM's single-plane desktop presents stop while the application plane is active.
+- The application window is scanned out on its own DCP layer for the first time. Chain of defects fixed to get
+  here, each confirmed on hardware: DirectFlip segment flag (EXP2354), DdiPresent MPO flip flags (EXP2357),
+  mode-setting primary lifetime (EXP2361), application back buffers as primaries (EXP2363), plus leaving the
+  legacy DWM path. The S2 lever is finally measurable; FPS evidence = the measured tail of this boot (pending).
+- DEFECT observed by the operator: the whole panel blinks for about 0.5 s when the application plane appears and
+  when it disappears; the display ring shows one ModeChange and one hidden entry at each transition, none in
+  steady two-plane state. Adding or removing the second plane goes through a mode-set / blank instead of a
+  plain swap (U-4 / F-7 class). Cause not yet read; a receipt-only re-look in the same boot is planned.
+- Decision recorded on the user's question (2026-11-12): the legacy DWM path is no longer a verification target;
+  the owed legacy-path boot is cancelled; baselines measured on it are reference only for the normal-path line.
+
+## UPDATE 2026-11-12T10:17Z (architect): EXP2363 measured: two planes give +6.0 % PERF, FULL 8320 / 8347; two defects open
+
+- First FPS evidence for S2 (application window on its own plane, normal DWM path): PERF mean(r2,r3) 52.98
+  against 49.97 (EXP2361) and 49.75 (EXP2362) = +6.0 %; nb.py wall 18.896 ms against 20.064; foreign-job row e
+  0.000 (about 1.0 before); FULL (windowed whole run) 8320 / 8347 against 8050 / 8025 and 8058 / 7977 = +3.7 %.
+  FULL 8347 = 83.9 % of macOS 9946 (previous best 8170 = 82.1 %). Frame time in the PERF window 18.9 ms against
+  Apple's 16.46 whole-run = about 87 % (different windows; not a verdict number).
+  Verdict on the lever: CONFIRMED in direction and size (the removed time matches row e); not accepted as a
+  default until the defects below are fixed and a normal-path control band exists.
+- Defect 1 (cause found, fix DP-1 in work): the UMD refuses a PresentMultiplaneOverlay1 that lists a disabled
+  plane; DWM then destroys its device and sets the mode again: 0.44 s full-panel blank at window appear and
+  close, preceded at close by 1.4 s of black window content (operator's video). Kernel side accepts a disabled
+  plane without an allocation; how the runtime pairs the callback's allocation entries with planes is still to
+  be read from the guest's d3d11 / dxgi.
+- Defect 2 (open): during the Counter-Strike timedemo the operator saw the desktop and no game picture, although
+  the run completed at 48 fps; no flip entered the display ring during it. EXP2361 / EXP2362 already showed no
+  DWM present activity during CS. HYPOTHESIS: on DWM's normal path the OpenGL ICD's frames do not reach the
+  screen. All CS numbers measured on the normal path (EXP2361, 2362, 2363) are NOT VALID as gate results until
+  this is settled; the "-3 % CS with MPO live" reading of those boots is withdrawn as a performance statement
+  (EXP2357 on the legacy path stands).
+
+## UPDATE 2026-11-12T10:24Z (architect): invisible Counter-Strike: our UMD refuses window-sized displayable primaries; WP-1
+
+- Cause found by the implementer from source and EXP2362's full UMD log: with DirectFlip reported, DXGI creates
+  the OpenGL ICD's flip-model swap-chain back buffers as shared displayable primaries of the WINDOW's size
+  (640x480 for Counter-Strike). AdmissionUmdDescribePrimary refuses any primary that is not a fixed-panel mode
+  (E_INVALIDARG); the runtime removes the device; every later present fails: 0 of about 3960 presents shown in
+  each CS process, rendering continues unseen. The kernel trace agrees (no present, flip or present-history
+  event from the game). GravityMark is unaffected because its D3D12 buffers do not pass that rule.
+- All CS numbers of EXP2361 / 2362 / 2363 are "render without present" and NOT VALID; the earlier "-3 % CS with
+  MPO live" reading is void for them. Whether the legacy-path CS boots since EXP2354 are affected is being
+  checked (the DirectFlip flag changes what DXGI creates on both paths).
+- Decision WP-1 (ATOMIC with the per-allocation geometry check owed since DF-1a): accept displayable primaries
+  of any supported size in user mode; require mode-equal geometry only where an allocation is scanned out
+  full-screen, refused cleanly otherwise; plane scan-out uses the allocation's own geometry. Boot before DP-1
+  (DP-1 waits for the read of the guest's d3d11 / dxgi).
+
+## UPDATE 2026-11-12T12:32Z (architect): WP-1 (EXP2365) CONFIRMED: first all-valid, all-pass boot with two planes
+
+- EXP2365 = EXP2363 shape + WP-1 (displayable primaries accepted at window size; mode-equal geometry required
+  only where an allocation is scanned out full-screen). Counter-Strike is presented in every process (120 shown
+  / 0 failed per window, no reject-primary) and the operator confirmed the game was visible. CS 52.69 / 52.02
+  (gate PASS, -0.80 %): the first valid CS result with MPO live. GM gate PASS (+1.24 %); PERF 52.64 / 52.80;
+  FULL 8393 / 8367 = 84.4 % / 84.1 % of macOS 9946 (best so far).
+- The lever (application window on its own plane) now stands on two boots: EXP2363 (8320 / 8347, PERF 52.98) and
+  EXP2365 (8393 / 8367, PERF 52.72) against the single-plane normal-path replicates EXP2361 / EXP2362
+  (8050 / 8025 / 8058 / 7977, PERF 49.97 / 49.75): about +4 % FULL, +6 % PERF.
+- Open before it can become the default: DP-1 (blink and black window content at plane removal; cause known,
+  forwarding form now a fact from the guest's d3d11: allocation entries pair with planes by array index, count
+  = all planes, a disabled plane's entry is not read); the frozen MPO receipt during EXP2365's hold (not yet
+  shown that two planes ran for the whole run there); whether CS's window gets a plane; pitch alignment so any
+  window size is plane-eligible; a normal-path control band (three boots) and re-based gates; merge of DF-1,
+  PF-1, PL-1, BP-1, WP-1, DP-1 and removal of DisableDDisplay from the bench profile.
+- Next boot: DP-1 (EXP2366) on top of WP-1.
+
+## UPDATE 2026-11-12T13:35Z (architect): DP-1 (EXP2366) CONFIRMED; the two-plane line is complete on hardware; next steps
+
+- EXP2366 = EXP2365 shape + DP-1 (a present listing a disabled plane is accepted and forwarded: one allocation
+  entry per DDI plane by array index, empty at the disabled plane's index). Three GM open/close cycles: every
+  transition is {layer 0 enabled, layer 1 disabled}; no reject, no SetDisplayMode, no ModeChange / hidden;
+  removal commits = latches (19 for the boot); operator: no blink and no black window content. Gates PASS
+  (GM +2.69 %, CS -0.61 %). FULL 8424 / 8256, PERF 52.52 / 52.99.
+- Two-plane FULL arms so far (normal path): 8320, 8347, 8393, 8367, 8424, 8256 = mean 8351 = 84.0 % of macOS
+  9946 (single-plane normal path: 8050, 8025, 8058, 7977 = 8028). Gain about +4.0 % FULL, +6 % PERF.
+- Defects fixed in this series, each confirmed on hardware: DF-1 DirectFlip segment flag (EXP2354), PF-1
+  DdiPresent MPO flip flags (EXP2357), PL-1 mode-setting primary lifetime (EXP2361), BP-1 D3D12 back buffers as
+  primaries (EXP2363), WP-1 window-sized displayable primaries + geometry check (EXP2365), DP-1 disabled planes
+  (EXP2366); the D3D11 video sub-object is served (EXP2359).
+- Next: candidate package NP-1 (DP-1 line + receipt publish from the Set3 path), two more boots for a three-boot
+  band with EXP2366, re-based gates and stop lines, merge into gpu/memory-latency, bench default without
+  DisableDDisplay. Then, each its own item: full-screen application form (Check3 refuses plane B full-screen with
+  reason 17: DWM composites full-screen CS), stretch caps, pitch alignment, switch default-on.
+- Remaining gap to macOS after S2 (from the EXP2339 partition minus the removed DWM wait): compute rows at
+  1.13x Apple's GPU span (about 1.0..1.4 ms), R5 (about 0.65), hand-over gaps (0.35), Apple's cross-frame
+  overlap (0.33). The user's target (within 5 %) needs the compute ratio and R5; the macOS twin of the
+  arithmetic probe (operator boot into macOS) is the open discriminator for the compute ratio.
+
+## UPDATE 2026-11-12T13:55Z (architect): CLKTWIN macOS twin: hardware rate at parity; "slower hardware" REJECTED for the compute ratio
+
+- macOS reference run on this J313 (macOS 15.7.8), tools/macos/clktwin_metal.m, three runs, evidence
+  .local/experiments/MACOS-20261112-clktwin/. powermetrics (started by the operator): GPU active 99.9 %, 1278 MHz
+  for 99.8 % of the 79 busy samples.
+- Per-dispatch GPU time, macOS / ours (EXP2345): N32 0.525..0.528 / 0.526; L1 2.464..2.474 / 2.382..2.420;
+  L8 4.673..4.677 / 4.545..4.603; L15 6.917..6.920 / 6.743; W56 18.09 / 17.68; W224 71.64 / 69.82. G* = 8 on
+  both; W224/L1 29.0 / 29.3. Oracle FFMA 4/4 on both.
+- On an arithmetic-bound kernel at every width our driver equals macOS (2..3 % faster). The clock, the per-core
+  rate and the number of active cores are the same. "The hardware runs slower in our environment" is REJECTED
+  as the owner of the 1.13 compute ratio in GravityMark. NOT yet done: the code-equality gate (disassembly of
+  the Metal archive against our 59-instruction form); the verdict is conditional on it.
+- What remains for the compute ratio: GravityMark's own compute kernels as our compiler emits them (memory
+  access forms, atomics, loads through constant buffers, loop structure - the untested differences of the
+  job-row census), or job structure (how the 134 dispatches of C0 are launched). Next step is offline: per-kernel
+  comparison against the Metal oracle on the heaviest kernels, with op-class costs measured by twin probes of
+  this kind (a memory-bound and an atomic-bound full-width twin are the obvious next two).
+
+## UPDATE 2026-11-12T16:16:07Z - two-plane line accepted and merged; cursor layer refused by DCP; production-first queue
+
+- ACCEPTED PACKAGE: the normal-DWM-path two-plane line (DF-1, PF-1, PL-1, BP-1, WP-1, DP-1, NP-1) is merged
+  (b79100899) after the control band EXP2366/2367/2368: FULL 8424/8256, 8402/8414, 8401/8357 (macOS 9946 ->
+  83.0..84.7 %), PERF ~52.5..53.5, CS ~52.1..52.6. perf-baseline re-based (7bc86c6de): CS 51.991, GM 47.007.
+  Stop lines: FULL 8173, PERF 51.696. Staging default: DisableDDisplay absent; AGX_STAGE_DDISPLAY=legacy is a
+  deliberate opt-in. The legacy DWM path is no longer verified.
+- Boot profiles: SHORT (suite, picture rule, the change's own check, GM PERF w+r2, CS warm+r2; a gate miss
+  triggers FULL once in the same boot) for correctness/display changes; FULL for band boots, speed-relevant
+  changes and merge packages. Harness fix: the CS wait polled findstr on a UTF-16 log (450 s timeout per run);
+  now type|find at the same cadence.
+- Operator rule 2026-11-12: production features are not parked as "later"; full-screen scan-out, stretch and
+  pitch are active work items in parallel with the compute ratio.
+- EXP2371 (m1n1 diagnostic, proxy): a swap carrying a third surface (slot 2 or slot 3, 64x64, with slots 0/1
+  full panel) is refused cleanly by DCP 13.5 (A408 out=000000000004000000, RESULT -11, restore latched). Layer
+  scaling 2.0x / 1.5x / 0.5x latches (RESULT 0). The filter type is NOT determined (phone photos cannot
+  separate replication from bilinear at these ratios). NOT tested: a small layer on slot 1.
+- DECISION CUR-1: no hardware-pointer capability on this firmware (a pointer would take one of only two
+  layers and remove the windowed two-plane gain). Full-screen applications get direct scan-out the way DWM
+  itself asks for it: application plane + DWM's own top cursor plane (full-panel surface with a cursor-sized
+  clip). Work: Check3 accepts the clipped top plane (rule 17 replaced by a measured minimum), broker record
+  carries the clip as source offset/size and destination rect. Unknown, to be measured in one proxy session
+  (HC-1): smallest layer DCP accepts on slot 1 (1, 16, 32, 64 px; at panel edges).
+- SP-2 (same proxy session): filter discrimination with an on-screen reference - unscaled half shows the two
+  predictions (2-px full-contrast stripes; 0.25/0.75 stripes), scaled half shows 1-px stripes at 2.0x, plus an
+  isolated 1-px line (2 px wide = replication, ~4 px gradient = bilinear). Until then STRETCH-1 keeps reason 34.
+- STRETCH-1 (arch/stretch1) and PITCH-1 (arch/pitch1, EXP2369 queued) packages build; neither is hardware
+  verified yet.
+- OPTWIN ours side: first run failed in probe setup (pipeline table cap 24, C1 needs 25..27; probe defect,
+  fixed 71d9ced72); no measurement yet; reruns in EXP2369's tail. The macOS twin follows once R values are final.
+
+## UPDATE 2026-11-12T16:45:44Z - EXP2372 HC-1: DCP minimum layer between 32x30 and 40x39; PITCH-1 half shown
+
+- EXP2372 (m1n1 diagnostic, proxy; logs .local/experiments/m1n1-hc1-sp2-diag/evidence/EXP2372): slot-1 layer
+  64x64 and 40x39 APPLIED and latched (also 40x39 flush at all four panel edges); 32x30, 24x27, 16x16, 8x8, 1x1
+  REFUSED before submit (A408 out=00000004), restores clean. 32x32 itself not measured. SP-2 (line-width filter
+  pattern at 2.0x and 1.5x) latched; the filter verdict waits on the operator's macro photos.
+- Consequence for CUR-1: DWM's full-screen top plane carries clips 1x1 (323 of 330 requests in EXP2366, pointer
+  hidden), 24x27, 32x30, 40x39. Only the last can be sent to DCP as a cropped layer. Realisation for smaller
+  clips is OPEN; candidates under offline read (driver-owned transparent 64x64 scratch layer holding the clip
+  pixels; second layer off when the clip pixels are fully transparent). No hardware until the read is back.
+- EXP2369 PITCH-1 (SHORT): rule-14 refusal removed (Check3 supported for a 1682x840 window, no Set3/Table/
+  Broker refusal), gates PASS (GM 52.78/52.40, CS r2 52.32). Plane use NOT shown: in ~30 s of rendering
+  TwoPlaneCommits +17 against single-plane presents +384; DWM went back to composition, cause open. Re-look
+  EXP2373 on the same package: Dwm-Core 218/219/220/290 over a 1280x720 control arm and the 1682x840 arm with
+  window rects. OPTWIN ours side has still not produced a measurement (second miss: stale exe path in the
+  harness); runs in EXP2373's tail behind a sha256 preflight.
+
+## UPDATE 2026-11-12T17:07:53Z - EXP2373: 1682x840 window held its plane; OPTWIN ours side ran but 2/3 of reps carry a second job
+
+- EXP2373 (same PITCH-1 package as EXP2369, Dwm-Core look): 1682x840 arm fSupported=1, TwoPlaneCommits +1448 in
+  the arm (control 1280x720 arm +1377), no Set3/Table/Broker refusal, picture rule held. So PITCH-1 removes the
+  refusal AND the window runs as a plane. The EXP2369 arm that fell back to composition (+17 two-plane against
+  +384 single-plane) is NOT reproduced and NOT explained (no Dwm-Core record there). Operator skew look still
+  missing. Dwm-Core 290 reason 5 fires in both arms at equal density (not size dependent, meaning not decoded).
+  Harness: Wom1MpoReceipt snapshots 20 s apart were identical in steady windowed GM (publish cadence defect,
+  under check by the implementer).
+- OPTWIN ours side (probe sha 3a1459a8..., evidence EXP2373/tool-optwin-std.txt): PASS, 140 cases, P6 100 % on
+  all variants. NOT usable yet as a whole: 558 of 840 repetitions report jobs=2; the extra job is 17.2..18.7 ms
+  (quartiles) in every repetition index. Owner of that job not identified (candidates: a foreign client, or the
+  probe's own per-repetition job). Several variants (G1 base, G1d 16M/64M, G1c 64M, C1, B1_128) have no clean
+  repetition. No ratio against macOS exists yet; the macOS twin waits for a clean ours-side run.
+
+## UPDATE 2026-11-12T17:14:20Z - OPTWIN second job explained; "late completion" is the known notifier batching, not a new lever
+
+- The second job in OPTWIN spans is the probe's own filler (the probe counts only its own compute records).
+  Offline read of the 3350 job records of EXP2373 (.local/night-20261110/completion-latency/REPORT.md):
+  the KMD detects a job 0.04..0.07 ms after its GPU end when it is not batched. jobs=1 repetitions: the timed
+  job waited 7.2..8.5 ms BEFORE its start behind the previous repetition's filler (not after its end).
+  jobs=2 repetitions: the timed job's completion arrives with its successor's (0.036 ms after the filler's end):
+  the single-notifier deferral at depth two (one event ends both; same contract in Asahi queue/mod.rs run()).
+- Verdict: "completion delivered late" as a new defect is REJECTED; it is the known depth-two batching with
+  own-notify / stamp-complete switches off. Size in GravityMark (gm2373t, 21002 completions): 407 batched
+  (1.9 %), extra 0.46..0.87 ms each, ~0.3 s in the whole run - an upper bound, critical-path share unknown.
+  Not a top lever; stays under the hand-over item.
+- Probe fix: span = the oldest compute record submitted after t0; filler kept for the frequency hold.
+
+## UPDATE 2026-11-12T17:48:12Z - EXP2374 STRETCH-1: Set3 refusal after Check3 support freezes the display permanently
+
+- EXP2374 (arch/stretch1 ed8d5aac1, based on NP-1, NOT on PITCH-1 as its BEFORE claimed): Check3 accepted a
+  scaled plane (1280x720 -> 1920x1080, StretchQuality 2 HIGH, factor 1.5); every Set3 was then refused with
+  table reason 33 (stretch quality judged again on the Set3 path; the raw Set3 value was not recorded).
+  ScaledTwoPlaneCommits 0. STRETCH-1 as built is REJECTED.
+- Proven boundary: a Set3 failure for a configuration Check3 accepted is not "compose this frame". dxgkrnl
+  re-submits the same plane set indefinitely (Set3TableRefusals 12740 -> 41484 over ~11 min, no new Check3,
+  no accepted Set3, no fallback); the screen stays on the last latched frame until reboot and presents of
+  other clients time out behind it (suite probe 200 s timeout). Operator saw the freeze.
+- RULE (binding for all plane work incl. CUR-1 v2): no refusal reason may be reachable from Set3 for a
+  configuration Check3 accepted. Decisions about what we are willing to show are made in Check3 only.
+- STRETCH-1b (arch/stretch1b, on PITCH-1): quality rules 33/34 on the Check3 path only; receipts for Set3's raw
+  StretchQuality and for "Set3 refused after support"; contract test Check3-supported => Set3-supported.
+- NP-2 confirmed on hardware: Set3 runs at IRQL 8 (above DISPATCH); receipts publish through a DPC.
+- DWM asks for StretchQuality HIGH for a stretched window (so reason 34 does not block it).
+
+## UPDATE 2026-11-12T18:07:59Z - Set3 status contract from the guest dxgkrnl image; S3-SAFE and E5-RQ specified
+
+- Static read of the guest dxgkrnl/dxgmms2 (26100.9974): the Set3 thunk accepts only SUCCESS, STATUS_DEVICE_BUSY
+  and STATUS_RETRY. On STATUS_INVALID_PARAMETER dxgmms2 logs and never advances the flip entry (the EXP2374
+  loop); DEVICE_BUSY has a defined retry state; there is no MPO-disable or support re-check path. With the MPO3
+  flag latched the flip routine never calls the legacy SetVidPnSourceAddress (whose accepted set is the reverse:
+  SUCCESS, INVALID_PARAMETER, NO_MEMORY).
+- S3-SAFE (spec in the handoff file; package on arch/stretch1b after STRETCH-1b is accepted): for every
+  Check3-accepted configuration Set3 returns SUCCESS or DEVICE_BUSY only; runtime obstacles (not visible, not
+  qualified, transport, no runtime, broker reject) map to DEVICE_BUSY at the Set3 boundary; INVALID_PARAMETER only
+  for dxgkrnl contract violations. Check3 needs no change (class and distinct-surface rules already there).
+- Defect found by source read on the accepted line (not yet seen on hardware): after a broker IRQ_ERROR the KMD
+  marks the scan-out faulted and never releases the present gate - one failed swap makes every later commit
+  BUSY and StopDevice fail. m1n1 has no latch deadline: a lost D589 wedges the broker service. Spec E5-RQ
+  (RQ-1 KMD retry and gate release; RQ-2 m1n1 latch deadline + fault injection). Nothing of S3-SAFE / E5-RQ is
+  implemented or hardware-verified yet.
+
+## UPDATE 2026-11-12T18:48:32Z - EXP2375 STRETCH-1b: windowed scaling works; CS halves on the two-plane path; not merged
+
+- EXP2375 (arch/stretch1b 0349dcdbd = PITCH-1 + STRETCH-1b + receipt v4/NP-2/S3-C, SHORT): suite 119/0.
+  Windowed 1280x720 shown at 1920x1080: ScaledTwoPlaneCommits 2691, Set3RefusedAfterSupport 0, no freeze.
+  Raw Set3 StretchQuality is 0 on all 2689 scaled Set3 (Check3 saw 2): dxgkrnl does not carry the quality into
+  Set3 - CONFIRMED; quality is a Check3-only decision. 1682x840 window again a plane (+1169 commits / 45 s).
+  GM PERF 53.42 / 53.30 (gate PASS).
+- CS gate FAIL: 28.05 / 28.72 fps against 51.99 (-45 %). In this package CS is admitted as the application
+  plane (TwoPlaneCommits +7743 per run; control EXP2368: 0, all one-plane V2). Per CS frame two Set3 arrive;
+  one meets the held present gate, answers DEVICE_BUSY and is dropped by dxgkrnl (S3-C receipt:
+  BusyThenSuperseded only, never re-issued). GM on the same path: Busy +19 in 8508 Set3. Which change admitted
+  CS (PITCH-1 is doubted: 640x480 pitch is already 64-aligned) and why CS issues two Set3 per frame: OPEN,
+  offline read requested. Scaled window: Busy 196 in ~2700.
+- Proven: STATUS_DEVICE_BUSY from Set3 costs the flip (dxgkrnl moves to the next PresentId), it is not a retry.
+- DECISION HOLD-1: with the present gate held the two-plane path stores the requested plane set as pending
+  (latest wins) and commits it at the latch, as the one-plane V2 path does; BUSY remains for runtime obstacles
+  only. PITCH-1 and STRETCH-1b are NOT merged until HOLD-1 exists and CS is back in its band.
+- STRETCHFS (1280x800 shown full screen at 2.0x): application 60 fps but composited; Check3 refused the offered
+  form with reason 3 (LayerIndex); DWM's row not captured. OPEN.
+- CUR-1 clip receipt: no clipped top plane occurred in this boot (ClipChecks 0); 1x1 alpha and read cost still
+  unmeasured. With CS itself on a plane the EXP2366 scene no longer forms; a scene is needed.
+- Dwm-Core manifest has no value maps: 290 RejectReason values stay undecoded.
+
+## UPDATE 2026-11-12T18:52:36Z - CORRECTION to the EXP2375 entry; cause of the CS halving; FS-1 and HOLD-1
+
+- CORRECTION: "STATUS_DEVICE_BUSY from Set3 costs the flip" is WRONG. DxgKrnl ETW of the CS window (EXP2375): per
+  layer the Set3-level PresentId steps by 2 and FlipPresentId by 1 on 254/254 accepted flips - every Busy flip
+  was re-offered by dxgkrnl (same flip, new Set3 PresentId) and accepted after the next latch. The S3-C counter
+  compared the renumbered Set3 PresentId and miscounted. DEVICE_BUSY = hardware-proven "retry after the latch".
+- Cause of CS 28.7 fps: PITCH-1 is NOT involved (full-screen 2560x1600 surface). For a full-screen game DWM first
+  asks for the application plane alone (one plane, LayerIndex 1); we refuse (reason 3). On the accepted line DWM
+  then composes (52 fps). In EXP2375 DWM went on to the two-plane form and sends each frame as two one-layer
+  Set3 (strictly alternating, one accepted per vsync), so each layer latches at 30 Hz. Why DWM asks for the
+  two-plane form in this package (hypothesis: stretch caps) is not verified.
+- FS-1 (spec in the handoff file): admit the lone application plane covering the panel (scaled within limits) as
+  a single DCP layer - the direct full-screen path; also the STRETCHFS reason-3 case.
+- HOLD-1 (final form): while a swap is outstanding, Set3 merges an incoming flip into the pending set only if that
+  layer has no pending flip (SUCCESS); a second flip for the same layer answers DEVICE_BUSY as today. No flip is
+  superseded inside the driver; every accepted PresentId latches and is reported. The one-plane V2 path has no
+  pending-replace (earlier statement withdrawn).
+- Boot order on the stretch1b line: S3 package -> FS-1 -> HOLD-1 -> CUR-1 v2; merge when CS is back in band.
+
+## UPDATE 2026-11-12T20:11:39Z - EXP2376 S3 package accepted as behaviour; PITCH-1 skew look done; DWM query shape varies per boot
+
+- EXP2376 (arch/s3safe-pkg 29aa9d3eb = stretch1b line + S3-A tests + S3-B statuses, SHORT): suite 119/0; GM
+  52.73 / 52.88 (gate PASS); CS r2 51.86 / 52.29 (gate PASS); every S3Busy* counter 0, no Set3 refusal after
+  support, picture rule held. S3 (Set3 answers SUCCESS or DEVICE_BUSY for accepted configurations) ACCEPTED as
+  behaviour; its obstacle paths were not exercised on hardware (no obstacle occurred).
+- PITCH-1: operator look at the 1682x840 window and the 1.5x stretched window - no skew. PITCH-1 verified.
+- Full-screen CS in this boot: 76 Check3 groups, all the lone application plane (one plane, full panel, blend 0),
+  refused with reason 3 -> composed, 52 fps. DWM did NOT go on to the two-plane form that EXP2375 got (same
+  caps): the query shape varies between boots; "stretch caps cause the two-plane form" is weakened, cause
+  unknown. The CS halving of EXP2375 is therefore intermittent on this line; merge still waits for FS-1 + HOLD-1.
+- STRETCHFS: one plane 1280x800 -> full panel, refused (reason 3): exactly FS-1's scaled lone-plane case.
+- No clipped top plane formed in either scene (ClipChecks 0); CUR-1's scene is expected on top of FS-1's form.
+- New fact, unexplained: before this boot the inert recovery guest (no AppleAgx package) hung in an ordered
+  restart (no PSCI reset after 4+ min; HV kept the guest; physical power cycle needed). Log:
+  EXP2376/evidence/EXP2376/recovery-guest-shutdown-hang.log. One occurrence.
+- FS-1 (arch/fs1 f19598fb3) and HOLD-1 (arch/hold1 226b6de22 + 74823830b) are implemented, gates clean, not yet
+  on hardware.
+
+## UPDATE 2026-11-12T20:52:02Z - EXP2377 FS-1 rejected as built: the D3D UMD refuses a lone LayerIndex-1 present
+
+- EXP2377 (arch/fs1 f19598fb3): GM 53.13 / 52.47 (gate PASS), windowed scaling unchanged. Full-screen CS: both
+  runs never finished (timedemo stalled), screen flicker reported by the operator, dwm.exe crashed
+  (dwmcore.dll, 0x889800d0). Receipts: about every 1.2 s one lone Check3 (supported), exactly one lone commit,
+  then composition again (CS warm: LoneCommits +278, ToLone 278, FromLone 277, no Set3 refusal, Busy 0).
+  STRETCHFS: 9 scaled lone commits latched, then DXGI_ERROR_DEVICE_REMOVED at frame 37.
+- Cause (session UMD log): PresentMultiplaneOverlay1 with one plane at LayerIndex 1 is rejected in our D3D UMD
+  with E_INVALIDARG (reject-dxgi-mpo-present1, reason 6 LayerIndex), because AgxDxgiMpoCheckPlanes demands the
+  LayerIndex values to be a permutation of 0..Count-1. The kernel side accepted the form; the vsync report for
+  the lone commit carries both listed planes (code trace) and is not the defect.
+- FS-1b (UMD only): LayerIndex < MaxPlanes and unique among listed planes; regression test on the EXP2377 list.
+- RULE extended: no layer of ours (UMD present path included) may refuse a plane set the KMD's Check3 accepted.
+- FS-1 as built is REJECTED; the kernel part of FS-1 is not yet shown on hardware beyond single commits.
+
+## UPDATE 2026-11-12T21:34:09Z - EXP2378 FS-1b: full-screen applications scan out directly on one plane - CONFIRMED
+
+- EXP2378 (arch/fs1 884c8a8a1 = S3 line + FS-1 + UMD LayerIndex rule fix, SHORT): full-screen CS ran in the lone
+  form (r2: lone +3892, two 0, v2 +40) at 51.90 fps (gate PASS, -0.18 %); warm 48.98 with lone +4044. GM gate
+  PASS. STRETCHFS 1280x800 -> full panel at 2.0x: 59.46 fps, 2669 scaled lone commits of 2676 frames, no device
+  removal. No Set3 refusal after support, S3Busy 0, no dwm fault. Operator look (pointer over the game,
+  stretched full screen) NOT yet received.
+- FS-1 + FS-1b ACCEPTED as behaviour pending the operator look. Direct full-screen scan-out gives CS no speed
+  gain over composition (51.9 vs ~52): its frame time is render-bound.
+- HOLD-1 (arch/hold1 rebased on FS-1b) next. Its discriminator cannot be full-screen CS any more (lone form);
+  it is the scaled-window scene, which showed Busy 196 in ~2700 commits (EXP2375) on every boot of this line,
+  plus a windowed CS arm: expect Busy -> ~0 and HoldMerges ~ the former Busy count.
+
+## UPDATE 2026-11-12T22:41:29Z - EXP2379 HOLD-1 confirmed; display line is the merge candidate
+
+- EXP2379 (arch/hold1, SHORT): scaled-window scene Busy +0 against +181/+192/+190/+178 in the four control boots
+  (EXP2375..2378); HoldMerges +186 = HoldCommits +186; HoldDropped 0, no Set3 refusal after support; accepted
+  vs reported PresentIds differ by at most the one in flight. Full-screen CS lone form 48.73 / 52.07 (gate
+  PASS), GM gate PASS (-0.87 %), STRETCHFS 59.99 fps with 2697 of 2700 frames as scaled lone commits. No faults.
+  HOLD-1 CONFIRMED.
+- Windowed CS arm (1600x1000 GL window): composed by DWM (two-plane 0), no bench result (harness); why DWM does
+  not give this window a plane is OPEN, not chased.
+- MERGE CANDIDATE: PITCH-1, STRETCH-1b, S3, FS-1/FS-1b, HOLD-1 on arch/hold1. Still owed before the merge: a
+  FULL-profile band boot on this package and the operator looks (pointer over the full-screen game, stretched
+  full screen, flicker). Not merged.
+- Build lesson: host shims stubbed a function that existed only on another branch (MSVC C4013 stopped the
+  package); test_render_admission_calls_defined now requires every Admission* call to have a definition.
+
+## UPDATE 2026-11-12T23:19:14Z - EXP2380 FULL band on the display line; merge approved
+
+- EXP2380 (EXP2379 binaries, FULL profile): suite 119/0, no faults. GM PERF 53.04 / 52.66 (stop 51.696), FULL
+  8330 / 8360 (stop 8173; NP-1 band 8256..8424; macOS 9946 -> 83.8 / 84.1 %). CS full screen lone form
+  52.38 / 52.26. Scaled window Busy +0 with 192 merges; STRETCHFS 59.99 fps.
+- The display line does not move GravityMark (as expected: windowed GM already had its plane). Gap to macOS
+  unchanged at ~16 %; the compute-ratio item (OPTWIN macOS twin) is still waiting for a macOS session.
+- MERGE APPROVED: arch/hold1 (PITCH-1, STRETCH-1b, S3, FS-1/FS-1b, HOLD-1) into gpu/memory-latency once the
+  merged tree's gate is BASELINE_OK; no perf-baseline re-base. Operator looks for FS-1b/HOLD-1 were requested
+  four times and not received: accepted on receipts, gates and the FULL band.
+- Implemented offline, not on hardware: CUR-1 v2 (rebased on hold1), RQ-1 (failed-swap retry, gate held during
+  retry, exhausted ids reported as completed), RQ-2 m1n1 draft (latch deadline + fault injection).
+
+## UPDATE 2026-11-12T23:32:10Z - compute ratio: per-kernel cost prediction from our own OPTWIN prices (offline)
+
+- Report .local/night-20261110/kernel-cost/REPORT.md. Our unit prices from the EXP2373 recompute: 2.0..2.15 us per
+  dispatch (incl. barrier and pipeline switch), ~0.5 us per job, random gather 0.59/1.06/1.38/5.19 ns per load
+  at 1/4/16/64 MB (dependent = independent: throughput bound), coalesced load 0.15 ns, sample 81..92 ps,
+  barrier pair 5.6 ps per thread, dynamic-index constant-buffer row load ~7..9 ps.
+- REJECTED as owner of any kernel's excess: dispatch structure. Apple C0 issues 134 dispatches, ours 128; at
+  2.06 us each the whole per-dispatch cost is 0.26..0.28 ms per frame on OUR side and the bound on a difference
+  per kernel is ~0.01 ms. Group size, indirect launch and barriers are bounded the same way.
+- Countable differences priced with our costs explain only part: k48 <= 0.09 of 0.214 ms; C0 traversal ~0.2 of
+  0.310 (extra waits 54 vs 32 = 0.075, of which 0.048 was measured by EXP2315); C2 traversal ~0.05 of 0.139;
+  C4 <= 0.05 of 0.229; C6 has no Apple twin mapped.
+- Largest candidate that cannot be priced without macOS: the dynamic-index constant-buffer load form (same
+  count, different addressing; our own cost for them is 0.16..0.21 ms in k48 and 0.14..0.18 ms in C0 traversal).
+  Reading order for the macOS twin: C1, then B1/B1b, G1/G1d 16M/64M, T1, S1o, S1_64 vs S1_256, S1n.
+- Unexplained by any countable term: C4 ~0.18 ms, C2 traversal ~0.09 ms, C6. OPTWIN batch 2 (sin, stores,
+  atomics, divergence) covers classes these kernels use.
+
+## UPDATE 2026-11-13T00:14:21Z - EXP2381/EXP2382: CUR-1 v2 regression-free, crop path exercised; two independently flipping layers still halve
+
+- EXP2381 (arch/cur1 on the accepted line, SHORT): gates PASS (CS 51.40 / 52.00, GM 52.25 / 52.68), suite
+  119/0; scratch reservation correct (segment 2 = pool - 128 KiB, reads back zero). No clipped top plane formed.
+- EXP2382 (same package, synthetic pointer): SetCursorPos does not un-suppress the cursor (GetCursorInfo flags 2
+  in every sample) - the FULLFS and STRETCHFS pointer arms are INVALID; next attempt uses injected mouse input.
+  CS arm: the pointer path crossed the bottom edge and DWM showed a 2560x72 top strip (taskbar) over the game
+  as a clipped top plane: TwoPlaneCommits +7746, CropCommits +7735 - CUR-1 v2's crop path ran with no Set3
+  refusal after support, HoldDropped 0, accepted = reported. Picture not seen by a person. The <=64x64 scratch
+  path is still unexercised.
+- FINDING: in that scene CS ran 27.95 fps (52 in the lone form). Both layers flip every vsync; HOLD-1 merges
+  the second layer's flip behind the first layer's outstanding swap (HoldMerges +7669), so each layer still
+  latches every other vsync. HOLD-1 removed the Busy answers, not the halving. Any full-screen application with
+  an always-updating DWM strip over it hits this. Fix direction (HOLD-2): one DCP swap must carry everything
+  flipped for the same vsync; the mechanism depends on when the two Set3 arrive relative to each other and to
+  the latch - being read from the EXP2382 trace. Not designed yet.
+
+## UPDATE 2026-11-13T00:34:37Z - CORRECTION (EXP2379 windowed CS arm) and HOLD-2 mechanism
+
+- CORRECTION to the EXP2379 entry: the windowed CS arm never ran (a harness quoting defect wrote a broken guest
+  script); "DWM composed the 1600x1000 GL window" came from the idle desktop and a stale file and is WITHDRAWN.
+  Windowed CS on a plane is untested.
+- Timing facts from existing traces: in the two-plane form dxgkrnl issues the per-layer Set3 from its vsync DPC
+  pass (EXP2375: all on CPU 0, at the vsync); in the lone form a worker issues one Set3 ~0.9 ms after the vsync.
+  A swap submitted as late as 4.1 ms before the vblank latched at that vblank; the floor is unmeasured.
+- HOLD-2 (arch/hold2 aea1ed764 on the accepted package; spec in the handoff file): Set3 only merges into the
+  pending set and queues a driver DPC; the DPC runs after dxgkrnl's pass and issues one swap for everything
+  flipped in it; one commit path (DPC / latch / tick). EXP2383 is its first boot; discriminator = the
+  scaled-window scene (186..192 flips merged behind an outstanding swap per run on HOLD-1). The taskbar-strip
+  scene needs CUR-1 on top and is read in the boot after.
+- SendInput (injected mouse moves) makes the guest cursor visible (verified on the recovery guest); SetCursorPos
+  does not.
+
+## UPDATE 2026-11-13T01:11:16Z - EXP2383 HOLD-2: regression-free, no effect on the scaled-window scene; pointer facts
+
+- EXP2383 (arch/hold2 on the accepted package, SHORT): gates PASS (CS r2 51.98, GM +0.50 %), suite 119/0, no
+  faults. Commits come from the DPC 22..147 us after Set3; accepted = reported; HoldDropped 0.
+- Scaled-window scene: DWM's layer and the application's layer flip in DIFFERENT dxgkrnl passes (0 of 161
+  commits carried both); merges behind an outstanding swap 9/170 (HOLD-1: ~7 %). The BEFORE criterion on this
+  scene is FAILED: pass-end coalescing does nothing here. This scene never halved (application 57.6 fps both
+  ways). HOLD-2's verdict for the halving defect (both layers every vsync) is deferred to EXP2384.
+- Pointer (injected mouse input, cursor showing): over a full-screen application DWM asks for two planes with
+  the top plane clipped to the pointer rectangle - 24x27 at the pointer position, 1x1 at panel centre when the
+  application hides it. The accepted package refuses these (no CUR-1) and DWM composes for as long as a cursor
+  exists: FULLFS and CS ran entirely composed after the first injected move.
+- CONSEQUENCE / CORRECTION OF SCOPE: every "lone form" full-screen number of EXP2378..2382 was taken with the
+  cursor suppressed (no mouse input since boot). On a machine with a mouse the accepted package composes
+  full-screen applications (CS 51.98 composed in EXP2383). Direct full-screen scan-out for real use needs
+  CUR-1's scratch path; it is a production requirement.
+- EXP2384 next: CUR-1 v2 on HOLD-2 (arch/cur1h2), lone controls before the first injected input, then the
+  pointer-on scenes incl. gated CS (expected two-plane + scratch) with the timing ring.
+
+## UPDATE 2026-11-13T01:35:00Z - EXP2384 (interim): CUR-1 scratch path works on hardware; HOLD-2 REJECTED as the halving fix
+
+- EXP2384 (arch/cur1h2 = accepted + HOLD-2 + CUR-1 v2), pointer arms with a showing cursor: DWM's 24x27 pointer
+  clip is accepted at every position and shown through the driver-owned scratch layer (ScratchCommits ~2700 per
+  arm = two-plane commits, no refusal, no dropped or unreported flip); hidden-pointer 1x1 over CS likewise
+  (3479 scratch commits, 3244 zero-skips). Full-screen CS with a cursor present: 49.09 fps against the same-boot
+  lone control 48.51 - direct scan-out with a mouse attached WORKS. Picture not seen by a person.
+- Cost found: the scratch copy reads DWM's surface through the write-combined mapping: 124..137 us mean,
+  361..422 us max per commit at device IRQL. Optimisation item (wide loads or avoiding the read).
+- While the pointer MOVES the application drops from 60 to 30..40 fps (60 when still). Ring: DWM's pointer layer
+  and the application layer flip in separate passes (0/102 commits carried both); each waits for the other's
+  latch. HOLD-2's pass-end coalescing is REJECTED as the fix for the two-layer halving (outcome b). The code
+  stays as the single commit path only if HOLD-3 builds on it.
+- HOLD-3 (spec in the handoff file): the pending set is committed once per frame at a deadline before the vblank
+  (lead 5.0 ms; 4.1 ms is the latest submit seen to latch), so both layers ride one swap.
+
+## UPDATE 2026-11-13T01:50:03Z - EXP2384 final: CUR-1 v2 confirmed; full-screen game with a mouse present runs direct at gate rate
+
+- EXP2384 final rows: CS with a cursor present (two-plane + scratch, hidden-pointer 1x1) 51.95 / 52.21 (cs16 gate
+  PASS +0.42 %); same-boot lone control 48.51 (cold run); GM 53.22 / 53.21 (gate PASS); scaled window 57.66;
+  STRETCHFS 59.94; windowed CS 1600x1000 - first real run - two-plane (+3981 commits) at 54.33 fps. Suite 119/0,
+  no faults. CUR-1 v2 (scratch reservation, clipped top plane via scratch or crop) CONFIRMED on hardware.
+- Ring cut for the moving-pointer scenes: the application's Set3 arrives 0.8..1.8 ms after the latch, DWM's
+  pointer-layer Set3 2.4..4.9 ms (max 8.7 ms); 1 of ~850 flips later than 11.6 ms. A 5.0 ms lead catches both.
+- Open on this line: application 30..40 fps while the pointer moves (HOLD-3 deadline commit, implemented on
+  arch/hold3, not yet on hardware); scratch copy cost (CUR-1c staged copy b0e5b0404, not yet on hardware);
+  no person has seen the pointer picture.
+
+## UPDATE 2026-11-13T02:25:26Z - EXP2385 (interim): CUR-1c confirmed; HOLD-3 as specified does not fix the halving; HOLD-3b
+
+- CUR-1c (staged scratch copy): 24x27 pointer copy 8.0 us mean, 38 us max (EXP2384: 126 / 422 us). CONFIRMED.
+- HOLD-3 deadline timer: error ~0.3 ms mean, 2.6 ms max, missed vblanks 0, lead 5.0 ms; controls unchanged
+  (FULLFS 59.41, STRETCHFS 59.57). But the defect remains: moving pointer over FULLFS 30..48 fps, taskbar strip
+  over CS 32.00 fps.
+- Cause (ring): Set3 phases are early (L1 1.2..1.6 ms, L0 2.8..6.9 ms), lateness is not it. The latch handler
+  and the tick commit a held set at the latch; that swap is outstanding for the whole next frame, so that
+  frame's flips are held again and committed at the following latch - a self-sustaining regime in which every
+  flip pays a frame (120 latch commits against 38 deadline commits during motion).
+- HOLD-3b (approved, not implemented): latch and tick never commit; they queue the commit DPC and the deadline
+  rule decides. A held set committed at the latch or at the same frame's deadline reaches the screen at the same
+  vblank, so nothing is lost and the gate stays free for the frame's own flips.
+
+## UPDATE 2026-11-13T03:36:08Z - EXP2386 HOLD-3b: two-layer halving fixed; strip-scene CS gate misses by the price of the lead
+
+- EXP2386 (arch/hold3 6b55ce6d4 = CUR-1 v2 + CUR-1c + HOLD-2 base + HOLD-3 + HOLD-3b): moving pointer over a
+  full-screen application 59.93 / 59.91 / 59.90 fps (EXP2385: 30..48); CS under the taskbar strip 50.36, gated
+  runs 50.68 / 50.90 (EXP2385: 32.2 / 31.2; EXP2382: 27.95). Commits come from the deadline and carry both
+  layers; missed vblanks 0 in every arm; deadline error max 0.9..1.2 ms. Scaled window 59.84 (was 57.6..58.1:
+  residual merges gone). GM gate PASS, suite 119/0, no faults. HOLD-3b CONFIRMED as the fix of the halving.
+- cs16 gate in the strip scene FAIL: -2.09 % against -2.0 %. Cause measured: CS is not vsync-paced; 8.0 % of its
+  flips (314 of 3931) arrive after the 11.6 ms deadline while that frame's swap is outstanding and wait one
+  frame (NoLatch L1 +316, HeldAtLatch +312). DWM's layer: 0.2 %. This is the price of the 5.0 ms lead.
+- Criterion ruling: the halving regime is a sustained pattern; a single MaxNoLatchRun of 2 in a one-layer
+  cold control is not it (my earlier "above 1" wording was too tight). No arm shows the regime.
+- NOT merged. Next: lead-floor boots on the same package (3000 us first; zero missed vblanks required), then
+  one SHORT boot at the chosen default as the merge candidate.
+
+## UPDATE 2026-11-13T08:21:27Z - CORRECTION (missed-vblank counter) and HOLD-3c; lead-floor boots withdrawn
+
+- CORRECTION to the EXP2385/EXP2386 entries: "missed vblanks 0" came from a counter with a 1.5-period threshold
+  that cannot see a one-frame miss. From the timing rings of EXP2386: deadline commits made 5674 / missed 3
+  (0.05 %); late commits (issued after the deadline had passed) made 158 / missed 225.
+- DCP contract number: a swap committed less than ~2.2..2.4 ms before the latch interrupt misses that vblank
+  (made minimum 2.14..2.25 ms, missed maximum 2.30..2.38 ms, both boots).
+- At lead 5.0 ms the deadline commits actually land 3.92 ms (median) before the latch: the vertical tick, which
+  fires ~1.07 ms after the latch interrupt, overwrites the phase reference, so every deadline is ~1.07 ms late.
+  With that, leads of 4.0 / 3.0 ms would miss an estimated 5..15 % / ~70 % of frames: the lead-floor boots I
+  specified are WITHDRAWN (they would only confirm the prediction).
+- HOLD-3c (approved, offline): phase reference = the latch, tick corrected by the learned tick-to-latch offset;
+  missed-vblank counter with threshold lead + P/2, split by commit source. Lead stays 5.0 ms. Its boot is the
+  merge candidate run for the CUR-1 / HOLD-3 line.
+
+## UPDATE 2026-11-13T09:55:08Z - OPTWIN macOS twin run; first paired table; code gate
+
+- macOS twin (MACOS-20261113-optwin, J313 macOS 15.7.8, same probe source, 3 runs x 140 cases, GPU at 1278 MHz for
+  99.78 % of active time by powermetrics): evidence .local/experiments/MACOS-20261113-optwin/. ioreg:
+  IOMFBNumLayers MaxNumLayers = 2 (macOS itself has two layers on this panel).
+- Ratio ours / macOS (min of 3, 5 dispatches, large shapes): arithmetic S1_* 0.99..1.00; random gathers G1
+  3.98 (1 MB) / 2.6 (4 MB) / 1.45 (16 MB) / 2.5 (64 MB), dependent gathers the same; coalesced loads 1.7..1.8
+  (1 MB), 1.14..1.23 (64 MB); dynamic-index constant-buffer rows C1 1.30..1.31; sampling T1 1.2..1.3, T1l
+  1.05..1.17; barrier + shared loads B1 1.08..1.11, barriers alone 0.95; per short dispatch 2.0 us vs 1.0 us.
+- Code gate (.local/night-20261110/optwin-codegate/REPORT.md; Apple side disassembled, ours only as statistics):
+  the G1 family is a CODE-FORM difference, not a memory-path difference: the probe binds its source as a root
+  SRV and our DXBC front end (dxbc_to_nir.c mem_load) turns one float4 structured load into four 1-component
+  buffer-texture fetches, each with a size compare/select and a format branch; Apple issues one 16-byte
+  device load. Both sides sustain the same request rate (6.7 G/s); ours makes 4x the requests (predicted 4.0,
+  measured 3.98; latency-bound small shapes predicted 9.6 / 4.4, measured 9.63 / 4.42).
+- NOT explained by counts: G1 at 64 MB (ours x3.8 from 16 to 64 MB, Apple x2.2), G1c, C1 1.31, T1, B1 1.1.
+  S1o (macOS 2x slower) is Apple's register spilling, not ours.
+- For GravityMark: the earlier census found equal device-load counts and no buffer-texture fetches in k48, so
+  GM's buffer reads apparently take another path than the probe's root SRV; which path, and whether any GM
+  kernel reads through the slow SRV form, is OPEN. The gather rows are therefore not yet a GM verdict. C1 1.31
+  applied to our own cost of those loads gives about 0.04..0.05 ms in k48 and in the C0 traversal - a part,
+  not the whole excess.
+- Next: SRV buffer reads as device loads in the compiler (production defect regardless of GM), the probe's
+  gather rows re-measured in GM's binding form, and shader captures of the probe for offline listings.
+
+## UPDATE 2026-11-13T10:33:55Z - EXP2387 HOLD-3c confirmed, merge approved; SRV-1 is not a GravityMark lever
+
+- EXP2387 (arch/hold3 41b21c980): deadline commits reach the latch with 4.67 ms median / 3.14 ms minimum to
+  spare (EXP2386: 3.92 / 2.25); learned tick-to-latch offset 0.94..1.34 ms; missed deadlines 6 of 47475
+  (0.013 %). Strip-scene CS with a cursor 52.38 / 52.49 (cs16 gate PASS +0.96 %; EXP2386 -2.09 %), GM PASS,
+  windowed CS 54.72, moving pointer 59.92..59.96, scaled window 59.90. No faults. HOLD-3c CONFIRMED.
+- MERGE APPROVED: CUR-1 v2 + CUR-1c + HOLD-2 base + HOLD-3/3b/3c as the accepted package (after the merged-tree
+  gate). Lead stays 5.0 ms; no lead-step boots. No person has seen the pointer picture.
+- Display line summary now: windowed and full-screen applications scan out on their own planes with or
+  without a mouse, stretched, with the pointer and the taskbar strip over them, at their own frame rate; Set3
+  cannot freeze the display for accepted configurations. Open: failed-swap recovery (RQ-1/RQ-2, implemented,
+  not on hardware).
+- SRV-1 fact: all 243 GravityMark shaders are DXIL; no buffer SRVs; 533 raw UAVs (RWByteAddressBuffer) read by
+  device loads vectorised 1..4 wide. The slow per-dword SRV form is NOT used by GravityMark: SRV-1 is a general
+  driver defect, not a GM lever. The probe gains G1u rows in GM's form (raw UAV Load4); the next boot measures
+  them against the macOS table.
+- GravityMark gap unchanged (~16 %); priced so far: constant-buffer row loads ~0.04..0.05 ms in each of k48 and
+  the C0 traversal.

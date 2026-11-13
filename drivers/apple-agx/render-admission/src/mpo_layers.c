@@ -1,4 +1,5 @@
 #include "mpo_layers.h"
+#include <string.h>
 
 /* S2: see mpo_layers.h. */
 
@@ -142,22 +143,46 @@ unsigned int AdmissionMpoBlockIsZero(const unsigned char *Source,
   return 1u;
 }
 
+unsigned int AdmissionMpoScratchStage(unsigned char *Stage,
+                                      const unsigned char *Source,
+                                      unsigned int SourcePitch,
+                                      unsigned int Width, unsigned int Height) {
+  const unsigned int row = Width * 4u;
+  unsigned long long bits = 0ULL;
+  unsigned int y, i;
+  for (y = 0u; y < Height; ++y)
+    memcpy(Stage + (unsigned long long)y * row,
+           Source + (unsigned long long)y * SourcePitch, row);
+  /* Rows are whole pixels (4 bytes); the stage is contiguous. */
+  for (i = 0u; i + 8u <= row * Height; i += 8u) {
+    unsigned long long w;
+    memcpy(&w, Stage + i, sizeof(w));
+    bits |= w;
+  }
+  for (; i < row * Height; ++i)
+    bits |= Stage[i];
+  return bits == 0ULL ? 1u : 0u;
+}
+
 void AdmissionMpoScratchFill(unsigned char *Scratch,
                              const unsigned char *Source,
                              unsigned int SourcePitch, unsigned int Width,
                              unsigned int Height, unsigned int OffsetX,
                              unsigned int OffsetY) {
-  unsigned int x, y;
+  const unsigned int left = OffsetX * 4u, row = Width * 4u;
+  unsigned int y;
+  /* CUR-1c: whole-row stores (memset / memcpy) instead of byte stores. */
   for (y = 0u; y < ADMISSION_MPO_SCRATCH_EXTENT; ++y) {
-    unsigned char *row = Scratch + (unsigned long long)y * ADMISSION_MPO_SCRATCH_STRIDE;
-    for (x = 0u; x < ADMISSION_MPO_SCRATCH_STRIDE; ++x) {
-      const unsigned int px = x / 4u;
-      row[x] = y >= OffsetY && y < OffsetY + Height && px >= OffsetX &&
-                       px < OffsetX + Width
-                   ? Source[(unsigned long long)(y - OffsetY) * SourcePitch +
-                            (px - OffsetX) * 4u + (x & 3u)]
-                   : 0u;
+    unsigned char *out = Scratch + (unsigned long long)y * ADMISSION_MPO_SCRATCH_STRIDE;
+    if (y < OffsetY || y >= OffsetY + Height) {
+      memset(out, 0, ADMISSION_MPO_SCRATCH_STRIDE);
+      continue;
     }
+    if (left != 0u)
+      memset(out, 0, left);
+    memcpy(out + left, Source + (unsigned long long)(y - OffsetY) * SourcePitch, row);
+    if (left + row < ADMISSION_MPO_SCRATCH_STRIDE)
+      memset(out + left + row, 0, ADMISSION_MPO_SCRATCH_STRIDE - left - row);
   }
 }
 

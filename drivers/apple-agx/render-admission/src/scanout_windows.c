@@ -565,6 +565,31 @@ Exit:
 
 /* S2: a device-key REG_DWORD switch; TRUE only for the value 1 (the
  * backend_platform_windows.c Wom1 switch pattern).  PASSIVE_LEVEL. */
+/* HOLD-3: a DWORD device parameter, Default when absent. */
+static ULONG AdmissionScanoutSwitchValue(ADMISSION_CONTEXT *Context,
+                                         PCWSTR ValueName, ULONG Default) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u, result = Default;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return Default;
+  RtlInitUnicodeString(&name, ValueName);
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG))
+    result = *(const ULONG *)value->Data;
+  ZwClose(key);
+  return result;
+}
+
 static BOOLEAN AdmissionScanoutSwitchEnabled(ADMISSION_CONTEXT *Context,
                                              PCWSTR ValueName) {
   HANDLE key = NULL;
@@ -700,6 +725,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
     AdmissionMpoPublishStart(Context);
     AdmissionMpoHoldClear(&Context->MpoHold);
     Context->MpoHoldLock = 0;
+    /* HOLD-3: the frame-deadline lead (us), Wom1MpoLeadUs, default 5000
+     * (EXP2384: the latest submit seen still latching was 4.08 ms before the
+     * vblank), clamped to 1000..12000. */
+    Context->MpoLeadUs = AdmissionScanoutSwitchValue(Context, L"Wom1MpoLeadUs", 5000u);
+    if (Context->MpoLeadUs < 1000u) Context->MpoLeadUs = 1000u;
+    if (Context->MpoLeadUs > 12000u) Context->MpoLeadUs = 12000u;
+    /* HOLD-2: Set3 commits through this DPC. */
+    AdmissionMpoCommitDpcStart(Context);
     /* CUR-1 v2: zero the scan-out scratch (PASSIVE, before any Set3) and
      * prove it reads back zero; only then may Check3 offer it. */
     {
@@ -790,6 +823,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStop(
   /* NP-1: no Set3 runs once the scanout stops; drain and free the publish
    * work item (its worker touches the context). */
   AdmissionMpoPublishStop(Context);
+  /* HOLD-2: no commit DPC outlives scan-out (the gate is held: a running
+   * one commits nothing). */
+  AdmissionMpoCommitDpcStop(Context);
   /* HOLD-1: a held set cannot outlive scan-out (counted if dropped). */
   if (Context->MpoHold.Valid)
     InterlockedIncrement(&Context->Mpo.HoldDropped);
@@ -2040,7 +2076,12 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
         InterlockedExchange(&runtime->PresentGate, 0);
         /* HOLD-1: the held set goes out on this latch (its vsync info,
          * already taken above, belongs to the swap that just latched). */
-        AdmissionMpoCommitPending(Context);
+        AdmissionMpoNoteLatch(Context);
+        AdmissionMpoTimingRecord(Context, ADMISSION_MPO_TIMING_LATCH,
+                                 (ULONG)mpo_count,
+                                 (ULONGLONG)mpo_info[0].PresentId);
+        /* HOLD-3b: hand a held set to the deadline (same vblank, free gate). */
+        AdmissionMpoQueueCommit(Context, TRUE);
       }
     } else if ((irq_status & APPLE_AGX_SCANOUT_IRQ_LATCHED) != 0u) {
       AdmissionScanoutVsyncRecord(runtime, 4u, STATUS_SUCCESS);
@@ -2051,9 +2092,12 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
      * before the held set may go. */
     if (InterlockedCompareExchange(&runtime->RetryArmed, 0, 0) != 0)
       AdmissionScanoutSwapRetry(Context, runtime, now);
+    /* HOLD-3c: the software tick keeps the latch phase in frames without a
+     * latch (tick - learned offset, mpo_hold.h). */
+    AdmissionMpoNoteTick(Context);
     /* HOLD-1: a held set whose commit met an obstacle retries per tick. */
     if (InterlockedCompareExchange(&runtime->PresentGate, 0, 0) == 0)
-      AdmissionMpoCommitPending(Context);
+      AdmissionMpoQueueCommit(Context, FALSE);
     notify_vsync = AppleAgxVsyncAdvance(&runtime->Timeline, now) != 0;
     AdmissionScanoutVsyncRecord(runtime, 5u, STATUS_SUCCESS);
   }
@@ -2107,6 +2151,7 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
                                  ? &Context->Mpo.ReportedIds1
                                  : &Context->Mpo.ReportedIds0);
     }
+    AdmissionMpoNoteNotify(Context);
     if (runtime->VsyncReceipt.NotifyCount != APPLE_AGX_VSYNC_MAX)
       runtime->VsyncReceipt.NotifyCount++;
     AdmissionScanoutVsyncRecord(runtime, 6u, STATUS_SUCCESS);

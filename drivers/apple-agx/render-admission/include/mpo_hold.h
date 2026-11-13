@@ -40,4 +40,76 @@ void AdmissionMpoHoldRestore(ADMISSION_MPO_HOLD *Hold,
                              const ADMISSION_MPO_HOLD *Taken);
 void AdmissionMpoHoldClear(ADMISSION_MPO_HOLD *Hold);
 
+/* HOLD-2: Set3 never submits.  Every accepted flip joins the pending set;
+ * the commit is issued by a DPC queued from Set3 when no swap is
+ * outstanding (it runs after dxgkrnl's vsync DPC pass, so every Set3 of the
+ * pass is in the set: EXP2375 trace, all two-plane Set3 on one CPU in that
+ * pass) or by the latch handler when one is.  Outcome of one Set3: */
+#define ADMISSION_MPO_SET3_BUSY 0u
+#define ADMISSION_MPO_SET3_MERGED_FIRST 1u  /* the set was empty */
+#define ADMISSION_MPO_SET3_MERGED_SECOND 2u /* joined a pending set */
+/* Acceptable = the merged set passed the Set3 table (dry run).  Merges on
+ * Admit && Acceptable; *QueueCommit = 1 when the caller must queue the
+ * commit DPC (merged and GateFree). */
+unsigned int AdmissionMpoHoldSet3(ADMISSION_MPO_HOLD *Hold,
+                                  unsigned int ListedMask,
+                                  unsigned int Acceptable, unsigned int Count,
+                                  const unsigned int *Layer,
+                                  const unsigned long long *PresentId,
+                                  unsigned int GateFree,
+                                  unsigned int *QueueCommit);
+
+/* HOLD-3 (EXP2384: DWM's pointer layer flips 2.4-4.9 ms and the
+ * application 0.8-1.8 ms after the latch, in different dxgkrnl passes):
+ * the pending set is committed once per frame at a deadline, so every flip
+ * of the frame rides one swap; a swap latches at the vblank whatever its
+ * submit phase, so a flip that arrives before the deadline loses nothing.
+ * Times in QPC units.  Frame = [LastVsync + k*Period, + Period) containing
+ * Now; Deadline = frame start + Period - Lead.  Returns 1 and *Wait (> 0)
+ * when Now is before the deadline (arm the timer), 0 when it has passed or
+ * no vsync is known yet (commit now). */
+unsigned int AdmissionMpoHoldDeadline(long long Now, long long LastVsync,
+                                      long long Period, long long Lead,
+                                      long long *Deadline, long long *Wait);
+
+/* HOLD-3c (EXP2385/2386 rings): the frame reference is the scan-out latch
+ * interrupt only.  The vertical tick is a software KTIMER that fires about
+ * 1.07 ms after the latch; letting it overwrite the reference moved every
+ * deadline ~1 ms late (deadline commits reached the latch at a median 3.92 ms
+ * with a 5.0 ms lead).  A reference older than MaxPeriods frames (no swap
+ * latched for a while) is stale: the caller commits at once and the next
+ * latch re-establishes the phase.  Returns 1 when LastLatch is usable. */
+#define ADMISSION_MPO_REFERENCE_MAX_PERIODS 4u
+unsigned int AdmissionMpoHoldReferenceFresh(long long Now, long long LastLatch,
+                                            long long Period,
+                                            unsigned int MaxPeriods);
+
+/* HOLD-3c phase tracker (architect 2026-11-13).  The latch sets the
+ * reference.  A tick within Period/4 after a latch is a pairing sample of
+ * the tick-to-latch offset (kept as the median of the last
+ * ADMISSION_MPO_PHASE_SAMPLES pairs; pairs outside the window are
+ * rejected).  A tick in a frame with no latch (more than Period/2 after the
+ * last latch) sets the reference to tick - offset, once an offset is known,
+ * so a tick-only stretch keeps the latch phase.  Times in QPC units; all
+ * calls are serialized by the caller (scan-out ISR / SynchronizeExecution). */
+#define ADMISSION_MPO_PHASE_SAMPLES 5u
+typedef struct ADMISSION_MPO_PHASE {
+  long long LastLatch, Reference, Offset;
+  long long Sample[ADMISSION_MPO_PHASE_SAMPLES];
+  unsigned int Samples, Next, Rejected;
+} ADMISSION_MPO_PHASE;
+void AdmissionMpoPhaseLatch(ADMISSION_MPO_PHASE *Phase, long long Now);
+/* Returns 1 when the tick set the reference (tick - offset). */
+unsigned int AdmissionMpoPhaseTick(ADMISSION_MPO_PHASE *Phase, long long Now,
+                                   long long Period);
+
+/* HOLD-3c: a committed swap latched at the next vblank arrives at most
+ * Lead (deadline commit) or less (late commit) after its commit; one that
+ * missed it arrives a full period later.  Lead + Period/2 separates the two
+ * for every lead below the period (the old 1.5-period threshold could not
+ * see a one-frame miss: lead + period < 1.5 periods for lead < period/2).
+ * Returns 1 for a missed vblank. */
+unsigned int AdmissionMpoHoldLatchMissed(long long CommitToLatch,
+                                         long long Period, long long Lead);
+
 #endif

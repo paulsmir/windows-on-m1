@@ -1,4 +1,10 @@
 {
-  "gravitymark_hd_perf": {"fps": 40.770, "source": "EXP2220 (default: firmware RX drain on, no device switches): worst of same-boot repeats r2/r3 (40.770/40.973), HD PERF 100k -temporal 0 (10 + 60 s window); the probe's first run (40.377) is the warm-up; previous 41.036 (EXP2218, single first run)"},
-  "cs16_benchmark": {"fps": 50.832, "source": "EXP2339 wait-form correction of the EXP2220 baseline: 49.943 x 52.206 / 51.293 (same boot: mean of warm r2/r3 with the cmd wait 52.214/52.199 against r4 with the old powershell wait loop 51.293, one run); valid for runs with the cmd wait form (harness 1ad9f966b on); re-base to the tip level after three cmd-form boots; before the correction: EXP2220 (default: firmware RX drain on, no device switches): worst of warm runs r2/r3 (50.246/49.943), standard CS 1.6 benchmark (timedemo agxbench, 2560x1600, playnoovl); warm-up 46.394 not gated; previous 48.380 (EXP2218, drain off)"}
+  "gravitymark_hd_perf": {
+    "fps": 47.007,
+    "source": "Re-based 2026-11-12 on the three normal-path two-plane control boots EXP2366 (DP-1 04850c6ba) / EXP2367 / EXP2368 (NP-1 4e231cb19), m1n1 s2v3, DisableDDisplay absent, Wom1MpoTwoPlanes=1: mean of the per-boot worst fps_presents of r2/r3 (47.098 / 47.057 / 46.865); lowest control boot -0.30 %. HD PERF 100k -temporal 0 (10 + 60 s window). Previous 45.865 (legacy-path band EXP2339/2341/2348)."
+  },
+  "cs16_benchmark": {
+    "fps": 51.991,
+    "source": "Re-based 2026-11-12 on the same three boots EXP2366 / EXP2367 / EXP2368 (CS presented: hl Shown 120 / Failed 0): mean of the per-boot worst of warm r2/r3 (52.120 / 51.761 / 52.093); lowest control boot -0.44 %. Measured with the findstr wait form (450 s waits; the UTF-16-safe wait applies from EXP2369, first boot after it is watched for a >1 % shift). Previous 52.441 (legacy-path band EXP2339/2341/2348)."
+  }
 }

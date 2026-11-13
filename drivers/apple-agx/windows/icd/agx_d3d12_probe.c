@@ -54,6 +54,7 @@
 #include "agx_d3d12_probe_cs_texture1d_array_store.h"
 #include "agx_d3d12_probe_cs.h"
 #include "agx_d3d12_probe_q3_compute.h"
+#include "agx_d3d12_probe_cs_clktwin.h"
 #include "agx_d3d12_probe_cs_cb.h"
 #include "agx_d3d12_probe_cs_table.h"
 #include "agx_d3d12_probe_cs_srv.h"
@@ -9702,6 +9703,446 @@ static int ov_pair_heavy(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12
     return ov_pair_run(device, queue, fence, base, 1);
 }
 
+/* CLKTWIN (architect 2026-11-11T15:35Z; clock-twin REPORT.md Part B): effective parallel width of one compute job.
+ * Arithmetic-only kernel (agx_d3d12_probe_cs_clktwin.h, R from root constants). Shapes: N32 (one 32-thread group),
+ * L(G) numthreads 1024 for G = 1..16 (a 1024-thread group fills one shader core), W(G) for G = 56 and 224. Each case
+ * runs as a list with 1 and with 5 dispatches (UAV barrier between), per-dispatch = (T5 - T1) / 4 on the firmware
+ * compute Start/End of the job (Q3 completion escape, needs Wom1JobDiagnostics), best of 3. A 2 s warm-up of W56
+ * filler lists, and a W56 filler queued behind every timed list, keep the GPU busy while the CPU waits (P6 hold).
+ * Prints the whole ladder; G* = first G whose time steps up (> 1.25 x L1); 224 / (T(W224) / T(L1)) = cores. */
+#define CLKTWIN_R 10000u
+static HRESULT clktwin_pso(ID3D12Device *device, ID3D12RootSignature *root, const char *nt, ID3D12PipelineState **pso) {
+    HMODULE compiler=LoadLibraryExW(L"d3dcompiler_47.dll",NULL,LOAD_LIBRARY_SEARCH_SYSTEM32);
+    pD3DCompile compile=compiler ? (pD3DCompile)(void *)GetProcAddress(compiler,"D3DCompile"):NULL;
+    D3D_SHADER_MACRO defines[2]={{"NT",nt},{NULL,NULL}};
+    D3D12_COMPUTE_PIPELINE_STATE_DESC desc={0};
+    ID3DBlob *shader=NULL, *errors=NULL;
+    HRESULT hr=compile ? compile(clktwin_hlsl,sizeof(clktwin_hlsl)-1,"clktwin",defines,NULL,"main","cs_5_0",
+        D3DCOMPILE_ENABLE_STRICTNESS,0,&shader,&errors):E_FAIL;
+    if (SUCCEEDED(hr)) {
+        desc.pRootSignature=root;
+        desc.CS.pShaderBytecode=ID3D10Blob_GetBufferPointer(shader);
+        desc.CS.BytecodeLength=ID3D10Blob_GetBufferSize(shader);
+        hr=ID3D12Device_CreateComputePipelineState(device,&desc,&IID_ID3D12PipelineState,(void **)pso);
+    }
+    if (errors) { printf("CLKTWIN compiler NT=%s: %s\n",nt,(const char *)ID3D10Blob_GetBufferPointer(errors)); ID3D10Blob_Release(errors); }
+    if (shader) ID3D10Blob_Release(shader);
+    if (compiler) FreeLibrary(compiler);
+    return hr;
+}
+static HRESULT clktwin_record(ID3D12GraphicsCommandList *list, ID3D12CommandAllocator *allocator,
+    ID3D12PipelineState *pso, ID3D12RootSignature *root, ID3D12Resource *outv, UINT groups, UINT dispatches,
+    const UINT constants[3]) {
+    D3D12_RESOURCE_BARRIER uavb={D3D12_RESOURCE_BARRIER_TYPE_UAV};
+    HRESULT hr=ID3D12CommandAllocator_Reset(allocator);
+    if (SUCCEEDED(hr)) hr=ID3D12GraphicsCommandList_Reset(list,allocator,pso);
+    if (FAILED(hr)) return hr;
+    uavb.UAV.pResource=outv;
+    ID3D12GraphicsCommandList_SetComputeRootSignature(list,root);
+    ID3D12GraphicsCommandList_SetComputeRoot32BitConstants(list,0,3,constants,0);
+    ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list,1,ID3D12Resource_GetGPUVirtualAddress(outv));
+    for (UINT d=0;d<dispatches;++d) {
+        if (d) ID3D12GraphicsCommandList_ResourceBarrier(list,1,&uavb);
+        ID3D12GraphicsCommandList_Dispatch(list,groups,1,1);
+    }
+    return ID3D12GraphicsCommandList_Close(list);
+}
+static HRESULT clktwin_exec(ID3D12CommandQueue *queue, ID3D12Fence *fence, ID3D12GraphicsCommandList *list, UINT64 signal) {
+    ID3D12CommandList *lists[]={(ID3D12CommandList *)list};
+    ID3D12CommandQueue_ExecuteCommandLists(queue,1,lists);
+    return ID3D12CommandQueue_Signal(queue,fence,signal);
+}
+static HRESULT clktwin_wait(ID3D12Fence *fence, HANDLE event, UINT64 signal) {
+    if (ID3D12Fence_GetCompletedValue(fence)>=signal) return S_OK;
+    if (FAILED(ID3D12Fence_SetEventOnCompletion(fence,signal,event))) return E_FAIL;
+    return WaitForSingleObject(event,10000)==WAIT_OBJECT_0 && ID3D12Fence_GetCompletedValue(fence)>=signal ? S_OK : E_FAIL;
+}
+/* The timed list is submitted before its filler, so its record is the oldest compute record of this
+ * process submitted after begin (fillers of earlier iterations were submitted before begin). */
+static int clktwin_pick(const Q3_GPU_COMPLETION_QUERY *q, UINT64 cursor, UINT pid, UINT64 begin, double *ms) {
+    const Q3_GPU_COMPLETION *r=NULL;
+    if (!q->Frequency || q->Lost || q->Reset || q->Count>Q3_GPU_COMPLETION_PAGE) return 0;
+    for (UINT i=0;i<q->Count;++i) {
+        const Q3_GPU_COMPLETION *c=&q->Record[i];
+        if (c->Sequence<=cursor || c->ProcessId!=pid || c->Kind!=Q3_GPU_TIMESTAMP_COMPUTE || c->Status || c->SubmitQpc<begin) continue;
+        if (!r || c->Sequence<r->Sequence) r=c;
+    }
+    if (!r || !r->Start || r->End<=r->Start) return 0;
+    *ms=1000.0*(double)(r->End-r->Start)/(double)q->Frequency;
+    return 1;
+}
+static int clk_twin(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    enum { CASES = 19, BYTES = 1u << 20 };
+    static const char *names[CASES]={"N32","L1","L2","L3","L4","L5","L6","L7","L8","L9","L10","L11","L12","L13","L14",
+                                      "L15","L16","W56","W224"};
+    static const UINT groups[CASES]={1,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,56,224};
+    const float a=0.999f, b=0.001f;
+    UINT constants[3];
+    D3D12_ROOT_PARAMETER params[2]={{D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS},{D3D12_ROOT_PARAMETER_TYPE_UAV}};
+    D3D12_ROOT_SIGNATURE_DESC root_desc={2,params,0,NULL,D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    ID3DBlob *blob=NULL, *errors=NULL;
+    ID3D12RootSignature *root=NULL;
+    ID3D12PipelineState *pso32=NULL, *pso1024=NULL;
+    ID3D12Resource *outv=c21_buffer(device,D3D12_HEAP_TYPE_DEFAULT,BYTES,D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                                    D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    ID3D12Resource *readback=c21_buffer(device,D3D12_HEAP_TYPE_READBACK,BYTES,D3D12_RESOURCE_FLAG_NONE,D3D12_RESOURCE_STATE_COPY_DEST);
+    ID3D12CommandAllocator *alloc[3]={NULL,NULL,NULL};
+    ID3D12GraphicsCommandList *list[3]={NULL,NULL,NULL}; /* 0 timed, 1/2 alternating W56 fillers */
+    HANDLE event=CreateEventA(NULL,FALSE,FALSE,NULL);
+    Q3_GPU_COMPLETION_QUERY *rec=(Q3_GPU_COMPLETION_QUERY *)calloc(1,sizeof(*rec));
+    double best[CASES][2], wall[CASES][2];
+    UINT64 signal=base, filler_signal[2]={0,0}, cursor=0;
+    UINT fill=0, missing=0;
+    const UINT pid=(UINT)GetCurrentProcessId();
+    HRESULT hr=outv && readback && event && rec ? S_OK : E_FAIL;
+    memcpy(&constants[1],&a,4); memcpy(&constants[2],&b,4); constants[0]=CLKTWIN_R;
+    for (UINT m=0;m<CASES;++m) best[m][0]=best[m][1]=wall[m][0]=wall[m][1]=1e30;
+    params[0].Constants.ShaderRegister=0; params[0].Constants.Num32BitValues=3;
+    params[1].Descriptor.ShaderRegister=0;
+    if (SUCCEEDED(hr)) hr=D3D12SerializeRootSignature(&root_desc,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&errors);
+    if (SUCCEEDED(hr)) hr=ID3D12Device_CreateRootSignature(device,0,ID3D10Blob_GetBufferPointer(blob),ID3D10Blob_GetBufferSize(blob),
+                                                         &IID_ID3D12RootSignature,(void **)&root);
+    if (SUCCEEDED(hr)) hr=clktwin_pso(device,root,"32",&pso32);
+    if (SUCCEEDED(hr)) hr=clktwin_pso(device,root,"1024",&pso1024);
+    for (UINT i=0;i<3 && SUCCEEDED(hr);++i) {
+        hr=ID3D12Device_CreateCommandAllocator(device,D3D12_COMMAND_LIST_TYPE_DIRECT,&IID_ID3D12CommandAllocator,(void **)&alloc[i]);
+        if (SUCCEEDED(hr)) hr=ID3D12Device_CreateCommandList(device,0,D3D12_COMMAND_LIST_TYPE_DIRECT,alloc[i],pso1024,
+                                                             &IID_ID3D12GraphicsCommandList,(void **)&list[i]);
+        if (SUCCEEDED(hr)) hr=ID3D12GraphicsCommandList_Close(list[i]);
+    }
+    for (UINT i=1;i<3 && SUCCEEDED(hr);++i) hr=clktwin_record(list[i],alloc[i],pso1024,root,outv,56,1,constants);
+    printf("CLKTWIN setup R=%u a=%.3f b=%.3f hr=0x%08lx\n",CLKTWIN_R,a,b,(unsigned long)hr);
+    /* Oracle: one L(1) dispatch, read back, compare four lanes with fused and unfused CPU forms. */
+    if (SUCCEEDED(hr)) {
+        hr=ID3D12CommandAllocator_Reset(alloc[0]);
+        if (SUCCEEDED(hr)) hr=ID3D12GraphicsCommandList_Reset(list[0],alloc[0],pso1024);
+        if (SUCCEEDED(hr)) {
+            ID3D12GraphicsCommandList_SetComputeRootSignature(list[0],root);
+            ID3D12GraphicsCommandList_SetComputeRoot32BitConstants(list[0],0,3,constants,0);
+            ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list[0],1,ID3D12Resource_GetGPUVirtualAddress(outv));
+            ID3D12GraphicsCommandList_Dispatch(list[0],1,1,1);
+            transition(list[0],outv,D3D12_RESOURCE_STATE_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_COPY_SOURCE);
+            ID3D12GraphicsCommandList_CopyBufferRegion(list[0],readback,0,outv,0,4096);
+            transition(list[0],outv,D3D12_RESOURCE_STATE_COPY_SOURCE,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            hr=ID3D12GraphicsCommandList_Close(list[0]);
+        }
+        if (SUCCEEDED(hr)) hr=clktwin_exec(queue,fence,list[0],++signal);
+        if (SUCCEEDED(hr)) hr=clktwin_wait(fence,event,signal);
+        if (SUCCEEDED(hr)) {
+            static const UINT lanes[4]={0,1,511,1023};
+            D3D12_RANGE range={0,4096};
+            float *v=NULL;
+            UINT fused=0, unfused=0;
+            hr=ID3D12Resource_Map(readback,0,&range,(void **)&v);
+            for (UINT i=0;i<4 && SUCCEEDED(hr) && v;++i) {
+                const float f=clktwin_expected(lanes[i],CLKTWIN_R,a,b,1), u=clktwin_expected(lanes[i],CLKTWIN_R,a,b,0);
+                UINT gv, fv, uv; memcpy(&gv,&v[lanes[i]],4); memcpy(&fv,&f,4); memcpy(&uv,&u,4);
+                fused+=gv==fv; unfused+=gv==uv;
+                printf("CLKTWIN oracle lane %u gpu 0x%08x fused 0x%08x unfused 0x%08x\n",lanes[i],gv,fv,uv);
+            }
+            if (v) ID3D12Resource_Unmap(readback,0,NULL);
+            printf("CLKTWIN_ORACLE fused_match %u/4 unfused_match %u/4 %s\n",fused,unfused,
+                   fused==4 ? "FFMA" : unfused==4 ? "MUL+ADD" : "NEITHER (reassociated sum or other code)");
+        }
+    }
+    /* Warm-up: 2 s of back-to-back W56 fillers, two in flight. */
+    if (SUCCEEDED(hr)) {
+        LARGE_INTEGER f, t0, t;
+        UINT lists_run=0;
+        QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
+        do {
+            if (filler_signal[fill]) hr=clktwin_wait(fence,event,filler_signal[fill]);
+            if (SUCCEEDED(hr)) hr=clktwin_exec(queue,fence,list[1+fill],filler_signal[fill]=++signal);
+            fill^=1u; ++lists_run;
+            QueryPerformanceCounter(&t);
+        } while (SUCCEEDED(hr) && (t.QuadPart-t0.QuadPart)<2*f.QuadPart);
+        printf("CLKTWIN warm-up lists %u hr=0x%08lx\n",lists_run,(unsigned long)hr);
+        if (SUCCEEDED(hr)) hr=q3_completions(device,0,rec);
+        if (SUCCEEDED(hr)) cursor=rec->Newest;
+    }
+    for (UINT rep=0;rep<3u && SUCCEEDED(hr);++rep)
+        for (UINT m=0;m<CASES && SUCCEEDED(hr);++m)
+            for (UINT k=0;k<2u && SUCCEEDED(hr);++k) {
+                const UINT dispatches=k ? 5u : 1u;
+                LARGE_INTEGER f, t0, t1;
+                UINT64 timed;
+                double ms=0.0;
+                int got=0;
+                hr=clktwin_record(list[0],alloc[0],m ? pso1024 : pso32,root,outv,groups[m],dispatches,constants);
+                if (FAILED(hr)) break;
+                if (filler_signal[fill]) hr=clktwin_wait(fence,event,filler_signal[fill]);
+                QueryPerformanceFrequency(&f); QueryPerformanceCounter(&t0);
+                if (SUCCEEDED(hr)) hr=clktwin_exec(queue,fence,list[0],timed=++signal);
+                if (SUCCEEDED(hr)) hr=clktwin_exec(queue,fence,list[1+fill],filler_signal[fill]=++signal);
+                fill^=1u;
+                if (SUCCEEDED(hr)) hr=clktwin_wait(fence,event,timed);
+                QueryPerformanceCounter(&t1);
+                for (UINT tries=0;tries<4 && SUCCEEDED(hr) && !got;++tries) {
+                    if (tries) Sleep(2);
+                    if (SUCCEEDED(q3_completions(device,cursor,rec))) got=clktwin_pick(rec,cursor,pid,(UINT64)t0.QuadPart,&ms);
+                }
+                if (got) cursor=rec->Cursor; else ++missing;
+                if (got && ms<best[m][k]) best[m][k]=ms;
+                {
+                    const double wms=(double)(t1.QuadPart-t0.QuadPart)*1000.0/(double)f.QuadPart;
+                    if (wms<wall[m][k]) wall[m][k]=wms;
+                    printf("CLKTWIN rep %u case %s groups %u dispatches %u fw_ms %s%.4f wall_ms %.3f hr=0x%08lx\n",rep,names[m],
+                           groups[m],dispatches,got ? "" : "missing ",got ? ms : 0.0,wms,(unsigned long)hr);
+                }
+            }
+    if (filler_signal[0]) (void)clktwin_wait(fence,event,filler_signal[0]);
+    if (filler_signal[1]) (void)clktwin_wait(fence,event,filler_signal[1]);
+    if (SUCCEEDED(hr)) {
+        double per[CASES], l1;
+        UINT gstar=0;
+        for (UINT m=0;m<CASES;++m) {
+            per[m]=best[m][0]<1e29 && best[m][1]<1e29 ? (best[m][1]-best[m][0])/4.0 : -1.0;
+            printf("CLKTWIN_CASE %s groups %u threads %u t1_ms %.4f t5_ms %.4f per_dispatch_ms %.4f wall1_ms %.3f wall5_ms %.3f\n",
+                   names[m],groups[m],m ? groups[m]*1024u : 32u,best[m][0],best[m][1],per[m],wall[m][0],wall[m][1]);
+        }
+        l1=per[1];
+        printf("CLKTWIN_LADDER");
+        for (UINT m=1;m<=16;++m) printf(" L%u=%.4f(%.3f)",groups[m],per[m],l1>0 ? per[m]/l1 : 0.0);
+        printf("\n");
+        for (UINT m=2;m<=16 && !gstar;++m) if (l1>0 && per[m]>1.25*l1) gstar=groups[m];
+        printf("CLKTWIN_GSTAR %u (first G with L(G) > 1.25 x L1; 8 = seven cores in parallel, 7 = six)\n",gstar);
+        printf("CLKTWIN_WIDE W56/L1 %.3f (56/7 = 8) W224/L1 %.3f (224/7 = 32) cores_from_W224 %.3f cores_from_W56 %.3f\n",
+               l1>0 ? per[17]/l1 : 0.0,l1>0 ? per[18]/l1 : 0.0,per[18]>0 ? 224.0*l1/per[18] : 0.0,per[17]>0 ? 56.0*l1/per[17] : 0.0);
+        printf("CLKTWIN_N32 per_dispatch_ms %.4f ns_per_iter %.3f cycles_per_iter_at_1278MHz %.2f (32 FFMA per iteration)\n",
+               per[0],per[0]*1e6/CLKTWIN_R,per[0]*1e6/CLKTWIN_R*1.278);
+        printf("CLKTWIN_RECORDS missing %u\n",missing);
+    }
+    printf("AGX_D3D12_CLKTWIN: %s\n",SUCCEEDED(hr) && !missing ? "PASS" : "FAIL");
+    for (UINT i=0;i<3;++i) { if (list[i]) ID3D12GraphicsCommandList_Release(list[i]); if (alloc[i]) ID3D12CommandAllocator_Release(alloc[i]); }
+    if (pso32) ID3D12PipelineState_Release(pso32);
+    if (pso1024) ID3D12PipelineState_Release(pso1024);
+    if (root) ID3D12RootSignature_Release(root);
+    if (errors) ID3D10Blob_Release(errors);
+    if (blob) ID3D10Blob_Release(blob);
+    if (outv) ID3D12Resource_Release(outv);
+    if (readback) ID3D12Resource_Release(readback);
+    if (event) CloseHandle(event);
+    free(rec);
+    return SUCCEEDED(hr) && !missing ? 0 : 1;
+}
+
+/* MPOKMT (S2-1c, architect 2026-11-11, amended): ask dxgkrnl directly, from user mode, what DWM never asks, for the
+ * adapter behind the primary GDI display: D3DKMTQueryAdapterInfo KMTQAITYPE_MULTIPLANEOVERLAY_SUPPORT (20) first,
+ * then DIRECTFLIP_SUPPORT (19), MULTIPLANEOVERLAY_HUD_SUPPORT (23), _SECONDARY_SUPPORT (38), MPO3DDI_SUPPORT (43),
+ * _STRETCH_SUPPORT (46); D3DKMTGetMultiPlaneOverlayCaps and D3DKMTGetPostCompositionCaps for source ids 0..3 (a
+ * gated call returns success with MaxPlanes 1 and caps 0; OverlayCaps bit 0x800 Version3DDISupport appears only after
+ * a successful miniport call). Check3 is not constructible here (needs a device and real resources). Read-only
+ * registry report: DisableOverlays / OverlayTestMode under Control\GraphicsDrivers (recursive) and Windows\Dwm.
+ * Wom1MpoGateReceipt (KMD device key) is read before/after each block: DrvCapsQueryCount +16, CapsCallsAll +28,
+ * Check3CallsAll +32, CapsLastMaxPlanes +40. Every struct field from the pinned WDK 26100 d3dkmthk.h. No writes. */
+#pragma comment(lib, "advapi32.lib")
+typedef NTSTATUS (APIENTRY *MPOKMT_FN)(void *);
+static void mpokmt_gate(const char *tag) {
+    BYTE b[512]; DWORD size = sizeof(b);
+    LSTATUS st = RegGetValueW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Enum\\ACPI\\APPL0002\\0\\Device Parameters",
+                              L"Wom1MpoGateReceipt", RRF_RT_REG_BINARY, NULL, b, &size);
+    if (st != ERROR_SUCCESS || size < 48) { printf("MPOKMT_GATE %s unreadable status=%ld size=%lu\n", tag, (long)st, (unsigned long)size); return; }
+    printf("MPOKMT_GATE %s DrvCapsQueryCount=%ld CapsCallsAll=%ld Check3CallsAll=%ld CapsLastVidPnSourceId=%ld CapsLastMaxPlanes=%ld StartDeviceCount=%ld\n",
+           tag, *(LONG *)(b + 16), *(LONG *)(b + 28), *(LONG *)(b + 32), *(LONG *)(b + 36), *(LONG *)(b + 40), *(LONG *)(b + 8));
+}
+static MPOKMT_FN mpokmt_fn(HMODULE gdi, const char *name) {
+    MPOKMT_FN f = (MPOKMT_FN)(void *)GetProcAddress(gdi, name);
+    if (!f) printf("MPOKMT missing export %s\n", name);
+    return f;
+}
+static NTSTATUS mpokmt_qai(MPOKMT_FN qai, D3DKMT_HANDLE hAdapter, UINT type, void *data, UINT size) {
+    D3DKMT_QUERYADAPTERINFO q;
+    memset(&q, 0, sizeof(q));
+    q.hAdapter = hAdapter; q.Type = (KMTQUERYADAPTERINFOTYPE)type; q.pPrivateDriverData = data; q.PrivateDriverDataSize = size;
+    return qai(&q);
+}
+/* Read-only: report every value named DisableOverlays / OverlayTestMode below key (recursive, bounded depth). */
+static void mpokmt_reg_scan(HKEY root, const WCHAR *path, int depth) {
+    HKEY key; WCHAR sub[256]; DWORD i;
+    static const WCHAR *names[2] = {L"DisableOverlays", L"OverlayTestMode"};
+    if (depth > 6 || RegOpenKeyExW(root, path, 0, KEY_READ, &key) != ERROR_SUCCESS) return;
+    for (i = 0; i < 2; ++i) {
+        DWORD type = 0, value = 0, size = sizeof(value);
+        if (RegQueryValueExW(key, names[i], NULL, &type, (BYTE *)&value, &size) == ERROR_SUCCESS)
+            printf("MPOKMT_REG %ls\\%ls type=%lu value=0x%lx\n", path, names[i], (unsigned long)type, (unsigned long)value);
+    }
+    for (i = 0;; ++i) {
+        DWORD len = 256; WCHAR child[1024];
+        if (RegEnumKeyExW(key, i, sub, &len, NULL, NULL, NULL, NULL) != ERROR_SUCCESS) break;
+        _snwprintf(child, 1023, L"%ls\\%ls", path, sub); child[1023] = 0;
+        mpokmt_reg_scan(root, child, depth + 1);
+    }
+    RegCloseKey(key);
+}
+static void mpokmt_dwm_values(void) {
+    HKEY key; DWORD i;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\Dwm", 0, KEY_READ, &key) != ERROR_SUCCESS) {
+        puts("MPOKMT_REG_DWM key absent or unreadable"); return; }
+    for (i = 0;; ++i) {
+        WCHAR name[256]; DWORD len = 256, type = 0, size = 8; BYTE data[8] = {0};
+        LSTATUS st = RegEnumValueW(key, i, name, &len, NULL, &type, data, &size);
+        if (st == ERROR_NO_MORE_ITEMS) break;
+        if (st != ERROR_SUCCESS && st != ERROR_MORE_DATA) break;
+        printf("MPOKMT_REG_DWM %ls type=%lu dword=0x%lx\n", name, (unsigned long)type,
+               st == ERROR_SUCCESS && type == REG_DWORD ? (unsigned long)*(DWORD *)data : 0ul);
+    }
+    RegCloseKey(key);
+}
+static int mpo_kmt(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base) {
+    HMODULE gdi = LoadLibraryW(L"gdi32.dll");
+    MPOKMT_FN open_gdi = gdi ? mpokmt_fn(gdi, "D3DKMTOpenAdapterFromGdiDisplayName") : NULL;
+    MPOKMT_FN qai = gdi ? mpokmt_fn(gdi, "D3DKMTQueryAdapterInfo") : NULL;
+    MPOKMT_FN caps_fn = gdi ? mpokmt_fn(gdi, "D3DKMTGetMultiPlaneOverlayCaps") : NULL;
+    MPOKMT_FN post_fn = gdi ? mpokmt_fn(gdi, "D3DKMTGetPostCompositionCaps") : NULL;
+    MPOKMT_FN close_fn = gdi ? mpokmt_fn(gdi, "D3DKMTCloseAdapter") : NULL;
+    DISPLAY_DEVICEW dd; D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME od;
+    LUID luid;
+    DWORD session = 0; NTSTATUS st; int found = 0;
+    (void)queue; (void)fence; (void)base;
+    ID3D12Device_GetAdapterLuid(device, &luid);
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    printf("MPOKMT session=%lu pid=%lu d3d12_luid=%08lx:%08lx\n", (unsigned long)session, (unsigned long)GetCurrentProcessId(),
+           (unsigned long)luid.HighPart, (unsigned long)luid.LowPart);
+    if (!open_gdi || !qai || !caps_fn || !post_fn) { puts("AGX_D3D12_MPOKMT: FAIL (exports)"); return 1; }
+    for (DWORD i = 0; !found; ++i) {
+        memset(&dd, 0, sizeof(dd)); dd.cb = sizeof(dd);
+        if (!EnumDisplayDevicesW(NULL, i, &dd, 0)) break;
+        if (dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) found = 1;
+    }
+    if (!found) { puts("MPOKMT no primary display device"); puts("AGX_D3D12_MPOKMT: FAIL"); return 1; }
+    memset(&od, 0, sizeof(od)); memcpy(od.DeviceName, dd.DeviceName, sizeof(od.DeviceName) - sizeof(WCHAR));
+    st = open_gdi(&od);
+    printf("MPOKMT OpenAdapterFromGdiDisplayName %ls status=0x%08lx hAdapter=0x%x luid=%08lx:%08lx VidPnSourceId=%u same_luid=%d desc=%ls\n",
+           dd.DeviceName, (unsigned long)st, od.hAdapter, (unsigned long)od.AdapterLuid.HighPart, (unsigned long)od.AdapterLuid.LowPart,
+           od.VidPnSourceId, od.AdapterLuid.HighPart == luid.HighPart && od.AdapterLuid.LowPart == luid.LowPart, dd.DeviceString);
+    if (st < 0) { puts("AGX_D3D12_MPOKMT: FAIL"); return 1; }
+    mpokmt_gate("qai-before");
+    {
+        D3DKMT_MULTIPLANEOVERLAY_SUPPORT mpo; D3DKMT_DIRECTFLIP_SUPPORT df; D3DKMT_MULTIPLANEOVERLAY_HUD_SUPPORT hud;
+        D3DKMT_MULTIPLANEOVERLAY_SECONDARY_SUPPORT sec; D3DKMT_MPO3DDI_SUPPORT mpo3; D3DKMT_MULTIPLANEOVERLAY_STRETCH_SUPPORT stretch;
+        memset(&mpo, 0, sizeof(mpo)); st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_MULTIPLANEOVERLAY_SUPPORT, &mpo, sizeof(mpo));
+        printf("MPOKMT_QAI MULTIPLANEOVERLAY_SUPPORT(20) status=0x%08lx Supported=%d\n", (unsigned long)st, mpo.Supported);
+        memset(&df, 0, sizeof(df)); st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_DIRECTFLIP_SUPPORT, &df, sizeof(df));
+        printf("MPOKMT_QAI DIRECTFLIP_SUPPORT(19) status=0x%08lx Supported=%d\n", (unsigned long)st, df.Supported);
+        memset(&hud, 0, sizeof(hud)); hud.VidPnSourceId = od.VidPnSourceId;
+        st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_MULTIPLANEOVERLAY_HUD_SUPPORT, &hud, sizeof(hud));
+        printf("MPOKMT_QAI MULTIPLANEOVERLAY_HUD_SUPPORT(23) status=0x%08lx VidPnSourceId=%u Update=%d KernelSupported=%d HudSupported=%d\n",
+               (unsigned long)st, hud.VidPnSourceId, hud.Update, hud.KernelSupported, hud.HudSupported);
+        memset(&sec, 0, sizeof(sec)); st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_MULTIPLANEOVERLAY_SECONDARY_SUPPORT, &sec, sizeof(sec));
+        printf("MPOKMT_QAI MULTIPLANEOVERLAY_SECONDARY_SUPPORT(38) status=0x%08lx Supported=%d\n", (unsigned long)st, sec.Supported);
+        memset(&mpo3, 0, sizeof(mpo3)); st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_MPO3DDI_SUPPORT, &mpo3, sizeof(mpo3));
+        printf("MPOKMT_QAI MPO3DDI_SUPPORT(43) status=0x%08lx Supported=%d\n", (unsigned long)st, mpo3.Supported);
+        memset(&stretch, 0, sizeof(stretch)); stretch.VidPnSourceId = od.VidPnSourceId;
+        st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_MULTIPLANEOVERLAY_STRETCH_SUPPORT, &stretch, sizeof(stretch));
+        printf("MPOKMT_QAI MULTIPLANEOVERLAY_STRETCH_SUPPORT(46) status=0x%08lx VidPnSourceId=%u Update=%d Supported=%d\n",
+               (unsigned long)st, stretch.VidPnSourceId, stretch.Update, stretch.Supported);
+    }
+    mpokmt_gate("qai-after");
+    /* Architect follow-up (REPORT-followup.md): adapter type bits, raw DRIVERCAPS_EXT / WDDM_x_x_CAPS words, and a
+     * self-check of types 19/20 (struct size, header line, a second handle from D3DKMTOpenAdapterFromLuid). */
+    {
+        D3DKMT_ADAPTERTYPE at;
+        memset(&at, 0, sizeof(at)); st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_ADAPTERTYPE, &at, sizeof(at));
+        printf("MPOKMT_QAI ADAPTERTYPE(15) status=0x%08lx Value=0x%x RenderSupported=%u DisplaySupported=%u SoftwareDevice=%u PostDevice=%u HybridDiscrete=%u HybridIntegrated=%u IndirectDisplayDevice=%u Paravirtualized=%u ACGSupported=%u SupportSetTimingsFromVidPn=%u Detachable=%u ComputeOnly=%u Prototype=%u RuntimePowerManagement=%u\n",
+               (unsigned long)st, at.Value, at.RenderSupported, at.DisplaySupported, at.SoftwareDevice, at.PostDevice, at.HybridDiscrete,
+               at.HybridIntegrated, at.IndirectDisplayDevice, at.Paravirtualized, at.ACGSupported, at.SupportSetTimingsFromVidPn,
+               at.Detachable, at.ComputeOnly, at.Prototype, at.RuntimePowerManagement);
+    }
+    {
+        static const struct { UINT type; const char *name; UINT size; } raw[] = {
+            {KMTQAITYPE_WDDM_1_2_CAPS, "WDDM_1_2_CAPS(17)", sizeof(D3DKMT_WDDM_1_2_CAPS)},
+            {KMTQAITYPE_WDDM_1_3_CAPS, "WDDM_1_3_CAPS(22)", sizeof(D3DKMT_WDDM_1_3_CAPS)},
+            {KMTQAITYPE_WDDM_2_0_CAPS, "WDDM_2_0_CAPS(24)", sizeof(D3DKMT_WDDM_2_0_CAPS)},
+            {KMTQAITYPE_DRIVERCAPS_EXT, "DRIVERCAPS_EXT(32)", sizeof(D3DKMT_DRIVERCAPS_EXT)},
+            {KMTQAITYPE_WDDM_2_7_CAPS, "WDDM_2_7_CAPS(70)", sizeof(D3DKMT_WDDM_2_7_CAPS)},
+            {KMTQAITYPE_WDDM_2_9_CAPS, "WDDM_2_9_CAPS(75)", sizeof(D3DKMT_WDDM_2_9_CAPS)},
+            {KMTQAITYPE_WDDM_3_0_CAPS, "WDDM_3_0_CAPS(77)", sizeof(D3DKMT_WDDM_3_0_CAPS)},
+            {KMTQAITYPE_WDDM_3_1_CAPS, "WDDM_3_1_CAPS(80)", sizeof(D3DKMT_WDDM_3_1_CAPS)},
+        };
+        for (UINT r = 0; r < sizeof(raw) / sizeof(raw[0]); ++r) {
+            UINT words[16]; memset(words, 0, sizeof(words));
+            st = mpokmt_qai(qai, od.hAdapter, raw[r].type, words, raw[r].size);
+            printf("MPOKMT_QAI %s status=0x%08lx size=%u words", raw[r].name, (unsigned long)st, raw[r].size);
+            for (UINT w = 0; w < (raw[r].size + 3u) / 4u && w < 16u; ++w) printf(" %08x", words[w]);
+            printf("\n");
+        }
+    }
+    /* Architect after EXP2355: the remaining flip / overlay support queries. */
+    {
+        static const struct { UINT type; const char *name; } bools[] = {
+            {KMTQAITYPE_INDEPENDENTFLIP_SUPPORT, "INDEPENDENTFLIP_SUPPORT(28)"},
+            {KMTQAITYPE_QUERY_MULTIPLANEOVERLAY_DECODE_SUPPORT, "MULTIPLANEOVERLAY_DECODE_SUPPORT(35)"},
+            {KMTQAITYPE_INDEPENDENTFLIP_SECONDARY_SUPPORT, "INDEPENDENTFLIP_SECONDARY_SUPPORT(39)"},
+            {KMTQAITYPE_MPOKERNELCAPS_SUPPORT, "MPOKERNELCAPS_SUPPORT(45)"},
+        };
+        for (UINT r = 0; r < sizeof(bools) / sizeof(bools[0]); ++r) {
+            BOOL supported = FALSE;
+            st = mpokmt_qai(qai, od.hAdapter, bools[r].type, &supported, sizeof(supported));
+            printf("MPOKMT_QAI %s status=0x%08lx Supported=%d\n", bools[r].name, (unsigned long)st, supported);
+        }
+    }
+    {
+        D3DKMT_FLIPQUEUEINFO fq; D3DKMT_CURRENTDISPLAYMODE cm; D3DKMT_QUERY_SCANOUT_CAPS sc; UINT dc[16];
+        memset(&fq, 0, sizeof(fq)); st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_FLIPQUEUEINFO, &fq, sizeof(fq));
+        printf("MPOKMT_QAI FLIPQUEUEINFO(5) status=0x%08lx MaxHardwareFlipQueueLength=%u MaxSoftwareFlipQueueLength=%u FlipFlags=0x%x\n",
+               (unsigned long)st, fq.MaxHardwareFlipQueueLength, fq.MaxSoftwareFlipQueueLength, *(const UINT *)&fq.FlipFlags);
+        memset(&cm, 0, sizeof(cm)); cm.VidPnSourceId = od.VidPnSourceId;
+        st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_CURRENTDISPLAYMODE, &cm, sizeof(cm));
+        printf("MPOKMT_QAI CURRENTDISPLAYMODE(9) status=0x%08lx Source=%u %ux%u fmt=%u refresh=%u/%u scanline=%u rotation=%u\n",
+               (unsigned long)st, cm.VidPnSourceId, cm.DisplayMode.Width, cm.DisplayMode.Height, (UINT)cm.DisplayMode.Format,
+               cm.DisplayMode.IntegerRefreshRate, cm.DisplayMode.RefreshRate.Denominator, cm.DisplayMode.ScanLineOrdering,
+               (UINT)cm.DisplayMode.DisplayOrientation);
+        memset(&sc, 0, sizeof(sc)); sc.VidPnSourceId = od.VidPnSourceId;
+        st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_SCANOUT_CAPS, &sc, sizeof(sc));
+        printf("MPOKMT_QAI SCANOUT_CAPS(67) status=0x%08lx Source=%u Caps=0x%x\n", (unsigned long)st, sc.VidPnSourceId, sc.Caps);
+        memset(dc, 0, sizeof(dc)); st = mpokmt_qai(qai, od.hAdapter, KMTQAITYPE_DISPLAY_CAPS, dc, 8u);
+        printf("MPOKMT_QAI DISPLAY_CAPS(74) status=0x%08lx words %08x %08x\n", (unsigned long)st, dc[0], dc[1]);
+    }
+    printf("MPOKMT_SELFCHECK sizeof(D3DKMT_MULTIPLANEOVERLAY_SUPPORT)=%u (d3dkmthk.h:2048 {BOOL Supported}) sizeof(D3DKMT_DIRECTFLIP_SUPPORT)=%u (d3dkmthk.h {BOOL Supported}) type20=%u type19=%u\n",
+           (UINT)sizeof(D3DKMT_MULTIPLANEOVERLAY_SUPPORT), (UINT)sizeof(D3DKMT_DIRECTFLIP_SUPPORT),
+           (UINT)KMTQAITYPE_MULTIPLANEOVERLAY_SUPPORT, (UINT)KMTQAITYPE_DIRECTFLIP_SUPPORT);
+    {
+        MPOKMT_FN open_luid = mpokmt_fn(gdi, "D3DKMTOpenAdapterFromLuid");
+        D3DKMT_OPENADAPTERFROMLUID ol;
+        memset(&ol, 0, sizeof(ol)); ol.AdapterLuid = od.AdapterLuid;
+        st = open_luid ? open_luid(&ol) : (NTSTATUS)0xC0000001L;
+        printf("MPOKMT_SELFCHECK OpenAdapterFromLuid status=0x%08lx hAdapter=0x%x (display-path hAdapter=0x%x)\n", (unsigned long)st, ol.hAdapter, od.hAdapter);
+        if (st >= 0) {
+            D3DKMT_MULTIPLANEOVERLAY_SUPPORT m2; D3DKMT_DIRECTFLIP_SUPPORT d2;
+            memset(&m2, 0, sizeof(m2)); st = mpokmt_qai(qai, ol.hAdapter, KMTQAITYPE_MULTIPLANEOVERLAY_SUPPORT, &m2, sizeof(m2));
+            printf("MPOKMT_SELFCHECK luid-handle MULTIPLANEOVERLAY_SUPPORT(20) status=0x%08lx Supported=%d\n", (unsigned long)st, m2.Supported);
+            memset(&d2, 0, sizeof(d2)); st = mpokmt_qai(qai, ol.hAdapter, KMTQAITYPE_DIRECTFLIP_SUPPORT, &d2, sizeof(d2));
+            printf("MPOKMT_SELFCHECK luid-handle DIRECTFLIP_SUPPORT(19) status=0x%08lx Supported=%d\n", (unsigned long)st, d2.Supported);
+            if (close_fn) { D3DKMT_CLOSEADAPTER c2; memset(&c2, 0, sizeof(c2)); c2.hAdapter = ol.hAdapter; (void)close_fn(&c2); }
+        }
+    }
+    for (UINT source = 0; source < 4u; ++source) {
+        D3DKMT_GET_MULTIPLANE_OVERLAY_CAPS caps; D3DKMT_GET_POST_COMPOSITION_CAPS post; char tag[32];
+        memset(&caps, 0, sizeof(caps)); caps.hAdapter = od.hAdapter; caps.VidPnSourceId = source;
+        snprintf(tag, sizeof(tag), "caps%u-before", source); mpokmt_gate(tag);
+        st = caps_fn(&caps);
+        printf("MPOKMT_CAPS source=%u status=0x%08lx MaxPlanes=%u MaxRGBPlanes=%u MaxYUVPlanes=%u OverlayCaps=0x%x bit0x800_Version3DDISupport=%u (Rotation %u RotationWithoutIndependentFlip %u VerticalFlip %u HorizontalFlip %u StretchRGB %u StretchYUV %u BilinearFilter %u HighFilter %u Shared %u Immediate %u Plane0ForVirtualModeOnly %u) MaxStretchFactor=%.3f MaxShrinkFactor=%.3f\n",
+               source, (unsigned long)st, caps.MaxPlanes, caps.MaxRGBPlanes, caps.MaxYUVPlanes, caps.OverlayCaps.Value,
+               caps.OverlayCaps.Version3DDISupport, caps.OverlayCaps.Rotation, caps.OverlayCaps.RotationWithoutIndependentFlip,
+               caps.OverlayCaps.VerticalFlip, caps.OverlayCaps.HorizontalFlip, caps.OverlayCaps.StretchRGB, caps.OverlayCaps.StretchYUV,
+               caps.OverlayCaps.BilinearFilter, caps.OverlayCaps.HighFilter, caps.OverlayCaps.Shared, caps.OverlayCaps.Immediate,
+               caps.OverlayCaps.Plane0ForVirtualModeOnly, caps.MaxStretchFactor, caps.MaxShrinkFactor);
+        snprintf(tag, sizeof(tag), "caps%u-after", source); mpokmt_gate(tag);
+        memset(&post, 0, sizeof(post)); post.hAdapter = od.hAdapter; post.VidPnSourceId = source;
+        st = post_fn(&post);
+        printf("MPOKMT_POSTCAPS source=%u status=0x%08lx MaxStretchFactor=%.3f MaxShrinkFactor=%.3f\n", source, (unsigned long)st,
+               post.MaxStretchFactor, post.MaxShrinkFactor);
+    }
+    puts("MPOKMT_CHECK3 not constructible: D3DKMTCheckMultiPlaneOverlaySupport3 needs a device and real resources (architect amendment 3)");
+    mpokmt_reg_scan(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers", 0);
+    mpokmt_reg_scan(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\Dwm", 0);
+    mpokmt_dwm_values();
+    puts("MPOKMT_REG done (read-only)");
+    if (close_fn) { D3DKMT_CLOSEADAPTER ca; memset(&ca, 0, sizeof(ca)); ca.hAdapter = od.hAdapter; (void)close_fn(&ca); }
+    puts("AGX_D3D12_MPOKMT: PASS (receipt step; the reading is in the MPOKMT_ lines)");
+    return 0;
+}
+
 static const struct { const char *name; probe_step step; } named_steps[] = {
     {"OVPAIR", ov_pair},
     {"OVPAIRH", ov_pair_heavy},
@@ -9711,6 +10152,8 @@ static const struct { const char *name; probe_step step; } named_steps[] = {
     {"MEMBWHOT", mem_bw_hot},
     {"MEMBWLONG", mem_bw_long},
     {"MEMBWATOM", mem_bw_atom},
+    {"CLKTWIN", clk_twin},
+    {"MPOKMT", mpo_kmt},
     {"Q3PC", q3_pc}, {"Q3CP", q3_cp},
     {"Q3CR", q3_cr}, {"Q3RC", q3_rc_pair}, {"Q3RCR", q3_rcr}, {"Q3RR", q3_rr},
     {"RC57C", step_rc57c}, {"RC57U", step_rc57u}, {"RC57M", step_rc57m}, {"RC59G", step_rc59g}, {"RC63G", rc63_gravitymark_stream}, {"RC89S", rc89_stream_capacity},

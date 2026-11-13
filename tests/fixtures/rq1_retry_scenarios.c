@@ -33,27 +33,27 @@ static void boot(ADMISSION_CONTEXT*c,ADMISSION_SCANOUT_RUNTIME*r){setup(c,r);ass
 int main(void){ADMISSION_CONTEXT c;ADMISSION_SCANOUT_RUNTIME r;unsigned m,k;
 /* A: failure -> retry on the tick -> the retry latches -> the original ids reported once. */
 boot(&c,&r);c.Interface.DxgkCbNotifyInterrupt=count_mpo;
-v3_pending(&c,&r,10);m=mpo_reports;commit_pending_calls=0;
+v3_pending(&c,&r,10);m=mpo_reports;commit_tick_calls=0;commit_latch_calls=0;
 fail_pending(&c,10);
 assert(!r.Faulted&&!r.PendingValid&&r.PresentGate==1&&r.RetryArmed==1&&c.Mpo.SwapFailures==1&&c.Mpo.LastSwapFailureResult==APPLE_AGX_SCANOUT_BROKER_PRESENT_FAILED);
 assert(!r.Panel.Scanout.PresentPending&&mpo_reports==m&&r.PendingMpoPresentId[0]==100&&r.PendingMpoPresentId[1]==200);
 period(&r);
 assert(fcommits==1&&r.PendingValid&&r.PendingSequence==11&&r.RetryTries==1&&c.Mpo.SwapRetries==1&&!r.RetryArmed&&r.PresentGate==1);
-assert(commit_pending_calls==0); /* the gate is held: no held set goes */
+assert(commit_tick_calls==0&&commit_latch_calls==0); /* the gate is held: no held set goes */
 irq=APPLE_AGX_SCANOUT_IRQ_LATCHED;latch=11;AdmissionScanoutInterrupt(&c);
 assert(mpo_reports==m+1&&last_mpo_count==2&&last_mpo_id[0]==100&&last_mpo_id[1]==200&&c.Mpo.SwapRetryLatched==1&&r.RetryTries==0);
-assert(r.PresentGate==0&&!r.PendingValid&&commit_pending_calls==1); /* the held set goes after the retry resolved */
+assert(r.PresentGate==0&&!r.PendingValid&&commit_latch_calls==1); /* HOLD-3b: the retry's latch hands the held set to the deadline */
 period(&r);assert(mpo_reports==m+1); /* reported once */
 puts("RQ-1 failed swap retried, latched, ids once PASS");
 /* B: three failed retries -> ids reported exactly once at the next vsync -> gate released -> the next commit reports only its own ids. */
 boot(&c,&r);c.Interface.DxgkCbNotifyInterrupt=count_mpo;
-v3_pending(&c,&r,20);m=mpo_reports;commit_pending_calls=0;
+v3_pending(&c,&r,20);m=mpo_reports;commit_tick_calls=0;commit_latch_calls=0;
 fail_pending(&c,20);frefuse=1;
-for(k=0;k<3;++k){period(&r);assert(r.RetryTries==(LONG)(k+1)&&r.PresentGate==1&&!r.PendingValid&&mpo_reports==m&&commit_pending_calls==0);}
+for(k=0;k<3;++k){period(&r);assert(r.RetryTries==(LONG)(k+1)&&r.PresentGate==1&&!r.PendingValid&&mpo_reports==m&&commit_tick_calls==0);}
 assert(fcommits==3&&c.Mpo.SwapRetries==3&&!r.Faulted);
 period(&r);
 assert(c.Mpo.SwapRetryExhaustedReported==1&&mpo_reports==m+1&&last_mpo_count==2&&last_mpo_id[0]==100&&last_mpo_id[1]==200);
-assert(r.PresentGate==0&&!r.RetryArmed&&r.RetryKind==ADMISSION_SCANOUT_RETRY_NONE&&!r.PlaneOffPending&&commit_pending_calls==1);
+assert(r.PresentGate==0&&!r.RetryArmed&&r.RetryKind==ADMISSION_SCANOUT_RETRY_NONE&&!r.PlaneOffPending&&commit_tick_calls==1);
 period(&r);assert(mpo_reports==m+1); /* exactly once */
 frefuse=0;pending(&r,30,0x1500210000LL);r.Panel.Scanout.Io.Read32=br32;r.Panel.Scanout.Io.Read64=br64;r.Panel.Scanout.Io.Write32=bw32;
 r.PendingMpoCount=1;r.PendingMpoLayer[0]=1;r.PendingMpoPresentId[0]=300;r.PendingMpoKind=ADMISSION_SCANOUT_MPO_KIND_TWO_LAYERS;

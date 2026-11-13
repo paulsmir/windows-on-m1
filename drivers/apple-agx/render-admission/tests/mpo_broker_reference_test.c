@@ -752,6 +752,32 @@ static void TestScratchFillAndSelect(void) {
   CHECK(index == 1u && write == 1u);          /* never the scanned one */
 }
 
+
+/* CUR-1c: the stage holds exactly the block rows (padding skipped), its
+ * zero test matches the bytes, and a fill from the stage equals a fill from
+ * the source. */
+static void TestScratchStage(void) {
+  unsigned char source[27 * 112], stage[0x4000], a[0x4000], b[0x4000];
+  const unsigned int pitch = 112u, w = 24u, h = 27u; /* 96-byte rows + 16 padding */
+  unsigned int i, y, x, bad = 0u;
+  for (i = 0u; i < sizeof(source); ++i) source[i] = (unsigned char)(i * 7u + 3u);
+  CHECK(AdmissionMpoScratchStage(stage, source, pitch, w, h) == 0u);
+  for (y = 0u; y < h; ++y)
+    for (x = 0u; x < w * 4u; ++x)
+      if (stage[y * w * 4u + x] != source[y * pitch + x]) ++bad;
+  CHECK(bad == 0u);
+  AdmissionMpoScratchFill(a, source, pitch, w, h, 9u, 11u);
+  AdmissionMpoScratchFill(b, stage, w * 4u, w, h, 9u, 11u);
+  CHECK(memcmp(a, b, sizeof(a)) == 0);
+  memset(source, 0, sizeof(source));
+  for (y = 0u; y < h; ++y) source[y * pitch + w * 4u] = 0xffu; /* padding only */
+  CHECK(AdmissionMpoScratchStage(stage, source, pitch, w, h) == 1u);
+  source[(h - 1u) * pitch + w * 4u - 1u] = 1u;                 /* last byte of the block */
+  CHECK(AdmissionMpoScratchStage(stage, source, pitch, w, h) == 0u);
+  source[(h - 1u) * pitch + w * 4u - 1u] = 0u;
+  CHECK(AdmissionMpoScratchStage(stage, source, 4u, 1u, 1u) == 1u); /* hidden 1x1 */
+}
+
 int main(void) {
   TestUnsupportedWritesNothing();
   TestScaledRecords();
@@ -763,6 +789,7 @@ int main(void) {
   TestScratchPlacement();
   TestClippedRecords();
   TestScratchFillAndSelect();
+  TestScratchStage();
   if (Failures != 0u) {
     fprintf(stderr, "mpo_broker_reference_test: %u failure(s)\n", Failures);
     return EXIT_FAILURE;
