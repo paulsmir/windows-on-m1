@@ -78857,3 +78857,31 @@ EXP2389 HARDWARE BEFORE 2026-11-13T11:47:34Z:
 - Hashes: sys a8c044c79a79, UmdArm64 6d1f23fe6780, UmdX64 a342395e9d0c, Umd32 028d7767e7a0; manifest 7510f0991bde, hardware-manifest e3577a10ecaf; probe2389.sh 44244cc84718 (PROBE_LINT_OK); visible recovery rec2389h 214eada9a563d363; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
 - Recovery rec2389h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2389-srv1/run2389.sh.
+
+EXP2389 HARDWARE ACTUAL 2026-11-13T12:09:58Z:
+- Boot and run: package arch/srv1 b8dfff641 (merged HOLD-3 line + SRV-1). STOPS 0. WER_REPORTS 2 (the October dumps). Recovery rec2389h RECOVERY_DONE.
+- Switch off (the always-on owner binding of SRV slots < 16 as read-only shader buffers 16 + t, and root SRVs in the root views):
+  - suite PASS 119 / FAIL 0;
+  - GM w/r2 fps_frames 52.00 / 53.28, gravitymark_hd_perf PASS +0.50 %;
+  - CS warm/r2 48.44 / 51.80, cs16 PASS -0.37 %; PERF_GATE_PASS.
+  - Expected inert: confirmed.
+- OPTWIN switch off (optoff, with captures): 188 cases, oracle_bad 0, 33 captures. OPTWIN_RECORDS missing 8 (EXP2388: 9), so the missing completion records REPEAT. Per the architect, this is now a receipt-path defect to fix before more OPTWIN work rests on it.
+  - G1u control per rep, GM shape:
+
+    | Boot | 4 MB per dispatch | 16 MB per dispatch |
+    |---|---|---|
+    | EXP2389 | 17.40 / 17.40 / 17.40 ms | 29.16 / 29.11 / 29.11 ms |
+    | EXP2388 | 17.43 / 17.40 / 17.40 ms | 29.25 / 29.38 / 30.34 ms |
+
+  - Medians against macOS, GM shape: 4 MB 1.43 / 1.43, 16 MB 0.99 / 0.99.
+  - N32 4 MB: 1.25 (EXP2389) / 1.16 (EXP2388); N32 16 MB: 1.01 / 1.04.
+  - The SRV rows reproduce too: G1_4M GM 2.64 / 2.63, G1_16M 1.42 / 1.42.
+- OPTWIN switch on (APPLE_AGX_D3D12_SRV_SSBO=1, probe process only): FAIL hr=0x887a0005 (device removed) at the first SRV-form dispatch (G1_1M oracle); 0 cases. The S1 oracles passed before it.
+  - Cause from the UMD log: measure-d3d12-dispatch refusal 7 = CompileCompute failed.
+  - Source: dxbc_nir_uav_dimensions counted the load_ssbo at shader buffer 16 + t as a UAV slot beyond DXBC_UAV_DIMENSION_SLOTS and failed. AgxD3d12OwnerCreateComputeFlags returned E_NOTIMPL with no receipt, the dispatch was refused and the UMD removed the device.
+  - Not a GPU fault: no reset receipt; Wom1SoftFaultState shows no fault entry beyond the boot's.
+  - The offline translator test had not run the owner's dimension checks.
+- Verdict:
+  - switch-off inertness CONFIRMED;
+  - SRV-1 switch-on INCONCLUSIVE (pipeline refused by a translator-side defect). Fixed in arch/srv1 73bdffafe: the check skips the SRV shader buffers; the fixture now runs both owner checks, RED -> GREEN.
+- Next: the SRV-1 switch-on arm needs the rebuilt package. Proposed to ride the MP-1 switch-off boot as its own per-process arm.
