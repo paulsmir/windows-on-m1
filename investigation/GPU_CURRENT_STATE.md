@@ -6295,3 +6295,19 @@ boot was run. The previous entry stays as written.
   CUR-1's scratch path; it is a production requirement.
 - EXP2384 next: CUR-1 v2 on HOLD-2 (arch/cur1h2), lone controls before the first injected input, then the
   pointer-on scenes incl. gated CS (expected two-plane + scratch) with the timing ring.
+
+## UPDATE 2026-11-13T01:35:00Z - EXP2384 (interim): CUR-1 scratch path works on hardware; HOLD-2 REJECTED as the halving fix
+
+- EXP2384 (arch/cur1h2 = accepted + HOLD-2 + CUR-1 v2), pointer arms with a showing cursor: DWM's 24x27 pointer
+  clip is accepted at every position and shown through the driver-owned scratch layer (ScratchCommits ~2700 per
+  arm = two-plane commits, no refusal, no dropped or unreported flip); hidden-pointer 1x1 over CS likewise
+  (3479 scratch commits, 3244 zero-skips). Full-screen CS with a cursor present: 49.09 fps against the same-boot
+  lone control 48.51 - direct scan-out with a mouse attached WORKS. Picture not seen by a person.
+- Cost found: the scratch copy reads DWM's surface through the write-combined mapping: 124..137 us mean,
+  361..422 us max per commit at device IRQL. Optimisation item (wide loads or avoiding the read).
+- While the pointer MOVES the application drops from 60 to 30..40 fps (60 when still). Ring: DWM's pointer layer
+  and the application layer flip in separate passes (0/102 commits carried both); each waits for the other's
+  latch. HOLD-2's pass-end coalescing is REJECTED as the fix for the two-layer halving (outcome b). The code
+  stays as the single commit path only if HOLD-3 builds on it.
+- HOLD-3 (spec in the handoff file): the pending set is committed once per frame at a deadline before the vblank
+  (lead 5.0 ms; 4.1 ms is the latest submit seen to latch), so both layers ride one swap.
