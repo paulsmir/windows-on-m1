@@ -6432,3 +6432,21 @@ boot was run. The previous entry stays as written.
   the thread-0 section. Sampling T1 1.11..1.21: 6..13 ps per sample unexplained by code.
 - GravityMark translation (estimates): k48 0.05..0.20 of 0.214 ms from the measured per-form ratios; the C0 and
   C2 traversals run fewer loads per wait than Apple's (1.69 vs 2.41, 1.81 vs 2.85).
+
+## UPDATE 2026-11-13T11:44:43Z - memory-path record reconciled; MP-1 specified (lever ranking: memory path first)
+
+- Reconciliation (.local/night-20261110/mempath-reconcile/REPORT.md): the closure of the memory path (EXP2269)
+  compared only 32-thread latency. The 1024-thread chase rows in the same evidence were never compared and
+  already show ours/macOS 1.43 at 4 MB (573 vs 400 ns) and 1.32 at 64 MB (2769 vs 2090 ns) - the same ratios
+  as the new gather rows. Every device-load exclusion of EXP2238..2263 (data attribute, VMID, map TLBI, DRAMCFG,
+  size of the SLC effect) ran with the GPU ~65 % at P1 (EXP2265) and is NOT a valid exclusion at P6.
+  Accepted and present in the bench m1n1 (s2v3): SLC enable, DRAMCFG following the P-cluster.
+- New numbers in the old units: dependent round trip at the single-group shape 1 MB 228 vs 157 ns (ours/macOS),
+  64 MB 299 vs 284; coalesced loads with a new 16K page per load at 64 MB 387 vs 183 ns.
+- Never tested: block mappings / page size, placement and attribute of the page-table pages, GPU L2 / walker
+  configuration, shareability; broker TLBIs inside a dispatch never counted.
+- LEVER RANKING for the compute ratio now: (1) GPU memory path (identical code, 1.19..1.43); (2) loads in
+  flight per wait in the traversals and constant-buffer rows (compiler; C1 1.31); (3) sampling residual
+  6..13 ps per sample; dispatch structure, group size, barriers, clock: excluded.
+- MP-1 (spec in the handoff file): MEMATTR 0 on GPU-only leaves as a measurement switch with a coverage receipt,
+  OPTWIN gather rows at P6, off/on boots. In parallel: macOS's own UAT leaf attributes read from the kext.
