@@ -458,6 +458,67 @@ static void TestCommitSequences(void) {
         fake.Trace[0].Width == 32u && !fake.Trace[0].Write);
 }
 
+/* RQ-1: a pending commit that fails after acceptance (synchronous failure
+ * or the RQ-2 latch deadline): IRQ_ERROR, RESULT != OK, RECEIPT = its
+ * sequence.  Only that matching failure releases the client; a RELEASE or
+ * stale error, or RESULT OK, does not. */
+static void TestPendingFailureReleasesClient(void) {
+  APPLE_AGX_FIXED_PANEL panel;
+  FAKE fake;
+  APPLE_AGX_SCANOUT_LAYER layers[2];
+  APPLE_AGX_SCANOUT_U64 sequence = 0ULL, failed = 0ULL, next = 0ULL;
+  APPLE_AGX_SCANOUT_U32 result = 0u, status = 0u;
+  APPLE_AGX_SCANOUT_U64 latched = 0ULL;
+
+  FakeInit(&fake, V2_CAPS | APPLE_AGX_SCANOUT_CAP_TWO_LAYERS);
+  CHECK(StartPanel(&panel, &fake, 1u) == AppleAgxFixedPanelOk);
+  CHECK(AppleAgxFixedPanelCommit(&panel, 0u, 0u, 2560u, 1600u, 10240u,
+                                 APPLE_AGX_SCANOUT_FORMAT_BGRA8888) ==
+        AppleAgxFixedPanelOk);
+  layers[0] = Layer(0x1000000ULL, 640u, 480u,
+                    APPLE_AGX_SCANOUT_LAYER_FLAG_PREMULTIPLIED);
+  layers[1] = Layer(0x10000ULL, 2560u, 1600u,
+                    APPLE_AGX_SCANOUT_LAYER_FLAG_PREMULTIPLIED);
+  layers[1].DstOrigin = 0u;
+  CHECK(AppleAgxFixedPanelQueueCommitLayers(&panel, layers, 2u, &sequence) ==
+        AppleAgxFixedPanelOk);
+  /* Nothing failed yet: no release, nothing reported. */
+  CHECK(AppleAgxScanoutTakePresentFailure(&panel.Scanout, &failed, &result) ==
+        AppleAgxScanoutNoInterrupt);
+  CHECK(panel.Scanout.PresentPending && failed == 0ULL);
+  /* An error about another sequence (a RELEASE, a stale receipt). */
+  fake.Receipt = sequence - 1ULL;
+  fake.Result = APPLE_AGX_SCANOUT_BROKER_PRESENT_FAILED;
+  CHECK(AppleAgxScanoutTakePresentFailure(&panel.Scanout, &failed, &result) ==
+        AppleAgxScanoutNoInterrupt);
+  CHECK(panel.Scanout.PresentPending);
+  /* The receipt of this commit with RESULT OK is its acceptance, not a failure. */
+  fake.Receipt = sequence;
+  fake.Result = APPLE_AGX_SCANOUT_BROKER_OK;
+  CHECK(AppleAgxScanoutTakePresentFailure(&panel.Scanout, &failed, &result) ==
+        AppleAgxScanoutNoInterrupt);
+  CHECK(panel.Scanout.PresentPending);
+  /* Its failure: IRQ_ERROR consumed, then the failure releases the client. */
+  fake.Result = APPLE_AGX_SCANOUT_BROKER_PRESENT_FAILED;
+  fake.IrqStatus = APPLE_AGX_SCANOUT_IRQ_ERROR;
+  CHECK(AppleAgxScanoutConsumeInterrupt(&panel.Scanout, &status, &latched) ==
+        AppleAgxScanoutOk);
+  CHECK(status == APPLE_AGX_SCANOUT_IRQ_ERROR && panel.Scanout.PresentPending);
+  CHECK(AppleAgxScanoutTakePresentFailure(&panel.Scanout, &failed, &result) ==
+        AppleAgxScanoutOk);
+  CHECK(failed == sequence && result == APPLE_AGX_SCANOUT_BROKER_PRESENT_FAILED);
+  CHECK(!panel.Scanout.PresentPending && panel.Scanout.PendingPresentSequence == 0ULL);
+  CHECK(panel.Scanout.LastBrokerResult == APPLE_AGX_SCANOUT_BROKER_PRESENT_FAILED);
+  /* The same records go again with a new sequence. */
+  fake.Result = 0u;
+  CHECK(AppleAgxFixedPanelQueueCommitLayers(&panel, layers, 2u, &next) ==
+        AppleAgxFixedPanelOk);
+  CHECK(next == sequence + 1ULL && panel.Scanout.PresentPending);
+  /* No client: invalid argument. */
+  CHECK(AppleAgxScanoutTakePresentFailure(NULL, &failed, &result) ==
+        AppleAgxScanoutInvalidArgument);
+}
+
 /* Every terminal refusal code reaches the caller; BUSY is not terminal. */
 static void TestRefusalsSurface(void) {
   APPLE_AGX_FIXED_PANEL panel;
@@ -523,6 +584,7 @@ int main(void) {
   TestNoV3AccessWhenNotEffective();
   TestNegotiationOrder();
   TestCommitSequences();
+  TestPendingFailureReleasesClient();
   TestRefusalsSurface();
   if (Failures != 0u) {
     fprintf(stderr, "apple_agx_scanout_v3_test: %u failure(s)\n", Failures);

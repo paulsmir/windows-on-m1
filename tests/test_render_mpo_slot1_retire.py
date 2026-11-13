@@ -213,6 +213,7 @@ class RenderMpoSlot1RetireTests(unittest.TestCase):
         code += "static ADMISSION_SCANOUT_RUNTIME *AdmissionScanoutGet(ADMISSION_CONTEXT *c);\n"
         code += wait + "\n"
         for signature in (
+            "static VOID AdmissionScanoutRetryRecordV3(",  # RQ-1: QueueHeld records the commit
             "static VOID AdmissionScanoutSetNextMpo(",
             "static VOID AdmissionScanoutTakeNextMpo(",
             "_Use_decl_annotations_ BOOLEAN AdmissionScanoutMpoSlot1MayShow(",

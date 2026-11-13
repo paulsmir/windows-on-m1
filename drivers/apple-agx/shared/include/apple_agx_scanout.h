@@ -311,6 +311,15 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutNegotiateTwoLayers(
 APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutQueueCommitLayers(
     APPLE_AGX_SCANOUT_CLIENT *Client, const APPLE_AGX_SCANOUT_LAYER *Layers,
     APPLE_AGX_SCANOUT_U32 Count, APPLE_AGX_SCANOUT_U64 *Sequence);
+/* RQ-1: after IRQ_ERROR, read RESULT and RECEIPT_SEQUENCE once.  When a
+ * present or commit is pending, RECEIPT is its sequence and RESULT is not OK
+ * (a synchronous failure after acceptance, or the broker's latch deadline),
+ * the client is released (PresentPending FALSE) and Ok returns the failed
+ * sequence and the result; any other combination returns NoInterrupt and
+ * changes nothing (a RELEASE failure, a stale receipt, an acceptance). */
+APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutTakePresentFailure(
+    APPLE_AGX_SCANOUT_CLIENT *Client, APPLE_AGX_SCANOUT_U64 *Sequence,
+    APPLE_AGX_SCANOUT_U32 *BrokerResult);
 /* REG_ACTIVE_LAYERS; NotNegotiated without MMIO unless negotiated. */
 APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutReadActiveLayers(
     APPLE_AGX_SCANOUT_CLIENT *Client, APPLE_AGX_SCANOUT_U32 *ActiveLayers);

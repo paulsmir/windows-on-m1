@@ -48,6 +48,22 @@ typedef struct _ADMISSION_SCANOUT_RUNTIME {
   volatile LONG PlaneOffLayer[2];
   volatile LONG64 PlaneOffPresentId[2];
   volatile LONG64 LastNotifiedSequence;
+  /* RQ-1: the last asynchronous submission (V3 records, or the V2 surface),
+   * re-submitted after the broker failed it (IRQ_ERROR, RESULT != OK,
+   * RECEIPT == its sequence) from the vertical tick, one try per vsync. */
+#define ADMISSION_SCANOUT_RETRY_NONE 0
+#define ADMISSION_SCANOUT_RETRY_V3 1
+#define ADMISSION_SCANOUT_RETRY_V2 2
+#define ADMISSION_SCANOUT_RETRY_TRIES 3
+  volatile LONG RetryKind;
+  volatile LONG RetryArmed;
+  volatile LONG RetryTries;
+  volatile LONG64 RetrySequence;
+  ULONG RetryCount;
+  APPLE_AGX_SCANOUT_LAYER RetryRecords[2];
+  ULONG RetrySegment;
+  ULONGLONG RetryOffset;
+  LONG RetryFormat;
   APPLE_AGX_VSYNC_TIMELINE Timeline;
   KTIMER VsyncTimer;
   KDPC VsyncDpc;
@@ -802,6 +818,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStop(
       return STATUS_DEVICE_BUSY;
   }
   InterlockedExchange(&runtime->PresentGate, 1);
+  /* RQ-1: no retry outlives the scan-out. */
+  InterlockedExchange(&runtime->RetryArmed, 0);
   /* NP-1: no Set3 runs once the scanout stops; drain and free the publish
    * work item (its worker touches the context). */
   AdmissionMpoPublishStop(Context);
@@ -1199,6 +1217,36 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutSetVisible(
              : STATUS_DEVICE_HARDWARE_ERROR;
 }
 
+/* ---- RQ-1: a swap that fails after acceptance is retried, not fatal ----
+ * (investigation/analysis/RQ-1-scanout-failed-swap-retry.md).  The broker
+ * reports it as IRQ_ERROR with RESULT != OK and RECEIPT == the pending
+ * sequence (m1n1 complete_present / fail_latch).  The flip's PresentIds stay
+ * pending and the present gate stays held, so a Set3 meanwhile merges into
+ * the HOLD-1 set or answers DEVICE_BUSY.  Device IRQL (ISR) only. */
+static VOID AdmissionScanoutRetryRecordV3(ADMISSION_SCANOUT_RUNTIME *Runtime,
+                                          const APPLE_AGX_SCANOUT_LAYER *Records,
+                                          ULONG Count, APPLE_AGX_SCANOUT_U64 Sequence) {
+  ULONG index;
+  for (index = 0u; index < Count && index < 2u; ++index)
+    Runtime->RetryRecords[index] = Records[index];
+  Runtime->RetryCount = Count;
+  InterlockedExchange(&Runtime->RetryKind, ADMISSION_SCANOUT_RETRY_V3);
+  InterlockedExchange(&Runtime->RetryTries, 0);
+  InterlockedExchange64(&Runtime->RetrySequence, (LONG64)Sequence);
+}
+
+static VOID AdmissionScanoutRetryRecordV2(ADMISSION_SCANOUT_RUNTIME *Runtime,
+                                          ULONG Segment, ULONGLONG Offset,
+                                          LONG Format,
+                                          APPLE_AGX_SCANOUT_U64 Sequence) {
+  Runtime->RetrySegment = Segment;
+  Runtime->RetryOffset = Offset;
+  Runtime->RetryFormat = Format;
+  InterlockedExchange(&Runtime->RetryKind, ADMISSION_SCANOUT_RETRY_V2);
+  InterlockedExchange(&Runtime->RetryTries, 0);
+  InterlockedExchange64(&Runtime->RetrySequence, (LONG64)Sequence);
+}
+
 static VOID AdmissionScanoutSetNextMpo(
     ADMISSION_SCANOUT_RUNTIME *Runtime,
     const ADMISSION_MPO_COMPLETION *Completion) {
@@ -1425,6 +1473,7 @@ static NTSTATUS AdmissionScanoutMpoQueueHeld(
   if (Count == 2u)
     InterlockedExchange(&Runtime->Slot1Shown, 1);
   AdmissionScanoutSetNextMpo(Runtime, Completion);
+  AdmissionScanoutRetryRecordV3(Runtime, Records, Count, sequence);
   InterlockedExchange64(&Runtime->PendingSequence, (LONG64)sequence);
   InterlockedExchange(&Runtime->PendingValid, 1);
   AdmissionScanoutTakeNextMpo(Runtime,
@@ -1568,6 +1617,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueueDeferred(
                ? STATUS_DEVICE_BUSY
                : STATUS_DEVICE_HARDWARE_ERROR;
   }
+  AdmissionScanoutRetryRecordV2(
+      runtime, ADMISSION_MEMORY_LOCAL_SEGMENT, offset,
+      InterlockedCompareExchange(&runtime->DeferredFormat, 0, 0), sequence);
   InterlockedExchange64(&runtime->PendingSequence, (LONG64)sequence);
   InterlockedExchange(&runtime->PendingValid, 1);
   AdmissionScanoutTakeNextMpo(runtime, ADMISSION_SCANOUT_MPO_KIND_V2);
@@ -1755,6 +1807,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
                ? STATUS_DEVICE_BUSY
                : STATUS_DEVICE_HARDWARE_ERROR;
   }
+  AdmissionScanoutRetryRecordV2(runtime, Args->PrimarySegment, surface_offset,
+                                (LONG)format_code, sequence);
   InterlockedExchange64(&runtime->PendingSequence, (LONG64)sequence);
   InterlockedExchange(&runtime->PendingValid, 1);
   AdmissionScanoutTakeNextMpo(runtime, ADMISSION_SCANOUT_MPO_KIND_V2);
@@ -1788,6 +1842,107 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
 /* All timeline and receipt writes are serialized at the adapter's DIRQL.
  * TimerLock only serializes PASSIVE/DPC timer scheduling and teardown;
  * the ISR never acquires it. First32 receipts are immutable, last32 roll. */
+
+/* IRQ_ERROR.  TRUE when it was the recorded asynchronous submission failing
+ * (now armed for a retry); FALSE when the caller keeps today's fail-closed
+ * path (a PASSIVE start/retire present, or a lost transport). */
+static BOOLEAN AdmissionScanoutSwapError(ADMISSION_CONTEXT *Context,
+                                         ADMISSION_SCANOUT_RUNTIME *Runtime) {
+  APPLE_AGX_SCANOUT_U64 failed = 0ULL;
+  APPLE_AGX_SCANOUT_U32 broker = 0u;
+  APPLE_AGX_SCANOUT_RESULT result;
+  if (InterlockedCompareExchange(&Runtime->PendingValid, 0, 0) == 0) {
+    /* No present outstanding: a RELEASE failure or a stale error. */
+    InterlockedIncrement(&Context->Mpo.ForeignErrors);
+    return TRUE;
+  }
+  result = AppleAgxScanoutTakePresentFailure(&Runtime->Panel.Scanout, &failed,
+                                             &broker);
+  if (result == AppleAgxScanoutNoInterrupt) {
+    InterlockedIncrement(&Context->Mpo.ForeignErrors);
+    return TRUE;
+  }
+  if (result != AppleAgxScanoutOk ||
+      failed != (APPLE_AGX_SCANOUT_U64)InterlockedCompareExchange64(
+                    &Runtime->PendingSequence, 0, 0) ||
+      failed != (APPLE_AGX_SCANOUT_U64)InterlockedCompareExchange64(
+                    &Runtime->RetrySequence, 0, 0) ||
+      InterlockedCompareExchange(&Runtime->RetryKind, 0, 0) ==
+          ADMISSION_SCANOUT_RETRY_NONE)
+    return FALSE;
+  InterlockedIncrement(&Context->Mpo.SwapFailures);
+  InterlockedExchange(&Context->Mpo.LastSwapFailureResult, (LONG)broker);
+  InterlockedExchange(&Runtime->PendingValid, 0);
+  InterlockedExchange64(&Runtime->PendingSequence, 0);
+  InterlockedExchange(&Runtime->RetryArmed, 1);
+  return TRUE;
+}
+
+/* Vertical tick with a retry armed: one re-submission per vsync; after
+ * ADMISSION_SCANOUT_RETRY_TRIES the flip's PresentIds are reported at this
+ * vsync as its latch would have (architect 2026-11-12, as Asahi completes a
+ * failed swap with a fake vblank) and the gate is released. */
+static VOID AdmissionScanoutSwapRetry(ADMISSION_CONTEXT *Context,
+                                      ADMISSION_SCANOUT_RUNTIME *Runtime,
+                                      ULONGLONG Now) {
+  APPLE_AGX_SCANOUT_U64 sequence = 0ULL;
+  APPLE_AGX_SCANOUT_RESULT result = AppleAgxScanoutBusy;
+  ULONG index;
+  LONG count;
+  if (InterlockedCompareExchange(&Runtime->Stopping, 0, 0) != 0)
+    return;
+  if (InterlockedCompareExchange(&Runtime->RetryTries, 0, 0) >=
+      ADMISSION_SCANOUT_RETRY_TRIES) {
+    if (InterlockedCompareExchange(&Runtime->PlaneOffPending, 0, 0) != 0)
+      return; /* a plane-off report is still due: next tick */
+    count = InterlockedExchange(&Runtime->PendingMpoCount, 0);
+    for (index = 0u; index < 2u; ++index) {
+      InterlockedExchange(&Runtime->PlaneOffLayer[index],
+                          InterlockedExchange(&Runtime->PendingMpoLayer[index], 0));
+      InterlockedExchange64(
+          &Runtime->PlaneOffPresentId[index],
+          InterlockedExchange64(&Runtime->PendingMpoPresentId[index], 0));
+    }
+    InterlockedExchange(&Runtime->PendingMpoKind, ADMISSION_SCANOUT_MPO_KIND_V2);
+    InterlockedExchange64(&Runtime->PendingPhysicalAddress, 0);
+    InterlockedExchange64(&Runtime->PendingQueuedTime100ns, 0);
+    if (count > 0) {
+      InterlockedExchange(&Runtime->PlaneOffCount, count);
+      InterlockedExchange(&Runtime->PlaneOffPending, 1);
+    }
+    InterlockedExchange(&Runtime->RetryArmed, 0);
+    InterlockedExchange(&Runtime->RetryTries, 0);
+    InterlockedExchange(&Runtime->RetryKind, ADMISSION_SCANOUT_RETRY_NONE);
+    InterlockedExchange64(&Runtime->RetrySequence, 0);
+    InterlockedIncrement(&Context->Mpo.SwapRetryExhaustedReported);
+    InterlockedExchange(&Runtime->PresentGate, 0);
+    return;
+  }
+  InterlockedIncrement(&Runtime->RetryTries);
+  InterlockedIncrement(&Context->Mpo.SwapRetries);
+  if (InterlockedCompareExchange(&Runtime->RetryKind, 0, 0) ==
+      ADMISSION_SCANOUT_RETRY_V3) {
+    result = AppleAgxScanoutQueueCommitLayers(&Runtime->Panel.Scanout,
+                                              Runtime->RetryRecords,
+                                              Runtime->RetryCount, &sequence);
+  } else if (AppleAgxFixedPanelSetPresentFormat(
+                 &Runtime->Panel, (APPLE_AGX_SCANOUT_U32)Runtime->RetryFormat) ==
+                 AppleAgxFixedPanelOk &&
+             AppleAgxFixedPanelQueuePresent(&Runtime->Panel,
+                                            Runtime->RetrySegment,
+                                            Runtime->RetryOffset,
+                                            &sequence) == AppleAgxFixedPanelOk) {
+    result = AppleAgxScanoutOk;
+  }
+  if (result != AppleAgxScanoutOk)
+    return; /* counted as a try; the next tick tries again */
+  InterlockedExchange64(&Runtime->RetrySequence, (LONG64)sequence);
+  InterlockedExchange64(&Runtime->PendingQueuedTime100ns, (LONG64)Now);
+  InterlockedExchange64(&Runtime->PendingSequence, (LONG64)sequence);
+  InterlockedExchange(&Runtime->PendingValid, 1);
+  InterlockedExchange(&Runtime->RetryArmed, 0);
+}
+
 /* EXP1106: a period's tick is armed this long after its predicted vblank,
  * so the hardware latch of that vblank (which re-anchors the grid) arrives
  * first and the period gets one vsync, not a tick and then a latch. */
@@ -1857,6 +2012,15 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
     InterlockedExchange(&Context->LastInterruptStatus, (LONG)irq_status);
     InterlockedIncrement(&Context->InterruptCount);
     InterlockedIncrement(&Context->InterruptAckCount);
+    /* RQ-1: a failed swap of the recorded submission is retried from the
+     * vertical tick; only a lost transport or a failed PASSIVE present keeps
+     * the fail-closed path. */
+    if (result == AppleAgxScanoutOk &&
+        (irq_status & APPLE_AGX_SCANOUT_IRQ_ERROR) != 0u) {
+      AdmissionScanoutVsyncRecord(runtime, 7u, STATUS_DEVICE_HARDWARE_ERROR);
+      if (AdmissionScanoutSwapError(Context, runtime))
+        irq_status &= ~(APPLE_AGX_SCANOUT_U32)APPLE_AGX_SCANOUT_IRQ_ERROR;
+    }
     if (result != AppleAgxScanoutOk ||
         (irq_status & APPLE_AGX_SCANOUT_IRQ_ERROR) != 0u) {
       InterlockedExchange(&runtime->Faulted, 1);
@@ -1875,6 +2039,9 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
           (ULONGLONG)InterlockedCompareExchange64(
               &runtime->PendingPhysicalAddress, 0, 0), now) != 0;
       if (matched) {
+        /* RQ-1: a retried flip latched; its PresentIds are reported below. */
+        if (InterlockedExchange(&runtime->RetryTries, 0) != 0)
+          InterlockedIncrement(&Context->Mpo.SwapRetryLatched);
         RtlZeroMemory(mpo_info, sizeof(mpo_info));
         mpo_count = (ULONG)InterlockedExchange(&runtime->PendingMpoCount, 0);
         if (mpo_count > 2u)
@@ -1921,6 +2088,10 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
     }
   }
   if (VerticalTick) {
+    /* RQ-1: a failed swap is re-submitted (or, after the bound, reported)
+     * before the held set may go. */
+    if (InterlockedCompareExchange(&runtime->RetryArmed, 0, 0) != 0)
+      AdmissionScanoutSwapRetry(Context, runtime, now);
     /* HOLD-3c: the software tick keeps the latch phase in frames without a
      * latch (tick - learned offset, mpo_hold.h). */
     AdmissionMpoNoteTick(Context);

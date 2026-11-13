@@ -6411,3 +6411,101 @@ boot was run. The previous entry stays as written.
   them against the macOS table.
 - GravityMark gap unchanged (~16 %); priced so far: constant-buffer row loads ~0.04..0.05 ms in each of k48 and
   the C0 traversal.
+
+## UPDATE 2026-11-13T11:37:34Z - REOPENED WITH NEW EVIDENCE: GPU memory path is slower than macOS on identical code (EXP2388)
+
+- EXP2388 (ours-side OPTWIN with GravityMark's buffer form: root RWByteAddressBuffer Load4) against the macOS
+  twin: random gathers 1.19 (1 MB) / 1.43 (4 MB) / 0.98..1.03 (16 MB) / 1.32 (64 MB); dependent 1.21 / 1.32;
+  coalesced 0.92 (1 MB) / 1.41 (64 MB). 9 of 564 repetitions had no completion record (not investigated).
+- Code gate round 2 (.local/night-20261110/optwin-codegate2/REPORT.md; our listings compiled offline from the
+  captured DXBC, 32 of 33 kernels equal to the guest's shader-stats rows): the G1u/G1du/G1cu inner loops are
+  the SAME instructions as Apple's (4 x 16-byte device load, same addressing and hint bits; ours one extra wait).
+  The ratios above are therefore NOT code form. At the latency-bound shape the 1 MB round trip is +73..95 ns
+  on our side; at 64 MB the latency gap is small (1.05..1.15) and the loss is in throughput. The 16 MB point is
+  parity in every pairing (not an outlier): the two size curves cross.
+- This contradicts the entry that lists "memory hierarchy, SLC, DRAMCFG, GPU TLB" as closed (hypothesis of a
+  rate-type cause the latency probes could not see). That closure stays as written; it is superseded by this
+  measurement for full-width gathers. Cause: OPEN. Reconciliation with the EXP2226..2243 record is running.
+- Code-form differences found by the same gate (compiler items, each priced): constant-buffer rows C1 1.31 =
+  one load in flight per wait on our side against up to ~15 on Apple's (latency shape 2.27x fully explained);
+  shared-memory kernel: our compiler keeps barriers at group size 32x1 that Apple drops and lacks the skip over
+  the thread-0 section. Sampling T1 1.11..1.21: 6..13 ps per sample unexplained by code.
+- GravityMark translation (estimates): k48 0.05..0.20 of 0.214 ms from the measured per-form ratios; the C0 and
+  C2 traversals run fewer loads per wait than Apple's (1.69 vs 2.41, 1.81 vs 2.85).
+
+## UPDATE 2026-11-13T11:44:43Z - memory-path record reconciled; MP-1 specified (lever ranking: memory path first)
+
+- Reconciliation (.local/night-20261110/mempath-reconcile/REPORT.md): the closure of the memory path (EXP2269)
+  compared only 32-thread latency. The 1024-thread chase rows in the same evidence were never compared and
+  already show ours/macOS 1.43 at 4 MB (573 vs 400 ns) and 1.32 at 64 MB (2769 vs 2090 ns) - the same ratios
+  as the new gather rows. Every device-load exclusion of EXP2238..2263 (data attribute, VMID, map TLBI, DRAMCFG,
+  size of the SLC effect) ran with the GPU ~65 % at P1 (EXP2265) and is NOT a valid exclusion at P6.
+  Accepted and present in the bench m1n1 (s2v3): SLC enable, DRAMCFG following the P-cluster.
+- New numbers in the old units: dependent round trip at the single-group shape 1 MB 228 vs 157 ns (ours/macOS),
+  64 MB 299 vs 284; coalesced loads with a new 16K page per load at 64 MB 387 vs 183 ns.
+- Never tested: block mappings / page size, placement and attribute of the page-table pages, GPU L2 / walker
+  configuration, shareability; broker TLBIs inside a dispatch never counted.
+- LEVER RANKING for the compute ratio now: (1) GPU memory path (identical code, 1.19..1.43); (2) loads in
+  flight per wait in the traversals and constant-buffer rows (compiler; C1 1.31); (3) sampling residual
+  6..13 ps per sample; dispatch structure, group size, barriers, clock: excluded.
+- MP-1 (spec in the handoff file): MEMATTR 0 on GPU-only leaves as a measurement switch with a coverage receipt,
+  OPTWIN gather rows at P6, off/on boots. In parallel: macOS's own UAT leaf attributes read from the kext.
+
+## UPDATE 2026-11-13T11:58:02Z - macOS UAT leaves read from the kernelcache (behaviour only): cached user mappings exist
+
+- Static read of the macOS 15.7.8 kernelcache for J313 (.local/night-20261110/kext-uat-attrs/REPORT.md): on M1
+  the GPU page tables are written by XNU's PPL "uat" driver. Leaf = PA | AF | nG | bit 55, SH 00, 16K pages at
+  L3 only (no block or contiguous mappings). AttrIndx: device (1), uncached (2) or cached (0); a user buffer is
+  mapped CACHED when a map option (bit 41) is set, UNCACHED otherwise. Which Metal buffers get that option is
+  not found. Kernel/firmware-shared resources are mapped cached at ~17 sites. Asahi and our broker always write
+  the uncached index (leaf 0x...C8B) for user memory. MAIR encodings: not written by driver code, unknown.
+- TLB maintenance differs: macOS issues no invalidation when mapping into an invalid entry and one range
+  invalidation per unmapped segment; our broker issues a whole-ASID invalidation per 16K entry on unmap (and on
+  map unless built with AGX_GPUVA_MAP_NO_TLBI). Effect on a running dispatch: unmeasured (counted in MP-1).
+- Consequence: the MP-1 hypothesis (data attribute) has a source basis - macOS has a cached user-buffer form that
+  neither Asahi nor we use. Still a hypothesis until MP-1's rows are in.
+
+## UPDATE 2026-11-13T13:02:12Z - EXP2389..2391: SRV-1 confirmed; MP-1 inconclusive (variable did not reach the measured leaves)
+
+- SRV-1 (SRV buffer reads as device loads, opt-in): with the switch on the root-SRV gather rows equal the
+  raw-UAV rows (ours/macOS 3.98 -> 1.19 at 1 MB, 2.50 -> 1.32 at 64 MB); switch-off binding inert (gates PASS).
+  CONFIRMED; stays opt-in until the table-SRV robust form (SRV-1b) exists. Not a GravityMark lever.
+- Gather control rows reproduce across EXP2388/2389/2390: 4 MB 1.43, 16 MB 0.99..1.00, per-rep spread < 0.3 %.
+- MP-1 (EXP2390 off / EXP2391 on): INCONCLUSIVE. Coverage receipt: the cached encoding works (leaf ...C83 on
+  1000 leaves) but the probe's 85 MB regions and GravityMark's large buffers live in segment 3 (the pool
+  segment from Windows memory), which the rule excludes; big_cached 0 in both windows. Ratios unchanged, as they
+  must be. The EXP2239 exclusion had the same hole.
+- EXCLUDED with a count: broker TLB invalidations during the probe and GM windows = 0 in both boots.
+- Probe defect fixed: "missing records" were timed lists stamped after ExecuteCommandLists returned and
+  classified as fillers (reason 7).
+- MP-1b approved: the cached attribute also on GPU-only pool-segment allocations (measurement only; stale data
+  from CPU-side fills is a possible outcome), same rows, coverage line must show the probe regions cached, plus a
+  GM PERF window.
+
+## UPDATE 2026-11-13T13:31:21Z - EXP2392 MP-1b: leaf data attribute REJECTED as the cause (valid coverage, P6)
+
+- EXP2392 (Wom1GpuPrivateCached=2, measurement only): coverage proven - both GPU-only 85 MiB probe regions and
+  GravityMark's large buffers mapped with the cached leaf (...C83; 150748 cached leaves, 0 TLB invalidations);
+  oracle_bad 0, suite 119/0 (no stale data seen). Every gather ratio is unchanged to two decimals at the GM
+  shape (G1u 1.19 / 1.43 / 0.99 / 1.32; G1du 1.21 / 1.43 / 0.96 / 1.32; G1cu 0.92 / 1.41), the single-group
+  rows within noise, GM PERF 53.05 against 53.06. The cached/uncached leaf attribute does NOT change GPU load
+  cost on this hardware: REJECTED (this replaces the invalid EXP2239 exclusion with a valid one).
+- Excluded so far at P6 with identical code: leaf data attribute, broker TLB invalidations, GPU clock, code form.
+- Observation that shapes the next step: latency is not ordered by region size on our side (single-group G1u
+  1 MB 386 ns > 4 MB 299 ns; Apple 294 -> 326), and 16 distinct lines over 1 MB still cost 227 vs 134 ns.
+- MP-2 specified (handoff file): physical placement - the same rows from the contiguous local segment against
+  the Windows pool pages, with contiguity/colour receipts. In parallel, offline: the register list of the GPU
+  L2 / MMU blocks macOS prints, for a read-side comparison.
+
+## UPDATE 2026-11-13T13:52:36Z - PRIORITY CHANGE (operator): completeness first; plan in investigation/GPU_COMPLETENESS_PLAN.md
+
+- Operator 2026-11-13: the driver is to be made complete for everyday use first; the GravityMark gap is resumed
+  afterwards. A change rejected as a GravityMark lever is still landed when it is contract-correct or a real
+  driver feature. Staged MP-2 may finish; the memory-path and compiler levers are otherwise frozen.
+- Audit of the accepted package: .local/night-20261110/completeness-audit/REPORT.md. Largest gaps: GPU only in
+  assisted boot, no brightness, SetPowerState a no-op (no sleep / display off), TDR ends in bugcheck 0x116, no
+  firmware-crash recovery, mode changes to verify, no gamma, no video decode, OpenGL 2.1 and no native ARM64
+  ICD in the package, about 30 fail-closed D3D12 DDIs, disable/enable ends in Code 43, drills and measurement
+  switches in the shipped build.
+- Work packages A (faults), B (power), C (display), D (memory/scheduling/security), E (API), F (shipping) and the
+  order of hardware checks are in the plan. First wave of design reads started.
