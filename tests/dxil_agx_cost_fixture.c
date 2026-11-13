@@ -1394,6 +1394,9 @@ main(int argc, char **argv)
       /* T5b step B2: the owner's APPLE_AGX_D3D12_SRV_STATIC_FIRST */
       if (srv_static_first)
          limits[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_STATIC_FIRST;
+      /* SRV-1: APPLE_AGX_D3D12_SRV_SSBO reaches both frontends as this flag */
+      if (srv_ssbo)
+         limits[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_SSBO;
       /* SRV-1: a DXBC container or token stream takes the owner's DXBC
        * entry (dxbc_translate_tokens_bindings); everything else is DXIL */
       const void *shex = NULL;
@@ -1410,8 +1413,6 @@ main(int argc, char **argv)
       if (tokens) {
          struct dxbc_binding_map map;
          struct dxbc_nir_error err;
-         if (srv_ssbo)
-            limits[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_SSBO;
          nir = dxbc_translate_tokens_bindings(words, &agx_nir_options, limits, &map, &err);
          if (!nir) {
             printf("REFUSED %s\n", err.message);

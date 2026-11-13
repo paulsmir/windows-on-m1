@@ -2284,10 +2284,12 @@ static const uint32_t *dxbc_binding_limits() {
  * frontend keeps shader_binding_limits()) */
 static const uint32_t *dxil_binding_limits() {
   const uint32_t *limits = shader_binding_limits();
-  if (!t5b_srv_static_first()) return limits;
+  if (!t5b_srv_static_first() && !srv1_ssbo()) return limits;
   static thread_local uint32_t flagged[DXBC_BINDING_KIND_COUNT];
   memcpy(flagged, limits, sizeof(flagged));
-  flagged[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_STATIC_FIRST;
+  if (t5b_srv_static_first()) flagged[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_STATIC_FIRST;
+  /* SRV-1: the DXIL frontend reads the same flag */
+  if (srv1_ssbo()) flagged[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_SSBO;
   return flagged;
 }
 #endif
