@@ -78991,3 +78991,35 @@ EXP2391 HARDWARE ACTUAL 2026-11-13T13:01:17Z:
 - OPTWIN: 120 cases, oracle_bad 0, missing 8 (reason 7, the probe's late-submit classification; fixed in exp/optwin 520237720, kept out of the pair). GM PERF w fps_frames 53.96.
 - Verdict: INCONCLUSIVE. The MP-1 hypothesis is untested, because its variable did not reach the G1 regions or GM's buffers (pool segment, excluded by the GC rule). The rule's local-segment-only scope is the reason, not the attribute.
 - Next: architect decision. Either a measurement-only scope extension to GPU-only allocations in the pool segment (KMD switch value, m1n1 unchanged), or placing GPU-only allocations in the local segment.
+
+EXP2392 HARDWARE BEFORE 2026-11-13T13:21:58Z:
+- Kind: one variable against EXP2390. Wom1GpuPrivateCached=2 extends the cached-leaf scope from the local segment to GPU-only, non-presentation, not-written-primary allocations in the pool segment (3), where VidMm placed the OPTWIN regions and GravityMark's large buffers (EXP2391 coverage line).
+  - Package: arch/srv1 6b1a24547 (= EXP2390's 71d2aa492 + MP-1b only).
+  - m1n1: m1n1-s2v3-gc unchanged (sha 3a72f1ec...), whose broker encodes cached for system backings through the same path.
+  - The probe binary differs from the control's by one change only: the late_submit classification fix (exp/optwin 520237720; eoptwin6 sha a6847f5a02a162e5246c4cd597e078a498e3aafb727de774ba9d60d1bf871e9d). A rep whose single timed job was stamped after ExecuteCommandLists returned is now measured instead of counted missing.
+- HAZARD, in plain words: pool pages are CPU-mapped by the KMD. KMD paging fills and copies can write them with the CPU while the GPU reads them through a cached mapping, and nothing flushes the GPU cache. So wrong data is a possible outcome, and it is itself a result. Measurement only, never a default.
+- Windows (each with receipts pre/post, Wom1GpuGcReceipt, full.log span with CPPC dram_fast and GPUVA-GC lines):
+  1. OPTWING1 (G1/G1d/G1c and G1u/G1du/G1cu, 1/4/16/64 MB, 5 reps, N32 and GM shapes);
+  2. GM PERF w (a measurement-switch reading of what the attribute is worth in GravityMark, not a gain);
+  3. the suite as the corruption check.
+- WHY THIS HYPOTHESIS:
+  1. EXP2390 control: GravityMark's gather form 1.19 / 1.43 / 0.99 / 1.32 x macOS (GM shape) with identical inner loops.
+  2. EXP2391 coverage: the switch never reached those leaves (pool segment, big_cached 0). MP-1 is untested, not rejected.
+  3. macOS writes C83 for user buffers under a map option; we write C8B.
+- WINDOWS / AGX / TRANSLATION: as EXP2390/2391, with the GC scope extended to segment 3.
+- WHAT IS STILL UNKNOWN: whether AttrIndx 0 changes gather latency and throughput, and whether the uncached-coherency hazard shows up as wrong data.
+- Validity gates:
+  - Wom1GpuGcReceipt switch=2 with big_cached > 0 in the OPTWING1 window (leaves and the last-cached leaf value quoted);
+  - oracle_bad 0. If an oracle fails, that variant's result is "cached mapping returned stale data", not a timing result;
+  - P6 >= 99 % per variant.
+- Expected readings (MP-1 spec):
+  - 1 MB N32 dependent round trip toward ~157 ns and the 1/4 MB ratios toward ~1.0 -> the data attribute is confirmed as a cause;
+  - unchanged -> GPU-side cache/walker configuration;
+  - 64 MB staying at 1.32 -> a separate walk-side cause.
+  - GM fps_frames against EXP2390's 53.06.
+  - Suite 119/0 or failures named. dram_fast noted per window.
+- Failure criteria: coverage absent (inconclusive again); GPU fault, reset, hang (exact-PID stop + recovery).
+- Recovery: rec2392h visible recovery.
+- Hashes: sys ec75ffcc165f, UmdArm64 482d7abc10bb, UmdX64 4decd41846a6, Umd32 f0980489d61f; manifest 7cc30afbbd3b, hardware-manifest 92f3da7f5a01; probe2392.sh 6b8ad7bc888b (PROBE_LINT_OK); visible recovery rec2392h b61e71ea58951791; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1 Wom1GpuPrivateCached=2.
+- Recovery rec2392h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2392-mp1b/run2392.sh.
