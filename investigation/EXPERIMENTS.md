@@ -79351,3 +79351,20 @@ EXP2402 BEFORE ADDENDUM 2026-11-13T17:47:28Z (manual arm after EXP2402_PROBE_DON
   2. ChangeDisplaySettingsEx(NULL) from the interactive session (bench/cds-null.ps1 via arm-task);
   3. restart dwm.exe (taskkill /f /im dwm.exe; Windows restarts DWM itself) - a guest action inside the test session.
 - No device restart (A5: the second start fails). Expected: the source becomes visible again at the step that rebuilds DWM's output; a step with no change is a result.
+
+EXP2402 HARDWARE ACTUAL 2026-11-13T17:50:11Z:
+- Boot and run: recovery rec2401h (RECOVERY_DONE), first launch refused by the 6 GiB disk gate (LAUNCH_2402_FAIL mac-disk-below-6GiB; 471 old text logs, 11 GB, compressed losslessly -> 8 GiB free), relaunch: the EXP2394 package (accepted line, no C2), m1n1-s2v3-rq2, switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes. Suite PASS 119 / FAIL 0. Probe to EXP2402_PROBE_DONE. STOPS 0, WER_REPORTS 2.
+- Full-screen arm (GravityMark 100k 1920x1080, the EXP2401 gmf1080 command), started 17:45:47Z:
+  - f-pre: CommitCalls 1, 2560x1600, VisibilityCalls 4, DeferredFlips 1, SourceAddressCalls 246.
+  - f-1 (+10 s): CommitCalls 2, committed 1920x1080 scaling 4, VisibilityCalls 216, DeferredFlips 106, SourceAddressCalls 759, SourceVisible 0 -> loop detector fired (17:46:00Z), GravityMark killed 17:46:05Z.
+  - after the kill (+20 s, +40 s, post): CommitCalls 3 (back to 2560x1600), VisibilityCalls 312 and frozen, DeferredFlips 153, SourceVisible 0 / LastVisible 0: the loop stopped with the source left hidden.
+  - HOLD over the arm: HoldMerges +153, HoldCommits +152, V2Presents +2, Accepted0 834 / Reported0 833, HoldDropped 0.
+  - Traces fetched: DxgKrnl dxg.etl 25.3 MB and Dwm-Core dwm.xml 1.4 MB (both started before the mode change), UMD session log 5.4 MB (evidence/EXP2402/etw-fs/, umd-session.log).
+- Discriminator (architect): about 106 hide/show pairs in the first 10 s after the commit into 1920x1080, one deferred flip per pair: the loop's rate, not two or three per mode change.
+- Expected vs actual: outcome A. The same loop on the accepted package without C2. The defect is in the accepted line; C2 is not its cause.
+- What ends it (BEFORE addendum, manual, before the recovery):
+  1. wait 60 s: VisibilityCalls 312 -> 320, DeferredFlips 153 -> 157, source still hidden (slow residual cycles);
+  2. ChangeDisplaySettingsEx(NULL) from the interactive session: returns -5 (DISP_CHANGE_BADPARAM), VisibilityCalls -> 324, still hidden;
+  3. dwm.exe killed (pid 1288; Windows restarted it as pid 2600): VisibilityCalls -> 328, then stable over 15 s, LastVisible 1 / SourceVisible 1: the output comes back. No device restart was needed or done.
+- Verdict: CONFIRMED (outcome A): a full-screen mode change on the accepted line (plane/hold line, m1n1 s2v3-rq2) puts DWM into an output set-up/tear-down loop; it stops when the mode returns to native but leaves the source hidden until DWM restarts. Known defect of the accepted package: a full-screen mode change breaks the display until DWM restarts. C2 is cleared of causing it.
+- Not captured in this boot (asked after the probe had started): the first post-commit cycle in the KMD timing ring (snapshots were 10 s apart) and a per-branch receipt for the SetVidPnSourceAddress calls (needs a driver change).
