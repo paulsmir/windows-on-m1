@@ -82,7 +82,10 @@ static VOID AdmissionMpoPublishStop(ADMISSION_CONTEXT *Context) { (void)Context;
 #define ADMISSION_MPO_TIMING_COMMIT_TICK 6u
 #define ADMISSION_MPO_TIMING_LATCH 7u
 static unsigned commit_latch_calls, commit_tick_calls, timing_latches;
-static VOID AdmissionMpoCommitPendingSource(ADMISSION_CONTEXT *Context, ULONG Source) { (void)Context; if (Source == ADMISSION_MPO_TIMING_COMMIT_LATCH) ++commit_latch_calls; else if (Source == ADMISSION_MPO_TIMING_COMMIT_TICK) ++commit_tick_calls; }
+/* HOLD-3b: the ISR hands a held set to the commit DPC; it never commits. */
+static VOID AdmissionMpoQueueCommit(ADMISSION_CONTEXT *Context, BOOLEAN Latch) { (void)Context; if (Latch) ++commit_latch_calls; else ++commit_tick_calls; }
+static unsigned notify_notes;
+static VOID AdmissionMpoNoteNotify(ADMISSION_CONTEXT *Context) { (void)Context; ++notify_notes; }
 static VOID AdmissionMpoTimingRecord(ADMISSION_CONTEXT *Context, ULONG Kind, ULONG Mask, ULONGLONG Id) { (void)Context; (void)Mask; (void)Id; if (Kind == ADMISSION_MPO_TIMING_LATCH) ++timing_latches; }
 static VOID AdmissionMpoCommitDpcStop(ADMISSION_CONTEXT *Context) { (void)Context; }
 static unsigned vsync_notes, latch_notes; /* HOLD-3 */

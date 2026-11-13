@@ -62,7 +62,7 @@ typedef struct {
   unsigned int Outstanding, DpcQueued, Commits, DpcCommits, LatchCommits, TwoLayerCommits;
   unsigned int InFlightCount, InFlightLayer[2];
   unsigned long long InFlightId[2];
-  unsigned long long Accepted[16], Reported[16];
+  unsigned long long Accepted[1024], Reported[1024];
   unsigned int AcceptedN, ReportedN;
 } MODEL;
 static void ModelInit(MODEL *M) { memset(M, 0, sizeof(*M)); AdmissionMpoHoldClear(&M->Hold); }
@@ -249,6 +249,78 @@ static void TestHold3StopWithAnArmedTimer(void) {
   CHECK(t.M.Commits == 0u);
 }
 
+
+/* ---- HOLD-3b: the latch handler and the vertical tick never commit a held
+ * set; they queue the commit DPC, which applies the deadline rule. ---- */
+static void M3bLatch(MODEL3 *T, long long At) {         /* latch: report, then hand the set to the DPC */
+  unsigned int i;
+  M3Advance(T, At); T->LastVsync = At;
+  if (T->M.Outstanding) {
+    for (i = 0u; i < T->M.InFlightCount; ++i) T->M.Reported[T->M.ReportedN++] = T->M.InFlightId[i];
+    T->M.Outstanding = 0u; T->M.InFlightCount = 0u;
+  }
+  if (T->M.Hold.Valid) T->M.DpcQueued = 1u;
+  M3Dpc(T);
+}
+static void TestHold3bOutstandingAtTheDeadlineCommitsAtTheNextDeadline(void) {
+  MODEL3 t; M3Init(&t);
+  M3Advance(&t, 1800); ModelSet3(&t.M, 1u, 1u); M3Dpc(&t);  /* after the deadline: at once */
+  M3Advance(&t, 1900); ModelSet3(&t.M, 0u, 2u); M3Dpc(&t);  /* outstanding: held */
+  CHECK(t.M.Commits == 1u);
+  M3bLatch(&t, 2000);                                       /* the latch does not commit */
+  CHECK(t.M.Commits == 1u && t.TimerArmed && t.TimerAt == 2700);
+  M3Advance(&t, 2700); CHECK(t.M.Commits == 2u && t.DeadlineCommits == 1u && t.M.LatchCommits == 0u);
+  M3bLatch(&t, 3000); ExpectReportedEqualsAccepted(&t.M);
+}
+/* Steady two-layer frames (application at phase 150, DWM at 400) with one
+ * injected late DWM flip at phase 850: the next DWM flip meets "layer
+ * already pending" (BUSY), dxgkrnl re-offers it at the next vsync, the held
+ * set goes at the deadline; after that every frame latches both layers. */
+static unsigned int LateFlipRun(void (*Latch)(MODEL3 *, long long), unsigned int *MaxRun, unsigned int *Stable, unsigned int *LatchCommits) {
+  MODEL3 t; unsigned int f, retry = 0u, lateFrames = 0u, run = 0u, maxRun = 0u, stable = 0u;
+  unsigned long long id = 100u, retryId = 0u;
+  M3Init(&t);
+  for (f = 0u; f < 400u; ++f) {
+    const long long base = 1000 + 1000 * (long long)f;
+    unsigned int before = t.M.ReportedN;
+    if (retry) {                                          /* dxgkrnl re-offers the BUSY flip */
+      M3Advance(&t, base + 10);
+      if (ModelSet3(&t.M, 0u, retryId) != ADMISSION_MPO_SET3_BUSY) retry = 0u;
+      M3Dpc(&t);
+    }
+    M3Advance(&t, base + 150); CHECK(ModelSet3(&t.M, 1u, id) != ADMISSION_MPO_SET3_BUSY); id++; M3Dpc(&t);
+    if (f == 200u) {                                      /* the injected late DWM flip */
+      M3Advance(&t, base + 850); ModelSet3(&t.M, 0u, id++); M3Dpc(&t);
+    } else if (!retry) {
+      M3Advance(&t, base + 400);
+      if (ModelSet3(&t.M, 0u, id) == ADMISSION_MPO_SET3_BUSY) { retry = 1u; retryId = id; }
+      id++; M3Dpc(&t);
+    }
+    M3Advance(&t, base + 999);
+    Latch(&t, base + 1000);
+    /* frames whose latch reported fewer than the two flips of the frame before */
+    if (f > 0u && t.M.ReportedN - before < 2u) { lateFrames++; run++; if (run > maxRun) maxRun = run; }
+    else run = 0u;
+    if (f > 205u && t.M.ReportedN - before == 2u) stable++;
+  }
+  *MaxRun = maxRun; *Stable = stable; *LatchCommits = t.M.LatchCommits;
+  return lateFrames;
+}
+static void TestHold3bLateFlipSelfHeals(void) {
+  unsigned int maxRun, stable, latchCommits, late;
+  late = LateFlipRun(M3bLatch, &maxRun, &stable, &latchCommits);
+  CHECK(late <= 2u && maxRun <= 1u);                      /* one glitch, never a locked pattern */
+  CHECK(stable >= 190u);                                  /* back to both layers per latch */
+  CHECK(latchCommits == 0u);                              /* the latch never committed */
+  /* HOLD-3 as first built (the latch commits the held set): the same
+   * injected late flip locks the every-other-vsync regime (EXP2385). */
+  late = LateFlipRun(M3Latch, &maxRun, &stable, &latchCommits);
+  /* The regime locks: every later commit comes from the latch, so every
+   * flip reaches the screen one frame late (the model has no application
+   * back-pressure; on hardware a double-buffered application halves). */
+  CHECK(latchCommits >= 190u);
+}
+
 int main(void) {
   TestMergeOfTwoLayersIntoOneSet();
   TestSameLayerSecondFlipIsRefused();
@@ -266,6 +338,8 @@ int main(void) {
   TestHold3SameLayerBeforeTheDeadlineIsBusy();
   TestHold3IdleArmsNoTimer();
   TestHold3StopWithAnArmedTimer();
+  TestHold3bOutstandingAtTheDeadlineCommitsAtTheNextDeadline();
+  TestHold3bLateFlipSelfHeals();
   if (Failures) { fprintf(stderr, "mpo_hold_test: %u failure(s)\n", Failures); return EXIT_FAILURE; }
   printf("mpo_hold_test: OK\n");
   return EXIT_SUCCESS;

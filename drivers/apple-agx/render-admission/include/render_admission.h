@@ -145,7 +145,7 @@ typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT {
  * switch is effective (switch = 1 AND broker CAPABILITIES bit 9 AND the
  * REG_NEGOTIATED read-back); all zero otherwise.  Counters are interlocked
  * at any IRQL. */
-#define ADMISSION_MPO_RECEIPT_VERSION 6u /* v6: tail ... Ids, HOLD-2 (H2*), CUR-1 v2, HOLD-3 (H3*) */
+#define ADMISSION_MPO_RECEIPT_VERSION 7u /* v7: tail ... Ids, HOLD-2 (H2*), CUR-1 v2, HOLD-3 (H3*), HOLD-3b */
 #define ADMISSION_MPO_RECEIPT_REASONS 40u
 /* Key: clip width (12 bits) | height << 12 | format class << 24 |
  * blend << 28; 0 = free row.  Origin/DstSize: x | y << 16. */
@@ -299,6 +299,13 @@ typedef struct _ADMISSION_MPO_RECEIPT {
   volatile LONG H3DeadlineErrN, H3DeadlineErrMinUs, H3DeadlineErrMaxUs, H3DeadlineErrSumUs;
   volatile LONG H3MissedVblanks, H3LeadUs;
   volatile LONG H3PhaseL0[9], H3PhaseL1[9];
+  /* HOLD-3b: sets pending when a latch arrived (handed to the deadline,
+   * never committed by the latch), same-layer DEVICE_BUSY per layer, vsyncs
+   * after which a layer still had an accepted flip not on screen (count and
+   * longest run): the direct detector of the every-other-vsync regime. */
+  volatile LONG H3HeldAtLatch, H3SameLayerBusyL0, H3SameLayerBusyL1;
+  volatile LONG H3NoLatchFramesL0, H3NoLatchFramesL1;
+  volatile LONG H3MaxNoLatchRunL0, H3MaxNoLatchRunL1;
 } ADMISSION_MPO_RECEIPT;
 /* HOLD-2 receipt: Wom1MpoTiming, the last ADMISSION_MPO_TIMING_ENTRIES Set3
  * outcomes, commits (by source) and latches with QPC, CPU and IRQL. */
@@ -1268,6 +1275,7 @@ typedef struct _ADMISSION_CONTEXT {
   LONGLONG MpoPeriodQpc;
   LONGLONG MpoLeadQpc;
   ULONG MpoLeadUs;
+  LONG MpoNoLatchRun[2];             /* HOLD-3b: current runs per layer */
   /* CUR-1 v2: which scan-out scratch DCP scans (mpo_layers.h). */
   ADMISSION_MPO_SCRATCH_STATE MpoScratch;
   ULONGLONG MpoScratchPoolOffset;   /* scratch 0; scratch 1 = + STEP */
@@ -2652,6 +2660,11 @@ VOID AdmissionMpoCommitDpcStart(_In_opt_ ADMISSION_CONTEXT *Context);
 VOID AdmissionMpoCommitDpcStop(_In_opt_ ADMISSION_CONTEXT *Context);
 /* HOLD-3: a latch (Latch TRUE) or a vertical tick seen by the scan-out ISR. */
 VOID AdmissionMpoNoteVsync(_In_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Latch);
+/* HOLD-3b: the latch handler (Latch TRUE) and the vertical tick hand a held
+ * set to the commit DPC (deadline rule); they never commit it. */
+VOID AdmissionMpoQueueCommit(_In_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Latch);
+/* HOLD-3b receipt: after each MPO vsync notification (scan-out ISR). */
+VOID AdmissionMpoNoteNotify(_In_ ADMISSION_CONTEXT *Context);
 /* Queue one V3 commit (Count 1 = removal, 2 = two planes); Completion is
  * reported at its latch.  PrimaryAddress is the LayerIndex 0 surface
  * (CRTC_VSYNC physical address bookkeeping). */

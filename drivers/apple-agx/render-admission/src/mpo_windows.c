@@ -1137,6 +1137,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
                                    &queue);
     if (outcome == ADMISSION_MPO_SET3_BUSY) {
       InterlockedIncrement(&Context->Mpo.HoldBusy);
+      /* HOLD-3b receipt: the layer already had a pending flip. */
+      if ((Context->MpoHold.ListedMask & mask & 1u) != 0u)
+        InterlockedIncrement(&Context->Mpo.H3SameLayerBusyL0);
+      if ((Context->MpoHold.ListedMask & mask & 2u) != 0u)
+        InterlockedIncrement(&Context->Mpo.H3SameLayerBusyL1);
       status = STATUS_DEVICE_BUSY;
     } else {
       RtlCopyMemory(Context->MpoHoldNext, candidate, sizeof(candidate));
@@ -1373,6 +1378,7 @@ _Use_decl_annotations_ VOID AdmissionMpoCommitDpcStart(ADMISSION_CONTEXT *Contex
   /* HOLD-3: the deadline timer; without it Set3 commits through the DPC at
    * once (HOLD-2 behaviour). */
   Context->MpoDeadlineArmed = 0;
+  Context->MpoNoLatchRun[0] = Context->MpoNoLatchRun[1] = 0;
   Context->MpoLastVsyncQpc = 0;
   Context->MpoLastCommitQpc = 0;
   if (Context->MpoDeadlineTimer == NULL)
@@ -1411,4 +1417,39 @@ _Use_decl_annotations_ VOID AdmissionMpoCommitDpcStop(ADMISSION_CONTEXT *Context
   InterlockedExchange(&Context->MpoDeadlineArmed, 0);
   (void)KeRemoveQueueDpc(&Context->MpoCommitDpc);
   KeFlushQueuedDpcs();
+}
+
+/* HOLD-3b: one decision point (the commit DPC's deadline rule) for every
+ * source; a set committed at the latch and one committed at this frame's
+ * deadline reach the screen at the same vblank, so the latch never commits
+ * (EXP2385: latch commits locked an every-other-vsync regime). */
+_Use_decl_annotations_ VOID AdmissionMpoQueueCommit(ADMISSION_CONTEXT *Context,
+                                                    BOOLEAN Latch) {
+  if (Context == NULL || !Context->MpoHold.Valid)
+    return;
+  if (Latch)
+    InterlockedIncrement(&Context->Mpo.H3HeldAtLatch);
+  if (InterlockedCompareExchange(&Context->MpoCommitDpcReady, 0, 0) != 0)
+    (void)KeInsertQueueDpc(&Context->MpoCommitDpc, NULL, NULL);
+}
+
+_Use_decl_annotations_ VOID AdmissionMpoNoteNotify(ADMISSION_CONTEXT *Context) {
+  ULONG layer;
+  if (Context == NULL)
+    return;
+  for (layer = 0u; layer < 2u; ++layer) {
+    const LONG accepted = layer != 0u ? Context->Mpo.AcceptedIds1 : Context->Mpo.AcceptedIds0;
+    const LONG reported = layer != 0u ? Context->Mpo.ReportedIds1 : Context->Mpo.ReportedIds0;
+    if (accepted - reported > 0) {
+      const LONG run = ++Context->MpoNoLatchRun[layer];
+      InterlockedIncrement(layer != 0u ? &Context->Mpo.H3NoLatchFramesL1
+                                       : &Context->Mpo.H3NoLatchFramesL0);
+      if (layer != 0u ? run > Context->Mpo.H3MaxNoLatchRunL1
+                      : run > Context->Mpo.H3MaxNoLatchRunL0)
+        InterlockedExchange(layer != 0u ? &Context->Mpo.H3MaxNoLatchRunL1
+                                        : &Context->Mpo.H3MaxNoLatchRunL0, run);
+    } else {
+      Context->MpoNoLatchRun[layer] = 0;
+    }
+  }
 }

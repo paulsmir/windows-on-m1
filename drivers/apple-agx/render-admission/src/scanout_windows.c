@@ -1913,7 +1913,8 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
         AdmissionMpoTimingRecord(Context, ADMISSION_MPO_TIMING_LATCH,
                                  (ULONG)mpo_count,
                                  (ULONGLONG)mpo_info[0].PresentId);
-        AdmissionMpoCommitPendingSource(Context, ADMISSION_MPO_TIMING_COMMIT_LATCH);
+        /* HOLD-3b: hand a held set to the deadline (same vblank, free gate). */
+        AdmissionMpoQueueCommit(Context, TRUE);
       }
     } else if ((irq_status & APPLE_AGX_SCANOUT_IRQ_LATCHED) != 0u) {
       AdmissionScanoutVsyncRecord(runtime, 4u, STATUS_SUCCESS);
@@ -1924,7 +1925,7 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
     AdmissionMpoNoteVsync(Context, FALSE);
     /* HOLD-1: a held set whose commit met an obstacle retries per tick. */
     if (InterlockedCompareExchange(&runtime->PresentGate, 0, 0) == 0)
-      AdmissionMpoCommitPendingSource(Context, ADMISSION_MPO_TIMING_COMMIT_TICK);
+      AdmissionMpoQueueCommit(Context, FALSE);
     notify_vsync = AppleAgxVsyncAdvance(&runtime->Timeline, now) != 0;
     AdmissionScanoutVsyncRecord(runtime, 5u, STATUS_SUCCESS);
   }
@@ -1978,6 +1979,7 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
                                  ? &Context->Mpo.ReportedIds1
                                  : &Context->Mpo.ReportedIds0);
     }
+    AdmissionMpoNoteNotify(Context);
     if (runtime->VsyncReceipt.NotifyCount != APPLE_AGX_VSYNC_MAX)
       runtime->VsyncReceipt.NotifyCount++;
     AdmissionScanoutVsyncRecord(runtime, 6u, STATUS_SUCCESS);

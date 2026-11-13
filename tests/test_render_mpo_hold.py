@@ -32,8 +32,10 @@ class RenderMpoHold(unittest.TestCase):
         # the latch handler and the vertical tick commit through the same routine with their source.
         self.assertIn("AdmissionMpoHoldSet3(", mpo)
         self.assertIn("KeInsertQueueDpc(&Context->MpoCommitDpc", mpo)
-        self.assertIn("AdmissionMpoCommitPendingSource(Context, ADMISSION_MPO_TIMING_COMMIT_LATCH)", scanout)
-        self.assertIn("AdmissionMpoCommitPendingSource(Context, ADMISSION_MPO_TIMING_COMMIT_TICK)", scanout)
+        # HOLD-3b: the latch handler and the vertical tick hand a held set to the commit DPC; neither commits.
+        self.assertIn("AdmissionMpoQueueCommit(Context, TRUE)", scanout)
+        self.assertIn("AdmissionMpoQueueCommit(Context, FALSE)", scanout)
+        self.assertNotIn("AdmissionMpoCommitPendingSource(", scanout)
         self.assertIn("AdmissionMpoCommitDpcStop(Context)", scanout)
         self.assertIn("AdmissionMpoCommitDpcStart(Context)", scanout)
         # Set3 never submits a swap itself: the only commit-path call left in Set3 is ForcePlanesOff's plane-off.
