@@ -6243,3 +6243,20 @@ boot was run. The previous entry stays as written.
   Reading order for the macOS twin: C1, then B1/B1b, G1/G1d 16M/64M, T1, S1o, S1_64 vs S1_256, S1n.
 - Unexplained by any countable term: C4 ~0.18 ms, C2 traversal ~0.09 ms, C6. OPTWIN batch 2 (sin, stores,
   atomics, divergence) covers classes these kernels use.
+
+## UPDATE 2026-11-13T00:14:21Z - EXP2381/EXP2382: CUR-1 v2 regression-free, crop path exercised; two independently flipping layers still halve
+
+- EXP2381 (arch/cur1 on the accepted line, SHORT): gates PASS (CS 51.40 / 52.00, GM 52.25 / 52.68), suite
+  119/0; scratch reservation correct (segment 2 = pool - 128 KiB, reads back zero). No clipped top plane formed.
+- EXP2382 (same package, synthetic pointer): SetCursorPos does not un-suppress the cursor (GetCursorInfo flags 2
+  in every sample) - the FULLFS and STRETCHFS pointer arms are INVALID; next attempt uses injected mouse input.
+  CS arm: the pointer path crossed the bottom edge and DWM showed a 2560x72 top strip (taskbar) over the game
+  as a clipped top plane: TwoPlaneCommits +7746, CropCommits +7735 - CUR-1 v2's crop path ran with no Set3
+  refusal after support, HoldDropped 0, accepted = reported. Picture not seen by a person. The <=64x64 scratch
+  path is still unexercised.
+- FINDING: in that scene CS ran 27.95 fps (52 in the lone form). Both layers flip every vsync; HOLD-1 merges
+  the second layer's flip behind the first layer's outstanding swap (HoldMerges +7669), so each layer still
+  latches every other vsync. HOLD-1 removed the Busy answers, not the halving. Any full-screen application with
+  an always-updating DWM strip over it hits this. Fix direction (HOLD-2): one DCP swap must carry everything
+  flipped for the same vsync; the mechanism depends on when the two Set3 arrive relative to each other and to
+  the latch - being read from the EXP2382 trace. Not designed yet.
