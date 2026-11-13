@@ -78761,3 +78761,22 @@ EXP2387 HARDWARE BEFORE 2026-11-13T09:59:31Z:
 - Hashes: sys 83db8457179e, UmdArm64 ac95dbbffc8c, UmdX64 52e1dfb39645, Umd32 1beb3c838adb; manifest b8541d7e086f, hardware-manifest 1e5ca011ab48; probe2387.sh 97f215a8cf2e (PROBE_LINT_OK); visible recovery rec2387h 5f7716f188e2f06c; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
 - Recovery rec2387h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2387-hold3c2/run2387.sh.
+
+EXP2387 HARDWARE ACTUAL 2026-11-13T10:32:55Z:
+- Boot and run: AT_PROXY recovery rec2386h (RECOVERY_DONE), then staged arch/hold3 41b21c980 (HOLD-3c). Full probe ran to EXP2387_PROBE_DONE / CHAIN2387_DONE. STOPS 0. WER_REPORTS 2 are the two October dumps (dwm-live983, explorer-live984), the same count as EXP2385/2386. HoldDropped 0, Set3RefusedAfterSupport 0. Cursor flags=1 in every pointer arm (20-21/21). Guest alive after every arm. Recovery rec2387h started.
+- Expected vs actual, deadline commit margin: expected median ~5.0 ms, min ~3.3 ms. Ring, all snapshots pooled: deadline commits reached the latch with median 4.665 ms, p1 4.241, p5 4.383, min 3.139 (n=5935); EXP2386 was median 3.92, p1 2.94, min 2.25.
+- Learned tick-to-latch offset (H3TickOffsetUs): 0.94-1.34 ms during the boot, 1.13 ms at the end. Matches the ~1.07 ms estimate from EXP2385. H3TickPairsRejected 0. H3TickReference 53020 (frames without a latch kept their phase from the tick). H3StaleReference 0.
+- Expected vs actual, deadline-commit misses ~0:
+  - Ring classifier: 0 in every arm window, and 1 in all snapshots pooled (n=5936).
+  - Receipt H3MissedDeadline: 6 of 47475 deadline commits for the whole boot (0.013 %), against EXP2386's ring rate of 0.053 %. All 6 came before the r2 CS run; 2 of them before the first arm.
+  - H3MadeMinUs 2124, H3MissMaxUs 3070: the scan-out floor estimate stands, made at >= 2.12 ms before the latch, missed at <= 3.07 ms.
+  - Not zero: the residue is timer error near the floor (H3DeadlineErrMaxUs 1519).
+  - H3MissedVblanks 2329 for the boot: the new counter (lead + P/2) of all sources. Mostly late commits (H3CommitsLate 5593), i.e. the application's own late frames.
+- Pointer arms: FULLFS 59.92 / 59.96 fps, STRETCHFS 59.94, FULLFS through the bottom edge 59.96 (EXP2386 ~59.9). Controls FULLFS 59.91, STRETCHFS 59.31 (first second 29: window open), STRETCHWIN 59.90. All the same as EXP2386.
+- Gates:
+  - CS cs16 in the strip scene with the cursor: warm 52.384, r2 52.489. PASS +0.96 % against the 51.991 baseline. EXP2386 was -2.09 % FAIL in the same scene.
+  - GravityMark PERF PASS +0.02 % (fps_frames w 52.38, r2 52.37). PERF_GATE_PASS.
+  - Windowed CS 54.72 (not gated; EXP2386 54.35).
+- L1 phase histograms are not comparable with EXP2386: the reference moved from the tick to the latch.
+- Verdict: CONFIRMED. HOLD-3c keeps ~0.75 ms more lead before the latch (median), and the strip-scene CS gate passes. This is the merge-candidate run for CUR-1 v2 + CUR-1c + HOLD-2 base + HOLD-3 + HOLD-3b + HOLD-3c on arch/hold3 41b21c980; the merge decision is the architect's.
+- Next: the lead step (4500, then 4000) is now meaningful, with the ring/receipt deadline-miss count as the criterion.
