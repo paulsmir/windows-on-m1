@@ -9943,7 +9943,7 @@ typedef struct {
     ID3D12RootSignature *root; ID3D12CommandSignature *dispatch_sig; ID3D12DescriptorHeap *heap;
     ID3D12PipelineState *pso[OPTWIN_MAX_PSO]; unsigned pso_key[OPTWIN_MAX_PSO]; unsigned pso_count;
     unsigned long long pso_hash[OPTWIN_MAX_PSO]; /* the UMD's shader-stats key of each pipeline */
-    ID3D12Resource *out, *readback, *data, *rows, *shadow, *color, *args, *upload;
+    ID3D12Resource *out, *readback, *data, *datau, *rows, *shadow, *color, *args, *upload;
     ID3D12CommandAllocator *alloc[3]; ID3D12GraphicsCommandList *list[3]; /* 0 timed / setup, 1-2 fillers */
     Q3_GPU_COMPLETION_QUERY *rec;
     float *cpu_data;
@@ -9957,7 +9957,7 @@ static HRESULT optwin_compile(OptwinCtx *x, unsigned kernel, unsigned ntx, unsig
     pD3DCompile compile=compiler ? (pD3DCompile)(void *)GetProcAddress(compiler,"D3DCompile"):NULL;
     const optwin_kernel *k=&optwin_kernels[kernel];
     char ntxs[16], ntys[16], alts[16];
-    D3D_SHADER_MACRO defines[4]={{"NTX",ntxs},{"NTY",ntys},{"ALT",alts},{NULL,NULL}};
+    D3D_SHADER_MACRO defines[5]={{"NTX",ntxs},{"NTY",ntys},{"ALT",alts},{"SRCU",(k->res & OPTWIN_RES_SRCU) ? "1" : "0"},{NULL,NULL}};
     const size_t cap=sizeof(optwin_hlsl_preamble)+sizeof(optwin_common_src)+strlen(k->body)+256u;
     char *text=(char *)malloc(cap);
     D3D12_COMPUTE_PIPELINE_STATE_DESC desc={0};
@@ -10065,18 +10065,28 @@ static HRESULT optwin_texture(OptwinCtx *x, int color, int depth_flag, ID3D12Res
 static HRESULT optwin_resources(OptwinCtx *x, unsigned need) {
     HRESULT hr=S_OK;
     const UINT64 upload=(need & (OPTWIN_RES_SHADOW|OPTWIN_RES_COLOR)) ? (UINT64)OPTWIN_LAYERS*OPTWIN_TEX_LAYER_BYTES+65536u
-                       : (need & OPTWIN_RES_SRC) ? OPTWIN_DATA_BYTES : 65536u;
+                       : (need & (OPTWIN_RES_SRC|OPTWIN_RES_SRCU)) ? OPTWIN_DATA_BYTES : 65536u;
     x->out=c21_buffer(x->device,D3D12_HEAP_TYPE_DEFAULT,OPTWIN_OUT_BYTES,D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     x->readback=c21_buffer(x->device,D3D12_HEAP_TYPE_READBACK,4096,D3D12_RESOURCE_FLAG_NONE,D3D12_RESOURCE_STATE_COPY_DEST);
     x->args=c21_buffer(x->device,D3D12_HEAP_TYPE_DEFAULT,256,D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     x->upload=c21_buffer(x->device,D3D12_HEAP_TYPE_UPLOAD,upload,D3D12_RESOURCE_FLAG_NONE,D3D12_RESOURCE_STATE_GENERIC_READ);
     if (!x->out || !x->readback || !x->args || !x->upload) return E_OUTOFMEMORY;
-    if (need & OPTWIN_RES_SRC) {
+    if (need & (OPTWIN_RES_SRC|OPTWIN_RES_SRCU)) {
         x->cpu_data=(float *)malloc(OPTWIN_DATA_BYTES);
+        hr=x->cpu_data && optwin_fill_data(x->cpu_data) ? S_OK : E_OUTOFMEMORY;
+    }
+    if (SUCCEEDED(hr) && (need & OPTWIN_RES_SRC)) {
         x->data=c21_buffer(x->device,D3D12_HEAP_TYPE_DEFAULT,OPTWIN_DATA_BYTES,D3D12_RESOURCE_FLAG_NONE,D3D12_RESOURCE_STATE_COPY_DEST);
-        hr=x->cpu_data && x->data && optwin_fill_data(x->cpu_data) ? S_OK : E_OUTOFMEMORY;
+        hr=x->data ? S_OK : E_OUTOFMEMORY;
         if (SUCCEEDED(hr)) hr=optwin_upload_buffer(x,x->data,x->cpu_data,OPTWIN_DATA_BYTES,D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         printf("OPTWIN data %u bytes hr=0x%08lx\n",OPTWIN_DATA_BYTES,(unsigned long)hr);
+    }
+    /* SRV-1 fact 1: the same bytes in a UAV-capable buffer for the G1u rows (GravityMark's raw-UAV form) */
+    if (SUCCEEDED(hr) && (need & OPTWIN_RES_SRCU)) {
+        x->datau=c21_buffer(x->device,D3D12_HEAP_TYPE_DEFAULT,OPTWIN_DATA_BYTES,D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,D3D12_RESOURCE_STATE_COPY_DEST);
+        hr=x->datau ? S_OK : E_OUTOFMEMORY;
+        if (SUCCEEDED(hr)) hr=optwin_upload_buffer(x,x->datau,x->cpu_data,OPTWIN_DATA_BYTES,D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        printf("OPTWIN datau %u bytes hr=0x%08lx\n",OPTWIN_DATA_BYTES,(unsigned long)hr);
     }
     if (SUCCEEDED(hr) && (need & OPTWIN_RES_ROWS)) {
         float rows[OPTWIN_ROWS*4u];
@@ -10124,6 +10134,8 @@ static HRESULT optwin_record(OptwinCtx *x, ID3D12GraphicsCommandList *list, ID3D
     ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list,1,ID3D12Resource_GetGPUVirtualAddress(out));
     if (res & OPTWIN_RES_SRC)
         ID3D12GraphicsCommandList_SetComputeRootShaderResourceView(list,2,ID3D12Resource_GetGPUVirtualAddress(x->data)+optwin_region_offset(v->region));
+    if (res & OPTWIN_RES_SRCU)
+        ID3D12GraphicsCommandList_SetComputeRootUnorderedAccessView(list,6,ID3D12Resource_GetGPUVirtualAddress(x->datau)+optwin_region_offset(v->region));
     if (res & OPTWIN_RES_ROWS) ID3D12GraphicsCommandList_SetComputeRootConstantBufferView(list,3,ID3D12Resource_GetGPUVirtualAddress(x->rows));
     if (res & (OPTWIN_RES_SHADOW|OPTWIN_RES_COLOR)) {
         D3D12_GPU_DESCRIPTOR_HANDLE gpu;
@@ -10294,7 +10306,7 @@ static void optwin_shader_report(OptwinCtx *x) {
 }
 static int optwin_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fence *fence, UINT64 base, const char *probe) {
     OptwinCtx ctx, *x=&ctx;
-    D3D12_ROOT_PARAMETER params[6];
+    D3D12_ROOT_PARAMETER params[7];
     D3D12_DESCRIPTOR_RANGE range={D3D12_DESCRIPTOR_RANGE_TYPE_SRV,2,1,0,0};
     D3D12_STATIC_SAMPLER_DESC samplers[2]={
         {D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT,D3D12_TEXTURE_ADDRESS_MODE_CLAMP,D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
@@ -10303,7 +10315,7 @@ static int optwin_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
         {D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT,D3D12_TEXTURE_ADDRESS_MODE_CLAMP,D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
          D3D12_TEXTURE_ADDRESS_MODE_CLAMP,0.0f,1,D3D12_COMPARISON_FUNC_NEVER,D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK,0.0f,
          D3D12_FLOAT32_MAX,1,0,D3D12_SHADER_VISIBILITY_ALL}};
-    D3D12_ROOT_SIGNATURE_DESC root_desc={6,params,2,samplers,D3D12_ROOT_SIGNATURE_FLAG_NONE};
+    D3D12_ROOT_SIGNATURE_DESC root_desc={7,params,2,samplers,D3D12_ROOT_SIGNATURE_FLAG_NONE};
     D3D12_INDIRECT_ARGUMENT_DESC arg={D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH};
     D3D12_COMMAND_SIGNATURE_DESC sd={12,1,&arg,0};
     ID3DBlob *blob=NULL, *errors=NULL;
@@ -10315,6 +10327,17 @@ static int optwin_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
     memset(x,0,sizeof(*x)); memset(params,0,sizeof(params));
     x->device=device; x->queue=queue; x->fence=fence; x->signal=base; x->pid=(UINT)GetCurrentProcessId();
     x->event=CreateEventA(NULL,FALSE,FALSE,NULL);
+    {
+        /* Architect 2026-11-13: with APPLE_AGX_D3D12_SHADER_DUMP_DIR (the run's one env pair) every OPTWIN kernel's
+         * DXBC is captured (the UMD's RC39 reason-0 capture also needs DUMP_ALL=1, read per translation). */
+        char dump[MAX_PATH];
+        const DWORD n=GetEnvironmentVariableA("APPLE_AGX_D3D12_SHADER_DUMP_DIR",dump,sizeof(dump));
+        if (n && n<sizeof(dump)) {
+            SetEnvironmentVariableA("APPLE_AGX_D3D12_SHADER_DUMP_ALL","1");
+            CreateDirectoryA(dump,NULL);
+            printf("OPTWIN_SHADER_DUMP dir %s\n",dump);
+        }
+    }
     x->rec=(Q3_GPU_COMPLETION_QUERY *)calloc(1,sizeof(*x->rec));
     QueryPerformanceFrequency(&x->qpf);
     for (unsigned i=0;i<OPTWIN_VARIANTS;++i)
@@ -10326,6 +10349,7 @@ static int optwin_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
     params[4].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     params[4].DescriptorTable.NumDescriptorRanges=1; params[4].DescriptorTable.pDescriptorRanges=&range;
     params[5].ParameterType=D3D12_ROOT_PARAMETER_TYPE_UAV; params[5].Descriptor.ShaderRegister=1;
+    params[6].ParameterType=D3D12_ROOT_PARAMETER_TYPE_UAV; params[6].Descriptor.ShaderRegister=2; /* G1u srcu */
     hr=x->event && x->rec && variants ? S_OK : E_FAIL;
     if (SUCCEEDED(hr)) hr=D3D12SerializeRootSignature(&root_desc,D3D_ROOT_SIGNATURE_VERSION_1,&blob,&errors);
     if (SUCCEEDED(hr)) hr=ID3D12Device_CreateRootSignature(device,0,ID3D10Blob_GetBufferPointer(blob),ID3D10Blob_GetBufferSize(blob),
@@ -10423,8 +10447,8 @@ static int optwin_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
         if (errors) ID3D10Blob_Release(errors);
         if (blob) ID3D10Blob_Release(blob);
         {
-            ID3D12Resource *resources[8]={x->out,x->readback,x->data,x->rows,x->shadow,x->color,x->args,x->upload};
-            for (unsigned i=0;i<8;++i) if (resources[i]) ID3D12Resource_Release(resources[i]);
+            ID3D12Resource *resources[9]={x->out,x->readback,x->data,x->rows,x->shadow,x->color,x->args,x->upload,x->datau};
+            for (unsigned i=0;i<9;++i) if (resources[i]) ID3D12Resource_Release(resources[i]);
         }
         if (x->event) CloseHandle(x->event);
         free(x->rec);

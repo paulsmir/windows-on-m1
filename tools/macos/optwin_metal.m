@@ -43,13 +43,20 @@
 #define OPTWIN_MAX_CASES 6u
 
 enum { OPTWIN_K_S1, OPTWIN_K_S1O, OPTWIN_K_ARGS, OPTWIN_K_G1, OPTWIN_K_G1D, OPTWIN_K_G1C, OPTWIN_K_T1, OPTWIN_K_T1L,
-       OPTWIN_K_B1, OPTWIN_K_B1B, OPTWIN_K_C1, OPTWIN_KERNELS };
+       OPTWIN_K_B1, OPTWIN_K_B1B, OPTWIN_K_C1, OPTWIN_K_G1U, OPTWIN_K_G1DU, OPTWIN_K_G1CU, OPTWIN_KERNELS };
 #define OPTWIN_RES_SRC 1u      /* StructuredBuffer<float4> src / device const float4 *src (a G1 region) */
 #define OPTWIN_RES_ROWS 2u     /* cbuffer rows[912] / constant float4 *rows */
 #define OPTWIN_RES_SHADOW 4u   /* Texture2DArray<float> + comparison sampler / depth2d_array + compare sampler */
 #define OPTWIN_RES_COLOR 8u    /* Texture2DArray<float4> + linear sampler / texture2d_array + linear sampler */
 #define OPTWIN_RES_ARGS 16u    /* RWByteAddressBuffer args / device uint *args (indirect arguments) */
 #define OPTWIN_RES_SHARED 32u  /* groupshared / threadgroup uint sh[16] */
+#define OPTWIN_RES_SRCU 64u    /* ours only (architect 2026-11-13, SRV-1 fact 1): the G1 region as a root
+                                * RWByteAddressBuffer srcu:register(u2) read by Load4 -- GravityMark's binding form
+                                * (raw UAV, no buffer SRV); compared with Apple's same G1 rows */
+/* a G1u-family kernel computes exactly what its G1-family twin computes */
+static unsigned optwin_g1_base(unsigned k) {
+    return k == OPTWIN_K_G1U ? OPTWIN_K_G1 : k == OPTWIN_K_G1DU ? OPTWIN_K_G1D : k == OPTWIN_K_G1CU ? OPTWIN_K_G1C : k;
+}
 
 /* Root constants b0 (8 dwords) == Metal setBytes buffer(1), same order. */
 typedef struct { unsigned R, mask, n, view, w; float a, b, c; } optwin_params;
@@ -182,6 +189,9 @@ static const optwin_kernel optwin_kernels[OPTWIN_KERNELS] = {
     {"B1", OPTWIN_RES_SHARED, 1u, 0u, "barrier_pair", optwin_body_b1},
     {"B1b", 0u, 1u, 0u, "barrier_pair", optwin_body_b1b},
     {"C1", OPTWIN_RES_ROWS, 16u, 16u, "row_load", optwin_body_c1},
+    {"G1u", OPTWIN_RES_SRCU, 4u, 16u, "load", optwin_body_g1},
+    {"G1du", OPTWIN_RES_SRCU, 4u, 16u, "load", optwin_body_g1d},
+    {"G1cu", OPTWIN_RES_SRCU, 4u, 16u, "load", optwin_body_g1c},
 };
 
 /* Batch 1, in run order. Shapes per variant: N32 (one 32x1 group, the variant's R_lat), L1 / L8 / W56 / W224 =
@@ -212,6 +222,15 @@ static const optwin_variant optwin_variants[] = {
     {"G1", "G1d_64M", OPTWIN_K_G1D, 256u, 1u, 3u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
     {"G1", "G1c_1M", OPTWIN_K_G1C, 256u, 1u, 0u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
     {"G1", "G1c_64M", OPTWIN_K_G1C, 256u, 1u, 3u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
+    /* GravityMark's form (raw UAV Load4), same shapes and R; ours only, against Apple's G1 / G1d / G1c rows */
+    {"G1", "G1u_1M", OPTWIN_K_G1U, 256u, 1u, 0u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
+    {"G1", "G1u_4M", OPTWIN_K_G1U, 256u, 1u, 1u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
+    {"G1", "G1u_16M", OPTWIN_K_G1U, 256u, 1u, 2u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
+    {"G1", "G1u_64M", OPTWIN_K_G1U, 256u, 1u, 3u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
+    {"G1", "G1du_1M", OPTWIN_K_G1DU, 256u, 1u, 0u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
+    {"G1", "G1du_64M", OPTWIN_K_G1DU, 256u, 1u, 3u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
+    {"G1", "G1cu_1M", OPTWIN_K_G1CU, 256u, 1u, 0u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
+    {"G1", "G1cu_64M", OPTWIN_K_G1CU, 256u, 1u, 3u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
     {"T1", "T1", OPTWIN_K_T1, 8u, 8u, 0u, 0u, 0u, 256u, 64u, 16u, 16u, 160u, 90u, 1.0f, 0.1234567f, 0.0765432f},
     {"T1", "T1l", OPTWIN_K_T1L, 8u, 8u, 0u, 0u, 0u, 256u, 64u, 16u, 16u, 160u, 90u, 1.0f, 0.1234567f, 0.0765432f},
     {"B1", "B1_128", OPTWIN_K_B1, 128u, 1u, 0u, 0u, 0u, 4096u, 2048u, 512u, 512u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
@@ -256,7 +275,7 @@ static optwin_params optwin_case_params(const optwin_variant *v, const optwin_ca
     optwin_params p;
     p.R = c->R;
     p.mask = optwin_region_elems(v->region) - 1u;
-    p.n = v->kernel == OPTWIN_K_G1C ? OPTWIN_G1C_STEP : 0u;
+    p.n = optwin_g1_base(v->kernel) == OPTWIN_K_G1C ? OPTWIN_G1C_STEP : 0u;
     p.view = v->kernel == OPTWIN_K_C1 ? OPTWIN_VIEW : 0u;
     p.w = c->gx * c->ntx;
     p.a = v->a; p.b = v->b; p.c = v->c;
@@ -431,8 +450,8 @@ static int optwin_oracle_lane(const optwin_variant *v, const optwin_case *c, uns
                  optwin_f2u(v->kernel == OPTWIN_K_S1 ? optwin_expect_s1(lin, p.R, p.a, p.b, 0, 0) : optwin_expect_s1o(lin, p.R, p.a, p.b, 0, 0)));
         return 0;
     }
-    if (v->kernel == OPTWIN_K_G1 || v->kernel == OPTWIN_K_G1D || v->kernel == OPTWIN_K_G1C) {
-        const unsigned e = optwin_f2u(optwin_expect_g1(v->kernel, lin, &p, data + optwin_region_offset(v->region) / 4u));
+    if (optwin_g1_base(v->kernel) != v->kernel || v->kernel == OPTWIN_K_G1 || v->kernel == OPTWIN_K_G1D || v->kernel == OPTWIN_K_G1C) {
+        const unsigned e = optwin_f2u(optwin_expect_g1(optwin_g1_base(v->kernel), lin, &p, data + optwin_region_offset(v->region) / 4u));
         snprintf(form, form_size, "exact expect 0x%08x", e);
         return e == gpu;
     }
@@ -471,7 +490,7 @@ static void optwin_print_case(const optwin_variant *v, const optwin_case *c, con
            "indirect=%u alt=%u na=%u nb=%u ta_ms=%.4f tb_ms=%.4f per_dispatch_ms=%.4f per_group_ns=%.3f op=%s "
            "simd_op_ns=%.4f gbps=%.3f wall_a_ms=%.3f wall_b_ms=%.3f p6_pct=%.2f\n",
            v->probe, v->variant, c->shape, k->name, c->ntx, c->nty, c->gx, c->gy, optwin_threads(c), c->R,
-           v->kernel == OPTWIN_K_G1 || v->kernel == OPTWIN_K_G1D || v->kernel == OPTWIN_K_G1C ? 1u << (2u * v->region) : 0u,
+           optwin_g1_base(v->kernel) == OPTWIN_K_G1 || optwin_g1_base(v->kernel) == OPTWIN_K_G1D || optwin_g1_base(v->kernel) == OPTWIN_K_G1C ? 1u << (2u * v->region) : 0u,
            v->indirect, v->alt, c->na, c->nb, best[0], best[1], per, per > 0.0 ? per * 1e6 / groups : -1.0, k->op,
            per > 0.0 && ops > 0.0 ? per * 1e6 / (ops / 32.0) : -1.0,
            per > 0.0 && k->bytes_per_op ? ops * (double)k->bytes_per_op / (per * 1e6) : 0.0, wall[0], wall[1], p6_pct);
@@ -531,7 +550,7 @@ static id<MTLComputePipelineState> optwin_pso(optwin_ctx *x, unsigned kernel, un
   [s appendFormat:@"%s#define NTX %u\n#define NTY %u\n#define ALT %uu\n", optwin_common_src, ntx, nty, alt];
   [s appendString:@"[[max_total_threads_per_threadgroup(NTX*NTY)]] kernel void k(device uint *output [[buffer(0)]],"
                    " constant OptwinParams &p [[buffer(1)]]"];
-  if (k->res & OPTWIN_RES_SRC) [s appendString:@", device const float4 *src [[buffer(2)]]"];
+  if (k->res & (OPTWIN_RES_SRC | OPTWIN_RES_SRCU)) [s appendString:@", device const float4 *src [[buffer(2)]]"];
   if (k->res & OPTWIN_RES_ROWS) [s appendString:@", constant float4 *rows [[buffer(3)]]"];
   if (k->res & OPTWIN_RES_ARGS) [s appendString:@", device uint *args [[buffer(4)]]"];
   if (k->res & OPTWIN_RES_SHADOW) [s appendString:@", depth2d_array<float> shadow [[texture(0)]], sampler cmp [[sampler(0)]]"];
@@ -599,7 +618,7 @@ static id<MTLCommandBuffer> optwin_encode(optwin_ctx *x, const optwin_variant *v
   id<MTLCommandBuffer> cb = [x->q commandBuffer];
   id<MTLComputeCommandEncoder> e = [cb computeCommandEncoder];
   [e setBuffer:out offset:0 atIndex:0]; [e setBytes:&p length:sizeof p atIndex:1];
-  if (res & OPTWIN_RES_SRC) [e setBuffer:x->data offset:optwin_region_offset(v->region) atIndex:2];
+  if (res & (OPTWIN_RES_SRC | OPTWIN_RES_SRCU)) [e setBuffer:x->data offset:optwin_region_offset(v->region) atIndex:2];
   if (res & OPTWIN_RES_ROWS) [e setBuffer:x->rows offset:0 atIndex:3];
   if (res & OPTWIN_RES_SHADOW) { [e setTexture:x->shadow atIndex:0]; [e setSamplerState:x->cmp atIndex:0]; }
   if (res & OPTWIN_RES_COLOR) { [e setTexture:x->color atIndex:1]; [e setSamplerState:x->lin atIndex:1]; }
@@ -711,7 +730,7 @@ int main(int argc, char **argv) { @autoreleasepool {
   x->out = [x->dev newBufferWithLength:OPTWIN_OUT_BYTES options:MTLResourceStorageModeShared];
   x->args = [x->dev newBufferWithLength:256 options:MTLResourceStorageModePrivate];
   x->staging = [x->dev newBufferWithLength:(NSUInteger)OPTWIN_LAYERS * OPTWIN_TEX_LAYER_BYTES options:MTLResourceStorageModeShared];
-  if (need & OPTWIN_RES_SRC) {
+  if (need & (OPTWIN_RES_SRC | OPTWIN_RES_SRCU)) {
     x->cpu_data = (float *)malloc(OPTWIN_DATA_BYTES);
     if (!x->cpu_data || !optwin_fill_data(x->cpu_data)) { printf("OPTWIN data allocation failed\n"); return 1; }
     x->data = optwin_private_buffer(x, x->cpu_data, OPTWIN_DATA_BYTES);
