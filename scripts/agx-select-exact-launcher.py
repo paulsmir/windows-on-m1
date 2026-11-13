@@ -148,6 +148,9 @@ def is_owner(executable, argv, launcher, contract):
     grammar.add_argument('--storage-mode', choices=('VNVME_RECOVERY', 'ANS_NATIVE'))
     grammar.add_argument('--ans-direct', action='store_true')
     grammar.add_argument('--ans-production-fd-sha256')
+    # 2026-11-13: run_uefi --host-request FILE (09091701e): SIGUSR1 proxy requests to the
+    # running guest; a path the launcher only reads, no bearing on ownership (EXP2395).
+    grammar.add_argument('--host-request')
     parsed = grammar.parse_args(args)
     if parsed.dry_run or '--' in args:
         raise SelectionError('dry-run/end-of-options cannot own recovery launcher')

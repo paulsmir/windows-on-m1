@@ -46,6 +46,12 @@ class ExactLauncherTests(unittest.TestCase):
         self.assertTrue(self.owner(argv))
         self.assertEqual(self.select({7: ('/usr/bin/python3', argv)}), 7)
 
+    def test_host_request_launcher_is_owner(self):
+        # EXP2395 recovery: "unrecognized arguments: --host-request .../host-request.txt"
+        argv = self.argv[:4] + ['--host-request', str(self.alias / 'experiment/host-request.txt')] + self.argv[4:]
+        self.assertTrue(self.owner(argv))
+        self.assertEqual(self.select({7: ('/usr/bin/python3', argv)}), 7)
+
     def test_option_equals_and_other_contract(self):
         self.assertTrue(self.owner(self.argv[:-2] + ['--contract-output=' + self.argv[-1]]))
         other = self.exp / 'other.bin'
