@@ -373,7 +373,7 @@ parent authorized GREEN compilation/run.
 Exact authorized host command, phase red then green:
 
 ```
-AGX_C15_OWNED_RECEIPTS=/Users/pavel/public_windows/.local/c15-owned-1396 AGX_C15_OWNED_PHASE=green PYTHONPATH=tests python3 -m unittest test_dxil_owned -v
+AGX_C15_OWNED_RECEIPTS=$HOME/public_windows/.local/c15-owned-1396 AGX_C15_OWNED_PHASE=green PYTHONPATH=tests python3 -m unittest test_dxil_owned -v
 ```
 
 `tests/test_dxil_owned.py` is explicitly opt-in: ordinary discovery does not launch
@@ -405,7 +405,7 @@ independence. That needs the separately designed new HLSL/DXC checkpoint; it is
 explicitly unclaimed here. No promise of recoverable internal library OOM follows.
 The external allocator blocker above remains a production-integration gate.
 
-Receipts: `/Users/pavel/public_windows/.local/c15-owned-1396/before-inputs.json`,
+Receipts: `$HOME/public_windows/.local/c15-owned-1396/before-inputs.json`,
 `red/{inputs,commands,results}.json`, `green/{inputs,commands,results}.json`, raw
 numbered stdout/stderr files, original objects/executable and
 `EXP1396-verdict.json`. SPIR-V was inspected from owned memory after teardown and

@@ -5,7 +5,7 @@ ERROR: test_device_owned_allocation_ranges_are_validated_atomically (tests.test_
 Catches using a wrong, stale, active, read-only or partial allocation.
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_apple_agx_render_win32_transport.py", line 40, in test_device_owned_allocation_ranges_are_validated_atomically
+  File "$HOME/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_apple_agx_render_win32_transport.py", line 40, in test_device_owned_allocation_ranges_are_validated_atomically
     subprocess.run([str(binary)], check=True, cwd=ROOT)
     ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run

@@ -25,7 +25,7 @@ outgoing-field policy.
 ## Inspected primary sources and observed contract
 
 Mesa paths below are relative to the pinned source root
-`/Users/pavel/public_windows/.local/reference/mesa`. Inspected agx_state.c SHA256:
+`$HOME/public_windows/.local/reference/mesa`. Inspected agx_state.c SHA256:
 `5015b75863202a170f8d6015eb82a76a70ecd4b92204894fa3d1886b1baa94ba`.
 
 - `src/gallium/drivers/asahi/agx_state.c:3423` agx_encode_state;

@@ -5,7 +5,7 @@ Opt-in only: parent preregisters compiler/run; never rebuilds a dependency.
 import hashlib,json,os,subprocess,unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-EXTERNAL=Path('/Users/pavel/public_windows/.local/c15-host-8434b063')
+EXTERNAL=Path('~/public_windows/.local/c15-host-8434b063').expanduser()
 ARCHIVES=['libdxil-spirv-c-static.a','libdxil-converter.a','libspirv-module.a','bc/libllvm-bc.a','third_party/libglslang-spirv-builder.a','third_party/libbc-decoder.a','libdxil-utils.a','libdxil-debug.a','third_party/libdxbc-spirv.a']
 class DxilOwned(unittest.TestCase):
  def test_actual_capi_owned_output_and_reported_failure_lifetime(self):

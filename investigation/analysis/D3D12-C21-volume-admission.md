@@ -27,7 +27,7 @@ If those spans are left refused, say so rather than describing3D as complete.
 Current `agx_d3d12_ddi.cpp` advertises
 `D3D12DDI_3DPIPELINELEVEL_11_0` through both pipeline-support queries. Its
 `CheckFormatSupport` returns0. The pinned WDK
-`/Users/pavel/public_windows/.local/reference/wdk26100/d3d12umddi.h:672-692`
+`$HOME/public_windows/.local/reference/wdk26100/d3d12umddi.h:672-692`
 explicitly labels these format bits as optional-on-some-formats. There is a
 RENDERTARGET bit, but no3D-specific RTV/resource-disable bit in that interface.
 A zero optional answer does not remove a mandatory feature of a baseline format.

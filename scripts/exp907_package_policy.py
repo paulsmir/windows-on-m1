@@ -4,9 +4,13 @@ from pathlib import Path
 import hashlib
 import re
 import shutil
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bench_env  # noqa: E402
 
 
-POLICY = Path('/Users/pavel/public_windows/.local/experiments/EXP907-disk/staged-disk-policy.ps1')
+POLICY = bench_env.bench_root() / '.local/experiments/EXP907-disk/staged-disk-policy.ps1'
 
 
 def replace_once(path, before, after):

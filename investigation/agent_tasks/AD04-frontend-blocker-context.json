@@ -8,7 +8,7 @@
   "source": [
     {"path":"drivers/apple-agx/render-admission/src/render_dynamic_overlay.c","start":10,"end":20},
     {"path":"drivers/apple-agx/render-admission/src/render_dynamic_overlay.c","start":432,"end":459},
-    {"path":"/Users/pavel/public_windows/.local/reference/mesa/src/gallium/drivers/asahi/agx_state.c","start":2873,"end":2899},
-    {"path":"/Users/pavel/public_windows/.local/reference/mesa/src/asahi/lib/pool.c","start":52,"end":79}
+    {"path":"$HOME/public_windows/.local/reference/mesa/src/gallium/drivers/asahi/agx_state.c","start":2873,"end":2899},
+    {"path":"$HOME/public_windows/.local/reference/mesa/src/asahi/lib/pool.c","start":52,"end":79}
   ]
 }

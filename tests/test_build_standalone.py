@@ -117,7 +117,7 @@ class BuildStandaloneTests(unittest.TestCase):
             found = output.find(item, cursor)
             self.assertGreaterEqual(found, 0, f"missing or out-of-order command: {item}")
             cursor = found + len(item)
-        self.assertNotIn("/Users/pavel", output)
+        self.assertNotIn(str(Path.home()), output)
 
     def test_check_python_rejects_an_incompatible_explicit_runtime(self):
         with tempfile.TemporaryDirectory() as directory:

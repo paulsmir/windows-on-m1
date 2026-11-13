@@ -43,7 +43,7 @@ Reproduce after building a persistent fixture with `tools/agx_shader_cost.py`
 
 ```sh
 APPLE_AGX_LOCAL_LOAD_SCHED=0 .local/k1-cost/dxil_agx_cost_fixture \
-  /Users/pavel/public_windows/.local/experiments/EXP2070-shader-capture/evidence/EXP2070/capture/97ae4b027aa43c6c-s5-r0.bin \
+  $HOME/public_windows/.local/experiments/EXP2070-shader-capture/evidence/EXP2070/capture/97ae4b027aa43c6c-s5-r0.bin \
   --root-views=e,3 --soft-fault-loads --print-selected
 ```
 

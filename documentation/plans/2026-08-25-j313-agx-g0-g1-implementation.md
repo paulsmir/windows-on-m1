@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Work only on `feature/j313-gpu-acceleration` under `/Users/pavel/public_windows`.
+- Work only on `feature/j313-gpu-acceleration` under `$HOME/public_windows`.
 - Preserve root `7f8492edecb96d03a6f6915b0877cb46611fcc7f`, Mu `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, and m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184` as the recovery source baseline.
 - Never modify or overwrite `.local/recovery/STABLE-j313-8core-native-input-v1/`.
 - G0 performs no clock, power, MMIO, DART, UAT, or interrupt-controller writes.
@@ -260,7 +260,7 @@ resource.
 - [ ] **Step 2: Run the exact read-only capture**
 
 ```bash
-M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+M1N1DEVICE=/dev/cu.usbmodem<SERIAL>41 \
   proxyenv/bin/python tools/agx_live_inventory.py \
   --output investigation/artifacts/EXP-20260825-073-agx-g0/raw-adt.json
 ```

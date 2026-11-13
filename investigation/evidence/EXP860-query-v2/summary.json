@@ -414,7 +414,7 @@
   "builder_delta_files": 7,
   "compiler_script_sha256": "159be6a63b409b2dbddf5573bec479fa8ec7fdd1ab067cfc2ff5e2948e72e9cb",
   "compiler_result_sha256": "a59518896853a9aa51825058f4d8b0724a11c9f10084b19dfaac1c220fc6adad",
-  "raw_evidence": "/Users/pavel/public_windows/.local/experiments/EXP860-query-v2-offline",
+  "raw_evidence": "$HOME/public_windows/.local/experiments/EXP860-query-v2-offline",
   "log_sha256": {
     "arm64.log": "56ab1bb96db4e49d9f3489452c1a4272a81b172808ec11dbd192a6885f58de56",
     "full-suite-initial.log": "10f8d5cd2077ecbefb2e947b83cf69116423ee47732d9f008d76cd5a0dc9a29c",

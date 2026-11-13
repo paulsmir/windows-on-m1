@@ -53,7 +53,7 @@ class LaunchLockTests(unittest.TestCase):
             finally:p.communicate('\n',timeout=5)
             self.assertEqual(p.returncode,0)
     def test_own_wrapper_via_symlinked_root_is_not_legacy(self):
-        # ANS001-R3 (2026-11-06): /Users/pavel/public_windows is a symlink to
+        # ANS001-R3 (2026-11-06): $HOME/public_windows is a symlink to
         # /Volumes/pwdev/public_windows; the guarded run-assisted.sh ancestor was
         # rejected as "legacy" because its argv path was compared unresolved.
         with tempfile.TemporaryDirectory() as temp:

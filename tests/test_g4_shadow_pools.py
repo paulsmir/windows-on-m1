@@ -32,7 +32,7 @@ BO = WINSYS / 'agx_win32_asahi_bo.c'
 BO_H = WINSYS / 'agx_win32_asahi_bo.h'
 BATCH = WINSYS / 'agx_win32_gpuva_batch.c'
 GENERATOR = ROOT / 'drivers/apple-agx/mesa/scripts/native-asahi-batch-lifecycle.py'
-MESA = Path('/Users/pavel/public_windows/.local/reference/mesa')
+MESA = Path('~/public_windows/.local/reference/mesa').expanduser()
 
 
 def function(text, name):

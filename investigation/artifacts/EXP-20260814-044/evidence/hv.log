@@ -2329,7 +2329,7 @@ TTY> E_LSU_ERR_STS: 0x0
 TTY> E_FED_ERR_STS: 0x0
 TTY> E_MMU_ERR_STS: 0x0
 Traceback (most recent call last):
-  File "/Users/pavel/public_windows/proxyenv/lib/python3.13/site-packages/serial/serialposix.py", line 575, in read
+  File "$HOME/public_windows/proxyenv/lib/python3.13/site-packages/serial/serialposix.py", line 575, in read
     buf = os.read(self.fd, size - len(read))
 OSError: [Errno 6] Device not configured
 
@@ -2358,6 +2358,6 @@ Traceback (most recent call last):
              ~~~~~~~~~~~~~^^^
   File "/private/tmp/wom1-root-5d827ba.WCgcVM/m1n1_windows/proxyclient/m1n1/proxy.py", line 189, in readfull
     block = self.dev.read(size - len(d))
-  File "/Users/pavel/public_windows/proxyenv/lib/python3.13/site-packages/serial/serialposix.py", line 581, in read
+  File "$HOME/public_windows/proxyenv/lib/python3.13/site-packages/serial/serialposix.py", line 581, in read
     raise SerialException('read failed: {}'.format(e))
 serial.serialutil.SerialException: read failed: [Errno 6] Device not configured

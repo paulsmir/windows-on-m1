@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Work only in `/Users/pavel/public_windows` on `feature/j313-gpu-acceleration`; do not modify `/Users/pavel/windows` or create a worktree.
+- Work only in `$HOME/public_windows` on `feature/j313-gpu-acceleration`; do not modify `$HOME/windows` or create a worktree.
 - Preserve the accepted eight-core, AppleInput, NVMe, xHCI and physical-display baseline; this plan performs no hardware run and installs no package.
 - Pin behavior to m1n1 `bee53dc60bd160c0a64de758974af767c2970baf`, Asahi `77cb8f24c2381a8abb7272d7bbdec548d6426a8a`, J313, G13 and V13_5.
 - UAT uses two canonical 39-bit TTBR halves, 40 output bits, 16-KiB pages, shifts `36/25/14`, entry counts `8/2048/2048` and 64 contexts.

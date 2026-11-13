@@ -2,7 +2,7 @@
 """Reproduce EXP861 memory accounting from saved UMD/ETL; no hardware access."""
 import argparse,collections,hashlib,json,re
 from pathlib import Path
-p=argparse.ArgumentParser();p.add_argument('--experiment',type=Path,default=Path('/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot'));p.add_argument('--etl-jsonl',type=Path);p.add_argument('--output',type=Path,default=Path(__file__).with_name('summary.json'));a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--experiment',type=Path,default=Path('~/public_windows/.local/experiments/EXP861-r147-pagingroot').expanduser());p.add_argument('--etl-jsonl',type=Path);p.add_argument('--output',type=Path,default=Path(__file__).with_name('summary.json'));a=p.parse_args()
 e=a.experiment; evidence=e/'hardware-evidence'; out={'inputs':{},'caveats':['UMD normal trace is capped at128 records per loaded module instance; log lacks time/device ID and no destroy receipt exists. Counts are observed lower bounds, not live allocation counts.','ETL ending without destroy does not establish a leak; pair identities and report trace window.']}
 for f in [e/'heartbeat.jsonl',evidence/'state.json',evidence/'umd-final-after-loss.log',evidence/'post-recovery-events.json']:
  out['inputs'][str(f)]={'bytes':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()}

@@ -32,7 +32,7 @@ Future staging must use that location; oldEXP726-signing is gone. Copied obsolet
 package extras were removed. Immutablehost377/392 recovery and accepted archives remain.
 
 Hostarchives:
-/Users/pavel/J313-evidence-archive/2026-10-02/guest-old-experiments-last50-retained/
+$HOME/J313-evidence-archive/2026-10-02/guest-old-experiments-last50-retained/
 
 Detailed receipts/scripts and hostgates are in ROOT.local/experiments/EXP925-allocation-destroy-boundary.
 No driver implementation was changed by this cleanup. The blackscreen investigation

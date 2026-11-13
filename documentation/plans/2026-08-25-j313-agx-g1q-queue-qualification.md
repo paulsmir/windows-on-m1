@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Work only on `feature/j313-gpu-acceleration` under `/Users/pavel/public_windows`.
+- Work only on `feature/j313-gpu-acceleration` under `$HOME/public_windows`.
 - Preserve `.local/recovery/STABLE-j313-8core-native-input-v1/` byte-for-byte.
 - Keep normal assisted launch, standalone launch, Mu, ACPI, stable firmware, and Windows unchanged.
 - G1Q runs only before guest entry with sole proxy ownership.

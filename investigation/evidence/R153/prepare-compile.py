@@ -35,7 +35,7 @@ for name in ['apple_agx_exp208_dynamic.c','apple_agx_render_shared_memory.c','ap
 sys.exit(1 if any(r['exit'] for r in records) else 0)
 '''
 (out/'compile.py').write_text(s)
-s=(Path('/Users/pavel/public_windows/.local/experiments/R151-dump/run-compile.py')).read_text().replace('r151-dump','r153-offline')
+s=(Path('~/public_windows/.local/experiments/R151-dump/run-compile.py').expanduser()).read_text().replace('r151-dump','r153-offline')
 s=s.replace("['compile-result.json','original-compile-command.txt','builder-before.json','compile/render_backend_image.c.log']", "['compile-result.json','builder-before.json',*[ 'compile/'+n+'.log' for n in ['apple_agx_exp208_dynamic.c','apple_agx_render_shared_memory.c','apple_agx_g13_queue_provider.c','gpuva_g3_windows.c','backend_platform_windows.c','render_backend_image.c']]]")
 (out/'run-compile.py').write_text(s)
 print('changed builder inputs',len(changed),changed)

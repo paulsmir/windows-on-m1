@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Use `/Users/pavel/public_windows` only; `/Users/pavel/windows` is reference evidence and must remain unchanged.
+- Use `$HOME/public_windows` only; `$HOME/windows` is reference evidence and must remain unchanged.
 - The control must use Homebrew Clang 22.1.8 from `/opt/homebrew/opt/llvm/bin` for every rebuilt m1n1 C object.
 - Reuse the already built `dist/j313/J313_EFI.fd`; do not rebuild or alter Mu for this experiment.
 - Keep launch flags at `display=physical debug=monitor`, which encode as `0x11`.
@@ -53,7 +53,7 @@ Expected: the first line reports `Homebrew clang version 22.1.8`, the submodule 
 
 - [ ] **Step 2: Remove mixed-compiler m1n1 objects and rebuild with Clang**
 
-Run from `/Users/pavel/public_windows/m1n1_windows`:
+Run from `$HOME/public_windows/m1n1_windows`:
 
 ```bash
 make clean
@@ -74,7 +74,7 @@ Expected: all 19 named host binaries print their `: ok` result and the script ex
 
 - [ ] **Step 4: Preserve the exact m1n1 binary and symbols**
 
-Run from `/Users/pavel/public_windows`:
+Run from `$HOME/public_windows`:
 
 ```bash
 mkdir -p .local/clang22-control
@@ -123,8 +123,8 @@ Expected: parser output starts with `flags=0x11`; all four SHA-256 values are re
 Run from the development Mac:
 
 ```bash
-scp -i /Users/pavel/.ssh/air .local/clang22-control/boot.bin pavel@192.168.1.35:~/boot-clang22-control.bin
-ssh -i /Users/pavel/.ssh/air pavel@192.168.1.35 'shasum -a 256 ~/boot-clang22-control.bin'
+scp -i $HOME/.ssh/air .local/clang22-control/boot.bin pavel@192.168.1.35:~/boot-clang22-control.bin
+ssh -i $HOME/.ssh/air pavel@192.168.1.35 'shasum -a 256 ~/boot-clang22-control.bin'
 ```
 
 Expected: the remote SHA-256 exactly matches Task 1.
@@ -141,7 +141,7 @@ Expected: the installer validates the manifest, preserves the existing scoped ba
 
 - [ ] **Step 3: Start the recorder before cold boot**
 
-Run from `/Users/pavel/public_windows` on the development Mac:
+Run from `$HOME/public_windows` on the development Mac:
 
 ```bash
 ./scripts/log-standalone.sh --output .local/clang22-control-monitor

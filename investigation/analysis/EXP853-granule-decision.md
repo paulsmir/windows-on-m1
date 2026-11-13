@@ -14,7 +14,7 @@ EXPERIMENTS.md entry is asserted. Existing experimental results remain intact.
 
 ## 1. Sources inspected and evidence identity
 
-Paths starting `.local/` below are relative to `/Users/pavel/public_windows`,
+Paths starting `.local/` below are relative to `$HOME/public_windows`,
 not this worktree. Current source root is `b2887a51dde30c362ad2c2b7472039a3c7e4cff1`,
 branch `integration/ad04-windows-compiler`. Current m1n1 HEAD is
 `8769e5e981730ca5c971ad985e65bd47d005e8c0`; Mu HEAD is

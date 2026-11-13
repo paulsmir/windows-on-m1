@@ -8,7 +8,7 @@ INPUT_COMMIT:
 f90402c7589236ec9e8a030f4b825b5a36280866
 
 WORKTREE:
-/Users/pavel/public_windows/.worktrees/task-AD04-UATOMIC-PORTABILITY-001
+$HOME/public_windows/.worktrees/task-AD04-UATOMIC-PORTABILITY-001
 
 RESULT:
 PASS (bounded five-intrinsic contract; later blockers intentionally unresolved)

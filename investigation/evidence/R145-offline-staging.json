@@ -3,7 +3,7 @@
   "base_commit": "79e5b983931b86fecb7796eb8ca18f05ef42a671",
   "hardware_run": false,
   "package_built": false,
-  "artifact_root": "/Users/pavel/public_windows/.local/experiments/R145-offline",
+  "artifact_root": "$HOME/public_windows/.local/experiments/R145-offline",
   "accepted_test_gate": "No new failures or errors versus unchanged base; user clarification 2026-09-28",
   "suite_command": "CC=/tmp/agx-clang-wrapper python3 -m unittest discover -s tests -v",
   "suite_comparison": {

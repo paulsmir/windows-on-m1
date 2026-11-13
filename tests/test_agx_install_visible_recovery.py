@@ -67,7 +67,7 @@ waitcycle; nohup $R/launch-hidden.sh > $R/launch.log 2>&1 & sshup
 
     def test_wrapper_and_manifest_written_through_a_path_alias_select_the_template(self):
         """WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? On the WSL host /Volumes/pwdev and
-        /Users/pavel/public_windows are symlinks, so the EXP1939 wrapper and manifest written on the Mac
+        $HOME/public_windows are symlinks, so the EXP1939 wrapper and manifest written on the Mac
         (alias spelling) no longer byte-matched the resolve()-built ones and launch-exp refused EXP1940."""
         self.install()
         alias_exp = self.root / "alias experiments"

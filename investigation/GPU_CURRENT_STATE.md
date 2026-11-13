@@ -2276,7 +2276,7 @@ c2eb9203ab6c75725e3d9754e9b4c8b6dd89116eb6e012c6231dbb82bc3f0744;
 - Full1463hostsuite1617/219.389s EXACT117old67fail50error18skip/noaddedremoved/13postpinsMATCH;
  NOTwhole-suiteGREEN. Originalprojector189c08a0/source-rootbuilders e4433190 qualifiedGPU1471.
  No broadtestrepeatabsentnewchange/failure. tests/test_change_ledger2PASSafterrows; append40charcommits.
-- RootTandem airssh/airscp `/Users/pavel/public_windows/.local/tandem`, guestpavel@192.168.1.37.
+- RootTandem airssh/airscp `$HOME/public_windows/.local/tandem`, guestpavel@192.168.1.37.
  Builderpauls@192.168.1.24/key~/.ssh/windows_builder. Bareairaliasunconfigured.
  BeforephysicalaskcheckguestSSH ANDproxy/vUARTUSB/ownedlauncher; neveraskalreadyRunningproxy.
  Normalvisible recovery ownsorderedreboots/disable/exactpackagecleanup; no manualprereboot/fakePID/
@@ -2678,7 +2678,7 @@ no code. F0 outcome selects: cross-process depth-2 pairs (C1 then C2a), display 
   H-C a legal overlap we do not use (cross-process DWM||compute; cross-frame or next-compute-behind-render pairs);
   H-D GPU runs below its maximum (P6 residency 86-87 %, firmware power inputs), or mapping granularity;
   H-E macOS queues the frame ahead in firmware and has no compositor job on the critical path.
-- **Running offline (read-only subagents, reports in /Users/pavel/public_windows/.local/night-20261110/):**
+- **Running offline (read-only subagents, reports in $HOME/public_windows/.local/night-20261110/):**
   r1-fhd-budget, r2-dxgk-queue, r3-dag-bound, r4-compute-levers, r5-macos-submission, r6-render-scaling.
 - **Decision (architect):** mechanism C of DWM-COMPOSITION-LEVER.md is unparked. C1 (class I, opt-in
   `Wom1CrossProcessPairs`) and C2a (class O) are being implemented offline in a separate worktree session; F0 is
@@ -2715,7 +2715,7 @@ Next causal target for this line: FS-D1 receipt (BrokerCaps 0x1ff, ScaledModes 1
 
 ## UPDATE 2026-11-10T00:04:40Z -- GravityMark gap: offline budget from five reports (no hardware), hypotheses re-ranked
 
-Sources (read-only agents, /Users/pavel/public_windows/.local/night-20261110/): r1-fhd-budget, r2-dxgk-queue,
+Sources (read-only agents, $HOME/public_windows/.local/night-20261110/): r1-fhd-budget, r2-dxgk-queue,
 r4-compute-levers, r5-macos-submission, r6-render-scaling. Reports are model output; rows below marked (checked)
 were spot-checked by the architect against the cited tables, the rest are as reported.
 
@@ -2916,7 +2916,7 @@ Report: `.local/night-20261110/r9-window-misses/REPORT.md`; cited lines re-check
 
 ## UPDATE 2026-11-10T01:30:51Z -- R10: C0 variant kernels differ by a dynamic constant-buffer index; scoreboard slot policy is the first code-level candidate (offline, no hardware)
 
-Source: `/Users/pavel/public_windows/.local/night-20261110/r10-variant-opclass/REPORT.md` (208 lines). Checked by
+Source: `$HOME/public_windows/.local/night-20261110/r10-variant-opclass/REPORT.md` (208 lines). Checked by
 the architect against files: stats column order (`drivers/apple-agx/mesa/winsys/agx_win32_shader_stats.h`), the slot
 rule in the projection (`native-asahi-latency-schedule.py`, `agx_win32_wait_block`), Apple's listing
 (`.local/metal-oracle/m208_13b1c0.s` 0x262-0x288: four device loads on slot 0, one `wait 0`), our listing
@@ -3193,7 +3193,7 @@ dispatch because 9726b186 at d28 is also a tag.
 
 ## UPDATE 2026-11-10T04:53Z -- R12: gap re-budgeted on EXP2316 x (C1 + N4b on): 3.71 ms = busy +2.48 + non-busy +1.23
 
-Source: /Users/pavel/public_windows/.local/night-20261110/r12-nonbusy-rebudget/REPORT.md (offline, read-only;
+Source: $HOME/public_windows/.local/night-20261110/r12-nonbusy-rebudget/REPORT.md (offline, read-only;
 scripts nb.py / split_foreign.py / corr.py / align_nb.py, outputs out-*.txt checked by the architect against the
 report). HD windowed 100k -temporal 0, PERF window; every cross-run delta is SEPARATE BOOTS.
 
@@ -5363,7 +5363,7 @@ recomputed from fold-on FULL runs before any job-row lever is chosen.
 
 ## UPDATE 2026-11-11T13:28Z (architect): per-job gap ranking recomputed on the fold-on package (RANKING-REFRESH)
 
-Source: /Users/pavel/public_windows/.local/night-20261110/ranking-refresh/REPORT.md (out-compare.txt, out-incx.txt,
+Source: $HOME/public_windows/.local/night-20261110/ranking-refresh/REPORT.md (out-compare.txt, out-incx.txt,
 out-foreign.txt). Runs: EXP2339 f0a (8047) and f0b (7962), package fd410f54c, control switch set, windowed HD,
 -temporal 0, same Apple capture and same scene mapping as the EXP2309 ranking (lag 0.00 s, execute offset 63).
 EXP2341 and EXP2337 were not used (no ACTUAL yet / old wait form). This supersedes the EXP2309 ranking above as the

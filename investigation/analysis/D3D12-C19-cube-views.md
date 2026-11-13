@@ -10,7 +10,7 @@ with existing KMD/firmware contracts unchanged.
 
 References describe the current C18 working tree; line numbers may move.
 
-- Pinned `/Users/pavel/public_windows/.local/reference/wdk26100/d3d12umddi.h`:
+- Pinned `$HOME/public_windows/.local/reference/wdk26100/d3d12umddi.h`:
   `:897-904` exact `D3D12DDIARG_TEXCUBE_SHADER_RESOURCE_VIEW`;
   `:911-918` `D3D12DDI_RD_TEXTURECUBE=5`;
   `:921-937` common SRV header, mapping field and TexCube union arm.
@@ -35,7 +35,7 @@ References describe the current C18 working tree; line numbers may move.
 - `drivers/apple-agx/mesa/dxbc/dxbc_to_nir.c:1714-1727` cube shape/coordinates;
   `:1758-1774` NIR sampler_dim/is_array/texture_index;
   `:1807-1865` sampling and explicit LOD sources.
-- Asahi root `/Users/pavel/public_windows/.local/reference/mesa`:
+- Asahi root `$HOME/public_windows/.local/reference/mesa`:
   `src/gallium/drivers/asahi/agx_pipe.c:2048` independent sampler-view targets;
   `src/gallium/drivers/asahi/agx_state.c:614-624` distinct descriptor dimensions
   for 3D/CUBE/CUBE_ARRAY; `:640-739` view swizzle/mip/layer/address packing;

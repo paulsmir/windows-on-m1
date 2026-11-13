@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CAPTURE = Path('/Users/pavel/public_windows/.local/experiments/EXP1969-no-wait/evidence/shader-capture')
+CAPTURE = Path('~/public_windows/.local/experiments/EXP1969-no-wait/evidence/shader-capture').expanduser()
 KERNELS = ('a8260e4297efffb3', '97ae4b027aa43c6c', '3467e84ef582ac2c', 'e5ffd902fc968f7a')
 VARIABLES = ('APPLE_AGX_WAIT_SINGLE_SLOT', 'APPLE_AGX_WAIT_GLOBAL')
 LINE = re.compile(r'^[ \t]*[0-9a-f]+:[ \t]+[0-9a-f]+[ \t]+(\S+)(.*)$', re.M)

@@ -95,7 +95,7 @@ sessions; every ANS run needs explicit user approval and an agreed slot.
 
 ## Branch
 
-`feature/j313-ans-native-offline` in `/Users/pavel/public_windows/.worktrees/ans-native`
+`feature/j313-ans-native-offline` in `$HOME/public_windows/.worktrees/ans-native`
 now contains `feature/j313-gpu-acceleration` 8786f51f7 (merge 803593d5e; GPU
 branches untouched). m1n1_windows ANS branch merged GPU m1n1 c6d10e04 → ba1cfa1
 (no overlapping files). mu ANS branch baea359242 (one clang-21 header fix).

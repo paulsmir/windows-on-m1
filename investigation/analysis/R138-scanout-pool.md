@@ -1,6 +1,6 @@
 # R138 — EXP855 scanout memory contract (offline)
 
-Task: `/Users/pavel/public_windows/.local/tandem/NEXT_TASK_R138.md`.
+Task: `$HOME/public_windows/.local/tandem/NEXT_TASK_R138.md`.
 No Air access, package, firmware edit, launch or installation is authorized.
 
 ## Evidence and source-first inspection

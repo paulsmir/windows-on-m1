@@ -5,7 +5,7 @@
 **Goal:** reproduce and correct EXP855D's Parse/Invalid in its owning producer; classify the saved Explorer AV and shutdown delay offline.
 **Architecture:** keep AGX4 v3/private leases and strict KMD validation. Exercise real Mesa serialization instead of a handwritten attachment packet.
 **Tech stack:** C, Python unittest/ASan/UBSan, matching ARM64 PDB/CDB on Windows builder.
-**Spec:** `/Users/pavel/public_windows/.local/tandem/NEXT_TASK_R141.md`.
+**Spec:** `$HOME/public_windows/.local/tandem/NEXT_TASK_R141.md`.
 
 ## Source contract and ownership
 

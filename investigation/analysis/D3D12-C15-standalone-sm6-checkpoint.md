@@ -11,7 +11,7 @@ reviewed candidate and N01–N14 inventory; tool licenses are separate.
 
 Translator: dxil-spirv `8434b0639fb2a48ce13aac08a420ecce5d23df0e`, builtin llvm-bc,
 exact reviewed dxbc-spirv/H graph. Existing standalone host nine archives are under
-`/Users/pavel/public_windows/.local/c15-host-8434b063/build`; their hashes and complete
+`$HOME/public_windows/.local/c15-host-8434b063/build`; their hashes and complete
 compiler input inventory are in `observed-inventory.json`, SHA-256
 `93ac2f925e03b24a902056f088041970aac00301c6c1fff11386a380c86e0b22`.
 No translator source/target change is proposed.
@@ -146,7 +146,7 @@ archives are already available; no new third-party installation is needed.
 ## Implementation input recorded before DXC invocation
 
 Parent authorized proceeding with the planned isolated checkpoint. Original HLSL
-is `/Users/pavel/public_windows/.local/c15-sm6-8434b063/compute.hlsl`, SHA-256
+is `$HOME/public_windows/.local/c15-sm6-8434b063/compute.hlsl`, SHA-256
 `d9493d63709a0fc4a546f97cfa5033f6a7f14c90360d56aa7d119ddc188356e0`.
 It is exactly the one-u0/space0, 64-thread guarded `3*x+7` fixture above. Dedicated
 builder fixture directory: `C:\Users\pauls\C15-sm6-8434b063`. Before compiling,
@@ -269,7 +269,7 @@ is solely the preregistered libvtn dependency, not a new translator/runtime pack
 ### Frozen artifacts and reproduction
 
 All original sources, tool outputs, NIR dumps, adapter binaries and logs are under
-`/Users/pavel/public_windows/.local/c15-sm6-8434b063/`; EXP1389 labels distinguish
+`$HOME/public_windows/.local/c15-sm6-8434b063/`; EXP1389 labels distinguish
 this compiler-only checkpoint. Original C adapter `translate.c`, original NIR
 adapter `nir-check.c`, narrow `cpu-oracle.h` and `build-nir-check.py` remain outside
 tracked production source. The full final inventory is
@@ -291,8 +291,8 @@ Exact Mesa host compile/link arguments are retained in
 `EXP1389-nir-link-command.json`. Reproduce that host gate from the worktree:
 
 ```
-AGX_LOCAL_TREE=/Users/pavel/public_windows/.local PYTHONPATH=tests \
- python3 /Users/pavel/public_windows/.local/c15-sm6-8434b063/build-nir-check.py
+AGX_LOCAL_TREE=$HOME/public_windows/.local PYTHONPATH=tests \
+ python3 $HOME/public_windows/.local/c15-sm6-8434b063/build-nir-check.py
 ```
 
 The existing generated DXIL is the input; no builder or device is needed to rerun

@@ -46,7 +46,7 @@ owner early-out; EXP1378 checks counted and uncounted draws against C13 control.
 
 ## Tandem review at C14 owner fix
 
-Read shared `/Users/pavel/public_windows/.local/tandem/REVIEW.md` (the worktree-local path is absent).
+Read shared `$HOME/public_windows/.local/tandem/REVIEW.md` (the worktree-local path is absent).
 
 REVIEW R113: DEFER — historical G3/G4/firmware boundary; EXP1377 reaches completed D3D12 work and this owner-only fix changes none of those contracts.
 

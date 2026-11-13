@@ -20,7 +20,7 @@ Line references describe the current C17 integration tree and may move later.
   `bind_stage` initializes XYZW for every sampler view, then constructs a
   texture or buffer view; `:321-351`: only 2D/2D-array texture allocation;
   `:1042-1069`: typed UAV image view bounds.
-- Pinned `/Users/pavel/public_windows/.local/reference/wdk26100/d3d12umddi.h`:
+- Pinned `$HOME/public_windows/.local/reference/wdk26100/d3d12umddi.h`:
   `:835-853` defines six component selectors and the exact encoded mapping;
   `:921-937` includes `Shader4ComponentMapping` in
   `D3D12DDIARG_CREATE_SHADER_RESOURCE_VIEW_0002`; `:897-904` specifies cube
@@ -28,7 +28,7 @@ Line references describe the current C17 integration tree and may move later.
   `:682-690` distinguishes typed UAV write/read format support.
 - Microsoft [D3D12_SHADER_COMPONENT_MAPPING](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_shader_component_mapping):
   memory components 0..3, forced zero and format-appropriate one.
-- Asahi source root `/Users/pavel/public_windows/.local/reference/mesa`:
+- Asahi source root `$HOME/public_windows/.local/reference/mesa`:
   `src/gallium/drivers/asahi/agx_state.c:640-685` (`agx_pack_texture`)
   composes format swizzles with view swizzles and emits the four channels;
   `:722-739` packs 3D depth or cube face-count/6;

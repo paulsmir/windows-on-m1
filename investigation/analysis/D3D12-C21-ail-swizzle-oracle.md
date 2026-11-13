@@ -7,7 +7,7 @@ lane; its pattern-count and DDI-version constraints must be resolved before admi
 
 ## Sources and scope
 
-Pinned Mesa root: `/Users/pavel/public_windows/.local/reference/mesa`.
+Pinned Mesa root: `$HOME/public_windows/.local/reference/mesa`.
 
 - `src/asahi/layout/layout.c:32-214`: maximum tiles, GPU-tiled mip allocation,
   padding and physical layer stride; `:327-387`: full-chain expansion and final size.
@@ -18,7 +18,7 @@ Pinned Mesa root: `/Users/pavel/public_windows/.local/reference/mesa`.
   subsequent dispatch supports 1, 2, 4, 8 and 16 bytes per element.
 - `src/gallium/drivers/asahi/agx_state.h:958-962`: CPU map adds layer and mip offset.
   `agx_pipe.c:1000-1005,1050-1055`: transfer calls tile/detile on that adjusted pointer.
-- Pinned WDK `/Users/pavel/public_windows/.local/reference/wdk26100/d3d12umddi.h`:
+- Pinned WDK `$HOME/public_windows/.local/reference/wdk26100/d3d12umddi.h`:
   `D3D12DDI_SWIZZLE_BIT_ENTRY`, `D3D12DDI_SWIZZLE_PATTERN_DESC_0003`/`_0004`,
   `D3D12DDI_SUBRESOURCE_INFO_0003` and texture-layout enums. These establish field
   existence, not the complete interpretation of the Windows postamble. The separate
@@ -184,7 +184,7 @@ backing only. Constructor equivalence remains covered by the separate
 Reproduce from the repository worktree:
 
 ```
-AGX_LOCAL_TREE=/Users/pavel/public_windows/.local \
+AGX_LOCAL_TREE=$HOME/public_windows/.local \
  python3 -m unittest discover -s tests -p test_ail_swizzle_oracle.py -v
 ```
 
@@ -254,7 +254,7 @@ admission. No shape restriction or capability was added by these tests.
 Reproduce:
 
 ```
-AGX_LOCAL_TREE=/Users/pavel/public_windows/.local \
+AGX_LOCAL_TREE=$HOME/public_windows/.local \
  python3 -m unittest discover -s tests -p test_windows_ail_swizzle_coalescing.py -v
 ```
 

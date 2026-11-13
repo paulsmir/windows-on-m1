@@ -66,7 +66,7 @@ metadata.
 - Windows Setup/unattend owns specialize/OOBE, local-account creation, locale,
   and the first-logon transition.
 - Windows OpenSSH owns remote access. The installer provisions only the public
-  half of `/Users/pavel/.ssh/air`; the private key never enters the media or
+  half of `$HOME/.ssh/air`; the private key never enters the media or
   guest.
 
 ## Media payload
@@ -207,7 +207,7 @@ The first real boot is a baseline-only boot. PASS requires:
 - NVMe and external xHCI/input are healthy;
 - AppleInput, APPL0001, keyboard child, and Precision Touchpad child are
   healthy;
-- SSH key login succeeds using `/Users/pavel/.ssh/air`;
+- SSH key login succeeds using `$HOME/.ssh/air`;
 - Event 129, new bugcheck, and reset counts are zero;
 - registry hives load normally;
 - exactly one inert `ACPI\\APPL0002` is visible with no AppleAgx package,

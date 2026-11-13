@@ -4,7 +4,7 @@
 
 Standalone boot currently regresses in ways that are difficult to distinguish from retained
 framebuffer contents, lost USB telemetry, slow decompression, or an early Windows CPU stall. The
-known-good host-assisted launch remains available in `/Users/pavel/windows`; it must become the
+known-good host-assisted launch remains available in `$HOME/windows`; it must become the
 measured reference rather than an informal source of expected behavior.
 
 This design introduces a shared, structured launch contract. The assisted launcher records the
@@ -89,7 +89,7 @@ unknown field.
 
 ### Golden assisted capture
 
-1. Build and launch the unchanged known-good tree from `/Users/pavel/windows` using the established
+1. Build and launch the unchanged known-good tree from `$HOME/windows` using the established
    `chainload.py` followed by `run-with-uart.sh` flow.
 2. The shared m1n1 collector emits snapshots at all checkpoints.
 3. A host capture tool validates ordering and checksums, then writes an immutable raw capture and a
@@ -158,8 +158,8 @@ early CPU watchdog failure.
 
 ## Repository Integration
 
-The implementation belongs in the public repository at `/Users/pavel/public_windows`. The old tree
-at `/Users/pavel/windows` remains read-only and serves as the golden assisted reference. Shared
+The implementation belongs in the public repository at `$HOME/public_windows`. The old tree
+at `$HOME/windows` remains read-only and serves as the golden assisted reference. Shared
 collector code is implemented in `m1n1_windows`; host capture and comparison tooling lives in the
 repository's `tools` or `scripts` directory. Documentation describes how to regenerate a golden
 capture without publishing machine-specific data.

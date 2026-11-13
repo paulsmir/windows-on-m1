@@ -17,7 +17,7 @@ Offline pass over current source and the existing EXP2171 receipts (no hardware)
 - WDK 26100 `d3dkmddi.h`: `DXGK_PRESENTFLAGS` 167-199, `SchedulingCaps.HwQueuePacketCap`
   2016 ("maximum number of DMA packets allowed to be queued to a node"),
   `DXGK_SUBMITCOMMANDFLAGS.Resubmission` 4320.
-- EXP2171 receipts `/Users/pavel/public_windows/.local/experiments/EXP2171-m1n1split2/evidence/EXP2171/`:
+- EXP2171 receipts `$HOME/public_windows/.local/experiments/EXP2171-m1n1split2/evidence/EXP2171/`:
   `kmd-receipts-mid-a.txt` (Wom1JobTiming971 v4, Wom1G2PresentPath, Wom1DdiStatus,
   Wom1G4PreemptOverlap, Wom1SubmitPath1135), `rcpt-final/Wom1G3PagingProfile.bin`,
   `gm2171a-umd.log`. Ring decoded with a throw-away script (slot = 288 B, header 32 B).
