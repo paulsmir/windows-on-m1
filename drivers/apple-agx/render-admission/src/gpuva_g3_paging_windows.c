@@ -798,6 +798,15 @@ static const ADMISSION_ALLOCATION_HANDLE *AdmissionG3LeafHandle(
          handle->Object.Magic == ADMISSION_ALLOCATION_OBJECT_MAGIC ? handle : NULL;
 }
 
+/* GC scope: the local segment (Wom1GpuPrivateCached = 1), or also the pool
+ * segment (= 2, MP-1b measurement only: pool pages are CPU-mapped by the KMD
+ * and get no cache maintenance). */
+static bool AdmissionG3GcSegment(const ADMISSION_CONTEXT *adapter, UINT segment) {
+  return !ADMISSION_G3_FRAME_SEGMENT(segment) ||
+         (adapter != NULL && adapter->GpuPrivateCached == 2u &&
+          segment == ADMISSION_MEMORY_POOL_SEGMENT);
+}
+
 /* MP-1 coverage receipt (render_admission.h GcLeaves): one published 16 KiB
  * leaf group of this update, classified by segment, eligibility and the
  * graph's cached switch. */
@@ -805,10 +814,11 @@ static VOID AdmissionG3GcCount(ADMISSION_CONTEXT *adapter,
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
     const ADMISSION_G3_PROCESS *process, UINT segment, bool gpu_private) {
   const bool local = !ADMISSION_G3_FRAME_SEGMENT(segment);
-  const bool cached = local && gpu_private && process->Graph.PrivateCached;
+  const bool cached = AdmissionG3GcSegment(adapter, segment) && gpu_private &&
+                      process->Graph.PrivateCached;
   const ADMISSION_ALLOCATION_HANDLE *gc = AdmissionG3LeafHandle(update);
   if (adapter == NULL) return;
-  InterlockedIncrement(&adapter->GcLeaves[!local ? 3 : cached ? 0 : gpu_private ? 1 : 2]);
+  InterlockedIncrement(&adapter->GcLeaves[cached ? 0 : !local ? 3 : gpu_private ? 1 : 2]);
   if (gc != NULL && gc->Object.Description.Size >= (16ULL << 20)) {
     InterlockedIncrement(&adapter->GcLeaves[cached ? 4 : 5]);
     InterlockedExchange(&adapter->GcLeaves[6],
@@ -1015,7 +1025,7 @@ static NTSTATUS AdmissionG3UpdateLeaf(
         ADMISSION_G3_FRAME_SEGMENT(segment) ? AppleAgxGpuvaG3SystemBacking :
                                               AppleAgxGpuvaG3LocalBacking,
         &unavailable,
-        !ADMISSION_G3_FRAME_SEGMENT(segment) && gpu_private);
+        AdmissionG3GcSegment(adapter, segment) && gpu_private);
     if (!updated && unavailable) {
       /* VidMm's logical mapping may be CPU-only under the retained broker
        * contract. Retire any previous GPU leaf before acknowledging it. */

@@ -430,12 +430,14 @@ static BOOLEAN AdmissionLiveAdditivePagingRequested(ADMISSION_CONTEXT *Context) 
   return enabled;
 }
 
-/* GC (experiment): device value Wom1GpuPrivateCached = 1. */
-static BOOLEAN AdmissionGpuPrivateCachedRequested(ADMISSION_CONTEXT *Context) {
+/* GC (experiment): device value Wom1GpuPrivateCached = 1 (local segment), or
+ * 2 (MP-1b, EXP2391: also GPU-only allocations in the pool segment, where
+ * VidMm places DEFAULT-heap buffers); returns the value, 0 otherwise. */
+static ULONG AdmissionGpuPrivateCachedRequested(ADMISSION_CONTEXT *Context) {
   HANDLE key = NULL;
   UNICODE_STRING name;
   ULONG bytes = 0u;
-  BOOLEAN enabled = FALSE;
+  ULONG enabled = 0u;
   union {
     ULONGLONG Alignment;
     UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
@@ -445,13 +447,13 @@ static BOOLEAN AdmissionGpuPrivateCachedRequested(ADMISSION_CONTEXT *Context) {
   if (Context->PhysicalDeviceObject == NULL ||
       !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
-    return FALSE;
+    return 0u;
   RtlInitUnicodeString(&name, L"Wom1GpuPrivateCached");
   if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
                                  value, sizeof(data.Buffer), &bytes)) &&
       value->Type == REG_DWORD && value->DataLength == sizeof(ULONG) &&
-      *(const ULONG *)value->Data == 1u)
-    enabled = TRUE;
+      (*(const ULONG *)value->Data == 1u || *(const ULONG *)value->Data == 2u))
+    enabled = *(const ULONG *)value->Data;
   ZwClose(key);
   return enabled;
 }
@@ -526,8 +528,8 @@ NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
   /* GC (experiment, measurement only): GPU-only allocations as cached
    * leaves; the broker refuses the leaf bit unless it advertises it. */
   context->GpuPrivateCached =
-      AdmissionGpuPrivateCachedRequested(context) &&
-      AppleAgxGpuvaV5ClientHasPrivateCached(&state->Client) ? 1u : 0u;
+      AppleAgxGpuvaV5ClientHasPrivateCached(&state->Client) ?
+          AdmissionGpuPrivateCachedRequested(context) : 0u;
   AdmissionG3AttachMailbox(state);
   context->GpuvaG3State = state;
   return STATUS_SUCCESS;
