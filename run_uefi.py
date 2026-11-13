@@ -91,6 +91,10 @@ ap.add_argument("--snapshot-devnodes", metavar="SPEC",
 ap.add_argument("--snapshot-modules", metavar="SPEC",
                 help="read-only diagnostic: on each SIGINT snapshot, list kernel loaded modules "
                      "(PsLoadedModuleList RVA,BaseDllName offset,Flags offset)")
+ap.add_argument("--host-request", type=pathlib.Path, metavar="FILE",
+                help="on SIGUSR1, stop the guest, run FILE's requests through the proxy "
+                     "(tools/host_request.py: refuse N, drop N, status), rename it to FILE.done "
+                     "and resume the guest; without this option SIGUSR1 is not handled")
 ap.add_argument("--contract-output", type=pathlib.Path,
                 help="write four CRC-framed launch-contract checkpoints")
 args = ap.parse_args()
@@ -436,13 +440,34 @@ def request_snapshot_reboot(signum, frame):
 
 signal.signal(signal.SIGTERM, request_snapshot_reboot)
 
+host_request_pending = False
+
+def request_host_request(signum, frame):
+    global host_request_pending
+    host_request_pending = True
+    hv._handle_sigint(signum, frame)
+
+if args.host_request:
+    signal.signal(signal.SIGUSR1, request_host_request)
+
 def unattended_control(*_args, **_kwargs):
     # The C side prints lock-free per-vCPU records before attempting its SMP
     # rendezvous.  Do not issue nested proxy commands from this handler: a
     # partially wedged guest cannot service them reliably.  A diagnostic signal
     # is deliberately non-destructive; recovery/reboot is a separate explicit
     # operation so repeated snapshots can prove whether CPUs still advance.
-    global snapshot_reboot_requested
+    global snapshot_reboot_requested, host_request_pending
+    if host_request_pending and not snapshot_reboot_requested:
+        # A host request is an ordinary proxy exchange with a healthy guest;
+        # it takes no snapshot and never changes recovery policy.
+        host_request_pending = False
+        from tools.host_request import consume as host_request_consume
+        try:
+            for line in host_request_consume(args.host_request, hv.p):
+                print(line)
+        except Exception as error:
+            print(f"HOST_REQUEST error: {error}")
+        return EXC_RET.HANDLED
     if snapshot_reboot_requested:
         snapshot_reboot_requested = False
         print("HOST CONTROL: diagnostic snapshot captured; rebooting Air")
