@@ -59,6 +59,14 @@ sessions.
   brightness), lid and power-button actions, booting macOS, and decisions about signing,
   licences and guest security settings.
 
+## 2a. Portability (operator, 2026-11-13)
+
+New drivers and new code are designed so that a port to M2, M3, M4 and M5 machines is as easy as possible; existing
+code follows the rule wherever it is touched. No machine or SoC constants in driver logic (they live in per-SoC or
+per-machine tables, the Apple device tree or the generated ACPI); firmware-version-dependent layouts behind one
+versioned module; hardware reached through small interfaces so a new SoC adds a table and at most one backend. Every
+design note carries a PORTABILITY section. This applies to the other driver sessions as well.
+
 ## 3. Work packages
 
 Status legend: MISSING (no code), STUB (entry point refuses or does nothing), PARTIAL
