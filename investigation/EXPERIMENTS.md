@@ -79121,3 +79121,27 @@ EXP2393 HARDWARE ACTUAL 2026-11-13T14:19:13Z:
 - dram_fast per 10 s window: arm A 0,0,0,1,0,0 (plus the boot window -1); arm B 0,1,0,0,1,0,0,0,0,0,0,0.
 - Verdict: REJECTED. Moving the measured regions into the contiguous local segment (IPA = PA) changes neither gather latency nor throughput at any size. With MP-1/MP-1b (leaf attribute) and TLBI 0, the memory-path levers on our side are exhausted; per the architect's directive they are frozen after this boot. Open (not on our side, not pursued now): the GPU-side cache/walker configuration (register-prep REPORT: SGX+0xd06030 is the only gating control never read; no macOS reference values on disk).
 - Next: A1 bench order: EXP2394 RQ-1 (exp/rq1-pkg c20a763ab, package built), then EXP2395 RQ-2 (m1n1-s2v3-rq2 772d2ee7, injection through run_uefi --host-request).
+
+EXP2394 HARDWARE BEFORE 2026-11-13T14:22:54Z:
+- Kind: one variable against the last package (EXP2393 arch/srv1 69741696): exp/rq1-pkg c20a763ab = 69741696 + arch/rq1 (merged with gpu/memory-latency). Driver diff against EXP2393 = RQ-1 only:
+  - scanout_windows.c: AdmissionScanoutSwapError / AdmissionScanoutSwapRetry; the ISR clears IRQ_ERROR when the failure is the recorded asynchronous submission (V3 commit or V2 queue);
+  - apple_agx_scanout.c: AppleAgxScanoutTakePresentFailure;
+  - render_admission.h: MPO receipt v9 (SwapFailures SwapRetries SwapRetryLatched SwapRetryExhaustedReported LastSwapFailureResult ForeignErrors);
+  - all other files in the diff are design notes and tests.
+  - SRV-1 and MP-2 code is present but switch-gated and inert (switches absent).
+- m1n1: m1n1-ansdirect-closedv5-scaled1-s2v3 (the EXP2387 m1n1, and the base of the RQ-2 image m1n1-s2v3-rq2 772d2ee7...), so EXP2395 changes the m1n1 only. Mu MUANSCPPC002. Switches as EXP2387: Wom1JobDiagnostics Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes Wom1MpoClipRead.
+- WHY THIS HYPOTHESIS:
+  1. E5-RQ (completeness plan A1): one IRQ_ERROR latched Faulted for good. PresentGate, PendingValid and the client's PresentPending stayed set, so every later commit returned DEVICE_BUSY and StopDevice failed.
+  2. RQ-1 host test test_scanout_rq1_retry drives the real ISR through five scenarios (retry latches, exhaustion, foreign error, PASSIVE failure stays fail-closed, no retry once stopping). It passes on the package branch, and run_against_baseline passes.
+  3. This boot has no failure source (no injection in this m1n1), so it can show only that RQ-1 is inert on the healthy path and costs no speed. The recovery behaviour is EXP2395's question.
+- ATOMIC CONTRACT: none.
+- WINDOWS CONTRACT: DxgkDdiSetVidPnSourceAddress / Set3 PresentIds must be completed through DXGK_INTERRUPT_VSYNC (or CRTC_VSYNC with MultiPlaneOverlay info) eventually, and a failed flip must not stall the queue. DxgkDdiStopDevice must succeed while a flip is pending.
+- AGX/ASAHI CONTRACT: the m1n1 broker reports a failed accepted swap as IRQ_ERROR with RESULT != OK and RECEIPT == that sequence (complete_present PRESENT_FAILED). Asahi completes a failed swap with a fake vblank.
+- TRANSLATION: IRQ_ERROR for the pending sequence -> PendingValid cleared, gate held, re-submit at the next vertical tick (3 tries), then report the PresentIds through the plane-off completion at the next vsync and release the gate.
+- WHAT IS STILL UNKNOWN: nothing for the healthy path. Hardware behaviour under real failures is EXP2395.
+- Expected: RQ1_ lines with v9 and all six counters 0 in every snapshot (ForeignErrors 0: no stray IRQ_ERROR in a healthy boot). Everything else equal to EXP2387 within noise: STOPS 0; H3MissedDeadline ~0; FULLFS ~59.9 fps; CS strip-scene gate PASS (r2 vs 51.991, -2 %); GravityMark PERF PASS (EXP2387 r2 52.37); windowed CS ~54.5.
+- Failure criteria: any speed gate FAIL (> 2 % drop); Version != 9 (wrong package); ForeignErrors > 0 (an IRQ_ERROR that is not the pending present: read LastSwapFailureResult); SwapFailures > 0 without a matching SwapRetryLatched/ExhaustedReported (retry stuck); hang or bugcheck.
+- Recovery: rec2394h visible recovery (exact-PID stop + AT_PROXY recovery on a hang).
+- Hashes: sys ab0f35624824, UmdArm64 eb72104a716b, UmdX64 5daca6acddce, Umd32 357b5ef9ef07; manifest bbe26f92e8c6, hardware-manifest 90ce7a6f89f6; probe2394.sh ac4b23c9bfd2 (PROBE_LINT_OK); visible recovery rec2394h 57d700580176c515; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
+- Recovery rec2394h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2394-rq1/run2394.sh.
