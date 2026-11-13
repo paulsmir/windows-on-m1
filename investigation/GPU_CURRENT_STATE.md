@@ -6559,3 +6559,22 @@ boot was run. The previous entry stays as written.
   "triage pending" (.local/handoff/gate-coverage/TRIAGE.md). Full gate: 2612 tests, 0 NEW.
 - Correction recorded: m1n1's pcie_shutdown makes no power-manager call (it asserts port reset, gates the port
   clock and resets the PHY control bits); the proxy-reboot rule after PCIe proxy steps stands.
+
+## UPDATE 2026-11-13T17:50:46Z - KNOWN DEFECT of the accepted package: a display-mode change blacks the screen until DWM restarts
+
+- EXP2401 (C2-1 + C2-2) and control EXP2402 (accepted package, no C2): the first real mode change of a boot
+  (GravityMark full screen at 1920x1080) starts a loop of about ten hide/show pairs per second with one
+  deferred flip each; nothing reaches the panel; the application times out. After the application exits the
+  mode returns to native and the loop stops, but the source stays hidden. Waiting 60 s does not help;
+  ChangeDisplaySettingsEx(NULL) returns BADPARAM; restarting dwm.exe brings the picture back. C2 is CLEARED as
+  the cause; the defect is in the accepted line (no boot since the plane line was merged had changed mode;
+  EXP2056 predates it).
+- Offline read (.local/night-20261110/modechange-loop/REPORT.md): the KMD completes every flip it accepts
+  (per cycle: visibility +2, source address +1, deferred +1, one plane-off Set3, accepted = reported); DWM
+  drives the loop - about one DXGI SetDisplayMode S_OK per cycle and MPO present callbacks over three shared
+  buffers, none arriving at the miniport as an enabled plane. Same signature as the DDisplay output rebuild
+  loops of EXP2351..2360. The failing call and its status are NOT yet known; evidence for it is in
+  EXP2402/etw-fs (DxgKrnl ETL started before the mode change, Dwm-Core, UMD session log).
+- Plan consequences: C2 boot 2 (mode probe) is gated by this defect; C2-1/C2-2 themselves showed no regression
+  at native mode (SHORT profile clean) but stay unmerged until the mode-change defect is fixed and the probe has
+  run. The explicit-0 arm of EXP2401 hit the A5 class (second device start fails).
