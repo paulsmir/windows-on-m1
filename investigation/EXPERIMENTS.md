@@ -79091,3 +79091,33 @@ EXP2393 HARDWARE BEFORE 2026-11-13T14:10:31Z:
 - Hashes: sys cb4f38daabb1, UmdArm64 589cfdf18b7c, UmdX64 0fabc19b148d, Umd32 f01531a8739f; manifest c976b43565f1, hardware-manifest 83c2340766ef; probe2393.sh 16ead4c877ba (PROBE_LINT_OK); visible recovery rec2393h 41c9c9646bb5e813; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
 - Recovery rec2393h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2393-mp2/run2393.sh.
+
+EXP2393 HARDWARE ACTUAL 2026-11-13T14:19:13Z:
+- Boot and run: recovery rec2392h (RECOVERY_DONE), then staged arch/srv1 69741696 (MP-2), m1n1-s2v3-gc. Both OPTWING1 arms ran to AGX_D3D12_OPTWING1 PASS; CHAIN2393_DONE. STOPS 0, WER_REPORTS 2 (the two October dumps). Guest alive after each arm. Recovery rec2393h started.
+- Validity: the switch read back absent in arm A, 0x50 in arm B, cleared after (SWITCH_CLEARED 0). OPTWIN_RECORDS missing 0, oracle_bad 0 in both arms (late_submit 11 each, measured). P6 >= 99.40 % for every variant. GPUVA-GC: cached 0, tlbi 0 for the boot (Wom1GpuPrivateCached absent, as intended).
+- Placement receipt (Wom1GpuPlacementReceipt), the two GPU-only 85 MiB regions (5440 groups of 16 KiB each):
+  - arm A: segment 3 (pool, segments=0x8), runs=1, largest_run=5440: one contiguous IPA run each (first IPA 0xd0b480000, 0xd10980000); frame residues uniform (mod16 340 each, 64/256/1024 distinct);
+  - arm B: segment 2 (local reserve, segments=0x4), runs=1, first IPA 0x8e73d0000 / 0x8ec8d0000, identical residue distribution;
+  - the CPU-visible upload buffer stayed in segment 3 in both arms (as designed);
+  - so the pool regions were already IPA-contiguous; the arms differ in segment (local reserve, IPA = PA) and in the host-PA layout behind segment 3's IPA, which the receipt cannot see.
+- Expected vs actual, ours/macOS per dispatch (macOS = mean of MACOS-20261113-optwin run1/run2; u rows against macOS's non-u twin), arm A -> arm B:
+
+  | Variant | GM shape | N32 |
+  |---|---|---|
+  | G1u 1 MB | 1.19 -> 1.19 | 1.30 -> 1.30 |
+  | G1u 4 MB | 1.43 -> 1.43 | 1.18 -> 1.20 |
+  | G1u 16 MB | 0.99 -> 0.99 | 0.84 -> 1.04 |
+  | G1u 64 MB | 1.32 -> 1.32 | 1.16 -> 1.26 |
+  | G1du 1 MB | 1.21 -> 1.21 | 1.37 -> 1.37 |
+  | G1du 4 MB | 1.43 -> 1.43 | 1.11 -> 1.13 |
+  | G1du 16 MB | 0.96 -> 0.96 | 0.94 -> 0.89 |
+  | G1du 64 MB | 1.32 -> 1.32 | 1.02 -> 1.05 |
+  | G1cu 1 MB | 0.92 -> 0.91 | 1.69 -> 1.69 |
+  | G1cu 64 MB | 1.41 -> 1.41 | 2.29 -> 2.31 |
+
+  - Arm B / arm A at the GM shape: 0.992-1.002 for every row. N32 moves both ways within its known noise (G1u 16 MB N32 also moved 0.99 -> 1.05 between EXP2390 and EXP2392).
+  - The expected readings (1 MB N32 G1du toward ~157 ns per the BEFORE, 1/4 MB GM ratios toward 1.0) did not happen. SRV rows unchanged (G1_1M GM 3.98, G1_64M 2.50).
+  - Arm A equals EXP2390/EXP2392 (GM 1.19/1.43/0.99/1.32), as expected.
+- dram_fast per 10 s window: arm A 0,0,0,1,0,0 (plus the boot window -1); arm B 0,1,0,0,1,0,0,0,0,0,0,0.
+- Verdict: REJECTED. Moving the measured regions into the contiguous local segment (IPA = PA) changes neither gather latency nor throughput at any size. With MP-1/MP-1b (leaf attribute) and TLBI 0, the memory-path levers on our side are exhausted; per the architect's directive they are frozen after this boot. Open (not on our side, not pursued now): the GPU-side cache/walker configuration (register-prep REPORT: SGX+0xd06030 is the only gating control never read; no macOS reference values on disk).
+- Next: A1 bench order: EXP2394 RQ-1 (exp/rq1-pkg c20a763ab, package built), then EXP2395 RQ-2 (m1n1-s2v3-rq2 772d2ee7, injection through run_uefi --host-request).
