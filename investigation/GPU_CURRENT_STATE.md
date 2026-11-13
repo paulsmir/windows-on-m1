@@ -6450,3 +6450,17 @@ boot was run. The previous entry stays as written.
   6..13 ps per sample; dispatch structure, group size, barriers, clock: excluded.
 - MP-1 (spec in the handoff file): MEMATTR 0 on GPU-only leaves as a measurement switch with a coverage receipt,
   OPTWIN gather rows at P6, off/on boots. In parallel: macOS's own UAT leaf attributes read from the kext.
+
+## UPDATE 2026-11-13T11:58:02Z - macOS UAT leaves read from the kernelcache (behaviour only): cached user mappings exist
+
+- Static read of the macOS 15.7.8 kernelcache for J313 (.local/night-20261110/kext-uat-attrs/REPORT.md): on M1
+  the GPU page tables are written by XNU's PPL "uat" driver. Leaf = PA | AF | nG | bit 55, SH 00, 16K pages at
+  L3 only (no block or contiguous mappings). AttrIndx: device (1), uncached (2) or cached (0); a user buffer is
+  mapped CACHED when a map option (bit 41) is set, UNCACHED otherwise. Which Metal buffers get that option is
+  not found. Kernel/firmware-shared resources are mapped cached at ~17 sites. Asahi and our broker always write
+  the uncached index (leaf 0x...C8B) for user memory. MAIR encodings: not written by driver code, unknown.
+- TLB maintenance differs: macOS issues no invalidation when mapping into an invalid entry and one range
+  invalidation per unmapped segment; our broker issues a whole-ASID invalidation per 16K entry on unmap (and on
+  map unless built with AGX_GPUVA_MAP_NO_TLBI). Effect on a running dispatch: unmeasured (counted in MP-1).
+- Consequence: the MP-1 hypothesis (data attribute) has a source basis - macOS has a cached user-buffer form that
+  neither Asahi nor we use. Still a hypothesis until MP-1's rows are in.
