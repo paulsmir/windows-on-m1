@@ -6578,3 +6578,21 @@ boot was run. The previous entry stays as written.
 - Plan consequences: C2 boot 2 (mode probe) is gated by this defect; C2-1/C2-2 themselves showed no regression
   at native mode (SHORT profile clean) but stay unmerged until the mode-change defect is fixed and the probe has
   run. The explicit-0 arm of EXP2401 hit the A5 class (second device start fails).
+
+## UPDATE 2026-11-13T18:08:20Z - cause of the mode-change black screen: PL-1 releases the previous primary at SetDisplayMode
+
+- Offline trace read of EXP2402 (.local/night-20261110/modechange-cause/REPORT.md; DxgKrnl ETL decoded natively and
+  merged with the DWM UMD log on the common QPC). After a mode change DWM's SetDisplayMode(new primary) returns S_OK
+  and the UMD (PL-1 release branch, render-admission/umd/src/umd.c + umd_primary_retention.h) immediately deallocates
+  the previously retained mode-setting primary. dxgkrnl still treats that allocation as the displayed primary, so
+  the deallocation runs its disable path: plane off, flush with DisableAllPlanes, vblank wait, source hidden. DWM's
+  next present needs a new SetDisplayMode, which releases the previous primary again: the loop sustains itself.
+- Evidence: 119 of 119 repeating hides lie between a SetDisplayMode return and the return of the PL-1 release, each
+  followed by termination of exactly the released allocation; UMD log: 152 set-display-mode rows, 151 release rows.
+  At native mode DWM sets the mode once per device, so the release branch had never run on hardware (EXP2361
+  exercised only the retain branch). Excluded as the loop driver: new primary refused or mis-sized, Check3 answers,
+  CommitVidPn / cofunctional modality (one commit in the whole trace), stretch caps.
+- Fix spec PL-1b (handoff file): superseded primaries are held (bound 4, oldest released beyond it, all released at
+  device destroy); host state-machine test first. NOT yet built or run. Still unknown: which dxgkrnl predicate keeps
+  the old primary "displayed" and until when (sets the earliest safe release), the kernel status of DWM's retry
+  presents, the BADPARAM of ChangeDisplaySettingsEx(NULL) in the broken state, the first two hides after the commit.
