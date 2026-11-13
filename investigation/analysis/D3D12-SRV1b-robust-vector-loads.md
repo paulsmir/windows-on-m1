@@ -54,3 +54,15 @@ Alternative to measure first: a `j` select that only distinguishes "whole" from 
 1. Offline: RC74's exactness tests (`test_d3d_buffer_robustness`: every size, every straddle) GREEN with the new form, plus a new straddle case where the vector base moves.
 2. Offline: production-shape cost of G1 (table) and of every GM compute capture that has table UAV reads.
 3. Hardware only after that: the OPTWIN G1 table rows (an SRV-1 table variant, to be added to the probe) and the GM gate.
+
+## GravityMark check (offline, 2026-11-13)
+
+The question "are GravityMark's UAVs root or table" from WHAT IS STILL UNKNOWN is answered from the EXP2387 gm r2 measure-d3d12-root-views receipts:
+
+- 179 of 180 compute shaders bind UAVs; 32 of them have a table (robust-checked) UAV. Those 32 include the top of the ranking: bdb1944a (85.8 % of compute instruction work, UAVs 0xf, root 0xe, table u0), c5af950a (4.0 %) and 17de760d (2.2 %).
+- Production-shape cost with the receipts' root views, compared with the table UAV marked unchecked:
+  - bdb1944a 3514 = 3514 instructions, nir-mem 234 = 234;
+  - c5af950a 196 = 196;
+  - 17de760d 108 = 108.
+
+  The table UAV is not read through the RC74 load split in these kernels, so SRV-1b changes nothing in them. SRV-1b stays a general-defect item, not a GravityMark lever.
