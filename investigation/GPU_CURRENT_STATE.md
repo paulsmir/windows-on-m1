@@ -6323,3 +6323,17 @@ boot was run. The previous entry stays as written.
 - Open on this line: application 30..40 fps while the pointer moves (HOLD-3 deadline commit, implemented on
   arch/hold3, not yet on hardware); scratch copy cost (CUR-1c staged copy b0e5b0404, not yet on hardware);
   no person has seen the pointer picture.
+
+## UPDATE 2026-11-13T02:25:26Z - EXP2385 (interim): CUR-1c confirmed; HOLD-3 as specified does not fix the halving; HOLD-3b
+
+- CUR-1c (staged scratch copy): 24x27 pointer copy 8.0 us mean, 38 us max (EXP2384: 126 / 422 us). CONFIRMED.
+- HOLD-3 deadline timer: error ~0.3 ms mean, 2.6 ms max, missed vblanks 0, lead 5.0 ms; controls unchanged
+  (FULLFS 59.41, STRETCHFS 59.57). But the defect remains: moving pointer over FULLFS 30..48 fps, taskbar strip
+  over CS 32.00 fps.
+- Cause (ring): Set3 phases are early (L1 1.2..1.6 ms, L0 2.8..6.9 ms), lateness is not it. The latch handler
+  and the tick commit a held set at the latch; that swap is outstanding for the whole next frame, so that
+  frame's flips are held again and committed at the following latch - a self-sustaining regime in which every
+  flip pays a frame (120 latch commits against 38 deadline commits during motion).
+- HOLD-3b (approved, not implemented): latch and tick never commit; they queue the commit DPC and the deadline
+  rule decides. A held set committed at the latch or at the same frame's deadline reaches the screen at the same
+  vblank, so nothing is lost and the gate stays free for the frame's own flips.
