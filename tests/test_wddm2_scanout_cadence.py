@@ -37,6 +37,10 @@ static unsigned calls,clock_calls,mpo_takes;
 #define ADMISSION_SCANOUT_MPO_KIND_V2 0
 static void AdmissionScanoutTakeNextMpo(ADMISSION_SCANOUT_RUNTIME*p,int k){
  assert(p==&r && k==ADMISSION_SCANOUT_MPO_KIND_V2 && r.PendingValid);++mpo_takes;}
+/* RQ-1: the queued V2 surface is recorded for a retry, with its sequence. */
+static unsigned retry_records;
+static void AdmissionScanoutRetryRecordV2(ADMISSION_SCANOUT_RUNTIME*p,unsigned g,unsigned long long o,int f,unsigned long long q){
+ (void)g;(void)o;(void)f;assert(p==&r && q!=0ULL);++retry_records;}
 static ADMISSION_SCANOUT_RUNTIME* AdmissionScanoutGet(ADMISSION_CONTEXT*c){(void)c;return &r;}
 static int InterlockedCompareExchange(int*p,int v,int c){int o=*p;if(o==c)*p=v;return o;}
 static int InterlockedExchange(int*p,int v){int o=*p;*p=v;return o;}

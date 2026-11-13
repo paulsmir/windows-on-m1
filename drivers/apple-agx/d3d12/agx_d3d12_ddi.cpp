@@ -5160,7 +5160,7 @@ static VOID APIENTRY IASetIndexBuffer(D3D12DDI_HCOMMANDLIST handle, const D3D12D
     list->index_bytes = list->index_heap ? view->SizeInBytes : 0u;
     if (!list->index_heap) ListError(list, E_INVALIDARG);
 }
-/* RC75: the root CBVs and UAVs of a root signature, with the stages that
+/* RC75: the root CBVs and UAVs (SRV-1: and SRVs) of a root signature, with the stages that
  * see them (compute sees every parameter, as ResolveRoot with kAnyStage).
  * D3D12 requires the bound root signature to match the PSO's, so the one
  * bound at a PSO's first dispatch or draw describes all of them. */
@@ -5168,8 +5168,9 @@ static void RootViews(const AgxD3d12RootSignature *root, AGX_D3D12_ROOT_VIEWS *o
     memset(out, 0, sizeof(*out));
     for (UINT i = 0; root && i < root->parameters && out->Count < AGX_D3D12_ROOT_VIEWS_MAX; ++i) {
         const AgxD3d12RootParameter &p = root->parameter[i];
-        const bool cbv = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_CBV, uav = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_UAV;
-        if (!cbv && !uav) continue;
+        const bool cbv = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_CBV, uav = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_UAV,
+                   srv = p.type == D3D12DDI_ROOT_PARAMETER_TYPE_SRV;
+        if (!cbv && !uav && !srv) continue;
         unsigned stages = 1u << AGX_D3D12_HEAP_CS;
         switch (p.visibility) {
         case D3D12DDI_SHADER_VISIBILITY_ALL:
@@ -5184,7 +5185,7 @@ static void RootViews(const AgxD3d12RootSignature *root, AGX_D3D12_ROOT_VIEWS *o
         default: break;
         }
         auto &v = out->View[out->Count++];
-        v.Kind = cbv ? DXBC_BINDING_CBV : DXBC_BINDING_UAV;
+        v.Kind = cbv ? DXBC_BINDING_CBV : uav ? DXBC_BINDING_UAV : DXBC_BINDING_SRV;
         v.Space = p.space;
         v.Register = p.shader_register;
         v.Stages = stages;

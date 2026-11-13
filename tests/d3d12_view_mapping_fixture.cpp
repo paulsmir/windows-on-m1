@@ -45,6 +45,10 @@ struct AGX_D3D12_UAV {const AGX_D3D12_BUFFER *Buffer;UINT64 Offset,Bytes;DXGI_FO
 #ifndef DXBC_NIR_UAV_COUNTER_SLOT
 #define DXBC_NIR_UAV_COUNTER_SLOT 8 /* C33: dxbc_to_nir.h */
 #endif
+#ifndef DXBC_NIR_SRV_SSBO_SLOT
+#define DXBC_NIR_SRV_SSBO_SLOT 16 /* SRV-1: dxbc_to_nir.h */
+#define DXBC_NIR_MAX_SRV_SSBOS 16
+#endif
 struct AgxD3d12Descriptor;
 struct Bindings {const AgxD3d12Descriptor *srv_descriptor[128];AgxD3d12Heap *srv_heap[128];UINT64 srv_offset[128];};
 struct OwnerBindings {AGX_D3D12_BUFFER srv_buffers[128];AGX_D3D12_SRV srvs[128];};

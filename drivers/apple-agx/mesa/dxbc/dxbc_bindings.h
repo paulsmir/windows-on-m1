@@ -49,7 +49,14 @@ enum dxbc_binding_kind {
  * the textures a shader names by constant reach the 16 texture state
  * registers; the DXBC frontend ignores it */
 #define DXBC_BINDING_SRV_STATIC_FIRST 0x20000000u
-#define DXBC_BINDING_LIMIT_FLAGS (DXBC_BINDING_HEAP_RANGES | DXBC_BINDING_MINMAX | DXBC_BINDING_SRV_STATIC_FIRST)
+/* SRV-1 (investigation/analysis/D3D12-SRV1-buffer-srv-loads.md): a caller
+ * sets DXBC_BINDING_SRV_SSBO in the SRV limit to have raw and structured SRV
+ * slots below DXBC_NIR_MAX_SRV_SSBOS read as read-only shader buffers
+ * (shader-buffer slot DXBC_NIR_SRV_SSBO_SLOT + slot, bound by the caller
+ * beside the texel-buffer view) instead of one texel fetch per dword */
+#define DXBC_BINDING_SRV_SSBO 0x10000000u
+#define DXBC_BINDING_LIMIT_FLAGS (DXBC_BINDING_HEAP_RANGES | DXBC_BINDING_MINMAX | DXBC_BINDING_SRV_STATIC_FIRST | \
+                                  DXBC_BINDING_SRV_SSBO)
 /* Tier 2: 64 UAVs per pipeline, which a shader may declare one register at
  * a time: 8 in slots, 56 heap ranges */
 #define DXBC_HEAP_RANGE_MAX 64u

@@ -188,6 +188,20 @@ class CompiledCost(unittest.TestCase):
                 table = self.tool.cost(self.binary, source, '--root-views=0,0')
                 self.assertEqual(table, robust)
 
+    def test_dxil_buffer_srvs_become_shader_buffer_loads_under_srv1(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? SRV-1 must reach the
+        # DXIL frontend too: dxil-spirv reads a raw/structured SRV bound as an
+        # R32_UINT texel buffer one dword per fetch. Under --srv-ssbo
+        # (APPLE_AGX_D3D12_SRV_SSBO) c44/par_cs's ByteAddressBuffer t2 and
+        # StructuredBuffer<uint2> t3 reads leave the texture unit (the typed
+        # Buffer<float4> t1 and Texture2D t0 stay texture reads), and the
+        # shader gets cheaper.
+        source = ROOT / 'tests/fixtures/dxil/c44/par_cs.dxil'
+        off = self.tool.cost(self.binary, source, '--root-views=0,0', '--production')
+        on = self.tool.cost(self.binary, source, '--root-views=0,0', '--production', '--srv-ssbo')
+        self.assertEqual((off['nir-tex'], on['nir-tex']), (11, 7))
+        self.assertLess(on['instrs'], off['instrs'])
+
     def test_array_sample_crawls_run_in_the_preamble(self):
         asahi_rule = {'APPLE_AGX_D3D_CRAWL_SPECULATE': '0'}
         source = '--synthetic-array-samples=8'

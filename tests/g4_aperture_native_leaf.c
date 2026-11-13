@@ -135,6 +135,9 @@ static int AppleAgxGpuvaG3GraphTryLeafBackingEx(GRAPH *g, ULONGLONG table,
   return AppleAgxGpuvaG3GraphTryLeafBacking(g,table,index,ipa,write,kind,unavailable);
 }
 static BOOLEAN AdmissionG3LeafGpuPrivate(const void *update) {(void)update;return FALSE;}
+/* GC scope and the MP-1/MP-2 receipts: not part of this replay */
+static bool AdmissionG3GcSegment(const void *adapter,unsigned segment) {(void)adapter;(void)segment;return true;}
+static void AdmissionG3GcCount(void *adapter,const void *update,const void *process,unsigned segment,bool gpu_private,unsigned long long ipa) {(void)adapter;(void)update;(void)process;(void)segment;(void)gpu_private;(void)ipa;}
 static NTSTATUS AdmissionG3RejectPaging(ADMISSION_G3_PAGING_FAILURE *f,
     UINT branch, UINT index, const DXGK_PTE *pte, ULONGLONG ipa, NTSTATUS status) {
   (void)f;(void)branch;(void)index;(void)pte;(void)ipa; return status;

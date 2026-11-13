@@ -575,6 +575,33 @@ APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutQueueCommitLayers(
   return AppleAgxScanoutOk;
 }
 
+APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutTakePresentFailure(
+    APPLE_AGX_SCANOUT_CLIENT *Client, APPLE_AGX_SCANOUT_U64 *Sequence,
+    APPLE_AGX_SCANOUT_U32 *BrokerResult) {
+  APPLE_AGX_SCANOUT_U32 result = 0u;
+  APPLE_AGX_SCANOUT_U64 receipt = 0ULL;
+  if (Client == APPLE_AGX_SCANOUT_NULL || Sequence == APPLE_AGX_SCANOUT_NULL ||
+      BrokerResult == APPLE_AGX_SCANOUT_NULL)
+    return AppleAgxScanoutInvalidArgument;
+  *Sequence = 0ULL;
+  *BrokerResult = 0u;
+  if (!Client->PresentPending || Client->PendingPresentSequence == 0ULL)
+    return AppleAgxScanoutNoInterrupt;
+  if (!AppleAgxScanoutRead32(Client, APPLE_AGX_SCANOUT_REG_RESULT, &result) ||
+      !AppleAgxScanoutRead64(Client, APPLE_AGX_SCANOUT_REG_RECEIPT_SEQUENCE,
+                             &receipt))
+    return AppleAgxScanoutTransportFailed;
+  if (receipt != Client->PendingPresentSequence ||
+      result == APPLE_AGX_SCANOUT_BROKER_OK)
+    return AppleAgxScanoutNoInterrupt;
+  Client->LastBrokerResult = result;
+  *Sequence = receipt;
+  *BrokerResult = result;
+  Client->PresentPending = APPLE_AGX_SCANOUT_FALSE;
+  Client->PendingPresentSequence = 0ULL;
+  return AppleAgxScanoutOk;
+}
+
 APPLE_AGX_SCANOUT_RESULT AppleAgxScanoutReadActiveLayers(
     APPLE_AGX_SCANOUT_CLIENT *Client, APPLE_AGX_SCANOUT_U32 *ActiveLayers) {
   if (Client == APPLE_AGX_SCANOUT_NULL ||

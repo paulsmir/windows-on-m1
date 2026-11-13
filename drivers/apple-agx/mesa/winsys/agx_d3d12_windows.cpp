@@ -410,6 +410,15 @@ static bool t5b_srv_static_first() {
   static const bool on = t5b_switch("APPLE_AGX_D3D12_SRV_STATIC_FIRST");
   return on;
 }
+/* SRV-1 (investigation/analysis/D3D12-SRV1-buffer-srv-loads.md): with
+ * APPLE_AGX_D3D12_SRV_SSBO=1 raw/structured SRV slots below
+ * DXBC_NIR_MAX_SRV_SSBOS are read as read-only shader buffers
+ * (DXBC_BINDING_SRV_SSBO). bind_stage binds those buffers whatever the
+ * switch, so a pipeline compiled either way reads its views. */
+static bool srv1_ssbo() {
+  static const bool on = t5b_switch("APPLE_AGX_D3D12_SRV_SSBO");
+  return on;
+}
 /* projected agx_state.c (native-asahi-batch-lifecycle.py
  * project_crawl_bindful): the samples step A moved on this thread since
  * the last call */
@@ -2259,16 +2268,28 @@ static const uint32_t *shader_binding_limits() {
   };
   return t_shader_minmax ? minmax_limits : owner_binding_limits;
 }
+/* SRV-1: the DXBC frontend's limits; APPLE_AGX_D3D12_SRV_SSBO reaches it as
+ * the SRV limit flag DXBC_BINDING_SRV_SSBO */
+static const uint32_t *dxbc_binding_limits() {
+  const uint32_t *limits = shader_binding_limits();
+  if (!srv1_ssbo()) return limits;
+  static thread_local uint32_t flagged[DXBC_BINDING_KIND_COUNT];
+  memcpy(flagged, limits, sizeof(flagged));
+  flagged[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_SSBO;
+  return flagged;
+}
 #ifdef APPLE_AGX_D3D12_DXIL
 /* T5b step B2: the DXIL frontend's limits; APPLE_AGX_D3D12_SRV_STATIC_FIRST
  * reaches it as the SRV limit flag DXBC_BINDING_SRV_STATIC_FIRST (the DXBC
  * frontend keeps shader_binding_limits()) */
 static const uint32_t *dxil_binding_limits() {
   const uint32_t *limits = shader_binding_limits();
-  if (!t5b_srv_static_first()) return limits;
+  if (!t5b_srv_static_first() && !srv1_ssbo()) return limits;
   static thread_local uint32_t flagged[DXBC_BINDING_KIND_COUNT];
   memcpy(flagged, limits, sizeof(flagged));
-  flagged[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_STATIC_FIRST;
+  if (t5b_srv_static_first()) flagged[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_STATIC_FIRST;
+  /* SRV-1: the DXIL frontend reads the same flag */
+  if (srv1_ssbo()) flagged[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_SSBO;
   return flagged;
 }
 #endif
@@ -2336,13 +2357,17 @@ static void mark_root_views(struct nir_shader *nir, mesa_shader_stage stage, con
   const int heap_stage = root_view_stage(stage);
   if (!nir || !t_root_views_set || heap_stage < 0) return;
   const unsigned bit = 1u << heap_stage;
-  uint32_t root_cbv = 0, root_uav = 0, cbv = 0, uav = 0;
+  uint32_t root_cbv = 0, root_uav = 0, cbv = 0, uav = 0, root_srv = 0;
   if (bindings && bindings->active) {
     for (uint32_t i = 0; i < bindings->count && i < DXBC_BINDING_MAP_MAX; ++i) {
       const struct dxbc_binding &b = bindings->bindings[i];
-      if ((b.flags & DXBC_BINDING_HEAP) || b.slot >= 32u ||
-          (b.kind != DXBC_BINDING_CBV && b.kind != DXBC_BINDING_UAV))
+      if ((b.flags & DXBC_BINDING_HEAP) || b.slot >= 32u) continue;
+      /* SRV-1: a root SRV read as a shader buffer is unchecked like a root UAV */
+      if (b.kind == DXBC_BINDING_SRV) {
+        if (root_view_of(t_root_views, bit, b.kind, b.space, b.reg)) root_srv |= 1u << b.slot;
         continue;
+      }
+      if (b.kind != DXBC_BINDING_CBV && b.kind != DXBC_BINDING_UAV) continue;
       const bool cb = b.kind == DXBC_BINDING_CBV;
       (cb ? cbv : uav) |= 1u << b.slot;
       if (root_view_of(t_root_views, bit, b.kind, b.space, b.reg)) (cb ? root_cbv : root_uav) |= 1u << b.slot;
@@ -2353,16 +2378,19 @@ static void mark_root_views(struct nir_shader *nir, mesa_shader_stage stage, con
       if (v.Space || v.Register >= 32u || !(v.Stages & bit)) continue;
       if (v.Kind == DXBC_BINDING_CBV) root_cbv |= 1u << v.Register;
       if (v.Kind == DXBC_BINDING_UAV) root_uav |= 1u << v.Register;
+      if (v.Kind == DXBC_BINDING_SRV) root_srv |= 1u << v.Register;
     }
   }
+  root_srv = srv1_ssbo() ? root_srv & ((1u << DXBC_NIR_MAX_SRV_SSBOS) - 1u) : 0u;
   root_cbv &= (1u << AGX_D3D12_CBV_SLOTS) - 1u;
   root_uav &= (1u << AGX_D3D12_UAV_SLOTS) - 1u;
   char keep[2] = {};
   const bool checked = GetEnvironmentVariableA("APPLE_AGX_D3D12_ROOT_BOUNDS", keep, sizeof(keep)) == 1 && keep[0] == '1';
-  const bool applied = !checked && (root_cbv || root_uav) && dxbc_nir_mark_root_views(nir, root_cbv, root_uav);
+  const bool applied = !checked && (root_cbv || root_uav || root_srv) &&
+                       dxbc_nir_mark_root_views(nir, root_cbv, root_uav | (root_srv << DXBC_NIR_SRV_SSBO_SLOT));
   const ShaderStatsTag tag = shader_stats_tag(tokens);
   const UINT values[] = {static_cast<UINT>(stage), static_cast<UINT>(tag.Hash), root_cbv, root_uav, cbv, uav,
-                         applied ? 1u : checked ? 2u : 0u};
+                         applied ? 1u : checked ? 2u : 0u, root_srv};
   AdmissionUmdDiagnostic("measure-d3d12-root-views", S_OK, values, ARRAYSIZE(values));
 }
 /* APPLE_AGX_D3D12_SHADER_DUMP_DIR retains failure captures (reason 1..4).
@@ -2465,7 +2493,7 @@ static struct nir_shader *translate_shader(const UINT *tokens, mesa_shader_stage
   }
 #endif
   (void)stage;
-  return dxbc_translate_tokens_bindings_xfb(tokens, options, shader_binding_limits(), bindings, passthrough_registers,
+  return dxbc_translate_tokens_bindings_xfb(tokens, options, dxbc_binding_limits(), bindings, passthrough_registers,
                                             passthrough_positions, xfb, error);
 }
 extern "C" HRESULT AgxD3d12OwnerCreateCompute(AGX_D3D12_OWNER *owner, const UINT *tokens,
@@ -5492,9 +5520,18 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
     *view_count = i + 1;
   }
   if (*view_count) pipe->set_sampler_views(pipe, stage, 0, *view_count, 0, views);
-  /* C33: UAV buffers at 0..7, their append/consume counters at 8..15 */
+  /* C33: UAV buffers at 0..7, their append/consume counters at 8..15;
+   * SRV-1: raw/structured SRV slot t < 16 also read-only at 16 + t */
   static_assert(DXBC_NIR_UAV_COUNTER_SLOT == AGX_D3D12_UAV_SLOTS, "counter slots follow the UAV slots");
-  struct pipe_shader_buffer buffers[2 * AGX_D3D12_UAV_SLOTS] = {};
+  static_assert(DXBC_NIR_SRV_SSBO_SLOT == 2 * AGX_D3D12_UAV_SLOTS, "SRV buffers follow the counters");
+  static_assert(DXBC_NIR_SRV_SSBO_SLOT + DXBC_NIR_MAX_SRV_SSBOS <= PIPE_MAX_SHADER_BUFFERS, "Gallium shader buffers");
+  struct pipe_shader_buffer buffers[DXBC_NIR_SRV_SSBO_SLOT + DXBC_NIR_MAX_SRV_SSBOS] = {};
+  for (unsigned i = 0; i < DXBC_NIR_MAX_SRV_SSBOS && i < *view_count; ++i) {
+    if (!views[i] || views[i]->target != PIPE_BUFFER || srvs[i].Format || srvs[i].Texture) continue;
+    buffers[DXBC_NIR_SRV_SSBO_SLOT + i].buffer = views[i]->texture;
+    buffers[DXBC_NIR_SRV_SSBO_SLOT + i].buffer_offset = views[i]->u.buf.offset;
+    buffers[DXBC_NIR_SRV_SSBO_SLOT + i].buffer_size = views[i]->u.buf.size;
+  }
   struct pipe_image_view images[AGX_D3D12_UAV_SLOTS] = {};
   for (unsigned i = 0; i < AGX_D3D12_UAV_SLOTS; ++i) {
     const AGX_D3D12_BUFFER *buffer = uavs[i].Buffer;
@@ -5524,7 +5561,9 @@ static HRESULT bind_stage(struct pipe_context *pipe, mesa_shader_stage stage, co
     const unsigned long long room = buffer->Bytes - uavs[i].Offset;
     buffers[i].buffer_size = static_cast<unsigned>(uavs[i].Bytes && uavs[i].Bytes < room ? uavs[i].Bytes : room);
   }
-  pipe->set_shader_buffers(pipe, stage, 0, 2 * AGX_D3D12_UAV_SLOTS, buffers, (1u << (2 * AGX_D3D12_UAV_SLOTS)) - 1u);
+  /* SRV-1: slots 16..31 are not writable */
+  pipe->set_shader_buffers(pipe, stage, 0, DXBC_NIR_SRV_SSBO_SLOT + DXBC_NIR_MAX_SRV_SSBOS, buffers,
+                           (1u << (2 * AGX_D3D12_UAV_SLOTS)) - 1u);
   pipe->set_shader_images(pipe, stage, 0, AGX_D3D12_UAV_SLOTS, 0, images);
   return S_OK;
 }
@@ -5532,7 +5571,7 @@ static void unbind_stage(struct pipe_context *pipe, mesa_shader_stage stage, str
                          unsigned view_count) {
   for (unsigned i = 0; i < AGX_D3D12_CBV_SLOTS; ++i) pipe->set_constant_buffer(pipe, stage, i, NULL);
   /* the batch holds its resources; UAV bindings must not outlive the heaps */
-  pipe->set_shader_buffers(pipe, stage, 0, 2 * AGX_D3D12_UAV_SLOTS, NULL, 0);
+  pipe->set_shader_buffers(pipe, stage, 0, DXBC_NIR_SRV_SSBO_SLOT + DXBC_NIR_MAX_SRV_SSBOS, NULL, 0);
   pipe->set_shader_images(pipe, stage, 0, 0, AGX_D3D12_UAV_SLOTS, NULL);
   if (!view_count) return;
   pipe->set_sampler_views(pipe, stage, 0, 0, view_count, NULL);

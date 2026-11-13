@@ -1321,6 +1321,7 @@ main(int argc, char **argv)
    bool soft_fault = false, soft_fault_loads = false, fs_backend = false, print_selected = false, hex_main = false;
    bool shared_store_oracle = false;
    bool crawl_bindful = false, srv_static_first = false, print_bindings = false, print_samples = false;
+   bool srv_ssbo = false;
    unsigned root_uavs = 0, root_cbvs = 0;
    for (int a = 2; a < argc; ++a) {
       unsigned uav, cbv;
@@ -1336,6 +1337,7 @@ main(int argc, char **argv)
       print_lowered |= !strcmp(argv[a], "--print-lowered"); /* after the D3D lowering */
       crawl_bindful |= !strcmp(argv[a], "--crawl-bindful"); /* T5b step A */
       srv_static_first |= !strcmp(argv[a], "--srv-static-first"); /* T5b step B2 */
+      srv_ssbo |= !strcmp(argv[a], "--srv-ssbo"); /* SRV-1: APPLE_AGX_D3D12_SRV_SSBO (DXBC) */
       print_bindings |= !strcmp(argv[a], "--print-bindings"); /* T5b: the frontend's slot map */
       print_samples |= !strcmp(argv[a], "--print-samples"); /* T5b: the SAMPLES line */
       in_bounds |= !strcmp(argv[a], "--assume-in-bounds");
@@ -1392,6 +1394,32 @@ main(int argc, char **argv)
       /* T5b step B2: the owner's APPLE_AGX_D3D12_SRV_STATIC_FIRST */
       if (srv_static_first)
          limits[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_STATIC_FIRST;
+      /* SRV-1: APPLE_AGX_D3D12_SRV_SSBO reaches both frontends as this flag */
+      if (srv_ssbo)
+         limits[DXBC_BINDING_SRV] |= DXBC_BINDING_SRV_SSBO;
+      /* SRV-1: a DXBC container or token stream takes the owner's DXBC
+       * entry (dxbc_translate_tokens_bindings); everything else is DXIL */
+      const void *shex = NULL;
+      uint32_t shex_bytes = 0;
+      /* a DXIL program also comes in a DXBC container (DXIL chunk, no SHEX/SHDR) */
+      const bool container = size >= 4 && !memcmp(bytes, "DXBC", 4) &&
+         (dxbc_container_find_chunk(bytes, (size_t)size, DXBC_FOURCC('S', 'H', 'E', 'X'), &shex, &shex_bytes) ||
+          dxbc_container_find_chunk(bytes, (size_t)size, DXBC_FOURCC('S', 'H', 'D', 'R'), &shex, &shex_bytes));
+      const uint32_t *words = container ? (const uint32_t *)shex : (const uint32_t *)bytes;
+      /* a raw DXIL program part has the same version/size header, then "DXIL" */
+      const bool tokens = container || (size >= 12 && (words[0] >> 16) <= 5u && ((words[0] >> 4) & 0xfu) >= 4u &&
+                                        ((words[0] >> 4) & 0xfu) <= 5u && (size_t)words[1] * 4u == (size_t)size &&
+                                        memcmp((const char *)bytes + 8, "DXIL", 4) != 0);
+      if (tokens) {
+         struct dxbc_binding_map map;
+         struct dxbc_nir_error err;
+         nir = dxbc_translate_tokens_bindings(words, &agx_nir_options, limits, &map, &err);
+         if (!nir) {
+            printf("REFUSED %s\n", err.message);
+            return 0;
+         }
+         goto translated;
+      }
       struct agx_dxil_nir_result r;
       if (agx_dxil_to_nir(bytes, (size_t)size, limits, &agx_nir_options, &r) != AGX_DXIL_NIR_OK) {
          printf("REFUSED %s\n", r.error);
@@ -1404,6 +1432,7 @@ main(int argc, char **argv)
                    r.bindings.bindings[i].flags);
       nir = r.nir;
    }
+translated:
    if (production && nir->info.stage != MESA_SHADER_COMPUTE) {
       fprintf(stderr, "--production: compute shaders only (stage %s)\n", mesa_shader_stage_name(nir->info.stage));
       return 2;

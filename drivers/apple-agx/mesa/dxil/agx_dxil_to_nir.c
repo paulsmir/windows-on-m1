@@ -234,8 +234,18 @@ remap_srv(void *u, const dxil_spv_d3d_binding *b, dxil_spv_srv_vulkan_binding *v
    const struct declaration *d = placed(u, DXBC_BINDING_SRV, b);
    if (!d)
       return DXIL_SPV_FALSE;
+   const struct job *job = u;
    v->buffer_binding.set = SET_SRV;
    v->buffer_binding.binding = d->heap ? HEAP_BINDING + d->slot : d->slot;
+   /* SRV-1 (DXBC_BINDING_SRV_SSBO): a raw/structured SRV range below
+    * DXBC_NIR_MAX_SRV_SSBOS is a read-only storage buffer at shader-buffer
+    * slot DXBC_NIR_SRV_SSBO_SLOT + slot, which dxil-spirv vectorizes */
+   if ((job->limits[DXBC_BINDING_SRV] & DXBC_BINDING_SRV_SSBO) && !d->heap && raw_buffer(b->kind) &&
+       d->slot + d->range <= DXBC_NIR_MAX_SRV_SSBOS) {
+      v->buffer_binding.binding = DXBC_NIR_SRV_SSBO_SLOT + d->slot;
+      v->buffer_binding.descriptor_type = DXIL_SPV_VULKAN_DESCRIPTOR_TYPE_SSBO;
+      return DXIL_SPV_TRUE;
+   }
    /* the owner binds raw and structured SRVs as R32_UINT buffer views */
    v->buffer_binding.descriptor_type =
       raw_buffer(b->kind) ? DXIL_SPV_VULKAN_DESCRIPTOR_TYPE_TEXEL_BUFFER : DXIL_SPV_VULKAN_DESCRIPTOR_TYPE_IDENTITY;
@@ -359,8 +369,10 @@ lower_buffer_slot(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    case nir_intrinsic_vulkan_resource_index: {
       const unsigned set = nir_intrinsic_desc_set(intr);
       const nir_descriptor_type type = nir_intrinsic_desc_type(intr);
+      /* SRV-1: SRV storage buffers carry their shader-buffer slot as binding */
       if (!((set == SET_CBV && type == nir_descriptor_type_uniform_buffer) ||
-            (set == SET_UAV && type == nir_descriptor_type_storage_buffer)))
+            (set == SET_UAV && type == nir_descriptor_type_storage_buffer) ||
+            (set == SET_SRV && type == nir_descriptor_type_storage_buffer)))
          *bad = true;
       value = nir_vec2(b, nir_iadd_imm(b, intr->src[0].ssa, nir_intrinsic_binding(intr)), nir_imm_int(b, 0));
       break;

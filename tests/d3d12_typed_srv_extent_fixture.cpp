@@ -23,6 +23,10 @@ struct AGX_D3D12_UAV {const AGX_D3D12_BUFFER *Buffer;UINT64 Offset,Bytes;DXGI_FO
 #ifndef DXBC_NIR_UAV_COUNTER_SLOT
 #define DXBC_NIR_UAV_COUNTER_SLOT 8 /* C33: dxbc_to_nir.h */
 #endif
+#ifndef DXBC_NIR_SRV_SSBO_SLOT
+#define DXBC_NIR_SRV_SSBO_SLOT 16 /* SRV-1: dxbc_to_nir.h */
+#define DXBC_NIR_MAX_SRV_SSBOS 16
+#endif
 /* OWNER_SRV */
 static pipe_format FormatTranslate(DXGI_FORMAT f,int) {
  return f==DXGI_FORMAT_R8_UINT?PIPE_FORMAT_R8_UINT:f==DXGI_FORMAT_R16_UINT?PIPE_FORMAT_R16_UINT:

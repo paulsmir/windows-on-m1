@@ -145,7 +145,7 @@ typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT {
  * switch is effective (switch = 1 AND broker CAPABILITIES bit 9 AND the
  * REG_NEGOTIATED read-back); all zero otherwise.  Counters are interlocked
  * at any IRQL. */
-#define ADMISSION_MPO_RECEIPT_VERSION 8u /* v8: tail ... Ids, HOLD-2 (H2*), CUR-1 v2, HOLD-3 (H3*), HOLD-3b, HOLD-3c */
+#define ADMISSION_MPO_RECEIPT_VERSION 9u /* v9: tail ... Ids, HOLD-2 (H2*), CUR-1 v2, HOLD-3 (H3*), HOLD-3b, HOLD-3c, RQ-1 */
 #define ADMISSION_MPO_RECEIPT_REASONS 40u
 /* Key: clip width (12 bits) | height << 12 | format class << 24 |
  * blend << 28; 0 = free row.  Origin/DstSize: x | y << 16. */
@@ -318,6 +318,13 @@ typedef struct _ADMISSION_MPO_RECEIPT {
   volatile LONG H3MissedDeadline, H3StaleReference;
   volatile LONG H3MadeMinUs, H3MissMaxUs;
   volatile LONG H3TickReference, H3TickOffsetUs, H3TickPairsRejected;
+  /* RQ-1 (v9, after HOLD-3c): swaps the broker failed after acceptance (IRQ_ERROR, RESULT !=
+   * OK, RECEIPT == the pending sequence), re-submissions, failed swaps that
+   * latched on a retry, failed swaps whose PresentIds were reported after
+   * the last try, the last failure's broker result, and IRQ_ERRORs that were
+   * not about the pending present (a RELEASE failure, a stale error). */
+  volatile LONG SwapFailures, SwapRetries, SwapRetryLatched;
+  volatile LONG SwapRetryExhaustedReported, LastSwapFailureResult, ForeignErrors;
 } ADMISSION_MPO_RECEIPT;
 /* HOLD-2 receipt: Wom1MpoTiming, the last ADMISSION_MPO_TIMING_ENTRIES Set3
  * outcomes, commits (by source) and latches with QPC, CPU and IRQL. */
@@ -1142,6 +1149,28 @@ typedef struct _ADMISSION_CONTEXT {
   ULONG LiveAdditivePaging, PagingActiveNode;
   /* GC (experiment): Wom1GpuPrivateCached = 1 and the broker capability. */
   ULONG GpuPrivateCached;
+  /* MP-1 coverage receipt (Wom1GpuGcReceipt, every build): 16 KiB leaf
+   * groups published, by class: [0] written cached (local segment, GPU-only,
+   * GpuPrivateCached on), [1] GPU-only local but coherent (switch off),
+   * [2] local CPU-visible / presentation / written primary, [3] system
+   * segment; allocations >= 16 MiB: [4] cached, [5] coherent; [6] the last
+   * such allocation's size in MiB, [7] its flags (CpuVisible | Presentation
+   * << 1 | WrittenPrimary << 2 | GPU-only eligible << 3 | segment << 8). */
+  volatile LONG GcLeaves[8];
+  /* MP-2 placement receipt (Wom1GpuPlacementReceipt, every build): the last
+   * ADMISSION_MP2_RECORDS allocations of >= 64 MiB that published leaves:
+   * KMD handle (low 32 bits), size in MiB, segments seen (bit per segment id),
+   * 16 KiB groups published, physically contiguous runs in publication order
+   * (guest IPA), the largest run in groups, the first group's IPA, counts of
+   * the group frame number (IPA >> 14) mod 16, and a bitmap of it mod 1024
+   * (the mod 64 / 256 distributions follow offline). Paging is serialized. */
+  struct {
+    ULONG Handle, SizeMib, Segments, Groups, Runs, LargestRun, Current;
+    ULONGLONG FirstIpa, LastIpa;
+    ULONG Mod16[16];
+    ULONG Bitmap1024[32];
+  } Mp2[4];
+  volatile LONG Mp2Next;
   /* V1 (experiment): Wom1G3RetainedSlots = 1 (REG_DWORD), read once at
    * start: per-process VM slots kept between jobs (gpuva_g3_private.h). */
   ULONG G3RetainedSlots;

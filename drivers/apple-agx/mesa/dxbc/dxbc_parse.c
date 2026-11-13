@@ -825,6 +825,7 @@ dxbc_prepare_static_bindings(struct dxbc_program *program,
    if (!program || !limits)
       goto fail;
    program->minmax = (limits[DXBC_BINDING_SAMPLER] & DXBC_BINDING_MINMAX) != 0;
+   program->srv_ssbo = (limits[DXBC_BINDING_SRV] & DXBC_BINDING_SRV_SSBO) != 0;
    if (program->major != 5 || program->minor != 1)
       return DXBC_OK;
    for (unsigned k = 0; k < DXBC_BINDING_KIND_COUNT; ++k)

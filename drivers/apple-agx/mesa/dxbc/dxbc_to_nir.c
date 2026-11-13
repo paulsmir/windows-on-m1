@@ -1376,6 +1376,10 @@ declare(struct ctx *c, const struct dxbc_instruction *insn)
          c->res[t].type = nir_type_uint32;
          c->res_kind[t] = structured ? MEM_STRUCTURED : MEM_RAW;
          c->res_stride[t] = structured ? insn->payload[0] : 0;
+         /* SRV-1: also read-only shader buffer DXBC_NIR_SRV_SSBO_SLOT + t */
+         if (c->p->srv_ssbo && t < DXBC_NIR_MAX_SRV_SSBOS)
+            b->shader->info.num_ssbos = MAX2(b->shader->info.num_ssbos,
+                                             (uint8_t)(DXBC_NIR_SRV_SSBO_SLOT + t + 1));
          BITSET_SET(b->shader->info.textures_used, t);
          BITSET_SET(b->shader->info.textures_used_by_txf, t);
       }
@@ -2823,6 +2827,14 @@ mem_load(struct ctx *c, const struct dxbc_instruction *insn,
       return nir_load_ssbo(b, n, 32, nir_imm_int(b, (int)index), byte_address,
                            .align_mul = 4, .align_offset = 0);
    const bool heap = target->type == DXBC_OPERAND_RESOURCE && heap_operand(c, target);
+   /* SRV-1: a raw/structured SRV slot with a shader-buffer twin is one
+    * device load of n dwords (the D3D robustness pass bounds it) */
+   if (target->type == DXBC_OPERAND_RESOURCE && !heap && c->p->srv_ssbo &&
+       index < DXBC_NIR_MAX_SRV_SSBOS &&
+       (c->res_kind[index] == MEM_RAW || c->res_kind[index] == MEM_STRUCTURED))
+      return nir_load_ssbo(b, n, 32, nir_imm_int(b, (int)(DXBC_NIR_SRV_SSBO_SLOT + index)), byte_address,
+                           .access = ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER,
+                           .align_mul = 4, .align_offset = 0);
    if (heap)
       index = MAX_RESOURCES + (unsigned)target->index[0].imm; /* C47: mem_address validated it */
    for (unsigned i = 0; i < n; ++i) {
@@ -3913,8 +3925,10 @@ dxbc_nir_mark_root_view(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 bool
 dxbc_nir_mark_root_views(nir_shader *nir, uint32_t cbv_slots, uint32_t uav_slots)
 {
-   /* root UAVs have no counter (their slots are below DXBC_NIR_UAV_COUNTER_SLOT) */
-   const uint32_t masks[2] = {cbv_slots, uav_slots & ((1u << DXBC_NIR_MAX_UAVS) - 1u)};
+   /* root UAVs have no counter (their slots are below DXBC_NIR_UAV_COUNTER_SLOT);
+    * SRV-1: root SRVs read as shader buffers sit at DXBC_NIR_SRV_SSBO_SLOT + t */
+   const uint32_t srv_bits = ((1u << DXBC_NIR_MAX_SRV_SSBOS) - 1u) << DXBC_NIR_SRV_SSBO_SLOT;
+   const uint32_t masks[2] = {cbv_slots, uav_slots & (((1u << DXBC_NIR_MAX_UAVS) - 1u) | srv_bits)};
    if (!nir || (!masks[0] && !masks[1]))
       return false;
    /* slot indices built as base + array index fold to constants */
@@ -4215,6 +4229,11 @@ bool dxbc_nir_uav_dimensions(const struct nir_shader *nir,
             }
             if (!nir_src_is_const(intr->src[source])) goto fail;
             unsigned slot = nir_src_as_uint(intr->src[source]);
+            /* SRV-1: shader buffers DXBC_NIR_SRV_SSBO_SLOT.. are SRVs, not UAVs
+             * (EXP2389: counting them refused the pipeline, device removed) */
+            if (!image && slot >= DXBC_NIR_SRV_SSBO_SLOT &&
+                slot < DXBC_NIR_SRV_SSBO_SLOT + DXBC_NIR_MAX_SRV_SSBOS)
+               continue;
             if (!image && slot >= DXBC_NIR_UAV_COUNTER_SLOT &&
                 slot < DXBC_NIR_UAV_COUNTER_SLOT + DXBC_UAV_DIMENSION_SLOTS)
                slot -= DXBC_NIR_UAV_COUNTER_SLOT;
