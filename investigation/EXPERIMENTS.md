@@ -79052,3 +79052,42 @@ EXP2392 HARDWARE ACTUAL 2026-11-13T13:30:00Z:
 - GM PERF w (measurement-switch reading): fps_frames 53.05 against the control's 53.06. No effect.
 - Verdict: REJECTED. With the data attribute AttrIndx 0 (cached, C83, as macOS writes) covering the measured regions, gather latency and throughput are unchanged at every size. The leaf data attribute is not the cause of the 1.2-1.43x gap. Per the MP-1 reading: the GPU-side cache/walker configuration is next. The 64 MB 1.32 is unchanged as well.
 - MP-1b stays measurement only (Wom1GpuPrivateCached=2 is never a default).
+
+EXP2393 HARDWARE BEFORE 2026-11-13T14:10:31Z:
+- Kind: one variable between the two OPTWING1 arms of one boot: the device value Wom1LocalPlacementMinMiB (absent in arm A; 80 in arm B, set by the probe script between the arms and deleted after). The KMD re-reads it for every GPU-only class allocation of >= 16 MiB, so only the new probe process's allocations of >= 80 MiB are affected:
+  - moved to segment 2: OPTWIN data and datau, GPU-only, 85 MiB each, 170 of 312 MiB;
+  - unmoved: the CPU-visible upload buffer (85 MiB), GravityMark (not run in this boot), the desktop, and everything below 80 MiB.
+  - The 64 MiB rows read inside the 85 MiB regions, so they are covered in arm B.
+  - Package: arch/srv1 69741696 = 6b1a24547 + MP-2 (switch + Wom1GpuPlacementReceipt) + two corrections: the GC capability is queried only when its switch is set (6b1a24547 queried it first; no effect with the switch off); a test-fixture print order.
+  - Wom1GpuPrivateCached absent. m1n1-s2v3-gc (3a72f1ec...). Probe eoptwin6 (a6847f5a...).
+- WHY THIS HYPOTHESIS (architect):
+  1. At N32 our G1u 1 MB round trip (386 ns) is slower than our 4 MB one (299 ns), while Apple's grows with size (294 -> 326). Neither cache size nor TLB reach orders it that way.
+  2. G1cu over 1 MB touches only 16 distinct lines/pages and still costs 227 ns against Apple's 134.
+  3. The measured regions sit in segment 3: arbitrary Windows page frames, taken in 16 KiB chunks at start. Segment 2 is one physically contiguous block.
+- What else differs about segment 2 as the GPU sees it (offline check, source):
+  - Same normal stage-2 RAM: m1n1 carves it from RAM after the low window, excluding MCC carveouts (hv_agx_power_mmio.c local_reserve_translate).
+  - Same leaf encoding: AppleAgxUatEncodePageDescriptor, C8B with Wom1GpuPrivateCached absent.
+  - Different broker ownership path: local_granted (local reserve) instead of a backing record. Both reach the same publish_entry, and tlbi was 0 in all MP-1 boots.
+  - The GPU sees physical addresses (UAT leaves hold PA), so stage-2 plays no part in GPU accesses.
+  - Segment 2 is IPA == PA, contiguous. In segment 3 the receipt's frame numbers are guest IPA (guest-physical), not necessarily host PA.
+  - The SLC DSID is per GPU traffic class (firmware structure, register-prep REPORT C), not per page, so it does not differ by placement.
+- WINDOWS CONTRACT: VidMm honours the segment set the KMD reports in DxgkDdiCreateAllocation (SupportedRead/WriteSegmentSet, PreferredSegment).
+- AGX/ASAHI CONTRACT: unchanged load path.
+- TRANSLATION: the local segment is mapped through the broker's local-reserve grants.
+- WHAT IS STILL UNKNOWN: whether placement (contiguity, bank/channel distribution of the frames) changes gather latency and throughput.
+- Receipt per measured allocation in both arms (Wom1GpuPlacementReceipt, allocations >= 64 MiB): segment(s), 16 KiB groups, contiguous runs, largest run, first IPA, frame counts mod 16, distinct residues mod 64/256/1024.
+- Rows: G1/G1d/G1c and G1u/G1du/G1cu at 1/4/16/64 MB, N32 and GM shapes, 5 reps, P6 >= 99 %, oracle check, both arms.
+- Expected readings:
+  - arm B's 1 MB N32 rows fall toward macOS (G1du ~157 ns, G1cu ~134 ns) and the 1/4 MB GM ratios toward 1.0 -> placement is a cause;
+  - unchanged -> registers next (register-prep REPORT: SGX+0xd06030 is the one unread gating control).
+  - Arm A is expected to equal EXP2390/2392.
+- Validity gates:
+  - arm A receipt shows segment 3 and arm B segment 2 for data and datau (runs 1, or very few, in segment 2);
+  - oracle_bad 0;
+  - P6 >= 99 %;
+  - the switch read back 0x50 in arm B and absent in arm A and after.
+- Failure criteria: VidMm refuses the allocation (segment 2 exhaustion: OPTWIN setup E_OUTOFMEMORY) -> inconclusive; fault, hang (exact-PID stop + recovery).
+- Recovery: rec2393h visible recovery.
+- Hashes: sys cb4f38daabb1, UmdArm64 589cfdf18b7c, UmdX64 0fabc19b148d, Umd32 f01531a8739f; manifest c976b43565f1, hardware-manifest 83c2340766ef; probe2393.sh 16ead4c877ba (PROBE_LINT_OK); visible recovery rec2393h 41c9c9646bb5e813; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
+- Recovery rec2393h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2393-mp2/run2393.sh.
