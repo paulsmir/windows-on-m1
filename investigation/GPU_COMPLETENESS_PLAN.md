@@ -196,6 +196,14 @@ Design notes: `investigation/analysis/COMPLETENESS-*.md` (A2A3, B1B3B4, C1, C2C4
   and the expanded RAM layout. The one-shot arm is a registry value written inside Windows.
 - A small m1n1 defect found on the way: the PSCI SMC64 dispatcher has no default case.
 
+## 5b. External display and Thunderbolt released (operator, 2026-11-13)
+
+External displays and Thunderbolt are developed now, in their own session, and tested together with this plan
+(sessions "Driver: Thunderbolt and external display" and "Driver: USB (security, hot-plug)" for the Type-C port).
+C6 (KMD second source, child status, hot-plug, per-display modes and scaling) is therefore active: design read
+started; interface points with the two sessions are part of its note. Those sessions hand staged hardware packages
+to the architect; the bench stays with the implementer session.
+
 ## 6. First wave (started 2026-11-13)
 
 Design reads, in parallel, each returning the four sections and an ownership table:
