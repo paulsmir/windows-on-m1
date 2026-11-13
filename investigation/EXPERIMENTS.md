@@ -78748,3 +78748,4 @@ EXP2385/EXP2386 CORRECTION 2026-11-13T08:39:40Z (appended; the ACTUAL entries ab
 - Scan-out floor estimate from the same rings: made commit-to-latch minimum 2.14-2.25 ms, missed maximum 2.30-2.38 ms, so the cutoff is about 2.2-2.4 ms before the latch interrupt.
 - The deadline reference was overwritten by the software vertical tick (KTIMER, about 1.07 ms after the latch), so deadline commits reached the latch at a median 3.92 ms with a 5.0 ms lead.
 - Fixed in HOLD-3c, arch/hold3 41b21c980 (counter threshold lead + period/2, split by commit source; latch phase reference). The lead-floor series (lead 3000/2000) was withdrawn by the architect before any boot: the predicted deadline-commit miss share at lead 3000 is 67-71 %.
+- Note to the floor estimate above: one EXP2385 deadline commit missed with 3.17 ms to the latch (a HOLD-3 outlier, latch-commit regime); the other 233 missed commits in both boots lie at or below 2.38 ms.
