@@ -79237,3 +79237,36 @@ EXP2396 HARDWARE ACTUAL 2026-11-13T16:18:09Z:
 - Reading: the poll is a 2.7 ms busy-wait (I2C byte transfers polled in m1n1) inside hv_tick on the CPU taking the tick; when that stall overlaps a display deadline commit, the commit misses its vblank, and the strip-scene CS (cursor-composed, deadline-paced) loses ~3 %. The GM gate and the unscaled windowed CS absorb it.
 - Verdict: REJECTED as a bench image (gate miss, failure criterion "any gate miss"). The observation data are valid (both controllers read, 0 errors, shadow plan as designed). For the USB session: the poll must stop blocking the tick CPU for milliseconds, e.g. one register per tick (~0.35 ms), an interrupt-driven read (the HPM IRQ), or a faster bus clock; then a repeat run.
 - Next: the proxy-only slot (EXP2397-2400), then AT_PROXY rec2396h.
+
+EXP2397-EXP2400 HARDWARE BEFORE 2026-11-13T16:18:38Z (proxy-only slot):
+  PROXY SLOT (no guest) after EXP2396, before rec2396h (AT_PROXY). Entry: ordered Windows reboot of the EXP2396 guest -> PSCI SYSTEM_RESET -> the stage-1 m1n1 at "Running proxy"; the EXP2396 run_uefi has exited (exact PID checked). All four tools run with the proxyenv python (/Users/pavel/public_windows/proxyenv/bin/python), M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41, proxyclient /Volumes/pwdev/public_windows/m1n1_windows/proxyclient unless the tool takes its own. Exit: full proxy reboot (p.reboot via the proxyclient) before any guest boot, then AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2396h/recover.sh. Released driver work (architect 2026-11-13); tools read and reviewed by me before the run.
+  
+  EXP2397 TBX-S1a: external display coprocessor (dcpext) services at the proxy
+  - Tool: driver-tb-extdisplay-3a73cc @ 8cddffe42, tools/tb_extdisplay/stage1a_dcpext_probe.py sha256 19e284f446511950e45a6b7bba7694420b071a880ffccdc12c5a0920ffdf388e (the reviewed e2254df4 version moved paths into config/j313-tb-extdisplay.json pipes[0]; resolves to the same /arm-io/dcpext, /arm-io/dispext0, dart-dcpext, dart-dispext0).
+  - What it does: enables the ADT clocks of /arm-io/dispext0 (none) and /arm-io/dcpext (DISPEXT0_CPU0-V, DP0/DP1-SOC-VNAX; closure adds DISPEXT_CPU0, DISPEXT_FE, RMX), boots the ASC through DCPIBootClient, collects announced EPIC services for 5 s, stops the ASC and resets DISPEXT_CPU0 in finally.
+  - Safety (ADT R3 d1d05756 closure, mine): no PMGR domain shared with /arm-io/sgx or /arm-io/disp0; only RMX shared with the panel DCP, and the script only enables (idempotent) and resets DISPEXT_CPU0.
+  - Expected: booted true; two dcpdptx-port services on endpoint 0x2a; dcpav/dcpdp and iboot services present.
+  - Failure: boot timeout or exception (exit 2). Recovery: built in (stop + reset); a hung proxy -> power cycle to the proxy.
+  - Command: cd driver-tb-extdisplay-3a73cc; PYTHONPATH=<m1n1_windows/proxyclient> proxyenv-python tools/tb_extdisplay/stage1a_dcpext_probe.py -o .local/tbx/TBX-S1a/services.json
+  
+  EXP2398 WBT000: APCIE port facts for the Wi-Fi/BT chip at the proxy
+  - Tool: driver-wifi-bt-08a668 @ a80e19ba, tools/wifi_bt/wbt000_apcie_probe.py sha256 e6ae41a865552cd5a15e5a09f0fdaaf345be7ff980ab5273c581c6dd2e777c3c (unchanged at the session's later head 72cf9a04f).
+  - What it does: one P_PCIE_INIT and a P_PCIE_SHUTDOWN; reads ADT facts (including /arm-io/ans gates, read-only), link state, the two functions' IDs, interrupt pins and MSI capabilities, under an exception guard. Only write besides m1n1's init/shutdown: the root port's bus-number register, restored in finally. No BAR enable, no backplane access, no radio. Raw ADT to .local/wbt000 (git-ignored, checked); only the receipt is committable.
+  - Safety: pcie_init powers /arm-io/apcie (APCIE, APCIE_GP, PCIE_REF; parents shared with the SSD: APCIE, IMX) and disables index 1 (APCIE_GP); pcie_shutdown makes no PMGR call (asserts PERST, gates APPCLK, resets the PHY, drops its clock requests). The SSD is not used at the proxy; the full proxy reboot before any guest boot is mandatory.
+  - Expected: verdict BOTH_FUNCTIONS (fn0 14e4:4425 interrupt pin 1; fn1 14e4:5f69 with an MSI capability). LINK_DOWN or PCIE_INIT_FAILED = a result. FAULT = stop, keep the receipt.
+  - Command: cd driver-wifi-bt-08a668; proxyenv-python tools/wifi_bt/wbt000_apcie_probe.py --confirm-experiment WBT000 --machine j313 --proxyclient <m1n1_windows/proxyclient> --output investigation/artifacts/WBT000/receipt.json --private-dir .local/wbt000
+  
+  EXP2399 KB1: keyboard backlight PWM block state at the proxy (read-only)
+  - Tool: driver-kbd-backlight-833fd4 @ d3538e423, tools/kbd_backlight_proxy_probe.py sha256 dc3e2a253f920911fd5bf1e39b6cd826086784d3f9dca0f475780e841c8778d1, run WITHOUT --light (read-only): --plan first, then the run.
+  - What it does: reads the FPWM1 PMGR power-state register; reads the three FPWM registers (control, off cycles, on cycles) only when that state is active, otherwise records them as skipped. Every write path (PS request, duty registers, restore) exists only under --light, which is not passed.
+  - Expected: the PS register value and, if active, the three register values at boot - the unproven points of the safety note (powered/clocked, values).
+  - Failure: an exception or MMIO fault -> stop, keep the output.
+  - Command: cd driver-kbd-backlight-833fd4; PYTHONPATH=<m1n1_windows/proxyclient> proxyenv-python tools/kbd_backlight_proxy_probe.py --machine j313 --plan; then without --plan.
+  
+  EXP2400 TBX-S0: read-only Type-C port-controller snapshots of port 1 (left-front), with the operator
+  - Tool: driver-tb-extdisplay-3a73cc @ 8cddffe42, tools/tb_extdisplay/stage0_hpm_readout.py sha256 adcf93f95b1cd3afd8d60558c804836806334fabab7e389227eb008989156ec7 (the reviewed 5706bce3b version now takes the bus from the contract; port 1 -> /arm-io/i2c0, hpm1, address 63); register map config/j313-hpm-cd3217-candidates.json.
+  - What it does: SMBus block reads of every register with a known length through a wrapper that refuses anything but read_reg (no I2C write, no HPM command, no interrupt clear). Side effect: m1n1's proxyclient I2C.read_reg leaves the i2c0 controller CTL ENABLE=0 -> the proxy reboot afterwards covers it.
+  - Three snapshots: (1) port 1 empty, (2) the operator's dock with the HDMI monitor connected on port 1, (3) empty again. The operator is prompted for each plug step; ACTUAL records the dock, monitor and cable models and which bench devices (keyboard, mouse, Ethernet) were on the dock.
+  - Expected in (2): DATA_STATUS bit 8 = 1, a pin assignment C/D/E, bit 15 HPD = 1; (3) returns to (1).
+  - Failure: read errors (short block) -> recorded per register.
+  - Command: cd driver-tb-extdisplay-3a73cc; PYTHONPATH=<m1n1_windows/proxyclient> proxyenv-python tools/tb_extdisplay/stage0_hpm_readout.py --port 1 --label <empty|dock-monitor|empty-again> -o .local/tbx/TBX-S0/port1-<label>.json
