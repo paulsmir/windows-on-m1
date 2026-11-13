@@ -23,31 +23,32 @@ D3D11.3 functional spec 7.5 and SM5 ld_raw / ld_structured: each 32-bit componen
 - `load_ssbo` -> device_load of up to 16 bytes, with alignment = component size (`agx_mem_vectorize_cb`).
 - The backend waits for outstanding loads at the end of a block (`agx_insert_waits.c`), so a branch around a load serialises it (RC74). The form must therefore be straight-line.
 
-## TRANSLATION (proposed)
+## TRANSLATION (architect 2026-11-13: one load with a per-component select)
 
-For an n-dword read at byte offset `o` of a view of `size` bytes (dword multiple), with E = 4n:
+For an n-dword read at byte offset `o` of a view of `size` bytes (dword multiple):
 
-1. `whole = o + E <= size` (RC74's limit form: one compare against a preamble constant).
-2. Base: `B = whole ? o : (size >= E ? size - E : 0)`. B is dword-aligned because o and size are.
-3. One n-dword load at B: `v = load_ssbo(slot, B)`.
-4. Component i:
-   - `valid_i = o + 4(i+1) <= size` (RC74's per-component test);
-   - `j = ((o - B) >> 2) + i`, which is 0..n-1 whenever valid_i;
-   - `c_i = valid_i ? v[j] : 0`.
-   - `v[j]` is a select chain over the n loaded components (n-1 bcsel). When `whole` holds, j = i, and NIR keeps the chain because `whole` is not constant. Cost: about n(n-1) selects for a vec4 (12) plus n compares, and 1 load instead of n.
-5. Root views keep ACCESS_IN_BOUNDS, so none of this applies (unchanged).
+1. One n-dword load at the unclamped offset: `v = load_ssbo(slot, o)`.
+2. Component i: `valid_i = o + 4(i+1) <= size` (RC74's per-component test), `c_i = valid_i ? v[i] : 0`.
+3. Root views keep ACCESS_IN_BOUNDS, so none of this applies (unchanged).
 
-Expected G1 table-SRV cost: about 80 + 4 x (12 selects + 4 compares), roughly 140 issued instructions but 7 memory ops instead of 23. The point is the memory requests: one per float4 instead of four.
+Cost per n-dword read: 1 load + n compares + n selects, against RC74's n loads + n compares + n selects. No base clamp and no index select chain. The earlier draft clamped the base to `size - E` and re-indexed with about n(n-1) selects; the soft-fault contract below makes that unnecessary.
 
-Alternative to measure first: a `j` select that only distinguishes "whole" from "straddle" (`c_i = whole ? v[i] : per-component RC74 load`). It is not branch-free in memory ops, because the straddle path needs loads, so it is rejected unless the select chain costs more than it saves.
+Why the over-read is safe (this resolves the earlier "view smaller than E / view at the end of its allocation" question):
+
+- The load can read up to 4(n-1) bytes past the view, or anywhere when `o` itself is out of bounds. Those bytes are always discarded by the selects. The only question is whether the access can fault.
+- Soft faults are the production contract (RC82). RegionC fault_control is always 0xb (`apple_agx_regionc.c`, APPLE_AGX_REGIONC_J313_FAULT_CONTROL). The KMD reports AGX_WIN32_DEVICE_FEATURE_SOFT_FAULTS unless the device value Wom1SoftFaults = 0 (`backend_platform_windows.c`, rc82). Asahi's definition: "Shader loads of unmapped memory will return zero".
+- So an unmapped page returns 0 without a fault, and a mapped one belongs to the same process VM (another allocation, read and discarded).
+- Soft faults do not cover the texture unit, but this form issues only `load_ssbo` (a device load).
+
+Gating: the form is chosen at compile time only when `agx_win32_soft_faults(dev)` holds, the same key RC82 uses for speculation. Without the feature (Wom1SoftFaults = 0, a diagnostic setting) the pass keeps RC74's per-dword split, which never reads outside the view.
+
+Expected G1 table-SRV form: 7 memory ops instead of 23 (one request per float4 instead of four), about 8 ALU ops per float4.
 
 ## WHAT IS STILL UNKNOWN
 
-- **Views smaller than E bytes (size < 16 for a vec4):** B = 0 and the load reads past the view.
-  - If the view ends inside its resource, the extra bytes are discarded by the selects.
-  - If the view sits at the very end of the allocation, the read could leave it. That needs either the owner's guarantee of 16 bytes of slack after every shader-buffer binding (BO allocations are page-granular; to be verified in `agx_d3d12_windows.cpp` buffer creation) or a scalar fallback when `size < E` (one compare and select, no branch, by clamping n).
-- Whether the select chain re-schedules well on AGX (offline: production-shape cost of G1 and the GM kernels with table UAV reads).
-- GM's UAVs are register-bound. Whether they are root (unchecked) or table (RC74) in GM's root signature decides whether SRV-1b also changes GM's code. The receipts `measure-d3d12-root-views` of a GM run answer it offline.
+- Whether one 16-byte load at a 4-byte-aligned offset costs the same as an aligned one on AGX. `agx_mem_vectorize_cb` already permits alignment = component size, and the compiler emits such loads today for in-bounds vectors, so this is a measurement, not a correctness question.
+- Production-shape cost of G1 (table) and of every capture with table SRV/UAV reads (offline, `agx_shader_cost.py`).
+- GravityMark's UAVs: answered below (not read through the RC74 split, so not a GM lever).
 
 ## Checkpoint
 
