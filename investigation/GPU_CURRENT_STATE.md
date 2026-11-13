@@ -6481,3 +6481,18 @@ boot was run. The previous entry stays as written.
 - MP-1b approved: the cached attribute also on GPU-only pool-segment allocations (measurement only; stale data
   from CPU-side fills is a possible outcome), same rows, coverage line must show the probe regions cached, plus a
   GM PERF window.
+
+## UPDATE 2026-11-13T13:31:21Z - EXP2392 MP-1b: leaf data attribute REJECTED as the cause (valid coverage, P6)
+
+- EXP2392 (Wom1GpuPrivateCached=2, measurement only): coverage proven - both GPU-only 85 MiB probe regions and
+  GravityMark's large buffers mapped with the cached leaf (...C83; 150748 cached leaves, 0 TLB invalidations);
+  oracle_bad 0, suite 119/0 (no stale data seen). Every gather ratio is unchanged to two decimals at the GM
+  shape (G1u 1.19 / 1.43 / 0.99 / 1.32; G1du 1.21 / 1.43 / 0.96 / 1.32; G1cu 0.92 / 1.41), the single-group
+  rows within noise, GM PERF 53.05 against 53.06. The cached/uncached leaf attribute does NOT change GPU load
+  cost on this hardware: REJECTED (this replaces the invalid EXP2239 exclusion with a valid one).
+- Excluded so far at P6 with identical code: leaf data attribute, broker TLB invalidations, GPU clock, code form.
+- Observation that shapes the next step: latency is not ordered by region size on our side (single-group G1u
+  1 MB 386 ns > 4 MB 299 ns; Apple 294 -> 326), and 16 distinct lines over 1 MB still cost 227 vs 134 ns.
+- MP-2 specified (handoff file): physical placement - the same rows from the contiguous local segment against
+  the Windows pool pages, with contiguity/colour receipts. In parallel, offline: the register list of the GPU
+  L2 / MMU blocks macOS prints, for a read-side comparison.
