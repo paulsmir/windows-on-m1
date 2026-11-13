@@ -78822,3 +78822,9 @@ EXP2388 HARDWARE ACTUAL 2026-11-13T11:27:07Z:
   - What remains for GravityMark's form is 1.2-1.4x at 1, 4 and 64 MB: the memory path, not the code form.
 - Verdict: CONFIRMED (measurement). GravityMark's gather form runs at 0.99-1.43x of Apple. The 2.5-4x G1 gap is the SRV per-dword form only (SRV-1, a general defect, implemented on arch/srv1 0641fa433 + 4e5bf1239, offline G1 317 -> 80 instructions at the root).
 - Next: the SRV-1 boot (switch on vs off in one boot, OPTWIN rows); the captures go to the offline listings of the unexplained rows.
+
+MERGE RECORD 2026-11-13T11:34:52Z: arch/hold3 41b21c980 into gpu/memory-latency (merge commit bf56f6728, --no-ff with the per-change commits; CHANGES row CHG-20261113-bf56f672-HOLD3-MERGE), appended because the merge commit message carries only the title:
+- Accepted package: CUR-1 v2, CUR-1c, HOLD-2 base, HOLD-3/3b/3c. Supporting run EXP2387. Merged-tree gate BASELINE_OK (0 NEW). No perf-baseline re-base. Gitlinks not staged. m1n1 image as recorded in the EXP2387 manifest.
+- The pointer and taskbar-strip scenes were driven by injected mouse input (SendInput). No person has looked at the pointer picture: looks were announced and none were received.
+- Missed-deadline residue at lead 5.0 ms (production default Wom1MpoLeadUs 5000, no lead-step boots): 6 of 47475 deadline commits.
+- Rejected steps that the final design replaced: HOLD-2's pass-end coalescing (EXP2383/2384) and HOLD-3's latch commit (EXP2385).
