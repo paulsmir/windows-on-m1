@@ -172,6 +172,30 @@ scripted day (applications, video, resolution changes, brightness, display off, 
 wake, two GPU applications at once, a forced GPU fault, driver update, shutdown), plus the
 speed gates.
 
+## 5a. Corrections after the first design reads (2026-11-13)
+
+Design notes: `investigation/analysis/COMPLETENESS-*.md` (A2A3, B1B3B4, C1, C2C4C5, F1).
+
+- A2: a render hang the firmware detects already ends per application (EXP1277). Bugcheck 0x116 comes from three
+  classes: halted-and-resumed job that never retires, firmware crash (not reported to Windows today), compute loop
+  the firmware never detects. Recovery ladder: host halt + resume in ResetEngine -> adapter restart -> cold cycle
+  through a new m1n1 operation -> render-dead mode with the display alive.
+- B3: real S3 sleep and hibernation are not possible on this stack. "Sleep" = modern standby (display blank with
+  backlight off, GPU idle, instant wake). B5 (hibernate) is withdrawn; the SSD driver refuses that path by design.
+- B4: the lid and power button are only readable through the SMC coprocessor. New package **B4-SMC**: a read-only
+  Windows SMC driver exposing the lid and power button (later AC and battery). Own design read.
+- B1: SetVidPnSourceVisibility does not blank today; a broker DISPLAY_POWER command is needed, defined in the same
+  ABI bump as brightness.
+- C1: every swap hard-codes ~99 nits (panel maximum 420). Brightness needs a broker command; the Asahi nits table is
+  used under MIT with attribution (operator decision 2026-11-13).
+- C2: the 11-mode table IS offered on the bench line (scaled-source capability present); no mode change has been run
+  on the current line. Found by reading: plane records at non-native modes use mode coordinates as panel coordinates.
+- C4: rotation is not over-claimed (identity only is offered). Under-claims: no EDID/descriptor, no tearing presents.
+- F1: the GPU brokers are already in m1n1 and run in standalone stage1; standalone lacks the GPU because the image is
+  built from an old m1n1 line without the bench flags, with an old Mu profile, and without three small host-side steps
+  and the expanded RAM layout. The one-shot arm is a registry value written inside Windows.
+- A small m1n1 defect found on the way: the PSCI SMC64 dispatcher has no default case.
+
 ## 6. First wave (started 2026-11-13)
 
 Design reads, in parallel, each returning the four sections and an ownership table:
