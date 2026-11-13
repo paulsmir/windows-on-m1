@@ -181,6 +181,33 @@ static void TestHold3DeadlineFunction(void) {
   CHECK(AdmissionMpoHoldDeadline(1100, 1000, 1000, 1000, &d, &w) == 0u); /* lead >= period */
 }
 
+/* HOLD-3c: the deadline must sit Lead before the next latch.  With the
+ * software tick (107 after the latch, EXP2385) as the reference it sat only
+ * 193 before it (the ~1 ms loss of EXP2386); the latch reference gives 300. */
+static void TestHold3cLatchReferenceKeepsTheLead(void) {
+  long long d = -1, w = -1;
+  const long long latch = 1000, tick = 1107, next_latch = 2000;
+  CHECK(AdmissionMpoHoldDeadline(1200, tick, 1000, 300, &d, &w) == 1u && next_latch - d == 193); /* old */
+  CHECK(AdmissionMpoHoldDeadline(1200, latch, 1000, 300, &d, &w) == 1u && next_latch - d == 300);
+  CHECK(AdmissionMpoHoldReferenceFresh(1200, latch, 1000, ADMISSION_MPO_REFERENCE_MAX_PERIODS) == 1u);
+  CHECK(AdmissionMpoHoldReferenceFresh(5000, latch, 1000, 4u) == 1u);
+  CHECK(AdmissionMpoHoldReferenceFresh(5001, latch, 1000, 4u) == 0u); /* stale: commit now */
+  CHECK(AdmissionMpoHoldReferenceFresh(1200, 0, 1000, 4u) == 0u);     /* no latch yet */
+  CHECK(AdmissionMpoHoldReferenceFresh(900, latch, 1000, 4u) == 0u);  /* clock before latch */
+}
+
+/* HOLD-3c: a one-frame miss latches Lead + Period after a deadline commit
+ * (1300 here); the old 1.5-period threshold (1500) never counted it. */
+static void TestHold3cOneFrameMissIsCounted(void) {
+  CHECK(1300 <= 1000 + 1000 / 2);                                  /* the old rule missed it */
+  CHECK(AdmissionMpoHoldLatchMissed(1300, 1000, 300) == 1u);       /* deadline commit, missed */
+  CHECK(AdmissionMpoHoldLatchMissed(300, 1000, 300) == 0u);        /* deadline commit, made */
+  CHECK(AdmissionMpoHoldLatchMissed(120, 1000, 300) == 0u);        /* late commit, made */
+  CHECK(AdmissionMpoHoldLatchMissed(1120, 1000, 300) == 1u);       /* late commit, missed */
+  CHECK(AdmissionMpoHoldLatchMissed(700, 1000, 700) == 0u);        /* long lead, made */
+  CHECK(AdmissionMpoHoldLatchMissed(1700, 1000, 700) == 1u);       /* long lead, missed */
+}
+
 typedef struct { MODEL M; long long Now, LastVsync, TimerAt; unsigned int TimerArmed, DeadlineCommits, LateCommits; } MODEL3;
 static void M3Dpc(MODEL3 *T) {                          /* the HOLD-2 DPC, HOLD-3 rules */
   long long d, w;
@@ -339,6 +366,8 @@ int main(void) {
   TestHold3IdleArmsNoTimer();
   TestHold3StopWithAnArmedTimer();
   TestHold3bOutstandingAtTheDeadlineCommitsAtTheNextDeadline();
+  TestHold3cLatchReferenceKeepsTheLead();
+  TestHold3cOneFrameMissIsCounted();
   TestHold3bLateFlipSelfHeals();
   if (Failures) { fprintf(stderr, "mpo_hold_test: %u failure(s)\n", Failures); return EXIT_FAILURE; }
   printf("mpo_hold_test: OK\n");

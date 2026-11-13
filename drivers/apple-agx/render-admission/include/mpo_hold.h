@@ -72,4 +72,25 @@ unsigned int AdmissionMpoHoldDeadline(long long Now, long long LastVsync,
                                       long long Period, long long Lead,
                                       long long *Deadline, long long *Wait);
 
+/* HOLD-3c (EXP2385/2386 rings): the frame reference is the scan-out latch
+ * interrupt only.  The vertical tick is a software KTIMER that fires about
+ * 1.07 ms after the latch; letting it overwrite the reference moved every
+ * deadline ~1 ms late (deadline commits reached the latch at a median 3.92 ms
+ * with a 5.0 ms lead).  A reference older than MaxPeriods frames (no swap
+ * latched for a while) is stale: the caller commits at once and the next
+ * latch re-establishes the phase.  Returns 1 when LastLatch is usable. */
+#define ADMISSION_MPO_REFERENCE_MAX_PERIODS 4u
+unsigned int AdmissionMpoHoldReferenceFresh(long long Now, long long LastLatch,
+                                            long long Period,
+                                            unsigned int MaxPeriods);
+
+/* HOLD-3c: a committed swap latched at the next vblank arrives at most
+ * Lead (deadline commit) or less (late commit) after its commit; one that
+ * missed it arrives a full period later.  Lead + Period/2 separates the two
+ * for every lead below the period (the old 1.5-period threshold could not
+ * see a one-frame miss: lead + period < 1.5 periods for lead < period/2).
+ * Returns 1 for a missed vblank. */
+unsigned int AdmissionMpoHoldLatchMissed(long long CommitToLatch,
+                                         long long Period, long long Lead);
+
 #endif

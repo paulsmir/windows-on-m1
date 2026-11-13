@@ -145,7 +145,7 @@ typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT {
  * switch is effective (switch = 1 AND broker CAPABILITIES bit 9 AND the
  * REG_NEGOTIATED read-back); all zero otherwise.  Counters are interlocked
  * at any IRQL. */
-#define ADMISSION_MPO_RECEIPT_VERSION 7u /* v7: tail ... Ids, HOLD-2 (H2*), CUR-1 v2, HOLD-3 (H3*), HOLD-3b */
+#define ADMISSION_MPO_RECEIPT_VERSION 8u /* v8: tail ... Ids, HOLD-2 (H2*), CUR-1 v2, HOLD-3 (H3*), HOLD-3b, HOLD-3c */
 #define ADMISSION_MPO_RECEIPT_REASONS 40u
 /* Key: clip width (12 bits) | height << 12 | format class << 24 |
  * blend << 28; 0 = free row.  Origin/DstSize: x | y << 16. */
@@ -292,7 +292,8 @@ typedef struct _ADMISSION_MPO_RECEIPT {
   volatile LONG ScratchCopyTicks[4];
   /* HOLD-3: commits at the frame deadline / by the DPC after the deadline,
    * timer arms, deadline error (actual - planned, us: n, min, max, sum),
-   * swaps whose latch came more than 1.5 frames after the commit, the lead
+   * swaps whose latch missed the vblank after the commit (HOLD-3c: more
+   * than Lead + Period/2 after it; v7 used 1.5 frames and was blind), the lead
    * in use (us), and the Set3 phase after the last vsync per layer
    * (L0 / L1, 2 ms bins, the last bin = 16 ms and later). */
   volatile LONG H3CommitsDeadline, H3CommitsLate, H3TimerArms;
@@ -306,6 +307,14 @@ typedef struct _ADMISSION_MPO_RECEIPT {
   volatile LONG H3HeldAtLatch, H3SameLayerBusyL0, H3SameLayerBusyL1;
   volatile LONG H3NoLatchFramesL0, H3NoLatchFramesL1;
   volatile LONG H3MaxNoLatchRunL0, H3MaxNoLatchRunL1;
+  /* HOLD-3c: missed vblanks whose commit came from the deadline timer (the
+   * lead's own misses; H3MissedVblanks counts every source), deadline
+   * decisions taken without a fresh latch reference (committed at once),
+   * the smallest commit-to-latch of a swap that made its vblank and the
+   * largest time from a commit to the latch it missed (us; the scan-out
+   * floor lies between them). */
+  volatile LONG H3MissedDeadline, H3StaleReference;
+  volatile LONG H3MadeMinUs, H3MissMaxUs;
 } ADMISSION_MPO_RECEIPT;
 /* HOLD-2 receipt: Wom1MpoTiming, the last ADMISSION_MPO_TIMING_ENTRIES Set3
  * outcomes, commits (by source) and latches with QPC, CPU and IRQL. */
@@ -1271,6 +1280,7 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG MpoDeadlineArmed;
   volatile LONG64 MpoLastVsyncQpc;
   volatile LONG64 MpoLastCommitQpc;
+  volatile LONG MpoLastCommitSource; /* HOLD-3c: ADMISSION_MPO_TIMING_COMMIT_* */
   LONGLONG MpoDeadlineQpc;
   LONGLONG MpoPeriodQpc;
   LONGLONG MpoLeadQpc;
@@ -2659,7 +2669,7 @@ VOID AdmissionMpoTimingRecord(_In_opt_ ADMISSION_CONTEXT *Context, _In_ ULONG Ki
 VOID AdmissionMpoCommitDpcStart(_In_opt_ ADMISSION_CONTEXT *Context);
 VOID AdmissionMpoCommitDpcStop(_In_opt_ ADMISSION_CONTEXT *Context);
 /* HOLD-3: a latch (Latch TRUE) or a vertical tick seen by the scan-out ISR. */
-VOID AdmissionMpoNoteVsync(_In_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Latch);
+VOID AdmissionMpoNoteLatch(_In_ ADMISSION_CONTEXT *Context);
 /* HOLD-3b: the latch handler (Latch TRUE) and the vertical tick hand a held
  * set to the commit DPC (deadline rule); they never commit it. */
 VOID AdmissionMpoQueueCommit(_In_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Latch);

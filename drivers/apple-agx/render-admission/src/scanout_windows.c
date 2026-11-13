@@ -1909,7 +1909,7 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
         InterlockedExchange(&runtime->PresentGate, 0);
         /* HOLD-1: the held set goes out on this latch (its vsync info,
          * already taken above, belongs to the swap that just latched). */
-        AdmissionMpoNoteVsync(Context, TRUE);
+        AdmissionMpoNoteLatch(Context);
         AdmissionMpoTimingRecord(Context, ADMISSION_MPO_TIMING_LATCH,
                                  (ULONG)mpo_count,
                                  (ULONGLONG)mpo_info[0].PresentId);
@@ -1921,8 +1921,7 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
     }
   }
   if (VerticalTick) {
-    /* HOLD-3: the frame boundary for the deadline when no latch arrives. */
-    AdmissionMpoNoteVsync(Context, FALSE);
+    /* HOLD-3c: the software tick is not a frame reference (mpo_hold.h). */
     /* HOLD-1: a held set whose commit met an obstacle retries per tick. */
     if (InterlockedCompareExchange(&runtime->PresentGate, 0, 0) == 0)
       AdmissionMpoQueueCommit(Context, FALSE);

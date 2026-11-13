@@ -96,3 +96,18 @@ unsigned int AdmissionMpoHoldDeadline(long long Now, long long LastVsync,
   *Wait = deadline - Now;
   return 1u;
 }
+
+unsigned int AdmissionMpoHoldReferenceFresh(long long Now, long long LastLatch,
+                                            long long Period,
+                                            unsigned int MaxPeriods) {
+  if (LastLatch <= 0 || Period <= 0 || MaxPeriods == 0u || Now < LastLatch)
+    return 0u;
+  return Now - LastLatch <= (long long)MaxPeriods * Period ? 1u : 0u;
+}
+
+unsigned int AdmissionMpoHoldLatchMissed(long long CommitToLatch,
+                                         long long Period, long long Lead) {
+  if (Period <= 0 || Lead < 0)
+    return 0u;
+  return CommitToLatch > Lead + Period / 2 ? 1u : 0u;
+}

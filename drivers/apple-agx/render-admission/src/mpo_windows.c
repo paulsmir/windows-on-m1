@@ -1227,6 +1227,7 @@ _Use_decl_annotations_ VOID AdmissionMpoCommitPendingSource(
                                : &Context->Mpo.H2CommitsFromLatch);
       if (Source == ADMISSION_MPO_TIMING_COMMIT_DPC)
         InterlockedIncrement(&Context->Mpo.H3CommitsLate);
+      InterlockedExchange(&Context->MpoLastCommitSource, (LONG)Source);
       InterlockedExchange64(&Context->MpoLastCommitQpc, now);
       if (taken.ListedMask == 3u)
         InterlockedIncrement(&Context->Mpo.H2TwoLayerCommits);
@@ -1312,18 +1313,34 @@ static VOID AdmissionMpoDeadlineCallback(_In_ PEX_TIMER Timer, _In_opt_ PVOID Op
       0u, &done);
 }
 
-/* HOLD-3: a latch or a vertical tick (scan-out ISR).  A latch more than 1.5
- * frames after its commit is a missed vblank. */
-_Use_decl_annotations_ VOID AdmissionMpoNoteVsync(ADMISSION_CONTEXT *Context,
-                                                  BOOLEAN Latch) {
-  const LONGLONG now = KeQueryPerformanceCounter(NULL).QuadPart;
+/* HOLD-3c: a scan-out latch (ISR) is the frame reference; the software
+ * vertical tick no longer touches it (mpo_hold.h).  A latch more than
+ * Lead + Period/2 after its commit is a missed vblank. */
+_Use_decl_annotations_ VOID AdmissionMpoNoteLatch(ADMISSION_CONTEXT *Context) {
+  LARGE_INTEGER f;
+  const LONGLONG now = KeQueryPerformanceCounter(&f).QuadPart;
+  LONGLONG commit;
+  LONG source;
   if (Context == NULL)
     return;
-  if (Latch) {
-    const LONGLONG commit = InterlockedExchange64(&Context->MpoLastCommitQpc, 0);
-    if (commit != 0 && Context->MpoPeriodQpc > 0 &&
-        now - commit > Context->MpoPeriodQpc + Context->MpoPeriodQpc / 2)
+  source = InterlockedExchange(&Context->MpoLastCommitSource, 0);
+  commit = InterlockedExchange64(&Context->MpoLastCommitQpc, 0);
+  if (commit != 0 && now >= commit && f.QuadPart > 0) {
+    const LONGLONG d = now - commit;
+    if (AdmissionMpoHoldLatchMissed(d, Context->MpoPeriodQpc, Context->MpoLeadQpc)) {
+      const LONGLONG us = (d - Context->MpoPeriodQpc) * 1000000LL / f.QuadPart;
+      const LONG v = us > 0x7fffffffLL ? 0x7fffffff : us < -0x7fffffffLL ? -0x7fffffff : (LONG)us;
       InterlockedIncrement(&Context->Mpo.H3MissedVblanks);
+      if (source == (LONG)ADMISSION_MPO_TIMING_COMMIT_DEADLINE)
+        InterlockedIncrement(&Context->Mpo.H3MissedDeadline);
+      if (v > Context->Mpo.H3MissMaxUs)
+        InterlockedExchange(&Context->Mpo.H3MissMaxUs, v);
+    } else {
+      const LONGLONG us = d * 1000000LL / f.QuadPart;
+      const LONG v = us > 0x7fffffffLL ? 0x7fffffff : (LONG)us;
+      if (Context->Mpo.H3MadeMinUs == 0 || v < Context->Mpo.H3MadeMinUs)
+        InterlockedExchange(&Context->Mpo.H3MadeMinUs, v);
+    }
   }
   InterlockedExchange64(&Context->MpoLastVsyncQpc, now);
 }
@@ -1351,8 +1368,15 @@ static VOID AdmissionMpoCommitDpcRoutine(_In_ PKDPC Dpc,
     LARGE_INTEGER f;
     long long deadline = 0, wait = 0;
     const LONGLONG now = KeQueryPerformanceCounter(&f).QuadPart;
-    if (AdmissionMpoHoldDeadline(now, InterlockedCompareExchange64(
-                                          &context->MpoLastVsyncQpc, 0, 0),
+    LONGLONG reference = InterlockedCompareExchange64(&context->MpoLastVsyncQpc, 0, 0);
+    /* HOLD-3c: no fresh latch -> no phase: commit now. */
+    if (!AdmissionMpoHoldReferenceFresh(now, reference, context->MpoPeriodQpc,
+                                        ADMISSION_MPO_REFERENCE_MAX_PERIODS)) {
+      if (reference != 0)
+        InterlockedIncrement(&context->Mpo.H3StaleReference);
+      reference = 0;
+    }
+    if (AdmissionMpoHoldDeadline(now, reference,
                                  context->MpoPeriodQpc, context->MpoLeadQpc,
                                  &deadline, &wait)) {
       if (InterlockedCompareExchange(&context->MpoDeadlineArmed, 1, 0) == 0 &&
@@ -1381,6 +1405,7 @@ _Use_decl_annotations_ VOID AdmissionMpoCommitDpcStart(ADMISSION_CONTEXT *Contex
   Context->MpoNoLatchRun[0] = Context->MpoNoLatchRun[1] = 0;
   Context->MpoLastVsyncQpc = 0;
   Context->MpoLastCommitQpc = 0;
+  Context->MpoLastCommitSource = 0;
   if (Context->MpoDeadlineTimer == NULL)
     Context->MpoDeadlineTimer = ExAllocateTimer(AdmissionMpoDeadlineCallback,
                                                 Context, EX_TIMER_HIGH_RESOLUTION);
