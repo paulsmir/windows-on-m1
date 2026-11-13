@@ -79343,3 +79343,11 @@ EXP2402 HARDWARE BEFORE 2026-11-13T17:41:13Z:
 - Hashes: sys ab0f35624824, UmdArm64 eb72104a716b, UmdX64 5daca6acddce, Umd32 357b5ef9ef07; manifest 0106c5b8a5e7, hardware-manifest e759dcb1b727; probe2402.sh ff20e38deed7 (PROBE_LINT_OK); visible recovery rec2402h d50fd3c5ca7de3c4; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
 - Recovery rec2402h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2402-ctlfs/run2402.sh.
+
+EXP2402 BEFORE ADDENDUM 2026-11-13T17:47:28Z (manual arm after EXP2402_PROBE_DONE, before rec2402h; architect item 5 "what ends the loop", requested after the probe had already started):
+- State at entry: the loop stopped when GravityMark was killed (VisibilityCalls 312 at +20 s and +40 s), mode back at 2560x1600 (CommitCalls 3), but SourceVisible=0 / LastVisible=0 (source left hidden).
+- Steps, receipts after each (display-modes receipt: VisibilityCalls, SourceVisible, SourceAddressCalls, DeferredFlips; MPO: V2Presents):
+  1. wait 60 s;
+  2. ChangeDisplaySettingsEx(NULL) from the interactive session (bench/cds-null.ps1 via arm-task);
+  3. restart dwm.exe (taskkill /f /im dwm.exe; Windows restarts DWM itself) - a guest action inside the test session.
+- No device restart (A5: the second start fails). Expected: the source becomes visible again at the step that rebuilds DWM's output; a step with no change is a result.
