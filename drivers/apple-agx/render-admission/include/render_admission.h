@@ -145,7 +145,7 @@ typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT {
  * switch is effective (switch = 1 AND broker CAPABILITIES bit 9 AND the
  * REG_NEGOTIATED read-back); all zero otherwise.  Counters are interlocked
  * at any IRQL. */
-#define ADMISSION_MPO_RECEIPT_VERSION 4u
+#define ADMISSION_MPO_RECEIPT_VERSION 5u /* v5: tail ... Ids, HOLD-2 (H2*), CUR-1 v2 */
 #define ADMISSION_MPO_RECEIPT_REASONS 40u
 /* Key: clip width (12 bits) | height << 12 | format class << 24 |
  * blend << 28; 0 = free row.  Origin/DstSize: x | y << 16. */
