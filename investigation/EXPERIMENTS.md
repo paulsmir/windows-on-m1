@@ -79023,3 +79023,32 @@ EXP2392 HARDWARE BEFORE 2026-11-13T13:21:58Z:
 - Hashes: sys ec75ffcc165f, UmdArm64 482d7abc10bb, UmdX64 4decd41846a6, Umd32 f0980489d61f; manifest 7cc30afbbd3b, hardware-manifest 92f3da7f5a01; probe2392.sh 6b8ad7bc888b (PROBE_LINT_OK); visible recovery rec2392h b61e71ea58951791; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1 Wom1GpuPrivateCached=2.
 - Recovery rec2392h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2392-mp1b/run2392.sh.
+
+EXP2392 HARDWARE ACTUAL 2026-11-13T13:30:00Z:
+- Boot and run: as EXP2390, with package arch/srv1 6b1a24547 and Wom1GpuPrivateCached=2 (SWITCHES_SET confirmed); probe eoptwin6 (control's probe + the late_submit fix only). All windows ran; guest alive. STOPS 0. WER_REPORTS 2 (October dumps). Recovery rec2392h started.
+- Validity gates, all met:
+  - Coverage: Wom1GpuGcReceipt switch=2. In the OPTWING1 window big_cached +10880 and big_coherent +5440. That is 2 of the 3 85 MiB allocations (5440 leaf groups each): the GPU-only data and datau regions cached, the CPU-visible upload buffer coherent. GM window: big_cached +124560, big_coherent +38668. m1n1 GPUVA-GC: cached 150748 over the boot, last-cached 0xc000089262cc83 (low 12 bits C83).
+  - Correctness: oracle_bad 0, OPTWIN_RECORDS missing 0 (late_submit 11, measured), suite PASS 119 / FAIL 0 after the cached windows. No stale data observed.
+  - P6 >= 99 % per variant.
+  - tlbi 0.
+  - dram_fast: OPTWING1 0,0,1,0,0,0; GM 0,0,1,0,0,0,0,0.
+- Expected vs actual, ours/macOS per dispatch, control (EXP2390) -> cached (EXP2392):
+
+  | Variant | GM shape | N32 |
+  |---|---|---|
+  | G1u 1 MB | 1.19 -> 1.19 | 1.31 -> 1.30 (0.0493 -> 0.0492 ms; macOS 0.0377) |
+  | G1u 4 MB | 1.43 -> 1.43 | 1.21 -> 1.21 |
+  | G1u 16 MB | 0.99 -> 0.99 | 0.99 -> 1.05 |
+  | G1u 64 MB | 1.32 -> 1.32 | 1.13 -> 1.15 |
+  | G1du 1 MB | 1.21 -> 1.21 | 1.23 -> 1.38 |
+  | G1du 4 MB | 1.43 -> 1.43 | 1.11 -> 1.13 |
+  | G1du 16 MB | 0.96 -> 0.96 | 0.90 -> 0.95 |
+  | G1du 64 MB | 1.32 -> 1.32 | 1.00 -> 1.04 |
+  | G1cu 1 MB | 0.91 -> 0.92 | 1.68 -> 1.69 |
+  | G1cu 64 MB | 1.41 -> 1.41 | 2.30 -> 2.30 |
+
+  - SRV rows unchanged (G1_1M 3.98, G1_64M 2.50).
+  - The expected movement (1 MB N32 toward Apple's round trip, 1/4 MB toward ~1.0) did not happen. The GM-shape values are identical to two decimals.
+- GM PERF w (measurement-switch reading): fps_frames 53.05 against the control's 53.06. No effect.
+- Verdict: REJECTED. With the data attribute AttrIndx 0 (cached, C83, as macOS writes) covering the measured regions, gather latency and throughput are unchanged at every size. The leaf data attribute is not the cause of the 1.2-1.43x gap. Per the MP-1 reading: the GPU-side cache/walker configuration is next. The 64 MB 1.32 is unchanged as well.
+- MP-1b stays measurement only (Wom1GpuPrivateCached=2 is never a default).
