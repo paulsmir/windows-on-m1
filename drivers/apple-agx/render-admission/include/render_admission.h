@@ -312,9 +312,12 @@ typedef struct _ADMISSION_MPO_RECEIPT {
    * decisions taken without a fresh latch reference (committed at once),
    * the smallest commit-to-latch of a swap that made its vblank and the
    * largest time from a commit to the latch it missed (us; the scan-out
-   * floor lies between them). */
+   * floor lies between them), ticks that set the reference (tick - learned
+   * tick-to-latch offset, frames without a latch), the learned offset (us)
+   * and the tick/latch pairs rejected outside the Period/4 window. */
   volatile LONG H3MissedDeadline, H3StaleReference;
   volatile LONG H3MadeMinUs, H3MissMaxUs;
+  volatile LONG H3TickReference, H3TickOffsetUs, H3TickPairsRejected;
 } ADMISSION_MPO_RECEIPT;
 /* HOLD-2 receipt: Wom1MpoTiming, the last ADMISSION_MPO_TIMING_ENTRIES Set3
  * outcomes, commits (by source) and latches with QPC, CPU and IRQL. */
@@ -1281,6 +1284,7 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG64 MpoLastVsyncQpc;
   volatile LONG64 MpoLastCommitQpc;
   volatile LONG MpoLastCommitSource; /* HOLD-3c: ADMISSION_MPO_TIMING_COMMIT_* */
+  ADMISSION_MPO_PHASE MpoPhase;      /* HOLD-3c: ISR-serialized frame phase */
   LONGLONG MpoDeadlineQpc;
   LONGLONG MpoPeriodQpc;
   LONGLONG MpoLeadQpc;
@@ -2670,6 +2674,7 @@ VOID AdmissionMpoCommitDpcStart(_In_opt_ ADMISSION_CONTEXT *Context);
 VOID AdmissionMpoCommitDpcStop(_In_opt_ ADMISSION_CONTEXT *Context);
 /* HOLD-3: a latch (Latch TRUE) or a vertical tick seen by the scan-out ISR. */
 VOID AdmissionMpoNoteLatch(_In_ ADMISSION_CONTEXT *Context);
+VOID AdmissionMpoNoteTick(_In_ ADMISSION_CONTEXT *Context);
 /* HOLD-3b: the latch handler (Latch TRUE) and the vertical tick hand a held
  * set to the commit DPC (deadline rule); they never commit it. */
 VOID AdmissionMpoQueueCommit(_In_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Latch);

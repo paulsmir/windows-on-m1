@@ -1921,7 +1921,9 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
     }
   }
   if (VerticalTick) {
-    /* HOLD-3c: the software tick is not a frame reference (mpo_hold.h). */
+    /* HOLD-3c: the software tick keeps the latch phase in frames without a
+     * latch (tick - learned offset, mpo_hold.h). */
+    AdmissionMpoNoteTick(Context);
     /* HOLD-1: a held set whose commit met an obstacle retries per tick. */
     if (InterlockedCompareExchange(&runtime->PresentGate, 0, 0) == 0)
       AdmissionMpoQueueCommit(Context, FALSE);

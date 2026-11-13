@@ -1313,9 +1313,9 @@ static VOID AdmissionMpoDeadlineCallback(_In_ PEX_TIMER Timer, _In_opt_ PVOID Op
       0u, &done);
 }
 
-/* HOLD-3c: a scan-out latch (ISR) is the frame reference; the software
- * vertical tick no longer touches it (mpo_hold.h).  A latch more than
- * Lead + Period/2 after its commit is a missed vblank. */
+/* HOLD-3c: a scan-out latch (ISR) is the frame reference (mpo_hold.h phase
+ * tracker).  A latch more than Lead + Period/2 after its commit is a missed
+ * vblank. */
 _Use_decl_annotations_ VOID AdmissionMpoNoteLatch(ADMISSION_CONTEXT *Context) {
   LARGE_INTEGER f;
   const LONGLONG now = KeQueryPerformanceCounter(&f).QuadPart;
@@ -1342,7 +1342,27 @@ _Use_decl_annotations_ VOID AdmissionMpoNoteLatch(ADMISSION_CONTEXT *Context) {
         InterlockedExchange(&Context->Mpo.H3MadeMinUs, v);
     }
   }
-  InterlockedExchange64(&Context->MpoLastVsyncQpc, now);
+  AdmissionMpoPhaseLatch(&Context->MpoPhase, now);
+  InterlockedExchange64(&Context->MpoLastVsyncQpc, Context->MpoPhase.Reference);
+}
+
+/* HOLD-3c: the software vertical tick (SynchronizeExecution, serialized with
+ * the ISR) learns the tick-to-latch offset after a latch and, in a frame
+ * without one, sets the reference to tick - offset. */
+_Use_decl_annotations_ VOID AdmissionMpoNoteTick(ADMISSION_CONTEXT *Context) {
+  LARGE_INTEGER f;
+  const LONGLONG now = KeQueryPerformanceCounter(&f).QuadPart;
+  if (Context == NULL)
+    return;
+  if (AdmissionMpoPhaseTick(&Context->MpoPhase, now, Context->MpoPeriodQpc)) {
+    InterlockedIncrement(&Context->Mpo.H3TickReference);
+    InterlockedExchange64(&Context->MpoLastVsyncQpc, Context->MpoPhase.Reference);
+  }
+  if (f.QuadPart > 0)
+    InterlockedExchange(&Context->Mpo.H3TickOffsetUs,
+                        (LONG)(Context->MpoPhase.Offset * 1000000LL / f.QuadPart));
+  InterlockedExchange(&Context->Mpo.H3TickPairsRejected,
+                      (LONG)Context->MpoPhase.Rejected);
 }
 
 static KDEFERRED_ROUTINE AdmissionMpoCommitDpcRoutine;
@@ -1406,6 +1426,7 @@ _Use_decl_annotations_ VOID AdmissionMpoCommitDpcStart(ADMISSION_CONTEXT *Contex
   Context->MpoLastVsyncQpc = 0;
   Context->MpoLastCommitQpc = 0;
   Context->MpoLastCommitSource = 0;
+  RtlZeroMemory(&Context->MpoPhase, sizeof(Context->MpoPhase));
   if (Context->MpoDeadlineTimer == NULL)
     Context->MpoDeadlineTimer = ExAllocateTimer(AdmissionMpoDeadlineCallback,
                                                 Context, EX_TIMER_HIGH_RESOLUTION);

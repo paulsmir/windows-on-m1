@@ -111,3 +111,43 @@ unsigned int AdmissionMpoHoldLatchMissed(long long CommitToLatch,
     return 0u;
   return CommitToLatch > Lead + Period / 2 ? 1u : 0u;
 }
+
+void AdmissionMpoPhaseLatch(ADMISSION_MPO_PHASE *Phase, long long Now) {
+  if (Phase == 0 || Now <= 0)
+    return;
+  Phase->LastLatch = Now;
+  Phase->Reference = Now;
+}
+
+unsigned int AdmissionMpoPhaseTick(ADMISSION_MPO_PHASE *Phase, long long Now,
+                                   long long Period) {
+  long long d, sorted[ADMISSION_MPO_PHASE_SAMPLES], t;
+  unsigned int i, j, n;
+  if (Phase == 0 || Period <= 0 || Phase->LastLatch <= 0 || Now < Phase->LastLatch)
+    return 0u;
+  d = Now - Phase->LastLatch;
+  if (d <= Period / 2) {
+    /* A latch in this frame: a pairing sample, never a reference change. */
+    if (d > Period / 4) {
+      Phase->Rejected++;
+      return 0u;
+    }
+    Phase->Sample[Phase->Next] = d;
+    Phase->Next = (Phase->Next + 1u) % ADMISSION_MPO_PHASE_SAMPLES;
+    if (Phase->Samples < ADMISSION_MPO_PHASE_SAMPLES)
+      Phase->Samples++;
+    n = Phase->Samples;
+    for (i = 0u; i < n; ++i)
+      sorted[i] = Phase->Sample[i];
+    for (i = 1u; i < n; ++i)
+      for (j = i; j > 0u && sorted[j - 1u] > sorted[j]; --j) {
+        t = sorted[j]; sorted[j] = sorted[j - 1u]; sorted[j - 1u] = t;
+      }
+    Phase->Offset = sorted[n / 2u];
+    return 0u;
+  }
+  if (Phase->Samples == 0u || Now - Phase->Offset <= Phase->Reference)
+    return 0u;
+  Phase->Reference = Now - Phase->Offset;
+  return 1u;
+}

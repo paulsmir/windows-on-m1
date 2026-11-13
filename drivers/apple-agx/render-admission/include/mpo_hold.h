@@ -84,6 +84,25 @@ unsigned int AdmissionMpoHoldReferenceFresh(long long Now, long long LastLatch,
                                             long long Period,
                                             unsigned int MaxPeriods);
 
+/* HOLD-3c phase tracker (architect 2026-11-13).  The latch sets the
+ * reference.  A tick within Period/4 after a latch is a pairing sample of
+ * the tick-to-latch offset (kept as the median of the last
+ * ADMISSION_MPO_PHASE_SAMPLES pairs; pairs outside the window are
+ * rejected).  A tick in a frame with no latch (more than Period/2 after the
+ * last latch) sets the reference to tick - offset, once an offset is known,
+ * so a tick-only stretch keeps the latch phase.  Times in QPC units; all
+ * calls are serialized by the caller (scan-out ISR / SynchronizeExecution). */
+#define ADMISSION_MPO_PHASE_SAMPLES 5u
+typedef struct ADMISSION_MPO_PHASE {
+  long long LastLatch, Reference, Offset;
+  long long Sample[ADMISSION_MPO_PHASE_SAMPLES];
+  unsigned int Samples, Next, Rejected;
+} ADMISSION_MPO_PHASE;
+void AdmissionMpoPhaseLatch(ADMISSION_MPO_PHASE *Phase, long long Now);
+/* Returns 1 when the tick set the reference (tick - offset). */
+unsigned int AdmissionMpoPhaseTick(ADMISSION_MPO_PHASE *Phase, long long Now,
+                                   long long Period);
+
 /* HOLD-3c: a committed swap latched at the next vblank arrives at most
  * Lead (deadline commit) or less (late commit) after its commit; one that
  * missed it arrives a full period later.  Lead + Period/2 separates the two

@@ -90,6 +90,7 @@ static VOID AdmissionMpoTimingRecord(ADMISSION_CONTEXT *Context, ULONG Kind, ULO
 static VOID AdmissionMpoCommitDpcStop(ADMISSION_CONTEXT *Context) { (void)Context; }
 static unsigned vsync_notes, latch_notes; /* HOLD-3 */
 static VOID AdmissionMpoNoteLatch(ADMISSION_CONTEXT *Context) { (void)Context; ++vsync_notes; ++latch_notes; }
+static VOID AdmissionMpoNoteTick(ADMISSION_CONTEXT *Context) { (void)Context; ++vsync_notes; }
 static VOID AdmissionMpoHoldClear(void *Hold) { (void)Hold; } /* HOLD-1 (mpo_hold.c) */
 static void AdmissionSchedulerDpc(ADMISSION_CONTEXT*c){(void)c;}
 static void AdmissionRenderCorrelationDpcWindows(ADMISSION_CONTEXT*c,ULONG f,ULONGLONG t){(void)c;(void)f;(void)t;}

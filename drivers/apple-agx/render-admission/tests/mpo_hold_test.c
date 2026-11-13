@@ -181,19 +181,47 @@ static void TestHold3DeadlineFunction(void) {
   CHECK(AdmissionMpoHoldDeadline(1100, 1000, 1000, 1000, &d, &w) == 0u); /* lead >= period */
 }
 
-/* HOLD-3c: the deadline must sit Lead before the next latch.  With the
- * software tick (107 after the latch, EXP2385) as the reference it sat only
- * 193 before it (the ~1 ms loss of EXP2386); the latch reference gives 300. */
-static void TestHold3cLatchReferenceKeepsTheLead(void) {
+/* HOLD-3c phase tracker, period 1000, lead 300; the software tick fires
+ * 107 after the latch (EXP2385: tick commits reached the latch at P - 1.07 ms). */
+static void TestHold3cTickAfterALatchDoesNotMoveTheReference(void) {
+  ADMISSION_MPO_PHASE p;
+  memset(&p, 0, sizeof(p));
+  AdmissionMpoPhaseLatch(&p, 1000);
+  CHECK(AdmissionMpoPhaseTick(&p, 1107, 1000) == 0u && p.Reference == 1000);
+  CHECK(p.Samples == 1u && p.Offset == 107);
+  CHECK(AdmissionMpoPhaseTick(&p, 1400, 1000) == 0u && p.Reference == 1000 && p.Rejected == 1u); /* outside P/4 */
+}
+
+static void TestHold3cDeadlineIsLeadBeforeTheNextLatch(void) {
+  ADMISSION_MPO_PHASE p;
   long long d = -1, w = -1;
-  const long long latch = 1000, tick = 1107, next_latch = 2000;
-  CHECK(AdmissionMpoHoldDeadline(1200, tick, 1000, 300, &d, &w) == 1u && next_latch - d == 193); /* old */
-  CHECK(AdmissionMpoHoldDeadline(1200, latch, 1000, 300, &d, &w) == 1u && next_latch - d == 300);
-  CHECK(AdmissionMpoHoldReferenceFresh(1200, latch, 1000, ADMISSION_MPO_REFERENCE_MAX_PERIODS) == 1u);
-  CHECK(AdmissionMpoHoldReferenceFresh(5000, latch, 1000, 4u) == 1u);
-  CHECK(AdmissionMpoHoldReferenceFresh(5001, latch, 1000, 4u) == 0u); /* stale: commit now */
-  CHECK(AdmissionMpoHoldReferenceFresh(1200, 0, 1000, 4u) == 0u);     /* no latch yet */
-  CHECK(AdmissionMpoHoldReferenceFresh(900, latch, 1000, 4u) == 0u);  /* clock before latch */
+  memset(&p, 0, sizeof(p));
+  AdmissionMpoPhaseLatch(&p, 1000);
+  (void)AdmissionMpoPhaseTick(&p, 1107, 1000);
+  CHECK(AdmissionMpoHoldDeadline(1200, p.Reference, 1000, 300, &d, &w) == 1u && 2000 - d == 300);
+  /* the v7 rule (the tick wrote the reference) left only 193 */
+  CHECK(AdmissionMpoHoldDeadline(1200, 1107, 1000, 300, &d, &w) == 1u && 2000 - d == 193);
+}
+
+static void TestHold3cTickOnlyStretchKeepsThePhase(void) {
+  ADMISSION_MPO_PHASE p;
+  long long d = -1, w = -1, k;
+  memset(&p, 0, sizeof(p));
+  for (k = 1; k <= 5; ++k) {                       /* learn: offsets 105..109 */
+    AdmissionMpoPhaseLatch(&p, k * 1000);
+    (void)AdmissionMpoPhaseTick(&p, k * 1000 + 104 + k, 1000);
+  }
+  CHECK(p.Offset == 107);
+  for (k = 6; k <= 20; ++k)                        /* no latches: ticks only */
+    CHECK(AdmissionMpoPhaseTick(&p, k * 1000 + 107, 1000) == 1u && p.Reference == k * 1000);
+  CHECK(AdmissionMpoHoldDeadline(20500, p.Reference, 1000, 300, &d, &w) == 1u && d == 20700);
+  CHECK(AdmissionMpoHoldReferenceFresh(20500, p.Reference, 1000, ADMISSION_MPO_REFERENCE_MAX_PERIODS) == 1u);
+  /* no offset learned yet: a tick never invents a reference */
+  memset(&p, 0, sizeof(p));
+  AdmissionMpoPhaseLatch(&p, 1000);
+  CHECK(AdmissionMpoPhaseTick(&p, 2107, 1000) == 0u && p.Reference == 1000);
+  CHECK(AdmissionMpoHoldReferenceFresh(5001, 1000, 1000, 4u) == 0u);   /* stale: commit now */
+  CHECK(AdmissionMpoHoldReferenceFresh(1200, 0, 1000, 4u) == 0u);      /* no latch yet */
 }
 
 /* HOLD-3c: a one-frame miss latches Lead + Period after a deadline commit
@@ -366,7 +394,9 @@ int main(void) {
   TestHold3IdleArmsNoTimer();
   TestHold3StopWithAnArmedTimer();
   TestHold3bOutstandingAtTheDeadlineCommitsAtTheNextDeadline();
-  TestHold3cLatchReferenceKeepsTheLead();
+  TestHold3cTickAfterALatchDoesNotMoveTheReference();
+  TestHold3cDeadlineIsLeadBeforeTheNextLatch();
+  TestHold3cTickOnlyStretchKeepsThePhase();
   TestHold3cOneFrameMissIsCounted();
   TestHold3bLateFlipSelfHeals();
   if (Failures) { fprintf(stderr, "mpo_hold_test: %u failure(s)\n", Failures); return EXIT_FAILURE; }
