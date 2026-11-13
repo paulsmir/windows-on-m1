@@ -78910,3 +78910,40 @@ EXP2390 HARDWARE BEFORE 2026-11-13T12:39:31Z:
 - Hashes: sys 73a20ddad467, UmdArm64 2f0bde456b7a, UmdX64 dc58e7a8774d, Umd32 15d16997b5e2; manifest 266bb28da910, hardware-manifest 3d6ad8ef1dd8; probe2390.sh 0ef0a1435e76 (PROBE_LINT_OK); visible recovery rec2390h 3a1b850dd4bcb204; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
 - Recovery rec2390h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2390-mp1off/run2390.sh.
+
+EXP2390 HARDWARE ACTUAL 2026-11-13T12:49:05Z:
+- Boot and run: m1n1-s2v3-gc (3a72f1ec), package arch/srv1 71d2aa492, Wom1GpuPrivateCached absent. All three windows ran; guest alive after each. STOPS 0. WER_REPORTS 2 (October dumps). Recovery rec2390h started.
+- Coverage (Wom1GpuGcReceipt, switch=0):
+  - OPTWING1 window: +16320 big leaf groups, all coherent; last big allocation 85 MiB, flags 0x308 (CpuVisible 0, Presentation 0, WrittenPrimary 0, GPU-only eligible 1, segment 3). So the G1 source regions are exactly the leaves MP-1 changes.
+  - GM window: big_coherent +163228, last big allocation 16 MiB, flags 0x308.
+  - Boot totals: gpuonly_coherent 1000, cpu_or_present 41496, system 251604.
+  - m1n1 GPUVA-GC: cached 0, shared 315820, clear 290389, tlbi 0 over the whole boot (no ASID invalidation issued at all). TLBI is out for the probe and for GM's frame.
+- DRAMCFG: CPPC dram_fast=0 in most snapshots in every window (OPTWING1: 0,0,1,0,0,0,1; GM: all 0; SRV-1 arm: 1,0,0,0,0,0,1,0,1).
+- OPTWING1 (eoptwin5): 120 cases, oracle_bad 0, P6 99.15-100 % per variant. OPTWIN_RECORDS missing 13, every one reason 7 (no job of ours in [t0, tf)) with 1-2 of our jobs found at SubmitQpc >= tf. So the timed job's record exists but carries a submit stamp later than ExecuteCommandLists' return, and the probe counts it as a filler. This is a probe classification defect, not a lost driver record. Fix: take our earliest job submitted after t0. Not applied before EXP2391, to keep the MP-1 pair's probe identical.
+- Control ratios, ours/macOS per dispatch, GM shape (N32 in brackets), 5 reps:
+
+  | Variant | 1 MB | 4 MB | 16 MB | 64 MB |
+  |---|---|---|---|---|
+  | G1u | 1.19 [1.31] | 1.43 [1.21] | 0.99 [0.99] | 1.32 [1.13] |
+  | G1du | 1.21 [1.23] | 1.43 [1.11] | 0.96 [0.90] | 1.32 [1.00] |
+
+  G1cu: 1 MB 0.91 [1.68], 64 MB 1.41 [2.30]. Equal to EXP2388 at the GM shape.
+- SRV-1 switch-on arm (APPLE_AGX_D3D12_SRV_SSBO=1, probe process only): 120 cases, oracle_bad 0, missing 9 (reason 7). The SRV-form rows now equal the raw-UAV rows; the G1u control rows are unchanged:
+
+  | Variant, GM shape | Switch off | Switch on |
+  |---|---|---|
+  | G1 1 MB | 3.98 | 1.19 |
+  | G1 4 MB | 2.64 | 1.43 |
+  | G1 16 MB | 1.42 | 0.99 |
+  | G1 64 MB | 2.50 | 1.32 |
+  | G1d 1 MB | 3.98 | 1.21 |
+  | G1d 64 MB | 2.75 | 1.32 |
+  | G1c 1 MB | 1.67 | 0.91 |
+
+  - N32: G1_1M 11.19 -> 1.30, G1c_1M 19.91 -> 1.70.
+  - G1c_64M GM 1.23 -> 1.41, now equal to G1cu.
+- GM PERF w: fps_frames 53.06 (not gated).
+- Verdict:
+  - MP-1 control CONFIRMED (coverage proven, TLBI 0);
+  - SRV-1 CONFIRMED (arch/srv1 0641fa433 + 4e5bf1239 + 73bdffafe): buffer-SRV reads now run at the raw-UAV rate, 3.3x faster at 1 MB.
+- Next: EXP2391 (Wom1GpuPrivateCached=1), launched.
