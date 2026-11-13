@@ -6509,3 +6509,16 @@ boot was run. The previous entry stays as written.
   switches in the shipped build.
 - Work packages A (faults), B (power), C (display), D (memory/scheduling/security), E (API), F (shipping) and the
   order of hardware checks are in the plan. First wave of design reads started.
+
+## UPDATE 2026-11-13T14:19:59Z - EXP2393 MP-2: physical placement REJECTED; memory-path lever frozen (completeness first)
+
+- EXP2393: the same gather rows from the local segment (arm B) against the pool segment (arm A): every ratio
+  unchanged (G1u 1.19 / 1.43 / 0.99 / 1.32; B/A 0.992..1.002). Receipt: both 85 MiB regions were ONE contiguous
+  run in guest-physical space in both arms, so the pool regions were not scattered as hypothesised; what lies
+  behind them in host-physical space is not visible in the receipt. Placement as tested: REJECTED.
+- Excluded at P6 on identical code so far: leaf data attribute (EXP2392), broker TLB invalidations (0 counted),
+  segment / guest-physical placement (EXP2393), GPU clock, code form. Not tested: GPU-side cache and page-walk
+  configuration registers, host-physical layout behind the guest pages (stage-2), DRAM configuration state
+  (dram_fast is 0 in most snapshots of our runs; macOS's state unknown).
+- Frozen here by the operator's priority change; resume from this entry and the register read-side notes.
+- Bench moves to the completeness plan: EXP2394 (RQ-1) next, RQ-2 image built (m1n1-s2v3-rq2).
