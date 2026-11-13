@@ -10176,19 +10176,30 @@ static HRESULT optwin_filler(OptwinCtx *x) {
  * EXP2373: the timed fence often completed only when the filler queued behind it finished, and the filler's record
  * then landed inside the window (558 of 840 reps "jobs=2", +17-19 ms); *others counts those records (diagnostic).
  * Pages from the Newest sequence read just before the submission, so ring wrap-around cannot hide a record. */
+/* EXP2388/2389: 9 and 8 of 564 reps had no record. The reason of the last failed
+ * collect: 1 query failed, 2 no frequency, 3 ring lost, 4 reset, 5 page overflow,
+ * 6 a record of ours with status/start/end invalid (status in *why_value), 7 no job of
+ * ours in the window, 8 sixteen pages without reaching Newest. */
+static unsigned optwin_why, optwin_why_value;
 static int optwin_collect(OptwinCtx *x, UINT64 cursor, UINT64 t0, UINT64 tf, UINT64 t1, double *ms, double *jobsum_ms,
                           unsigned *jobs, unsigned *others) {
     const UINT64 slack=(UINT64)x->qpf.QuadPart*3u/1000u;
     UINT64 start=~0ull, end=0, sum=0;
     *jobs=0; *others=0;
+    optwin_why=8u; optwin_why_value=0u;
     for (unsigned page=0;page<16u;++page) {
         Q3_GPU_COMPLETION_QUERY *q=x->rec;
-        if (FAILED(q3_completions(x->device,cursor,q)) || !q->Frequency || q->Lost || q->Reset || q->Count>Q3_GPU_COMPLETION_PAGE) return 0;
+        if (FAILED(q3_completions(x->device,cursor,q))) { optwin_why=1u; return 0; }
+        if (!q->Frequency) { optwin_why=2u; return 0; }
+        if (q->Lost) { optwin_why=3u; optwin_why_value=(unsigned)q->Lost; return 0; }
+        if (q->Reset) { optwin_why=4u; return 0; }
+        if (q->Count>Q3_GPU_COMPLETION_PAGE) { optwin_why=5u; optwin_why_value=q->Count; return 0; }
         for (UINT i=0;i<q->Count;++i) {
             const Q3_GPU_COMPLETION *r=&q->Record[i];
             if (r->ProcessId!=x->pid || r->Kind!=Q3_GPU_TIMESTAMP_COMPUTE || r->SubmitQpc<t0 || r->CompleteQpc>t1+slack) continue;
             if (r->SubmitQpc>=tf) { ++*others; continue; }
-            if (r->Status || !r->Start || r->End<=r->Start) return 0;
+            if (r->Status || !r->Start || r->End<=r->Start) {
+                optwin_why=6u; optwin_why_value=r->Status ? (unsigned)r->Status : r->Start ? 0xe0u : 0x50u; return 0; }
             if (r->Start<start) start=r->Start;
             if (r->End>end) end=r->End;
             sum+=r->End-r->Start;
@@ -10196,7 +10207,7 @@ static int optwin_collect(OptwinCtx *x, UINT64 cursor, UINT64 t0, UINT64 tf, UIN
         }
         cursor=q->Cursor;
         if (cursor>=q->Newest) {
-            if (!*jobs) return 0;
+            if (!*jobs) { optwin_why=7u; optwin_why_value=*others; return 0; }
             *ms=1000.0*(double)(end-start)/(double)q->Frequency;
             *jobsum_ms=1000.0*(double)sum/(double)q->Frequency;
             return 1;
@@ -10413,7 +10424,10 @@ static int optwin_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
         if (!optwin_selected(v,probe)) continue;
         for (unsigned m=0;m<n;++m) best[m][0]=best[m][1]=wall[m][0]=wall[m][1]=1e30;
         QueryPerformanceCounter(&begin);
-        for (unsigned rep=0;rep<OPTWIN_REPS && SUCCEEDED(hr);++rep)
+        /* MP-1 (architect 2026-11-13): the gather rows get 5 reps (N32 4 MB spread 299..378 ns) */
+        const unsigned reps=optwin_g1_base(v->kernel)==OPTWIN_K_G1 || optwin_g1_base(v->kernel)==OPTWIN_K_G1D ||
+                            optwin_g1_base(v->kernel)==OPTWIN_K_G1C ? OPTWIN_GATHER_REPS : OPTWIN_REPS;
+        for (unsigned rep=0;rep<reps && SUCCEEDED(hr);++rep)
             for (unsigned m=0;m<n && SUCCEEDED(hr);++m)
                 for (unsigned k=0;k<2u && SUCCEEDED(hr);++k) {
                     const unsigned dispatches=k ? cases[m].nb : cases[m].na;
@@ -10421,7 +10435,11 @@ static int optwin_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
                     unsigned jobs;
                     int got;
                     hr=optwin_timed(x,v,&cases[m],dispatches,&got,&ms,&jobsum,&wms,&jobs);
-                    if (!got) ++x->missing; else busy+=ms;
+                    if (!got) {
+                        ++x->missing;
+                        printf("OPTWIN_MISSING variant=%s shape=%s rep=%u dispatches=%u reason=%u value=0x%x wall_ms=%.3f\n",
+                               v->variant,cases[m].shape,rep,dispatches,optwin_why,optwin_why_value,wms);
+                    } else busy+=ms;
                     if (got && ms<best[m][k]) best[m][k]=ms;
                     if (wms<wall[m][k]) wall[m][k]=wms;
                     optwin_print_rep(rep,v,&cases[m],dispatches,got,ms,jobsum,wms,jobs);

@@ -35,6 +35,7 @@
 #define OPTWIN_FILL_R 10000u                 /* P6-hold filler: the CLKTWIN W56 list (S1 at 1024, R 10000) */
 #define OPTWIN_FILL_GROUPS 56u
 #define OPTWIN_REPS 3u
+#define OPTWIN_GATHER_REPS 5u              /* MP-1: G1 / G1d / G1c families (and their u forms) */
 #define OPTWIN_ARGS_THREADS 32u              /* S1i argument writer: one 32-thread group */
 #define OPTWIN_MAX_CASES 6u
 
@@ -224,6 +225,8 @@ static const optwin_variant optwin_variants[] = {
     {"G1", "G1u_16M", OPTWIN_K_G1U, 256u, 1u, 2u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
     {"G1", "G1u_64M", OPTWIN_K_G1U, 256u, 1u, 3u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
     {"G1", "G1du_1M", OPTWIN_K_G1DU, 256u, 1u, 0u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
+    {"G1", "G1du_4M", OPTWIN_K_G1DU, 256u, 1u, 1u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
+    {"G1", "G1du_16M", OPTWIN_K_G1DU, 256u, 1u, 2u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
     {"G1", "G1du_64M", OPTWIN_K_G1DU, 256u, 1u, 3u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
     {"G1", "G1cu_1M", OPTWIN_K_G1CU, 256u, 1u, 0u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
     {"G1", "G1cu_64M", OPTWIN_K_G1CU, 256u, 1u, 3u, 0u, 0u, 128u, 32u, 8u, 16u, 1840u, 1u, 0.0f, 0.0f, 0.0f},
