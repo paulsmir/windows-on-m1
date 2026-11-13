@@ -79153,3 +79153,33 @@ EXP2394 HARDWARE ACTUAL 2026-11-13T14:55:54Z:
 - Equal to EXP2387 otherwise: H3MissedDeadline 8 of 47528 deadline commits (EXP2387 6 of 47475), H3StaleReference 0, H3MadeMinUs 2119, H3MissMaxUs 3602, H3TickOffsetUs 1135. Full-screen arms 59.89-59.96 fps (controls 59.96 / 59.92). HoldDropped 0, Set3RefusedAfterSupport 0, Check3Unsupported 0 at the end.
 - Verdict: CONFIRMED for the healthy path: RQ-1 is inert without failures and costs no speed. Its recovery behaviour under failures is EXP2395 (RQ-2 m1n1 with injection), which changes only the m1n1.
 - Next: EXP2395 (package reused, m1n1-s2v3-rq2 772d2ee7, run_uefi --host-request).
+
+EXP2395 HARDWARE BEFORE 2026-11-13T15:01:35Z:
+- Kind: one variable against EXP2394: the m1n1 only, m1n1-ansdirect-closedv5-scaled1-s2v3 -> m1n1-s2v3-rq2 (772d2ee71d4ce7dd47674a9ca5a4c9ffc6bf5e850f2a5c799ab2348450ea88d8; gpu/rq2-latch-deadline 4215928f = s2v3 63c13618 + 93d833ad deadline + f76c15e8 injection + 4215928f refusal before A407; build info m1n1-s2v3-rq2/m1n1-build-info.json). Package = EXP2394's (exp/rq1-pkg c20a763ab), copied, not rebuilt; same switches and Mu.
+- Launcher: run_uefi --host-request "$b/host-request.txt" (prepare AGX_HOST_REQUEST=1; gpu/memory-latency 09091701e). SIGUSR1 stops the guest through the existing USER_INTERRUPT route, the proxy op runs, the guest resumes.
+- WHY THIS HYPOTHESIS:
+  1. E5-RQ: a lost latch left the swap expected forever, and a failed swap latched Faulted. RQ-2 turns a lost latch into a failed present after 100 ms, and RQ-1 (EXP2394) retries a failed present.
+  2. The m1n1 path is traced in source: an injected refusal -> complete_present(PRESENT_FAILED) -> RESULT != OK, RECEIPT = sequence, IRQ_ERROR. A dropped latch -> deadline -> fail_latch -> RESULT PRESENT_FAILED, RECEIPT still that sequence, IRQ_ERROR. The KMD client keeps PresentPending until LATCHED, so AppleAgxScanoutTakePresentFailure accepts both.
+  3. Host suites: m1n1 run_host_tests 80/84 (the 4 failures also fail on base 63c13618); three-define syntax check rc=0; the RQ-1 host test drives the ISR in five scenarios.
+- ATOMIC CONTRACT: none. The m1n1 is the only change; the injections are the boot's measurements.
+- WINDOWS CONTRACT: every flip's PresentIds complete through a VSYNC interrupt eventually; a failed flip must not stall the queue or the desktop; DxgkDdiStopDevice succeeds afterwards.
+- AGX/ASAHI CONTRACT: DCP may not deliver a swap's latch (D589). Asahi bounds the wait and completes the swap.
+- TRANSLATION: lost latch -> m1n1 deadline -> broker failure report -> KMD retry (RQ-1) -> latch, or after 3 tries the plane-off report and the gate released.
+- WHAT IS STILL UNKNOWN:
+  - whether a legitimate latch ever takes > 100 ms in normal use (mode change, display power, heavy load): latch_deadline_expiries at INJ_status0 is the natural count over the whole regression part of the probe;
+  - whether the HV pause of a host request disturbs the guest (status0 is a request with no injection: the control);
+  - real DCP behaviour after a refused swap (before A407) and after a swallowed D589.
+- Expected per step (INJ_ lines; the RQ1_ counters come from the KMD receipt):
+  - status0: latch_deadline_expiries 0, injected_refusals 0, dropped_latches 0; the guest stays alive;
+  - refuse 1: injected_refusals 1; KMD SwapFailures +1, SwapRetries +1, SwapRetryLatched +1; the app's per-second fps shows at most one short second;
+  - refuse 4: the first failure plus three refused retries -> SwapRetryExhaustedReported +1, then presents continue (gate released);
+  - drop 1: dropped_latches 1, latch_deadline_expiries 1, KMD SwapFailures +1 and SwapRetryLatched +1;
+  - drop 2: two deadlines in a row, the second retry latches;
+  - ForeignErrors 0; pending_refuse_swaps and pending_drop_latches back to 0 at status_end;
+  - the guest is alive after INJ; the ordered restart at the end works (StopDevice), with m1n1 BUGCHECK code 0 at the PSCI reset.
+  - Regression part as EXP2394 (speed gates PASS, STOPS 0).
+- Failure criteria: the screen freezes or the app stops presenting after an injection (gate stuck: RQ1 counters show which); Faulted / device removed; ForeignErrors > 0; a natural deadline expiry before the INJ arm; any speed gate FAIL; hang or bugcheck; the ordered restart fails.
+- Recovery: rec2395h visible recovery (exact-PID stop + AT_PROXY recovery on a hang); the recovery m1n1 is the normal production one, not the RQ-2 image.
+- Hashes: sys ab0f35624824, UmdArm64 eb72104a716b, UmdX64 5daca6acddce, Umd32 357b5ef9ef07; manifest 567fb74f1d0a, hardware-manifest 3b0673fc03a7; probe2395.sh bb49fb52ff33 (PROBE_LINT_OK); visible recovery rec2395h 4bf47042c02da110; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
+- Recovery rec2395h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2395-rq2/run2395.sh.
