@@ -79224,3 +79224,16 @@ EXP2396 HARDWARE BEFORE 2026-11-13T15:42:52Z:
 - Hashes: sys ab0f35624824, UmdArm64 eb72104a716b, UmdX64 5daca6acddce, Umd32 357b5ef9ef07; manifest 7ccbe9ff0f10, hardware-manifest f0feec5d944a; probe2396.sh 89bacfb6df95 (PROBE_LINT_OK); visible recovery rec2396h 3b8036c06fd30690; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
 - Recovery rec2396h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2396-u1obs/run2396.sh.
+
+EXP2396 HARDWARE ACTUAL 2026-11-13T16:18:09Z:
+- Boot and run: recovery rec2395h (rerun after the selector fix, RECOVERY_DONE), then the EXP2394 package (copied) on m1n1-s2v3-u1obs (befcaf4c). Probe ran to EXP2396_PROBE_DONE / CHAIN2396_DONE. STOPS 0, WER_REPORTS 2 (the October dumps). Guest alive after every arm; boot, input, network and SSH as usual. RQ-1 counters 0 throughout.
+- Observation (USBOBS_ lines, full.log): "usb-observe: port 0 via i2c", "port 1 via i2c", guest mask 0x2. First reads:
+  - port0 (proxy): status=0x100cb60d data=0x10000091 power=0x0e5f int=0x00000000, shadow=off;
+  - port1 (left-front, guest): status=0x108282ff data=0x00008573 power=0x000d int=0x00000400, shadow debounce -> host-up "would: phy-on, usb2-phy-host, dwc3-reset-deassert, dwc3-core-init-host, xhci-map, guest-attach-notify" (printed only, nothing executed);
+  - no state change afterwards; reads ~1954 per port by the last heartbeat, read failed 0.
+- Poll cost (33 heartbeats): poll_us last min 2633, median 2679, max 2702; overall max 2826 µs per poll (both ports, 4 registers each), once per second in hv_tick. Below the 10 ms failure line.
+- Expected vs actual, gates: GravityMark PERF PASS -0.42 % (worst 46.808); CS cs16 FAIL -3.43 % (worst 50.207 vs 51.991; warm 50.306, r2 50.207; EXP2394 51.919 / 52.153, EXP2395 51.798 / 52.367). Cursor-suppressed control CS 49.009 (EXP2394 47.990, EXP2395 48.609: no drop); windowed CS 54.20 (54.28 / 54.60: no drop).
+- Deadline-commit misses (H3MissedDeadline, cumulative): ... -> CS warm 8 -> CS r2 61 -> CS win 87 (EXP2394 8/8/8, EXP2395 5/5/5 over the same runs). 53 misses during the ~75 s r2 run and 26 during the ~70 s windowed run, i.e. close to one per 1 Hz poll in the strip scene. Whole boot 87 of 51031 (EXP2394 8/47528).
+- Reading: the poll is a 2.7 ms busy-wait (I2C byte transfers polled in m1n1) inside hv_tick on the CPU taking the tick; when that stall overlaps a display deadline commit, the commit misses its vblank, and the strip-scene CS (cursor-composed, deadline-paced) loses ~3 %. The GM gate and the unscaled windowed CS absorb it.
+- Verdict: REJECTED as a bench image (gate miss, failure criterion "any gate miss"). The observation data are valid (both controllers read, 0 errors, shadow plan as designed). For the USB session: the poll must stop blocking the tick CPU for milliseconds, e.g. one register per tick (~0.35 ms), an interrupt-driven read (the HPM IRQ), or a faster bus clock; then a repeat run.
+- Next: the proxy-only slot (EXP2397-2400), then AT_PROXY rec2396h.
