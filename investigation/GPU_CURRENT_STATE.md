@@ -6544,3 +6544,18 @@ boot was run. The previous entry stays as written.
   those domains.
 - Open code-review note on C2 (not blocking): Set3 at device IRQL reads the committed destination rectangle
   without a lock while a mode commit writes it at PASSIVE.
+
+## UPDATE 2026-11-13T15:53:36Z - plan A1 DONE: failed-swap recovery validated (EXP2395); test gate now covers every module
+
+- EXP2395 (EXP2394 package on m1n1 s2v3 + RQ-2 4215928f, fault injection from the host): a refused swap is
+  retried and latches (1/1/1/0); four refusals exhaust the retries, the ids are reported, the gate is released
+  and presents continue; a dropped latch expires at the 100 ms deadline, the late latch is ignored and the retry
+  latches; two drops likewise. Full-screen loop under injection 59.36 fps mean, worst second 47; no frozen
+  screen; StopDevice afterwards clean (BUGCHECK code 0). Regression part: GM +0.25 %, CS +0.72 %, no natural
+  deadline expiry. RQ-1 + RQ-2 VALIDATED; merge approved (driver RQ-1 into gpu/memory-latency, RQ-2 into the
+  bench m1n1 line).
+- Test gate: 424 of 854 test modules matched no pattern of the default set and had rotted unseen (139 failing
+  tests in 87 modules). The default set is now every test_*.py (2d4403484); the 139 are listed as known with
+  "triage pending" (.local/handoff/gate-coverage/TRIAGE.md). Full gate: 2612 tests, 0 NEW.
+- Correction recorded: m1n1's pcie_shutdown makes no power-manager call (it asserts port reset, gates the port
+  clock and resets the PHY control bits); the proxy-reboot rule after PCIe proxy steps stands.

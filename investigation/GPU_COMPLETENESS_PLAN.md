@@ -76,7 +76,7 @@ Status legend: MISSING (no code), STUB (entry point refuses or does nothing), PA
 
 | WP | Item | Status | Done when |
 |---|---|---|---|
-| A1 | Scan-out swap failure recovery (RQ-1 KMD retry, RQ-2 m1n1 latch deadline + fault injection) | READY | injected refused swap and dropped latch both recover without a frozen screen; StopDevice works afterwards |
+| A1 | Scan-out swap failure recovery (RQ-1 KMD retry, RQ-2 m1n1 latch deadline + fault injection) | DONE (EXP2394, EXP2395) | injected refused swap and dropped latch both recover without a frozen screen; StopDevice works afterwards |
 | A2 | TDR: a hung job ends with device-removed for the owning application, not bugcheck 0x116 | PARTIAL | drill with a deliberately hung job: desktop survives, the application gets DXGI_ERROR_DEVICE_REMOVED/RESET, the next application renders; three drills in one boot |
 | A3 | Firmware (RTKit) crash: detect, restart the GPU coprocessor in the same boot, rebuild queues and contexts | MISSING | drill: forced firmware crash -> desktop back within seconds, no reboot |
 | A4 | GPU page fault: report the faulting process with details by default, kill only its context | PARTIAL | fault drill: other applications keep rendering |
