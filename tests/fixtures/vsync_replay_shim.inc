@@ -85,6 +85,8 @@ static unsigned commit_latch_calls, commit_tick_calls, timing_latches;
 static VOID AdmissionMpoCommitPendingSource(ADMISSION_CONTEXT *Context, ULONG Source) { (void)Context; if (Source == ADMISSION_MPO_TIMING_COMMIT_LATCH) ++commit_latch_calls; else if (Source == ADMISSION_MPO_TIMING_COMMIT_TICK) ++commit_tick_calls; }
 static VOID AdmissionMpoTimingRecord(ADMISSION_CONTEXT *Context, ULONG Kind, ULONG Mask, ULONGLONG Id) { (void)Context; (void)Mask; (void)Id; if (Kind == ADMISSION_MPO_TIMING_LATCH) ++timing_latches; }
 static VOID AdmissionMpoCommitDpcStop(ADMISSION_CONTEXT *Context) { (void)Context; }
+static unsigned vsync_notes, latch_notes; /* HOLD-3 */
+static VOID AdmissionMpoNoteVsync(ADMISSION_CONTEXT *Context, BOOLEAN Latch) { (void)Context; ++vsync_notes; if (Latch) ++latch_notes; }
 static VOID AdmissionMpoHoldClear(void *Hold) { (void)Hold; } /* HOLD-1 (mpo_hold.c) */
 static void AdmissionSchedulerDpc(ADMISSION_CONTEXT*c){(void)c;}
 static void AdmissionRenderCorrelationDpcWindows(ADMISSION_CONTEXT*c,ULONG f,ULONGLONG t){(void)c;(void)f;(void)t;}

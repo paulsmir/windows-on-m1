@@ -59,4 +59,17 @@ unsigned int AdmissionMpoHoldSet3(ADMISSION_MPO_HOLD *Hold,
                                   unsigned int GateFree,
                                   unsigned int *QueueCommit);
 
+/* HOLD-3 (EXP2384: DWM's pointer layer flips 2.4-4.9 ms and the
+ * application 0.8-1.8 ms after the latch, in different dxgkrnl passes):
+ * the pending set is committed once per frame at a deadline, so every flip
+ * of the frame rides one swap; a swap latches at the vblank whatever its
+ * submit phase, so a flip that arrives before the deadline loses nothing.
+ * Times in QPC units.  Frame = [LastVsync + k*Period, + Period) containing
+ * Now; Deadline = frame start + Period - Lead.  Returns 1 and *Wait (> 0)
+ * when Now is before the deadline (arm the timer), 0 when it has passed or
+ * no vsync is known yet (commit now). */
+unsigned int AdmissionMpoHoldDeadline(long long Now, long long LastVsync,
+                                      long long Period, long long Lead,
+                                      long long *Deadline, long long *Wait);
+
 #endif

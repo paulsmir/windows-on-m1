@@ -1,4 +1,5 @@
 #include "render_admission.h"
+#include "apple_agx_vsync.h" /* HOLD-3: panel rate for the frame period */
 
 /* S2 kernel wiring of the two-plane MPO contract (specification v1,
  * amendments 2026-11-11).  Everything here is effective-only: dxgkrnl calls
@@ -1145,6 +1146,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
       InterlockedIncrement(outcome == ADMISSION_MPO_SET3_MERGED_FIRST
                                ? &Context->Mpo.H2Set3MergedFirst
                                : &Context->Mpo.H2Set3MergedSecond);
+      {
+        /* HOLD-3 receipt: the Set3 phase after the last vsync, per layer. */
+        LARGE_INTEGER f;
+        const LONGLONG now = KeQueryPerformanceCounter(&f).QuadPart;
+        const LONGLONG last = InterlockedCompareExchange64(&Context->MpoLastVsyncQpc, 0, 0);
+        if (last != 0 && now >= last && f.QuadPart > 0) {
+          LONGLONG bin = ((now - last) * 1000LL / f.QuadPart) / 2;
+          if (bin > 8) bin = 8;
+          if (listed[0]) InterlockedIncrement(&Context->Mpo.H3PhaseL0[bin]);
+          if (listed[1]) InterlockedIncrement(&Context->Mpo.H3PhaseL1[bin]);
+        }
+      }
       status = STATUS_SUCCESS;
     }
     InterlockedExchange(&Context->MpoHoldLock, 0);
@@ -1204,7 +1217,12 @@ _Use_decl_annotations_ VOID AdmissionMpoCommitPendingSource(
                                ? &Context->Mpo.H2CommitsFromDpc
                            : Source == ADMISSION_MPO_TIMING_COMMIT_TICK
                                ? &Context->Mpo.H2CommitsFromTick
+                           : Source == ADMISSION_MPO_TIMING_COMMIT_DEADLINE
+                               ? &Context->Mpo.H3CommitsDeadline
                                : &Context->Mpo.H2CommitsFromLatch);
+      if (Source == ADMISSION_MPO_TIMING_COMMIT_DPC)
+        InterlockedIncrement(&Context->Mpo.H3CommitsLate);
+      InterlockedExchange64(&Context->MpoLastCommitQpc, now);
       if (taken.ListedMask == 3u)
         InterlockedIncrement(&Context->Mpo.H2TwoLayerCommits);
       if (frequency > 0 && Context->MpoHoldFirstQpc != 0 &&
@@ -1250,6 +1268,61 @@ static BOOLEAN AdmissionMpoCommitSync(PVOID Opaque) {
   return TRUE;
 }
 
+static BOOLEAN AdmissionMpoCommitSyncDeadline(PVOID Opaque) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Opaque;
+  if (context != NULL && AdmissionScanoutMpoGateFree(context))
+    AdmissionMpoCommitPendingSource(context, ADMISSION_MPO_TIMING_COMMIT_DEADLINE);
+  return TRUE;
+}
+
+/* HOLD-3: the frame deadline fired (DISPATCH_LEVEL). */
+static EXT_CALLBACK AdmissionMpoDeadlineCallback;
+static VOID AdmissionMpoDeadlineCallback(_In_ PEX_TIMER Timer, _In_opt_ PVOID Opaque) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Opaque;
+  LARGE_INTEGER f;
+  LONGLONG now, us;
+  LONG err;
+  BOOLEAN done = FALSE;
+  UNREFERENCED_PARAMETER(Timer);
+  if (context == NULL)
+    return;
+  now = KeQueryPerformanceCounter(&f).QuadPart;
+  InterlockedExchange(&context->MpoDeadlineArmed, 0);
+  if (f.QuadPart > 0) {
+    us = (now - context->MpoDeadlineQpc) * 1000000LL / f.QuadPart;
+    err = us > 0x7fffffffLL ? 0x7fffffff : us < -0x7fffffffLL ? -0x7fffffff : (LONG)us;
+    if (InterlockedIncrement(&context->Mpo.H3DeadlineErrN) == 1 ||
+        err < context->Mpo.H3DeadlineErrMinUs)
+      InterlockedExchange(&context->Mpo.H3DeadlineErrMinUs, err);
+    if (err > context->Mpo.H3DeadlineErrMaxUs)
+      InterlockedExchange(&context->Mpo.H3DeadlineErrMaxUs, err);
+    InterlockedExchangeAdd(&context->Mpo.H3DeadlineErrSumUs, err);
+  }
+  if (InterlockedCompareExchange(&context->MpoCommitDpcReady, 0, 0) == 0 ||
+      !context->InterfaceValid ||
+      context->Interface.DxgkCbSynchronizeExecution == NULL)
+    return;
+  (void)context->Interface.DxgkCbSynchronizeExecution(
+      context->Interface.DeviceHandle, AdmissionMpoCommitSyncDeadline, context,
+      0u, &done);
+}
+
+/* HOLD-3: a latch or a vertical tick (scan-out ISR).  A latch more than 1.5
+ * frames after its commit is a missed vblank. */
+_Use_decl_annotations_ VOID AdmissionMpoNoteVsync(ADMISSION_CONTEXT *Context,
+                                                  BOOLEAN Latch) {
+  const LONGLONG now = KeQueryPerformanceCounter(NULL).QuadPart;
+  if (Context == NULL)
+    return;
+  if (Latch) {
+    const LONGLONG commit = InterlockedExchange64(&Context->MpoLastCommitQpc, 0);
+    if (commit != 0 && Context->MpoPeriodQpc > 0 &&
+        now - commit > Context->MpoPeriodQpc + Context->MpoPeriodQpc / 2)
+      InterlockedIncrement(&Context->Mpo.H3MissedVblanks);
+  }
+  InterlockedExchange64(&Context->MpoLastVsyncQpc, now);
+}
+
 static KDEFERRED_ROUTINE AdmissionMpoCommitDpcRoutine;
 static VOID AdmissionMpoCommitDpcRoutine(_In_ PKDPC Dpc,
                                          _In_opt_ PVOID DeferredContext,
@@ -1265,6 +1338,28 @@ static VOID AdmissionMpoCommitDpcRoutine(_In_ PKDPC Dpc,
       !context->InterfaceValid ||
       context->Interface.DxgkCbSynchronizeExecution == NULL)
     return;
+  /* HOLD-3: a swap outstanding -> the latch commits; before this frame's
+   * deadline -> arm the deadline timer (once); after it -> commit now. */
+  if (!AdmissionScanoutMpoGateFree(context) || !context->MpoHold.Valid)
+    return;
+  if (context->MpoDeadlineTimer != NULL) {
+    LARGE_INTEGER f;
+    long long deadline = 0, wait = 0;
+    const LONGLONG now = KeQueryPerformanceCounter(&f).QuadPart;
+    if (AdmissionMpoHoldDeadline(now, InterlockedCompareExchange64(
+                                          &context->MpoLastVsyncQpc, 0, 0),
+                                 context->MpoPeriodQpc, context->MpoLeadQpc,
+                                 &deadline, &wait)) {
+      if (InterlockedCompareExchange(&context->MpoDeadlineArmed, 1, 0) == 0 &&
+          f.QuadPart > 0) {
+        context->MpoDeadlineQpc = deadline;
+        InterlockedIncrement(&context->Mpo.H3TimerArms);
+        (void)ExSetTimer(context->MpoDeadlineTimer,
+                         -(LONGLONG)((wait * 10000000LL) / f.QuadPart), 0LL, NULL);
+      }
+      return;
+    }
+  }
   (void)context->Interface.DxgkCbSynchronizeExecution(
       context->Interface.DeviceHandle, AdmissionMpoCommitSync, context, 0u,
       &done);
@@ -1275,6 +1370,24 @@ _Use_decl_annotations_ VOID AdmissionMpoCommitDpcStart(ADMISSION_CONTEXT *Contex
     return;
   KeInitializeDpc(&Context->MpoCommitDpc, AdmissionMpoCommitDpcRoutine, Context);
   Context->MpoHoldFirstQpc = 0;
+  /* HOLD-3: the deadline timer; without it Set3 commits through the DPC at
+   * once (HOLD-2 behaviour). */
+  Context->MpoDeadlineArmed = 0;
+  Context->MpoLastVsyncQpc = 0;
+  Context->MpoLastCommitQpc = 0;
+  if (Context->MpoDeadlineTimer == NULL)
+    Context->MpoDeadlineTimer = ExAllocateTimer(AdmissionMpoDeadlineCallback,
+                                                Context, EX_TIMER_HIGH_RESOLUTION);
+  {
+    LARGE_INTEGER f;
+    (void)KeQueryPerformanceCounter(&f);
+    /* Period from the panel rate (fixed 16.16 Hz, apple_agx_vsync.h). */
+    Context->MpoPeriodQpc = (LONGLONG)(((ULONGLONG)f.QuadPart * 65536ULL) /
+                                       APPLE_AGX_VSYNC_RATE_NUMERATOR);
+    Context->MpoLeadQpc = (LONGLONG)(((ULONGLONG)f.QuadPart * Context->MpoLeadUs) /
+                                     1000000ULL);
+    Context->Mpo.H3LeadUs = (LONG)Context->MpoLeadUs;
+  }
   RtlZeroMemory(&Context->MpoTiming, sizeof(Context->MpoTiming));
   Context->MpoTiming.Version = ADMISSION_MPO_TIMING_VERSION;
   {
@@ -1290,6 +1403,12 @@ _Use_decl_annotations_ VOID AdmissionMpoCommitDpcStop(ADMISSION_CONTEXT *Context
   if (Context == NULL ||
       InterlockedExchange(&Context->MpoCommitDpcReady, 0) == 0)
     return;
+  /* HOLD-3: cancel the deadline timer and wait for a running callback. */
+  if (Context->MpoDeadlineTimer != NULL) {
+    (void)ExDeleteTimer(Context->MpoDeadlineTimer, TRUE, TRUE, NULL);
+    Context->MpoDeadlineTimer = NULL;
+  }
+  InterlockedExchange(&Context->MpoDeadlineArmed, 0);
   (void)KeRemoveQueueDpc(&Context->MpoCommitDpc);
   KeFlushQueuedDpcs();
 }

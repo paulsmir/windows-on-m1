@@ -549,6 +549,31 @@ Exit:
 
 /* S2: a device-key REG_DWORD switch; TRUE only for the value 1 (the
  * backend_platform_windows.c Wom1 switch pattern).  PASSIVE_LEVEL. */
+/* HOLD-3: a DWORD device parameter, Default when absent. */
+static ULONG AdmissionScanoutSwitchValue(ADMISSION_CONTEXT *Context,
+                                         PCWSTR ValueName, ULONG Default) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u, result = Default;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return Default;
+  RtlInitUnicodeString(&name, ValueName);
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG))
+    result = *(const ULONG *)value->Data;
+  ZwClose(key);
+  return result;
+}
+
 static BOOLEAN AdmissionScanoutSwitchEnabled(ADMISSION_CONTEXT *Context,
                                              PCWSTR ValueName) {
   HANDLE key = NULL;
@@ -684,6 +709,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
     AdmissionMpoPublishStart(Context);
     AdmissionMpoHoldClear(&Context->MpoHold);
     Context->MpoHoldLock = 0;
+    /* HOLD-3: the frame-deadline lead (us), Wom1MpoLeadUs, default 5000
+     * (EXP2384: the latest submit seen still latching was 4.08 ms before the
+     * vblank), clamped to 1000..12000. */
+    Context->MpoLeadUs = AdmissionScanoutSwitchValue(Context, L"Wom1MpoLeadUs", 5000u);
+    if (Context->MpoLeadUs < 1000u) Context->MpoLeadUs = 1000u;
+    if (Context->MpoLeadUs > 12000u) Context->MpoLeadUs = 12000u;
     /* HOLD-2: Set3 commits through this DPC. */
     AdmissionMpoCommitDpcStart(Context);
     /* CUR-1 v2: zero the scan-out scratch (PASSIVE, before any Set3) and
@@ -1878,6 +1909,7 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
         InterlockedExchange(&runtime->PresentGate, 0);
         /* HOLD-1: the held set goes out on this latch (its vsync info,
          * already taken above, belongs to the swap that just latched). */
+        AdmissionMpoNoteVsync(Context, TRUE);
         AdmissionMpoTimingRecord(Context, ADMISSION_MPO_TIMING_LATCH,
                                  (ULONG)mpo_count,
                                  (ULONGLONG)mpo_info[0].PresentId);
@@ -1888,6 +1920,8 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
     }
   }
   if (VerticalTick) {
+    /* HOLD-3: the frame boundary for the deadline when no latch arrives. */
+    AdmissionMpoNoteVsync(Context, FALSE);
     /* HOLD-1: a held set whose commit met an obstacle retries per tick. */
     if (InterlockedCompareExchange(&runtime->PresentGate, 0, 0) == 0)
       AdmissionMpoCommitPendingSource(Context, ADMISSION_MPO_TIMING_COMMIT_TICK);

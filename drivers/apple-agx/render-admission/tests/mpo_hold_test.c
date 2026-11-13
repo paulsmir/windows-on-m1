@@ -166,6 +166,89 @@ static void TestHold2LongSequenceReportsEveryAcceptedIdOnce(void) {
   ExpectReportedEqualsAccepted(&m);
 }
 
+
+/* ---- HOLD-3 deadline model: period 1000, lead 300 -> deadline at 700 of
+ * each frame; the commit is issued at the deadline (one swap per frame), at
+ * once for a flip after it, at the latch for a swap outstanding. ---- */
+static void TestHold3DeadlineFunction(void) {
+  long long d = -1, w = -1;
+  CHECK(AdmissionMpoHoldDeadline(1100, 1000, 1000, 300, &d, &w) == 1u && d == 1700 && w == 600);
+  CHECK(AdmissionMpoHoldDeadline(1699, 1000, 1000, 300, &d, &w) == 1u && w == 1);
+  CHECK(AdmissionMpoHoldDeadline(1700, 1000, 1000, 300, &d, &w) == 0u && d == 1700 && w == 0);
+  CHECK(AdmissionMpoHoldDeadline(3200, 1000, 1000, 300, &d, &w) == 1u && d == 3700 && w == 500); /* missed ticks */
+  CHECK(AdmissionMpoHoldDeadline(1100, 0, 1000, 300, &d, &w) == 0u);   /* no vsync yet: now */
+  CHECK(AdmissionMpoHoldDeadline(900, 1000, 1000, 300, &d, &w) == 0u);  /* clock before vsync: now */
+  CHECK(AdmissionMpoHoldDeadline(1100, 1000, 1000, 1000, &d, &w) == 0u); /* lead >= period */
+}
+
+typedef struct { MODEL M; long long Now, LastVsync, TimerAt; unsigned int TimerArmed, DeadlineCommits, LateCommits; } MODEL3;
+static void M3Dpc(MODEL3 *T) {                          /* the HOLD-2 DPC, HOLD-3 rules */
+  long long d, w;
+  if (!T->M.DpcQueued) return;
+  T->M.DpcQueued = 0u;
+  if (T->M.Outstanding || !T->M.Hold.Valid) return;
+  if (AdmissionMpoHoldDeadline(T->Now, T->LastVsync, 1000, 300, &d, &w)) {
+    if (!T->TimerArmed) { T->TimerArmed = 1u; T->TimerAt = d; }
+  } else { ModelCommit(&T->M, 1u); T->LateCommits++; }
+}
+static void M3Advance(MODEL3 *T, long long To) {        /* timer fires at its time */
+  T->Now = To;
+  if (T->TimerArmed && T->Now >= T->TimerAt) {
+    T->TimerArmed = 0u;
+    if (!T->M.Outstanding && T->M.Hold.Valid) { ModelCommit(&T->M, 1u); T->DeadlineCommits++; }
+  }
+}
+static void M3Latch(MODEL3 *T, long long At) { M3Advance(T, At); T->LastVsync = At; ModelLatch(&T->M); }
+static void M3Init(MODEL3 *T) { memset(T, 0, sizeof(*T)); ModelInit(&T->M); T->LastVsync = 1000; T->Now = 1000; }
+
+static void TestHold3TwoPhasesOneCommitAtTheDeadline(void) {
+  MODEL3 t; M3Init(&t);
+  M3Advance(&t, 1150); CHECK(ModelSet3(&t.M, 1u, 1u) == ADMISSION_MPO_SET3_MERGED_FIRST); M3Dpc(&t);
+  CHECK(t.TimerArmed && t.TimerAt == 1700 && t.M.Commits == 0u);
+  M3Advance(&t, 1400); CHECK(ModelSet3(&t.M, 0u, 2u) == ADMISSION_MPO_SET3_MERGED_SECOND); M3Dpc(&t);
+  CHECK(t.M.Commits == 0u);                             /* still before the deadline */
+  M3Advance(&t, 1700);
+  CHECK(t.M.Commits == 1u && t.DeadlineCommits == 1u && t.M.TwoLayerCommits == 1u);
+  M3Latch(&t, 2000); ExpectReportedEqualsAccepted(&t.M);
+}
+static void TestHold3FlipAfterTheDeadlineCommitsAtOnce(void) {
+  MODEL3 t; M3Init(&t);
+  M3Advance(&t, 1800); ModelSet3(&t.M, 1u, 5u); M3Dpc(&t);
+  CHECK(t.LateCommits == 1u && !t.TimerArmed && t.M.Commits == 1u);
+  M3Latch(&t, 2000); ExpectReportedEqualsAccepted(&t.M);
+}
+static void TestHold3OutstandingAtTheDeadlineCommitsAtTheLatch(void) {
+  MODEL3 t; M3Init(&t);
+  M3Advance(&t, 1800); ModelSet3(&t.M, 1u, 1u); M3Dpc(&t);  /* late: outstanding */
+  M3Advance(&t, 1900); ModelSet3(&t.M, 1u, 2u); M3Dpc(&t);  /* outstanding: the latch commits */
+  CHECK(t.M.Commits == 1u && !t.TimerArmed);
+  M3Latch(&t, 2000);
+  CHECK(t.M.Commits == 2u && t.M.LatchCommits == 1u);
+  M3Latch(&t, 3000); ExpectReportedEqualsAccepted(&t.M);
+}
+static void TestHold3SameLayerBeforeTheDeadlineIsBusy(void) {
+  MODEL3 t; M3Init(&t);
+  M3Advance(&t, 1100); ModelSet3(&t.M, 1u, 1u); M3Dpc(&t);
+  M3Advance(&t, 1200); CHECK(ModelSet3(&t.M, 1u, 2u) == ADMISSION_MPO_SET3_BUSY);
+  M3Advance(&t, 1700); M3Latch(&t, 2000);
+  CHECK(ModelSet3(&t.M, 1u, 2u) == ADMISSION_MPO_SET3_MERGED_FIRST);
+  M3Dpc(&t); M3Advance(&t, 2700); M3Latch(&t, 3000);
+  ExpectReportedEqualsAccepted(&t.M);
+}
+static void TestHold3IdleArmsNoTimer(void) {
+  MODEL3 t; unsigned int f; M3Init(&t);
+  for (f = 1u; f <= 5u; ++f) { M3Dpc(&t); M3Latch(&t, 1000 + 1000 * (long long)f); }
+  CHECK(!t.TimerArmed && t.M.Commits == 0u);
+}
+static void TestHold3StopWithAnArmedTimer(void) {
+  MODEL3 t; M3Init(&t);
+  M3Advance(&t, 1100); ModelSet3(&t.M, 0u, 1u); M3Dpc(&t);
+  CHECK(t.TimerArmed);
+  t.TimerArmed = 0u; AdmissionMpoHoldClear(&t.M.Hold);  /* ExDeleteTimer(cancel, wait) + clear */
+  M3Advance(&t, 1700);
+  CHECK(t.M.Commits == 0u);
+}
+
 int main(void) {
   TestMergeOfTwoLayersIntoOneSet();
   TestSameLayerSecondFlipIsRefused();
@@ -176,6 +259,13 @@ int main(void) {
   TestHold2SameLayerSecondFlipIsBusy();
   TestHold2StopWithAQueuedDpc();
   TestHold2LongSequenceReportsEveryAcceptedIdOnce();
+  TestHold3DeadlineFunction();
+  TestHold3TwoPhasesOneCommitAtTheDeadline();
+  TestHold3FlipAfterTheDeadlineCommitsAtOnce();
+  TestHold3OutstandingAtTheDeadlineCommitsAtTheLatch();
+  TestHold3SameLayerBeforeTheDeadlineIsBusy();
+  TestHold3IdleArmsNoTimer();
+  TestHold3StopWithAnArmedTimer();
   if (Failures) { fprintf(stderr, "mpo_hold_test: %u failure(s)\n", Failures); return EXIT_FAILURE; }
   printf("mpo_hold_test: OK\n");
   return EXIT_SUCCESS;

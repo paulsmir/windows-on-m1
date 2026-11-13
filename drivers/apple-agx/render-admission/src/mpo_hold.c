@@ -78,3 +78,21 @@ unsigned int AdmissionMpoHoldSet3(ADMISSION_MPO_HOLD *Hold,
   return first != 0u ? ADMISSION_MPO_SET3_MERGED_FIRST
                      : ADMISSION_MPO_SET3_MERGED_SECOND;
 }
+
+unsigned int AdmissionMpoHoldDeadline(long long Now, long long LastVsync,
+                                      long long Period, long long Lead,
+                                      long long *Deadline, long long *Wait) {
+  long long start, deadline;
+  if (Deadline != 0) *Deadline = 0;
+  if (Wait != 0) *Wait = 0;
+  if (Deadline == 0 || Wait == 0 || LastVsync <= 0 || Period <= 0 ||
+      Lead < 0 || Lead >= Period || Now < LastVsync)
+    return 0u;
+  start = LastVsync + ((Now - LastVsync) / Period) * Period;
+  deadline = start + Period - Lead;
+  *Deadline = deadline;
+  if (Now >= deadline)
+    return 0u;
+  *Wait = deadline - Now;
+  return 1u;
+}

@@ -145,7 +145,7 @@ typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT {
  * switch is effective (switch = 1 AND broker CAPABILITIES bit 9 AND the
  * REG_NEGOTIATED read-back); all zero otherwise.  Counters are interlocked
  * at any IRQL. */
-#define ADMISSION_MPO_RECEIPT_VERSION 5u /* v5: tail ... Ids, HOLD-2 (H2*), CUR-1 v2 */
+#define ADMISSION_MPO_RECEIPT_VERSION 6u /* v6: tail ... Ids, HOLD-2 (H2*), CUR-1 v2, HOLD-3 (H3*) */
 #define ADMISSION_MPO_RECEIPT_REASONS 40u
 /* Key: clip width (12 bits) | height << 12 | format class << 24 |
  * blend << 28; 0 = free row.  Origin/DstSize: x | y << 16. */
@@ -290,6 +290,15 @@ typedef struct _ADMISSION_MPO_RECEIPT {
    * (count, min, max, sum; the read + fill + barrier). */
   volatile LONG ScratchCommits, CropCommits, ScratchSkippedWrites;
   volatile LONG ScratchCopyTicks[4];
+  /* HOLD-3: commits at the frame deadline / by the DPC after the deadline,
+   * timer arms, deadline error (actual - planned, us: n, min, max, sum),
+   * swaps whose latch came more than 1.5 frames after the commit, the lead
+   * in use (us), and the Set3 phase after the last vsync per layer
+   * (L0 / L1, 2 ms bins, the last bin = 16 ms and later). */
+  volatile LONG H3CommitsDeadline, H3CommitsLate, H3TimerArms;
+  volatile LONG H3DeadlineErrN, H3DeadlineErrMinUs, H3DeadlineErrMaxUs, H3DeadlineErrSumUs;
+  volatile LONG H3MissedVblanks, H3LeadUs;
+  volatile LONG H3PhaseL0[9], H3PhaseL1[9];
 } ADMISSION_MPO_RECEIPT;
 /* HOLD-2 receipt: Wom1MpoTiming, the last ADMISSION_MPO_TIMING_ENTRIES Set3
  * outcomes, commits (by source) and latches with QPC, CPU and IRQL. */
@@ -302,6 +311,7 @@ typedef struct _ADMISSION_MPO_RECEIPT {
 #define ADMISSION_MPO_TIMING_COMMIT_LATCH 5u
 #define ADMISSION_MPO_TIMING_COMMIT_TICK 6u
 #define ADMISSION_MPO_TIMING_LATCH 7u
+#define ADMISSION_MPO_TIMING_COMMIT_DEADLINE 8u
 typedef struct _ADMISSION_MPO_TIMING_ENTRY {
   ULONGLONG Qpc;
   ULONG Id;          /* low 32 bits of the first PresentId */
@@ -1247,6 +1257,17 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG MpoCommitDpcReady;
   LONGLONG MpoHoldFirstQpc;
   ADMISSION_MPO_TIMING MpoTiming;
+  /* HOLD-3: the frame-deadline commit timer (high resolution), armed only
+   * while a set is pending; the last vsync / latch, the last commit and the
+   * planned deadline (QPC); the panel period and the lead (QPC). */
+  PEX_TIMER MpoDeadlineTimer;
+  volatile LONG MpoDeadlineArmed;
+  volatile LONG64 MpoLastVsyncQpc;
+  volatile LONG64 MpoLastCommitQpc;
+  LONGLONG MpoDeadlineQpc;
+  LONGLONG MpoPeriodQpc;
+  LONGLONG MpoLeadQpc;
+  ULONG MpoLeadUs;
   /* CUR-1 v2: which scan-out scratch DCP scans (mpo_layers.h). */
   ADMISSION_MPO_SCRATCH_STATE MpoScratch;
   ULONGLONG MpoScratchPoolOffset;   /* scratch 0; scratch 1 = + STEP */
@@ -2629,6 +2650,8 @@ VOID AdmissionMpoTimingRecord(_In_opt_ ADMISSION_CONTEXT *Context, _In_ ULONG Ki
 /* Scan-out start / stop (PASSIVE). */
 VOID AdmissionMpoCommitDpcStart(_In_opt_ ADMISSION_CONTEXT *Context);
 VOID AdmissionMpoCommitDpcStop(_In_opt_ ADMISSION_CONTEXT *Context);
+/* HOLD-3: a latch (Latch TRUE) or a vertical tick seen by the scan-out ISR. */
+VOID AdmissionMpoNoteVsync(_In_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Latch);
 /* Queue one V3 commit (Count 1 = removal, 2 = two planes); Completion is
  * reported at its latch.  PrimaryAddress is the LayerIndex 0 surface
  * (CRTC_VSYNC physical address bookkeeping). */
