@@ -58,7 +58,7 @@ int main(void) {
     const ADMISSION_UMD_PRIMARY_MAPPING gm = AdmissionUmdPrimaryMap(
         0, 0, 0, AdmissionUmdStorageDisplayable(A8B8G8R8),
         ADMISSION_UMD_CREATE_RUNTIME_PRIMARY);
-    ADMISSION_UMD_PRIMARY_RETENTION state = {0u, 0, 0u};
+    ADMISSION_UMD_PRIMARY_RETENTION state = {0};
     int object = 0;
     assert(gm.AllocationPrimary == 1u && gm.VidPnSourceId == 0u &&
            gm.WrittenPrimary == 0u && gm.DeviceAssociated == 0u &&
@@ -75,7 +75,7 @@ int main(void) {
   {
     const ADMISSION_UMD_PRIMARY_MAPPING mode = AdmissionUmdPrimaryMap(
         1, 0, 0, AdmissionUmdStorageDisplayable(A8R8G8B8), 0u);
-    ADMISSION_UMD_PRIMARY_RETENTION state = {0u, 0, 0u};
+    ADMISSION_UMD_PRIMARY_RETENTION state = {0};
     int object = 0;
     assert(mode.DeviceAssociated == 1u && mode.RetirementPrimary == 1u);
     assert(AdmissionUmdRetentionSetDisplayMode(&state, 0x80u, 1) == 0);

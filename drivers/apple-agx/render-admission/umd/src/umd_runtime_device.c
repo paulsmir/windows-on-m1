@@ -760,15 +760,18 @@ HRESULT AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *device,
   if (FAILED(screenResult) || screenUndeallocated != 0u)
     return FAILED(screenResult) ? screenResult : E_FAIL;
   {
-    /* PL-1: the retained displayed primary goes before the device's other
-     * retirements and the kernel context. */
-    ADMISSION_UMD_RETIREMENT *retained = (ADMISSION_UMD_RETIREMENT *)
-        AdmissionUmdRetentionDeviceDestroy(&device->PrimaryRetention);
-    if (retained != NULL) {
+    /* PL-1/PL-1b: the retained displayed primary and every superseded one go
+     * before the device's other retirements and the kernel context (path 4).
+     * The helper hands back one object per call and NULL when none is
+     * left; a failed deallocation is queued for the finalize below. */
+    ADMISSION_UMD_RETIREMENT *retained;
+    while ((retained = (ADMISSION_UMD_RETIREMENT *)
+                AdmissionUmdRetentionDeviceDestroy(
+                    &device->PrimaryRetention)) != NULL) {
       HRESULT released = AdmissionUmdRetirementDeallocate(&device->Retirement,
                                                           retained);
-      UINT values[3] = {(UINT)retained->KernelAllocation, 3u, (UINT)released};
-      AdmissionUmdDiagnostic("measure-primary-retention", released, values, 3u);
+      AdmissionUmdRetentionReceipt(device, (UINT)retained->KernelAllocation,
+                                   4u, released);
       if (FAILED(released))
         AdmissionUmdRetirementQueue(&device->Retirement, retained);
       else

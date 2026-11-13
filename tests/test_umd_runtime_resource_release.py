@@ -50,6 +50,9 @@ static ADMISSION_UMD_DEVICE*AdmissionUmdDeviceFromHandle(D3D10DDI_HDEVICE x){ret
 static ADMISSION_UMD_RESOURCE*AdmissionUmdResourceFromHandle(D3D10DDI_HRESOURCE x){return (ADMISSION_UMD_RESOURCE*)x.pDrvPrivate;}
 static unsigned errors,closes,stale;
 static void AdmissionUmdSetError(ADMISSION_UMD_DEVICE*,HRESULT){++errors;}
+/* PL-1b receipt (umd_internal.h): path 1 = retained at its destroy. */
+static unsigned retained_rows;
+static void AdmissionUmdRetentionReceipt(const ADMISSION_UMD_DEVICE*,UINT,UINT path,HRESULT){if(path==1u)++retained_rows;}
 /* Runtime resource objects: alive until the runtime's DestroyResource returns. */
 static bool runtime_alive[16];
 static HRESULT deallocate(void*,const ADMISSION_UMD_RETIREMENT*r){
@@ -103,19 +106,23 @@ int main(){
  AdmissionUmdDestroyResource(dh,rh);assert(AdmissionUmdRetirementDrain(&d.Retirement));
  if(!(closes==6&&stale==0&&errors==0)){printf("closes=%u stale=%u errors=%u\n",closes,stale,errors);return 1;}
  /* PL-1: the displayed primary (device-associated, HandleList) survives the
-  * runtime's DestroyResource and is released, without naming the dead
-  * runtime object, after the next SetDisplayMode of another allocation. */
+  * runtime's DestroyResource.  PL-1b: the next SetDisplayMode of another
+  * allocation supersedes it (no deallocation); it is released, without
+  * naming the dead runtime object, at device destroy. */
  ADMISSION_UMD_RESOURCE mode=make(7,1u,TRUE,FALSE,0u);mode.Retirement->DeviceAssociated=TRUE;
  assert(AdmissionUmdRetentionSetDisplayMode(&d.PrimaryRetention,mode.KernelAllocation,1)==nullptr);
  unsigned before=closes;runtime_destroy(&d,&mode,7);
- assert(closes==before&&d.PrimaryRetention.Retained!=nullptr);
- ADMISSION_UMD_RETIREMENT*rel=(ADMISSION_UMD_RETIREMENT*)AdmissionUmdRetentionSetDisplayMode(&d.PrimaryRetention,0x7777u,1);
- assert(rel&&AdmissionUmdRetirementDeallocate(&d.Retirement,rel)==S_OK);AdmissionUmdRetirementFree(rel);
- if(!(closes==before+1&&stale==0)){printf("PL-1 closes=%u stale=%u\n",closes,stale);return 1;}
+ assert(closes==before&&d.PrimaryRetention.Retained!=nullptr&&retained_rows==1u);
+ assert(AdmissionUmdRetentionSetDisplayMode(&d.PrimaryRetention,0x7777u,1)==nullptr);
+ assert(closes==before&&d.PrimaryRetention.Retained==nullptr&&d.PrimaryRetention.SupersededCount==1u);
  /* A non-mode device-associated primary is released at destroy as before. */
  ADMISSION_UMD_RESOURCE other=make(8,1u,TRUE,FALSE,0u);other.Retirement->DeviceAssociated=TRUE;
  before=closes;runtime_destroy(&d,&other,8);assert(AdmissionUmdRetirementDrain(&d.Retirement));
  if(!(closes==before+1&&stale==0)){printf("PL-1 other closes=%u stale=%u\n",closes,stale);return 1;}
+ before=closes;
+ for(ADMISSION_UMD_RETIREMENT*rel;(rel=(ADMISSION_UMD_RETIREMENT*)AdmissionUmdRetentionDeviceDestroy(&d.PrimaryRetention))!=nullptr;){
+  assert(AdmissionUmdRetirementDeallocate(&d.Retirement,rel)==S_OK);AdmissionUmdRetirementFree(rel);}
+ if(!(closes==before+1&&stale==0)){printf("PL-1b device destroy closes=%u stale=%u\n",closes,stale);return 1;}
  assert(AdmissionUmdRetentionDeviceDestroy(&d.PrimaryRetention)==nullptr);
  puts("EXP975 runtime resource release: PASS");
 }

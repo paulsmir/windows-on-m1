@@ -40,6 +40,13 @@ class PrimaryRetentionTests(unittest.TestCase):
         self.assertIn("AdmissionUmdRetentionDestroy(", umd)
         self.assertIn("AdmissionUmdRetentionSetDisplayMode(", umd)
 
+    def test_device_destroy_releases_every_held_primary(self):
+        # PL-1b: the device-destroy helper hands back one object per call;
+        # a single call would leak the superseded primaries' allocations.
+        runtime = (UMD / "src/umd_runtime_device.c").read_text()
+        self.assertRegex(runtime, r"while \(\(retained = \(ADMISSION_UMD_RETIREMENT \*\)\s*"
+                                  r"AdmissionUmdRetentionDeviceDestroy\(")
+
 
 if __name__ == "__main__":
     unittest.main()

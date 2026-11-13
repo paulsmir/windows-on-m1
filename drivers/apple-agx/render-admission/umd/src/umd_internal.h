@@ -441,6 +441,47 @@ HRESULT AdmissionUmdScreenFreeAllocation(ADMISSION_UMD_DEVICE *Device,
 #endif
 VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                             const UINT *Values, UINT Count);
+/* EXP2360 receipt-only (architect 2026-11-12): which UMD device, runtime
+ * device and kernel context a DWM row belongs to (the kernel D3DKMT device
+ * handle is the runtime's and not visible here). {device pointer low/high,
+ * hRTDevice low, KernelContext low}.  Here (not in umd.c) because
+ * umd_runtime_device.c also writes PL-1b rows and is linked without umd.c
+ * (ICD, one-shot). */
+static inline void AdmissionUmdDeviceIds(const ADMISSION_UMD_DEVICE *Device,
+                                         UINT *Ids) {
+  Ids[0] = (UINT)(ULONG_PTR)Device;
+  Ids[1] = (UINT)(((ULONG_PTR)Device >> 16) >> 16);
+  Ids[2] = Device != NULL ? (UINT)(ULONG_PTR)Device->RuntimeDevice.handle : 0u;
+  Ids[3] = Device != NULL ? (UINT)(ULONG_PTR)Device->KernelContext : 0u;
+}
+/* PL-1b receipt "measure-primary-retention" (receipt-only).  Path: 1 retained
+ * at its destroy, 2 released by the superseded bound, 3 superseded (no
+ * deallocation), 4 released at device destroy.  {allocation, path, HRESULT,
+ * AdmissionUmdDeviceIds[4], hDevice low/high that pfnDeallocateCb receives
+ * for this device's retirements (the retirement queue's callback context's
+ * RuntimeDevice.handle, AdmissionUmdDeallocateResource), superseded count
+ * after the step}. */
+#define ADMISSION_UMD_RETENTION_RECEIPT_VALUES 10u
+static inline void AdmissionUmdRetentionReceipt(
+    const ADMISSION_UMD_DEVICE *Device, UINT Allocation, UINT Path,
+    HRESULT Result) {
+  UINT values[ADMISSION_UMD_RETENTION_RECEIPT_VALUES];
+  const ADMISSION_UMD_DEVICE *owner = NULL;
+  ULONG_PTR deallocateDevice = 0u;
+  if (Device != NULL)
+    owner = (const ADMISSION_UMD_DEVICE *)Device->Retirement.CallbackContext;
+  if (owner != NULL)
+    deallocateDevice = (ULONG_PTR)owner->RuntimeDevice.handle;
+  values[0] = Allocation;
+  values[1] = Path;
+  values[2] = (UINT)Result;
+  AdmissionUmdDeviceIds(Device, &values[3]);
+  values[7] = (UINT)deallocateDevice;
+  values[8] = (UINT)((deallocateDevice >> 16) >> 16);
+  values[9] = Device != NULL ? Device->PrimaryRetention.SupersededCount : 0u;
+  AdmissionUmdDiagnostic("measure-primary-retention", Result, values,
+                         ADMISSION_UMD_RETENTION_RECEIPT_VALUES);
+}
 #ifndef ADMISSION_UMD_PRESENT_MEASURE_KIND_DEFINED
 #define ADMISSION_UMD_PRESENT_MEASURE_KIND_DEFINED
 typedef enum ADMISSION_UMD_PRESENT_MEASURE_KIND {

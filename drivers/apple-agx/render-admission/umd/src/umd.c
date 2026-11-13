@@ -314,17 +314,7 @@ static HRESULT AdmissionUmdSubmitClear(
  * into a module, as module-name prefix and offset, flush, and continue the
  * search (the process fails exactly as before). */
 static PVOID AdmissionUmdNullCallHandler;
-/* EXP2360 receipt-only (architect 2026-11-12): which UMD device, runtime
- * device and kernel context a DWM row belongs to (the kernel D3DKMT device
- * handle is the runtime's and not visible here). {device pointer low/high,
- * hRTDevice low, KernelContext low}. */
-static void AdmissionUmdDeviceIds(const ADMISSION_UMD_DEVICE *Device,
-                                  UINT *Ids) {
-  Ids[0] = (UINT)(ULONG_PTR)Device;
-  Ids[1] = (UINT)(((ULONG_PTR)Device >> 16) >> 16);
-  Ids[2] = Device != NULL ? (UINT)(ULONG_PTR)Device->RuntimeDevice.handle : 0u;
-  Ids[3] = Device != NULL ? (UINT)(ULONG_PTR)Device->KernelContext : 0u;
-}
+/* AdmissionUmdDeviceIds: umd_internal.h (PL-1b). */
 
 
 static void AdmissionUmdModuleOffset(ULONG_PTR Address, UINT *Name,
@@ -1185,8 +1175,8 @@ HRESULT AdmissionUmdReleaseRuntimeResource(
   if (AdmissionUmdRetentionDestroy(&device->PrimaryRetention, retirement,
                                    (unsigned int)retirement->KernelAllocation,
                                    retirement->DeviceAssociated)) {
-    UINT values[3] = {(UINT)retirement->KernelAllocation, 1u, 0u};
-    AdmissionUmdDiagnostic("measure-primary-retention", S_OK, values, 3u);
+    AdmissionUmdRetentionReceipt(device, (UINT)retirement->KernelAllocation,
+                                 1u, S_OK);
     return S_OK;
   }
   result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
@@ -1233,8 +1223,8 @@ VOID APIENTRY AdmissionUmdDestroyResource(
   if (AdmissionUmdRetentionDestroy(&device->PrimaryRetention, retirement,
                                    (unsigned int)retirement->KernelAllocation,
                                    retirement->DeviceAssociated)) {
-    UINT values[3] = {(UINT)retirement->KernelAllocation, 1u, 0u};
-    AdmissionUmdDiagnostic("measure-primary-retention", S_OK, values, 3u);
+    AdmissionUmdRetentionReceipt(device, (UINT)retirement->KernelAllocation,
+                                 1u, S_OK);
     return;
   }
   if (AdmissionUmdRetirementNeedsRuntimeResource(retirement)) {
@@ -1489,25 +1479,39 @@ HRESULT APIENTRY AdmissionUmdSetDisplayMode(
      * HRESULT, PrivateDriverFormatAttribute out}. "measure-": DWM's session
      * trace is refusals-only. */
     HRESULT result;
+    /* PL-1b receipt-only: the hDevice actually passed to the callback. */
+    HANDLE kernelDevice = device->RuntimeDevice.handle;
     AdmissionUmdCxxSiteFlush();
-    result = device->KernelCallbacks->pfnSetDisplayModeCb(
-        device->RuntimeDevice.handle, &setMode);
-    UINT values[7] = {(UINT)setMode.hPrimaryAllocation, (UINT)result,
+    result = device->KernelCallbacks->pfnSetDisplayModeCb(kernelDevice,
+                                                          &setMode);
+    /* {allocation, HRESULT, PrivateDriverFormatAttribute out,
+     * AdmissionUmdDeviceIds[4] (EXP2360), callback hDevice low/high}. */
+    UINT values[9] = {(UINT)setMode.hPrimaryAllocation, (UINT)result,
         setMode.PrivateDriverFormatAttribute};
     AdmissionUmdDeviceIds(device, &values[3]); /* EXP2360 */
-    AdmissionUmdDiagnostic("measure-dxgi-set-display-mode", result, values, 7u);
+    values[7] = (UINT)(ULONG_PTR)kernelDevice;
+    values[8] = (UINT)((((ULONG_PTR)kernelDevice) >> 16) >> 16);
+    AdmissionUmdDiagnostic("measure-dxgi-set-display-mode", result, values,
+                           ARRAYSIZE(values));
     {
-      /* PL-1: after the callback returned; a retained primary that is no
-       * longer the displayed one is released now (HandleList). */
+      /* PL-1b: after the callback returned, a retained primary of another
+       * allocation is superseded (kept, no deallocation: EXP2402 released it
+       * here and every release was followed by a hide of the source).  Only
+       * the oldest superseded one beyond the bound is released (HandleList). */
+      void *retainedBefore = device->PrimaryRetention.Retained;
+      UINT retainedAllocation =
+          (UINT)device->PrimaryRetention.RetainedAllocation;
       ADMISSION_UMD_RETIREMENT *released = (ADMISSION_UMD_RETIREMENT *)
           AdmissionUmdRetentionSetDisplayMode(
               &device->PrimaryRetention,
               (unsigned int)setMode.hPrimaryAllocation, SUCCEEDED(result));
+      if (retainedBefore != NULL && device->PrimaryRetention.Retained == NULL)
+        AdmissionUmdRetentionReceipt(device, retainedAllocation, 3u, S_OK);
       if (released != NULL) {
         HRESULT freed = AdmissionUmdRetirementDeallocate(&device->Retirement,
                                                         released);
-        UINT r[3] = {(UINT)released->KernelAllocation, 2u, (UINT)freed};
-        AdmissionUmdDiagnostic("measure-primary-retention", freed, r, 3u);
+        AdmissionUmdRetentionReceipt(device, (UINT)released->KernelAllocation,
+                                     2u, freed);
         if (FAILED(freed))
           AdmissionUmdRetirementQueue(&device->Retirement, released);
         else
