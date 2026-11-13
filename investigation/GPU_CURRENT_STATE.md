@@ -6464,3 +6464,20 @@ boot was run. The previous entry stays as written.
   map unless built with AGX_GPUVA_MAP_NO_TLBI). Effect on a running dispatch: unmeasured (counted in MP-1).
 - Consequence: the MP-1 hypothesis (data attribute) has a source basis - macOS has a cached user-buffer form that
   neither Asahi nor we use. Still a hypothesis until MP-1's rows are in.
+
+## UPDATE 2026-11-13T13:02:12Z - EXP2389..2391: SRV-1 confirmed; MP-1 inconclusive (variable did not reach the measured leaves)
+
+- SRV-1 (SRV buffer reads as device loads, opt-in): with the switch on the root-SRV gather rows equal the
+  raw-UAV rows (ours/macOS 3.98 -> 1.19 at 1 MB, 2.50 -> 1.32 at 64 MB); switch-off binding inert (gates PASS).
+  CONFIRMED; stays opt-in until the table-SRV robust form (SRV-1b) exists. Not a GravityMark lever.
+- Gather control rows reproduce across EXP2388/2389/2390: 4 MB 1.43, 16 MB 0.99..1.00, per-rep spread < 0.3 %.
+- MP-1 (EXP2390 off / EXP2391 on): INCONCLUSIVE. Coverage receipt: the cached encoding works (leaf ...C83 on
+  1000 leaves) but the probe's 85 MB regions and GravityMark's large buffers live in segment 3 (the pool
+  segment from Windows memory), which the rule excludes; big_cached 0 in both windows. Ratios unchanged, as they
+  must be. The EXP2239 exclusion had the same hole.
+- EXCLUDED with a count: broker TLB invalidations during the probe and GM windows = 0 in both boots.
+- Probe defect fixed: "missing records" were timed lists stamped after ExecuteCommandLists returned and
+  classified as fillers (reason 7).
+- MP-1b approved: the cached attribute also on GPU-only pool-segment allocations (measurement only; stale data
+  from CPU-side fills is a possible outcome), same rows, coverage line must show the probe regions cached, plus a
+  GM PERF window.
