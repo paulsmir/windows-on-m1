@@ -355,6 +355,37 @@ static ADMISSION_ALLOCATION_LIFE_ENTRY *AdmissionAllocationLifeSlot(
   return e;
 }
 
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+/* MP-2 (measurement only): device value Wom1LocalPlacementMinMiB, read at
+ * each GPU-only allocation of >= 16 MiB so a probe script can change it
+ * between arms of one boot. A GPU-only class allocation of at least that
+ * many MiB skips the pool segment and takes the local segment (2, the
+ * physically contiguous firmware reserve). Absent or 0: unchanged. */
+static ULONGLONG AdmissionLocalPlacementMinBytes(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  ULONGLONG minimum = 0ULL;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE, &key)))
+    return 0ULL;
+  RtlInitUnicodeString(&name, L"Wom1LocalPlacementMinMiB");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 value, sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_DWORD && value->DataLength == sizeof(ULONG))
+    minimum = (ULONGLONG)*(const ULONG *)value->Data << 20;
+  ZwClose(key);
+  return minimum;
+}
+#endif
+
 static NTSTATUS AdmissionCreateAllocationImpl(
     HANDLE Adapter, DXGKARG_CREATEALLOCATION *Args) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
@@ -365,6 +396,9 @@ static NTSTATUS AdmissionCreateAllocationImpl(
   ADMISSION_WIN32_TRANSPORT_RESULT parseResult;
   ADMISSION_ALLOCATION_HANDLE *allocation;
   ULONGLONG aligned;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  BOOLEAN localPlacement = FALSE; /* MP-2 measurement switch */
+#endif
   APPLE_AGX_U32 classId = 0u;
   APPLE_AGX_U32 flags = 0u;
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
@@ -549,7 +583,12 @@ static NTSTATUS AdmissionCreateAllocationImpl(
    * alone. Segment 2 is the fixed firmware reserve; 4 x 64 MiB targets
    * exhausted it. Without an aperture in its set VidMm evicts it to system
    * memory (paging TRANSFER) instead of making it resident there. */
-  if (classId != 0u &&
+  if (classId != 0u && (flags & AppleAgxWin32BufferGpuOnly) != 0u &&
+      description->CpuVisible == 0u && aligned >= (16ULL << 20)) {
+    const ULONGLONG local_min = AdmissionLocalPlacementMinBytes(context);
+    localPlacement = local_min != 0ULL && aligned >= local_min;
+  }
+  if (classId != 0u && !localPlacement &&
 #ifdef APPLE_AGX_NATIVE_STAGING
       info->PrivateDriverDataSize != sizeof(ADMISSION_NATIVE_STAGING_ALLOCATION) &&
 #endif

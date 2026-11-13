@@ -89,6 +89,8 @@ typedef struct { unsigned Value, SegmentId0, SegmentId1; } SEGMENT_HINT;
 typedef struct { void *CpuAddress; uint64_t GuestIpaAddress, GpuVirtualAddress,
                  Bytes; } ADMISSION_SCANOUT_MEMORY_VIEW;
 static int replay_pool_present;
+/* MP-2 measurement switch: absent */
+static ULONGLONG AdmissionLocalPlacementMinBytes(ADMISSION_CONTEXT *context) { (void)context; return 0; }
 static int AdmissionMemoryPoolView(const ADMISSION_CONTEXT *context,
                                    ADMISSION_SCANOUT_MEMORY_VIEW *view) {
   (void)context; memset(view, 0, sizeof(*view));

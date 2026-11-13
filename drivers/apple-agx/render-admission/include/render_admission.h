@@ -1150,6 +1150,20 @@ typedef struct _ADMISSION_CONTEXT {
    * such allocation's size in MiB, [7] its flags (CpuVisible | Presentation
    * << 1 | WrittenPrimary << 2 | GPU-only eligible << 3 | segment << 8). */
   volatile LONG GcLeaves[8];
+  /* MP-2 placement receipt (Wom1GpuPlacementReceipt, every build): the last
+   * ADMISSION_MP2_RECORDS allocations of >= 64 MiB that published leaves:
+   * KMD handle (low 32 bits), size in MiB, segments seen (bit per segment id),
+   * 16 KiB groups published, physically contiguous runs in publication order
+   * (guest IPA), the largest run in groups, the first group's IPA, counts of
+   * the group frame number (IPA >> 14) mod 16, and a bitmap of it mod 1024
+   * (the mod 64 / 256 distributions follow offline). Paging is serialized. */
+  struct {
+    ULONG Handle, SizeMib, Segments, Groups, Runs, LargestRun, Current;
+    ULONGLONG FirstIpa, LastIpa;
+    ULONG Mod16[16];
+    ULONG Bitmap1024[32];
+  } Mp2[4];
+  volatile LONG Mp2Next;
   /* V1 (experiment): Wom1G3RetainedSlots = 1 (REG_DWORD), read once at
    * start: per-process VM slots kept between jobs (gpuva_g3_private.h). */
   ULONG G3RetainedSlots;

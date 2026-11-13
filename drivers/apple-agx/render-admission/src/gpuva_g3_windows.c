@@ -527,9 +527,13 @@ NTSTATUS AdmissionGpuvaG3Start(ADMISSION_CONTEXT *context) {
   AdmissionG3RecordLiveAdditiveState(context, liveRequested, &state->Client);
   /* GC (experiment, measurement only): GPU-only allocations as cached
    * leaves; the broker refuses the leaf bit unless it advertises it. */
-  context->GpuPrivateCached =
-      AppleAgxGpuvaV5ClientHasPrivateCached(&state->Client) ?
-          AdmissionGpuPrivateCachedRequested(context) : 0u;
+  {
+    /* the capability is queried only when the switch asks for it */
+    const unsigned int requested = (unsigned int)AdmissionGpuPrivateCachedRequested(context);
+    context->GpuPrivateCached =
+        requested != 0u && AppleAgxGpuvaV5ClientHasPrivateCached(&state->Client) ?
+            requested : 0u;
+  }
   AdmissionG3AttachMailbox(state);
   context->GpuvaG3State = state;
   return STATUS_SUCCESS;
@@ -4606,6 +4610,27 @@ VOID AdmissionGpuvaG3LockProfileExport(ADMISSION_CONTEXT *adapter, HANDLE key,
       gc[3u + k] = (ULONG)InterlockedCompareExchange(&adapter->GcLeaves[k], 0, 0);
     RtlInitUnicodeString(&name, L"Wom1GpuGcReceipt");
     (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, gc, sizeof(gc));
+  }
+  {
+    /* MP-2 placement receipt: version, bytes, then 4 records of 58 ULONGs
+     * (Handle, SizeMib, Segments, Groups, Runs, LargestRun, FirstIpa lo/hi,
+     * Mod16[16], Bitmap1024[32]) */
+    static ULONG mp2[2u + 4u * 58u];
+    UINT r, k, o;
+    RtlZeroMemory(mp2, sizeof(mp2));
+    mp2[0] = 1u; mp2[1] = sizeof(mp2);
+    for (r = 0u; r < 4u; ++r) {
+      o = 2u + r * 58u;
+      mp2[o + 0] = adapter->Mp2[r].Handle; mp2[o + 1] = adapter->Mp2[r].SizeMib;
+      mp2[o + 2] = adapter->Mp2[r].Segments; mp2[o + 3] = adapter->Mp2[r].Groups;
+      mp2[o + 4] = adapter->Mp2[r].Runs; mp2[o + 5] = adapter->Mp2[r].LargestRun;
+      mp2[o + 6] = (ULONG)adapter->Mp2[r].FirstIpa;
+      mp2[o + 7] = (ULONG)(adapter->Mp2[r].FirstIpa >> 32);
+      for (k = 0u; k < 16u; ++k) mp2[o + 8u + k] = adapter->Mp2[r].Mod16[k];
+      for (k = 0u; k < 32u; ++k) mp2[o + 24u + k] = adapter->Mp2[r].Bitmap1024[k];
+    }
+    RtlInitUnicodeString(&name, L"Wom1GpuPlacementReceipt");
+    (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, mp2, sizeof(mp2));
   }
   RtlInitUnicodeString(&name, L"Wom1G3LockProfile");
   (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &state->LockProfileSnapshot,

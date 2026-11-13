@@ -812,13 +812,43 @@ static bool AdmissionG3GcSegment(const ADMISSION_CONTEXT *adapter, UINT segment)
  * graph's cached switch. */
 static VOID AdmissionG3GcCount(ADMISSION_CONTEXT *adapter,
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
-    const ADMISSION_G3_PROCESS *process, UINT segment, bool gpu_private) {
+    const ADMISSION_G3_PROCESS *process, UINT segment, bool gpu_private,
+    ULONGLONG ipa) {
   const bool local = !ADMISSION_G3_FRAME_SEGMENT(segment);
   const bool cached = AdmissionG3GcSegment(adapter, segment) && gpu_private &&
                       process->Graph.PrivateCached;
   const ADMISSION_ALLOCATION_HANDLE *gc = AdmissionG3LeafHandle(update);
   if (adapter == NULL) return;
   InterlockedIncrement(&adapter->GcLeaves[cached ? 0 : !local ? 3 : gpu_private ? 1 : 2]);
+  /* MP-2 placement receipt: allocations of >= 64 MiB */
+  if (gc != NULL && gc->Object.Description.Size >= (64ULL << 20)) {
+    const ULONG key = (ULONG)(ULONG_PTR)gc;
+    ULONG r;
+    for (r = 0u; r < 4u && adapter->Mp2[r].Handle != key; ++r) {}
+    if (r == 4u) {
+      r = (ULONG)(InterlockedIncrement(&adapter->Mp2Next) - 1) & 3u;
+      RtlZeroMemory(&adapter->Mp2[r], sizeof(adapter->Mp2[r]));
+      adapter->Mp2[r].Handle = key;
+      adapter->Mp2[r].SizeMib = (ULONG)(gc->Object.Description.Size >> 20);
+      adapter->Mp2[r].FirstIpa = ipa;
+    }
+    {
+      const ULONGLONG frame = ipa >> 14;
+      adapter->Mp2[r].Segments |= 1u << (segment & 31u);
+      if (adapter->Mp2[r].Groups != 0u && ipa == adapter->Mp2[r].LastIpa + 0x4000ULL) {
+        ++adapter->Mp2[r].Current;
+      } else {
+        ++adapter->Mp2[r].Runs;
+        adapter->Mp2[r].Current = 1u;
+      }
+      if (adapter->Mp2[r].Current > adapter->Mp2[r].LargestRun)
+        adapter->Mp2[r].LargestRun = adapter->Mp2[r].Current;
+      ++adapter->Mp2[r].Groups;
+      adapter->Mp2[r].LastIpa = ipa;
+      ++adapter->Mp2[r].Mod16[frame & 15u];
+      adapter->Mp2[r].Bitmap1024[(frame & 1023u) >> 5] |= 1u << (frame & 31u);
+    }
+  }
   if (gc != NULL && gc->Object.Description.Size >= (16ULL << 20)) {
     InterlockedIncrement(&adapter->GcLeaves[cached ? 4 : 5]);
     InterlockedExchange(&adapter->GcLeaves[6],
@@ -1069,7 +1099,7 @@ static NTSTATUS AdmissionG3UpdateLeaf(
     }
     ++published;
     if (complete)
-      AdmissionG3GcCount(adapter, update, process, segment, gpu_private);
+      AdmissionG3GcCount(adapter, update, process, segment, gpu_private, ipa);
     if (!complete) {
       BOOLEAN valid = FALSE;
       /* Count only valid PTEs belonging to this update, including a group

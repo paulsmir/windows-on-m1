@@ -249,7 +249,7 @@ main(int argc, char **argv)
       nir = dxbc_translate_tokens_bindings_hs(chunk, &agx_nir_options, heap ? (minmax ? minmax_limits : heap_limits) : srv_ssbo ? srv_ssbo_limits : d3d12_limits,
                                               &d3d12_map, regs, positions, &terr);
       /* the owner's checks right after translation (AgxD3d12OwnerCreateComputeFlags) */
-      if (nir && nir->info.stage == MESA_SHADER_COMPUTE) {
+      if (nir && (print || print_final) && nir->info.stage == MESA_SHADER_COMPUTE) {
          uint8_t srv_dims[DXBC_RESOURCE_SLOTS], uav_dims[DXBC_UAV_DIMENSION_SLOTS];
          printf("OWNER_DIMENSIONS srv %d uav %d\n", dxbc_nir_srv_dimensions(nir, srv_dims) ? 1 : 0,
                 dxbc_nir_uav_dimensions(nir, uav_dims) ? 1 : 0);
