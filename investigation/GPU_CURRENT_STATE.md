@@ -6367,3 +6367,28 @@ boot was run. The previous entry stays as written.
 - HOLD-3c (approved, offline): phase reference = the latch, tick corrected by the learned tick-to-latch offset;
   missed-vblank counter with threshold lead + P/2, split by commit source. Lead stays 5.0 ms. Its boot is the
   merge candidate run for the CUR-1 / HOLD-3 line.
+
+## UPDATE 2026-11-13T09:55:08Z - OPTWIN macOS twin run; first paired table; code gate
+
+- macOS twin (MACOS-20261113-optwin, J313 macOS 15.7.8, same probe source, 3 runs x 140 cases, GPU at 1278 MHz for
+  99.78 % of active time by powermetrics): evidence .local/experiments/MACOS-20261113-optwin/. ioreg:
+  IOMFBNumLayers MaxNumLayers = 2 (macOS itself has two layers on this panel).
+- Ratio ours / macOS (min of 3, 5 dispatches, large shapes): arithmetic S1_* 0.99..1.00; random gathers G1
+  3.98 (1 MB) / 2.6 (4 MB) / 1.45 (16 MB) / 2.5 (64 MB), dependent gathers the same; coalesced loads 1.7..1.8
+  (1 MB), 1.14..1.23 (64 MB); dynamic-index constant-buffer rows C1 1.30..1.31; sampling T1 1.2..1.3, T1l
+  1.05..1.17; barrier + shared loads B1 1.08..1.11, barriers alone 0.95; per short dispatch 2.0 us vs 1.0 us.
+- Code gate (.local/night-20261110/optwin-codegate/REPORT.md; Apple side disassembled, ours only as statistics):
+  the G1 family is a CODE-FORM difference, not a memory-path difference: the probe binds its source as a root
+  SRV and our DXBC front end (dxbc_to_nir.c mem_load) turns one float4 structured load into four 1-component
+  buffer-texture fetches, each with a size compare/select and a format branch; Apple issues one 16-byte
+  device load. Both sides sustain the same request rate (6.7 G/s); ours makes 4x the requests (predicted 4.0,
+  measured 3.98; latency-bound small shapes predicted 9.6 / 4.4, measured 9.63 / 4.42).
+- NOT explained by counts: G1 at 64 MB (ours x3.8 from 16 to 64 MB, Apple x2.2), G1c, C1 1.31, T1, B1 1.1.
+  S1o (macOS 2x slower) is Apple's register spilling, not ours.
+- For GravityMark: the earlier census found equal device-load counts and no buffer-texture fetches in k48, so
+  GM's buffer reads apparently take another path than the probe's root SRV; which path, and whether any GM
+  kernel reads through the slow SRV form, is OPEN. The gather rows are therefore not yet a GM verdict. C1 1.31
+  applied to our own cost of those loads gives about 0.04..0.05 ms in k48 and in the C0 traversal - a part,
+  not the whole excess.
+- Next: SRV buffer reads as device loads in the compiler (production defect regardless of GM), the probe's
+  gather rows re-measured in GM's binding form, and shader captures of the probe for offline listings.
