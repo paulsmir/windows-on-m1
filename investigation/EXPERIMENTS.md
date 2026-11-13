@@ -79145,3 +79145,11 @@ EXP2394 HARDWARE BEFORE 2026-11-13T14:22:54Z:
 - Hashes: sys ab0f35624824, UmdArm64 eb72104a716b, UmdX64 5daca6acddce, Umd32 357b5ef9ef07; manifest bbe26f92e8c6, hardware-manifest 90ce7a6f89f6; probe2394.sh ac4b23c9bfd2 (PROBE_LINT_OK); visible recovery rec2394h 57d700580176c515; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
 - Recovery rec2394h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2394-rq1/run2394.sh.
+
+EXP2394 HARDWARE ACTUAL 2026-11-13T14:55:54Z:
+- Boot and run: recovery rec2393h (RECOVERY_DONE), then staged exp/rq1-pkg c20a763ab (EXP2393 package + RQ-1) on m1n1-ansdirect-closedv5-scaled1-s2v3. Full EXP2387-shape probe ran to EXP2394_PROBE_DONE / CHAIN2394_DONE. STOPS 0, WER_REPORTS 2 (the two October dumps). Guest alive after every arm. Recovery rec2394h started.
+- Expected vs actual, RQ-1 counters (MPO receipt v9): expected all six 0 with ForeignErrors 0; actual SwapFailures/SwapRetries/SwapRetryLatched/SwapRetryExhaustedReported/LastSwapFailureResult/ForeignErrors = 0 in every snapshot (CS ctl/warm/r2/win, CTL fullfs/stretchfs, PTR cstb/csnb/fullfs/fullfstb/stretchfsp). No stray IRQ_ERROR in a healthy boot.
+- Speed gates: GravityMark PERF PASS (worst 46.908 vs 47.007, -0.21 %); CS cs16 PASS (r2 52.153 vs 51.991, +0.31 %; warm 51.919). Windowed CS 54.28 (EXP2387 54.72, not gated).
+- Equal to EXP2387 otherwise: H3MissedDeadline 8 of 47528 deadline commits (EXP2387 6 of 47475), H3StaleReference 0, H3MadeMinUs 2119, H3MissMaxUs 3602, H3TickOffsetUs 1135. Full-screen arms 59.89-59.96 fps (controls 59.96 / 59.92). HoldDropped 0, Set3RefusedAfterSupport 0, Check3Unsupported 0 at the end.
+- Verdict: CONFIRMED for the healthy path: RQ-1 is inert without failures and costs no speed. Its recovery behaviour under failures is EXP2395 (RQ-2 m1n1 with injection), which changes only the m1n1.
+- Next: EXP2395 (package reused, m1n1-s2v3-rq2 772d2ee7, run_uefi --host-request).
