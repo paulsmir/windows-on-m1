@@ -6411,3 +6411,24 @@ boot was run. The previous entry stays as written.
   them against the macOS table.
 - GravityMark gap unchanged (~16 %); priced so far: constant-buffer row loads ~0.04..0.05 ms in each of k48 and
   the C0 traversal.
+
+## UPDATE 2026-11-13T11:37:34Z - REOPENED WITH NEW EVIDENCE: GPU memory path is slower than macOS on identical code (EXP2388)
+
+- EXP2388 (ours-side OPTWIN with GravityMark's buffer form: root RWByteAddressBuffer Load4) against the macOS
+  twin: random gathers 1.19 (1 MB) / 1.43 (4 MB) / 0.98..1.03 (16 MB) / 1.32 (64 MB); dependent 1.21 / 1.32;
+  coalesced 0.92 (1 MB) / 1.41 (64 MB). 9 of 564 repetitions had no completion record (not investigated).
+- Code gate round 2 (.local/night-20261110/optwin-codegate2/REPORT.md; our listings compiled offline from the
+  captured DXBC, 32 of 33 kernels equal to the guest's shader-stats rows): the G1u/G1du/G1cu inner loops are
+  the SAME instructions as Apple's (4 x 16-byte device load, same addressing and hint bits; ours one extra wait).
+  The ratios above are therefore NOT code form. At the latency-bound shape the 1 MB round trip is +73..95 ns
+  on our side; at 64 MB the latency gap is small (1.05..1.15) and the loss is in throughput. The 16 MB point is
+  parity in every pairing (not an outlier): the two size curves cross.
+- This contradicts the entry that lists "memory hierarchy, SLC, DRAMCFG, GPU TLB" as closed (hypothesis of a
+  rate-type cause the latency probes could not see). That closure stays as written; it is superseded by this
+  measurement for full-width gathers. Cause: OPEN. Reconciliation with the EXP2226..2243 record is running.
+- Code-form differences found by the same gate (compiler items, each priced): constant-buffer rows C1 1.31 =
+  one load in flight per wait on our side against up to ~15 on Apple's (latency shape 2.27x fully explained);
+  shared-memory kernel: our compiler keeps barriers at group size 32x1 that Apple drops and lacks the skip over
+  the thread-0 section. Sampling T1 1.11..1.21: 6..13 ps per sample unexplained by code.
+- GravityMark translation (estimates): k48 0.05..0.20 of 0.214 ms from the measured per-form ratios; the C0 and
+  C2 traversals run fewer loads per wait than Apple's (1.69 vs 2.41, 1.81 vs 2.85).
