@@ -28,7 +28,27 @@ DEFAULT = ['test_d3d12_*', 'test_umd*', 'test_g4*', 'test_d3dg1*', 'test_r149*',
            'test_notifier_*',
            # 2026-11-10: test_job_timing_export_rate had rotted (harness lacked the receipts
            # added since rc83) because no gate ran it.
-           'test_job_*', 'test_rc_*']
+           'test_job_*', 'test_rc_*',
+           # 2026-11-13: the gate's own integrity (a dead run or an import error is never OK).
+           'test_gate_*']
+
+
+RUNNER = r"""
+import importlib, sys, traceback, unittest
+loader, suite = unittest.TestLoader(), unittest.TestSuite()
+import_failed = False
+for name in sys.argv[1:]:
+    try:
+        module = importlib.import_module(name)
+    except Exception:
+        print('ERROR: %s (unittest.loader._FailedTest.%s)' % (name, name), file=sys.stderr)
+        traceback.print_exc()
+        import_failed = True
+        continue
+    suite.addTests(loader.loadTestsFromModule(module))
+result = unittest.TextTestRunner(stream=sys.stderr, verbosity=1).run(suite)
+sys.exit(0 if result.wasSuccessful() and not import_failed else 1)
+"""
 
 
 def modules(patterns):
@@ -52,7 +72,13 @@ def known():
 
 def main():
     chosen = modules(sys.argv[1:] or DEFAULT)
-    run = subprocess.run([sys.executable, '-m', 'unittest', *chosen], cwd=HERE, capture_output=True, text=True)
+    # 2026-11-13: `python -m unittest a b` turns only an ImportError into a failed
+    # test; any other exception at import aborted the whole run, no FAIL/ERROR
+    # line and no "Ran" line were printed, and the gate still said BASELINE_OK.
+    # Each module is now imported on its own: an import failure is reported as
+    # ERROR for that module (known_failures.txt lists import errors by module
+    # name) and the other modules still run.
+    run = subprocess.run([sys.executable, '-c', RUNNER, *chosen], cwd=HERE, capture_output=True, text=True)
     failed = set()
     for kind, name, where in re.findall(r'^(FAIL|ERROR): (\S+) \(([^)]+)\)', run.stderr, re.M):
         if where.startswith('unittest.loader._FailedTest'):
@@ -63,13 +89,19 @@ def main():
     ran = set(chosen)
     new = sorted(f for f in failed if f not in baseline)
     fixed = sorted(k for k in baseline if k.split('.')[0] in ran and k not in failed)
-    total = re.search(r'^Ran (\d+) tests', run.stderr, re.M)
+    total = re.search(r'^Ran (\d+) tests?\b', run.stderr, re.M)
     print(f'ran {total.group(1) if total else "?"} tests in {len(chosen)} modules; '
           f'{len(failed)} failing, {len(failed) - len(new)} known, {len(new)} NEW, {len(fixed)} FIXED')
     for f in new:
         print('NEW', f)
     for f in fixed:
         print('FIXED', f, '#', baseline[f])
+    if total is None or run.returncode not in (0, 1):
+        # The runner died (crash, os._exit, exit at import outside the loader):
+        # the counts above are not a result.
+        print('GATE_INCOMPLETE returncode %d; stderr tail:' % run.returncode)
+        print('\n'.join(run.stderr.splitlines()[-8:]))
+        return 1
     print('BASELINE_OK' if not new else 'BASELINE_NEW_FAILURES')
     return 1 if new else 0
 
