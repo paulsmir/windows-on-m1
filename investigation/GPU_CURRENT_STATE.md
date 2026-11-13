@@ -6311,3 +6311,15 @@ boot was run. The previous entry stays as written.
   stays as the single commit path only if HOLD-3 builds on it.
 - HOLD-3 (spec in the handoff file): the pending set is committed once per frame at a deadline before the vblank
   (lead 5.0 ms; 4.1 ms is the latest submit seen to latch), so both layers ride one swap.
+
+## UPDATE 2026-11-13T01:50:03Z - EXP2384 final: CUR-1 v2 confirmed; full-screen game with a mouse present runs direct at gate rate
+
+- EXP2384 final rows: CS with a cursor present (two-plane + scratch, hidden-pointer 1x1) 51.95 / 52.21 (cs16 gate
+  PASS +0.42 %); same-boot lone control 48.51 (cold run); GM 53.22 / 53.21 (gate PASS); scaled window 57.66;
+  STRETCHFS 59.94; windowed CS 1600x1000 - first real run - two-plane (+3981 commits) at 54.33 fps. Suite 119/0,
+  no faults. CUR-1 v2 (scratch reservation, clipped top plane via scratch or crop) CONFIRMED on hardware.
+- Ring cut for the moving-pointer scenes: the application's Set3 arrives 0.8..1.8 ms after the latch, DWM's
+  pointer-layer Set3 2.4..4.9 ms (max 8.7 ms); 1 of ~850 flips later than 11.6 ms. A 5.0 ms lead catches both.
+- Open on this line: application 30..40 fps while the pointer moves (HOLD-3 deadline commit, implemented on
+  arch/hold3, not yet on hardware); scratch copy cost (CUR-1c staged copy b0e5b0404, not yet on hardware);
+  no person has seen the pointer picture.
