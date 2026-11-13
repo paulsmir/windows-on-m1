@@ -78947,3 +78947,29 @@ EXP2390 HARDWARE ACTUAL 2026-11-13T12:49:05Z:
   - MP-1 control CONFIRMED (coverage proven, TLBI 0);
   - SRV-1 CONFIRMED (arch/srv1 0641fa433 + 4e5bf1239 + 73bdffafe): buffer-SRV reads now run at the raw-UAV rate, 3.3x faster at 1 MB.
 - Next: EXP2391 (Wom1GpuPrivateCached=1), launched.
+
+EXP2391 HARDWARE BEFORE 2026-11-13T12:53:53Z:
+- Kind: the variable boot of the MP-1 pair; the single change against EXP2390 is the device value Wom1GpuPrivateCached=1.
+  - Package: EXP2390's (arch/srv1 71d2aa492), copied, not rebuilt.
+  - m1n1: m1n1-s2v3-gc (sha 3a72f1ec4c10b076a248f83d26bb8451f0d8b8bf90ed278e60811158a84ece94).
+  - Probe: eoptwin5 (sha 1317d2fc...).
+  - Windows: OPTWING1, then GM PERF w. No SRV-1 arm.
+  - Measurement only: no cache maintenance on unmap/reuse (stale data possible across reuse), never a default.
+- WHY THIS HYPOTHESIS:
+  1. EXP2390 control: GravityMark's gather form (G1u) at 1.19 / 1.43 / 0.99 / 1.32 x macOS (GM shape, 1/4/16/64 MB). G1du: 1.21 / 1.43 / 0.96 / 1.32. These are identical inner loops (codegate2).
+  2. Coverage proven in the control: the 85 MB G1 regions are GPU-only and eligible (Wom1GpuGcReceipt big flags 0x308: CpuVisible 0, eligible 1, segment 3; 16320 leaf groups per OPTWIN run), and so are GM's large buffers (big_coherent +163228 over the GM window). So the switch reaches exactly those leaves.
+  3. macOS writes AttrIndx 0 (C83) for user buffers under a map option (kext read); we write AttrIndx 2 (C8B).
+- WINDOWS CONTRACT: unchanged.
+- AGX/ASAHI CONTRACT: AttrIndx 0 = cached (Asahi uses it for firmware-private memory with flush on unmap).
+- TRANSLATION: KMD sends LEAF_PRIVATE_CACHED for eligible leaves; broker encodes AppleAgxUatGpuPrivate* (C83).
+- WHAT IS STILL UNKNOWN: whether AttrIndx 0 changes GPU gather latency and throughput.
+- Expected readings (architect):
+  - 1 MB N32 falls toward Apple's ~157 ns round trip and the 1/4 MB ratios toward ~1.0: the data attribute is the cause.
+  - Nothing moves: the GPU-side cache/walker configuration is next.
+  - 64 MB staying at 1.32 either way: an independent walk-side cause.
+  - Coverage: Wom1GpuGcReceipt switch=1, cached > 0, big_cached > 0, big_coherent unchanged for the G1 regions. GPUVA-GC last-cached low 12 bits C83.
+- Failure criteria: coverage line absent or big_cached 0 (inconclusive); oracle_bad > 0 (stale/corrupt data with cached leaves); GPU fault, reset, hang (exact-PID stop + recovery).
+- Recovery: rec2391h visible recovery.
+- Hashes: sys 73a20ddad467, UmdArm64 2f0bde456b7a, UmdX64 dc58e7a8774d, Umd32 15d16997b5e2; manifest 1e0b735798d0, hardware-manifest 8ddf6f86b924; probe2391.sh 8ef7517ffb63 (PROBE_LINT_OK); visible recovery rec2391h 66440f915b2e526a; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1 Wom1GpuPrivateCached=1.
+- Recovery rec2391h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2391-mp1on/run2391.sh.
