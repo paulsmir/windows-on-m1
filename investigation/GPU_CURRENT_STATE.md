@@ -6522,3 +6522,25 @@ boot was run. The previous entry stays as written.
   (dram_fast is 0 in most snapshots of our runs; macOS's state unknown).
 - Frozen here by the operator's priority change; resume from this entry and the register read-side notes.
 - Bench moves to the completeness plan: EXP2394 (RQ-1) next, RQ-2 image built (m1n1-s2v3-rq2).
+
+## UPDATE 2026-11-13T14:57:44Z - completeness plan: first hardware result (EXP2394) and offline status
+
+- EXP2394 (plan A1, RQ-1 healthy path, package exp/rq1-pkg c20a763ab): all six swap-failure counters 0 in every
+  snapshot, no stray broker error in a healthy boot, gates PASS (GM -0.21 %, CS +0.31 %). RQ-1 is inert without
+  failures; its recovery paths are NOT yet exercised - EXP2395 (m1n1 with the latch deadline and fault injection)
+  is next.
+- Test gate defect found and fixed (c21e74c24): an exception other than ImportError at module import aborted the
+  whole run with no tests executed and the script still printed BASELINE_OK. Past gates did print real "Ran"
+  lines; branches waiting for packages are being re-gated with the fixed runner.
+- Implemented offline by Opus subagents, reviewed by report, waiting for hardware (order): C2 modes / MPO default
+  on (arch/c2-modes), F1-k start policy (arch/f1-start-policy), C1 brightness (gpu/c1-brightness +
+  arch/c1-brightness), F1-m m1n1 platform profile for standalone boot (gpu/f1-platform-profile +
+  arch/f1-standalone-scripts). In progress: B1 display off/on, C6 per-display KMD structure (N displays).
+- Other drivers released by the operator for hardware steps today: external display over USB-C (Thunderbolt
+  tunnelling declared unreachable on this stack), USB Type-C port, Wi-Fi/Bluetooth, keyboard backlight. Their
+  first steps are proxy-only reads queued with the implementer. Fact for all of them: the SSD controller's power
+  gate hangs under APCIE (ANS2 -> APCIE_ST -> APCIE -> IMX); m1n1's pcie_shutdown can cut power under the SSD, so
+  every proxy step that touches PCIe is followed by a full proxy reboot, and no live-guest design may power-cycle
+  those domains.
+- Open code-review note on C2 (not blocking): Set3 at device IRQL reads the committed destination rectangle
+  without a lock while a mode commit writes it at PASSIVE.
