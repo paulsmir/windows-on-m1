@@ -82,6 +82,12 @@ static ShaderStatsTag shader_stats_tag(const UINT *tokens) {
 }
 static int g_marks;
 static uint32_t g_cbv, g_uav;
+static bool g_srv1;
+static bool srv1_ssbo() { return g_srv1; }
+#ifndef DXBC_NIR_SRV_SSBO_SLOT
+#define DXBC_NIR_SRV_SSBO_SLOT 16
+#define DXBC_NIR_MAX_SRV_SSBOS 16
+#endif
 static bool dxbc_nir_mark_root_views(struct nir_shader *, uint32_t cbv, uint32_t uav) {
   ++g_marks; g_cbv = cbv; g_uav = uav;
   return true;
@@ -111,7 +117,7 @@ int main() {
   s.head.parameters = 6;
   AGX_D3D12_ROOT_VIEWS views;
   RootViews(&s.head, &views);
-  CHECK(views.Count == 3); /* the table, root constants and the root SRV are not root views */
+  CHECK(views.Count == 4); /* the table and root constants are not root views; SRV-1: the root SRV is */
   struct dxbc_binding_map map = {};
   map.active = 1;
   bind(&map, DXBC_BINDING_UAV, 0, 1, 0);                    /* root UAV u1 */
@@ -132,7 +138,7 @@ int main() {
     mark_root_views(&nir, MESA_SHADER_COMPUTE, &map, tokens);
     CHECK(g_marks == 1 && g_uav == 0x5u && g_cbv == 0x1u);
     CHECK(g_receipts.size() == 1);
-    const std::vector<UINT> want = {MESA_SHADER_COMPUTE, 0x77u, 0x1u, 0x5u, 0x3u, 0xfu, 1u};
+    const std::vector<UINT> want = {MESA_SHADER_COMPUTE, 0x77u, 0x1u, 0x5u, 0x3u, 0xfu, 1u, 0u};
     CHECK(g_receipts.back() == want);
     mark_root_views(&nir, MESA_SHADER_VERTEX, &map, tokens);
     CHECK(g_uav == 0x5u && g_cbv == 0u);
@@ -145,6 +151,11 @@ int main() {
     struct dxbc_binding_map identity = {};
     mark_root_views(&nir, MESA_SHADER_COMPUTE, &identity, tokens);
     CHECK(g_uav == 0x2u && g_cbv == 0x1u);
+    /* SRV-1: with APPLE_AGX_D3D12_SRV_SSBO the root SRV slot 0 is unchecked at shader buffer 16 */
+    g_srv1 = true;
+    mark_root_views(&nir, MESA_SHADER_COMPUTE, &map, tokens);
+    CHECK(g_uav == (0x5u | 1u << 16) && g_receipts.back()[7] == 1u);
+    g_srv1 = false;
     /* the opt-out keeps every check and still receipts */
     g_env = "1";
     const int before = g_marks;

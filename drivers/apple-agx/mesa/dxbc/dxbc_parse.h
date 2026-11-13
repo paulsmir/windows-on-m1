@@ -285,6 +285,8 @@ struct dxbc_program {
    uint32_t heap_ranges;
    /* C65: the sampler limit asked for min/max emulation (DXBC_BINDING_MINMAX) */
    uint32_t minmax;
+   /* SRV-1: the SRV limit asked for shader-buffer reads (DXBC_BINDING_SRV_SSBO) */
+   uint32_t srv_ssbo;
 };
 
 enum dxbc_status {

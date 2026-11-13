@@ -35,6 +35,11 @@ struct nir_shader_compiler_options;
  * 32.  The 64 slots of the D3D11.1 DDI use dxbc_translate_tokens_uav64. */
 #define DXBC_NIR_MAX_UAVS 8
 #define DXBC_NIR_UAV_COUNTER_SLOT DXBC_NIR_MAX_UAVS
+/* SRV-1 (DXBC_BINDING_SRV_SSBO): raw/structured SRV slot t < 16 is also
+ * shader-buffer slot DXBC_NIR_SRV_SSBO_SLOT + t (read-only), after the UAV
+ * buffers and counters; the texel-buffer view stays bound for resinfo */
+#define DXBC_NIR_SRV_SSBO_SLOT (2 * DXBC_NIR_MAX_UAVS)
+#define DXBC_NIR_MAX_SRV_SSBOS 16
 
 /* D3D11.1 (feature level 11_1): UAV registers u0..u63
  * (D3D11_1_UAV_SLOT_COUNT). Typed views move to consecutive images in

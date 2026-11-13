@@ -179,6 +179,26 @@ class DxbcToNir(unittest.TestCase):
         sizes = re.findall(r"32x(\d) +%\d+ = @image_size .*image_dim=2D, image_array=(\w+)", result.stdout)
         self.assertEqual(sorted(sizes), [("2", "false"), ("2", "false"), ("3", "true")])
 
+    def test_buffer_srvs_read_as_whole_shader_buffer_loads_under_srv1(self):
+        # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? OPTWIN 2026-11-13: a
+        # float4 ld_structured / ld_raw on a buffer SRV became four 1-dword
+        # texel fetches (4x the requests of Apple's one 16-byte load). Under
+        # DXBC_BINDING_SRV_SSBO (SRV-1) each such read must be ONE 4-wide
+        # read-only shader-buffer load at slot 16 + t, with no texel fetch;
+        # without the flag the D3D12 path keeps the texel-buffer form.
+        on = subprocess.run([str(self.binary), str(FIXTURES / "cs50.dxbc"), "--d3d12", "--d3d12-srv-ssbo", "--print"],
+                            capture_output=True, text=True, timeout=60)
+        self.assertEqual(on.returncode, 0, on.stdout[-2000:] + on.stderr[-2000:])
+        loads = re.findall(r"(\d+)x?(\d*)\s+%\d+ = @load_ssbo \(%\d+ \((0x[0-9a-f]+)\)", on.stdout)
+        srv = sorted((int(slot, 16), int(width or 1)) for _, width, slot in
+                     [(b, w, s) for b, w, s in loads] if int(slot, 16) >= 16)
+        self.assertEqual(srv, [(16, 4), (17, 4)], on.stdout[-3000:])
+        self.assertNotRegex(on.stdout, r"\)txf ")
+        off = subprocess.run([str(self.binary), str(FIXTURES / "cs50.dxbc"), "--d3d12", "--print"],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(off.returncode, 0)
+        self.assertEqual(len(re.findall(r"\)txf ", off.stdout)), 8)
+
     def test_miniengine_sm51_shaders_translate_through_the_d3d12_bindings(self):
         # WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH? EXP1839: MiniEngine
         # stopped on a translator assertion (loop continue) only on

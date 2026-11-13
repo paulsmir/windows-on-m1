@@ -60,7 +60,7 @@ main(int argc, char **argv)
    struct dxbc_error perr;
    struct dxbc_nir_error terr;
    nir_shader *nir;
-   bool print = false, print_final = false, d3d12 = false, heap = false, uav64 = false, minmax = false;
+   bool print = false, print_final = false, d3d12 = false, heap = false, uav64 = false, minmax = false, srv_ssbo = false;
    unsigned tir = 0, tir_pass = 0;
    const char *tir_gs = NULL;
    bool tir_wrap = false, tir_wrap_heap = false;
@@ -70,6 +70,7 @@ main(int argc, char **argv)
       d3d12 |= !strcmp(argv[a], "--d3d12");
       heap |= !strcmp(argv[a], "--d3d12-heap");
       minmax |= !strcmp(argv[a], "--d3d12-minmax"); /* C65: with --d3d12-heap */
+      srv_ssbo |= !strcmp(argv[a], "--d3d12-srv-ssbo"); /* SRV-1: with --d3d12 */
       uav64 |= !strcmp(argv[a], "--d3d11-uav64");
       if (!strcmp(argv[a], "--tir") && a + 1 < argc)
          tir = (unsigned)atoi(argv[a + 1]);
@@ -91,6 +92,7 @@ main(int argc, char **argv)
    /* C47: Tier 2 heap ranges for SRVs, UAVs and samplers */
    static const uint32_t heap_limits[DXBC_BINDING_KIND_COUNT] = {14, 128 | DXBC_BINDING_HEAP_RANGES, 8 | DXBC_BINDING_HEAP_RANGES, 16 | DXBC_BINDING_HEAP_RANGES};
    static const uint32_t minmax_limits[DXBC_BINDING_KIND_COUNT] = {14, 128 | DXBC_BINDING_HEAP_RANGES, 8 | DXBC_BINDING_HEAP_RANGES, 16 | DXBC_BINDING_HEAP_RANGES | DXBC_BINDING_MINMAX};
+   static const uint32_t srv_ssbo_limits[DXBC_BINDING_KIND_COUNT] = {14, 128 | DXBC_BINDING_SRV_SSBO, 8, 16};
    struct dxbc_binding_map d3d12_map;
 
    if (argc < 2 || !(f = fopen(argv[1], "rb")))
@@ -244,7 +246,7 @@ main(int argc, char **argv)
       uint32_t regs = 0, positions = 0;
       if (program.type == DXBC_PROGRAM_HULL)
          hull_passthrough(bytes, (size_t)size, &regs, &positions);
-      nir = dxbc_translate_tokens_bindings_hs(chunk, &agx_nir_options, heap ? (minmax ? minmax_limits : heap_limits) : d3d12_limits,
+      nir = dxbc_translate_tokens_bindings_hs(chunk, &agx_nir_options, heap ? (minmax ? minmax_limits : heap_limits) : srv_ssbo ? srv_ssbo_limits : d3d12_limits,
                                               &d3d12_map, regs, positions, &terr);
       for (uint32_t i = 0; nir && heap && i < d3d12_map.count; ++i)
          printf("BINDING kind %u id %u space %u reg %u slot %u flags %u\n", d3d12_map.bindings[i].kind,
