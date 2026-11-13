@@ -684,6 +684,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
     AdmissionMpoPublishStart(Context);
     AdmissionMpoHoldClear(&Context->MpoHold);
     Context->MpoHoldLock = 0;
+    /* HOLD-2: Set3 commits through this DPC. */
+    AdmissionMpoCommitDpcStart(Context);
   }
   /* S2-1b: Effective 0 -> 1 at this scanout start. */
   if (AppleAgxFixedPanelTwoLayers(&runtime->Panel)) {
@@ -744,6 +746,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStop(
   /* NP-1: no Set3 runs once the scanout stops; drain and free the publish
    * work item (its worker touches the context). */
   AdmissionMpoPublishStop(Context);
+  /* HOLD-2: no commit DPC outlives scan-out (the gate is held: a running
+   * one commits nothing). */
+  AdmissionMpoCommitDpcStop(Context);
   /* HOLD-1: a held set cannot outlive scan-out (counted if dropped). */
   if (Context->MpoHold.Valid)
     InterlockedIncrement(&Context->Mpo.HoldDropped);
@@ -1845,7 +1850,10 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
         InterlockedExchange(&runtime->PresentGate, 0);
         /* HOLD-1: the held set goes out on this latch (its vsync info,
          * already taken above, belongs to the swap that just latched). */
-        AdmissionMpoCommitPending(Context);
+        AdmissionMpoTimingRecord(Context, ADMISSION_MPO_TIMING_LATCH,
+                                 (ULONG)mpo_count,
+                                 (ULONGLONG)mpo_info[0].PresentId);
+        AdmissionMpoCommitPendingSource(Context, ADMISSION_MPO_TIMING_COMMIT_LATCH);
       }
     } else if ((irq_status & APPLE_AGX_SCANOUT_IRQ_LATCHED) != 0u) {
       AdmissionScanoutVsyncRecord(runtime, 4u, STATUS_SUCCESS);
@@ -1854,7 +1862,7 @@ static BOOLEAN AdmissionScanoutProcessInterrupt(ADMISSION_CONTEXT *Context,
   if (VerticalTick) {
     /* HOLD-1: a held set whose commit met an obstacle retries per tick. */
     if (InterlockedCompareExchange(&runtime->PresentGate, 0, 0) == 0)
-      AdmissionMpoCommitPending(Context);
+      AdmissionMpoCommitPendingSource(Context, ADMISSION_MPO_TIMING_COMMIT_TICK);
     notify_vsync = AppleAgxVsyncAdvance(&runtime->Timeline, now) != 0;
     AdmissionScanoutVsyncRecord(runtime, 5u, STATUS_SUCCESS);
   }

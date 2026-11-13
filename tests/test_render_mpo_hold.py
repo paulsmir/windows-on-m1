@@ -28,7 +28,18 @@ class RenderMpoHold(unittest.TestCase):
         mpo = (DRIVER / "src/mpo_windows.c").read_text()
         scanout = (DRIVER / "src/scanout_windows.c").read_text()
         self.assertIn("AdmissionMpoHoldAdmit(", mpo)
-        self.assertIn("AdmissionMpoCommitPending(", scanout)
+        # HOLD-2: Set3 decides through the pure AdmissionMpoHoldSet3 and queues the commit DPC;
+        # the latch handler and the vertical tick commit through the same routine with their source.
+        self.assertIn("AdmissionMpoHoldSet3(", mpo)
+        self.assertIn("KeInsertQueueDpc(&Context->MpoCommitDpc", mpo)
+        self.assertIn("AdmissionMpoCommitPendingSource(Context, ADMISSION_MPO_TIMING_COMMIT_LATCH)", scanout)
+        self.assertIn("AdmissionMpoCommitPendingSource(Context, ADMISSION_MPO_TIMING_COMMIT_TICK)", scanout)
+        self.assertIn("AdmissionMpoCommitDpcStop(Context)", scanout)
+        self.assertIn("AdmissionMpoCommitDpcStart(Context)", scanout)
+        # Set3 never submits a swap itself: the only commit-path call left in Set3 is ForcePlanesOff's plane-off.
+        set3 = mpo[mpo.index("_Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3("):mpo.index("_Use_decl_annotations_ VOID AdmissionMpoCommitPending(")]
+        self.assertEqual(set3.count("&completion, FALSE)"), 1)
+        self.assertIn("Args->PlaneCount == 0u", set3[:set3.index("&completion, FALSE)")])
         project = (ROOT / "drivers/apple-agx/render-admission/AppleAgxRenderAdmission.vcxproj")
         if project.exists():
             self.assertIn("mpo_hold.c", project.read_text())

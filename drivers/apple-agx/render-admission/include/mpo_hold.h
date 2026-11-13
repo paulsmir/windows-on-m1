@@ -40,4 +40,23 @@ void AdmissionMpoHoldRestore(ADMISSION_MPO_HOLD *Hold,
                              const ADMISSION_MPO_HOLD *Taken);
 void AdmissionMpoHoldClear(ADMISSION_MPO_HOLD *Hold);
 
+/* HOLD-2: Set3 never submits.  Every accepted flip joins the pending set;
+ * the commit is issued by a DPC queued from Set3 when no swap is
+ * outstanding (it runs after dxgkrnl's vsync DPC pass, so every Set3 of the
+ * pass is in the set: EXP2375 trace, all two-plane Set3 on one CPU in that
+ * pass) or by the latch handler when one is.  Outcome of one Set3: */
+#define ADMISSION_MPO_SET3_BUSY 0u
+#define ADMISSION_MPO_SET3_MERGED_FIRST 1u  /* the set was empty */
+#define ADMISSION_MPO_SET3_MERGED_SECOND 2u /* joined a pending set */
+/* Acceptable = the merged set passed the Set3 table (dry run).  Merges on
+ * Admit && Acceptable; *QueueCommit = 1 when the caller must queue the
+ * commit DPC (merged and GateFree). */
+unsigned int AdmissionMpoHoldSet3(ADMISSION_MPO_HOLD *Hold,
+                                  unsigned int ListedMask,
+                                  unsigned int Acceptable, unsigned int Count,
+                                  const unsigned int *Layer,
+                                  const unsigned long long *PresentId,
+                                  unsigned int GateFree,
+                                  unsigned int *QueueCommit);
+
 #endif

@@ -58,3 +58,23 @@ void AdmissionMpoHoldClear(ADMISSION_MPO_HOLD *Hold) {
     Hold->PresentId[i] = 0ULL;
   }
 }
+
+unsigned int AdmissionMpoHoldSet3(ADMISSION_MPO_HOLD *Hold,
+                                  unsigned int ListedMask,
+                                  unsigned int Acceptable, unsigned int Count,
+                                  const unsigned int *Layer,
+                                  const unsigned long long *PresentId,
+                                  unsigned int GateFree,
+                                  unsigned int *QueueCommit) {
+  unsigned int first;
+  if (QueueCommit != 0)
+    *QueueCommit = 0u;
+  if (Hold == 0 || QueueCommit == 0 || Acceptable == 0u ||
+      !AdmissionMpoHoldAdmit(Hold, ListedMask))
+    return ADMISSION_MPO_SET3_BUSY;
+  first = Hold->Valid == 0u ? 1u : 0u;
+  AdmissionMpoHoldMerge(Hold, ListedMask, Count, Layer, PresentId);
+  *QueueCommit = GateFree != 0u ? 1u : 0u;
+  return first != 0u ? ADMISSION_MPO_SET3_MERGED_FIRST
+                     : ADMISSION_MPO_SET3_MERGED_SECOND;
+}

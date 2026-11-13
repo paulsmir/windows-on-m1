@@ -774,8 +774,8 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
       /* Check3 cannot see placement; Set3 can.  Do not send records the
        * table rejects.  S3-A/S3-B: for a configuration Check3 accepted this
        * is an invariant violation (counted); DEVICE_BUSY either way. */
-      if (!DryRun)
-        AdmissionMpoSet3TableRefusal(Context, result.Reason);
+      /* HOLD-2: Set3 validates by dry run; its refusal is the Set3 view. */
+      AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_DEVICE_BUSY;
     }
     if (AdmissionMpoBuildCommit(&result, records) != 2u) {
@@ -801,8 +801,8 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
     pair[0] = next[1].Input;
     AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
     if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
-      if (!DryRun)
-        AdmissionMpoSet3TableRefusal(Context, result.Reason);
+      /* HOLD-2: Set3 validates by dry run; its refusal is the Set3 view. */
+      AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_DEVICE_BUSY;
     }
     if (AdmissionMpoBuildLone(&next[1].Input, &records[0]) != 1u) {
@@ -841,8 +841,8 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
     pair[0] = next[0].Input;
     AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
     if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
-      if (!DryRun)
-        AdmissionMpoSet3TableRefusal(Context, result.Reason);
+      /* HOLD-2: Set3 validates by dry run; its refusal is the Set3 view. */
+      AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_DEVICE_BUSY;
     }
     status = DryRun ? STATUS_SUCCESS : AdmissionScanoutMpoCommit(Context, records, 1u, completion,
@@ -866,8 +866,8 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
     pair[0] = next[0].Input;
     AdmissionMpoInput(Context, pair, 1u, ADMISSION_MPO_PATH_SET3, &input);
     if (AdmissionMpoEvaluateOne(&input, &result) != AdmissionMpoSupported) {
-      if (!DryRun)
-        AdmissionMpoSet3TableRefusal(Context, result.Reason);
+      /* HOLD-2: Set3 validates by dry run; its refusal is the Set3 view. */
+      AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_DEVICE_BUSY;
     }
     if (result.OnePlaneRecord != 0u) {
@@ -991,21 +991,36 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
     AdmissionMpoCompletionAdd(&completion, 0u, 0ULL);
   }
 
-  /* HOLD-1: a commit is outstanding (or a held set waits): join the held
-   * set when every listed layer is free there and the merged set would be
-   * accepted (SUCCESS, committed at the latch); otherwise DEVICE_BUSY and
-   * dxgkrnl re-offers the flip (EXP2375). */
-  if (!AdmissionScanoutMpoGateFree(Context) || Context->MpoHold.Valid) {
+  if (Args->PlaneCount == 0u) {
+    /* ForcePlanesOff is not a swap (plane-off completion at the next vsync):
+     * direct when nothing is pending, else re-offered. */
+    if (!AdmissionScanoutMpoGateFree(Context) || Context->MpoHold.Valid)
+      return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
+    status = AdmissionMpoApply(Context, next, listed, &completion, FALSE);
+    return AdmissionMpoBusyNote(Context, &completion, status);
+  }
+  /* HOLD-2: Set3 never submits.  The flip joins the pending set (HOLD-1
+   * rules: one flip per layer, a same-layer second flip DEVICE_BUSY) when
+   * the merged set passes the Set3 table; the commit is issued by the commit
+   * DPC queued here when no swap is outstanding (it runs after dxgkrnl's
+   * vsync DPC pass, so both layers of a pass travel in one swap), or by the
+   * latch handler when one is. */
+  {
     const ULONG mask = (listed[0] ? 1u : 0u) | (listed[1] ? 2u : 0u);
     ADMISSION_MPO_PLANE_STATE candidate[2];
     BOOLEAN merged[2];
+    unsigned int layers[2] = {0u, 0u};
+    unsigned long long ids[2] = {0ULL, 0ULL};
+    unsigned int acceptable = 0u, queue = 0u, outcome, first;
+    RtlZeroMemory(candidate, sizeof(candidate));
+    RtlZeroMemory(merged, sizeof(merged));
     if (InterlockedCompareExchange(&Context->MpoHoldLock, 1, 0) != 0) {
       InterlockedIncrement(&Context->Mpo.HoldContended);
+      AdmissionMpoTimingRecord(Context, ADMISSION_MPO_TIMING_SET3_BUSY, mask,
+                               completion.Count != 0u ? completion.PresentId[0] : 0ULL);
       return AdmissionMpoBusyNote(Context, &completion, STATUS_DEVICE_BUSY);
     }
-    status = STATUS_DEVICE_BUSY;
-    if (Args->PlaneCount != 0u &&
-        AdmissionMpoHoldAdmit(&Context->MpoHold, mask)) {
+    if (AdmissionMpoHoldAdmit(&Context->MpoHold, mask)) {
       for (layer = 0u; layer < 2u; ++layer) {
         candidate[layer] = listed[layer] || !Context->MpoHold.Valid
                                ? next[layer]
@@ -1014,34 +1029,58 @@ _Use_decl_annotations_ NTSTATUS AdmissionMpoSetVidPnSourceAddress3(
                         (Context->MpoHold.Valid &&
                          (Context->MpoHold.ListedMask & (1u << layer)) != 0u);
       }
-      if (NT_SUCCESS(AdmissionMpoApply(Context, candidate, merged,
-                                       &completion, TRUE))) {
-        unsigned int layers[2];
-        unsigned long long ids[2];
-        for (index = 0u; index < completion.Count && index < 2u; ++index) {
-          layers[index] = (unsigned int)completion.LayerIndex[index];
-          ids[index] = (unsigned long long)completion.PresentId[index];
-        }
-        RtlCopyMemory(Context->MpoHoldNext, candidate, sizeof(candidate));
-        AdmissionMpoHoldMerge(&Context->MpoHold, mask, completion.Count,
-                              layers, ids);
-        InterlockedIncrement(&Context->Mpo.HoldMerges);
-        status = STATUS_SUCCESS;
-      }
+      acceptable = NT_SUCCESS(AdmissionMpoApply(Context, candidate, merged,
+                                                &completion, TRUE)) ? 1u : 0u;
     }
-    if (status == STATUS_DEVICE_BUSY)
+    for (index = 0u; index < completion.Count && index < 2u; ++index) {
+      layers[index] = (unsigned int)completion.LayerIndex[index];
+      ids[index] = (unsigned long long)completion.PresentId[index];
+    }
+    first = Context->MpoHold.Valid == 0u ? 1u : 0u;
+    outcome = AdmissionMpoHoldSet3(&Context->MpoHold, mask, acceptable,
+                                   completion.Count, layers, ids,
+                                   AdmissionScanoutMpoGateFree(Context) ? 1u : 0u,
+                                   &queue);
+    if (outcome == ADMISSION_MPO_SET3_BUSY) {
       InterlockedIncrement(&Context->Mpo.HoldBusy);
+      status = STATUS_DEVICE_BUSY;
+    } else {
+      RtlCopyMemory(Context->MpoHoldNext, candidate, sizeof(candidate));
+      if (first != 0u)
+        Context->MpoHoldFirstQpc = KeQueryPerformanceCounter(NULL).QuadPart;
+      InterlockedIncrement(&Context->Mpo.HoldMerges);
+      InterlockedIncrement(outcome == ADMISSION_MPO_SET3_MERGED_FIRST
+                               ? &Context->Mpo.H2Set3MergedFirst
+                               : &Context->Mpo.H2Set3MergedSecond);
+      status = STATUS_SUCCESS;
+    }
     InterlockedExchange(&Context->MpoHoldLock, 0);
+    AdmissionMpoTimingRecord(Context,
+        outcome == ADMISSION_MPO_SET3_BUSY ? ADMISSION_MPO_TIMING_SET3_BUSY
+        : outcome == ADMISSION_MPO_SET3_MERGED_FIRST ? ADMISSION_MPO_TIMING_SET3_FIRST
+                                                     : ADMISSION_MPO_TIMING_SET3_SECOND,
+        mask, ids[0]);
+    if (queue != 0u &&
+        InterlockedCompareExchange(&Context->MpoCommitDpcReady, 0, 0) != 0)
+      (void)KeInsertQueueDpc(&Context->MpoCommitDpc, NULL, NULL);
     return AdmissionMpoBusyNote(Context, &completion, status);
   }
-  status = AdmissionMpoApply(Context, next, listed, &completion, FALSE);
-  return AdmissionMpoBusyNote(Context, &completion, status);
 }
 
 /* HOLD-1: the latch handler (scan-out ISR, the gate just released) and the
  * vertical tick commit the held set exactly once; a commit that meets the
  * gate or a runtime obstacle again keeps the set for the next tick. */
 _Use_decl_annotations_ VOID AdmissionMpoCommitPending(ADMISSION_CONTEXT *Context) {
+  AdmissionMpoCommitPendingSource(Context, ADMISSION_MPO_TIMING_COMMIT_LATCH);
+}
+
+/* HOLD-2: the one commit path.  Source = ADMISSION_MPO_TIMING_COMMIT_DPC
+ * (the commit DPC, through DxgkCbSynchronizeExecution), _LATCH (the latch
+ * handler) or _TICK (the vertical tick, which also drives the retry of a
+ * commit that met an obstacle with nothing outstanding).  Device IRQL,
+ * serialised with the scan-out ISR. */
+_Use_decl_annotations_ VOID AdmissionMpoCommitPendingSource(
+    ADMISSION_CONTEXT *Context, ULONG Source) {
   ADMISSION_MPO_HOLD taken;
   ADMISSION_MPO_PLANE_STATE next[2];
   ADMISSION_MPO_COMPLETION completion;
@@ -1063,10 +1102,101 @@ _Use_decl_annotations_ VOID AdmissionMpoCommitPending(ADMISSION_CONTEXT *Context
       AdmissionMpoHoldRestore(&Context->MpoHold, &taken);
       InterlockedIncrement(&Context->Mpo.HoldCommitRetries);
     } else if (NT_SUCCESS(status)) {
+      LONGLONG frequency = 0, now;
+      LARGE_INTEGER f;
+      now = KeQueryPerformanceCounter(&f).QuadPart;
+      frequency = f.QuadPart;
       InterlockedIncrement(&Context->Mpo.HoldCommits);
+      InterlockedIncrement(Source == ADMISSION_MPO_TIMING_COMMIT_DPC
+                               ? &Context->Mpo.H2CommitsFromDpc
+                           : Source == ADMISSION_MPO_TIMING_COMMIT_TICK
+                               ? &Context->Mpo.H2CommitsFromTick
+                               : &Context->Mpo.H2CommitsFromLatch);
+      if (taken.ListedMask == 3u)
+        InterlockedIncrement(&Context->Mpo.H2TwoLayerCommits);
+      if (frequency > 0 && Context->MpoHoldFirstQpc != 0 &&
+          now > Context->MpoHoldFirstQpc) {
+        const LONGLONG us = (now - Context->MpoHoldFirstQpc) * 1000000LL / frequency;
+        const LONG v = us > 0x7fffffffLL ? 0x7fffffff : (LONG)us;
+        if (v > Context->Mpo.H2MaxSet3ToCommitUs)
+          InterlockedExchange(&Context->Mpo.H2MaxSet3ToCommitUs, v);
+      }
+      Context->MpoHoldFirstQpc = 0;
+      AdmissionMpoTimingRecord(Context, Source, taken.ListedMask,
+                               taken.Count != 0u ? taken.PresentId[0] : 0ULL);
     } else {
       InterlockedIncrement(&Context->Mpo.HoldDropped);
     }
   }
   InterlockedExchange(&Context->MpoHoldLock, 0);
+}
+
+/* HOLD-2 receipt: the Set3 / commit / latch timing ring (receipt-only). */
+_Use_decl_annotations_ VOID AdmissionMpoTimingRecord(ADMISSION_CONTEXT *Context,
+                                                     ULONG Kind, ULONG Mask,
+                                                     ULONGLONG Id) {
+  ADMISSION_MPO_TIMING_ENTRY *e;
+  ULONG slot;
+  if (Context == NULL)
+    return;
+  slot = (ULONG)InterlockedIncrement(&Context->MpoTiming.Next) - 1u;
+  e = &Context->MpoTiming.Entries[slot % ADMISSION_MPO_TIMING_ENTRIES];
+  e->Qpc = (ULONGLONG)KeQueryPerformanceCounter(NULL).QuadPart;
+  e->Id = (ULONG)Id;
+  e->Kind = (UCHAR)Kind;
+  e->Cpu = (UCHAR)KeGetCurrentProcessorNumber();
+  e->Irql = (UCHAR)KeGetCurrentIrql();
+  e->Mask = (UCHAR)Mask;
+}
+
+static BOOLEAN AdmissionMpoCommitSync(PVOID Opaque) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Opaque;
+  /* A swap outstanding: the latch handler commits the set. */
+  if (context != NULL && AdmissionScanoutMpoGateFree(context))
+    AdmissionMpoCommitPendingSource(context, ADMISSION_MPO_TIMING_COMMIT_DPC);
+  return TRUE;
+}
+
+static KDEFERRED_ROUTINE AdmissionMpoCommitDpcRoutine;
+static VOID AdmissionMpoCommitDpcRoutine(_In_ PKDPC Dpc,
+                                         _In_opt_ PVOID DeferredContext,
+                                         _In_opt_ PVOID Argument1,
+                                         _In_opt_ PVOID Argument2) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)DeferredContext;
+  BOOLEAN done = FALSE;
+  UNREFERENCED_PARAMETER(Dpc);
+  UNREFERENCED_PARAMETER(Argument1);
+  UNREFERENCED_PARAMETER(Argument2);
+  if (context == NULL ||
+      InterlockedCompareExchange(&context->MpoCommitDpcReady, 0, 0) == 0 ||
+      !context->InterfaceValid ||
+      context->Interface.DxgkCbSynchronizeExecution == NULL)
+    return;
+  (void)context->Interface.DxgkCbSynchronizeExecution(
+      context->Interface.DeviceHandle, AdmissionMpoCommitSync, context, 0u,
+      &done);
+}
+
+_Use_decl_annotations_ VOID AdmissionMpoCommitDpcStart(ADMISSION_CONTEXT *Context) {
+  if (Context == NULL)
+    return;
+  KeInitializeDpc(&Context->MpoCommitDpc, AdmissionMpoCommitDpcRoutine, Context);
+  Context->MpoHoldFirstQpc = 0;
+  RtlZeroMemory(&Context->MpoTiming, sizeof(Context->MpoTiming));
+  Context->MpoTiming.Version = ADMISSION_MPO_TIMING_VERSION;
+  {
+    LARGE_INTEGER f;
+    (void)KeQueryPerformanceCounter(&f);
+    Context->MpoTiming.Frequency = f.QuadPart;
+  }
+  InterlockedExchange(&Context->MpoCommitDpcReady, 1);
+}
+
+/* NP-2 order: no new queueing, remove a queued one, drain a running one. */
+_Use_decl_annotations_ VOID AdmissionMpoCommitDpcStop(ADMISSION_CONTEXT *Context) {
+  if (Context == NULL ||
+      InterlockedExchange(&Context->MpoCommitDpcReady, 0) == 0)
+    return;
+  (void)KeRemoveQueueDpc(&Context->MpoCommitDpc);
+  KeFlushQueuedDpcs();
 }

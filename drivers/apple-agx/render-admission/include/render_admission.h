@@ -273,7 +273,35 @@ typedef struct _ADMISSION_MPO_RECEIPT {
    * CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2 interrupt.  Accepted - Reported at
    * the end of an arm is the flips in flight (queued + held) or lost ids. */
   volatile LONG AcceptedIds0, AcceptedIds1, ReportedIds0, ReportedIds1;
+  /* HOLD-2: Set3 outcomes (joined an empty / a pending set), commits by
+   * source (commit DPC after dxgkrnl's pass, latch handler, vertical tick),
+   * commits carrying both layers, the longest first-Set3-to-commit delay. */
+  volatile LONG H2Set3MergedFirst, H2Set3MergedSecond;
+  volatile LONG H2CommitsFromDpc, H2CommitsFromLatch, H2CommitsFromTick;
+  volatile LONG H2TwoLayerCommits, H2MaxSet3ToCommitUs;
 } ADMISSION_MPO_RECEIPT;
+/* HOLD-2 receipt: Wom1MpoTiming, the last ADMISSION_MPO_TIMING_ENTRIES Set3
+ * outcomes, commits (by source) and latches with QPC, CPU and IRQL. */
+#define ADMISSION_MPO_TIMING_VERSION 1u
+#define ADMISSION_MPO_TIMING_ENTRIES 512u
+#define ADMISSION_MPO_TIMING_SET3_FIRST 1u
+#define ADMISSION_MPO_TIMING_SET3_SECOND 2u
+#define ADMISSION_MPO_TIMING_SET3_BUSY 3u
+#define ADMISSION_MPO_TIMING_COMMIT_DPC 4u
+#define ADMISSION_MPO_TIMING_COMMIT_LATCH 5u
+#define ADMISSION_MPO_TIMING_COMMIT_TICK 6u
+#define ADMISSION_MPO_TIMING_LATCH 7u
+typedef struct _ADMISSION_MPO_TIMING_ENTRY {
+  ULONGLONG Qpc;
+  ULONG Id;          /* low 32 bits of the first PresentId */
+  UCHAR Kind, Cpu, Irql, Mask;
+} ADMISSION_MPO_TIMING_ENTRY;
+typedef struct _ADMISSION_MPO_TIMING {
+  ULONG Version;
+  volatile LONG Next;
+  LONGLONG Frequency;
+  ADMISSION_MPO_TIMING_ENTRY Entries[ADMISSION_MPO_TIMING_ENTRIES];
+} ADMISSION_MPO_TIMING;
 #define ADMISSION_MPO_RETIRE_STAGE_HIDE 1u
 #define ADMISSION_MPO_RETIRE_STAGE_COMMIT 2u
 
@@ -1201,6 +1229,13 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_MPO_HOLD MpoHold;
   ADMISSION_MPO_PLANE_STATE MpoHoldNext[2];
   volatile LONG MpoHoldLock;
+  /* HOLD-2: the commit DPC (queued from Set3 when no swap is outstanding),
+   * its readiness, the QPC of the first Set3 of the pending set, and the
+   * timing ring. */
+  KDPC MpoCommitDpc;
+  volatile LONG MpoCommitDpcReady;
+  LONGLONG MpoHoldFirstQpc;
+  ADMISSION_MPO_TIMING MpoTiming;
   ADMISSION_MPO_PLANE_STATE MpoPlanes[2];
 } ADMISSION_CONTEXT;
 
@@ -2564,6 +2599,14 @@ BOOLEAN AdmissionScanoutMpoSlot1MayShow(_In_ ADMISSION_CONTEXT *Context);
 BOOLEAN AdmissionScanoutMpoGateFree(_In_ ADMISSION_CONTEXT *Context);
 /* HOLD-1: commit the held plane set; scan-out ISR context (device IRQL). */
 VOID AdmissionMpoCommitPending(_In_ ADMISSION_CONTEXT *Context);
+/* HOLD-2: the one commit path with its source (ADMISSION_MPO_TIMING_COMMIT_*). */
+VOID AdmissionMpoCommitPendingSource(_In_ ADMISSION_CONTEXT *Context,
+                                     _In_ ULONG Source);
+VOID AdmissionMpoTimingRecord(_In_opt_ ADMISSION_CONTEXT *Context, _In_ ULONG Kind,
+                              _In_ ULONG Mask, _In_ ULONGLONG Id);
+/* Scan-out start / stop (PASSIVE). */
+VOID AdmissionMpoCommitDpcStart(_In_opt_ ADMISSION_CONTEXT *Context);
+VOID AdmissionMpoCommitDpcStop(_In_opt_ ADMISSION_CONTEXT *Context);
 /* Queue one V3 commit (Count 1 = removal, 2 = two planes); Completion is
  * reported at its latch.  PrimaryAddress is the LayerIndex 0 surface
  * (CRTC_VSYNC physical address bookkeeping). */

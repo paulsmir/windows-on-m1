@@ -76,7 +76,15 @@ static APPLE_AGX_SCANOUT_U64 AdmissionScanoutNow(void*p){(void)p;return fakeNow/
 static void AdmissionPagingDpc(ADMISSION_CONTEXT*c){(void)c;}
 static VOID AdmissionPlatformMailboxDpc(ADMISSION_CONTEXT *Context) { (void)Context; } /* IRQ-completion step 2 */
 static VOID AdmissionMpoPublishStop(ADMISSION_CONTEXT *Context) { (void)Context; } /* NP-1: receipt work item (receipts.c) */
-static VOID AdmissionMpoCommitPending(ADMISSION_CONTEXT *Context) { (void)Context; } /* HOLD-1 (mpo_windows.c); the replay holds no set */
+/* HOLD-1/2 (mpo_windows.c); the replay holds no set: the ISR commits through AdmissionMpoCommitPendingSource. */
+/* HOLD-2 (mpo_windows.c / render_admission.h): commit sources and the timing ring. */
+#define ADMISSION_MPO_TIMING_COMMIT_LATCH 5u
+#define ADMISSION_MPO_TIMING_COMMIT_TICK 6u
+#define ADMISSION_MPO_TIMING_LATCH 7u
+static unsigned commit_latch_calls, commit_tick_calls, timing_latches;
+static VOID AdmissionMpoCommitPendingSource(ADMISSION_CONTEXT *Context, ULONG Source) { (void)Context; if (Source == ADMISSION_MPO_TIMING_COMMIT_LATCH) ++commit_latch_calls; else if (Source == ADMISSION_MPO_TIMING_COMMIT_TICK) ++commit_tick_calls; }
+static VOID AdmissionMpoTimingRecord(ADMISSION_CONTEXT *Context, ULONG Kind, ULONG Mask, ULONGLONG Id) { (void)Context; (void)Mask; (void)Id; if (Kind == ADMISSION_MPO_TIMING_LATCH) ++timing_latches; }
+static VOID AdmissionMpoCommitDpcStop(ADMISSION_CONTEXT *Context) { (void)Context; }
 static VOID AdmissionMpoHoldClear(void *Hold) { (void)Hold; } /* HOLD-1 (mpo_hold.c) */
 static void AdmissionSchedulerDpc(ADMISSION_CONTEXT*c){(void)c;}
 static void AdmissionRenderCorrelationDpcWindows(ADMISSION_CONTEXT*c,ULONG f,ULONGLONG t){(void)c;(void)f;(void)t;}
