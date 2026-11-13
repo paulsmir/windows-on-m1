@@ -190,3 +190,7 @@ Architect notes (2026-11-13T14:25:20Z):
 - KMD steps 1-3 (per-display structure, mode provider, VidPN for N paths with N = 1) are behaviour-neutral for the
   panel and start after the C2 mode work returns, because both edit display.c and the scan-out code.
 - Licence for the PHY import decided by the operator the same day (see the Thunderbolt session's ledger).
+- REQUIREMENT (2026-11-13T14:38:00Z, operator): general for N displays (2, 3, 4, ...), with this machine's single external
+  display as data. KMD: Display[] and SourceToTarget[] sized by one maximum with a run-time count, no internal/external
+  boolean, tests at N = 2 and N = 3. Broker ABI: indexed external instances (count advertised, one page per instance,
+  shared interrupt with per-instance status), crossbar routing as per-machine data.
