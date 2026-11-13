@@ -6352,3 +6352,18 @@ boot was run. The previous entry stays as written.
   cold control is not it (my earlier "above 1" wording was too tight). No arm shows the regime.
 - NOT merged. Next: lead-floor boots on the same package (3000 us first; zero missed vblanks required), then
   one SHORT boot at the chosen default as the merge candidate.
+
+## UPDATE 2026-11-13T08:21:27Z - CORRECTION (missed-vblank counter) and HOLD-3c; lead-floor boots withdrawn
+
+- CORRECTION to the EXP2385/EXP2386 entries: "missed vblanks 0" came from a counter with a 1.5-period threshold
+  that cannot see a one-frame miss. From the timing rings of EXP2386: deadline commits made 5674 / missed 3
+  (0.05 %); late commits (issued after the deadline had passed) made 158 / missed 225.
+- DCP contract number: a swap committed less than ~2.2..2.4 ms before the latch interrupt misses that vblank
+  (made minimum 2.14..2.25 ms, missed maximum 2.30..2.38 ms, both boots).
+- At lead 5.0 ms the deadline commits actually land 3.92 ms (median) before the latch: the vertical tick, which
+  fires ~1.07 ms after the latch interrupt, overwrites the phase reference, so every deadline is ~1.07 ms late.
+  With that, leads of 4.0 / 3.0 ms would miss an estimated 5..15 % / ~70 % of frames: the lead-floor boots I
+  specified are WITHDRAWN (they would only confirm the prediction).
+- HOLD-3c (approved, offline): phase reference = the latch, tick corrected by the learned tick-to-latch offset;
+  missed-vblank counter with threshold lead + P/2, split by commit source. Lead stays 5.0 ms. Its boot is the
+  merge candidate run for the CUR-1 / HOLD-3 line.
