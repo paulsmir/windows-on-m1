@@ -79324,3 +79324,22 @@ EXP2401 HARDWARE ACTUAL 2026-11-13T17:33:42Z:
 - Explicit Wom1MpoTwoPlanes=0 arm: pnputil "Device restarted successfully", then CM_PROB_FAILED_POST_START (second start failed; the A5 class, EXP2308). Recorded under A5; the C2-2 opt-out read-back is inconclusive (receipts frozen).
 - Verdict: C2 as packaged NOT ACCEPTED. C2-2 default CONFIRMED; C2-1 refusals observed (reason 39) but the full-screen non-native path is broken; whether by C2 or by the accepted line is EXP2402's question (control boot, architect).
 - Next: EXP2402 control (accepted package, one GravityMark full-screen 1920x1080 arm).
+
+EXP2402 HARDWARE BEFORE 2026-11-13T17:41:13Z:
+- Kind: control. Package = the EXP2394/2395 package (exp/rq1-pkg c20a763ab, now merged as gpu/memory-latency 64aad4ede), copied, not rebuilt. m1n1 = bench line m1n1-s2v3-rq2 (772d2ee7), same as EXP2401. Switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes (two planes set explicitly as on the baseline; EXP2401 had them on by C2-2's default, so the effective plane state is the same). Against EXP2401 the variable is C2 (58ba7865b + 64f39b010) absent.
+- WHY THIS HYPOTHESIS (architect: the line, not C2):
+  1. No boot since the plane line was merged has changed mode; EXP2056 (fullscreen 1920x1080 worked, score 4035, m1n1 "scanout source 1920x1080 -> panel 2560x1440 at 0,80") was on the old line, before S3, FS-1, HOLD-1/2/3 and CUR-1 put every Set3 through the hold/deadline path.
+  2. EXP2401's 1080 arm: HoldCommits +1633 against V2Presents +31: the hold path accepted flips that almost never became a present at the non-native mode.
+  3. C2-1 only adds Check3 refusals (reason 39 x2 in EXP2401); C2-2 only changes a default the bench already set by registry.
+- EXP2401 facts this boot is compared with: the loop started inside the 1080 arm (VisibilityCalls 4 -> 3216, DeferredFlips 1 -> 1605, CommitCalls 1 -> 3 in 2.7 min); m1n1 scanned out the 1920x1080 and 1280x720 sources centred at 2560x1440 0,80 correctly; the loop outlived GravityMark.
+- ATOMIC CONTRACT: none.
+- Probe: suite + one GM PERF window (sanity); then GravityMark full screen 1920x1080 (100k, timeout 150 s) inside a Dwm-Core (9e9bba3c 0x600) + DxgKrnl (802EC45A 0xC000000008018401) trace that starts before the mode change; receipts every 10 s with the display-modes receipt decoded; loop detector: VisibilityCalls +40 between two snapshots -> stop GravityMark, receipts 20 s and 40 s later (does the display come back without a restart?). HOLD/H3/TIMING lines; OPERATOR_LOOK_FS. No 720 arm, no explicit-0 arm.
+- Expected / outcomes:
+  - A (line defect): the same loop (VisibilityCalls climbing, flips deferred, V2Presents flat, black) -> the accepted line carries it, C2 is not its cause; the accepted package gets a known-defect note (a full-screen mode change breaks the display until restart).
+  - B (C2 defect): a picture, VisibilityCalls in single digits, GravityMark finishes -> C2 introduced it; next split C2-1 vs C2-2.
+- From the DxgKrnl/Dwm trace and the MPO timing ring: what dxgkrnl does between the two CommitVidPn calls (SetVidPnSourceVisibility / SetVidPnSourceAddress / Set3 sequence with arguments for the first two seconds after the commit into 1920x1080), and the first flip that does not become a present with our branch and status.
+- Failure criteria: hang, bugcheck; suite or PERF far off the EXP2394/2395 values.
+- Recovery: rec2402h visible recovery (the loop needs it if the display does not come back).
+- Hashes: sys ab0f35624824, UmdArm64 eb72104a716b, UmdX64 5daca6acddce, Umd32 357b5ef9ef07; manifest 0106c5b8a5e7, hardware-manifest e759dcb1b727; probe2402.sh ff20e38deed7 (PROBE_LINT_OK); visible recovery rec2402h d50fd3c5ca7de3c4; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
+- Recovery rec2402h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2402-ctlfs/run2402.sh.
