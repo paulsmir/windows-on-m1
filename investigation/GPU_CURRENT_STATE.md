@@ -6596,3 +6596,16 @@ boot was run. The previous entry stays as written.
   device destroy); host state-machine test first. NOT yet built or run. Still unknown: which dxgkrnl predicate keeps
   the old primary "displayed" and until when (sets the earliest safe release), the kernel status of DWM's retry
   presents, the BADPARAM of ChangeDisplaySettingsEx(NULL) in the broken state, the first two hides after the commit.
+
+## UPDATE 2026-11-13T18:18:40Z - correction to the PL-1 release entry: the dxgkrnl mechanism is not confirmed
+
+- Refers to the entry "cause of the mode-change black screen: PL-1 releases the previous primary at SetDisplayMode".
+  The trace correlation stands (every repeating hide lies in the release window and is followed by termination of
+  the released allocation). The stated reason ("dxgkrnl still treats that allocation as the displayed primary") is
+  an inference and is contradicted by a static read of the guest dxgkrnl 26100.9974: SetDisplayMode moves the
+  per-device displayed-primary record and the newest plane-0 config to the new primary before it returns; nothing on
+  vsync or flip completion changes them; the miniport's scanned address is not read.
+- Open run-time candidates: different kernel devices for SetDisplayMode and the release, different source bits,
+  old allocation still the newest config of another plane/source, SetTimingsFromVidPn mode active.
+- PL-1b is unchanged as the fix candidate (no release -> no destroy path) with added receipt fields (kernel device
+  handles on both rows); its bound-release arm decides between "bound 4" and "release only at device destroy".
