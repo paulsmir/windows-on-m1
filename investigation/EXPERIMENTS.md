@@ -79183,3 +79183,44 @@ EXP2395 HARDWARE BEFORE 2026-11-13T15:01:35Z:
 - Hashes: sys ab0f35624824, UmdArm64 eb72104a716b, UmdX64 5daca6acddce, Umd32 357b5ef9ef07; manifest 567fb74f1d0a, hardware-manifest 3b0673fc03a7; probe2395.sh bb49fb52ff33 (PROBE_LINT_OK); visible recovery rec2395h 4bf47042c02da110; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
 - Recovery rec2395h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2395-rq2/run2395.sh.
+
+EXP2395 HARDWARE ACTUAL 2026-11-13T15:42:04Z:
+- Boot and run: recovery rec2394h (RECOVERY_DONE), then the EXP2394 package (exp/rq1-pkg c20a763ab, copied) on m1n1-s2v3-rq2 (772d2ee7), launcher run_uefi --host-request "$b/host-request.txt" (prepare HOST_REQUEST line present). Probe ran to EXP2395_PROBE_DONE / CHAIN2395_DONE, pipeline RC 0. STOPS 0, WER_REPORTS 2 (the two October dumps).
+- Regression part (m1n1 change, before the injection arm): GM PERF PASS +0.25 % (worst 47.125 vs 47.007); CS PASS +0.72 % (r2 52.367); windowed CS 54.60. H3MissedDeadline 5 of 47773. The m1n1 status read before any injection (INJ_status0, after the whole regression part): latch_deadline_expiries 0, latch_poll_errors 0, late_latches_ignored 0 - no natural deadline expiry in normal use.
+- Host-request route: the launcher was found (INJ_LAUNCHER pid 98776), every request answered within the 10 s wait, and the guest stayed alive; the status0 control (a request with no injection) changed nothing.
+- Injection arm over a FULLFS flip loop (45 s): app fps mean 59.36, per-second min 47, max 61 (no frozen screen; the dips are the injected seconds). Expected vs actual per step, m1n1 status / KMD receipt (decoded from kmd-receipts-inj-*.txt; the probe's own RQ1_INJ lines were empty, see below):
+
+  | Step | m1n1 refusals / drops / deadline expiries | KMD SwapFailures / Retries / RetryLatched / Exhausted |
+  |---|---|---|
+  | before | 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+  | refuse 1 | 1 / 0 / 0 | 1 / 1 / 1 / 0 |
+  | refuse 4 | 5 / 0 / 0 | 5 / 4 / 1 / 1 |
+  | drop 1 | 5 / 1 / 1 | 6 / 5 / 2 / 1 |
+  | drop 2 | 5 / 3 / 3 | 8 / 7 / 3 / 1 |
+
+  - Matches the BEFORE exactly: a refused swap recovers by retry; four refusals exhaust the 3 tries and the gate is released (presents continue); a dropped latch is abandoned after the deadline ("D589 of swap_id=57757 abandoned; a late one is ignored") and the retry latches; two drops in a row cost two deadlines and the second retry latches.
+  - LastSwapFailureResult 10 (PRESENT_FAILED); ForeignErrors 0; TransportFailures 0; BrokerRefusals 0; pending_refuse_swaps / pending_drop_latches 0 at the end. HOLD over the arm: HoldDropped 0, Set3RefusedAfterSupport 0.
+- StopDevice afterwards: the visible recovery's ordered Windows reboot of this guest stopped the service (VISIBLE_CODE32_SERVICE_STOPPED); the panel kept latching to the end; m1n1 recorded PSCI SYSTEM_RESET (x0 0x84000009) with BUGCHECK code=0x0.
+- Defects found in this run (mine, not the driver's):
+  1. probe: the INJ arm's h3line calls read kmd-receipts-<tag>-post.txt while the arm saved kmd-receipts-inj-<step>.txt, so RQ1_INJ lines were empty; the receipts themselves were captured and decoded above.
+  2. recovery: rec2395h first refused (EXACT_OWNER_REFUSED: unrecognized arguments: --host-request ...) - scripts/agx-select-exact-launcher.py validates the launcher grammar and did not know the new option. Fixed (option added to the reviewed grammar, regression case test_host_request_launcher_is_owner RED on the old script with the same error, GREEN now); recovery rerun -> RECOVERY_DONE.
+- Verdict: CONFIRMED. A1 (scan-out swap failure recovery) works on hardware: injected refused swaps and dropped latches both recover without a frozen screen, and StopDevice works afterwards. RQ-1 (KMD retry) and RQ-2 (m1n1 100 ms latch deadline) are validated together; the injection ops stay diagnostic (default 0).
+- Next: EXP2396 USB U1 run A (EXP2394 package, m1n1-s2v3-u1obs), then the proxy-only slot.
+
+EXP2396 HARDWARE BEFORE 2026-11-13T15:42:52Z:
+- Kind: one variable against EXP2394 (same package exp/rq1-pkg c20a763ab, copied, not rebuilt; same probe; same switches and Mu MUANSCPPC002): the m1n1 only, m1n1-ansdirect-closedv5-scaled1-s2v3 -> m1n1-s2v3-u1obs (befcaf4ca5bb7f6cb53f0b80596cadbfd90a59da246db848c20f1fdea93f821c; m1n1_windows usb/u1-observe-bench 2a5f4e88 = 63c13618 + a43bd7de 8d642142 11b59fb1 9172191b 2a5f4e88, the tps6598x fix deliberately left out; s2v3 snapshot + 20 overlaid files, bench flags + USB_TYPEC_OBSERVE=1; build info m1n1-s2v3-u1obs/m1n1-build-info.json; host tests hv_usb_observe/pc/typec/dma_policy/apgpio_filter PASS).
+- What runs: once per second from hv_tick (after hv_ans_tick), for each port controller found under /arm-io/i2c*/hpmBusManager: SMBus block reads of STATUS, DATA_STATUS, POWER_STATUS and INT_EVENT1 (no command, no interrupt clear); a shadow Type-C policy prints its plan ("would: ...") and executes nothing. Log lines usb-observe: port..., heartbeat poll_us last/max every heartbeat.
+- Review (mine): i2c_init only powers the bus and allocates; tps6598x_init does no I2C traffic; tps6598x_read_reg = i2c_smbus_read. Windows has no i2c0 device (Mu exposes none), so the hypervisor is the only bus user during the guest; m1n1's own usb.c uses i2c0 only at init and IRQ restore.
+- WHY THIS HYPOTHESIS (USB session draft USB-U1, docs/drivers/usb/BEFORE-DRAFTS.md at 95949051d):
+  1. Nobody reads the CD3217 after boot; the USB policy and the TBX alt-mode decoder both depend on its state and latched events.
+  2. hv_init restores the guest port's CD3217 interrupt masks but nothing services them.
+- ATOMIC CONTRACT: none.
+- WINDOWS CONTRACT: unchanged (no guest-visible device or register).
+- AGX/ASAHI CONTRACT: unchanged; the poll runs in the hypervisor tick for the whole boot, so its cost lands on the CPU taking the tick.
+- WHAT IS STILL UNKNOWN: the port controllers' state as read at runtime; the poll's cost (poll_us).
+- Expected: boot, desktop, input, network and SSH as EXP2394; usb-observe lines for port 0 (proxy) and port 1 (left-front, guest mask 0x2), controller reads succeed (read failed 0), shadow plan printed; poll_us max well below 10 ms; SHORT gates PASS (GM PERF and CS within -2 % of the baselines; EXP2394 -0.21 % / +0.31 %).
+- Failure criteria: I2C read errors; poll_us above 10 ms; any gate miss; loss of USB input or network; hang.
+- Recovery: rec2396h visible recovery (known-good m1n1 for the recovery boot); exact-PID stop + AT_PROXY recovery on a hang.
+- Hashes: sys ab0f35624824, UmdArm64 eb72104a716b, UmdX64 5daca6acddce, Umd32 357b5ef9ef07; manifest 7ccbe9ff0f10, hardware-manifest f0feec5d944a; probe2396.sh 89bacfb6df95 (PROBE_LINT_OK); visible recovery rec2396h 3b8036c06fd30690; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
+- Recovery rec2396h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2396-u1obs/run2396.sh.
