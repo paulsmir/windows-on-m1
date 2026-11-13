@@ -6337,3 +6337,18 @@ boot was run. The previous entry stays as written.
 - HOLD-3b (approved, not implemented): latch and tick never commit; they queue the commit DPC and the deadline
   rule decides. A held set committed at the latch or at the same frame's deadline reaches the screen at the same
   vblank, so nothing is lost and the gate stays free for the frame's own flips.
+
+## UPDATE 2026-11-13T03:36:08Z - EXP2386 HOLD-3b: two-layer halving fixed; strip-scene CS gate misses by the price of the lead
+
+- EXP2386 (arch/hold3 6b55ce6d4 = CUR-1 v2 + CUR-1c + HOLD-2 base + HOLD-3 + HOLD-3b): moving pointer over a
+  full-screen application 59.93 / 59.91 / 59.90 fps (EXP2385: 30..48); CS under the taskbar strip 50.36, gated
+  runs 50.68 / 50.90 (EXP2385: 32.2 / 31.2; EXP2382: 27.95). Commits come from the deadline and carry both
+  layers; missed vblanks 0 in every arm; deadline error max 0.9..1.2 ms. Scaled window 59.84 (was 57.6..58.1:
+  residual merges gone). GM gate PASS, suite 119/0, no faults. HOLD-3b CONFIRMED as the fix of the halving.
+- cs16 gate in the strip scene FAIL: -2.09 % against -2.0 %. Cause measured: CS is not vsync-paced; 8.0 % of its
+  flips (314 of 3931) arrive after the 11.6 ms deadline while that frame's swap is outstanding and wait one
+  frame (NoLatch L1 +316, HeldAtLatch +312). DWM's layer: 0.2 %. This is the price of the 5.0 ms lead.
+- Criterion ruling: the halving regime is a sustained pattern; a single MaxNoLatchRun of 2 in a one-layer
+  cold control is not it (my earlier "above 1" wording was too tight). No arm shows the regime.
+- NOT merged. Next: lead-floor boots on the same package (3000 us first; zero missed vblanks required), then
+  one SHORT boot at the chosen default as the merge candidate.
