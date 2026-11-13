@@ -78973,3 +78973,21 @@ EXP2391 HARDWARE BEFORE 2026-11-13T12:53:53Z:
 - Hashes: sys 73a20ddad467, UmdArm64 2f0bde456b7a, UmdX64 dc58e7a8774d, Umd32 15d16997b5e2; manifest 1e0b735798d0, hardware-manifest 8ddf6f86b924; probe2391.sh 8ef7517ffb63 (PROBE_LINT_OK); visible recovery rec2391h 66440f915b2e526a; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1 Wom1GpuPrivateCached=1.
 - Recovery rec2391h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2391-mp1on/run2391.sh.
+
+EXP2391 HARDWARE ACTUAL 2026-11-13T13:01:17Z:
+- Boot and run: as EXP2390 with Wom1GpuPrivateCached=1 (SWITCHES_SET confirmed). Both windows ran. Guest alive. STOPS 0. WER_REPORTS 2 (October dumps). Recovery rec2391h started.
+- Coverage (the deciding line):
+  - Wom1GpuGcReceipt switch=1, cached=1000 (all written before the first window).
+  - In the OPTWING1 window: +16320 big leaf groups counted big_coherent, big_cached 0, flags 0x308 (GPU-only eligible, segment 3).
+  - In the GM window: big_coherent +163228, big_cached 0.
+  - m1n1 GPUVA-GC: cached 1000, last-cached 0x...C83 (the encoding works), shared 279644, tlbi 0.
+  - Segment 3 is ADMISSION_MEMORY_POOL_SEGMENT, the CPU-visible pool published as System backings, which ADMISSION_G3_FRAME_SEGMENT excludes from the GC rule (cached only for local segment 2). VidMm placed the 85 MB OPTWIN DEFAULT-heap regions and GravityMark's large buffers in segment 3.
+  - So the switch did not reach the measured leaves. The probe cannot choose the segment.
+- Ratios ours/macOS, GM shape, off (EXP2390) vs on:
+  - G1u 1.19/1.19, 1.43/1.43, 0.99/1.00, 1.32/1.32 (1/4/16/64 MB);
+  - G1du 1.21/1.21, 1.43/1.43, 0.96/0.96, 1.32/1.32;
+  - G1cu 0.91/0.91, 1.41/1.41.
+  - N32 within rep noise. Unchanged, as expected with no coverage.
+- OPTWIN: 120 cases, oracle_bad 0, missing 8 (reason 7, the probe's late-submit classification; fixed in exp/optwin 520237720, kept out of the pair). GM PERF w fps_frames 53.96.
+- Verdict: INCONCLUSIVE. The MP-1 hypothesis is untested, because its variable did not reach the G1 regions or GM's buffers (pool segment, excluded by the GC rule). The rule's local-segment-only scope is the reason, not the attribute.
+- Next: architect decision. Either a measurement-only scope extension to GPU-only allocations in the pool segment (KMD switch value, m1n1 unchanged), or placing GPU-only allocations in the local segment.
