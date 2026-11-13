@@ -4229,6 +4229,11 @@ bool dxbc_nir_uav_dimensions(const struct nir_shader *nir,
             }
             if (!nir_src_is_const(intr->src[source])) goto fail;
             unsigned slot = nir_src_as_uint(intr->src[source]);
+            /* SRV-1: shader buffers DXBC_NIR_SRV_SSBO_SLOT.. are SRVs, not UAVs
+             * (EXP2389: counting them refused the pipeline, device removed) */
+            if (!image && slot >= DXBC_NIR_SRV_SSBO_SLOT &&
+                slot < DXBC_NIR_SRV_SSBO_SLOT + DXBC_NIR_MAX_SRV_SSBOS)
+               continue;
             if (!image && slot >= DXBC_NIR_UAV_COUNTER_SLOT &&
                 slot < DXBC_NIR_UAV_COUNTER_SLOT + DXBC_UAV_DIMENSION_SLOTS)
                slot -= DXBC_NIR_UAV_COUNTER_SLOT;

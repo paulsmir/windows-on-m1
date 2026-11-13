@@ -194,6 +194,9 @@ class DxbcToNir(unittest.TestCase):
                      [(b, w, s) for b, w, s in loads] if int(slot, 16) >= 16)
         self.assertEqual(srv, [(16, 4), (17, 4)], on.stdout[-3000:])
         self.assertNotRegex(on.stdout, r"\)txf ")
+        # EXP2389: the owner's UAV slot check refused shader buffer 16 + t
+        # (E_NOTIMPL at CreateCompute -> device removed); both checks must pass
+        self.assertIn("OWNER_DIMENSIONS srv 1 uav 1", on.stdout)
         off = subprocess.run([str(self.binary), str(FIXTURES / "cs50.dxbc"), "--d3d12", "--print"],
                              capture_output=True, text=True, timeout=60)
         self.assertEqual(off.returncode, 0)

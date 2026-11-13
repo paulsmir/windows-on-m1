@@ -248,6 +248,12 @@ main(int argc, char **argv)
          hull_passthrough(bytes, (size_t)size, &regs, &positions);
       nir = dxbc_translate_tokens_bindings_hs(chunk, &agx_nir_options, heap ? (minmax ? minmax_limits : heap_limits) : srv_ssbo ? srv_ssbo_limits : d3d12_limits,
                                               &d3d12_map, regs, positions, &terr);
+      /* the owner's checks right after translation (AgxD3d12OwnerCreateComputeFlags) */
+      if (nir && nir->info.stage == MESA_SHADER_COMPUTE) {
+         uint8_t srv_dims[DXBC_RESOURCE_SLOTS], uav_dims[DXBC_UAV_DIMENSION_SLOTS];
+         printf("OWNER_DIMENSIONS srv %d uav %d\n", dxbc_nir_srv_dimensions(nir, srv_dims) ? 1 : 0,
+                dxbc_nir_uav_dimensions(nir, uav_dims) ? 1 : 0);
+      }
       for (uint32_t i = 0; nir && heap && i < d3d12_map.count; ++i)
          printf("BINDING kind %u id %u space %u reg %u slot %u flags %u\n", d3d12_map.bindings[i].kind,
                 d3d12_map.bindings[i].id, d3d12_map.bindings[i].space, d3d12_map.bindings[i].reg,
