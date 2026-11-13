@@ -123,6 +123,16 @@ class StartPolicyWiring(unittest.TestCase):
         self.assertLess(persist.index('ZwSetValueKey'), persist.index('ZwFlushKey(Key)'))
         self.assertLess(persist.index('ZwDeleteValueKey'), persist.index('ZwFlushKey(Key)'))
         self.assertIn('STATUS_OBJECT_NAME_NOT_FOUND', persist)
+        # Pending keeps its value (2 = scheduler faulted at T) on disk.
+        self.assertIn('AppleAgxStartPolicyParsePending(present, dword, value)', event)
+        self.assertNotIn('data = 1u;', persist)
+        # The latch decision runs before any hardware access: the decision
+        # helper touches only the registry (and m1n1's ARM_CONSUMED HVC after
+        # the flush, on Allow only).
+        for helper in ('AdmissionStartPolicyEvent', 'AdmissionStartPolicyPersist',
+                       'AdmissionStartPolicyQuery', 'AdmissionStartPolicyAttempt'):
+            body = function(self.source, helper)
+            self.assertIsNone(re.search(r'READ_REGISTER|WRITE_REGISTER|MmMapIoSpace|Mmio', body), helper)
         self.assertLess(event.index('AppleAgxStartPolicyEvaluate(&state, Event'),
                         event.index('AdmissionStartPolicyPersist(key, Result)'))
         self.assertLess(event.index('AdmissionStartPolicyPersist(key, Result)'),

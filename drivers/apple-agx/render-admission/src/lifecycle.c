@@ -179,7 +179,8 @@ static ULONG AdmissionStartPolicyNextField(
   }
 }
 
-/* Markers: REG_DWORD 1 or deleted; counters: REG_DWORD. One flush after
+/* Markers: REG_DWORD (1, or 2 for a pending start faulted at T) or deleted;
+ * counters: REG_DWORD. One flush after
  * all values, before the caller acts on the decision. */
 static NTSTATUS AdmissionStartPolicyPersist(
     HANDLE Key, const APPLE_AGX_START_POLICY_RESULT *Result) {
@@ -202,8 +203,6 @@ static NTSTATUS AdmissionStartPolicyPersist(
       if (one == STATUS_OBJECT_NAME_NOT_FOUND)
         one = STATUS_SUCCESS;
     } else {
-      if ((bit & APPLE_AGX_START_POLICY_VALUE_MARKERS) != 0u)
-        data = 1u;
       one = ZwSetValueKey(Key, &name, 0, REG_DWORD, &data, sizeof(data));
     }
     if (NT_SUCCESS(status) && !NT_SUCCESS(one))
@@ -282,7 +281,7 @@ static NTSTATUS AdmissionStartPolicyEvent(ADMISSION_CONTEXT *Context,
   if (state.Policy == APPLE_AGX_START_POLICY_CRASH_LATCH) {
     AdmissionStartPolicyQuery(key, L"Wom1StartPending", &present, &dword,
                               &value);
-    state.Pending = AppleAgxStartPolicyParseMarker(present, dword, value);
+    state.Pending = AppleAgxStartPolicyParsePending(present, dword, value);
     AdmissionStartPolicyQuery(key, L"Wom1StartRunning", &present, &dword,
                               &value);
     state.Running = AppleAgxStartPolicyParseMarker(present, dword, value);
@@ -352,7 +351,8 @@ static VOID AdmissionStartPolicyDpc(_In_ PKDPC Dpc,
 }
 
 /* PASSIVE_LEVEL, T seconds after a successful start: clear the pending
- * marker while the scheduler is not faulted. */
+ * marker while the scheduler is not faulted; otherwise keep it pending as
+ * value 2 (the next boot latches with reason FaultedPending). */
 static VOID AdmissionStartPolicyWorker(_In_ PDEVICE_OBJECT DeviceObject,
                                        _In_opt_ PVOID Parameter) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Parameter;
@@ -1592,7 +1592,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetPowerState(
     PVOID MiniportDeviceContext, ULONG DeviceUid,
     DEVICE_POWER_STATE DevicePowerState, POWER_ACTION ActionType) {
   UNREFERENCED_PARAMETER(DevicePowerState);
-  /* F1-k: an orderly shutdown/restart of the adapter ends this run cleanly
+  /* F1-k: an orderly shutdown/restart of the adapter is a clean exit: it
+   * clears Wom1StartPending and Wom1StartRunning like a clean stop
    * (dispmprt.h DXGKDDI_SET_POWER_STATE, PASSIVE_LEVEL). Hibernate (also
    * Fast Startup) is not an end: the same run resumes without StartDevice. */
   if (DeviceUid == DISPLAY_ADAPTER_HW_ID &&

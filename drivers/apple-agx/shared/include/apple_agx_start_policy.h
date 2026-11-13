@@ -22,10 +22,14 @@
 /* Consecutive boots that ended with Wom1StartRunning still set. */
 #define APPLE_AGX_START_POLICY_UNCLEAN_LIMIT 3u
 
+/* Wom1StartPending = 2: the start reached T with the scheduler faulted; it
+ * still latches the next boot, with its own reason. */
+#define APPLE_AGX_START_POLICY_PENDING_FAULTED 2u
+
 /* UpdateMask bits: which value of Next the caller must persist.  Marker
  * values (PENDING, RUNNING, LATCHED, LATCH_RESET) are written as REG_DWORD
- * 1 when the Next field is 1 and deleted when it is 0; counters are written
- * as REG_DWORD. */
+ * of the Next field when it is non-zero and deleted when it is 0; counters
+ * are written as REG_DWORD. */
 #define APPLE_AGX_START_POLICY_VALUE_PENDING 0x01u
 #define APPLE_AGX_START_POLICY_VALUE_RUNNING 0x02u
 #define APPLE_AGX_START_POLICY_VALUE_LATCHED 0x04u
@@ -43,7 +47,7 @@
 #define AppleAgxStartPolicyEventSucceeded 2u /* StartDevice returned success */
 #define AppleAgxStartPolicyEventFailed 3u    /* StartDevice returned an error */
 #define AppleAgxStartPolicyEventCleanStop 4u /* StopDevice returned success */
-#define AppleAgxStartPolicyEventShutdown 5u  /* SetPowerState, shutdown action */
+#define AppleAgxStartPolicyEventShutdown 5u  /* SetPowerState, shutdown action: clean exit */
 #define AppleAgxStartPolicyEventTimer 6u     /* T seconds after a success */
 
 #define AppleAgxStartPolicyDecisionNone 0u   /* not a start event */
@@ -59,17 +63,18 @@
 #define AppleAgxStartPolicyReasonUncleanCounted 5u /* allow, counter below N */
 #define AppleAgxStartPolicyReasonLatchReset 6u     /* allow after admin reset */
 #define AppleAgxStartPolicyReasonLatched 7u        /* refuse, latch set */
-#define AppleAgxStartPolicyReasonStalePending 8u   /* refuse, latch now */
+#define AppleAgxStartPolicyReasonStalePending 8u   /* refuse, latch now (crash/hang/power loss) */
 #define AppleAgxStartPolicyReasonUncleanLimit 9u   /* refuse, latch now */
 #define AppleAgxStartPolicyReasonArmTimer 10u      /* success, timer armed */
-#define AppleAgxStartPolicyReasonCleared 11u       /* pending/running cleared */
-#define AppleAgxStartPolicyReasonTimerFaulted 12u  /* timer, adapter unhealthy */
+#define AppleAgxStartPolicyReasonCleared 11u       /* pending/running cleared (clean exit) */
+#define AppleAgxStartPolicyReasonTimerFaulted 12u  /* timer, scheduler faulted: pending = 2 */
 #define AppleAgxStartPolicyReasonNotPending 13u    /* nothing to clear */
 #define AppleAgxStartPolicyReasonInvalidEvent 14u
+#define AppleAgxStartPolicyReasonFaultedPending 15u /* refuse, latch now (faulted at T) */
 
 typedef struct _APPLE_AGX_START_POLICY_STATE {
   unsigned int Policy;       /* Wom1StartPolicy (parsed) */
-  unsigned int Pending;      /* Wom1StartPending, 0/1 */
+  unsigned int Pending;      /* Wom1StartPending, 0/1/2 (faulted at T) */
   unsigned int Running;      /* Wom1StartRunning, 0/1 */
   unsigned int Latched;      /* Wom1StartLatched, 0/1 */
   unsigned int LatchReset;   /* Wom1StartLatchReset, 0/1 (administrator) */
@@ -95,6 +100,11 @@ unsigned int AppleAgxStartPolicyParsePolicy(unsigned int Present,
 unsigned int AppleAgxStartPolicyParseMarker(unsigned int Present,
                                             unsigned int DwordValid,
                                             unsigned int Value);
+/* Pending: 0, 1 or APPLE_AGX_START_POLICY_PENDING_FAULTED; any other set or
+ * malformed value counts as 1 (fail closed). */
+unsigned int AppleAgxStartPolicyParsePending(unsigned int Present,
+                                             unsigned int DwordValid,
+                                             unsigned int Value);
 /* LatchReset: only an explicit REG_DWORD 1 counts. */
 unsigned int AppleAgxStartPolicyParseExplicit(unsigned int Present,
                                               unsigned int DwordValid,

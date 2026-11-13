@@ -23,6 +23,14 @@ unsigned int AppleAgxStartPolicyParseMarker(unsigned int Present,
   return Value != 0u ? 1u : 0u;
 }
 
+unsigned int AppleAgxStartPolicyParsePending(unsigned int Present,
+                                             unsigned int DwordValid,
+                                             unsigned int Value) {
+  if (Present && DwordValid && Value == APPLE_AGX_START_POLICY_PENDING_FAULTED)
+    return Value;
+  return AppleAgxStartPolicyParseMarker(Present, DwordValid, Value);
+}
+
 unsigned int AppleAgxStartPolicyParseExplicit(unsigned int Present,
                                               unsigned int DwordValid,
                                               unsigned int Value) {
@@ -100,8 +108,13 @@ static void AppleAgxStartPolicyAttempt(APPLE_AGX_START_POLICY_RESULT *Result) {
     Result->Reason = AppleAgxStartPolicyReasonLatched;
     return;
   } else if (next->Pending) {
-    /* The previous start neither proved healthy nor stopped cleanly. */
-    AppleAgxStartPolicyLatch(Result, AppleAgxStartPolicyReasonStalePending);
+    /* The previous start neither proved healthy nor exited cleanly: a
+     * crash, hang, forced power-off or reset inside T, or (value 2) a
+     * scheduler fault at T. */
+    AppleAgxStartPolicyLatch(Result,
+        next->Pending == APPLE_AGX_START_POLICY_PENDING_FAULTED
+            ? AppleAgxStartPolicyReasonFaultedPending
+            : AppleAgxStartPolicyReasonStalePending);
     return;
   } else if (next->Running) {
     /* The previous boot ended without a shutdown action or clean stop. */
@@ -154,14 +167,17 @@ int AppleAgxStartPolicyEvaluate(const APPLE_AGX_START_POLICY_STATE *Current,
                          : AppleAgxStartPolicyReasonNotPending;
   } else if (Event == AppleAgxStartPolicyEventCleanStop ||
              Event == AppleAgxStartPolicyEventShutdown) {
-    /* A clean stop ends the start and the run; a shutdown action ends the
-     * run only (a pending start inside T still latches, by design). */
-    if (Event == AppleAgxStartPolicyEventCleanStop)
-      next->Pending = 0u;
+    /* A clean stop and an orderly shutdown/restart are both clean exits:
+     * they end the start and the run (architect decision 2026-11-13,
+     * supersedes START-GATE's "a shutdown inside T latches"). */
+    next->Pending = 0u;
     next->Running = 0u;
     next->UncleanCount = 0u;
     Result->Reason = AppleAgxStartPolicyReasonCleared;
   } else if (!Healthy) {
+    /* Keep the start pending (the next boot latches) and mark why. */
+    if (Current->Pending)
+      next->Pending = APPLE_AGX_START_POLICY_PENDING_FAULTED;
     Result->Reason = AppleAgxStartPolicyReasonTimerFaulted;
   } else if (Current->Pending) {
     next->Pending = 0u;

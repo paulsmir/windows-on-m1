@@ -141,8 +141,26 @@ static void TestFaultedTimerKeepsPending(void) {
   (void)Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
   (void)Run(&state, AppleAgxStartPolicyEventSucceeded, 1u);
   r = Run(&state, AppleAgxStartPolicyEventTimer, 0u);
+  /* Pending stays set, now marked "faulted at T" (value 2). */
+  assert(r.UpdateMask == P_PENDING && r.Reason == AppleAgxStartPolicyReasonTimerFaulted);
+  assert(state.Pending == APPLE_AGX_START_POLICY_PENDING_FAULTED);
+  /* A second faulted expiry writes nothing. */
+  r = Run(&state, AppleAgxStartPolicyEventTimer, 0u);
   assert(r.UpdateMask == 0u && r.Reason == AppleAgxStartPolicyReasonTimerFaulted);
-  assert(state.Pending == 1u);
+  /* The next boot latches with a reason distinct from a crash latch. */
+  r = Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(r.Decision == AppleAgxStartPolicyDecisionRefuse);
+  assert(r.Reason == AppleAgxStartPolicyReasonFaultedPending);
+  assert(state.Latched == 1u && state.Pending == 0u && state.LatchCount == 1u);
+  /* A clean stop after a faulted timer is still a clean exit. */
+  state = State(1u);
+  (void)Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  (void)Run(&state, AppleAgxStartPolicyEventSucceeded, 1u);
+  (void)Run(&state, AppleAgxStartPolicyEventTimer, 0u);
+  r = Run(&state, AppleAgxStartPolicyEventCleanStop, 1u);
+  assert(state.Pending == 0u && state.Running == 0u);
+  r = Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(r.Reason == AppleAgxStartPolicyReasonClean);
 }
 
 /* Stop, hang or EL2 reset inside T: the next boot finds pending and
@@ -230,15 +248,28 @@ static void TestCleanShutdownResetsCounter(void) {
     assert(state.Running == 0u && state.UncleanCount == 0u);
   }
   assert(state.Latched == 0u);
-  /* Shutdown clears running and the count, never pending: a shutdown
-   * inside T still latches the next boot (START-GATE, accepted). */
+  /* Architect decision 2026-11-13 (supersedes START-GATE "a shutdown
+   * inside T latches"): an orderly shutdown/restart inside T is a clean
+   * exit; the next start is clean. */
   state = State(1u);
   (void)Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
   (void)Run(&state, AppleAgxStartPolicyEventSucceeded, 1u);
   r = Run(&state, AppleAgxStartPolicyEventShutdown, 1u);
-  assert(r.UpdateMask == P_RUNNING && state.Pending == 1u);
+  assert(r.UpdateMask == (P_PENDING | P_RUNNING));
+  assert(r.Reason == AppleAgxStartPolicyReasonCleared);
+  assert(state.Pending == 0u && state.Running == 0u);
   r = Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(r.Decision == AppleAgxStartPolicyDecisionAllow);
+  assert(r.Reason == AppleAgxStartPolicyReasonClean);
+  /* Power loss / reset / hang inside T: no event reaches the driver, the
+   * next start latches. */
+  state = State(1u);
+  (void)Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  (void)Run(&state, AppleAgxStartPolicyEventSucceeded, 1u);
+  r = Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(r.Decision == AppleAgxStartPolicyDecisionRefuse);
   assert(r.Reason == AppleAgxStartPolicyReasonStalePending);
+  assert(state.Latched == 1u);
 }
 
 static void TestCleanStopResetsCounter(void) {
@@ -262,6 +293,13 @@ static void TestParsersAndReceipt(void) {
   assert(AppleAgxStartPolicyParseMarker(1u, 1u, 0u) == 0u);
   assert(AppleAgxStartPolicyParseMarker(1u, 1u, 5u) == 1u);
   assert(AppleAgxStartPolicyParseMarker(1u, 0u, 0u) == 1u); /* fail closed */
+  assert(AppleAgxStartPolicyParsePending(0u, 0u, 0u) == 0u);
+  assert(AppleAgxStartPolicyParsePending(1u, 1u, 0u) == 0u);
+  assert(AppleAgxStartPolicyParsePending(1u, 1u, 1u) == 1u);
+  assert(AppleAgxStartPolicyParsePending(1u, 1u, 2u) ==
+         APPLE_AGX_START_POLICY_PENDING_FAULTED);
+  assert(AppleAgxStartPolicyParsePending(1u, 1u, 7u) == 1u);
+  assert(AppleAgxStartPolicyParsePending(1u, 0u, 2u) == 1u); /* fail closed */
   assert(AppleAgxStartPolicyParseExplicit(1u, 1u, 1u) == 1u);
   assert(AppleAgxStartPolicyParseExplicit(1u, 1u, 2u) == 0u);
   assert(AppleAgxStartPolicyParseExplicit(1u, 0u, 1u) == 0u);
