@@ -6496,3 +6496,16 @@ boot was run. The previous entry stays as written.
 - MP-2 specified (handoff file): physical placement - the same rows from the contiguous local segment against
   the Windows pool pages, with contiguity/colour receipts. In parallel, offline: the register list of the GPU
   L2 / MMU blocks macOS prints, for a read-side comparison.
+
+## UPDATE 2026-11-13T13:52:36Z - PRIORITY CHANGE (operator): completeness first; plan in investigation/GPU_COMPLETENESS_PLAN.md
+
+- Operator 2026-11-13: the driver is to be made complete for everyday use first; the GravityMark gap is resumed
+  afterwards. A change rejected as a GravityMark lever is still landed when it is contract-correct or a real
+  driver feature. Staged MP-2 may finish; the memory-path and compiler levers are otherwise frozen.
+- Audit of the accepted package: .local/night-20261110/completeness-audit/REPORT.md. Largest gaps: GPU only in
+  assisted boot, no brightness, SetPowerState a no-op (no sleep / display off), TDR ends in bugcheck 0x116, no
+  firmware-crash recovery, mode changes to verify, no gamma, no video decode, OpenGL 2.1 and no native ARM64
+  ICD in the package, about 30 fail-closed D3D12 DDIs, disable/enable ends in Code 43, drills and measurement
+  switches in the shipped build.
+- Work packages A (faults), B (power), C (display), D (memory/scheduling/security), E (API), F (shipping) and the
+  order of hardware checks are in the plan. First wave of design reads started.
