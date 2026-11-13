@@ -29,6 +29,15 @@ static unsigned int MpoRectIsPanel(const ADMISSION_MPO_RECT *Rect,
          (long long)Rect->Bottom == (long long)Height ? 1u : 0u;
 }
 
+/* Version 8 (C2): the committed source mode is the scanout panel, so plane
+ * rectangles (mode pixels) are panel pixels. */
+static unsigned int MpoModeNative(const ADMISSION_MPO_INPUT *Input) {
+  return Input->PanelWidth == ADMISSION_MPO_SCANOUT_WIDTH &&
+                 Input->PanelHeight == ADMISSION_MPO_SCANOUT_HEIGHT
+             ? 1u
+             : 0u;
+}
+
 /* Equality is a special case of containment. */
 static unsigned int MpoRectContains(const ADMISSION_MPO_RECT *Outer,
                                     const ADMISSION_MPO_RECT *Inner) {
@@ -384,7 +393,9 @@ unsigned int AdmissionMpoEvaluateOne(const ADMISSION_MPO_INPUT *Input,
   if (plane->Enabled != 0u && plane->LayerIndex == 1u) {
     (void)AdmissionMpoEvaluate(Input, Result); /* argument and slot reset */
     Result->OnePlaneRecord = 0u;
-    if (plane->FormatClass != AdmissionMpoFormatBgra8 &&
+    if (!MpoModeNative(Input))
+      reason = AdmissionMpoReasonRecordModeNotNative;
+    else if (plane->FormatClass != AdmissionMpoFormatBgra8 &&
         plane->FormatClass != AdmissionMpoFormatRgba8)
       reason = AdmissionMpoReasonFormat;
     else if (plane->ColorSpaceClass != AdmissionMpoColorSpaceSdrSrgb)
@@ -421,7 +432,9 @@ unsigned int AdmissionMpoEvaluateOne(const ADMISSION_MPO_INPUT *Input,
   /* The v1 one-plane answer (argument and slot reset) first. */
   (void)AdmissionMpoEvaluate(Input, Result);
   Result->OnePlaneRecord = 0u;
-  if (plane->FormatClass != AdmissionMpoFormatBgra8 &&
+  if (!MpoModeNative(Input))
+    reason = AdmissionMpoReasonRecordModeNotNative;
+  else if (plane->FormatClass != AdmissionMpoFormatBgra8 &&
       plane->FormatClass != AdmissionMpoFormatRgba8)
     reason = AdmissionMpoReasonFormat;
   else if (plane->ColorSpaceClass != AdmissionMpoColorSpaceSdrSrgb)

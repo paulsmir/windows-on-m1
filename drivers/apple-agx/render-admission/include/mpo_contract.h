@@ -48,7 +48,7 @@
  * in the scanout pool and the 64 KiB placement alignment CreateAllocation
  * requests; Set3 evaluates again with the actual offset. */
 
-#define ADMISSION_MPO_CONTRACT_VERSION 7u
+#define ADMISSION_MPO_CONTRACT_VERSION 8u
 #define ADMISSION_MPO_MAX_PLANES 2u
 #define ADMISSION_MPO_SLOT_COUNT 2u
 #define ADMISSION_MPO_MIN_EXTENT 32u
@@ -171,6 +171,16 @@ typedef enum _ADMISSION_MPO_REASON {
    * whose visible part is neither scratch-realisable (<= 64x64, scratch
    * reserved) nor crop-realisable (> 64 on an axis and >= 40x39). */
   AdmissionMpoReasonTopClip = 38,
+  /* Version 8 (C2): a plane that would go as one layer record (the lone
+   * application plane, a scaled, cropped or positioned LayerIndex 0 plane)
+   * while the committed source mode is not the native panel mode.  Plane
+   * rectangles are mode pixels and a record's destination is panel pixels,
+   * so the record would show the picture 1:1 at the panel's top left
+   * instead of in the committed destination.  Refused so that DWM composes
+   * and the full-screen primary takes the V2 PRESENT path, which the broker
+   * scales into the committed destination.  Two planes at such a mode are
+   * refused earlier with PanelGeometry (24). */
+  AdmissionMpoReasonRecordModeNotNative = 39,
   ADMISSION_MPO_REASON_COUNT
 } ADMISSION_MPO_REASON;
 
@@ -361,7 +371,10 @@ unsigned int AdmissionMpoEvaluatePrimary(const ADMISSION_MPO_INPUT *Input,
  * plane meets (see AdmissionMpoEvaluate: 10..17, 32..34, 18..21, 25), and
  * OnePlaneRecord is 1 with Slots[0] filled (Premultiplied 0: nothing lies
  * beneath slot 0 except the black background).  A disabled plane is the
- * plane-off path (supported, OnePlaneRecord 0). */
+ * plane-off path (supported, OnePlaneRecord 0).  Version 8: every record
+ * form (this one and the lone LayerIndex 1 plane) is refused first with
+ * RecordModeNotNative (39) while PanelWidth x PanelHeight is not the
+ * scanout panel; the full-screen primary is unaffected. */
 unsigned int AdmissionMpoEvaluateOne(const ADMISSION_MPO_INPUT *Input,
                                      ADMISSION_MPO_RESULT *Result);
 
