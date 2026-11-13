@@ -53,7 +53,11 @@ class AppleAgxRenderMemoryTests(unittest.TestCase):
         self.assertIn("AdmissionMemoryReady(&Context->Memory)", windows)
         self.assertIn("output->SegmentDescriptorStride", windows)
         self.assertIn("Flags.PopulatedFromSystemMemory", windows)
-        self.assertIn("LocalAllocationBytes", windows)
+        # CUR-1 v2: VidMm's segment 2 is the allocation range minus the
+        # scan-out scratch, derived from LocalAllocationBytes in one place.
+        self.assertIn("AdmissionMemoryVidMmLocalBytes(&Context->Memory)", windows)
+        memory = (RENDER / "src" / "render_memory.c").read_text()
+        self.assertIn("Memory->LocalAllocationBytes - ADMISSION_SCANOUT_SCRATCH_BYTES", memory)
         self.assertIn("ADMISSION_MEMORY_CONTRACT Memory", header)
 
     def test_scanout_segment_is_directflip_capable(self):

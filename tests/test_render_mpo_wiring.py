@@ -151,7 +151,8 @@ class RenderMpoWiringTests(unittest.TestCase):
             includes = set(re.findall(r'^#include\s+[<"]([^>"]+)', text, re.M))
             self.assertLessEqual(
                 includes,
-                {"mpo_layers.h", "mpo_contract.h", "apple_agx_scanout.h"},
+                # string.h: standard C memcpy/memset for CUR-1c's wide-load copy (no Windows header).
+                {"mpo_layers.h", "mpo_contract.h", "apple_agx_scanout.h", "string.h"},
                 path)
             self.assertNotRegex(text, r"\bunion\b", path)
 

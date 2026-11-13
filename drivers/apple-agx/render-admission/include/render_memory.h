@@ -43,6 +43,16 @@ typedef struct _ADMISSION_LOCAL_MEMORY_VIEW {
   APPLE_AGX_U64 Bytes;
 } ADMISSION_LOCAL_MEMORY_VIEW;
 
+/* CUR-1 v2 scan-out scratch: the top 128 KiB of the segment-2 range are
+ * driver-owned (two 64 KiB-aligned 64x64 32-bpp scratch surfaces).  VidMm
+ * is told segment 2 ends below them; the DCP registration keeps the whole
+ * range (pool = VidMm segment 2 + scratch), so a scratch record passes the
+ * broker's in-pool rule. */
+#define ADMISSION_SCANOUT_SCRATCH_BYTES 0x20000ULL
+#define ADMISSION_SCANOUT_SCRATCH_STEP 0x10000ULL
+/* The segment-2 size VidMm manages (0 when the range is too small). */
+APPLE_AGX_U64 AdmissionMemoryVidMmLocalBytes(const ADMISSION_MEMORY_CONTRACT *Memory);
+
 APPLE_AGX_BOOL AdmissionMemoryInitialize(
     ADMISSION_MEMORY_CONTRACT *Memory,
     APPLE_AGX_SOFTWARE_APERTURE_ENTRY *ApertureEntries,

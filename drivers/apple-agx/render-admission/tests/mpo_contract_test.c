@@ -455,10 +455,12 @@ static int RuleHolds(const ADMISSION_MPO_PLANE_INPUT *P, unsigned int Index,
   case AdmissionMpoReasonUnsupportedFlags:
     return x->HasUnsupportedFlags == 0u;
   case AdmissionMpoReasonClip:
-    return x->Clip.Left <= x->Destination.Left &&
+    /* CUR-1 v2: the top plane's clip is classified by TopClipOracle. */
+    return x->LayerIndex == 0u ||
+           (x->Clip.Left <= x->Destination.Left &&
            x->Clip.Top <= x->Destination.Top &&
            x->Clip.Right >= x->Destination.Right &&
-           x->Clip.Bottom >= x->Destination.Bottom;
+           x->Clip.Bottom >= x->Destination.Bottom);
   case AdmissionMpoReasonSurfaceNotInPool:
     return x->InScanoutPool != 0u &&
            (x->PlacementKnown == 0u ||
@@ -486,6 +488,24 @@ static int PerPlaneRule(unsigned int Reason) {
          Reason != AdmissionMpoReasonSameSurface &&
          Reason != AdmissionMpoReasonSurfaceOverlap &&
          Reason != AdmissionMpoReasonPanelGeometry;
+}
+
+/* Independent oracle of the top plane's clip (no scratch reservation in
+ * the sweep): covering Dst -> supported; visible part (Dst ∩ Clip) empty or
+ * <= 64x64 -> TopClip; else supported only from 40x39. */
+static unsigned int TopClipOracle(const ADMISSION_MPO_PLANE_INPUT *X) {
+  long long l, t, r, b;
+  if (X->Clip.Left <= X->Destination.Left && X->Clip.Top <= X->Destination.Top &&
+      X->Clip.Right >= X->Destination.Right && X->Clip.Bottom >= X->Destination.Bottom)
+    return AdmissionMpoSupported;
+  l = X->Clip.Left > X->Destination.Left ? X->Clip.Left : X->Destination.Left;
+  t = X->Clip.Top > X->Destination.Top ? X->Clip.Top : X->Destination.Top;
+  r = X->Clip.Right < X->Destination.Right ? X->Clip.Right : X->Destination.Right;
+  b = X->Clip.Bottom < X->Destination.Bottom ? X->Clip.Bottom : X->Destination.Bottom;
+  if (r - l <= 0 || b - t <= 0 || (r - l <= 64 && b - t <= 64))
+    return AdmissionMpoReasonTopClip;
+  return r - l >= 40 && b - t >= 39 ? AdmissionMpoSupported
+                                    : AdmissionMpoReasonTopClip;
 }
 
 /* Independent pair oracle (both planes already passed every plane rule). */
@@ -608,6 +628,13 @@ static void TestPropertySweep(void) {
         }
       }
     }
+    for (index = 0u; index < 2u && expectedReason == AdmissionMpoSupported;
+         ++index)
+      if (p[index].LayerIndex == 0u &&
+          TopClipOracle(&p[index]) != AdmissionMpoSupported) {
+        expectedReason = AdmissionMpoReasonTopClip;
+        expectedPlane = index;
+      }
     if (expectedReason == AdmissionMpoSupported) {
       expectedReason = PairOracle(&p[0], &p[1]);
       if (expectedReason != AdmissionMpoSupported)
@@ -690,8 +717,9 @@ static void TestStableReasonValues(void) {
   CHECK(AdmissionMpoReasonOnePlaneBlend == 35);
   CHECK(AdmissionMpoReasonLoneNotFullPanel == 36);
   CHECK(AdmissionMpoReasonLoneBlend == 37);
-  CHECK(ADMISSION_MPO_REASON_COUNT == 38);
-  CHECK(ADMISSION_MPO_CONTRACT_VERSION == 6u);
+  CHECK(AdmissionMpoReasonTopClip == 38);
+  CHECK(ADMISSION_MPO_REASON_COUNT == 39);
+  CHECK(ADMISSION_MPO_CONTRACT_VERSION == 7u);
 }
 
 /* Version 2 surface rules, each on its role, both orders. */
@@ -1281,6 +1309,73 @@ static void TestLonePlane(void) {
   }
 }
 
+/* CUR-1 v2: the full-panel top plane of a pair with a clip.  Sizes from
+ * EXP2366 (1x1 at the panel centre, 24x27, 32x30, 40x39) and the limits. */
+static unsigned int EvalTopClip(ADMISSION_MPO_RECT Clip, unsigned int Scratch,
+                                ADMISSION_MPO_RESULT *Result, int Swap) {
+  ADMISSION_MPO_PLANE_INPUT p[2];
+  ADMISSION_MPO_INPUT input;
+  Pair(p, Swap);
+  p[Swap ? 1 : 0].Clip = Clip;
+  memset(&input, 0, sizeof(input));
+  input.PanelWidth = PANEL_W;
+  input.PanelHeight = PANEL_H;
+  input.PlaneCount = 2u;
+  input.Planes = p;
+  input.PoolBytes = POOL_BYTES;
+  input.ScratchAvailable = Scratch;
+  return AdmissionMpoEvaluate(&input, Result);
+}
+
+static void TestTopClip(void) {
+  static const struct { int l, t, w, h; unsigned int mode; } cases[] = {
+      {1280, 800, 1, 1, AdmissionMpoClipScratch},
+      {1280, 800, 24, 27, AdmissionMpoClipScratch},
+      {1277, 773, 32, 30, AdmissionMpoClipScratch},
+      {1280, 788, 40, 39, AdmissionMpoClipScratch},
+      {0, 0, 64, 64, AdmissionMpoClipScratch},
+      {2496, 1536, 64, 64, AdmissionMpoClipScratch},
+      {100, 100, 65, 40, AdmissionMpoClipCrop},
+      {100, 100, 40, 65, AdmissionMpoClipCrop},
+      {0, 0, (int)PANEL_W, (int)PANEL_H, AdmissionMpoClipNone},
+  };
+  ADMISSION_MPO_RESULT result;
+  unsigned int i;
+  int swap;
+  for (swap = 0; swap < 2; ++swap) {
+    for (i = 0u; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+      ADMISSION_MPO_RECT clip = Rect(cases[i].l, cases[i].t, cases[i].l + cases[i].w,
+                                     cases[i].t + cases[i].h);
+      CHECK(EvalTopClip(clip, 1u, &result, swap) == AdmissionMpoSupported);
+      CHECK(result.Slots[1].ClipMode == cases[i].mode);
+      CHECK(RectEqual(result.Slots[1].Clip, clip));
+      CHECK(result.ScratchOffset == ADMISSION_MPO_SCRATCH_NONE);
+      /* Without the reservation a scratch-sized clip is refused. */
+      if (cases[i].mode == AdmissionMpoClipScratch) {
+        CHECK(EvalTopClip(clip, 0u, &result, swap) == AdmissionMpoReasonTopClip);
+        CHECK(result.FailingPlane == (unsigned int)(swap ? 1 : 0));
+      }
+    }
+    /* Neither realisable: one axis over 64 and the crop below 40x39. */
+    CHECK(EvalTopClip(Rect(10, 10, 75, 48), 1u, &result, swap) == AdmissionMpoReasonTopClip);
+    CHECK(EvalTopClip(Rect(10, 10, 40, 110), 1u, &result, swap) == AdmissionMpoReasonTopClip);
+    /* Clip partly outside the panel: the visible part is Dst ∩ Clip. */
+    CHECK(EvalTopClip(Rect(2550, 1590, 2600, 1650), 1u, &result, swap) == AdmissionMpoSupported);
+    CHECK(result.Slots[1].ClipMode == AdmissionMpoClipScratch &&
+          RectEqual(result.Slots[1].Clip, Rect(2550, 1590, 2560, 1600)));
+    /* Empty visible part. */
+    CHECK(EvalTopClip(Rect(2600, 10, 2700, 20), 1u, &result, swap) == AdmissionMpoReasonTopClip);
+    CHECK(EvalTopClip(Rect(10, 10, 10, 20), 1u, &result, swap) == AdmissionMpoReasonTopClip);
+  }
+  /* The bottom plane keeps rule 17. */
+  {
+    ADMISSION_MPO_PLANE_INPUT p[2];
+    Pair(p, 0);
+    p[1].Clip = Rect(110, 210, 120, 220);
+    FAIL_AT(p, 2u, AdmissionMpoReasonClip, 1u);
+  }
+}
+
 int main(void) {
   TestStableReasonValues();
   TestArgumentsAndCounts();
@@ -1295,6 +1390,7 @@ int main(void) {
   TestCapsDerivation();
   TestCheck3OnlyRulesNotReachableFromSet3();
   TestLonePlane();
+  TestTopClip();
   if (Failures != 0u) {
     fprintf(stderr, "mpo_contract_test: %u failure(s)\n", Failures);
     return EXIT_FAILURE;
