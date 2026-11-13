@@ -78885,3 +78885,28 @@ EXP2389 HARDWARE ACTUAL 2026-11-13T12:09:58Z:
   - switch-off inertness CONFIRMED;
   - SRV-1 switch-on INCONCLUSIVE (pipeline refused by a translator-side defect). Fixed in arch/srv1 73bdffafe: the check skips the SRV shader buffers; the fixture now runs both owner checks, RED -> GREEN.
 - Next: the SRV-1 switch-on arm needs the rebuilt package. Proposed to ride the MP-1 switch-off boot as its own per-process arm.
+
+EXP2390 HARDWARE BEFORE 2026-11-13T12:39:31Z:
+- Kind: control boot of a two-boot MP-1 pair; the single variable between EXP2390 and EXP2391 is the device value Wom1GpuPrivateCached (absent here, =1 in EXP2391).
+  - m1n1: m1n1-s2v3-gc (sha 3a72f1ec4c10b076a248f83d26bb8451f0d8b8bf90ed278e60811158a84ece94) = s2v3 63c13618 + exp/m1n1-s2v3-gc (GC series cherry-picked + MP-1 broker receipt 8597a336), built with AGX_GPUVA_PRIVATE_CACHED=1. Without the KMD's LEAF_PRIVATE_CACHED flag it writes the same C8B leaves as s2v3. AGX_GPUVA_MAP_NO_TLBI off, as s2v3.
+  - Package: arch/srv1 71d2aa492 = merged HOLD-3 line + SRV-1 (switch off by default) + the UAV-dimension fix 73bdffafe + coverage receipt Wom1GpuGcReceipt.
+  - Measurement only: no cache maintenance on unmap/reuse, never a default.
+- Arms, each a window with receipts pre/post and its full.log span (CPPC dram_fast, GPUVA-GC):
+  1. OPTWING1 with eoptwin5 (exp/optwin f12f5a69a, sha 1317d2fce173b1289112418f641e950c4f59904f04af9568e725861852e80bdd): G1/G1d/G1c and G1u/G1du/G1cu at 1/4/16/64 MB (G1du 4/16 MB added), 5 reps on the gather rows, N32 and GM shapes, OPTWIN_MISSING reasons.
+  2. GM PERF w (GravityMark's own frame, for the TLBI/leaf counts).
+  3. OPTWING1 with APPLE_AGX_D3D12_SRV_SSBO=1 for the probe process only: the SRV-1 switch-on rerun after the fix.
+  - ATOMIC CONTRACT: none -- separate arms and receipts; the SRV-1 arm changes only the probe process's compiler form.
+- WHY THIS HYPOTHESIS (MP-1, architect): (1) OPTWIN with identical inner loops (codegate2): ours/macOS 1.19 / 1.43 / 0.99 / 1.32 at 1/4/16/64 MB; the 1024-thread chase rows of EXP2266/2269 give the same 1.43 / 1.32. (2) Our leaves are AttrIndx 2 (uncached, C8B); macOS's kext writes AttrIndx 0 (C83) for user buffers under a map option. (3) Earlier exclusions of the device-load path ran with the GPU ~65 % at P1.
+- WINDOWS / AGX / TRANSLATION: KMD marks GPU-only, non-presentation, not-written-primary local leaves; the broker writes AppleAgxUatGpuPrivate* (C83) only with that flag; this boot sends no flag.
+- WHAT IS STILL UNKNOWN: whether AttrIndx 0 changes the gather latency (EXP2391); here, the control values and the coverage of the G1 regions with the switch off.
+- Expected:
+  - G1u rows as EXP2388/2389 (1 MB ~1.2, 4 MB ~1.43, 16 MB ~0.99, 64 MB ~1.32);
+  - Wom1GpuGcReceipt switch=0, cached 0, big_coherent > 0 for the 85 MB regions (flags CpuVisible 0, eligible 1);
+  - GPUVA-GC lines with cached 0;
+  - the SRV-1 arm completes with oracle_bad 0 and the G1 SRV rows at the G1u level (1 MB ~1.2 instead of 3.98);
+  - OPTWIN_MISSING lines name a reason if any record is missing.
+- Failure criteria: preflight mismatch; oracle_bad > 0; the SRV-1 arm refused again; coverage receipt absent; fault, hang (exact-PID stop + recovery).
+- Recovery: rec2390h visible recovery.
+- Hashes: sys 73a20ddad467, UmdArm64 2f0bde456b7a, UmdX64 dc58e7a8774d, Umd32 15d16997b5e2; manifest 266bb28da910, hardware-manifest 3d6ad8ef1dd8; probe2390.sh 0ef0a1435e76 (PROBE_LINT_OK); visible recovery rec2390h 3a1b850dd4bcb204; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
+- Recovery rec2390h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2390-mp1off/run2390.sh.
