@@ -70,7 +70,7 @@ FAKE = r"""
 /* Fake broker page: V3 advertised; records COMMIT_LAYERS. */
 static unsigned active_layers, refuse, commits, count_written, v3_writes;
 static unsigned long long receipt, request_seq, rec_offset;
-static unsigned rec_flags, rec_width;
+static unsigned rec_flags, rec_width, rec_dst_origin, rec_dst_size;
 static APPLE_AGX_SCANOUT_U64 now_ms(void *c) { (void)c; return 1; }
 static APPLE_AGX_SCANOUT_BOOL r32(void *c, unsigned o, unsigned *v) {
   (void)c; o -= APPLE_AGX_SCANOUT_MMIO_OFFSET;
@@ -85,6 +85,8 @@ static APPLE_AGX_SCANOUT_BOOL w32(void *c, unsigned o, unsigned v) {
   if (o >= APPLE_AGX_SCANOUT_REG_NEGOTIATED) ++v3_writes;
   if (o == APPLE_AGX_SCANOUT_REG_LAYER0 + APPLE_AGX_SCANOUT_LAYER_FLAGS) rec_flags = v;
   if (o == APPLE_AGX_SCANOUT_REG_LAYER0 + APPLE_AGX_SCANOUT_LAYER_WIDTH) rec_width = v;
+  if (o == APPLE_AGX_SCANOUT_REG_LAYER0 + APPLE_AGX_SCANOUT_LAYER_DST_ORIGIN) rec_dst_origin = v;
+  if (o == APPLE_AGX_SCANOUT_REG_LAYER0 + APPLE_AGX_SCANOUT_LAYER_DST_SIZE) rec_dst_size = v;
   if (o == APPLE_AGX_SCANOUT_REG_LAYER_COUNT) count_written = v;
   if (o == APPLE_AGX_SCANOUT_REG_COMMAND && v == APPLE_AGX_SCANOUT_CMD_COMMIT_LAYERS) {
     ++commits; if (refuse) receipt = request_seq; }
@@ -102,11 +104,16 @@ static ADMISSION_SCANOUT_RUNTIME *AdmissionScanoutGet(ADMISSION_CONTEXT *c) { re
 static void setup(int two_layers, int slot1, int stored) {
   memset(&ctx, 0, sizeof(ctx)); memset(&run, 0, sizeof(run));
   active_layers = refuse = commits = count_written = v3_writes = 0;
-  rec_flags = rec_width = 0; rec_offset = 0; receipt = 0; delays = 0; irql = 0;
+  rec_flags = rec_width = rec_dst_origin = rec_dst_size = 0; rec_offset = 0;
+  receipt = 0; delays = 0; irql = 0;
   ctx.ScanoutRuntime = &run; run.Adapter = &ctx;
   run.Panel.Started = run.Panel.Committed = run.Panel.Visible = 1;
   run.Panel.Scanout.Qualified = 1; run.Panel.Scanout.NextSequence = 5;
   run.Panel.Scanout.AbiVersion = 2;
+  /* C2: the native commit's placement (FixedPanelCommitMode identity). */
+  run.Panel.Scanout.PresentWidth = 2560u; run.Panel.Scanout.PresentHeight = 1600u;
+  run.Panel.Scanout.PresentDestOrigin = 0u;
+  run.Panel.Scanout.PresentDestSize = 2560u | (1600u << 16);
   run.Panel.Scanout.Capabilities = APPLE_AGX_SCANOUT_V2_PRESENT_CAPABILITIES |
       APPLE_AGX_SCANOUT_CAP_TWO_LAYERS;
   run.Panel.Scanout.TwoLayers = two_layers ? 1 : 0;
@@ -135,6 +142,7 @@ int main(void) {
   assert(AdmissionScanoutSetVisible(&ctx, FALSE) == STATUS_SUCCESS);
   assert(commits == 1 && count_written == 1 && rec_flags == 0u &&
          rec_width == 2560u && rec_offset == 0x10000ULL);
+  assert(rec_dst_origin == 0u && rec_dst_size == (2560u | (1600u << 16)));
   assert(!run.Panel.Visible && run.PendingValid && run.PresentGate == 1);
   assert(run.PendingMpoKind == ADMISSION_SCANOUT_MPO_KIND_REMOVAL &&
          run.PendingMpoCount == 0 && run.Slot1Shown == 1);
@@ -169,6 +177,27 @@ int main(void) {
          run.PresentGate == 0 && !run.PendingValid);
   /* No stored LayerIndex 0 plane: nothing to show in slot 0; counted. */
   setup(1, 1, 0);
+  assert(AdmissionScanoutSetVisible(&ctx, FALSE) == STATUS_SUCCESS);
+  assert(commits == 0 && ctx.Mpo.Slot1RetireFailures == 1);
+  /* C2: leaving a 1920x1080 mode (letterbox 0,80 2560x1440): the stored
+   * mode-coordinate plane is mapped with the outgoing mode's placement. */
+  setup(1, 1, 1);
+  run.Panel.Scanout.PresentWidth = 1920u; run.Panel.Scanout.PresentHeight = 1080u;
+  run.Panel.Scanout.PresentDestOrigin = 0u | (80u << 16);
+  run.Panel.Scanout.PresentDestSize = 2560u | (1440u << 16);
+  {
+    ADMISSION_MPO_PLANE_INPUT *p = &ctx.MpoPlanes[0].Input;
+    p->SurfaceWidth = 1920; p->SurfaceHeight = 1080; p->SurfaceStride = 7680;
+    p->SurfaceBytes = 7680ULL * 1080u;
+    p->Source.Right = p->Destination.Right = 1920;
+    p->Source.Bottom = p->Destination.Bottom = 1080;
+  }
+  assert(AdmissionScanoutSetVisible(&ctx, FALSE) == STATUS_SUCCESS);
+  assert(commits == 1 && rec_width == 1920u &&
+         rec_dst_origin == (0u | (80u << 16)) &&
+         rec_dst_size == (2560u | (1440u << 16)));
+  /* No committed placement: the removal is not built (counted). */
+  setup(1, 1, 1); run.Panel.Committed = 0;
   assert(AdmissionScanoutSetVisible(&ctx, FALSE) == STATUS_SUCCESS);
   assert(commits == 0 && ctx.Mpo.Slot1RetireFailures == 1);
   /* Showing the source never removes anything. */
@@ -216,6 +245,7 @@ class RenderMpoSlot1RetireTests(unittest.TestCase):
             "static VOID AdmissionScanoutSetNextMpo(",
             "static VOID AdmissionScanoutTakeNextMpo(",
             "_Use_decl_annotations_ BOOLEAN AdmissionScanoutMpoSlot1MayShow(",
+            "_Use_decl_annotations_ BOOLEAN AdmissionScanoutMpoModeMap(",
             "static NTSTATUS AdmissionScanoutMpoQueueHeld(",
             "static VOID AdmissionScanoutMpoRetireSlot1(ADMISSION_CONTEXT *Context,\n                                           ULONG Stage) {",
             "_Use_decl_annotations_ NTSTATUS AdmissionScanoutSetVisible(",

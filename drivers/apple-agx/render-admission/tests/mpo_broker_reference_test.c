@@ -778,6 +778,177 @@ static void TestScratchStage(void) {
   CHECK(AdmissionMpoScratchStage(stage, source, 4u, 1u, 1u) == 1u); /* hidden 1x1 */
 }
 
+
+/* ---- C2 (contract version 9): records at the eleven source modes ----
+ * WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?  A record the table
+ * admits at a scaled mode whose mapped (panel) form the broker refuses
+ * (destination outside the panel, composed scale beyond 2x), a mapped
+ * destination outside the committed destination (drawn over the letterbox),
+ * and the native records changing.  Destinations: AppleAgxFixedPanel
+ * Destination, aspect-ratio-centred-max. */
+static const struct { unsigned int W, H; int L, T, R, B; } RefModes[] = {
+    {2560u, 1600u, 0, 0, 2560, 1600},  {2048u, 1280u, 0, 0, 2560, 1600},
+    {1920u, 1200u, 0, 0, 2560, 1600},  {1920u, 1080u, 0, 80, 2560, 1520},
+    {1680u, 1050u, 0, 0, 2560, 1600},  {1600u, 900u, 0, 80, 2560, 1520},
+    {1440u, 900u, 0, 0, 2560, 1600},   {1280u, 800u, 0, 0, 2560, 1600},
+    {1280u, 720u, 0, 80, 2560, 1520},  {1024u, 768u, 213, 0, 2346, 1600},
+    {800u, 600u, 213, 0, 2346, 1600},
+};
+
+static ADMISSION_MPO_MODE_MAP RefMap(unsigned int I) {
+  ADMISSION_MPO_MODE_MAP map;
+  map.ModeWidth = RefModes[I].W;
+  map.ModeHeight = RefModes[I].H;
+  map.Destination = Rect(RefModes[I].L, RefModes[I].T, RefModes[I].R, RefModes[I].B);
+  return map;
+}
+
+static ADMISSION_MPO_PLANE_INPUT ModeDesktop(unsigned int W, unsigned int H) {
+  ADMISSION_MPO_PLANE_INPUT p = Desktop();
+  p.Source = Rect(0, 0, (int)W, (int)H);
+  p.Destination = p.Source; p.Clip = p.Source;
+  p.SurfaceWidth = W; p.SurfaceHeight = H; p.SurfaceStride = W * 4u;
+  p.SurfaceBytes = (unsigned long long)W * 4u * H;
+  return p;
+}
+
+static unsigned int EvalAtMode(ADMISSION_MPO_PLANE_INPUT *P, unsigned int Count,
+                               unsigned int I, ADMISSION_MPO_RESULT *Result) {
+  ADMISSION_MPO_INPUT input;
+  memset(&input, 0, sizeof(input));
+  input.PanelWidth = RefModes[I].W;
+  input.PanelHeight = RefModes[I].H;
+  input.PanelStride = RefModes[I].W * 4u;
+  input.PanelModeSupported = 1u;
+  input.PlaneCount = Count;
+  input.Planes = P;
+  input.PoolBytes = REF_POOL;
+  input.ScalingSupported = 1u;
+  input.ScratchAvailable = 1u;
+  input.Path = ADMISSION_MPO_PATH_SET3;
+  input.ModeMapKnown = 1u;
+  input.ModeMap = RefMap(I);
+  return Count == 1u ? AdmissionMpoEvaluateOne(&input, Result)
+                     : AdmissionMpoEvaluate(&input, Result);
+}
+
+/* The mapped destination lies inside the committed destination. */
+static int InsideCommitted(const APPLE_AGX_SCANOUT_LAYER *R, unsigned int I) {
+  unsigned int dx = Lo(R->DstOrigin), dy = Hi(R->DstOrigin);
+  return (int)dx >= RefModes[I].L && (int)dy >= RefModes[I].T &&
+         (int)(dx + Lo(R->DstSize)) <= RefModes[I].R &&
+         (int)(dy + Hi(R->DstSize)) <= RefModes[I].B;
+}
+
+static void TestModeMappedRecords(void) {
+  ADMISSION_MPO_PLANE_INPUT p[2];
+  ADMISSION_MPO_RESULT result;
+  ADMISSION_MPO_MODE_MAP map;
+  APPLE_AGX_SCANOUT_LAYER records[2], native[2];
+  unsigned int i, n, accepted = 0u, refused = 0u;
+
+  /* Vectors at 1920x1080 (letterbox 0,80 2560x1440). */
+  p[0] = ModeDesktop(1920u, 1080u);
+  p[0].LayerIndex = 1u; p[0].BlendAlpha = 0u; /* the lone application plane */
+  CHECK(EvalAtMode(p, 1u, 3u, &result) == AdmissionMpoSupported);
+  CHECK(AdmissionMpoBuildLone(&p[0], &records[0]) == 1u);
+  CHECK(AdmissionMpoMapRecords(&result.ModeMap, records, 1u) == 1u);
+  CHECK(records[0].SrcSize == APPLE_AGX_SCANOUT_PACK(1920u, 1080u) &&
+        records[0].DstOrigin == APPLE_AGX_SCANOUT_PACK(0u, 80u) &&
+        records[0].DstSize == APPLE_AGX_SCANOUT_PACK(2560u, 1440u));
+  CHECK(RefCommit(records, 1u, REF_POOL) == 0u);
+  /* The pointer clip at the mode's bottom-right corner: the 64x64 scratch
+   * layer is placed inside the mode (1856,1016) and then mapped. */
+  p[0] = ModeDesktop(1920u, 1080u);
+  p[1] = Application();
+  p[1].Destination = Rect(400, 300, 1680, 1020); p[1].Clip = p[1].Destination;
+  p[0].Clip = Rect(1919, 1079, 1920, 1080);
+  CHECK(EvalAtMode(p, 2u, 3u, &result) == AdmissionMpoSupported);
+  CHECK(result.Slots[1].ClipMode == AdmissionMpoClipScratch);
+  result.ScratchOffset = REF_POOL - 0x20000ULL;
+  CHECK(AdmissionMpoBuildCommit(&result, records) == 2u);
+  CHECK(records[1].DstOrigin == APPLE_AGX_SCANOUT_PACK(1856u, 1016u));
+  CHECK(AdmissionMpoMapRecords(&result.ModeMap, records, 2u) == 2u);
+  CHECK(records[1].DstOrigin == APPLE_AGX_SCANOUT_PACK(2474u, 1434u) &&
+        records[1].DstSize == APPLE_AGX_SCANOUT_PACK(86u, 86u) &&
+        records[1].SrcSize == APPLE_AGX_SCANOUT_PACK(64u, 64u));
+  CHECK(records[0].DstOrigin == APPLE_AGX_SCANOUT_PACK(533u, 480u) &&
+        records[0].DstSize == APPLE_AGX_SCANOUT_PACK(1707u, 960u));
+  CHECK(InsideCommitted(&records[0], 3u) && InsideCommitted(&records[1], 3u));
+  CHECK(RefCommit(records, 2u, REF_POOL) == 0u);
+  /* The native mode: mapping is the identity, records byte-identical. */
+  p[0] = Desktop(); p[1] = Application();
+  CHECK(EvalAtMode(p, 2u, 0u, &result) == AdmissionMpoSupported);
+  CHECK(AdmissionMpoBuildCommit(&result, records) == 2u);
+  memcpy(native, records, sizeof(native));
+  CHECK(AdmissionMpoMapRecords(&result.ModeMap, records, 2u) == 2u);
+  CHECK(memcmp(native, records, sizeof(native)) == 0);
+  /* A zero map maps nothing and leaves the records untouched. */
+  memset(&map, 0, sizeof(map));
+  CHECK(AdmissionMpoMapRecords(&map, records, 2u) == 0u);
+  CHECK(memcmp(native, records, sizeof(native)) == 0);
+  CHECK(AdmissionMpoMapRecords(&result.ModeMap, records, 3u) == 0u);
+
+  /* Sweep: every mode, random application planes (lone, positioned and
+   * paired) and top-plane clips.  Supported -> mapped records the broker
+   * accepts, inside the committed destination. */
+  for (n = 0u; n < 60000u; ++n) {
+    unsigned int count, mode = Next((unsigned int)(sizeof(RefModes) / sizeof(RefModes[0])));
+    const int w = (int)RefModes[mode].W, h = (int)RefModes[mode].H;
+    int sw = 32 + (int)Next(1400u), sh = 32 + (int)Next(900u);
+    int dl = (int)Next((unsigned int)w), dt = (int)Next((unsigned int)h);
+    int dw = 1 + (int)Next((unsigned int)w), dh = 1 + (int)Next((unsigned int)h);
+    unsigned int form = Next(4u);
+    p[0] = ModeDesktop((unsigned int)w, (unsigned int)h);
+    p[1] = Application();
+    p[1].Source = Rect(0, 0, sw, sh);
+    p[1].SurfaceWidth = (unsigned int)sw; p[1].SurfaceHeight = (unsigned int)sh;
+    p[1].SurfaceStride = ((unsigned int)sw * 4u + 63u) & ~63u;
+    p[1].SurfaceBytes = (unsigned long long)p[1].SurfaceStride * (unsigned int)sh;
+    p[1].PoolOffset = 0x2000000ULL;
+    p[1].Destination = Rect(dl, dt, dl + dw > w ? w : dl + dw, dt + dh > h ? h : dt + dh);
+    if (form == 0u) /* the lone plane covers the mode */
+      p[1].Destination = Rect(0, 0, w, h);
+    p[1].Clip = p[1].Destination;
+    if (form == 3u) { /* a clipped top plane */
+      int cl = (int)Next((unsigned int)w), ct = (int)Next((unsigned int)h);
+      p[0].Clip = Rect(cl, ct, cl + 1 + (int)Next(120u), ct + 1 + (int)Next(120u));
+    }
+    if (form <= 1u) {
+      count = 1u;
+      if (form == 1u) { /* a positioned LayerIndex 0 plane */
+        p[1].LayerIndex = 0u; p[1].BlendAlpha = 1u;
+      }
+      if (EvalAtMode(&p[1], 1u, mode, &result) != AdmissionMpoSupported) {
+        ++refused;
+        continue;
+      }
+      if (result.OnePlaneRecord == 0u)
+        continue; /* the V2 full-screen primary: no record */
+      CHECK((form == 0u ? AdmissionMpoBuildLone(&p[1], &records[0])
+                        : AdmissionMpoBuildRemoval(&p[1], &records[0])) == 1u);
+    } else {
+      count = 2u;
+      if (EvalAtMode(p, 2u, mode, &result) != AdmissionMpoSupported) {
+        ++refused;
+        continue;
+      }
+      result.ScratchOffset = REF_POOL - 0x20000ULL;
+      CHECK(AdmissionMpoBuildCommit(&result, records) == 2u);
+    }
+    CHECK(AdmissionMpoMapRecords(&result.ModeMap, records, count) == count);
+    for (i = 0u; i < count; ++i)
+      CHECK(InsideCommitted(&records[i], mode));
+    if (RefCommit(records, count, REF_POOL) != 0u) {
+      fprintf(stderr, "mode %ux%u form %u: broker refuses %u\n", RefModes[mode].W,
+              RefModes[mode].H, form, RefCommit(records, count, REF_POOL));
+      ++Failures;
+    }
+    ++accepted;
+  }
+  CHECK(accepted > 1000u && refused > 1000u);
+}
+
 int main(void) {
   TestUnsupportedWritesNothing();
   TestScaledRecords();
@@ -790,6 +961,7 @@ int main(void) {
   TestClippedRecords();
   TestScratchFillAndSelect();
   TestScratchStage();
+  TestModeMappedRecords();
   if (Failures != 0u) {
     fprintf(stderr, "mpo_broker_reference_test: %u failure(s)\n", Failures);
     return EXIT_FAILURE;

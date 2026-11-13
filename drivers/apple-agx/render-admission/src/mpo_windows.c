@@ -168,6 +168,12 @@ static VOID AdmissionMpoInput(ADMISSION_CONTEXT *Context,
   /* CUR-1 v2: the scan-out scratch was zeroed and read back at start. */
   Input->ScratchAvailable =
       InterlockedCompareExchange(&Context->Mpo.ScratchReady, 0, 0) != 0 ? 1u : 0u;
+  /* C2 (contract version 9): where the committed mode is shown on the
+   * panel; the table maps mode-coordinate records through it and checks
+   * the composed scale.  The table ignores it at the native mode and when
+   * its mode differs from CommittedWidth/Height (a commit in flight). */
+  Input->ModeMapKnown =
+      AdmissionScanoutMpoModeMap(Context, &Input->ModeMap) ? 1u : 0u;
 }
 
 /* STRETCH-1: the plane's source size differs from its destination's. */
@@ -858,7 +864,10 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
           return status;
       }
     }
-    if (AdmissionMpoBuildCommit(&result, records) != 2u) {
+    /* C2: records are built in mode coordinates and mapped to the panel
+     * (identity at the native mode). */
+    if (AdmissionMpoBuildCommit(&result, records) != 2u ||
+        AdmissionMpoMapRecords(&result.ModeMap, records, 2u) != 2u) {
       if (!DryRun)
         InterlockedIncrement(&Context->Mpo.S3BusyBuild); /* D2 invariant */
       return STATUS_DEVICE_BUSY;
@@ -895,7 +904,8 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
       AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_DEVICE_BUSY;
     }
-    if (AdmissionMpoBuildLone(&next[1].Input, &records[0]) != 1u) {
+    if (AdmissionMpoBuildLone(&next[1].Input, &records[0]) != 1u ||
+        AdmissionMpoMapRecords(&result.ModeMap, &records[0], 1u) != 1u) {
       if (!DryRun)
         InterlockedIncrement(&Context->Mpo.S3BusyBuild);
       return STATUS_DEVICE_BUSY;
@@ -936,6 +946,12 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
       AdmissionMpoSet3TableRefusal(Context, result.Reason);
       return STATUS_DEVICE_BUSY;
     }
+    /* C2: the removal record, built above in mode coordinates. */
+    if (AdmissionMpoMapRecords(&result.ModeMap, &records[0], 1u) != 1u) {
+      if (!DryRun)
+        InterlockedIncrement(&Context->Mpo.S3BusyBuild);
+      return STATUS_DEVICE_BUSY;
+    }
     status = DryRun ? STATUS_SUCCESS : AdmissionScanoutMpoCommit(Context, records, 1u, completion,
                                        next[0].PrimaryAddress);
     if (NT_SUCCESS(status) && !DryRun) {
@@ -963,7 +979,8 @@ static NTSTATUS AdmissionMpoApply(ADMISSION_CONTEXT *Context,
       return STATUS_DEVICE_BUSY;
     }
     if (result.OnePlaneRecord != 0u) {
-      if (AdmissionMpoBuildRemoval(&next[0].Input, &records[0]) != 1u) {
+      if (AdmissionMpoBuildRemoval(&next[0].Input, &records[0]) != 1u ||
+          AdmissionMpoMapRecords(&result.ModeMap, &records[0], 1u) != 1u) {
         if (!DryRun)
           InterlockedIncrement(&Context->Mpo.S3BusyBuild); /* G1 invariant */
         return STATUS_DEVICE_BUSY;

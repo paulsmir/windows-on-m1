@@ -2653,6 +2653,11 @@ BOOLEAN AdmissionScanoutMpoEffective(_In_opt_ ADMISSION_CONTEXT *Context);
 /* STRETCH-1: effective AND the broker advertised CAP_SCALED_SOURCE (bit 8):
  * a layer record's source size may differ from its destination's. */
 BOOLEAN AdmissionScanoutMpoScaledSource(_In_opt_ ADMISSION_CONTEXT *Context);
+/* C2 (MPO contract version 9): the committed source mode's panel placement
+ * (PresentWidth/Height and PresentDestOrigin/Size of the committed panel
+ * state) as an MPO mode map.  FALSE before a commit.  Any IRQL. */
+BOOLEAN AdmissionScanoutMpoModeMap(_In_opt_ ADMISSION_CONTEXT *Context,
+                                   _Out_ ADMISSION_MPO_MODE_MAP *Map);
 /* Pool view for plane placement: segment base, pool bytes. */
 BOOLEAN AdmissionScanoutMpoPool(_In_ ADMISSION_CONTEXT *Context,
                                 _Out_ ULONGLONG *SegmentBase,

@@ -32,6 +32,17 @@ unsigned int AdmissionMpoBuildRemoval(const ADMISSION_MPO_PLANE_INPUT *Plane,
 unsigned int AdmissionMpoBuildLone(const ADMISSION_MPO_PLANE_INPUT *Plane,
                                    APPLE_AGX_SCANOUT_LAYER *Record);
 
+/* C2 (contract version 9): the records above are built in mode coordinates
+ * (the slots' and planes' rectangles).  This maps each record's destination
+ * (DstOrigin/DstSize) through Map (AdmissionMpoMapRect: the committed
+ * destination composed with the mode rectangle); the source, surface and
+ * flags are unchanged.  The identity map (native mode) leaves the records
+ * byte-identical.  Count when every record was mapped; 0 when Map is
+ * invalid or a destination is not inside the mode (Records untouched). */
+unsigned int AdmissionMpoMapRecords(const ADMISSION_MPO_MODE_MAP *Map,
+                                    APPLE_AGX_SCANOUT_LAYER *Records,
+                                    unsigned int Count);
+
 /* ---- CUR-1 v2: the clipped top plane through a driver-owned scratch ----
  * Two 64x64 32-bpp scratch surfaces (stride 256) in the pool.  Pure and
  * IRQL-agnostic: no allocation, no wait, no mapping (Set3 runs at DIRQL,
