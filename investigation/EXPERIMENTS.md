@@ -79310,3 +79310,17 @@ EXP2401 HARDWARE BEFORE 2026-11-13T16:52:09Z:
 - Hashes: sys 471dc42ec4d9, UmdArm64 54f65b966657, UmdX64 b1e6313bf319, Umd32 3bf6c69bdc20; manifest 7e3ee8855f11, hardware-manifest 9b2c49c685cc; probe2401.sh 336f0f4c9a58 (PROBE_LINT_OK); visible recovery rec2401h 34da245bea8e0179; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1.
 - Recovery rec2401h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2401-c2a/run2401.sh.
+
+EXP2401 HARDWARE ACTUAL 2026-11-13T17:33:42Z:
+- Boot and run: recovery rec2396h (AT_PROXY, RECOVERY_DONE), then staged exp/c2a-pkg 32ccd8020 (A1 line + C2-1 + C2-2) on m1n1-s2v3-rq2; switches Wom1CrossProcessPairs Wom1SubmitRequeue (Wom1MpoTwoPlanes absent: SWITCH absent read back). Probe ran to EXP2401_PROBE_DONE / CHAIN2401_DONE. STOPS 0, WER_REPORTS 2 (October dumps).
+- Gates: GravityMark PERF PASS -0.69 % (worst 46.683); CS PASS +0.07 % (52.025). RQ-1 counters 0.
+- C2-2 (fresh install): CONFIRMED. With the value absent: SwitchSet=1 BrokerAdvertised=1 Effective=1, ContractVersion=8, two planes in use (TwoPlaneCommits 43282), Set3RefusedAfterSupport 0.
+- Mode probe: did not run (my defect: modeprobe.ps1 hard-coded \\.\DISPLAY1; under AppleAgx EnumDisplaySettings returned nothing: CURRENT 0x0, 0 modes). Fixed for the next boot (EnumDisplayDevices -> primary device, DEVICE lines logged). EXP2056 had already recorded "no GDI devices or modes from the scheduled task", so the fix still has to be proven.
+- Full-screen arms (GravityMark 100k, EXP2056 arm-b form):
+  - 1920x1080: TIMEOUT after 154 s; V2Presents +31, HoldCommits +1633 (all hold-path), Check3Reasons {24: 2, 39: 2} (C2-1 refused records twice), CommitCalls 1 -> 3.
+  - 1280x720: TIMEOUT after 158 s; V2Presents +0, HoldCommits +3075, HoldBusy +16, CommitCalls 3 -> 5.
+  - m1n1 scanned out both modes correctly: "display: scanout source 1920x1080 stride 7680 -> panel 2560x1440 at 0,80" and "... 1280x720 stride 5120 -> panel 2560x1440 at 0,80", then 2560x1600 again.
+- Black screen (operator at ~17:28Z: "прямо сейчас экран черный"): a source hide/show loop. Display-modes receipt over the boot: VisibilityCalls 4 and DeferredFlips 1 through the whole SHORT profile (16:53-17:23:52, every native full-screen arm included); in the 1080 arm 4 -> 3216 and 1 -> 1605; still climbing after GravityMark exited (9627 by 17:29:58, about 4 hide/show pairs per second); every SetVidPnSourceAddress deferred by the hidden-source path (SourceAddressCalls +98 = DeferredFlips +98 over 23 s); V2Presents flat. Snapshots kmd-receipts-blackscreen-{a,b}.txt (read-only, during the 720 arm).
+- Explicit Wom1MpoTwoPlanes=0 arm: pnputil "Device restarted successfully", then CM_PROB_FAILED_POST_START (second start failed; the A5 class, EXP2308). Recorded under A5; the C2-2 opt-out read-back is inconclusive (receipts frozen).
+- Verdict: C2 as packaged NOT ACCEPTED. C2-2 default CONFIRMED; C2-1 refusals observed (reason 39) but the full-screen non-native path is broken; whether by C2 or by the accepted line is EXP2402's question (control boot, architect).
+- Next: EXP2402 control (accepted package, one GravityMark full-screen 1920x1080 arm).
