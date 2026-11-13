@@ -74,7 +74,7 @@ typedef enum _AGX_WIN32_BUFFER_FLAGS {
 #define AGX_WIN32_DEVICE_FEATURE_OV2_CROSS_LEAD 0x10u
 /* S2 (second display plane, OV-ARCHITECT-HANDOFF specification v1): the
  * KMD drives two display planes. Set only while REG_DWORD
- * Wom1MpoTwoPlanes = 1 is effective: the scanout broker advertised
+ * Wom1MpoTwoPlanes (absent = on, 0 = off) is effective: the scanout broker advertised
  * capability bit 9 (two layers) and the V3 negotiation was read back at
  * StartDevice (AdmissionScanoutMpoEffective). The D3D11 UMD then answers
  * the DXGI multiplane-overlay entries for two RGB planes on VidPnSource 0

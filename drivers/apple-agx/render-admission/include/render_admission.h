@@ -142,7 +142,7 @@ typedef struct _ADMISSION_DISPLAY_MODES_RECEIPT {
 
 /* S2 receipt (Wom1MpoReceipt, device key): the two-plane MPO path.  Written
  * with Wom1DisplayModesReceipt and touched only while the Wom1MpoTwoPlanes
- * switch is effective (switch = 1 AND broker CAPABILITIES bit 9 AND the
+ * switch is effective (switch absent or nonzero AND broker CAPABILITIES bit 9 AND the
  * REG_NEGOTIATED read-back); all zero otherwise.  Counters are interlocked
  * at any IRQL. */
 #define ADMISSION_MPO_RECEIPT_VERSION 8u /* v8: tail ... Ids, HOLD-2 (H2*), CUR-1 v2, HOLD-3 (H3*), HOLD-3b, HOLD-3c */
@@ -2646,7 +2646,8 @@ VOID AdmissionScanoutClearMpoFlip(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutMpoPlaneOff(_Inout_ ADMISSION_CONTEXT *Context,
                                      _In_ ULONGLONG PresentId);
 /* S2 (all inert unless AdmissionScanoutMpoEffective). */
-/* TRUE iff the Wom1MpoTwoPlanes switch was set at StartDevice, the broker
+/* TRUE iff the Wom1MpoTwoPlanes switch was not 0 at StartDevice (absent =
+ * on, C2/C5 opt-out), the broker
  * advertised CAPABILITIES bit 9 and REG_NEGOTIATED read back 0x200. */
 BOOLEAN AdmissionScanoutMpoEffective(_In_opt_ ADMISSION_CONTEXT *Context);
 /* STRETCH-1: effective AND the broker advertised CAP_SCALED_SOURCE (bit 8):

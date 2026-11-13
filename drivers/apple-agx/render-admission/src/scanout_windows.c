@@ -667,10 +667,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
     ExFreePoolWithTag(runtime, ADMISSION_SCANOUT_TAG);
     return STATUS_NOT_SUPPORTED;
   }
-  /* S2: Wom1MpoTwoPlanes = 1 asks the panel to negotiate ABI V3 between
-   * its Qualify and REGISTER_POOL; absent/0 leaves every access as today. */
-  two_planes_requested = AdmissionScanoutSwitchEnabled(Context,
-                                                       L"Wom1MpoTwoPlanes");
+  /* S2: ask the panel to negotiate ABI V3 between its Qualify and
+   * REGISTER_POOL.  C2/C5: default on, an opt-out (absent or nonzero = on,
+   * an explicit 0 = off: every access as before S2).  Two planes stay
+   * effective only with broker CAPABILITIES bit 9 and the negotiation
+   * read-back (AppleAgxFixedPanelStart), so a broker without the
+   * capability behaves as with the switch off. */
+  two_planes_requested =
+      AdmissionScanoutSwitchValue(Context, L"Wom1MpoTwoPlanes", 1u) != 0u;
   runtime->Panel.RequestTwoLayers =
       two_planes_requested ? APPLE_AGX_SCANOUT_TRUE : APPLE_AGX_SCANOUT_FALSE;
   result = AppleAgxFixedPanelStart(
