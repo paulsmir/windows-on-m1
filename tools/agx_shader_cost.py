@@ -348,6 +348,8 @@ def main(argv=None):
                            'loads: the Windows projection, memory loads only)')
     comp.add_argument('--production', action='store_true',
                       help='the production shape (real Gallium passes); needs --root-views')
+    comp.add_argument('--srv-ssbo', action='store_true',
+                      help='SRV-1: DXBC raw/structured SRVs as shader buffers (APPLE_AGX_D3D12_SRV_SSBO)')
     comp.add_argument('--build-dir')
     ver = sub.add_parser('verify')
     ver.add_argument('umd_log')
@@ -391,6 +393,8 @@ def main(argv=None):
             variants = [(name, flags + (sf,)) for name, flags in variants]
         if args.production:
             variants = [(name, flags + ('--production',)) for name, flags in variants]
+        if args.srv_ssbo:
+            variants = [(name, flags + ('--srv-ssbo',)) for name, flags in variants]
         rows = []
         for path in inputs(args.paths):
             row = {'shader': path.name}
