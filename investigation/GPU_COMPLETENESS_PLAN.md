@@ -212,6 +212,13 @@ C6 (KMD second source, child status, hot-plug, per-display modes and scaling) is
 started; interface points with the two sessions are part of its note. Those sessions hand staged hardware packages
 to the architect; the bench stays with the implementer session.
 
+## 5c. Wi-Fi/Bluetooth released; macOS boots stay manual (operator, 2026-11-13)
+
+Wi-Fi and Bluetooth move to active development with hardware steps (session "Driver: Wi-Fi and Bluetooth"): the
+bench's USB Ethernet occupies the Type-C port the external display needs. USB Ethernet stays the control path until
+Wi-Fi has carried SSH across several boots. Booting the bench into macOS stays a manual operator action (no NVRAM or
+boot-policy automation); the architect says when it is needed.
+
 ## 6. First wave (started 2026-11-13)
 
 Design reads, in parallel, each returning the four sections and an ownership table:
