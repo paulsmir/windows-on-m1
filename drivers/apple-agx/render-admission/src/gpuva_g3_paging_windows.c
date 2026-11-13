@@ -787,6 +787,40 @@ static VOID AdmissionG3NativeStagingRebase(PVOID binding,
 /* GC (opt-in, Wom1GpuPrivateCached): a GPU-only allocation the CPU never
  * maps and the display never scans out; hAllocation is the KMD's own pointer
  * (validated as in the shape receipt above) or the leaf stays coherent. */
+/* MP-1 coverage: the KMD's own allocation behind a leaf update, or NULL. */
+static const ADMISSION_ALLOCATION_HANDLE *AdmissionG3LeafHandle(
+    const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update) {
+  const ULONGLONG allocation = (ULONGLONG)(ULONG_PTR)update->hAllocation;
+  const ADMISSION_ALLOCATION_HANDLE *handle =
+      (const ADMISSION_ALLOCATION_HANDLE *)(ULONG_PTR)allocation;
+  return handle != NULL &&
+         (allocation & (ULONGLONG)(sizeof(ULONG_PTR) - 1u)) == 0ULL &&
+         handle->Object.Magic == ADMISSION_ALLOCATION_OBJECT_MAGIC ? handle : NULL;
+}
+
+/* MP-1 coverage receipt (render_admission.h GcLeaves): one published 16 KiB
+ * leaf group of this update, classified by segment, eligibility and the
+ * graph's cached switch. */
+static VOID AdmissionG3GcCount(ADMISSION_CONTEXT *adapter,
+    const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update,
+    const ADMISSION_G3_PROCESS *process, UINT segment, bool gpu_private) {
+  const bool local = !ADMISSION_G3_FRAME_SEGMENT(segment);
+  const bool cached = local && gpu_private && process->Graph.PrivateCached;
+  const ADMISSION_ALLOCATION_HANDLE *gc = AdmissionG3LeafHandle(update);
+  if (adapter == NULL) return;
+  InterlockedIncrement(&adapter->GcLeaves[!local ? 3 : cached ? 0 : gpu_private ? 1 : 2]);
+  if (gc != NULL && gc->Object.Description.Size >= (16ULL << 20)) {
+    InterlockedIncrement(&adapter->GcLeaves[cached ? 4 : 5]);
+    InterlockedExchange(&adapter->GcLeaves[6],
+        (LONG)(gc->Object.Description.Size >> 20 > 0x7fffffffULL ? 0x7fffffffULL :
+               gc->Object.Description.Size >> 20));
+    InterlockedExchange(&adapter->GcLeaves[7],
+        (LONG)((gc->Object.Description.CpuVisible ? 1u : 0u) |
+               (gc->Presentation ? 2u : 0u) | (gc->WrittenPrimary ? 4u : 0u) |
+               (gpu_private ? 8u : 0u) | ((segment & 0xffu) << 8)));
+  }
+}
+
 static BOOLEAN AdmissionG3LeafGpuPrivate(
     const DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE *update) {
   const ULONGLONG allocation = (ULONGLONG)(ULONG_PTR)update->hAllocation;
@@ -1024,6 +1058,8 @@ static NTSTATUS AdmissionG3UpdateLeaf(
       goto Done;
     }
     ++published;
+    if (complete)
+      AdmissionG3GcCount(adapter, update, process, segment, gpu_private);
     if (!complete) {
       BOOLEAN valid = FALSE;
       /* Count only valid PTEs belonging to this update, including a group

@@ -1142,6 +1142,14 @@ typedef struct _ADMISSION_CONTEXT {
   ULONG LiveAdditivePaging, PagingActiveNode;
   /* GC (experiment): Wom1GpuPrivateCached = 1 and the broker capability. */
   ULONG GpuPrivateCached;
+  /* MP-1 coverage receipt (Wom1GpuGcReceipt, every build): 16 KiB leaf
+   * groups published, by class: [0] written cached (local segment, GPU-only,
+   * GpuPrivateCached on), [1] GPU-only local but coherent (switch off),
+   * [2] local CPU-visible / presentation / written primary, [3] system
+   * segment; allocations >= 16 MiB: [4] cached, [5] coherent; [6] the last
+   * such allocation's size in MiB, [7] its flags (CpuVisible | Presentation
+   * << 1 | WrittenPrimary << 2 | GPU-only eligible << 3 | segment << 8). */
+  volatile LONG GcLeaves[8];
   /* V1 (experiment): Wom1G3RetainedSlots = 1 (REG_DWORD), read once at
    * start: per-process VM slots kept between jobs (gpuva_g3_private.h). */
   ULONG G3RetainedSlots;

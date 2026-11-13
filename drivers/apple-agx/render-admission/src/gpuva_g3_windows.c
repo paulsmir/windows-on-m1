@@ -4595,6 +4595,16 @@ VOID AdmissionGpuvaG3LockProfileExport(ADMISSION_CONTEXT *adapter, HANDLE key,
     RtlInitUnicodeString(&name, L"Wom1G3RetainedSlotsReceipt");
     (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, slots, sizeof(slots));
   }
+  {
+    /* MP-1 coverage receipt: version, bytes, GpuPrivateCached, GcLeaves[8] */
+    ULONG gc[11];
+    UINT k;
+    gc[0] = 1u; gc[1] = sizeof(gc); gc[2] = adapter->GpuPrivateCached;
+    for (k = 0u; k < 8u; ++k)
+      gc[3u + k] = (ULONG)InterlockedCompareExchange(&adapter->GcLeaves[k], 0, 0);
+    RtlInitUnicodeString(&name, L"Wom1GpuGcReceipt");
+    (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, gc, sizeof(gc));
+  }
   RtlInitUnicodeString(&name, L"Wom1G3LockProfile");
   (void)ZwSetValueKey(key, &name, 0u, REG_BINARY, &state->LockProfileSnapshot,
                       sizeof(state->LockProfileSnapshot));
