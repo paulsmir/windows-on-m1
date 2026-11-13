@@ -78792,3 +78792,33 @@ EXP2388 HARDWARE BEFORE 2026-11-13T11:19:44Z:
 - Hashes: sys 83db8457179e, UmdArm64 ac95dbbffc8c, UmdX64 52e1dfb39645, Umd32 1beb3c838adb; manifest dd2f95346057, hardware-manifest 0e7e4f04253a; probe2388.sh e2b8567664ef (PROBE_LINT_OK); visible recovery rec2388h 552dab1804d31605; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1JobDiagnostics=1 Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1MpoClipRead=1.
 - Recovery rec2388h (run directly). Command bash /Users/pavel/public_windows/.local/experiments/EXP2388-optwin4/run2388.sh.
+
+EXP2388 HARDWARE ACTUAL 2026-11-13T11:27:07Z:
+- Boot and run: reuse of the EXP2387 package (arch/hold3 41b21c980). Staged with the same switches; CM_PROB_NONE.
+  - OPTWIN step: 11:21:34Z-11:23:45Z, probe exp/optwin 78bf2477d. Preflight hash ok local = guest 507847e9...
+  - Guest alive after the step. STOPS 0. WER_REPORTS 2 (the October dumps).
+  - Recovery rec2388h started.
+- Result line: AGX_D3D12_OPTWIN FAIL, because OPTWIN_RECORDS has missing 9 (9 of 564 reps without GPU completion records, scattered: S1_128 L1, S1_256 W56, G1d_64M GM/N32, G1u_64M GM rep 0, T1 W224, ...). oracle_bad 0, so every kernel computed the expected values. filler_in_window 648.
+  - The medians below use the reps that have records (3 per case except those 9).
+  - EXP2373 had missing 0. Cause not investigated.
+- 188 cases; 33 kernel captures (APPLE_AGX_D3D12_SHADER_DUMP_DIR + DUMP_ALL) in evidence/EXP2388/optwin-dump.
+- Reproducibility: the unchanged SRV-form rows equal EXP2373 at the GM shape (G1_1M, G1_64M, T1, C1, S1_256 now/then all 1.00).
+- Expected vs actual, ours/macOS per dispatch at the GM shape (macOS = MACOS-20261113-optwin run1+run2 medians):
+
+  | Variant | Root SRV form (today) | GravityMark form (root raw UAV Load4) |
+  |---|---|---|
+  | G1 1 MB | 3.98 | 1.19 |
+  | G1 4 MB | 2.63 | 1.43 |
+  | G1 16 MB | 1.42 | 0.99 |
+  | G1 64 MB | 2.50 | 1.32 |
+  | G1d 1 MB | 3.98 | 1.21 |
+  | G1d 64 MB | 2.75 | 1.32 |
+  | G1c 1 MB | 1.67 | 0.91 |
+  | G1c 64 MB | 1.24 | 1.41 |
+
+  - N32 shape: G1 10.77 vs G1u 1.24.
+  - Expected G1u ~1.0-1.5 at 1 MB: confirmed (1.19).
+  - The 64 MB growth is much smaller in the UAV form (16 -> 64 MB: 0.99 -> 1.32, against the SRV form's 1.42 -> 2.50). The SRV form's extra growth is the per-dword request count.
+  - What remains for GravityMark's form is 1.2-1.4x at 1, 4 and 64 MB: the memory path, not the code form.
+- Verdict: CONFIRMED (measurement). GravityMark's gather form runs at 0.99-1.43x of Apple. The 2.5-4x G1 gap is the SRV per-dword form only (SRV-1, a general defect, implemented on arch/srv1 0641fa433 + 4e5bf1239, offline G1 317 -> 80 instructions at the root).
+- Next: the SRV-1 boot (switch on vs off in one boot, OPTWIN rows); the captures go to the offline listings of the unexplained rows.
