@@ -6276,3 +6276,22 @@ boot was run. The previous entry stays as written.
   scene needs CUR-1 on top and is read in the boot after.
 - SendInput (injected mouse moves) makes the guest cursor visible (verified on the recovery guest); SetCursorPos
   does not.
+
+## UPDATE 2026-11-13T01:11:16Z - EXP2383 HOLD-2: regression-free, no effect on the scaled-window scene; pointer facts
+
+- EXP2383 (arch/hold2 on the accepted package, SHORT): gates PASS (CS r2 51.98, GM +0.50 %), suite 119/0, no
+  faults. Commits come from the DPC 22..147 us after Set3; accepted = reported; HoldDropped 0.
+- Scaled-window scene: DWM's layer and the application's layer flip in DIFFERENT dxgkrnl passes (0 of 161
+  commits carried both); merges behind an outstanding swap 9/170 (HOLD-1: ~7 %). The BEFORE criterion on this
+  scene is FAILED: pass-end coalescing does nothing here. This scene never halved (application 57.6 fps both
+  ways). HOLD-2's verdict for the halving defect (both layers every vsync) is deferred to EXP2384.
+- Pointer (injected mouse input, cursor showing): over a full-screen application DWM asks for two planes with
+  the top plane clipped to the pointer rectangle - 24x27 at the pointer position, 1x1 at panel centre when the
+  application hides it. The accepted package refuses these (no CUR-1) and DWM composes for as long as a cursor
+  exists: FULLFS and CS ran entirely composed after the first injected move.
+- CONSEQUENCE / CORRECTION OF SCOPE: every "lone form" full-screen number of EXP2378..2382 was taken with the
+  cursor suppressed (no mouse input since boot). On a machine with a mouse the accepted package composes
+  full-screen applications (CS 51.98 composed in EXP2383). Direct full-screen scan-out for real use needs
+  CUR-1's scratch path; it is a production requirement.
+- EXP2384 next: CUR-1 v2 on HOLD-2 (arch/cur1h2), lone controls before the first injected input, then the
+  pointer-on scenes incl. gated CS (expected two-plane + scratch) with the timing ring.
