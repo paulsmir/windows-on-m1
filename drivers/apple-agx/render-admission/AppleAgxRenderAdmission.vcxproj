@@ -178,6 +178,7 @@
     <ClCompile Include="src\scheduler_windows.c" />
     <ClCompile Include="src\receipts.c" />
     <ClCompile Include="..\shared\src\apple_agx_wddm_feature_contract.c" />
+    <ClCompile Include="..\shared\src\apple_agx_start_policy.c" />
     <ClCompile Include="..\shared\src\apple_agx_gpuva_broker_v5_client.c" />
     <ClCompile Include="..\shared\src\apple_agx_render_template_vm_slot.c" />
     <ClCompile Include="..\shared\src\apple_agx_gpuva_b1_graph.c" />
@@ -265,6 +266,7 @@
     <ClInclude Include="include\render_backend_image.h" />
     <ClInclude Include="include\hv_guest_ipa_pa_abi.h" />
     <ClInclude Include="..\shared\include\apple_agx_wddm_feature_contract.h" />
+    <ClInclude Include="..\shared\include\apple_agx_start_policy.h" />
     <ClInclude Include="..\shared\include\apple_agx_gpuva_b1_status.h" />
     <ClInclude Include="..\shared\include\apple_agx_gpuva_b1_completion.h" />
     <ClInclude Include="..\shared\include\apple_agx_gpuva_g3_translation.h" />

@@ -32,6 +32,7 @@ FIXTURE = r'''
 #include <assert.h>
 #include <string.h>
 #include <wchar.h>
+#include "apple_agx_start_policy.h"
 #define APPLE_AGX_GPUVA_G3_QUALIFICATION 1
 #define _Use_decl_annotations_
 #define TRUE 1
@@ -77,6 +78,11 @@ static int AdmissionConsumeGpuvaArm(ADMISSION_CONTEXT *c,const wchar_t *name,int
  (void)c;assert(!wcscmp(name,L"G3Armed") && report);++arms;return armed;
 }
 static NTSTATUS AdmissionInterruptStart(ADMISSION_CONTEXT *c) {(void)c;++starts;return 123;}
+/* F1-k: policy 0 (absent) keeps the one-shot arm; the policy decisions
+ * themselves are exercised in test_render_start_policy. */
+static ULONG AdmissionStartPolicyAttempt(ADMISSION_CONTEXT *c) {
+ (void)c;return AppleAgxStartPolicyDecisionArm;
+}
 '''
 
 CASES = r'''

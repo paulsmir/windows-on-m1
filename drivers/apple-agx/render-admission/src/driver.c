@@ -22,7 +22,7 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   RtlZeroMemory(&initialization, sizeof(initialization));
   initialization.Version = ADMISSION_G1B_INTERFACE_VERSION;
   initialization.DxgkDdiAddDevice = AdmissionDdiAddDevice;
-  initialization.DxgkDdiStartDevice = AdmissionDdiStartDevice;
+  initialization.DxgkDdiStartDevice = AdmissionDdiStartDeviceGated;
   initialization.DxgkDdiStopDevice = AdmissionDdiStopDevice;
   initialization.DxgkDdiRemoveDevice = AdmissionDdiRemoveDevice;
   initialization.DxgkDdiDispatchIoRequest = AdmissionDdiDispatchIoRequest;

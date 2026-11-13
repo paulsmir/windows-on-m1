@@ -1,5 +1,6 @@
 #include "render_admission.h"
 #include "render_wow64.h"
+#include "apple_agx_start_policy.h"
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 #include "apple_agx_gpuva_g3_caps.h"
 #include "hv_guest_ipa_pa_abi.h"
@@ -110,6 +111,341 @@ static BOOLEAN AdmissionConsumeGpuvaArm(ADMISSION_CONTEXT *context,
   UNREFERENCED_PARAMETER(report_consumption);
 #endif
   return NT_SUCCESS(status);
+}
+#endif
+
+/* F1-k production start policy (apple_agx_start_policy.h; design
+ * investigation/analysis/COMPLETENESS-F1-standalone-gpu-boot.md 4.C). The
+ * decision is the pure AppleAgxStartPolicyEvaluate; this layer reads the
+ * device-key values, persists exactly UpdateMask with the arm code's
+ * set/delete + ZwFlushKey pattern, records one receipt per event and owns
+ * the T-second healthy-start timer. Policy 0 (Wom1StartPolicy absent) reads
+ * only Wom1StartPolicy at the start attempt and touches nothing afterwards. */
+typedef struct _ADMISSION_START_POLICY_VALUE_NAME {
+  ULONG Bit;
+  PCWSTR Name;
+} ADMISSION_START_POLICY_VALUE_NAME;
+
+static const ADMISSION_START_POLICY_VALUE_NAME AdmissionStartPolicyValues[] = {
+    {APPLE_AGX_START_POLICY_VALUE_PENDING, L"Wom1StartPending"},
+    {APPLE_AGX_START_POLICY_VALUE_RUNNING, L"Wom1StartRunning"},
+    {APPLE_AGX_START_POLICY_VALUE_LATCHED, L"Wom1StartLatched"},
+    {APPLE_AGX_START_POLICY_VALUE_LATCH_RESET, L"Wom1StartLatchReset"},
+    {APPLE_AGX_START_POLICY_VALUE_UNCLEAN_COUNT, L"Wom1StartUncleanCount"},
+    {APPLE_AGX_START_POLICY_VALUE_LATCH_COUNT, L"Wom1StartLatchCount"},
+};
+
+static KDEFERRED_ROUTINE AdmissionStartPolicyDpc;
+static IO_WORKITEM_ROUTINE AdmissionStartPolicyWorker;
+
+/* Present = the query returned data (any failure other than "not found"
+ * counts as present and malformed, so markers fail closed). */
+static void AdmissionStartPolicyQuery(HANDLE Key, PCWSTR Name, ULONG *Present,
+                                      ULONG *DwordValid, ULONG *Value) {
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  NTSTATUS status;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  *Present = 0u;
+  *DwordValid = 0u;
+  *Value = 0u;
+  RtlInitUnicodeString(&name, Name);
+  status = ZwQueryValueKey(Key, &name, KeyValuePartialInformation, value,
+                           sizeof(data.Buffer), &bytes);
+  if (status == STATUS_OBJECT_NAME_NOT_FOUND)
+    return;
+  *Present = 1u;
+  if (NT_SUCCESS(status) && value->Type == REG_DWORD &&
+      value->DataLength == sizeof(ULONG)) {
+    *DwordValid = 1u;
+    *Value = *(const ULONG *)value->Data;
+  }
+}
+
+static ULONG AdmissionStartPolicyNextField(
+    const APPLE_AGX_START_POLICY_STATE *Next, ULONG Bit) {
+  switch (Bit) {
+  case APPLE_AGX_START_POLICY_VALUE_PENDING: return Next->Pending;
+  case APPLE_AGX_START_POLICY_VALUE_RUNNING: return Next->Running;
+  case APPLE_AGX_START_POLICY_VALUE_LATCHED: return Next->Latched;
+  case APPLE_AGX_START_POLICY_VALUE_LATCH_RESET: return Next->LatchReset;
+  case APPLE_AGX_START_POLICY_VALUE_UNCLEAN_COUNT: return Next->UncleanCount;
+  default: return Next->LatchCount;
+  }
+}
+
+/* Markers: REG_DWORD 1 or deleted; counters: REG_DWORD. One flush after
+ * all values, before the caller acts on the decision. */
+static NTSTATUS AdmissionStartPolicyPersist(
+    HANDLE Key, const APPLE_AGX_START_POLICY_RESULT *Result) {
+  UNICODE_STRING name;
+  NTSTATUS status = STATUS_SUCCESS;
+  NTSTATUS one;
+  ULONG index;
+  ULONG data;
+  if (Result->UpdateMask == 0u)
+    return STATUS_SUCCESS;
+  for (index = 0u; index < RTL_NUMBER_OF(AdmissionStartPolicyValues);
+       ++index) {
+    const ULONG bit = AdmissionStartPolicyValues[index].Bit;
+    if ((Result->UpdateMask & bit) == 0u)
+      continue;
+    RtlInitUnicodeString(&name, AdmissionStartPolicyValues[index].Name);
+    data = AdmissionStartPolicyNextField(&Result->Next, bit);
+    if ((bit & APPLE_AGX_START_POLICY_VALUE_MARKERS) != 0u && data == 0u) {
+      one = ZwDeleteValueKey(Key, &name);
+      if (one == STATUS_OBJECT_NAME_NOT_FOUND)
+        one = STATUS_SUCCESS;
+    } else {
+      if ((bit & APPLE_AGX_START_POLICY_VALUE_MARKERS) != 0u)
+        data = 1u;
+      one = ZwSetValueKey(Key, &name, 0, REG_DWORD, &data, sizeof(data));
+    }
+    if (NT_SUCCESS(status) && !NT_SUCCESS(one))
+      status = one;
+  }
+  one = ZwFlushKey(Key);
+  return NT_SUCCESS(status) ? one : status;
+}
+
+static PCWSTR AdmissionStartPolicyReceiptName(ULONG Event) {
+  switch (Event) {
+  case AppleAgxStartPolicyEventAttempt: return L"Wom1StartPolicyAttempt";
+  case AppleAgxStartPolicyEventSucceeded:
+  case AppleAgxStartPolicyEventFailed: return L"Wom1StartPolicyReturn";
+  case AppleAgxStartPolicyEventCleanStop: return L"Wom1StartPolicyStop";
+  case AppleAgxStartPolicyEventShutdown: return L"Wom1StartPolicyPower";
+  default: return L"Wom1StartPolicyTimer";
+  }
+}
+
+/* Timer, DPC, event and work item exist only once a policy-1 start was
+ * allowed; without the work item the start is refused before any write. */
+static NTSTATUS AdmissionStartPolicyPrepare(ADMISSION_CONTEXT *Context) {
+  ADMISSION_START_POLICY_RUNTIME *runtime = &Context->StartPolicy;
+  if (runtime->Initialized == 0u) {
+    KeInitializeTimer(&runtime->Timer);
+    KeInitializeDpc(&runtime->Dpc, AdmissionStartPolicyDpc, Context);
+    KeInitializeEvent(&runtime->Idle, NotificationEvent, TRUE);
+    InterlockedExchange(&runtime->TimerState, 0);
+    runtime->Initialized = 1u;
+  }
+  if (runtime->WorkItem == NULL)
+    runtime->WorkItem = IoAllocateWorkItem(Context->PhysicalDeviceObject);
+  return runtime->WorkItem != NULL ? STATUS_SUCCESS
+                                   : STATUS_INSUFFICIENT_RESOURCES;
+}
+
+/* One event: read, decide, persist + flush, receipt (+ flush). Returns the
+ * registry status; Result->Decision is Refuse whenever an allowed start
+ * could not be made durable. */
+static NTSTATUS AdmissionStartPolicyEvent(ADMISSION_CONTEXT *Context,
+                                          ULONG Event, ULONG Healthy,
+                                          APPLE_AGX_START_POLICY_RESULT *Result) {
+  HANDLE key = NULL;
+  APPLE_AGX_START_POLICY_STATE state;
+  ULONG present, dword, value;
+  NTSTATUS status;
+  RtlZeroMemory(&state, sizeof(state));
+  RtlZeroMemory(Result, sizeof(*Result));
+  if (Event != AppleAgxStartPolicyEventAttempt &&
+      Context->StartPolicy.Policy != APPLE_AGX_START_POLICY_CRASH_LATCH)
+    return STATUS_SUCCESS;
+  status = KeGetCurrentIrql() == PASSIVE_LEVEL &&
+                   Context->PhysicalDeviceObject != NULL
+               ? IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+                     PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE | KEY_SET_VALUE,
+                     &key)
+               : STATUS_INVALID_DEVICE_STATE;
+  if (!NT_SUCCESS(status)) {
+    /* Unreadable at the start attempt: today's arm path, which fails
+     * closed on the same key with its own phase-1 receipt. */
+    if (Event == AppleAgxStartPolicyEventAttempt) {
+      Context->StartPolicy.Policy = APPLE_AGX_START_POLICY_ONE_SHOT_ARM;
+      (void)AppleAgxStartPolicyEvaluate(&state, Event, Healthy, Result);
+    }
+    return status;
+  }
+  if (Event == AppleAgxStartPolicyEventAttempt) {
+    AdmissionStartPolicyQuery(key, L"Wom1StartPolicy", &present, &dword,
+                              &value);
+    state.Policy = AppleAgxStartPolicyParsePolicy(present, dword, value);
+    Context->StartPolicy.Policy = state.Policy;
+  } else {
+    state.Policy = Context->StartPolicy.Policy;
+  }
+  if (state.Policy == APPLE_AGX_START_POLICY_CRASH_LATCH) {
+    AdmissionStartPolicyQuery(key, L"Wom1StartPending", &present, &dword,
+                              &value);
+    state.Pending = AppleAgxStartPolicyParseMarker(present, dword, value);
+    AdmissionStartPolicyQuery(key, L"Wom1StartRunning", &present, &dword,
+                              &value);
+    state.Running = AppleAgxStartPolicyParseMarker(present, dword, value);
+    AdmissionStartPolicyQuery(key, L"Wom1StartLatched", &present, &dword,
+                              &value);
+    state.Latched = AppleAgxStartPolicyParseMarker(present, dword, value);
+    AdmissionStartPolicyQuery(key, L"Wom1StartLatchReset", &present, &dword,
+                              &value);
+    state.LatchReset = AppleAgxStartPolicyParseExplicit(present, dword, value);
+    AdmissionStartPolicyQuery(key, L"Wom1StartUncleanCount", &present, &dword,
+                              &value);
+    state.UncleanCount = AppleAgxStartPolicyParseCounter(present, dword, value);
+    AdmissionStartPolicyQuery(key, L"Wom1StartLatchCount", &present, &dword,
+                              &value);
+    state.LatchCount = AppleAgxStartPolicyParseCounter(present, dword, value);
+  }
+  (void)AppleAgxStartPolicyEvaluate(&state, Event, Healthy, Result);
+  status = Result->Decision == AppleAgxStartPolicyDecisionAllow
+               ? AdmissionStartPolicyPrepare(Context)
+               : STATUS_SUCCESS;
+  if (NT_SUCCESS(status)) {
+    status = AdmissionStartPolicyPersist(key, Result);
+    if (!NT_SUCCESS(status) &&
+        Result->Decision == AppleAgxStartPolicyDecisionAllow) {
+      /* Best effort: do not leave a marker of a start that is refused. */
+      APPLE_AGX_START_POLICY_RESULT undo;
+      if (AppleAgxStartPolicyEvaluate(&Result->Next,
+                                      AppleAgxStartPolicyEventFailed, 0u,
+                                      &undo))
+        (void)AdmissionStartPolicyPersist(key, &undo);
+    }
+  }
+  if (!NT_SUCCESS(status) &&
+      Result->Decision == AppleAgxStartPolicyDecisionAllow)
+    Result->Decision = AppleAgxStartPolicyDecisionRefuse;
+  {
+    UNICODE_STRING name;
+    ULONG receipt = AppleAgxStartPolicyReceipt(&state, Result);
+    ULONG io = (ULONG)status;
+    RtlInitUnicodeString(&name, AdmissionStartPolicyReceiptName(Event));
+    (void)ZwSetValueKey(key, &name, 0, REG_DWORD, &receipt, sizeof(receipt));
+    RtlInitUnicodeString(&name, L"Wom1StartPolicyIoStatus");
+    (void)ZwSetValueKey(key, &name, 0, REG_DWORD, &io, sizeof(io));
+  }
+  if (state.Policy != APPLE_AGX_START_POLICY_ONE_SHOT_ARM)
+    (void)ZwFlushKey(key);
+  if (Event == AppleAgxStartPolicyEventAttempt &&
+      Result->Decision == AppleAgxStartPolicyDecisionAllow)
+    Context->StartPolicy.PendingOwned = 1u;
+  ZwClose(key);
+  return status;
+}
+
+static VOID AdmissionStartPolicyDpc(_In_ PKDPC Dpc,
+                                    _In_opt_ PVOID DeferredContext,
+                                    _In_opt_ PVOID Argument1,
+                                    _In_opt_ PVOID Argument2) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)DeferredContext;
+  UNREFERENCED_PARAMETER(Dpc);
+  UNREFERENCED_PARAMETER(Argument1);
+  UNREFERENCED_PARAMETER(Argument2);
+  if (context == NULL)
+    return;
+  if (InterlockedCompareExchange(&context->StartPolicy.TimerState, 2, 1) == 1)
+    IoQueueWorkItem(context->StartPolicy.WorkItem, AdmissionStartPolicyWorker,
+                    DelayedWorkQueue, context);
+}
+
+/* PASSIVE_LEVEL, T seconds after a successful start: clear the pending
+ * marker while the scheduler is not faulted. */
+static VOID AdmissionStartPolicyWorker(_In_ PDEVICE_OBJECT DeviceObject,
+                                       _In_opt_ PVOID Parameter) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Parameter;
+  APPLE_AGX_START_POLICY_RESULT result;
+  UNREFERENCED_PARAMETER(DeviceObject);
+  if (context == NULL)
+    return;
+  (void)AdmissionStartPolicyEvent(
+      context, AppleAgxStartPolicyEventTimer,
+      InterlockedCompareExchange(&context->SchedulerFaulted, 0, 0) == 0 ? 1u
+                                                                        : 0u,
+      &result);
+  InterlockedExchange(&context->StartPolicy.TimerState, 0);
+  KeSetEvent(&context->StartPolicy.Idle, IO_NO_INCREMENT, FALSE);
+}
+
+/* Cancel the timer and drain its DPC and work item (StopDevice before the
+ * runtime goes away, RemoveDevice before the context is freed). */
+static void AdmissionStartPolicyQuiesce(ADMISSION_CONTEXT *Context) {
+  if (Context == NULL || Context->StartPolicy.Initialized == 0u)
+    return;
+  if (InterlockedCompareExchange(&Context->StartPolicy.TimerState, 0, 1) ==
+      1) {
+    if (!KeCancelTimer(&Context->StartPolicy.Timer))
+      KeFlushQueuedDpcs();
+    KeSetEvent(&Context->StartPolicy.Idle, IO_NO_INCREMENT, FALSE);
+  }
+  (void)KeWaitForSingleObject(&Context->StartPolicy.Idle, Executive,
+                              KernelMode, FALSE, NULL);
+}
+
+/* After StartDevice returned, for a start this policy allowed: an error
+ * clears both markers; a success arms the healthy-start timer. */
+static void AdmissionStartPolicyReturned(ADMISSION_CONTEXT *Context,
+                                         NTSTATUS Status) {
+  APPLE_AGX_START_POLICY_RESULT result;
+  LARGE_INTEGER due;
+  if (Context == NULL || Context->StartPolicy.PendingOwned == 0u)
+    return;
+  Context->StartPolicy.PendingOwned = 0u;
+  (void)AdmissionStartPolicyEvent(
+      Context,
+      NT_SUCCESS(Status) ? AppleAgxStartPolicyEventSucceeded
+                         : AppleAgxStartPolicyEventFailed,
+      1u, &result);
+  if (result.ArmTimer == 0u || Context->StartPolicy.WorkItem == NULL)
+    return;
+  KeClearEvent(&Context->StartPolicy.Idle);
+  InterlockedExchange(&Context->StartPolicy.TimerState, 1);
+  due.QuadPart =
+      -(LONGLONG)APPLE_AGX_START_POLICY_TIMER_SECONDS * 10000000LL;
+  (void)KeSetTimer(&Context->StartPolicy.Timer, due,
+                   &Context->StartPolicy.Dpc);
+}
+
+static void AdmissionStartPolicyStopped(ADMISSION_CONTEXT *Context) {
+  APPLE_AGX_START_POLICY_RESULT result;
+  (void)AdmissionStartPolicyEvent(Context, AppleAgxStartPolicyEventCleanStop,
+                                  1u, &result);
+}
+
+static void AdmissionStartPolicyShutdown(ADMISSION_CONTEXT *Context) {
+  APPLE_AGX_START_POLICY_RESULT result;
+  if (Context == NULL)
+    return;
+  (void)AdmissionStartPolicyEvent(Context, AppleAgxStartPolicyEventShutdown,
+                                  1u, &result);
+}
+
+static void AdmissionStartPolicyRelease(ADMISSION_CONTEXT *Context) {
+  AdmissionStartPolicyQuiesce(Context);
+  if (Context->StartPolicy.WorkItem != NULL) {
+    IoFreeWorkItem(Context->StartPolicy.WorkItem);
+    Context->StartPolicy.WorkItem = NULL;
+  }
+}
+
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+/* Called where G3Armed is consumed, after the resource-shape check and
+ * before any GPU or broker access. Policy 0: AppleAgxStartPolicyDecisionArm,
+ * and the caller consumes the one-shot arm exactly as before. Policy 1:
+ * Allow only after Wom1StartPending/Wom1StartRunning were flushed; the arm
+ * consumption is then reported to m1n1 as the arm path does. */
+static ULONG AdmissionStartPolicyAttempt(ADMISSION_CONTEXT *Context) {
+  APPLE_AGX_START_POLICY_RESULT result;
+  Context->StartPolicy.PendingOwned = 0u;
+  (void)AdmissionStartPolicyEvent(Context, AppleAgxStartPolicyEventAttempt,
+                                  1u, &result);
+  /* A refused report leaves PendingOwned set: the return clears it. */
+  if (result.Decision == AppleAgxStartPolicyDecisionAllow &&
+      !AdmissionReportGpuvaArmConsumed(Context))
+    return AppleAgxStartPolicyDecisionRefuse;
+  return result.Decision;
 }
 #endif
 
@@ -241,6 +577,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   NTSTATUS status;
   APPLE_AGX_POST_DISPLAY_ROUTE post_display_route;
+#if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
+  ULONG start_policy;
+#endif
 
   AdmissionRecordDevice(context == NULL ? NULL : context->PhysicalDeviceObject,
                         AdmissionReceiptStartEntered, STATUS_PENDING);
@@ -286,7 +625,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
                               STATUS_DEVICE_NOT_READY);
     return STATUS_DEVICE_NOT_READY;
   }
-  if (!AdmissionConsumeGpuvaArm(context, L"G3Armed", TRUE)) {
+  /* F1-k: policy 0 (Wom1StartPolicy absent) is the one-shot arm below,
+   * unchanged; policy 1 starts without an arm once Wom1StartPending is
+   * durable; every other decision fails closed before GPU access. */
+  start_policy = AdmissionStartPolicyAttempt(context);
+  if (start_policy == AppleAgxStartPolicyDecisionArm &&
+      !AdmissionConsumeGpuvaArm(context, L"G3Armed", TRUE)) {
+    AdmissionRecordStartStage(context, AdmissionStartEntered,
+                              STATUS_NOT_SUPPORTED);
+    return STATUS_NOT_SUPPORTED;
+  }
+  if (start_policy != AppleAgxStartPolicyDecisionArm &&
+      start_policy != AppleAgxStartPolicyDecisionAllow) {
     AdmissionRecordStartStage(context, AdmissionStartEntered,
                               STATUS_NOT_SUPPORTED);
     return STATUS_NOT_SUPPORTED;
@@ -575,6 +925,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
   if (context->GpuvaB1State != NULL)
     return STATUS_DEVICE_BUSY;
 #endif
+  /* F1-k: no healthy-start timer may outlive the runtime it judges. */
+  AdmissionStartPolicyQuiesce(context);
   AdmissionFlushSourceAddressReceipt(context);
   AdmissionFlushPresentTransfer(context);
   AdmissionFlushGdiReceipt(context);
@@ -627,6 +979,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
                 sizeof(context->PostDisplayInformation));
   RtlZeroMemory(&context->Interface, sizeof(context->Interface));
   context->InterfaceValid = FALSE;
+  /* F1-k: the runtime stopped cleanly: clear pending/running markers. */
+  AdmissionStartPolicyStopped(context);
   return STATUS_SUCCESS;
 }
 
@@ -665,6 +1019,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceCon
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionMemoryPoolStop(context);
 #endif
+  AdmissionStartPolicyRelease(context);
   AdmissionRecordDevice(context->PhysicalDeviceObject, AdmissionReceiptRemove,
                         STATUS_SUCCESS);
   ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
@@ -1236,10 +1591,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDispatchIoRequest(
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSetPowerState(
     PVOID MiniportDeviceContext, ULONG DeviceUid,
     DEVICE_POWER_STATE DevicePowerState, POWER_ACTION ActionType) {
-  UNREFERENCED_PARAMETER(MiniportDeviceContext);
-  UNREFERENCED_PARAMETER(DeviceUid);
   UNREFERENCED_PARAMETER(DevicePowerState);
-  UNREFERENCED_PARAMETER(ActionType);
+  /* F1-k: an orderly shutdown/restart of the adapter ends this run cleanly
+   * (dispmprt.h DXGKDDI_SET_POWER_STATE, PASSIVE_LEVEL). Hibernate (also
+   * Fast Startup) is not an end: the same run resumes without StartDevice. */
+  if (DeviceUid == DISPLAY_ADAPTER_HW_ID &&
+      (ActionType == PowerActionShutdown ||
+       ActionType == PowerActionShutdownReset ||
+       ActionType == PowerActionShutdownOff))
+    AdmissionStartPolicyShutdown((ADMISSION_CONTEXT *)MiniportDeviceContext);
   return STATUS_SUCCESS;
 }
 
@@ -1251,4 +1611,20 @@ VOID AdmissionDdiUnload(VOID) {
 #ifdef APPLE_AGX_NATIVE_STAGING
   AdmissionNativeStagingUninitialize();
 #endif
+}
+
+/* F1-k: the registered DxgkDdiStartDevice. AdmissionDdiStartDevice is
+ * unchanged apart from its policy gate; this adds the return handling of a
+ * start the policy allowed (error: clear the markers; success: arm the
+ * healthy-start timer). Policy 0 starts never set PendingOwned. */
+_Use_decl_annotations_ NTSTATUS AdmissionDdiStartDeviceGated(
+    PVOID MiniportDeviceContext, PDXGK_START_INFO DxgkStartInfo,
+    PDXGKRNL_INTERFACE DxgkInterface, PULONG NumberOfVideoPresentSources,
+    PULONG NumberOfChildren) {
+  NTSTATUS status = AdmissionDdiStartDevice(MiniportDeviceContext,
+      DxgkStartInfo, DxgkInterface, NumberOfVideoPresentSources,
+      NumberOfChildren);
+  AdmissionStartPolicyReturned((ADMISSION_CONTEXT *)MiniportDeviceContext,
+                               status);
+  return status;
 }

@@ -19,7 +19,7 @@ ADMISSION_STATUS_WRAP(0, AdmissionDdiAddDevice,
     (PhysicalDeviceObject, MiniportDeviceContext), PhysicalDeviceObject, 0, MAXULONG,
     (void)0)
 /* 1: DxgkDdiStartDevice */
-ADMISSION_STATUS_WRAP(1, AdmissionDdiStartDevice,
+ADMISSION_STATUS_WRAP(1, AdmissionDdiStartDeviceGated,
     (PVOID MiniportDeviceContext, PDXGK_START_INFO DxgkStartInfo, PDXGKRNL_INTERFACE DxgkInterface, PULONG NumberOfVideoPresentSources, PULONG NumberOfChildren),
     (MiniportDeviceContext, DxgkStartInfo, DxgkInterface, NumberOfVideoPresentSources, NumberOfChildren), MiniportDeviceContext, 0, MAXULONG,
     (void)0; if (first) AdmissionQueueDdiStatus((ADMISSION_CONTEXT *)MiniportDeviceContext))
@@ -363,7 +363,7 @@ ADMISSION_STATUS_WRAP(68, AdmissionDdiGetMultiPlaneOverlayCaps,
 
 static void AdmissionInstallStatusReceipts(DRIVER_INITIALIZATION_DATA *Init) {
   Init->DxgkDdiAddDevice = AdmissionDdiAddDeviceStatus;
-  Init->DxgkDdiStartDevice = AdmissionDdiStartDeviceStatus;
+  Init->DxgkDdiStartDevice = AdmissionDdiStartDeviceGatedStatus;
   Init->DxgkDdiStopDevice = AdmissionDdiStopDeviceStatus;
   Init->DxgkDdiRemoveDevice = AdmissionDdiRemoveDeviceStatus;
   Init->DxgkDdiDispatchIoRequest = AdmissionDdiDispatchIoRequestStatus;
