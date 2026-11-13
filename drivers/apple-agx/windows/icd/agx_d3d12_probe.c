@@ -10180,11 +10180,16 @@ static HRESULT optwin_filler(OptwinCtx *x) {
  * collect: 1 query failed, 2 no frequency, 3 ring lost, 4 reset, 5 page overflow,
  * 6 a record of ours with status/start/end invalid (status in *why_value), 7 no job of
  * ours in the window, 8 sixteen pages without reaching Newest. */
-static unsigned optwin_why, optwin_why_value;
+static unsigned optwin_why, optwin_why_value, optwin_late_submit;
 static int optwin_collect(OptwinCtx *x, UINT64 cursor, UINT64 t0, UINT64 tf, UINT64 t1, double *ms, double *jobsum_ms,
                           unsigned *jobs, unsigned *others) {
     const UINT64 slack=(UINT64)x->qpf.QuadPart*3u/1000u;
     UINT64 start=~0ull, end=0, sum=0;
+    /* EXP2390: every miss was reason 7 -- the timed list (always one job) carried a
+     * submit stamp after ExecuteCommandLists returned (tf), so it was counted with the
+     * filler. The timed list is queued before the filler: our earliest-Sequence job
+     * submitted after t0 that completed in the window is the timed one. */
+    UINT64 late_seq=~0ull, late_start=0, late_end=0;
     *jobs=0; *others=0;
     optwin_why=8u; optwin_why_value=0u;
     for (unsigned page=0;page<16u;++page) {
@@ -10197,7 +10202,11 @@ static int optwin_collect(OptwinCtx *x, UINT64 cursor, UINT64 t0, UINT64 tf, UIN
         for (UINT i=0;i<q->Count;++i) {
             const Q3_GPU_COMPLETION *r=&q->Record[i];
             if (r->ProcessId!=x->pid || r->Kind!=Q3_GPU_TIMESTAMP_COMPUTE || r->SubmitQpc<t0 || r->CompleteQpc>t1+slack) continue;
-            if (r->SubmitQpc>=tf) { ++*others; continue; }
+            if (r->SubmitQpc>=tf) {
+                ++*others;
+                if (r->Sequence<late_seq && !r->Status && r->Start && r->End>r->Start) {
+                    late_seq=r->Sequence; late_start=r->Start; late_end=r->End; }
+                continue; }
             if (r->Status || !r->Start || r->End<=r->Start) {
                 optwin_why=6u; optwin_why_value=r->Status ? (unsigned)r->Status : r->Start ? 0xe0u : 0x50u; return 0; }
             if (r->Start<start) start=r->Start;
@@ -10207,6 +10216,10 @@ static int optwin_collect(OptwinCtx *x, UINT64 cursor, UINT64 t0, UINT64 tf, UIN
         }
         cursor=q->Cursor;
         if (cursor>=q->Newest) {
+            if (!*jobs && late_seq!=~0ull) {
+                /* the late-stamped timed job */
+                start=late_start; end=late_end; sum=late_end-late_start; *jobs=1; --*others; ++optwin_late_submit;
+            }
             if (!*jobs) { optwin_why=7u; optwin_why_value=*others; return 0; }
             *ms=1000.0*(double)(end-start)/(double)q->Frequency;
             *jobsum_ms=1000.0*(double)sum/(double)q->Frequency;
@@ -10453,7 +10466,8 @@ static int optwin_run(ID3D12Device *device, ID3D12CommandQueue *queue, ID3D12Fen
     }
     if (x->filler_signal[0]) (void)optwin_wait(x,x->filler_signal[0]);
     if (x->filler_signal[1]) (void)optwin_wait(x,x->filler_signal[1]);
-    printf("OPTWIN_RECORDS missing %u oracle_bad %u filler_in_window %u\n",x->missing,x->oracle_bad,x->filler_in_window);
+    printf("OPTWIN_RECORDS missing %u oracle_bad %u filler_in_window %u late_submit %u\n",x->missing,x->oracle_bad,
+           x->filler_in_window,optwin_late_submit);
     {
         const int pass=SUCCEEDED(hr) && !x->missing && !x->oracle_bad;
         printf("AGX_D3D12_OPTWIN%s: %s hr=0x%08lx\n",probe ? probe : "",pass ? "PASS" : "FAIL",(unsigned long)hr);
