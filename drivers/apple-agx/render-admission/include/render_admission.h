@@ -1251,6 +1251,8 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_MPO_SCRATCH_STATE MpoScratch;
   ULONGLONG MpoScratchPoolOffset;   /* scratch 0; scratch 1 = + STEP */
   PUCHAR MpoScratchCpu;             /* write-combined view of scratch 0 */
+  /* CUR-1c: cached copy of the visible block (read once from the pool). */
+  UCHAR MpoScratchStage[ADMISSION_MPO_SCRATCH_BYTES];
   ADMISSION_MPO_PLANE_STATE MpoPlanes[2];
 } ADMISSION_CONTEXT;
 

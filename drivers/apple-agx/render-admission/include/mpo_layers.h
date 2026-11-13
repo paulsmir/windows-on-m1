@@ -55,6 +55,15 @@ unsigned int AdmissionMpoBlockIsZero(const unsigned char *Source,
 
 /* Writes the whole scratch: the block at (OffsetX, OffsetY), zero
  * elsewhere (the previous block's pixels are cleared). */
+/* CUR-1c (EXP2384: ~126 us per 24x27 block, byte reads from the
+ * write-combined pool): copy the visible block once, row by row with wide
+ * loads (memcpy), into a cached stage buffer (Width * 4 bytes per row, at
+ * most ADMISSION_MPO_SCRATCH_BYTES); 1 when every byte of the block is 0.
+ * The zero test runs on the stage, never on the source. */
+unsigned int AdmissionMpoScratchStage(unsigned char *Stage,
+                                      const unsigned char *Source,
+                                      unsigned int SourcePitch,
+                                      unsigned int Width, unsigned int Height);
 void AdmissionMpoScratchFill(unsigned char *Scratch,
                              const unsigned char *Source,
                              unsigned int SourcePitch, unsigned int Width,

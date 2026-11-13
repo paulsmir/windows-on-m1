@@ -738,11 +738,14 @@ static NTSTATUS AdmissionMpoScratchPrepare(ADMISSION_CONTEXT *Context,
   source = pool + Top->PoolOffset + (ULONGLONG)(ULONG)slot->Clip.Top * Top->SurfaceStride +
            (ULONGLONG)(ULONG)slot->Clip.Left * 4u;
   t0 = KeQueryPerformanceCounter(NULL);
-  *Zero = AdmissionMpoBlockIsZero(source, Top->SurfaceStride, w, h);
+  /* CUR-1c: one wide-load pass over the write-combined source into the
+   * cached stage; the zero test and the fill read the stage. */
+  *Zero = AdmissionMpoScratchStage(Context->MpoScratchStage, source,
+                                   Top->SurfaceStride, w, h);
   index = AdmissionMpoScratchSelect(&Context->MpoScratch, *Zero, &write);
   if (write != 0u)
     AdmissionMpoScratchFill(Context->MpoScratchCpu + index * ADMISSION_SCANOUT_SCRATCH_STEP,
-                            source, Top->SurfaceStride, w, h, ox, oy);
+                            Context->MpoScratchStage, w * 4u, w, h, ox, oy);
   else
     InterlockedIncrement(&Context->Mpo.ScratchSkippedWrites);
   KeMemoryBarrier(); /* the scratch bytes before COMMIT_LAYERS */
