@@ -6966,3 +6966,25 @@ boot was run. The previous entry stays as written.
   configuration with band fingerprints; (3) last accepted package (2e19eaaf5) on the current platform.
 - Architect error recorded: the step-1 rule "two more runs in the same boot decide" cannot sample between-boot
   variation; withdrawn.
+
+## UPDATE 2026-11-14T22:24Z - combined package perf gate PASS on the repeat boot; CPU placement lever (+8.1 % CS)
+
+- EXP2459 (repeat boot of EXP2428, package 536f2357 = PL-1c + F1K-STAMP + C2 + A5-D1 receipt, a6916e26 + MUKBD003):
+  CS warm 51.827, r2 52.350 (+0.69 %); GM 47.267 (+0.55 %); PERF_GATE_PASS (bench report). EXP2428's CS -2.4 % is
+  recorded as per-boot band variation (history: EXP2404 -> EXP2412). The band's cause is OPEN.
+- Refuted (architect hypotheses of this evening): (1) "the combined package costs ~3 % on the present path";
+  (2) "the loaded keyboard driver costs CS" - in-boot remove/rescan A/B showed no difference; (3) "the low band is
+  CS on the E cluster" - both bands run CS on E.
+- FINDING: with hl.exe pinned to the P cluster (affinity 0xF0) CS gives 56.22 / 56.21 fps against 51.77 / 52.07
+  unpinned in the same boot (+8.1 %). Unpinned, the E cluster runs at 2044-2064 MHz and the P cluster idles at
+  ~700 MHz, 2-6 % busy. EfficiencyClass is correct (E=0, P=1).
+- Research pass (report outside the repo, .local/night-20261110/core-placement/REPORT.md), facts: Windows accepts
+  _CPC and writes desired performance (m1n1 "HV: CPPC" lines); the firmware _CPC scale is MHz (E 2064, P 2988 ->
+  E appears as 69 % of P; Asahi capacity ratio ~48 %); m1n1 switches DRAM to the fast configuration only when the
+  P cluster is >= 2184 MHz, so pinned-vs-unpinned also differs in DRAM speed (confounder). Hypotheses, unverified:
+  core parking keeps the class-1 cores unused for a non-saturating thread; Windows derives class-relative
+  thresholds from _CPC Highest Performance.
+- Ordered, read-only (EXP2459 part 2): Parking Status / performance-limit counters, CSwitch residency of the hl.exe
+  main thread, foreground state, dram_fast per run; GravityMark pinned vs unpinned. No guest power setting is
+  changed. The _CPC capacity-scale experiment (Mu + m1n1, atomic) is decided after that measurement.
+- Not reported yet at this time: C2-1/C2-3 arm and the A5-D1 tail of the same experiment.
