@@ -6748,3 +6748,16 @@ boot was run. The previous entry stays as written.
 - So EXP2421 says nothing about the dxgkrnl-side failure seen in EXP2416 (policy 1, StartDevice succeeded, device
   failed afterwards). A5-D1 must run with the start policy that allows re-starts (Wom1StartPolicy=1); the A5
   analysis of EXP2416 stands unchanged.
+
+## UPDATE 2026-11-14T09:57:15Z - EXP2424/2425: RST-2 A, B, C confirmed; bench m1n1 = RST-2ABC
+
+- Reset path of the hypervisor no longer touches the guest-owned AGX block (A), its console flushes are bounded to
+  100 ms (B), and the bugcheck line is printed only for an identified kernel (C). Orderly restart with the host
+  reader stopped: USB gone after 11.4 s, proxy answering after 19.6 s. Forced crash: 7.4 s and 17.1 s. No
+  pre-reset stall.
+- Bench m1n1 decision: gpu/rst2-reset-path ecc084da (image a6916e26); previous RST-1 (71f64fc1); emergency
+  s2v3-rq2 (772d2ee7). Pending: the usual perf gate on the first normal GPU boot with this image.
+- Still open: which step stalled in EXP2420 was never observed again; the printf path on reset can still wait on
+  the console/USB locks (covered by the watchdog only); no bugcheck-code readout for kernel 26200.9974 (identity
+  recorded: TimeDateStamp 0xcf576790, SizeOfImage 0x124a000, CheckSum 0xb26993; RVA needs that build's PDB);
+  no watchdog during guest run (a full hang still needs the operator).
