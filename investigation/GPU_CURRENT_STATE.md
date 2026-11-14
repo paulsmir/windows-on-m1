@@ -6934,3 +6934,16 @@ boot was run. The previous entry stays as written.
   gets an offline capacity test before the bench.
 - GPU box: combined package branch exp/combo1-pkg; its one new gate failure was the repository hygiene test on
   CHANGES.csv rows (ledger only), fixed on the branch by 536f23573 with no driver/tool diff (bench report).
+
+## CORRECTION 2026-11-14T20:10Z to "UPDATE 2026-11-14T19:55Z" (keyboard backlight in every boot, EXP2454)
+
+- The claim "the bench certificate stays trusted, the driver loads at every boot" holds only until the next GPU
+  experiment rollback. The keyboard package is signed with the same bench certificate as the AppleAgx packages,
+  and the AppleAgx recovery removes that certificate and requires it absent (the recovery after the Wi-Fi/keyboard
+  runs stopped at "signer state mismatch" in the durable-transition check). Found by the bench at 19:50Z.
+- Decision for the current GPU box: the AppleAgx lifecycle keeps owning the certificate; the keyboard driver does
+  not load during the box; the perf gate of the box covers the MUKBD003 firmware only, not the loaded driver.
+- Proper fix (separate signer for the keyboard package, kept trusted in the guest; rollback scripts never remove
+  it) waits for the user's yes because it is a new persistent trust setting in the guest.
+- Process defect (architect): the every-boot experiment's BEFORE did not name the shared signer as a resource
+  owned by another lifecycle. Same rule as for the IRQ route table: a BEFORE names every shared resource it uses.
