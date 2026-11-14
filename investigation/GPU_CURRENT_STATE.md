@@ -6738,3 +6738,13 @@ boot was run. The previous entry stays as written.
   worked); DxgKrnl-Admin event 549 carried 0xC00000BB (STATUS_NOT_SUPPORTED), not the 0xC0000017 of EXP2308; no
   memory pressure, adapter count 1 throughout. So the earlier "out-of-memory path" reading does not describe this
   failure; a DxgKrnl ETW trace across one failing enable now exists. Cause open.
+
+## UPDATE 2026-11-14T09:23:50Z - correction: the A5 tail of EXP2421 is not A5 evidence (one-shot arm consumed)
+
+- Refers to the previous entry's A5 paragraph. The per-cycle KMD receipt of EXP2421 shows Wom1GpuvaArmStatus
+  0xC0000034 (the one-shot arm value absent) and Wom1StartStatus 0xC00000BB: the package ran with start policy 0
+  (one-shot arm), the arm was consumed by the boot's first start, and every re-enable was refused by design inside
+  our StartDevice. The event-549 payload (first word 0x4C505041 = "APPL", status 0xC00000BB) reports that refusal.
+- So EXP2421 says nothing about the dxgkrnl-side failure seen in EXP2416 (policy 1, StartDevice succeeded, device
+  failed afterwards). A5-D1 must run with the start policy that allows re-starts (Wom1StartPolicy=1); the A5
+  analysis of EXP2416 stands unchanged.
