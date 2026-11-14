@@ -6947,3 +6947,22 @@ boot was run. The previous entry stays as written.
   it) waits for the user's yes because it is a new persistent trust setting in the guest.
 - Process defect (architect): the every-boot experiment's BEFORE did not name the shared signer as a resource
   owned by another lifecycle. Same rule as for the IRQ route table: a BEFORE names every shared resource it uses.
+
+## CORRECTION 2026-11-14T20:58Z to "CORRECTION 2026-11-14T20:10Z" (keyboard signer) + EXP2428 perf gate status
+
+- The 20:10Z statement "after a GPU rollback the keyboard driver stops loading" was wrong. Bench observation in the
+  EXP2428 boot: the guest runs with testsigning on, and the keyboard driver was loaded (device OK, level 90) with
+  the bench certificate absent from Root/TrustedPublisher. The certificate is needed only when a package is
+  installed. So "every boot" survives the AppleAgx rollback while the package stays installed; no separate signer
+  is needed; the question to the user was withdrawn. The recovery's "signer absent" check stays unchanged.
+- EXP2428 (combined package PL-1c + F1K-STAMP + C2 + A5-D1 receipt on a6916e26 + MUKBD003, policy 1): GravityMark
+  gate PASS (worst 46.770 vs 47.007, -0.50 %). Counter-Strike gate FAIL: warm 50.23, r2-r6 50.50 / 50.79 / 51.15 /
+  50.75 / 51.14 vs base 51.991 (plateau about -2 to -2.5 %). Quiet-guest check clean (no servicing, no install
+  retries for the keyboard device, trace symmetric with the baseline runs). C2-1/C2-3 and A5-D1 not run.
+- NOT a verdict on the package: ledger history has per-boot CS bands (EXP2404 -2.30 % then EXP2412 +0.12 % on the
+  same package; EXP2396 -3.43 %), and the boot differs from the baseline in five things, one newly found: the
+  keyboard driver was loaded during the gate. Ordered discriminators, in this order: (1) in-boot toggle of the
+  keyboard device with CS pairs (single variable, immune to the boot band); (2) one repeat boot of the same
+  configuration with band fingerprints; (3) last accepted package (2e19eaaf5) on the current platform.
+- Architect error recorded: the step-1 rule "two more runs in the same boot decide" cannot sample between-boot
+  variation; withdrawn.
