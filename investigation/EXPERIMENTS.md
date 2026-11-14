@@ -79522,6 +79522,21 @@ EXP2411 HARDWARE BEFORE (record) and ACTUAL 2026-11-14T02:34:20Z:
 - Also read on this guest: Control\Windows ShutdownTime 29A48CE3DD73DD01 = 2026-11-14T02:14:33Z (the ordered restart of the rec2405h guest into this boot, 32 s before LastBootUpTime 02:15:05Z); guest kernel 10.0.26200 UBR 9974.
 - Recovery rec2411h started. Next: PL-1c rerun under EXP2413 with the same package (proxy slot after it).
 
+EXP2413 HARDWARE BEFORE 2026-11-14T02:39:49Z:
+- Kind: one variable against the EXP2402 control: package arch/pl1b 503cbc135 = gpu/memory-latency fbe3dc1f7 + 9f28cb42f (PL-1b) + bc383e206 (PL-1c: SetDisplayMode never returns an object to release; superseded objects chained through ADMISSION_UMD_RETIREMENT::Next, oldest first; DeviceDestroy returns the current object, then the chain) + CHANGES rows. Driver diff against fbe3dc1f7: UMD only (umd_primary_retention.h, umd.c, umd_internal.h, umd_runtime_device.c, two host tests); gpu/memory-latency since fbe3dc1f7 changed no driver behaviour (scripts only). m1n1 s2v3-rq2, switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes (the EXP2402/2403 set).
+- WHY THIS HYPOTHESIS: (1) EXP2403: arms a and b passed with superseding instead of releasing, so the first mode change is fixed; (2) the first bound release (an old primary, four mode sets back) restarted the same hide/SetDisplayMode loop at d1; (3) the architect's trace read of EXP2403 (69/69 hides follow a live release; kernel-device candidate excluded). No live release -> no hide.
+- ATOMIC CONTRACT: none.
+- Arms (DxgKrnl + Dwm-Core ETW from before the first mode change, KMD display receipt every 10 s, OPERATOR_LOOK): a GravityMark full screen 1920x1080 150 s; b exit to native without a DWM restart (SourceVisible 1 at a-exit); c GravityMark full screen 1680x1050 150 s; d six further mode changes (40 s runs alternating 1920x1080 / 1680x1050). SOURCE_VISIBLE_EXIT after every exit. Guest disk checked before d (skip d below 4 GiB free); ETL files deleted from the guest after fetch.
+- Expected: no FS_LOOP_DETECTED in any arm; SourceVisible 1 after every exit; V2Presents rising in every arm; UMD rows: path 3 (superseded) per mode change, no path-2 release, releases only at device destroy (path 4) when GravityMark exits.
+- Reject: VisibilityCalls +40 within 10 s in any arm -> stop GravityMark, receipts, restart dwm.exe (recovery tail), skip the rest; or SourceVisible 0 after an exit.
+- Not covered: memory held by superseded primaries until device destroy (one mode-size allocation per mode change of one device; 16 MiB at native).
+- Sanity first: suite + one GM PERF window at native.
+- Recovery: rec2413h visible recovery; restart dwm.exe restores the picture in the broken state.
+- Rerun note: same package (EXP2411 builder output copied), same probe plus an abort when the device is not CM_PROB_NONE at first contact. prepare.sh now restores the arm lines when AGX_NO_ARM is not set (PREPARE_FAIL arm-restore otherwise); prepare must log "ARM stage writes G3Armed".
+- Hashes: sys 0c28e6fde6ac, UmdArm64 40b4e5eb6258, UmdX64 4646c8e2a797, Umd32 bb94afc26fbe; manifest 7f6a25be053f, hardware-manifest 30400b9d80fa; probe2413.sh 1555d82a92b7 (PROBE_LINT_OK); visible recovery rec2413h cc6f1a4be0d4c40d; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
+- Recovery rec2413h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2413-pl1cr/run2413.sh.
+
 EXP2413 HARDWARE ACTUAL 2026-11-14T03:01:01Z (PL-1c rerun of the invalid EXP2411):
 - Boot and run: rec2411h (RECOVERY_DONE), the EXP2411 package copied (arch/pl1b 503cbc135), m1n1 s2v3-rq2, switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes; prepare logged "ARM stage writes G3Armed"; device CM_PROB_NONE; CHAIN2413_DONE.
 - Sanity: suite 119/0; GM window at native ran (TIMEOUT CLOSED = timed run end; the perf summary did not parse, no perf gate in this boot).
