@@ -286,6 +286,54 @@ static void test_payload_cdbs_need_prps(void)
     }
     assert(ans_scsi_cdb_has_payload_prps(0x2a) && ans_scsi_cdb_has_payload_prps(0x8a));
 }
+/* WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
+ * Unbuffered I/O from a buffer that is not page-aligned (EXP2437: a managed array) reaches the
+ * miniport with a first-page offset. For EVERY dword-aligned offset and for lengths that make the
+ * last page partial, the PRP set must name exactly the pages the bytes live in: page[0] carries
+ * the offset, every later entry is page-aligned and consecutive for a contiguous buffer, the count
+ * is ceil((offset + bytes) / 4096) and never exceeds 33; whether the SG list arrives as one run
+ * or as one element per page must not matter. A wrong entry here is DMA to the wrong memory. */
+static void prp_offset_sweep_tests(void)
+{
+    static const uint32_t lengths[] = {4096, 8192, 12288, 65536, 126976, 131072};
+    const uint64_t base = 0x812340000ULL;
+    for (uint32_t off = 0; off < 4096; off += 4) {
+        for (size_t li = 0; li < sizeof lengths / sizeof lengths[0]; ++li) {
+            uint32_t bytes = lengths[li], pages = (off + bytes + 4095) / 4096;
+            struct ans_logical_prps one, split;
+            struct ans_sg_span run = {base + off, bytes}, sg[34];
+            size_t n = 0; uint32_t left = bytes; uint64_t a = base + off;
+            while (left) { /* one SG element per physical page */
+                uint32_t take = 4096 - (uint32_t)(a & 4095); if (take > left) take = left;
+                sg[n].address = a; sg[n].length = take; n++; a += take; left -= take;
+            }
+            assert(pages <= 33 && n == pages);
+            assert(ans_sg_to_prps_ex(&run, 1, bytes, &one, 1) == ANS_PRP_OK);
+            assert(ans_sg_to_prps_ex(sg, n, bytes, &split, 1) == ANS_PRP_OK);
+            assert(one.count == pages && split.count == pages && one.bytes == bytes && split.bytes == bytes);
+            assert(one.page[0] == base + off && split.page[0] == base + off);
+            for (uint32_t i = 1; i < pages; ++i) {
+                assert(one.page[i] == base + (uint64_t)i * 4096 && split.page[i] == one.page[i]);
+            }
+            /* The same buffer on scattered physical pages: order and addresses are preserved. */
+            for (size_t i = 1; i < n; ++i) sg[i].address = 0x900000000ULL + (uint64_t)(n - i) * 0x10000;
+            assert(ans_sg_to_prps_ex(sg, n, bytes, &split, 1) == ANS_PRP_OK && split.count == pages);
+            for (size_t i = 1; i < n; ++i) assert(split.page[i] == sg[i].address);
+        }
+    }
+    /* Not dword-aligned: refused, never rounded. A fragment that restarts mid-page: refused. */
+    for (uint64_t bad = 1; bad < 4; ++bad) {
+        struct ans_logical_prps p; struct ans_sg_span run = {base + bad, 4096};
+        assert(ans_sg_to_prps_ex(&run, 1, 4096, &p, 1) == ANS_PRP_INVALID && !p.count);
+    }
+    {
+        struct ans_logical_prps p; struct ans_sg_span sg[2] = {{base + 24, 4072}, {base + 0x5008, 24}};
+        assert(ans_sg_to_prps_ex(sg, 2, 4096, &p, 1) == ANS_PRP_FRAGMENT && !p.count);
+        /* 128 KiB + offset needs 33 pages; one more page does not fit. */
+        struct ans_sg_span big = {base + 4, 131072};
+        assert(ans_sg_to_prps_ex(&big, 1, 131072, &p, 1) == ANS_PRP_OK && p.count == 33);
+    }
+}
 /* UNMAP -> NVMe Dataset Management (deallocate). investigation/analysis/ANS-TRIM-UNMAP.md.
  * The capability exists only when Identify reported ONCS.DSM (ns.deallocate). */
 static uint64_t get_le(const uint8_t *p, size_t n)
@@ -442,7 +490,7 @@ int main(void)
     test_payload_cdbs_need_prps();
     fixture_strings();
     rw_tests(); discovery_tests(); cache_tests(); prp_tests(); status_tests();
-    unmap_tests();
+    unmap_tests(); prp_offset_sweep_tests();
     puts("ANS common SCSI + SG/PRP deterministic tests PASS");
     return 0;
 }
