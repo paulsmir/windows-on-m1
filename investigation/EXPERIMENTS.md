@@ -79581,3 +79581,17 @@ EXP2414-EXP2415 HARDWARE ACTUAL 2026-11-14T03:07:33Z (proxy-only slot):
   - Verdict: CONFIRMED (all PASS values as preregistered). Evidence driver-tb-extdisplay-3a73cc/.local/tbx/TBX-S1b/result.json, driver-usb-0460ed/.local/usb/S0c/port1-{ssps-exp2415,after-s1b}.json.
 - Exit: p.reboot() -> bench m1n1 (base 0x804494000; op 0x1401 absent = bench image), TTY logger stopped, AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2413h started.
 - Next: F1K-STAMP L1 (EXP2416) after RECOVERY_DONE.
+
+EXP2416 HARDWARE BEFORE 2026-11-14T03:13:45Z:
+- Kind: one variable against the EXP2405 package (exp/f1k-pkg 2e19eaaf5): package arch/f1k-stamp f4e8010ba = 2e19eaaf5 + 6d4768db2 (F1K-STAMP: ShutdownTime vs Wom1StartShutdownStamp at a policy-1 Attempt, reason 16 OrderlyByShutdownStamp, receipt Wom1StartPolicyStamp; the SetPowerState shutdown write removed) + f4e8010ba (CHANGES row). Driver diff: lifecycle.c, apple_agx_start_policy.{c,h}, tests. No driver drift between 133962a6c and the current gpu/memory-latency. Gate BASELINE_OK (2630 tests, 0 NEW); MSVC package build PASS (X86B521, STACK_FRAMES PASS). m1n1 s2v3-rq2, switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes Wom1StartPolicy=1, AGX_NO_ARM=1.
+- WHY THIS HYPOTHESIS: (1) EXP2405: no write from the shutdown path survived (no Wom1StartPolicyPower, Return unchanged) and the next start latched with reason 8; (2) architect's ntoskrnl read: CmShutdownSystem closes the registry before the device S5 pass, registry calls there return STATUS_TOO_LATE; (3) live: Control\Windows ShutdownTime changed across one ordered restart on this guest kernel (26200.9974): 02:14:33Z -> 02:37:00Z.
+- ATOMIC CONTRACT: none.
+- Steps: L1a probe2416.sh (first start: ShutdownTime, stamp, Attempt, Pending, Running; shutdown /r /t 0 at uptime < 120 s) -> proxy -> L1b probe2416b.sh by hand (AGX_FROM_PROXY=1, EXP2416b): next start, uptime >= 150 s, three disable/enable cycles, then one more ordered restart (after T) -> proxy -> L1c probe2416c.sh (EXP2416c): read the next start only.
+- Expected: L1a Attempt 0x01020004 (Clean; no stamp yet), Wom1StartPolicyStamp 0x0000000800000000 (read ok, no stamp, action set), stamp = ShutdownTime. L1b Attempt 0x01020310 (reason 16), Wom1StartPolicyStamp 0x0000000D00000000 (present, OrderlyExit, set), no Latched, UncleanCount absent/0, new stamp = the new ShutdownTime. L1c: reason 16 again (Running was never cleared) or Clean, UncleanCount 0, no Latched.
+- Failure: any Latched/StalePending after an ordered restart; Wom1StartPolicyStamp read status non-zero; stamp not equal to ShutdownTime after an allowed start.
+- Known A5: a re-enable may fail with CM_PROB_FAILED_POST_START; that is not an L1 item, a policy refusal is.
+- Hashes: probe2416.sh a5e9595b03a9 probe2416b.sh e68f5c3f72af probe2416c.sh 32534a18960f 
+- No GM/CS gates; no mode change. Recovery: rec2416h (visible, or AT_PROXY when at the proxy).
+- Hashes: sys c0edbbbdbbc1, UmdArm64 4294030e8b0d, UmdX64 895240ef7dd2, Umd32 35b40782a6f6; manifest 754ac794515b, hardware-manifest 999f42fd8870; probe2416.sh a5e9595b03a9 (PROBE_LINT_OK); visible recovery rec2416h ad49e727a2cd702a; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
+- Recovery rec2416h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2416-f1ks/run2416.sh.
