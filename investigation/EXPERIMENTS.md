@@ -79662,3 +79662,17 @@ EXP2406 HARDWARE ACTUAL 2026-11-14T03:47:28Z (F1-k L2 on F1K-STAMP):
 - Verdict: INVALID for L2 (trigger defect; no crash inside T, so the latch path was not exercised). T passed in this boot (Pending cleared by the timer, Running set), so no improvised crash afterwards (it would test the unclean-counter path, not L2).
 - Recovery rec2406h started.
 - Next: L2 rerun under a new ID with taskkill /F /PID and the full trigger output recorded; checked on a guest before the run that the trigger reaches a crash (the pre-check itself is the crash, so it is done as the L2 step itself, with a fallback: if the guest is still up after 20 s, NotMyFault-free alternative = an m1n1-side forced reset is not available on this line, so the run stops as invalid again).
+
+EXP2420 HARDWARE BEFORE 2026-11-14T03:52:54Z:
+- Kind: one variable against EXP2416 (same package arch/f1k-stamp f4e8010ba, EXP2416 build copied; same m1n1 s2v3-rq2, switches + Wom1StartPolicy=1, AGX_NO_ARM=1): the end of the first run is a forced stop (bugcheck) instead of an ordered restart. Rerun of EXP2406 with a working trigger; if the guest is still up 20 s after taskkill, the run stops as invalid again.
+- WHY THIS HYPOTHESIS: (1) EXP2416 showed the orderly side: an ordered restart changes ShutdownTime and the next start clears with reason 16; (2) a crash/hang/reset inside T does not run ExShutdownSystem, so ShutdownTime stays equal to the stamp and the stale Pending must latch (reason 8, decision function host-tested); (3) open assumption from the architect: the stamp is written before Pending in one flush; if L2 does not latch, that ordering (or a lazy flush losing Pending) is the first suspect.
+- ATOMIC CONTRACT: none.
+- Steps: L2a probe2420.sh: first start (policy values, ShutdownTime), then at uptime < 120 s taskkill of the DcomLaunch svchost (kill-dcomlaunch2.ps1, taskkill /F /PID with the full output recorded; critical process -> bugcheck 0xEF -> PSCI reset; EXP2305 used the same trigger); m1n1 must print a BUGCHECK line with code 0xEF. L2b by hand from the proxy (AGX_FROM_PROXY=1, EXP2420b, probe2420b.sh): read the next start only.
+- Expected: L2a as EXP2416 L1a (Attempt 0x01020004, stamp-rx 0x0000000800000000, stamp = ShutdownTime, Pending 1, Running 1). L2b: ShutdownTime unchanged from L2a; Attempt Refuse reason 8 (0x0103xx08, inputs Pending|Running); Wom1StartLatched 1, Wom1StartLatchCount 1; Wom1StartPolicyStamp 0x0000000300000000 (read ok, present, equal, no OrderlyExit, action keep); device CM_PROB_FAILED_POST_START (refused before GPU access).
+- Failure: L2b allowed (no latch) -> stamp/Pending ordering or flush durability defect; ShutdownTime changed by the crash -> the clean-exit source is not crash-proof.
+- Recovery: rec2420h (visible); afterwards confirm the recovery guest's APPL0002 has no Wom1StartLatched (as rec2405h: devnode stripped).
+- Hashes: probe2420.sh 651b7c37927f probe2420b.sh 22506da28c19 kill-dcomlaunch2.ps1 8f554f14fafb; package as EXP2416.
+- No GM/CS gates; no mode change.
+- Hashes: sys c0edbbbdbbc1, UmdArm64 4294030e8b0d, UmdX64 895240ef7dd2, Umd32 35b40782a6f6; manifest 8f22e4bb3b8a, hardware-manifest c0c8e5391b7c; probe2420.sh 651b7c37927f (PROBE_LINT_OK); visible recovery rec2420h dcfa1cadebd17efc; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
+- Recovery rec2420h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2420-f1kl2r/run2420.sh.
