@@ -1,5 +1,5 @@
 {
-  "dll": "/Users/pavel/public_windows/.local/experiments/EXP862-r148-pools/AppleAgxRenderAdmissionUmd.dll",
+  "dll": "$HOME/public_windows/.local/experiments/EXP862-r148-pools/AppleAgxRenderAdmissionUmd.dll",
   "dll_sha256": "817348ae8cce47e8685a301f30c48a3f7dc9da81c92d43108468893eed369849",
   "pdb_sha256": "4b7883515840bd62c9336fdb11b336a3d8734e233d79bac5ecb27df67f8b433d",
   "preferred_base": "0x180000000",

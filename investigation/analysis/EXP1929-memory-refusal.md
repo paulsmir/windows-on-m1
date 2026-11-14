@@ -8,7 +8,7 @@ the uncompleted app at 106 s with WER 0. No GPU fault/reset/recovery or G4 submi
 refusal receipt is present. DWM PID 1216 survives both runs. This supports MEM2
 failure containment, but does not establish memory savings or benchmark fit.
 
-Evidence root: `/Users/pavel/public_windows/.local/experiments/EXP1929-mem2-b/`.
+Evidence root: `$HOME/public_windows/.local/experiments/EXP1929-mem2-b/`.
 Within `evidence/EXP1929/`:
 
 - `gm1929a-umd.log:4066`: 128 MiB allocation refusal, General class, flags 0x2c,

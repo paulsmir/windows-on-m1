@@ -3,7 +3,7 @@
 Date: 2026-10-12. Read-only survey for roadmap step M1 (reserve the ramdisk window
 0x860000000-0x8A0000000 only when the boot carries a ramdisk; otherwise give the RAM to
 Windows) while keeping WinPE/ANS ramdisk boots. Prefixes: `E` =
-`/Users/pavel/public_windows/.local/experiments`, `G` = `.local/tandem/gpu-pipeline`,
+`$HOME/public_windows/.local/experiments`, `G` = `.local/tandem/gpu-pipeline`,
 `A` = `.worktrees/ans-native`.
 
 ## Headline

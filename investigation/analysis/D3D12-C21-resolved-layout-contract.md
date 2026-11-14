@@ -182,7 +182,7 @@ The fixture calls actual linked AIL for all6 sides, every depth1..2048, requests
 and both explicit formats. ASan/UBSan PASS:
 
 ```
-AGX_LOCAL_TREE=/Users/pavel/public_windows/.local python3 -m unittest discover -s tests -p test_windows_ail_two_pattern_footprints.py -v
+AGX_LOCAL_TREE=$HOME/public_windows/.local python3 -m unittest discover -s tests -p test_windows_ail_two_pattern_footprints.py -v
 NATIVE_TWO_PATTERN_FOOTPRINT_PASS resources=49150 mips=73724 disjoint_full_blocks=62939144
 ```
 
@@ -210,7 +210,7 @@ DESC_0004=104, allocation info=56, subresource info=32 bytes. Packed descriptor
 addresses cover each whole native block exactly once.
 
 ```
-AGX_LOCAL_TREE=/Users/pavel/public_windows/.local PYTHONPATH=tests python3 -m unittest test_d3d12_resolved_volume test_d3d12_volume test_d3d12_abi_gate test_d3d12_native_owner test_d3d12_view_mapping test_d3d12_typed_srv_extent test_native_resource_layout test_windows_ail_two_pattern_footprints
+AGX_LOCAL_TREE=$HOME/public_windows/.local PYTHONPATH=tests python3 -m unittest test_d3d12_resolved_volume test_d3d12_volume test_d3d12_abi_gate test_d3d12_native_owner test_d3d12_view_mapping test_d3d12_typed_srv_extent test_native_resource_layout test_windows_ail_two_pattern_footprints
 Ran52tests:OK
 ```
 

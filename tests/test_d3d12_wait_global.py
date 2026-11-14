@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CAPTURE = Path('/Users/pavel/public_windows/.local/experiments/EXP1969-no-wait/evidence/shader-capture')
+CAPTURE = Path('~/public_windows/.local/experiments/EXP1969-no-wait/evidence/shader-capture').expanduser()
 KERNELS = ('bd59552039e0399a', 'a6e5a25c7bc49152', '97ae4b027aa43c6c')
 
 

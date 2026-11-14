@@ -6,7 +6,7 @@
 
 **Architecture:** Mesa owns batch and pipeline pools separately from bo_list. The Windows batch adapter must enumerate both dynarrays into its canonical allocation reference set. Existing AgxWin32GpuvaSubmit owns MakeResident, paging-fence wait, upload, submission and retirement; it deduplicates through add_bo before entering that transaction.
 
-**Spec:** `/Users/pavel/public_windows/.local/tandem/NEXT_TASK_R148.md`.
+**Spec:** `$HOME/public_windows/.local/tandem/NEXT_TASK_R148.md`.
 **Tech stack:** pinned Mesa C, Windows UMD callbacks, ARM64, Python host replay.
 
 ## Evidence and ownership

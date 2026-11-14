@@ -2,7 +2,7 @@ from pathlib import Path
 import subprocess,base64,time,json,datetime
 b=Path(__file__).parent
 enc=base64.b64encode((b/'sample.ps1').read_text().encode('utf-16le')).decode()
-cmd=['ssh','-i',str(Path.home()/'.ssh/air'),'-o','BatchMode=yes','-o','ConnectTimeout=5','-o','ConnectionAttempts=1','-o','StrictHostKeyChecking=yes','-o','UserKnownHostsFile=/Users/pavel/public_windows/.local/experiments/EXP641-standard-present/air_known_hosts','pavel@192.168.1.37','powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+enc]
+cmd=['ssh','-i',str(Path.home()/'.ssh/air'),'-o','BatchMode=yes','-o','ConnectTimeout=5','-o','ConnectionAttempts=1','-o','StrictHostKeyChecking=yes','-o','UserKnownHostsFile=$HOME/public_windows/.local/experiments/EXP641-standard-present/air_known_hosts','pavel@192.168.1.37','powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand '+enc]
 first=None;start=time.monotonic();last_good=None
 with (b/'heartbeat.jsonl').open('a',buffering=1) as f:
  while time.monotonic()-start<900:

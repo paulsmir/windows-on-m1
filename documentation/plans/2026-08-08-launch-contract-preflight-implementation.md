@@ -25,7 +25,7 @@
 ## Global Constraints
 
 - The assisted launch is the golden behavioral reference.
-- `/Users/pavel/windows` is read-only; implementation occurs in `/Users/pavel/public_windows` or an isolated worktree created from the recorded assisted revision.
+- `$HOME/windows` is read-only; implementation occurs in `$HOME/public_windows` or an isolated worktree created from the recorded assisted revision.
 - Required mismatches at `PRE_HV_INIT`, `POST_HV_INIT`, `POST_MAPS`, or `PRE_GUEST` block `hv_start()`.
 - Dynamic values are normalized only by explicit `exact`, `masked`, `relative-region`, `set`, `digest`, or `range` rules.
 - Unknown fields, unsupported schema versions, missing checkpoints, duplicate sequences, and checksum failures are blocking errors.
@@ -301,14 +301,14 @@ git commit -m "feat: transport and decode launch contracts"
 - Modify: `.gitignore`
 
 **Interfaces:**
-- Consumes: `/Users/pavel/windows` only as a read-only source of the known-good assisted scripts, binaries, ELF symbols, and logs.
+- Consumes: `$HOME/windows` only as a read-only source of the known-good assisted scripts, binaries, ELF symbols, and logs.
 - Produces an unmodified-reference capture under `.local/contracts/assisted-reference/<run-id>/`.
 - Produces a collector-candidate capture under `.local/contracts/assisted-collector/<run-id>/`.
 - Produces Python: `capture_reference_checkpoint(context, checkpoint: str) -> dict`, `decode_collector_checkpoint(data: bytes) -> dict`, `compare_calibration(reference, collector, schema) -> list[Difference]`, and `validate_capture_set(records) -> None`.
 
 - [ ] **Step 1: Write failing command-construction and validation tests**
 
-Use a fake proxy, fake assisted-runner context, and fake subprocess runner. Assert the script refuses a dirty or missing reference identity, never writes below `/Users/pavel/windows`, requires all four blocking checkpoints, records the m1n1/Mu SHA-256 values, and does not accept a collector capture unless it matches the host-side reference capture.
+Use a fake proxy, fake assisted-runner context, and fake subprocess runner. Assert the script refuses a dirty or missing reference identity, never writes below `$HOME/windows`, requires all four blocking checkpoints, records the m1n1/Mu SHA-256 values, and does not accept a collector capture unless it matches the host-side reference capture.
 
 - [ ] **Step 2: Run the tests and verify RED**
 
@@ -318,7 +318,7 @@ Expected: capture module is missing.
 
 - [ ] **Step 3: Implement the read-only reference probe**
 
-The unchanged binary cannot emit a record format that did not exist when it was built. Therefore the first capture is intentionally host-side: add checkpoint callbacks around the established Python-assisted orchestration and read only already-exposed proxy state, symbols, boot arguments, stage-2 descriptors, and device configuration. Encode those observations into the canonical schema on the host. Do not patch, rebuild, or write into `/Users/pavel/windows`.
+The unchanged binary cannot emit a record format that did not exist when it was built. Therefore the first capture is intentionally host-side: add checkpoint callbacks around the established Python-assisted orchestration and read only already-exposed proxy state, symbols, boot arguments, stage-2 descriptors, and device configuration. Encode those observations into the canonical schema on the host. Do not patch, rebuild, or write into `$HOME/windows`.
 
 The reference probe must record provenance for every field: direct proxy read, assisted-runner value, ELF symbol plus offset, or digest of a bounded memory region. A field that cannot be observed is marked `unobserved`; it cannot be silently assigned an expected value and cannot become blocking until collector calibration supplies it.
 
@@ -327,8 +327,8 @@ The reference probe must record provenance for every field: direct proxy read, a
 `capture-assisted-contract.sh` accepts:
 
 ```text
---reference-root /Users/pavel/windows
---public-root /Users/pavel/public_windows
+--reference-root $HOME/windows
+--public-root $HOME/public_windows
 --reference-output .local/contracts/assisted-reference/<run-id>
 --collector-output .local/contracts/assisted-collector/<run-id>
 --device /dev/cu.usbmodem...
@@ -351,11 +351,11 @@ Run:
 
 ```bash
 scripts/capture-assisted-contract.sh \
-  --reference-root /Users/pavel/windows \
-  --public-root /Users/pavel/public_windows \
+  --reference-root $HOME/windows \
+  --public-root $HOME/public_windows \
   --reference-output .local/contracts/assisted-reference/dry-run \
   --collector-output .local/contracts/assisted-collector/dry-run \
-  --device /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --device /dev/cu.usbmodem<SERIAL>41 \
   --dry-run
 ```
 
@@ -395,7 +395,7 @@ Expected: golden and schema files are absent.
 
 - [ ] **Step 3: Capture the unmodified assisted hardware reference**
 
-Run the tested reference mode from Task 5 against the old assisted flow. Do not change or rebuild `/Users/pavel/windows`. Keep the machine at the Windows desktop for five minutes and record guest liveness separately from the pre-guest host observations. Preserve the complete command output and hashes in `.local/contracts/assisted-reference/<timestamp>/metadata.json`.
+Run the tested reference mode from Task 5 against the old assisted flow. Do not change or rebuild `$HOME/windows`. Keep the machine at the Windows desktop for five minutes and record guest liveness separately from the pre-guest host observations. Preserve the complete command output and hashes in `.local/contracts/assisted-reference/<timestamp>/metadata.json`.
 
 - [ ] **Step 4: Capture and calibrate the shared C collector in assisted mode**
 

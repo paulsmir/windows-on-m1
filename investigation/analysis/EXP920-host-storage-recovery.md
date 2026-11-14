@@ -12,7 +12,7 @@ verification. The hypervisor launcher was not interrupted.
 
 33 completed immutable evidence files were relocated: 32 frozen ETLs from
 EXP916/917/918 and the EXP919 kernel dump. Destination:
-`/Users/pavel/J313-evidence-archive/2026-10-02/`.
+`$HOME/J313-evidence-archive/2026-10-02/`.
 Each source was checked against its existing size/SHA receipt. Each destination
 copy was fsynced and independently size/SHA verified before the source file was
 removed and its original path replaced with a symlink. Reopening the original

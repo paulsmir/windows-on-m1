@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Work only in `/Users/pavel/public_windows`; keep `/Users/pavel/windows` read-only as assisted evidence.
+- Work only in `$HOME/public_windows`; keep `$HOME/windows` read-only as assisted evidence.
 - Use the approved two-stage architecture in `docs/superpowers/specs/2026-08-07-self-chainload-shared-guest-engine-design.md`.
 - Preserve the inner m1n1, Mu FD, guest manifest flags `0x11`, and guest layout from the Clang control.
 - The outer magic must differ from `ASIWINGU`; old and new formats must reject one another rather than fall back ambiguously.

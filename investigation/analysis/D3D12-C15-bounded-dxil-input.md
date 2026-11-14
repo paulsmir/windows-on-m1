@@ -33,7 +33,7 @@ bitcode span. We copy neither implementation and link neither in this task.
 
 ## Observed layout and exact original fixture
 
-EXP1389 input `/Users/pavel/public_windows/.local/c15-sm6-8434b063/compute.dxil`:
+EXP1389 input `$HOME/public_windows/.local/c15-sm6-8434b063/compute.dxil`:
 2824 bytes, SHA256 `f3934fccef3b1428d62ed6a675540cab1bf674faaf85c67320e3ed83c6c62bb4`.
 Container has DXBC magic, major1/minor0, size2824 and7 parts. DXIL part header
 starts1540; its body starts1548 and has1276 bytes, SHA256

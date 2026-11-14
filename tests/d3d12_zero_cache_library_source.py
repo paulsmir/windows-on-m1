@@ -4,7 +4,7 @@ import hashlib
 import json
 
 ROOT = Path(__file__).resolve().parents[1]
-WDK = Path('/Users/pavel/public_windows/.local/reference/winsdk26100/um/d3d12umddi.h')
+WDK = Path('~/public_windows/.local/reference/winsdk26100/um/d3d12umddi.h').expanduser()
 WDK_SHA256 = 'd338e00bbd079cfed42434b5bd8cb9c658238cfe22747fb7d3b7cff3a3cabc28'
 
 

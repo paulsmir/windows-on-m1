@@ -4,7 +4,7 @@
 
 ## Proven boundary and limits
 
-Read `GPU_CURRENT_STATE.md:1–30`, saved EXP864 `hardware-result.json`, `hardware-manifest.json`, and targeted `full.log` lines under `/Users/pavel/public_windows/.local/experiments/EXP864-r149-usc/`. These saved observations replace live acquisition in this explicitly offline task. No current live ADT/register/timer snapshot was obtained. The log records fetching an ADT, broker mappings and retained-root activity; it does not establish contemporary TA/3D register state at timeout.
+Read `GPU_CURRENT_STATE.md:1–30`, saved EXP864 `hardware-result.json`, `hardware-manifest.json`, and targeted `full.log` lines under `$HOME/public_windows/.local/experiments/EXP864-r149-usc/`. These saved observations replace live acquisition in this explicitly offline task. No current live ADT/register/timer snapshot was obtained. The log records fetching an ADT, broker mappings and retained-root activity; it does not establish contemporary TA/3D register state at timeout.
 
 Package864 is EXP863 + USC `3a7b6cc9`, excluding Flush-retire `0f51f3f5`. Live141 uptime 28.920 s shows a preemption-completion wait while switching suspended devices; final116 uptime 29.063 s has P3 `c0000483`, with `AdmissionDdiResetFromTimeout` the recovery owner. Durable StartStage12/status0 and consumed arm establish startup. R150's subsequent original-kernel-dump correlation establishes KMD acceptance/activation of fence149 after completed fence148, followed by backend refusal before firmware publication; the evidence and source chain appear below. No TA/3D execution or completion is established, and the mismatched request cannot reach either queue. Absence of a durable G4 rejection is not the basis for this conclusion. USC execution correctness remains untested by that request.
 
@@ -14,7 +14,7 @@ The saved R143 firmware identities are m1n1 SHA256 `5fe13d19c5ca4d21327c44934613
 
 ## Asahi reference: actual progress and recovery
 
-Primary checkout `/Users/pavel/public_windows/.local/reference/asahi-linux-asahi`, commit `77cb8f24c2381a8abb7272d7bbdec548d6426a8a`. Paths in this section are relative to that checkout.
+Primary checkout `$HOME/public_windows/.local/reference/asahi-linux-asahi`, commit `77cb8f24c2381a8abb7272d7bbdec548d6426a8a`. Paths in this section are relative to that checkout.
 
 * `arch/arm64/boot/dts/apple/t8103.dtsi:477–540`: GPU ASC/SGX resources, `ps_gfx`, reserved UAT TTBR/page-table/handoff/calibration/global regions, mailbox at `0x206408000`; mailbox AIC interrupts 575–578 are named send-empty/send-not-empty/recv-empty/recv-not-empty. Those are Linux physical routes, not Windows synthetic scanout IRQ889.
 * `drivers/gpu/drm/asahi/event.rs:30–120,202–256`: 128 event slots; separate firmware/internal and CPU-visible stamp pointers; values advance by `0x100`, wrap-aware ordering, acquire-load of current stamp. Event notification selects the owning workqueue; it is not itself the completed job counter.

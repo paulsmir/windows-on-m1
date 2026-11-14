@@ -19,7 +19,7 @@ m1n1 launch-contract tests, Windows ARM64 WDK resource parser tests.
 
 ## Global Constraints
 
-- Work only on `feature/j313-gpu-acceleration` in `/Users/pavel/public_windows`.
+- Work only on `feature/j313-gpu-acceleration` in `$HOME/public_windows`.
 - Do not modify or install the immutable stable recovery image.
 - Do not install `AppleAgx.sys` during Task 4.
 - Generate every address, GSIV, version, and hash from

@@ -1,18 +1,18 @@
 {
   "inputs": {
-    "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/heartbeat.jsonl": {
+    "$HOME/public_windows/.local/experiments/EXP861-r147-pagingroot/heartbeat.jsonl": {
       "bytes": 10981,
       "sha256": "16b3531b43fea8cd4d5c5091ab0fd4305a8effbd0cadf3174999423d82ebbd1c"
     },
-    "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/state.json": {
+    "$HOME/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/state.json": {
       "bytes": 29663,
       "sha256": "d8bd4dd9b47ab2f3e72bd2c569fd87ed6f5fc074ebe93c7adf38477ed304323a"
     },
-    "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/umd-final-after-loss.log": {
+    "$HOME/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/umd-final-after-loss.log": {
       "bytes": 13799902,
       "sha256": "5260e420d40b800b78ed7f79dab5bffa5337669c7a57e19592a4e0ed27015b97"
     },
-    "/Users/pavel/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/post-recovery-events.json": {
+    "$HOME/public_windows/.local/experiments/EXP861-r147-pagingroot/hardware-evidence/post-recovery-events.json": {
       "bytes": 849945,
       "sha256": "8b642fb824f17c8f46080c27fd9a41daed4505a812fd0f0bce819045bf9929ca"
     },

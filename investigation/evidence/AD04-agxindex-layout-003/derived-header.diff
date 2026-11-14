@@ -1,5 +1,5 @@
---- /Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compiler.h
-+++ /Users/pavel/public_windows/.worktrees/task-AD04-AGXINDEX-LAYOUT-003/drivers/apple-agx/mesa/windows-overlay/agx_compiler.h
+--- $HOME/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compiler.h
++++ $HOME/public_windows/.worktrees/task-AD04-AGXINDEX-LAYOUT-003/drivers/apple-agx/mesa/windows-overlay/agx_compiler.h
 @@ -68,22 +68,22 @@
      * last use in a block and the source is not live after the block). Set by
      * liveness analysis.

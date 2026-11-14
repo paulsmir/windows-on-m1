@@ -19,7 +19,7 @@ device errors; these must be distinguished from the later shell AVs.
 
 Paths below use these explicit roots:
 
-- `E` = `/Users/pavel/public_windows/.local/experiments/EXP848-r127-stale`.
+- `E` = `$HOME/public_windows/.local/experiments/EXP848-r127-stale`.
 - `H` = `E/hardware-evidence`.
 - `A` = `E/offline-analysis` (commands, raw CDB output, decoded XML, analysis scripts).
 - `P` = builder `C:\Users\pauls\EXP848-r127-stale\native-gpuva-source`.
@@ -423,7 +423,7 @@ package or explaining old experiments again.
 
 ## Review dispositions and verification
 
-Read `/Users/pavel/public_windows/.local/tandem/REVIEW.md` at thread start and
+Read `$HOME/public_windows/.local/tandem/REVIEW.md` at thread start and
 again before committing. The worktree-local `.local/tandem/REVIEW.md` does not
 exist; the main-workspace file is the active review source. These dispositions
 apply to this analysis scope, not a rewriting of historical experiment verdicts.

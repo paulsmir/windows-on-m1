@@ -1,22 +1,24 @@
 #!/bin/bash
 # Exact-package rollback through GPU-visible, service-disabled Windows.
 set -euo pipefail
+# Machine-specific values (bench root, proxy serial ports, guest account): scripts/lib/bench-env.sh.
+. "$(dirname "${BASH_SOURCE[0]}")/lib/bench-env.sh"
 N=${1:?experiment directory}; X=${2:?experiment number}
 [[ "$X" =~ ^[0-9]+$ && "$(basename "$N")" == EXP"$X"-* ]] || exit 2
 W=/Volumes/pwdev/public_windows/.worktrees/integration-ad04-windows-compiler
-T=/Users/pavel/public_windows/.local/tandem
+T="$AGX_TANDEM"
 R="$N/evidence/rec${X}h"
 # 2026-11-08: normal recovery boots the native SSD (AppleAns ANS-DIRECT, RECANS001). The bridge launcher
 # EXP950 launch-normal2.sh stays the emergency fallback: AGX_RECOVERY_STORAGE=bridge.
 case "${AGX_RECOVERY_STORAGE:-ans}" in
   ans)
-    NORMAL=/Users/pavel/public_windows/.local/experiments/RECANS001-normal-ans/launch-normal-ans.sh
-    NORMAL_LOG=/Users/pavel/public_windows/.local/experiments/RECANS001-normal-ans/normal-full.log
-    NORMAL_CONTRACT=/Users/pavel/public_windows/.local/experiments/RECANS001-normal-ans/normal-contract.bin ;;
+    NORMAL="$AGX_BENCH_ROOT"/.local/experiments/RECANS001-normal-ans/launch-normal-ans.sh
+    NORMAL_LOG="$AGX_BENCH_ROOT"/.local/experiments/RECANS001-normal-ans/normal-full.log
+    NORMAL_CONTRACT="$AGX_BENCH_ROOT"/.local/experiments/RECANS001-normal-ans/normal-contract.bin ;;
   bridge)
-    NORMAL=/Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/launch-normal2.sh
-    NORMAL_LOG=/Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/normal2-full.log
-    NORMAL_CONTRACT=/Users/pavel/public_windows/.local/experiments/EXP950-dwm-output-trace/normal2-contract.bin ;;
+    NORMAL="$AGX_BENCH_ROOT"/.local/experiments/EXP950-dwm-output-trace/launch-normal2.sh
+    NORMAL_LOG="$AGX_BENCH_ROOT"/.local/experiments/EXP950-dwm-output-trace/normal2-full.log
+    NORMAL_CONTRACT="$AGX_BENCH_ROOT"/.local/experiments/EXP950-dwm-output-trace/normal2-contract.bin ;;
   *) echo "AGX_RECOVERY_STORAGE must be ans or bridge"; exit 2 ;;
 esac
 echo "RECOVERY_STORAGE ${AGX_RECOVERY_STORAGE:-ans}"
@@ -64,7 +66,7 @@ select_recovery_owner() {
   return 3
 }
 proxy_endpoints_present() {
-  [ -e /dev/cu.usbmodemC02HDNCCQ6L41 ] && [ -e /dev/cu.usbmodemC02HDNCCQ6L43 ]
+  [ -e "$AGX_PROXY_PORT_A" ] && [ -e "$AGX_PROXY_PORT_B" ]
 }
 wait_cycle() {
   local owner=$1 end=$(( $(date +%s) + 180 ))
@@ -82,18 +84,18 @@ wait_cycle() {
     done
   fi
   end=$(( $(date +%s) + 60 ))
-  until [ -e /dev/cu.usbmodemC02HDNCCQ6L41 ] && [ -e /dev/cu.usbmodemC02HDNCCQ6L43 ]; do
+  until [ -e "$AGX_PROXY_PORT_A" ] && [ -e "$AGX_PROXY_PORT_B" ]; do
     [ "$(date +%s)" -lt "$end" ] || { echo USB_ENDPOINTS_MISSING; return 1; }
     sleep 3
   done
   sleep 5
   (cd "$W" && bash scripts/agx-recovery-proxy-ready.sh \
-    /dev/cu.usbmodemC02HDNCCQ6L41 /dev/cu.usbmodemC02HDNCCQ6L43 "$R/proxy-ready.log" \
-    perl -e 'alarm 30; exec @ARGV' /Users/pavel/public_windows/proxyenv/bin/python \
-    scripts/air-serial-guard.py --port /dev/cu.usbmodemC02HDNCCQ6L41 \
-    --port /dev/cu.usbmodemC02HDNCCQ6L43 -- \
-    /Users/pavel/public_windows/proxyenv/bin/python \
-    /Users/pavel/public_windows/.local/experiments/EXP909-render-local-view/proxy-nop.py)
+    "$AGX_PROXY_PORT_A" "$AGX_PROXY_PORT_B" "$R/proxy-ready.log" \
+    perl -e 'alarm 30; exec @ARGV' "$AGX_PROXY_PYTHON" \
+    scripts/air-serial-guard.py --port "$AGX_PROXY_PORT_A" \
+    --port "$AGX_PROXY_PORT_B" -- \
+    "$AGX_PROXY_PYTHON" \
+    "$AGX_BENCH_ROOT"/.local/experiments/EXP909-render-local-view/proxy-nop.py)
 }
 launch_normal() {
   bash "$NORMAL" > "$R/normal-$1-launch.log" 2>&1 &
@@ -146,7 +148,7 @@ PY
 ssh_bounded 'powershell -NoProfile -Command "$k=Get-Item \"HKLM:\SYSTEM\CurrentControlSet\Enum\ACPI\APPL0002\0\Device Parameters\" -EA 0; if($k){ $k.GetValueNames() | % { $v=$k.GetValue($_); if($v -is [byte[]]){ \"$_ \" + ((($v) | % { $_.ToString(\"x2\") }) -join \"\") } else { \"$_ = $v\" } } }"' 2>/dev/null | tr -d '\r' > "$R/kmd-receipts-pre-disable.txt" || true
 echo "PRE_DISABLE_RECEIPTS $(wc -l < "$R/kmd-receipts-pre-disable.txt" | tr -d ' ') values"
 for f in "$W/scripts/agx-recovery-disable-service.ps1" "$R/disable-visible.ps1" "$R/cleanup-visible.ps1"; do
-  perl -e 'alarm 60; exec @ARGV' "$T/airscp" "$f" "pavel@192.168.1.37:C:/Users/pavel/EXP$X/cleanup$X/" >/dev/null || { echo VISIBLE_COPY_FAILED "$f"; exit 3; }
+  perl -e 'alarm 60; exec @ARGV' "$T/airscp" "$f" "$AGX_GUEST_SSH:$AGX_GUEST_HOME/EXP$X/cleanup$X/" >/dev/null || { echo VISIBLE_COPY_FAILED "$f"; exit 3; }
 done
 # EXP2185: a recovery whose normal-absent guest then hung was rerun AT_PROXY;
 # the experiment profile booted without the package (removed by the first
@@ -189,7 +191,7 @@ fi
 # rc1: a guest hang/bugcheck during the workload left no app logs (EXP1939 had no gm1939a UMD log, so the
 # faulting resource could not be identified). They are still on the guest disk here; copy them before cleanup.
 mkdir -p "$R/app-logs"
-perl -e 'alarm 120; exec @ARGV' "$T/airscp" "pavel@192.168.1.37:C:/Users/pavel/gravitymark/runs/gm${X}*" "$R/app-logs/" >/dev/null 2>&1 || echo "VISIBLE_COPY_FAILED app-logs (best effort; recovery continues)"
+perl -e 'alarm 120; exec @ARGV' "$T/airscp" "$AGX_GUEST_SSH:$AGX_GUEST_HOME/gravitymark/runs/gm${X}*" "$R/app-logs/" >/dev/null 2>&1 || echo "VISIBLE_COPY_FAILED app-logs (best effort; recovery continues)"
 # Keep only what the probe did not already save: byte-identical copies of evidence/EXP$X files only cost Mac disk.
 for f in "$R"/app-logs/*; do s="$N/evidence/EXP$X/${f##*/}"; [ -f "$f" ] && [ -f "$s" ] && cmp -s "$f" "$s" && rm -f "$f"; done
 echo "APP_LOGS_COLLECTED $(ls "$R/app-logs" | wc -l | tr -d ' ')"

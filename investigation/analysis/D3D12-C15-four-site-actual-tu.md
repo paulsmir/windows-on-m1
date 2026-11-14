@@ -17,7 +17,7 @@ were applied to that clone: `Builder::import` (EXP1687), `makeVoidType`
 `Builder::makeFunctionEntry` (EXP1692). The frozen manifest records exact
 source/function/candidate hashes and the full compiler argv. The initial
 metadata generation used the `/Volumes` alias while the old argv used the
-`/Users/pavel/public_windows` alias; the script was corrected before
+`$HOME/public_windows` alias; the script was corrected before
 preregistration/compilation and the final manifest pins only the cloned
 source paths.
 

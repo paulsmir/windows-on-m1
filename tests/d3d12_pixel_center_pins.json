@@ -1,7 +1,7 @@
 {
   "scope": "isolated original actual-owner C19 coordinate regression; no production wiring or external archive rebuild",
-  "mesa": "/Users/pavel/public_windows/.local/reference/mesa",
-  "build": "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build",
+  "mesa": "$HOME/public_windows/.local/reference/mesa",
+  "build": "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build",
   "host_flags": [
     "-D__STDC_CONSTANT_MACROS",
     "-D__STDC_FORMAT_MACROS",
@@ -92,122 +92,122 @@
     "-DHAVE_RENDERDOC_INTEGRATION=0",
     "-DXXH_FORCE_ALIGN_CHECK=0",
     "-DXXH_FORCE_MEMORY_ACCESS=0",
-    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a.p",
-    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir",
-    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src/compiler/nir",
-    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/include",
-    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/include",
-    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src",
-    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src",
-    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler",
-    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src/compiler",
-    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util",
-    "-I/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/format",
+    "-I$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a.p",
+    "-I$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir",
+    "-I$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src/compiler/nir",
+    "-I$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/include",
+    "-I$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/include",
+    "-I$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src",
+    "-I$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src",
+    "-I$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler",
+    "-I$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/../../reference/mesa/src/compiler",
+    "-I$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util",
+    "-I$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/format",
     "-I/opt/homebrew/opt/zstd/include"
   ],
   "libraries": [
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/compiler/libasahi_compiler.a",
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/isa/libagx2_disasm.a",
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/layout/libasahi_layout.a",
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a",
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/libcompiler.a",
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util.a",
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util_simd.a",
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/c11/impl/libmesa_util_c11.a",
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/blake3/libblake3.a"
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/compiler/libasahi_compiler.a",
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/isa/libagx2_disasm.a",
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/layout/libasahi_layout.a",
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a",
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/libcompiler.a",
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util.a",
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util_simd.a",
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/c11/impl/libmesa_util_c11.a",
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/blake3/libblake3.a"
   ],
   "files": {
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/compiler/libasahi_compiler.a": {
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/compiler/libasahi_compiler.a": {
       "bytes": 6534632,
       "sha256": "f28c73fc3cc18fc724760f4d368f47ef98c9830de4a38d0e7170f23575767b54",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/compiler/libasahi_compiler.a"
     },
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/isa/libagx2_disasm.a": {
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/isa/libagx2_disasm.a": {
       "bytes": 302112,
       "sha256": "c955d1be99f75603e37b178b7745d472c36e81c1124d29210b3dec69bfe56f85",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/isa/libagx2_disasm.a"
     },
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/layout/libasahi_layout.a": {
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/layout/libasahi_layout.a": {
       "bytes": 152192,
       "sha256": "959e39df3a280422a7c8db9f3cd7c955a539594451cfe95dc918fc942cd0ae26",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/layout/libasahi_layout.a"
     },
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a": {
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a": {
       "bytes": 45850960,
       "sha256": "ed2a3afcf609dc3277b704a8e4ff21f1b97e117fa2f17fffefb263a3224a0598",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/nir/libnir.a"
     },
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/libcompiler.a": {
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/libcompiler.a": {
       "bytes": 360304,
       "sha256": "c9be5de1032e4049dca14e69481c5e5f1b18592aa055ba76da099269a590ce7f",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/compiler/libcompiler.a"
     },
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util.a": {
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util.a": {
       "bytes": 6907320,
       "sha256": "d2536eca98f8c7ec95830340a7cb9184dd4d786b97ecab0f4916c57d66400c7f",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util.a"
     },
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util_simd.a": {
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util_simd.a": {
       "bytes": 3880,
       "sha256": "1a6d03bfccb12d7541c357b54d1106f292b6c63ee7e350100fa45e93fa257d36",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/libmesa_util_simd.a"
     },
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/c11/impl/libmesa_util_c11.a": {
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/c11/impl/libmesa_util_c11.a": {
       "bytes": 26752,
       "sha256": "ef036f3cb25bf989228659745e60b24eb5b274bf89771febb4ea85cb078e4f22",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/c11/impl/libmesa_util_c11.a"
     },
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/blake3/libblake3.a": {
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/blake3/libblake3.a": {
       "bytes": 237744,
       "sha256": "26dff477989b965d3af3ac9206530f0b6747589aac5eb80fcd7a5da5fe17fe7b",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/util/blake3/libblake3.a"
     },
-    "/Users/pavel/public_windows/.local/reference/mesa/src/asahi/lib/agx_nir_lower_sample_intrinsics.c": {
+    "$HOME/public_windows/.local/reference/mesa/src/asahi/lib/agx_nir_lower_sample_intrinsics.c": {
       "bytes": 7540,
       "sha256": "cb7b9efd8a9b2c2c8052bf495490f7dc55b998c7a8bdb01454412eded811b929",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/asahi/lib/agx_nir_lower_sample_intrinsics.c"
     },
-    "/Users/pavel/public_windows/.local/reference/mesa/src/asahi/lib/agx_tilebuffer.h": {
+    "$HOME/public_windows/.local/reference/mesa/src/asahi/lib/agx_tilebuffer.h": {
       "bytes": 3729,
       "sha256": "52921ff09a45de63ba29be8a3929fef8351c38cd4af2912e8f7600dc8d38ffe3",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/asahi/lib/agx_tilebuffer.h"
     },
-    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/nir/nir_lower_wpos_center.c": {
+    "$HOME/public_windows/.local/reference/mesa/src/compiler/nir/nir_lower_wpos_center.c": {
       "bytes": 2640,
       "sha256": "7dbe78d1e841346ee390435a066cdbafe52d733b68cfbd070c374c0d3e5d8c84",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/nir/nir_lower_wpos_center.c"
     },
-    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/nir/nir_lower_frag_coord_to_pixel_coord.c": {
+    "$HOME/public_windows/.local/reference/mesa/src/compiler/nir/nir_lower_frag_coord_to_pixel_coord.c": {
       "bytes": 1279,
       "sha256": "86f2d757e8a54dc3d62aba172c8aecaf7e44a7f7aa5ac3eabf102635aa2546c7",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/nir/nir_lower_frag_coord_to_pixel_coord.c"
     },
-    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/nir/nir.h": {
+    "$HOME/public_windows/.local/reference/mesa/src/compiler/nir/nir.h": {
       "bytes": 261367,
       "sha256": "c3340cdc663076c0dedb62501b71533891cda53297b23e07a39b77ee843cde5f",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/nir/nir.h"
     },
-    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/nir/nir_builder.h": {
+    "$HOME/public_windows/.local/reference/mesa/src/compiler/nir/nir_builder.h": {
       "bytes": 75935,
       "sha256": "10925bc9b97f5d2c4133f91a1f19121d4fa916a68ad7dee992f26f374d251f7c",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/nir/nir_builder.h"
     },
-    "/Users/pavel/public_windows/.local/reference/mesa/src/compiler/nir/nir_shader_compiler_options.h": {
+    "$HOME/public_windows/.local/reference/mesa/src/compiler/nir/nir_shader_compiler_options.h": {
       "bytes": 34291,
       "sha256": "0bf684538cf77a1d74918beeab8bcaa4596e28f5544a71fc2f009d212d17d46c",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/compiler/nir/nir_shader_compiler_options.h"
     },
-    "/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compile.h": {
+    "$HOME/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compile.h": {
       "bytes": 12124,
       "sha256": "32104a9829776363ca142d207020d2fa11a96952a24e2ef47b2a58b81a50ca32",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compile.h"
     },
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/genxml/agx_pack.h": {
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/genxml/agx_pack.h": {
       "bytes": 263866,
       "sha256": "aedee39dd8eb0305acdd21512c1334f2923b4b3a99db0dd2ef61912471415ce8",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/src/asahi/genxml/agx_pack.h"
     },
-    "/Users/pavel/public_windows/.local/accelerated-desktop-ad03/mesa-build/compile_commands.json": {
+    "$HOME/public_windows/.local/accelerated-desktop-ad03/mesa-build/compile_commands.json": {
       "bytes": 3645988,
       "sha256": "e3b38da880dbaad783172e4e9a76fa152ef26ca5df257b3eaf45a50ec16aed4f",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/accelerated-desktop-ad03/mesa-build/compile_commands.json"
@@ -252,7 +252,7 @@
       "sha256": "4f96f1402e1950b1764ac6accd0d2b9c1ca197b7783caae5e838fd0a4b474028",
       "resolved_path": "/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk/usr/lib/libSystem.B.tbd"
     },
-    "/Users/pavel/public_windows/.local/reference/mesa/src/gallium/include/pipe/p_state.h": {
+    "$HOME/public_windows/.local/reference/mesa/src/gallium/include/pipe/p_state.h": {
       "bytes": 45129,
       "sha256": "39e4ca9343f6daf4867cb67613a4ccdfd7d88fa57b3f015a7e2c6e1199853414",
       "resolved_path": "/Volumes/pwdev/public_windows/.local/reference/mesa/src/gallium/include/pipe/p_state.h"

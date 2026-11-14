@@ -84,7 +84,7 @@
     "errors": 38,
     "skipped": 2,
     "new_failure_error_identities": [],
-    "log": "/Users/pavel/public_windows/.local/experiments/R146-offline/full-suite.log",
+    "log": "$HOME/public_windows/.local/experiments/R146-offline/full-suite.log",
     "sha256": "bf022decde45f2198d639c45862265c488372f9ef2deeb531b5b917dfe623ece"
   },
   "arm64": "not applicable: no production translation unit changed",

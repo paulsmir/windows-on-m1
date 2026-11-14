@@ -74,7 +74,7 @@
       "FAIL: test_type1_writer_is_atomic_and_exact (test_apple_agx_render_type1_ready.AppleAgxRenderType1ReadyTests.test_type1_writer_is_atomic_and_exact)",
       "FAIL: test_wrong_commit_in_lock_is_rejected (test_apple_agx_mesa_source.AppleAgxMesaSourceTests.test_wrong_commit_in_lock_is_rejected)"
     ],
-    "baseline_log": "/Users/pavel/public_windows/.local/experiments/R145-offline/final-suite-stable.log",
+    "baseline_log": "$HOME/public_windows/.local/experiments/R145-offline/final-suite-stable.log",
     "baseline_sha256": "98755e1a4bc967bad68c9449034d55fe2ca3b685c6832d631960656fd9afd9d9",
     "note": "Full suite followed production edits; final additional test-only cases then ran targeted."
   },
@@ -280,7 +280,7 @@
       "object_sha256": "8a6d2f0f4c0d025b66c56874ce155f88bf26729afb25bc1edf3213b368bde760"
     }
   ],
-  "raw_evidence": "/Users/pavel/public_windows/.local/experiments/EXP858-query-audit",
+  "raw_evidence": "$HOME/public_windows/.local/experiments/EXP858-query-audit",
   "log_sha256": {
     "final-targeted.log": "8c34ca10e058fa318d75ff615907a2914c256ffad19075769f4ff2a67d0dcef6",
     "full-suite.log": "b8f54f43244bf06988f648b0f032fe95db35ea49401ace0fa3920b13b3d7082d",

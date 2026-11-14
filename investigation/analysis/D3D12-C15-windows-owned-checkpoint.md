@@ -25,7 +25,7 @@ size/SHA256. Parent also verified all52 collected final-host-manifest files.
 Distribution contains the1090048-byte EXE, original3704-byte fixture,16notice/
 index/combined files and three raw licenses. The executable was NOT run by1402.
 
-Evidence under /Users/pavel/public_windows/.local/c15-owned-win-1402/:
+Evidence under $HOME/public_windows/.local/c15-owned-win-1402/:
 
 - zip ad466259bb1170df9f7aca5987f80ee63e2b77d8ea5118e551460510f9321ebe
 - build script8db8a4b2a60e4e1c30b5ae14ee9356567b4b49dcd559868b035dd99a7642aa81

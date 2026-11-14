@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(ROOT / 'tools'))
 import agx_shader_cost as tool  # noqa: E402
 
-CAPTURE = Path('/Users/pavel/public_windows/.local/experiments/EXP1969-no-wait/evidence/shader-capture')
+CAPTURE = Path('~/public_windows/.local/experiments/EXP1969-no-wait/evidence/shader-capture').expanduser()
 LIGHTING = '806ee7b1bdb1944a'
 LIGHTING_FLAGS = ('--production', '--root-views=e,3', '--soft-fault-loads')
 LIGHTING_GUEST = (3450, 2808, 207, 512, 0, 0, 0, 21, 23978, 229)  # EXP2319 gm2319p0-umd.log

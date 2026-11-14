@@ -63,7 +63,7 @@ explicit minimum-DDI rule to SM6.0 without an SM6-specific statement.
 ## Actual EXP1397 program versus the existing0003 storage contract
 
 Read-only bytes from
-`/Users/pavel/public_windows/.local/c15-spaces-1397/builder-output/exp1397_spaces_cs60.program.dxil`:
+`$HOME/public_windows/.local/c15-spaces-1397/builder-output/exp1397_spaces_cs60.program.dxil`:
 1680 bytes, SHA256
 `1a7860f346cd2c430bba8725824f1e107c5c26c8c0c58b5a48a0185f38e9c179`.
 No new compiler/converter run occurred for this comparison.
@@ -202,7 +202,7 @@ companion behavior is not implemented. No hardware bit experiment is needed to
 confirm the shown branch.
 
 Evidence excerpts and numeric identity/table receipt are preserved under
-`/Users/pavel/public_windows/.local/c15-runtime-sm60-gate/`:
+`$HOME/public_windows/.local/c15-runtime-sm60-gate/`:
 constructor.txt, model-init.txt, caps-call-and-consumer.txt, identity-table.json.
 Manifest SHA256:
 `19d60ad6d4f1bb7cfa64c16abc601413702a2cbeaf55f10d921de94520fb3299`.

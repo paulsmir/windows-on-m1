@@ -32,7 +32,7 @@ contracts pass. Do not cast0003 callbacks into the new table.
 
 ## Sources inspected and bounded scope
 
-Pinned `/Users/pavel/public_windows/.local/reference/wdk26100/d3d12umddi.h`, SHA-256
+Pinned `$HOME/public_windows/.local/reference/wdk26100/d3d12umddi.h`, SHA-256
 `d338e00bbd079cfed42434b5bd8cb9c658238cfe22747fb7d3b7cff3a3cabc28`:
 
 | Lines | Relevant contract |

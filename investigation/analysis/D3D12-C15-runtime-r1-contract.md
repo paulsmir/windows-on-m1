@@ -249,7 +249,7 @@ SM6 caps, translator linkage or hardware admission. Remaining gates include:
 
 ## Immutable local receipts
 
-All paths below are under `/Users/pavel/public_windows/.local/`. Manifests carry
+All paths below are under `$HOME/public_windows/.local/`. Manifests carry
 the individual source/tool/input/output hashes and raw excerpts. Earlier files
 were not overwritten by later appendices.
 

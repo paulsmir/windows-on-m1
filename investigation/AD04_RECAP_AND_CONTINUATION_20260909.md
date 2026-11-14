@@ -2,7 +2,7 @@
 
 User requested a deliberate stop, complete recap, commit/push and continuation
 instructions to preserve remaining account usage. This is NOT mission completion.
-Work is in `/Users/pavel/public_windows`, branch `feature/j313-gpu-acceleration`.
+Work is in `$HOME/public_windows`, branch `feature/j313-gpu-acceleration`.
 Last implementation/ledger HEAD before this checkpoint:
 `853e9365b88d29fd865c12d0c0c8e143be7632cd`.
 
@@ -27,12 +27,12 @@ no fresh Events41/1001/129. This is historical verified state, not a current pol
 No hardware launch or installation occurred during subsequent AD04 work.
 No next installable hardware candidate is prepared.
 
-Air SSH: `pavel@192.168.1.37`, identity `/Users/pavel/.ssh/air`;
+Air SSH: `pavel@192.168.1.37`, identity `$HOME/.ssh/air`;
 use `-o BatchMode=yes -o ConnectTimeout=8` and
 `-o UserKnownHostsFile=.local/experiments/EXP641-standard-present/air_known_hosts`.
 Default known_hosts has a conflicting old host identity; do not disable checking.
 Builder: `pauls@192.168.1.24` (FRYZZING),
-identity `/Users/pavel/.ssh/windows_builder`, same bounded SSH options.
+identity `$HOME/.ssh/windows_builder`, same bounded SSH options.
 
 ## Hardware proven — do not repeat
 
@@ -162,7 +162,7 @@ Never `git reset --hard`, `git clean`, or apply the whole dirty overlay to a bui
 
 Continuation prompt:
 
-> Continue /Users/pavel/public_windows, current feature/j313-gpu-acceleration.
+> Continue $HOME/public_windows, current feature/j313-gpu-acceleration.
 > Read AGENTS.md, GPU_CURRENT_STATE.md, AD04_RECAP_AND_CONTINUATION_20260909.md,
 > GPU_ENGINEERING_PROCEDURE.md and FULL_GRAPHICS_MISSION.md. Main process only.
 > Preserve EXP680–682 and earlier proven hardware. Resume actual Windows Asahi

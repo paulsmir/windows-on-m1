@@ -8,7 +8,7 @@
 
 **Tech Stack:** WDK26100 C, PowerShell, D3DKMT, Python host tests.
 
-**Spec:** REVIEW R105 in `/Users/pavel/public_windows/.local/tandem/REVIEW.md`; `investigation/GPU_CURRENT_STATE.md` EXP819–821.
+**Spec:** REVIEW R105 in `$HOME/public_windows/.local/tandem/REVIEW.md`; `investigation/GPU_CURRENT_STATE.md` EXP819–821.
 
 ## Source and contract
 

@@ -1,6 +1,6 @@
 WP A2+A3 design note: GPU hang / firmware crash ends in device-removed for the app, not 0x116
 
-Read-only work. No files were written and the scratch directory /Users/pavel/public_windows/.local/night-20261110/wp-a2a3/ is empty. Paths: K = drivers/apple-agx/render-admission, S = drivers/apple-agx/shared, A = asahi-linux-asahi drivers/gpu/drm/asahi, M = .local/m1n1-wt-s2-broker-v3 (63c13618).
+Read-only work. No files were written and the scratch directory $HOME/public_windows/.local/night-20261110/wp-a2a3/ is empty. Paths: K = drivers/apple-agx/render-admission, S = drivers/apple-agx/shared, A = asahi-linux-asahi drivers/gpu/drm/asahi, M = .local/m1n1-wt-s2-broker-v3 (63c13618).
 
 1. CURRENT STATE (arch-integrate 4d0d4ca23)
 

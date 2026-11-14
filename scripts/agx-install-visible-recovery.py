@@ -105,8 +105,7 @@ def same_path(recorded, actual: Path) -> bool:
 def is_wrapper(data: bytes, host: Path, experiment: Path, number: str) -> bool:
     """The installed visible wrapper, also when it names host/experiment through a path alias.
 
-    Path aliases are real on the WSL host: /Volumes/pwdev and /Users/pavel/public_windows are symlinks to
-    /home/pavel/pwdev there, so a wrapper written with either spelling must still be recognised."""
+    Path aliases are real on the hosts: the bench root is reachable under more than one spelling (symlinks), so a wrapper written with either spelling must still be recognised."""
     if data == wrapper_bytes(host, experiment, number):
         return True
     header = ("#!/bin/bash\n# Installed by agx-install-visible-recovery.py; ordinary GPU-visible recovery.\n")

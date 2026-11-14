@@ -11,7 +11,7 @@ Start-Process/WaitForExit. No timeout was observed. This does not establish a
 native caller failure or a captured zero exit; preserve both facts separately.
 The stronger cause of the missing exit observation is not asserted.
 
-Evidence: /Users/pavel/public_windows/.local/c15-owned-cpu-1400/final-host-manifest.json
+Evidence: $HOME/public_windows/.local/c15-owned-cpu-1400/final-host-manifest.json
 SHA6ef6b41825a96f771225d0ecaaa8add43b28513ac35167ac37a4cd42b1ce1608. Native SPIR-V SHA1a5bef149143573bf7fcd8ca2d07772e054f8b61f6958363f8f3ce22e408c07f
 differs from host1398 SPIR-V24e3df26; semantic equivalence of this native artifact
 is not yet claimed.
@@ -29,7 +29,7 @@ SPIR-V after TLS cleanup; timeoutfalse/inputunchanged. Native interval
 2026-10-18T15:52:34.4960547Z--15:52:34.6734865Z. Pre/post Code28/noService/8CPU
 and BootUtc2026-10-18T15:39:26.6904720Z remained identical.
 
-Final evidence: /Users/pavel/public_windows/.local/c15-owned-cpu-1405/final-host-manifest.json
+Final evidence: $HOME/public_windows/.local/c15-owned-cpu-1405/final-host-manifest.json
 SHA342e45f372a8b82e28fb7c79641ae3ffbeeb3dec2f5d322cda020f84456c2d9c.
 This proves the limited Windows ARM64 C API/CRT/TLS invocation and exit capture.
 It does not prove GPU/DDI/SM6 capabilities, internal allocation failure handling

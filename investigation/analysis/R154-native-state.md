@@ -3,7 +3,7 @@
 Read-only audit of the saved EXP867 kernel dump. No Air access, package, firmware,
 driver change, or hardware run. The builder was used only to read the existing
 dump with its matched private PDB. Raw evidence below lives under
-`/Users/pavel/public_windows/.local/experiments/EXP867-r153-bm/`.
+`$HOME/public_windows/.local/experiments/EXP867-r153-bm/`.
 
 ## Findings
 

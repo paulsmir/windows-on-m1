@@ -47,7 +47,7 @@ class PublicDocumentationTests(unittest.TestCase):
         offenders = []
         for path in paths:
             text = path.read_text(encoding="utf-8")
-            if CYRILLIC.search(text) or "/Users/pavel" in text:
+            if CYRILLIC.search(text) or str(Path.home()) in text:
                 offenders.append(str(path.relative_to(ROOT)))
         self.assertEqual([], offenders)
 

@@ -50,7 +50,7 @@ class RunAgxCaptureContainerTests(unittest.TestCase):
             found = output.find(item, cursor)
             self.assertGreaterEqual(found, 0, f"missing or out-of-order step: {item}")
             cursor = found + len(item)
-        self.assertNotIn("/Users/pavel", output)
+        self.assertNotIn(str(Path.home()), output)
         self.assertNotIn(" /opt/agx-capture/run-capture.sh ", output)
 
     def test_container_helper_reconnects_pty_and_uses_pinned_linux_python(self):

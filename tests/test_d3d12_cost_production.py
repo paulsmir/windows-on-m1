@@ -35,7 +35,7 @@ sys.path.insert(0, str(ROOT / 'tools'))
 import agx_shader_cost as tool  # noqa: E402
 from test_dxbc_to_nir import local_tree  # noqa: E402
 
-CAPTURE = Path('/Users/pavel/public_windows/.local/experiments/EXP1969-no-wait/evidence/shader-capture')
+CAPTURE = Path('~/public_windows/.local/experiments/EXP1969-no-wait/evidence/shader-capture').expanduser()
 FIELDS = ('instrs', 'alu', 'gprs', 'threads', 'scratch', 'spills', 'fills', 'loops', 'code', 'preamble')
 # hash: (root UAV mask, root CBV mask, the guest's measure-d3d12-shader-stats values)
 GUEST = {

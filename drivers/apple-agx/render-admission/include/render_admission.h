@@ -907,6 +907,24 @@ typedef struct _ADMISSION_G4_PENDING {
   ADMISSION_PRESENT_COMPUTE PresentJob;
 } ADMISSION_G4_PENDING;
 
+/* F1-k start policy runtime (lifecycle.c, apple_agx_start_policy.h).
+ * Policy: Wom1StartPolicy as parsed at the last start attempt. PendingOwned:
+ * that attempt persisted Wom1StartPending (cleared when StartDevice
+ * returns). The T-second healthy-start KTIMER queues WorkItem from Dpc;
+ * TimerState 0 idle, 1 armed, 2 work queued; Idle is signalled whenever no
+ * timer, DPC or work item is outstanding. Initialized/WorkItem exist only
+ * after a policy-1 start was allowed. */
+typedef struct _ADMISSION_START_POLICY_RUNTIME {
+  ULONG Policy;
+  ULONG PendingOwned;
+  ULONG Initialized;
+  volatile LONG TimerState;
+  KTIMER Timer;
+  KDPC Dpc;
+  KEVENT Idle;
+  PIO_WORKITEM WorkItem;
+} ADMISSION_START_POLICY_RUNTIME;
+
 typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   ADMISSION_MEMORY_CONTRACT Memory;
@@ -1326,6 +1344,7 @@ typedef struct _ADMISSION_CONTEXT {
   /* CUR-1c: cached copy of the visible block (read once from the pool). */
   UCHAR MpoScratchStage[ADMISSION_MPO_SCRATCH_BYTES];
   ADMISSION_MPO_PLANE_STATE MpoPlanes[2];
+  ADMISSION_START_POLICY_RUNTIME StartPolicy;
 } ADMISSION_CONTEXT;
 
 typedef struct _ADMISSION_DEVICE {
@@ -2801,6 +2820,9 @@ VOID AdmissionRecordVisibleScanout(
 
 DXGKDDI_ADD_DEVICE AdmissionDdiAddDevice;
 DXGKDDI_START_DEVICE AdmissionDdiStartDevice;
+/* F1-k: the registered StartDevice: AdmissionDdiStartDevice plus the start
+ * policy's return handling (lifecycle.c). */
+DXGKDDI_START_DEVICE AdmissionDdiStartDeviceGated;
 DXGKDDI_STOP_DEVICE AdmissionDdiStopDevice;
 DXGKDDI_REMOVE_DEVICE AdmissionDdiRemoveDevice;
 DXGKDDI_DISPATCH_IO_REQUEST AdmissionDdiDispatchIoRequest;

@@ -10,8 +10,8 @@ import hashlib, json, os, re, shutil, subprocess, sys, zipfile, datetime
 # Builder root (APPLE AGX\active as its 8.3 alias, no space); override with APPLE_AGX_BUILDER_ROOT.
 BUILDER = os.environ.get('APPLE_AGX_BUILDER_ROOT', r'C:\Users\pauls\APB12E~1\active')
 
-EXP = '/Users/pavel/public_windows/.local/experiments'
-WT = '/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler'
+EXP = __import__('os').path.expanduser('~/public_windows/.local/experiments')
+WT = __import__('os').path.expanduser('~/public_windows/.worktrees/integration-ad04-windows-compiler')
 GIT = '/opt/homebrew/bin/git'
 PKG = ['AppleAgxRenderAdmission.inf', 'AppleAgxRenderAdmission.sys',
        'AppleAgxRenderAdmissionUmd.dll', 'appleagxrenderadmission.cat']

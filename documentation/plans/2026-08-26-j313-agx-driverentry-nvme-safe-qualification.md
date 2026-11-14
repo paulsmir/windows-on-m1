@@ -107,10 +107,10 @@ PowerShell/PnPUtil, Windows Event Log and public assisted launcher.
 
   ```sh
   WOM1_AGX_G2_POWER_BROKER=1 \
-  M1N1VUART=/dev/cu.usbmodemC02HDNCCQ6L43 \
+  M1N1VUART=/dev/cu.usbmodem<SERIAL>43 \
   scripts/run-assisted.sh \
-    --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
-    --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+    --proxy /dev/cu.usbmodem<SERIAL>41 \
+    --vuart /dev/cu.usbmodem<SERIAL>43 \
     --firmware .local/agx-power-exp124-profile/J313_EFI.fd \
     --m1n1 .local/agx-power-exp124-profile/m1n1.macho \
     --display both --debug monitor --chainload \

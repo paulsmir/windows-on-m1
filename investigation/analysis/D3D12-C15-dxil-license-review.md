@@ -102,7 +102,7 @@ Windows link/CRT closure would require a separate review. Keep
 DXIL_SPIRV_NATIVE_LLVM=OFF; the selected MIT builtin parser avoids this graph.
 
 Additional primary-source notice/metadata receipts are outside the repository at
-`/Users/pavel/public_windows/.local/c15-optional-license-review/manifest.json`, SHA-256
+`$HOME/public_windows/.local/c15-optional-license-review/manifest.json`, SHA-256
 `9a96134aa03bec0467fe7750dcd196d1e3e8b514d5f6a3fc0202b3cbd7527086`.
 Only missing license/build metadata was inspected; no optional code was built/imported.
 

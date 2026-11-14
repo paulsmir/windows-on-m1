@@ -21,7 +21,7 @@ Line numbers describe the C19/C20 working tree and may move.
   creation; `:733-758`: GPU region copies; `:787-843`: buffer/texture copies;
   `:1053-1083`: typed UAV image construction; `:1128-1160`: SRV view creation.
   `agx_d3d12_windows.h` contains owner texture-copy/UAV/SRV records.
-- Pinned `/Users/pavel/public_windows/.local/reference/wdk26100/d3d12umddi.h`:
+- Pinned `$HOME/public_windows/.local/reference/wdk26100/d3d12umddi.h`:
   `:396` RT_TEXTURE3D=4; `:450-462` resource dimensions and layout;
   `:890-895` Tex3D SRV; `:916` RD_TEXTURE3D=4;
   `:1165-1171` Tex3D UAV; `:1546-1554` pitched physical footprint;
@@ -33,7 +33,7 @@ Line numbers describe the C19/C20 working tree and may move.
   and [placed footprint](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ns-d3d12-d3d12_placed_subresource_footprint).
 - Local `drivers/apple-agx/mesa/d3d11/agx_d3d11_ddi.cpp:480-532`:
   3D UAV FirstW/WSize validation against u_minify(depth0,mip).
-- Asahi/Mesa source root `/Users/pavel/public_windows/.local/reference/mesa`:
+- Asahi/Mesa source root `$HOME/public_windows/.local/reference/mesa`:
   - `src/gallium/frontends/d3d10umd/Resource.cpp:131-179`: 3D target has
     array_size 1; volume boxes use minified depth;
     `Shader.cpp:1236-1241`: 3D SRV uses mip interval and default-template layers.

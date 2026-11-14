@@ -11,7 +11,7 @@ event belonged to the original boot. The original records were not edited.
 
 ## Provenance evidence
 
-Input: `/Users/pavel/public_windows/.local/experiments/EXP864-r149-usc/hardware-evidence/EXP801DxgBoot.etl`.
+Input: `$HOME/public_windows/.local/experiments/EXP864-r149-usc/hardware-evidence/EXP801DxgBoot.etl`.
 SHA-256 `8e346f91190c8ac2e68b46d8aa22195d4568753d4513b2950bb33b90f9381b93`,
 96,468,992 bytes. The isolated-builder hash matches the original artifact manifest.
 
@@ -125,7 +125,7 @@ Concise evidence: `investigation/evidence/R150-etl/`:
 `query-decoded.json`, `hashes.json`.
 
 Large decoded outputs and reproducible scripts:
-`/Users/pavel/public_windows/.local/experiments/R150-etl/`:
+`$HOME/public_windows/.local/experiments/R150-etl/`:
 `events.jsonl` (32,475,397 bytes), `dma-joined.json`, `event-counts.json`,
 `event-examples.json`, `etl.ps1`, `readetl.cpp`, `native.ps1`, `schema.ps1`,
 `analyze.py`. `events.partial.jsonl` was a progress snapshot and is not used

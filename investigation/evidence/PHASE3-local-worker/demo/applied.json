@@ -8,9 +8,9 @@
     {
       "argv": [
         "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
-        "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agent/harmless_patch_check.py",
+        "$HOME/public_windows/.worktrees/integration-ad04-windows-compiler/scripts/agent/harmless_patch_check.py",
         "--repo",
-        "/Users/pavel/public_windows/.worktrees/phase3-demo-001"
+        "$HOME/public_windows/.worktrees/phase3-demo-001"
       ],
       "command_id": "RUN_HARMLESS_CHECK",
       "exit_code": 0,

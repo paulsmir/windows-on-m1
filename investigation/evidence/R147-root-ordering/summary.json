@@ -222,7 +222,7 @@
     ],
     "verdict": "Both are user-mode access violations. The copy refusal is a returned NTSTATUS, not evidence of the faulting pointer writer or a causal stack. Consequence of copy failure is unproven; no separate crash investigation."
   },
-  "raw_evidence": "/Users/pavel/public_windows/.local/experiments/R147-root-ordering-offline",
+  "raw_evidence": "$HOME/public_windows/.local/experiments/R147-root-ordering-offline",
   "log_sha256": {
     "v2.log": "dba58579f737dd3f824c9f71800ed346c4d608456f218c0115f1e0c5482a18e3",
     "full-suite.log": "53a035d848ad3eefcb03d0e8a8dcaaa7f8db360a2d46c94acefb27385eef5097",

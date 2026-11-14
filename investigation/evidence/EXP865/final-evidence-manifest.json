@@ -1,7 +1,7 @@
 {
   "experiment": "EXP865",
   "utc": "2026-09-28T12:32:04.251878+00:00",
-  "artifact_root": "/Users/pavel/public_windows/.local/experiments/EXP865-r150-owner",
+  "artifact_root": "$HOME/public_windows/.local/experiments/EXP865-r150-owner",
   "files": {
     "chainload.log": {
       "bytes": 10354,

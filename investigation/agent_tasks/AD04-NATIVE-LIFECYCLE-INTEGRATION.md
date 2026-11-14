@@ -7,7 +7,7 @@ materializer; there is no alternate BO allocator or renderer.
 
 ## Inspected sources and ownership
 
-Pinned Mesa root: `/Users/pavel/public_windows/.local/reference/mesa`.
+Pinned Mesa root: `$HOME/public_windows/.local/reference/mesa`.
 
 - `agx_batch.c:80-164,206-302,975-1053`: encoder allocation, stable context batch
   slots, pools, active/submitted/complete state, cleanup and synchronization.

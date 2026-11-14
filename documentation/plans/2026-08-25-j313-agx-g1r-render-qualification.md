@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Work only on `feature/j313-gpu-acceleration` under `/Users/pavel/public_windows`.
+- Work only on `feature/j313-gpu-acceleration` under `$HOME/public_windows`.
 - Preserve `.local/recovery/STABLE-j313-8core-native-input-v1/` byte-for-byte.
 - Preserve m1n1 commit `9cd80ac652ac404e92ae279deeaec8c629d7d184` and Mu commit `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`.
 - Keep assisted Windows launch, standalone launch, Mu, ACPI, firmware images, Windows, native keyboard, Precision Touchpad, and physical DCP scanout unchanged.

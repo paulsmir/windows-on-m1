@@ -122,7 +122,7 @@ in the logs/CHANGES rows. A final immutable host copy is recorded below.
 ## Final verification of retained prerequisites
 
 Evidence paths in this R137 report are relative to this worktree, not the main
-repository's .local: /Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler.
+repository's .local: $HOME/public_windows/.worktrees/integration-ad04-windows-compiler.
 Final focused command (CC=clang) loads test_apple_agx_render_memory,
 test_g3_kmd_local_reserve, test_gpuva_g3_caps_contract, test_g3_vidmm_replay,
 test_g3_private_pool, test_g3_private_storage, test_g4*replay and test_change_ledger:

@@ -4,7 +4,7 @@ Status: offline UMD contract. Hardware execution belongs to the integration thre
 
 ## Sources inspected
 
-- `/Users/pavel/public_windows/.local/research/GPUVA_PLAN.md` §1 and G4;
+- `$HOME/public_windows/.local/research/GPUVA_PLAN.md` §1 and G4;
   `docs/superpowers/specs/2026-09-24-gpuva-g3-contract.md`;
   `investigation/GPU_CURRENT_STATE.md` (EXP782 boundary).
 - Mesa reference `src/asahi/lib/agx_bo.c`, `agx_device.c` and

@@ -41,9 +41,9 @@ foreach($path in @('{source}','{archive}','{output}','{native}')){{
 print(base64.b64encode(script.encode('utf-16le')).decode())
 PY
 )
-ssh -o ConnectTimeout=8 -o BatchMode=yes -i /Users/pavel/.ssh/windows_builder pauls@192.168.1.24 \
+ssh -o ConnectTimeout=8 -o BatchMode=yes -i $HOME/.ssh/windows_builder pauls@192.168.1.24 \
   powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand "$preflight"
-scp -i /Users/pavel/.ssh/windows_builder "$archive" "pauls@192.168.1.24:${remote_archive}"
+scp -i $HOME/.ssh/windows_builder "$archive" "pauls@192.168.1.24:${remote_archive}"
 encoded=$(python3 - "$remote_source" "$remote_archive" "$run_id" "$architecture" "$archive_sha256" "$expected_build" <<'PY'
 import base64, sys
 src, archive, run_id, architecture, archive_sha256, expected_build = sys.argv[1:]
@@ -61,11 +61,11 @@ print(base64.b64encode(script.encode('utf-16le')).decode())
 PY
 )
 set +e
-ssh -o ConnectTimeout=8 -o BatchMode=yes -i /Users/pavel/.ssh/windows_builder pauls@192.168.1.24 \
+ssh -o ConnectTimeout=8 -o BatchMode=yes -i $HOME/.ssh/windows_builder pauls@192.168.1.24 \
   powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand "$encoded" \
   > "$evidence_dir/remote-console.log" 2>&1
 remote_exit=$?
-scp -r -i /Users/pavel/.ssh/windows_builder \
+scp -r -i $HOME/.ssh/windows_builder \
   "pauls@192.168.1.24:${remote_output}" "$evidence_dir/remote-output" \
   > "$evidence_dir/fetch.log" 2>&1
 fetch_exit=$?

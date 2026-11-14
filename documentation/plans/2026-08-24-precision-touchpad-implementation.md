@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Work only in `/Users/pavel/public_windows` on `feature/j313-native-input`; do not use the private checkout or worktrees.
+- Work only in `$HOME/public_windows` on `feature/j313-native-input`; do not use the private checkout or worktrees.
 - Preserve the accepted four-E-core firmware and ESP. This plan changes only the Windows AppleInput package.
 - Keep the keyboard and trackpad as separate VHF objects. Failure of either frontend must not remove the other or stop Apple SPI transport.
 - Do not add a relative-mouse fallback. Completion is a Windows Precision Touchpad.

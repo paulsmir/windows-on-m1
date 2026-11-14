@@ -1,7 +1,7 @@
 # R145 — local GPU backing with CPU staging
 
 Specification: `investigation/analysis/R142-render-backing.md`; task authority:
-`/Users/pavel/public_windows/.local/tandem/NEXT_TASK_R145.md`.
+`$HOME/public_windows/.local/tandem/NEXT_TASK_R145.md`.
 Base: 79e5b983. Offline only: no Air, package, firmware, signer or caps change.
 
 ## Evidence and contract

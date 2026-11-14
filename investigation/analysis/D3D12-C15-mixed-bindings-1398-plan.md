@@ -154,8 +154,8 @@ portable fixture/provenance and preregisters input/source hashes for1398.
 Proposed NEW opt-in test command, phase red then green:
 
 ```
-AGX_C15_MIXED_RECEIPTS=/Users/pavel/public_windows/.local/c15-owned-1398 AGX_C15_MIXED_PHASE=red PYTHONPATH=tests python3 -m unittest test_dxil_owned_mixed -v
-AGX_C15_MIXED_RECEIPTS=/Users/pavel/public_windows/.local/c15-owned-1398 AGX_C15_MIXED_PHASE=green PYTHONPATH=tests python3 -m unittest test_dxil_owned_mixed -v
+AGX_C15_MIXED_RECEIPTS=$HOME/public_windows/.local/c15-owned-1398 AGX_C15_MIXED_PHASE=red PYTHONPATH=tests python3 -m unittest test_dxil_owned_mixed -v
+AGX_C15_MIXED_RECEIPTS=$HOME/public_windows/.local/c15-owned-1398 AGX_C15_MIXED_PHASE=green PYTHONPATH=tests python3 -m unittest test_dxil_owned_mixed -v
 ```
 
 Planned outputs: phase/{inputs,commands,results}.json; raw numbered stdout/stderr;
@@ -173,8 +173,8 @@ They retain every flag/library from the recorded successful EXP1389 actual NIR
 link command, substituting ONLY the original new fixture source and output:
 
 - source: worktree `tests/dxil_owned_mixed_nir_fixture.c`;
-- executable: `/Users/pavel/public_windows/.local/c15-owned-1398/green/mixed-nir-check`;
-- run: that executable with `/Users/pavel/public_windows/.local/c15-owned-1398/green/mixed.spv`.
+- executable: `$HOME/public_windows/.local/c15-owned-1398/green/mixed-nir-check`;
+- run: that executable with `$HOME/public_windows/.local/c15-owned-1398/green/mixed.spv`.
 
 Basis command file is `.local/c15-sm6-8434b063/EXP1389-nir-link-command.json`;
 proposal JSON records its exact hash. Libraries: existing libvtn, libasahi_compiler
@@ -233,7 +233,7 @@ Legacy1396 test also passed with unchanged test/runner in a NEW receipt root,
 raw/container conversion, actual scan-false-success observation, negative remap,
 valid-again same-thread cleanup and owned output after TLS teardown.
 
-Durable receipts root `/Users/pavel/public_windows/.local/c15-owned-1398` contains
+Durable receipts root `$HOME/public_windows/.local/c15-owned-1398` contains
 approved source/dependency manifests, exact phase commands, every raw step output,
 objects/executables, SPIR-V/map and pre/post NIR dumps. Final
 `EXP1398-verdict.json` SHA256

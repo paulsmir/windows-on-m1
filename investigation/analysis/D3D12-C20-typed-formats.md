@@ -10,7 +10,7 @@ broader typed-texture UAV/SRV coverage remains open and is not declared fixed.
 Microsoft's [D3D12_BUFFER_SRV](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ns-d3d12-d3d12_buffer_srv)
 defines FirstElement and NumElements in elements. With StructureByteStride0,
 a typed format supplies element size. The pinned WDK
-`/Users/pavel/public_windows/.local/reference/wdk26100/d3d12umddi.h` preserves
+`$HOME/public_windows/.local/reference/wdk26100/d3d12umddi.h` preserves
 those fields in its buffer SRV ABI. A view of3 R8_UINT elements therefore names
 3 bytes;3 R16_UINT elements name6 bytes. A dword alignment requirement for raw
 views does not redefine the element count of typed views.

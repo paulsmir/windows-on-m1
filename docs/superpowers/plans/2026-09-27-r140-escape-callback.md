@@ -3,7 +3,7 @@
 > Execute inline with superpowers:executing-plans; one final independent review.
 
 **Goal:** Correct R137's runtime escape identity contract proven by the EXP855C Explorer dump.
-**Spec:** `/Users/pavel/public_windows/.local/tandem/NEXT_TASK_R140.md`.
+**Spec:** `$HOME/public_windows/.local/tandem/NEXT_TASK_R140.md`.
 **Architecture:** Keep private scene ownership in KMD and AGX4 v3 unchanged. UMD passes the adapter runtime handle to EscapeCb and the owning runtime device plus context in D3DDDICB_ESCAPE. No Air writes, package, firmware or caps changes.
 **Tech stack:** pinned WDK26100, real Windows UMD wrapper, x64 contract executable and ARM64 compile; host G3/G4 profiles16/64.
 

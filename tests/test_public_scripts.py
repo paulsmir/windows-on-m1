@@ -5,6 +5,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+import sys  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_repository_hygiene import DEVICE_SERIAL, private_identifiers  # noqa: E402
+
+PRIVATE = private_identifiers()
 
 
 class PublicScriptTests(unittest.TestCase):
@@ -33,9 +38,9 @@ class PublicScriptTests(unittest.TestCase):
             path = ROOT / "scripts" / name
             self.assertTrue(path.is_file(), name)
             text = path.read_text(encoding="utf-8")
-            self.assertNotIn("/Users/pavel", text)
-            self.assertNotIn("C02HDNCCQ6L41", text)
-            self.assertNotIn("C02HDNCCQ6L43", text)
+            for value in PRIVATE:
+                self.assertNotIn(value, text)
+            self.assertIsNone(DEVICE_SERIAL.search(text))
             self.assertIn('dirname -- "$0"', text)
 
     def test_assisted_supervisor_dry_run_is_bounded_and_uses_public_artifacts(self):
@@ -53,7 +58,8 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("max generations: 3", result.stdout)
         self.assertIn("snapshot signal: SIGINT", result.stdout)
         self.assertIn("recovery policy: captured read-only after SSH-ready", result.stdout)
-        self.assertNotIn("/Users/pavel", result.stdout)
+        for value in PRIVATE:
+            self.assertNotIn(value, result.stdout)
 
     def test_assisted_supervisor_captures_recovery_policy_without_mutating_it(self):
         text = (ROOT / "scripts/supervise-assisted.sh").read_text(encoding="utf-8")
@@ -104,8 +110,9 @@ class PublicScriptTests(unittest.TestCase):
         self.assertTrue(path.is_file())
         text = path.read_text(encoding="utf-8")
         self.assertIn('dirname -- "$0"', text)
-        self.assertNotIn("/Users/pavel", text)
-        self.assertNotIn("C02HDNCCQ6L41", text)
+        for value in PRIVATE:
+            self.assertNotIn(value, text)
+        self.assertIsNone(DEVICE_SERIAL.search(text))
 
         result = subprocess.run(
             [

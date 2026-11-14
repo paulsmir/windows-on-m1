@@ -1,7 +1,7 @@
 # Canonical Public Release Consolidation Implementation Plan
 
-> **Execution rule:** Work only in `/Users/pavel/public_windows`. Treat
-> `/Users/pavel/windows` and every existing worktree as read-only migration
+> **Execution rule:** Work only in `$HOME/public_windows`. Treat
+> `$HOME/windows` and every existing worktree as read-only migration
 > sources until the final cleanup task.
 
 **Goal:** Turn the public repository into the sole reproducible source for the
@@ -60,7 +60,7 @@ Mu/EDK2 build, Git submodules, SHA-256 manifests, J313 hardware validation.
 
 1. Record root/submodule status, branches, remotes, and exact hashes.
 2. Create or switch the public checkout to a named `codex/` consolidation
-   branch in `/Users/pavel/public_windows` itself.
+   branch in `$HOME/public_windows` itself.
 3. Import the root platform-stability checkpoint by reviewing its patch rather
    than blindly merging its submodule pointer.
 4. Run the root test suite before further changes.
@@ -233,11 +233,11 @@ the recovery image.
 
 1. Verify all useful source commits exist on public remotes.
 2. Verify the root repository points to those pushed submodule commits.
-3. Delete `/Users/pavel/public_windows/.local`.
+3. Delete `$HOME/public_windows/.local`.
 4. Delete legacy top-level experimental binaries from `dist/j313`, leaving only
    current `release` and `debug` directories.
 5. Remove old private Git worktrees using Git's worktree management.
-6. Delete `/Users/pavel/windows` completely.
+6. Delete `$HOME/windows` completely.
 7. Re-clone or run a clean-checkout smoke test from the public repository to
    prove no hidden dependency on deleted files remains.
 

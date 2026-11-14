@@ -28,8 +28,8 @@
 
 ## Идентичность и границы доказательств
 
-`E` ниже — `/Users/pavel/public_windows/.local/experiments/EXP852-r132-sysframes/`;
-`A` — `/Users/pavel/public_windows/.local/experiments/EXP852-protected-range/`.
+`E` ниже — `$HOME/public_windows/.local/experiments/EXP852-r132-sysframes/`;
+`A` — `$HOME/public_windows/.local/experiments/EXP852-protected-range/`.
 Ссылки `файл:строка` для исходников отсчитываются от корня worktree.
 
 - EXP852 использует неизменённые R110 firmware: `E/firmware/J313_EFI-r110.fd`

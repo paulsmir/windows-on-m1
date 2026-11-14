@@ -3,7 +3,7 @@
 TIER: C
 MODEL: Devstral Small 2 24B through verified builder-local Ollama
 INPUT_COMMIT: 5f42d6481661df44c6c114921c514adee50c2988
-WORKTREE: /Users/pavel/public_windows/.worktrees/devstral-mechanical
+WORKTREE: $HOME/public_windows/.worktrees/devstral-mechanical
 BRANCH: agent/devstral-mechanical
 
 ## GOAL

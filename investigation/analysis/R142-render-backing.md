@@ -8,12 +8,12 @@ with them. This is an offline decision, not an implemented backing fix.
 
 ## 1. Primary evidence and inspected sources
 
-Task: `/Users/pavel/public_windows/.local/tandem/NEXT_TASK_R142.md`.
+Task: `$HOME/public_windows/.local/tandem/NEXT_TASK_R142.md`.
 Root `a982fb7552acfb894f5ea58f037e88f9d65997e8`, branch
 `integration/ad04-windows-compiler`; EXP855E package source `fa8a66a2`.
 No Air connection, new ADT/register/IRQ observation, launch or package build.
 Saved EXP855E evidence is the machine-state authority for this analysis.
-`.local/` paths below are relative to `/Users/pavel/public_windows`.
+`.local/` paths below are relative to `$HOME/public_windows`.
 
 Inspected in source-first order:
 

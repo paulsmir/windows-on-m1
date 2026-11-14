@@ -9,19 +9,19 @@
   "artifacts": [
     {
       "path": ".local/ans-native/recovery/m1n1.macho",
-      "source": "/Users/pavel/public_windows/.local/experiments/EXP-20260903-377-secondary-cpu-receipt/assisted-boot/m1n1.macho",
+      "source": "$HOME/public_windows/.local/experiments/EXP-20260903-377-secondary-cpu-receipt/assisted-boot/m1n1.macho",
       "sha256": "fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a",
       "size": 950272
     },
     {
       "path": ".local/ans-native/recovery/J313_EFI.fd",
-      "source": "/Users/pavel/public_windows/.local/experiments/EXP-20260903-392-current-gpu-mu-publication/J313_EFI.fd",
+      "source": "$HOME/public_windows/.local/experiments/EXP-20260903-392-current-gpu-mu-publication/J313_EFI.fd",
       "sha256": "16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06",
       "size": 30965760
     },
     {
       "path": ".local/ans-native/recovery/final-ordinary-health.json",
-      "source": "/Users/pavel/public_windows/.local/experiments/EXP474-retained-root/final-ordinary-health.json",
+      "source": "$HOME/public_windows/.local/experiments/EXP474-retained-root/final-ordinary-health.json",
       "sha256": "7e2d82ea1d7cc71580073e48a46db64a8eb1822dd5aa728a167d40956b0c0cdd",
       "size": 1073
     }

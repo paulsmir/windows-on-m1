@@ -133,7 +133,7 @@
   "source_inputs_sha256": "737662840a483eeba0cabab4e47291fccf54a5e98fef0275a9b25705eb80abb8",
   "review": "Independent review accepted all3 changes; no blocking findings",
   "tandem_review_sha256": "753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5",
-  "raw_evidence": "/Users/pavel/public_windows/.local/experiments/R148-offline",
+  "raw_evidence": "$HOME/public_windows/.local/experiments/R148-offline",
   "raw_logs": {
     "full-suite.log": "14a9498aaddd16c7c5dff32bf7d8dc8935d2ce6e472b538adbc6c30a1d6271eb",
     "pool-red.log": "b136f793e0711904641a9afa5f2aa0deb7084dee4a9c54ea1ba9923a83204a7c",

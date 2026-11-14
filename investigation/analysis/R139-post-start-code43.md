@@ -3,7 +3,7 @@
 ## Evidence and owning contract
 
 Offline only; no Air, package, stage or hardware experiment. Task:
-`/Users/pavel/public_windows/.local/tandem/NEXT_TASK_R139.md`.
+`$HOME/public_windows/.local/tandem/NEXT_TASK_R139.md`.
 Saved evidence root: main repository `.local/experiments/EXP855B-r138-scanout-pool/hardware-evidence/`.
 ETL SHA256 a6243dbb2892a7716361bed03d7069adb117f23fd468d6471bd448458d1aebe7.
 Builder tracerpt decoded the saved ETL; thread 4952 names the failure:

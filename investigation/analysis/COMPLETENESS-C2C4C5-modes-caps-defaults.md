@@ -1,6 +1,6 @@
 ## WP C2 / C4 / C5 / F2-F3: verification against the arch/integrate-k2 tree, which contains 1cadce2b3 and bf56f6728
 
-**Short answer:** the bench m1n1 line (s2v3) does report the scaled-source capability, and the 11-mode table is offered today. But no mode change has been run on the current bench line. Reading the code turns up one real defect at scaled modes (C2 below). Of the requested lists, the KMD switches are fully classified (73 registry switches, every member named); the UMD environment variables are counted per group but only the drill/diagnostic group is named member by member. Nothing in the repository was modified. My scratch files are in `/Users/pavel/public_windows/.local/night-20261110/wp-c2c4c5/`: `env-names.txt`, `env-context.txt` (the file:line and context for each environment variable) and `classify.py`.
+**Short answer:** the bench m1n1 line (s2v3) does report the scaled-source capability, and the 11-mode table is offered today. But no mode change has been run on the current bench line. Reading the code turns up one real defect at scaled modes (C2 below). Of the requested lists, the KMD switches are fully classified (73 registry switches, every member named); the UMD environment variables are counted per group but only the drill/diagnostic group is named member by member. Nothing in the repository was modified. My scratch files are in `$HOME/public_windows/.local/night-20261110/wp-c2c4c5/`: `env-names.txt`, `env-context.txt` (the file:line and context for each environment variable) and `classify.py`.
 
 ### 1. Current state
 

@@ -2,7 +2,7 @@
 
 2026-09-27; analysis base `dc193ed472a4886385f87fac86d27ac2867c36ee`, branch
 `integration/ad04-windows-compiler`. Task:
-`/Users/pavel/public_windows/.local/tandem/NEXT_TASK_REASON19.md`, B3 hypothesis 1
+`$HOME/public_windows/.local/tandem/NEXT_TASK_REASON19.md`, B3 hypothesis 1
 of [the preceding analysis](EXP848-next-boundary.md#b3-ranked-hypotheses-and-the-smallest-next-discriminator).
 
 **Result:** all 84 saved Reason19 events have the same 16-frame stack. Public
@@ -23,7 +23,7 @@ recorded recovery; it was not probed or revalidated in this task.
 
 ## Evidence identity and decoding
 
-`E` = `/Users/pavel/public_windows/.local/experiments/EXP848-r127-stale`;
+`E` = `$HOME/public_windows/.local/experiments/EXP848-r127-stale`;
 `A` = `E/reason19-analysis`. Builder input is the existing
 `C:\Users\pauls\EXP848-analysis-offline\EXP801DxgBoot.etl`; analysis outputs
 are in `C:\Users\pauls\EXP848-reason19-offline`.

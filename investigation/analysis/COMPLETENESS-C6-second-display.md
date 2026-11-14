@@ -1,5 +1,5 @@
 C6 DESIGN NOTE: a second display in the KMD (external DP over USB-C on J313)
-This was read-only work. No files were written and no hardware was touched. The scratch directory `/Users/pavel/public_windows/.local/night-20261110/wp-c6/` was created and is empty.
+This was read-only work. No files were written and no hardware was touched. The scratch directory `$HOME/public_windows/.local/night-20261110/wp-c6/` was created and is empty.
 
 ## 1. CURRENT STATE (arch/integrate-k2 b7d3df623)
 Every display path in the driver assumes one panel. These places hard-code display 0 or a single display:

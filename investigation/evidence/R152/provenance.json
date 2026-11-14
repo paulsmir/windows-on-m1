@@ -37,16 +37,16 @@
     }
   ],
   "raw_debugger_logs": {
-    "/Users/pavel/public_windows/.local/experiments/R152-offline/active.txt": "43483b84298d12dddcd1c7e79d65cf6c1d73241d8df388cfb424c0934cee4e19",
-    "/Users/pavel/public_windows/.local/experiments/R152-offline/bm.txt": "ac24457b1f3e00bc4ad73a1367f47515b295679a91d5938e1b34b98ecae7e9cb",
-    "/Users/pavel/public_windows/.local/experiments/R152-offline/channels.txt": "33a1363e009240dfab3be4b1f8bd048d3b38c792b2d77edfbc1c6851eecdf7aa",
-    "/Users/pavel/public_windows/.local/experiments/R152-offline/export.txt": "aa824d7346e4a65ecee639a1f193f1b0b2e7e67cc6baaaad7bf1f21a33c901c6",
-    "/Users/pavel/public_windows/.local/experiments/R152-offline/history.txt": "806c2ef4df76d569f4d002e1406f301bb108b3e3c729458f7443e32980d48892",
-    "/Users/pavel/public_windows/.local/experiments/R152-offline/leaves.txt": "e1d860e9bf8b6d8c719b55fe80b3ebe86efb1eaa0abed91d5fa566d1b71a6484",
-    "/Users/pavel/public_windows/.local/experiments/R152-offline/objects.txt": "fe749cad07fb8f19a8d01063552e4f40d87ecd9672495605c24c89a224423b48",
-    "/Users/pavel/public_windows/.local/experiments/R152-offline/owners.txt": "78bde5a605e73a884fc189780dfcd89ff5b9b78dc9b42381ad5d9004ff35f852",
-    "/Users/pavel/public_windows/.local/experiments/R152-offline/state.txt": "dbb52fe190bd7c65a8c65e17233c7e6906bcaff92a8835d38e2f886728d150f2",
-    "/Users/pavel/public_windows/.local/experiments/R152-offline/walk.txt": "5f86fd1851f013502206d693a8eb9800e48086e8c46007404f90730d64e00cad"
+    "$HOME/public_windows/.local/experiments/R152-offline/active.txt": "43483b84298d12dddcd1c7e79d65cf6c1d73241d8df388cfb424c0934cee4e19",
+    "$HOME/public_windows/.local/experiments/R152-offline/bm.txt": "ac24457b1f3e00bc4ad73a1367f47515b295679a91d5938e1b34b98ecae7e9cb",
+    "$HOME/public_windows/.local/experiments/R152-offline/channels.txt": "33a1363e009240dfab3be4b1f8bd048d3b38c792b2d77edfbc1c6851eecdf7aa",
+    "$HOME/public_windows/.local/experiments/R152-offline/export.txt": "aa824d7346e4a65ecee639a1f193f1b0b2e7e67cc6baaaad7bf1f21a33c901c6",
+    "$HOME/public_windows/.local/experiments/R152-offline/history.txt": "806c2ef4df76d569f4d002e1406f301bb108b3e3c729458f7443e32980d48892",
+    "$HOME/public_windows/.local/experiments/R152-offline/leaves.txt": "e1d860e9bf8b6d8c719b55fe80b3ebe86efb1eaa0abed91d5fa566d1b71a6484",
+    "$HOME/public_windows/.local/experiments/R152-offline/objects.txt": "fe749cad07fb8f19a8d01063552e4f40d87ecd9672495605c24c89a224423b48",
+    "$HOME/public_windows/.local/experiments/R152-offline/owners.txt": "78bde5a605e73a884fc189780dfcd89ff5b9b78dc9b42381ad5d9004ff35f852",
+    "$HOME/public_windows/.local/experiments/R152-offline/state.txt": "dbb52fe190bd7c65a8c65e17233c7e6906bcaff92a8835d38e2f886728d150f2",
+    "$HOME/public_windows/.local/experiments/R152-offline/walk.txt": "5f86fd1851f013502206d693a8eb9800e48086e8c46007404f90730d64e00cad"
   },
   "excerpts": "Debugger command through quit; trailing whitespace normalized; raw log hashes retained"
 }

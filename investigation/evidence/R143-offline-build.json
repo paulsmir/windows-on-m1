@@ -12,7 +12,7 @@
     "m1n1_windows": "20d55f4c9532df4bcd6bdb8a04ad01089c453672",
     "mu": "0dac68712f3bc520d46f88af84a430cfb916dfc4"
   },
-  "artifacts_base": "/Users/pavel/public_windows/.local/experiments/EXP856-r143-reserve1g",
+  "artifacts_base": "$HOME/public_windows/.local/experiments/EXP856-r143-reserve1g",
   "hardware_manifest_sha256": "ecd1f20e3ceb4715f79c2b325c15046b0711d7737f302a4b46d47efc1a1dc4cc",
   "artifact_sha256": {
     "firmware/m1n1-r143.macho": "5fe13d19c5ca4d21327c44934613ae0f5109b8de096590db69f455e439e61a01",

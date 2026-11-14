@@ -46,7 +46,7 @@
   "targeted_identity": "PASS legacy/B1/G3",
   "hardware": "NOT_RUN",
   "Air_transfer_stage_launch": "NOT_PERFORMED",
-  "GO_gate": "/Users/pavel/public_windows/.local/tandem/GO_EXP865",
+  "GO_gate": "$HOME/public_windows/.local/tandem/GO_EXP865",
   "recovery": "mandatory immutable hiddenCode45 exact cleanup then ordinaryCode28",
   "limits": [
     "No hardware completion/scanout/stability claim",

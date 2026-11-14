@@ -21,7 +21,7 @@ PnPUtil, public assisted m1n1 launcher, Mu UEFI/ACPI, JSON and SHA-256 evidence.
 
 ## Global Constraints
 
-- Work only in `/Users/pavel/public_windows` on
+- Work only in `$HOME/public_windows` on
   `feature/j313-gpu-acceleration`.
 - Preserve `.local/recovery/STABLE-j313-8core-native-input-v1/` byte-for-byte.
 - Use G2 manifest SHA-256

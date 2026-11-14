@@ -1,6 +1,6 @@
 # R135 — EXP854B root reuse (offline)
 
-Spec: `/Users/pavel/public_windows/.local/tandem/NEXT_TASK_R135.md`.
+Spec: `$HOME/public_windows/.local/tandem/NEXT_TASK_R135.md`.
 Execute inline in the supplied worktree. Air and package builds prohibited.
 
 ## Source-first contract and implementation plan

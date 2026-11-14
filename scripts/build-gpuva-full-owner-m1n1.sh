@@ -11,7 +11,7 @@ output=$1
 mkdir -p "$output"
 output=$(cd "$output" && pwd)
 
-export PATH="/opt/homebrew/bin:/Users/pavel/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH"
+export PATH="/opt/homebrew/bin:${HOME}/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH"
 export TOOLCHAIN=/opt/homebrew/Cellar/llvm/22.1.8/bin/
 export LLDDIR=/tmp/agx-lld-dir/
 # Mu with the receipt-sized local reserve (ABI v3, m1n1 62f361bc; Mu 361a2134

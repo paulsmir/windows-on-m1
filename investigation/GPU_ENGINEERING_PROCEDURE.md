@@ -63,7 +63,7 @@ No candidate without recorded hash. No blind repeat of rejected/inconclusive EXP
 
 Check Windows SSH with bounded timeout and pinned known_hosts, plus proxy/vUART
 USB endpoints and active launcher before requesting physical action.
-Expected proxy `/dev/cu.usbmodemC02HDNCCQ6L41`, vUART suffix43; enumerate actual
+Expected proxy `/dev/cu.usbmodem<SERIAL>41`, vUART suffix43; enumerate actual
 ports rather than assuming unchanged names. Last launcher76592 is historical.
 Ordinary GPU-visible recovery is377/392 with exactly one inert APPL0002 Code28,
 broker disabled and no AppleAgx package/service/module/SYS/UMD.

@@ -19,7 +19,8 @@
 # Prints PRUNE_PLAN, then ARCHIVED/DELETED/KEPT lines and PRUNE_DONE <free GB>.
 # Do not run it while a recover.sh or an experiment pipeline uses the guest.
 set -u
-T=/Users/pavel/public_windows/.local/tandem
+. "$(dirname "$0")/lib/bench-env.sh"
+T="$AGX_TANDEM"
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 EXPS=/Volumes/pwdev/public_windows/.local/experiments
 ARCHIVE=$EXPS/guest-archive
@@ -58,7 +59,7 @@ for d in $candidates; do
   if [ "$ARCHIVE_ON" = 1 ]; then
     mkdir -p "$ARCHIVE/$d"
     g "powershell -NoProfile -Command \"Get-ChildItem C:\\Users\\pavel\\$d -Recurse -File | ForEach-Object { (Get-FileHash \$_.FullName).Hash.ToLower() + ' ' + \$_.FullName.Substring(\\\"C:\\Users\\pavel\\$d\\\".Length+1) }\"" > "$ARCHIVE/$d.guest-sha256.txt"
-    perl -e 'alarm 1800; exec @ARGV' "$T/airscp" -r "pavel@192.168.1.37:C:/Users/pavel/$d/*" "$ARCHIVE/$d/" >/dev/null 2>&1
+    perl -e 'alarm 1800; exec @ARGV' "$T/airscp" -r "$AGX_GUEST_SSH:$AGX_GUEST_HOME/$d/*" "$ARCHIVE/$d/" >/dev/null 2>&1
     verdict=$(python3 - "$ARCHIVE" "$d" <<'P'
 import sys,hashlib,pathlib
 root,d=sys.argv[1],sys.argv[2]; bad=n=0

@@ -61,7 +61,7 @@ FreeC5569912832/shadow0. Cleanup3file hostgate:
 Exact stopped task removed06:29:50 after action identity inspection.
 
 Both identical closed ETL paths were verified/fsynced to one internal archive under
-/Users/pavel/J313-evidence-archive/2026-10-02/EXP923-completed, then replaced by verified
+$HOME/J313-evidence-archive/2026-10-02/EXP923-completed, then replaced by verified
 original-path symlinks.388497408externalbytes reclaimed; archive target must remain.
 All experiment evidence is under .local/experiments/EXP923-sdk-creation-stack.
 

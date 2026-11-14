@@ -16,7 +16,7 @@
 - Require exact confirmation `ERASE WINDOWS` after all read-only target and evidence-preservation gates.
 - Install Windows 11 Pro ARM64 image index 3 from build 26200.8037 media.
 - Configure English `en-GB` UI, French AZERTY `040C:0000040C`, `Romance Standard Time`, computer `J313-WIN`, and local administrator `pavel` with password `a`.
-- Provision only `/Users/pavel/.ssh/air.pub`; never copy `/Users/pavel/.ssh/air`.
+- Provision only `$HOME/.ssh/air.pub`; never copy `$HOME/.ssh/air`.
 - Disable SSH password authentication; retain password `a` for local console recovery only.
 - Install only the hash-pinned EXP145 AppleInput package and set `TransportOnly/PublishKeyboard/PublishTrackpad` to `0/1/1`.
 - Leave Windows inbox USBXHCI/HID unchanged and leave AppleAgx entirely absent.
@@ -367,7 +367,7 @@ git commit -m "feat(installer): integrate unattended offline deployment"
 - Create: `tests/test_prepare_reinstall_media.py`
 
 **Interfaces:**
-- Consumes: mounted source ISO, mounted exFAT USB, `wimlib-imagex`, repository payload, exact EXP145 package, and `/Users/pavel/.ssh/air.pub`.
+- Consumes: mounted source ISO, mounted exFAT USB, `wimlib-imagex`, repository payload, exact EXP145 package, and `$HOME/.ssh/air.pub`.
 - Produces: backed-up and modified USB `boot.wim`, root recovery launcher, `J313-Reinstall/payload.sha256`, and `media-manifest.txt`; never accepts or copies a private key.
 
 - [ ] **Step 1: Write failing builder contract tests**

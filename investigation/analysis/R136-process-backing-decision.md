@@ -7,7 +7,7 @@ fix. Its decisive Windows interface is `DxgkCbReserveGpuVirtualAddressRange`.
 A raw mapping into an ordinary VidMm-owned VA, or taking bytes out of the
 currently advertised local segment behind VidMm's back, is not this design.
 
-Scope: the task in `/Users/pavel/public_windows/.local/tandem/NEXT_TASK_PROCESS_BACKING.md`.
+Scope: the task in `$HOME/public_windows/.local/tandem/NEXT_TASK_PROCESS_BACKING.md`.
 Only this document is changed. No Air access, live measurement, builder SSH,
 package, driver/firmware change, hardware run or experiment preregistration.
 No implementation/workflow change is made, so no CHANGES.csv row is claimed;
@@ -17,7 +17,7 @@ from the proposed RED→GREEN implementation gates.
 
 ## 1. Inspected primary sources and evidence
 
-Paths beginning `.local/` refer to `/Users/pavel/public_windows`, not this
+Paths beginning `.local/` refer to `$HOME/public_windows`, not this
 worktree. Source-first inspection used saved machine evidence, then Asahi,
 m1n1, Mu, pinned WDK and official Microsoft documentation. Air was prohibited;
 no new ADT, register, interrupt-route or memory-map observation is asserted.
@@ -483,7 +483,7 @@ The step-3 producer/handoff acceptance gate is still pending: production UMD
 continues to create/Lock its ordinary nine BOs. No full fix is claimed.
 
 For this R137 correction only, .local evidence paths refer to the worktree
-/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler,
+$HOME/public_windows/.worktrees/integration-ad04-windows-compiler,
 not the main repository paths used by the original analysis.
 
 The uncommitted step-4 prototype passed 19 G3 replay tests and ARM64 compile/link,

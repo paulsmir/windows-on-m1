@@ -34,7 +34,7 @@ def command_for(command_id, repo):
         "LOCAL_MUTATE_ALLOWED": [python, "-c", "from pathlib import Path; Path('allowed/worker.txt').write_text('worker\\n')"],
         "LOCAL_MUTATE_FORBIDDEN": [python, "-c", "from pathlib import Path; Path('forbidden.txt').write_text('worker\\n')"],
         "FRYZZING_VERIFY_CLANG": [
-            "ssh", "-i", "/Users/pavel/.ssh/windows_builder", "-o", "BatchMode=yes",
+            "ssh", "-i", os.path.expanduser("~/.ssh/windows_builder"), "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=8", "pauls@192.168.1.24",
             f'cmd /c "{BUILDER}\\AD04-asahi-windows-compiler\\llvm20\\bin\\clang-cl.exe --version"',
         ],

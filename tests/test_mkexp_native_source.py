@@ -6,7 +6,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "drivers/apple-agx/render-admission/scripts/mkexp.py"
-TEMPLATE = Path("/Users/pavel/public_windows/.local/experiments/EXP853-r133-unpublished/build-kmd.ps1")
+TEMPLATE = Path("~/public_windows/.local/experiments/EXP853-r133-unpublished/build-kmd.ps1").expanduser()
 
 
 class MkexpNativeSourceTests(unittest.TestCase):

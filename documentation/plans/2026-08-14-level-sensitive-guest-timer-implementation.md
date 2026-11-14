@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Work only in `/Users/pavel/public_windows`; `/Users/pavel/windows` and worktrees are not build or launch sources.
+- Work only in `$HOME/public_windows`; `$HOME/windows` and worktrees are not build or launch sources.
 - Target MacBook Air M1 J313/T8103 with all eight CPUs.
 - Do not change Mu, ACPI, Windows, NVMe, USB, display, Apple input, CPU topology, or the 100 Hz secondary recovery heartbeat.
 - Do not attach a second proxy client while the assisted launcher owns USB callbacks.
@@ -103,7 +103,7 @@ The Empty+asserted case is intentionally excluded: creating a correctly formatte
 Run:
 
 ```bash
-cd /Users/pavel/public_windows/m1n1_windows
+cd $HOME/public_windows/m1n1_windows
 ./tests/run_host_tests.sh hv_vgic_diag_test
 ```
 
@@ -175,7 +175,7 @@ static void test_two_timer_sources_keep_fifo_order(void)
 Add `hv_timer_delivery_test` to `run_host_tests.sh` with `src/hv_timer_delivery.c`, then run:
 
 ```bash
-cd /Users/pavel/public_windows/m1n1_windows
+cd $HOME/public_windows/m1n1_windows
 ./tests/run_host_tests.sh hv_timer_delivery_test
 ```
 
@@ -238,7 +238,7 @@ These source-boundary tests supplement, rather than replace, the real C transiti
 Run:
 
 ```bash
-cd /Users/pavel/public_windows
+cd $HOME/public_windows
 ./proxyenv/bin/python -m unittest tests.test_vgic_irq_queue_contract -v
 ```
 
@@ -268,7 +268,7 @@ No remote timer synchronization exists in this path, so do not add speculative p
 Run:
 
 ```bash
-cd /Users/pavel/public_windows
+cd $HOME/public_windows
 ./proxyenv/bin/python -m unittest tests.test_vgic_irq_queue_contract -v
 cd m1n1_windows
 ./tests/run_host_tests.sh hv_vgic_diag_test hv_timer_delivery_test hv_fiq_fast_path_test hv_tick_policy_test
@@ -288,7 +288,7 @@ Expected: all focused suites pass; `hv_tick_policy_test` confirms the unchanged 
 - [ ] **Step 1: Run the complete nested host suite**
 
 ```bash
-cd /Users/pavel/public_windows/m1n1_windows
+cd $HOME/public_windows/m1n1_windows
 ./tests/run_host_tests.sh
 ```
 
@@ -297,7 +297,7 @@ Expected: every listed host test prints `ok` and the script exits zero.
 - [ ] **Step 2: Run the focused SMP suite**
 
 ```bash
-cd /Users/pavel/public_windows/m1n1_windows
+cd $HOME/public_windows/m1n1_windows
 ../proxyenv/bin/python -m unittest \
   tests.python.test_proxyclient.test_m1n1.test_smp_secondary_launch -v
 ```
@@ -307,7 +307,7 @@ Expected: 10 tests pass.
 - [ ] **Step 3: Run the complete root suite and hygiene checks**
 
 ```bash
-cd /Users/pavel/public_windows
+cd $HOME/public_windows
 ./proxyenv/bin/python -m unittest discover -s tests -v
 git diff --check
 git -C m1n1_windows diff --check
@@ -322,7 +322,7 @@ Confirm that there is no Mu, ACPI, Windows driver, NVMe, USB, display, Apple-inp
 - [ ] **Step 5: Commit m1n1 without attribution trailers**
 
 ```bash
-cd /Users/pavel/public_windows/m1n1_windows
+cd $HOME/public_windows/m1n1_windows
 git add src/hv_exc.c src/hv_vgic.c src/hv_vgic.h \
   src/hv_vgic_diag.c src/hv_vgic_diag.h src/hv_timer_delivery.c \
   src/hv_timer_delivery.h src/hv_watchdog_snapshot.h \
@@ -353,7 +353,7 @@ Use the new 40-character m1n1 commit. Set `status=implemented`; leave hardware r
 - [ ] **Step 3: Build from the canonical public m1n1 commit**
 
 ```bash
-cd /Users/pavel/public_windows/m1n1_windows
+cd $HOME/public_windows/m1n1_windows
 PATH="/opt/homebrew/opt/rustup/bin:$PATH" make clean
 PATH="/opt/homebrew/opt/rustup/bin:$PATH" make -j8
 ```
@@ -362,7 +362,7 @@ Copy `build/m1n1.macho` and the unchanged EXP-018 Mu file into the EXP-019 artif
 
 - [ ] **Step 4: Re-run the artifact preflight**
 
-Use the canonical public launcher dry-run with the exact EXP-019 artifact paths and physical/monitor profile. Stop if the launcher resolves any path under `/Users/pavel/windows`, a worktree, or an unmatched Mu artifact.
+Use the canonical public launcher dry-run with the exact EXP-019 artifact paths and physical/monitor profile. Stop if the launcher resolves any path under `$HOME/windows`, a worktree, or an unmatched Mu artifact.
 
 ### Task 6: Run one falsifiable assisted hardware experiment
 

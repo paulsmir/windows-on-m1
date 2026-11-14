@@ -14,7 +14,7 @@ This is the bounded session entry point. Detailed history is append-only in
 
 ## Repository identity
 
-- Canonical checkout: `/Users/pavel/public_windows`.
+- Canonical checkout: `$HOME/public_windows`.
 - Branch: `feature/j313-gpu-acceleration`.
 - Candidate root: `6ac19e9458b5d7786e2685fe7202f9e48eb0cf24`.
 - EXP-156 official ARM64 package was built, ABI-inspected, hash-pinned, staged
