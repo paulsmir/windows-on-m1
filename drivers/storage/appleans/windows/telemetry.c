@@ -116,7 +116,9 @@ int ans_stats_ioctl_reply(void *buffer, ans_u32 bytes, const struct ans_telemetr
     ans_u32 wanted;struct ans_io_control h;
     if(!ans_stats_ioctl_validate(buffer,bytes,&wanted) || !valid(windows,1))return 0;
     struct ans_telemetry_query q={ANS_IOCTL_VERSION,ANS_IOCTL_PAYLOAD_BYTES,ANS_IOCTL_WINDOWS,0};
-    if((wanted&ANS_IOCTL_BROKER) && valid(broker,2))q.sources|=ANS_IOCTL_BROKER;
+    /* Second slot: the EL2 broker's record (source 2) or, in ANS-DIRECT mode, the driver's own
+     * direct-runtime record (source 3, TELEMETRY.md). */
+    if((wanted&ANS_IOCTL_BROKER) && (valid(broker,2) || valid(broker,3)))q.sources|=ANS_IOCTL_BROKER;
     COPY(&h,buffer,sizeof(h));h.return_code=0;
     COPY(buffer,&h,sizeof(h));COPY((ans_u8 *)buffer+sizeof(h),&q,sizeof(q));
     COPY((ans_u8 *)buffer+sizeof(h)+sizeof(q),windows,sizeof(*windows));
