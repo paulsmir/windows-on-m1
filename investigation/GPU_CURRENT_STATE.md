@@ -7013,3 +7013,16 @@ boot was run. The previous entry stays as written.
   pre-OS framebuffer (m1n1 logo). Completeness item: post-display hand-back at stop / failed start. Architect
   error: first described to the user as the hypervisor screen between boots.
 - Side finding: four "Driver returned an invalid NTSTATUS code" 0xC00000BB events at each start; DDI not named yet.
+
+## UPDATE 2026-11-14T23:07Z - EXP2460: harness task priority rejected as the cause of E-cluster placement
+
+- One boot, unpinned, no ETW: CS at task priority 7 = 51.706 (warm; first run 47.571 cold), at priority 4 = 51.834 /
+  52.107 with hl.exe confirmed Normal (base 8). GM 52.794 / 52.520 at 7 vs 52.628 / 52.811 at 4. Placement
+  identical in all runs: E 2050-2064 MHz, P 632-727 MHz busy 3-6 %, Parking Status 0.96-1.00 on cores 4-7,
+  dram_fast=0, foreground = explorer in every sample. Verdict: REJECTED (the architect's leading candidate).
+- GM gives ~53 fps both with the P cores 88-93 % busy (EXP2459 part 2) and with them parked (EXP2460): GM does not
+  depend on thread placement.
+- Remaining candidates, in order: (1) the benchmark window is never foreground (harness-only A/B, next step);
+  (2) Windows parking policy for class-1 cores vs the firmware _CPC scale (MHz, E shown as 69 % of P); (3) the
+  DRAM-fast rule tied to the P cluster as part of the pinned gain. No guest power setting has been changed.
+- Running at the time of writing: EXP2461 = A5 discriminator D1 (Wom1PoolHalfSize=1, three-cycle tail).
