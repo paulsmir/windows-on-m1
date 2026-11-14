@@ -79417,3 +79417,10 @@ EXP2404 HARDWARE BEFORE 2026-11-14T00:37:30Z:
 - Hashes: sys a25f4473ded3, UmdArm64 8279e3d263b6, UmdX64 2af54db525b9, Umd32 2c588369b76e; manifest 8b69ca811da2, hardware-manifest b4a46dd029b7; probe2404.sh 7bea903bdf79 (PROBE_LINT_OK); visible recovery rec2404h ae1257294e2f065e; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
 - Recovery rec2404h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2404-f1k0/run2404.sh.
+
+EXP2404 HARDWARE ACTUAL 2026-11-14T01:10:42Z:
+- Boot and run: recovery rec2403h (RECOVERY_DONE), then exp/f1k-pkg 2e19eaaf5 (gpu/memory-latency + F1-k start policy, policy absent), m1n1 s2v3-rq2, switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes. Probe to EXP2404_PROBE_DONE / CHAIN2404_DONE. Suite PASS 119 / FAIL 0. STOPS 0, WER_REPORTS 2. RQ-1 counters 0.
+- Start policy, expected vs actual: Wom1StartPolicyAttempt 0x10001 (expected 0x00010001) and Wom1StartPolicyIoStatus 0x0; no Wom1StartPending/Running/Latched/UncleanCount/LatchCount; G3Armed consumed as before. The policy-absent path behaves as designed.
+- Gates: GravityMark PERF PASS +0.07 % (worst 47.038); CS cs16 FAIL -2.30 % (worst 50.796 vs 51.991; warm 50.114, r2 50.796; EXP2394/2395/2401 warm 51.8-51.9, r2 52.0-52.4). Windowed CS 54.25 (EXP2394 54.28). Probe: "SHORT_MISS CS: no r3 in this boot; escalation = repeat boot".
+- No display-path mechanism: H3MissedDeadline over the CS runs 1/3/3/3 (EXP2401: 3/8/8/8); the policy-absent code adds one registry write at start and no runtime path.
+- Verdict: INCONCLUSIVE (CS gate miss without a mechanism). Per the SHORT rule a repeat boot of the same package decides: EXP2412 (the next free id; 2405-2411 are reserved for F1-k L1/L2, the proxy slot and the PL-1c package already built as EXP2411). F1-k L1 waits for that repeat.
