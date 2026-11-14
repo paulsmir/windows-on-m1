@@ -80167,3 +80167,9 @@ EXP2454 HARDWARE BEFORE 2026-11-14T18:56:18Z (keyboard backlight every-boot pack
 - RISK shared-domain teardown: none (FPWM1 TARGET F + PWM programming; no shared power-off). SSD state: AppleAns 0.4.8.3, no disk-driver change.
 - Not in this run: perf gate (needs a GPU package boot; it runs in the GPU box on this profile if PASS), sleep/resume, Fn keys.
 - Rollback (full): OutputEnable 0, remove devnode, delete every applekbdbacklight.inf, delete service, remove the cert, previous FD (MUANSCPPC002).
+
+EXP2454 ACTUAL (2026-11-14 UTC): full proxy reboot from the G3b-0 guest (StartOverride cleared), boot 1 launch 18:57:38Z (RST-2ABC + MUKBD003 2ef00a13), SSH 18:58:03Z. Install: cert into Root/TrustedPublisher; guest hashes cat 2F41299B / inf 1D05C4AD / sys 6648F764 / kbdblctl 69DFF7C4; pnputil -> oem20.inf on ACPI\APPL0005\0, DEV OK, driver 11.52.14.293 (no Code 31); status: hardware_fault 0, output_enable 1, user_level 90, effective 90, live_on 237 / live_off 723, live_control 0x4001.
+- Every-boot proof: StartOverride cleared, ordered reboot 18:58:59Z with NO manual step, full proxy reboot, boot 2 launch 19:00:00Z, SSH 19:00:25Z: driver loaded, APPL0005 OK, OutputEnable 1, identical status (90 / 237 / 723 / 0x4001), 8 CPUs, buffered 64 MiB 804/1089 MB/s, ansq-canary CANARY_OK.
+- Persistent guest trust setting: the bench certificate stays in LocalMachine Root + TrustedPublisher (required for every boot; listed per the architect).
+- Not run: perf gate (GPU package boot - in the GPU box on this profile), sleep/resume, Fn keys.
+- Verdict: CONFIRMED - keyboard backlight on every boot with MUKBD003 2ef00a13 (= MUANSCPPC002 + every-boot patch 41a3156b, byte-identical own build) + package-everyboot (sys 6648f764, inf 1d05c4ad, cat 2f41299b signed with the bench cert). Recovery profile unchanged.
