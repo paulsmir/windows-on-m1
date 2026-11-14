@@ -6873,3 +6873,18 @@ boot was run. The previous entry stays as written.
   storage stall trigger = non-page-aligned first buffer address (EXP2441).
 - Rule from now on (pre-install gate): no storage-driver install without a demonstrated rollback path that does not
   depend on that driver.
+
+## UPDATE 2026-11-14T18:08:47Z - BENCH RESTORED: offline repair of the SYSTEM hive worked; rollback path verified
+
+- Repair: one 4 KiB block (LBA 41984192) rewritten through m1n1's nvme_write at the proxy - the AppleAns ImagePath
+  back to the 0.4.8.3 driver-store directory (32 bytes). Preconditions read from the disk first (hive clean,
+  checksum valid, no pending log entries, old driver file hash matching), block backed up, read back identical;
+  a second reconnaissance showed exactly that one block changed. The guest booted on the ANS path at once.
+- After the repair: running driver 0.4.8.3, buffered disk check normal, canary check clean (331 files), chkdsk
+  clean; the 0.4.8.5 package removed from the driver store (kept on the Mac as evidence).
+- Rollback path: the bridge launcher booted to SSH once stornvme StartOverride was removed. Finding: Windows sets
+  StartOverride = 3 again on the unused storage driver at EVERY boot (stornvme after an ANS boot, AppleAns after a
+  bridge boot), so the bridge path is a rollback path only until the next ANS boot unless the value is cleared
+  each time. A permanent handling is open.
+- Tools kept as the emergency path: tools/ans_repair/ans_offline_recon.py and ans_offline_patch.py.
+- Bench downtime about two hours (17:00Z-18:00Z install to repair, incl. two bridge attempts).
