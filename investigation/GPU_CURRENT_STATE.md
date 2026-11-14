@@ -6852,3 +6852,24 @@ boot was run. The previous entry stays as written.
   not needed.
 - Next: one test frame from the proxy (S1e), then the guest-facing design (broker for a second scanout instance,
   second VidPn source in the KMD: arch/c6-per-display).
+
+## UPDATE 2026-11-14T17:54:06Z - BENCH DOWN: guest unbootable after AppleAns 0.4.8.5 (EXP2447); offline repair in progress
+
+- 0.4.8.5 (bounce pool inside the mandatory uncached extension, 0.38 -> 2.48 MiB) does not boot: stop 0x7B
+  INACCESSIBLE_BOOT_DEVICE, stable over two launches, confirmed on the panel by the operator; the hypervisor log
+  never shows the driver's interrupt being connected. Whether FindAdapter returned an error or the image did not
+  load is not known. No write test ran; disk data intact.
+- Rollback was not possible: the recovery profile boots the same disk with the same installed driver, and the
+  bridge path (stornvme on the emulated NVMe) also stops with 0x7B (two launches; stornvme StartOverride = 3 set by
+  Windows after native boots). No offline repair path existed. Process defect of mine: a boot-disk driver was
+  installed without a verified rollback path.
+- Repair chosen: one in-place write of the AppleAns ImagePath back to the 0.4.8.3 driver-store directory (same
+  string length, 32 bytes) through m1n1's nvme_write at the proxy, after a read-only reconnaissance of GPT, NTFS and
+  the SYSTEM hive, with block backup, pre-write hash check and read-back. Tools are written and host-tested; the
+  first hardware run of the reconnaissance read 7115 blocks cleanly but failed to resolve the path on the real
+  volume (a parser limit on a large directory, to be fixed from the saved blocks). No disk write has been made.
+- Earlier today, for the record: external display - DisplayPort link trains, mode set and frame hand-over return
+  success (EXP2442-2445), picture not seen by anyone; keyboard backlight repeats by registers (EXP2446), not seen;
+  storage stall trigger = non-page-aligned first buffer address (EXP2441).
+- Rule from now on (pre-install gate): no storage-driver install without a demonstrated rollback path that does not
+  depend on that driver.
