@@ -6841,3 +6841,14 @@ boot was run. The previous entry stays as written.
 - Fix direction (reinstated): driver-side bounce through page-aligned memory for such transfers; no alignment
   change announced to Windows, no refusal. Not built. Unexplained even with the fix: why the controller goes silent
   only sometimes for such buffers.
+
+## UPDATE 2026-11-14T13:19:02Z - EXP2442 (external display): DisplayPort link trains and the monitor's modes are read
+
+- With m1n1 answering the display coprocessor's calls while it waits for a command reply (enabled for the
+  external-display coprocessor only; internal-panel objects byte-identical), the display request completes in under
+  1 ms and the firmware configures and trains the link through the dock: 2 lanes at 5.4 Gbit/s, hot-plug detected,
+  45 timing modes and 16 colour modes reported. Proxy only, no guest, no picture yet.
+- Excluded earlier in the same line: the crossbar route as the cause (EXP2427); the hot-plug ordering variant is
+  not needed.
+- Next: one test frame from the proxy (S1e), then the guest-facing design (broker for a second scanout instance,
+  second VidPn source in the KMD: arch/c6-per-display).
