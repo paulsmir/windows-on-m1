@@ -6786,3 +6786,18 @@ boot was run. The previous entry stays as written.
   through the OpRegion, the hypervisor's split-page emulation, or the hardware); the next keyboard box runs a
   hardened ASL/driver with a hypervisor tracer on that word.
 - Wi-Fi box is running (G1: m1n1 brings the link up by itself at the proxy).
+
+## UPDATE 2026-11-14T12:02:22Z - focus boxes 2-4: keyboard backlight works by registers; Wi-Fi reaches Windows partially; NEW SSD defect
+
+- Keyboard backlight (EXP2432/2433): the earlier all-ones reading was our own ACPI receipt (a package of names),
+  not the hypervisor. With the driver powering the PWM block itself the driver programs levels and the live
+  read-back matches (control bit 5 is a self-clearing update strobe). Windows Dynamic Lighting owns the lamp; the
+  driver scales it with the user level. NOT yet confirmed by eye; not yet in every boot.
+- Wi-Fi/Bluetooth (EXP2430/2431/2434/2435): m1n1 trains the link by itself; BARs sized; with a second PCI segment
+  (filtered real ECAM) Windows shows the host bridge and the Apple root port, but the port has Problem 12
+  (resource conflict), so the two 14E4 functions are not enumerated yet. Finding: pcie_shutdown while ANS is
+  initialised resets the SoC (shared controller clocks); a guard is prepared as a separate m1n1 change.
+- NEW DEFECT, storage (EXP2435, control EXP2435-C): a 512 MiB unbuffered write-through write (1 MiB blocks) hangs
+  the guest under AppleAns (ANS-DIRECT), reproduced on the plain bench guest without Wi-Fi; the machine later
+  reset to the proxy; disk healthy afterwards. Cause unknown. Until fixed, no bench probe uses unbuffered
+  write-through I/O on the guest disk. Routed to the SSD session for offline analysis and a staged reproduction.
