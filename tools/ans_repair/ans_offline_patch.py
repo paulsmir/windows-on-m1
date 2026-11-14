@@ -14,10 +14,12 @@ with the receipt, save it (--backup-dir, file must not exist), write, flush, rea
 Any mismatch stops before the write.
 
 Through the proxy the write uses m1n1's own nvme_write(nsid, lba, buffer), called with P_CALL at
-the address taken from the image's ELF (--elf); there is no proxy NVMe write operation.  Before
-any write the tool proves it has the right image and calling convention: the code bytes of
-nvme_read and nvme_write in memory equal the ELF's, and nvme_read called the same way returns
-the same block as the proxy's own NVMe read.
+the address taken from the image's ELF (--elf); there is no proxy NVMe write operation.  The ELF
+is tied to the loaded image in two steps: offline, the image file (--macho, pinned by
+--macho-sha256) must contain the ELF's code of nvme_read, nvme_write, nvme_rw_blocks and
+nvme_exec_command exactly once each; at the proxy, the same code must be found in memory at
+base + symbol address.  Then nvme_read called by address must return the same block as the
+proxy's own NVMe read.  Only after that can nvme_write be called.
 
 Run with `python3 -I`.  Standard library only.
 """
@@ -153,7 +155,7 @@ class ImageBackend:
 
 
 def elf_symbols(path, names):
-    """{name: (value, first 64 code bytes)} from an ELF64 little-endian file."""
+    """{name: (value, the function's code bytes)} from an ELF64 little-endian file."""
     data = Path(path).read_bytes()
     if data[:6] != b"\x7fELF\x02\x01":
         raise PatchError("not an ELF64 little-endian file")
@@ -166,19 +168,34 @@ def elf_symbols(path, names):
             continue
         strtab = secs[s[6]]
         for i in range(s[5] // 24):
-            name_off, info, _, shndx, value, _ = struct.unpack_from("<IBBHQQ", data, s[4] + 24 * i)
+            name_off, info, _, shndx, value, size = struct.unpack_from("<IBBHQQ", data, s[4] + 24 * i)
             end = data.index(b"\0", strtab[4] + name_off)
             name = data[strtab[4] + name_off:end].decode("latin-1")
             if name in names and info & 15 == 2 and 0 < shndx < shnum:
                 sec = secs[shndx]
-                if sec[1] != 1 or not sec[3] <= value < sec[3] + sec[5] - 64:
-                    raise PatchError(f"{name}: not inside a code section")
+                if sec[1] != 1 or not 8 <= size <= 4096 or not sec[3] <= value <= sec[3] + sec[5] - size:
+                    raise PatchError(f"{name}: not a function inside a code section")
                 fo = sec[4] + value - sec[3]
-                out[name] = (value, data[fo:fo + 64])
+                if name in out and out[name][0] != value:
+                    raise PatchError(f"{name}: defined more than once")
+                out[name] = (value, data[fo:fo + size])
     missing = [n for n in names if n not in out]
     if missing:
         raise PatchError(f"ELF has no function symbol {missing}")
     return out
+
+
+CHECKED = ("nvme_read", "nvme_write", "nvme_rw_blocks", "nvme_exec_command")
+
+
+def check_image_file(elf, macho, macho_sha256):
+    """The ELF belongs to the image file whose hash names the bench m1n1: same code bytes."""
+    raw = Path(macho).read_bytes()
+    if sha256(raw) != macho_sha256:
+        raise PatchError("m1n1 image file does not have the expected SHA-256")
+    for name, (_, code) in elf_symbols(elf, CHECKED).items():
+        if raw.count(code) != 1:
+            raise PatchError(f"{name}: the ELF's code is not in the image file exactly once")
 
 
 class ProxyBackend:
@@ -187,7 +204,7 @@ class ProxyBackend:
 
     def __init__(self, proxy, iface, utils, elf):
         self.p, self.iface, self.u = proxy, iface, utils
-        self.sym = elf_symbols(elf, ("nvme_read", "nvme_write"))
+        self.sym = elf_symbols(elf, CHECKED)
         self.bfr = self.scratch = None
         self.up = False
         try:
@@ -211,7 +228,7 @@ class ProxyBackend:
     def preflight(self, lba):
         """Proves the image and the calling convention without writing anything."""
         for name, (value, code) in self.sym.items():
-            if bytes(self.iface.readmem(self.base + value, 64)) != code:
+            if bytes(self.iface.readmem(self.base + value, len(code))) != code:
                 raise PatchError(f"{name}: code in memory differs from the ELF; wrong image")
         direct = self.read_block(lba)
         self.iface.writemem(self.scratch, b"\xa5" * BLOCK)
@@ -330,6 +347,8 @@ def main(argv=None):
     src.add_argument("--proxyclient", type=Path)
     ap.add_argument("--elf", type=Path, help="m1n1.elf of the image at the proxy (required with --proxyclient)")
     ap.add_argument("--elf-sha256", help="expected SHA-256 of the ELF")
+    ap.add_argument("--macho", type=Path, help="the m1n1 image file that was loaded (required with --proxyclient)")
+    ap.add_argument("--macho-sha256", help="its SHA-256 (required with --proxyclient)")
     ap.add_argument("--backup-dir", type=Path, required=True)
     ap.add_argument("--output", type=Path, required=True, help="JSON result (must not exist)")
     ap.add_argument("--expect-sys-sha256", default=SYS_0483)
@@ -357,8 +376,9 @@ def main(argv=None):
         if a.image:
             backend = ImageBackend(a.image)
         else:
-            if not a.elf:
-                raise PatchError("--elf is required with --proxyclient")
+            if not a.elf or not a.macho or not a.macho_sha256:
+                raise PatchError("--elf, --macho and --macho-sha256 are required with --proxyclient")
+            check_image_file(a.elf, a.macho, a.macho_sha256)
             if a.elf_sha256 and sha256(a.elf.read_bytes()) != a.elf_sha256:
                 raise PatchError("ELF does not have the expected SHA-256")
             sys.path.insert(0, str(a.proxyclient.resolve()))

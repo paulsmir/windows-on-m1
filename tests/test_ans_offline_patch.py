@@ -240,7 +240,7 @@ class FakeM1n1:
 @unittest.skipUnless(BENCH_ELF.is_file(), "bench m1n1 ELF not present")
 class ProxyPath(unittest.TestCase):
     def setUp(self):
-        self.sym = P.elf_symbols(BENCH_ELF, ("nvme_read", "nvme_write"))
+        self.sym = P.elf_symbols(BENCH_ELF, P.CHECKED)
         self.blocks = {7: bytes(range(256)) * 16, 8: b"\x11" * BLOCK}
         self.m = FakeM1n1(self.sym, self.blocks)
         self.tmp = Path(tempfile.mkdtemp(prefix="ans-proxy-"))
@@ -253,8 +253,21 @@ class ProxyPath(unittest.TestCase):
 
     def test_symbols_match_the_linker_map(self):
         self.assertEqual((self.sym["nvme_read"][0], self.sym["nvme_write"][0]), (0x585c4, 0x586bc))
+        self.assertEqual((len(self.sym["nvme_write"][1]), len(self.sym["nvme_rw_blocks"][1])), (0xf8, 0x1c0))
         with self.assertRaises(P.PatchError):
             P.elf_symbols(BENCH_ELF, ("no_such_function",))
+
+    def test_elf_is_tied_to_the_bench_image_file(self):
+        macho = BENCH_ELF.with_name("m1n1.macho")
+        good = "a6916e26b5d56103106d59080c1d5a594f25780f897a6751f613804d5734fb86"
+        P.check_image_file(BENCH_ELF, macho, good)
+        with self.assertRaises(P.PatchError):
+            P.check_image_file(BENCH_ELF, macho, "0" * 64)
+        other = self.tmp / "other.macho"
+        raw = bytearray(macho.read_bytes()); i = raw.find(self.sym["nvme_write"][1]); raw[i + 9] ^= 1
+        other.write_bytes(raw)
+        with self.assertRaises(P.PatchError):
+            P.check_image_file(BENCH_ELF, other, P.sha256(bytes(raw)))
 
     def test_dry_run_never_calls_write(self):
         be = self.backend()
@@ -278,7 +291,7 @@ class ProxyPath(unittest.TestCase):
         self.assertIn(("flush",), self.m.calls)
 
     def test_wrong_image_or_convention_stops_before_the_write(self):
-        self.m.mem[self.m.BASE + 0x586bc][5] ^= 1
+        self.m.mem[self.m.BASE + 0x586bc][0xf0] ^= 1  # late in the function
         be = self.backend()
         with self.assertRaises(P.PatchError):
             P.apply(be, self.plan, self.tmp / "b1", True, lambda m: None)
