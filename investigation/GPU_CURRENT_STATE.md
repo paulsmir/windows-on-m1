@@ -6633,3 +6633,16 @@ boot was run. The previous entry stays as written.
   commits, eviction or ClearFlipDevice. Which dxgkrnl state keeps a superseded primary "displayed" is still unknown.
 - Candidate PL-1d (hypothesis, after PL-1c): release superseded primaries at entry to SetDisplayMode, where the
   source is already hidden in all 77 observed calls; would remove PL-1c's memory limitation.
+
+## UPDATE 2026-11-14T02:05:33Z - F1-k start policy: L0 validated (EXP2404/2412), L1 rejected (EXP2405)
+
+- L0 (policy path at a normal start) validated; the CS gate miss of EXP2404 (-2.30 %) did not repeat in EXP2412
+  (+0.12 %), classified as run-to-run variation.
+- L1 rejected: after an orderly restart 51 s after start, the next start found a stale Pending record and latched
+  the GPU off (refuse reason StalePending; later enables refused as Latched; guest alive, fail-closed side works).
+  No write from the shutdown path reached the next boot. Unknown which: DxgkDdiSetPowerState(shutdown) not called,
+  or its registry write not durable. L2 is held.
+- Offline read started (.local/night-20261110/f1k-clean-exit/): order of shutdown notification, registry shutdown
+  and device power pass in the guest kernel; ranking of clean-exit designs (earlier write path, a record Windows
+  itself keeps, non-registry store, policy change). A one-boot marker experiment is the fallback if the ordering
+  stays open.
