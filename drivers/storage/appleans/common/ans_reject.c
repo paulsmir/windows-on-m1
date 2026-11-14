@@ -13,7 +13,7 @@ static void put_le(ans_u8 *p, ans_u64 v, unsigned n)
 void ans_reject_note(struct ans_rejects *r, ans_u32 kind, ans_u32 code)
 {
     ans_u32 i;
-    if (!r || kind < ANS_REJECT_SRB_FUNCTION || kind > ANS_REJECT_CDB) return;
+    if (!r || kind < ANS_REJECT_SRB_FUNCTION || kind > ANS_REJECT_MISALIGNED) return;
     r->total[kind]++;
     for (i = 0; i < ANS_REJECT_SLOTS; i++) {
         struct ans_reject_entry *e = &r->entry[i];

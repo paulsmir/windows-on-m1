@@ -40,7 +40,7 @@ enum APPLE_ANS_STAGE {
     AppleAnsStageAdminReady=20, AppleAnsStageQualificationStop=21
 };
 typedef struct _APPLE_ANS_SRB {
-    UCHAR Cdb[16], CdbLength, Valid, PrpFailure;
+    UCHAR Cdb[16], CdbLength, Valid, PrpFailure, Misaligned, MisalignedLow;
     ULONG Length, DiagValue, DiagCount;
     struct ans_logical_prps Prps;
 } APPLE_ANS_SRB, *PAPPLE_ANS_SRB;

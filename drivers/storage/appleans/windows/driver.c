@@ -247,6 +247,9 @@ BOOLEAN AppleAnsBuildIo(PVOID DeviceExtension, PSCSI_REQUEST_BLOCK Srb)
                 spans[i].address = (ULONGLONG)sg->List[i].PhysicalAddress.QuadPart;
                 spans[i].length = sg->List[i].Length;
             }
+            /* Measurement only (EXP2437-2439): remember a first address that is not 0 modulo 16.
+             * Counted in StartIo; the transfer itself is not changed. */
+            if (spans[0].address & 0xf) { x->Misaligned=TRUE;x->MisalignedLow=(UCHAR)(spans[0].address & 0xf); }
             /* Direct mode accepts the memory manager's repeated dummy page; the broker never did. */
             int prp_error=ans_sg_to_prps_ex(spans,sg->NumberOfElements,x->Length,&x->Prps,
                                             ((PAPPLE_ANS_ADAPTER)DeviceExtension)->Direct);

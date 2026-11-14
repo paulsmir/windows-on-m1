@@ -12,7 +12,7 @@ static uint64_t get_le(const uint8_t *p, size_t n) { uint64_t v = 0; while (n--)
 int main(void)
 {
     struct ans_rejects r = {0};
-    ans_reject_note(NULL, 1, 1); ans_reject_note(&r, 0, 5); ans_reject_note(&r, 4, 5);
+    ans_reject_note(NULL, 1, 1); ans_reject_note(&r, 0, 5); ans_reject_note(&r, 5, 5);
     assert(!r.total[1] && !r.total[2] && !r.total[3] && !r.entry[0].kind);
     ans_reject_note(&r, ANS_REJECT_CDB, 0x1b); ans_reject_note(&r, ANS_REJECT_CDB, 0x1b);
     ans_reject_note(&r, ANS_REJECT_IO_CONTROL, 0x1b); /* same code, other kind: own slot */
@@ -40,6 +40,11 @@ int main(void)
     assert(get_le(p + 8, 8) == 1 && get_le(p + 16, 8) == 1 && get_le(p + 24, 8) == 23 && get_le(p + 32, 8) == 7);
     assert(get_le(p + 40, 4) == 3 && get_le(p + 44, 4) == 0x1b && get_le(p + 48, 8) == 3);
     assert(get_le(p + 40 + 15 * 16 + 4, 4) == 0x100 + 12);
+    {
+        struct ans_rejects m = {0};
+        ans_reject_note(&m, ANS_REJECT_MISALIGNED, 0x2a08); ans_reject_note(&m, ANS_REJECT_MISALIGNED, 0x2a08);
+        assert(m.total[4] == 2 && m.entry[0].kind == 4 && m.entry[0].code == 0x2a08 && m.entry[0].count == 2);
+    }
     puts("ANS reject receipt tests PASS");
     return 0;
 }

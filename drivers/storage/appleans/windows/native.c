@@ -473,6 +473,10 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
         AppleAnsDiag(a,srb,0xA2,x->DiagValue);
         if (x->DiagCount) AppleAnsDiag(a,srb,0xA3,x->DiagCount);
     }
+    if(srb->Function==SRB_FUNCTION_EXECUTE_SCSI && x && x->Misaligned) {
+        ans_reject_note(&a->Rejects,ANS_REJECT_MISALIGNED,((ULONG)x->Cdb[0]<<8)|x->MisalignedLow);
+        x->Misaligned=FALSE; /* count once; execution continues unchanged */
+    }
     struct ans_scsi_plan plan={0};
     enum ans_order_attribute attribute=ANS_ORDER_UNTAGGED;
     if (!a->Ready || faulted(a) || a->ShuttingDown || srb->PathId || srb->TargetId || srb->Lun) {

@@ -5,11 +5,14 @@
 /* Receipt of requests the miniport refuses because it does not implement them: which SRB
  * functions, SRB_IO_CONTROL control codes and CDB opcodes Windows actually sends. Read-only
  * evidence (ANSQ-T7: what an NVMe-typed adapter is asked that a Fibre-typed one is not). */
-enum { ANS_REJECT_SRB_FUNCTION = 1, ANS_REJECT_IO_CONTROL = 2, ANS_REJECT_CDB = 3 };
+/* ANS_REJECT_MISALIGNED is a count, not a refusal: a READ/WRITE whose first data address is not
+ * 0 modulo 16 (code = opcode << 8 | address & 0xf, so at most three codes per opcode). The transfer is executed unchanged. It has no
+ * total field in the query; its entries carry the counts. */
+enum { ANS_REJECT_SRB_FUNCTION = 1, ANS_REJECT_IO_CONTROL = 2, ANS_REJECT_CDB = 3, ANS_REJECT_MISALIGNED = 4 };
 #define ANS_REJECT_SLOTS 16u
 struct ans_reject_entry { ans_u32 kind, code; ans_u64 count; };
 struct ans_rejects {
-    ans_u64 total[4];  /* indexed by kind; [0] unused */
+    ans_u64 total[5];  /* indexed by kind; [0] unused */
     ans_u64 overflow;  /* rejects whose (kind, code) found no free slot */
     struct ans_reject_entry entry[ANS_REJECT_SLOTS]; /* distinct (kind, code), first come */
 };
