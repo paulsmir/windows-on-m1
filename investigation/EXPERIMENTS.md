@@ -79704,3 +79704,11 @@ EXP2423 HARDWARE BEFORE 2026-11-14T08:43:46Z:
 - Hashes: sys 0c28e6fde6ac, UmdArm64 40b4e5eb6258, UmdX64 4646c8e2a797, Umd32 bb94afc26fbe; manifest 966647cc683c, hardware-manifest 22effe689c95; probe2423.sh 2202d8e096d7 (PROBE_LINT_OK); visible recovery rec2423h efd48acc910260a6; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
 - Recovery rec2423h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2423-rst1/run2423.sh.
+
+EXP2423 HARDWARE ACTUAL 2026-11-14T08:52:39Z (RST-1):
+- Launch: the first chain attempt stopped in launch-exp before any guest action (m1n1-image-lacks-expanded-guest-ram: no m1n1-build-info.json beside the new macho); build-info written from the build facts (guest RAM inherited from 4215928f); the rerun launched (commit 5493fe0d7), prepare "M1N1 ...rq2.macho -> ...rq2-rst1.macho".
+- Step A, expected vs actual: ordered restart at uptime 51 s (08:45:31Z); PSCI reset logged; the launcher exited and the proxy answered (base 0x804ee4000), as before RST-1. PASS (no regression of the orderly path). full.log kept as evidence/EXP2423/full-a.log.
+- Step B (AGX_FROM_PROXY=1, EXP2423b), expected vs actual: first contact uptime 52 s; taskkill /F of the DcomLaunch svchost (pid 608) at uptime 62 s (08:47:46Z); m1n1 logged the PSCI reset; full.log ends with "SerialException: read failed: Device not configured" written at 08:47:53Z (USB link dropped 7 s after the kill); the launcher exited; the proxy answered with a new base 0x805c88000 at the first check (08:49:48Z, 122 s after the kill; the probe's 1 s device poll did not catch the short re-enumeration, so the 60 s bound for the proxy answer is not measured more tightly). No operator action. The device was FAILED_POST_START in B because the one-shot G3Armed was consumed in A (policy 0), unrelated.
+- Verdict: RST-1 CONFIRMED: the EXP2420 crash-reset hang does not recur; a crash reset returns to the proxy by itself. BENCH-M1N1.json now accepts m1n1-s2v3-rq2-rst1 (71f64fc1...), previous_known_good = rq2 772d2ee7 (backup BENCH-M1N1.json.pre-rst1).
+- Recovery AT_PROXY rec2423h started.
+- Next: C2 boot 2 (EXP2421) on RST-1 while the operator is reachable (proposed to the architect), then RST-2A, RST-2B+C.
