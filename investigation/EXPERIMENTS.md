@@ -79777,3 +79777,12 @@ EXP2425 HARDWARE BEFORE 2026-11-14T09:41:40Z:
 - Hashes: sys 0c28e6fde6ac, UmdArm64 40b4e5eb6258, UmdX64 4646c8e2a797, Umd32 bb94afc26fbe; manifest eaa0a224719b, hardware-manifest ca53bc2d4160; probe2425.sh a1db06dc9a89 (PROBE_LINT_OK); visible recovery rec2425h 3bffaf367aa9e1e0; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
 - Recovery rec2425h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2425-rst2bc/run2425.sh.
+
+EXP2425 HARDWARE ACTUAL 2026-11-14T09:56:20Z (RST-2B+C):
+- Launch: rec2424h RECOVERY_DONE; m1n1 RST-2A+B+C (a6916e26...); EXP2413 package; CHAIN2425_DONE.
+- Step A (B observable), expected vs actual: first contact uptime 51 s; host reader run_uefi pid 30740 SIGSTOPped right after "shutdown /r /t 0" returned (09:50:03Z; SIGSTOP only); background poller from just before the command: USB_GONE 11.4 s, PROXY_ANSWER 19.6 s (base 0x8040bc000); the reader was resumed at the device disconnect. The reset returned with the host reader stopped - B PASS (no pre-PSCI stall either).
+- Step B (crash, EXP2425b): taskkill /F DcomLaunch (pid 692) at uptime 61 s (09:53:31Z); poller from just before the kill command: USB_GONE 7.4 s, PROXY_ANSWER 17.1 s (base 0x805690000) - measured, within 60 s.
+- C observable: both resets printed "BUGCHECK unknown-kernel base=... id timedatestamp=0xcf576790 sizeofimage=0x124a000 checksum=0xb26993" (the 26200.9974 identity, for a table entry) and no "code=0x0" line - C PASS.
+- Verdict: RST-2B CONFIRMED, RST-2C CONFIRMED (separate observables, ATOMIC CONTRACT none). With RST-1/RST-2A: orderly and crash resets return to the proxy in 17-20 s without an operator, also with the host reader stopped.
+- Recovery AT_PROXY rec2425h started.
+- Next: the proxy slot (WBT000d, proxy reboot, TBX-S1c2, proxy reboot), then the C2-1/C2-3 arm with A5-D1 (policy 1), C1, U1b. Bench m1n1 stays RST-1 until the architect decides on RST-2.
