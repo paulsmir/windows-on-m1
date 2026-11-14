@@ -258,7 +258,13 @@ BOOLEAN AppleAnsBuildIo(PVOID DeviceExtension, PSCSI_REQUEST_BLOCK Srb)
                 if (ans_bounce_size_ok(x->Length)) {
                     PVOID va=NULL;
                     if (StorPortGetSystemAddress(DeviceExtension,Srb,&va)==STOR_STATUS_SUCCESS && va) {
-                        x->NeedBounce=TRUE;x->BounceVa=va;
+                        /* Self-check: the mapping must be THIS request's data, not the start of a
+                         * larger MDL it was split from (the documentation does not say which).
+                         * The first mapped byte and the first SG byte must be the same memory. */
+                        if ((ULONGLONG)MmGetPhysicalAddress(va).QuadPart ==
+                            (ULONGLONG)sg->List[0].PhysicalAddress.QuadPart) {
+                            x->NeedBounce=TRUE;x->BounceVa=va;
+                        } else x->BounceMismatch=TRUE;
                     } else x->BounceDefer=TRUE;
                     x->Valid=TRUE;
                     return TRUE;

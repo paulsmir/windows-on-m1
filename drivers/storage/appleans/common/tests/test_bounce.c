@@ -76,6 +76,35 @@ int main(void)
         ans_u32 bits = 0; for (unsigned i = 0; i < ANS_BOUNCE_COUNT; i++) if (owned[i]) bits |= 1u << i;
         assert(pool.claimed == bits && pool.busy == busy0 && pool.high_water >= held);
     }
+    /* A request whose data cannot be mapped is retried a bounded number of times, then failed:
+     * it must never be BUSY forever (review finding 4). */
+    {
+        struct ans_bounce_pool q = {0}; unsigned defers = 0;
+        for (unsigned i = 0; i < ANS_BOUNCE_DEFER_LIMIT; i++) assert(ans_bounce_map_deferred(&q, &defers) == 1);
+        assert(q.map_deferred == ANS_BOUNCE_DEFER_LIMIT && !q.map_failed);
+        assert(ans_bounce_map_deferred(&q, &defers) == 0 && q.map_failed == 1 && q.map_deferred == ANS_BOUNCE_DEFER_LIMIT);
+        assert(!ans_bounce_map_deferred(NULL, &defers) && !ans_bounce_map_deferred(&q, NULL));
+        ans_bounce_copy_timed(&q, 5); ans_bounce_copy_timed(&q, 9); ans_bounce_copy_timed(&q, 2);
+        assert(q.copies == 3 && q.copy_ticks == 16 && q.copy_ticks_max == 9);
+        /* Receipt layout. */
+        uint8_t raw[ANS_BOUNCE_IOCTL_TOTAL + 2], *b = raw + 1; memset(raw, 0xee, sizeof raw); memset(b, 0, ANS_BOUNCE_IOCTL_TOTAL);
+        q.claimed = 0x8001; q.high_water = 7; q.bounced_reads = 11; q.bounced_writes = 12; q.busy = 13; q.map_mismatch = 14;
+        q.ticks_per_second = 24000000;
+        b[0] = 28; memcpy(b + 4, "APANS001", 8); b[12] = 10; b[16] = 0x0c; b[17] = 0x60; b[18] = 0x1b;
+        b[24] = (uint8_t)ANS_BOUNCE_IOCTL_PAYLOAD; b[28] = 1; b[32] = (uint8_t)ANS_BOUNCE_IOCTL_PAYLOAD;
+        assert(ANS_BOUNCE_IOCTL_TOTAL == 140 && ans_bounce_ioctl_validate(b, 140) && !ans_bounce_ioctl_validate(b, 139));
+        b[16] = 8; assert(!ans_bounce_ioctl_reply(b, 140, &q)); b[16] = 0x0c;
+        assert(ans_bounce_ioctl_reply(b, 140, &q) && raw[0] == 0xee && raw[sizeof raw - 1] == 0xee);
+        uint64_t v; uint32_t w; const uint8_t *p = b + 28;
+        memcpy(&w, p + 8, 4); assert(w == 16); memcpy(&w, p + 12, 4); assert(w == 131072);
+        memcpy(&w, p + 16, 4); assert(w == 4096); memcpy(&w, p + 20, 4); assert(w == 0x8001);
+        memcpy(&w, p + 24, 4); assert(w == 7);
+        memcpy(&v, p + 32, 8); assert(v == 11); memcpy(&v, p + 40, 8); assert(v == 12);
+        memcpy(&v, p + 48, 8); assert(v == 13); memcpy(&v, p + 56, 8); assert(v == ANS_BOUNCE_DEFER_LIMIT);
+        memcpy(&v, p + 64, 8); assert(v == 1); memcpy(&v, p + 72, 8); assert(v == 14);
+        memcpy(&v, p + 80, 8); assert(v == 3); memcpy(&v, p + 88, 8); assert(v == 16);
+        memcpy(&v, p + 96, 8); assert(v == 9); memcpy(&v, p + 104, 8); assert(v == 24000000);
+    }
     puts("ANS bounce pool and PRP tests PASS");
     return 0;
 }

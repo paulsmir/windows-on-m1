@@ -140,6 +140,13 @@ static BOOLEAN telemetry_query(PAPPLE_ANS_ADAPTER a,PSCSI_REQUEST_BLOCK srb)
         }
         AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,ANS_TRIM_IOCTL_TOTAL);return TRUE;
     }
+    /* Bounce receipt: a fourth read-only query. */
+    if(ans_bounce_ioctl_validate(srb->DataBuffer,srb->DataTransferLength)) {
+        if(!ans_bounce_ioctl_reply(srb->DataBuffer,srb->DataTransferLength,&a->Bounce)) {
+            AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
+        }
+        AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,ANS_BOUNCE_IOCTL_TOTAL);return TRUE;
+    }
     /* Reject receipt: a third read-only query. */
     if(ans_reject_ioctl_validate(srb->DataBuffer,srb->DataTransferLength)) {
         if(!ans_reject_ioctl_reply(srb->DataBuffer,srb->DataTransferLength,&a->Rejects)) {
@@ -374,11 +381,17 @@ VOID AppleAnsComplete(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, UCHAR statu
     /* The one place an SRB leaves the driver: a bounced READ that succeeded is copied to the
      * caller's buffer, and the bounce buffer is returned whatever the status. */
     PAPPLE_ANS_SRB bx = srb->SrbExtension;
-    if (bx && bx->BounceIndex) {
+    if (!a->DumpMode && bx && bx->BounceIndex && bx->BounceIndex <= ANS_BOUNCE_COUNT) {
         unsigned index = (unsigned)bx->BounceIndex - 1;
         if (status == SRB_STATUS_SUCCESS && (srb->SrbFlags & SRB_FLAGS_DATA_IN) && bx->BounceVa &&
-            length && length <= bx->Length && length <= ANS_BOUNCE_BYTES)
+            length && length <= bx->Length && length <= ANS_BOUNCE_BYTES) {
+            LARGE_INTEGER t0={0},t1={0},frequency={0};
+            (void)StorPortQueryPerformanceCounter(a,&frequency,&t0);
             RtlCopyMemory(bx->BounceVa, a->BounceBuffer[index], length);
+            (void)StorPortQueryPerformanceCounter(a,NULL,&t1);
+            a->Bounce.ticks_per_second=(ans_u64)frequency.QuadPart;
+            ans_bounce_copy_timed(&a->Bounce,(ans_u64)(t1.QuadPart-t0.QuadPart));
+        }
         (void)ans_bounce_release(&a->Bounce, (int)index);
         bx->BounceIndex = 0;
     }
@@ -553,18 +566,41 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
     }
     /* Bounce: claim a buffer for a READ/WRITE whose data BuildIo found misaligned. A write is
      * copied now, before the command exists; the PRP set comes from the buffer's own pages.
-     * No buffer free, or the data could not be mapped: BUSY (Storport retries), never an error. */
-    if (x && (x->NeedBounce || x->BounceDefer) && plan.action==ANS_SCSI_SUBMIT &&
+     * Never sent directly. Outcomes other than "bounced":
+     *   mapping is not this request's data  -> error (counted; data would be wrong otherwise)
+     *   data could not be mapped            -> BUSY, at most ANS_BOUNCE_DEFER_LIMIT times, then error
+     *   every buffer in use                 -> the LU is paused until one request completes
+     *                                          (StorPortDeviceBusy), this request BUSY; Storport
+     *                                          resubmits it. */
+    if (x && (x->NeedBounce || x->BounceDefer || x->BounceMismatch) && plan.action==ANS_SCSI_SUBMIT &&
         (plan.nvme_opcode==1 || plan.nvme_opcode==2)) {
-        int index = (x->NeedBounce && ans_bounce_size_ok(plan.transfer_bytes) &&
-                     plan.transfer_bytes==x->Length)
-            ? ans_bounce_acquire(&a->Bounce,plan.nvme_opcode==1) : -1;
+        if (x->BounceMismatch) {
+            a->Bounce.map_mismatch++;
+            AppleAnsComplete(a,srb,SRB_STATUS_ERROR,0);return TRUE;
+        }
+        if (x->BounceDefer) {
+            unsigned defers=x->BounceDefers;
+            int retry=ans_bounce_map_deferred(&a->Bounce,&defers);
+            x->BounceDefers=(UCHAR)defers;
+            AppleAnsComplete(a,srb,retry?SRB_STATUS_BUSY:SRB_STATUS_ERROR,0);return TRUE;
+        }
+        if (!ans_bounce_size_ok(plan.transfer_bytes) || plan.transfer_bytes!=x->Length) {
+            AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
+        }
+        int index=ans_bounce_acquire(&a->Bounce,plan.nvme_opcode==1);
         if (index < 0) {
-            if (!x->NeedBounce) a->Bounce.busy++; /* mapping failed: counted with the busy pool */
+            (void)StorPortDeviceBusy(a,0,0,0,1);
             AppleAnsComplete(a,srb,SRB_STATUS_BUSY,0);return TRUE;
         }
         x->BounceIndex=(UCHAR)(index+1);
-        if (plan.nvme_opcode==1) RtlCopyMemory(a->BounceBuffer[index],x->BounceVa,plan.transfer_bytes);
+        if (plan.nvme_opcode==1) {
+            LARGE_INTEGER t0={0},t1={0},frequency={0};
+            (void)StorPortQueryPerformanceCounter(a,&frequency,&t0);
+            RtlCopyMemory(a->BounceBuffer[index],x->BounceVa,plan.transfer_bytes);
+            (void)StorPortQueryPerformanceCounter(a,NULL,&t1);
+            a->Bounce.ticks_per_second=(ans_u64)frequency.QuadPart;
+            ans_bounce_copy_timed(&a->Bounce,(ans_u64)(t1.QuadPart-t0.QuadPart));
+        }
     }
     struct ans_order_token token;
     int admitted=ans_order_admit(&a->Order,tag,attribute,&token);

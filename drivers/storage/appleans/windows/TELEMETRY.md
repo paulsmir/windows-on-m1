@@ -146,3 +146,18 @@ it serves (kind 1, code = SRB function), SRB_IO_CONTROL requests that are none o
 ILLEGAL REQUEST / INVALID COMMAND OPERATION CODE (kind 3, code = opcode). Payload offsets
 (little-endian): 0 version = 1, 4 payload size = 296, 8/16/24 totals for kinds 1/2/3, 32 rejects
 that found no free slot, 40 sixteen entries of {kind 4, code 4, count 8} in first-seen order.
+
+## Bounce receipt (control code 0x001b600c)
+
+Same header and signature, total size exactly 140 bytes (28 + 112). Read-only. Payload offsets
+(little-endian): 0 version = 1, 4 payload size = 112, 8 number of bounce buffers, 12 bytes per
+buffer, 16 required first-address alignment, 20 bitmap of buffers in use now, 24 most in use at
+once, 28 reserved; then 64-bit counters: 32 bounced reads, 40 bounced writes, 48 requests returned
+BUSY because every buffer was in use, 56 requests returned BUSY because their data could not be
+mapped, 64 requests failed after 8 such deferrals, 72 requests failed because the mapped address
+was not the request's first scatter/gather page, 80 copies timed, 88 total copy time and 96 longest
+copy in performance-counter ticks, 104 ticks per second.
+
+The direct record's reads/writes/resets/flushes fields are NOT used for bounce counters (build
+0.4.8.4 did; that build was never installed). Reject-receipt kind 4 counts page-misaligned
+READ/WRITE requests seen in StartIo, including resubmissions after BUSY.

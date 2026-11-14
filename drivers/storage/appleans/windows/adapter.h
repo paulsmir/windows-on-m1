@@ -32,6 +32,9 @@
  * plus alignment slack (StorPortGetUncachedExtension guarantees only page alignment). */
 #define APPLE_ANS_DIRECT_BYTES (6u * ANSD_QUEUE_ALIGN + APPLE_ANS_METADATA_PAGES * ANS_PRP_PAGE_SIZE + \
     ANS_BOUNCE_COUNT * ANS_BOUNCE_BYTES + ANSD_QUEUE_ALIGN) /* ... then the bounce buffers */
+/* The reject receipt's ANS_REJECT_MISALIGNED entries now count READ/WRITE requests whose first
+ * data address is not page-aligned, as seen in StartIo: a request that is resubmitted after BUSY
+ * is counted again; the code's low nibble is still the address's low four bits. */
 enum APPLE_ANS_STAGE {
     AppleAnsStageEntry=1, AppleAnsStageFindAdapter=2, AppleAnsStageResourcesRejected=3,
     AppleAnsStageResourcesAccepted=4, AppleAnsStageTransportUnavailable=5,
@@ -44,9 +47,10 @@ enum APPLE_ANS_STAGE {
 typedef struct _APPLE_ANS_SRB {
     UCHAR Cdb[16], CdbLength, Valid, PrpFailure, Misaligned, MisalignedLow;
     /* Bounce (common/ans_bounce.h): BuildIo sets NeedBounce and the mapped address of the SRB's
-     * data, or BounceDefer when the buffer could not be mapped; StartIo claims a buffer
+     * data, BounceDefer when the buffer could not be mapped, or BounceMismatch when the mapped
+     * address is not the request's first SG page; StartIo claims a buffer
      * (BounceIndex = index + 1) and AppleAnsComplete copies a read back and releases it. */
-    UCHAR NeedBounce, BounceDefer, BounceIndex;
+    UCHAR NeedBounce, BounceDefer, BounceMismatch, BounceIndex, BounceDefers;
     PVOID BounceVa;
     ULONG Length, DiagValue, DiagCount;
     struct ans_logical_prps Prps;
