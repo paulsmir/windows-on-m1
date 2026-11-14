@@ -6646,3 +6646,16 @@ boot was run. The previous entry stays as written.
   and device power pass in the guest kernel; ranking of clean-exit designs (earlier write path, a record Windows
   itself keeps, non-registry store, policy change). A one-boot marker experiment is the fallback if the ordering
   stays open.
+
+## UPDATE 2026-11-14T02:19:50Z - F1-k L1 cause: the shutdown-time registry write is too late by design of the kernel
+
+- Offline read of the guest kernel (.local/night-20261110/f1k-clean-exit/REPORT.md): at an orderly shutdown the
+  registry is closed (CmShutdownSystem phase 2) before the device S5 power pass from which dxgkrnl calls
+  DxgkDdiSetPowerState(shutdown); registry calls there return STATUS_TOO_LATE, and the driver discarded that status.
+  This explains EXP2405. A miniport gets no shutdown notification before the registry closes.
+- Second defect from the same cause, not yet seen on hardware: the Running record is never cleared, so the third
+  ordinary restart would latch the GPU off.
+- Fix spec F1K-STAMP (handoff file): no shutdown-time write; at the next start "previous run ended orderly" is
+  derived from Windows' own ShutdownTime value (kernel-written and flushed before the registry closes), compared
+  with a snapshot stored at the previous allowed start. Fail closed when unreadable. NOT yet built or run; the value
+  is undocumented and verified only in kernel 26100.9711.
