@@ -79757,3 +79757,10 @@ EXP2424 HARDWARE BEFORE 2026-11-14T09:28:01Z:
 - Hashes: sys 0c28e6fde6ac, UmdArm64 40b4e5eb6258, UmdX64 4646c8e2a797, Umd32 bb94afc26fbe; manifest bc525d36ac61, hardware-manifest 22d8f6e4afef; probe2424.sh 6fee1df816f5 (PROBE_LINT_OK); visible recovery rec2424h e23da2dc17a35616; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
 - Recovery rec2424h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2424-rst2a/run2424.sh.
+
+EXP2424 HARDWARE ACTUAL 2026-11-14T09:35:40Z (RST-2A):
+- Launch: rec2421h RECOVERY_DONE; m1n1 RST-2A (6d451dd7...); EXP2413 package; CHAIN2424_DONE.
+- Step A: ordered restart at uptime 73 s (09:29:45Z); PSCI reset logged; no "ASC RX control" line in full.log (0 matches); launcher exited; proxy answered (base 0x804df4000). PASS.
+- Step B (EXP2424b): taskkill /F DcomLaunch (pid 984) at uptime 61 s (09:31:51Z); full.log last written 09:31:58Z with "Device not configured" (USB link drop 7 s after the kill, as EXP2423); no "ASC RX control" line; proxy answering with a new base 0x8056a8000. The probe's in-line return measurement failed: the kill command's SSH session to the crashing guest blocked until its 60 s alarm, so the poll loop started after the device had already re-enumerated (RST2B_USB_DISCONNECT_S none PROXY_ANSWER_S none). Probe defect, not a reset defect; EXP2425 uses a background poller started just before the reset command (reset-poller.sh, 0.2 s device poll, proxy ping after re-enumeration).
+- Verdict: RST-2A CONFIRMED: the raw AGX ASC load is gone from the reset/off path and both an orderly and a crash reset return to the proxy without an operator. The exact proxy-answer time is still unmeasured (bounded: answering at the run's end).
+- Recovery AT_PROXY rec2424h started. Next: RST-2B+C (EXP2425).
