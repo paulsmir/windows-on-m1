@@ -79436,3 +79436,10 @@ EXP2412 HARDWARE BEFORE 2026-11-14T01:16:28Z:
 - Hashes: sys a25f4473ded3, UmdArm64 8279e3d263b6, UmdX64 2af54db525b9, Umd32 2c588369b76e; manifest 863842579542, hardware-manifest c2048037104a; probe2412.sh 3e0fcdc813ad (PROBE_LINT_OK); visible recovery rec2412h 01bac33398451eea; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
 - Recovery rec2412h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2412-f1k0r/run2412.sh.
+
+EXP2412 HARDWARE ACTUAL 2026-11-14T01:50:08Z:
+- Boot and run: recovery rec2404h (RECOVERY_DONE), then the copied EXP2404 package (exp/f1k-pkg 2e19eaaf5, policy absent), m1n1 s2v3-rq2, same switches; stage PASS, CM_PROB_NONE, CHAIN2412_DONE.
+- Expected vs actual: CS r2 >= 50.95 expected; actual warm 51.822, r2 52.054, gate PASS +0.12 % (baseline 51.991); windowed CS 54.491. GM PERF PASS +0.26 % (worst 47.130 vs 47.007). Suite 119/0, STOPS 0, WER_REPORTS 2 (the usual count). Wom1StartPolicyAttempt 0x10001, Wom1StartPolicyIoStatus 0x0, as expected.
+- Verdict: CONFIRMED. EXP2404's CS miss (-2.30 %) was run-to-run variation (same package, same switches, CS back to the EXP2394/2395/2401 band). F1-k L0 (policy absent = unchanged arm path, attempt receipt only) is accepted.
+- Recovery: rec2412h visible recovery started after the run.
+- Next: F1-k L1 (EXP2405: Wom1StartPolicy=1, no arm, ordered restart inside the 120 s window, next start clean).
