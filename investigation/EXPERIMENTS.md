@@ -79373,3 +79373,21 @@ LEDGER NOTE 2026-11-13T23:55:52Z (redaction, operator decision 2026-11-13: "Ос
 - In this file and every other tracked text file, the bench host's serial (the part of the proxy device name /dev/cu.usbmodem<SERIAL>NN) was replaced by <SERIAL>, and the absolute home path of the bench Mac by $HOME. Windows paths of the guest account (C:/Users/<name>) were left, they are working paths in guest-side scripts.
 - Redaction only: no result text changed. Every redacted file restores byte-for-byte to the previous text when the two values are substituted back (checked for all 164 files of the branch and for this file at the merge). No number, hash, timestamp or verdict was touched.
 - Tool scripts/redact_bench_identifiers.py (values from the untracked bench config); the pipeline's ledger writer (launch-exp) filters its BEFORE text the same way; test_repository_hygiene checks the whole tree.
+
+EXP2403 HARDWARE BEFORE 2026-11-14T00:08:05Z:
+- Kind: one variable against the EXP2402 control: package arch/pl1b 659da86d5 = gpu/memory-latency fbe3dc1f7 + 9f28cb42f (UMD primary retention: superseded list, bound 4; oldest released past the bound; all released at device destroy; retain-at-destroy keyed on the current slot only; receipt rows with device ids and runtime device handle) + 659da86d5 (CHANGES row). Driver diff: UMD only (umd_primary_retention.h, umd.c, umd_internal.h, umd_runtime_device.c, tests). m1n1 s2v3-rq2, switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes, Mu MUANSCPPC002: as EXP2402.
+- WHY THIS HYPOTHESIS (architect, .local/night-20261110/modechange-cause/REPORT.md on the EXP2402 traces): after DWM's SetDisplayMode(new) returns, the UMD's PL-1 release branch deallocates the previous retained primary; dxgkrnl still counts it as the displayed primary and runs plane-off + DisableAllPlanes + hide; DWM's next present needs another SetDisplayMode; repeat. 119/119 hides sit in that window; the UMD log has 152 set-display-mode and 151 release rows. Amendment: the static dxgkrnl read does not confirm why that release runs the disable path; PL-1b removes the release there either way.
+- ATOMIC CONTRACT: none.
+- Receipt meaning: primary-retention path 1 retained at destroy, 2 released by bound, 3 superseded (no deallocation), 4 released at device destroy (old logs used 3 for device destroy); set-display-mode row with 9 values.
+- Arms (spec PL-1b), DxgKrnl + Dwm-Core ETW from before the first mode change, KMD display receipt every 10 s, OPERATOR_LOOK:
+  a. GravityMark full screen 1920x1080 (150 s): picture on the panel, the run completes; <= 2 DWM SetDisplayMode after the commit, no path-2 rows, V2Presents rising.
+  b. exit: mode back to native, SourceVisible 1 without a DWM restart (the a-exit receipt).
+  c. GravityMark full screen 1680x1050 (150 s), same expectations.
+  d. five further mode changes (GravityMark 40 s runs alternating 1920x1080 / 1680x1050): past bound 4 -> first path-2 release of the oldest; no hide loop after it. Mandatory.
+- Reject: VisibilityCalls +40 within 10 s in any arm -> stop GravityMark, receipts, restart dwm.exe (recovery tail), skip the rest. If d alone fails: report; the release point becomes device destroy only (no guess).
+- Not covered: memory held by superseded primaries (up to 4 x mode size; 16 MiB each at native) until device destroy.
+- Sanity first: suite + one GM PERF window at native.
+- Recovery: rec2403h visible recovery; restart dwm.exe restores the picture in the broken state.
+- Hashes: sys b95b9184113d, UmdArm64 256538223235, UmdX64 0b714738daf4, Umd32 5c1eaced4554; manifest 30196895ad17, hardware-manifest 5a4c0e4dbe08; probe2403.sh fe9887fd9ea2 (PROBE_LINT_OK); visible recovery rec2403h 4a7968c0e9319cfb; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
+- Recovery rec2403h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2403-pl1b/run2403.sh.
