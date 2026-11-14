@@ -79691,3 +79691,16 @@ EXP2420 HARDWARE ACTUAL part 2 2026-11-14T08:37:28Z (L2b and verdict):
 - Verdict: F1-k L2 on F1K-STAMP CONFIRMED: a forced stop inside T latches the next start with reason 8 and the stamp-equal bit (stamp written before Pending held; no ordering defect seen).
 - Separate finding (owned by RST-1): the crash-reset path hung the SoC (no reset, USB link up) until the power cycle.
 - Recovery rec2420h started; the latch check on the recovery guest follows.
+
+EXP2423 HARDWARE BEFORE 2026-11-14T08:43:46Z:
+- Kind: one variable against the accepted bench: m1n1 gpu/rst1-wdt-arm 995e1957a5522fd53e2dfb11592ffec0b42ded9c (= bench 4215928f + RST-1: wdt_arm(WDT_ARM_3S) first in the 0x84000009/0x84000008 branch of hv_handle_smc; hv_exc.c, wdt.c, wdt.h), built with the bench procedure: .local/experiments/m1n1-s2v3-rq2-rst1/m1n1-g2-abi6-iomfb-owner-s2v3-rq2-rst1.macho sha256 71f64fc16449a651817e4dd6e0a8b3fc7f71dfbc06b78ca2279718e40f3fa775 (same procedure reproduces the bench 772d2ee7 from 4215928f; stripped objects differ from the base only in hv_exc.o and wdt.o). Package: the EXP2413 build (arch/pl1b 503cbc135, PL-1c validated), switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes; Mu MUANSCPPC002.
+- WHY THIS HYPOTHESIS: (1) EXP2420: after the crash's PSCI SYSTEM_RESET the SoC never reset (USB link stayed up, run_uefi hung) until a power cycle 4.6 h later; (2) architect's read (crash-reset-hang REPORT): the reset handler prints, does an unguarded read32 of the guest-owned AGX ASC block, flushes USB without a deadline and arms the watchdog only at the end; 20 of 57 earlier resets aborted on that load; (3) the watchdog armed first bounds every stall below it to 3 s.
+- ATOMIC CONTRACT: none.
+- Steps: A (chain, probe2423.sh): first contact, then shutdown /r /t 0 -> must return to "Running proxy" as before (an orderly reset must not change). B (by hand from the proxy, AGX_FROM_PROXY=1, EXP2423b, probe2423b.sh): first contact, wait for uptime 60 s, taskkill /F of the DcomLaunch svchost (the EXP2420 trigger) -> PASS = the proxy USB device disconnects and the proxy answers within 60 s without an operator.
+- Failure: B leaves the machine hung (USB up, no proxy) beyond 60 s -> RST-1 rejected; operator power cycle. A regressing (no return) -> stop.
+- Recovery: AT_PROXY rec2423h after B (visible if the guest is up).
+- Hashes: probe2423.sh 2202d8e096d7 probe2423b.sh 58e87338e9fd kill-dcomlaunch2.ps1 8f554f14fafb.
+- No GM/CS gates.
+- Hashes: sys 0c28e6fde6ac, UmdArm64 40b4e5eb6258, UmdX64 4646c8e2a797, Umd32 bb94afc26fbe; manifest 966647cc683c, hardware-manifest 22effe689c95; probe2423.sh 2202d8e096d7 (PROBE_LINT_OK); visible recovery rec2423h efd48acc910260a6; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
+- Recovery rec2423h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2423-rst1/run2423.sh.
