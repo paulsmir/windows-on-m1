@@ -79849,3 +79849,9 @@ EXP2430 HARDWARE BEFORE 2026-11-14T10:30:11Z (Wi-Fi/Bluetooth box, G1, proxy onl
 - Tool: wbt000_apcie_probe.py sha256 e6ae41a865552cd5a15e5a09f0fdaaf345be7ff980ab5273c581c6dd2e777c3c from an export of commit 26ea9e3a (.local/experiments/EXP2430-wbtg1/wbt-26ea9e3a), --confirm-experiment WBT-G1, stdout tee'd (m1n1 TTY lines).
 - Sequence: proxy (rec2425h guest rebooted), chainload the WIFI_PCIE_LINK image (LLDDIR wrapper), the probe (its pcie_init runs the new hooks), full proxy reboot to the bench image, AT_PROXY recovery.
 - Expected: TTY "pcie-wlan: rail on (SMC key 0x67503064 = 0x800001)" ... "pcie-wlan: port 0 link up"; probe BOTH_FUNCTIONS (14e4:4425, 14e4:5f69). Failure: "rail not touched", refclk/link timeout, or a reset (TTY names the step).
+
+EXP2430 HARDWARE ACTUAL 2026-11-14T10:32:05Z (Wi-Fi G1):
+- Entry: rec2425h guest rebooted to the proxy (bench RST-2ABC, base 0x804f80000); chainload of the WIFI_PCIE_LINK image (590fa63b...) rc 0.
+- Probe (WBT-G1, e6ae41a8..., stdout .local/experiments/EXP2430-wbtg1/g1-probe.stdout.log): TTY "pcie: Initializing t8103 PCIe controller", "pcie-wlan: rail on (SMC key 0x67503064 = 0x800001)", "pcie: Initializing port 0", "Port 0 max speed = 2", "pcie-wlan: port 0 link up (LINKSTS 0xdb000001)", "Initialized controller 0"; probe verdict BOTH_FUNCTIONS (receipt 9f12f4bd...): wlan 14e4:4425 class 0x028000 INTA, bt 14e4:5f69 class 0x028000 INTB. No reset.
+- Verdict: G1 CONFIRMED - the m1n1 build flag reproduces EXP2426's host-side link bring-up inside pcie_init (rail, port refclk, PERST# release, LTSSM).
+- Exit: p.reboot() to the bench image (base 0x804ef0000); bench held at the proxy for G1b.
