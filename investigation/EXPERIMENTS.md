@@ -79676,3 +79676,10 @@ EXP2420 HARDWARE BEFORE 2026-11-14T03:52:54Z:
 - Hashes: sys c0edbbbdbbc1, UmdArm64 4294030e8b0d, UmdX64 895240ef7dd2, Umd32 35b40782a6f6; manifest 8f22e4bb3b8a, hardware-manifest c0c8e5391b7c; probe2420.sh 651b7c37927f (PROBE_LINT_OK); visible recovery rec2420h dcfa1cadebd17efc; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
 - Recovery rec2420h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2420-f1kl2r/run2420.sh.
+
+EXP2420 HARDWARE ACTUAL part 1 2026-11-14T04:01:22Z (F1-k L2 rerun, L2a):
+- Launch: rec2406h RECOVERY_DONE; prepare "NO_ARM stage removes G3Armed"; CHAIN2420_DONE.
+- L2a: first contact uptime 52 s, device OK; Attempt 0x1020004, stamp-rx 0x800000000, stamp 0x01dd73ebad887642 = ShutdownTime 427688ADEB73DD01, Pending 1, Running 1 (as EXP2416 L1a).
+- Forced stop delivered: taskkill /F of the DcomLaunch svchost (pid 900) at uptime 60 s (03:54:48Z); the guest was down 20 s later. m1n1: one PSCI reset (x0 0x84000009 = SYSTEM_RESET, ELR in the kernel) and "BUGCHECK ok code=0x0" (the m1n1 bugcheck RVA is pinned to ntoskrnl 26100.9711; the guest runs 26200.9974, so code 0 is not a measurement here).
+- After the reset the machine did not return: full.log stopped at 03:54Z, the run_uefi launcher did not exit (SIGTERM ignored, SIGKILL of the exact PID at ~04:01Z), the proxy endpoint enumerated but did not answer (UartTimeout), Windows SSH timed out. Both control planes are down -> operator power cycle requested.
+- Pending: L2b (next start: latch expected) after the power cycle, from the proxy; then recovery. Note: the hang after a crash-reset is itself a finding (the EXP2416 ordered resets returned to the proxy every time).
