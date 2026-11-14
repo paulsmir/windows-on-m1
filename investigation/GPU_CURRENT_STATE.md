@@ -6609,3 +6609,16 @@ boot was run. The previous entry stays as written.
   old allocation still the newest config of another plane/source, SetTimingsFromVidPn mode active.
 - PL-1b is unchanged as the fix candidate (no release -> no destroy path) with added receipt fields (kernel device
   handles on both rows); its bound-release arm decides between "bound 4" and "release only at device destroy".
+
+## UPDATE 2026-11-14T00:23:39Z - EXP2403 (PL-1b): partial; any live release of a retained primary restarts the hide loop
+
+- Superseding instead of releasing removed the loop on the first mode changes (GravityMark full screen 1920x1080
+  ran 150 s, exit returned to native with the source visible and no DWM restart). The first bound release (a
+  primary four mode sets old) restarted the loop at once; UMD log: 75 supersede rows, 70 bound releases, 78 retains.
+  Verdict: the release timing is confirmed as the trigger; the age of the released primary does not matter.
+- Next rule PL-1c (handoff file): no bound, release only at device destroy. Known limitation: one old-mode primary
+  stays allocated per mode set until DWM's device dies.
+- New separate observation: after the 1680x1050 arm the source was left hidden at exit although no release had
+  happened. Cause unknown.
+- Still unknown: why dxgkrnl runs the disable path for an old retained primary (static read says it should not).
+  EXP2403 has a DxgKrnl ETL covering the bound releases; analysis started.
