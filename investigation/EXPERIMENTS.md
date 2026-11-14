@@ -79404,3 +79404,16 @@ EXP2403 HARDWARE ACTUAL 2026-11-14T00:22:21Z:
 EXP2403 CORRECTION 2026-11-14T00:33:59Z (to the EXP2403 ACTUAL; architect trace read .local/night-20261110/modechange-cause/exp2403/REPORT.md, confirmed with my receipt decoder):
 - The arm-c exit with the source hidden is NOT a separate open item. Receipts c-12 (00:18:25Z) -> c-13 (00:18:38Z): CommitCalls 4 -> 5 (1680x1050 -> 2560x1600, the native restore), VisibilityCalls 23 -> 55, SourceVisible 1 -> 0. The native restore contains two DWM SetDisplayMode calls; the second passed the bound and its path-2 release (UMD qpc 573.64 s, the first bound release) hid the source. Arm a's exit has the same two-call shape without a release (list below the bound), hence SourceVisible 1 there.
 - So every hide in EXP2403 follows a live release (69/69 per the trace read); the kernel-device candidate is excluded (create, destroy and ClearFlipDevice name one device). The EXP2403 verdict stands (PL-1b partial); PL-1c (no live release before device destroy) is the next run.
+
+EXP2404 HARDWARE BEFORE 2026-11-14T00:37:30Z:
+- Kind: one variable against the accepted line (gpu/memory-latency, EXP2402 control setup): package exp/f1k-pkg 2e19eaaf5 = gpu/memory-latency 133962a6c+ + arch/f1-start-policy (97a8afd34 start policy: crash latch + unclean-boot counter; 06e079c8b shutdown power action is a clean exit, faulted-at-T latch reason; CHANGES rows). Driver diff: lifecycle.c (policy layer), driver.c, shared apple_agx_start_policy.c/.h, tests. m1n1 s2v3-rq2 (BENCH-M1N1.json), switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes, Mu MUANSCPPC002.
+- WHY: design investigation/analysis/COMPLETENESS-F1-standalone-gpu-boot.md 4.C; the standalone boot needs a start policy that survives a crash at start without a host to clear the one-shot arm. L0 proves the policy-absent path is today's path.
+- Review (mine): with Wom1StartPolicy absent, AdmissionStartPolicyAttempt returns the Arm decision and the start consumes the one-shot arm (AdmissionConsumeGpuvaArm G3Armed) exactly as before; the only addition is the receipt Wom1StartPolicyAttempt (expected 0x00010001); no timer, DPC or work item is created; no other policy value is written.
+- ATOMIC CONTRACT: none.
+- Expected: Wom1StartPolicyAttempt 0x00010001; no Wom1StartPending/Running/Latched/UncleanCount/LatchCount values; arm receipts unchanged (G3Armed consumed); suite 119/0; SHORT gates PASS (GM PERF, CS); STOPS 0.
+- Failure criteria: any policy value besides the attempt receipt; start failure; gate miss.
+- No mode change in this boot (all full-screen arms at native).
+- Recovery: rec2404h visible recovery.
+- Hashes: sys a25f4473ded3, UmdArm64 8279e3d263b6, UmdX64 2af54db525b9, Umd32 2c588369b76e; manifest 8b69ca811da2, hardware-manifest b4a46dd029b7; probe2404.sh 7bea903bdf79 (PROBE_LINT_OK); visible recovery rec2404h ae1257294e2f065e; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
+- Recovery rec2404h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2404-f1k0/run2404.sh.
