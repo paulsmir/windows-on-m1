@@ -29,6 +29,81 @@ static unsigned int MpoRectIsPanel(const ADMISSION_MPO_RECT *Rect,
          (long long)Rect->Bottom == (long long)Height ? 1u : 0u;
 }
 
+/* Version 8 (C2): the committed source mode is the scanout panel, so plane
+ * rectangles (mode pixels) are panel pixels. */
+static unsigned int MpoModeNative(const ADMISSION_MPO_INPUT *Input) {
+  return Input->PanelWidth == ADMISSION_MPO_SCANOUT_WIDTH &&
+                 Input->PanelHeight == ADMISSION_MPO_SCANOUT_HEIGHT
+             ? 1u
+             : 0u;
+}
+
+/* Version 9: see mpo_contract.h AdmissionMpoMapRect. */
+static unsigned int MpoMapValid(const ADMISSION_MPO_MODE_MAP *Map) {
+  return Map != MPO_NULL && Map->ModeWidth != 0u && Map->ModeHeight != 0u &&
+                 Map->Destination.Right > Map->Destination.Left &&
+                 Map->Destination.Bottom > Map->Destination.Top &&
+                 MpoRectInside(&Map->Destination, ADMISSION_MPO_SCANOUT_WIDTH,
+                               ADMISSION_MPO_SCANOUT_HEIGHT)
+             ? 1u
+             : 0u;
+}
+
+/* Low + floor(Value * Extent / Mode); Value in [0, Mode], so the result is
+ * in [Low, Low + Extent] and fits an int (the destination is inside the
+ * panel). */
+static int MpoMapEdge(int Value, int Low, long long Extent,
+                      unsigned int Mode) {
+  return Low + (int)(((long long)Value * Extent) / (long long)Mode);
+}
+
+unsigned int AdmissionMpoMapRect(const ADMISSION_MPO_MODE_MAP *Map,
+                                 const ADMISSION_MPO_RECT *Rect,
+                                 ADMISSION_MPO_RECT *Panel) {
+  long long w, h;
+  if (!MpoMapValid(Map) || Rect == MPO_NULL || Panel == MPO_NULL ||
+      !MpoRectInside(Rect, Map->ModeWidth, Map->ModeHeight))
+    return 0u;
+  w = MpoWidth(&Map->Destination);
+  h = MpoHeight(&Map->Destination);
+  Panel->Left = MpoMapEdge(Rect->Left, Map->Destination.Left, w, Map->ModeWidth);
+  Panel->Right = MpoMapEdge(Rect->Right, Map->Destination.Left, w, Map->ModeWidth);
+  Panel->Top = MpoMapEdge(Rect->Top, Map->Destination.Top, h, Map->ModeHeight);
+  Panel->Bottom = MpoMapEdge(Rect->Bottom, Map->Destination.Top, h, Map->ModeHeight);
+  return 1u;
+}
+
+/* Version 9: the map the records of this input go through.  Native mode:
+ * the identity (whatever ModeMap says).  Otherwise the input's map when it
+ * is known, valid and describes this mode.  0 when there is none. */
+static unsigned int MpoMapFor(const ADMISSION_MPO_INPUT *Input,
+                              ADMISSION_MPO_MODE_MAP *Map) {
+  if (MpoModeNative(Input)) {
+    Map->ModeWidth = ADMISSION_MPO_SCANOUT_WIDTH;
+    Map->ModeHeight = ADMISSION_MPO_SCANOUT_HEIGHT;
+    Map->Destination.Left = 0;
+    Map->Destination.Top = 0;
+    Map->Destination.Right = (int)ADMISSION_MPO_SCANOUT_WIDTH;
+    Map->Destination.Bottom = (int)ADMISSION_MPO_SCANOUT_HEIGHT;
+    return 1u;
+  }
+  if (Input->ModeMapKnown == 0u || !MpoMapValid(&Input->ModeMap) ||
+      Input->ModeMap.ModeWidth != Input->PanelWidth ||
+      Input->ModeMap.ModeHeight != Input->PanelHeight)
+    return 0u;
+  *Map = Input->ModeMap;
+  return 1u;
+}
+
+static void MpoMapClear(ADMISSION_MPO_MODE_MAP *Map) {
+  Map->ModeWidth = 0u;
+  Map->ModeHeight = 0u;
+  Map->Destination.Left = 0;
+  Map->Destination.Top = 0;
+  Map->Destination.Right = 0;
+  Map->Destination.Bottom = 0;
+}
+
 /* Equality is a special case of containment. */
 static unsigned int MpoRectContains(const ADMISSION_MPO_RECT *Outer,
                                     const ADMISSION_MPO_RECT *Inner) {
@@ -52,12 +127,14 @@ static unsigned int MpoScaleOk(long long Source, long long Destination) {
  * 18..21, 25. */
 static unsigned int MpoCheckLayer(const ADMISSION_MPO_INPUT *Input,
                                   const ADMISSION_MPO_PLANE_INPUT *plane,
-                                  unsigned int TopClip) {
+                                  unsigned int TopClip,
+                                  const ADMISSION_MPO_MODE_MAP *Map) {
   const unsigned int scaled =
       MpoWidth(&plane->Source) != MpoWidth(&plane->Destination) ||
               MpoHeight(&plane->Source) != MpoHeight(&plane->Destination)
           ? 1u
           : 0u;
+  ADMISSION_MPO_RECT panel = {0, 0, 0, 0};
 
   if (scaled != 0u && Input->ScalingSupported == 0u)
     return AdmissionMpoReasonScaling;
@@ -70,10 +147,23 @@ static unsigned int MpoCheckLayer(const ADMISSION_MPO_INPUT *Input,
   if (!MpoRectInside(&plane->Source, plane->SurfaceWidth,
                      plane->SurfaceHeight))
     return AdmissionMpoReasonSourceOutsideSurface;
+  /* Version 9 (C2): at a non-native mode the record shows Source at the
+   * mapped destination; the hardware limits apply to that composed scale
+   * (the mode-space scale is only what Windows asked for, below). */
+  if (!MpoModeNative(Input)) {
+    if (!AdmissionMpoMapRect(Map, &plane->Destination, &panel) ||
+        Input->ScalingSupported == 0u ||
+        MpoWidth(&panel) < (long long)ADMISSION_MPO_MIN_EXTENT ||
+        MpoHeight(&panel) < (long long)ADMISSION_MPO_MIN_EXTENT ||
+        !MpoScaleOk(MpoWidth(&plane->Source), MpoWidth(&panel)) ||
+        !MpoScaleOk(MpoHeight(&plane->Source), MpoHeight(&panel)))
+      return AdmissionMpoReasonRecordModeNotNative;
+  }
   if (scaled != 0u) {
-    if (!MpoScaleOk(MpoWidth(&plane->Source), MpoWidth(&plane->Destination)) ||
-        !MpoScaleOk(MpoHeight(&plane->Source),
-                    MpoHeight(&plane->Destination)))
+    if (MpoModeNative(Input) &&
+        (!MpoScaleOk(MpoWidth(&plane->Source), MpoWidth(&plane->Destination)) ||
+         !MpoScaleOk(MpoHeight(&plane->Source),
+                     MpoHeight(&plane->Destination))))
       return AdmissionMpoReasonScaleBeyondLimit;
     /* Check3 only (ADMISSION_MPO_CHECK3_ONLY_REASONS): the quality makes
      * the Check3 answer truthful; DCP has one scaler filter and nothing on
@@ -165,7 +255,8 @@ static unsigned int MpoTopClip(const ADMISSION_MPO_INPUT *Input,
 
 /* First violated two-plane rule of Planes[Index], or Supported. */
 static unsigned int MpoCheckPairPlane(const ADMISSION_MPO_INPUT *Input,
-                                      unsigned int Index) {
+                                      unsigned int Index,
+                                      const ADMISSION_MPO_MODE_MAP *Map) {
   const ADMISSION_MPO_PLANE_INPUT *plane = &Input->Planes[Index];
   const ADMISSION_MPO_PLANE_INPUT *other = &Input->Planes[Index ^ 1u];
 
@@ -189,7 +280,7 @@ static unsigned int MpoCheckPairPlane(const ADMISSION_MPO_INPUT *Input,
   } else if (plane->BlendAlpha != 0u) {
     return AdmissionMpoReasonBottomBlend;
   }
-  return MpoCheckLayer(Input, plane, plane->LayerIndex == 0u ? 1u : 0u);
+  return MpoCheckLayer(Input, plane, plane->LayerIndex == 0u ? 1u : 0u, Map);
 }
 
 /* Pair rules on two planes that passed every per-plane rule (so a known
@@ -239,7 +330,10 @@ unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
   unsigned int slot;
   unsigned int clip_mode = AdmissionMpoClipNone;
   ADMISSION_MPO_RECT visible = {0, 0, 0, 0};
+  ADMISSION_MPO_MODE_MAP map;
 
+  MpoMapClear(&map);
+  MpoMapClear(&out->ModeMap);
   out->Supported = 0u;
   out->ScratchOffset = ADMISSION_MPO_SCRATCH_NONE;
   out->Reason = AdmissionMpoReasonArgument;
@@ -282,12 +376,13 @@ unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
     MpoFillSlot(&out->Slots[0], &Input->Planes[0], 0u, 1u);
     out->SlotCount = 1u;
   } else {
-    if (Input->PanelWidth != ADMISSION_MPO_SCANOUT_WIDTH ||
-        Input->PanelHeight != ADMISSION_MPO_SCANOUT_HEIGHT)
+    /* Version 9: a non-native mode needs its panel map; the rules then run
+     * in mode coordinates and the scale limit on the composed scale. */
+    if (!MpoMapFor(Input, &map))
       return MpoFail(out, AdmissionMpoReasonPanelGeometry,
                      ADMISSION_MPO_NO_PLANE);
     for (index = 0u; index < 2u; ++index) {
-      reason = MpoCheckPairPlane(Input, index);
+      reason = MpoCheckPairPlane(Input, index, &map);
       if (reason != AdmissionMpoSupported)
         return MpoFail(out, reason, index);
     }
@@ -312,6 +407,10 @@ unsigned int AdmissionMpoEvaluate(const ADMISSION_MPO_INPUT *Input,
     out->Slots[1].Clip = visible;
     out->SlotCount = 2u;
   }
+  /* Version 9: the map the slot destinations go through (identity at the
+   * native mode; zero when a non-native one-plane answer has none). */
+  if (Input->PlaneCount == 2u || MpoMapFor(Input, &map))
+    out->ModeMap = map;
   out->Supported = 1u;
   out->Reason = AdmissionMpoSupported;
   out->FailingPlane = ADMISSION_MPO_NO_PLANE;
@@ -365,6 +464,7 @@ unsigned int AdmissionMpoEvaluatePrimary(const ADMISSION_MPO_INPUT *Input,
   Result->Supported = 0u;
   Result->SlotCount = 0u;
   Result->Slots[0].PlaneIndex = ADMISSION_MPO_NO_PLANE;
+  MpoMapClear(&Result->ModeMap);
   return MpoFail(Result, reason, 0u);
 }
 
@@ -372,19 +472,23 @@ unsigned int AdmissionMpoEvaluatePrimary(const ADMISSION_MPO_INPUT *Input,
 unsigned int AdmissionMpoEvaluateOne(const ADMISSION_MPO_INPUT *Input,
                                      ADMISSION_MPO_RESULT *Result) {
   const ADMISSION_MPO_PLANE_INPUT *plane;
+  ADMISSION_MPO_MODE_MAP map;
   unsigned int reason;
 
   if (Input == MPO_NULL || Result == MPO_NULL || Input->PlaneCount != 1u ||
       Input->Planes == MPO_NULL)
     return AdmissionMpoEvaluatePrimary(Input, Result);
   plane = &Input->Planes[0];
+  MpoMapClear(&map);
   /* FS-1: the application plane alone (DWM's top plane off): a full-panel,
    * opaque LayerIndex 1 plane, scaled within the layer limits, sent as one
    * layer record.  The full-screen independent flip of a game. */
   if (plane->Enabled != 0u && plane->LayerIndex == 1u) {
     (void)AdmissionMpoEvaluate(Input, Result); /* argument and slot reset */
     Result->OnePlaneRecord = 0u;
-    if (plane->FormatClass != AdmissionMpoFormatBgra8 &&
+    if (!MpoMapFor(Input, &map)) /* version 9: mapping unknown */
+      reason = AdmissionMpoReasonRecordModeNotNative;
+    else if (plane->FormatClass != AdmissionMpoFormatBgra8 &&
         plane->FormatClass != AdmissionMpoFormatRgba8)
       reason = AdmissionMpoReasonFormat;
     else if (plane->ColorSpaceClass != AdmissionMpoColorSpaceSdrSrgb)
@@ -395,16 +499,18 @@ unsigned int AdmissionMpoEvaluateOne(const ADMISSION_MPO_INPUT *Input,
                              Input->PanelHeight))
       reason = AdmissionMpoReasonLoneNotFullPanel;
     else
-      reason = MpoCheckLayer(Input, plane, 0u); /* the application plane: rule 17 */
+      reason = MpoCheckLayer(Input, plane, 0u, &map); /* the application plane: rule 17 */
     if (reason != AdmissionMpoSupported) {
       Result->Supported = 0u;
       Result->SlotCount = 0u;
       Result->Slots[0].PlaneIndex = ADMISSION_MPO_NO_PLANE;
+      MpoMapClear(&Result->ModeMap);
       return MpoFail(Result, reason, 0u);
     }
     Result->Supported = 1u;
     Result->Reason = AdmissionMpoSupported;
     Result->FailingPlane = ADMISSION_MPO_NO_PLANE;
+    Result->ModeMap = map;
     MpoFillSlot(&Result->Slots[0], plane, 0u, 0u);
     Result->SlotCount = 1u;
     Result->OnePlaneRecord = 1u;
@@ -421,7 +527,9 @@ unsigned int AdmissionMpoEvaluateOne(const ADMISSION_MPO_INPUT *Input,
   /* The v1 one-plane answer (argument and slot reset) first. */
   (void)AdmissionMpoEvaluate(Input, Result);
   Result->OnePlaneRecord = 0u;
-  if (plane->FormatClass != AdmissionMpoFormatBgra8 &&
+  if (!MpoMapFor(Input, &map)) /* version 9: mapping unknown */
+    reason = AdmissionMpoReasonRecordModeNotNative;
+  else if (plane->FormatClass != AdmissionMpoFormatBgra8 &&
       plane->FormatClass != AdmissionMpoFormatRgba8)
     reason = AdmissionMpoReasonFormat;
   else if (plane->ColorSpaceClass != AdmissionMpoColorSpaceSdrSrgb)
@@ -429,13 +537,15 @@ unsigned int AdmissionMpoEvaluateOne(const ADMISSION_MPO_INPUT *Input,
   else if (plane->BlendAlpha > 1u)
     reason = AdmissionMpoReasonOnePlaneBlend;
   else
-    reason = MpoCheckLayer(Input, plane, 0u);
+    reason = MpoCheckLayer(Input, plane, 0u, &map);
   if (reason != AdmissionMpoSupported) {
     Result->Supported = 0u;
     Result->SlotCount = 0u;
     Result->Slots[0].PlaneIndex = ADMISSION_MPO_NO_PLANE;
+    MpoMapClear(&Result->ModeMap);
     return MpoFail(Result, reason, 0u);
   }
+  Result->ModeMap = map;
   MpoFillSlot(&Result->Slots[0], plane, 0u, 0u);
   Result->SlotCount = 1u;
   Result->OnePlaneRecord = 1u;

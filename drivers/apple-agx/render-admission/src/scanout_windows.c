@@ -683,10 +683,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
     ExFreePoolWithTag(runtime, ADMISSION_SCANOUT_TAG);
     return STATUS_NOT_SUPPORTED;
   }
-  /* S2: Wom1MpoTwoPlanes = 1 asks the panel to negotiate ABI V3 between
-   * its Qualify and REGISTER_POOL; absent/0 leaves every access as today. */
-  two_planes_requested = AdmissionScanoutSwitchEnabled(Context,
-                                                       L"Wom1MpoTwoPlanes");
+  /* S2: ask the panel to negotiate ABI V3 between its Qualify and
+   * REGISTER_POOL.  C2/C5: default on, an opt-out (absent or nonzero = on,
+   * an explicit 0 = off: every access as before S2).  Two planes stay
+   * effective only with broker CAPABILITIES bit 9 and the negotiation
+   * read-back (AppleAgxFixedPanelStart), so a broker without the
+   * capability behaves as with the switch off. */
+  two_planes_requested =
+      AdmissionScanoutSwitchValue(Context, L"Wom1MpoTwoPlanes", 1u) != 0u;
   runtime->Panel.RequestTwoLayers =
       two_planes_requested ? APPLE_AGX_SCANOUT_TRUE : APPLE_AGX_SCANOUT_FALSE;
   result = AppleAgxFixedPanelStart(
@@ -1369,6 +1373,24 @@ _Use_decl_annotations_ BOOLEAN AdmissionScanoutMpoScaledSource(
              : FALSE;
 }
 
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutMpoModeMap(
+    ADMISSION_CONTEXT *Context, ADMISSION_MPO_MODE_MAP *Map) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  ULONG origin, size;
+  RtlZeroMemory(Map, sizeof(*Map));
+  if (runtime == NULL || !runtime->Panel.Committed)
+    return FALSE;
+  origin = runtime->Panel.Scanout.PresentDestOrigin;
+  size = runtime->Panel.Scanout.PresentDestSize;
+  Map->ModeWidth = runtime->Panel.Scanout.PresentWidth;
+  Map->ModeHeight = runtime->Panel.Scanout.PresentHeight;
+  Map->Destination.Left = (int)(origin & 0xffffu);
+  Map->Destination.Top = (int)(origin >> 16);
+  Map->Destination.Right = Map->Destination.Left + (int)(size & 0xffffu);
+  Map->Destination.Bottom = Map->Destination.Top + (int)(size >> 16);
+  return Map->ModeWidth != 0u && Map->ModeHeight != 0u ? TRUE : FALSE;
+}
+
 _Use_decl_annotations_ BOOLEAN AdmissionScanoutMpoPool(
     ADMISSION_CONTEXT *Context, ULONGLONG *SegmentBase, ULONGLONG *PoolBytes) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
@@ -1551,6 +1573,15 @@ static VOID AdmissionScanoutMpoRetireSlot1(ADMISSION_CONTEXT *Context,
   built = Context->MpoPlanes[0].Valid != 0u
               ? AdmissionMpoBuildRemoval(&Context->MpoPlanes[0].Input, &record)
               : 0u;
+  /* C2: the stored plane is in the outgoing mode's coordinates; this runs
+   * before the new mode is committed, so the panel state is still that
+   * mode's placement. */
+  if (built == 1u) {
+    ADMISSION_MPO_MODE_MAP map;
+    if (!AdmissionScanoutMpoModeMap(Context, &map) ||
+        AdmissionMpoMapRecords(&map, &record, 1u) != 1u)
+      built = 0u;
+  }
   primary = Context->MpoPlanes[0].PrimaryAddress;
   RtlZeroMemory(Context->MpoPlanes, sizeof(Context->MpoPlanes));
   if (built != 1u) {

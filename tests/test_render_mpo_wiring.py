@@ -7,8 +7,10 @@ WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
   generated sweep against a reference predicate written from the refusal
   list (tests/mpo_broker_reference_test.c).
 - MPO advertised, or the two-plane Set3 path entered, without the
-  Wom1MpoTwoPlanes-effective predicate (AGENTS capability rule; the bench
-  image must be byte-for-byte today's behaviour with the switch off).
+  Wom1MpoTwoPlanes-effective predicate (AGENTS capability rule; with an
+  explicit 0, or on a broker without CAPABILITIES bit 9, the image must be
+  byte-for-byte the one-plane behaviour).
+- C2/C5: the switch is an opt-out: absent means on, an explicit 0 off.
 """
 from pathlib import Path
 import os
@@ -195,15 +197,28 @@ class RenderMpoWiringTests(unittest.TestCase):
         for name in ("mpo_contract.c", "mpo_layers.c", "mpo_windows.c"):
             self.assertIn(f'<ClCompile Include="src\\{name}" />', project)
 
-    def test_switch_is_read_once_at_start_and_defaults_off(self):
+    def test_switch_is_read_once_at_start_and_defaults_on(self):
+        # C2/C5: opt-out reader.  Absent -> the default 1 (on); any nonzero
+        # value on; an explicit 0 off.  Effectiveness still needs broker
+        # bit 9 and the negotiation read-back (FixedPanelStart).
         scanout = (DRIVER / "src/scanout_windows.c").read_text()
         self.assertEqual(scanout.count('L"Wom1MpoTwoPlanes"'), 1)
         start = function(scanout,
                          "_Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(")
+        self.assertIn('AdmissionScanoutSwitchValue(Context, L"Wom1MpoTwoPlanes", 1u) != 0u',
+                      start)
+        self.assertNotIn('AdmissionScanoutSwitchEnabled(Context,\n'
+                         '                                                       L"Wom1MpoTwoPlanes")',
+                         start)
         self.assertLess(start.index("RequestTwoLayers"),
                         start.index("AppleAgxFixedPanelStart("))
-        reader = function(scanout, "static BOOLEAN AdmissionScanoutSwitchEnabled(")
-        self.assertIn("*(const ULONG *)value->Data == 1u", reader)
+        reader = function(scanout, "static ULONG AdmissionScanoutSwitchValue(")
+        # Absent (or not a REG_DWORD) keeps the default.
+        self.assertIn("ULONG bytes = 0u, result = Default;", reader)
+        self.assertIn("result = *(const ULONG *)value->Data;", reader)
+        panel = (ROOT / "drivers/apple-agx/shared/src/apple_agx_fixed_panel.c").read_text()
+        self.assertIn("if (Panel->RequestTwoLayers &&\n"
+                      "      AppleAgxScanoutTwoLayersAdvertised(&Panel->Scanout))", panel)
 
 
 if __name__ == "__main__":

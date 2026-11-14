@@ -48,7 +48,7 @@
  * in the scanout pool and the 64 KiB placement alignment CreateAllocation
  * requests; Set3 evaluates again with the actual offset. */
 
-#define ADMISSION_MPO_CONTRACT_VERSION 7u
+#define ADMISSION_MPO_CONTRACT_VERSION 9u
 #define ADMISSION_MPO_MAX_PLANES 2u
 #define ADMISSION_MPO_SLOT_COUNT 2u
 #define ADMISSION_MPO_MIN_EXTENT 32u
@@ -132,7 +132,8 @@ typedef enum _ADMISSION_MPO_REASON {
   /* Two planes: the two surfaces' pool byte ranges overlap. */
   AdmissionMpoReasonSurfaceOverlap = 23,
   /* Two planes: the source mode is not the scanout panel geometry, so
-   * Windows destination coordinates are not panel coordinates. */
+   * Windows destination coordinates are not panel coordinates.  Version 9:
+   * only when the committed mode's panel map is not known. */
   AdmissionMpoReasonPanelGeometry = 24,
   /* Two planes: stride smaller than SurfaceWidth * 4 bytes. */
   AdmissionMpoReasonStrideBelowRow = 25,
@@ -171,6 +172,22 @@ typedef enum _ADMISSION_MPO_REASON {
    * whose visible part is neither scratch-realisable (<= 64x64, scratch
    * reserved) nor crop-realisable (> 64 on an axis and >= 40x39). */
   AdmissionMpoReasonTopClip = 38,
+  /* Version 8 (C2): a plane that would go as one layer record (the lone
+   * application plane, a scaled, cropped or positioned LayerIndex 0 plane)
+   * while the committed source mode is not the native panel mode.  Plane
+   * rectangles are mode pixels and a record's destination is panel pixels,
+   * so the record would show the picture 1:1 at the panel's top left
+   * instead of in the committed destination.  Refused so that DWM composes
+   * and the full-screen primary takes the V2 PRESENT path, which the broker
+   * scales into the committed destination.  Two planes at such a mode are
+   * refused earlier with PanelGeometry (24).
+   * Version 9: records at a non-native mode are mapped to the panel
+   * (AdmissionMpoMapRect) and admitted when the composed record is within
+   * the limits; 39 remains for a record whose mode map is unknown, whose
+   * composed scale (source -> mapped destination) is beyond
+   * ADMISSION_MPO_MAX_SCALE on an axis or below ADMISSION_MPO_MIN_EXTENT,
+   * or that needs scaling while the broker has no CAP_SCALED_SOURCE. */
+  AdmissionMpoReasonRecordModeNotNative = 39,
   ADMISSION_MPO_REASON_COUNT
 } ADMISSION_MPO_REASON;
 
@@ -208,6 +225,31 @@ typedef struct _ADMISSION_MPO_RECT {
   int Right;
   int Bottom;
 } ADMISSION_MPO_RECT;
+
+/* Version 9 (C2): where the committed source mode is shown on the panel.
+ * Destination is the panel rectangle (panel pixels, right/bottom exclusive)
+ * the broker scales the ModeWidth x ModeHeight source into (the committed
+ * PresentDestOrigin/PresentDestSize, apple_agx_fixed_panel.c
+ * AppleAgxFixedPanelDestination).  Native mode: 2560x1600 onto the whole
+ * panel (identity). */
+typedef struct _ADMISSION_MPO_MODE_MAP {
+  unsigned int ModeWidth;
+  unsigned int ModeHeight;
+  ADMISSION_MPO_RECT Destination;
+} ADMISSION_MPO_MODE_MAP;
+
+/* Version 9: panel rectangle = the committed destination composed with a
+ * rectangle in mode coordinates.  Each edge maps independently:
+ *   x' = Destination.Left + floor(x * DestinationWidth / ModeWidth)
+ *   y' = Destination.Top  + floor(y * DestinationHeight / ModeHeight)
+ * so the whole mode maps exactly onto Destination and adjacent rectangles
+ * stay adjacent.  1 when *Panel was written; 0 (Panel untouched) when Map
+ * is NULL or invalid (a zero mode extent, an empty or inverted destination,
+ * a destination outside the 2560x1600 scanout panel) or Rect is inverted or
+ * not inside [0,ModeWidth] x [0,ModeHeight]. */
+unsigned int AdmissionMpoMapRect(const ADMISSION_MPO_MODE_MAP *Map,
+                                 const ADMISSION_MPO_RECT *Rect,
+                                 ADMISSION_MPO_RECT *Panel);
 
 typedef struct _ADMISSION_MPO_PLANE_INPUT {
   unsigned int LayerIndex;
@@ -273,6 +315,13 @@ typedef struct _ADMISSION_MPO_INPUT {
   /* Nonzero: the driver holds two scratch surfaces in the pool (a clipped
    * top plane <= 64x64 is realisable through them). */
   unsigned int ScratchAvailable;
+  /* ---- version 9 (C2) ---- */
+  /* Nonzero: ModeMap is the committed mode's panel placement, read from
+   * the committed scan-out state.  Used only while PanelWidth x PanelHeight
+   * is not the native panel (native is the identity map whatever these
+   * say), and only when ModeMap.ModeWidth/Height equal PanelWidth/Height. */
+  unsigned int ModeMapKnown;
+  ADMISSION_MPO_MODE_MAP ModeMap;
 } ADMISSION_MPO_INPUT;
 #define ADMISSION_MPO_PATH_CHECK3 0u
 #define ADMISSION_MPO_PATH_SET3 1u
@@ -329,6 +378,12 @@ typedef struct _ADMISSION_MPO_RESULT {
   /* Pool offset of the scratch surface a ClipScratch slot shows; set by
    * the caller (Set3) before AdmissionMpoBuildCommit, NONE otherwise. */
   unsigned long long ScratchOffset;
+  /* ---- version 9 (C2) ---- */
+  /* Supported answers: the map the slots' mode-coordinate destinations go
+   * through on the way to panel coordinates (AdmissionMpoMapRecords after
+   * the record build); identity at the native mode.  All zero otherwise
+   * (a zero map maps nothing). */
+  ADMISSION_MPO_MODE_MAP ModeMap;
 } ADMISSION_MPO_RESULT;
 
 /* Fills *Result (when non-NULL) and returns Result->Reason. */
@@ -361,7 +416,14 @@ unsigned int AdmissionMpoEvaluatePrimary(const ADMISSION_MPO_INPUT *Input,
  * plane meets (see AdmissionMpoEvaluate: 10..17, 32..34, 18..21, 25), and
  * OnePlaneRecord is 1 with Slots[0] filled (Premultiplied 0: nothing lies
  * beneath slot 0 except the black background).  A disabled plane is the
- * plane-off path (supported, OnePlaneRecord 0). */
+ * plane-off path (supported, OnePlaneRecord 0).  Version 8: every record
+ * form (this one and the lone LayerIndex 1 plane) is refused first with
+ * RecordModeNotNative (39) while PanelWidth x PanelHeight is not the
+ * scanout panel; the full-screen primary is unaffected.  Version 9: at a
+ * non-native mode with a known map the record rules run in mode
+ * coordinates (rules 10..13, 17.. and StretchQuality on the mode-space
+ * scale) and the scale limit on the composed scale (source -> mapped
+ * destination); a composed record outside the limits stays 39. */
 unsigned int AdmissionMpoEvaluateOne(const ADMISSION_MPO_INPUT *Input,
                                      ADMISSION_MPO_RESULT *Result);
 

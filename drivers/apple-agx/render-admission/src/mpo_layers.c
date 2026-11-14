@@ -100,6 +100,37 @@ unsigned int AdmissionMpoBuildCommit(const ADMISSION_MPO_RESULT *Result,
   return 2u;
 }
 
+/* C2: see mpo_layers.h. */
+unsigned int AdmissionMpoMapRecords(const ADMISSION_MPO_MODE_MAP *Map,
+                                    APPLE_AGX_SCANOUT_LAYER *Records,
+                                    unsigned int Count) {
+  ADMISSION_MPO_RECT mapped[2] = {{0, 0, 0, 0}, {0, 0, 0, 0}};
+  unsigned int index;
+  if (Map == MPO_LAYERS_NULL || Records == MPO_LAYERS_NULL || Count == 0u ||
+      Count > 2u)
+    return 0u;
+  for (index = 0u; index < Count; ++index) {
+    const unsigned int origin = Records[index].DstOrigin;
+    const unsigned int size = Records[index].DstSize;
+    ADMISSION_MPO_RECT mode;
+    mode.Left = (int)(origin & 0xffffu);
+    mode.Top = (int)(origin >> 16);
+    mode.Right = mode.Left + (int)(size & 0xffffu);
+    mode.Bottom = mode.Top + (int)(size >> 16);
+    if (!AdmissionMpoMapRect(Map, &mode, &mapped[index]) ||
+        !MpoLayerRectPacks(&mapped[index]))
+      return 0u;
+  }
+  for (index = 0u; index < Count; ++index) {
+    Records[index].DstOrigin = APPLE_AGX_SCANOUT_PACK(
+        (unsigned int)mapped[index].Left, (unsigned int)mapped[index].Top);
+    Records[index].DstSize = APPLE_AGX_SCANOUT_PACK(
+        (unsigned int)(mapped[index].Right - mapped[index].Left),
+        (unsigned int)(mapped[index].Bottom - mapped[index].Top));
+  }
+  return Count;
+}
+
 /* CUR-1 v2: see mpo_layers.h. */
 unsigned int AdmissionMpoScratchPlace(const ADMISSION_MPO_RECT *Clip,
                                       unsigned int PanelWidth,

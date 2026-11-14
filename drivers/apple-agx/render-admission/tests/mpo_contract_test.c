@@ -718,8 +718,9 @@ static void TestStableReasonValues(void) {
   CHECK(AdmissionMpoReasonLoneNotFullPanel == 36);
   CHECK(AdmissionMpoReasonLoneBlend == 37);
   CHECK(AdmissionMpoReasonTopClip == 38);
-  CHECK(ADMISSION_MPO_REASON_COUNT == 39);
-  CHECK(ADMISSION_MPO_CONTRACT_VERSION == 7u);
+  CHECK(AdmissionMpoReasonRecordModeNotNative == 39);
+  CHECK(ADMISSION_MPO_REASON_COUNT == 40);
+  CHECK(ADMISSION_MPO_CONTRACT_VERSION == 9u);
 }
 
 /* Version 2 surface rules, each on its role, both orders. */
@@ -1376,6 +1377,415 @@ static void TestTopClip(void) {
   }
 }
 
+/* ---- C2 (contract version 8): layer records at a non-native mode ----
+ * WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?  At a committed mode
+ * other than 2560x1600 the plane rectangles are mode pixels while a layer
+ * record's destination is panel pixels: a supported record would show the
+ * picture 1:1 in the panel's top-left corner instead of aspect-fitted at
+ * the committed destination (1920x1080 -> 0,80,2560,1440).  Only the
+ * full-screen primary (V2 PRESENT, scaled by the broker) stays supported. */
+/* Map NULL: the mode's panel placement is not known (ModeMapKnown 0). */
+static unsigned int EvalModeMapped(const ADMISSION_MPO_PLANE_INPUT *Planes,
+                                   unsigned int Count, unsigned int ModeW,
+                                   unsigned int ModeH, unsigned int Path,
+                                   const ADMISSION_MPO_MODE_MAP *Map,
+                                   ADMISSION_MPO_RESULT *Result) {
+  ADMISSION_MPO_INPUT input;
+  memset(&input, 0, sizeof(input));
+  if (Map != NULL) {
+    input.ModeMapKnown = 1u;
+    input.ModeMap = *Map;
+  }
+  input.PanelWidth = ModeW;
+  input.PanelHeight = ModeH;
+  input.PanelStride = ModeW * 4u;
+  input.PanelModeSupported = 1u;
+  input.PlaneCount = Count;
+  input.Planes = Planes;
+  input.PoolBytes = POOL_BYTES;
+  input.ScalingSupported = 1u;
+  input.ScalerFilter = AdmissionMpoScalerFilterUnknown;
+  input.ScratchAvailable = 1u;
+  input.Path = Path;
+  memset(Result, 0xa5, sizeof(*Result));
+  return Count == 1u ? AdmissionMpoEvaluateOne(&input, Result)
+                     : AdmissionMpoEvaluate(&input, Result);
+}
+
+static unsigned int EvalMode(const ADMISSION_MPO_PLANE_INPUT *Planes,
+                             unsigned int Count, unsigned int ModeW,
+                             unsigned int ModeH, unsigned int Path,
+                             ADMISSION_MPO_RESULT *Result) {
+  return EvalModeMapped(Planes, Count, ModeW, ModeH, Path, NULL, Result);
+}
+
+/* A mode-size surface plane covering the whole mode. */
+static ADMISSION_MPO_PLANE_INPUT ModePlane(unsigned int W, unsigned int H,
+                                           unsigned int Layer) {
+  ADMISSION_MPO_PLANE_INPUT plane = OnePlane((int)W, (int)H, 0, 0, (int)W,
+                                             (int)H);
+  plane.LayerIndex = Layer;
+  plane.BlendAlpha = Layer == 0u ? 1u : 0u;
+  plane.SurfaceIdentity = 0x3000u; /* not BottomPlane's surface */
+  return plane;
+}
+
+static void TestNonNativeModeRecords(void) {
+  static const unsigned int modes[][2] = {
+      {1920u, 1080u}, {1920u, 1200u}, {1280u, 720u}, {1280u, 800u},
+      {1024u, 768u},  {800u, 600u},   {1680u, 1050u}, {1440u, 900u}};
+  ADMISSION_MPO_PLANE_INPUT plane, p[2];
+  ADMISSION_MPO_RESULT result;
+  unsigned int m, path;
+
+  for (m = 0u; m < sizeof(modes) / sizeof(modes[0]); ++m) {
+    const unsigned int w = modes[m][0], h = modes[m][1];
+    for (path = 0u; path < 2u; ++path) {
+      /* The lone application plane covering the mode (FS-1 at 1920x1080:
+       * accepted before version 8 and shown 1:1 at the top left). */
+      plane = ModePlane(w, h, 1u);
+      CHECK(EvalMode(&plane, 1u, w, h, path, &result) ==
+            AdmissionMpoReasonRecordModeNotNative);
+      CHECK(result.Supported == 0u && result.SlotCount == 0u &&
+            result.FailingPlane == 0u && result.OnePlaneRecord == 0u);
+      /* The scaled lone plane (half the mode, 2x up). */
+      plane = OnePlane((int)w / 2, (int)h / 2, 0, 0, (int)w, (int)h);
+      plane.LayerIndex = 1u; plane.BlendAlpha = 0u;
+      CHECK(EvalMode(&plane, 1u, w, h, path, &result) ==
+            AdmissionMpoReasonRecordModeNotNative);
+      /* A positioned LayerIndex 0 plane (one-plane record). */
+      plane = OnePlane(320, 240, 10, 10, 330, 250);
+      CHECK(EvalMode(&plane, 1u, w, h, path, &result) ==
+            AdmissionMpoReasonRecordModeNotNative);
+      /* The full-screen primary keeps the V2 PRESENT path (scaled by the
+       * broker into the committed destination). */
+      plane = ModePlane(w, h, 0u);
+      CHECK(EvalMode(&plane, 1u, w, h, path, &result) == AdmissionMpoSupported);
+      CHECK(result.OnePlaneRecord == 0u);
+      /* Two planes and the clipped top plane: refused (PanelGeometry). */
+      p[0] = ModePlane(w, h, 0u);
+      p[1] = BottomPlane();
+      p[1].PoolOffset = BOTTOM_OFFSET * 16u;
+      CHECK(EvalMode(p, 2u, w, h, path, &result) ==
+            AdmissionMpoReasonPanelGeometry);
+      p[0].Clip = Rect(100, 100, 124, 127);
+      CHECK(EvalMode(p, 2u, w, h, path, &result) ==
+            AdmissionMpoReasonPanelGeometry);
+    }
+  }
+  /* The native mode is unchanged: the same lone plane is one record. */
+  plane = ModePlane(PANEL_W, PANEL_H, 1u);
+  CHECK(EvalMode(&plane, 1u, PANEL_W, PANEL_H, 0u, &result) ==
+        AdmissionMpoSupported && result.OnePlaneRecord == 1u);
+}
+
+/* Check3 supported implies Set3 supported at every mode, both plane
+ * counts (Set3 must not refuse what Check3 accepted). */
+static void TestCheck3ImpliesSet3AtEveryMode(void) {
+  static const unsigned int modes[][2] = {
+      {2560u, 1600u}, {1920u, 1080u}, {1920u, 1200u}, {1280u, 720u},
+      {1024u, 768u}};
+  static const int sizes[][2] = {{640, 480}, {960, 720}, {1280, 960},
+                                 {320, 240}, {1281, 960}, {640, 481}};
+  ADMISSION_MPO_PLANE_INPUT p[2], one;
+  ADMISSION_MPO_RESULT check3, set3;
+  unsigned int m, z, q, swap, layer, rc, rs, supported = 0u;
+  for (m = 0u; m < sizeof(modes) / sizeof(modes[0]); ++m)
+    for (swap = 0u; swap < 2u; ++swap)
+      for (z = 0u; z < sizeof(sizes) / sizeof(sizes[0]); ++z)
+        for (q = 0u; q < 3u; ++q) {
+          const unsigned int w = modes[m][0], h = modes[m][1];
+          unsigned int bottom = swap ? 0u : 1u;
+          ScaledPair(p, (int)swap, sizes[z][0], sizes[z][1]);
+          p[bottom ^ 1u].Source = Rect(0, 0, (int)w, (int)h);
+          p[bottom ^ 1u].Destination = p[bottom ^ 1u].Source;
+          p[bottom ^ 1u].Clip = p[bottom ^ 1u].Source;
+          p[bottom ^ 1u].SurfaceWidth = w;
+          p[bottom ^ 1u].SurfaceHeight = h;
+          p[bottom ^ 1u].SurfaceStride = w * 4u;
+          p[bottom ^ 1u].SurfaceBytes = (unsigned long long)w * 4u * h;
+          p[bottom].StretchQuality = q;
+          rc = EvalMode(p, 2u, w, h, ADMISSION_MPO_PATH_CHECK3, &check3);
+          rs = EvalMode(p, 2u, w, h, ADMISSION_MPO_PATH_SET3, &set3);
+          CHECK(rc != AdmissionMpoSupported || rs == AdmissionMpoSupported);
+          supported += rc == AdmissionMpoSupported;
+          for (layer = 0u; layer < 2u; ++layer) {
+            one = p[bottom];
+            one.LayerIndex = layer;
+            one.BlendAlpha = 0u;
+            rc = EvalMode(&one, 1u, w, h, ADMISSION_MPO_PATH_CHECK3, &check3);
+            rs = EvalMode(&one, 1u, w, h, ADMISSION_MPO_PATH_SET3, &set3);
+            CHECK(rc != AdmissionMpoSupported || rs == AdmissionMpoSupported);
+            supported += rc == AdmissionMpoSupported;
+          }
+          one = p[bottom ^ 1u]; /* the full-mode surface alone, both layers */
+          for (layer = 0u; layer < 2u; ++layer) {
+            one.LayerIndex = layer;
+            one.BlendAlpha = layer == 0u ? 1u : 0u;
+            one.ScanoutCapable = 1u;
+            one.DescriptionValid = 1u;
+            one.AllocationBytes = one.SurfaceBytes;
+            rc = EvalMode(&one, 1u, w, h, ADMISSION_MPO_PATH_CHECK3, &check3);
+            rs = EvalMode(&one, 1u, w, h, ADMISSION_MPO_PATH_SET3, &set3);
+            CHECK(rc != AdmissionMpoSupported || rs == AdmissionMpoSupported);
+            CHECK(rc == rs);
+            supported += rc == AdmissionMpoSupported;
+          }
+        }
+  CHECK(supported != 0u);
+}
+
+
+/* ---- C2 (contract version 9): mode -> panel mapping ----
+ * WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?  A layer record at a
+ * scaled mode placed with mode coordinates (1:1 at the top left) instead of
+ * inside the committed destination; a mapping that is not exact at the mode
+ * edges (a gap or overhang at the letterbox); a record admitted whose
+ * composed scale (source -> panel) the broker refuses, or refused on the
+ * mode-space scale although the composed one is within the limit. */
+
+/* The eleven offered modes and their aspect-ratio-centred-max destinations
+ * (apple_agx_fixed_panel.c AppleAgxFixedPanelDestination, rounded to the
+ * nearest pixel and centred), panel pixels. */
+static const struct {
+  unsigned int W, H;
+  int L, T, R, B;
+  unsigned int WithinLimit; /* composed scale <= 2 on both axes */
+} Modes[] = {
+    {2560u, 1600u, 0, 0, 2560, 1600, 1u},  {2048u, 1280u, 0, 0, 2560, 1600, 1u},
+    {1920u, 1200u, 0, 0, 2560, 1600, 1u},  {1920u, 1080u, 0, 80, 2560, 1520, 1u},
+    {1680u, 1050u, 0, 0, 2560, 1600, 1u},  {1600u, 900u, 0, 80, 2560, 1520, 1u},
+    {1440u, 900u, 0, 0, 2560, 1600, 1u},   {1280u, 800u, 0, 0, 2560, 1600, 1u},
+    {1280u, 720u, 0, 80, 2560, 1520, 1u},  {1024u, 768u, 213, 0, 2346, 1600, 0u},
+    {800u, 600u, 213, 0, 2346, 1600, 0u},
+};
+#define MODE_COUNT (sizeof(Modes) / sizeof(Modes[0]))
+
+static ADMISSION_MPO_MODE_MAP MapOf(unsigned int Index) {
+  ADMISSION_MPO_MODE_MAP map;
+  map.ModeWidth = Modes[Index].W;
+  map.ModeHeight = Modes[Index].H;
+  map.Destination = Rect(Modes[Index].L, Modes[Index].T, Modes[Index].R,
+                         Modes[Index].B);
+  return map;
+}
+
+static ADMISSION_MPO_RECT Mapped(const ADMISSION_MPO_MODE_MAP *Map,
+                                 ADMISSION_MPO_RECT R) {
+  ADMISSION_MPO_RECT out = Rect(-7, -7, -7, -7);
+  CHECK(AdmissionMpoMapRect(Map, &R, &out) == 1u);
+  return out;
+}
+
+static void TestMapRectVectors(void) {
+  ADMISSION_MPO_MODE_MAP map, bad;
+  ADMISSION_MPO_RECT r, out;
+  unsigned int i;
+  /* Native: identity. */
+  map = MapOf(0u);
+  CHECK(RectEqual(Mapped(&map, Rect(100, 200, 740, 680)), Rect(100, 200, 740, 680)));
+  CHECK(RectEqual(Mapped(&map, Rect(0, 0, 2560, 1600)), Rect(0, 0, 2560, 1600)));
+  /* 1920x1200: full-panel fit, 4/3 on both axes. */
+  map = MapOf(2u);
+  CHECK(RectEqual(Mapped(&map, Rect(0, 0, 1920, 1200)), Rect(0, 0, 2560, 1600)));
+  CHECK(RectEqual(Mapped(&map, Rect(960, 600, 1920, 1200)), Rect(1280, 800, 2560, 1600)));
+  CHECK(RectEqual(Mapped(&map, Rect(1, 1, 2, 2)), Rect(1, 1, 2, 2)));
+  CHECK(RectEqual(Mapped(&map, Rect(3, 3, 6, 6)), Rect(4, 4, 8, 8)));
+  /* 1920x1080: letterboxed at 0,80 size 2560x1440. */
+  map = MapOf(3u);
+  CHECK(RectEqual(Mapped(&map, Rect(0, 0, 1920, 1080)), Rect(0, 80, 2560, 1520)));
+  CHECK(RectEqual(Mapped(&map, Rect(480, 270, 1440, 810)), Rect(640, 440, 1920, 1160)));
+  /* Clip rectangles map the same way (the pointer clip of EXP2366). */
+  CHECK(RectEqual(Mapped(&map, Rect(960, 540, 984, 567)), Rect(1280, 800, 1312, 836)));
+  CHECK(RectEqual(Mapped(&map, Rect(1919, 1079, 1920, 1080)), Rect(2558, 1518, 2560, 1520)));
+  /* 1280x720: exactly 2x into the letterbox. */
+  map = MapOf(8u);
+  CHECK(RectEqual(Mapped(&map, Rect(100, 100, 164, 164)), Rect(200, 280, 328, 408)));
+  /* 1024x768: pillarboxed at 213,0 size 2133x1600. */
+  map = MapOf(9u);
+  CHECK(RectEqual(Mapped(&map, Rect(0, 0, 1024, 768)), Rect(213, 0, 2346, 1600)));
+  /* Every mode: the whole mode is exactly the destination, an empty
+   * rectangle stays empty, and adjacent halves stay adjacent. */
+  for (i = 0u; i < MODE_COUNT; ++i) {
+    ADMISSION_MPO_RECT a, b;
+    map = MapOf(i);
+    CHECK(RectEqual(Mapped(&map, Rect(0, 0, (int)Modes[i].W, (int)Modes[i].H)),
+                    map.Destination));
+    a = Mapped(&map, Rect(0, 0, (int)Modes[i].W / 3, (int)Modes[i].H));
+    b = Mapped(&map, Rect((int)Modes[i].W / 3, 0, (int)Modes[i].W, (int)Modes[i].H));
+    CHECK(a.Right == b.Left && a.Left == map.Destination.Left &&
+          b.Right == map.Destination.Right);
+    out = Mapped(&map, Rect(5, 5, 5, 9));
+    CHECK(out.Left == out.Right);
+  }
+  /* Refusals: rectangle outside or inverted; map invalid. */
+  map = MapOf(3u);
+  r = Rect(0, 0, 1921, 1080);
+  out = Rect(1, 2, 3, 4);
+  CHECK(AdmissionMpoMapRect(&map, &r, &out) == 0u && RectEqual(out, Rect(1, 2, 3, 4)));
+  r = Rect(-1, 0, 10, 10);
+  CHECK(AdmissionMpoMapRect(&map, &r, &out) == 0u);
+  r = Rect(10, 0, 5, 10);
+  CHECK(AdmissionMpoMapRect(&map, &r, &out) == 0u);
+  r = Rect(0, 0, 10, 10);
+  bad = map; bad.ModeWidth = 0u;
+  CHECK(AdmissionMpoMapRect(&bad, &r, &out) == 0u);
+  bad = map; bad.Destination = Rect(0, 80, 2561, 1520);
+  CHECK(AdmissionMpoMapRect(&bad, &r, &out) == 0u);
+  bad = map; bad.Destination = Rect(0, 80, 0, 1520);
+  CHECK(AdmissionMpoMapRect(&bad, &r, &out) == 0u);
+  CHECK(AdmissionMpoMapRect(NULL, &r, &out) == 0u);
+  CHECK(AdmissionMpoMapRect(&map, NULL, &out) == 0u);
+  CHECK(AdmissionMpoMapRect(&map, &r, NULL) == 0u);
+}
+
+static void TestNonNativeModeMapped(void) {
+  ADMISSION_MPO_PLANE_INPUT plane, p[2];
+  ADMISSION_MPO_RESULT result;
+  ADMISSION_MPO_MODE_MAP map, other;
+  unsigned int i, path;
+  for (i = 0u; i < MODE_COUNT; ++i) {
+    const unsigned int w = Modes[i].W, h = Modes[i].H;
+    const unsigned int expect =
+        Modes[i].WithinLimit ? (unsigned int)AdmissionMpoSupported
+                             : (unsigned int)AdmissionMpoReasonRecordModeNotNative;
+    map = MapOf(i);
+    for (path = 0u; path < 2u; ++path) {
+      /* The lone application plane covering the mode: one record, slots in
+       * mode coordinates, the map in the result. */
+      plane = ModePlane(w, h, 1u);
+      CHECK(EvalModeMapped(&plane, 1u, w, h, path, &map, &result) == expect);
+      if (expect == AdmissionMpoSupported) {
+        CHECK(result.OnePlaneRecord == 1u && result.SlotCount == 1u &&
+              RectEqual(result.Slots[0].Destination, Rect(0, 0, (int)w, (int)h)) &&
+              result.ModeMap.ModeWidth == w && result.ModeMap.ModeHeight == h &&
+              RectEqual(result.ModeMap.Destination, map.Destination));
+      } else {
+        CHECK(result.Supported == 0u && result.FailingPlane == 0u &&
+              result.ModeMap.ModeWidth == 0u);
+      }
+      /* Two planes: the full-mode desktop over a 640x480 video. */
+      p[0] = ModePlane(w, h, 0u);
+      p[1] = BottomPlane();
+      p[1].PoolOffset = BOTTOM_OFFSET * 16u;
+      CHECK(EvalModeMapped(p, 2u, w, h, path, &map, &result) == expect);
+      if (expect == AdmissionMpoSupported)
+        CHECK(result.SlotCount == 2u &&
+              RectEqual(result.Slots[0].Destination, Rect(100, 200, 740, 680)) &&
+              RectEqual(result.ModeMap.Destination, map.Destination));
+      else
+        CHECK(result.FailingPlane == 0u); /* the full-mode desktop */
+      /* The full-screen primary keeps the V2 path at every mode. */
+      plane = ModePlane(w, h, 0u);
+      CHECK(EvalModeMapped(&plane, 1u, w, h, path, &map, &result) ==
+            AdmissionMpoSupported && result.OnePlaneRecord == 0u);
+      /* A map for another mode is not used (commit in flight). */
+      if (i != 0u) {
+        other = MapOf(i == 3u ? 2u : 3u);
+        plane = ModePlane(w, h, 1u);
+        CHECK(EvalModeMapped(&plane, 1u, w, h, path, &other, &result) ==
+              AdmissionMpoReasonRecordModeNotNative);
+        CHECK(EvalModeMapped(p, 2u, w, h, path, &other, &result) ==
+              AdmissionMpoReasonPanelGeometry);
+      }
+    }
+  }
+  /* Composed, not mode-space, scale.  At 1920x1080 (4/3): a 960x540
+   * surface at 2x in mode space is 2.67x on the panel -> refused; a
+   * 1920x1080 surface shrunk to 900x500 (0.47x in mode space, beyond the
+   * limit at the native mode) is 0.63x on the panel -> supported. */
+  map = MapOf(3u);
+  plane = OnePlane(960, 540, 0, 0, 1920, 1080);
+  plane.LayerIndex = 1u; plane.BlendAlpha = 0u;
+  CHECK(EvalModeMapped(&plane, 1u, 1920u, 1080u, 0u, &map, &result) ==
+        AdmissionMpoReasonRecordModeNotNative);
+  plane = OnePlane(1920, 1080, 100, 100, 1000, 600);
+  CHECK(EvalModeMapped(&plane, 1u, 1920u, 1080u, 0u, &map, &result) ==
+        AdmissionMpoSupported && result.OnePlaneRecord == 1u);
+  plane.Destination = Rect(100, 100, 1000, 600); plane.Clip = plane.Destination;
+  CHECK(EvalModeMapped(&plane, 1u, 2560u, 1600u, 0u, NULL, &result) ==
+        AdmissionMpoReasonScaleBeyondLimit); /* the same at the native mode */
+  /* StretchQuality stays a mode-space rule: a 1:1 mode-space plane needs
+   * none even though the panel scales it; a mode-space scaled one does. */
+  plane = ModePlane(1920u, 1080u, 1u);
+  plane.StretchQuality = 0u;
+  CHECK(EvalModeMapped(&plane, 1u, 1920u, 1080u, 0u, &map, &result) ==
+        AdmissionMpoSupported);
+  plane = OnePlane(1920, 1080, 100, 100, 1000, 600);
+  plane.StretchQuality = 0u;
+  CHECK(EvalModeMapped(&plane, 1u, 1920u, 1080u, ADMISSION_MPO_PATH_CHECK3, &map,
+                       &result) == AdmissionMpoReasonStretchQuality);
+  CHECK(EvalModeMapped(&plane, 1u, 1920u, 1080u, ADMISSION_MPO_PATH_SET3, &map,
+                       &result) == AdmissionMpoSupported);
+  /* Without the broker's scaled-source capability nothing maps. */
+  {
+    ADMISSION_MPO_INPUT input;
+    plane = ModePlane(1920u, 1080u, 1u);
+    memset(&input, 0, sizeof(input));
+    input.PanelWidth = 1920u; input.PanelHeight = 1080u;
+    input.PanelStride = 1920u * 4u; input.PanelModeSupported = 1u;
+    input.PlaneCount = 1u; input.Planes = &plane; input.PoolBytes = POOL_BYTES;
+    input.ModeMapKnown = 1u; input.ModeMap = map;
+    CHECK(AdmissionMpoEvaluateOne(&input, &result) ==
+          AdmissionMpoReasonRecordModeNotNative);
+  }
+  /* Clipped top plane at 1920x1080: scratch and crop are chosen in mode
+   * coordinates (the surface's pixels). */
+  p[0] = ModePlane(1920u, 1080u, 0u);
+  p[1] = BottomPlane();
+  p[1].PoolOffset = BOTTOM_OFFSET * 16u;
+  p[0].Clip = Rect(960, 540, 984, 567);
+  CHECK(EvalModeMapped(p, 2u, 1920u, 1080u, 0u, &map, &result) == AdmissionMpoSupported);
+  CHECK(result.Slots[1].ClipMode == AdmissionMpoClipScratch &&
+        RectEqual(result.Slots[1].Clip, Rect(960, 540, 984, 567)));
+  p[0].Clip = Rect(100, 100, 165, 140);
+  CHECK(EvalModeMapped(p, 2u, 1920u, 1080u, 0u, &map, &result) == AdmissionMpoSupported);
+  CHECK(result.Slots[1].ClipMode == AdmissionMpoClipCrop);
+  /* The native mode ignores ModeMap entirely. */
+  plane = ModePlane(PANEL_W, PANEL_H, 1u);
+  other = MapOf(3u);
+  CHECK(EvalModeMapped(&plane, 1u, PANEL_W, PANEL_H, 0u, &other, &result) ==
+        AdmissionMpoSupported &&
+        RectEqual(result.ModeMap.Destination, Rect(0, 0, 2560, 1600)));
+}
+
+/* Check3 supported implies Set3 supported with the map known, every mode. */
+static void TestCheck3ImpliesSet3Mapped(void) {
+  static const int sizes[][2] = {{640, 480}, {960, 720}, {1280, 960},
+                                 {320, 240}, {1281, 960}, {640, 481}};
+  ADMISSION_MPO_PLANE_INPUT p[2], one;
+  ADMISSION_MPO_RESULT check3, set3;
+  ADMISSION_MPO_MODE_MAP map;
+  unsigned int i, z, q, layer, rc, rs, supported = 0u;
+  for (i = 0u; i < MODE_COUNT; ++i)
+    for (z = 0u; z < sizeof(sizes) / sizeof(sizes[0]); ++z)
+      for (q = 0u; q < 3u; ++q) {
+        const unsigned int w = Modes[i].W, h = Modes[i].H;
+        map = MapOf(i);
+        p[0] = ModePlane(w, h, 0u);
+        p[1] = BottomPlane();
+        p[1].PoolOffset = BOTTOM_OFFSET * 16u;
+        p[1].Destination = Rect(10, 10, 10 + sizes[z][0], 10 + sizes[z][1]);
+        if (p[1].Destination.Right > (int)w || p[1].Destination.Bottom > (int)h)
+          p[1].Destination = Rect(0, 0, (int)w / 2, (int)h / 2);
+        p[1].Clip = p[1].Destination;
+        p[1].StretchQuality = q;
+        rc = EvalModeMapped(p, 2u, w, h, ADMISSION_MPO_PATH_CHECK3, &map, &check3);
+        rs = EvalModeMapped(p, 2u, w, h, ADMISSION_MPO_PATH_SET3, &map, &set3);
+        CHECK(rc != AdmissionMpoSupported || rs == AdmissionMpoSupported);
+        supported += rc == AdmissionMpoSupported;
+        for (layer = 0u; layer < 2u; ++layer) {
+          one = p[1];
+          one.LayerIndex = layer;
+          rc = EvalModeMapped(&one, 1u, w, h, ADMISSION_MPO_PATH_CHECK3, &map, &check3);
+          rs = EvalModeMapped(&one, 1u, w, h, ADMISSION_MPO_PATH_SET3, &map, &set3);
+          CHECK(rc != AdmissionMpoSupported || rs == AdmissionMpoSupported);
+          supported += rc == AdmissionMpoSupported;
+        }
+      }
+  CHECK(supported != 0u);
+}
+
 int main(void) {
   TestStableReasonValues();
   TestArgumentsAndCounts();
@@ -1391,6 +1801,11 @@ int main(void) {
   TestCheck3OnlyRulesNotReachableFromSet3();
   TestLonePlane();
   TestTopClip();
+  TestNonNativeModeRecords();
+  TestCheck3ImpliesSet3AtEveryMode();
+  TestMapRectVectors();
+  TestNonNativeModeMapped();
+  TestCheck3ImpliesSet3Mapped();
   if (Failures != 0u) {
     fprintf(stderr, "mpo_contract_test: %u failure(s)\n", Failures);
     return EXIT_FAILURE;
