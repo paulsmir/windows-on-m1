@@ -6761,3 +6761,16 @@ boot was run. The previous entry stays as written.
   the console/USB locks (covered by the watchdog only); no bugcheck-code readout for kernel 26200.9974 (identity
   recorded: TimeDateStamp 0xcf576790, SizeOfImage 0x124a000, CheckSum 0xb26993; RVA needs that build's PDB);
   no watchdog during guest run (a full hang still needs the operator).
+
+## UPDATE 2026-11-14T10:06:21Z - proxy slot EXP2426/2427 (other drivers): Wi-Fi link up; external-display route excluded
+
+- Wi-Fi/Bluetooth (EXP2426): with the per-port reference clock enabled (missing in m1n1's pcie_init on this SoC),
+  PERST# released and link training started, the PCIe link came up at once and both functions answered
+  (14e4:4425 and 14e4:5f69). Proxy-only, no guest involved. Next: a lasting m1n1 path and the guest ownership
+  design (ECAM/interrupts/DMA isolation), offline in the Wi-Fi session.
+- External display (EXP2427): the display-crossbar route was programmed, the connect result did not change
+  (REQUEST_DISPLAY timed out; the firmware's ACTIVATE call arrived 0.26 ms after m1n1 stopped waiting). The route
+  is excluded as the cause; next variable S1c3 = m1n1 answers firmware calls while it waits for a command reply,
+  enabled for the external display coprocessor only. Internal-panel guard: no change.
+- GPU bench next: one combined package (accepted + PL-1c + F1K-STAMP + C2 set + A5-D1 receipt) with verdict lines
+  for integration, C2-1/C2-3 at non-native desktop modes, and the device-restart discriminator under start policy 1.
