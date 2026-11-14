@@ -79744,3 +79744,16 @@ EXP2421 CORRECTION 2026-11-14T09:24:28Z (to the EXP2421 ACTUAL, A5-D1 tail; arch
 - The A5 tail of EXP2421 is NOT A5 evidence. kmd-receipts-a5-c1.txt shows Wom1GpuvaArmStatus 0xC0000034 and Wom1StartStatus 0xC00000BB: the package ran with start policy 0 (Wom1StartPolicy absent), the one-shot G3Armed arm was consumed at boot, so every re-enable was refused by design inside our StartDevice (the same cause as the EXP2423 step-B FAILED_POST_START). Event 549's 0xC00000BB is that refusal; its first data word 1280331841 = 0x4C505041 = "APPL". The "first re-enable already fails" and "0xC00000BB instead of 0xC0000017" statements in the ACTUAL are therefore not about A5.
 - The dxgkrnl-side A5 failure (EXP2416 cycles 2-3, policy allowed the start) needs a re-start our StartDevice allows: A5-D1 runs with Wom1StartPolicy=1 on the F1K-STAMP package, after uptime >= 150 s. The probe tail (scratchpad a5tail.sh) now skips with A5_TAIL_SKIPPED when Wom1StartPolicy is not 1 and waits for uptime 150 s otherwise.
 - The C2 part of the EXP2421 verdict stands.
+
+EXP2424 HARDWARE BEFORE 2026-11-14T09:28:01Z:
+- Kind: one variable against the bench (RST-1): m1n1 gpu/rst2-reset-path ecafa286 (RST-1 995e1957 + RST-2A: the "ASC RX control" read32 of the guest-owned AGX ASC block removed from hv_handle_smc's reset branch), built with the bench procedure: .local/experiments/m1n1-s2v3-rq2-rst2a/m1n1-g2-abi6-iomfb-owner-s2v3-rq2-rst2a.macho sha256 6d451dd736ae82ae5a92c47468f9d7005607a77657bfd88150be8ca84354e933; stripped objects differ from RST-1 only in hv_exc.o. Package: the EXP2413 build (PL-1c), normal switches.
+- WHY THIS HYPOTHESIS: (1) architect's crash-reset read: the raw load of 0x206408114 returned 37 and aborted 20 of 57 earlier resets and is the first EXP2420 stall candidate; (2) EL2 must not touch a block whose post-crash bus state it does not track; (3) RST-1 now bounds the path, so removing the load is observable as the line's absence while resets still return.
+- ATOMIC CONTRACT: none.
+- Steps: A (chain): ordered restart -> back at the proxy; no "ASC RX control" line in full.log. B (from the proxy): taskkill /F DcomLaunch at uptime ~60 s; the probe polls from the kill: RST2B_USB_DISCONNECT_S and PROXY_ANSWER_S (measured, 0.2 s device poll, proxy pings once the device is back).
+- Expected: both resets return; no "ASC RX control" line after either; PROXY_ANSWER_S < 60.
+- Failure: a reset that does not return (RST-1 should still catch it at 3 s), or the line still printed.
+- Recovery: AT_PROXY rec2424h after B.
+- Hashes: probe2424.sh 6fee1df816f5 probe2424b.sh 22fb8dbba67b.
+- Hashes: sys 0c28e6fde6ac, UmdArm64 40b4e5eb6258, UmdX64 4646c8e2a797, Umd32 bb94afc26fbe; manifest bc525d36ac61, hardware-manifest 22d8f6e4afef; probe2424.sh 6fee1df816f5 (PROBE_LINT_OK); visible recovery rec2424h e23da2dc17a35616; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
+- Recovery rec2424h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2424-rst2a/run2424.sh.
