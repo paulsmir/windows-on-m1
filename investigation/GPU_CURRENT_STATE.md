@@ -6801,3 +6801,14 @@ boot was run. The previous entry stays as written.
   the guest under AppleAns (ANS-DIRECT), reproduced on the plain bench guest without Wi-Fi; the machine later
   reset to the proxy; disk healthy afterwards. Cause unknown. Until fixed, no bench probe uses unbuffered
   write-through I/O on the guest disk. Routed to the SSD session for offline analysis and a staged reproduction.
+
+## UPDATE 2026-11-14T12:17:27Z - EXP2436: Windows enumerates both BCM4378 functions; SSD box started
+
+- Wi-Fi/Bluetooth: the root port's Problem 12 was an unroutable interrupt requirement (no _PRT entry for device 0
+  of the new segment). With that one ACPI line the port starts and Windows lists 14e4:4425 and 14e4:5f69
+  (Code 28, no driver). The hypervisor's config-space filter, the launch profile and the second PCI segment are
+  thereby validated for enumeration; interrupts, DMA isolation and the function drivers do not exist yet.
+- Storage: offline read of the write-through stall found no cause, but a real contract defect - AppleAns refused
+  WRITE commands carrying FUA, so Windows dropped FUA for the boot and write-through data went to the volatile
+  cache. Fixed offline in driver 0.4.9 (FUA passed to the device), not installed. The stall reproduction with a
+  live counter poller is running in the SSD box.
