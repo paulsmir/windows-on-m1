@@ -6703,3 +6703,14 @@ boot was run. The previous entry stays as written.
   decidable offline. The bugcheck-code line is not a measurement on the current guest kernel (stale RVA, prints 0).
 - Fix specs RST-1 (arm the SoC watchdog at entry of the reset handler) and RST-2 (remove the device load, bound the
   flush) are in the handoff file. NOT built or run. No crash-trigger experiment before RST-1.
+
+## UPDATE 2026-11-14T08:41:55Z - EXP2420: F1-k L2 confirmed; the start policy (F1K-STAMP) has passed L0, L1 and L2
+
+- After a forced crash 60 s after start, the next start refused the GPU (reason StalePending, Latched 1); the
+  stamp equalled the unchanged ShutdownTime. Recovery removes the latch. With EXP2412 (L0) and EXP2416 (L1) the
+  start policy with the ShutdownTime-derived clean exit is validated on hardware.
+- Limits: L2b was read after an additional operator power cycle (the machine hung after the crash-reset, see the
+  RST entry); both are non-orderly ends and cannot be told apart. Not exercised: Running still set at a third
+  consecutive orderly restart. The policy is still opt-in (Wom1StartPolicy=1); making it the default belongs to
+  the standalone work (F1).
+- EXP2423 (RST-1, watchdog armed at entry of the reset path) is running.
