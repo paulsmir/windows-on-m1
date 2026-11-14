@@ -121,6 +121,9 @@ static ADMISSION_UMD_RESOURCE *AdmissionUmdResourceFromDxgi(
 
 /* BP-1: umd_primary_backbuffer.h names A8R8G8B8 storage without d3dukmdt.h. */
 C_ASSERT(ADMISSION_UMD_STORAGE_A8R8G8B8 == (UINT)D3DDDIFMT_A8R8G8B8);
+/* PL-1c: superseded primaries are chained through their first field
+ * (umd_primary_retention.h ADMISSION_UMD_RETENTION_LINK). */
+C_ASSERT(FIELD_OFFSET(ADMISSION_UMD_RETIREMENT, Next) == 0);
 
 /* The storage AdmissionUmdDescribePrimary gives each shared DXGI format. */
 static BOOLEAN AdmissionUmdSharedFormatStorage(UINT DxgiFormat,
@@ -1494,29 +1497,19 @@ HRESULT APIENTRY AdmissionUmdSetDisplayMode(
     AdmissionUmdDiagnostic("measure-dxgi-set-display-mode", result, values,
                            ARRAYSIZE(values));
     {
-      /* PL-1b: after the callback returned, a retained primary of another
-       * allocation is superseded (kept, no deallocation: EXP2402 released it
-       * here and every release was followed by a hide of the source).  Only
-       * the oldest superseded one beyond the bound is released (HandleList). */
+      /* PL-1b/PL-1c: after the callback returned, a retained primary of
+       * another allocation is superseded (kept, no deallocation: EXP2402
+       * released it here, EXP2403 released the oldest superseded one past a
+       * bound, and every live release was followed by a hide of the source).
+       * Nothing is released before device destroy (path 4). */
       void *retainedBefore = device->PrimaryRetention.Retained;
       UINT retainedAllocation =
           (UINT)device->PrimaryRetention.RetainedAllocation;
-      ADMISSION_UMD_RETIREMENT *released = (ADMISSION_UMD_RETIREMENT *)
-          AdmissionUmdRetentionSetDisplayMode(
-              &device->PrimaryRetention,
-              (unsigned int)setMode.hPrimaryAllocation, SUCCEEDED(result));
+      (void)AdmissionUmdRetentionSetDisplayMode(
+          &device->PrimaryRetention,
+          (unsigned int)setMode.hPrimaryAllocation, SUCCEEDED(result));
       if (retainedBefore != NULL && device->PrimaryRetention.Retained == NULL)
         AdmissionUmdRetentionReceipt(device, retainedAllocation, 3u, S_OK);
-      if (released != NULL) {
-        HRESULT freed = AdmissionUmdRetirementDeallocate(&device->Retirement,
-                                                        released);
-        AdmissionUmdRetentionReceipt(device, (UINT)released->KernelAllocation,
-                                     2u, freed);
-        if (FAILED(freed))
-          AdmissionUmdRetirementQueue(&device->Retirement, released);
-        else
-          AdmissionUmdRetirementFree(released);
-      }
     }
     return result;
   }

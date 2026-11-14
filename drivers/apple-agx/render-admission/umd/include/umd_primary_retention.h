@@ -20,59 +20,59 @@
  *
  * PL-1b (EXP2401/2402): releasing the retained primary right after a later
  * SetDisplayMode(new) returned was followed, every time, by a hide of the
- * source and a new SetDisplayMode from DWM (a mode-change loop).  The
- * retained object is therefore not released there: it moves to a bounded
- * "superseded" list (oldest first) and the current slot is freed, so the new
- * mode-setting primary is retained at its destroy.  Only when the list is
- * full is its OLDEST entry (at least ADMISSION_UMD_RETENTION_SUPERSEDED_MAX
- * mode sets old) handed back for release.  Device destroy hands back the
- * current object and every superseded one.
+ * source and a new SetDisplayMode from DWM (a mode-change loop), so the
+ * retained object is superseded instead (the current slot is freed and the
+ * new mode-setting primary is retained at its destroy).  PL-1c (EXP2403):
+ * releasing the oldest superseded one beyond a bound of 4 restarted the same
+ * loop, so the superseded set is unbounded and SetDisplayMode never returns
+ * an object to release.  Device destroy hands back the current object and
+ * every superseded one.
  *
  * Neutral types only, so a host test compiles it (tests/
- * test_umd_primary_retention.py); the retained object is opaque. */
+ * test_umd_primary_retention.py); the retained object is opaque except that
+ * its first field is the pointer-sized chain link (ADMISSION_UMD_RETENTION_LINK). */
 
-#define ADMISSION_UMD_RETENTION_SUPERSEDED_MAX 4u
+/* PL-1c (EXP2403): any live release of a retained primary - also the
+ * oldest superseded one, four mode sets back - was followed by a hide of the
+ * source and a new SetDisplayMode (the loop returned at the first bound
+ * release).  The superseded set is therefore unbounded and nothing is
+ * released before device destroy.  Superseded objects are chained through
+ * their FIRST pointer-sized field (ADMISSION_UMD_RETIREMENT::Next, checked
+ * at compile time in umd.c), oldest first; no allocation is needed. */
+#define ADMISSION_UMD_RETENTION_LINK(Object) (*(void **)(Object))
 
 typedef struct _ADMISSION_UMD_PRIMARY_RETENTION {
   unsigned int ModeAllocation;     /* last successful SetDisplayMode, 0 none */
   void *Retained;                  /* current slot: retained retirement */
   unsigned int RetainedAllocation; /* its kernel allocation */
-  unsigned int SupersededCount;    /* valid entries below, oldest first */
-  void *Superseded[ADMISSION_UMD_RETENTION_SUPERSEDED_MAX];
-  unsigned int SupersededAllocation[ADMISSION_UMD_RETENTION_SUPERSEDED_MAX];
+  unsigned int SupersededCount;    /* entries in the chain below */
+  void *SupersededHead;            /* oldest superseded, chained by LINK */
+  void *SupersededTail;            /* newest superseded */
 } ADMISSION_UMD_PRIMARY_RETENTION;
 
 /* After pfnSetDisplayModeCb returned.  A retained object of another
- * allocation is superseded, not released.  Returns the object the caller
- * must release now (the oldest superseded one, only when the list was
- * full), or NULL.  The caller sees a supersede as Retained going from
+ * allocation is superseded (appended to the chain), never released: PL-1c
+ * returns NULL always.  The caller sees a supersede as Retained going from
  * non-NULL to NULL across the call. */
 static inline void *AdmissionUmdRetentionSetDisplayMode(
     ADMISSION_UMD_PRIMARY_RETENTION *State, unsigned int Allocation,
     int Succeeded) {
-  void *release = 0;
-  unsigned int i;
   if (State == 0 || !Succeeded || Allocation == 0u ||
       Allocation == State->ModeAllocation)
     return 0;
   State->ModeAllocation = Allocation;
   if (State->Retained == 0 || State->RetainedAllocation == Allocation)
     return 0;
-  if (State->SupersededCount >= ADMISSION_UMD_RETENTION_SUPERSEDED_MAX) {
-    release = State->Superseded[0];
-    for (i = 1u; i < ADMISSION_UMD_RETENTION_SUPERSEDED_MAX; ++i) {
-      State->Superseded[i - 1u] = State->Superseded[i];
-      State->SupersededAllocation[i - 1u] = State->SupersededAllocation[i];
-    }
-    State->SupersededCount = ADMISSION_UMD_RETENTION_SUPERSEDED_MAX - 1u;
-  }
-  State->Superseded[State->SupersededCount] = State->Retained;
-  State->SupersededAllocation[State->SupersededCount] =
-      State->RetainedAllocation;
+  ADMISSION_UMD_RETENTION_LINK(State->Retained) = 0;
+  if (State->SupersededTail != 0)
+    ADMISSION_UMD_RETENTION_LINK(State->SupersededTail) = State->Retained;
+  else
+    State->SupersededHead = State->Retained;
+  State->SupersededTail = State->Retained;
   ++State->SupersededCount;
   State->Retained = 0;
   State->RetainedAllocation = 0u;
-  return release;
+  return 0;
 }
 
 /* At the destroy of a resource.  Returns 1 when the caller must NOT
@@ -96,7 +96,6 @@ static inline int AdmissionUmdRetentionDestroy(
 static inline void *AdmissionUmdRetentionDeviceDestroy(
     ADMISSION_UMD_PRIMARY_RETENTION *State) {
   void *release;
-  unsigned int i;
   if (State == 0)
     return 0;
   State->ModeAllocation = 0u;
@@ -106,16 +105,14 @@ static inline void *AdmissionUmdRetentionDeviceDestroy(
     State->RetainedAllocation = 0u;
     return release;
   }
-  if (State->SupersededCount == 0u)
+  release = State->SupersededHead;
+  if (release == 0)
     return 0;
-  release = State->Superseded[0];
-  for (i = 1u; i < State->SupersededCount; ++i) {
-    State->Superseded[i - 1u] = State->Superseded[i];
-    State->SupersededAllocation[i - 1u] = State->SupersededAllocation[i];
-  }
+  State->SupersededHead = ADMISSION_UMD_RETENTION_LINK(release);
+  ADMISSION_UMD_RETENTION_LINK(release) = 0;
+  if (State->SupersededHead == 0)
+    State->SupersededTail = 0;
   --State->SupersededCount;
-  State->Superseded[State->SupersededCount] = 0;
-  State->SupersededAllocation[State->SupersededCount] = 0u;
   return release;
 }
 
