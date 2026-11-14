@@ -6679,3 +6679,15 @@ boot was run. The previous entry stays as written.
 - Open defect seen again (plan item A5): of three disable/enable cycles in one boot the first restart worked, the
   second and third ended CM_PROB_FAILED_POST_START although the policy allowed the start. Cause unknown; this is a
   device-restart defect, not a start-policy defect.
+
+## UPDATE 2026-11-14T03:52:52Z - A5 (device restart inside one boot): failure located in dxgkrnl's adapter creation, cause open
+
+- Offline read (.local/night-20261110/a5-restart/REPORT.md): in the failing restarts our StartDevice and child
+  enumeration succeed; dxgkrnl's DxgkAddAdapter then fails in the render-core initialisation right after VidMm's
+  second QUERYSEGMENT4 (out-of-memory status path), marks the adapter failed, and PnP reports
+  CM_PROB_FAILED_POST_START. Same receipt pattern as EXP2308 (event 549, 0xC0000017, reason 3); for EXP2416 the
+  event was not collected, so this is inferred there. Hypervisor brokers and the KMD start path are identical in
+  working and failing cycles.
+- Open: whether our segment answer changes on later instances (KMD cause) or Windows still holds the previous
+  adapter instance (teardown cause; candidates include allocations kept by DWM's device). Discriminator A5-D1
+  (receipt-only, handoff file) is specified, not yet built or run.
