@@ -79803,3 +79803,23 @@ EXP2426-EXP2427 HARDWARE BEFORE 2026-11-14T09:57:27Z (proxy-only slot after rec2
   - Sequence: chainload; S0c snapshot; S1b precondition (must reproduce EXP2415: crossbar 0x110, lanes 0x489, power_ctrl 0x1b); route op 0x1403 (PASS: stage DONE, base 0x50304c000, DFP 0, state 0, every plan control bit present after); then 0x1402 with the panel guard; port controller read. Single variable vs EXP2418: the route.
   - Outcomes: lane-count/link-rate AP calls (and possibly modes) = the route was the missing piece; only ACTIVATE again = route excluded. Guard FAIL or a stable-word change in the shared panel regions = stop. After a host-side failure: the same command with --recover (read-only), never a resend.
   - Recovery: p.reboot(), AT_PROXY rec2425h; panel state in the recovery guest recorded.
+
+EXP2426-EXP2427 HARDWARE ACTUAL 2026-11-14T10:04:49Z (proxy-only slot):
+- Entry: rec2425h RECOVERY_DONE, ordered reboot of the recovery guest at 10:00:53Z, recovery run_uefi (exact PID) exited, bench m1n1 (RST-2ABC) at "Running proxy" (base 0x805c00000). Stdout of every invocation and a usbmodem<SERIAL>43 log are in the evidence dirs.
+- EXP2426 WBT000d (v5 copy .local/experiments/EXP2419-wbt000d/wbt-v5, hashes verified; receipts and stdout in .local/experiments/EXP2426-wbt000d):
+  - read READ_ONLY_DONE; smc-write SMC_WRITE_DONE; pcie-up PCIE_UP_DONE with post_state refclk_on false (so the refclk step was justified).
+  - refclk REFCLK_ON: LANE_CTL 0x680084004 0x35 -> 0x8035 (CFGACC), LANE_CFG 0x680084000 0x0 -> 0x1 (REFCLK0REQ), ACK0 at once (0x5), -> 0x7 (REFCLK1REQ), ACK1 at once (0xf), LANE_CTL back to 0x35, LANE_CFG 0xf -> 0x60f (REFCLKEN), PORT_REFCLK 0x681000810 0x100 -> 0x101.
+  - perst-release PERST_RELEASED; link: LTSSM start, link up at the first poll (LINKSTS 0x99000001, 0 ms); bus numbers set, config read, restored.
+  - Functions: fn0 14e4:4425 (class 0x028000, interrupt pin 1 = INTA), fn1 14e4:5f69 (class 0x028000, interrupt pin 2), both with PM, MSI (0x58), vendor and PCIe capabilities. Verdict BOTH_FUNCTIONS - CONFIRMED: the missing piece of EXP2417 was the per-port reference clock (Asahi apple_pcie_setup_refclk), not CLKREQ#.
+  - No reset; the proxy answered after every invocation (same base).
+- Proxy reboot -> bench base 0x804898000.
+- EXP2427 TBX-S1c2 (m1n1 709b939f f38d5d34..., tools from the 380c3059 copy, hashes verified):
+  - Chainload rc 0 (LLDDIR wrapper); identity 0x1401(9,0) = -1000.
+  - S0c: already S0, STATUS 0x108282ef, DATA_STATUS 0x8571.
+  - S1b precondition PASS: pin D, mode 3, not flipped, crossbar 0x110, lanes 0x489, power_ctrl 0x1b (reproduces EXP2415).
+  - Route 0x1403 PASS (10:03:05Z): TTY "dpxbar atc 1 pipe 0 dfp 0 state 0 base 0x50304c000 stage 6 error 0 steps 19"; request_ret 0, no problems.
+  - Connect 0x1402 with the panel guard: stage 12 DONE, error 0, deadline 0, dcpext backend atc dfp 1 lanes 2; CONNECT sent 0x8010, reply 0x8010 with unk 0 (connect_ret -1 by m1n1's 0x100 rule); REQUEST_DISPLAY -110; hpd 0; no iBoot HPD/modes; AP calls: activate 1, lanes 0, rate 0. Timing: t_connect 141.65 ms, REQUEST_DISPLAY done (timeout) 641.84 ms, ACTIVATE at 642.10 ms - 0.26 ms after m1n1 stopped waiting for the REQUEST_DISPLAY reply (activate_after_request_timeout true). The tool labels it CONNECT_AP_CALLS (verdict PASS by its criteria) because ACTIVATE counts as an AP call.
+  - Panel guard: three regions shared with disp0 (0x23b3d0000/0x4000, 0x23b738000/0x1000, 0x23bc3c000/0x1000), volatile words 0, changed 0.
+  - Port controller afterwards unchanged (STATUS 0x108282ef, DATA_STATUS 0x8571).
+  - Verdict by the architect's preregistered reading: only ACTIVATE again, no lane-count/link-rate calls -> the crossbar route is EXCLUDED as the missing piece; the timing (ACTIVATE right after the REQUEST_DISPLAY timeout) points at the next variable named in the BEFORE: m1n1 answering firmware AP calls while it waits for a command reply.
+- Exit: p.reboot() -> bench image (base 0x805664000, 0x1401 absent), AT_PROXY rec2425h started; panel check in the recovery guest follows.
