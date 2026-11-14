@@ -6622,3 +6622,14 @@ boot was run. The previous entry stays as written.
   happened. Cause unknown.
 - Still unknown: why dxgkrnl runs the disable path for an old retained primary (static read says it should not).
   EXP2403 has a DxgKrnl ETL covering the bound releases; analysis started.
+
+## UPDATE 2026-11-14T00:33:19Z - EXP2403 trace read: one device, no late reference; "arm c exit hidden" was the first bound release
+
+- Correction to the previous EXP2403 entry: the hidden source at the exit of the 1680x1050 arm is not a separate
+  defect. The native restore at that exit is where the superseded list passed the bound; its release hid the source
+  (receipts c-12 -> c-13 bracket it). PL-1c covers it.
+- Excluded by the DxgKrnl trace: different kernel devices for set and release; a late flip/present reference to the
+  released primary. 69 of 69 releases on the live device hid the source, regardless of age, later mode sets,
+  commits, eviction or ClearFlipDevice. Which dxgkrnl state keeps a superseded primary "displayed" is still unknown.
+- Candidate PL-1d (hypothesis, after PL-1c): release superseded primaries at entry to SetDisplayMode, where the
+  source is already hidden in all 77 observed calls; would remove PL-1c's memory limitation.
