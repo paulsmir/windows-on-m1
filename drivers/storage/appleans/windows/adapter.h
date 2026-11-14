@@ -9,6 +9,7 @@
 #include "../common/ans_direct.h"
 #include "../common/ans_trim.h"
 #include "../common/ans_reject.h"
+#include "../common/ans_bounce.h"
 #include "telemetry.h"
 #include "dump.h"
 #ifndef APPLE_ANS_NATIVE_READ_ONLY
@@ -29,7 +30,8 @@
 #define APPLE_ANS_METADATA_BYTES (APPLE_ANS_METADATA_PAGES * ANS_PRP_PAGE_SIZE + ANS_PRP_PAGE_SIZE - 1)
 /* Direct mode: six 16 KiB queue arrays (admin/IO SQ, CQ, TCB), then the metadata pages,
  * plus alignment slack (StorPortGetUncachedExtension guarantees only page alignment). */
-#define APPLE_ANS_DIRECT_BYTES (6u * ANSD_QUEUE_ALIGN + APPLE_ANS_METADATA_PAGES * ANS_PRP_PAGE_SIZE + ANSD_QUEUE_ALIGN)
+#define APPLE_ANS_DIRECT_BYTES (6u * ANSD_QUEUE_ALIGN + APPLE_ANS_METADATA_PAGES * ANS_PRP_PAGE_SIZE + \
+    ANS_BOUNCE_COUNT * ANS_BOUNCE_BYTES + ANSD_QUEUE_ALIGN) /* ... then the bounce buffers */
 enum APPLE_ANS_STAGE {
     AppleAnsStageEntry=1, AppleAnsStageFindAdapter=2, AppleAnsStageResourcesRejected=3,
     AppleAnsStageResourcesAccepted=4, AppleAnsStageTransportUnavailable=5,
@@ -41,6 +43,11 @@ enum APPLE_ANS_STAGE {
 };
 typedef struct _APPLE_ANS_SRB {
     UCHAR Cdb[16], CdbLength, Valid, PrpFailure, Misaligned, MisalignedLow;
+    /* Bounce (common/ans_bounce.h): BuildIo sets NeedBounce and the mapped address of the SRB's
+     * data, or BounceDefer when the buffer could not be mapped; StartIo claims a buffer
+     * (BounceIndex = index + 1) and AppleAnsComplete copies a read back and releases it. */
+    UCHAR NeedBounce, BounceDefer, BounceIndex;
+    PVOID BounceVa;
     ULONG Length, DiagValue, DiagCount;
     struct ans_logical_prps Prps;
 } APPLE_ANS_SRB, *PAPPLE_ANS_SRB;
@@ -91,6 +98,11 @@ typedef struct _APPLE_ANS_ADAPTER {
     struct ans_trim Trim;
     /* Requests refused as not implemented (SRB functions, SRB_IO_CONTROL codes, CDB opcodes). */
     struct ans_rejects Rejects;
+    /* Page-aligned bounce buffers in the uncached extension and the controller address of each
+     * of their pages (resolved once in direct_carve). Pool state under InterruptLock. */
+    struct ans_bounce_pool Bounce;
+    PUCHAR BounceBuffer[ANS_BOUNCE_COUNT];
+    ULONGLONG BouncePa[ANS_BOUNCE_COUNT][ANS_BOUNCE_PAGES];
 } APPLE_ANS_ADAPTER, *PAPPLE_ANS_ADAPTER;
 BOOLEAN AppleAnsNativeResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config);
 BOOLEAN AppleAnsNativeInitialize(PAPPLE_ANS_ADAPTER a);

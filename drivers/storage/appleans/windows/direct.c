@@ -76,6 +76,13 @@ static BOOLEAN direct_carve(PAPPLE_ANS_ADAPTER a, ULONGLONG common_ipa, struct a
         a->Pages[i] = pages + (ULONG_PTR)i * ANS_PRP_PAGE_SIZE;
         if (!carve_pa(a, common_ipa, a->Pages[i], ANS_PRP_PAGE_SIZE, &a->PageDma[i])) return FALSE;
     }
+    PUCHAR bounce = pages + (ULONG_PTR)APPLE_ANS_METADATA_PAGES * ANS_PRP_PAGE_SIZE;
+    for (unsigned i = 0; i < ANS_BOUNCE_COUNT; i++) {
+        a->BounceBuffer[i] = bounce + (ULONG_PTR)i * ANS_BOUNCE_BYTES;
+        for (unsigned p = 0; p < ANS_BOUNCE_PAGES; p++)
+            if (!carve_pa(a, common_ipa, a->BounceBuffer[i] + (ULONG_PTR)p * ANS_PRP_PAGE_SIZE,
+                          ANS_PRP_PAGE_SIZE, &a->BouncePa[i][p])) return FALSE;
+    }
     for (unsigned n = 0; n < 2; n++) {
         q[n] = (struct ansd_queue){0};
         q[n].sq = chunk[3*n]; q[n].cq = (volatile struct ansd_cqe *)chunk[3*n+1];
@@ -431,6 +438,13 @@ VOID AppleAnsDirectPeer(PAPPLE_ANS_ADAPTER a, struct ans_telemetry *peer)
          ((ans_u64)StorPortReadRegisterUlong(a, (PULONG)(a->Ctrl + ANSD_CC)) << 32)) : 0;
     peer->bytes_read = a->Ansd.stats.last_unknown_msg;
     peer->bytes_written = a->Ansd.stats.last_unknown_ep;
+    /* Bounce receipt: reads / writes = bounced transfers by direction, resets = requests deferred
+     * (pool exhausted or data not mappable), flushes = buffers in use now | high-water << 32. */
+    peer->valid_fields |= ANS_TELEM_READS | ANS_TELEM_WRITES | ANS_TELEM_RESETS | ANS_TELEM_FLUSHES;
+    peer->reads = a->Bounce.bounced_reads;
+    peer->writes = a->Bounce.bounced_writes;
+    peer->resets = a->Bounce.busy;
+    peer->flushes = (ans_u64)a->Bounce.claimed | ((ans_u64)a->Bounce.high_water << 32);
     peer->last_stage = a->Ansd.stage;
     peer->last_error = (ans_u32)((a->Ansd.crashed ? 2u : 0u) | (a->Ansd.faulted ? 1u : 0u));
 }

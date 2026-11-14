@@ -371,6 +371,17 @@ failure:
 VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a);
 VOID AppleAnsComplete(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, UCHAR status, ULONG length)
 {
+    /* The one place an SRB leaves the driver: a bounced READ that succeeded is copied to the
+     * caller's buffer, and the bounce buffer is returned whatever the status. */
+    PAPPLE_ANS_SRB bx = srb->SrbExtension;
+    if (bx && bx->BounceIndex) {
+        unsigned index = (unsigned)bx->BounceIndex - 1;
+        if (status == SRB_STATUS_SUCCESS && (srb->SrbFlags & SRB_FLAGS_DATA_IN) && bx->BounceVa &&
+            length && length <= bx->Length && length <= ANS_BOUNCE_BYTES)
+            RtlCopyMemory(bx->BounceVa, a->BounceBuffer[index], length);
+        (void)ans_bounce_release(&a->Bounce, (int)index);
+        bx->BounceIndex = 0;
+    }
     srb->SrbStatus = status;
     srb->DataTransferLength = length;
     StorPortNotification(RequestComplete, a, srb);
@@ -540,6 +551,21 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
         /* Policy and receipt: SUBMIT survives only in DEALLOCATE mode, fenced ranges only. */
         ans_trim_gate(&a->Trim,&plan,a->Pages[tag]);
     }
+    /* Bounce: claim a buffer for a READ/WRITE whose data BuildIo found misaligned. A write is
+     * copied now, before the command exists; the PRP set comes from the buffer's own pages.
+     * No buffer free, or the data could not be mapped: BUSY (Storport retries), never an error. */
+    if (x && (x->NeedBounce || x->BounceDefer) && plan.action==ANS_SCSI_SUBMIT &&
+        (plan.nvme_opcode==1 || plan.nvme_opcode==2)) {
+        int index = (x->NeedBounce && ans_bounce_size_ok(plan.transfer_bytes) &&
+                     plan.transfer_bytes==x->Length)
+            ? ans_bounce_acquire(&a->Bounce,plan.nvme_opcode==1) : -1;
+        if (index < 0) {
+            if (!x->NeedBounce) a->Bounce.busy++; /* mapping failed: counted with the busy pool */
+            AppleAnsComplete(a,srb,SRB_STATUS_BUSY,0);return TRUE;
+        }
+        x->BounceIndex=(UCHAR)(index+1);
+        if (plan.nvme_opcode==1) RtlCopyMemory(a->BounceBuffer[index],x->BounceVa,plan.transfer_bytes);
+    }
     struct ans_order_token token;
     int admitted=ans_order_admit(&a->Order,tag,attribute,&token);
     if(admitted!=ANS_ORDER_OK) {
@@ -552,7 +578,10 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
     /* Direct: controller PAs (guest DMA view translated); PageDma already holds PAs. */
     struct ans_logical_prps translated;
     const struct ans_logical_prps *prps=x?&x->Prps:NULL;
-    if(a->Direct && prps && prps->count) {
+    if (x && x->BounceIndex) {
+        /* Controller addresses of the bounce buffer's pages: already translated, page-aligned. */
+        prps=ans_bounce_prps(a->BouncePa[x->BounceIndex-1],plan.transfer_bytes,&translated)?&translated:NULL;
+    } else if(a->Direct && prps && prps->count) {
         if(!ansd_translate_prps(prps,&translated)) {
             for (ans_u32 i=0;i<prps->count;i++) {
                 ans_u64 pa,off=prps->page[i]&(ANS_PRP_PAGE_SIZE-1);

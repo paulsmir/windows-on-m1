@@ -28,3 +28,9 @@ trap 'rm -rf "$build"' EXIT HUP INT TERM
     -fsanitize=address,undefined -fno-omit-frame-pointer \
     "$here/../ans_reject.c" "$here/test_reject.c" -o "$build/test_reject"
 "$build/test_reject"
+
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -pedantic -g \
+    -fsanitize=address,undefined -fno-omit-frame-pointer \
+    "$here/../ans_bounce.c" "$here/../ans_scsi.c" "$here/../ans_prp.c" "$here/../../windows/request.c" \
+    "$here/test_bounce.c" -o "$build/test_bounce"
+"$build/test_bounce"
