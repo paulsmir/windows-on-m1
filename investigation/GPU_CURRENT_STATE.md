@@ -6812,3 +6812,19 @@ boot was run. The previous entry stays as written.
   WRITE commands carrying FUA, so Windows dropped FUA for the boot and write-through data went to the volatile
   cache. Fixed offline in driver 0.4.9 (FUA passed to the device), not installed. The stall reproduction with a
   live counter poller is running in the SSD box.
+
+## UPDATE 2026-11-14T12:54:05Z - storage defect narrowed (EXP2437-2440): probabilistic firmware stall under unbuffered write-through
+
+- Reproduced on the bench profile with live driver counters: under 512 MiB unbuffered write-through writes in
+  1 MiB blocks about half of the runs stall at a random position (after 30-200 MiB). At the stall the commands of
+  one block stay outstanding and completions and interrupts stop for everything, an unrelated read included; the
+  driver's resets return at once (by code reading: the ANS firmware reported a crash, which the driver cannot
+  recover; the receipt of 0.4.8 does not return that flag, so this is inferred). The machine resets itself after
+  1.5-2 minutes and returns to the proxy. Canary checks after every stall: data intact.
+- Refuted with a preregistered prediction: a buffer-alignment rule (a 16-byte aligned buffer stalled, EXP2440).
+  Also excluded: the managed-buffer API path, the read-back and delete phases, one specific m1n1/Mu profile.
+  My fix decision built on the alignment rule (driver-side bounce) is withdrawn; nothing was coded.
+- Separate confirmed contract defect, fixed offline only (0.4.9, not installed): WRITE with FUA was refused, so
+  write-through data was not durable at completion.
+- Open: the trigger (queue depth / structure reuse / completion races / concurrent Dataset Management are
+  candidates, none tested). No bench probe uses unbuffered write-through until this is fixed.
