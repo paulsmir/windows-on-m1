@@ -6669,3 +6669,13 @@ boot was run. The previous entry stays as written.
   stays allocated per mode set until DWM's device dies - known limitation; candidate PL-1d would remove it).
 - Why dxgkrnl runs its disable path for an old retained primary is still unknown.
 - Unblocked: C2 boot 2 (mode probe, C2-1/C2-2/C2-3) on top of PL-1c.
+
+## UPDATE 2026-11-14T03:25:46Z - EXP2416: F1K-STAMP L1 confirmed; device restart inside one boot still fails (A5)
+
+- An orderly restart 52 s after start no longer latches the GPU: the next start allowed with reason
+  OrderlyByShutdownStamp, the stamp followed Windows' ShutdownTime, no Latched, no UncleanCount. Guest kernel
+  26200.9974 writes ShutdownTime at every graceful restart (observed pair before the run).
+- Not exercised: Running still set at a third consecutive restart; L2 (forced reset inside T must latch) is pending.
+- Open defect seen again (plan item A5): of three disable/enable cycles in one boot the first restart worked, the
+  second and third ended CM_PROB_FAILED_POST_START although the policy allowed the start. Cause unknown; this is a
+  device-restart defect, not a start-policy defect.
