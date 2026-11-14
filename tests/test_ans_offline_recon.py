@@ -190,6 +190,95 @@ class StructureTests(unittest.TestCase):
             R.fixup(bytes(rec), "t")
 
 
+class FakeVolume:
+    """The driver-store listing logic against a described directory tree (the mkntfs volume of
+    the other tests cannot hold sub-directories: ntfs-3g's tools create none)."""
+
+    def __init__(self):
+        e = lambda name, ref, d, ns=1, seq=1, size=0: {"name": name, "ref": ref, "dir": d, "namespace": ns,
+                                                        "ref_sequence": seq, "size": size, "flags": 0}
+        self.dirs = {
+            100: [e("appleans.inf_arm64_1111111111111111.ini", 219, False, size=419),  # a FILE with the prefix
+                  e("APPLEA~2.INI", 219, False, ns=2, size=419),                        # its DOS name
+                  e("appleans.inf_arm64_1111111111111111", 201, True),
+                  e("appleans.inf_arm64_2222222222222222", 202, True),                  # unreadable
+                  e("appleans.inf_arm64_3333333333333333", 203, True, seq=7),           # stale reference
+                  e("APPLEA~1", 201, True, ns=2),
+                  e("other.inf_arm64_4444444444444444", 204, True)],
+            201: [e("AppleAns.sys", 301, False), e("APPLEANS.SYS", 301, False, ns=2), e("sub", 302, True)],
+        }
+        self.records = {n: {"sequence": 1, "in_use": True, "directory": n < 300} for n in (100, 201, 202, 203, 204, 301)}
+
+    def resolve(self, path, trace=None):
+        if trace is not None:
+            trace.append({"component": path, "record": 100})
+        return 100
+
+    def record(self, n):
+        return self.records[n]
+
+    def listdir(self, n):
+        if n not in self.dirs:
+            raise R.ReconError(f"MFT record {n} is not a directory")
+        return self.dirs[n]
+
+    def stream(self, n, atype, name):
+        data = b"driver image"
+        return type("S", (), {"size": len(data), "read": staticmethod(lambda o, l: data[o:o + l])})()
+
+
+class DriverStoreTests(unittest.TestCase):
+    def test_only_directories_are_packages_and_one_bad_package_does_not_hide_the_rest(self):
+        # 2026-11-14, first run on the machine: FileRepository holds <package>.ini FILES beside
+        # the package directories; listing one as a directory aborted the whole volume.
+        store = R.driver_store(FakeVolume(), "\\store")
+        self.assertNotIn("error", store)
+        self.assertEqual([p["directory"][-16:] for p in store["packages"]], ["1" * 16, "2" * 16, "3" * 16])
+        self.assertEqual(store["other_entries"], [{"name": "appleans.inf_arm64_1111111111111111.ini", "mft_record": 219, "size": 419}])
+        good, unreadable, stale = store["packages"]
+        self.assertEqual(good["files"], [{"name": "AppleAns.sys", "mft_record": 301, "size": 12,
+                                         "sha256": hashlib.sha256(b"driver image").hexdigest()}])
+        self.assertIn("not a directory", unreadable["error"])
+        self.assertIn("does not match", stale["error"])
+        self.assertEqual(store["path_trace"], [{"component": "\\store", "record": 100}])
+
+
+SAVED_BLOCKS = Path("/Volumes/pwdev/public_windows/.local/experiments/EXP2447-ansbounce/evidence/recon-blocks")
+
+
+@unittest.skipUnless(SAVED_BLOCKS.is_dir(), "blocks of the 2026-11-14 run are not present on this machine")
+class MachineReplay(unittest.TestCase):
+    """Replay of the blocks the first run on the J313 saved (local evidence, not in the repository).
+    Real structures the synthetic volume lacks: a directory record with an $ATTRIBUTE_LIST
+    (\\Windows), large $INDEX_ALLOCATION directories (System32, FileRepository, about 7000 blocks
+    read), Win32 and DOS names for one file, a 33 MiB hive."""
+
+    def test_first_run_is_reproduced_and_fixed(self):
+        disk = R.Disk(R.BlocksDevice(SAVED_BLOCKS))
+        receipt = R.recon(disk, "\\Windows\\System32\\config\\SYSTEM", "\\Windows\\System32\\DriverStore\\FileRepository", "452f0c0cf11d36f5")
+        self.assertNotIn("error", receipt)
+        vol = receipt["volumes"][receipt["windows_volume_index"]]
+        self.assertEqual(vol["partition"]["first_lba"], 30916352)
+        trace = vol["hive_path_trace"]
+        self.assertEqual([t["component"] for t in trace], ["Windows", "System32", "config", "SYSTEM"])
+        self.assertTrue(trace[0]["attribute_list"] and all(t["reference_sequence"] == t["record_sequence"] for t in trace))
+        self.assertEqual([t["record_is_directory"] for t in trace], [True, True, True, False])
+        hive = vol["hive"]
+        self.assertTrue(hive["base_block"]["clean"] and hive["base_block"]["checksum_ok"] and hive["bins_verified"] > 1000)
+        self.assertEqual(hive["services"]["stornvme"]["StartOverride"]["values"][0]["value"], 3)
+        self.assertIn("appleans.inf_arm64_", hive["services"]["AppleAns"]["ImagePath"]["value"])
+        store = vol["driver_store"]
+        names = [p["directory"] for p in store["packages"]]
+        self.assertIn("appleans.inf_arm64_452f0c0cf11d36f5", names)
+        self.assertTrue(all(not n.endswith(".ini") for n in names))
+        self.assertTrue(any(o["name"].endswith(".ini") for o in store["other_entries"]))
+        # the record that stopped the first run is a file with two names
+        v = R.Ntfs(disk, 30916352)
+        rec = v.record(219925)
+        self.assertFalse(rec["directory"])
+        self.assertEqual(sum(a["type"] == 0x30 for a in rec["attrs"]), 2)
+
+
 def gpt_disk(volume, path):
     """Whole-disk image: protective MBR, GPT with one basic-data partition at PART_LBA."""
     blocks = len(volume) // BLOCK
@@ -302,6 +391,25 @@ class RealNtfsTests(unittest.TestCase):
             self.assertTrue(all(p["offset"] + p["length"] <= BLOCK for p in R.lbas_of(vol, s, off, n)))
         with self.assertRaises(R.ReconError):
             s.locate(len(data) - 1, 2)
+
+    def test_trace_and_verdict(self):
+        receipt = R.recon(self.open(), "\\$Extend\\$Reparse", "\\$Extend", OLD)
+        # found a file, but it is no hive: the receipt is an error, never "ok without a volume"
+        self.assertIn("error", receipt)
+        self.assertIsNone(receipt["windows_volume_index"])
+        self.assertNotIn("hive", receipt["volumes"][0])
+        trace = receipt["volumes"][0]["hive_path_trace"]
+        self.assertEqual([(t["component"], t["record_is_directory"]) for t in trace], [("$Extend", True), ("$Reparse", False)])
+        self.assertTrue(all(t["reference_sequence"] == t["record_sequence"] and t["record_in_use"] for t in trace))
+        missing = R.recon(self.open(), "\\nowhere\\SYSTEM", "\\$Extend", OLD)
+        self.assertIn("error", missing)
+        self.assertEqual(missing["volumes"][0]["hive_path_trace"], [{"component": "nowhere", "parent_record": 5, "found": False}])
+        vol = R.Ntfs(self.open(), PART_LBA)
+        with self.assertRaises(R.ReconError):  # a file used as a directory
+            vol.resolve("\\SYSTEM\\x")
+        out = self.tmp / "cli.json"
+        self.assertEqual(R.main(["--image", str(self.disk_path), "--output", str(out), "--hive", "\\nowhere"]), 3)
+        self.assertIn("error", json.loads(out.read_text()))
 
     def test_receipt_and_patch_rehearsal(self):
         receipt = R.recon(self.open(), "\\SYSTEM", "\\$Extend", OLD)

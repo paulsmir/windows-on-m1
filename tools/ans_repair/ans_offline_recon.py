@@ -47,6 +47,26 @@ class ImageDevice:
         self.f.close()
 
 
+class BlocksDevice:
+    """Blocks saved by an earlier run (--save-blocks): offline replay.  A block that was not
+    saved is an error naming the LBA."""
+
+    def __init__(self, directory, block=BLOCK):
+        self.dir, self.block = Path(directory), block
+
+    def read_block(self, lba):
+        p = self.dir / f"lba-{lba:012d}.bin"
+        if not p.is_file():
+            raise ReconError(f"block {lba} was not saved")
+        data = p.read_bytes()
+        if len(data) != self.block:
+            raise ReconError(f"saved block {lba} has the wrong size")
+        return data
+
+    def close(self):
+        pass
+
+
 class ProxyDevice:
     """m1n1 proxy: P_NVME_INIT once, P_NVME_READ per block, P_NVME_SHUTDOWN at the end."""
 
@@ -352,7 +372,7 @@ class Ntfs:
             ref, elen, klen, flags = struct.unpack_from("<QHHI", buf, pos)
             if elen < 16 or pos + elen > len(buf):
                 raise ReconError("bad index entry")
-            e = {"flags": flags, "ref": ref & 0xffffffffffff}
+            e = {"flags": flags, "ref": ref & 0xffffffffffff, "ref_sequence": ref >> 48}
             if flags & 1:
                 e["child"] = struct.unpack_from("<Q", buf, pos + elen - 8)[0]
             if not flags & 2 and klen >= 66:
@@ -420,12 +440,31 @@ class Ntfs:
                     out += [e for e in node(i * block_size // unit) if "name" in e]
         return out
 
-    def resolve(self, path):
-        number, e = 5, None
+    def resolve(self, path, trace=None):
+        """Record number of a path, or None.  `trace` receives one entry per component: how it
+        was found and what the record says, so that a wrong resolution is visible."""
+        number = 5
         for part in [p for p in path.replace("/", "\\").split("\\") if p]:
+            parent = self.record(number)
+            if not parent["in_use"] or not parent["directory"]:
+                raise ReconError(f"path component before {part!r}: MFT record {number} is not a directory in use")
             e = self.lookup(number, part)
+            step = {"component": part, "parent_record": number, "found": e is not None}
+            if e is not None:
+                rec = self.record(e["ref"])
+                step.update(record=e["ref"], index_name=e["name"], namespace=e["namespace"],
+                            index_says_directory=e["dir"], reference_sequence=e["ref_sequence"],
+                            record_sequence=rec["sequence"], record_in_use=rec["in_use"],
+                            record_is_directory=rec["directory"], record_flags=rec["flags"],
+                            attribute_list=any(a["type"] == 0x20 for a in rec["attrs"]),
+                            how="B+tree descent of $I30 by upper-cased name")
+            if trace is not None:
+                trace.append(step)
             if e is None:
                 return None
+            if e["ref_sequence"] != rec["sequence"] or not rec["in_use"]:
+                raise ReconError(f"{part!r}: index entry refers to record {e['ref']} sequence "
+                                 f"{e['ref_sequence']}, the record has {rec['sequence']} (in use: {rec['in_use']})")
             number = e["ref"]
         return number
 
@@ -645,12 +684,19 @@ def describe_value(vol, stream, v):
     return d
 
 
-def recon_volume(disk, part, hive_path, store_path, old_store):
+def recon_volume(disk, part, hive_path, store_path, old_store, out=None):
+    out = {"partition": part} if out is None else out
     vol = Ntfs(disk, part["first_lba"])
-    out = {"partition": part, "ntfs": {"sector": vol.sector, "cluster": vol.cluster,
-           "record_size": vol.record_size, "index_block": vol.index_size,
-           "serial": f"{vol.serial:016x}", "mft_lcn": vol.mft_lcn}}
-    rec = vol.resolve(hive_path)
+    out["ntfs"] = {"sector": vol.sector, "cluster": vol.cluster,
+                   "record_size": vol.record_size, "index_block": vol.index_size,
+                   "serial": f"{vol.serial:016x}", "mft_lcn": vol.mft_lcn}
+    try:
+        out["driver_store"] = driver_store(vol, store_path)
+    except ReconError as e:
+        out["driver_store"] = {"path": store_path, "packages": [], "error": str(e)}
+    hive_trace = []
+    out["hive_path_trace"] = hive_trace
+    rec = vol.resolve(hive_path, hive_trace)
     if rec is None:
         out["hive"] = None
         return out
@@ -662,7 +708,6 @@ def recon_volume(disk, part, hive_path, store_path, old_store):
             "runs": [{"lcn": l, "clusters": c} for l, c in stream.runs],
             "attribute_flags": stream.flags, "base_block": hive.base,
             "base_block_location": lbas_of(vol, stream, 0, 512)}
-    out["hive"] = info
     info["bins_verified"] = hive.verify_bins()
     select = hive.open("Select")
     current = value_text(hive.value(select, "Current")) if select else None
@@ -711,7 +756,7 @@ def recon_volume(disk, part, hive_path, store_path, old_store):
     # Transaction logs
     logs = {}
     for suffix in (".LOG1", ".LOG2"):
-        lrec = vol.resolve(hive_path + suffix)
+        lrec = vol.resolve(hive_path + suffix)  # same directory as the hive: traced above
         if lrec is None:
             logs[suffix] = None
             continue
@@ -724,14 +769,32 @@ def recon_volume(disk, part, hive_path, store_path, old_store):
             if e["sequence"] >= hive.base["secondary_sequence"]:
                 pending.append({"log": suffix, "sequence": e["sequence"], "touches": e["touches"]})
     info["log_entries_at_or_after_hive_sequence"] = pending
-    # Driver store
-    store = {"path": store_path, "packages": []}
-    srec = vol.resolve(store_path)
-    if srec is not None:
-        for e in vol.listdir(srec):
-            if e["namespace"] == 2 or not e["name"].lower().startswith("appleans.inf_"):
-                continue
-            pkg = {"directory": e["name"], "mft_record": e["ref"], "files": []}
+    out["hive"] = info
+    return out
+
+
+def driver_store(vol, store_path):
+    """AppleAns packages in the driver store.  Only DIRECTORIES named appleans.inf_* are
+    packages: the store also holds a file <package>.ini beside each of them (first run on the
+    machine, 2026-11-14: listing such a file as a directory aborted the whole volume).  A
+    package that cannot be read is reported with its error; the others are still listed."""
+    trace = []
+    store = {"path": store_path, "path_trace": trace, "packages": [], "other_entries": []}
+    srec = vol.resolve(store_path, trace)
+    if srec is None:
+        store["error"] = "driver store directory not found"
+        return store
+    for e in vol.listdir(srec):
+        if e["namespace"] == 2 or not e["name"].lower().startswith("appleans.inf_"):
+            continue
+        if not e["dir"]:
+            store["other_entries"].append({"name": e["name"], "mft_record": e["ref"], "size": e["size"]})
+            continue
+        pkg = {"directory": e["name"], "mft_record": e["ref"], "files": []}
+        try:
+            rec = vol.record(e["ref"])
+            if rec["sequence"] != e["ref_sequence"] or not rec["in_use"] or not rec["directory"]:
+                raise ReconError("index entry does not match a directory record in use")
             for f in vol.listdir(e["ref"]):
                 if f["namespace"] == 2 or f["dir"]:
                     continue
@@ -740,15 +803,14 @@ def recon_volume(disk, part, hive_path, store_path, old_store):
                 if fs is not None and fs.size <= 8 << 20:
                     item["sha256"] = sha256(fs.read(0, fs.size))
                 pkg["files"].append(item)
-            store["packages"].append(pkg)
-    else:
-        store["error"] = "driver store directory not found"
-    out["driver_store"] = store
-    return out
+        except ReconError as err:
+            pkg["error"] = str(err)
+        store["packages"].append(pkg)
+    return store
 
 
 def recon(disk, hive_path, store_path, old_store):
-    receipt = {"tool": "ans_offline_recon", "version": 1, "block_size": disk.block, "read_only": True}
+    receipt = {"tool": "ans_offline_recon", "version": 2, "block_size": disk.block, "read_only": True}
     gpt = parse_gpt(disk)
     receipt["gpt"] = gpt
     volumes = []
@@ -756,12 +818,18 @@ def recon(disk, hive_path, store_path, old_store):
         try:
             if disk.read(part["first_lba"] * disk.block, 16)[3:11] != b"NTFS    ":
                 continue
-            volumes.append(recon_volume(disk, part, hive_path, store_path, old_store))
+            partial = {"partition": part}
+            volumes.append(partial)
+            recon_volume(disk, part, hive_path, store_path, old_store, partial)
         except ReconError as e:
-            volumes.append({"partition": part, "error": str(e)})
+            partial["error"] = str(e)
+            partial.pop("hive", None)  # an incomplete hive description is never offered
     receipt["volumes"] = volumes
     receipt["windows_volume_index"] = next(
-        (i for i, v in enumerate(volumes) if v.get("hive")), None)
+        (i for i, v in enumerate(volumes) if v.get("hive") and "error" not in v), None)
+    if receipt["windows_volume_index"] is None:
+        receipt["error"] = "no volume with a readable SYSTEM hive: " + "; ".join(
+            f"partition {v['partition']['index']}: {v.get('error', 'hive not found')}" for v in volumes)
     receipt["blocks_read"] = len(disk.cache)
     return receipt
 
@@ -771,6 +839,7 @@ def main(argv=None):
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--image", type=Path, help="disk image file (whole disk, 4096-byte blocks)")
     src.add_argument("--proxyclient", type=Path, help="m1n1 proxyclient directory; reads through the proxy")
+    src.add_argument("--blocks", type=Path, help="directory of blocks saved by an earlier run (offline replay)")
     ap.add_argument("--output", type=Path, required=True, help="JSON receipt (must not exist)")
     ap.add_argument("--save-blocks", type=Path, help="directory that receives a copy of every block read")
     ap.add_argument("--hive", default="\\Windows\\System32\\config\\SYSTEM")
@@ -780,13 +849,13 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.output.exists():
         ap.error("refusing to overwrite an existing receipt")
-    dev = ImageDevice(a.image) if a.image else ProxyDevice(a.proxyclient)
+    dev = ImageDevice(a.image) if a.image else BlocksDevice(a.blocks) if a.blocks else ProxyDevice(a.proxyclient)
     try:
         disk = Disk(dev, a.save_blocks)
         try:
             receipt = recon(disk, a.hive, a.driver_store, a.old_store_id)
         except ReconError as e:
-            receipt = {"tool": "ans_offline_recon", "error": str(e), "blocks_read": len(disk.cache)}
+            receipt = {"tool": "ans_offline_recon", "version": 2, "error": str(e), "blocks_read": len(disk.cache)}
     finally:
         dev.close()
     a.output.parent.mkdir(parents=True, exist_ok=True)
@@ -794,7 +863,7 @@ def main(argv=None):
     w = receipt.get("windows_volume_index")
     print("RECON_ERROR " + receipt["error"] if "error" in receipt else
           f"RECON_OK volume={w} blocks_read={receipt['blocks_read']} -> {a.output}")
-    return 0 if "error" not in receipt and w is not None else 3
+    return 0 if "error" not in receipt else 3
 
 
 if __name__ == "__main__":
