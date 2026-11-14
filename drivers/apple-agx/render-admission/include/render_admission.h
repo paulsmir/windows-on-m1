@@ -1754,6 +1754,11 @@ void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ ULONG OutputDataSize, _In_ NTSTATUS Status,
                           _In_reads_bytes_opt_(OutputDataSize)
                               const VOID *OutputData);
+/* A5-D1: receipt-only ring of QUERYSEGMENT4 answers per device instance. */
+void AdmissionRecordQuerySegment4(_In_opt_ PDEVICE_OBJECT DeviceObject,
+                                  ULONG Instance,
+                                  _In_ const DXGKARG_QUERYADAPTERINFO *Query,
+                                  NTSTATUS Status);
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
 void AdmissionRecordGpuvaG3Query(_In_opt_ PDEVICE_OBJECT DeviceObject,
                                  _In_ const DXGKARG_QUERYADAPTERINFO *Query,

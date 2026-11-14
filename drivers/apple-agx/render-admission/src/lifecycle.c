@@ -1450,6 +1450,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
 
   case DXGKQAITYPE_QUERYSEGMENT4:
     status = AdmissionDdiQuerySegment4(context, QueryAdapterInfo);
+    AdmissionRecordQuerySegment4(context->PhysicalDeviceObject,
+                                 context->Win32BootGeneration,
+                                 QueryAdapterInfo, status);
     break;
 
 #if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0

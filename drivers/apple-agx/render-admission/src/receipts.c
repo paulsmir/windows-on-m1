@@ -153,6 +153,125 @@ static void WriteQword(HANDLE Key, PCWSTR Name, ULONGLONG Value) {
   (void)ZwSetValueKey(Key,&name,0,REG_QWORD,&Value,sizeof(Value));
 }
 
+/* A5-D1 (receipt only): one record per DXGKQAITYPE_QUERYSEGMENT4 call, kept in
+ * a ring of the last ADMISSION_A5_QS4_RING calls across device instances in
+ * the device key (Wom1A5QuerySegment4).  Instance = the AddDevice stamp
+ * (ADMISSION_CONTEXT.Win32BootGeneration), so a disable/enable cycle shows as
+ * a new instance.  PASSIVE_LEVEL only; no behaviour change. */
+#define ADMISSION_A5_QS4_RING 8u
+#define ADMISSION_A5_QS4_SEGMENTS 3u
+typedef struct _ADMISSION_A5_QS4_SEGMENT {
+  ULONG SizeLo, SizeHi, CommitLimitLo, CommitLimitHi;
+  ULONG BaseLo, BaseHi, CpuTranslatedLo, CpuTranslatedHi, Flags;
+} ADMISSION_A5_QS4_SEGMENT;
+typedef struct _ADMISSION_A5_QS4_ENTRY {
+  ULONG CallIndex, Instance, Status, NbSegment;
+  ULONG PagingBufferSegmentId, PagingBufferSize, PagingBufferPrivateDataSize;
+  ULONG SegmentDescriptorStride;
+  ADMISSION_A5_QS4_SEGMENT Segment[ADMISSION_A5_QS4_SEGMENTS];
+} ADMISSION_A5_QS4_ENTRY;
+typedef struct _ADMISSION_A5_QS4_RECEIPT {
+  ULONG Version, EntryBytes, Count, Next;
+  ADMISSION_A5_QS4_ENTRY Entry[ADMISSION_A5_QS4_RING];
+} ADMISSION_A5_QS4_RECEIPT;
+C_ASSERT(sizeof(ADMISSION_A5_QS4_SEGMENT) == 36u);
+C_ASSERT(sizeof(ADMISSION_A5_QS4_ENTRY) == 32u + 3u * 36u);
+
+static volatile LONG a5Qs4CallCount;
+
+_Use_decl_annotations_ void AdmissionRecordQuerySegment4(
+    PDEVICE_OBJECT DeviceObject, ULONG Instance,
+    const DXGKARG_QUERYADAPTERINFO *Query, NTSTATUS Status) {
+  ADMISSION_A5_QS4_RECEIPT *receipt;
+  ADMISSION_A5_QS4_ENTRY *entry;
+  KEY_VALUE_PARTIAL_INFORMATION *info;
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  ULONG infoBytes;
+  ULONG index;
+  ULONG segment;
+  HANDLE key = NULL;
+  if (DeviceObject == NULL || Query == NULL ||
+      Query->Type != DXGKQAITYPE_QUERYSEGMENT4 ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  infoBytes = (ULONG)(FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) +
+                      sizeof(*receipt));
+  info = (KEY_VALUE_PARTIAL_INFORMATION *)ExAllocatePool2(
+      POOL_FLAG_PAGED, infoBytes, ADMISSION_POOL_TAG);
+  receipt = (ADMISSION_A5_QS4_RECEIPT *)ExAllocatePool2(
+      POOL_FLAG_PAGED, sizeof(*receipt), ADMISSION_POOL_TAG);
+  if (info == NULL || receipt == NULL)
+    goto out;
+  RtlZeroMemory(receipt, sizeof(*receipt));
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_QUERY_VALUE | KEY_SET_VALUE, &key)))
+    goto out;
+  RtlInitUnicodeString(&name, L"Wom1A5QuerySegment4");
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation,
+                                 info, infoBytes, &bytes)) &&
+      info->Type == REG_BINARY && info->DataLength == sizeof(*receipt)) {
+    RtlCopyMemory(receipt, info->Data, sizeof(*receipt));
+    if (receipt->Version != 1u ||
+        receipt->EntryBytes != sizeof(ADMISSION_A5_QS4_ENTRY) ||
+        receipt->Next >= ADMISSION_A5_QS4_RING)
+      RtlZeroMemory(receipt, sizeof(*receipt));
+  }
+  receipt->Version = 1u;
+  receipt->EntryBytes = (ULONG)sizeof(ADMISSION_A5_QS4_ENTRY);
+  index = receipt->Next;
+  entry = &receipt->Entry[index];
+  RtlZeroMemory(entry, sizeof(*entry));
+  entry->CallIndex = (ULONG)InterlockedIncrement(&a5Qs4CallCount);
+  entry->Instance = Instance;
+  entry->Status = (ULONG)Status;
+  if (Query->pOutputData != NULL &&
+      Query->OutputDataSize >= sizeof(DXGK_QUERYSEGMENTOUT4)) {
+    const DXGK_QUERYSEGMENTOUT4 *output =
+        (const DXGK_QUERYSEGMENTOUT4 *)Query->pOutputData;
+    entry->NbSegment = output->NbSegment;
+    entry->PagingBufferSegmentId = output->PagingBufferSegmentId;
+    entry->PagingBufferSize = output->PagingBufferSize;
+    entry->PagingBufferPrivateDataSize = output->PagingBufferPrivateDataSize;
+    entry->SegmentDescriptorStride = (ULONG)output->SegmentDescriptorStride;
+    if (NT_SUCCESS(Status) && output->pSegmentDescriptor != NULL &&
+        output->SegmentDescriptorStride >= sizeof(DXGK_SEGMENTDESCRIPTOR4)) {
+      for (segment = 0u; segment < output->NbSegment &&
+                         segment < ADMISSION_A5_QS4_SEGMENTS; ++segment) {
+        const DXGK_SEGMENTDESCRIPTOR4 *d = (const DXGK_SEGMENTDESCRIPTOR4 *)(
+            (const UCHAR *)output->pSegmentDescriptor +
+            (SIZE_T)segment * output->SegmentDescriptorStride);
+        ADMISSION_A5_QS4_SEGMENT *r = &entry->Segment[segment];
+        ULONGLONG size = (ULONGLONG)d->Size;
+        ULONGLONG commit = (ULONGLONG)d->CommitLimit;
+        ULONGLONG base = (ULONGLONG)d->BaseAddress.QuadPart;
+        ULONGLONG cpu = (ULONGLONG)d->CpuTranslatedAddress.QuadPart;
+        r->SizeLo = (ULONG)size;
+        r->SizeHi = (ULONG)(size >> 32);
+        r->CommitLimitLo = (ULONG)commit;
+        r->CommitLimitHi = (ULONG)(commit >> 32);
+        r->BaseLo = (ULONG)base;
+        r->BaseHi = (ULONG)(base >> 32);
+        r->CpuTranslatedLo = (ULONG)cpu;
+        r->CpuTranslatedHi = (ULONG)(cpu >> 32);
+        r->Flags = d->Flags.Value;
+      }
+    }
+  }
+  receipt->Next = (index + 1u) % ADMISSION_A5_QS4_RING;
+  if (receipt->Count < ADMISSION_A5_QS4_RING)
+    receipt->Count++;
+  WriteBinary(key, L"Wom1A5QuerySegment4", receipt, sizeof(*receipt));
+  (void)ZwFlushKey(key);
+out:
+  if (key != NULL)
+    ZwClose(key);
+  if (receipt != NULL)
+    ExFreePoolWithTag(receipt, ADMISSION_POOL_TAG);
+  if (info != NULL)
+    ExFreePoolWithTag(info, ADMISSION_POOL_TAG);
+}
+
 #if ADMISSION_GPUVA_G1B_PAGE_PROFILE != 0
 static volatile LONG g1bAllocationInputCount;
 static volatile LONG g1bDdiFailureCount;
