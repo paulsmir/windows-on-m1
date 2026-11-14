@@ -6828,3 +6828,16 @@ boot was run. The previous entry stays as written.
   write-through data was not durable at completion.
 - Open: the trigger (queue depth / structure reuse / completion races / concurrent Dataset Management are
   candidates, none tested). No bench probe uses unbuffered write-through until this is fixed.
+
+## UPDATE 2026-11-14T13:08:38Z - EXP2441: the storage stall trigger is a non-page-aligned first buffer address
+
+- On the receipt-only driver 0.4.8.3 (now installed on the bench): ten 512 MiB unbuffered write-through runs with a
+  page-aligned buffer were all clean; the first run at page offset 32 stalled. Preregistered prediction confirmed
+  (chance of ten clean runs at the ~50 % stall rate: below 0.1 %). With EXP2440 this replaces the refuted
+  16-byte rule: the trigger is an unbuffered transfer whose first address is not page-aligned.
+- At the stall the controller is alive but silent (CSTS RDY=1, CFS=0; nine I/O tags outstanding; completion queue
+  head not moving, nothing unreaped; two mailbox messages arrived and were echoed). The driver did not flag a
+  firmware crash in those seconds, so the earlier crash inference is not confirmed.
+- Fix direction (reinstated): driver-side bounce through page-aligned memory for such transfers; no alignment
+  change announced to Windows, no refusal. Not built. Unexplained even with the fix: why the controller goes silent
+  only sometimes for such buffers.
