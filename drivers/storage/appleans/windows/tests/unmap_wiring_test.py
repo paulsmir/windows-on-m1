@@ -61,3 +61,15 @@ for needle in ('ans_reject_note(&a->Rejects,ANS_REJECT_IO_CONTROL,', 'ans_reject
                'ans_reject_ioctl_reply(srb->DataBuffer,srb->DataTransferLength,&a->Rejects)'):
     assert needle in NATIVE, needle
 print('PASS reject_receipt_wiring')
+# Flush elision: decided at dispatch, never for the shutdown flush; write-class commands and
+# flushes are accounted at submit and at completion; a reset forgets the clean state.
+disp = NATIVE[NATIVE.index('VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a)\n{'):NATIVE.index('BOOLEAN AppleAnsNativeStart(')]
+el = disp.index('ans_flush_can_elide(&a->Flush)')
+assert 'srb->Function!=SRB_FUNCTION_SHUTDOWN' in disp[el-200:el] and '!slot->Shutdown' in disp[el-200:el]
+assert el < disp.index('AppleAnsDirectSubmit(a,token.tag,&slot->Request)')
+for needle in ('ans_flush_write_submitted(&a->Flush)', 'slot->FlushTicket=ans_flush_submitted(&a->Flush)'):
+    assert needle in disp, needle
+for needle in ('ans_flush_write_completed(&a->Flush)', 'ans_flush_completed(&a->Flush, slot->FlushTicket,',
+               'ans_flush_reset(&a->Flush)'):
+    assert needle in DIRECT, needle
+print('PASS flush_elision_wiring')

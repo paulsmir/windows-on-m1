@@ -434,6 +434,17 @@ VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a)
             AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,plan.transfer_bytes);
             continue;
         }
+        /* A flush that an earlier completed flush already covers needs no command (the second
+         * half of Windows' SYNCHRONIZE CACHE + SRB_FUNCTION_FLUSH pair). Never the shutdown flush. */
+        if (a->Direct && slot->Request.sqe[0]==0 && !slot->Shutdown &&
+            srb->Function!=SRB_FUNCTION_SHUTDOWN && ans_flush_can_elide(&a->Flush)) {
+            if (ans_order_complete(&a->Order,token)!=ANS_ORDER_OK) { quarantine(a);return; }
+            ans_flush_elided(&a->Flush);
+            *slot=(APPLE_ANS_SLOT){0};
+            srb->ScsiStatus=SCSISTAT_GOOD;
+            AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,0);
+            continue;
+        }
         struct ans_broker_response response;
         int ret;
         if (a->Direct) {
@@ -453,6 +464,11 @@ VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a)
         } else if (ret==ANS_WIRE_OK) {
             ans_stats_submit(&a->Stats,1,slot->Request.sqe[0]);
             if (slot->Request.sqe[0]==ANS_NVME_DSM) ans_trim_queued(&a->Trim);
+            if (a->Direct) {
+                if (slot->Request.sqe[0]==1 || slot->Request.sqe[0]==ANS_NVME_DSM)
+                    ans_flush_write_submitted(&a->Flush);
+                else if (slot->Request.sqe[0]==0) slot->FlushTicket=ans_flush_submitted(&a->Flush);
+            }
         } else {
             ans_stats_uncertain(&a->Stats,1,slot->Request.sqe[0]);
             (void)ans_order_quarantine(&a->Order,token);quarantine(a);return;

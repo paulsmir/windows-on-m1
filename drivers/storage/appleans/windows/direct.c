@@ -290,6 +290,8 @@ static VOID complete_tag(PAPPLE_ANS_ADAPTER a, const struct ansd_cqe *e)
     ans_stats_complete(&a->Stats, 1, slot->Request.sqe[0], slot->Length, (status >> 1) == 0);
     if (status >> 1) AppleAnsDiag(a, slot->Srb, 0xA4, ((ULONG)(status >> 1) << 8) | slot->Request.sqe[0]);
     if (slot->Request.sqe[0] == ANS_NVME_DSM) ans_trim_done(&a->Trim, (ULONG)(status >> 1));
+    if (slot->Request.sqe[0] == 1 || slot->Request.sqe[0] == ANS_NVME_DSM) ans_flush_write_completed(&a->Flush);
+    else if (slot->Request.sqe[0] == 0) ans_flush_completed(&a->Flush, slot->FlushTicket, (status >> 1) == 0);
     if (slot->Shutdown) {
         a->ShutdownTag = tag; a->ShutdownFlushOk = (status >> 1) == 0;
         (void)StorPortIssueDpc(a, &a->ShutdownDpc, NULL, NULL);
@@ -358,6 +360,7 @@ VOID AppleAnsDirectTimer(PVOID DeviceExtension)
 static VOID direct_retire(PAPPLE_ANS_ADAPTER a, UCHAR status)
 {
     (void)ans_order_reset(&a->Order, 1);
+    ans_flush_reset(&a->Flush); /* retired commands may or may not have reached the cache */
     ans_stats_stopped(&a->Stats, 0);
     for (unsigned tag = 0; tag < ANS_QUEUE_DEPTH; tag++) {
         PSCSI_REQUEST_BLOCK srb = a->Slots[tag].Srb;
