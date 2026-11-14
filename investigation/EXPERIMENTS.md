@@ -79654,3 +79654,11 @@ EXP2406 HARDWARE BEFORE 2026-11-14T03:42:46Z:
 - Hashes: sys c0edbbbdbbc1, UmdArm64 4294030e8b0d, UmdX64 895240ef7dd2, Umd32 35b40782a6f6; manifest e1255e20599f, hardware-manifest b8c3302ef8ef; probe2406.sh 7a4bbc3387df (PROBE_LINT_OK); visible recovery rec2406h ca03f915d0c57b71; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
 - Recovery rec2406h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2406-f1kl2/run2406.sh.
+
+EXP2406 HARDWARE ACTUAL 2026-11-14T03:47:28Z (F1-k L2 on F1K-STAMP):
+- Launch: a first chain attempt failed in prepare before any guest action ("stage arm lines not found exactly once": the AGX_NO_ARM hook did not accept a stage already in the no-arm form inherited from EXP2416; hook made idempotent and tested on both inputs, backup prepare.sh.pre-noarm-idem); the rerun staged correctly ("NO_ARM stage removes G3Armed"), launch commit cb5677772.
+- L2a: first contact uptime 51 s, device OK; Attempt 0x1020004, stamp-rx 0x800000000, stamp 0x01dd73ea42a551fa = ShutdownTime FA51A542EA73DD01, Pending 1, Running 1 (as EXP2416 L1a).
+- Forced stop: NOT delivered. kill-dcomlaunch.ps1 (Stop-Process -Force on the DcomLaunch svchost, pid 808) at uptime 60 s; the guest was still up 20 s later and at uptime 178 s, DcomLaunch still pid 808 running; m1n1 printed no BUGCHECK/PSCI reset. The SSH session is elevated (Administrator role true); the Stop-Process error text was cut by the probe's 120-character output limit. EXP2305 used taskkill for the same trigger.
+- Verdict: INVALID for L2 (trigger defect; no crash inside T, so the latch path was not exercised). T passed in this boot (Pending cleared by the timer, Running set), so no improvised crash afterwards (it would test the unclean-counter path, not L2).
+- Recovery rec2406h started.
+- Next: L2 rerun under a new ID with taskkill /F /PID and the full trigger output recorded; checked on a guest before the run that the trigger reaches a crash (the pre-check itself is the crash, so it is done as the L2 step itself, with a fallback: if the guest is still up after 20 s, NotMyFault-free alternative = an m1n1-side forced reset is not available on this line, so the run stops as invalid again).
