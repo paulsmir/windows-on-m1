@@ -79873,3 +79873,17 @@ EXP2432 HARDWARE BEFORE 2026-11-14T10:41:13Z (keyboard backlight box 2, boot 1, 
 - Run: normal GPU-visible guest (no AppleAgx) on RST-2ABC; install; kbdblctl status twice; KBD-PS lines from full.log.
 - Expected with the hardened build if the guest read is still all-ones: power_state 0xff, hardware_fault 1, no PWM MMIO, no write anywhere.
 - Decision rule (architect): trusted + powered -> KB-W in this boot (operator look); no KBD-PS line while status reads, or a 0x...244-like value -> boot 2 variant (ii) driver-power Mu; KBD-PS lines with 0xffffffff -> boot 2 variant (i) proxyclient guest-PS allow-list. No PWM write unless status shows ACTUAL F from a trusted read.
+
+EXP2432 HARDWARE ACTUAL 2026-11-14T10:44:53Z (box 2 boot 1):
+- Launch 10:41:53Z (RST-2ABC + MUKBD002 c7d463ee..., run_uefi_kbd2.py, WOM1_KBD_PS_TRACE=1); SSH 10:42:19Z.
+- KBD-PS: "tracing PMGR FPWM1 PS word at 0x23b7001e0"; EL2 pre-guest read32 = 0x00000244. Guest accesses (ASYNC mmiotrace, EL2 SPTE_MAP path) during boot, before the driver: R.4 0x23b7001e0 = 0x244 (x3).
+- Install (cert into Root/TrustedPublisher; oem19.inf) 10:42:48Z: ACPI\APPL0005\0 OK. KBD-PS during the start: R = 0x200 (x3), W.4 = 0x20f (the AML _PS0 PSET, TARGET F), then R = 0x2ff (ACTUAL F) on every later read, including during kbdblctl status. No 0xffffffff anywhere in the trace.
+- kbdblctl status (10:42:51Z, 10:43:01Z, identical): hardware_fault=1, power_state=0xf, observed_valid=0, output_enable=0, ps0_count=0, ps_before_ps0 = ps_after_ps0 = ps_raw_at_d0_entry = 0xffffffff. The hardened driver refused (no PWM MMIO, no write by the driver).
+- Reading: the hardware and the HV path are correct (0x244 before, 0x20f written by ACPI, 0x2ff after); the guest-side value the driver gets from PSTH is not: PSTH returns Package () { PSB0, PSA0, PS0N, PSRW } - named objects inside a package are stored as references, not evaluated integers, so the driver cannot read the receipt and falls back to 0xffffffff/0 (EXP2429's all-ones came from this, not from m1n1). PSTA itself reads 0x2ff -> 0xF.
+- Verdict: KB-R (hardened acpi-power) FAILED with a known cause in the ACPI receipt (PSTH package of names); the power path works (ACPI powered FPWM1 to ACTUAL F). By the decision rule (trace lines with real 0x2xx values, no all-ones) -> boot 2 = variant (ii) driver-power, same package.
+
+EXP2433 HARDWARE BEFORE 2026-11-14T10:44:53Z (box 2 boot 2, variant (ii) driver-power):
+- Mu MUKBD003: the same tree with AcpiTables/J313AppleKbdBacklight.asl.inc = driver-power (c63610f3...; no ACPI power methods; the PS word 0x23B7001E0/4 is a second _CRS memory resource owned by the driver; KCFG with the driver-power flags); FD .local/experiments/MUKBD003-2ef00a13/J313_EFI-mukbd003.fd sha256 2ef00a13550988cb3d094c5f9eed02245ffd7b121254ef840fb7d91c7f6db924. Gate: DSDT differs from MUANSCPPC002 only by Device KBDL (_HID, _CRS, KCFG, _S0W) + header; SSDT identical. PASS.
+- Same package (700e31fc, cat 56bab27b...), kept installed from boot 1 (devnode and oem19.inf persist; cert still in Root/TrustedPublisher); same launcher with the MUKBD003 FD, KBD-PS trace on.
+- Expected: at D0Entry exactly one validated TARGET write by the driver (KBD-PS W.4 with TARGET F from a trusted read), ACTUAL F within 100 ms; kbdblctl: hardware_fault 0, power_state 0xf from a trusted read, observed_valid 1. Then KB-W in the same boot (OutputEnable 1 + restart-device; operator look).
+- Failure: hardware_fault 1 again -> stop and report; any write other than TARGET in the PS word.
