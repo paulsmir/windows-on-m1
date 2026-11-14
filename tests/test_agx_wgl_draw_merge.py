@@ -18,7 +18,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 ICD = ROOT / 'drivers/apple-agx/windows/icd'
-MESA = Path('/Users/pavel/public_windows/.local/reference/mesa')
+MESA = Path('~/public_windows/.local/reference/mesa').expanduser()
 
 PROGRAM = r'''
 #include <assert.h>

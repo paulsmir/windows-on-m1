@@ -52,7 +52,7 @@ The architect decides whether raw evidence needs reading.
 
 ## Current worker layout
 
-`/Users/pavel/public_windows` is the architect checkout and may remain dirty.
+`$HOME/public_windows` is the architect checkout and may remain dirty.
 Dedicated worker paths below `.worktrees/` must begin at an explicit commit:
 
 ```text

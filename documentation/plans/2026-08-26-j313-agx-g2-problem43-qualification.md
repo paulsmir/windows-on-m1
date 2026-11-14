@@ -14,7 +14,7 @@ metadata.  It does not change either candidate or authorize GPU activity.
 
 ## Immutable inputs
 
-- Work only in `/Users/pavel/public_windows` on
+- Work only in `$HOME/public_windows` on
   `feature/j313-gpu-acceleration`.
 - Stable recovery remains
   `.local/recovery/STABLE-j313-8core-native-input-v1/`; all five hashes must

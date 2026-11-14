@@ -11,7 +11,7 @@ and physical-display path. The latest assisted run is noticeably smoother than
 earlier builds after adding NVMe queue backpressure and multi-block backend I/O.
 
 The development layout no longer reliably identifies that working system. The
-validated run used Mu from `/Users/pavel/public_windows`, but m1n1 was copied
+validated run used Mu from `$HOME/public_windows`, but m1n1 was copied
 from a dirty stability worktree based on commit `517ec3a`. The standalone image
 and its metadata still describe an older m1n1 commit, `cc2a46b`. Historical
 images coexist under `.local` and `dist/j313`, and similarly named artifacts
@@ -22,7 +22,7 @@ platform or driver work begins.
 
 ## Goals
 
-- Make `/Users/pavel/public_windows` the only development checkout.
+- Make `$HOME/public_windows` the only development checkout.
 - Preserve every source change and technical conclusion required by the latest
   hardware-validated Windows boot.
 - Produce reproducible release and diagnostic profiles from clean commits.
@@ -56,8 +56,8 @@ public_windows/
   dist/j313/debug/    latest generated diagnostic artifacts
 ```
 
-Only `/Users/pavel/public_windows` may be used to edit, build, launch, install,
-commit, or push the project. The old `/Users/pavel/windows` checkout and all Git
+Only `$HOME/public_windows` may be used to edit, build, launch, install,
+commit, or push the project. The old `$HOME/windows` checkout and all Git
 worktrees are read-only migration sources until final deletion.
 
 The m1n1 and Mu submodules must each point to named, pushed commits. Detached or
@@ -172,11 +172,11 @@ archive.
 
 After the verification gates pass:
 
-- delete `/Users/pavel/public_windows/.local`;
+- delete `$HOME/public_windows/.local`;
 - remove obsolete experimental files from `dist/j313`;
 - retain only the current `release` and `debug` artifact directories;
 - remove all worktrees belonging to the old private checkout;
-- delete `/Users/pavel/windows` completely;
+- delete `$HOME/windows` completely;
 - document the recovery procedure and the last known-good release hash before
   replacing an installed ESP image.
 

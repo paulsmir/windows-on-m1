@@ -3,7 +3,7 @@
   "command": [
     "ssh",
     "-i",
-    "/Users/pavel/.ssh/windows_builder",
+    "$HOME/.ssh/windows_builder",
     "-o",
     "BatchMode=yes",
     "-o",

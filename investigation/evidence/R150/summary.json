@@ -105,7 +105,7 @@
   "review": "Independent ACCEPT",
   "tandem_review_sha256": "753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5",
   "final_source_tree_manifest_sha256": "e543a3a4a54f0250504bd9ea5aa71e815dd68a63489406fcc4f8136bd901954a",
-  "raw_output_root": "/Users/pavel/public_windows/.local/experiments/R150-dump",
+  "raw_output_root": "$HOME/public_windows/.local/experiments/R150-dump",
   "raw_outputs_sha256": {
     "discover.txt": "e198627de1c1e69cf51661dd03833e59961a83ed679a9a10199b9e85f1202b66",
     "state.txt": "151b4210975faf8cf578a5e400ee9220f2aa176b5d168562094309aba7c991d3",

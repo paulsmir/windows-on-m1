@@ -16,7 +16,7 @@ recomputed and matched. No source/graph discrepancy was found; no revision chang
 The complete per-file license texts and N01–N14 notice groups remain in
 `D3D12-C15-runtime-license-inventory.md`; this build does not replace that review.
 
-An isolated copy under `/Users/pavel/public_windows/.local/c15-host-8434b063/source`
+An isolated copy under `$HOME/public_windows/.local/c15-host-8434b063/source`
 restored B into `subprojects/dxbc-spirv` and H into `third_party/spirv-headers`.
 File contents remained unchanged. Nested HN, SPIRV-Tools and SPIRV-Cross were not
 assembled into the selected graph. Full upstream archives contain unused files;
@@ -98,7 +98,7 @@ flags; dxbc-spirv has its own flags. No MSVC CRT result follows from this host l
 ## Evidence and artifacts
 
 Local durable preparation directory:
-`/Users/pavel/public_windows/.local/c15-host-8434b063`.
+`$HOME/public_windows/.local/c15-host-8434b063`.
 
 - `build/.cmake/api/v1/reply`: configured target/source manifests.
 - `build/compile_commands.json`, per-object `.o.d`: compiler-observed inputs.
@@ -132,7 +132,7 @@ allocator/output lifetime and truthful Microsoft shader-model admission.
 
 Parent reserved name `EXP1386-dxil-runtime-build-only`; parent must write BUILD_ONLY
 BEFORE before execution. Isolated inputs are under
-`/Users/pavel/public_windows/.local/c15-win-arm64-1386/`, with source staging/build
+`$HOME/public_windows/.local/c15-win-arm64-1386/`, with source staging/build
 root fixed to `C:\Users\pauls\EXP1386-dxil-runtime-build-only`. No shared production
 directory is referenced. The script refuses existing source/build/out directories.
 
@@ -207,7 +207,7 @@ retain /MD everywhere, C++14 for core/builder/decoder, C++17 for llvm-bc and
 `/tmp/c15-1386-configured-targets.json`; parent owns ACTUAL/ledger interpretation.
 
 Prepared retry root is `C:\Users\pauls\EXP1388-dxil-runtime-build-only`.
-Local bundle `/Users/pavel/public_windows/.local/c15-win-arm64-1388/EXP1388-dxil-runtime-build-only.zip`
+Local bundle `$HOME/public_windows/.local/c15-win-arm64-1388/EXP1388-dxil-runtime-build-only.zip`
 SHA-256 `0c416a3b0601ba6255e4dda639c17d9a3ff4e0032395b8c729cdabc29a641be3`.
 Corrected script SHA-256
 `49bb9cf29fd68affe8f35150642ed3fe91ec0f5a1e1a47a44db11c018ca2b462`.

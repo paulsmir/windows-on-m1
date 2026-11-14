@@ -162,7 +162,7 @@ runner SHA256 `4fb395c7e87531d6b7ebfc331de82e4cd3cd06d33e8ca0e45d580c12c60544c4`
 Exact proposed command, NOT EXECUTED:
 
 ```
-AGX_C19_CENTER_RECEIPTS=/Users/pavel/public_windows/.local/c19-pixel-center-offline AGX_C19_CENTER_APPROVED_MANIFEST=/Users/pavel/public_windows/.local/c19-pixel-center-offline/before-red.json AGX_C19_CENTER_APPROVED_SHA256=b5fa4ac84f46425532e8364589eec4b6d059c3a1a62c3c01017791a9f2659dbd PYTHONPATH=tests python3 -m unittest test_d3d12_pixel_center -v
+AGX_C19_CENTER_RECEIPTS=$HOME/public_windows/.local/c19-pixel-center-offline AGX_C19_CENTER_APPROVED_MANIFEST=$HOME/public_windows/.local/c19-pixel-center-offline/before-red.json AGX_C19_CENTER_APPROVED_SHA256=b5fa4ac84f46425532e8364589eec4b6d059c3a1a62c3c01017791a9f2659dbd PYTHONPATH=tests python3 -m unittest test_d3d12_pixel_center -v
 ```
 
 Six exact compile/link/run commands are in prepared-red-commands.json, SHA256

@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Work only in `/Users/pavel/public_windows` on `feature/j313-native-input`; do not use `/Users/pavel/windows` or a worktree.
+- Work only in `$HOME/public_windows` on `feature/j313-native-input`; do not use `$HOME/windows` or a worktree.
 - Do not change m1n1, Mu, ACPI, CPU topology, NVMe, display, xHCI or the stable ESP in this phase.
 - Keep the existing physical IRQ 330 to guest INTID 865 level route and EXP-057 firmware pair unchanged.
 - Keep external USB keyboard and mouse connected as the recovery path.

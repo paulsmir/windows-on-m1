@@ -42,7 +42,7 @@ class PerfGate(unittest.TestCase):
             self.assertEqual(g.cs_fps(b), 45.457)
 
     def test_real_evidence_if_present(self):
-        cs = Path("/Users/pavel/public_windows/.local/experiments/EXP2208-cs16-nqrefusal/evidence/EXP2208-B/cs-bench.log")
+        cs = Path("~/public_windows/.local/experiments/EXP2208-cs16-nqrefusal/evidence/EXP2208-B/cs-bench.log").expanduser()
         if not cs.exists():
             self.skipTest("evidence not on this machine")
         ok, lines = g.gate(BASE, {"cs16_benchmark": [g.cs_fps(cs)]}, 2.0)

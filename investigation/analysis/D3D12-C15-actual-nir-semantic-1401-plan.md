@@ -97,7 +97,7 @@ No generic interpreter, backend code generator or GPU dispatch is introduced.
 ## Exact input inventory: SEVEN binary arrays, plus JSON
 
 Existing SPIR-V2152B:
-`/Users/pavel/public_windows/.local/c15-owned-1398/green/mixed.spv`, SHA256
+`$HOME/public_windows/.local/c15-owned-1398/green/mixed.spv`, SHA256
 `24e3df26411f940c71e4dc2322d38226cb3c1d50725e07d27b890aa9b2b307d4`.
 Original post-NIR3848B SHA256
 `ee2c212cca1cd284b0eb8d11bd242e0eee1184ec76aca92af6b45cf19458708c`.
@@ -133,7 +133,7 @@ exactly after read-only interpretation. It also byte-compares both emitted actua
 UAV arrays to their independently pinned expected binary files.
 
 Prepared source manifest:
-`/Users/pavel/public_windows/.local/c15-nir-semantic-1401/before-inputs.json`, SHA256
+`$HOME/public_windows/.local/c15-nir-semantic-1401/before-inputs.json`, SHA256
 `f7de5506a4512f528b2b2ffba591a5ee58b03284c568351dcbb2359ed205357b`.
 Pins SHA256 `18602a87c04f9b84c1ac98b71d1e6c38f7397ac830a55a9e3df694a3d27822a3`:
 51 existing dependency/tool/source/artifact files, including exact seven binaries.
@@ -143,7 +143,7 @@ Original new source/runner hashes are in the approved manifest as well.
 Exact proposed command, NOT EXECUTED:
 
 ```
-AGX_C15_SEMANTIC_RECEIPTS=/Users/pavel/public_windows/.local/c15-nir-semantic-1401 AGX_C15_SEMANTIC_APPROVED_MANIFEST=/Users/pavel/public_windows/.local/c15-nir-semantic-1401/before-inputs.json AGX_C15_SEMANTIC_APPROVED_SHA256=f7de5506a4512f528b2b2ffba591a5ee58b03284c568351dcbb2359ed205357b PYTHONPATH=tests python3 -m unittest test_dxil_nir_semantic -v
+AGX_C15_SEMANTIC_RECEIPTS=$HOME/public_windows/.local/c15-nir-semantic-1401 AGX_C15_SEMANTIC_APPROVED_MANIFEST=$HOME/public_windows/.local/c15-nir-semantic-1401/before-inputs.json AGX_C15_SEMANTIC_APPROVED_SHA256=f7de5506a4512f528b2b2ffba591a5ee58b03284c568351dcbb2359ed205357b PYTHONPATH=tests python3 -m unittest test_dxil_nir_semantic -v
 ```
 
 Exact compile/run arrays are in `prepared-commands.json` under that receipt root,
@@ -188,7 +188,7 @@ structural PASS marker still says SEMANTIC_EXECUTION_UNPROVEN, reflecting that
 fixture's original scope; the separate new semantic marker above is the1401
 proof for this exact fixed shader/input domain, not a general interpreter claim.
 
-Receipts are under `/Users/pavel/public_windows/.local/c15-nir-semantic-1401`:
+Receipts are under `$HOME/public_windows/.local/c15-nir-semantic-1401`:
 approved inputs/pins, generated actual-semantic-nir.c, exact commands/results,
 raw stdout/stderr, executable, pre/post NIR, actual UAV binaries, artifact manifest
 and EXP1401-verdict.json. Actual UAV0 SHA256

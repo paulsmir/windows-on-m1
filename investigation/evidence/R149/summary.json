@@ -112,7 +112,7 @@
   "review": "Independent ACCEPT; hashes in independent-review-hashes.json; no blockers",
   "tandem_review_sha256": "753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5",
   "final_source_manifest_sha256": "06305d95f36b5119d4ab405f913e51df66adcee48cb72ed71d1b11421049d1f3",
-  "raw_evidence": "/Users/pavel/public_windows/.local/experiments/R149-offline",
+  "raw_evidence": "$HOME/public_windows/.local/experiments/R149-offline",
   "raw_logs": {
     "full-suite.log": "4993450e7722411716027cbaa924063fb8a3301ab6a39d2ad5e3981121381a70",
     "arm64-baseline.log": "125013c71892e0541f2870b9343df0f20fd159f3b5dbcd6cce567b48deec71b4",

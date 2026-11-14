@@ -1,6 +1,6 @@
 # R143 — 1-GiB GPU reserve: offline design
 
-2026-09-28. Task: `/Users/pavel/public_windows/.local/tandem/NEXT_TASK_R143.md`.
+2026-09-28. Task: `$HOME/public_windows/.local/tandem/NEXT_TASK_R143.md`.
 **Selected:** one physically contiguous 1-GiB reserve, identity IPA=PA,
 with **1000 MiB VidMm-local / 16 MiB private scenes / 8 MiB backend**.
 The candidate is `[0x8e0000000, 0x920000000)`; it is conditional on validation,
@@ -10,7 +10,7 @@ different gates. Enlarging RAM alone does not fix EXP855E's system-backed VDM.
 
 Scope is the requested design only: no production/test code, firmware, package,
 Air connection, builder operation or hardware experiment. No new hardware
-verdict. All `.local/` references mean the main `/Users/pavel/public_windows`
+verdict. All `.local/` references mean the main `$HOME/public_windows`
 repository. Only this document and its CHANGES row are to be committed.
 
 ## WINDOWS/UEFI CONTRACT

@@ -171,7 +171,7 @@ Parent owns native ARM64 build, full suite, and ledger workflow.
 
 ## Inspected primary contracts and ownership
 
-- Mesa pinned reference `/Users/pavel/public_windows/.local/reference/mesa`,
+- Mesa pinned reference `$HOME/public_windows/.local/reference/mesa`,
   commit `9aa1215f878b504f66159dd2ead4c7973142126e` (matches source lock):
   `src/gallium/drivers/asahi/agx_pipe.c` render producer around 1550–1603 and
   field writes around 1391–1421; `agx_batch.c` pool init/cleanup;

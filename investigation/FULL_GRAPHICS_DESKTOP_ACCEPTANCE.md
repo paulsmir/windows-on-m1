@@ -1,7 +1,7 @@
 # Active mission: usable hardware-accelerated Windows desktop
 
 Authoritative objective: user attachment
-`/Users/pavel/.codex/attachments/d02412ec-8aeb-4a37-ac38-74d62a9f2ef1/pasted-text-1.txt`.
+`$HOME/.codex/attachments/d02412ec-8aeb-4a37-ac38-74d62a9f2ef1/pasted-text-1.txt`.
 OpenGL/WGL and CS1.6 are subsequent goals. The mission is not complete until
 every row below is supported by evidence from the final installed package.
 

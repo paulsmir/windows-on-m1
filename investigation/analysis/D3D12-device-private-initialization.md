@@ -11,7 +11,7 @@ therefore unmeasured in this run.
 
 The preserved dump is
 `.local/experiments/EXP1381-d3d12-srv-component-map/evidence/EXP1381/agx_d3d12_probe_e1381_arm64.exe.11168.dmp`
-(host artifact root `/Users/pavel/public_windows`), SHA-256
+(host artifact root `$HOME/public_windows`), SHA-256
 `2728c3c3b634159873bca65eb9d8aa72585085f8d4416c536ffc62f64b8665e1`.
 Process 11168, exception thread 9628, exception `0xc0000005`, read address
 `0x31a94f`, PC `0x7ff9ecd22530`, UMD base `0x7ff9ecab0000`, RVA `0x272530`.

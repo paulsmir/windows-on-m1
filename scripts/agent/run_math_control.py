@@ -9,11 +9,14 @@ import subprocess
 import sys
 import uuid
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+import bench_env  # noqa: E402
+
 COMMAND = "RUN_MATH_CONTROL"
 EXPECTED_SHA256 = "c1a5d554c941a78c3fa02e77c370e8cbb0e5ecb8291177f277f079a07cd67d13"
-APPROVED = pathlib.Path("/Users/pavel/public_windows/.worktrees/task-AD04-MATH-CONSTANTS-006/drivers/apple-agx/mesa/scripts/run-phase3-normalized.ps1")
-LOCAL_ROOT = pathlib.Path("/Users/pavel/public_windows/.worktrees/phase3-normalize")
-KEY = "/Users/pavel/.ssh/windows_builder"
+APPROVED = bench_env.bench_root() / ".worktrees/task-AD04-MATH-CONSTANTS-006/drivers/apple-agx/mesa/scripts/run-phase3-normalized.ps1"
+LOCAL_ROOT = bench_env.bench_root() / ".worktrees/phase3-normalize"
+KEY = os.path.expanduser("~/.ssh/windows_builder")
 HOST = "pauls@192.168.1.24"
 # Builder root (APPLE AGX\active as its 8.3 alias, no space); override with APPLE_AGX_BUILDER_ROOT.
 BUILDER = os.environ.get("APPLE_AGX_BUILDER_ROOT", r"C:\Users\pauls\APB12E~1\active").replace("\\", "/")

@@ -1,6 +1,6 @@
 # R144 — full-local G3 paging bounds
 
-Task: `/Users/pavel/public_windows/.local/tandem/NEXT_TASK_R144.md`.
+Task: `$HOME/public_windows/.local/tandem/NEXT_TASK_R144.md`.
 Baseline root57c680e49fb1c8481a967c798c54af8f3c1c6086; source/diff snapshots
 and all offline logs: main `.local/experiments/EXP857-r144-paging-bounds/`.
 No Air access, launch, package installation, or recovery image writes.

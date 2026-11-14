@@ -17,7 +17,7 @@ future command frontend must add pfnRenderCb before it may set that state.
 mock runtime callbacks, OutputDebugString/DBWIN capture, current D3D11 probe.
 
 **Spec:** User review captured at
-`/Users/pavel/.codex/attachments/4bdef9f9-ea93-44c3-8bdf-81a2bd569a4e/pasted-text.txt`
+`$HOME/.codex/attachments/4bdef9f9-ea93-44c3-8bdf-81a2bd569a4e/pasted-text.txt`
 plus Microsoft `CheckFormatSupport`, `Changes from Direct3D 10`,
 `pfnDeallocateCb`, and `Primary Exceptions` contracts.
 

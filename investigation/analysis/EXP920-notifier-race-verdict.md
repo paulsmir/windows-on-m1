@@ -50,7 +50,7 @@ Root `.local/experiments/EXP920-preempt-notifier-race/`:
 - `observer-resume-sample.out`, `frame-after-storage-recovery.out`,
   `composition-create-host-gate.json`, `recovered-original-snapshot-host-gate.json`;
 - `host-storage-recovery-receipt.json`; original evidence paths remain valid via
-  verified symlinks to `/Users/pavel/J313-evidence-archive/2026-10-02/`.
+  verified symlinks to `$HOME/J313-evidence-archive/2026-10-02/`.
 
 Next921 is the still-unexecuted guarded DWM reinitialization diagnostic on exact
 920package, with corrected host storage controls. It distinguishes fresh

@@ -1,5 +1,5 @@
---- /Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compiler.h
-+++ /Users/pavel/public_windows/.worktrees/task-AD04-OFFT-PORTABILITY-004/drivers/apple-agx/mesa/windows-overlay/agx_compiler.h
+--- $HOME/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compiler.h
++++ $HOME/public_windows/.worktrees/task-AD04-OFFT-PORTABILITY-004/drivers/apple-agx/mesa/windows-overlay/agx_compiler.h
 @@ -68,22 +68,22 @@
      * last use in a block and the source is not live after the block). Set by
      * liveness analysis.
@@ -49,8 +49,8 @@
  
     /** Available for passes to use for metadata */
     uint8_t pass_flags;
---- /Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c
-+++ /Users/pavel/public_windows/.worktrees/task-AD04-OFFT-PORTABILITY-004/drivers/apple-agx/mesa/windows-overlay/agx_pack.c
+--- $HOME/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c
++++ $HOME/public_windows/.worktrees/task-AD04-OFFT-PORTABILITY-004/drivers/apple-agx/mesa/windows-overlay/agx_pack.c
 @@ -9,7 +9,7 @@
  /* Binary patches needed for branch offsets */
  struct agx_branch_fixup {

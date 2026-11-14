@@ -37,7 +37,10 @@ PASS_STARTS = (0, 60, 180)
 PASS_BUDGET = 300
 ZERO_PAGE = bytes(PAGE)
 EXIT = {"STABLE": 0, "CHANGED": 2, "INCOMPLETE": 3, "REFUSED": 4}
-DEFAULT_SSH = "/Users/pavel/public_windows/.local/tandem/airssh"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+import bench_env  # noqa: E402
+
+DEFAULT_SSH = str(bench_env.bench_root() / ".local/tandem/airssh")
 
 
 class Fault(RuntimeError):

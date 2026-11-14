@@ -12,8 +12,8 @@
 
 ## Global Constraints
 
-- Work only in `/Users/pavel/public_windows` on `feature/j313-gpu-acceleration`.
-- Do not create a worktree and do not touch `/Users/pavel/windows`.
+- Work only in `$HOME/public_windows` on `feature/j313-gpu-acceleration`.
+- Do not create a worktree and do not touch `$HOME/windows`.
 - Preserve existing m1n1 and Mu submodule dirt.
 - Never use `pnputil /force`.
 - Never infer driver success from `pnputil` completion or transient PnP `OK`.

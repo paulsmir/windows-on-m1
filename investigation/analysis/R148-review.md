@@ -1,6 +1,6 @@
 # R148 tandem dispositions
 
-Canonical review read at thread start and before audit commit: `/Users/pavel/public_windows/.local/tandem/REVIEW.md`.
+Canonical review read at thread start and before audit commit: `$HOME/public_windows/.local/tandem/REVIEW.md`.
 SHA256 `753bdfe638d6171954875a5fc9a58c09761999ffcab89b9d216f566c7e1300c5`.
 
 Scope: explicit offline submit mapping and memory-lifetime task.

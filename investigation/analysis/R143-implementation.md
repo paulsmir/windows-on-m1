@@ -1,7 +1,7 @@
 # R143 offline implementation ledger
 
 Plan: investigation/analysis/R143-reserve-1g-design.md; authorized task:
-`/Users/pavel/public_windows/.local/tandem/NEXT_TASK_R143_IMPL.md`.
+`$HOME/public_windows/.local/tandem/NEXT_TASK_R143_IMPL.md`.
 No Air access. No recovery artifact modifications. Source baseline and immutable
 artifact hashes: `.local/experiments/EXP856-r143-reserve1g/` in the main repo.
 Root baseline c7879b16c552c14bb3a665a540056b5982c7b0d3. Nested baseline commits

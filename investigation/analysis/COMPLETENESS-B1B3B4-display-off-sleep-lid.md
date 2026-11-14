@@ -122,7 +122,7 @@
 - **Storage:** hibernation and fast startup must stay off, because a hibernate attempt on AppleAns would lose data. Do not run H2 before U5 is answered.
 - **Display:** a DCP that stays dark is recoverable over SSH plus a reboot. Keep the known-good m1n1 as the recovery image for every m1n1 step.
 
-Nothing was written to the repository. The scratch directory `/Users/pavel/public_windows/.local/night-20261110/wp-b1b3/` was created and is empty.
+Nothing was written to the repository. The scratch directory `$HOME/public_windows/.local/night-20261110/wp-b1b3/` was created and is empty.
 ---
 Architect notes (2026-11-13T14:02:24Z):
 - ACCEPTED: "sleep" on this platform = modern standby (S0 low-power idle): display blank with backlight off, GPU idle,

@@ -57,7 +57,7 @@ Delegate those whenever possible.
 
 Repository:
 
-/Users/pavel/public_windows
+$HOME/public_windows
 
 Read first:
 

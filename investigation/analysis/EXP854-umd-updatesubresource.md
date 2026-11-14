@@ -21,7 +21,7 @@ under the user's explicit document-only scope.
 
 ## Evidence and provenance chain
 
-Host evidence roots below are relative to `/Users/pavel/public_windows`:
+Host evidence roots below are relative to `$HOME/public_windows`:
 
 - `E854 = .local/experiments/EXP854-r134-sysmem64k`
 - `E853 = .local/experiments/EXP853-r133-unpublished`
@@ -255,7 +255,7 @@ Additional SHA-256 anchors:
 
 ## Tandem OPEN-item dispositions for this bounded task
 
-Read `/Users/pavel/public_windows/.local/tandem/REVIEW.md` (worktree-local path
+Read `$HOME/public_windows/.local/tandem/REVIEW.md` (worktree-local path
 absent). Items with obsolete OPEN text plus an existing disposition are retained
 as such; this analysis does not reopen their historical hardware questions.
 

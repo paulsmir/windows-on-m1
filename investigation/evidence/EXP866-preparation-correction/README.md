@@ -39,5 +39,5 @@ manifest/payload digest remains in the active audited corpus. Hardware NOT_RUN.
 Reproduce from repository root:
 
 ```sh
-python3 investigation/evidence/EXP866-preparation-correction/audit_hash_literals.py /Users/pavel/public_windows/.local/experiments/EXP866-r151-stamp --output /tmp/exp866-literals.tsv
+python3 investigation/evidence/EXP866-preparation-correction/audit_hash_literals.py $HOME/public_windows/.local/experiments/EXP866-r151-stamp --output /tmp/exp866-literals.tsv
 ```

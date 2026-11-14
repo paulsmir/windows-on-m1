@@ -35,7 +35,7 @@ class InstallEspTests(unittest.TestCase):
         ):
             self.assertIn(item, output)
         self.assertNotIn("disk0s4", output)
-        self.assertNotIn("/Users/pavel", output)
+        self.assertNotIn(str(Path.home()), output)
 
     def test_restore_uses_the_same_scoped_backup(self):
         result = self.run_dry("restore", "--disk", "disk9s4")

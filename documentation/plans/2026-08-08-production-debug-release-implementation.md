@@ -234,8 +234,8 @@ With a monitor image already running, execute:
 
 ```sh
 scripts/log-standalone.sh \
-  --console /dev/cu.usbmodemC02HDNCCQ6L41 \
-  --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+  --console /dev/cu.usbmodem<SERIAL>41 \
+  --vuart /dev/cu.usbmodem<SERIAL>43 \
   --output /tmp/windows-on-m1-monitor
 ```
 
