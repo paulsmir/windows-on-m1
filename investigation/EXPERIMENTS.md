@@ -79564,3 +79564,20 @@ EXP2414-EXP2415 HARDWARE BEFORE 2026-11-14T03:02:54Z (proxy-only slot after EXP2
   - Sequence in one proxy session (dock with monitor on the left-front port): chainload the TBX macho; TBX-S0c again (USB tool, --execute; its JSON feeds the script); stage1b --port 1 --s0c-json; port-controller snapshot (S0c dry run).
   - Expected (PASS): request returns 0; crossbar protocol 0x10 (0x11 if flipped); DP_BOTH_PMA 0; lane mode 0x489 (0x252 flipped); PHY_RESET_N 1; the proxy on port 0 alive; snapshot still DP / pin D / HPD. Failure: non-zero return, any field differs, proxy loss.
   - Recovery: p.reboot() (back to the bench m1n1), then AT_PROXY rec2413h; no guest boot before the proxy reboot.
+
+EXP2414-EXP2415 HARDWARE ACTUAL 2026-11-14T03:07:33Z (proxy-only slot):
+- Entry: ordered reboot of the EXP2413 guest at 03:03:22Z; the EXP2413 run_uefi (exact PID) exited; bench m1n1 at "Running proxy" (base 0x805210000). TTY logger on usbmodem<SERIAL>43 from 03:04:01Z (WBT000b2: driver-wifi-bt-08a668/.local/wbt000b2/tty.log; TBX-S1b: driver-tb-extdisplay-3a73cc/.local/tbx/TBX-S1b/tty.log). Tool hashes verified at run.
+- EXP2414 WBT000b2 (order read -> smc-write -> pcie):
+  - read: READ_ONLY_DONE (receipt 2f5fd15d...), PERST# GPIO 152 0x76a02 asserted (output low), as EXP2409.
+  - smc-write: SMC_WRITE_DONE (receipt 60dca890...), every step done: proxy_connect, gate, pre_state, smc_attach (RTKit mgmt startup complete, smcep started), smc_key_info gP0d length 4, smc_write gP0d = 0x800001, settle_100ms, post_state (PERST# still asserted). No reset; the proxy answered afterwards (same base).
+  - pcie: LINK_DOWN (receipt a19b5ba3...), pcie_init_rc 0, pcie_shutdown_rc 0, LINKSTS 0xa9000200, status 0x1, link down, as expected with PERST# asserted. No SMC access in this mode.
+  - Verdict: CONFIRMED for the split: attach, key info, the gP0d write and pcie_init with the rail on all return without a reset; the only EXP2410 step not repeated is SMCClient.stop() (SetAPPower/SetIOPPower 0x10 quiesce), which is now the identified cause of the EXP2410 SoC reset (by elimination, not by a reset in this slot). Next for Wi-Fi: WBT000c (PERST# pin release).
+- Proxy reboot (p.reboot) -> bench m1n1 base 0x804eb4000.
+- EXP2415 TBX-S1b:
+  - Chainload of m1n1-tbx-benchatc-85a73e90.macho (39f8f023...) with the bench LLD wrapper (LLDDIR=/tmp/agx-lld-dir/; a first attempt without it failed in the proxyclient's own ld.lld before any load, nothing sent). Identity check: request 0x1401 with instance 9 returned -1000 (TBX_ATC_E_INSTANCE, refused before any access), so the TBX image was running.
+  - TBX-S0c (USB tool, --execute): action none, "already S0" (the controller was still in S0 from the EXP2413 guest session); STATUS 0x108282ef, POWER_STATE 0, POWER_STATUS 0x0d, DATA_STATUS 0x8571; writes [].
+  - stage1b --port 1 --s0c-json: pin D, mode 3 (USB3_DP), not flipped, atc instance 1, core 0x503000000. TTY: "USB1: shutdown (single)", "TBX: atc-phy1 mode 3 flipped 0 -> 0". request_ret 0; crossbar 0x0 -> 0x110 (protocol 0x10, DP_BOTH_PMA 0), lane mode 0x0 -> 0x489, power_ctrl 0x4 -> 0x1b (PHY_RESET_N 1); problems [] -> PASS.
+  - Snapshot after (S0c dry run): STATUS 0x108282ef, POWER_STATE 0, DATA_STATUS 0x8571 (DP, pin D, HPD), RX identity unchanged; the proxy on port 0 alive throughout.
+  - Verdict: CONFIRMED (all PASS values as preregistered). Evidence driver-tb-extdisplay-3a73cc/.local/tbx/TBX-S1b/result.json, driver-usb-0460ed/.local/usb/S0c/port1-{ssps-exp2415,after-s1b}.json.
+- Exit: p.reboot() -> bench m1n1 (base 0x804494000; op 0x1401 absent = bench image), TTY logger stopped, AGX_RECOVERY_ALLOW_AT_PROXY=1 rec2413h started.
+- Next: F1K-STAMP L1 (EXP2416) after RECOVERY_DONE.
