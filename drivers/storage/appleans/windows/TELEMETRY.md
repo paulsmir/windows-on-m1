@@ -143,6 +143,7 @@ Same header and signature, total size exactly 324 bytes (28 + 296). Read-only. C
 miniport refuses as not implemented since the adapter was found: SRB functions other than the ones
 it serves (kind 1, code = SRB function), SRB_IO_CONTROL requests that are none of its own queries
 (kind 2, code = the request's ControlCode, 0xffffffff if the buffer is too short) and CDBs answered
-ILLEGAL REQUEST / INVALID COMMAND OPERATION CODE (kind 3, code = opcode). Payload offsets
+ILLEGAL REQUEST with INVALID COMMAND OPERATION CODE (20h) or INVALID FIELD IN CDB (24h) (kind 3,
+code = additional sense code << 8 | opcode; up to 0.4.9 only 20h was counted and code was the opcode). Payload offsets
 (little-endian): 0 version = 1, 4 payload size = 296, 8/16/24 totals for kinds 1/2/3, 32 rejects
 that found no free slot, 40 sixteen entries of {kind 4, code 4, count 8} in first-seen order.

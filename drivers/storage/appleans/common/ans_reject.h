@@ -5,6 +5,7 @@
 /* Receipt of requests the miniport refuses because it does not implement them: which SRB
  * functions, SRB_IO_CONTROL control codes and CDB opcodes Windows actually sends. Read-only
  * evidence (ANSQ-T7: what an NVMe-typed adapter is asked that a Fibre-typed one is not). */
+/* ANS_REJECT_CDB code = additional sense code << 8 | opcode (20h unknown opcode, 24h refused field). */
 enum { ANS_REJECT_SRB_FUNCTION = 1, ANS_REJECT_IO_CONTROL = 2, ANS_REJECT_CDB = 3 };
 #define ANS_REJECT_SLOTS 16u
 struct ans_reject_entry { ans_u32 kind, code; ans_u64 count; };

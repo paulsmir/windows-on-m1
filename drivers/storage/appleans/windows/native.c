@@ -496,9 +496,11 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
         if (shutdown) attribute=ANS_ORDER_ORDERED; /* global shutdown fence */
     } else if (srb->Function==SRB_FUNCTION_EXECUTE_SCSI && x && x->Valid) {
         plan=ans_scsi_prepare(&a->Namespace,x->Cdb,x->CdbLength,x->Length,&a->Sense);
-        /* ILLEGAL REQUEST / INVALID COMMAND OPERATION CODE: an opcode the planner does not know. */
-        if (plan.action==ANS_SCSI_CHECK && plan.sense.key==5 && plan.sense.asc==0x20)
-            ans_reject_note(&a->Rejects,ANS_REJECT_CDB,x->Cdb[0]);
+        /* ILLEGAL REQUEST: an opcode the planner does not know (20h) or a CDB field it refuses
+         * (24h, e.g. a flag bit). code = asc<<8 | opcode. */
+        if (plan.action==ANS_SCSI_CHECK && plan.sense.key==5 &&
+            (plan.sense.asc==0x20 || plan.sense.asc==0x24))
+            ans_reject_note(&a->Rejects,ANS_REJECT_CDB,((ULONG)plan.sense.asc<<8)|x->Cdb[0]);
     } else {
         if (srb->Function!=SRB_FUNCTION_EXECUTE_SCSI)
             ans_reject_note(&a->Rejects,ANS_REJECT_SRB_FUNCTION,srb->Function);
