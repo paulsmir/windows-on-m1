@@ -6659,3 +6659,13 @@ boot was run. The previous entry stays as written.
   derived from Windows' own ShutdownTime value (kernel-written and flushed before the registry closes), compared
   with a snapshot stored at the previous allowed start. Fail closed when unreadable. NOT yet built or run; the value
   is undocumented and verified only in kernel 26100.9711.
+
+## UPDATE 2026-11-14T03:02:37Z - EXP2413 (PL-1c): mode changes work; the known mode-change defect is fixed on the experiment line
+
+- PL-1c (superseded mode-setting primaries are released only at device destroy) ran eight full-screen mode changes
+  (1920x1080 and 1680x1050, native after every exit) with no hide loop, the source visible after every exit and no
+  DWM restart. UMD rows: no live release (path 2 = 0). EXP2411 was invalid (bench tool defect), EXP2413 is its rerun.
+- Not verified: an operator's look at the panel during the arms; behaviour over long sessions (one old-mode primary
+  stays allocated per mode set until DWM's device dies - known limitation; candidate PL-1d would remove it).
+- Why dxgkrnl runs its disable path for an old retained primary is still unknown.
+- Unblocked: C2 boot 2 (mode probe, C2-1/C2-2/C2-3) on top of PL-1c.
