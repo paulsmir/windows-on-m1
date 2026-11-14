@@ -6988,3 +6988,28 @@ boot was run. The previous entry stays as written.
   main thread, foreground state, dram_fast per run; GravityMark pinned vs unpinned. No guest power setting is
   changed. The _CPC capacity-scale experiment (Mu + m1n1, atomic) is decided after that measurement.
 - Not reported yet at this time: C2-1/C2-3 arm and the A5-D1 tail of the same experiment.
+
+## UPDATE 2026-11-14T22:54Z - EXP2459 part 2: harness priority, A5 second restart cause, no post-display owner
+
+- C2-1/C2-3 PASS (bench report): 1920x1200 and 1920x1080 accepted, native restored.
+- CS PLACEMENT: RUN A (read-only) shows hl.exe at priority class BelowNormal (the scheduled task that launches the
+  tests has the Task Scheduler default priority 7) and never foreground; P cores parked during the run (Parking
+  Status ~1.0 on cores 4-7), no performance limit; unpinned dram_fast=0, pinned dram_fast=1. GravityMark pinned vs
+  unpinned: no gain (52.9 / 52.6 vs 53.2 / 53.0); GM already keeps the P cores busy. Strongest candidate for "CS on
+  the E cluster" is therefore the test harness, not firmware. EXP2460 (one boot: CS and GM at task priority 7 vs 4)
+  is the discriminator. The _CPC capacity-scale experiment is NOT run on this evidence. Gate harness and
+  perf baseline unchanged until a decision (a harness change invalidates every baseline since EXP1184).
+- A5 (in-boot device restart, policy 1): first restart OK; second and third enable fail, DxgKrnl 549 0xC0000017.
+  CORRECTION to the bench reading "failure in the firmware/retained boot path": KMD StartDevice returned 0 and the
+  firmware reached phase 9 in the failing cycle; the receipt differences are the stop after dxgkrnl's failure.
+  FACT from the cycle-2 DxgKrnl ETW text (research pass; bench asked to re-verify the strings): "Driver dedicated
+  too much system memory for video, system policy violated" -> sysmem segment init fails -> ADAPTER_RENDER create
+  fails. HYPOTHESIS (dxgmms2 disassembly): VidMm's limit is Share minus the dedicated bytes of the last budgeted
+  adapter and is not recomputed at adapter destroy; segment 3 is 4 GiB against a 4.898 GiB share. Spec A5-D2 in the
+  architect handoff: discriminator D1 = same package with Wom1PoolHalfSize=1 (2 GiB), three-cycle tail. Why the
+  first restart passes is unknown.
+- NEW DEFECT (operator photo ~22:25Z + guest logs): while the adapter was disabled / failed to start, no Windows
+  display owner existed (no BasicDisplay/Basic Render load, adapter list = ours with Error); the panel showed the
+  pre-OS framebuffer (m1n1 logo). Completeness item: post-display hand-back at stop / failed start. Architect
+  error: first described to the user as the hypervisor screen between boots.
+- Side finding: four "Driver returned an invalid NTSTATUS code" 0xC00000BB events at each start; DDI not named yet.
