@@ -79950,3 +79950,12 @@ EXP2436 ACTUAL (2026-11-14, UTC): ordered restart of the bench guest to the prox
 - Recovery: rec2425h RECOVERY_DONE 12:15:38Z (Verdict PASS, Package Absent), SSH alive.
 - Evidence: .local/experiments/EXP2436-wbtg2b/evidence/{probe.txt,full-end.log,launcher.log}.
 - Verdict: CONFIRMED. Code 12 was the missing PCI1._PRT for the root port's INTx; with it Windows starts the root port and enumerates both BCM4378 functions (G2 endpoint reached: Code 28). Next (Wi-Fi owner): G3 = HV route for vINTID 695 / MSI and DMA (DART), then a function driver; diagnostic filter stats image 28495e57 only if needed.
+
+## Correction to ANSQ-T5a/T5b/T5c, ANSQ-T6, ANSQ-T7a/T7b and the ANSQ-T4 analysis note (2026-11-14, appended; the entries are not edited)
+
+- Those entries read "no 0xAA" (no missed-interrupt record in the System log) as evidence that no completion
+  interrupt was lost. The System-log part stands. Any statement or implication that the driver's
+  poll_recovered_completions counter was read as 0 does not: until 765e7d85c the telemetry query dropped the
+  ANS-DIRECT record (source 3) that carries it, together with the faulted/crashed bits and mailbox counters, so
+  that counter was never readable on hardware (found in EXP2437). 0xAA records need a working disk to persist,
+  so a boot that stalled could not have shown one either.
