@@ -79521,3 +79521,13 @@ EXP2411 HARDWARE BEFORE (record) and ACTUAL 2026-11-14T02:34:20Z:
 - Fix (scratchpad tool, prepare.sh): without AGX_NO_ARM the arm lines are restored and each must be present exactly once (stage write + readback, ordered-restart readiness condition), else PREPARE_FAIL arm-restore; tested on the EXP2411 copies (restored text identical to EXP2412's, idempotent). Backup prepare.sh.pre-armrestore.
 - Also read on this guest: Control\Windows ShutdownTime 29A48CE3DD73DD01 = 2026-11-14T02:14:33Z (the ordered restart of the rec2405h guest into this boot, 32 s before LastBootUpTime 02:15:05Z); guest kernel 10.0.26200 UBR 9974.
 - Recovery rec2411h started. Next: PL-1c rerun under EXP2413 with the same package (proxy slot after it).
+
+EXP2413 HARDWARE ACTUAL 2026-11-14T03:01:01Z (PL-1c rerun of the invalid EXP2411):
+- Boot and run: rec2411h (RECOVERY_DONE), the EXP2411 package copied (arch/pl1b 503cbc135), m1n1 s2v3-rq2, switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes; prepare logged "ARM stage writes G3Armed"; device CM_PROB_NONE; CHAIN2413_DONE.
+- Sanity: suite 119/0; GM window at native ran (TIMEOUT CLOSED = timed run end; the perf summary did not parse, no perf gate in this boot).
+- Arms, expected vs actual: no FS_LOOP_DETECTED in a, c, d1-d6 (expected none). Every arm committed the GM mode and the exit restored native: CommitCalls 1 -> 17 (8 mode changes, +2 per arm), 1920x1080 / 1680x1050 at CommittedScaling 4, 2560x1600 scaling 1 after each exit. VisibilityCalls +7 per arm (4 -> 114; the EXP2403 loop added 59 -> 123 in 10 s). SourceVisible 1 after every exit (a, c, d1-d6), without a DWM restart. V2Presents rising through every arm (614 -> 862).
+- UMD retention rows (umd-session.log, all from dwm pid 1284; the probe's live grep returned nothing again, decoded offline): path 1 retained-at-destroy 32, path 3 superseded 24, path 4 released at device destroy 29, path 2 (live release) 0; superseded chain depth up to 6. As specified: no release before device destroy, and no hide follows any release.
+- Guest alive, WER_REPORTS 2, STOPS 0; guest C: 28471 MiB free before d; no DWM restart needed (PL1C_ARMS_PASS).
+- Verdict: PL-1c CONFIRMED. The full-screen mode-change black screen (EXP2401/2402, loop at the first live release in EXP2403) is fixed by retaining every superseded mode-setting primary until device destroy. Picture on the panel not observed by an operator in this boot (receipts only).
+- Not covered: memory held by superseded primaries until DWM's device destroy (here up to 6 objects).
+- Next: proxy slot from this guest (ordered reboot -> proxy: WBT000b2, proxy reboot, TBX-S1b, proxy reboot), then AT_PROXY rec2413h; then F1K-STAMP L1 (EXP2416); C2 boot 2 can now build on PL-1c.
