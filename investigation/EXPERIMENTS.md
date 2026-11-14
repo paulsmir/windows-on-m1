@@ -79443,3 +79443,17 @@ EXP2412 HARDWARE ACTUAL 2026-11-14T01:50:08Z:
 - Verdict: CONFIRMED. EXP2404's CS miss (-2.30 %) was run-to-run variation (same package, same switches, CS back to the EXP2394/2395/2401 band). F1-k L0 (policy absent = unchanged arm path, attempt receipt only) is accepted.
 - Recovery: rec2412h visible recovery started after the run.
 - Next: F1-k L1 (EXP2405: Wom1StartPolicy=1, no arm, ordered restart inside the 120 s window, next start clean).
+
+EXP2405 HARDWARE BEFORE 2026-11-14T01:56:03Z:
+- Kind: one variable against the accepted F1-k L0 package: the same build (exp/f1k-pkg 2e19eaaf5, EXP2404 output copied), m1n1 s2v3-rq2, switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes plus Wom1StartPolicy=1; staged with AGX_NO_ARM=1 (stage removes G3Armed and checks it is absent; the ordered restart no longer requires G3Armed=1).
+- WHY THIS HYPOTHESIS: (1) EXP2412 accepted L0 (policy absent = arm path unchanged), so policy 1 is the only new behaviour left; (2) the host-tested contract (apple_agx_start_policy_test.c, test_render_start_policy.py) maps Shutdown -> Cleared and a clean last boot -> Allow/Clean, but the live order of PowerActionShutdown vs the registry flush on AppleAns is a START-GATE unknown (COMPLETENESS-F1 4.D item 4); (3) EXP2404/2412 first SSH contact came at uptime 50-69 s, so an ordered restart at first contact lands inside T.
+- ATOMIC CONTRACT: none.
+- Steps: L1a (probe2405.sh) reads the policy values at first contact and runs shutdown /r /t 0; the machine returns to the proxy; L1b is run by hand as AGX_FROM_PROXY=1 run-probe.sh EXP2405-f1k1 2405 EXP2405b probe2405b.sh: reads the next start, waits for uptime >= 150 s, then three disable/enable cycles.
+- Expected (attempt receipt = decision<<16 | reason, as 0x10001 = Arm/OneShotArm in EXP2412): L1a Wom1StartPolicyAttempt 0x20004 (Allow/Clean), Wom1StartPending and Wom1StartRunning present (inside T), no Latched, no G3Armed; L1b Attempt 0x20004 again, no Wom1StartLatched, no UncleanCount; after the window Pending gone; each disable clears Running (CleanStop).
+- Failure criteria: L1b refuses (reason 7/8/9) or Wom1StartLatched / Wom1StartUncleanCount appear after the ordered restart -> the shutdown clean exit is not durable; L1a uptime at restart >= 120 s -> inconclusive (window not tested).
+- Known defect A5: a second start after disable/enable can fail with CM_PROB_FAILED_POST_START; that is not an L1 verdict item, but a policy refusal in the cycles is.
+- No GM/CS gates in this boot (policy behaviour only). No mode change.
+- Recovery: rec2405h after L1b (visible, or AT_PROXY if the guest is at the proxy).
+- Hashes: sys a25f4473ded3, UmdArm64 8279e3d263b6, UmdX64 2af54db525b9, Umd32 2c588369b76e; manifest 807655384a38, hardware-manifest f32dccf047b7; probe2405.sh d7ab0e705ec8 (PROBE_LINT_OK); visible recovery rec2405h 8274f86e6daa5b52; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
+- Recovery rec2405h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2405-f1k1/run2405.sh.
