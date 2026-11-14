@@ -6774,3 +6774,15 @@ boot was run. The previous entry stays as written.
   enabled for the external display coprocessor only. Internal-panel guard: no change.
 - GPU bench next: one combined package (accepted + PL-1c + F1K-STAMP + C2 set + A5-D1 receipt) with verdict lines
   for integration, C2-1/C2-3 at non-native desktop modes, and the device-restart discriminator under start policy 1.
+
+## UPDATE 2026-11-14T10:28:55Z - working mode: one driver per 60-90 minute box; keyboard backlight box 1 closed without success
+
+- By the user's decision (2026-11-14) bench work is done one driver at a time in focus boxes (easiest first; a
+  driver that works goes into every boot). The interleaved queue is replaced; the GPU items (combined package with
+  C2-1/C2-3 and the A5 discriminator, brightness, display power) are box 5 of the current order.
+- Keyboard backlight, EXP2429: Mu candidate with Device KBDL and the driver install cleanly, but the guest reads
+  0xffffffff from the PWM block's PMGR power-state word, so ACPI never ran _PS0 and the driver wrongly reported the
+  block as powered. No write step was run; rolled back. Layer not decided (Windows ACPI not reaching the hardware
+  through the OpRegion, the hypervisor's split-page emulation, or the hardware); the next keyboard box runs a
+  hardened ASL/driver with a hypervisor tracer on that word.
+- Wi-Fi box is running (G1: m1n1 brings the link up by itself at the proxy).
