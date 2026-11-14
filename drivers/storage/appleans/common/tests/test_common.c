@@ -41,9 +41,19 @@ static void rw_tests(void)
             if (n != len) sense(prep(c, n, 4096), 5, 0x24);
         for (unsigned flag = 1; flag <= 128; flag <<= 1) {
             c[1] = (uint8_t)flag;
+            if (flag == 0x08 || flag == 0x10) continue; /* FUA, DPO: below */
             sense(prep(c, len, 4096), 5, 0x24);
         }
-        c[1] = 0;
+        /* FUA -> NVMe CDW12 bit 30, block count untouched; DPO accepted and ignored. Windows
+         * (classpnp) sets FUA on write-through writes: a reject makes disk.sys drop FUA for the
+         * boot and try to switch the write cache off. */
+        c[1] = 0x08; p = prep(c, len, 4096);
+        assert(p.action == ANS_SCSI_SUBMIT && p.nvme_cdw12 == 0x40000000u && p.nvme_nlb == 0);
+        c[1] = 0x10; p = prep(c, len, 4096);
+        assert(p.action == ANS_SCSI_SUBMIT && p.nvme_cdw12 == 0);
+        c[1] = 0x18; p = prep(c, len, 4096);
+        assert(p.action == ANS_SCSI_SUBMIT && p.nvme_cdw12 == 0x40000000u);
+        c[1] = 0; p = prep(c, len, 4096); assert(p.nvme_cdw12 == 0);
         for (unsigned flag = 1; flag <= 128; flag <<= 1) {
             c[is16 ? 14 : 6] = (uint8_t)flag;
             sense(prep(c, len, 4096), 5, 0x24);
@@ -185,7 +195,7 @@ static void cache_tests(void)
         c[1] = 8; c[2] = 8; c[kind ? 8 : 4] = 64;
         ns.read_only = 1;
         struct ans_scsi_plan p = prep(c, len, 64);
-        assert(p.metadata_length == h + 20 && p.metadata[kind ? 3 : 2] == 0x80);
+        assert(p.metadata_length == h + 20 && p.metadata[kind ? 3 : 2] == 0x90); /* WP + DPOFUA */
         assert(p.metadata[h] == 8 && p.metadata[h + 1] == 18 && p.metadata[h + 2] == 4);
         c[2] = 0x48; p = prep(c, len, 64);
         assert(p.metadata[h + 2] == 0); /* no writable cache parameters */

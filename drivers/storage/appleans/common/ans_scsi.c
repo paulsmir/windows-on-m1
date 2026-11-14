@@ -198,11 +198,11 @@ struct ans_scsi_plan ans_scsi_prepare(const struct ans_namespace *ns,
         size_t n = header + descriptor + 20;
         if (header == 4) {
             p.metadata[0] = (ans_u8)(n - 1);
-            p.metadata[2] = (ns->read_only ? 0x80 : 0);
+            p.metadata[2] = (ans_u8)((ns->read_only ? 0x80 : 0) | 0x10); /* WP, DPOFUA */
             p.metadata[3] = (ans_u8)descriptor;
         } else {
             put_be(p.metadata, n - 2, 2);
-            p.metadata[3] = (ns->read_only ? 0x80 : 0);
+            p.metadata[3] = (ans_u8)((ns->read_only ? 0x80 : 0) | 0x10);
             p.metadata[7] = (ans_u8)descriptor;
         }
         if (descriptor) {
@@ -218,7 +218,10 @@ struct ans_scsi_plan ans_scsi_prepare(const struct ans_namespace *ns,
     case 0x28: case 0x2a: case 0x88: case 0x8a:
         long_cdb = len == 16;
         writing = c[0] == 0x2a || c[0] == 0x8a;
-        if (c[1] || c[long_cdb ? 14 : 6]) return invalid();
+        /* FUA (bit 3) becomes the NVMe FUA bit; DPO (bit 4) is advisory cache policy with no
+         * NVMe equivalent and is ignored (SNT 1.5). classpnp sets FUA on every write-through
+         * write while the write cache is on, whatever MODE SENSE says about DPOFUA. */
+        if ((c[1] & ~0x18u) || c[long_cdb ? 14 : 6]) return invalid();
         lba = be(c + 2, long_cdb ? 8 : 4);
         blocks = (ans_u32)be(c + (long_cdb ? 10 : 7), long_cdb ? 4 : 2);
         if (blocks > ANS_MAX_TRANSFER / ANS_PRP_PAGE_SIZE) return invalid();
@@ -232,7 +235,7 @@ struct ans_scsi_plan ans_scsi_prepare(const struct ans_namespace *ns,
         p.direction = writing ? ANS_DMA_TO_DEVICE : ANS_DMA_FROM_DEVICE;
         p.lba = lba;
         p.nvme_nlb = (ans_u16)(blocks - 1);
-        p.nvme_cdw12 = p.nvme_nlb;
+        p.nvme_cdw12 = p.nvme_nlb | ((c[1] & 0x08) ? ANS_NVME_RW_FUA : 0);
         p.transfer_bytes = blocks * ANS_PRP_PAGE_SIZE;
         return p;
     case 0x42:

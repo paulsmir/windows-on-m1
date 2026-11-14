@@ -16,7 +16,7 @@ int ans_io_request(const struct ans_scsi_plan *p,
         if (!p->transfer_bytes || p->transfer_bytes>ANS_MAX_TRANSFER ||
             p->transfer_bytes%ANS_PRP_PAGE_SIZE ||
             p->direction!=(p->nvme_opcode==1?ANS_DMA_TO_DEVICE:ANS_DMA_FROM_DEVICE) ||
-            p->nvme_cdw12!=p->transfer_bytes/ANS_PRP_PAGE_SIZE-1 || !prps ||
+            (p->nvme_cdw12&~ANS_NVME_RW_FUA)!=p->transfer_bytes/ANS_PRP_PAGE_SIZE-1 || !prps ||
             prps->bytes!=p->transfer_bytes || !prps->count || prps->count>ANS_MAX_DATA_PAGES ||
             !prps->page[0] || (prps->page[0]&3) ||
             prps->count!=((prps->page[0]&(ANS_PRP_PAGE_SIZE-1))+p->transfer_bytes+

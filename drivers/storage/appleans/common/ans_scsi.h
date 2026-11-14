@@ -26,6 +26,8 @@ struct ans_namespace {
 /* UNMAP limits, reported in VPD B0h and enforced by ans_scsi_unmap_resolve. One
  * NVMe Dataset Management command carries at most 256 ranges in one 4 KiB page. */
 #define ANS_NVME_DSM 9
+/* NVMe READ/WRITE CDW12 bit 30: Force Unit Access. Bits 15:0 are the zero-based block count. */
+#define ANS_NVME_RW_FUA 0x40000000u
 #define ANS_UNMAP_MAX_DESCRIPTORS 256u
 #define ANS_UNMAP_MAX_LBA_COUNT 0xffffffffu
 #define ANS_UNMAP_MAX_LIST (8u + ANS_UNMAP_MAX_DESCRIPTORS * 16u)

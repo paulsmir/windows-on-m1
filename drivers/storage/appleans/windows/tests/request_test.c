@@ -70,5 +70,16 @@ int main(void)
     plan.direction=ANS_DMA_FROM_DEVICE;assert(!ans_io_request(&plan,NULL,9,0x300000,dsm,1,&r));
     plan.direction=ANS_DMA_TO_DEVICE;plan.nvme_cdw12=1;
     assert(!ans_io_request(&plan,NULL,9,0x300000,dsm,1,&r));
+    /* FUA write: CDW12 = zero-based block count | bit 30; the TCB length (low 16 bits) is unchanged. */
+    {
+        struct ans_namespace fns=ns; ans_u8 w[10]={0x2a,0x08};struct ans_logical_prps one={0};
+        fns.read_only=0;fns.deallocate=0;w[5]=7;w[8]=1;one.page[0]=0x400000;one.count=1;one.bytes=4096;
+        struct ans_scsi_plan fp=ans_scsi_prepare(&fns,w,10,4096,NULL);
+        assert(fp.action==ANS_SCSI_SUBMIT && fp.nvme_cdw12==0x40000000u);
+        assert(ans_io_request(&fp,&one,9,0x300000,list,1,&r));
+        assert(r.sqe[0]==1 && get(r.sqe+48,4)==0x40000000u && get(r.sqe+48,2)==0 && get(r.sqe+40,8)==7);
+        fp.nvme_cdw12=0x40000001u;assert(!ans_io_request(&fp,&one,9,0x300000,list,1,&r)); /* count mismatch */
+        fp.nvme_cdw12=0x80000000u;assert(!ans_io_request(&fp,&one,9,0x300000,list,1,&r)); /* other bits */
+    }
     puts("request_test: ok");
 }
