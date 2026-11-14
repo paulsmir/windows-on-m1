@@ -79739,3 +79739,8 @@ EXP2421 HARDWARE ACTUAL 2026-11-14T09:22:24Z (C2 boot 2):
 - Verdict: C2 set at non-native modes: PASS for what was exercised (every offered mode commits, scales and returns visible; C2-2 default on; no regression of PL-1c); C2-1/C2-3 NOT exercised (no two-plane layer record at a non-native mode) -> INCONCLUSIVE for those two items.
 - Recovery rec2421h started.
 - Next: RST-2A (EXP2424), RST-2B+C, proxy slot (WBT000d, TBX-S1c2), C1, U1b; a windowed two-plane arm at a non-native desktop mode for C2-1/C2-3.
+
+EXP2421 CORRECTION 2026-11-14T09:24:28Z (to the EXP2421 ACTUAL, A5-D1 tail; architect review):
+- The A5 tail of EXP2421 is NOT A5 evidence. kmd-receipts-a5-c1.txt shows Wom1GpuvaArmStatus 0xC0000034 and Wom1StartStatus 0xC00000BB: the package ran with start policy 0 (Wom1StartPolicy absent), the one-shot G3Armed arm was consumed at boot, so every re-enable was refused by design inside our StartDevice (the same cause as the EXP2423 step-B FAILED_POST_START). Event 549's 0xC00000BB is that refusal; its first data word 1280331841 = 0x4C505041 = "APPL". The "first re-enable already fails" and "0xC00000BB instead of 0xC0000017" statements in the ACTUAL are therefore not about A5.
+- The dxgkrnl-side A5 failure (EXP2416 cycles 2-3, policy allowed the start) needs a re-start our StartDevice allows: A5-D1 runs with Wom1StartPolicy=1 on the F1K-STAMP package, after uptime >= 150 s. The probe tail (scratchpad a5tail.sh) now skips with A5_TAIL_SKIPPED when Wom1StartPolicy is not 1 and waits for uptime 150 s otherwise.
+- The C2 part of the EXP2421 verdict stands.
