@@ -105,6 +105,8 @@ struct ansd_queue {
 struct ansd_stats {
     ans_u64 mbox_messages, mbox_echoes, mbox_unknown, mbox_power_acks;
     ans_u64 tcb_stat_nonzero, cqes, invalid_cqes;
+    ans_u64 last_unknown_msg; /* last mailbox message that was counted, not answered */
+    ans_u32 last_unknown_ep;
     ans_u64 poll_recovered; /* CQEs reaped by the periodic missed-interrupt check */
     ans_u32 iop_power, ap_power, syslog_count, syslog_size;
 };

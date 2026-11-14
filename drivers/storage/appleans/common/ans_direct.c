@@ -336,6 +336,8 @@ int ansd_mbox_service(struct ansd_ctrl *c, unsigned budget)
             return ANSD_CRASHED;
         } else {
             c->stats.mbox_unknown++;
+            c->stats.last_unknown_msg = msg;
+            c->stats.last_unknown_ep = ep;
         }
     }
     return ANSD_OK;

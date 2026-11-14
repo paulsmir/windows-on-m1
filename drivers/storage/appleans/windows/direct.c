@@ -417,6 +417,20 @@ VOID AppleAnsDirectPeer(PAPPLE_ANS_ADAPTER a, struct ans_telemetry *peer)
     peer->tcb_inval_failures = a->Ansd.stats.tcb_stat_nonzero;
     peer->cqes = a->Ansd.stats.cqes;
     peer->invalid_cqe = a->Ansd.stats.invalid_cqes;
+    /* Evidence fields for a stalled adapter, all read here (no I/O-path bookkeeping added):
+     * current_outstanding = bitmap of I/O tags the engine still waits for, max_outstanding = the
+     * same for the admin queue, starts = I/O CQ head | phase << 32, timeouts = live CSTS | CC << 32,
+     * bytes_read / bytes_written = last unanswered mailbox message and its endpoint. */
+    peer->valid_fields |= ANS_TELEM_CURRENT_OUTSTANDING | ANS_TELEM_MAX_OUTSTANDING | ANS_TELEM_STARTS |
+        ANS_TELEM_TIMEOUTS | ANS_TELEM_BYTES_READ | ANS_TELEM_BYTES_WRITTEN;
+    peer->current_outstanding = a->Ansd.q[1].outstanding;
+    peer->max_outstanding = a->Ansd.q[0].outstanding;
+    peer->starts = (ans_u64)a->Ansd.q[1].head | ((ans_u64)a->Ansd.q[1].phase << 32);
+    peer->timeouts = (a->Ctrl && !a->DumpMode) ?
+        ((ans_u64)StorPortReadRegisterUlong(a, (PULONG)(a->Ctrl + ANSD_CSTS)) |
+         ((ans_u64)StorPortReadRegisterUlong(a, (PULONG)(a->Ctrl + ANSD_CC)) << 32)) : 0;
+    peer->bytes_read = a->Ansd.stats.last_unknown_msg;
+    peer->bytes_written = a->Ansd.stats.last_unknown_ep;
     peer->last_stage = a->Ansd.stage;
     peer->last_error = (ans_u32)((a->Ansd.crashed ? 2u : 0u) | (a->Ansd.faulted ? 1u : 0u));
 }
