@@ -78,7 +78,8 @@ static void AppleAgxStartPolicyLatch(APPLE_AGX_START_POLICY_RESULT *Result,
   Result->Next.Running = 0u;
 }
 
-static void AppleAgxStartPolicyAttempt(APPLE_AGX_START_POLICY_RESULT *Result) {
+static void AppleAgxStartPolicyAttempt(APPLE_AGX_START_POLICY_RESULT *Result,
+                                       unsigned int OrderlyExit) {
   APPLE_AGX_START_POLICY_STATE *next = &Result->Next;
   unsigned int reason = AppleAgxStartPolicyReasonClean;
   if (next->Policy == APPLE_AGX_START_POLICY_ONE_SHOT_ARM) {
@@ -107,23 +108,40 @@ static void AppleAgxStartPolicyAttempt(APPLE_AGX_START_POLICY_RESULT *Result) {
     Result->Decision = AppleAgxStartPolicyDecisionRefuse;
     Result->Reason = AppleAgxStartPolicyReasonLatched;
     return;
-  } else if (next->Pending) {
-    /* The previous start neither proved healthy nor exited cleanly: a
-     * crash, hang, forced power-off or reset inside T, or (value 2) a
-     * scheduler fault at T. */
-    AppleAgxStartPolicyLatch(Result,
-        next->Pending == APPLE_AGX_START_POLICY_PENDING_FAULTED
-            ? AppleAgxStartPolicyReasonFaultedPending
-            : AppleAgxStartPolicyReasonStalePending);
-    return;
-  } else if (next->Running) {
-    /* The previous boot ended without a shutdown action or clean stop. */
-    next->UncleanCount = AppleAgxStartPolicyIncrement(next->UncleanCount);
-    if (next->UncleanCount >= APPLE_AGX_START_POLICY_UNCLEAN_LIMIT) {
-      AppleAgxStartPolicyLatch(Result, AppleAgxStartPolicyReasonUncleanLimit);
+  } else {
+    if (OrderlyExit != 0u &&
+        next->Pending != APPLE_AGX_START_POLICY_PENDING_FAULTED &&
+        (next->Pending != 0u || next->Running != 0u ||
+         next->UncleanCount != 0u)) {
+      /* F1K-STAMP: the previous run ended in an orderly Windows
+       * shutdown/restart, which ended the start and the run.  No shutdown
+       * event can record that (the registry is closed before the device S5
+       * pass, EXP2405), so it is derived here, before today's rules.  A
+       * start faulted at T (Pending 2) still latches below. */
+      next->Pending = 0u;
+      next->Running = 0u;
+      next->UncleanCount = 0u;
+      reason = AppleAgxStartPolicyReasonOrderlyByShutdownStamp;
+    }
+    if (next->Pending) {
+      /* The previous start neither proved healthy nor exited cleanly: a
+       * crash, hang, forced power-off or reset inside T, or (value 2) a
+       * scheduler fault at T. */
+      AppleAgxStartPolicyLatch(Result,
+          next->Pending == APPLE_AGX_START_POLICY_PENDING_FAULTED
+              ? AppleAgxStartPolicyReasonFaultedPending
+              : AppleAgxStartPolicyReasonStalePending);
       return;
     }
-    reason = AppleAgxStartPolicyReasonUncleanCounted;
+    if (next->Running) {
+      /* The previous boot ended without an orderly exit or clean stop. */
+      next->UncleanCount = AppleAgxStartPolicyIncrement(next->UncleanCount);
+      if (next->UncleanCount >= APPLE_AGX_START_POLICY_UNCLEAN_LIMIT) {
+        AppleAgxStartPolicyLatch(Result, AppleAgxStartPolicyReasonUncleanLimit);
+        return;
+      }
+      reason = AppleAgxStartPolicyReasonUncleanCounted;
+    }
   }
   /* Both markers are persisted before the first GPU or broker access. */
   next->Pending = 1u;
@@ -144,8 +162,10 @@ int AppleAgxStartPolicyEvaluate(const APPLE_AGX_START_POLICY_STATE *Current,
   Result->ArmTimer = 0u;
   Result->Next = *Current;
   next = &Result->Next;
+  /* An input of this evaluation, never state carried to the next one. */
+  next->OrderlyExit = 0u;
   if (Event == AppleAgxStartPolicyEventAttempt) {
-    AppleAgxStartPolicyAttempt(Result);
+    AppleAgxStartPolicyAttempt(Result, Current->OrderlyExit);
   } else if (Event < AppleAgxStartPolicyEventSucceeded ||
              Event > AppleAgxStartPolicyEventTimer) {
     Result->Reason = AppleAgxStartPolicyReasonInvalidEvent;
@@ -187,6 +207,36 @@ int AppleAgxStartPolicyEvaluate(const APPLE_AGX_START_POLICY_STATE *Current,
   }
   Result->UpdateMask = AppleAgxStartPolicyDiff(Current, next);
   return 1;
+}
+
+unsigned int AppleAgxStartPolicyOrderlyExit(unsigned int ShutdownTimeReadable,
+                                            unsigned long long ShutdownTime,
+                                            unsigned int StampPresent,
+                                            unsigned long long Stamp) {
+  return ShutdownTimeReadable != 0u && StampPresent != 0u &&
+                 ShutdownTime != Stamp
+             ? 1u
+             : 0u;
+}
+
+unsigned int AppleAgxStartPolicyStampAction(unsigned int Decision,
+                                            unsigned int ShutdownTimeReadable) {
+  if (Decision != AppleAgxStartPolicyDecisionAllow)
+    return APPLE_AGX_START_POLICY_STAMP_KEEP;
+  return ShutdownTimeReadable != 0u ? APPLE_AGX_START_POLICY_STAMP_SET
+                                    : APPLE_AGX_START_POLICY_STAMP_DELETE;
+}
+
+unsigned long long AppleAgxStartPolicyStampReceipt(unsigned int ReadStatus,
+                                                   unsigned int StampPresent,
+                                                   unsigned int Equal,
+                                                   unsigned int OrderlyExit,
+                                                   unsigned int StampAction) {
+  return (unsigned long long)ReadStatus |
+         ((unsigned long long)(StampPresent != 0u ? 1u : 0u) << 32) |
+         ((unsigned long long)(Equal != 0u ? 1u : 0u) << 33) |
+         ((unsigned long long)(OrderlyExit != 0u ? 1u : 0u) << 34) |
+         ((unsigned long long)(StampAction & 3u) << 35);
 }
 
 unsigned int AppleAgxStartPolicyInputs(

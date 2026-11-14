@@ -120,7 +120,10 @@ static BOOLEAN AdmissionConsumeGpuvaArm(ADMISSION_CONTEXT *context,
  * device-key values, persists exactly UpdateMask with the arm code's
  * set/delete + ZwFlushKey pattern, records one receipt per event and owns
  * the T-second healthy-start timer. Policy 0 (Wom1StartPolicy absent) reads
- * only Wom1StartPolicy at the start attempt and touches nothing afterwards. */
+ * only Wom1StartPolicy at the start attempt and touches nothing afterwards.
+ * F1K-STAMP: nothing is written at shutdown (the registry is closed before
+ * the device S5 pass, EXP2405); a policy-1 start attempt derives the clean
+ * exit of the previous run from Windows' ShutdownTime instead. */
 typedef struct _ADMISSION_START_POLICY_VALUE_NAME {
   ULONG Bit;
   PCWSTR Name;
@@ -134,6 +137,21 @@ static const ADMISSION_START_POLICY_VALUE_NAME AdmissionStartPolicyValues[] = {
     {APPLE_AGX_START_POLICY_VALUE_UNCLEAN_COUNT, L"Wom1StartUncleanCount"},
     {APPLE_AGX_START_POLICY_VALUE_LATCH_COUNT, L"Wom1StartLatchCount"},
 };
+
+/* F1K-STAMP. Windows' last graceful shutdown time: REG_BINARY, 8 bytes,
+ * written and flushed by the kernel on every orderly shutdown/restart
+ * (ExShutdownSystem phase 0) before the registry closes. Undocumented,
+ * verified in ntoskrnl 10.0.26100.9711 only; any other type or size reads
+ * as unreadable, i.e. not orderly (today's behaviour). */
+#define ADMISSION_SHUTDOWN_TIME_KEY \
+  L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\Windows"
+#define ADMISSION_SHUTDOWN_TIME_VALUE L"ShutdownTime"
+/* Device key: REG_QWORD copy of ShutdownTime taken at the last allowed
+ * policy-1 start (absent: none, or ShutdownTime was unreadable then). */
+#define ADMISSION_START_SHUTDOWN_STAMP L"Wom1StartShutdownStamp"
+/* Device key: REG_QWORD AppleAgxStartPolicyStampReceipt of the last
+ * policy-1 start attempt. */
+#define ADMISSION_START_POLICY_STAMP_RECEIPT L"Wom1StartPolicyStamp"
 
 static KDEFERRED_ROUTINE AdmissionStartPolicyDpc;
 static IO_WORKITEM_ROUTINE AdmissionStartPolicyWorker;
@@ -167,6 +185,53 @@ static void AdmissionStartPolicyQuery(HANDLE Key, PCWSTR Name, ULONG *Present,
   }
 }
 
+/* An 8-byte value of exactly Type: STATUS_SUCCESS with *Value, the query
+ * status when it failed (a larger value fails with STATUS_BUFFER_OVERFLOW),
+ * STATUS_OBJECT_TYPE_MISMATCH for any other type or size. */
+static NTSTATUS AdmissionStartPolicyQueryQword(HANDLE Key, PCWSTR Name,
+                                               ULONG Type, ULONGLONG *Value) {
+  UNICODE_STRING name;
+  ULONG bytes = 0u;
+  NTSTATUS status;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONGLONG)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value =
+      (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  *Value = 0ULL;
+  RtlInitUnicodeString(&name, Name);
+  status = ZwQueryValueKey(Key, &name, KeyValuePartialInformation, value,
+                           sizeof(data.Buffer), &bytes);
+  if (!NT_SUCCESS(status))
+    return status;
+  if (value->Type != Type || value->DataLength != sizeof(ULONGLONG))
+    return STATUS_OBJECT_TYPE_MISMATCH;
+  /* Data sits at offset 12: copy instead of an unaligned 8-byte load. */
+  RtlCopyMemory(Value, value->Data, sizeof(ULONGLONG));
+  return STATUS_SUCCESS;
+}
+
+/* PASSIVE_LEVEL (the caller checked). Opens and closes its own handle. */
+static NTSTATUS AdmissionStartPolicyShutdownTime(ULONGLONG *Value) {
+  UNICODE_STRING path;
+  OBJECT_ATTRIBUTES attributes;
+  HANDLE key = NULL;
+  NTSTATUS status;
+  *Value = 0ULL;
+  RtlInitUnicodeString(&path, ADMISSION_SHUTDOWN_TIME_KEY);
+  InitializeObjectAttributes(&attributes, &path,
+                             OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL,
+                             NULL);
+  status = ZwOpenKey(&key, KEY_QUERY_VALUE, &attributes);
+  if (!NT_SUCCESS(status))
+    return status;
+  status = AdmissionStartPolicyQueryQword(key, ADMISSION_SHUTDOWN_TIME_VALUE,
+                                          REG_BINARY, Value);
+  ZwClose(key);
+  return status;
+}
+
 static ULONG AdmissionStartPolicyNextField(
     const APPLE_AGX_START_POLICY_STATE *Next, ULONG Bit) {
   switch (Bit) {
@@ -181,16 +246,33 @@ static ULONG AdmissionStartPolicyNextField(
 
 /* Markers: REG_DWORD (1, or 2 for a pending start faulted at T) or deleted;
  * counters: REG_DWORD. One flush after
- * all values, before the caller acts on the decision. */
+ * all values, before the caller acts on the decision.
+ * StampAction (APPLE_AGX_START_POLICY_STAMP_*): the shutdown stamp is set
+ * (REG_QWORD Stamp) or deleted FIRST, before any marker, so that a lazy
+ * hive flush between the writes cannot leave a new Pending durable next to
+ * the previous run's stamp (a crash of this run would then read as
+ * orderly at the next start). */
 static NTSTATUS AdmissionStartPolicyPersist(
-    HANDLE Key, const APPLE_AGX_START_POLICY_RESULT *Result) {
+    HANDLE Key, const APPLE_AGX_START_POLICY_RESULT *Result,
+    ULONG StampAction, ULONGLONG Stamp) {
   UNICODE_STRING name;
   NTSTATUS status = STATUS_SUCCESS;
   NTSTATUS one;
   ULONG index;
   ULONG data;
-  if (Result->UpdateMask == 0u)
+  if (Result->UpdateMask == 0u &&
+      StampAction == APPLE_AGX_START_POLICY_STAMP_KEEP)
     return STATUS_SUCCESS;
+  if (StampAction != APPLE_AGX_START_POLICY_STAMP_KEEP) {
+    RtlInitUnicodeString(&name, ADMISSION_START_SHUTDOWN_STAMP);
+    if (StampAction == APPLE_AGX_START_POLICY_STAMP_SET) {
+      status = ZwSetValueKey(Key, &name, 0, REG_QWORD, &Stamp, sizeof(Stamp));
+    } else {
+      status = ZwDeleteValueKey(Key, &name);
+      if (status == STATUS_OBJECT_NAME_NOT_FOUND)
+        status = STATUS_SUCCESS;
+    }
+  }
   for (index = 0u; index < RTL_NUMBER_OF(AdmissionStartPolicyValues);
        ++index) {
     const ULONG bit = AdmissionStartPolicyValues[index].Bit;
@@ -218,7 +300,6 @@ static PCWSTR AdmissionStartPolicyReceiptName(ULONG Event) {
   case AppleAgxStartPolicyEventSucceeded:
   case AppleAgxStartPolicyEventFailed: return L"Wom1StartPolicyReturn";
   case AppleAgxStartPolicyEventCleanStop: return L"Wom1StartPolicyStop";
-  case AppleAgxStartPolicyEventShutdown: return L"Wom1StartPolicyPower";
   default: return L"Wom1StartPolicyTimer";
   }
 }
@@ -250,6 +331,15 @@ static NTSTATUS AdmissionStartPolicyEvent(ADMISSION_CONTEXT *Context,
   APPLE_AGX_START_POLICY_STATE state;
   ULONG present, dword, value;
   NTSTATUS status;
+  /* F1K-STAMP derivation, policy-1 start attempts only. */
+  ULONG stamp_derived = 0u;
+  NTSTATUS time_status = STATUS_SUCCESS;
+  ULONGLONG shutdown_time = 0ULL;
+  ULONGLONG stamp = 0ULL;
+  ULONG time_readable = 0u;
+  ULONG stamp_present = 0u;
+  ULONG stamp_action = APPLE_AGX_START_POLICY_STAMP_KEEP;
+  ULONG stamp_done = APPLE_AGX_START_POLICY_STAMP_KEEP;
   RtlZeroMemory(&state, sizeof(state));
   RtlZeroMemory(Result, sizeof(*Result));
   if (Event != AppleAgxStartPolicyEventAttempt &&
@@ -297,13 +387,33 @@ static NTSTATUS AdmissionStartPolicyEvent(ADMISSION_CONTEXT *Context,
     AdmissionStartPolicyQuery(key, L"Wom1StartLatchCount", &present, &dword,
                               &value);
     state.LatchCount = AppleAgxStartPolicyParseCounter(present, dword, value);
+    if (Event == AppleAgxStartPolicyEventAttempt) {
+      /* OrderlyExit = ShutdownTime readable, stamp present, and different:
+       * Windows recorded a graceful shutdown/restart after the last allowed
+       * start. Anything unreadable is not orderly (fail closed). */
+      stamp_derived = 1u;
+      time_status = AdmissionStartPolicyShutdownTime(&shutdown_time);
+      time_readable = NT_SUCCESS(time_status) ? 1u : 0u;
+      stamp_present =
+          NT_SUCCESS(AdmissionStartPolicyQueryQword(
+              key, ADMISSION_START_SHUTDOWN_STAMP, REG_QWORD, &stamp))
+              ? 1u
+              : 0u;
+      state.OrderlyExit = AppleAgxStartPolicyOrderlyExit(
+          time_readable, shutdown_time, stamp_present, stamp);
+    }
   }
   (void)AppleAgxStartPolicyEvaluate(&state, Event, Healthy, Result);
+  if (stamp_derived != 0u)
+    stamp_action =
+        AppleAgxStartPolicyStampAction(Result->Decision, time_readable);
   status = Result->Decision == AppleAgxStartPolicyDecisionAllow
                ? AdmissionStartPolicyPrepare(Context)
                : STATUS_SUCCESS;
   if (NT_SUCCESS(status)) {
-    status = AdmissionStartPolicyPersist(key, Result);
+    stamp_done = stamp_action;
+    status = AdmissionStartPolicyPersist(key, Result, stamp_action,
+                                         shutdown_time);
     if (!NT_SUCCESS(status) &&
         Result->Decision == AppleAgxStartPolicyDecisionAllow) {
       /* Best effort: do not leave a marker of a start that is refused. */
@@ -311,7 +421,8 @@ static NTSTATUS AdmissionStartPolicyEvent(ADMISSION_CONTEXT *Context,
       if (AppleAgxStartPolicyEvaluate(&Result->Next,
                                       AppleAgxStartPolicyEventFailed, 0u,
                                       &undo))
-        (void)AdmissionStartPolicyPersist(key, &undo);
+        (void)AdmissionStartPolicyPersist(
+            key, &undo, APPLE_AGX_START_POLICY_STAMP_KEEP, 0ULL);
     }
   }
   if (!NT_SUCCESS(status) &&
@@ -325,6 +436,18 @@ static NTSTATUS AdmissionStartPolicyEvent(ADMISSION_CONTEXT *Context,
     (void)ZwSetValueKey(key, &name, 0, REG_DWORD, &receipt, sizeof(receipt));
     RtlInitUnicodeString(&name, L"Wom1StartPolicyIoStatus");
     (void)ZwSetValueKey(key, &name, 0, REG_DWORD, &io, sizeof(io));
+    if (stamp_derived != 0u) {
+      ULONGLONG stamp_receipt = AppleAgxStartPolicyStampReceipt(
+          (ULONG)time_status, stamp_present,
+          time_readable != 0u && stamp_present != 0u &&
+                  shutdown_time == stamp
+              ? 1u
+              : 0u,
+          state.OrderlyExit, stamp_done);
+      RtlInitUnicodeString(&name, ADMISSION_START_POLICY_STAMP_RECEIPT);
+      (void)ZwSetValueKey(key, &name, 0, REG_QWORD, &stamp_receipt,
+                          sizeof(stamp_receipt));
+    }
   }
   if (state.Policy != APPLE_AGX_START_POLICY_ONE_SHOT_ARM)
     (void)ZwFlushKey(key);
@@ -411,14 +534,6 @@ static void AdmissionStartPolicyReturned(ADMISSION_CONTEXT *Context,
 static void AdmissionStartPolicyStopped(ADMISSION_CONTEXT *Context) {
   APPLE_AGX_START_POLICY_RESULT result;
   (void)AdmissionStartPolicyEvent(Context, AppleAgxStartPolicyEventCleanStop,
-                                  1u, &result);
-}
-
-static void AdmissionStartPolicyShutdown(ADMISSION_CONTEXT *Context) {
-  APPLE_AGX_START_POLICY_RESULT result;
-  if (Context == NULL)
-    return;
-  (void)AdmissionStartPolicyEvent(Context, AppleAgxStartPolicyEventShutdown,
                                   1u, &result);
 }
 
@@ -1591,16 +1706,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDispatchIoRequest(
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSetPowerState(
     PVOID MiniportDeviceContext, ULONG DeviceUid,
     DEVICE_POWER_STATE DevicePowerState, POWER_ACTION ActionType) {
+  /* F1K-STAMP: no start-policy write here. dxgkrnl calls this for the S5
+   * pass after CmShutdownSystem closed the registry: every registry call
+   * returns STATUS_TOO_LATE and nothing persists (EXP2405). The next start
+   * derives the clean exit from Windows' ShutdownTime instead. */
+  UNREFERENCED_PARAMETER(MiniportDeviceContext);
+  UNREFERENCED_PARAMETER(DeviceUid);
   UNREFERENCED_PARAMETER(DevicePowerState);
-  /* F1-k: an orderly shutdown/restart of the adapter is a clean exit: it
-   * clears Wom1StartPending and Wom1StartRunning like a clean stop
-   * (dispmprt.h DXGKDDI_SET_POWER_STATE, PASSIVE_LEVEL). Hibernate (also
-   * Fast Startup) is not an end: the same run resumes without StartDevice. */
-  if (DeviceUid == DISPLAY_ADAPTER_HW_ID &&
-      (ActionType == PowerActionShutdown ||
-       ActionType == PowerActionShutdownReset ||
-       ActionType == PowerActionShutdownOff))
-    AdmissionStartPolicyShutdown((ADMISSION_CONTEXT *)MiniportDeviceContext);
+  UNREFERENCED_PARAMETER(ActionType);
   return STATUS_SUCCESS;
 }
 

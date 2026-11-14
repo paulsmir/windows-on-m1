@@ -5,7 +5,10 @@
  * or stopped cleanly, must latch after three consecutive unclean boots and
  * forget them after a clean shutdown, must clear a latch only on an explicit
  * administrator value, and must leave policy 0 (the bench one-shot arm)
- * without any write. */
+ * without any write.  F1K-STAMP: an orderly Windows shutdown/restart
+ * (OrderlyExit, derived at the next start) is a clean exit - stale Pending
+ * allowed, no unclean count - but never clears a fault at T or a latch, and
+ * an unreadable shutdown time or absent stamp is not orderly. */
 #include "apple_agx_start_policy.h"
 
 #include <assert.h>
@@ -230,6 +233,9 @@ static void TestUncleanCounterLatchesAtLimit(void) {
   assert(state.UncleanCount == 0u);
 }
 
+/* The pure Shutdown event keeps its semantics; since F1K-STAMP the Windows
+ * layer reaches the same clean exit through OrderlyExit at the next start
+ * (TestOrderlyExitClearsStalePending, TestOrderlyRestartsNeverCount). */
 static void TestCleanShutdownResetsCounter(void) {
   APPLE_AGX_START_POLICY_STATE state = State(1u);
   APPLE_AGX_START_POLICY_RESULT r;
@@ -286,6 +292,117 @@ static void TestCleanStopResetsCounter(void) {
   assert(state.UncleanCount == 0u);
 }
 
+/* F1K-STAMP (EXP2405): the registry is closed before the device S5 pass, so
+ * no shutdown event can persist anything.  The clean exit is derived at the
+ * next start (OrderlyExit, from Windows' ShutdownTime vs the stamp). */
+
+/* An orderly restart inside T leaves Pending = 1 on disk: with OrderlyExit
+ * it is a clean exit (Allow, new reason); without it the same state still
+ * latches as StalePending. */
+static void TestOrderlyExitClearsStalePending(void) {
+  APPLE_AGX_START_POLICY_STATE state = State(1u);
+  APPLE_AGX_START_POLICY_STATE stale;
+  APPLE_AGX_START_POLICY_RESULT r;
+  (void)Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  (void)Run(&state, AppleAgxStartPolicyEventSucceeded, 1u);
+  assert(state.Pending == 1u && state.Running == 1u);
+  stale = state;
+  /* orderly shutdown /r inside T: no event reaches the driver */
+  state.OrderlyExit = 1u;
+  r = Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(r.Decision == AppleAgxStartPolicyDecisionAllow);
+  assert(r.Reason == AppleAgxStartPolicyReasonOrderlyByShutdownStamp);
+  assert(state.Latched == 0u && state.LatchCount == 0u);
+  assert(state.Pending == 1u && state.Running == 1u);
+  assert(state.UncleanCount == 0u);
+  /* Pending/Running are cleared and set again: nothing to write. */
+  assert(r.UpdateMask == 0u);
+  /* The input is consumed: it is never carried into the next state. */
+  assert(state.OrderlyExit == 0u);
+  /* Not orderly (crash, hang, forced power-off, HV reset): latch. */
+  stale.OrderlyExit = 0u;
+  r = Run(&stale, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(r.Decision == AppleAgxStartPolicyDecisionRefuse);
+  assert(r.Reason == AppleAgxStartPolicyReasonStalePending);
+  assert(stale.Latched == 1u && stale.LatchCount == 1u);
+}
+
+/* Latent defect found with EXP2405: Running was never cleared, so the third
+ * ordinary restart after T latched as UncleanLimit.  Orderly restarts never
+ * count, however many follow each other; an orderly exit also forgets an
+ * earlier unclean count. */
+static void TestOrderlyRestartsNeverCount(void) {
+  APPLE_AGX_START_POLICY_STATE state = State(1u);
+  APPLE_AGX_START_POLICY_RESULT r;
+  unsigned int boot;
+  for (boot = 0u; boot <= APPLE_AGX_START_POLICY_UNCLEAN_LIMIT; ++boot) {
+    state.OrderlyExit = boot == 0u ? 0u : 1u;
+    r = Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+    assert(r.Decision == AppleAgxStartPolicyDecisionAllow);
+    assert(r.Reason == (boot == 0u
+                            ? AppleAgxStartPolicyReasonClean
+                            : AppleAgxStartPolicyReasonOrderlyByShutdownStamp));
+    assert(state.UncleanCount == 0u && state.Latched == 0u);
+    (void)Run(&state, AppleAgxStartPolicyEventSucceeded, 1u);
+    (void)Run(&state, AppleAgxStartPolicyEventTimer, 1u);
+    assert(state.Pending == 0u && state.Running == 1u);
+  }
+  /* Two unclean ends, then an orderly one: the count restarts at 0. */
+  state.OrderlyExit = 0u;
+  (void)Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  (void)Run(&state, AppleAgxStartPolicyEventSucceeded, 1u);
+  (void)Run(&state, AppleAgxStartPolicyEventTimer, 1u);
+  (void)Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(state.UncleanCount == 2u);
+  (void)Run(&state, AppleAgxStartPolicyEventSucceeded, 1u);
+  (void)Run(&state, AppleAgxStartPolicyEventTimer, 1u);
+  state.OrderlyExit = 1u;
+  r = Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(r.Reason == AppleAgxStartPolicyReasonOrderlyByShutdownStamp);
+  assert(state.UncleanCount == 0u);
+  assert(r.UpdateMask == (P_PENDING | P_UNCLEAN));
+  /* After a clean stop nothing is stale: an orderly exit adds no reason. */
+  (void)Run(&state, AppleAgxStartPolicyEventCleanStop, 1u);
+  state.OrderlyExit = 1u;
+  r = Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(r.Reason == AppleAgxStartPolicyReasonClean);
+}
+
+/* A scheduler fault at T wins over an orderly exit; a latch is not cleared
+ * by one; the administrator reset keeps its own reason. */
+static void TestOrderlyExitKeepsLatches(void) {
+  APPLE_AGX_START_POLICY_STATE state = State(1u);
+  APPLE_AGX_START_POLICY_RESULT r;
+  (void)Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  (void)Run(&state, AppleAgxStartPolicyEventSucceeded, 1u);
+  (void)Run(&state, AppleAgxStartPolicyEventTimer, 0u);
+  assert(state.Pending == APPLE_AGX_START_POLICY_PENDING_FAULTED);
+  state.OrderlyExit = 1u;
+  r = Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(r.Decision == AppleAgxStartPolicyDecisionRefuse);
+  assert(r.Reason == AppleAgxStartPolicyReasonFaultedPending);
+  assert(state.Latched == 1u && state.LatchCount == 1u);
+  /* Latched: refuse without touching any value, orderly or not. */
+  state.Pending = 1u;
+  state.Running = 1u;
+  state.UncleanCount = 2u;
+  state.OrderlyExit = 1u;
+  r = Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(r.Reason == AppleAgxStartPolicyReasonLatched && r.UpdateMask == 0u);
+  assert(state.Pending == 1u && state.Running == 1u && state.UncleanCount == 2u);
+  state.LatchReset = 1u;
+  state.OrderlyExit = 1u;
+  r = Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(r.Decision == AppleAgxStartPolicyDecisionAllow);
+  assert(r.Reason == AppleAgxStartPolicyReasonLatchReset);
+  /* Policy 0 ignores the input. */
+  state = State(0u);
+  state.OrderlyExit = 1u;
+  state.Pending = 1u;
+  r = Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(r.Decision == AppleAgxStartPolicyDecisionArm && r.UpdateMask == 0u);
+}
+
 static void TestParsersAndReceipt(void) {
   APPLE_AGX_START_POLICY_STATE state = State(1u);
   APPLE_AGX_START_POLICY_RESULT r;
@@ -330,6 +447,47 @@ static void TestParsersAndReceipt(void) {
   assert(state.UncleanCount == 0xffffffffu);
 }
 
+/* The derivation fails closed: an unreadable shutdown time, an absent stamp
+ * or an unchanged shutdown time is not an orderly exit, so a stale Pending
+ * still latches.  The stamp follows only allowed starts. */
+static void TestStampDerivationFailsClosed(void) {
+  const unsigned long long t0 = 0x01dc55aa12345678ull;
+  const unsigned long long t1 = 0x01dc55ab00000001ull;
+  APPLE_AGX_START_POLICY_STATE state = State(1u);
+  APPLE_AGX_START_POLICY_RESULT r;
+  assert(AppleAgxStartPolicyOrderlyExit(1u, t1, 1u, t0) == 1u);
+  assert(AppleAgxStartPolicyOrderlyExit(1u, t0, 1u, t0) == 0u); /* no shutdown */
+  assert(AppleAgxStartPolicyOrderlyExit(0u, t1, 1u, t0) == 0u); /* unreadable */
+  assert(AppleAgxStartPolicyOrderlyExit(0u, 0ull, 1u, t0) == 0u);
+  assert(AppleAgxStartPolicyOrderlyExit(1u, t1, 0u, 0ull) == 0u); /* no stamp */
+  assert(AppleAgxStartPolicyOrderlyExit(0u, 0ull, 0u, 0ull) == 0u);
+  /* Unreadable stamp at a start after an orderly restart inside T: latch. */
+  (void)Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  (void)Run(&state, AppleAgxStartPolicyEventSucceeded, 1u);
+  state.OrderlyExit = AppleAgxStartPolicyOrderlyExit(0u, t1, 1u, t0);
+  r = Run(&state, AppleAgxStartPolicyEventAttempt, 1u);
+  assert(r.Decision == AppleAgxStartPolicyDecisionRefuse);
+  assert(r.Reason == AppleAgxStartPolicyReasonStalePending);
+  assert(AppleAgxStartPolicyStampAction(AppleAgxStartPolicyDecisionAllow, 1u) ==
+         APPLE_AGX_START_POLICY_STAMP_SET);
+  assert(AppleAgxStartPolicyStampAction(AppleAgxStartPolicyDecisionAllow, 0u) ==
+         APPLE_AGX_START_POLICY_STAMP_DELETE);
+  assert(AppleAgxStartPolicyStampAction(AppleAgxStartPolicyDecisionRefuse, 1u) ==
+         APPLE_AGX_START_POLICY_STAMP_KEEP);
+  assert(AppleAgxStartPolicyStampAction(AppleAgxStartPolicyDecisionArm, 1u) ==
+         APPLE_AGX_START_POLICY_STAMP_KEEP);
+  assert(AppleAgxStartPolicyStampAction(AppleAgxStartPolicyDecisionNone, 1u) ==
+         APPLE_AGX_START_POLICY_STAMP_KEEP);
+  assert(AppleAgxStartPolicyStampReceipt(0u, 1u, 0u, 1u,
+                                         APPLE_AGX_START_POLICY_STAMP_SET) ==
+         ((1ull << 32) | (1ull << 34) | (1ull << 35)));
+  assert(AppleAgxStartPolicyStampReceipt(0xc0000034u, 1u, 0u, 0u,
+                                         APPLE_AGX_START_POLICY_STAMP_DELETE) ==
+         (0xc0000034ull | (1ull << 32) | (2ull << 35)));
+  assert(AppleAgxStartPolicyStampReceipt(0u, 1u, 1u, 0u, 7u) ==
+         ((1ull << 32) | (1ull << 33) | (3ull << 35)));
+}
+
 int main(void) {
   TestPolicyZeroIsTodaysArm();
   TestInvalidPolicyFailsClosed();
@@ -343,5 +501,9 @@ int main(void) {
   TestCleanShutdownResetsCounter();
   TestCleanStopResetsCounter();
   TestParsersAndReceipt();
+  TestOrderlyExitClearsStalePending();
+  TestOrderlyRestartsNeverCount();
+  TestOrderlyExitKeepsLatches();
+  TestStampDerivationFailsClosed();
   return 0;
 }

@@ -10,7 +10,8 @@
  *
  * Policy 0 (Wom1StartPolicy absent or 0): the one-shot G3Armed arm of the
  * bench, unchanged; no other event has an effect.  Policy 1: crash latch
- * plus unclean-boot counter, no arm. */
+ * plus unclean-boot counter, no arm; an orderly Windows shutdown/restart is
+ * recognised at the next start (OrderlyExit). */
 
 #define APPLE_AGX_START_POLICY_ONE_SHOT_ARM 0u
 #define APPLE_AGX_START_POLICY_CRASH_LATCH 1u
@@ -47,7 +48,10 @@
 #define AppleAgxStartPolicyEventSucceeded 2u /* StartDevice returned success */
 #define AppleAgxStartPolicyEventFailed 3u    /* StartDevice returned an error */
 #define AppleAgxStartPolicyEventCleanStop 4u /* StopDevice returned success */
-#define AppleAgxStartPolicyEventShutdown 5u  /* SetPowerState, shutdown action: clean exit */
+/* Clean exit by an orderly shutdown.  The Windows layer does not deliver it:
+ * the registry is closed before the device S5 pass (EXP2405), so the clean
+ * exit is the OrderlyExit input of the next Attempt (F1K-STAMP). */
+#define AppleAgxStartPolicyEventShutdown 5u
 #define AppleAgxStartPolicyEventTimer 6u     /* T seconds after a success */
 
 #define AppleAgxStartPolicyDecisionNone 0u   /* not a start event */
@@ -71,6 +75,10 @@
 #define AppleAgxStartPolicyReasonNotPending 13u    /* nothing to clear */
 #define AppleAgxStartPolicyReasonInvalidEvent 14u
 #define AppleAgxStartPolicyReasonFaultedPending 15u /* refuse, latch now (faulted at T) */
+/* allow: the previous run ended in an orderly Windows shutdown/restart
+ * (OrderlyExit), which cleared a stale Pending (1), Running and the
+ * unclean-boot count before the other rules ran. */
+#define AppleAgxStartPolicyReasonOrderlyByShutdownStamp 16u
 
 typedef struct _APPLE_AGX_START_POLICY_STATE {
   unsigned int Policy;       /* Wom1StartPolicy (parsed) */
@@ -80,6 +88,10 @@ typedef struct _APPLE_AGX_START_POLICY_STATE {
   unsigned int LatchReset;   /* Wom1StartLatchReset, 0/1 (administrator) */
   unsigned int UncleanCount; /* Wom1StartUncleanCount */
   unsigned int LatchCount;   /* Wom1StartLatchCount (receipt, never reset) */
+  /* Input only, read by AppleAgxStartPolicyEventAttempt, never persisted:
+   * 1 = the previous run ended in an orderly Windows shutdown/restart
+   * (AppleAgxStartPolicyOrderlyExit).  0 when unknown (fail closed). */
+  unsigned int OrderlyExit;
 } APPLE_AGX_START_POLICY_STATE;
 
 typedef struct _APPLE_AGX_START_POLICY_RESULT {
@@ -113,6 +125,37 @@ unsigned int AppleAgxStartPolicyParseExplicit(unsigned int Present,
 unsigned int AppleAgxStartPolicyParseCounter(unsigned int Present,
                                              unsigned int DwordValid,
                                              unsigned int Value);
+
+/* F1K-STAMP: the previous run ended orderly when Windows' shutdown time
+ * (written and flushed by the kernel on every graceful shutdown/restart,
+ * before the registry closes) differs from the copy persisted at the last
+ * allowed start.  Unreadable shutdown time or absent/malformed stamp: 0
+ * (fail closed: today's rules). */
+unsigned int AppleAgxStartPolicyOrderlyExit(unsigned int ShutdownTimeReadable,
+                                            unsigned long long ShutdownTime,
+                                            unsigned int StampPresent,
+                                            unsigned long long Stamp);
+
+/* What an Attempt does with the stamp, persisted with the same flush as
+ * Pending: an allowed start stores the current shutdown time, or deletes
+ * the stamp when the shutdown time is unreadable (so the next start cannot
+ * see "different"); any other decision leaves it. */
+#define APPLE_AGX_START_POLICY_STAMP_KEEP 0u
+#define APPLE_AGX_START_POLICY_STAMP_SET 1u
+#define APPLE_AGX_START_POLICY_STAMP_DELETE 2u
+unsigned int AppleAgxStartPolicyStampAction(unsigned int Decision,
+                                            unsigned int ShutdownTimeReadable);
+
+/* Receipt of the stamp derivation at an Attempt (REG_QWORD):
+ * bits 0-31 status of the shutdown-time read (0 = readable; a failed query
+ * keeps its NTSTATUS; wrong type or size = STATUS_OBJECT_TYPE_MISMATCH),
+ * bit 32 stamp present (valid REG_QWORD), bit 33 equal (both readable and
+ * identical), bit 34 OrderlyExit, bits 35-36 stamp action. */
+unsigned long long AppleAgxStartPolicyStampReceipt(unsigned int ReadStatus,
+                                                   unsigned int StampPresent,
+                                                   unsigned int Equal,
+                                                   unsigned int OrderlyExit,
+                                                   unsigned int StampAction);
 
 /* Healthy is read only by AppleAgxStartPolicyEventTimer (1: scheduler not
  * faulted).  Returns 0 for a NULL argument, 1 otherwise. */

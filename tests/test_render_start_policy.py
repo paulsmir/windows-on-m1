@@ -10,8 +10,11 @@ WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH?
    prefix consumes the arm exactly as before.
 3. The Windows wiring calls every event at its lifecycle point (pending
    persisted and flushed before the decision returns, StartDevice return,
-   clean StopDevice, shutdown SetPowerState, timer drained before the
-   context goes away).
+   clean StopDevice, timer drained before the context goes away).
+4. F1K-STAMP (EXP2405): no start-policy registry write in the shutdown
+   power path (the registry is closed there); the start attempt derives the
+   orderly exit from Windows' ShutdownTime and persists the new stamp first
+   in the same flush as Pending.
 Host builds only; nothing here proves an MSVC or hardware result.
 """
 import hashlib
@@ -51,8 +54,9 @@ NEW_VALUES = ('Wom1StartPolicy', 'Wom1StartPending', 'Wom1StartRunning',
               'Wom1StartLatched', 'Wom1StartLatchReset',
               'Wom1StartUncleanCount', 'Wom1StartLatchCount',
               'Wom1StartPolicyAttempt', 'Wom1StartPolicyReturn',
-              'Wom1StartPolicyStop', 'Wom1StartPolicyPower',
-              'Wom1StartPolicyTimer', 'Wom1StartPolicyIoStatus')
+              'Wom1StartPolicyStop', 'Wom1StartPolicyTimer',
+              'Wom1StartPolicyIoStatus', 'Wom1StartShutdownStamp',
+              'Wom1StartPolicyStamp')
 
 
 class StartPolicyStateMachine(unittest.TestCase):
@@ -134,10 +138,10 @@ class StartPolicyWiring(unittest.TestCase):
             body = function(self.source, helper)
             self.assertIsNone(re.search(r'READ_REGISTER|WRITE_REGISTER|MmMapIoSpace|Mmio', body), helper)
         self.assertLess(event.index('AppleAgxStartPolicyEvaluate(&state, Event'),
-                        event.index('AdmissionStartPolicyPersist(key, Result)'))
-        self.assertLess(event.index('AdmissionStartPolicyPersist(key, Result)'),
+                        event.index('AdmissionStartPolicyPersist(key, Result,'))
+        self.assertLess(event.index('AdmissionStartPolicyPersist(key, Result,'),
                         event.index('Result->Decision = AppleAgxStartPolicyDecisionRefuse'))
-        self.assertLess(event.index('AdmissionStartPolicyPersist(key, Result)'),
+        self.assertLess(event.index('AdmissionStartPolicyPersist(key, Result,'),
                         event.index('PendingOwned = 1u'))
         # Policy 0: no registry access outside the start attempt.
         early = event[:event.index('IoOpenDeviceRegistryKey')]
@@ -175,16 +179,43 @@ class StartPolicyWiring(unittest.TestCase):
         self.assertLess(quiesce.index('KeCancelTimer'), quiesce.index('KeWaitForSingleObject'))
         self.assertIn('KeFlushQueuedDpcs', quiesce)
 
-    def test_shutdown_action_of_the_adapter_clears_running(self):
+    def test_shutdown_power_path_writes_nothing(self):
+        """EXP2405: SetPowerState(shutdown) runs after CmShutdownSystem; any
+        registry write there returns STATUS_TOO_LATE and is lost."""
         power = function(self.source, 'AdmissionDdiSetPowerState')
-        self.assertNotIn('UNREFERENCED_PARAMETER(ActionType)', power)
-        self.assertIn('DeviceUid == DISPLAY_ADAPTER_HW_ID', power)
-        for action in ('PowerActionShutdown', 'PowerActionShutdownReset',
-                       'PowerActionShutdownOff'):
-            self.assertRegex(power, r'ActionType == ' + action + r'\b(?!Reset|Off)')
-        self.assertNotIn('PowerActionHibernate', power)
-        self.assertIn('AdmissionStartPolicyShutdown(', power)
+        self.assertIsNone(re.search(r'StartPolicy|Zw\w+|IoOpenDeviceRegistryKey', power))
         self.assertIn('return STATUS_SUCCESS;', power)
+        self.assertIsNone(re.search(r'AdmissionStartPolicyShutdown\b', self.source))
+        self.assertNotIn('AppleAgxStartPolicyEventShutdown', self.source)
+
+    def test_attempt_derives_orderly_exit_from_shutdown_time(self):
+        event = function(self.source, 'AdmissionStartPolicyEvent')
+        persist = function(self.source, 'AdmissionStartPolicyPersist')
+        query = function(self.source, 'AdmissionStartPolicyQueryQword')
+        read = function(self.source, 'AdmissionStartPolicyShutdownTime')
+        self.assertIn(r'L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\Windows"',
+                      self.source)
+        self.assertIn('#define ADMISSION_SHUTDOWN_TIME_VALUE L"ShutdownTime"', self.source)
+        # REG_BINARY of exactly 8 bytes; anything else is unreadable.
+        self.assertRegex(read, r'ADMISSION_SHUTDOWN_TIME_VALUE,\s+REG_BINARY, Value\)')
+        self.assertIn('value->DataLength != sizeof(ULONGLONG)', query)
+        self.assertIn('return STATUS_OBJECT_TYPE_MISMATCH;', query)
+        self.assertIn('sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONGLONG)', query)
+        # The opened key is closed on every path after a successful open.
+        self.assertEqual(read.count('ZwOpenKey('), 1)
+        self.assertEqual(read.count('ZwClose(key);'), 1)
+        self.assertLess(read.index('ZwClose(key);'), read.rindex('return status;'))
+        # Derived only at a policy-1 attempt, before the decision.
+        derive = event.index('state.OrderlyExit = AppleAgxStartPolicyOrderlyExit(')
+        self.assertLess(event.index('if (state.Policy == APPLE_AGX_START_POLICY_CRASH_LATCH)'),
+                        derive)
+        self.assertLess(derive, event.rindex('AppleAgxStartPolicyEvaluate(&state, Event'))
+        self.assertIn('AppleAgxStartPolicyStampAction(Result->Decision, time_readable)', event)
+        # The stamp goes first, in the same sequence and flush as Pending.
+        self.assertLess(persist.index('ADMISSION_START_SHUTDOWN_STAMP'),
+                        persist.index('for (index = 0u;'))
+        self.assertLess(persist.index('REG_QWORD, &Stamp'), persist.index('ZwFlushKey(Key)'))
+        self.assertIn('ADMISSION_START_POLICY_STAMP_RECEIPT', event)
 
     def test_timer_clears_only_while_scheduler_is_healthy(self):
         worker = function(self.source, 'AdmissionStartPolicyWorker')
