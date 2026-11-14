@@ -79424,3 +79424,15 @@ EXP2404 HARDWARE ACTUAL 2026-11-14T01:10:42Z:
 - Gates: GravityMark PERF PASS +0.07 % (worst 47.038); CS cs16 FAIL -2.30 % (worst 50.796 vs 51.991; warm 50.114, r2 50.796; EXP2394/2395/2401 warm 51.8-51.9, r2 52.0-52.4). Windowed CS 54.25 (EXP2394 54.28). Probe: "SHORT_MISS CS: no r3 in this boot; escalation = repeat boot".
 - No display-path mechanism: H3MissedDeadline over the CS runs 1/3/3/3 (EXP2401: 3/8/8/8); the policy-absent code adds one registry write at start and no runtime path.
 - Verdict: INCONCLUSIVE (CS gate miss without a mechanism). Per the SHORT rule a repeat boot of the same package decides: EXP2412 (the next free id; 2405-2411 are reserved for F1-k L1/L2, the proxy slot and the PL-1c package already built as EXP2411). F1-k L1 waits for that repeat.
+
+EXP2412 HARDWARE BEFORE 2026-11-14T01:16:28Z:
+- Kind: repeat, no variable: package exp/f1k-pkg 2e19eaaf5 (the EXP2404 build, copied), m1n1 s2v3-rq2, switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes, probe2404 unchanged (renumbered).
+- WHY: the SHORT profile's escalation for a CS miss is a repeat boot; EXP2404's CS runs were warm 50.114 / r2 50.796 against 51.8-52.4 on the same line (EXP2394/2395/2401) while H3MissedDeadline was lower (3 vs 8), and the policy-absent code adds no runtime path, so noise and a real cost are both open.
+- ATOMIC CONTRACT: none.
+- Expected: CS r2 >= 50.95 (baseline 51.991 - 2 %) -> EXP2404's miss was run-to-run variation and F1-k L0 is accepted; GM PASS; Wom1StartPolicyAttempt 0x10001; suite 119/0.
+- Failure: CS below the gate again -> a real cost of the F1-k package; F1-k stops for a cause analysis before L1.
+- No mode change in this boot.
+- Recovery: rec2412h visible recovery.
+- Hashes: sys a25f4473ded3, UmdArm64 8279e3d263b6, UmdX64 2af54db525b9, Umd32 2c588369b76e; manifest 863842579542, hardware-manifest c2048037104a; probe2412.sh 3e0fcdc813ad (PROBE_LINT_OK); visible recovery rec2412h 01bac33398451eea; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1.
+- Recovery rec2412h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2412-f1k0r/run2412.sh.
