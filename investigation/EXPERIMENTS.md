@@ -77860,7 +77860,9 @@ EXP2341 ACTUAL 2026-11-11T13:57:40Z:
 - Suite TOOL_SUITE PASS=119 FAIL=0. PERF w/r2/r3 fps_frames 50.502 / 50.622 / 50.859, mean(r2,r3) 50.740. FULL (-times) f0a 8025, f0b 8170.
 - CS 1.6 warm/r2/r3 48.656/52.169/52.075, both scored runs VALID (pages_in 0/s); PERF_GATE cs16 PASS (+2.45 % against the corrected baseline 50.832), gravitymark_hd_perf PASS (worst 45.787), PERF_GATE_PASS. WER_REPORTS 2 (the 2026-10-06 files).
 - DWM-TRACE (after every measured number; nobody touched the trackpad): logman start/stop "The command completed successfully"; dwmov.etl 811008 bytes, dwmov.xml 9033287 bytes (evidence/EXP2341/dwm-trace/, deleted on the guest). EventID histogram (6764 events): 0: 2, 221: 2085, 222: 2085, 289: 1285, 291: 1285, 458: 2, 459: 2, 460: 9, 461: 9. Five consecutive 291 payloads in dwm-trace/ev291-five.txt (surface 1280x720, PixelFormat 0x1C, Dst 640,457-1920,1177, IsDirectFlipCompatible 0, IsAdvancedDirectFlipCompatible 0, IsOverlayCompatible 0, IsOverlayRequired 0, fNoOverlappingContent 1, Flags 0x8, Rotation 0x1, Blend 0x0).
-- Rollback rec2341h: VISIBLE_INERT_PACKAGE_ABSENT_8CPU RECOVERY_STORAGE_APPLEANS_OK RECOVERY_DONE .
+- Rollback rec2341h: VISIBLE_INERT_PACKAGE_ABSENT_8CPU
+ RECOVERY_STORAGE_APPLEANS_OK
+ RECOVERY_DONE .
 - Ledger role (architect): fold-on band boot 2 of 3. Verdict / reading: the architect's.
 
 EXP2343 HARDWARE BEFORE 2026-11-11T13:59:31Z:
@@ -79978,3 +79980,9 @@ EXP2437 ACTUAL (2026-11-14, UTC): normal bench profile with host reader, launch 
   ANS-DIRECT record (source 3) that carries it, together with the faulted/crashed bits and mailbox counters, so
   that counter was never readable on hardware (found in EXP2437). 0xAA records need a working disk to persist,
   so a boot that stalled could not have shown one either.
+
+EXP2438 HARDWARE BEFORE 2026-11-14T12:34:44Z (SSD window, boot A: phase/buffer address of the AppleAns stall):
+- Single variable vs EXP2437 R1b: the instrumented copy of the original script, C:\Users\pavel\ANSQ\ssdrw-instr.ps1 (sha256 8a149aa633cacbf37b5cc2398341dfd520507f8962ac112593721ca62f50264d, read: same FileStream/managed byte[] calls in the same order, prints bufaddr before the first write and one line per write/close/read/delete). Same profile: m1n1 a6916e26 + MUANSCPPC002 ce17dea8, host reader, AppleAns 0.4.8, launcher EXP2438-answt-a/launch-normal.sh; fresh boot; poller in its own SSH session; all output tee'd to the Mac line by line.
+- WHY THIS HYPOTHESIS: (1) R1b stalled the original script after ~31-60 MiB of completed writes with the next commands never completed and the driver stuck in Reset/IO_ERROR (SSD session: crashed flag from an RTKit crash message); (2) ssdrw2 with buffer offset exactly 16 survived 512 MiB on the same boot; (3) a managed byte[] has an unknown 8-multiple page offset, so the offset value is the strongest remaining variable.
+- Expected: bufaddr and bufaddr mod 4096 printed; stall at some block index in the write phase. Failure/stop: CANARY_FAIL after recovery, two boots without SSH.
+- Recovery: wait for self reset with the host reader (or 10 min), save full.log, full proxy reboot, rec2425h AT_PROXY, ansq-canary check. Stall 2 of 4 in the window.
