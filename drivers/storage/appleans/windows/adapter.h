@@ -48,11 +48,12 @@ enum APPLE_ANS_STAGE {
 };
 typedef struct _APPLE_ANS_SRB {
     UCHAR Cdb[16], CdbLength, Valid, PrpFailure, Misaligned, MisalignedLow;
-    /* Bounce (common/ans_bounce.h): BuildIo sets NeedBounce and the mapped address of the SRB's
-     * data, BounceDefer when the buffer could not be mapped, or BounceMismatch when the mapped
-     * address is not the request's first SG page; StartIo claims a buffer
-     * (BounceIndex = index + 1) and AppleAnsComplete copies a read back and releases it. */
-    UCHAR NeedBounce, BounceDefer, BounceMismatch, BounceIndex, BounceDefers;
+    /* Bounce (common/ans_bounce.h): BuildIo always builds the PRPs from the SG list; for a
+     * misaligned request it also sets NeedBounce and the mapped address of the SRB's data, or
+     * BounceUnmapped / BounceMismatch when that is not possible (the request then goes
+     * directly); StartIo claims a buffer (BounceIndex = index + 1) and AppleAnsComplete copies
+     * a read back and releases it. */
+    UCHAR NeedBounce, BounceUnmapped, BounceMismatch, BounceIndex, BounceSpare;
     PVOID BounceVa;
     ULONG Length, DiagValue, DiagCount;
     struct ans_logical_prps Prps;
@@ -140,8 +141,8 @@ VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a);
  * Management: UNMAP stays unadvertised (value = ONCS), 0xA9 UNMAP policy at start
  * (value = effective mode<<16 | ONCS), 0xAA completions reaped by the timer because their
  * interrupt did not arrive within a timer period (value = running count), 0xAB bounce pool
- * after passive initialisation (value = usable buffers<<16 | first failing step<<12 |
- * buffers that could not be built). */
+ * after passive initialisation (value = bouncing enabled<<23 | usable buffers<<16 |
+ * first failing step<<12 | buffers that could not be built). */
 #define APPLE_ANS_DIAG_MAX 96
 VOID AppleAnsDiag(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, ULONG code, ULONG value);
 VOID AppleAnsFinish(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, USHORT nvme_status, ULONG length);

@@ -567,42 +567,36 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
         /* Policy and receipt: SUBMIT survives only in DEALLOCATE mode, fenced ranges only. */
         ans_trim_gate(&a->Trim,&plan,a->Pages[tag]);
     }
-    /* Bounce: claim a buffer for a READ/WRITE whose data BuildIo found misaligned. A write is
-     * copied now, before the command exists; the PRP set comes from the buffer's own pages.
-     * Never sent directly. Outcomes other than "bounced":
-     *   mapping is not this request's data  -> error (counted; data would be wrong otherwise)
-     *   data could not be mapped            -> BUSY, at most ANS_BOUNCE_DEFER_LIMIT times, then error
-     *   every buffer in use                 -> the LU is paused until one request completes
-     *                                          (StorPortDeviceBusy), this request BUSY; Storport
-     *                                          resubmits it. */
-    if (x && (x->NeedBounce || x->BounceDefer || x->BounceMismatch) && plan.action==ANS_SCSI_SUBMIT &&
-        (plan.nvme_opcode==1 || plan.nvme_opcode==2)) {
-        if (x->BounceMismatch) {
-            a->Bounce.map_mismatch++;
-            AppleAnsComplete(a,srb,SRB_STATUS_ERROR,0);return TRUE;
-        }
-        if (x->BounceDefer) {
-            unsigned defers=x->BounceDefers;
-            int retry=ans_bounce_map_deferred(&a->Bounce,&defers);
-            x->BounceDefers=(UCHAR)defers;
-            AppleAnsComplete(a,srb,retry?SRB_STATUS_BUSY:SRB_STATUS_ERROR,0);return TRUE;
-        }
-        if (!ans_bounce_size_ok(plan.transfer_bytes) || plan.transfer_bytes!=x->Length) {
-            AppleAnsComplete(a,srb,SRB_STATUS_INVALID_REQUEST,0);return TRUE;
-        }
-        int index=ans_bounce_acquire(&a->Bounce,plan.nvme_opcode==1);
-        if (index < 0) {
-            (void)StorPortDeviceBusy(a,0,0,0,1);
-            AppleAnsComplete(a,srb,SRB_STATUS_BUSY,0);return TRUE;
-        }
-        x->BounceIndex=(UCHAR)(index+1);
-        if (plan.nvme_opcode==1) {
-            LARGE_INTEGER t0={0},t1={0},frequency={0};
-            (void)StorPortQueryPerformanceCounter(a,&frequency,&t0);
-            RtlCopyMemory(a->BounceBuffer[index],x->BounceVa,plan.transfer_bytes);
-            (void)StorPortQueryPerformanceCounter(a,NULL,&t1);
-            a->Bounce.ticks_per_second=(ans_u64)frequency.QuadPart;
-            ans_bounce_copy_timed(&a->Bounce,(ans_u64)(t1.QuadPart-t0.QuadPart));
+    /* Bounce: claim a buffer for a READ/WRITE whose data BuildIo found misaligned and mapped.
+     * A write is copied now, before the command exists; the PRP set then comes from the buffer.
+     * A request that cannot be bounced is never failed for that reason: it keeps the PRPs BuildIo
+     * built from its SG list and goes to the controller directly, as without the bounce.
+     *   mapping is not this request's data   -> direct (counted)
+     *   data could not be mapped             -> direct (counted)
+     *   every buffer in use                  -> BUSY and the LU paused until a request completes
+     *                                           (StorPortDeviceBusy); after ANS_BOUNCE_BUSY_LIMIT
+     *                                           such answers without a release -> direct (counted) */
+    if (x && plan.action==ANS_SCSI_SUBMIT && (plan.nvme_opcode==1 || plan.nvme_opcode==2)) {
+        if (x->BounceMismatch) { a->Bounce.direct_mismatch++; x->BounceMismatch=FALSE; }
+        else if (x->BounceUnmapped) { a->Bounce.direct_unmapped++; x->BounceUnmapped=FALSE; }
+        else if (x->NeedBounce && ans_bounce_size_ok(plan.transfer_bytes) && plan.transfer_bytes==x->Length) {
+            int index=ans_bounce_acquire(&a->Bounce,plan.nvme_opcode==1);
+            if (index < 0) {
+                if (ans_bounce_wait(&a->Bounce)) {
+                    (void)StorPortDeviceBusy(a,0,0,0,1);
+                    AppleAnsComplete(a,srb,SRB_STATUS_BUSY,0);return TRUE;
+                }
+            } else {
+                x->BounceIndex=(UCHAR)(index+1);
+                if (plan.nvme_opcode==1) {
+                    LARGE_INTEGER t0={0},t1={0},frequency={0};
+                    (void)StorPortQueryPerformanceCounter(a,&frequency,&t0);
+                    RtlCopyMemory(a->BounceBuffer[index],x->BounceVa,plan.transfer_bytes);
+                    (void)StorPortQueryPerformanceCounter(a,NULL,&t1);
+                    a->Bounce.ticks_per_second=(ans_u64)frequency.QuadPart;
+                    ans_bounce_copy_timed(&a->Bounce,(ans_u64)(t1.QuadPart-t0.QuadPart));
+                }
+            }
         }
     }
     struct ans_order_token token;

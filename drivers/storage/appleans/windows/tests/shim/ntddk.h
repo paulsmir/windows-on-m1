@@ -12,6 +12,7 @@ typedef unsigned short USHORT;
 typedef uint32_t ULONG, *PULONG;
 typedef int32_t LONG;
 typedef uint64_t ULONGLONG, ULONG64, *PULONG64;
+typedef int64_t LONGLONG;
 typedef uintptr_t ULONG_PTR;
 typedef size_t SIZE_T;
 typedef union { struct { ULONG LowPart; LONG HighPart; } u; int64_t QuadPart; } LARGE_INTEGER, *PLARGE_INTEGER;

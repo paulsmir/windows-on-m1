@@ -6,7 +6,15 @@
  *   - FindAdapter asks Storport for exactly the 0.4.8.3 uncached extension;
  *   - without a pool a misaligned request is passed through as in 0.4.8.3, and no path uses
  *     a pool buffer; a partial pool works;
- *   - a bounced request round-trips its data through the driver's own copy code.
+ *   - a bounced request round-trips its data through the driver's own copy code;
+ *   - bouncing is off unless configured, and then the data path is the 0.4.8.3 one;
+ *   - a request that cannot be bounced (unmapped data, foreign mapping, pool exhausted for
+ *     good) is served directly and counted, never failed.
+ * What the fake Storport assumes and therefore cannot show (review of 0.4.8.6): that
+ * StorPortGetPhysicalAddress resolves contiguous allocations, that StorPortGetSystemAddress
+ * returns the request's own data unless a test says otherwise, that a BUSY request is
+ * resubmitted without BuildIo running again, that StorPortDeviceBusy only counts; one thread,
+ * no IRQL or ordering model; its own structure layouts, not the WDK's; no loader or imports.
  * HARNESS_OLD builds the interface-only subset against an older tree (the RED run). */
 #include "../adapter.h"
 #include <assert.h>
@@ -61,6 +69,8 @@ static struct {
     ULONG alloc_phys_fail_mask;    /* bit n: its pages have no physical address */
     uint64_t alloc_ipa[32];        /* placement override for the n-th allocation */
     int sysaddr_fail, sysaddr_wrong;
+    int reg_bounce;                /* Parameters\Device BounceEnable: -1 absent, else the DWORD */
+    ULONG sysaddr_calls;
     int hold;                      /* simulated controller keeps commands outstanding */
     /* observations */
     enum phase phase;
@@ -238,6 +248,8 @@ ULONG StorPortAllocateContiguousMemorySpecifyCacheNode(PVOID e, SIZE_T bytes, PH
     (void)e; (void)lo; (void)hi; (void)boundary; (void)node;
     assert(F.phase == PH_PASSIVE && !F.lock_held && "pool memory is allocated in passive initialization");
     assert(cache == MmCached && bytes && !(bytes & (PAGE - 1)));
+    assert(lo.QuadPart == 0 && (uint64_t)hi.QuadPart == ANSD_RAM_END - 1 && "allocation bounded to guest RAM");
+    assert(F.frees == 0 && "rejected buffers are held until every allocation was tried");
     unsigned n = F.allocs++;
     *out = NULL;
     if (n < 32 && (F.alloc_fail_mask & (1u << n))) return STOR_STATUS_INSUFFICIENT_RESOURCES;
@@ -303,15 +315,36 @@ ULONG StorPortGetSystemAddress(PVOID e, PSCSI_REQUEST_BLOCK srb, PVOID *va)
 {
     (void)e;
     assert(F.phase == PH_IO && !F.lock_held);
+    F.sysaddr_calls++;
     if (F.sysaddr_fail) { *va = NULL; return STOR_STATUS_INSUFFICIENT_RESOURCES; }
     *va = F.sysaddr_wrong ? (PVOID)((struct req *)srb)->page_base : (PVOID)((struct req *)srb)->data;
     return STOR_STATUS_SUCCESS;
 }
 BOOLEAN StorPortDeviceBusy(PVOID e, UCHAR p, UCHAR t, UCHAR l, ULONG n) { (void)e; (void)p; (void)t; (void)l; (void)n; F.device_busy++; return TRUE; }
 ULONG StorPortMarkDumpMemory(PVOID e, PVOID a, ULONG b, ULONG c) { (void)e; (void)a; (void)b; (void)c; return 0; }
-PUCHAR StorPortAllocateRegistryBuffer(PVOID e, PULONG l) { (void)e; (void)l; return NULL; }
-VOID StorPortFreeRegistryBuffer(PVOID e, PUCHAR b) { (void)e; (void)b; }
-BOOLEAN StorPortRegistryRead(PVOID e, PUCHAR n, ULONG g, ULONG t, PUCHAR b, PULONG l) { (void)e; (void)n; (void)g; (void)t; (void)b; (void)l; return FALSE; }
+static UCHAR registry_buffer[64];
+static int registry_buffer_out;
+PUCHAR StorPortAllocateRegistryBuffer(PVOID e, PULONG l)
+{
+    (void)e;
+    assert((F.phase == PH_FIND || F.phase == PH_PASSIVE) && !F.lock_held && "registry access at PASSIVE_LEVEL");
+    assert(!registry_buffer_out && "one registry buffer at a time");
+    registry_buffer_out = 1; *l = sizeof(registry_buffer);
+    return registry_buffer;
+}
+VOID StorPortFreeRegistryBuffer(PVOID e, PUCHAR b) { (void)e; assert(b == registry_buffer && registry_buffer_out); registry_buffer_out = 0; }
+BOOLEAN StorPortRegistryRead(PVOID e, PUCHAR n, ULONG g, ULONG t, PUCHAR b, PULONG l)
+{
+    (void)e;
+    assert((F.phase == PH_FIND || F.phase == PH_PASSIVE) && !F.lock_held && b == registry_buffer && g == 1);
+    if (!strcmp((const char *)n, "BounceEnable") && F.reg_bounce >= 0 && t == MINIPORT_REG_DWORD) {
+        assert(F.phase == PH_PASSIVE && "the bounce switch is not read in FindAdapter");
+        ULONG v = (ULONG)F.reg_bounce; memcpy(b, &v, 4); *l = 4;
+        return TRUE;
+    }
+    *l = 0;
+    return FALSE;
+}
 
 /* ---- port-driver side of the harness --------------------------------------------------- */
 static void world_reset(void)
@@ -322,6 +355,8 @@ static void world_reset(void)
     memset(&F, 0, sizeof(F)); memset(&S, 0, sizeof(S)); memset(disk, 0, sizeof(disk));
     S.cq_phase[0] = S.cq_phase[1] = 1;
     F.uncached_ipa = 0x820000000ULL;
+    F.reg_bounce = 1; /* bouncing configured on; test_gate covers off and absent */
+    registry_buffer_out = 0;
     uncached_mem = NULL; passive_routine = NULL;
     assert(DriverEntry(NULL, NULL) == 0);
     adapter_mem = calloc(1, init_data.DeviceExtensionSize);
@@ -507,7 +542,7 @@ static void test_boot_contract(void)
     const ans_u8 *p = receipt();
     assert(le(p + 8, 4) == ANS_BOUNCE_COUNT && le(p + 28, 4) == ANS_BOUNCE_COUNT);
     assert(le(p + 112, 4) == ANS_BOUNCE_STEP_NONE && le(p + 128, 4) == 0);
-    assert(logged(0xAB) == (int)(ANS_BOUNCE_COUNT << 16));
+    assert(logged(0xAB) == (int)(0x800000u | (ANS_BOUNCE_COUNT << 16)) && le(p + 132, 4) == 1);
 }
 static void test_bounced_round_trip(void)
 {
@@ -536,7 +571,7 @@ static void test_partial_pool(void)
     const ans_u8 *p = receipt();
     assert(le(p + 8, 4) == 2 && le(p + 28, 4) == ANS_BOUNCE_COUNT && le(p + 128, 4) == 14);
     assert(le(p + 112, 4) == ANS_BOUNCE_STEP_ALLOCATE && le(p + 116, 4) == 0);
-    assert(logged(0xAB) == (int)((2u << 16) | (ANS_BOUNCE_STEP_ALLOCATE << 12) | 14u));
+    assert(logged(0xAB) == (int)(0x800000u | (2u << 16) | (ANS_BOUNCE_STEP_ALLOCATE << 12) | 14u));
     round_trip(5, 32, 0x78, 1, 40);
     /* Exhaustion: two bounced writes outstanding, the third is BUSY and pauses the LU; after
      * the completions it is resubmitted and succeeds. */
@@ -546,10 +581,23 @@ static void test_partial_pool(void)
     assert(w[0]->srb.SrbStatus == SRB_STATUS_PENDING && w[1]->srb.SrbStatus == SRB_STATUS_PENDING);
     assert(w[2]->srb.SrbStatus == SRB_STATUS_BUSY && F.device_busy == 1);
     assert(A->Bounce.claimed == 3);
+    /* No buffer is released: after ANS_BOUNCE_BUSY_LIMIT BUSY answers the request is sent
+     * directly from its own (misaligned) buffer instead of failing or waiting for ever. Both
+     * resubmission styles are covered: StartIo alone, and BuildIo + StartIo. */
+    for (unsigned i = 1; i < ANS_BOUNCE_BUSY_LIMIT; i++) {
+        w[2]->srb.SrbStatus = SRB_STATUS_PENDING;
+        if (i & 1) assert(init_data.HwStartIo(adapter_mem, &w[2]->srb)); else port_submit(w[2]);
+        assert(w[2]->srb.SrbStatus == SRB_STATUS_BUSY);
+    }
+    assert(F.device_busy == ANS_BOUNCE_BUSY_LIMIT && F.nio == 4);
+    port_submit(w[2]);
+    assert(w[2]->srb.SrbStatus == SRB_STATUS_PENDING && F.nio == 5 && A->Bounce.claimed == 3);
+    assert(F.io_prp1[4] == (uint64_t)w[2]->sg.List[0].PhysicalAddress.QuadPart && !in_pool(F.io_prp1[4]));
     F.hold = 0; sim_release_held(); port_interrupt();
-    assert(w[0]->srb.SrbStatus == SRB_STATUS_SUCCESS && w[1]->srb.SrbStatus == SRB_STATUS_SUCCESS && A->Bounce.claimed == 0);
-    port_submit(w[2]); port_interrupt();
-    assert(w[2]->srb.SrbStatus == SRB_STATUS_SUCCESS);
+    for (unsigned i = 0; i < 3; i++) assert(w[i]->srb.SrbStatus == SRB_STATUS_SUCCESS);
+    assert(A->Bounce.claimed == 0);
+    p = receipt();
+    assert(le(p + 48, 8) == ANS_BOUNCE_BUSY_LIMIT && le(p + 56, 8) == 1);
     for (unsigned i = 0; i < 3; i++) {
         uint8_t want[2 * PAGE]; pattern(want, sizeof(want), 50 + i);
         assert(!memcmp(disk + (size_t)(60 + i * 4) * PAGE, want, sizeof(want)));
@@ -583,26 +631,46 @@ static void test_no_pool_is_083(void)
     const ans_u8 *p = receipt();
     assert(le(p + 8, 4) == 0 && le(p + 112, 4) == ANS_BOUNCE_STEP_ALLOCATE && le(p + 128, 4) == ANS_BOUNCE_COUNT);
     for (unsigned off = 32; off < 112; off += 8) assert(le(p + off, 8) == 0);
-    assert(logged(0xAB) == (int)((ANS_BOUNCE_STEP_ALLOCATE << 12) | ANS_BOUNCE_COUNT) && F.device_busy == 0);
+    assert(logged(0xAB) == (int)(0x800000u | (ANS_BOUNCE_STEP_ALLOCATE << 12) | ANS_BOUNCE_COUNT) && F.device_busy == 0);
+    assert(F.sysaddr_calls == 0);
 }
-static void test_mapping_failures(void)
+static void test_unbounceable_requests_go_direct(void)
 {
     world_reset();
-    assert(port_start());
-    struct req *w = req_new(1, 4, 1, 0x40);
+    assert(port_start() && A->Bounce.count == ANS_BOUNCE_COUNT);
+    /* The data cannot be mapped: served directly, counted, never an error or a wait. */
     F.sysaddr_fail = 1;
-    /* The port driver resubmits a BUSY request without preparing it again. */
-    assert(init_data.HwBuildIo(adapter_mem, &w->srb));
-    for (unsigned i = 0; i < ANS_BOUNCE_DEFER_LIMIT; i++) {
-        w->srb.SrbStatus = SRB_STATUS_PENDING;
-        assert(init_data.HwStartIo(adapter_mem, &w->srb) && w->srb.SrbStatus == SRB_STATUS_BUSY);
-    }
-    w->srb.SrbStatus = SRB_STATUS_PENDING;
-    assert(init_data.HwStartIo(adapter_mem, &w->srb) && w->srb.SrbStatus == SRB_STATUS_ERROR);
+    round_trip(4, 3, 0x40, 0, 80);
+    const ans_u8 *p = receipt();
+    assert(le(p + 64, 8) == 2 && le(p + 72, 8) == 0 && le(p + 48, 8) == 0 && le(p + 32, 8) == 0 && le(p + 40, 8) == 0);
+    /* The mapping is not the request's own data: the same, under its own counter. */
     F.sysaddr_fail = 0; F.sysaddr_wrong = 1;
-    port_submit(w);
-    assert(w->srb.SrbStatus == SRB_STATUS_ERROR && F.nio == 0 && A->Bounce.claimed == 0);
-    req_free(w);
+    round_trip(20, 2, 0xee8, 0, 81);
+    p = receipt();
+    assert(le(p + 72, 8) == 2 && le(p + 64, 8) == 2 && A->Bounce.claimed == 0 && F.device_busy == 0);
+    /* And a mappable request is bounced again. */
+    F.sysaddr_wrong = 0;
+    round_trip(30, 2, 0xee8, 1, 82);
+}
+static void test_gate(void)
+{
+    /* Off (explicit 0, absent, or any other value): the pool is built and reported, no request
+     * is bounced or even mapped, and the data path is the 0.4.8.3 one. */
+    static const int settings[] = {0, -1, 2};
+    for (unsigned s = 0; s < 3; s++) {
+        world_reset();
+        F.reg_bounce = settings[s];
+        assert(port_start());
+        assert(A->Bounce.count == ANS_BOUNCE_COUNT && A->Bounce.enabled == 0 && F.alloc_ok == ANS_BOUNCE_COUNT);
+        round_trip(11, 32, 0x78, 0, 90 + s);
+        round_trip(60, 1, 16, 0, 93 + s);
+        round_trip(70, 4, 0, 0, 96 + s);
+        const ans_u8 *p = receipt();
+        assert(le(p + 8, 4) == ANS_BOUNCE_COUNT && le(p + 132, 4) == 0 && le(p + 112, 4) == ANS_BOUNCE_STEP_NONE);
+        for (unsigned off = 32; off < 112; off += 8) assert(le(p + off, 8) == 0);
+        assert(F.sysaddr_calls == 0 && F.device_busy == 0 && A->Bounce.claimed == 0);
+        assert(logged(0xAB) == (int)(ANS_BOUNCE_COUNT << 16));
+    }
 }
 static void test_dump_seal_is_083(void)
 {
@@ -631,7 +699,8 @@ int main(int argc, char **argv)
     test_bounced_round_trip();
     test_partial_pool();
     test_no_pool_is_083();
-    test_mapping_failures();
+    test_unbounceable_requests_go_direct();
+    test_gate();
     test_dump_seal_is_083();
 #endif
     puts("storport shim harness: ok");

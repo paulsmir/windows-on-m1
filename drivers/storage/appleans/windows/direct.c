@@ -117,21 +117,41 @@ failed:
 /* Bounce pool (common/ans_bounce.h). PASSIVE_LEVEL, once, after HwInitialize succeeded: the
  * adapter is already running and nothing here can stop it. Each buffer is its own allocation
  * of ordinary cached, physically contiguous memory (the controller's DMA is cache-coherent,
- * ANS0 _CCA = 1): StorPortAllocateContiguousMemorySpecifyCacheNode, IRQL <= DISPATCH_LEVEL.
- * A buffer is kept only if every page has a physical address, the pages are contiguous and
- * page-aligned, and the whole range is one controller-visible window; otherwise it is freed,
- * the failure recorded, and the next one tried. Whatever number results is the pool, 0
- * included. StorPortGetPhysicalAddress: for memory from this allocator the returned length
- * is documented as "should be ignored", so only the address is used.
+ * ANS0 _CCA = 1): StorPortAllocateContiguousMemorySpecifyCacheNode, IRQL <= DISPATCH_LEVEL,
+ * asked for below the end of the controller-visible guest RAM. A buffer is kept only if every
+ * page has a physical address, the pages are contiguous and page-aligned, and the whole range
+ * is one controller-visible window; otherwise the failure is recorded and the next one tried.
+ * Rejected buffers are held until the loop ends, so the allocator cannot hand the same pages
+ * back; then they are freed. Whatever number results is the pool, 0 included.
+ * StorPortGetPhysicalAddress: for memory from this allocator the returned length is documented
+ * as "should be ignored", so only the address is used.
+ * Bouncing itself is a configuration switch: Parameters\Device, REG_DWORD BounceEnable, read
+ * here (StorPortRegistryRead: PASSIVE_LEVEL) so that FindAdapter is not involved. Absent,
+ * unreadable or zero means off: the pool is still built and reported, no request is bounced.
  * The buffers are not returned when the adapter stops (no passive stop callback is used here);
  * they live as long as the device extension. */
+static BOOLEAN bounce_enabled(PAPPLE_ANS_ADAPTER a)
+{
+    ULONG value = 0, length = sizeof(ULONG);
+    PUCHAR buffer = StorPortAllocateRegistryBuffer(a, &length);
+    if (!buffer) return FALSE;
+    if (length >= sizeof(ULONG)) {
+        ULONG bytes = sizeof(ULONG);
+        RtlZeroMemory(buffer, sizeof(ULONG));
+        if (StorPortRegistryRead(a, (PUCHAR)"BounceEnable", 1, MINIPORT_REG_DWORD, buffer, &bytes) &&
+            bytes == sizeof(ULONG)) RtlCopyMemory(&value, buffer, sizeof(ULONG));
+    }
+    StorPortFreeRegistryBuffer(a, buffer);
+    return value == 1 ? TRUE : FALSE;
+}
 VOID AppleAnsDirectBouncePool(PAPPLE_ANS_ADAPTER a)
 {
     PHYSICAL_ADDRESS lowest, highest, boundary;
-    ULONG count = 0;
+    PVOID rejected[ANS_BOUNCE_COUNT];
+    ULONG count = 0, held = 0;
     if (!a->Direct || a->DumpMode || a->BouncePoolBuilt) return;
     a->BouncePoolBuilt = TRUE;
-    lowest.QuadPart = 0; boundary.QuadPart = 0; highest.QuadPart = 0x7fffffffffffffffLL;
+    lowest.QuadPart = 0; boundary.QuadPart = 0; highest.QuadPart = (LONGLONG)(ANSD_RAM_END - 1);
     for (ULONG i = 0; i < ANS_BOUNCE_COUNT; i++) {
         PVOID va = NULL;
         ULONG step = ANS_BOUNCE_STEP_NONE;
@@ -161,7 +181,7 @@ VOID AppleAnsDirectBouncePool(PAPPLE_ANS_ADAPTER a)
         }
         if (step != ANS_BOUNCE_STEP_NONE) {
             ans_bounce_build_failed(&a->Bounce, step, i, address);
-            (void)StorPortFreeContiguousMemorySpecifyCache(a, va, ANS_BOUNCE_BYTES, MmCached);
+            rejected[held++] = va;
             continue;
         }
         RtlZeroMemory(va, ANS_BOUNCE_BYTES);
@@ -169,11 +189,16 @@ VOID AppleAnsDirectBouncePool(PAPPLE_ANS_ADAPTER a)
         a->BouncePa[count] = pa;
         count++;
     }
-    /* Publication: BuildIo and StartIo use a buffer only below this count. */
+    while (held) (void)StorPortFreeContiguousMemorySpecifyCache(a, rejected[--held], ANS_BOUNCE_BYTES, MmCached);
+    BOOLEAN enabled = bounce_enabled(a);
+    /* Publication: BuildIo and StartIo use a buffer only below this count, and only when enabled. */
     MemoryBarrier();
     a->Bounce.count = count;
     MemoryBarrier();
-    AppleAnsDiag(a, NULL, 0xAB, (count << 16) | ((a->Bounce.fail_step & 0xf) << 12) | (a->Bounce.failures & 0xfff));
+    a->Bounce.enabled = enabled ? 1u : 0u;
+    MemoryBarrier();
+    AppleAnsDiag(a, NULL, 0xAB, (enabled ? 0x800000u : 0u) | (count << 16) |
+                 ((a->Bounce.fail_step & 0xf) << 12) | (a->Bounce.failures & 0xfff));
 }
 
 static VOID put(ans_u8 *p, ans_u64 value, unsigned size)

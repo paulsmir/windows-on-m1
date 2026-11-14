@@ -13,12 +13,18 @@
  * The pool is optional (EXP2447): it is built after the adapter has started, from up to
  * ANS_BOUNCE_COUNT separate buffers, and holds only those that could be allocated and resolved
  * to controller addresses. With no buffer the driver bounces nothing and hands every request
- * to the controller as before the bounce existed; it never fails to start for lack of a pool. */
+ * to the controller as before the bounce existed; it never fails to start for lack of a pool.
+ * Never worse than no bounce: bouncing is switched on by configuration (enabled, default off;
+ * the pool is built and reported either way), and a request that cannot be bounced (its data
+ * cannot be mapped, the mapping is not its own data, or every buffer stays in use) is handed to
+ * the controller directly, exactly as without the bounce, and counted. Such a request is the
+ * misaligned transfer the bounce exists to avoid: it can stall the controller as it could
+ * before, which is the behaviour without the bounce and not a new failure. */
 #define ANS_DATA_ALIGNMENT ANS_PRP_PAGE_SIZE
 #define ANS_BOUNCE_COUNT 16u
 #define ANS_BOUNCE_PAGES (ANS_MAX_TRANSFER / ANS_PRP_PAGE_SIZE)
 #define ANS_BOUNCE_BYTES ANS_MAX_TRANSFER
-#define ANS_BOUNCE_DEFER_LIMIT 8u /* consecutive mapping failures of one request before it fails */
+#define ANS_BOUNCE_BUSY_LIMIT 8u /* BUSY answers between two buffer releases before requests go direct */
 enum ans_bounce_step { /* where building one buffer failed */
     ANS_BOUNCE_STEP_NONE = 0,
     ANS_BOUNCE_STEP_ALLOCATE = 1,    /* no memory; address = allocator status */
@@ -28,6 +34,8 @@ enum ans_bounce_step { /* where building one buffer failed */
 };
 struct ans_bounce_pool {
     ans_u32 count;                   /* usable buffers, 0..ANS_BOUNCE_COUNT; written once */
+    ans_u32 enabled;                 /* configuration gate; written once, after count */
+    ans_u32 busy_streak;             /* BUSY answers since a buffer was last claimed or released */
     ans_u32 failures;                /* buffers that could not be built */
     ans_u32 fail_step, fail_index;   /* first failure: enum ans_bounce_step, buffer attempt */
     ans_u64 fail_address;
@@ -35,9 +43,10 @@ struct ans_bounce_pool {
     ans_u32 high_water;              /* most buffers claimed at once */
     ans_u64 bounced_reads, bounced_writes;
     ans_u64 busy;                    /* requests returned BUSY because every buffer was in use */
-    ans_u64 map_deferred;            /* requests returned BUSY because their data could not be mapped */
-    ans_u64 map_failed;              /* requests failed after ANS_BOUNCE_DEFER_LIMIT such deferrals */
-    ans_u64 map_mismatch;            /* mapped address did not belong to the request's first SG page */
+    /* Requests sent directly although misaligned (see above), by reason: */
+    ans_u64 direct_exhausted;        /* every buffer still in use after ANS_BOUNCE_BUSY_LIMIT BUSY answers */
+    ans_u64 direct_unmapped;         /* the data could not be mapped */
+    ans_u64 direct_mismatch;         /* mapped address did not belong to the request's first SG page */
     ans_u64 copies, copy_ticks, copy_ticks_max; /* copy cost in performance-counter ticks */
     ans_u64 ticks_per_second;
 };
@@ -55,23 +64,24 @@ void ans_bounce_build_failed(struct ans_bounce_pool *pool, ans_u32 step, ans_u32
  * address of the buffer, which is contiguous there. Output zero and 0 returned on any invalid
  * input. */
 int ans_bounce_prps(ans_u64 base_pa, ans_u32 bytes, struct ans_logical_prps *out);
-/* A request whose data could not be mapped: 1 = retry later (BUSY), 0 = give up (error). The
- * count lives in the request, so the limit holds whether or not the port driver prepares the
- * request again before the retry. */
-int ans_bounce_map_deferred(struct ans_bounce_pool *pool, unsigned *request_defers);
+/* After a failed claim: 1 = answer BUSY (a holder will release a buffer), 0 = send the request
+ * directly (counted). The limit is kept in the pool, not in the request, so it holds whether or
+ * not the port driver prepares a request again before resubmitting it. */
+int ans_bounce_wait(struct ans_bounce_pool *pool);
 void ans_bounce_copy_timed(struct ans_bounce_pool *pool, ans_u64 ticks);
 
 /* Read-only bounce receipt: SRB_IO_CONTROL, signature "APANS001", control code
  * CTL_CODE(FILE_DEVICE_SCSI,0x803,METHOD_BUFFERED,FILE_READ_ACCESS), exactly
- * ANS_BOUNCE_IOCTL_TOTAL bytes. Payload (little-endian): 0 version = 2, 4 payload size, 8 usable
- * buffers (0 = nothing is bounced), 12 buffer bytes, 16 required alignment, 20 claimed bitmap,
- * 24 high water, 28 buffers attempted (ANS_BOUNCE_COUNT), then u64: 32 bounced reads, 40 bounced
- * writes, 48 busy (pool exhausted), 56 map deferred, 64 map failed, 72 map mismatch, 80 copies,
- * 88 copy ticks, 96 copy ticks max, 104 ticks/second; then the pool record: 112 first failing
- * step (enum ans_bounce_step), 116 its buffer attempt, 120 u64 its address, 128 buffers that
- * could not be built, 132 reserved. */
+ * ANS_BOUNCE_IOCTL_TOTAL bytes. Payload (little-endian): 0 version = 3, 4 payload size, 8 usable
+ * buffers, 12 buffer bytes, 16 required alignment, 20 claimed bitmap, 24 high water, 28 buffers
+ * attempted (ANS_BOUNCE_COUNT), then u64: 32 bounced reads, 40 bounced writes, 48 busy (pool
+ * exhausted, request retried), 56 sent directly: pool exhausted, 64 sent directly: data not
+ * mapped, 72 sent directly: mapping mismatch, 80 copies, 88 copy ticks, 96 copy ticks max,
+ * 104 ticks/second; then the pool record: 112 first failing step (enum ans_bounce_step), 116 its
+ * buffer attempt, 120 u64 its address, 128 buffers that could not be built, 132 bouncing
+ * enabled (0: the pool exists but no request is bounced). */
 #define ANS_BOUNCE_IOCTL_QUERY 0x001b600cu
-#define ANS_BOUNCE_IOCTL_VERSION 2u
+#define ANS_BOUNCE_IOCTL_VERSION 3u
 #define ANS_BOUNCE_IOCTL_PAYLOAD 136u
 #define ANS_BOUNCE_IOCTL_TOTAL (28u + ANS_BOUNCE_IOCTL_PAYLOAD)
 int ans_bounce_ioctl_validate(const void *buffer, ans_u32 bytes);

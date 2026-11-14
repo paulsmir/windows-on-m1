@@ -22,16 +22,26 @@ int ans_bounce_acquire(struct ans_bounce_pool *pool, int writing)
             if (pool->claimed & ((ans_u32)1 << j)) used++;
         if (used + 1 > pool->high_water) pool->high_water = used + 1;
         if (writing) pool->bounced_writes++; else pool->bounced_reads++;
+        pool->busy_streak = 0;
         return (int)i;
     }
-    pool->busy++;
     return -1;
+}
+int ans_bounce_wait(struct ans_bounce_pool *pool)
+{
+    if (!pool) return 0;
+    /* Nobody holds a buffer (no pool): waiting cannot help. */
+    if (!pool->claimed || pool->busy_streak >= ANS_BOUNCE_BUSY_LIMIT) { pool->direct_exhausted++; return 0; }
+    pool->busy_streak++;
+    pool->busy++;
+    return 1;
 }
 int ans_bounce_release(struct ans_bounce_pool *pool, int index)
 {
     if (!pool || index < 0 || (unsigned)index >= ANS_BOUNCE_COUNT || (ans_u32)index >= pool->count ||
         !(pool->claimed & ((ans_u32)1 << index))) return 0;
     pool->claimed &= ~((ans_u32)1 << index);
+    pool->busy_streak = 0;
     return 1;
 }
 void ans_bounce_build_failed(struct ans_bounce_pool *pool, ans_u32 step, ans_u32 index, ans_u64 address)
@@ -51,13 +61,6 @@ int ans_bounce_prps(ans_u64 base_pa, ans_u32 bytes, struct ans_logical_prps *out
         out->page[i] = base_pa + (ans_u64)i * ANS_PRP_PAGE_SIZE;
     out->count = bytes / ANS_PRP_PAGE_SIZE;
     out->bytes = bytes;
-    return 1;
-}
-int ans_bounce_map_deferred(struct ans_bounce_pool *pool, unsigned *request_defers)
-{
-    if (!pool || !request_defers) return 0;
-    if (++*request_defers > ANS_BOUNCE_DEFER_LIMIT) { pool->map_failed++; return 0; }
-    pool->map_deferred++;
     return 1;
 }
 void ans_bounce_copy_timed(struct ans_bounce_pool *pool, ans_u64 ticks)
@@ -101,12 +104,12 @@ int ans_bounce_ioctl_reply(void *buffer, ans_u32 bytes, const struct ans_bounce_
     bounce_put_le(p + 16, ANS_DATA_ALIGNMENT, 4); bounce_put_le(p + 20, pool->claimed, 4);
     bounce_put_le(p + 24, pool->high_water, 4);   bounce_put_le(p + 28, ANS_BOUNCE_COUNT, 4);
     bounce_put_le(p + 32, pool->bounced_reads, 8); bounce_put_le(p + 40, pool->bounced_writes, 8);
-    bounce_put_le(p + 48, pool->busy, 8);          bounce_put_le(p + 56, pool->map_deferred, 8);
-    bounce_put_le(p + 64, pool->map_failed, 8);    bounce_put_le(p + 72, pool->map_mismatch, 8);
+    bounce_put_le(p + 48, pool->busy, 8);          bounce_put_le(p + 56, pool->direct_exhausted, 8);
+    bounce_put_le(p + 64, pool->direct_unmapped, 8); bounce_put_le(p + 72, pool->direct_mismatch, 8);
     bounce_put_le(p + 80, pool->copies, 8);        bounce_put_le(p + 88, pool->copy_ticks, 8);
     bounce_put_le(p + 96, pool->copy_ticks_max, 8); bounce_put_le(p + 104, pool->ticks_per_second, 8);
     bounce_put_le(p + 112, pool->fail_step, 4);    bounce_put_le(p + 116, pool->fail_index, 4);
     bounce_put_le(p + 120, pool->fail_address, 8); bounce_put_le(p + 128, pool->failures, 4);
-    bounce_put_le(p + 132, 0, 4);
+    bounce_put_le(p + 132, pool->enabled ? 1 : 0, 4);
     return 1;
 }

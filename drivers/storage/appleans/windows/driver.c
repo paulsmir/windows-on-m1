@@ -247,18 +247,25 @@ BOOLEAN AppleAnsBuildIo(PVOID DeviceExtension, PSCSI_REQUEST_BLOCK Srb)
                 spans[i].address = (ULONGLONG)sg->List[i].PhysicalAddress.QuadPart;
                 spans[i].length = sg->List[i].Length;
             }
-            /* With a bounce pool, a first address inside a page is not handed to the controller
-             * (ans_bounce.h): the transfer goes through a bounce buffer that StartIo claims.
-             * Here, at DISPATCH_LEVEL without locks, only the SRB's data is mapped; no PRPs are
-             * built from the SG list. A buffer that cannot be mapped is retried (BUSY), never
-             * refused. Without a pool (Bounce.count == 0, written once in passive initialisation)
-             * the request is only counted and takes the direct path below, as before the bounce
-             * existed. The dump instance (page-sized dump buffers, IRQL above DISPATCH, no pool)
-             * always takes the direct path. */
+            /* Direct mode accepts the memory manager's repeated dummy page; the broker never did. */
+            int prp_error=ans_sg_to_prps_ex(spans,sg->NumberOfElements,x->Length,&x->Prps,
+                                            ((PAPPLE_ANS_ADAPTER)DeviceExtension)->Direct);
+            if (prp_error != ANS_PRP_OK) {
+                x->DiagValue=((ULONG)prp_error<<20)|(ULONG)((spans[0].address>>12)&0xfffff);
+                x->DiagCount=sg->NumberOfElements;
+                x->PrpFailure=TRUE;return TRUE;
+            }
+            /* The PRPs above are the request's direct path and are always built. With bouncing
+             * enabled and a pool (both written once in passive initialisation), a first address
+             * inside a page additionally gets the SRB's data mapped here, at DISPATCH_LEVEL
+             * without locks, so that StartIo can send it through a bounce buffer (ans_bounce.h).
+             * If the data cannot be mapped, or the mapping is not this request's own data, the
+             * request keeps its direct path and StartIo counts why. The dump instance
+             * (page-sized dump buffers, IRQL above DISPATCH, no pool) is always direct. */
             PAPPLE_ANS_ADAPTER a = DeviceExtension;
             if (a->Direct && !a->DumpMode && ans_bounce_needed((ULONGLONG)sg->List[0].PhysicalAddress.QuadPart)) {
                 x->Misaligned=TRUE;x->MisalignedLow=(UCHAR)(sg->List[0].PhysicalAddress.QuadPart & 0xf);
-                if (a->Bounce.count && ans_bounce_size_ok(x->Length)) {
+                if (a->Bounce.enabled && a->Bounce.count && ans_bounce_size_ok(x->Length)) {
                     PVOID va=NULL;
                     if (StorPortGetSystemAddress(DeviceExtension,Srb,&va)==STOR_STATUS_SUCCESS && va) {
                         /* Self-check: the mapping must be THIS request's data, not the start of a
@@ -268,18 +275,8 @@ BOOLEAN AppleAnsBuildIo(PVOID DeviceExtension, PSCSI_REQUEST_BLOCK Srb)
                             (ULONGLONG)sg->List[0].PhysicalAddress.QuadPart) {
                             x->NeedBounce=TRUE;x->BounceVa=va;
                         } else x->BounceMismatch=TRUE;
-                    } else x->BounceDefer=TRUE;
-                    x->Valid=TRUE;
-                    return TRUE;
+                    } else x->BounceUnmapped=TRUE;
                 }
-            }
-            /* Direct mode accepts the memory manager's repeated dummy page; the broker never did. */
-            int prp_error=ans_sg_to_prps_ex(spans,sg->NumberOfElements,x->Length,&x->Prps,
-                                            ((PAPPLE_ANS_ADAPTER)DeviceExtension)->Direct);
-            if (prp_error != ANS_PRP_OK) {
-                x->DiagValue=((ULONG)prp_error<<20)|(ULONG)((spans[0].address>>12)&0xfffff);
-                x->DiagCount=sg->NumberOfElements;
-                x->PrpFailure=TRUE;return TRUE;
             }
         }
     }
