@@ -6691,3 +6691,15 @@ boot was run. The previous entry stays as written.
 - Open: whether our segment answer changes on later instances (KMD cause) or Windows still holds the previous
   adapter instance (teardown cause; candidates include allocations kept by DWM's device). Discriminator A5-D1
   (receipt-only, handoff file) is specified, not yet built or run.
+
+## UPDATE 2026-11-14T05:34:19Z - EXP2420: machine hung after a guest crash-reset; hypervisor reset path is unbounded
+
+- F1-k L2 rerun: the forced stop was delivered (first L2 attempt EXP2406 was invalid: its trigger did not crash
+  the guest). After the guest's PSCI reset the SoC did not reset and the proxy did not answer; operator power cycle
+  requested. L2b (latch check) is pending.
+- Offline read (.local/night-20261110/crash-reset-hang/REPORT.md): the hypervisor's reset handler touches the
+  guest-owned AGX ASC block and flushes USB without a deadline before it arms the SoC watchdog. In earlier resets
+  that device load either returned or aborted (the abort itself rebooted). Which step stalled this time is not
+  decidable offline. The bugcheck-code line is not a measurement on the current guest kernel (stale RVA, prints 0).
+- Fix specs RST-1 (arm the SoC watchdog at entry of the reset handler) and RST-2 (remove the device load, bound the
+  flush) are in the handoff file. NOT built or run. No crash-trigger experiment before RST-1.
