@@ -6724,3 +6724,17 @@ boot was run. The previous entry stays as written.
   step stalled in EXP2420 (device load or USB flush); one crash-reset passing does not prove the stall would have
   recurred without RST-1.
 - RST-2 (A: drop the device load; B: bound the flushes; C: honest bugcheck line) is built and reviewed, not run.
+
+## UPDATE 2026-11-14T09:23:21Z - EXP2421 (C2 boot 2): all 11 modes commit; C2-1/C2-3 not exercised; A5 fails with NOT_SUPPORTED
+
+- On PL-1c + the C2 set (bench m1n1 RST-1): every one of the 11 offered 32-bpp modes (2560x1600 down to 800x600)
+  set and read back, source visible after each and after the restore, no geometry/layout refusal; full-screen runs
+  at 1920x1080 and 1680x1050 showed no hide loop. C2-2 (two planes by default) effective at native mode.
+- Inconclusive: C2-1 and C2-3 (two-plane rules and mode-to-panel mapping at non-native modes) were not exercised -
+  the full-screen workload commits single planes and no two-plane record was offered at a non-native mode. Needs a
+  windowed two-plane workload on a non-native desktop mode.
+- No operator report on the picture reached the ledger for this run (the arms started an hour earlier than announced).
+- A5 (device restart), probe-only data: the FIRST re-enable already failed in this boot (in EXP2416 the first had
+  worked); DxgKrnl-Admin event 549 carried 0xC00000BB (STATUS_NOT_SUPPORTED), not the 0xC0000017 of EXP2308; no
+  memory pressure, adapter count 1 throughout. So the earlier "out-of-memory path" reading does not describe this
+  failure; a DxgKrnl ETW trace across one failing enable now exists. Cause open.
