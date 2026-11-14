@@ -6714,3 +6714,13 @@ boot was run. The previous entry stays as written.
   consecutive orderly restart. The policy is still opt-in (Wom1StartPolicy=1); making it the default belongs to
   the standalone work (F1).
 - EXP2423 (RST-1, watchdog armed at entry of the reset path) is running.
+
+## UPDATE 2026-11-14T08:52:31Z - EXP2423: RST-1 confirmed; a guest crash-reset returns to the proxy without an operator
+
+- Bench m1n1 is now RST-1 (gpu/rst1-wdt-arm 995e1957, image 71f64fc1; previous s2v3-rq2 772d2ee7): the SoC
+  watchdog is armed (3 s) at entry of the PSCI reset/off handler. Orderly restart returned as before; after the
+  forced crash at 62 s the USB link dropped 7 s later and the proxy came back with a new base.
+- Not measured: the exact time until the proxy answered (first check 122 s after the trigger). Not decided: which
+  step stalled in EXP2420 (device load or USB flush); one crash-reset passing does not prove the stall would have
+  recurred without RST-1.
+- RST-2 (A: drop the device load; B: bound the flushes; C: honest bugcheck line) is built and reviewed, not run.
