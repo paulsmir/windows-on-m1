@@ -6911,3 +6911,26 @@ boot was run. The previous entry stays as written.
 - SSD: pre-install gate script fixed for review findings G1-G5 (0691a44c...), run on the builder only. AppleAns
   0.4.8.7 not installed; bench driver stays 0.4.8.3. restart-normal.sh now clears StartOverride before a reboot
   (not yet measured on a boot).
+
+## UPDATE 2026-11-14T19:55Z - keyboard backlight in every boot; Wi-Fi G3b status; slider defect
+
+- STANDARD BENCH PROFILE CHANGE (EXP2454 PASS): Mu = MUKBD003 2ef00a13 (= MUANSCPPC002 + keyboard backlight device
+  on by default; byte-identical rebuild), guest carries the keyboard backlight package (sys 6648f764, same sources
+  as the validated 3cfc5261 build) and the bench certificate stays trusted. After an ordered reboot with no manual
+  step the driver loads and sets level 90; 8 CPUs, SSD and canary unchanged. NOT yet done: GPU perf gate on this
+  Mu (first item of the GPU box); recovery profile unchanged; the Wi-Fi profile Mu has no keyboard device yet.
+- Keyboard: per-step level change confirmed by the operator (255/0/255/0/90). OPEN DEFECT: the Dynamic Lighting
+  brightness slider only switches off / back to the default level. Hypothesis (keyboard session, not confirmed):
+  the lamp is declared with colour level count 1 and only Intensity is mapped. EXP2458 (diagnostic package D)
+  recorded no LampArray report in 90 s, but whether the operator moved the slider is unknown -> inconclusive.
+  Packages F1 (declaration + mapping, atomic) and F2 (default level policy) are built, not run.
+- Wi-Fi: G3b-0 (EXP2453) inconclusive because its criterion "drops=0" contradicted the filter policy; G3b-0r
+  (EXP2455, print-only attribution image b6f7ab6a) PASS: every dropped write is on the root port 00:00.0 at
+  reg >= 0x40, none on bus 01, absent=0. Finding for G4: Windows writes to root-port capability registers
+  (0x44..0xa0, 0x104..0x130) never reach the port. G3b-1 (EXP2456) FAIL before guest start: with the INTx flag the
+  ANS broker's IRQ route was refused. Cause confirmed from source by the Wi-Fi session: 12 dynamic routes (AGX G2 9,
+  input 1, INTx 1, ANS 1) against a capacity of 11; fix = per-owner counts, order-independent, host test RED/GREEN;
+  image bf15adfb staged (G3b-1r), not run. Process rule added: every flag names the shared tables it adds to and
+  gets an offline capacity test before the bench.
+- GPU box: combined package branch exp/combo1-pkg; its one new gate failure was the repository hygiene test on
+  CHANGES.csv rows (ledger only), fixed on the branch by 536f23573 with no driver/tool diff (bench report).
