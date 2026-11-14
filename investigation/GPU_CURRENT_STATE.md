@@ -7026,3 +7026,21 @@ boot was run. The previous entry stays as written.
   (2) Windows parking policy for class-1 cores vs the firmware _CPC scale (MHz, E shown as 69 % of P); (3) the
   DRAM-fast rule tied to the P cluster as part of the pinned gain. No guest power setting has been changed.
 - Running at the time of writing: EXP2461 = A5 discriminator D1 (Wom1PoolHalfSize=1, three-cycle tail).
+
+## UPDATE 2026-11-14T23:40Z - EXP2461 (A5 discriminator D1): CONFIRMED; bench end state
+
+- With Wom1PoolHalfSize=1 (segment 3 = 2 GiB) all three in-boot disable/enable cycles start (enables 23:16:16Z,
+  23:16:54Z, 23:18:03Z), no event 549, no "dedicated too much" / sysmem-segment / ADAPTER_RENDER failure text in
+  the ETL. A5 cause confirmed: the 4 GiB system-memory segment exceeds what VidMm allows a second adapter instance
+  in the same boot. 2 GiB is a diagnostic size, not the fix. Fix spec A5-F1 is in the architect handoff (pool
+  sizing rule + deterministic RED/GREEN + five-cycle hardware checkpoint); open: the size sequence over several
+  restarts and why the first restart passes at 4 GiB.
+- "No post-display owner while the adapter is disabled" reproduced (60 s hold: only our adapter with Error, no
+  BasicDisplay / Basic Render). Operator saw the m1n1 image again during this run.
+- Side finding persists: 38 "invalid NTSTATUS" (0xC00000BB) events in the run; DDI not named.
+- Probe defect (bench, fixed in the script): a final persistent disable left Problem 22 and blocked the visible
+  recovery; recovered via an ordered restart to the proxy and the at-proxy recovery.
+- Bench idle on the RECOVERY profile (RECANS001, Mu G2 without the keyboard device, m1n1 882985fb): AppleAns
+  0.4.8.3, StartOverride cleared, AGX inert, keyboard package present but its device absent in this firmware.
+  So the keyboard backlight is NOT active in the idle/recovery profile; "every boot" currently means every bench
+  launch on MUKBD003. Open task: align the recovery/idle profile (Mu with the keyboard device, current m1n1).
