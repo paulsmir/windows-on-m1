@@ -43,6 +43,14 @@ int main(void)
     assert(ans_stats_ioctl_reply(p,ANS_IOCTL_TOTAL_BYTES,&t,&peer));
     memcpy(&out,p+28+16+232,232);assert(out.source==2 && out.generation==9);
     assert(raw[0]==0xa5 && raw[sizeof(raw)-1]==0x5a);
+    /* ANS-DIRECT: the driver's own record (source 3) travels in the second slot. It was dropped
+     * (EXP2437: the crashed bit and the poll-recovered count of a stalled adapter were unreadable). */
+    request(p);p[36]=3;peer=t;peer.source=3;peer.generation=0x544345524944ULL;peer.last_error=2;
+    assert(ans_stats_ioctl_reply(p,ANS_IOCTL_TOTAL_BYTES,&t,&peer));
+    memcpy(&out,p+28+16+232,232);assert(out.source==3 && out.last_error==2 && out.generation==0x544345524944ULL);
+    {struct ans_telemetry_query q3;memcpy(&q3,p+28,16);assert(q3.sources==3);}
+    request(p);p[36]=3;peer.source=4;assert(ans_stats_ioctl_reply(p,ANS_IOCTL_TOTAL_BYTES,&t,&peer));
+    {struct ans_telemetry_query q4;memcpy(&q4,p+28,16);assert(q4.sources==ANS_IOCTL_WINDOWS);}
     request(p);assert(ans_stats_ioctl_reply(p,ANS_IOCTL_TOTAL_BYTES,&t,NULL));
     struct ans_telemetry_query q;memcpy(&q,p+28,16);assert(q.sources==ANS_IOCTL_WINDOWS);
     for(unsigned i=0;i<232;i++)assert(p[28+16+232+i]==0);
