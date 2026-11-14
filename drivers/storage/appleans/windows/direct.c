@@ -76,13 +76,6 @@ static BOOLEAN direct_carve(PAPPLE_ANS_ADAPTER a, ULONGLONG common_ipa, struct a
         a->Pages[i] = pages + (ULONG_PTR)i * ANS_PRP_PAGE_SIZE;
         if (!carve_pa(a, common_ipa, a->Pages[i], ANS_PRP_PAGE_SIZE, &a->PageDma[i])) return FALSE;
     }
-    PUCHAR bounce = pages + (ULONG_PTR)APPLE_ANS_METADATA_PAGES * ANS_PRP_PAGE_SIZE;
-    for (unsigned i = 0; i < ANS_BOUNCE_COUNT; i++) {
-        a->BounceBuffer[i] = bounce + (ULONG_PTR)i * ANS_BOUNCE_BYTES;
-        for (unsigned p = 0; p < ANS_BOUNCE_PAGES; p++)
-            if (!carve_pa(a, common_ipa, a->BounceBuffer[i] + (ULONG_PTR)p * ANS_PRP_PAGE_SIZE,
-                          ANS_PRP_PAGE_SIZE, &a->BouncePa[i][p])) return FALSE;
-    }
     for (unsigned n = 0; n < 2; n++) {
         q[n] = (struct ansd_queue){0};
         q[n].sq = chunk[3*n]; q[n].cq = (volatile struct ansd_cqe *)chunk[3*n+1];
@@ -119,6 +112,68 @@ failed:
     if (a->Mbox) StorPortFreeDeviceBase(a, a->Mbox);
     a->Ctrl = a->Mbox = NULL;
     return FALSE;
+}
+
+/* Bounce pool (common/ans_bounce.h). PASSIVE_LEVEL, once, after HwInitialize succeeded: the
+ * adapter is already running and nothing here can stop it. Each buffer is its own allocation
+ * of ordinary cached, physically contiguous memory (the controller's DMA is cache-coherent,
+ * ANS0 _CCA = 1): StorPortAllocateContiguousMemorySpecifyCacheNode, IRQL <= DISPATCH_LEVEL.
+ * A buffer is kept only if every page has a physical address, the pages are contiguous and
+ * page-aligned, and the whole range is one controller-visible window; otherwise it is freed,
+ * the failure recorded, and the next one tried. Whatever number results is the pool, 0
+ * included. StorPortGetPhysicalAddress: for memory from this allocator the returned length
+ * is documented as "should be ignored", so only the address is used.
+ * The buffers are not returned when the adapter stops (no passive stop callback is used here);
+ * they live as long as the device extension. */
+VOID AppleAnsDirectBouncePool(PAPPLE_ANS_ADAPTER a)
+{
+    PHYSICAL_ADDRESS lowest, highest, boundary;
+    ULONG count = 0;
+    if (!a->Direct || a->DumpMode || a->BouncePoolBuilt) return;
+    a->BouncePoolBuilt = TRUE;
+    lowest.QuadPart = 0; boundary.QuadPart = 0; highest.QuadPart = 0x7fffffffffffffffLL;
+    for (ULONG i = 0; i < ANS_BOUNCE_COUNT; i++) {
+        PVOID va = NULL;
+        ULONG step = ANS_BOUNCE_STEP_NONE;
+        ULONGLONG address = 0, first = 0, pa = 0;
+        ULONG status = StorPortAllocateContiguousMemorySpecifyCacheNode(a, ANS_BOUNCE_BYTES, lowest, highest,
+            boundary, MmCached, MM_ANY_NODE_OK, &va);
+        if (status != STOR_STATUS_SUCCESS || !va) {
+            ans_bounce_build_failed(&a->Bounce, ANS_BOUNCE_STEP_ALLOCATE, i, status);
+            continue;
+        }
+        for (ULONG p = 0; p < ANS_BOUNCE_PAGES && step == ANS_BOUNCE_STEP_NONE; p++) {
+            ULONG ignored = 0;
+            STOR_PHYSICAL_ADDRESS ipa = StorPortGetPhysicalAddress(a, NULL,
+                (PUCHAR)va + (ULONG_PTR)p * ANS_PRP_PAGE_SIZE, &ignored);
+            if (!ipa.QuadPart) { step = ANS_BOUNCE_STEP_PHYSICAL; address = p; }
+            else if (!p) first = (ULONGLONG)ipa.QuadPart;
+            else if ((ULONGLONG)ipa.QuadPart != first + (ULONGLONG)p * ANS_PRP_PAGE_SIZE) {
+                step = ANS_BOUNCE_STEP_LAYOUT; address = (ULONGLONG)ipa.QuadPart;
+            }
+        }
+        if (step == ANS_BOUNCE_STEP_NONE && (((ULONG_PTR)va | first) & (ANS_PRP_PAGE_SIZE - 1))) {
+            step = ANS_BOUNCE_STEP_LAYOUT; address = first;
+        }
+        if (step == ANS_BOUNCE_STEP_NONE &&
+            (!ansd_translate(first, ANS_BOUNCE_BYTES, &pa) || (pa & (ANS_PRP_PAGE_SIZE - 1)))) {
+            step = ANS_BOUNCE_STEP_TRANSLATE; address = first;
+        }
+        if (step != ANS_BOUNCE_STEP_NONE) {
+            ans_bounce_build_failed(&a->Bounce, step, i, address);
+            (void)StorPortFreeContiguousMemorySpecifyCache(a, va, ANS_BOUNCE_BYTES, MmCached);
+            continue;
+        }
+        RtlZeroMemory(va, ANS_BOUNCE_BYTES);
+        a->BounceBuffer[count] = va;
+        a->BouncePa[count] = pa;
+        count++;
+    }
+    /* Publication: BuildIo and StartIo use a buffer only below this count. */
+    MemoryBarrier();
+    a->Bounce.count = count;
+    MemoryBarrier();
+    AppleAnsDiag(a, NULL, 0xAB, (count << 16) | ((a->Bounce.fail_step & 0xf) << 12) | (a->Bounce.failures & 0xfff));
 }
 
 static VOID put(ans_u8 *p, ans_u64 value, unsigned size)

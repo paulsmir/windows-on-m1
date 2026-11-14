@@ -30,8 +30,10 @@
 #define APPLE_ANS_METADATA_BYTES (APPLE_ANS_METADATA_PAGES * ANS_PRP_PAGE_SIZE + ANS_PRP_PAGE_SIZE - 1)
 /* Direct mode: six 16 KiB queue arrays (admin/IO SQ, CQ, TCB), then the metadata pages,
  * plus alignment slack (StorPortGetUncachedExtension guarantees only page alignment). */
-#define APPLE_ANS_DIRECT_BYTES (6u * ANSD_QUEUE_ALIGN + APPLE_ANS_METADATA_PAGES * ANS_PRP_PAGE_SIZE + \
-    ANS_BOUNCE_COUNT * ANS_BOUNCE_BYTES + ANSD_QUEUE_ALIGN) /* ... then the bounce buffers */
+#define APPLE_ANS_DIRECT_BYTES (6u * ANSD_QUEUE_ALIGN + APPLE_ANS_METADATA_PAGES * ANS_PRP_PAGE_SIZE + ANSD_QUEUE_ALIGN)
+/* EXP2447: nothing optional is ever added to this buffer. FindAdapter fails without it, and it
+ * is the boot disk. The bounce buffers are separate memory obtained after the adapter started
+ * (AppleAnsDirectBouncePool). */
 /* The reject receipt's ANS_REJECT_MISALIGNED entries now count READ/WRITE requests whose first
  * data address is not page-aligned, as seen in StartIo: a request that is resubmitted after BUSY
  * is counted again; the code's low nibble is still the address's low four bits. */
@@ -102,11 +104,15 @@ typedef struct _APPLE_ANS_ADAPTER {
     struct ans_trim Trim;
     /* Requests refused as not implemented (SRB functions, SRB_IO_CONTROL codes, CDB opcodes). */
     struct ans_rejects Rejects;
-    /* Page-aligned bounce buffers in the uncached extension and the controller address of each
-     * of their pages (resolved once in direct_carve). Pool state under InterruptLock. */
+    /* Optional bounce pool, built once in passive initialisation (AppleAnsDirectBouncePool):
+     * Bounce.count page-aligned buffers of ANS_BOUNCE_BYTES, each contiguous for the
+     * controller at BouncePa. Bounce.count is written once, after the buffers; 0 means no
+     * request is bounced. Claims and counters under InterruptLock. Kept at the end of the
+     * extension so that no earlier field moves. */
     struct ans_bounce_pool Bounce;
     PUCHAR BounceBuffer[ANS_BOUNCE_COUNT];
-    ULONGLONG BouncePa[ANS_BOUNCE_COUNT][ANS_BOUNCE_PAGES];
+    ULONGLONG BouncePa[ANS_BOUNCE_COUNT];
+    BOOLEAN BouncePoolBuilt;
 } APPLE_ANS_ADAPTER, *PAPPLE_ANS_ADAPTER;
 BOOLEAN AppleAnsNativeResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config);
 BOOLEAN AppleAnsNativeInitialize(PAPPLE_ANS_ADAPTER a);
@@ -123,6 +129,7 @@ BOOLEAN AppleAnsDirectReset(PAPPLE_ANS_ADAPTER a);
 BOOLEAN AppleAnsDirectStop(PAPPLE_ANS_ADAPTER a);
 int AppleAnsDirectSubmit(PAPPLE_ANS_ADAPTER a, unsigned tag, const struct ans_broker_request *r);
 VOID AppleAnsDirectPeer(PAPPLE_ANS_ADAPTER a, struct ans_telemetry *peer);
+VOID AppleAnsDirectBouncePool(PAPPLE_ANS_ADAPTER a);
 VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a);
 /* Receipt-only diagnostics: StorPortLogError UniqueId = code<<24 | (value & 0xffffff), at most
  * APPLE_ANS_DIAG_MAX per adapter start. Codes: 0xA1 DMA translation reject (value = IPA>>12),
@@ -132,7 +139,9 @@ VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a);
  * receipt (value = ans_dump_context_receipt_value), 0xA8 Identify ONCS without Dataset
  * Management: UNMAP stays unadvertised (value = ONCS), 0xA9 UNMAP policy at start
  * (value = effective mode<<16 | ONCS), 0xAA completions reaped by the timer because their
- * interrupt did not arrive within a timer period (value = running count). */
+ * interrupt did not arrive within a timer period (value = running count), 0xAB bounce pool
+ * after passive initialisation (value = usable buffers<<16 | first failing step<<12 |
+ * buffers that could not be built). */
 #define APPLE_ANS_DIAG_MAX 96
 VOID AppleAnsDiag(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, ULONG code, ULONG value);
 VOID AppleAnsFinish(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, USHORT nvme_status, ULONG length);

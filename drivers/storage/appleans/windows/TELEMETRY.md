@@ -149,14 +149,24 @@ that found no free slot, 40 sixteen entries of {kind 4, code 4, count 8} in firs
 
 ## Bounce receipt (control code 0x001b600c)
 
-Same header and signature, total size exactly 140 bytes (28 + 112). Read-only. Payload offsets
-(little-endian): 0 version = 1, 4 payload size = 112, 8 number of bounce buffers, 12 bytes per
-buffer, 16 required first-address alignment, 20 bitmap of buffers in use now, 24 most in use at
-once, 28 reserved; then 64-bit counters: 32 bounced reads, 40 bounced writes, 48 requests returned
-BUSY because every buffer was in use, 56 requests returned BUSY because their data could not be
-mapped, 64 requests failed after 8 such deferrals, 72 requests failed because the mapped address
-was not the request's first scatter/gather page, 80 copies timed, 88 total copy time and 96 longest
-copy in performance-counter ticks, 104 ticks per second.
+Same header and signature, total size exactly 164 bytes (28 + 136). Read-only. Payload offsets
+(little-endian): 0 version = 2, 4 payload size = 136, 8 usable bounce buffers (0 = nothing is
+bounced, misaligned requests go to the controller directly as in 0.4.8.3), 12 bytes per buffer,
+16 required first-address alignment, 20 bitmap of buffers in use now, 24 most in use at once,
+28 buffers attempted (16); then 64-bit counters: 32 bounced reads, 40 bounced writes, 48 requests
+returned BUSY because every buffer was in use, 56 requests returned BUSY because their data could
+not be mapped, 64 requests failed after 8 such deferrals, 72 requests failed because the mapped
+address was not the request's first scatter/gather page, 80 copies timed, 88 total copy time and
+96 longest copy in performance-counter ticks, 104 ticks per second; then the pool record written
+once after passive initialisation: 112 first failing step (0 none, 1 allocation, 2 a page without
+a physical address, 3 not a controller-visible range, 4 not page-aligned or not contiguous),
+116 the buffer attempt it happened on, 120 (64-bit) its address (allocator status for step 1,
+page index for step 2, guest address for steps 3 and 4), 128 buffers that could not be built,
+132 reserved. The same outcome is logged once as diagnostic 0xAB
+(usable<<16 | first failing step<<12 | buffers not built).
+
+Version 1 (140 bytes, builds 0.4.8.4/0.4.8.5) is not answered by this build: 0.4.8.5 put the
+buffers in the uncached extension and did not boot (EXP2447).
 
 The direct record's reads/writes/resets/flushes fields are NOT used for bounce counters (build
 0.4.8.4 did; that build was never installed). Reject-receipt kind 4 counts page-misaligned

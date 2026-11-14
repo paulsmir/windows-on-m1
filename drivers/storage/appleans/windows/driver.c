@@ -247,15 +247,18 @@ BOOLEAN AppleAnsBuildIo(PVOID DeviceExtension, PSCSI_REQUEST_BLOCK Srb)
                 spans[i].address = (ULONGLONG)sg->List[i].PhysicalAddress.QuadPart;
                 spans[i].length = sg->List[i].Length;
             }
-            /* A first address inside a page is never handed to the controller (ans_bounce.h): the
-             * transfer goes through a bounce buffer that StartIo claims. Here, at DISPATCH_LEVEL
-             * without locks, only the SRB's data is mapped; no PRPs are built from the SG list.
-             * A buffer that cannot be mapped is retried (BUSY), never refused. The dump instance
-             * (page-sized dump buffers, IRQL above DISPATCH) keeps the direct path. */
+            /* With a bounce pool, a first address inside a page is not handed to the controller
+             * (ans_bounce.h): the transfer goes through a bounce buffer that StartIo claims.
+             * Here, at DISPATCH_LEVEL without locks, only the SRB's data is mapped; no PRPs are
+             * built from the SG list. A buffer that cannot be mapped is retried (BUSY), never
+             * refused. Without a pool (Bounce.count == 0, written once in passive initialisation)
+             * the request is only counted and takes the direct path below, as before the bounce
+             * existed. The dump instance (page-sized dump buffers, IRQL above DISPATCH, no pool)
+             * always takes the direct path. */
             PAPPLE_ANS_ADAPTER a = DeviceExtension;
             if (a->Direct && !a->DumpMode && ans_bounce_needed((ULONGLONG)sg->List[0].PhysicalAddress.QuadPart)) {
                 x->Misaligned=TRUE;x->MisalignedLow=(UCHAR)(sg->List[0].PhysicalAddress.QuadPart & 0xf);
-                if (ans_bounce_size_ok(x->Length)) {
+                if (a->Bounce.count && ans_bounce_size_ok(x->Length)) {
                     PVOID va=NULL;
                     if (StorPortGetSystemAddress(DeviceExtension,Srb,&va)==STOR_STATUS_SUCCESS && va) {
                         /* Self-check: the mapping must be THIS request's data, not the start of a

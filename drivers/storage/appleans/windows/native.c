@@ -14,6 +14,8 @@ BOOLEAN AppleAnsPassiveInitialize(PVOID DeviceExtension)
     StorPortInitializeDpc(a,&a->ShutdownDpc,AppleAnsShutdownDpc);
     /* One-time publication. ISR cannot issue it before this flag is set. */
     InterlockedExchange(&a->DpcReady,1);
+    /* Optional: any outcome, an empty pool included, leaves the adapter started. */
+    AppleAnsDirectBouncePool(a);
     return TRUE;
 }
 
@@ -381,7 +383,8 @@ VOID AppleAnsComplete(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, UCHAR statu
     /* The one place an SRB leaves the driver: a bounced READ that succeeded is copied to the
      * caller's buffer, and the bounce buffer is returned whatever the status. */
     PAPPLE_ANS_SRB bx = srb->SrbExtension;
-    if (!a->DumpMode && bx && bx->BounceIndex && bx->BounceIndex <= ANS_BOUNCE_COUNT) {
+    if (!a->DumpMode && bx && bx->BounceIndex && bx->BounceIndex <= ANS_BOUNCE_COUNT &&
+        bx->BounceIndex <= a->Bounce.count) {
         unsigned index = (unsigned)bx->BounceIndex - 1;
         if (status == SRB_STATUS_SUCCESS && (srb->SrbFlags & SRB_FLAGS_DATA_IN) && bx->BounceVa &&
             length && length <= bx->Length && length <= ANS_BOUNCE_BYTES) {
@@ -616,7 +619,8 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
     const struct ans_logical_prps *prps=x?&x->Prps:NULL;
     if (x && x->BounceIndex) {
         /* Controller addresses of the bounce buffer's pages: already translated, page-aligned. */
-        prps=ans_bounce_prps(a->BouncePa[x->BounceIndex-1],plan.transfer_bytes,&translated)?&translated:NULL;
+        prps=(x->BounceIndex <= a->Bounce.count &&
+              ans_bounce_prps(a->BouncePa[x->BounceIndex-1],plan.transfer_bytes,&translated))?&translated:NULL;
     } else if(a->Direct && prps && prps->count) {
         if(!ansd_translate_prps(prps,&translated)) {
             for (ans_u32 i=0;i<prps->count;i++) {

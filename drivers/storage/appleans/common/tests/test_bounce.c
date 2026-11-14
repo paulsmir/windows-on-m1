@@ -24,34 +24,52 @@ int main(void)
     assert(!ans_bounce_size_ok(131072 + 4096) && !ans_bounce_size_ok(4095) && !ans_bounce_size_ok(6144));
 
     /* PRP set of a bounce buffer: whole pages of that buffer, nothing else. */
-    uint64_t pa[ANS_BOUNCE_PAGES];
-    for (unsigned i = 0; i < ANS_BOUNCE_PAGES; i++) pa[i] = 0x9f0000000ULL + (uint64_t)(31 - i) * 0x10000; /* scattered */
+    const uint64_t base = 0x9f0000000ULL;
     for (uint32_t bytes = 4096; bytes <= 131072; bytes += 4096) {
         struct ans_logical_prps p; memset(&p, 0xff, sizeof p);
-        assert(ans_bounce_prps(pa, bytes, &p) && p.count == bytes / 4096 && p.bytes == bytes);
+        assert(ans_bounce_prps(base, bytes, &p) && p.count == bytes / 4096 && p.bytes == bytes);
         for (unsigned i = 0; i < ANS_MAX_DATA_PAGES; i++)
-            assert(p.page[i] == (i < p.count ? pa[i] : 0) && !(p.page[i] & 4095));
+            assert(p.page[i] == (i < p.count ? base + (uint64_t)i * 4096 : 0));
         /* The request builder takes it as an ordinary aligned transfer. */
         uint8_t cdb[10] = {0x2a}, list[4096]; struct ans_broker_request r;
         struct ans_namespace ns = {.blocks = 1u << 20, .block_size = 4096, .nsid = 1, .ready = 1};
         cdb[5] = 9; cdb[7] = (uint8_t)((bytes / 4096) >> 8); cdb[8] = (uint8_t)(bytes / 4096);
         struct ans_scsi_plan plan = ans_scsi_prepare(&ns, cdb, 10, bytes, NULL);
         assert(plan.action == ANS_SCSI_SUBMIT && ans_io_request(&plan, &p, 5, 0x300000, list, 1, &r));
-        uint64_t prp1 = 0; memcpy(&prp1, r.sqe + 24, 8); assert(prp1 == pa[0]);
+        uint64_t prp1 = 0; memcpy(&prp1, r.sqe + 24, 8); assert(prp1 == base);
     }
     {
         struct ans_logical_prps p; memset(&p, 0xff, sizeof p);
-        assert(!ans_bounce_prps(pa, 4095, &p) && !p.count && !p.page[0]);
-        assert(!ans_bounce_prps(pa, 135168, &p) && !ans_bounce_prps(NULL, 4096, &p) && !ans_bounce_prps(pa, 4096, NULL));
-        uint64_t bad[ANS_BOUNCE_PAGES]; memcpy(bad, pa, sizeof bad); bad[3] += 8;
-        assert(!ans_bounce_prps(bad, 16384, &p) && !p.count && !p.page[0] && !p.page[3]);
-        bad[3] = 0; assert(!ans_bounce_prps(bad, 16384, &p));
-        assert(ans_bounce_prps(bad, 12288, &p) && p.count == 3); /* pages beyond the transfer are not consulted */
+        assert(!ans_bounce_prps(base, 4095, &p) && !p.count && !p.page[0]);
+        assert(!ans_bounce_prps(base, 135168, &p) && !ans_bounce_prps(0, 4096, &p) && !ans_bounce_prps(base, 4096, NULL));
+        memset(&p, 0xff, sizeof p);
+        assert(!ans_bounce_prps(base + 8, 16384, &p) && !p.count && !p.page[0] && !p.page[3]);
+        assert(!ans_bounce_prps(~0ULL & ~4095ULL, 4096, &p)); /* would wrap */
     }
 
     /* Pool: exclusive, bounded, no leak. */
     struct ans_bounce_pool pool = {0};
     assert(ans_bounce_acquire(NULL, 0) == -1 && !ans_bounce_release(NULL, 0));
+    /* No pool: nothing can be claimed or released, and that is not counted as exhaustion of a
+     * pool the caller was promised (the caller never asks: count == 0 means no bounce). */
+    assert(ans_bounce_acquire(&pool, 1) == -1 && !pool.claimed && !ans_bounce_release(&pool, 0));
+    /* Partial pool: only the buffers that exist are handed out. */
+    for (unsigned n = 1; n < ANS_BOUNCE_COUNT; n++) {
+        struct ans_bounce_pool part = {0}; part.count = n;
+        for (unsigned i = 0; i < n; i++) assert(ans_bounce_acquire(&part, 1) == (int)i);
+        assert(ans_bounce_acquire(&part, 1) == -1 && part.busy == 1 && part.high_water == n);
+        assert(!ans_bounce_release(&part, (int)n) && ans_bounce_release(&part, (int)n - 1));
+        assert(ans_bounce_acquire(&part, 0) == (int)n - 1);
+    }
+    {
+        struct ans_bounce_pool f = {0};
+        ans_bounce_build_failed(&f, ANS_BOUNCE_STEP_TRANSLATE, 3, 0x8a0110000ULL);
+        ans_bounce_build_failed(&f, ANS_BOUNCE_STEP_ALLOCATE, 4, 1);
+        ans_bounce_build_failed(NULL, 1, 1, 1);
+        assert(f.failures == 2 && f.fail_step == ANS_BOUNCE_STEP_TRANSLATE && f.fail_index == 3 &&
+               f.fail_address == 0x8a0110000ULL);
+    }
+    pool = (struct ans_bounce_pool){0}; pool.count = ANS_BOUNCE_COUNT; pool.busy = 0;
     for (unsigned i = 0; i < ANS_BOUNCE_COUNT; i++) assert(ans_bounce_acquire(&pool, i & 1) == (int)i);
     assert(pool.high_water == ANS_BOUNCE_COUNT && pool.bounced_writes == 8 && pool.bounced_reads == 8 && !pool.busy);
     assert(ans_bounce_acquire(&pool, 1) == -1 && pool.busy == 1 && pool.bounced_writes == 8);
@@ -89,14 +107,16 @@ int main(void)
         /* Receipt layout. */
         uint8_t raw[ANS_BOUNCE_IOCTL_TOTAL + 2], *b = raw + 1; memset(raw, 0xee, sizeof raw); memset(b, 0, ANS_BOUNCE_IOCTL_TOTAL);
         q.claimed = 0x8001; q.high_water = 7; q.bounced_reads = 11; q.bounced_writes = 12; q.busy = 13; q.map_mismatch = 14;
-        q.ticks_per_second = 24000000;
+        q.ticks_per_second = 24000000; q.count = 5;
+        ans_bounce_build_failed(&q, ANS_BOUNCE_STEP_PHYSICAL, 6, 17); ans_bounce_build_failed(&q, 1, 7, 0);
         b[0] = 28; memcpy(b + 4, "APANS001", 8); b[12] = 10; b[16] = 0x0c; b[17] = 0x60; b[18] = 0x1b;
-        b[24] = (uint8_t)ANS_BOUNCE_IOCTL_PAYLOAD; b[28] = 1; b[32] = (uint8_t)ANS_BOUNCE_IOCTL_PAYLOAD;
-        assert(ANS_BOUNCE_IOCTL_TOTAL == 140 && ans_bounce_ioctl_validate(b, 140) && !ans_bounce_ioctl_validate(b, 139));
-        b[16] = 8; assert(!ans_bounce_ioctl_reply(b, 140, &q)); b[16] = 0x0c;
-        assert(ans_bounce_ioctl_reply(b, 140, &q) && raw[0] == 0xee && raw[sizeof raw - 1] == 0xee);
+        b[24] = (uint8_t)ANS_BOUNCE_IOCTL_PAYLOAD; b[28] = ANS_BOUNCE_IOCTL_VERSION; b[32] = (uint8_t)ANS_BOUNCE_IOCTL_PAYLOAD;
+        assert(ANS_BOUNCE_IOCTL_TOTAL == 164 && ans_bounce_ioctl_validate(b, 164) && !ans_bounce_ioctl_validate(b, 140));
+        b[28] = 1; assert(!ans_bounce_ioctl_validate(b, 164)); b[28] = ANS_BOUNCE_IOCTL_VERSION;
+        b[16] = 8; assert(!ans_bounce_ioctl_reply(b, 164, &q)); b[16] = 0x0c;
+        assert(ans_bounce_ioctl_reply(b, 164, &q) && raw[0] == 0xee && raw[sizeof raw - 1] == 0xee);
         uint64_t v; uint32_t w; const uint8_t *p = b + 28;
-        memcpy(&w, p + 8, 4); assert(w == 16); memcpy(&w, p + 12, 4); assert(w == 131072);
+        memcpy(&w, p + 8, 4); assert(w == 5); memcpy(&w, p + 28, 4); assert(w == 16); memcpy(&w, p + 12, 4); assert(w == 131072);
         memcpy(&w, p + 16, 4); assert(w == 4096); memcpy(&w, p + 20, 4); assert(w == 0x8001);
         memcpy(&w, p + 24, 4); assert(w == 7);
         memcpy(&v, p + 32, 8); assert(v == 11); memcpy(&v, p + 40, 8); assert(v == 12);
@@ -104,6 +124,8 @@ int main(void)
         memcpy(&v, p + 64, 8); assert(v == 1); memcpy(&v, p + 72, 8); assert(v == 14);
         memcpy(&v, p + 80, 8); assert(v == 3); memcpy(&v, p + 88, 8); assert(v == 16);
         memcpy(&v, p + 96, 8); assert(v == 9); memcpy(&v, p + 104, 8); assert(v == 24000000);
+        memcpy(&w, p + 112, 4); assert(w == ANS_BOUNCE_STEP_PHYSICAL); memcpy(&w, p + 116, 4); assert(w == 6);
+        memcpy(&v, p + 120, 8); assert(v == 17); memcpy(&w, p + 128, 4); assert(w == 2);
     }
     puts("ANS bounce pool and PRP tests PASS");
     return 0;

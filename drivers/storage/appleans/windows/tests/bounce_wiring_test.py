@@ -51,6 +51,15 @@ assert 'ans_bounce_ioctl_reply(srb->DataBuffer,srb->DataTransferLength,&a->Bounc
 assert NATIVE.count('StorPortNotification(RequestComplete') == 1, 'one completion point'
 assert 'RequestComplete' not in DIRECT and 'RequestComplete' not in DRIVER
 
-carve = DIRECT[DIRECT.index('static BOOLEAN direct_carve('):DIRECT.index('BOOLEAN AppleAnsDirectResources(')]
-assert 'a->BouncePa[i][p]' in carve and 'ANS_BOUNCE_COUNT * ANS_BOUNCE_BYTES' in ADAPTER
+# EXP2447: the pool is optional and never part of FindAdapter (behaviour: storport_shim_test.c).
+assert 'a->Bounce.count && ans_bounce_size_ok(x->Length)' in branch, 'no pool: the request is not diverted'
+resources = DIRECT[DIRECT.index('static BOOLEAN direct_carve('):DIRECT.index('static VOID put(')]
+carve = resources[:resources.index('/* Bounce pool (common/ans_bounce.h)')]
+assert 'Bounce' not in carve and 'BOUNCE' not in carve, 'FindAdapter resources carry no bounce memory'
+define = ADAPTER[ADAPTER.index('#define APPLE_ANS_DIRECT_BYTES'):]
+assert 'BOUNCE' not in define[:define.index('\n')], 'the uncached extension keeps its 0.4.8.3 size'
+find = DRIVER[DRIVER.index('ULONG AppleAnsFindAdapter('):DRIVER.index('BOOLEAN AppleAnsBuildIo(')]
+assert 'Bounce' not in find, 'neither FindAdapter nor HwInitialize builds or needs the pool'
+passive = NATIVE[NATIVE.index('BOOLEAN AppleAnsPassiveInitialize('):NATIVE.index('static ans_u32 wire_read32(')]
+assert 'AppleAnsDirectBouncePool(a);\n    return TRUE;' in passive, 'the pool outcome never fails initialisation'
 print('PASS bounce_wiring')
