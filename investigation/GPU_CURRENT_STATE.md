@@ -6888,3 +6888,26 @@ boot was run. The previous entry stays as written.
   each time. A permanent handling is open.
 - Tools kept as the emergency path: tools/ans_repair/ans_offline_recon.py and ans_offline_patch.py.
 - Bench downtime about two hours (17:00Z-18:00Z install to repair, incl. two bridge attempts).
+
+## UPDATE 2026-11-14T18:54Z - first operator confirmations: external display frame, keyboard backlight; Wi-Fi G3a
+
+- EXTERNAL DISPLAY (EXP2451, S1e2 flow, timing 1920x1200@60, colour 0xffff8000): the operator saw the orange frame
+  on the external monitor (photo in the evidence dir); internal panel unchanged. First visual confirmation; before
+  this only return codes. Side bars left/right of the frame: the display session infers monitor pillarboxing of
+  16:10 on a 21:9 panel from geometry (layer = timing size); the monitor's scaling setting was not checked. The
+  choice was capped by --max-width 1920; the native timing is not in the log. Staged, not run: TBX-S1e4 native mode
+  (m1n1 tbx/afk-apcall 3f6d03e8).
+- KEYBOARD BACKLIGHT (EXP2452, MUKBD003 + driver 3cfc5261): operator "Подсветка работает" + photo with the keys
+  lit under Windows. Registers matched all six steps (255/1/0/90/+1/-1). Per-step visible change was not stated by
+  the operator. Box verdict: works -> every-boot follow-up ordered as its own experiment (box2b package-everyboot,
+  Mu patch 41a3156b); the standard profile changes only after that passes. The bench certificate must then stay
+  trusted in the guest (reported to the user).
+- WI-FI G3a (EXP2450, m1n1 2a67ed6c + MUWIFI003): a Windows probe driver on 14E4:4425 read ChipId 0x4378 rev 3
+  through BAR0; BARs inside the bridge window, IRQ 695 assigned. G3b defined by the Wi-Fi session (G3B-BEFORE.md
+  d845088a...) as three single-variable runs: integrated image alone, INTx route alone, ISR connected. It can prove
+  only "connected and silent for 60 s"; delivery of an asserted INTx stays unproven until firmware runs (G4).
+  The ANS pcie_shutdown guard is not in the integrated image; accepted for G3b because no run calls pcie_shutdown
+  and the G3a reference had no guard either; guard integration is a later separate step.
+- SSD: pre-install gate script fixed for review findings G1-G5 (0691a44c...), run on the builder only. AppleAns
+  0.4.8.7 not installed; bench driver stays 0.4.8.3. restart-normal.sh now clears StartOverride before a reboot
+  (not yet measured on a boot).
