@@ -7236,3 +7236,18 @@ boot was run. The previous entry stays as written.
   power-setting experiment and any shipped power profile need the user's approval.
 - Consequence for the record: all CS numbers so far (and any single-thread-bound workload) were measured with the
   P cluster parked; GravityMark is not affected by placement (EXP2459/2460).
+
+## UPDATE 2026-11-15T12:54Z - EXP2478 (bugcheck display A1) and EXP2479 (AppleAns 0.4.8.7)
+
+- A1 (m1n1 b720890f = PD-1 + emergency doorbell + guest-surface digest; KMD 536f2357 unchanged): image valid -
+  perf gate PASS (GM +0.38 %, CS +0.01 %), doorbell dormant, digest 8.2 ms, reset timing unchanged. Deliberate
+  bugcheck 0xEF: the guest GOP surface digest is identical at pool registration and at reset (all black,
+  changed=0). The architect's hypothesis "Windows draws the stop screen into the GOP surface, unseen" is REFUTED:
+  without DxgkDdiSystemDisplayEnable/Write nothing is drawn there. A2 (the KMD DDIs using the doorbell) remains
+  the fix; its checkpoint expects changed=1 with non-black pixels.
+- AppleAns 0.4.8.7 (bounce fix for the unaligned write-through stall): boot 1 with the switch off PASS (behaves
+  as 0.4.8.3; pre-install gate 35/35; bridge rollback demonstrated first). Boot 2 with BounceEnable=1: no stall,
+  but 6 of 81 test combinations return wrong bytes to the caller for 2 MiB split reads into a misaligned buffer
+  (disk content correct, guards intact), with disk paging-error events during the test. REJECTED; rolled back
+  to 0.4.8.3 (canary OK, chkdsk clean). Cause analysis, RED test and fix are with the SSD session; independent
+  review before the next hardware run. The bench driver stays 0.4.8.3.
