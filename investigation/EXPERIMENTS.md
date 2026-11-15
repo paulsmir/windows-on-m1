@@ -80759,3 +80759,5 @@ EXP2490 HARDWARE BEFORE 2026-11-15T17:56:09Z:
 - Hashes: sys 7cef8c37ee99, UmdArm64 e1a34bacd879, UmdX64 dbc145ef105f, Umd32 28e5b8901492; manifest ee1280ce4aad, hardware-manifest af0aa082086d; probe2490.sh 810aad739bff (PROBE_LINT_OK); visible recovery rec2490h 279085315b571cbc; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
 - Recovery rec2490h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2490-kbdoff/run2490.sh.
+
+EXP2490 ACTUAL (2026-11-15 UTC): same boot recipe as EXP2489 with "shutdown /s /t 0" at 17:57:58Z after kbdblctl set 90 and so_clear: USB gone +3.3 s, proxy +11.4 s (bench m1n1: SYSTEM_OFF ends in reboot() like RESET). At the proxy PS 0x23B7001E0 = 0x00000244 (target 4, actual 4) -> FPWM unpowered, registers not read. Verdict: after a guest shutdown the keyboard PWM is off as well. Item 3 evidence: both ordered paths end with the FPWM1 domain at the iBoot state; the KB-OFF lamp look and the bugcheck case remain. AT_PROXY rec2490h follows.
