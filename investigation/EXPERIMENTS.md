@@ -80584,3 +80584,9 @@ EXP2478 HARDWARE BEFORE 2026-11-15T12:17:10Z:
 - Hashes: sys dc8a66e0dadc, UmdArm64 223733550561, UmdX64 a676346ad8dd, Umd32 9db63b8e8813; manifest 4fae5a361cbc, hardware-manifest aacc0d8f655e; probe2478.sh 18365330f267 (PROBE_LINT_OK); visible recovery rec2478h 5b95f27e6cd7943d; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
 - Recovery rec2478h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2478-a1/run2478.sh.
+
+EXP2478 ACTUAL (2026-11-15 UTC): LAUNCH_2478_STARTED a8dab6ec5, pipeline RC 0. Probe 12:18:58Z uptime 53 s, device OK, guest surface latched 2560x1600.
+- Perf gate PASS: GM w/r2 fps_frames 54.053/53.154, worst 47.185 (+0.38 %); CS warm 48.423, r2 52.238, r3 51.994 (+0.01 %), CS_MEM VALID. STOPS 0.
+- m1n1: exactly one "scanout: guest-surface register stats nonblack=0 hash=f65ba453b6c42325 rows=1600 us=8186"; no "scanout: emergency" line (the old KMD never rings 0x1c; CAP bit 10 caused no boot/present difference).
+- 0xEF trigger (kill-dcomlaunch2.ps1) 12:28:28Z: reset poller USB_GONE +8.9 s, PROXY_ANSWER +17.9 s (RST-2 timing); "BUGCHECK unknown-kernel base=0xfffff803f5000000"; "scanout: guest-surface reset stats changed=0 nonblack=0 hash=f65ba453b6c42325 base_hash=f65ba453b6c42325 base_nonblack=0 us=8187". full.log copied to evidence/full-at-reset.log before the AT_PROXY recovery (rec2478h).
+- Verdict: A1 instrument PASS (both digest lines, 8.2 ms each, no emergency path, perf unchanged, RST-2 return). Design item 2 mechanism REJECTED: Windows did not write the GOP/POST surface at bugcheck (unchanged and all black from the first REGISTER_POOL to the reset); consistent with the missing DxgkDdiSystemDisplayEnable/Write. Side observation: the GOP surface is already all black at the first REGISTER_POOL.
