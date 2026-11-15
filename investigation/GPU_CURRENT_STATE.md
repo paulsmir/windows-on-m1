@@ -7277,3 +7277,28 @@ boot was run. The previous entry stays as written.
 - Status: this pair + package line is the CANDIDATE bench standard. It becomes the standard after the operator's
   look at the panel in the disabled state (still outstanding); recovery/idle profile alignment follows as its own
   step. Until then BENCH-M1N1.json stays a6916e26 + MUKBD003.
+
+## UPDATE 2026-11-15T15:54Z - working order changed; AppleAns 0.4.8.9 matrix; keyboard slider fix; two boot-path incidents
+
+- WORKING ORDER (user, 2026-11-15): strictly one driver at a time, finished completely: keyboard backlight ->
+  external monitor -> Wi-Fi/Bluetooth -> the rest. One approved exception first: adopt AppleAns 0.4.8.9. Parked
+  with no bench slots: power-policy series (design ready, experiments approved), bugcheck display A2, perf-data
+  queries B2, candidate bench pair switch (needs the operator's panel look, still without a firm answer).
+- AppleAns 0.4.8.9 (waiting list instead of BUSY on bounce-pool exhaustion + review fixes), bench report: boot 1
+  PASS; boot 2 observe stage: single 2 MiB misaligned reads do not overflow the pool (waited +0), so the "17th
+  request" of EXP2479 was a resubmission; matrix SSDRW4_OK 270/270 (waited +645, behind +6634, direct 0), canary
+  OK; rolled back to 0.4.8.3 as planned. Adoption approved by the user, pending the bench's full report.
+- Keyboard: with diagnostic package D Windows sends LampArray range reports whose intensity is only 0 or 255
+  (colour 1,1,1): two states. With F1 (programmable lamp, level counts 255, level = max(R,G,B) x I / 255) the
+  reports carry graded intensity (25..213) and the operator sees a smooth change. F1 accepted; the maximum is
+  capped by the persisted user level 90 (F2 addresses it; not yet seen).
+- INCIDENTS (15:07Z and 15:45Z): the guest did not boot twice. Cause both times: Windows sets StartOverride=3 on
+  the boot-start storage driver that was not used in the running boot; the rollback's hidden cleanup boots on the
+  bridge (stornvme) path, and hand-run probe steps had skipped the clear-before-reboot step. First: stornvme
+  blocked -> bridge boot 0x7B (operator saw the stop screen; the old hidden-profile m1n1 prints no bugcheck line).
+  Second: AppleAns blocked -> ANS boot hang. Recon read-only: hive clean, ImagePath = 0.4.8.3. Recovery without a
+  host write (boot the unblocked path, clear, reboot). Required before further work: the clear step as a shared
+  function in every probe and a recover.sh preflight that refuses to boot a path whose driver is overridden.
+- External display cold plug at m1n1 start (TBX-S1f-b): SKIPPED/NO_DP - the port controller showed a USB data
+  connection without DP alternate mode at that moment (DATA_STATUS 0x71 vs 0x8571 in the working run);
+  inconclusive, belongs to the external-monitor phase.
