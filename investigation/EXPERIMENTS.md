@@ -80712,3 +80712,13 @@ EXP2487 HARDWARE BEFORE 2026-11-15T16:50:02Z:
 - Hashes: sys 58598936970b, UmdArm64 97863de14fa7, UmdX64 475d3fcbca0a, Umd32 6e485fc36b33; manifest 29d792af6dff, hardware-manifest 77f42d86314d; probe2487.sh 83ed8a7f1512 (PROBE_LINT_OK); visible recovery rec2487h bc9411e62b823d15; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
 - Recovery rec2487h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2487-socycle/run2487.sh.
+
+EXP2487 ACTUAL (2026-11-15 UTC): LAUNCH_2487_STARTED d1837954a, pipeline RC 0; recovery rec2487h (291-byte visible wrapper) RECOVERY_DONE 16:58:10Z.
+- Boundary table (Services\stornvme / Services\AppleAns StartOverride):
+  A recovery guest, launch-exp pre-launch so_clear: ABSENT / ABSENT, STARTOVERRIDE_CLEAR_OK.
+  B experiment boot (ANS) uptime 53 s: 3 / absent (written by this boot).
+  C end of probe2487: 3 / absent; probe-exit trap so_clear: "stornvme REMOVED was 0=3", CLEAR_OK.
+  D visible rollback (rec2487h/startoverride.txt): pre-restart ABSENT/ABSENT CLEAR_OK; pre-cleanup "stornvme REMOVED was 0=3" CLEAR_OK.
+  E final recovery boot on the ANS disk (NVMe APPLE SSD AP0256) uptime 135 s: 3 / absent - written by that boot; no startup task exists, so E documents the gap the task is meant to close, not a guard failure.
+- Startup task NOT created: (1) the documented command in ANSBOUNCE1/tools/startoverride-patch/STARTUP-TASK.md is invalid - schtasks: "The options /RI, /DU, /ST, /SD, /ET, /ED and /K are not applicable for the scheduled types: ONSTART, ONLOGON, ONIDLE, ONEVENT" (STARTUP-TASK.md needs correcting); (2) the architect-approved equivalent (PowerShell Register-ScheduledTask: AtStartup, Delay PT3M, Repetition PT10M for PT1H, SYSTEM highest, same action) was denied by the bench session's tool safety layer for a persistent SYSTEM task on the relayed approval; it needs the user's direct permission. Only C:\ProgramData\AppleAns\ansq-clear-startoverride.ps1 (84A0EA7D) is on the guest.
+- Verdict: guards CONFIRMED on hardware for a full recovery -> launch -> rollback cycle with no manual clear; the recovery runs on the ANS path again (rec2481h wrapper restored; prepare.sh guard prevents the overwrite).
