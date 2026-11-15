@@ -7133,3 +7133,18 @@ boot was run. The previous entry stays as written.
 - What remains for the +8 %: Windows' parking/heterogeneous policy on a platform without vendor power provisioning.
   The temporary parking discriminator (EXP2468) is held until the user approves a guest power-setting change; the
   documented OEM route would be a provisioning package (power settings), i.e. a platform deliverable, also his call.
+
+## UPDATE 2026-11-15T05:33Z - CPC-1 settled-idle comparison PASS (EXP2470/EXP2471); decision
+
+- Settled idle (uptime ~10 and ~15 min, two 5-minute windows per boot): bench pair and scale pair both show the P
+  cluster above ps1 in 0 % of samples, dram_fast 0, E mean 636 vs 634.5 MHz, desired writes within 2 %. The
+  EXP2469 borderline was a window artifact.
+- DECISION (architect): CPC-1 is ACCEPTED as a contract correction (class C: one performance scale for all
+  processors; validity, perf gate and idle all pass; no performance effect; it does not explain the placement).
+  It is NOT switched in on its own: the next bench image is to be one integration of the accepted m1n1 lines
+  (RST-2ABC base + PD-1 release fix 73571ca8 after the operator look + capacity scale 6f0a2646) with the matching
+  Mu (MUKBD003 + _CPC patch), validated as one pair with the perf gate. Until then the bench pair stays
+  a6916e26 + MUKBD003 2ef00a13.
+- CS placement on the E cluster: three architect hypotheses refuted tonight (harness priority, foreground, _CPC
+  scale). Open: Windows parking / heterogeneous policy without vendor provisioning - needs the user's approval for
+  any guest power-setting change, diagnostic or shipped.
