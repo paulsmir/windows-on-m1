@@ -7180,3 +7180,21 @@ boot was run. The previous entry stays as written.
 - DECISION: P1 is accepted into the next package line. Still open on the same lifecycle: post-display hand-back
   package P2 (pd/release-ddi 6d31b3f7e, needs the PD-1 m1n1 image + operator look), the 13 QueryAdapterInfo
   refusals per start that dxgkrnl logs as invalid NTSTATUS, SystemDisplayEnable/Write, panel geometry from data.
+
+## UPDATE 2026-11-15T08:24Z - offline: bugcheck display (C9) design + m1n1 step; QueryAdapterInfo plan; package line
+
+- Package line pkg/next b055a5eba = 536f2357 + P1 (restart sizing, validated EXP2475) + P2 (release-DDI contract,
+  not yet on hardware); gated and compile-gated. PD-1c (P2 on m1n1 38bf6e3f with the operator look) is staged in a
+  single operator sitting together with the keyboard slider and the external-display native-mode looks.
+- C9 bugcheck display (DISPLAY_ONLY; DxgkDdiSystemDisplayEnable/Write are mandatory and not registered). Hypothesis
+  from code: today Windows draws the stop screen into the boot GOP surface while the panel scans the broker pool,
+  so it is not visible. Design accepted in two single-variable steps. A1 (m1n1, implemented offline, not run):
+  gpu/scanout-emergency 80bbf3ce on PD-1, image b720890f - broker capability bit 10 + doorbell register 0x1c
+  (bounded emergency present of the guest surface in any broker state, terminal) and a guest-surface digest at
+  first pool registration and at PSCI reset, which tests the hypothesis with the current KMD. A2 (KMD): non-paged
+  mapping of the POST surface, Enable rings the doorbell with a bounded stall loop, Write is a clipped CPU blit.
+  The runs need a deliberate guest bugcheck and are scheduled only while the user is reachable.
+- QueryAdapterInfo: the 13 refusals per start (types 10, 15, 20, 24, 25, 26, 27, 36, 39) are the source of
+  dxgkrnl's "invalid NTSTATUS" messages by count (inference: the event names no DDI). Plan: B0 offline (which
+  statuses dxgkrnl accepts) -> B1 truthful answers for 26, 27 (strings from firmware data only), 39 -> B2 perf data
+  24/25 from existing samples with a perf gate; 10, 15, 20, 36 stay refused; no invented values.
