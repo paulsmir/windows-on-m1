@@ -1348,18 +1348,18 @@ AdmissionDdiSetVidPnSourceAddressWithMultiPlaneOverlay3(
   return status;
 }
 
+/* PD-1c (KMD-D2): the release contract lives with the scanout owner
+ * (scanout_windows.c AdmissionScanoutReleasePostDisplay): returned target is the
+ * active internal panel, the surface is cleared, then the shared stop path. */
 _Use_decl_annotations_ NTSTATUS
 AdmissionDdiStopDeviceAndReleasePostDisplayOwnership(
     PVOID MiniportDeviceContext, D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
     PDXGK_DISPLAY_INFORMATION DisplayInfo) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
 
-  if (context == NULL || DisplayInfo == NULL || TargetId != 0)
+  if (context == NULL || DisplayInfo == NULL)
     return STATUS_INVALID_PARAMETER;
-  if (context->PostDisplayInformation.Width == 0u)
-    return STATUS_NOT_SUPPORTED;
-  *DisplayInfo = context->PostDisplayInformation;
-  return AdmissionDdiStopDevice(context);
+  return AdmissionScanoutReleasePostDisplay(context, TargetId, DisplayInfo);
 }
 
 static VOID AdmissionDwmRecordCommit(

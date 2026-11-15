@@ -175,6 +175,7 @@
     <ClCompile Include="src\backend_image_windows.c" />
     <ClCompile Include="src\backend_platform_windows.c" />
     <ClCompile Include="src\scanout_windows.c" />
+    <ClCompile Include="src\post_display_windows.c" />
     <ClCompile Include="src\scheduler_windows.c" />
     <ClCompile Include="src\receipts.c" />
     <ClCompile Include="..\shared\src\apple_agx_wddm_feature_contract.c" />
