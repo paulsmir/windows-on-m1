@@ -1231,7 +1231,7 @@ static int AdmissionReadWow64Umd(PDEVICE_OBJECT PhysicalDeviceObject) {
 _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     HANDLE Adapter, const DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
-  NTSTATUS status = STATUS_NOT_SUPPORTED;
+  NTSTATUS status = STATUS_NOT_IMPLEMENTED;
   LONG drvCapsZeroed = 0;
   if (context == NULL || QueryAdapterInfo == NULL)
     return STATUS_INVALID_PARAMETER;
@@ -1308,7 +1308,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     APPLE_AGX_WDDM_FEATURE_CONTRACT_RESULT featureResult;
     if (QueryAdapterInfo->pOutputData == NULL ||
         QueryAdapterInfo->OutputDataSize < sizeof(*caps)) {
-      status = STATUS_BUFFER_TOO_SMALL;
+      status = STATUS_INVALID_PARAMETER;
     } else {
       caps = (DXGK_DRIVERCAPS *)QueryAdapterInfo->pOutputData;
       RtlZeroMemory(caps, sizeof(*caps));
@@ -1416,7 +1416,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         QueryAdapterInfo->InputDataSize < sizeof(*input) ||
         QueryAdapterInfo->pOutputData == NULL ||
         QueryAdapterInfo->OutputDataSize < sizeof(*caps)) {
-      status = STATUS_BUFFER_TOO_SMALL;
+      status = STATUS_INVALID_PARAMETER;
     } else {
       input = (const DXGK_QUERYGPUMMUCAPSIN *)QueryAdapterInfo->pInputData;
       caps = (DXGK_GPUMMUCAPS *)QueryAdapterInfo->pOutputData;
@@ -1458,7 +1458,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         QueryAdapterInfo->InputDataSize < sizeof(*input) ||
         QueryAdapterInfo->pOutputData == NULL ||
         QueryAdapterInfo->OutputDataSize < sizeof(*level)) {
-      status = STATUS_BUFFER_TOO_SMALL;
+      status = STATUS_INVALID_PARAMETER;
     } else {
       input = (const DXGK_QUERYPAGETABLELEVELDESCIN *)
           QueryAdapterInfo->pInputData;
@@ -1489,7 +1489,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     DXGK_WDDMDEVICECAPS *caps;
     if (QueryAdapterInfo->pOutputData == NULL ||
         QueryAdapterInfo->OutputDataSize < sizeof(*caps)) {
-      status = STATUS_BUFFER_TOO_SMALL;
+      status = STATUS_INVALID_PARAMETER;
     } else {
       caps = (DXGK_WDDMDEVICECAPS *)QueryAdapterInfo->pOutputData;
       RtlZeroMemory(caps, sizeof(*caps));
@@ -1620,7 +1620,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
       break;
     }
     if (model.MmuCount != 0u && output->MmuDescriptors == NULL) {
-      status = STATUS_BUFFER_TOO_SMALL;
+      status = STATUS_INVALID_PARAMETER;
       break;
     }
 #endif
@@ -1645,7 +1645,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     DXGK_PHYSICAL_MEMORY_CAPS *physicalMemoryCaps;
     if (QueryAdapterInfo->pOutputData == NULL ||
         QueryAdapterInfo->OutputDataSize < sizeof(*physicalMemoryCaps)) {
-      status = STATUS_BUFFER_TOO_SMALL;
+      status = STATUS_INVALID_PARAMETER;
     } else {
       physicalMemoryCaps =
           (DXGK_PHYSICAL_MEMORY_CAPS *)QueryAdapterInfo->pOutputData;
@@ -1660,7 +1660,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     DXGK_IOMMU_CAPS *iommuCaps;
     if (QueryAdapterInfo->pOutputData == NULL ||
         QueryAdapterInfo->OutputDataSize < sizeof(*iommuCaps)) {
-      status = STATUS_BUFFER_TOO_SMALL;
+      status = STATUS_INVALID_PARAMETER;
     } else {
       iommuCaps = (DXGK_IOMMU_CAPS *)QueryAdapterInfo->pOutputData;
       RtlZeroMemory(iommuCaps, sizeof(*iommuCaps));
@@ -1674,7 +1674,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     DXGK_64_BIT_ONLY_CAPS *only64Caps;
     if (QueryAdapterInfo->pOutputData == NULL ||
         QueryAdapterInfo->OutputDataSize < sizeof(*only64Caps)) {
-      status = STATUS_BUFFER_TOO_SMALL;
+      status = STATUS_INVALID_PARAMETER;
     } else {
       only64Caps = (DXGK_64_BIT_ONLY_CAPS *)QueryAdapterInfo->pOutputData;
       RtlZeroMemory(only64Caps, sizeof(*only64Caps));
@@ -1690,7 +1690,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     DXGK_DISPLAY_DRIVERCAPS_EXTENSION *displayCaps;
     if (QueryAdapterInfo->pOutputData == NULL ||
         QueryAdapterInfo->OutputDataSize < sizeof(*displayCaps)) {
-      status = STATUS_BUFFER_TOO_SMALL;
+      status = STATUS_INVALID_PARAMETER;
     } else {
       displayCaps = (DXGK_DISPLAY_DRIVERCAPS_EXTENSION *)
           QueryAdapterInfo->pOutputData;
@@ -1700,8 +1700,49 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     break;
   }
 
+  /* B1 (BUGCHECK-QAI design B): truthful perf-data caps. AGX has no fan
+   * (MaxFanRPM 0), no PCIe link (MaxPCIEBandwidth 0) and no memory-bandwidth
+   * counter (MaxMemoryBandwidth 0). TemperatureMax/Warning stay 0 until an
+   * ADT thermal source is identified (named limitation, design table). */
+  case DXGKQAITYPE_ADAPTERPERFDATA_CAPS: {
+    DXGK_ADAPTER_PERFDATACAPS *perfCaps;
+    if (QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*perfCaps)) {
+      status = STATUS_INVALID_PARAMETER;
+    } else {
+      perfCaps = (DXGK_ADAPTER_PERFDATACAPS *)QueryAdapterInfo->pOutputData;
+      RtlZeroMemory(perfCaps, sizeof(*perfCaps));
+      status = STATUS_SUCCESS;
+    }
+    break;
+  }
+
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM3_2)
+  /* B1: the KMD implements no dirty-bit tracking (no CreateMemoryBasis /
+   * QueryDirtyBitData DDIs), so Supported = Performant = 0 is the truth.
+   * The type exists from DXGKDDI_INTERFACE_VERSION_WDDM3_2 (d3dkmddi.h). */
+  case DXGKQAITYPE_DIRTYBITTRACKINGCAPS: {
+    DXGK_DIRTY_BIT_TRACKING_CAPS *dirtyCaps;
+    if (QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*dirtyCaps)) {
+      status = STATUS_INVALID_PARAMETER;
+    } else {
+      dirtyCaps = (DXGK_DIRTY_BIT_TRACKING_CAPS *)QueryAdapterInfo->pOutputData;
+      dirtyCaps->Value = 0u;
+      status = STATUS_SUCCESS;
+    }
+    break;
+  }
+#endif
+
+  /* B0 (dxgkrnl 10.0.26100.9974, DXGADAPTER::DdiQueryAdapterInfo+0x1b8):
+   * dxgkrnl accepts only STATUS_SUCCESS, STATUS_NOT_IMPLEMENTED,
+   * STATUS_INVALID_PARAMETER and STATUS_NO_MEMORY from this DDI; any other
+   * status logs "Driver returned an invalid NTSTATUS code" per call. An
+   * unimplemented type answers STATUS_NOT_IMPLEMENTED and a short output
+   * buffer STATUS_INVALID_PARAMETER (documented parameter error). */
   default:
-    status = STATUS_NOT_SUPPORTED;
+    status = STATUS_NOT_IMPLEMENTED;
     break;
   }
   AdmissionRecordQuery(context->PhysicalDeviceObject, QueryAdapterInfo->Type,
