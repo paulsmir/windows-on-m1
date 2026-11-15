@@ -7264,3 +7264,16 @@ boot was run. The previous entry stays as written.
   perf data 24/25 (own run with perf gate).
 - AppleAns: 0.4.8.8 (waiting list instead of BUSY on bounce-pool exhaustion) is built by the SSD session and is
   under independent review; not installed.
+
+## UPDATE 2026-11-15T13:55Z - EXP2481: integration gate of the candidate bench pair PASS
+
+- m1n1 gpu/bench-int 54c329a4 (ecc084da + PD-1 + CPPC capacity scale + emergency doorbell), built with the scale
+  flag = image 6a9c2435 (flag-off build is bit-identical to the A1 image b720890f) + Mu MUCPC001 d9fe3a34 +
+  package pkg/next 04fe217c2 (536f2357 + P1 restart sizing + P2 release DDI + B1 QueryAdapterInfo).
+- Validity lines present (capacity scale 418..1439; guest-surface digest; doorbell dormant). Perf gate PASS: GM
+  worst 47.432 (+0.90 %), CS r2 52.510 / r3 52.755 (+1.00 %). Disable/enable cycle: release DDI called (Caller 26,
+  target 0, fill 0.4 ms), m1n1 released to the guest surface, enable OK with presents resuming (restart sizing).
+  Ordered reboot timing as before.
+- Status: this pair + package line is the CANDIDATE bench standard. It becomes the standard after the operator's
+  look at the panel in the disabled state (still outstanding); recovery/idle profile alignment follows as its own
+  step. Until then BENCH-M1N1.json stays a6916e26 + MUKBD003.
