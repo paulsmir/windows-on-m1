@@ -83,6 +83,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateDevice(
   }
 #endif
   Args->hDevice = device;
+  /* KMD-D1: a user-mode (non-system) device exists only after dxgkrnl finished
+   * starting this adapter, i.e. after VidMm budgeted it: confirm once. */
+  if ((flags & ADMISSION_DEVICE_SYSTEM) == 0u)
+    AdmissionMemoryPoolRestartConfirm(adapter);
   return STATUS_SUCCESS;
 }
 

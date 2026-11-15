@@ -389,3 +389,68 @@ void AdmissionPoolPressureDone(ADMISSION_POOL_PRESSURE *Pressure,
     Pressure->FastFailUntilMs = NowMs + ADMISSION_POOL_PRESSURE_FAST_FAIL_MS;
   }
 }
+
+unsigned long long AdmissionPoolDemandRestartBytes(
+    unsigned long long SegmentBytes, unsigned long long ShareBytes,
+    unsigned long long PreviousBytes) {
+  unsigned long long cap;
+  if (PreviousBytes == 0u) return SegmentBytes;
+  if (ShareBytes <= PreviousBytes ||
+      ShareBytes - PreviousBytes <= ADMISSION_POOL_POLICY_SEGMENT_MARGIN)
+    return 0u;
+  cap = ShareBytes - PreviousBytes - ADMISSION_POOL_POLICY_SEGMENT_MARGIN;
+  cap -= cap % ADMISSION_POOL_DEMAND_SIZE_STEP;
+  if (SegmentBytes < cap) cap = SegmentBytes;
+  return cap < ADMISSION_POOL_DEMAND_MIN_BYTES ? 0u : cap;
+}
+
+/* KMD-D1: previous-instance record (see render_pool_demand.h). */
+static int AdmissionPoolRestartUsable(const ADMISSION_POOL_RESTART_RECORD *Record,
+                                      int Valid, unsigned long long ShareBytes) {
+  return Record != 0 && Valid &&
+         Record->Version == ADMISSION_POOL_RESTART_RECORD_VERSION &&
+         Record->Bytes == (unsigned int)sizeof(*Record) &&
+         Record->ShareBytes == ShareBytes;
+}
+
+unsigned long long AdmissionPoolRestartPrevious(
+    const ADMISSION_POOL_RESTART_RECORD *Record, int Valid,
+    unsigned long long ShareBytes, unsigned long long BaseBytes) {
+  if (Record == 0) return 0u;
+  if (!AdmissionPoolRestartUsable(Record, Valid, ShareBytes)) return BaseBytes;
+  return Record->ConfirmedBytes > Record->UnconfirmedMaxBytes
+             ? Record->ConfirmedBytes : Record->UnconfirmedMaxBytes;
+}
+
+void AdmissionPoolRestartOnStart(ADMISSION_POOL_RESTART_RECORD *Record,
+                                 unsigned int State, unsigned long long ShareBytes,
+                                 unsigned long long BaseBytes,
+                                 unsigned long long Chosen) {
+  if (Record == 0) return;
+  if (!AdmissionPoolRestartUsable(Record, State == ADMISSION_POOL_RESTART_VALID,
+                                  ShareBytes)) {
+    Record->Version = ADMISSION_POOL_RESTART_RECORD_VERSION;
+    Record->Bytes = (unsigned int)sizeof(*Record);
+    Record->ShareBytes = ShareBytes;
+    Record->ConfirmedBytes = 0u;
+    /* A present but unusable record hid the last budgeted size: keep the
+     * conservative base as a floor until an instance confirms. */
+    Record->UnconfirmedMaxBytes =
+        State == ADMISSION_POOL_RESTART_ABSENT ? 0u : BaseBytes;
+    Record->Instances = 0u;
+    Record->UnconfirmedStarts = 0u;
+  }
+  Record->BaseBytes = BaseBytes;
+  if (Chosen > Record->UnconfirmedMaxBytes) Record->UnconfirmedMaxBytes = Chosen;
+  ++Record->Instances;
+  ++Record->UnconfirmedStarts;
+}
+
+void AdmissionPoolRestartOnConfirm(ADMISSION_POOL_RESTART_RECORD *Record,
+                                   unsigned long long Own) {
+  if (Record == 0 || Record->Version != ADMISSION_POOL_RESTART_RECORD_VERSION)
+    return;
+  Record->ConfirmedBytes = Own;
+  Record->UnconfirmedMaxBytes = 0u;
+  Record->UnconfirmedStarts = 0u;
+}

@@ -1849,6 +1849,137 @@ static BOOLEAN AdmissionSysmemShadowRequested(ADMISSION_CONTEXT *Context) {
   return enabled;
 }
 
+/* KMD-D1 (A5-F1b): previous-instance record in the VOLATILE subkey
+ * Wom1PoolRestart of the device hardware key (gone after a reboot, exactly like
+ * dxgmms2's in-memory limit; kept across a driver update). PASSIVE_LEVEL. */
+#define ADMISSION_POOL_RESTART_KEY L"Wom1PoolRestart"
+#define ADMISSION_POOL_RESTART_VALUE L"Record"
+typedef struct _ADMISSION_POOL_RESTART_RECEIPT {
+  ULONG Version, Bytes, RecordState, WriteStatus;
+  ULONGLONG ShareBytes, ConfirmedBefore, UnconfirmedBefore, PreviousBytes;
+  ULONGLONG BaseBytes, ChosenBytes;
+  ULONG Instances, UnconfirmedStarts;
+  LONGLONG ConfirmQpc;
+} ADMISSION_POOL_RESTART_RECEIPT;
+
+static NTSTATUS AdmissionPoolRestartOpen(ADMISSION_CONTEXT *Context,
+                                         BOOLEAN Create, HANDLE *Sub) {
+  HANDLE dev = NULL;
+  UNICODE_STRING name;
+  OBJECT_ATTRIBUTES attrs;
+  NTSTATUS status;
+  *Sub = NULL;
+  if (Context->PhysicalDeviceObject == NULL) return STATUS_INVALID_DEVICE_STATE;
+  status = IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+      PLUGPLAY_REGKEY_DEVICE,
+      KEY_CREATE_SUB_KEY | KEY_QUERY_VALUE | KEY_SET_VALUE, &dev);
+  if (!NT_SUCCESS(status)) return status;
+  RtlInitUnicodeString(&name, ADMISSION_POOL_RESTART_KEY);
+  InitializeObjectAttributes(&attrs, &name,
+                             OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, dev, NULL);
+  if (Create)
+    status = ZwCreateKey(Sub, KEY_QUERY_VALUE | KEY_SET_VALUE, &attrs, 0, NULL,
+                         REG_OPTION_VOLATILE, NULL);
+  else
+    status = ZwOpenKey(Sub, KEY_QUERY_VALUE, &attrs);
+  ZwClose(dev);
+  return status;
+}
+
+/* 0 absent, 1 valid, 2 corrupt (present with the wrong type or size). */
+static ULONG AdmissionPoolRestartRead(ADMISSION_CONTEXT *Context,
+                                      ADMISSION_POOL_RESTART_RECORD *Record) {
+  HANDLE sub = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u, state = 0u;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) +
+                 sizeof(ADMISSION_POOL_RESTART_RECORD)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value = (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  NTSTATUS status;
+  RtlZeroMemory(Record, sizeof(*Record));
+  if (!NT_SUCCESS(AdmissionPoolRestartOpen(Context, FALSE, &sub))) return 0u;
+  RtlInitUnicodeString(&name, ADMISSION_POOL_RESTART_VALUE);
+  status = ZwQueryValueKey(sub, &name, KeyValuePartialInformation, value,
+                           sizeof(data.Buffer), &bytes);
+  if (status == STATUS_OBJECT_NAME_NOT_FOUND) {
+    state = 0u;
+  } else if (NT_SUCCESS(status) && value->Type == REG_BINARY &&
+             value->DataLength == sizeof(*Record)) {
+    RtlCopyMemory(Record, value->Data, sizeof(*Record));
+    state = 1u;
+  } else {
+    state = 2u;
+  }
+  ZwClose(sub);
+  return state;
+}
+
+static NTSTATUS AdmissionPoolRestartWrite(ADMISSION_CONTEXT *Context,
+    const ADMISSION_POOL_RESTART_RECORD *Record) {
+  HANDLE sub = NULL;
+  UNICODE_STRING name;
+  NTSTATUS status = AdmissionPoolRestartOpen(Context, TRUE, &sub);
+  if (!NT_SUCCESS(status)) return status;
+  RtlInitUnicodeString(&name, ADMISSION_POOL_RESTART_VALUE);
+  status = ZwSetValueKey(sub, &name, 0, REG_BINARY, (PVOID)Record,
+                         (ULONG)sizeof(*Record));
+  ZwClose(sub);
+  return status;
+}
+
+/* Non-volatile receipt Wom1PoolRestart in the device key. */
+static VOID AdmissionPoolRestartReceipt(ADMISSION_CONTEXT *Context,
+    const ADMISSION_POOL_RESTART_RECORD *Before,
+    const ADMISSION_POOL_RESTART_RECORD *After, ULONGLONG Chosen,
+    NTSTATUS WriteStatus, LONGLONG ConfirmQpc) {
+  ADMISSION_POOL_RESTART_RECEIPT receipt;
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = (ULONG)sizeof(receipt);
+  receipt.RecordState = Context->PoolRestartState;
+  receipt.WriteStatus = (ULONG)WriteStatus;
+  receipt.ShareBytes = Context->PoolRestartShare;
+  receipt.ConfirmedBefore = Before->ConfirmedBytes;
+  receipt.UnconfirmedBefore = Before->UnconfirmedMaxBytes;
+  receipt.PreviousBytes = Context->PoolRestartPrevious;
+  receipt.BaseBytes = Context->PoolRestartBase;
+  receipt.ChosenBytes = Chosen;
+  receipt.Instances = After->Instances;
+  receipt.UnconfirmedStarts = After->UnconfirmedStarts;
+  receipt.ConfirmQpc = ConfirmQpc;
+  if (Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
+    return;
+  RtlInitUnicodeString(&name, L"Wom1PoolRestart");
+  (void)ZwSetValueKey(key, &name, 0, REG_BINARY, &receipt, (ULONG)sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ VOID AdmissionMemoryPoolRestartConfirm(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_POOL_RESTART_RECORD before, after;
+  ULONG state;
+  NTSTATUS status;
+  if (Context == NULL || Context->PoolBytes == 0ULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedCompareExchange(&Context->PoolRestartConfirmed, 1, 0) != 0)
+    return;
+  state = AdmissionPoolRestartRead(Context, &before);
+  after = before;
+  if (state != 1u) return; /* the start write failed or the record is gone */
+  AdmissionPoolRestartOnConfirm(&after, Context->PoolBytes);
+  status = AdmissionPoolRestartWrite(Context, &after);
+  AdmissionPoolRestartReceipt(Context, &before, &after, Context->PoolBytes,
+                              status, KeQueryPerformanceCounter(NULL).QuadPart);
+}
+
 /* An empty segment over the window, sized for this machine (M2-f4a), with
  * an optional smaller residency bound. FALSE leaves no state behind. */
 static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
@@ -1865,6 +1996,9 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   ULONG policyFlags = 0u, percent;
   ULONGLONG share, baseBytes, bytes, count;
   PHYSICAL_ADDRESS base;
+  ADMISSION_POOL_RESTART_RECORD restartBefore, restartAfter;
+  ULONG restartState;
+  NTSTATUS restartWrite;
   /* rc109: the machine policy VidMm enforces bounds Wom1PoolPercent; the
    * default formula alone (the kill switch) gives the base size. */
   AdmissionPoolGraphicsPolicyRead(&policy, &policyFlags);
@@ -1875,6 +2009,18 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   bytes = AdmissionPoolSegmentBytesShare(ram, Window->RequestedBytes,
       Context->PoolBrokerBytes, halfSize, threeQuarter, reserve, share);
   if (bytes < baseBytes) baseBytes = bytes; /* a lowered machine policy */
+  /* KMD-D1: an in-boot restart sizes against the previous instance. */
+  restartState = AdmissionPoolRestartRead(Context, &restartBefore);
+  Context->PoolRestartState = restartState;
+  Context->PoolRestartShare = share;
+  Context->PoolRestartBase = bytes;
+  Context->PoolRestartPrevious = AdmissionPoolRestartPrevious(
+      restartState == 0u ? NULL : &restartBefore, restartState == 1u, share,
+      bytes);
+  Context->PoolRestartConfirmed = 0;
+  bytes = AdmissionPoolDemandRestartBytes(bytes, share,
+                                          Context->PoolRestartPrevious);
+  if (bytes < baseBytes) baseBytes = bytes;
   count = bytes / ADMISSION_POOL_DEMAND_GRANULE;
   if (bytes == 0ULL) {
     Window->Status = ADMISSION_POOL_WINDOW_DEMAND_TOO_SMALL;
@@ -1952,6 +2098,16 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
   Window->Status = ADMISSION_POOL_WINDOW_DEMAND;
   Window->RequestedBytes = bytes;
   Window->ObtainedBytes = 0ULL;
+  /* KMD-D1: raise UnconfirmedMax before StartDevice returns, i.e. before the
+   * QUERYSEGMENT4 answer VidMm budgets. A failed write is today's behaviour
+   * for the next start (absent record) and is recorded. */
+  restartAfter = restartBefore;
+  AdmissionPoolRestartOnStart(&restartAfter, restartState, share,
+                              Context->PoolRestartBase, bytes);
+  restartWrite = AdmissionPoolRestartWrite(Context, &restartAfter);
+  if (!NT_SUCCESS(restartWrite)) Context->PoolRestartState = 3u;
+  AdmissionPoolRestartReceipt(Context, &restartBefore, &restartAfter, bytes,
+                              restartWrite, 0);
   return TRUE;
 }
 

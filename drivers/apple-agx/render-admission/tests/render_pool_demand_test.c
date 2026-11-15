@@ -504,6 +504,150 @@ static void test_graphics_policy(void)
                ADMISSION_POOL_DEMAND_APERTURE_RESERVE, 0) == GiB);
 }
 
+/* A5-F1: VidMm's in-boot dedicated-memory limit as observed (EXP2459: boot
+ * 4 GiB, restart 1 4 GiB OK, restart 2 4 GiB 0xC0000017; EXP2461: 2 GiB x 4
+ * OK). BootWrites selects whether the boot-time instance also lowers the limit
+ * (the architect's disassembly reading) or only restarted instances do (what
+ * EXP2459 shows); the restart rule must start every instance under both. */
+typedef struct {
+    unsigned long long Share, Limit;
+    int BootWrites;
+} VIDMM_MODEL;
+
+static int vidmm_start(VIDMM_MODEL *m, unsigned long long seg, int boot)
+{
+    if (seg + ADMISSION_POOL_POLICY_SEGMENT_MARGIN > m->Limit)
+        return 0; /* "Driver dedicated too much system memory for video" */
+    if (!boot || m->BootWrites)
+        m->Limit = m->Share - seg;
+    return 1;
+}
+
+/* Starts the boot instance and Restarts restarted ones with the driver rule;
+ * returns how many instances started, sizes in Sizes[0..]. */
+static unsigned run_boot(int boot_writes, unsigned long long share,
+                         unsigned long long base, unsigned restarts,
+                         int use_rule, unsigned long long *sizes)
+{
+    VIDMM_MODEL m = {share, share, boot_writes};
+    unsigned long long previous = 0; /* boot-stamped device-key record */
+    unsigned started = 0;
+    for (unsigned i = 0; i <= restarts; ++i) {
+        unsigned long long seg = use_rule
+            ? AdmissionPoolDemandRestartBytes(base, share, previous) : base;
+        sizes[i] = seg;
+        if (!vidmm_start(&m, seg, i == 0))
+            continue;
+        ++started;
+        previous = seg;
+    }
+    return started;
+}
+
+static void test_restart_segment_rule(void)
+{
+    const unsigned long long MiB = 1ULL << 20, GiB = 1ULL << 30;
+    const unsigned long long share = 5016 * MiB; /* bench: 4.898 GiB */
+    unsigned long long sizes[8];
+    /* The model reproduces the hardware without a restart rule. */
+    assert(run_boot(0, share, 4 * GiB, 2, 0, sizes) == 2);  /* EXP2459 */
+    assert(run_boot(0, share, 2 * GiB, 3, 0, sizes) == 4);  /* EXP2461 */
+    /* The rule: first start keeps the size; then the pair fits the share. */
+    assert(AdmissionPoolDemandRestartBytes(4 * GiB, share, 0) == 4 * GiB);
+    assert(AdmissionPoolDemandRestartBytes(4 * GiB, share, 4 * GiB) ==
+           (share - 4 * GiB - ADMISSION_POOL_POLICY_SEGMENT_MARGIN) /
+               ADMISSION_POOL_DEMAND_SIZE_STEP * ADMISSION_POOL_DEMAND_SIZE_STEP);
+    assert(AdmissionPoolDemandRestartBytes(4 * GiB, share, 832 * MiB) == 4 * GiB);
+    assert(AdmissionPoolDemandRestartBytes(2 * GiB, share, 2 * GiB) == 2 * GiB);
+    /* Too little left: no pool rather than a refused adapter. */
+    assert(AdmissionPoolDemandRestartBytes(4 * GiB, share, share) == 0);
+    assert(AdmissionPoolDemandRestartBytes(4 * GiB, share, share - 200 * MiB) == 0);
+    assert(AdmissionPoolDemandRestartBytes(0, share, 4 * GiB) == 0);
+    /* Every instance of a boot starts under both readings of VidMm. */
+    for (int boot_writes = 0; boot_writes <= 1; ++boot_writes) {
+        assert(run_boot(boot_writes, share, 4 * GiB, 7, 1, sizes) == 8);
+        for (unsigned i = 1; i < 8; ++i)
+            assert(sizes[i] == 0 ||
+                   sizes[i] + sizes[i - 1] + ADMISSION_POOL_POLICY_SEGMENT_MARGIN <= share);
+    }
+}
+
+/* KMD-D1 T2: the previous-instance record under failure injection. Kinds:
+ * 0 normal (budgeted, confirmed); 1 fails before its record write and before
+ * VidMm budgets it; 2 budgeted by VidMm, then fails (never confirmed);
+ * 3 budgeted, runs, confirmation never arrives; 4 the record is corrupt when this
+ * instance starts; 5 corrupt record and the instance fails between its record
+ * write and VidMm's budget. Every instance not of kind 1 or 5 must pass VidMm's limit, and
+ * Previous must never be below the size VidMm last budgeted. */
+static unsigned run_record(int boot_writes, unsigned long long share,
+                           unsigned long long base, const int *kinds,
+                           unsigned count)
+{
+    VIDMM_MODEL m = {share, share, boot_writes};
+    ADMISSION_POOL_RESTART_RECORD rec;
+    int present = 0, valid = 0;
+    unsigned long long last_budget = 0;
+    unsigned started = 0;
+    memset(&rec, 0, sizeof(rec));
+    for (unsigned i = 0; i < count; ++i) {
+        unsigned long long prev, seg;
+        if ((kinds[i] == 4 || kinds[i] == 5) && present) valid = 0; /* corrupt */
+        prev = AdmissionPoolRestartPrevious(present ? &rec : 0, valid, share, base);
+        assert(prev >= last_budget);
+        seg = AdmissionPoolDemandRestartBytes(base, share, prev);
+        if (kinds[i] == 1) continue;  /* failed before the record write */
+        AdmissionPoolRestartOnStart(&rec, !present ? ADMISSION_POOL_RESTART_ABSENT :
+                                    valid ? ADMISSION_POOL_RESTART_VALID :
+                                    ADMISSION_POOL_RESTART_CORRUPT, share, base, seg);
+        present = 1; valid = 1;
+        if (kinds[i] == 5) continue; /* fails between the record write and the budget */
+        if (!vidmm_start(&m, seg, i == 0)) {
+            assert(0 && "instance refused by VidMm");
+        }
+        last_budget = (i == 0 && !boot_writes) ? last_budget : seg;
+        ++started;
+        if (kinds[i] == 0 || kinds[i] == 4)
+            AdmissionPoolRestartOnConfirm(&rec, seg);
+    }
+    return started;
+}
+
+static void test_restart_record_state_machine(void)
+{
+    const unsigned long long MiB = 1ULL << 20, GiB = 1ULL << 30;
+    const unsigned long long share = 5016 * MiB;
+    static const int normal[16] = {0};
+    static const int faults[16] = {0, 2, 0, 3, 3, 0, 1, 0, 2, 2, 4, 0, 3, 1, 4, 0};
+    static const int tail[16] = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3};
+    static const int corrupt_gap[16] = {0, 0, 3, 5, 0, 2, 5, 3, 0, 5, 5, 0, 3, 4, 0, 0};
+    ADMISSION_POOL_RESTART_RECORD r;
+    for (int bw = 0; bw <= 1; ++bw) {
+        assert(run_record(bw, share, 4 * GiB, normal, 16) == 16);
+        assert(run_record(bw, share, 4 * GiB, faults, 16) == 14);
+        assert(run_record(bw, share, 4 * GiB, tail, 16) == 16);
+        assert(run_record(bw, share, 4 * GiB, corrupt_gap, 16) == 12);
+    }
+    /* Pure-function edges. */
+    memset(&r, 0, sizeof(r));
+    assert(AdmissionPoolRestartPrevious(0, 0, share, 4 * GiB) == 0);
+    AdmissionPoolRestartOnStart(&r, ADMISSION_POOL_RESTART_ABSENT, share, 4 * GiB, 4 * GiB);
+    assert(r.Version == ADMISSION_POOL_RESTART_RECORD_VERSION && r.Bytes == sizeof(r));
+    assert(r.Instances == 1 && r.UnconfirmedStarts == 1 && r.UnconfirmedMaxBytes == 4 * GiB);
+    assert(AdmissionPoolRestartPrevious(&r, 1, share, 4 * GiB) == 4 * GiB);
+    AdmissionPoolRestartOnConfirm(&r, 4 * GiB);
+    assert(r.ConfirmedBytes == 4 * GiB && r.UnconfirmedMaxBytes == 0 && r.UnconfirmedStarts == 0);
+    AdmissionPoolRestartOnStart(&r, ADMISSION_POOL_RESTART_VALID, share, 4 * GiB, 832 * MiB);
+    assert(AdmissionPoolRestartPrevious(&r, 1, share, 4 * GiB) == 4 * GiB); /* max */
+    assert(AdmissionPoolRestartPrevious(&r, 0, share, 4 * GiB) == 4 * GiB); /* corrupt -> base */
+    assert(AdmissionPoolRestartPrevious(&r, 1, share + MiB, 3 * GiB) == 3 * GiB); /* share changed */
+    r.Version = 2;
+    assert(AdmissionPoolRestartPrevious(&r, 1, share, 3 * GiB) == 3 * GiB);
+    /* Corrupt record replaced: the fresh record keeps the base as a floor. */
+    AdmissionPoolRestartOnStart(&r, ADMISSION_POOL_RESTART_CORRUPT, share, 4 * GiB, 832 * MiB);
+    assert(r.Version == ADMISSION_POOL_RESTART_RECORD_VERSION && r.UnconfirmedMaxBytes == 4 * GiB);
+    assert(r.BaseBytes == 4 * GiB && r.Instances == 1);
+}
+
 int main(void)
 {
     test_large_placement_backs_the_tail();
@@ -521,5 +665,7 @@ int main(void)
     test_reuse_between_passes_restarts_the_clock();
     test_segment_size();
     test_graphics_policy();
+    test_restart_segment_rule();
+    test_restart_record_state_machine();
     return 0;
 }
