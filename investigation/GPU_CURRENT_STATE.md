@@ -7411,3 +7411,15 @@ word within 5 s. Boot kept up for a driver swap. Next causal target (Wi-Fi sessi
 compare of the downloaded image (also validates the trap for bulk writes), activation sequence against
 brcmfmac, firmware/NVRAM form and variant. Owed for a production driver: the trap is a bring-up mechanism;
 the end state needs a posted guest mapping or an equivalent without per-access traps (design open).
+
+UPDATE 2026-11-15T22:59Z (architect): Wi-Fi firmware start (S5) still fails after five swaps in the EXP2502
+boot. Proven: image, NVRAM and seed footer are byte-exact in TCM through the trapped write path (EXP2507); CR4
+runs after release; the firmware initialises its data, logs an arena-init event at 82 ms and stops at 83 ms with
+"RO overwritten <return address>" (ROM stack-guard check; the guard word is re-seeded while a guarded frame is
+live; EXP2508). Excluded: footer/NVRAM arithmetic, guard taken verbatim from our seed (EXP2509), endpoint link PM
+(EXP2510), OTP read order (EXP2511), poll path, BAR0 window, firmware/NVRAM file selection (shikoku X3, B1).
+Three predictions failed, so single guesses on the Windows side stop. WHY CHANGE OF METHOD: the remaining causes
+split into "state added by Windows/probe/trap" versus "below the OS (m1n1 bring-up, firmware generation, host
+contract)". Next causal target: a reference download from the m1n1 proxy without a guest (1:1 port of the
+brcmfmac sequence) with variants (with seed / without seed / trailer forms). Leading hypothesis: the firmware
+does not accept our seed buffer. Known difference from all Asahi installs: firmware taken from macOS 15.7.8.
