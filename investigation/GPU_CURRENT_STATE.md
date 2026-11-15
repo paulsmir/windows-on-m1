@@ -7217,3 +7217,22 @@ boot was run. The previous entry stays as written.
 - B0 (offline, dxgkrnl 10.0.26100.9974 disassembly): after DxgkDdiQueryAdapterInfo dxgkrnl accepts only SUCCESS,
   NOT_IMPLEMENTED, INVALID_PARAMETER, NO_MEMORY; any other status logs "invalid NTSTATUS" per call, without rate
   limit. B1 (answers for types 26, 39; NOT_IMPLEMENTED for unimplemented types) is being gated offline.
+
+## UPDATE 2026-11-15T12:12Z - EXP2468: core parking CONFIRMED as the cause of CS on the E cluster (+9.6 %)
+
+- One boot, bench pair a6916e26 + MUKBD003, package 536f2357, harness unchanged, unpinned. Control 51.718 /
+  51.741 fps (P parking 0.93-1.00, P ~664 MHz, P ps 1, dram_fast 0). With the temporary power setting
+  CPMINCORES1 = 100 (approved by the user for one run): 56.706 / 56.762 fps = +9.6 % (P parking 0.00, work on
+  cores 4-7, P 2865-2892 MHz, P ps 12, dram_fast 1, E busy <= 10 %). After the verified restore
+  (PARKING_SETTING_RESTORED, values byte-equal to the saved ones) 51.891 with P parked again.
+- Verdict: reading (A) - Windows' parking of the class-1 cores is the mechanism; once they are unparked the
+  scheduler moves the thread by itself. Refuted earlier for this effect: harness priority, foreground state, _CPC
+  scale. The +9.6 % includes the DRAM fast mode that follows the P-cluster frequency.
+- This is NOT a fix: CPMINCORES1 = 100 keeps the P cores unparked always (idle power cost not measured). The
+  owning layer is platform power provisioning (this machine ships none; Microsoft documents heterogeneous
+  thresholds and core-parking settings as vendor-provided). Open design: which documented settings make the P
+  cores unpark under a single busy thread yet park at idle, how they are delivered (provisioning package with the
+  platform installer), and validation (perf gate, idle fingerprint, battery proxy). Any further guest
+  power-setting experiment and any shipped power profile need the user's approval.
+- Consequence for the record: all CS numbers so far (and any single-thread-bound workload) were measured with the
+  P cluster parked; GravityMark is not affected by placement (EXP2459/2460).
