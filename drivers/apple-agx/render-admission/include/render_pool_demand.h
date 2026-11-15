@@ -383,16 +383,26 @@ unsigned long long AdmissionPoolDemandRestartBytes(
 typedef struct _ADMISSION_POOL_RESTART_RECORD {
   unsigned int Version, Bytes;
   unsigned long long ShareBytes, ConfirmedBytes, UnconfirmedMaxBytes;
+  /* Base size of the start that wrote the record (the conservative floor kept
+   * when a corrupt record is replaced). */
+  unsigned long long BaseBytes;
   unsigned int Instances, UnconfirmedStarts;
 } ADMISSION_POOL_RESTART_RECORD;
+#define ADMISSION_POOL_RESTART_ABSENT 0u
+#define ADMISSION_POOL_RESTART_VALID 1u
+#define ADMISSION_POOL_RESTART_CORRUPT 2u
 /* Valid: the record was read with the expected size. */
 unsigned long long AdmissionPoolRestartPrevious(
     const ADMISSION_POOL_RESTART_RECORD *Record, int Valid,
     unsigned long long ShareBytes, unsigned long long BaseBytes);
-/* StartDevice chose Chosen bytes (written before StartDevice returns). Starts a
- * fresh record (Share, counters 0) when Record is absent or unusable. */
+/* StartDevice chose Chosen bytes (written before StartDevice returns). State is
+ * ADMISSION_POOL_RESTART_{ABSENT,VALID,CORRUPT} as read. A valid record with this
+ * share is updated; otherwise a fresh record starts, and when a record was present
+ * but unusable its UnconfirmedMax starts at max(Chosen, BaseBytes), so a failure
+ * between this write and VidMm's budget cannot hide the unknown older budget. */
 void AdmissionPoolRestartOnStart(ADMISSION_POOL_RESTART_RECORD *Record,
-                                 int Valid, unsigned long long ShareBytes,
+                                 unsigned int State, unsigned long long ShareBytes,
+                                 unsigned long long BaseBytes,
                                  unsigned long long Chosen);
 /* The first non-system CreateDevice of the instance that started with Own. */
 void AdmissionPoolRestartOnConfirm(ADMISSION_POOL_RESTART_RECORD *Record,

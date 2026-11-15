@@ -423,20 +423,24 @@ unsigned long long AdmissionPoolRestartPrevious(
 }
 
 void AdmissionPoolRestartOnStart(ADMISSION_POOL_RESTART_RECORD *Record,
-                                 int Valid, unsigned long long ShareBytes,
+                                 unsigned int State, unsigned long long ShareBytes,
+                                 unsigned long long BaseBytes,
                                  unsigned long long Chosen) {
   if (Record == 0) return;
-  if (!AdmissionPoolRestartUsable(Record, Valid, ShareBytes)) {
-    /* Absent or unusable: a fresh record. Chosen was sized against the
-     * conservative Previous (BaseBytes for an unusable record). */
+  if (!AdmissionPoolRestartUsable(Record, State == ADMISSION_POOL_RESTART_VALID,
+                                  ShareBytes)) {
     Record->Version = ADMISSION_POOL_RESTART_RECORD_VERSION;
     Record->Bytes = (unsigned int)sizeof(*Record);
     Record->ShareBytes = ShareBytes;
     Record->ConfirmedBytes = 0u;
-    Record->UnconfirmedMaxBytes = 0u;
+    /* A present but unusable record hid the last budgeted size: keep the
+     * conservative base as a floor until an instance confirms. */
+    Record->UnconfirmedMaxBytes =
+        State == ADMISSION_POOL_RESTART_ABSENT ? 0u : BaseBytes;
     Record->Instances = 0u;
     Record->UnconfirmedStarts = 0u;
   }
+  Record->BaseBytes = BaseBytes;
   if (Chosen > Record->UnconfirmedMaxBytes) Record->UnconfirmedMaxBytes = Chosen;
   ++Record->Instances;
   ++Record->UnconfirmedStarts;

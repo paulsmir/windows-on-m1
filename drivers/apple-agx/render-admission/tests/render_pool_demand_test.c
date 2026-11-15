@@ -576,7 +576,8 @@ static void test_restart_segment_rule(void)
  * 0 normal (budgeted, confirmed); 1 fails before its record write and before
  * VidMm budgets it; 2 budgeted by VidMm, then fails (never confirmed);
  * 3 budgeted, runs, confirmation never arrives; 4 the record is corrupt when this
- * instance starts. Every instance not of kind 1 must pass VidMm's limit, and
+ * instance starts; 5 corrupt record and the instance fails between its record
+ * write and VidMm's budget. Every instance not of kind 1 or 5 must pass VidMm's limit, and
  * Previous must never be below the size VidMm last budgeted. */
 static unsigned run_record(int boot_writes, unsigned long long share,
                            unsigned long long base, const int *kinds,
@@ -590,13 +591,16 @@ static unsigned run_record(int boot_writes, unsigned long long share,
     memset(&rec, 0, sizeof(rec));
     for (unsigned i = 0; i < count; ++i) {
         unsigned long long prev, seg;
-        if (kinds[i] == 4 && present) valid = 0; /* corrupt */
+        if ((kinds[i] == 4 || kinds[i] == 5) && present) valid = 0; /* corrupt */
         prev = AdmissionPoolRestartPrevious(present ? &rec : 0, valid, share, base);
         assert(prev >= last_budget);
         seg = AdmissionPoolDemandRestartBytes(base, share, prev);
         if (kinds[i] == 1) continue;  /* failed before the record write */
-        AdmissionPoolRestartOnStart(&rec, present && valid, share, seg);
+        AdmissionPoolRestartOnStart(&rec, !present ? ADMISSION_POOL_RESTART_ABSENT :
+                                    valid ? ADMISSION_POOL_RESTART_VALID :
+                                    ADMISSION_POOL_RESTART_CORRUPT, share, base, seg);
         present = 1; valid = 1;
+        if (kinds[i] == 5) continue; /* fails between the record write and the budget */
         if (!vidmm_start(&m, seg, i == 0)) {
             assert(0 && "instance refused by VidMm");
         }
@@ -615,27 +619,33 @@ static void test_restart_record_state_machine(void)
     static const int normal[16] = {0};
     static const int faults[16] = {0, 2, 0, 3, 3, 0, 1, 0, 2, 2, 4, 0, 3, 1, 4, 0};
     static const int tail[16] = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3};
+    static const int corrupt_gap[16] = {0, 0, 3, 5, 0, 2, 5, 3, 0, 5, 5, 0, 3, 4, 0, 0};
     ADMISSION_POOL_RESTART_RECORD r;
     for (int bw = 0; bw <= 1; ++bw) {
         assert(run_record(bw, share, 4 * GiB, normal, 16) == 16);
         assert(run_record(bw, share, 4 * GiB, faults, 16) == 14);
         assert(run_record(bw, share, 4 * GiB, tail, 16) == 16);
+        assert(run_record(bw, share, 4 * GiB, corrupt_gap, 16) == 12);
     }
     /* Pure-function edges. */
     memset(&r, 0, sizeof(r));
     assert(AdmissionPoolRestartPrevious(0, 0, share, 4 * GiB) == 0);
-    AdmissionPoolRestartOnStart(&r, 0, share, 4 * GiB);
+    AdmissionPoolRestartOnStart(&r, ADMISSION_POOL_RESTART_ABSENT, share, 4 * GiB, 4 * GiB);
     assert(r.Version == ADMISSION_POOL_RESTART_RECORD_VERSION && r.Bytes == sizeof(r));
     assert(r.Instances == 1 && r.UnconfirmedStarts == 1 && r.UnconfirmedMaxBytes == 4 * GiB);
     assert(AdmissionPoolRestartPrevious(&r, 1, share, 4 * GiB) == 4 * GiB);
     AdmissionPoolRestartOnConfirm(&r, 4 * GiB);
     assert(r.ConfirmedBytes == 4 * GiB && r.UnconfirmedMaxBytes == 0 && r.UnconfirmedStarts == 0);
-    AdmissionPoolRestartOnStart(&r, 1, share, 832 * MiB);
+    AdmissionPoolRestartOnStart(&r, ADMISSION_POOL_RESTART_VALID, share, 4 * GiB, 832 * MiB);
     assert(AdmissionPoolRestartPrevious(&r, 1, share, 4 * GiB) == 4 * GiB); /* max */
     assert(AdmissionPoolRestartPrevious(&r, 0, share, 4 * GiB) == 4 * GiB); /* corrupt -> base */
     assert(AdmissionPoolRestartPrevious(&r, 1, share + MiB, 3 * GiB) == 3 * GiB); /* share changed */
     r.Version = 2;
     assert(AdmissionPoolRestartPrevious(&r, 1, share, 3 * GiB) == 3 * GiB);
+    /* Corrupt record replaced: the fresh record keeps the base as a floor. */
+    AdmissionPoolRestartOnStart(&r, ADMISSION_POOL_RESTART_CORRUPT, share, 4 * GiB, 832 * MiB);
+    assert(r.Version == ADMISSION_POOL_RESTART_RECORD_VERSION && r.UnconfirmedMaxBytes == 4 * GiB);
+    assert(r.BaseBytes == 4 * GiB && r.Instances == 1);
 }
 
 int main(void)

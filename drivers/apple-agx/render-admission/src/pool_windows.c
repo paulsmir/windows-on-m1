@@ -2102,7 +2102,8 @@ static BOOLEAN AdmissionPoolDemandStart(ADMISSION_CONTEXT *Context,
    * QUERYSEGMENT4 answer VidMm budgets. A failed write is today's behaviour
    * for the next start (absent record) and is recorded. */
   restartAfter = restartBefore;
-  AdmissionPoolRestartOnStart(&restartAfter, restartState == 1u, share, bytes);
+  AdmissionPoolRestartOnStart(&restartAfter, restartState, share,
+                              Context->PoolRestartBase, bytes);
   restartWrite = AdmissionPoolRestartWrite(Context, &restartAfter);
   if (!NT_SUCCESS(restartWrite)) Context->PoolRestartState = 3u;
   AdmissionPoolRestartReceipt(Context, &restartBefore, &restartAfter, bytes,
