@@ -7359,3 +7359,22 @@ boot was run. The previous entry stays as written.
   docs and release signing.
 - Platform observation for the GPU list: with the basic display driver the panel backlight stays lit while the
   display is "off".
+
+## UPDATE 2026-11-15T21:54Z - order change: Wi-Fi/Bluetooth active; R1 integration boot PASS
+
+- User order (2026-11-15 evening): Wi-Fi/Bluetooth now, external monitor after it (its full done-list was estimated
+  at 24-44 offline days; "mirror in m1n1" at 4-7); keyboard backlight parked on operator steps (Fn keys, idle,
+  modern standby, verifier decision). Wi-Fi is run as one integration image + one long-lived guest boot with driver
+  hot-swap, no reboot per test.
+- Integration pair for Wi-Fi boots: m1n1 wifi/bench-int e0583641 on 54c329a4, WIFI_PCIE_LINK build 8a5a575a, + Mu
+  MUCPCWIFI001 fd94b781; both default builds are byte-identical to the bench standard (6a9c2435 / d9fe3a34), bench
+  rebuild confirmed. Contents: link, ECAM filter, INTx route, per-owner IRQ route capacity, ANS pcie_shutdown
+  guard, DMA window (dart-apcie0 stream 1 identity over guest RAM below 4 GiB, RID2SID for fn0/fn1, MPS clamp,
+  BME released only after read-back).
+- R1 (EXP2498, launcher boot without a GPU package): PASS - "DMA window ready ... BME released", RID2SID
+  0x80010100/0x80010101, MPS 128 with clamp, probe receipts as EXP2463 with BME now set, no alerts, bench-standard
+  lines present. Deviation accepted with an amended criterion: the DART error register reads a constant
+  0x5000400 / 0x77a6f52b from before any guest DMA (flag bit clear, stream field 5): criterion = value unchanged
+  and flag clear; origin unexplained.
+- Next rungs in the same boot: R2 (chip inventory, watchdog reset round trip, Bluetooth function binding), R3
+  (firmware download + CPU release); one probe package (2ca2a6aa4) serves both. Not expected tonight: data path.
