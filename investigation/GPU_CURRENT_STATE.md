@@ -7442,3 +7442,9 @@ consumed, link PM, OTP order) stay rejected. Next: probe build with macaddr from
 tracked files), R3 then R4 in one Windows boot with the BAR trap. Owed for production: the address, calibration
 blob and antenna SKU must reach the driver from Mu (ADT -> ACPI property), and the BAR needs a posted mapping
 without per-access traps.
+
+UPDATE 2026-11-15T23:52Z (architect): Wi-Fi firmware runs under Windows (EXP2514): probe rev 14 with the
+platform macaddr in the NVRAM, BAR trap on - DownloadStatus 1, firmware up in 150 ms, shared area published.
+EXP2515 (msgbuf rung): shared version 7 parsed, common buffer inside the DMA window, first INTx delivered end to
+end (MailboxClaims 1); the first ioctl timed out with no ring index movement and no DART change. Next causal
+target: DMA index mode / hostready per brcmfmac for SharedFlags 0x78810007 (rev 15, same boot).
