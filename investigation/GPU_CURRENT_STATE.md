@@ -7378,3 +7378,13 @@ boot was run. The previous entry stays as written.
   and flag clear; origin unexplained.
 - Next rungs in the same boot: R2 (chip inventory, watchdog reset round trip, Bluetooth function binding), R3
   (firmware download + CPU release); one probe package (2ca2a6aa4) serves both. Not expected tonight: data path.
+
+UPDATE 2026-11-15T22:05Z (architect): Wi-Fi R2 FAIL (EXP2499). Probe rev 5 (2ca2a6aa4) without firmware
+parameters raised a guest SError storm about 5 s after install (ESR 0xbe000000, probe store after a BAR0-window
+access, backplane address 0x18030040); the hypervisor then failed its CPU rendezvous and the boot was lost. DART
+line unchanged, link up in the last stats line. The receipts did not survive, so the failing stage (core
+inventory or watchdog round trip) is not known. R3 and R4 (rev 6, cf9bb32e3, signed, not run) are blocked.
+Next causal target (Wi-Fi session, offline): name the exact access from the rev-5 map; flushed stage markers and
+a per-stage mask so one boot can enable stages one at a time; wrapper-state check before touching a core.
+Separate open defect: a guest SError storm from a PCIe device access ends in an HV rendezvous panic.
+Bench: recovered (RECANS001), idle, no probe package installed.
