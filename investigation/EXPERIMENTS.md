@@ -80525,3 +80525,9 @@ EXP2476 HARDWARE BEFORE 2026-11-15T10:11:38Z:
 - Hashes: sys 292cf195fdb5, UmdArm64 1a6398591dcb, UmdX64 649888e8aed5, Umd32 78d1ebb9de38; manifest 0ffd83abd4d4, hardware-manifest b96abc900e63; probe2476.sh b9793e1c915a (PROBE_LINT_OK); visible recovery rec2476h e5795dde7e94c772; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
 - Recovery rec2476h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2476-pkgnext/run2476.sh.
+
+EXP2476 ACTUAL (boot B, 2026-11-15T10:14Z; sitting steps follow as separate lines)
+- Correction to the BEFORE hash line "m1n1 0d3a75b3" (launch-exp template text): the image booted is m1n1-pd1-38bf6e3f (sha256 38bf6e3f3e551edd..., full-owner2476.sh and hardware-manifest.json).
+- Launch 10:11:46Z (LAUNCH_2476_STARTED f3639d58a), EXP2476_ARTIFACTS_AND_STAGE_PASS, EXP2476_PIPELINE_RC 0. Probe 10:13:30Z: uptime 51 s, ACPI\APPL0002\0 OK CM_PROB_NONE, Wom1StartPolicy 0x1, Wom1PoolHalfSize absent, m1n1 "IOMFB guest surface latched PA=0x85f000000 DVA=0x4140000 2560x1600 stride=10240", keyboard APPL0005 OK (every-boot 6648f764), receipts collected, STOPS 0.
+- Keyboard staging: C:\Users\pavel\kbd3d = EXP2458-kbddiag/pkg-signed (D-7c4dd4dd sys 28d8a8e6, cat 57e60fad, bench signer); C:\Users\pavel\kbd3f1 = F1-4e01e43d (sys ee4e6a10, inf 752d1e95, kbdblctl 9b0d9d6a) recatalogued on the builder (Inf2Cat /os:10_CO_ARM64) and signed with the bench certificate E9BE15BD... -> applekbdbacklight.cat 08f887b84691b252 (local copy EXP2476-pkgnext/kbd-f1-signed). Not installed.
+- Verdict (boot): host boot for the sitting PASS. No perf gate in this boot (as preregistered).
