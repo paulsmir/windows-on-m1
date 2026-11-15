@@ -80787,3 +80787,8 @@ EXP2492 HARDWARE BEFORE 2026-11-15T18:49:49Z:
 - Hashes: sys 92bd6c245ff3, UmdArm64 5dcd63d58089, UmdX64 38ad1d471ff7, Umd32 4a200ffbb8c6; manifest 8ae1ad1c1e9e, hardware-manifest d7fcb47d960a; probe2492.sh 4910e87ec66f (PROBE_LINT_OK); visible recovery rec2492h 9a3984985d7c4902; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
 - Recovery rec2492h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2492-kbdlook2/run2492.sh.
+
+EXP2492 ACTUAL (2026-11-15 UTC): first launch failed at prepare (LAUNCH_2492_FAIL prepare, ~18:48Z) because I edited prepare.sh (AGX_RUN_UEFI support) while it was executing for this experiment (scratchpad copy hard-linked to the backup; bash read a shifted offset -> syntax error line 244); nothing reached the guest (STAGED 0). Relaunch LAUNCH_2492_STARTED a0dde4f8b; guest up 18:51:41Z (GPU OK, keyboard OK; keyboard package OFF-dbbc4f39 as installed).
+- L1 panel: disable 18:54:32Z, window to 18:56:32Z, re-enable 18:56:33Z OK, 126 latches; m1n1 "release (guest) -> guest surface"; Wom1StopReceipt Caller 26 TargetId 0 Mapped 0 Status 0 fmt 22 FillResult 0 FillUs 375. Operator word: pending.
+- L2 slider: start state (no set) user 90, host 0, effective 0, last_rgbi 0,0,0,1 (lamp dark, Windows' last LampArray colour black); window 18:58:30-19:00:30: one tuple in 120 samples -> no LampArray report reached the driver. Operator words: pending (Dynamic Lighting settings to be checked).
+- Process note: never edit a running pipeline script; pgrep before any tool edit (memory no-edit-running-scripts).
