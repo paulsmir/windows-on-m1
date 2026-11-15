@@ -7432,3 +7432,13 @@ Remaining causes: (A) host contract of the macOS 15.7.8 firmware generation vs w
 (validated on 13.5-era firmware); (B) chip state after m1n1's port bring-up vs Asahi apple-pcie/DT/iBoot.
 Next causal target (offline): Apple's own driver as behaviour reference for (A), m1n1-vs-Asahi bring-up diff for
 (B); the proxy script is the iteration tool. Bench back on RECANS001.
+
+UPDATE 2026-11-15T23:24Z (architect): Wi-Fi firmware start CAUSE FOUND (EXP2513, proxy reference run). The
+BCM4378 firmware (macOS 15.7.8 generation) stops at 83 ms when the NVRAM carries no macaddr= entry; with the
+address from the ADT appended as brcmfmac does, the firmware comes up (shared pointer 0x004E62A0 after 282 ms,
+no "RO overwritten"). Excluded on the way: PERST#-first order (iBoot leaves PERST# asserted; V4 = V1), seed
+form (Apple's driver writes it as we do), END trailer. Earlier hypotheses of this night (CR4 in reset, seed not
+consumed, link PM, OTP order) stay rejected. Next: probe build with macaddr from a locally staged value (never in
+tracked files), R3 then R4 in one Windows boot with the BAR trap. Owed for production: the address, calibration
+blob and antenna SKU must reach the driver from Mu (ADT -> ACPI property), and the BAR needs a posted mapping
+without per-access traps.
