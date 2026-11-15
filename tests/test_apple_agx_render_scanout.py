@@ -36,7 +36,8 @@ class AppleAgxRenderScanoutTests(unittest.TestCase):
     def test_scanout_lifetime_is_inside_post_and_memory_ownership(self):
         lifecycle = (RENDER / "src" / "lifecycle.c").read_text()
         start = function_body(lifecycle, "AdmissionDdiStartDevice")
-        stop = function_body(lifecycle, "AdmissionDdiStopDevice")
+        # PD-1c: StopDevice and the post-display release share this body.
+        stop = function_body(lifecycle, "AdmissionStopDeviceBody")
         remove = function_body(lifecycle, "AdmissionDdiRemoveDevice")
 
         self.assertLess(start.index("DxgkCbAcquirePostDisplayOwnership("),

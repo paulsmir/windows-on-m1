@@ -68,6 +68,18 @@
 #include "apple_agx_rtkit_session.h"
 #include "apple_agx_fixed_panel.h"
 #include "apple_agx_post_display_route.h"
+
+/* PD-1c (KMD-D2): the one KMD panel-geometry source the post-display route and
+ * release check against. LIMITATION: it is initialised from the J313 constants;
+ * the panel geometry is still J313-literal in scanout_windows.c (fixed-panel
+ * commit, scanout checks), gdi_windows.c and display.c (mode list). Follow-up:
+ * panel geometry from firmware data (ADT/ACPI), one source for scanout, GDI and
+ * the mode list (PORTABILITY, M2..M5). */
+static inline const APPLE_AGX_PANEL_LIMITS *AdmissionPanelLimits(void) {
+  static const APPLE_AGX_PANEL_LIMITS limits = {
+      APPLE_AGX_SCANOUT_J313_WIDTH, APPLE_AGX_SCANOUT_J313_HEIGHT};
+  return &limits;
+}
 #include "j313_agx_abi_admission.generated.h"
 #include "mpo_contract.h"
 #include "mpo_layers.h"
@@ -2829,6 +2841,35 @@ DXGKDDI_START_DEVICE AdmissionDdiStartDevice;
  * policy's return handling (lifecycle.c). */
 DXGKDDI_START_DEVICE AdmissionDdiStartDeviceGated;
 DXGKDDI_STOP_DEVICE AdmissionDdiStopDevice;
+/* PD-1c (KMD-D2): one stop path for StopDevice (Caller 2), the post-display
+ * release (26) and failed-start teardown (0xF); RemoveDevice records Caller 3. */
+#define ADMISSION_STOP_CALLER_STOP 2u
+#define ADMISSION_STOP_CALLER_RELEASE 26u
+#define ADMISSION_STOP_CALLER_REMOVE 3u
+#define ADMISSION_STOP_CALLER_START_FAILED 0xFu
+#define ADMISSION_STOP_FILL_DONE 0u
+#define ADMISSION_STOP_FILL_RAM_SKIP 1u
+#define ADMISSION_STOP_FILL_MAP_FAIL 2u
+#define ADMISSION_STOP_FILL_NA 3u
+#define ADMISSION_STOP_SOURCE_POST 0u
+#define ADMISSION_STOP_SOURCE_NONE 3u
+typedef struct _ADMISSION_STOP_EVENT {
+  ULONG Caller, TargetIdIn, MappedTargetId, Status;
+  APPLE_AGX_RELEASE_INFO Info;
+  ULONG SurfaceSource, FrameBufferState, FillResult, FillUs;
+  ULONG OwnershipBefore, BrokerReleaseResult;
+} ADMISSION_STOP_EVENT;
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS AdmissionStopDeviceInternal(_Inout_ ADMISSION_CONTEXT *Context,
+                                     _Inout_ ADMISSION_STOP_EVENT *Event);
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordStopReceipt(_In_ PDEVICE_OBJECT DeviceObject,
+                                _In_ const ADMISSION_STOP_EVENT *Event);
+/* PD-1c (KMD-D2): body of DxgkDdiStopDeviceAndReleasePostDisplayOwnership. */
+_IRQL_requires_(PASSIVE_LEVEL)
+NTSTATUS AdmissionScanoutReleasePostDisplay(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    _Out_ PDXGK_DISPLAY_INFORMATION DisplayInfo);
 DXGKDDI_REMOVE_DEVICE AdmissionDdiRemoveDevice;
 DXGKDDI_DISPATCH_IO_REQUEST AdmissionDdiDispatchIoRequest;
 DXGKDDI_INTERRUPT_ROUTINE AdmissionDdiInterruptRoutine;

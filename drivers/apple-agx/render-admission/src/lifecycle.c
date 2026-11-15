@@ -921,7 +921,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
       context->PostDisplayInformation.Width,
       context->PostDisplayInformation.Height,
       context->PostDisplayInformation.Pitch,
-      (ULONGLONG)context->PostDisplayInformation.PhysicAddress.QuadPart);
+      (APPLE_AGX_SCANOUT_U32)context->PostDisplayInformation.ColorFormat,
+      (ULONGLONG)context->PostDisplayInformation.PhysicAddress.QuadPart,
+      AdmissionPanelLimits());
   AdmissionRecordPostDisplay(
       context, status, post_display_route,
       post_display_route == AppleAgxPostDisplayGeometryRejected
@@ -956,6 +958,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   status = AdmissionScanoutStart(context);
   AdmissionRecordStartStage(context, AdmissionStartScanout, status);
   if (!NT_SUCCESS(status)) {
+    /* PD-1c: failed-start teardown; the scanout stop below (or PnP's retry)
+     * releases to the guest surface (PD-1 m1n1), leaving GOP mode usable. */
+    {
+      ADMISSION_STOP_EVENT stopEvent;
+      RtlZeroMemory(&stopEvent, sizeof(stopEvent));
+      stopEvent.Caller = ADMISSION_STOP_CALLER_START_FAILED;
+      stopEvent.Status = (ULONG)status;
+      stopEvent.FillResult = ADMISSION_STOP_FILL_NA;
+      stopEvent.SurfaceSource = ADMISSION_STOP_SOURCE_NONE;
+      stopEvent.OwnershipBefore = context->PostDisplayInformation.Width != 0u;
+      AdmissionRecordStopReceipt(context->PhysicalDeviceObject, &stopEvent);
+    }
     /* An uncertain REGISTER/RELEASE result retains every lower memory owner.
      * PnP teardown may retry AdmissionScanoutStop, but must not unmap a pool
      * that m1n1/DCP could still own. */
@@ -1027,7 +1041,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   return STATUS_SUCCESS;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceContext) {
+static NTSTATUS AdmissionStopDeviceBody(PVOID MiniportDeviceContext) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   if (context != NULL) {
     InterlockedIncrement(&context->MpoGate.StopDeviceCount);
@@ -1099,10 +1113,47 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
   return STATUS_SUCCESS;
 }
 
+/* PD-1c (KMD-D2): the one stop path. StopDevice (Caller 2) and the post-display
+ * release (Caller 26, after its black fill) run the same teardown, whose scanout
+ * stop sends the broker RELEASE (PD-1 m1n1 presents the guest surface and
+ * removes slot 1). Every call leaves one Wom1StopReceipt ring entry. */
+_Use_decl_annotations_ NTSTATUS AdmissionStopDeviceInternal(
+    ADMISSION_CONTEXT *Context, ADMISSION_STOP_EVENT *Event) {
+  NTSTATUS status;
+  PDEVICE_OBJECT pdo = Context->PhysicalDeviceObject;
+  Event->OwnershipBefore = Context->PostDisplayInformation.Width != 0u;
+  status = AdmissionStopDeviceBody(Context);
+  Event->Status = (ULONG)status;
+  Event->BrokerReleaseResult = (ULONG)status;
+  AdmissionRecordStopReceipt(pdo, Event);
+  return status;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceContext) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  ADMISSION_STOP_EVENT event;
+  if (context == NULL)
+    return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(&event, sizeof(event));
+  event.Caller = ADMISSION_STOP_CALLER_STOP;
+  event.FillResult = ADMISSION_STOP_FILL_NA;
+  event.SurfaceSource = context->PostDisplayInformation.Width != 0u
+                            ? ADMISSION_STOP_SOURCE_POST : ADMISSION_STOP_SOURCE_NONE;
+  return AdmissionStopDeviceInternal(context, &event);
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceContext) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
+  {
+    ADMISSION_STOP_EVENT removeEvent;
+    RtlZeroMemory(&removeEvent, sizeof(removeEvent));
+    removeEvent.Caller = ADMISSION_STOP_CALLER_REMOVE;
+    removeEvent.FillResult = ADMISSION_STOP_FILL_NA;
+    removeEvent.SurfaceSource = ADMISSION_STOP_SOURCE_NONE;
+    AdmissionRecordStopReceipt(context->PhysicalDeviceObject, &removeEvent);
+  }
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   if (!NT_SUCCESS(AdmissionGpuvaG3Stop(context))) return STATUS_DEVICE_BUSY;
 #endif

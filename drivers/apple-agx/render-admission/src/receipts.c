@@ -3546,3 +3546,60 @@ static void AdmissionWriteDdiStatuses(ADMISSION_CONTEXT *Context) {
 }
 
 #endif
+
+/* PD-1c (KMD-D2): Wom1StopReceipt, a ring of the last 4 stop-path calls
+ * (Caller 2 StopDevice / 26 release / 3 Remove / 0xF failed start), flushed on
+ * each call. PASSIVE_LEVEL. */
+#define ADMISSION_STOP_RING 4u
+typedef struct _ADMISSION_STOP_RING_ENTRY {
+  ULONG Sequence, Reserved;
+  LONGLONG Qpc;
+  ADMISSION_STOP_EVENT Event;
+} ADMISSION_STOP_RING_ENTRY;
+typedef struct _ADMISSION_STOP_RECEIPT {
+  ULONG Version, Bytes, Count, Next;
+  ADMISSION_STOP_RING_ENTRY Entry[ADMISSION_STOP_RING];
+} ADMISSION_STOP_RECEIPT;
+C_ASSERT(sizeof(APPLE_AGX_RELEASE_INFO) == 32);
+C_ASSERT(sizeof(ADMISSION_STOP_EVENT) == 72);
+C_ASSERT(sizeof(ADMISSION_STOP_RING_ENTRY) == 88);
+C_ASSERT(sizeof(ADMISSION_STOP_RECEIPT) == 16 + 4 * 88);
+
+_Use_decl_annotations_ VOID AdmissionRecordStopReceipt(
+    PDEVICE_OBJECT DeviceObject, const ADMISSION_STOP_EVENT *Event) {
+  HANDLE key = NULL;
+  UNICODE_STRING name;
+  ULONG bytes = 0u, slot;
+  ADMISSION_STOP_RECEIPT receipt;
+  union {
+    ULONGLONG Alignment;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ADMISSION_STOP_RECEIPT)];
+  } data;
+  PKEY_VALUE_PARTIAL_INFORMATION value = (PKEY_VALUE_PARTIAL_INFORMATION)data.Buffer;
+  if (DeviceObject == NULL || Event == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_QUERY_VALUE | KEY_SET_VALUE, &key)))
+    return;
+  RtlInitUnicodeString(&name, L"Wom1StopReceipt");
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  if (NT_SUCCESS(ZwQueryValueKey(key, &name, KeyValuePartialInformation, value,
+                                 sizeof(data.Buffer), &bytes)) &&
+      value->Type == REG_BINARY && value->DataLength == sizeof(receipt))
+    RtlCopyMemory(&receipt, value->Data, sizeof(receipt));
+  if (receipt.Version != 1u || receipt.Bytes != sizeof(receipt) ||
+      receipt.Next >= ADMISSION_STOP_RING) {
+    RtlZeroMemory(&receipt, sizeof(receipt));
+    receipt.Version = 1u;
+    receipt.Bytes = (ULONG)sizeof(receipt);
+  }
+  slot = receipt.Next;
+  ++receipt.Count;
+  receipt.Entry[slot].Sequence = receipt.Count;
+  receipt.Entry[slot].Reserved = 0u;
+  receipt.Entry[slot].Qpc = KeQueryPerformanceCounter(NULL).QuadPart;
+  receipt.Entry[slot].Event = *Event;
+  receipt.Next = (slot + 1u) % ADMISSION_STOP_RING;
+  (void)ZwSetValueKey(key, &name, 0, REG_BINARY, &receipt, (ULONG)sizeof(receipt));
+  (void)ZwFlushKey(key);
+  ZwClose(key);
+}

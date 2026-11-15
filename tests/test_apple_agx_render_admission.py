@@ -374,8 +374,14 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
             self.assertNotIn(forbidden, source_address)
 
         release = display[end:]
-        self.assertIn("*DisplayInfo = context->PostDisplayInformation", release)
-        self.assertIn("AdmissionDdiStopDevice(context)", release)
+        # PD-1c: the release delegates to the scanout owner, which builds the
+        # answer (active target, cleared surface) and runs the shared stop path.
+        self.assertIn("AdmissionScanoutReleasePostDisplay(context, TargetId, DisplayInfo)", release)
+        scanout = self.read("src/post_display_windows.c")
+        body = scanout[scanout.index("NTSTATUS AdmissionScanoutReleasePostDisplay("):]
+        self.assertIn("AppleAgxBuildReleaseInfo(", body)
+        self.assertLess(body.index("AdmissionStopFillBlack("),
+                        body.index("AdmissionStopDeviceInternal(context, &event)"))
 
     def test_interrupt_admission_owns_only_synthetic_broker_status_and_ack(self):
         interrupt = self.read("src/interrupt.c")

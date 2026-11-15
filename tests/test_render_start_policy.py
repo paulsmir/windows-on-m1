@@ -164,7 +164,11 @@ class StartPolicyWiring(unittest.TestCase):
         self.assertLess(returned.index('KeClearEvent'), returned.index('KeSetTimer'))
 
     def test_clean_stop_quiesces_first_and_clears_last(self):
-        stop = function(self.source, 'AdmissionDdiStopDevice')
+        # PD-1c: the StopDevice teardown body is shared with the post-display
+        # release (AdmissionStopDeviceInternal -> AdmissionStopDeviceBody).
+        stop = function(self.source, 'AdmissionStopDeviceBody')
+        self.assertIn('AdmissionStopDeviceBody(Context)',
+                      function(self.source, 'AdmissionStopDeviceInternal'))
         self.assertLess(stop.index('AdmissionStartPolicyQuiesce(context);'),
                         stop.index('AdmissionScanoutStop(context)'))
         tail = stop[stop.index('AdmissionStartPolicyStopped(context);'):]

@@ -20,7 +20,12 @@ class PostDisplayRouteTests(unittest.TestCase):
         self.assertTrue("AppleAgxPostDisplayOwnScanout" in start)
         self.assertLess(start.index("AppleAgxPostDisplayRoute("),
                         start.index("AdmissionScanoutStart(context)"))
-        self.assertIn("if (context->PostDisplayInformation.Width == 0u)", DISPLAY)
+        # PD-1c: the release builds its answer with AppleAgxBuildReleaseInfo
+        # (own-scanout route -> STATUS_UNSUCCESSFUL, no display -> NOT_SUPPORTED)
+        # and stops through the shared stop path.
+        release = DISPLAY.split("AdmissionDdiStopDeviceAndReleasePostDisplayOwnership(", 1)[1]
+        self.assertIn("AdmissionScanoutReleasePostDisplay(", release)
+        self.assertIn("AdmissionPanelLimits()", start)
 
     def test_real_c_route(self):
         with tempfile.TemporaryDirectory(prefix="post-display-route-") as tmp:
