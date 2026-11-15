@@ -7251,3 +7251,16 @@ boot was run. The previous entry stays as written.
   (disk content correct, guards intact), with disk paging-error events during the test. REJECTED; rolled back
   to 0.4.8.3 (canary OK, chkdsk clean). Cause analysis, RED test and fix are with the SSD session; independent
   review before the next hardware run. The bench driver stays 0.4.8.3.
+
+## UPDATE 2026-11-15T13:22Z - EXP2480 (B1 QueryAdapterInfo): PASS, accepted
+
+- Package b1/qai-caps d1d09d274 on pkg/next (bench pair a6916e26 + MUKBD003): refusal bitmap = [10, 15, 20, 24,
+  25, 27, 36], i.e. the previous set minus exactly 26 (ADAPTERPERFDATA_CAPS) and 39 (DIRTYBITTRACKINGCAPS), which
+  are now answered; unimplemented types return STATUS_NOT_IMPLEMENTED. DxgKrnl ETW over two GravityMark runs
+  (78 polls each of types 24/25 inside the window): "Driver returned an invalid NTSTATUS" count 0 (before: one per
+  refused call). Perf gate PASS (GM +0.98 %, CS -1.63 %). Not measured: the start-time window of the ETL and a
+  user-mode read-back of the two answered types.
+- DECISION: B1 accepted into the package line. Remaining: 27 GPUVERSION (needs firmware strings from data), B2
+  perf data 24/25 (own run with perf gate).
+- AppleAns: 0.4.8.8 (waiting list instead of BUSY on bounce-pool exhaustion) is built by the SSD session and is
+  under independent review; not installed.
