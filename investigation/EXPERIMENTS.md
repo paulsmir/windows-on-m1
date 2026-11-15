@@ -80854,3 +80854,13 @@ Keyboard backlight LVL-9c930a8f (UserLevel in the service key) + item 6 powercfg
 - Failure: level reset after remove/scan or reinstall; migration overwriting an existing service value; start failure; bugcheck.
 - Rollback: OFF2-e98288c9 (delete the newer oem INF first). End: launch-kbd end + AT_PROXY recovery rec2493h.
 - Launcher launch-kbd2495.sh sha256 64dd969fe40978e3 (launch-kbd.sh 2a702618aa0d2ce9); m1n1 6a9c2435257e20bacbe078e54d71e0dfd79101c3ea3ac739b3eed8dac13e209f; Mu d9fe3a3483663f355e341c79f52f5a7a6eca25d6e726b9bce9138552765e8238; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 7787c1857.
+EXP2495 ACTUAL (2026-11-15 UTC; launch-kbd boot, no operator): start 20:22:35Z (recovery guest restarted, proxy +23.7 s), launcher 20:23:05Z, SSH +27 s; end 20:24:50Z, proxy +22.6 s, AT_PROXY rec2493h RECOVERY_DONE 20:27:26Z. Whole boot incl. recovery ~5 min.
+- LVL-9c930a8f (catalog e53aaa50 signed with 35F48BAE; sys 2b1e3706, inf aa25dfe4, kbdblctl 8dad83ec) installed over OFF2 as oem22 19.38.54.183, device OK.
+- L1 migration PASS: device-key UserLevel 0x5a copied to the service key (svc 0x5a).
+- L2 set 137: service UserLevel 0x89, user_level 137, effective 137 (on 361) PASS.
+- L3 remove-device + scan: device key deleted (dev value absent), user_level 137 PASS (OFF2 returned 90 here).
+- L4 package uninstall (oem20, oem22) + reinstall (oem20): user_level 137 PASS.
+- L5 fresh state (both values deleted, restart-device): user_level 90, effective 255 = host 255 (F2 full range), no service value written PASS.
+- L6 set 137 again: service 0x89; after the ordered restart the recovery guest reads Services\AppleKbdBacklight\Parameters\UserLevel = 0x89 (persisted across restart); the driver-side read after restart is observed on the next boot with KBDL.
+- Item 6 powercfg /a: available "Standby (S0 Low Power Idle) Network Connected"; S1/S2/S3 disabled because S0 LPI is supported (component "Graphics" listed); Hibernate not enabled; Hybrid Sleep / Fast Startup n/a. This rejects ITEMS5-7.md's hypothesis "no S0 Low Power Idle" (the Mu FADT / platform does expose it); modern-standby testing becomes a separate item (operator: lid/power button).
+- Verdict: LVL-9c930a8f PASS, becomes the every-boot keyboard package (BENCH-M1N1.json keyboard_guest_package). Evidence evidence/sit/lvl-summary.txt.
