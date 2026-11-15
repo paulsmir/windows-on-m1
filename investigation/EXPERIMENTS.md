@@ -80564,3 +80564,11 @@ EXP2468 HARDWARE BEFORE 2026-11-15T11:58:57Z:
 - Hashes: sys f49ece47153a, UmdArm64 9c8e9a98d0c3, UmdX64 f7511e55df60, Umd32 8a8e31169963; manifest cb25a4d11258, hardware-manifest 14c0584a735b; probe2468.sh ad15dbd843d4 (PROBE_LINT_OK); visible recovery rec2468h 623ad9a7edcc586b; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
 - Recovery rec2468h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2468-park/run2468.sh.
+
+EXP2468 ACTUAL (2026-11-15 UTC): launch LAUNCH_2468_STARTED f9d9c9d97, pipeline RC 0; probe 12:00:44Z uptime 51 s, device OK, HETEROPOLICY 4. CPMINCORES1 AC=0 DC=0, CPMAXCORES1 AC=100 DC=100 before.
+- Control: cs0 47.456 (cold, discarded); ctl1 51.718, ctl2 51.741 (gate ref PASS -0.5 %). P Parking Status 0.93-1.00, P 664 MHz, E 2064 MHz busy 64/36/36/14 %, m1n1 P ps 1, dram_fast 0. hl class BelowNormal, main thread base 6, affinity 0xff.
+- save/set100: PARK_SAVED CPMINCORES1 AC=0 DC=0, CPMAXCORES1 AC=100 DC=100; PARK_SET CPMINCORES1 AC=100 DC=100.
+- pk1 56.706, pk2 56.762 (+9.6 % vs control mean; gate ref +9.1 %): P Parking Status 0.00, P 2865/2892 MHz, P busy 25/27/6/20 and 34/13/6/25 %, E busy <= 10 %, m1n1 P ps 12, dram_fast 1.
+- restore: PARKING_SETTING_RESTORED (case-exact re-read compare) -> PARK_GATE PASS; CPMINCORES1 AC=0 DC=0 again. rs1 51.891 (P parked 0.95-1.00, E busy 57/42/36/15 %).
+- STOPS 0, WER_REPORTS 2 before and after (unchanged). No setting left changed on the guest.
+- Verdict: CONFIRMED - core parking keeps the CS workload on the E cluster; with parking disabled by policy the scheduler places it on P (ps 12, dram_fast) and CS reaches 56.7 fps. Diagnostic only; the production fix belongs to the layer that owns the parking inputs (firmware/ACPI processor description or driver-visible load), decision with the architect.
