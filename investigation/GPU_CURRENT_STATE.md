@@ -7323,3 +7323,21 @@ boot was run. The previous entry stays as written.
   ISR, stale-CQE check, harness gaps.
 - Rule added: no staged GPU candidate package may remain on the disk when any other profile is booted.
 - Next: keyboard backlight only (done-list in the local focus file), first boot with the operator present.
+
+## UPDATE 2026-11-15T19:15Z - PD-1 confirmed by eye; bench standard switch; keyboard backlight status
+
+- PD-1b part 2 + PD-1c CONFIRMED BY EYE (EXP2492, operator photo at 19:06Z + word "выключился, изображение все
+  еще есть"): with the AppleAgx adapter disabled the internal panel shows the Windows desktop (basic display
+  driver), on m1n1 6a9c2435 (PD-1 release fix + capacity scale + emergency doorbell) + Mu MUCPC001 + package line
+  pkg/next 04fe217c2 (restart sizing P1, release-DDI contract P2, QueryAdapterInfo B1). Receipts in every look:
+  release DDI called (Caller 26), target 0, surface cleared in ~0.4 ms, "release (guest)" line, re-enable OK.
+  DECISION: this pair + package line is the bench standard (integration gate EXP2481); previous pair a6916e26 +
+  MUKBD003 kept as fallback. Recovery/idle profile alignment remains its own later step.
+- Keyboard backlight (the only active driver line): F1 slider gradation and F2 full-range mapping confirmed by the
+  operator (EXP2491/2492; sweep poll: 19 graded levels, effective == host). Windows' slider maximum arrives as
+  intensity 213 with colour (0,144,254): explained by the keyboard session as the default accent colour #0078D4
+  normalised (value 212/255) - inference from the numbers, no driver change; discriminator = choose white in
+  Settings. Open on the done-list: off-path proof (OFF2 package + PS trace boot), user level surviving driver
+  updates (package built), display-off/idle dimming, recovery profile without the device, verifier run and the
+  Fn-key decision (both wait for the user), standard package + docs. Observation to explain: at the start of
+  EXP2492 the lamp was dark and Windows' last report was black (0,0,0,1) until the operator touched the slider.
