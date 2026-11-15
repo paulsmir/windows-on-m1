@@ -399,7 +399,10 @@ VOID AppleAnsComplete(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, UCHAR statu
         bx->BounceIndex = 0;
     }
     srb->SrbStatus = status;
-    srb->DataTransferLength = length;
+    /* BUSY hands the request back to be submitted again: it must come back as it arrived.
+     * With the length zeroed, a resubmission through BuildIo is a READ/WRITE without data,
+     * which the planner answers ILLEGAL REQUEST - not retried by the class driver (EXP2479). */
+    if (status != SRB_STATUS_BUSY) srb->DataTransferLength = length;
     StorPortNotification(RequestComplete, a, srb);
 }
 static VOID sense(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, struct ans_sense value)
@@ -486,6 +489,50 @@ VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a)
         }
     }
 }
+/* Waiting list (ans_bounce.h): requests that found every bounce buffer in use, and every request
+ * that arrived after the first of them. Linked through the SRB extensions, interrupt lock held. */
+static VOID wait_append(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, BOOLEAN behind)
+{
+    PAPPLE_ANS_SRB x=srb->SrbExtension;
+    x->WaitNext=NULL;
+    if (a->WaitTail) ((PAPPLE_ANS_SRB)a->WaitTail->SrbExtension)->WaitNext=srb; else a->WaitHead=srb;
+    a->WaitTail=srb;
+    ans_bounce_wait_enter(&a->Bounce,!x->BounceWaited,behind);
+    x->BounceWaited=TRUE;
+}
+static BOOLEAN start_request(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb);
+VOID AppleAnsWaitDrain(PAPPLE_ANS_ADAPTER a)
+{
+    /* start_request can complete requests itself; it must not re-enter this loop. */
+    if (a->WaitDraining) return;
+    a->WaitDraining=TRUE;
+    while (a->WaitHead) {
+        PSCSI_REQUEST_BLOCK srb=a->WaitHead;
+        PAPPLE_ANS_SRB x=srb->SrbExtension;
+        /* Unlink first: once started, the request may already be completed and gone. */
+        a->WaitHead=x->WaitNext;x->WaitNext=NULL;
+        if (!a->WaitHead) a->WaitTail=NULL;
+        ans_bounce_wait_leave(&a->Bounce);
+        if (!start_request(a,srb)) {
+            /* Still no buffer: back to the front, and nothing behind it may pass. */
+            x->WaitNext=a->WaitHead;a->WaitHead=srb;
+            if (!a->WaitTail) a->WaitTail=srb;
+            ans_bounce_wait_enter(&a->Bounce,0,0);
+            break;
+        }
+    }
+    a->WaitDraining=FALSE;
+}
+VOID AppleAnsWaitRetire(PAPPLE_ANS_ADAPTER a, UCHAR status)
+{
+    while (a->WaitHead) {
+        PSCSI_REQUEST_BLOCK srb=a->WaitHead;
+        a->WaitHead=((PAPPLE_ANS_SRB)srb->SrbExtension)->WaitNext;
+        ans_bounce_wait_leave(&a->Bounce);
+        AppleAnsComplete(a,srb,status,0);
+    }
+    a->WaitTail=NULL;
+}
 BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
 {
     if(srb->Function==SRB_FUNCTION_IO_CONTROL) return telemetry_query(a,srb);
@@ -494,6 +541,18 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
         /* The record lives in the device extension: nothing was allocated. */
         AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,0);return TRUE;
     }
+    /* Requests are waiting for a bounce buffer: this one keeps its place behind them. */
+    if (a->WaitHead && srb->SrbExtension) { wait_append(a,srb,TRUE);return TRUE; }
+    if (!start_request(a,srb)) wait_append(a,srb,FALSE);
+    /* A request that ended here may have returned a buffer. */
+    AppleAnsWaitDrain(a);
+    return TRUE;
+}
+/* Everything that takes its turn in the command order. TRUE: the request was completed or
+ * handed to the controller. FALSE: it needs a bounce buffer and all are in use; nothing was
+ * claimed or counted twice, and it is started again from the waiting list. */
+static BOOLEAN start_request(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
+{
     PAPPLE_ANS_SRB x=srb->SrbExtension;
     if(srb->Function==SRB_FUNCTION_EXECUTE_SCSI && x && x->PrpFailure) {
         ans_stats_add(&a->Stats,ANS_TELEM_PRP_TRANSLATION_FAILURES,1);x->PrpFailure=FALSE;
@@ -552,7 +611,16 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
     }
     unsigned tag;
     for(tag=ANS_ADMIN_TAGS;tag<ANS_QUEUE_DEPTH && a->Slots[tag].Busy;tag++) {}
-    if(tag==ANS_QUEUE_DEPTH) { AppleAnsComplete(a,srb,SRB_STATUS_BUSY,0);return TRUE; }
+    if(tag==ANS_QUEUE_DEPTH) {
+        /* A request from the waiting list keeps waiting: commands are outstanding, and each
+         * completion starts the list again. Otherwise as 0.4.8.3. */
+        if (x && x->BounceWaited) return FALSE;
+        AppleAnsComplete(a,srb,SRB_STATUS_BUSY,0);return TRUE;
+    }
+    /* The same for the order (an untagged command, or commands before an untagged one, are
+     * outstanding): asked before anything below has an effect, so a request that goes back to
+     * the waiting list has claimed, translated and counted nothing. */
+    if (x && x->BounceWaited && ans_order_would_admit(&a->Order,tag,attribute)==ANS_ORDER_BUSY) return FALSE;
     /* UNMAP: the parameter list (mapped by Storport, STOR_MAP_NON_READ_WRITE_BUFFERS) is
      * validated once and turned into the Dataset Management range list in this tag's own
      * page, which no command owns while the slot is free. The plan becomes SUBMIT, CHECK
@@ -573,19 +641,15 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
      * built from its SG list and goes to the controller directly, as without the bounce.
      *   mapping is not this request's data   -> direct (counted)
      *   data could not be mapped             -> direct (counted)
-     *   every buffer in use                  -> BUSY and the LU paused until a request completes
-     *                                           (StorPortDeviceBusy); after ANS_BOUNCE_BUSY_LIMIT
-     *                                           such answers without a release -> direct (counted) */
+     *   every buffer in use                  -> the request waits in the driver (FALSE) until a
+     *                                           completion releases one; never BUSY (EXP2479) */
     if (x && plan.action==ANS_SCSI_SUBMIT && (plan.nvme_opcode==1 || plan.nvme_opcode==2)) {
         if (x->BounceMismatch) { a->Bounce.direct_mismatch++; x->BounceMismatch=FALSE; }
         else if (x->BounceUnmapped) { a->Bounce.direct_unmapped++; x->BounceUnmapped=FALSE; }
         else if (x->NeedBounce && ans_bounce_size_ok(plan.transfer_bytes) && plan.transfer_bytes==x->Length) {
             int index=ans_bounce_acquire(&a->Bounce,plan.nvme_opcode==1);
             if (index < 0) {
-                if (ans_bounce_wait(&a->Bounce)) {
-                    (void)StorPortDeviceBusy(a,0,0,0,1);
-                    AppleAnsComplete(a,srb,SRB_STATUS_BUSY,0);return TRUE;
-                }
+                if (ans_bounce_must_wait(&a->Bounce)) return FALSE;
             } else {
                 x->BounceIndex=(UCHAR)(index+1);
                 if (plan.nvme_opcode==1) {
@@ -686,6 +750,7 @@ BOOLEAN AppleAnsNativeInterrupt(PAPPLE_ANS_ADAPTER a)
         else { srb->ScsiStatus=SCSISTAT_GOOD;AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,length); }
     }
     AppleAnsDispatch(a);
+    AppleAnsWaitDrain(a);
     return TRUE;
 }
 static VOID retire(PAPPLE_ANS_ADAPTER a, UCHAR status)
@@ -697,6 +762,7 @@ static VOID retire(PAPPLE_ANS_ADAPTER a, UCHAR status)
         a->Slots[tag]=(APPLE_ANS_SLOT){0};
         if (srb) AppleAnsComplete(a,srb,status,0);
     }
+    AppleAnsWaitRetire(a,status);
     a->Claimed=FALSE;a->MayOwn=FALSE;
     a->ShuttingDown=FALSE;a->ShutdownTag=ANS_QUEUE_DEPTH;
 }

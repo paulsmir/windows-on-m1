@@ -28,10 +28,9 @@ int ans_order_init(struct ans_order *o, ans_u64 epoch)
     order_zero(o, sizeof(*o)); o->epoch = epoch;
     return ANS_ORDER_OK;
 }
-int ans_order_admit(struct ans_order *o, unsigned tag, enum ans_order_attribute attribute,
-                    struct ans_order_token *token)
+int ans_order_would_admit(const struct ans_order *o, unsigned tag, enum ans_order_attribute attribute)
 {
-    if (!o || !o->epoch || !token || !valid_tag(tag) ||
+    if (!o || !o->epoch || !valid_tag(tag) ||
         attribute < ANS_ORDER_SIMPLE || attribute > ANS_ORDER_UNTAGGED)
         return ANS_ORDER_INVALID;
     if (o->faulted) return ANS_ORDER_FAULT;
@@ -40,6 +39,13 @@ int ans_order_admit(struct ans_order *o, unsigned tag, enum ans_order_attribute 
         if (o->slot[i].state != ANS_ORDER_FREE &&
             (attribute == ANS_ORDER_UNTAGGED || o->slot[i].attribute == ANS_ORDER_UNTAGGED))
             return ANS_ORDER_BUSY;
+    return ANS_ORDER_OK;
+}
+int ans_order_admit(struct ans_order *o, unsigned tag, enum ans_order_attribute attribute,
+                    struct ans_order_token *token)
+{
+    int would = token ? ans_order_would_admit(o, tag, attribute) : ANS_ORDER_INVALID;
+    if (would != ANS_ORDER_OK) return would;
     if (o->sequence == ANS_U64_MAX) {
         o->faulted = 1;
         return ANS_ORDER_EXHAUSTED;

@@ -12,9 +12,13 @@
  *     good) is served directly and counted, never failed.
  * What the fake Storport assumes and therefore cannot show (review of 0.4.8.6): that
  * StorPortGetPhysicalAddress resolves contiguous allocations, that StorPortGetSystemAddress
- * returns the request's own data unless a test says otherwise, that a BUSY request is
- * resubmitted without BuildIo running again, that StorPortDeviceBusy only counts; one thread,
- * no IRQL or ordering model; its own structure layouts, not the WDK's; no loader or imports.
+ * returns the request's own data unless a test says otherwise; one thread, no IRQL model; its
+ * own structure layouts, not the WDK's; no loader or imports.
+ * EXP2479 (0.4.8.7 failed on hardware, this harness had passed it): the harness never filled
+ * the pool with one split transfer plus one more request, and its port restored the SRB's
+ * transfer length before every resubmission, so it could not see what the driver left behind
+ * in a request it answered BUSY. Both are modelled now (test_saturated_split_transfer,
+ * test_busy_answer_leaves_request_intact); the bounce path no longer answers BUSY at all.
  * HARNESS_OLD builds the interface-only subset against an older tree (the RED run). */
 #include "../adapter.h"
 #include <assert.h>
@@ -24,7 +28,7 @@
 
 sp_DRIVER_INITIALIZE DriverEntry;
 #define EXT_083_BYTES 385024u /* 6 x 16 KiB queues + 66 metadata pages + 16 KiB slack */
-#define DISK_BLOCKS 256u
+#define DISK_BLOCKS 1024u
 #define PAGE 4096u
 
 /* ---- fake physical memory ------------------------------------------------------------ */
@@ -77,7 +81,8 @@ static struct {
     int lock_held;
     ULONG uncached_calls, uncached_bytes, allocs, alloc_ok, frees, device_busy, completed;
     ULONG log_ids[256], nlogs;
-    uint64_t io_prp1[64]; unsigned nio; /* PRP1 of every READ/WRITE the controller executed */
+    uint64_t io_prp1[256]; unsigned nio; /* PRP1 of every READ/WRITE the controller executed */
+    uint8_t op[512]; uint32_t op_lba[512]; unsigned nops; /* every I/O-queue command, in doorbell order */
     unsigned held_tags[64], nheld;
 } F;
 static HW_INITIALIZATION_DATA init_data;
@@ -85,6 +90,13 @@ static HW_PASSIVE_INITIALIZE_ROUTINE *passive_routine;
 static void *adapter_mem, *ctrl_base, *mbox_base, *uncached_mem;
 static uint8_t disk[DISK_BLOCKS * PAGE];
 #define A ((PAPPLE_ANS_ADAPTER)adapter_mem)
+#ifdef HARNESS_0487 /* RED run of the EXP2479 tests against the 0.4.8.7 sources (no waiting list) */
+#define WAIT_LIST_EMPTY() 1
+#define WAIT_LIST_IS(h, t) 1
+#else
+#define WAIT_LIST_EMPTY() (A->WaitHead == NULL && A->WaitTail == NULL && A->Bounce.waiting == 0)
+#define WAIT_LIST_IS(h, t) (A->WaitHead == (h) && A->WaitTail == (t))
+#endif
 
 /* ---- simulated ANS2 controller (register model as common/tests/test_direct.c) --------- */
 static struct { ans_u32 cc, csts; unsigned cq_tail[2], cq_phase[2]; ans_u64 send0; } S;
@@ -103,7 +115,7 @@ static void sim_data(const ans_u8 *sqe, int write)
     size_t bytes = ((size_t)le(sqe + 48, 2) + 1) * PAGE, off = prp1 & (PAGE - 1), done = 0;
     unsigned entries = (unsigned)((off + bytes + PAGE - 1) / PAGE);
     assert(lba * PAGE + bytes <= sizeof(disk));
-    assert(F.nio < 64); F.io_prp1[F.nio++] = prp1;
+    assert(F.nio < 256); F.io_prp1[F.nio++] = prp1;
     for (unsigned i = 0; i < entries; i++) {
         uint64_t pa = prp1;
         if (i) {
@@ -139,7 +151,10 @@ static void sim_doorbell(unsigned q, unsigned tag)
                 page[130] = 12;
             }
         } else if (sqe[0] == 0x0a) result = 1;
-    } else if (sqe[0] == 1 || sqe[0] == 2) sim_data(sqe, sqe[0] == 1);
+    } else {
+        assert(F.nops < 512); F.op[F.nops] = sqe[0]; F.op_lba[F.nops++] = (uint32_t)le(sqe + 40, 8);
+        if (sqe[0] == 1 || sqe[0] == 2) sim_data(sqe, sqe[0] == 1);
+    }
     if (q == 1 && F.hold) { assert(F.nheld < 64); F.held_tags[F.nheld++] = tag; return; }
     sim_post(q, tag, result);
 }
@@ -430,6 +445,14 @@ static void port_submit(struct req *r)
     assert(init_data.HwBuildIo(adapter_mem, &r->srb));
     assert(init_data.HwStartIo(adapter_mem, &r->srb));
 }
+/* A port driver that resubmits a request exactly as the miniport returned it: nothing in the
+ * SRB is restored first (EXP2479: the earlier harness always restored the transfer length). */
+static void port_resubmit_as_left(struct req *r)
+{
+    r->srb.SrbStatus = SRB_STATUS_PENDING;
+    assert(init_data.HwBuildIo(adapter_mem, &r->srb));
+    assert(init_data.HwStartIo(adapter_mem, &r->srb));
+}
 static void pattern(uint8_t *p, size_t n, unsigned seed)
 {
     for (size_t i = 0; i < n; i++) p[i] = (uint8_t)(seed * 131u + i * 7u + (i >> 8));
@@ -573,31 +596,18 @@ static void test_partial_pool(void)
     assert(le(p + 112, 4) == ANS_BOUNCE_STEP_ALLOCATE && le(p + 116, 4) == 0);
     assert(logged(0xAB) == (int)(0x800000u | (2u << 16) | (ANS_BOUNCE_STEP_ALLOCATE << 12) | 14u));
     round_trip(5, 32, 0x78, 1, 40);
-    /* Exhaustion: two bounced writes outstanding, the third is BUSY and pauses the LU; after
-     * the completions it is resubmitted and succeeds. */
+    /* Exhaustion: two bounced writes outstanding, the third waits in the driver (never BUSY,
+     * never direct) and goes through a pool buffer once the completions release one. */
     F.hold = 1;
     struct req *w[3];
     for (unsigned i = 0; i < 3; i++) { w[i] = req_new(1, 60 + i * 4, 2, 0x20); pattern(w[i]->data, 2 * PAGE, 50 + i); port_submit(w[i]); }
-    assert(w[0]->srb.SrbStatus == SRB_STATUS_PENDING && w[1]->srb.SrbStatus == SRB_STATUS_PENDING);
-    assert(w[2]->srb.SrbStatus == SRB_STATUS_BUSY && F.device_busy == 1);
-    assert(A->Bounce.claimed == 3);
-    /* No buffer is released: after ANS_BOUNCE_BUSY_LIMIT BUSY answers the request is sent
-     * directly from its own (misaligned) buffer instead of failing or waiting for ever. Both
-     * resubmission styles are covered: StartIo alone, and BuildIo + StartIo. */
-    for (unsigned i = 1; i < ANS_BOUNCE_BUSY_LIMIT; i++) {
-        w[2]->srb.SrbStatus = SRB_STATUS_PENDING;
-        if (i & 1) assert(init_data.HwStartIo(adapter_mem, &w[2]->srb)); else port_submit(w[2]);
-        assert(w[2]->srb.SrbStatus == SRB_STATUS_BUSY);
-    }
-    assert(F.device_busy == ANS_BOUNCE_BUSY_LIMIT && F.nio == 4);
-    port_submit(w[2]);
-    assert(w[2]->srb.SrbStatus == SRB_STATUS_PENDING && F.nio == 5 && A->Bounce.claimed == 3);
-    assert(F.io_prp1[4] == (uint64_t)w[2]->sg.List[0].PhysicalAddress.QuadPart && !in_pool(F.io_prp1[4]));
-    F.hold = 0; sim_release_held(); port_interrupt();
+    for (unsigned i = 0; i < 3; i++) assert(w[i]->srb.SrbStatus == SRB_STATUS_PENDING);
+    assert(F.device_busy == 0 && A->Bounce.claimed == 3 && F.nio == 4);
+    F.hold = 0; sim_release_held(); port_interrupt(); port_interrupt();
     for (unsigned i = 0; i < 3; i++) assert(w[i]->srb.SrbStatus == SRB_STATUS_SUCCESS);
-    assert(A->Bounce.claimed == 0);
+    assert(F.nio == 5 && in_pool(F.io_prp1[4]) && A->Bounce.claimed == 0);
     p = receipt();
-    assert(le(p + 48, 8) == ANS_BOUNCE_BUSY_LIMIT && le(p + 56, 8) == 1);
+    assert(le(p + 48, 8) == 1 && le(p + 56, 8) == 0 && le(p + 136, 4) == 0 && le(p + 140, 4) == 1);
     for (unsigned i = 0; i < 3; i++) {
         uint8_t want[2 * PAGE]; pattern(want, sizeof(want), 50 + i);
         assert(!memcmp(disk + (size_t)(60 + i * 4) * PAGE, want, sizeof(want)));
@@ -652,6 +662,148 @@ static void test_unbounceable_requests_go_direct(void)
     F.sysaddr_wrong = 0;
     round_trip(30, 2, 0xee8, 1, 82);
 }
+/* EXP2479: a 2 MiB unbuffered read into a misaligned buffer arrives as 16 requests of 128 KiB
+ * and takes the whole pool; one more misaligned request at that moment was answered BUSY, and
+ * every such answer became a failed request above the driver (71 failed test reads, disk event
+ * 51 for paging requests). The pool being full is ordinary load: no request may be answered
+ * BUSY, sent misaligned, or lose its place in the arrival order because of it. */
+static struct req *flush_new(void)
+{
+    struct req *r = calloc(1, sizeof(*r));
+    assert(r);
+    r->page_base = aligned_alloc(PAGE, PAGE); assert(r->page_base);
+    region_add(r->page_base, PAGE, next_data_ipa, 0); next_data_ipa += 2 * PAGE;
+    r->srb.Function = SRB_FUNCTION_FLUSH; r->srb.SrbExtension = &r->ext;
+    return r;
+}
+static void saturated_split_transfer(int write, unsigned offset)
+{
+    enum { PIECES = 16, EXTRA = 3, PP = 32 }; /* 16 x 128 KiB = 2 MiB, then 3 more misaligned */
+    world_reset();
+    assert(port_start() && A->Bounce.count == ANS_BOUNCE_COUNT);
+    struct req *q[PIECES + EXTRA], *aligned, *fl, *last;
+    uint8_t *want = malloc((size_t)PP * PAGE); assert(want);
+    for (unsigned i = 0; i < (PIECES + EXTRA) * PP; i++) pattern(disk + (size_t)i * PAGE, PAGE, 1000 + i);
+    F.hold = 1;
+    for (unsigned i = 0; i < PIECES + EXTRA; i++) {
+        q[i] = req_new(write, i * PP, PP, offset);
+        if (write) pattern(q[i]->data, (size_t)PP * PAGE, 3000 + i);
+        port_submit(q[i]);
+        assert(q[i]->srb.SrbStatus == SRB_STATUS_PENDING && "the pool being full is not an error or BUSY");
+    }
+    /* Later arrivals of every kind keep their place: an aligned write, a FLUSH, a misaligned read. */
+    aligned = req_new(1, 700, 2, 0); pattern(aligned->data, 2 * PAGE, 77); port_submit(aligned);
+    fl = flush_new(); fl->srb.SrbStatus = SRB_STATUS_PENDING;
+    assert(init_data.HwBuildIo(adapter_mem, &fl->srb) && init_data.HwStartIo(adapter_mem, &fl->srb));
+    /* Untagged, so the order refuses it while the FLUSH before it is outstanding: it gives its
+     * buffer back, keeps waiting and is counted once. */
+    last = req_new(0, 700, 2, 0x78); last->srb.SrbFlags &= ~(ULONG)SRB_FLAGS_QUEUE_ACTION_ENABLE; port_submit(last);
+    assert(aligned->srb.SrbStatus == SRB_STATUS_PENDING && fl->srb.SrbStatus == SRB_STATUS_PENDING &&
+           last->srb.SrbStatus == SRB_STATUS_PENDING);
+    assert(F.device_busy == 0 && F.nops == PIECES && F.nio == PIECES && A->Bounce.claimed == 0xffff);
+    const ans_u8 *p = receipt();
+    assert(le(p + 136, 4) == EXTRA + 3 && le(p + 48, 8) == 1 && le(p + 144, 8) == EXTRA + 2);
+    /* Completions arrive one interrupt at a time; every waiting request gets a pool buffer. */
+    F.hold = 0;
+    for (unsigned round = 0; round < 48; round++) {
+        if (F.nheld) sim_post(1, F.held_tags[--F.nheld], 0);
+        port_interrupt();
+    }
+    for (unsigned i = 0; i < PIECES + EXTRA; i++) {
+        assert(q[i]->srb.SrbStatus == SRB_STATUS_SUCCESS && q[i]->srb.DataTransferLength == PP * PAGE);
+        if (write) pattern(want, (size_t)PP * PAGE, 3000 + i);
+        else for (unsigned b = 0; b < PP; b++) pattern(want + (size_t)b * PAGE, PAGE, 1000 + i * PP + b);
+        assert(!memcmp(write ? disk + (size_t)i * PP * PAGE : q[i]->data, want, (size_t)PP * PAGE) &&
+               "every piece carries its own data");
+        assert(q[i]->page_base[offset - 1] == 0xee);
+    }
+    assert(aligned->srb.SrbStatus == SRB_STATUS_SUCCESS && fl->srb.SrbStatus == SRB_STATUS_SUCCESS &&
+           last->srb.SrbStatus == SRB_STATUS_SUCCESS);
+    pattern(want, 2 * PAGE, 77);
+    assert(!memcmp(last->data, want, 2 * PAGE) && "the read behind the write sees the write");
+    /* Controller order = arrival order: the pieces, the extras, the aligned write, FLUSH, read. */
+    assert(F.nops == PIECES + EXTRA + 3 && F.nio == PIECES + EXTRA + 2);
+    for (unsigned i = 0; i < PIECES + EXTRA; i++) {
+        assert(F.op[i] == (write ? 1 : 2) && F.op_lba[i] == i * PP);
+        assert(in_pool(F.io_prp1[i]) && !(F.io_prp1[i] & (PAGE - 1)) && "never sent misaligned");
+    }
+    assert(F.op[PIECES + EXTRA] == 1 && F.op_lba[PIECES + EXTRA] == 700 && F.op[PIECES + EXTRA + 1] == 0 &&
+           F.op[PIECES + EXTRA + 2] == 2);
+    p = receipt();
+    assert(le(p + 20, 4) == 0 && le(p + 24, 4) == ANS_BOUNCE_COUNT && le(p + 56, 8) == 0 && le(p + 136, 4) == 0);
+    assert(le(p + 32, 8) == (write ? 1u : PIECES + EXTRA + 1u) && le(p + 40, 8) == (write ? PIECES + EXTRA : 0u));
+    assert(le(p + 48, 8) == 1 && le(p + 144, 8) == EXTRA + 2 && le(p + 140, 4) == EXTRA + 3 && WAIT_LIST_EMPTY());
+    for (unsigned i = 0; i < PIECES + EXTRA; i++) req_free(q[i]);
+    req_free(aligned); req_free(fl); req_free(last); free(want);
+}
+static void test_saturated_split_transfer(void)
+{
+    static const unsigned offsets[] = {16, 8, 0x78, 0xfc0, 0xee8, 0x20};
+    for (unsigned o = 0; o < 6; o++) { saturated_split_transfer(0, offsets[o]); saturated_split_transfer(1, offsets[o]); }
+}
+/* Waiting requests end with the commands the controller owned when the bus is reset. */
+static void test_waiting_requests_are_retired(void)
+{
+    world_reset();
+    assert(port_start());
+    struct req *q[ANS_BOUNCE_COUNT + 2];
+    F.hold = 1;
+    for (unsigned i = 0; i < ANS_BOUNCE_COUNT + 2; i++) { q[i] = req_new(0, i * 4, 4, 0x20); port_submit(q[i]); }
+    assert(WAIT_LIST_IS(&q[ANS_BOUNCE_COUNT]->srb, &q[ANS_BOUNCE_COUNT + 1]->srb));
+    (void)init_data.HwResetBus(adapter_mem, 0);
+    for (unsigned i = 0; i < ANS_BOUNCE_COUNT + 2; i++)
+        assert(q[i]->srb.SrbStatus == SRB_STATUS_BUS_RESET && "no request is left behind by a reset");
+    assert(WAIT_LIST_EMPTY() && A->Bounce.claimed == 0);
+    F.hold = 0; F.nheld = 0;
+    for (unsigned i = 0; i < ANS_BOUNCE_COUNT + 2; i++) req_free(q[i]);
+}
+/* The BUSY answers that remain are the 0.4.8.3 ones (here: an untagged request while a command
+ * is outstanding). A request answered BUSY is resubmitted by the port; it must come back
+ * exactly as it arrived. 0.4.8.7 zeroed its transfer length, and the resubmission was then a
+ * READ without data: CHECK CONDITION / ILLEGAL REQUEST, which the class driver does not retry. */
+static void test_busy_answer_leaves_request_intact(void)
+{
+    world_reset();
+    assert(port_start());
+    for (unsigned i = 0; i < 8; i++) pattern(disk + (size_t)i * PAGE, PAGE, 500 + i);
+    struct req *first = req_new(0, 0, 2, 0), *r = req_new(0, 4, 2, 0x20);
+    r->srb.SrbFlags &= ~(ULONG)SRB_FLAGS_QUEUE_ACTION_ENABLE; /* untagged */
+    F.hold = 1; port_submit(first); port_submit(r);
+    assert(r->srb.SrbStatus == SRB_STATUS_BUSY);
+    assert(r->srb.DataTransferLength == 2 * PAGE && "a BUSY answer does not change the request");
+    assert(A->Bounce.claimed == 0 && "a BUSY answer holds no buffer");
+    F.hold = 0; sim_release_held(); port_interrupt();
+    port_resubmit_as_left(r); port_interrupt();
+    assert(r->srb.SrbStatus == SRB_STATUS_SUCCESS && r->srb.DataTransferLength == 2 * PAGE);
+    uint8_t want[2 * PAGE]; pattern(want, PAGE, 504); pattern(want + PAGE, PAGE, 505);
+    assert(!memcmp(r->data, want, sizeof(want)));
+    req_free(first); req_free(r);
+}
+#ifdef HARNESS_0487
+/* Demonstration on the 0.4.8.7 sources only (SHIM_TEST=chain): what a port driver that
+ * resubmits a BUSY request as it was returned gets from that driver. The 17th misaligned read
+ * is answered BUSY with its transfer length zeroed; resubmitted through BuildIo it is a READ of
+ * 32 blocks without data, which the planner answers CHECK CONDITION, ILLEGAL REQUEST, INVALID
+ * FIELD IN CDB without sending anything. classpnp does not retry ILLEGAL REQUEST and, for a
+ * paging request, logs disk event 51 exactly when a request fails without retry. */
+static void test_0487_busy_chain(void)
+{
+    world_reset();
+    assert(port_start());
+    struct req *q[ANS_BOUNCE_COUNT + 1]; UCHAR sense_bytes[18] = {0};
+    F.hold = 1;
+    for (unsigned i = 0; i <= ANS_BOUNCE_COUNT; i++) { q[i] = req_new(0, i * 32, 32, 16); port_submit(q[i]); }
+    struct req *r = q[ANS_BOUNCE_COUNT];
+    assert(r->srb.SrbStatus == SRB_STATUS_BUSY && r->srb.DataTransferLength == 0);
+    F.hold = 0; sim_release_held(); port_interrupt();
+    unsigned sent = F.nops;
+    r->srb.SenseInfoBuffer = sense_bytes; r->srb.SenseInfoBufferLength = sizeof(sense_bytes);
+    port_resubmit_as_left(r);
+    printf("0.4.8.7 resubmitted as left: SrbStatus=0x%02x ScsiStatus=0x%02x sense key=%u asc=0x%02x sent=%u\n",
+           r->srb.SrbStatus, r->srb.ScsiStatus, sense_bytes[2] & 15u, sense_bytes[12], F.nops - sent);
+    assert((r->srb.SrbStatus & 0x3f) == SRB_STATUS_ERROR && (sense_bytes[2] & 15) == 5 && sense_bytes[12] == 0x24 && F.nops == sent);
+}
+#endif
 static void test_gate(void)
 {
     /* Off (explicit 0, absent, or any other value): the pool is built and reported, no request
@@ -693,6 +845,21 @@ static void test_dump_seal_is_083(void)
 #endif
 int main(int argc, char **argv)
 {
+#ifndef HARNESS_OLD
+    /* SHIM_TEST=<name>: one of the EXP2479 tests alone (used for the RED run on older sources). */
+    const char *one = getenv("SHIM_TEST");
+    if (one) {
+        if (!strcmp(one, "saturated")) test_saturated_split_transfer();
+        else if (!strcmp(one, "retired")) test_waiting_requests_are_retired();
+        else if (!strcmp(one, "busy")) test_busy_answer_leaves_request_intact();
+#ifdef HARNESS_0487
+        else if (!strcmp(one, "chain")) test_0487_busy_chain();
+#endif
+        else return 2;
+        printf("storport shim harness: %s ok\n", one);
+        return 0;
+    }
+#endif
     test_pool_failure_never_fails_boot(argc > 1 ? atoi(argv[1]) : 0);
 #ifndef HARNESS_OLD
     test_boot_contract();
@@ -700,6 +867,9 @@ int main(int argc, char **argv)
     test_partial_pool();
     test_no_pool_is_083();
     test_unbounceable_requests_go_direct();
+    test_saturated_split_transfer();
+    test_waiting_requests_are_retired();
+    test_busy_answer_leaves_request_intact();
     test_gate();
     test_dump_seal_is_083();
 #endif

@@ -119,9 +119,31 @@ static void admission_and_exhaustion(void)
     admit(0, ANS_ORDER_SIMPLE); publish(0);
     assert(ans_order_reset(&o, 1) == ANS_ORDER_EXHAUSTED && o.slot[id(0)].state == ANS_ORDER_ACTIVE);
 }
+/* The question "would this be admitted" has the answer admit gives and changes nothing. */
+static void would_admit(void)
+{
+    struct ans_order before; struct ans_order_token t;
+    reset();
+    assert(ans_order_would_admit(NULL, id(0), ANS_ORDER_SIMPLE) == ANS_ORDER_INVALID);
+    assert(ans_order_would_admit(&o, ANS_QUEUE_DEPTH, ANS_ORDER_SIMPLE) == ANS_ORDER_INVALID);
+    before = o;
+    assert(ans_order_would_admit(&o, id(0), ANS_ORDER_SIMPLE) == ANS_ORDER_OK && !memcmp(&before, &o, sizeof(o)));
+    admit(0, ANS_ORDER_SIMPLE); before = o;
+    assert(ans_order_would_admit(&o, id(0), ANS_ORDER_SIMPLE) == ANS_ORDER_BUSY);   /* tag in use */
+    assert(ans_order_would_admit(&o, id(1), ANS_ORDER_SIMPLE) == ANS_ORDER_OK);
+    assert(ans_order_would_admit(&o, id(1), ANS_ORDER_UNTAGGED) == ANS_ORDER_BUSY); /* untagged waits for all */
+    assert(!memcmp(&before, &o, sizeof(o)));
+    assert(ans_order_admit(&o, id(1), ANS_ORDER_UNTAGGED, &t) == ANS_ORDER_BUSY && !memcmp(&before, &o, sizeof(o)));
+    publish(0); finish(0);
+    assert(ans_order_would_admit(&o, id(1), ANS_ORDER_UNTAGGED) == ANS_ORDER_OK);
+    admit(1, ANS_ORDER_UNTAGGED);
+    assert(ans_order_would_admit(&o, id(2), ANS_ORDER_SIMPLE) == ANS_ORDER_BUSY);   /* behind an untagged one */
+    ans_order_fault(&o);
+    assert(ans_order_would_admit(&o, id(2), ANS_ORDER_SIMPLE) == ANS_ORDER_FAULT);
+}
 int main(void)
 {
-    simple_ordered(); heads(); tokens_and_faults(); admission_and_exhaustion();
+    simple_ordered(); heads(); tokens_and_faults(); admission_and_exhaustion(); would_admit();
     puts("ANS SIMPLE/ORDERED/HEAD task ordering and lifetime tests PASS");
     return 0;
 }

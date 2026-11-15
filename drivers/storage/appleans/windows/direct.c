@@ -414,6 +414,7 @@ BOOLEAN AppleAnsDirectInterrupt(PAPPLE_ANS_ADAPTER a)
     if (!claimed) ans_stats_add(&a->Stats, ANS_TELEM_SPURIOUS_IRQS, 1);
     a->Stats.tcb_inval_failures = a->Ansd.stats.tcb_stat_nonzero;
     AppleAnsDispatch(a);
+    AppleAnsWaitDrain(a);
     return claimed;
 }
 
@@ -451,6 +452,7 @@ static VOID direct_retire(PAPPLE_ANS_ADAPTER a, UCHAR status)
         a->Slots[tag] = (APPLE_ANS_SLOT){0};
         if (srb) AppleAnsComplete(a, srb, status, 0);
     }
+    AppleAnsWaitRetire(a, status);
     a->Claimed = FALSE;
     a->ShuttingDown = FALSE; a->ShutdownTag = ANS_QUEUE_DEPTH;
 }

@@ -149,20 +149,22 @@ that found no free slot, 40 sixteen entries of {kind 4, code 4, count 8} in firs
 
 ## Bounce receipt (control code 0x001b600c)
 
-Same header and signature, total size exactly 164 bytes (28 + 136). Read-only. Payload offsets
-(little-endian): 0 version = 3, 4 payload size = 136, 8 usable bounce buffers, 12 bytes per
+Same header and signature, total size exactly 180 bytes (28 + 152). Read-only. Payload offsets
+(little-endian): 0 version = 4, 4 payload size = 152, 8 usable bounce buffers, 12 bytes per
 buffer, 16 required first-address alignment, 20 bitmap of buffers in use now, 24 most in use at
 once, 28 buffers attempted (16); then 64-bit counters: 32 bounced reads, 40 bounced writes,
-48 requests answered BUSY because every buffer was in use (the logical unit is paused until a
-request completes), 56 misaligned requests sent directly because the pool stayed exhausted after
-8 such answers without a release, 64 sent directly because their data could not be mapped,
+48 requests that waited inside the driver because every buffer was in use, 56 misaligned
+requests sent directly because no buffer was free and none was in use (stays 0 while a pool
+exists), 64 sent directly because their data could not be mapped,
 72 sent directly because the mapped address was not the request's first scatter/gather page,
 80 copies timed, 88 total copy time and 96 longest copy in performance-counter ticks, 104 ticks
 per second; then the pool record written once after passive initialisation: 112 first failing
 step (0 none, 1 allocation, 2 a page without a physical address, 3 not a controller-visible
 range, 4 not page-aligned or not contiguous), 116 the buffer attempt it happened on, 120 (64-bit)
 its address (allocator status for step 1, page index for step 2, guest address for steps 3
-and 4), 128 buffers that could not be built, 132 bouncing enabled (0 or 1). The same outcome is
+and 4), 128 buffers that could not be built, 132 bouncing enabled (0 or 1), 136 requests waiting now, 140 most requests waiting at
+once, 144 (64-bit) requests that waited only to keep their place behind a waiting one. The same
+outcome is
 logged once as diagnostic 0xAB (enabled<<23 | usable<<16 | first failing step<<12 | buffers not
 built).
 
@@ -175,8 +177,16 @@ that is the transfer that can make the controller stop completing commands (EXP2
 what every such request did before the bounce existed, not a new failure; the counters say how
 often the protection did not apply.
 
-Versions 1 (140 bytes, 0.4.8.4/0.4.8.5) and 2 (0.4.8.6, never installed) are not answered:
-0.4.8.5 put the buffers in the uncached extension and did not boot (EXP2447).
+Every buffer in use (0.4.8.8, EXP2479): the request is kept in the driver and started when a
+completion releases a buffer; requests that arrive meanwhile wait behind it in arrival order.
+It is never answered BUSY and never sent misaligned for that reason. 0.4.8.7 answered BUSY, and
+on hardware every such answer became a failed request above the driver (failed unbuffered reads,
+disk event 51 for paging requests). The BUSY answers that remain are those of 0.4.8.3 (no free
+tag, an untagged request while commands are outstanding); they no longer change the request's
+transfer length.
+
+Versions 1 (140 bytes, 0.4.8.4/0.4.8.5), 2 (0.4.8.6, never installed) and 3 (164 bytes, 0.4.8.7)
+are not answered: 0.4.8.5 put the buffers in the uncached extension and did not boot (EXP2447).
 
 The direct record's reads/writes/resets/flushes fields are NOT used for bounce counters (build
 0.4.8.4 did; that build was never installed). Reject-receipt kind 4 counts page-misaligned

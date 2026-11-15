@@ -53,8 +53,9 @@ typedef struct _APPLE_ANS_SRB {
      * BounceUnmapped / BounceMismatch when that is not possible (the request then goes
      * directly); StartIo claims a buffer (BounceIndex = index + 1) and AppleAnsComplete copies
      * a read back and releases it. */
-    UCHAR NeedBounce, BounceUnmapped, BounceMismatch, BounceIndex, BounceSpare;
+    UCHAR NeedBounce, BounceUnmapped, BounceMismatch, BounceIndex, BounceWaited;
     PVOID BounceVa;
+    PSCSI_REQUEST_BLOCK WaitNext; /* next request of the adapter's waiting list (ans_bounce.h) */
     ULONG Length, DiagValue, DiagCount;
     struct ans_logical_prps Prps;
 } APPLE_ANS_SRB, *PAPPLE_ANS_SRB;
@@ -114,6 +115,11 @@ typedef struct _APPLE_ANS_ADAPTER {
     PUCHAR BounceBuffer[ANS_BOUNCE_COUNT];
     ULONGLONG BouncePa[ANS_BOUNCE_COUNT];
     BOOLEAN BouncePoolBuilt;
+    /* Requests waiting for a bounce buffer, and every request that arrived after the first of
+     * them, in arrival order (ans_bounce.h). Under the interrupt lock. Empty unless bouncing is
+     * enabled and every buffer is in use. */
+    PSCSI_REQUEST_BLOCK WaitHead, WaitTail;
+    BOOLEAN WaitDraining;
 } APPLE_ANS_ADAPTER, *PAPPLE_ANS_ADAPTER;
 BOOLEAN AppleAnsNativeResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config);
 BOOLEAN AppleAnsNativeInitialize(PAPPLE_ANS_ADAPTER a);
@@ -131,6 +137,10 @@ BOOLEAN AppleAnsDirectStop(PAPPLE_ANS_ADAPTER a);
 int AppleAnsDirectSubmit(PAPPLE_ANS_ADAPTER a, unsigned tag, const struct ans_broker_request *r);
 VOID AppleAnsDirectPeer(PAPPLE_ANS_ADAPTER a, struct ans_telemetry *peer);
 VOID AppleAnsDirectBouncePool(PAPPLE_ANS_ADAPTER a);
+/* Starts waiting requests while buffers are free; call after completions, under the lock. */
+VOID AppleAnsWaitDrain(PAPPLE_ANS_ADAPTER a);
+/* Completes every waiting request with this status (reset, stop). */
+VOID AppleAnsWaitRetire(PAPPLE_ANS_ADAPTER a, UCHAR status);
 VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a);
 /* Receipt-only diagnostics: StorPortLogError UniqueId = code<<24 | (value & 0xffffff), at most
  * APPLE_ANS_DIAG_MAX per adapter start. Codes: 0xA1 DMA translation reject (value = IPA>>12),

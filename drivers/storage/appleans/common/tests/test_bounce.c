@@ -53,12 +53,12 @@ int main(void)
     /* No pool: nothing can be claimed or released, and that is not counted as exhaustion of a
      * pool the caller was promised (the caller never asks: count == 0 means no bounce). */
     assert(ans_bounce_acquire(&pool, 1) == -1 && !pool.claimed && !ans_bounce_release(&pool, 0));
-    assert(ans_bounce_wait(&pool) == 0 && pool.direct_exhausted == 1 && !pool.busy); /* nobody to wait for */
+    assert(ans_bounce_must_wait(&pool) == 0 && pool.direct_exhausted == 1 && !pool.waited); /* nobody to wait for */
     /* Partial pool: only the buffers that exist are handed out. */
     for (unsigned n = 1; n < ANS_BOUNCE_COUNT; n++) {
         struct ans_bounce_pool part = {0}; part.count = n;
         for (unsigned i = 0; i < n; i++) assert(ans_bounce_acquire(&part, 1) == (int)i);
-        assert(ans_bounce_acquire(&part, 1) == -1 && ans_bounce_wait(&part) == 1 && part.busy == 1 && part.high_water == n);
+        assert(ans_bounce_acquire(&part, 1) == -1 && ans_bounce_must_wait(&part) == 1 && part.high_water == n);
         assert(!ans_bounce_release(&part, (int)n) && ans_bounce_release(&part, (int)n - 1));
         assert(ans_bounce_acquire(&part, 0) == (int)n - 1);
     }
@@ -70,10 +70,10 @@ int main(void)
         assert(f.failures == 2 && f.fail_step == ANS_BOUNCE_STEP_TRANSLATE && f.fail_index == 3 &&
                f.fail_address == 0x8a0110000ULL);
     }
-    pool = (struct ans_bounce_pool){0}; pool.count = ANS_BOUNCE_COUNT; pool.busy = 0;
+    pool = (struct ans_bounce_pool){0}; pool.count = ANS_BOUNCE_COUNT;
     for (unsigned i = 0; i < ANS_BOUNCE_COUNT; i++) assert(ans_bounce_acquire(&pool, i & 1) == (int)i);
-    assert(pool.high_water == ANS_BOUNCE_COUNT && pool.bounced_writes == 8 && pool.bounced_reads == 8 && !pool.busy);
-    assert(ans_bounce_acquire(&pool, 1) == -1 && ans_bounce_wait(&pool) == 1 && pool.busy == 1 && pool.bounced_writes == 8);
+    assert(pool.high_water == ANS_BOUNCE_COUNT && pool.bounced_writes == 8 && pool.bounced_reads == 8 && !pool.waited);
+    assert(ans_bounce_acquire(&pool, 1) == -1 && ans_bounce_must_wait(&pool) == 1 && pool.bounced_writes == 8);
     assert(ans_bounce_release(&pool, 5) && !ans_bounce_release(&pool, 5)); /* double release changes nothing */
     assert(!ans_bounce_release(&pool, -1) && !ans_bounce_release(&pool, (int)ANS_BOUNCE_COUNT));
     assert(ans_bounce_acquire(&pool, 1) == 5);
@@ -81,7 +81,7 @@ int main(void)
     assert(!pool.claimed);
     /* Randomised against a reference set. */
     srand(11);
-    int owned[ANS_BOUNCE_COUNT] = {0}; unsigned held = 0; uint64_t busy0 = pool.busy;
+    int owned[ANS_BOUNCE_COUNT] = {0}; unsigned held = 0; uint64_t busy0 = pool.waited;
     for (unsigned step = 0; step < 200000; step++) {
         if (rand() % 3) {
             int i = ans_bounce_acquire(&pool, rand() & 1);
@@ -93,36 +93,39 @@ int main(void)
             if (owned[i]) { owned[i] = 0; held--; }
         }
         ans_u32 bits = 0; for (unsigned i = 0; i < ANS_BOUNCE_COUNT; i++) if (owned[i]) bits |= 1u << i;
-        assert(pool.claimed == bits && pool.busy == busy0 && pool.high_water >= held);
+        assert(pool.claimed == bits && pool.waited == busy0 && pool.high_water >= held);
     }
-    /* Exhaustion: BUSY at most ANS_BOUNCE_BUSY_LIMIT times between two releases, then the request
-     * goes directly; a release or a successful claim starts the count again. The limit lives in
-     * the pool, so it does not depend on what the port driver keeps of a resubmitted request. */
+    /* Exhaustion (EXP2479): while a buffer is claimed the request must wait for its release,
+     * however long that takes - never a limit after which it is sent misaligned. With nothing
+     * claimed there is nobody to wait for. The waiting list is only counted here. */
     {
         struct ans_bounce_pool q = {0}; q.count = 2;
         assert(ans_bounce_acquire(&q, 1) == 0 && ans_bounce_acquire(&q, 1) == 1);
-        for (unsigned i = 0; i < ANS_BOUNCE_BUSY_LIMIT; i++) assert(ans_bounce_acquire(&q, 1) == -1 && ans_bounce_wait(&q) == 1);
-        assert(q.busy == ANS_BOUNCE_BUSY_LIMIT && !q.direct_exhausted);
-        assert(ans_bounce_wait(&q) == 0 && ans_bounce_wait(&q) == 0 && q.direct_exhausted == 2 && q.busy == ANS_BOUNCE_BUSY_LIMIT);
-        assert(ans_bounce_release(&q, 0) && ans_bounce_wait(&q) == 1 && q.busy == ANS_BOUNCE_BUSY_LIMIT + 1);
-        assert(ans_bounce_acquire(&q, 0) == 0 && q.busy_streak == 0);
-        assert(ans_bounce_wait(NULL) == 0);
-        q.direct_exhausted = 0; q.busy = 0; q.direct_unmapped = 1; q.direct_mismatch = 14;
-        for (unsigned i = 0; i < ANS_BOUNCE_BUSY_LIMIT + 1; i++) (void)ans_bounce_wait(&q);
-        assert(q.busy == ANS_BOUNCE_BUSY_LIMIT && q.direct_exhausted == 1);
+        for (unsigned i = 0; i < 1000; i++) assert(ans_bounce_acquire(&q, 1) == -1 && ans_bounce_must_wait(&q) == 1);
+        assert(!q.direct_exhausted && q.bounced_writes == 2);
+        ans_bounce_wait_enter(&q, 1, 0); ans_bounce_wait_enter(&q, 1, 1); ans_bounce_wait_enter(&q, 1, 1);
+        assert(q.waited == 1 && q.waited_behind == 2 && q.waiting == 3 && q.waiting_high == 3);
+        ans_bounce_wait_leave(&q); ans_bounce_wait_enter(&q, 0, 0); /* head goes back: not counted again */
+        assert(q.waited == 1 && q.waited_behind == 2 && q.waiting == 3 && q.waiting_high == 3);
+        ans_bounce_wait_leave(&q); ans_bounce_wait_leave(&q); ans_bounce_wait_leave(&q); ans_bounce_wait_leave(&q);
+        assert(q.waiting == 0 && q.waiting_high == 3);
+        ans_bounce_wait_enter(NULL, 1, 0); ans_bounce_wait_leave(NULL);
+        assert(ans_bounce_release(&q, 0) && ans_bounce_release(&q, 1));
+        assert(ans_bounce_must_wait(&q) == 0 && q.direct_exhausted == 1 && ans_bounce_must_wait(NULL) == 0);
+        q.direct_exhausted = 1; q.direct_unmapped = 1; q.direct_mismatch = 14; q.waited_behind = 21; q.waiting = 3; q.waiting_high = 9;
         ans_bounce_copy_timed(&q, 5); ans_bounce_copy_timed(&q, 9); ans_bounce_copy_timed(&q, 2);
         assert(q.copies == 3 && q.copy_ticks == 16 && q.copy_ticks_max == 9);
         /* Receipt layout. */
         uint8_t raw[ANS_BOUNCE_IOCTL_TOTAL + 2], *b = raw + 1; memset(raw, 0xee, sizeof raw); memset(b, 0, ANS_BOUNCE_IOCTL_TOTAL);
-        q.claimed = 0x8001; q.high_water = 7; q.bounced_reads = 11; q.bounced_writes = 12; q.busy = 13; q.enabled = 7;
+        q.claimed = 0x8001; q.high_water = 7; q.bounced_reads = 11; q.bounced_writes = 12; q.waited = 13; q.enabled = 7;
         q.ticks_per_second = 24000000; q.count = 5;
         ans_bounce_build_failed(&q, ANS_BOUNCE_STEP_PHYSICAL, 6, 17); ans_bounce_build_failed(&q, 1, 7, 0);
         b[0] = 28; memcpy(b + 4, "APANS001", 8); b[12] = 10; b[16] = 0x0c; b[17] = 0x60; b[18] = 0x1b;
         b[24] = (uint8_t)ANS_BOUNCE_IOCTL_PAYLOAD; b[28] = ANS_BOUNCE_IOCTL_VERSION; b[32] = (uint8_t)ANS_BOUNCE_IOCTL_PAYLOAD;
-        assert(ANS_BOUNCE_IOCTL_TOTAL == 164 && ans_bounce_ioctl_validate(b, 164) && !ans_bounce_ioctl_validate(b, 140));
-        b[28] = 2; assert(!ans_bounce_ioctl_validate(b, 164)); b[28] = ANS_BOUNCE_IOCTL_VERSION;
-        b[16] = 8; assert(!ans_bounce_ioctl_reply(b, 164, &q)); b[16] = 0x0c;
-        assert(ans_bounce_ioctl_reply(b, 164, &q) && raw[0] == 0xee && raw[sizeof raw - 1] == 0xee);
+        assert(ANS_BOUNCE_IOCTL_TOTAL == 180 && ans_bounce_ioctl_validate(b, 180) && !ans_bounce_ioctl_validate(b, 140));
+        b[28] = 3; assert(!ans_bounce_ioctl_validate(b, 180)); b[28] = ANS_BOUNCE_IOCTL_VERSION;
+        b[16] = 8; assert(!ans_bounce_ioctl_reply(b, 180, &q)); b[16] = 0x0c;
+        assert(ans_bounce_ioctl_reply(b, 180, &q) && raw[0] == 0xee && raw[sizeof raw - 1] == 0xee);
         uint64_t v; uint32_t w; const uint8_t *p = b + 28;
         memcpy(&w, p + 8, 4); assert(w == 5); memcpy(&w, p + 28, 4); assert(w == 16); memcpy(&w, p + 12, 4); assert(w == 131072);
         memcpy(&w, p + 16, 4); assert(w == 4096); memcpy(&w, p + 20, 4); assert(w == 0x8001);
@@ -135,6 +138,8 @@ int main(void)
         memcpy(&w, p + 112, 4); assert(w == ANS_BOUNCE_STEP_PHYSICAL); memcpy(&w, p + 116, 4); assert(w == 6);
         memcpy(&v, p + 120, 8); assert(v == 17); memcpy(&w, p + 128, 4); assert(w == 2);
         memcpy(&w, p + 132, 4); assert(w == 1);
+        memcpy(&w, p + 136, 4); assert(w == 3); memcpy(&w, p + 140, 4); assert(w == 9);
+        memcpy(&v, p + 144, 8); assert(v == 21);
     }
     puts("ANS bounce pool and PRP tests PASS");
     return 0;

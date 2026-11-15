@@ -25,7 +25,7 @@ assert 'x->BounceUnmapped=TRUE' in branch
 assert 'ans_bounce_acquire' not in build, 'no pool state is touched outside the interrupt lock'
 assert 'SRB_STATUS' not in branch, 'BuildIo never decides the outcome of a bounce'
 
-start = NATIVE[NATIVE.index('BOOLEAN AppleAnsNativeStart('):NATIVE.index('BOOLEAN AppleAnsNativeInterrupt(')]
+start = NATIVE[NATIVE.index('static BOOLEAN start_request(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)\n{'):NATIVE.index('BOOLEAN AppleAnsNativeInterrupt(')]
 acq = start.index('ans_bounce_acquire(&a->Bounce,plan.nvme_opcode==1)')
 copy = start.index('RtlCopyMemory(a->BounceBuffer[index],x->BounceVa,plan.transfer_bytes)')
 prps = start.index('ans_bounce_prps(a->BouncePa[x->BounceIndex-1],plan.transfer_bytes,&translated)')
@@ -36,9 +36,22 @@ bounce = start[start.index('if (x->BounceMismatch)'):admit]
 assert 'SRB_STATUS_ERROR' not in bounce and 'SRB_STATUS_INVALID_REQUEST' not in bounce, \
     'a request that cannot be bounced is never failed for that reason'
 assert 'a->Bounce.direct_mismatch++' in bounce and 'a->Bounce.direct_unmapped++' in bounce
-assert 'if (ans_bounce_wait(&a->Bounce)) {\n                    (void)StorPortDeviceBusy(a,0,0,0,1);\n' \
-       '                    AppleAnsComplete(a,srb,SRB_STATUS_BUSY,0);return TRUE;' in bounce, \
-    'no buffer: pause the LU and retry while a release is expected, otherwise direct'
+assert 'if (ans_bounce_must_wait(&a->Bounce)) return FALSE;' in bounce, \
+    'no buffer: the request waits in the driver while a release is expected, otherwise direct'
+# EXP2479: the pool being full is never answered BUSY, and no BUSY answer changes the request.
+assert 'SRB_STATUS_BUSY' not in bounce and 'StorPortDeviceBusy' not in NATIVE + DRIVER, \
+    'a full pool is ordinary load, not a BUSY answer'
+entry = NATIVE[NATIVE.index('BOOLEAN AppleAnsNativeStart('):NATIVE.index('static BOOLEAN start_request(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)\n{')]
+assert entry.index('if (a->WaitHead && srb->SrbExtension) { wait_append(a,srb,TRUE);return TRUE; }') < \
+    entry.index('if (!start_request(a,srb)) wait_append(a,srb,FALSE);') < entry.index('AppleAnsWaitDrain(a);'), \
+    'a later request never passes a waiting one'
+drain = NATIVE[NATIVE.index('VOID AppleAnsWaitDrain('):NATIVE.index('VOID AppleAnsWaitRetire(')]
+assert drain.index('a->WaitHead=x->WaitNext') < drain.index('if (!start_request(a,srb))'), \
+    'a waiting request is unlinked before it is started (it may be completed inside)'
+assert NATIVE.count('AppleAnsWaitRetire(a,status);') == 1 and 'AppleAnsWaitRetire(a, status);' in DIRECT, \
+    'reset and stop end the waiting requests too'
+assert 'AppleAnsDispatch(a);\n    AppleAnsWaitDrain(a);\n    return claimed;' in DIRECT, \
+    'every interrupt that completed commands starts the waiting list'
 assert start.index('x->BounceIndex') > start.index('plan=ans_scsi_prepare('), 'only planned READ/WRITE commands bounce'
 
 comp = NATIVE[NATIVE.index('VOID AppleAnsComplete('):NATIVE.index('static VOID sense(')]

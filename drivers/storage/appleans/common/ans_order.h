@@ -41,6 +41,9 @@ struct ans_order {
 };
 /* Init only fresh storage. Epoch is independent of device QueueTag values. */
 int ans_order_init(struct ans_order *o, ans_u64 epoch);
+/* What ans_order_admit would answer for this tag and attribute, without admitting anything
+ * (ANS_ORDER_OK, ANS_ORDER_BUSY, ANS_ORDER_FAULT or ANS_ORDER_INVALID). */
+int ans_order_would_admit(const struct ans_order *o, unsigned tag, enum ans_order_attribute attribute);
 int ans_order_admit(struct ans_order *o, unsigned tag, enum ans_order_attribute attribute,
                     struct ans_order_token *token);
 /* Reserves one dispatch decision. Caller must resolve SELECTED by mark_submitted
