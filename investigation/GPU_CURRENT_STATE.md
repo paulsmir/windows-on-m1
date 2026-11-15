@@ -7423,3 +7423,12 @@ split into "state added by Windows/probe/trap" versus "below the OS (m1n1 bring-
 contract)". Next causal target: a reference download from the m1n1 proxy without a guest (1:1 port of the
 brcmfmac sequence) with variants (with seed / without seed / trailer forms). Leading hypothesis: the firmware
 does not accept our seed buffer. Known difference from all Asahi installs: firmware taken from macOS 15.7.8.
+
+UPDATE 2026-11-15T23:12Z (architect): Wi-Fi reference download without a guest (EXP2512, m1n1 proxy, 1:1 port
+of the brcmfmac sequence, posted mapping, bus master off) fails exactly like the Windows boots: variants with
+seed, without seed and with an END trailer all stop at 82-84 ms with the same two console lines. VERDICT: the
+firmware-start failure is below the OS; Windows, the probe driver, the EL2 BAR trap and stage 2 are cleared.
+Remaining causes: (A) host contract of the macOS 15.7.8 firmware generation vs what brcmfmac implements
+(validated on 13.5-era firmware); (B) chip state after m1n1's port bring-up vs Asahi apple-pcie/DT/iBoot.
+Next causal target (offline): Apple's own driver as behaviour reference for (A), m1n1-vs-Asahi bring-up diff for
+(B); the proxy script is the iteration tool. Bench back on RECANS001.
