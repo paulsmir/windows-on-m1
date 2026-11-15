@@ -80878,3 +80878,8 @@ EXP2496 ACTUAL (2026-11-15 UTC): recovery guest so_clear (stornvme 0=3 removed) 
 - APPL0005 OK with the installed LVL package (oem20.inf 19.38.54.183): hardware_fault 0, power_state 0xf, output_enable 1, user_level 137, effective 137, live_on 361, ps0_count 1. user_level 137 = the level set in EXP2495 read by the driver after a full restart (completes EXP2495's restart check).
 - No BUGCHECK line; end 20:34:58Z: so_clear, ordered restart, proxy +18.4 s, AT_PROXY rec2493h on the unchanged G2 RECOVERY_DONE 20:37:37Z.
 - Verdict: recovery Mu with KBDL (cbf0413d) PASS on its validation boot. RECANS001 not switched yet (waits for the architect's acknowledgement); G2 7c283fb1 stays pinned as fallback. Evidence EXP2496-reckbd/evidence/checks.txt, MURECKBD001/aml (gate files).
+
+EXP2497 HARDWARE BEFORE 2026-11-15T20:38:56Z: first in-service recovery cycle with the recovery Mu + KBDL (architect GO after EXP2496)
+- Switch done: RECANS001-normal-ans/launch-normal-ans.sh FD -> production/J313_EFI-gpu-ans-direct-G2-kbd.fd cbf0413d (launcher sha dc14f238 -> f0f03857; backup .pre-kbd = G2 7c283fb1, which stays pinned on disk as the fallback; BENCH-M1N1.json recovery_mu). Recovery m1n1 unchanged 882985fb (c6f0c8cb); its alignment to the bench m1n1 is a separate later step.
+- Run: one full visible recovery cycle on purpose from the current (recovery) guest via rec2493h/recover.sh. Checks: RECOVERY_DONE, RECOVERY_STORAGE_APPLEANS_OK, AppleAns 0.4.8.9 image (620c6c57be34f47d), APPL0005 OK with user_level 137 and lamp registers (hardware_fault 0, power 0xf), StartOverride clear at the end.
+- Failure: any deviation -> switch back to .pre-kbd (G2) at once, report.
