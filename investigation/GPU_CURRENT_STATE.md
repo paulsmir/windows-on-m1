@@ -7044,3 +7044,22 @@ boot was run. The previous entry stays as written.
   0.4.8.3, StartOverride cleared, AGX inert, keyboard package present but its device absent in this firmware.
   So the keyboard backlight is NOT active in the idle/recovery profile; "every boot" currently means every bench
   launch on MUKBD003. Open task: align the recovery/idle profile (Mu with the keyboard device, current m1n1).
+
+## UPDATE 2026-11-15T00:24Z - panel image after stop (PD-1); A5-F1 offline rule
+
+- CORRECTION to "no Windows display owner existed" (updates of 2026-11-14 evening): the root-enumerated Microsoft
+  Basic Display Driver is loaded for the whole boot (EXP908 audit), so the missing load events prove nothing.
+  Whether it presents after our stop has not been measured.
+- PD-1 (DISPLAY_ONLY), hypothesis from code (research pass, report outside the repo): at stop the KMD returns the
+  guest GOP surface (PA 0x85F000000, 2560x1600) to Windows and sends the broker RELEASE; m1n1's release/quiesce
+  presents its own boot framebuffer (the logo), not the guest surface. Windows may therefore draw a desktop that is
+  not on the panel. Contract gaps found in our release DDI regardless: TargetId returned as 0xFFFFFFFF, surface not
+  cleared, NOT_SUPPORTED on the own-scanout route, geometry compared with J313 literals. Discriminator PD-1a (no
+  code): disable 60 s, monitor-child state + interactive screen capture, re-enable. Spec in the architect handoff.
+- A5-F1 offline part (bench, branch a5/f1-restart-size 1fd8c09bc, no hardware): restart sizing rule
+  min(segment, Share - previous - 8 MiB) rounded to 64 MiB, first start of a boot unchanged; the test models VidMm
+  under two readings and reproduces EXP2459 (2 of 3 start at 4 GiB) and EXP2461. Working reading from the instance
+  ids: the boot-time instance does not lower VidMm's limit, restarted instances do (explains the passing first
+  restart; hypothesis). With the bench share the sizes alternate 4 GiB / 832 MiB: a restarted instance is degraded -
+  to be settled in the design pass before the Windows wiring. Open: 2 NEW gate failures on that branch that also
+  fail at its base (cause to be named; not accepted as "environment").
