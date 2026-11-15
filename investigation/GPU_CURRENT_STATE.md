@@ -7388,3 +7388,15 @@ Next causal target (Wi-Fi session, offline): name the exact access from the rev-
 a per-stage mask so one boot can enable stages one at a time; wrapper-state check before touching a core.
 Separate open defect: a guest SError storm from a PCIe device access ends in an HV rendezvous panic.
 Bench: recovered (RECANS001), idle, no probe package installed.
+
+CORRECTION 2026-11-15T22:22Z (architect) to the Wi-Fi R2 entry above: the interim cause "CR4 written while in
+reset" is withdrawn. EXP2500 S1 (probe rev 7, 415045795, agent-only reads) PASS as a run but found ARM CR4 clocked,
+halted and out of reset on a fresh boot. EXP2501 S2 crashed at the first write of set_passive (RESET_CTL of the
+CR4 agent), before the bank access, as the Wi-Fi session predicted beforehand from re-reading EXP2499: every BAR0
+read completed, every BAR0 write raised an asynchronous SError. Working cause (hypothesis until the guest mapping
+type is measured): the PCIe BAR window needs posted writes (Device-nGnRE per the ADT pmap-io-ranges class and
+m1n1/Asahi), the Windows mapping is non-posted, stage 2 cannot relax it. Next causal target: m1n1 wifi/bench-int
+image with an opt-in EL2 trap-forward of the guest BAR window; discriminator = S2 with the trap on.
+DART criterion amended: the residual DART_ERROR value differs per boot; require "value at window-ready of the
+same boot, unchanged, bit 31 clear". Open: Stage=2 marker missing on disk after the crash; HV rendezvous panic on
+guest SError storms. Bench idle on RECANS001.
