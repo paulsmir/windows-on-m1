@@ -7107,3 +7107,15 @@ boot was run. The previous entry stays as written.
   confirms that the panel shows the desktop in the disabled state. Still open on the KMD side: release-DDI
   contract clean-up (clear the surface, TargetId, own-scanout route), A5-F1 Windows wiring.
 - Bench idle on the recovery profile, AppleAns 0.4.8.3, no pipeline.
+
+## UPDATE 2026-11-15T03:07Z - EXP2467: foreground window rejected; launch harness cleared for CS placement
+
+- One boot (a6916e26, MUKBD003, package 536f2357): control 51.877 / 51.925 with explorer foreground; hl.exe held
+  the foreground in 40/40 samples in the test runs (dynamic priority 9/8 vs base 6) and gave 51.683 / 52.558.
+  Placement identical in all runs: E 2044-2064 MHz, P parked (Parking Status 0.93-1.00), dram_fast=0. Verdict:
+  REJECTED. With EXP2460 the launch harness is cleared; CS numbers are not harness-depressed.
+- Remaining candidates: Windows parking of the class-1 cores (no platform power provisioning exists for this
+  machine) vs the firmware _CPC scale (MHz: E appears as 69 % of P). Ordered: a temporary in-boot parking
+  discriminator (CPMINCORES1=100, values saved and restored with verification; diagnostic only, reported to the
+  user as a temporary guest power-setting change). In design offline: the _CPC capacity-scale experiment (Mu + m1n1
+  atomic, default image unchanged) and the documented OEM provisioning route.
