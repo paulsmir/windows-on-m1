@@ -33,6 +33,9 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiQueryDeviceDescriptor = AdmissionDdiQueryDeviceDescriptor;
   initialization.DxgkDdiSetPowerState = AdmissionDdiSetPowerState;
   initialization.DxgkDdiResetDevice = AdmissionDdiResetDevice;
+  /* A2: bugcheck display (any IRQL; not wrapped by the status receipts). */
+  initialization.DxgkDdiSystemDisplayEnable = AdmissionDdiSystemDisplayEnable;
+  initialization.DxgkDdiSystemDisplayWrite = AdmissionDdiSystemDisplayWrite;
   initialization.DxgkDdiUnload = AdmissionDdiUnload;
   initialization.DxgkDdiQueryAdapterInfo = AdmissionDdiQueryAdapterInfo;
   initialization.DxgkDdiSetPalette = AdmissionDdiSetPalette;

@@ -4,31 +4,45 @@
  * the shared stop path (lifecycle.c AdmissionStopDeviceInternal). */
 #include "render_admission.h"
 
-/* Clear the returned surface to black before the hand-back, through a
- * write-combined map, only when the range is not Windows RAM (clearing is "if
- * possible" in the release contract; a skipped fill does not fail the release). */
-static ULONG AdmissionStopFillBlack(ULONGLONG Pa, ULONGLONG Bytes, ULONG *FillUs) {
+/* PD-1c / A2: TRUE only when [Pa, Pa+Bytes) is known not to intersect Windows
+ * RAM (MmGetPhysicalMemoryRangesEx2). An empty or wrapping range, or an
+ * unavailable range list, is FALSE: the caller must not map or write it.
+ * PASSIVE_LEVEL (the range list is allocated from pool). */
+_Use_decl_annotations_ BOOLEAN AdmissionPhysicalRangeOutsideRam(ULONGLONG Pa,
+                                                                ULONGLONG Bytes) {
   PPHYSICAL_MEMORY_RANGE ranges;
-  PHYSICAL_ADDRESS base;
-  LARGE_INTEGER frequency, t0, t1;
-  PVOID cpu;
   ULONG i;
-  *FillUs = 0u;
+  BOOLEAN outside = TRUE;
   if (Pa == 0ULL || Bytes == 0ULL || Pa + Bytes < Pa)
-    return ADMISSION_STOP_FILL_NA;
+    return FALSE;
   ranges = MmGetPhysicalMemoryRangesEx2(NULL, 0u);
   if (ranges == NULL)
-    return ADMISSION_STOP_FILL_RAM_SKIP; /* unknown: do not write */
+    return FALSE; /* unknown: do not write */
   for (i = 0u; ranges[i].BaseAddress.QuadPart != 0 ||
                ranges[i].NumberOfBytes.QuadPart != 0; ++i) {
     ULONGLONG rb = (ULONGLONG)ranges[i].BaseAddress.QuadPart;
     ULONGLONG re = rb + (ULONGLONG)ranges[i].NumberOfBytes.QuadPart;
     if (Pa < re && rb < Pa + Bytes) {
-      ExFreePool(ranges);
-      return ADMISSION_STOP_FILL_RAM_SKIP;
+      outside = FALSE;
+      break;
     }
   }
   ExFreePool(ranges);
+  return outside;
+}
+
+/* Clear the returned surface to black before the hand-back, through a
+ * write-combined map, only when the range is not Windows RAM (clearing is "if
+ * possible" in the release contract; a skipped fill does not fail the release). */
+static ULONG AdmissionStopFillBlack(ULONGLONG Pa, ULONGLONG Bytes, ULONG *FillUs) {
+  PHYSICAL_ADDRESS base;
+  LARGE_INTEGER frequency, t0, t1;
+  PVOID cpu;
+  *FillUs = 0u;
+  if (Pa == 0ULL || Bytes == 0ULL || Pa + Bytes < Pa)
+    return ADMISSION_STOP_FILL_NA;
+  if (!AdmissionPhysicalRangeOutsideRam(Pa, Bytes))
+    return ADMISSION_STOP_FILL_RAM_SKIP;
   base.QuadPart = (LONGLONG)Pa;
   t0 = KeQueryPerformanceCounter(&frequency);
   cpu = MmMapIoSpaceEx(base, (SIZE_T)Bytes, PAGE_READWRITE | PAGE_WRITECOMBINE);

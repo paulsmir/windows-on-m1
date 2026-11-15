@@ -70,7 +70,9 @@ int main(){
         wrapped=set(re.findall(r'ADMISSION_STATUS_WRAP\(\d+,\s*(\w+)',p.read_text()))
         driver=(SRC/'driver.c').read_text()
         registered=set(re.findall(r'initialization\.Dxgk\w+\s*=\s*(\w+);',driver))
-        no_status={'AdmissionDdiInterruptRoutine','AdmissionDdiDpcRoutine','AdmissionDdiResetDevice','AdmissionDdiUnload','AdmissionDdiControlEtwLogging','AdmissionDdiSetStablePowerState','AdmissionDdiSetRootPageTable'}
+        no_status={'AdmissionDdiInterruptRoutine','AdmissionDdiDpcRoutine','AdmissionDdiResetDevice','AdmissionDdiUnload','AdmissionDdiControlEtwLogging','AdmissionDdiSetStablePowerState','AdmissionDdiSetRootPageTable',
+                   # A2: bugcheck-time DDIs (any IRQL) must stay unwrapped.
+                   'AdmissionDdiSystemDisplayEnable','AdmissionDdiSystemDisplayWrite'}
         self.assertEqual(registered-no_status,wrapped)
         self.assertIn('AdmissionInstallStatusReceipts(&initialization)',driver)
         checked=(SRC/'gpuva_g3_paging_windows.c').read_text()

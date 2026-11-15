@@ -51,11 +51,11 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         for callback in required:
             self.assertIn(f"initialization.{callback} =", driver)
 
-        for callback in (
-            "DxgkDdiPresentDisplayOnly", "DxgkDdiSystemDisplayEnable",
-            "DxgkDdiSystemDisplayWrite",
-        ):
-            self.assertNotIn(f"initialization.{callback} =", driver)
+        # A2: the bugcheck display DDIs are mandatory for WDDM 1.2+ full
+        # graphics drivers (tests/test_apple_agx_bugcheck_display.py).
+        for callback in ("DxgkDdiSystemDisplayEnable", "DxgkDdiSystemDisplayWrite"):
+            self.assertIn(f"initialization.{callback} =", driver)
+        self.assertNotIn("initialization.DxgkDdiPresentDisplayOnly =", driver)
 
     def test_palette_scanline_fail_closed_and_present_accepts_exact_mmio_flip(self):
         display = self.read("src/display.c")

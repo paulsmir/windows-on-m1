@@ -1019,6 +1019,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
    * keeps two segments. */
   AdmissionMemoryPoolStart(context);
 #endif
+  /* A2: map the POST surface and the broker page for the bugcheck DDIs after
+   * the POST acquire and every fallible start step (no failure path to undo);
+   * a refused surface leaves Valid 0 and does not fail the start. */
+  AdmissionBugcheckDisplayPrepare(context);
   context->DisplayActive = TRUE;
   context->SourceVisible = TRUE;
   context->CommittedWidth = APPLE_AGX_SCANOUT_J313_WIDTH;
@@ -1102,6 +1106,9 @@ static NTSTATUS AdmissionStopDeviceBody(PVOID MiniportDeviceContext) {
       APPLE_AGX_WDDM_READY_WDDM3_IDENTITY |
           APPLE_AGX_WDDM_READY_DEVICE_CONTEXT);
   RtlZeroMemory(&context->StartInfo, sizeof(context->StartInfo));
+  /* A2: unpublish and unmap the bugcheck surface before the POST information
+   * it was prepared from is zeroed. */
+  AdmissionBugcheckDisplayRetire(context);
   RtlZeroMemory(&context->DeviceInformation,
                 sizeof(context->DeviceInformation));
   RtlZeroMemory(&context->PostDisplayInformation,
@@ -1185,6 +1192,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceCon
 #if defined(APPLE_AGX_GPUVA_G3_QUALIFICATION)
   AdmissionMemoryPoolStop(context);
 #endif
+  AdmissionBugcheckDisplayRetire(context); /* A2: before the context is freed */
   AdmissionStartPolicyRelease(context);
   AdmissionRecordDevice(context->PhysicalDeviceObject, AdmissionReceiptRemove,
                         STATUS_SUCCESS);

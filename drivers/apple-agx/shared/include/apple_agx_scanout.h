@@ -48,6 +48,22 @@ typedef unsigned long long APPLE_AGX_SCANOUT_U64;
  * and, past REG_NEGOTIATED, only after the negotiation read back. */
 #define APPLE_AGX_SCANOUT_CAP_TWO_LAYERS (1u << 9u)
 #define APPLE_AGX_SCANOUT_V3_MMIO_SIZE 0x140u
+/* A1 (m1n1 gpu/scanout-emergency, validated EXP2478): emergency hand-back
+ * doorbell.  REG_EMERGENCY exists only while this bit is advertised (else 0x1c
+ * aborts); u32 access only.  Writing MAGIC asks m1n1 to present the guest (POST)
+ * surface in any broker state; afterwards the broker refuses everything except
+ * QUERY for the rest of that hypervisor run.  A read returns a status below. */
+#define APPLE_AGX_SCANOUT_CAP_EMERGENCY_SURFACE (1u << 10u)
+#define APPLE_AGX_SCANOUT_EMERGENCY_MAGIC 0x4B484342u /* "BCHK" */
+#define APPLE_AGX_SCANOUT_EMERGENCY_IDLE 0u
+#define APPLE_AGX_SCANOUT_EMERGENCY_REQUESTED 1u
+#define APPLE_AGX_SCANOUT_EMERGENCY_LATCHED_GUEST 2u
+#define APPLE_AGX_SCANOUT_EMERGENCY_LATCHED_OWN 3u
+#define APPLE_AGX_SCANOUT_EMERGENCY_FAILED 0x80u /* | cause */
+#define APPLE_AGX_SCANOUT_EMERGENCY_CAUSE_NO_OPS 1u
+#define APPLE_AGX_SCANOUT_EMERGENCY_CAUSE_BEGIN 2u
+#define APPLE_AGX_SCANOUT_EMERGENCY_CAUSE_LATCH_FAILED 3u
+#define APPLE_AGX_SCANOUT_EMERGENCY_CAUSE_LATCH_TIMEOUT 4u
 #define APPLE_AGX_SCANOUT_V3_LAYERS 2u
 #define APPLE_AGX_SCANOUT_V3_LAYER_RECORD_SIZE 0x40u
 /* DCP limits the V3 broker enforces: destination at least 32x32 on the
@@ -90,6 +106,7 @@ typedef enum _APPLE_AGX_SCANOUT_REGISTER {
   APPLE_AGX_SCANOUT_REG_RESULT = 0x10u,
   APPLE_AGX_SCANOUT_REG_IRQ_STATUS = 0x14u,
   APPLE_AGX_SCANOUT_REG_IRQ_ENABLE = 0x18u,
+  APPLE_AGX_SCANOUT_REG_EMERGENCY = 0x1cu, /* u32 rw, CAP_EMERGENCY_SURFACE only */
   APPLE_AGX_SCANOUT_REG_RECEIPT_SEQUENCE = 0x20u,
   APPLE_AGX_SCANOUT_REG_APPLIED_SEQUENCE = 0x28u,
   APPLE_AGX_SCANOUT_REG_LATCHED_SEQUENCE = 0x30u,

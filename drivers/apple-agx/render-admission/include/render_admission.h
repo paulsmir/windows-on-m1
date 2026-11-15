@@ -937,6 +937,25 @@ typedef struct _ADMISSION_START_POLICY_RUNTIME {
   PIO_WORKITEM WorkItem;
 } ADMISSION_START_POLICY_RUNTIME;
 
+/* A2: DxgkDdiSystemDisplayEnable/Write state (bugcheck_display_windows.c).
+ * Lives in the non-paged ADMISSION_CONTEXT. Prepare (PASSIVE, end of
+ * StartDevice) fills every field and publishes Valid last; Retire (stop path)
+ * clears Valid first, then unmaps. The bugcheck-time DDIs read it without locks:
+ * at bugcheck every other processor is frozen. */
+typedef struct _ADMISSION_BUGCHECK_DISPLAY {
+  volatile LONG Valid;
+  /* Set by DxgkDdiSystemDisplayEnable: Windows is in a bugcheck. */
+  volatile LONG BugcheckActive;
+  PUCHAR Va;                   /* write-combined view of the POST surface */
+  ULONGLONG Pa;
+  SIZE_T Bytes;                /* Pitch * Height */
+  ULONG Width, Height, Pitch, Format;
+  ULONG TargetId;              /* the internal panel (child 0) */
+  volatile UCHAR *BrokerRegs;  /* one PAGE_NOCACHE page of the broker resource */
+  ULONG Capabilities;          /* scanout CAPABILITIES read at Prepare */
+  BOOLEAN EmergencyCap;        /* CAP_EMERGENCY_SURFACE advertised */
+} ADMISSION_BUGCHECK_DISPLAY;
+
 typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   ADMISSION_MEMORY_CONTRACT Memory;
@@ -1362,6 +1381,7 @@ typedef struct _ADMISSION_CONTEXT {
   UCHAR MpoScratchStage[ADMISSION_MPO_SCRATCH_BYTES];
   ADMISSION_MPO_PLANE_STATE MpoPlanes[2];
   ADMISSION_START_POLICY_RUNTIME StartPolicy;
+  ADMISSION_BUGCHECK_DISPLAY BugcheckDisplay;
 } ADMISSION_CONTEXT;
 
 typedef struct _ADMISSION_DEVICE {
@@ -2887,6 +2907,42 @@ DXGKDDI_QUERY_CHILD_STATUS AdmissionDdiQueryChildStatus;
 DXGKDDI_QUERY_DEVICE_DESCRIPTOR AdmissionDdiQueryDeviceDescriptor;
 DXGKDDI_SET_POWER_STATE AdmissionDdiSetPowerState;
 DXGKDDI_RESET_DEVICE AdmissionDdiResetDevice;
+/* A2 (bugcheck_display_windows.c): any IRQL, non-paged, no locks, no pool, no
+ * dxgkrnl callbacks; registered without the status-receipt wrapper. */
+DXGKDDI_SYSTEM_DISPLAY_ENABLE AdmissionDdiSystemDisplayEnable;
+DXGKDDI_SYSTEM_DISPLAY_WRITE AdmissionDdiSystemDisplayWrite;
+#define ADMISSION_BUGCHECK_RECEIPT_MAGIC 'BCRD'
+#define ADMISSION_BUGCHECK_RECEIPT_VERSION 1u
+#define ADMISSION_BUGCHECK_PREPARE_NONE 0u
+#define ADMISSION_BUGCHECK_PREPARE_READY 1u
+#define ADMISSION_BUGCHECK_PREPARE_OWN_SCANOUT 2u /* Width 0: no POST surface */
+#define ADMISSION_BUGCHECK_PREPARE_INVALID 3u     /* AppleAgxPostDisplaySurfaceValid */
+#define ADMISSION_BUGCHECK_PREPARE_RAM 4u         /* intersects Windows RAM / unknown */
+#define ADMISSION_BUGCHECK_PREPARE_MAP_FAIL 5u
+#define ADMISSION_BUGCHECK_MAX_POLLS 5000u
+#define ADMISSION_BUGCHECK_POLL_US 100u
+/* Read from MEMORY.DMP with cdb (dt/db g_AgxBugcheckReceipt): registry writes
+ * are impossible at bugcheck. */
+typedef struct _ADMISSION_BUGCHECK_RECEIPT {
+  ULONG Magic, Version;
+  ULONG PrepareCount, PrepareResult, RetireCount;
+  ULONG Width, Height, Pitch, Format;
+  ULONG Capabilities, BrokerMapped, EmergencyCap;
+  volatile LONG EnableCalls;
+  ULONG EnableTargetIn, EnableStatus;
+  ULONG Polls, EmergencyStatus, StallUs;
+  volatile LONG WriteCalls, WriteClipped, WriteRejected;
+  ULONG LastX, LastY, LastW, LastH;
+} ADMISSION_BUGCHECK_RECEIPT;
+extern ADMISSION_BUGCHECK_RECEIPT g_AgxBugcheckReceipt;
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionBugcheckDisplayPrepare(_Inout_ ADMISSION_CONTEXT *Context);
+_IRQL_requires_max_(DISPATCH_LEVEL)
+VOID AdmissionBugcheckDisplayRetire(_Inout_ ADMISSION_CONTEXT *Context);
+/* PD-1c / A2 (post_display_windows.c): TRUE only when the range is known not to
+ * intersect Windows RAM. */
+_IRQL_requires_(PASSIVE_LEVEL)
+BOOLEAN AdmissionPhysicalRangeOutsideRam(_In_ ULONGLONG Pa, _In_ ULONGLONG Bytes);
 DXGKDDI_UNLOAD AdmissionDdiUnload;
 DXGKDDI_QUERYADAPTERINFO AdmissionDdiQueryAdapterInfo;
 DXGKDDI_SETPALETTE AdmissionDdiSetPalette;
