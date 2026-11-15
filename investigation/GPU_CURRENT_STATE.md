@@ -7341,3 +7341,21 @@ boot was run. The previous entry stays as written.
   updates (package built), display-off/idle dimming, recovery profile without the device, verifier run and the
   Fn-key decision (both wait for the user), standard package + docs. Observation to explain: at the start of
   EXP2492 the lamp was dark and Windows' last report was black (0,0,0,1) until the operator touched the slider.
+
+## UPDATE 2026-11-15T20:44Z - keyboard backlight line: status after the 2026-11-15 evening; bench profiles
+
+- Working mode: keyboard boots use a no-GPU-package launcher (launch-kbd.sh, ~1 min to SSH instead of ~23 min);
+  operator looks are announced by push notification; a phone camera for unattended looks is being set up.
+- Closed on hardware: slider gradation (F1), full range (F2; slider maximum with the default accent colour is
+  intensity 213 = the colour's own value, white gives 255 -> full level), off paths (remove receipt 0x0005000F;
+  restart: PS trace shows the driver's stop + gate before the PSCI reset; the restart receipt does not persist),
+  display off -> lamp dark -> wake -> lit (seen by the operator), user level survives devnode removal and package
+  reinstall (LVL-9c930a8f, now the every-boot package), recovery/idle profile: RECANS001 switched to Mu G2+KBDL
+  cbf0413d and in service after a full recovery cycle (fallback G2 7c283fb1; recovery m1n1 still 882985fb).
+- Open: Fn+F5/F6 keys and idle dimming - KB3 v1 stopped at its descriptor check (the J313 keyboard declares Fn as a
+  7-bit field in report 1; parser fixed, activity link split from hotkeys, AppleInput INF no longer overwrites the
+  publication values; v2 staged, needs the operator's key presses); modern standby is available on the guest
+  (S0 Low Power Idle) and needs its own lid/power-button check; Driver Verifier run waits for the user's yes;
+  docs and release signing.
+- Platform observation for the GPU list: with the basic display driver the panel backlight stays lit while the
+  display is "off".
