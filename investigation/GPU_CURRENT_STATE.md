@@ -7165,3 +7165,18 @@ boot was run. The previous entry stays as written.
   planned).
 - m1n1 gpu/bench-next (local): ecc084da + PD-1 + capacity scale; flag-off image identical to 38bf6e3f, flag-on
   image b1fb16de pairs with Mu MUCPC001. Not adopted.
+
+## UPDATE 2026-11-15T07:53Z - EXP2475 (A5-F1b): in-boot adapter restart FIXED by restart sizing; accepted
+
+- Package P1 (a5/f1-restart-size f55931bd9) on the bench pair, standard switches: boot instance 4 GiB with the
+  record absent; perf gate PASS (GM -0.02 %, CS -0.76 %). Four disable/enable cycles: every enable OK, no event
+  549, no "dedicated too much" text; sizes 896 MiB / 4 GiB / 896 MiB / 4 GiB; every instance confirmed. After an
+  ordered reboot a plain boot is back at 4 GiB with the record absent.
+- Answered: VidMm's limit follows only the last budgeted instance (alternation, no monotone decrease). The reduced
+  size is 896 MiB with the bench share of 5015 MiB (the earlier 832 MiB figure used a wrong share value).
+- A5 (device restart inside one boot) is CLOSED as a start failure. Remaining, stated limitation: every second
+  in-boot instance runs with 896 MiB (desktop presents; heavy scenes will not fit) until its next restart or a
+  reboot; Microsoft documents no way to regain the full size; follow-up = the driver's own recovery via TDR.
+- DECISION: P1 is accepted into the next package line. Still open on the same lifecycle: post-display hand-back
+  package P2 (pd/release-ddi 6d31b3f7e, needs the PD-1 m1n1 image + operator look), the 13 QueryAdapterInfo
+  refusals per start that dxgkrnl logs as invalid NTSTATUS, SystemDisplayEnable/Write, panel geometry from data.
