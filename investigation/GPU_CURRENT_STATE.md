@@ -7063,3 +7063,21 @@ boot was run. The previous entry stays as written.
   restart; hypothesis). With the bench share the sizes alternate 4 GiB / 832 MiB: a restarted instance is degraded -
   to be settled in the design pass before the Windows wiring. Open: 2 NEW gate failures on that branch that also
   fail at its base (cause to be named; not accepted as "environment").
+
+## UPDATE 2026-11-15T01:05Z - night queue: Wi-Fi G3b PASS; PD-1a confirms Windows presents unseen; A5 restart-1 reading refuted
+
+- Wi-Fi: G3b-1r (EXP2462) PASS on m1n1 image bf15adfb (per-owner IRQ route capacity): route installed, ANS broker
+  accepted, guest boots, G3a receipt identical. G3b-2 (EXP2463) PASS: probe rev 3 connects the level interrupt on
+  vector 695, IsrCount60s 0, StormGuard 0, Interrupt Disable clear before and after. Limit of the proof: connected
+  and silent; delivery of an asserted INTx is unproven until firmware runs (G4).
+- PD-1a (EXP2464): with the adapter disabled for 60 s the monitor DISPLAY\Default_Monitor\1&8713bca&0&UID0 is OK
+  under ROOT\BasicDisplay\0000 and an interactive capture shows a full 2560x1600 desktop. So Windows does present
+  through the basic display driver; combined with the operator photos (m1n1 logo on the panel in that state) the
+  PD-1 cause stands: the panel is not scanning out the surface Windows draws into. Caveat: no operator look in
+  this very run. Fix owner: m1n1 release path (present the guest surface) + KMD release-DDI contract clean-up.
+- A5: in EXP2464 the FIRST re-enable at 4 GiB was refused (549 / 0xC0000017), unlike EXP2459 part 2. The reading
+  "the boot-time instance does not lower VidMm's limit" is REFUTED as a general rule; the pairwise sizing rule
+  (which also shrinks restart 1) is required. Why restart 1 passed in EXP2459 part 2 and EXP2416 stays open.
+- A5-F1 gate: BASELINE_OK on 1fd8c09bc. The two "new" failures were missing git-ignored evidence directories in
+  fresh worktrees (named cause; nothing added to known failures). Follow-up: worktree setup must link them.
+- Bench idle on the recovery profile; AppleAns 0.4.8.3; StartOverride absent; no pipeline.
