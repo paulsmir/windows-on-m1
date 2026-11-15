@@ -179,6 +179,152 @@ class ImageRehearsal(unittest.TestCase):
         self.assertEqual(diff_count(before, self.disk.read_bytes()), 1)
 
 
+HT = load("hivelog_tests", "tests/test_ans_hivelog.py")
+HL = P.HL
+
+
+@unittest.skipUnless(shutil.which("mkntfs") and shutil.which("ntfscp"), "mkntfs/ntfscp not installed")
+class LogAwarePlan(unittest.TestCase):
+    """Dirty hive + pending log entries on a real NTFS volume: plan offline, apply, replay."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp(prefix="ans-logplan-"))
+        primary = T.build_hive((8, 7))
+        bins = len(primary) - BLOCK
+        pos = HT.locate(primary)
+        page = (pos - BLOCK) & ~(BLOCK - 1)
+        other = 0 if page else BLOCK
+        pg = lambda off: (off, primary[BLOCK + off:BLOCK + off + BLOCK])
+        cls.primary = primary
+        cls.log1 = HT.log_file(primary, 7, [HT.entry(7, bins, [pg(other), pg(page)]), HT.entry(8, bins, [pg(other)]),
+                                            HT.entry(9, bins, [pg(page)])])
+        vol = cls.tmp / "vol.img"
+        with open(vol, "wb") as f:
+            f.truncate(64 << 20)
+        run = lambda *a: subprocess.run(a, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        run("mkntfs", "-F", "-Q", "-q", "-s", "4096", "-c", "4096", str(vol))
+        for name, data in (("SYSTEM", primary), ("SYSTEM.LOG1", cls.log1), ("SYSTEM.LOG2", b"")):
+            src = cls.tmp / "src.bin"
+            src.write_bytes(data)
+            run("ntfscp", "-q", str(vol), str(src), name)
+        cls.pristine = cls.tmp / "pristine.img"
+        T.gpt_disk(vol.read_bytes(), cls.pristine)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="case-", dir=self.tmp))
+        self.disk = self.dir / "disk.img"
+        shutil.copy(self.pristine, self.disk)
+
+    def plan(self):
+        dev = R.ImageDevice(self.disk)
+        try:
+            return P.make_plan(R.Disk(dev), "stornvme-startoverride", 0, "\\SYSTEM")
+        finally:
+            dev.close()
+
+    def files(self):
+        dev = R.ImageDevice(self.disk)
+        try:
+            vol = R.Ntfs(R.Disk(dev), T.PART_LBA)
+            out = []
+            for n in ("SYSTEM", "SYSTEM.LOG1"):
+                st = vol.stream(vol.resolve("\\" + n), 0x80, "")
+                out.append(st.read(0, st.size))
+            return out
+        finally:
+            dev.close()
+
+    def run_blocks(self, plan, execute):
+        be = P.ImageBackend(self.disk)
+        try:
+            return P.apply_blocks(be, plan, self.dir / "backup", execute, lambda m: None)
+        finally:
+            be.close()
+
+    def test_plan_lists_every_copy_and_dry_run_writes_nothing(self):
+        plan = json.loads(json.dumps(self.plan()))
+        self.assertTrue(plan["hive"]["dirty"])
+        self.assertEqual([e["sequence"] for e in plan["log_entries_applied"]], [7, 8, 9])
+        whys = sorted(x["why"] for b in plan["blocks"] for x in b["edits"])
+        self.assertEqual(sum("copy read" in w for w in whys), 3)
+        self.assertEqual(sum("Hash" in w for w in whys), 2)
+        self.assertEqual([s["before"]["stornvme"]["StartOverride"] for s in plan["states"]], [{"0": 3}] * 4)
+        self.assertEqual([s["after"]["stornvme"]["StartOverride"] for s in plan["states"]], [{"0": 0}] * 4)
+        self.assertEqual(len({b["lba"] for b in plan["blocks"]}), len(plan["blocks"]))
+        before = self.disk.read_bytes()
+        res = self.run_blocks(plan, False)
+        self.assertFalse(res["executed"])
+        self.assertTrue(res["witness_ok"])
+        self.assertEqual(self.disk.read_bytes(), before)
+
+    def test_execute_then_windows_style_replay_reads_zero_for_every_prefix(self):
+        plan = json.loads(json.dumps(self.plan()))
+        before = self.disk.read_bytes()
+        res = self.run_blocks(plan, True)
+        self.assertTrue(res["executed"])
+        after = self.disk.read_bytes()
+        changed = {i // BLOCK for i in range(0, len(after), BLOCK) if before[i:i + BLOCK] != after[i:i + BLOCK]}
+        self.assertEqual(changed, {b["lba"] for b in plan["blocks"]})
+        primary, log1 = self.files()
+        logs = {".LOG1": log1, ".LOG2": b""}
+        order, _ = HL.plan_replay(primary, logs)
+        self.assertEqual([e["sequence"] for _, e in order], [7, 8, 9])  # hashes still valid: nothing is dropped
+        for k in range(4):
+            img, _ = HL.replay(primary, logs, k)
+            self.assertEqual(struct.unpack_from("<I", img, HT.locate(img))[0], 0)
+            ref, _ = HL.replay(self.primary, {".LOG1": self.log1, ".LOG2": b""}, k)
+            self.assertEqual(diff_count(img, ref), 1)
+        # a second plan on the repaired disk finds nothing left to change
+        self.assertEqual(self.plan()["blocks"], [])
+        # restore, newest first, gives the original disk back
+        for b in reversed(plan["blocks"]):
+            be = P.ImageBackend(self.disk)
+            try:
+                P.restore(be, self.dir / "backup", b["lba"], b["after_sha256"], True, lambda m: None)
+            finally:
+                be.close()
+        self.assertEqual(self.disk.read_bytes(), before)
+
+    def test_a_disk_that_changed_since_the_plan_is_refused_before_any_write(self):
+        plan = json.loads(json.dumps(self.plan()))
+        victim = next(w["lba"] for w in plan["witness"] if w["file"] == ".LOG1" and
+                      w["lba"] not in {b["lba"] for b in plan["blocks"]})
+        with open(self.disk, "r+b") as f:
+            f.seek(victim * BLOCK + 100)
+            f.write(b"\x55")
+        before = self.disk.read_bytes()
+        with self.assertRaises(P.PatchError) as cm:
+            self.run_blocks(plan, True)
+        self.assertIn("witness", str(cm.exception))
+        self.assertEqual(self.disk.read_bytes(), before)
+        self.assertEqual(list((self.dir / "backup").iterdir()), [])
+
+    def test_tampered_plan_is_refused(self):
+        plan = json.loads(json.dumps(self.plan()))
+        plan["blocks"][0]["edits"][0]["new"] = "01000000"
+        before = self.disk.read_bytes()
+        with self.assertRaises(P.PatchError):
+            self.run_blocks(plan, True)
+        self.assertEqual(self.disk.read_bytes(), before)
+
+    @unittest.skipUnless(shutil.which("hivexsh"), "hivexsh not installed")
+    def test_independent_reader_sees_zero_in_the_recovered_hive(self):
+        plan = json.loads(json.dumps(self.plan()))
+        self.run_blocks(plan, True)
+        primary, log1 = self.files()
+        img, _ = HL.replay(primary, {".LOG1": log1, ".LOG2": b""})
+        f = self.dir / "recovered.hive"
+        f.write_bytes(img)
+        out = subprocess.run(["hivexsh", str(f)], input="cd \\ControlSet001\\Services\\stornvme\\StartOverride\nlsval\n",
+                             capture_output=True, text=True)
+        self.assertIn('"0"=dword:00000000', out.stdout, out.stdout + out.stderr)
+
+
 class TwoBlockChange(unittest.TestCase):
     def test_bytes_across_two_blocks(self):
         tmp = Path(tempfile.mkdtemp(prefix="ans-patch2-"))

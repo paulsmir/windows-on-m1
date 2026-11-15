@@ -8,6 +8,18 @@ Input is the receipt of ans_offline_recon.py.  Exactly one of two changes:
   startoverride  Services\\stornvme\\StartOverride value "0": DWORD 3 -> 0 (one byte)
 or  restore      write a saved block back.
 
+Log-aware change (hive not clean, or pending log entries cover the target):
+  plan           offline, from saved blocks or an image (never from the proxy, never writes):
+                 --target appleans-startoverride | stornvme-startoverride.  Replays the
+                 transaction log (ans_hivelog.py), finds every on-disk copy of the value that any
+                 prefix of the replay would read (primary file and log entry pages), changes
+                 each 3 -> 0 and gives every touched log entry new Hash-1/Hash-2.  The plan file
+                 lists the blocks to write with their SHA-256 before and after, and a witness
+                 list: the SHA-256 of every block of the hive file and of the used part of the
+                 log files.
+  apply-plan     reads every witness block and every block to be written and compares them with
+                 the plan; any difference stops before the first write.  Then as below.
+
 Default is a dry run: everything is read and checked, nothing is written.  --execute writes.
 Order for every affected 4 KiB block: read it, compare its SHA-256 and the bytes to be replaced
 with the receipt, save it (--backup-dir, file must not exist), write, flush, read back, compare.
@@ -32,6 +44,10 @@ import os
 import struct
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ans_hivelog as HL  # noqa: E402
+import ans_offline_recon as RC  # noqa: E402
 
 BLOCK = 4096
 SYS_0483 = "74c4f38e2847c2db3bb34ebc5b1399203379fc0c725c1f9f083c0fd148238683"
@@ -124,6 +140,195 @@ def build_steps(location, old, new, hashes, title):
     if pos != len(old) or len(old) != len(new) or not steps or len(steps) > 2:
         raise PatchError("location does not cover the bytes to change")
     return {"title": title, "steps": steps}
+
+
+# ---- log-aware plan (offline) -----------------------------------------------------------------
+TARGETS = {"appleans-startoverride": "AppleAns", "stornvme-startoverride": "stornvme"}
+HIVE_PATH = "\\Windows\\System32\\config\\SYSTEM"
+
+
+def describe_state(img):
+    """What a boot would read from this hive image: the values that decide the storage path."""
+    h = RC.Hive(lambda o, n: img[o:o + n], len(img))
+    sel = h.open("Select")
+    out = {"Select": {n: RC.value_text(h.value(sel, n)) for n in ("Current", "Default", "Failed", "LastKnownGood")}}
+    cs = f"ControlSet{out['Select']['Current']:03d}"
+    for svc in ("AppleAns", "stornvme"):
+        key = h.open(f"{cs}\\Services\\{svc}")
+        if key is None:
+            out[svc] = None
+            continue
+        so = h.subkey(key, "StartOverride")
+        out[svc] = {"Start": RC.value_text(h.value(key, "Start")), "ImagePath": RC.value_text(h.value(key, "ImagePath")),
+                    "StartOverride": None if so is None else {v["name"]: RC.value_text(v) for v in h.values(so)}}
+    return out
+
+
+def locate_startoverride(service):
+    def locate(img):
+        h = RC.Hive(lambda o, n: img[o:o + n], len(img))
+        cur = RC.value_text(h.value(h.open("Select"), "Current"))
+        key = h.open(f"ControlSet{cur:03d}\\Services\\{service}\\StartOverride")
+        v = h.value(key, "0") if key else None
+        if v is None:
+            return None
+        if v["type"] != 4 or not v["inline"] or v["data_size"] != 4:
+            raise HL.LogError("StartOverride \"0\" is not an inline DWORD")
+        return v["data_file_offset"]
+    return locate
+
+
+def make_plan(disk, target, windows_partition=6, hive_path=None):
+    """Plan from a read-only block source.  Returns the plan dict (JSON-serialisable)."""
+    service = TARGETS[target]
+    gpt = RC.parse_gpt(disk)
+    part = next(p for p in gpt["partitions"] if p["index"] == windows_partition)
+    vol = RC.Ntfs(disk, part["first_lba"])
+    streams, files = {}, {}
+    hive_path = hive_path or HIVE_PATH
+    for suffix in ("", ".LOG1", ".LOG2"):
+        rec = vol.resolve(hive_path + suffix)
+        if rec is None:
+            raise PatchError(f"{hive_path + suffix} not found")
+        st = vol.stream(rec, 0x80, "")
+        name = suffix or "primary"
+        streams[name] = st
+        files[name] = st.read(0, st.size) if st.size else b""
+    primary, logs = files["primary"], {n: b for n, b in files.items() if n != "primary"}
+    hive = RC.Hive(lambda o, n: primary[o:o + n], len(primary))
+    if not hive.base["checksum_ok"]:
+        raise PatchError("primary base block checksum is wrong")
+    hive.verify_bins()
+    old, new = bytes.fromhex("03000000"), bytes(4)
+    locate = locate_startoverride(service)
+    plan = HL.plan_byte_change(primary, logs, locate, old, new)
+    checked = HL.verify_plan(primary, logs, plan, locate, old, new)
+    order, notes = HL.plan_replay(primary, logs)
+    # the final hive must stay structurally valid for an independent reader
+    final, _ = HL.replay(plan["patched_primary"], plan["patched_logs"])
+    RC.Hive(lambda o, n: final[o:o + n], len(final)).verify_bins()
+    states = []
+    for k in range(len(order) + 1):
+        before, _ = HL.replay(primary, logs, k)
+        after, _ = HL.replay(plan["patched_primary"], plan["patched_logs"], k)
+        states.append({"entries_applied": k, "before": describe_state(before), "after": describe_state(after),
+                       "bytes_changed_in_image": checked[k]["bytes_changed"]})
+    # edits -> blocks
+    per_lba = {}
+    for e in plan["edits"]:
+        o, n = bytes.fromhex(e["old"]), bytes.fromhex(e["new"])
+        pos = 0
+        for loc in RC.lbas_of(vol, streams[e["file"]], e["offset"], len(o)):
+            per_lba.setdefault(loc["lba"], []).append(
+                {"offset": loc["offset"], "old": o[pos:pos + loc["length"]].hex(), "new": n[pos:pos + loc["length"]].hex(),
+                 "file": e["file"], "file_offset": e["offset"] + pos, "why": e["why"]})
+            pos += loc["length"]
+    def rank(lba):  # primary first; then log entries from the newest down, page data before hashes
+        es = per_lba[lba]
+        if any(x["file"] == "primary" for x in es):
+            return (0, 0, 0)
+        return (1, -max(x["file_offset"] for x in es), 1 if any("Hash" in x["why"] for x in es) else 0)
+    blocks = []
+    for lba in sorted(per_lba, key=rank):
+        before = disk.read_block(lba)
+        after = bytearray(before)
+        for x in per_lba[lba]:
+            o, n = bytes.fromhex(x["old"]), bytes.fromhex(x["new"])
+            if bytes(after[x["offset"]:x["offset"] + len(o)]) != o:
+                raise PatchError(f"LBA {lba}: the block does not hold the planned old bytes")
+            after[x["offset"]:x["offset"] + len(n)] = n
+        blocks.append({"lba": lba, "before_sha256": sha256(before), "after_sha256": sha256(bytes(after)),
+                       "bytes_differing": sum(a != b for a, b in zip(before, after)), "edits": per_lba[lba]})
+    # the patched files as the blocks would hold them must equal the planner's patched files
+    after_by_lba = {}
+    for b in blocks:
+        buf = bytearray(disk.read_block(b["lba"]))
+        for x in b["edits"]:
+            n = bytes.fromhex(x["new"])
+            buf[x["offset"]:x["offset"] + len(n)] = n
+        after_by_lba[b["lba"]] = bytes(buf)
+    witness = []
+    for name, st in streams.items():
+        if not st.size:
+            continue
+        used = st.size if name == "primary" else max(
+            [1024] + [e["log_offset"] + e["size"] for n, e in order if n == name])
+        used = min(st.size, (used + BLOCK - 1) // BLOCK * BLOCK)
+        want = plan["patched_primary"] if name == "primary" else plan["patched_logs"][name]
+        # the block edits, applied to the blocks, must reproduce the planner's patched file
+        rebuilt = bytearray()
+        for loc in RC.lbas_of(vol, st, 0, used):
+            data = disk.read_block(loc["lba"])
+            witness.append({"lba": loc["lba"], "sha256": sha256(data), "file": name})
+            rebuilt += after_by_lba.get(loc["lba"], data)[loc["offset"]:loc["offset"] + loc["length"]]
+        if bytes(rebuilt) != want[:used]:
+            raise PatchError(f"internal: block edits do not reproduce the patched {name}")
+    return {"tool": "ans_offline_patch", "kind": "log-aware plan", "version": 1, "target": target,
+            "title": f"{service} StartOverride \"0\": 3 -> 0 in every copy the log replay can read",
+            "hive": {"primary_sequence": hive.base["primary_sequence"], "secondary_sequence": hive.base["secondary_sequence"],
+                     "dirty": not hive.base["clean"]},
+            "log_notes": notes, "log_entries_applied": plan["entries"], "states": states,
+            "locations": plan["states"], "blocks": blocks, "witness": witness}
+
+
+def apply_blocks(backend, plan, backup_dir, execute, log):
+    """apply-plan: witness check, per-block check, then (execute) backup, write, flush, read back."""
+    backup_dir = Path(backup_dir)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    result = {"title": plan["title"], "executed": False, "blocks": [], "witness_blocks": len(plan["witness"])}
+    if not plan["blocks"]:
+        raise PatchError("the plan changes nothing")
+    if len(plan["blocks"]) > 16:
+        raise PatchError("the plan writes more than 16 blocks")
+    bad = [w["lba"] for w in plan["witness"] if sha256(backend.read_block(w["lba"])) != w["sha256"]]
+    if bad:
+        raise PatchError(f"{len(bad)} witness block(s) differ from the plan (first LBA {bad[0]}): "
+                         "the disk is not in the state the plan was made for")
+    result["witness_ok"] = True
+    planned = {w["lba"] for w in plan["witness"]}
+    todo = []
+    for b in plan["blocks"]:
+        if b["lba"] not in planned:
+            raise PatchError(f"LBA {b['lba']} is not in the witness list")
+        before = backend.read_block(b["lba"])
+        if sha256(before) != b["before_sha256"]:
+            raise PatchError(f"LBA {b['lba']}: block differs from the plan")
+        after = bytearray(before)
+        for x in b["edits"]:
+            o, n = bytes.fromhex(x["old"]), bytes.fromhex(x["new"])
+            if len(o) != len(n) or x["offset"] + len(o) > BLOCK or bytes(after[x["offset"]:x["offset"] + len(o)]) != o:
+                raise PatchError(f"LBA {b['lba']}: bytes at offset {x['offset']} are not the planned old bytes")
+            after[x["offset"]:x["offset"] + len(n)] = n
+        after = bytes(after)
+        if sha256(after) != b["after_sha256"]:
+            raise PatchError(f"LBA {b['lba']}: the patched block does not have the planned SHA-256")
+        todo.append((b, before, after))
+        result["blocks"].append({"lba": b["lba"], "before_sha256": b["before_sha256"], "after_sha256": b["after_sha256"],
+                                 "edits": [{k: x[k] for k in ("offset", "old", "new", "why")} for x in b["edits"]]})
+    result["preflight"] = backend.preflight(plan["blocks"][0]["lba"])
+    log(f"PLAN {plan['title']}")
+    for b in result["blocks"]:
+        for x in b["edits"]:
+            log(f"  LBA {b['lba']} +{x['offset']} {x['old']} -> {x['new']}  ({x['why']})")
+    log(f"WITNESS {len(plan['witness'])} blocks identical to the plan")
+    if not execute:
+        log("DRY RUN: all checks passed, nothing written")
+        return result
+    for b, before, _ in todo:
+        save_new(backup_dir / f"lba-{b['lba']:012d}.before.bin", before)
+    for i, (b, before, after) in enumerate(todo):
+        backend.write_block(b["lba"], after)
+        backend.flush()
+        seen = backend.read_block(b["lba"])
+        result["blocks"][i]["readback_sha256"] = sha256(seen)
+        if seen != after:
+            result["failed_at_lba"] = b["lba"]
+            raise PatchError(f"LBA {b['lba']}: read-back differs from what was written; restore every "
+                             f"block already written from {backup_dir} (--mode restore), newest first")
+        save_new(backup_dir / f"lba-{b['lba']:012d}.after.bin", seen)
+        log(f"WROTE LBA {b['lba']} and read it back identical")
+    result["executed"] = True
+    return result
 
 
 # ---- back ends ------------------------------------------------------------------------------
@@ -337,19 +542,54 @@ def restore(backend, backup_dir, lba, expect_current_sha256, execute, log):
     return result
 
 
+def main_plan(a, ap, log):
+    if not a.target or bool(a.blocks) == bool(a.image) or a.proxyclient or a.execute:
+        ap.error("plan needs --target and exactly one of --blocks/--image, and never --proxyclient/--execute")
+    dev = RC.BlocksDevice(a.blocks) if a.blocks else RC.ImageDevice(a.image)
+    try:
+        plan = make_plan(RC.Disk(dev), a.target, a.windows_partition)
+    except (PatchError, HL.LogError, RC.ReconError, StopIteration) as e:
+        print(f"PLAN_ERROR {type(e).__name__}: {e}", flush=True)
+        return 3
+    finally:
+        dev.close()
+    a.output.parent.mkdir(parents=True, exist_ok=True)
+    raw = json.dumps(plan, indent=1).encode()
+    a.output.write_bytes(raw)
+    log(f"HIVE primary={plan['hive']['primary_sequence']} secondary={plan['hive']['secondary_sequence']} "
+        f"dirty={plan['hive']['dirty']}; log entries applied: " +
+        (", ".join(f"{e['sequence']}({e['pages']} pages, {e['file']})" for e in plan["log_entries_applied"]) or "none"))
+    for st in plan["states"]:
+        b, c = st["before"], st["after"]
+        svc = TARGETS[a.target]
+        log(f"STATE after {st['entries_applied']} entries: {svc} StartOverride {b[svc] and b[svc]['StartOverride']} -> "
+            f"{c[svc] and c[svc]['StartOverride']}; image bytes changed {st['bytes_changed_in_image']}")
+    for b in plan["blocks"]:
+        for x in b["edits"]:
+            log(f"WRITE LBA {b['lba']} +{x['offset']} {x['old']} -> {x['new']}  ({x['file']} @{x['file_offset']}: {x['why']})")
+    log(f"PLAN_OK blocks_to_write={len(plan['blocks'])} witness_blocks={len(plan['witness'])} "
+        f"sha256={sha256(raw)} -> {a.output}")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="One in-place change of the offline Windows SYSTEM hive (dry run by default)")
-    ap.add_argument("--mode", required=True, choices=("imagepath", "startoverride", "restore"))
+    ap.add_argument("--mode", required=True, choices=("imagepath", "startoverride", "restore", "plan", "apply-plan"))
+    ap.add_argument("--target", choices=sorted(TARGETS), help="plan: the value to change")
+    ap.add_argument("--blocks", type=Path, help="plan: directory of saved blocks (read-only source)")
+    ap.add_argument("--plan", type=Path, help="apply-plan: the plan file")
+    ap.add_argument("--plan-sha256", help="apply-plan: expected SHA-256 of the plan file (required)")
+    ap.add_argument("--windows-partition", type=int, default=6, help="plan: GPT entry index of the Windows volume")
     ap.add_argument("--receipt", type=Path, help="ans_offline_recon receipt (imagepath, startoverride)")
     ap.add_argument("--receipt-sha256", help="expected SHA-256 of the receipt file")
-    src = ap.add_mutually_exclusive_group(required=True)
+    src = ap.add_mutually_exclusive_group()
     src.add_argument("--image", type=Path)
     src.add_argument("--proxyclient", type=Path)
     ap.add_argument("--elf", type=Path, help="m1n1.elf of the image at the proxy (required with --proxyclient)")
     ap.add_argument("--elf-sha256", help="expected SHA-256 of the ELF")
     ap.add_argument("--macho", type=Path, help="the m1n1 image file that was loaded (required with --proxyclient)")
     ap.add_argument("--macho-sha256", help="its SHA-256 (required with --proxyclient)")
-    ap.add_argument("--backup-dir", type=Path, required=True)
+    ap.add_argument("--backup-dir", type=Path, help="required for every mode except plan")
     ap.add_argument("--output", type=Path, required=True, help="JSON result (must not exist)")
     ap.add_argument("--expect-sys-sha256", default=SYS_0483)
     ap.add_argument("--lba", type=int, help="restore: block to write back")
@@ -359,10 +599,24 @@ def main(argv=None):
     if a.output.exists():
         ap.error("refusing to overwrite an existing result")
     log = lambda m: print(m, flush=True)
+    if a.mode == "plan":
+        return main_plan(a, ap, log)
+    if not a.backup_dir or not (a.image or a.proxyclient):
+        ap.error("--backup-dir and one of --image/--proxyclient are required")
     result, backend, code = {"tool": "ans_offline_patch", "mode": a.mode, "execute": a.execute}, None, 0
     try:
-        plan = None
-        if a.mode != "restore":
+        plan = block_plan = None
+        if a.mode == "apply-plan":
+            if not a.plan or not a.plan_sha256:
+                raise PatchError("--plan and --plan-sha256 are required")
+            raw = a.plan.read_bytes()
+            if sha256(raw) != a.plan_sha256:
+                raise PatchError("plan file does not have the expected SHA-256")
+            result["plan_sha256"] = sha256(raw)
+            block_plan = json.loads(raw)
+            if block_plan.get("kind") != "log-aware plan" or block_plan.get("version") != 1:
+                raise PatchError("not a log-aware plan of this tool")
+        elif a.mode != "restore":
             if not a.receipt:
                 raise PatchError("--receipt is required")
             raw = a.receipt.read_bytes()
@@ -388,11 +642,13 @@ def main(argv=None):
             p = M1N1Proxy(iface, debug=False)
             bootstrap_port(iface, p)
             backend = ProxyBackend(p, iface, ProxyUtils(p), a.elf)
-        if plan:
+        if block_plan:
+            result.update(apply_blocks(backend, block_plan, a.backup_dir, a.execute, log))
+        elif plan:
             result.update(apply(backend, plan, a.backup_dir, a.execute, log))
         else:
             result.update(restore(backend, a.backup_dir, a.lba, a.expect_current_sha256, a.execute, log))
-    except (PatchError, OSError, KeyError, ValueError) as e:
+    except (PatchError, HL.LogError, RC.ReconError, OSError, KeyError, ValueError) as e:
         result["error"] = f"{type(e).__name__}: {e}"
         code = 3
     finally:
