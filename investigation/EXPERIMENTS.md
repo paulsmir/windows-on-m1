@@ -80472,3 +80472,21 @@ EXP2470 HARDWARE ACTUAL 2026-11-15T04:43:42Z (settled idle, bench pair a6916e26 
 - Note: "% Processor Time" of parked P cores reads 90-93 % at 600 MHz with Parking Status 1.00 (counter artifact of parked cores; not load).
 - EXP2469 re-read with the fixed summary: its only P-above-ps1 m1n1 line covers the 90 s from boot to the window (dram_fast=-1, before the window), so inside that window P was at ps1 too.
 - Reference for EXP2471 (scale pair, same procedure).
+
+EXP2471 HARDWARE BEFORE 2026-11-15T04:56:46Z:
+- Package exp/combo1-pkg 536f235737c0f11bd90bdb543929df7b5bae9aa1 (EXP2471), standard switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes Wom1StartPolicy=1, AGX_NO_ARM=1, AppleAns 0.4.8.3. No workload launched, no setting changed.
+- Steps: wait to uptime 540 s, quiet-guest check (qgate + top CPU list), wait to uptime 600 s, then two consecutive 5-minute windows A and B: m1n1 "HV: CPPC" lines (E/P ps distribution, dram_fast, desired-performance writes per cluster) and Windows counters 1/s (per-core MHz, % busy, Parking Status), summarised by idlesum.py (P above ps1 % by m1n1 lines, P above 600 MHz % by counters, E ps distribution, mean E MHz, writes E/P).
+- WHY THIS HYPOTHESIS: EXP2469's idle P gate was borderline (1 of 5 m1n1 lines above ps1 = the line covering the 90 s from boot to the window; counters showed P 2988 MHz for 18 s at uptime 72 s) - not a settled idle; a same-uptime comparison against the bench pair decides adoption.
+- Pass for adoption (architect): the scale pair's P-above-ps1 share and E mean MHz are not higher than the bench pair's by more than the A/B spread of the same pair.
+- RISK shared-domain teardown: none. SSD state: AppleAns 0.4.8.3, StartOverride cleared. Shared tables: none added.
+- Recovery: rec<N>h; bench pair a6916e26 + MUKBD003 for the next boots.
+- Hashes: sys 04d71a9fa454, UmdArm64 a9de49cdc47c, UmdX64 d001fd8a46c8, Umd32 22fdc80013e8; manifest e4ee3953525e, hardware-manifest c2672d7de187; probe2471.sh e44784c54ddc (PROBE_LINT_OK); visible recovery rec2471h 42e713d288478863; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
+- Recovery rec2471h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2471-idles/run2471.sh.
+
+EXP2471 HARDWARE ACTUAL 2026-11-15T05:29:23Z (settled idle, scale pair 6d51bd92 + MUCPC001):
+- Probe 04:58:32Z (uptime 52 s), boot line "HV CPPC: capacity scale cluster 0 capacity 714/1024 perf 418..1439 = 600..2064 MHz"; quiet check at 540 s ok (top CPU: System 26 s, MsMpEng 20 s, svchost 9/7 s, explorer 6 s, dwm 5 s); pipeline RC 0, STOPS 0.
+- Window A (uptime 609 s): m1n1 30 lines, P ps=1 30/30 (0.0 % above ps1), E ps=1 30/30, dram_fast 0, writes E 2840 / P 36; counters E mean 667 MHz, P 600 MHz (0.0 % above 600), E busy 11.0 %, E parked 0.62, P parked 1.00.
+- Window B (uptime 924 s): m1n1 30 lines, P ps=1 30/30, E ps=1 29 + ps=5 1, dram_fast 0, writes E 2688 / P 0; E mean 605 MHz, P 600 MHz, E busy 8.2 %, E parked 0.66, P parked 1.00.
+- Comparison with EXP2470 (bench pair, same procedure): P above ps1 0 % vs 0 % (equal); E mean MHz 636 (667/605, A/B spread 62) vs 634.5 (641/628, spread 13): +1.5 MHz on the mean, within either pair's A/B spread (window-matched A +26, B -23); desired writes E 5528 vs 5432 (+1.8 %), P 36 vs 24.
+- Verdict: CPC-1 settled-idle criterion PASS (the scale pair's P-above-ps1 share and E mean MHz are not higher than the bench pair's by more than the A/B spread). With EXP2469 (validity PASS, perf gate PASS, placement unchanged) the capacity scale is a contract-correct change without idle or performance cost; adoption is the architect's decision. Bench pair unchanged until then.
