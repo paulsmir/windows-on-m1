@@ -80749,3 +80749,13 @@ EXP2489 HARDWARE BEFORE 2026-11-15T17:39:22Z:
 - Recovery rec2489h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2489-kbdreset/run2489.sh.
 
 EXP2489 ACTUAL (2026-11-15 UTC): boot of the accepted line (a6916e26 + MUKBD003, pkg/next 04fe217c2, AppleAns 0.4.8.9), every-boot keyboard package. kbdblctl set 90: power_state 0xf, output_enable 1, effective 90, on 237 / off 723, control 0x4021, live_control 0x4001, ps_before_ps0 0x244, ps_after_ps0 0x2ff. so_clear CLEAR_OK; guest "shutdown /r /t 0" 17:41:11Z; USB gone +8.5 s, proxy +16.6 s. At the proxy: PMGR FPWM1 PS 0x23B7001E0 = 0x00000244 (target 4, actual 4) = the same value the driver sees before its first PS0 at boot -> FPWM block not powered, block registers not read. Verdict: after an ordered guest restart the keyboard PWM is off (domain powered down by the SoC reset path); no lamp left lit through the reset. AT_PROXY rec2489h RECOVERY_DONE 17:47:56Z (clear_so pre-restart / pre-cleanup CLEAR_OK).
+
+EXP2490 HARDWARE BEFORE 2026-11-15T17:56:09Z:
+- Boot: accepted line only (bench pair m1n1 a6916e26 + Mu MUKBD003 2ef00a13, package pkg/next 04fe217c2 EXP2490-kbdoff / X86B546, standard switches), AppleAns 0.4.8.9 (BounceEnable=1, adopted EXP2488), every-boot keyboard package 6648f764. No GPU candidate.
+- Steps: kbdblctl set 90 + status; so_clear; guest "shutdown /s /t 0"; reset poller; at the proxy (fresh m1n1 after the PSCI reset path, RST-1/RST-2: both RESET and OFF end in reboot()) read PMGR FPWM1 PS 0x23B7001E0; only if ACTUAL[7:4] = 0xF read FPWM 0x235044000 +0x00 control, +0x18 off, +0x1C on. No register write. Second case of EXP2489 (which read PS 0x244 actual 4 after shutdown /r: block unpowered).
+- Question answered: is the keyboard PWM still powered/running after the guest's ordered restart (lamp left on through the reset)? No fix in this run (the keyboard session designs it).
+- Expected: either PS ACTUAL off (SoC reset turned the PMGR domain off -> lamp dark) or PS on with control 0x4021 / on 237 (lamp still lit). Both are results.
+- Failure: proxy read error/fault; no proxy within 60 s. Recovery: AT_PROXY rec2489h (visible, ANS; clear_so built in).
+- Hashes: sys 7cef8c37ee99, UmdArm64 e1a34bacd879, UmdX64 dbc145ef105f, Umd32 28e5b8901492; manifest ee1280ce4aad, hardware-manifest af0aa082086d; probe2490.sh 810aad739bff (PROBE_LINT_OK); visible recovery rec2490h 279085315b571cbc; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
+- Recovery rec2490h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2490-kbdoff/run2490.sh.
