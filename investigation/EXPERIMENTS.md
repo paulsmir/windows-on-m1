@@ -81002,3 +81002,9 @@ EXP2509 HARDWARE BEFORE 2026-11-15T22:50:11Z: rev 11 seed receipts in the runnin
 - Offline (Wi-Fi session): footer/NVRAM/token arithmetic equals brcmfmac exactly; 0x00BED12F is not an image constant; the guard is written by ROM code.
 - WHY THIS RUN: the seed is fresh entropy per load and was not recorded, so "did the firmware consume our seed" could not be read from EXP2508. PREDICTION (before the run): the new guard word at 0x362350 equals one of the 64 seed words, possibly with one byte zeroed.
 - Single variable: rev 10 -> rev 11 (receipts). Report: guard word, seed match (index, exact or byte zeroed), DownloadStatus, changed-word count vs EXP2508, console lines. Stop after reporting unless status 1 (then 0x3F).
+EXP2509 ACTUAL (2026-11-15 UTC): rev 11 swap 22:50:17Z (oem25 0.0.11.0, 103 receipt values), StageMask 0x1F; no SError, no watch alert, link up, DART unchanged.
+- DownloadStatus 6, VerifyBadTotal 0, VerifySeedWord0 0xB4C1874E, SeedFooterAddr 0x51E224 (as brcmfmac), SeedBytes 256 recorded.
+- Guard word 0x362350 after the stop: 0x7CA87300 (EXP2508: 0x00BED12F) - differs per load, low byte 0x00 here. PREDICTION NOT CONFIRMED: no seed word matches exactly or with any single byte zeroed (LE or byte-reversed), and no 3-byte or 2-byte sub-pattern of the guard occurs anywhere in the 256 seed bytes (also EXP2508's 0xBED12F low 3 bytes absent from this seed, as expected for a different load).
+- PostChangedWords 51727 = EXP2508 exactly; histogram per 64 KiB identical to EXP2508 (77, 4, 0 x9, 1383, 0, 0, 41, 423, 0, 0, 1135, 14320, 16231, 15561, 2552).
+- Console: the same two lines, same firmware times: 0x517AC0 at 82 ms (event-log line), 0x517A60 at 83 ms ("RO overwritten 003728df").
+- Reading: the guard is per-load entropy but not taken (verbatim) from our seed bytes; the run is otherwise byte-for-byte the same failure. Dumps local only (evidence/r11-dumps).
