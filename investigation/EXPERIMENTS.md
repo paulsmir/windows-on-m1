@@ -80873,3 +80873,8 @@ EXP2496 HARDWARE BEFORE 2026-11-15T20:32:55Z: item 8 recovery/idle profile with 
 - Single variable: recovery-profile Mu FD 7c283fb1 -> cbf0413d.
 - Checks: SSH up; storage driver AppleAns (ANS gate as recover.sh RECOVERY_STORAGE_APPLEANS_OK); APPL0002 inert; APPL0005 OK with the installed LVL package; kbdblctl status (hardware_fault 0, power 0xf, user_level 137 = driver-side read of the persisted level after restart, EXP2495).
 - Stop at the first deviation (no SSH in 5 min, storage not AppleAns, any bugcheck): proxy -> AT_PROXY recovery with the unchanged G2. End either way: so_clear, ordered restart, AT_PROXY rec2493h (G2). RECANS001 switch only after PASS and the architect's acknowledgement.
+EXP2496 ACTUAL (2026-11-15 UTC): recovery guest so_clear (stornvme 0=3 removed) + ordered restart 20:33:19Z, proxy +27.8 s; launch-reckbd.sh 20:33:46Z, SSH +27 s (uptime 47 s at the check).
+- Storage: AppleAns adapter OK, boot disk "APPLE SSD AP0256" NVMe (ANS gate PASS); APPL0002 CM_PROB_FAILED_INSTALL (inert); APPL0001 OK; 8 CPUs.
+- APPL0005 OK with the installed LVL package (oem20.inf 19.38.54.183): hardware_fault 0, power_state 0xf, output_enable 1, user_level 137, effective 137, live_on 361, ps0_count 1. user_level 137 = the level set in EXP2495 read by the driver after a full restart (completes EXP2495's restart check).
+- No BUGCHECK line; end 20:34:58Z: so_clear, ordered restart, proxy +18.4 s, AT_PROXY rec2493h on the unchanged G2 RECOVERY_DONE 20:37:37Z.
+- Verdict: recovery Mu with KBDL (cbf0413d) PASS on its validation boot. RECANS001 not switched yet (waits for the architect's acknowledgement); G2 7c283fb1 stays pinned as fallback. Evidence EXP2496-reckbd/evidence/checks.txt, MURECKBD001/aml (gate files).
