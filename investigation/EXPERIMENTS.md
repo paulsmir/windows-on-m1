@@ -80778,3 +80778,12 @@ EXP2491 ACTUAL (2026-11-15 UTC): LAUNCH_2491_STARTED commit 5fc39a115; candidate
 - L3 KB-OFF: set 255 18:24:00, remove-device 18:24:10, scan 18:24:26 -> OK, lit state back (user 90). FINDING: remove-device deletes Device Parameters - no FinalExit* readable 3 s after removal, and after the rescan only OutputEnable=1 remains (earlier count 1 lost).
 - Step 3: so_clear, "shutdown /r /t 0" 18:28:00Z, USB gone +13.3 s, proxy +21.3 s (PSCI reset, BUGCHECK unknown-kernel line); AT_PROXY visible recovery rec2491h RECOVERY_DONE ~18:33Z; recovery boot: APPL0005 Device Parameters only OutputEnable=1, no FinalExit* -> INCONCLUSIVE per the KB-OFF sheet (needs the KBD-PS trace boot).
 - Guards: StartOverride cleared before every reboot (probe-exit, pre-restart, recovery clear_so). Disk keyboard package now OFF-dbbc4f39 (decision pending).
+
+EXP2492 HARDWARE BEFORE 2026-11-15T18:49:49Z:
+- Configuration as EXP2491: candidate pair m1n1 6a9c2435 + Mu MUCPC001 d9fe3a34, package pkg/next 04fe217c2 (EXP2492-kbdlook2 / X86B548), four switches by launch-exp, AppleAns 0.4.8.9; keyboard package as installed on the disk: OFF-dbbc4f39 (kept by the architect as the every-boot package).
+- Looks at announced seconds (~60-120 s notice): L1 ACPI\APPL0002\0 disabled 120 s (desktop / black / logo / garbage; Wom1StopReceipt, m1n1 release line); L2 2-minute sweep max -> min -> hold min 5 s -> max with the 1 s status poll, no kbdblctl set before it (start state user/host/effective reported).
+- EXP2491 operator words recorded: L1 not observed (away a minute); L2 not swept; ~18:26Z unprompted: "сейчас вроде все еще горит и подсветка теперь до максимума ползунок доходит" (slider reaches the full maximum by eye).
+- Idle fallback: if no look time arrives within 10 min the probe ends and the bench rolls back. End: so_clear + visible rollback (pkg/next removed).
+- Hashes: sys 92bd6c245ff3, UmdArm64 5dcd63d58089, UmdX64 38ad1d471ff7, Umd32 4a200ffbb8c6; manifest 8ae1ad1c1e9e, hardware-manifest d7fcb47d960a; probe2492.sh 4910e87ec66f (PROBE_LINT_OK); visible recovery rec2492h 9a3984985d7c4902; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
+- Recovery rec2492h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2492-kbdlook2/run2492.sh.
