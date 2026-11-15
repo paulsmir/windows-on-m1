@@ -7198,3 +7198,22 @@ boot was run. The previous entry stays as written.
   dxgkrnl's "invalid NTSTATUS" messages by count (inference: the event names no DDI). Plan: B0 offline (which
   statuses dxgkrnl accepts) -> B1 truthful answers for 26, 27 (strings from firmware data only), 39 -> B2 perf data
   24/25 from existing samples with a perf gate; 10, 15, 20, 36 stay refused; no invented values.
+
+## UPDATE 2026-11-15T11:54Z - operator sitting: PD-1c receipts, external display native mode, Wi-Fi firmware provenance
+
+- PD-1c (EXP2476, m1n1 38bf6e3f + pkg/next b055a5eba = 536f2357 + P1 + P2): two disable windows; in both the stop
+  receipt shows the release DDI was the one called (Caller 26), TargetIdIn 0 -> target 0, Status 0, surface
+  2560x1600 pitch 10240 at PA 0x85F000000, fill done in ~0.36 ms, broker release OK; m1n1 one "release (guest)"
+  line; re-enable OK with presents resuming (P1). NOT yet closed: the operator's word for what the panel showed -
+  he was not at the machine in the first window and has not answered for the second. No claim about the panel.
+- Keyboard slider (same boot): diagnostic package D and fix F1 each polled for two minutes during a sweep: no
+  status field changed in either (no LampArray report, no power or output change). The operator's observation for
+  those windows is missing; on the standard package he reports "still two states". Cause open; F1 not accepted.
+- External display TBX-S1e4 (EXP2477): native timing 3440x1440@59.97 chosen from the modes dump, SET_MODE 0,
+  SET_SURFACE 0, operator: full screen, edge to edge. The EXP2451 side bars were the monitor's pillarboxing.
+  Staged next: boot-time cold plug (TBX-S1f-b) on the bench-next base.
+- Wi-Fi D-1: firmware files copied read-only from the J313's own macOS 15.7.8 over key-only SSH after the user's
+  boot-picker choice; kept local and untracked. The Wi-Fi session plans G4 with that set (six files).
+- B0 (offline, dxgkrnl 10.0.26100.9974 disassembly): after DxgkDdiQueryAdapterInfo dxgkrnl accepts only SUCCESS,
+  NOT_IMPLEMENTED, INVALID_PARAMETER, NO_MEMORY; any other status logs "invalid NTSTATUS" per call, without rate
+  limit. B1 (answers for types 26, 39; NOT_IMPLEMENTED for unimplemented types) is being gated offline.
