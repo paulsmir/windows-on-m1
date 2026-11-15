@@ -26,6 +26,13 @@ mkdir -p "$R" /tmp/agx-lld-dir
 [ -x /tmp/agx-lld-dir/ld.lld ] || cp /Volumes/pwdev/public_windows/.local/toolchain22/ld.lld /tmp/agx-lld-dir/ld.lld
 ssh_long() { perl -e 'alarm 120; exec @ARGV' "$T/airssh" -o ConnectTimeout=6 "$@"; }
 ssh_bounded() { perl -e 'alarm 30; exec @ARGV' "$T/airssh" -o ConnectTimeout=6 "$@"; }
+# EXP2485: Windows writes Services\<drv>\StartOverride 0=3 for the storage driver that controlled no device; the
+# next boot on the other path stops with 0x7B. Clear both values as the last guest step before every reboot.
+SO_PS=/Volumes/pwdev/public_windows/.local/experiments/ANSBOUNCE1/tools/ansq-clear-startoverride.ps1
+clear_so() {
+  perl -e 'alarm 60; exec @ARGV' "$T/airscp" "$SO_PS" "$AGX_GUEST_SSH:C:/Users/Public/ansq-clear-startoverride.ps1" >/dev/null || { echo VISIBLE_COPY_FAILED "$SO_PS"; return 1; }
+  ssh_bounded 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\Public\ansq-clear-startoverride.ps1 -Log' | tr -d '\r' | sed "s/^/SO_$1 /" | tee -a "$R/startoverride.txt" | grep -q 'STARTOVERRIDE_CLEAR_OK' || { echo "RECOVERY_STARTOVERRIDE_NOT_CLEARED $1"; return 1; }
+}
 select_recovery_owner() {
   local selected status=0 launchers guest
   selected=$(python3 "$W/scripts/agx-select-exact-launcher.py" "$N" --worktree "$W" 2>&1) || status=$?
@@ -158,6 +165,7 @@ done
 absent=$(ssh_bounded 'powershell -NoProfile -Command "$d=@(Get-PnpDevice -PresentOnly | Where-Object InstanceId -like \"*APPL0002*\"); $st=@(Get-WindowsDriver -Online -All | Where-Object OriginalFileName -match \"AppleAgx\"); if($d.Count -eq 1 -and [int]$d[0].Problem -eq 28 -and !(Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\AppleAgxAdmission) -and $st.Count -eq 0){\"RESUME_PACKAGE_ABSENT\"}"' 2>/dev/null | tr -d '\r' || true)
 if [ "$absent" = RESUME_PACKAGE_ABSENT ] && [ "$owners" != NO_HOST_OWNER ]; then
   echo RESUME_PACKAGE_ABSENT | tee "$R/visible-resume-absent.txt"
+  clear_so pre-restart || exit 6
   ssh_bounded 'shutdown /r /t 3'
   wait_cycle "$owners"
   launch_normal absent
@@ -184,6 +192,7 @@ if [ "$resume" = RESUME_DISABLED_VISIBLE ] && [ "$owners" != NO_HOST_OWNER ]; th
 else
   ssh_long "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\pavel\\EXP$X\\cleanup$X\\disable-visible.ps1" | tee "$R/visible-disable-output.txt"
   grep -q 'AGX_RECOVERY_DISABLE_SERVICE: PASS' "$R/visible-disable-output.txt"
+  clear_so pre-restart || exit 6
   ssh_bounded 'shutdown /r /t 3'
   wait_cycle "$owners"
   launch_normal disabled
@@ -197,6 +206,7 @@ for f in "$R"/app-logs/*; do s="$N/evidence/EXP$X/${f##*/}"; [ -f "$f" ] && [ -f
 echo "APP_LOGS_COLLECTED $(ls "$R/app-logs" | wc -l | tr -d ' ')"
 ssh_bounded 'powershell -NoProfile -Command "$ErrorActionPreference=\"Stop\"; $d=@(Get-PnpDevice -PresentOnly | Where-Object InstanceId -like \"*APPL0002*\"); $s=Get-CimInstance Win32_SystemDriver -Filter \"Name='"'"'AppleAgxAdmission'"'"'\"; if($d.Count -ne 1 -or [int]$d[0].Problem -ne 32 -or $s.State -ne \"Stopped\" -or (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\AppleAgxAdmission).Start -ne 4){throw \"disabled-visible gate\"}; \"VISIBLE_CODE32_SERVICE_STOPPED\""' | tee "$R/visible-disabled-gate.txt"
 grep -q VISIBLE_CODE32_SERVICE_STOPPED "$R/visible-disabled-gate.txt"
+clear_so pre-cleanup || exit 6
 # Cleanup commits an ordered restart itself. An SSH EOF/timeout is not proof
 # that removal failed; the ordered restart and durable final preflight decide.
 cleanup_status=0

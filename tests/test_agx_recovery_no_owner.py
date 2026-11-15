@@ -52,6 +52,23 @@ proxy_endpoints_present() { printf 'endpoints\n' >> "$TRACE"; return "$ENDPOINTS
             self.assertIn("perl -e 'alarm ", line)
             self.assertIn('VISIBLE_COPY_FAILED', line)
 
+    def test_every_guest_reboot_clears_startoverride_first(self):
+        # EXP2485: a reboot without clearing Services\<drv>\StartOverride left
+        # the other storage path at 0x7B (INACCESSIBLE_BOOT_DEVICE) for the
+        # next boot. Every ordered restart and the self-restarting cleanup must
+        # be preceded by clear_so, which fails the recovery when not cleared.
+        script=(ROOT/'scripts/agx-recover-visible.sh').read_text()
+        lines=[l.strip() for l in script.splitlines()]
+        self.assertIn('ansq-clear-startoverride.ps1', script)
+        self.assertIn("grep -q 'STARTOVERRIDE_CLEAR_OK'", script)
+        reboots=[i for i,l in enumerate(lines) if "'shutdown /r" in l and not l.startswith('#')]
+        self.assertEqual(len(reboots), 2)
+        for i in reboots:
+            self.assertEqual(lines[i-1], 'clear_so pre-restart || exit 6')
+        cleanup=[i for i,l in enumerate(lines) if 'cleanup-visible.ps1"' in l and 'airssh' in l]
+        self.assertEqual(len(cleanup), 1)
+        self.assertIn('clear_so pre-cleanup || exit 6', lines[cleanup[0]-4:cleanup[0]])
+
     def test_owned_success_default_unchanged(self):
         result,trace=self.call(selector='owned')
         self.assertEqual(result.returncode,0);self.assertEqual(result.stdout,'4242\n');self.assertEqual(trace,['selector'])
