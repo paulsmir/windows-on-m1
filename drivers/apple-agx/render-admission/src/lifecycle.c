@@ -1700,6 +1700,41 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     break;
   }
 
+  /* B1 (BUGCHECK-QAI design B): truthful perf-data caps. AGX has no fan
+   * (MaxFanRPM 0), no PCIe link (MaxPCIEBandwidth 0) and no memory-bandwidth
+   * counter (MaxMemoryBandwidth 0). TemperatureMax/Warning stay 0 until an
+   * ADT thermal source is identified (named limitation, design table). */
+  case DXGKQAITYPE_ADAPTERPERFDATA_CAPS: {
+    DXGK_ADAPTER_PERFDATACAPS *perfCaps;
+    if (QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*perfCaps)) {
+      status = STATUS_BUFFER_TOO_SMALL;
+    } else {
+      perfCaps = (DXGK_ADAPTER_PERFDATACAPS *)QueryAdapterInfo->pOutputData;
+      RtlZeroMemory(perfCaps, sizeof(*perfCaps));
+      status = STATUS_SUCCESS;
+    }
+    break;
+  }
+
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM3_2)
+  /* B1: the KMD implements no dirty-bit tracking (no CreateMemoryBasis /
+   * QueryDirtyBitData DDIs), so Supported = Performant = 0 is the truth.
+   * The type exists from DXGKDDI_INTERFACE_VERSION_WDDM3_2 (d3dkmddi.h). */
+  case DXGKQAITYPE_DIRTYBITTRACKINGCAPS: {
+    DXGK_DIRTY_BIT_TRACKING_CAPS *dirtyCaps;
+    if (QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*dirtyCaps)) {
+      status = STATUS_BUFFER_TOO_SMALL;
+    } else {
+      dirtyCaps = (DXGK_DIRTY_BIT_TRACKING_CAPS *)QueryAdapterInfo->pOutputData;
+      dirtyCaps->Value = 0u;
+      status = STATUS_SUCCESS;
+    }
+    break;
+  }
+#endif
+
   default:
     status = STATUS_NOT_SUPPORTED;
     break;

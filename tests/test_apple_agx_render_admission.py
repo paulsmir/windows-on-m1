@@ -257,6 +257,31 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertNotIn("SupportSoftwareDeviceBitmaps", lifecycle)
         self.assertNotIn("MapAperture2Supported = 1", lifecycle)
 
+    def test_query_adapter_info_cases_check_output_size_before_writing(self):
+        # B1: an out-of-bounds write into the dxgkrnl output buffer. Every
+        # case that writes through pOutputData must compare OutputDataSize
+        # with the struct size before the first write.
+        lifecycle = self.read("src/lifecycle.c")
+        start = lifecycle.index("NTSTATUS AdmissionDdiQueryAdapterInfo(")
+        body = lifecycle[start:lifecycle.index("  default:\n", start)]
+        cases = re.split(r"\n  case (DXGKQAITYPE_[A-Z0-9_]+):", body)[1:]
+        names = cases[0::2]
+        for required in ("DXGKQAITYPE_ADAPTERPERFDATA_CAPS",
+                         "DXGKQAITYPE_DIRTYBITTRACKINGCAPS"):
+            self.assertIn(required, names)
+        for name, block in zip(cases[0::2], cases[1::2]):
+            write = re.search(r"RtlZeroMemory\(|->[A-Za-z0-9_.]+ =(?!=)", block)
+            if write is None or "pOutputData" not in block:
+                continue
+            check = block.find("OutputDataSize")
+            self.assertNotEqual(check, -1, name)
+            self.assertLess(check, write.start(), name)
+        dirty = lifecycle.index("case DXGKQAITYPE_DIRTYBITTRACKINGCAPS:")
+        self.assertIn("DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM3_2",
+                      lifecycle[dirty - 400:dirty])
+        self.assertIn("dirtyCaps->Value = 0u", lifecycle)
+        self.assertIn("RtlZeroMemory(perfCaps, sizeof(*perfCaps))", lifecycle)
+
     def test_fixed_panel_child_monitor_pointer_and_visibility_contract(self):
         display = self.read("src/display.c")
         lifecycle = self.read("src/lifecycle.c")
