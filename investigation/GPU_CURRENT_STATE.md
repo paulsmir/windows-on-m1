@@ -7302,3 +7302,24 @@ boot was run. The previous entry stays as written.
 - External display cold plug at m1n1 start (TBX-S1f-b): SKIPPED/NO_DP - the port controller showed a USB data
   connection without DP alternate mode at that moment (DATA_STATUS 0x71 vs 0x8571 in the working run);
   inconclusive, belongs to the external-monitor phase.
+
+## UPDATE 2026-11-15T17:13Z - bench repaired; rollback guards validated; AppleAns 0.4.8.9 adopted
+
+- Third incident of the day (15:49Z): a normal GPU-visible bridge boot installed a staged GPU candidate package by
+  PnP and bugchecked 0x133 DPC_WATCHDOG_VIOLATION about two minutes in (dump header; routine not yet identified).
+  The architect's "WinRE/automatic repair" hypothesis was REFUTED by the offline read (BCD recoveryenabled 0,
+  bootstatuspolicy IgnoreAllFailures, no repair history). Repair EXP2486 without a host write: one GPU-hidden
+  bridge boot, package removed, StartOverride cleared last, ANS boot, canary OK. A log-aware three-block offline
+  patch was prepared as plan B and not used.
+- ROOT CAUSE of the day's blocked boots: two hand re-runs of prepare.sh replaced the visible ANS recovery wrapper
+  of that experiment by the legacy template (bridge hidden cleanup + bridge normal step), so every later recovery
+  alternated storage paths without a StartOverride clear. Guards now in place and demonstrated in EXP2487 with no
+  manual clear (values read at five boundaries): prepare refuses to overwrite an installed visible recovery; the
+  visible recovery and every probe clear and verify StartOverride before a reboot; the recovery guest is back on
+  the ANS path. Not in place: the guest startup task (user said "можно"; the bench session's tool safety layer
+  requires his direct permission there) - so an unscripted restart still leaves the value Windows wrote.
+- AppleAns 0.4.8.9 ADOPTED as the bench driver (EXP2488, BounceEnable=1): gate PASS, boot 0xAB900000, observe
+  stage OK, canary OK, recovery on 0.4.8.9; 0.4.8.3 kept as fallback. Open follow-ups: bounced-write copy in the
+  ISR, stale-CQE check, harness gaps.
+- Rule added: no staged GPU candidate package may remain on the disk when any other profile is booted.
+- Next: keyboard backlight only (done-list in the local focus file), first boot with the operator present.
