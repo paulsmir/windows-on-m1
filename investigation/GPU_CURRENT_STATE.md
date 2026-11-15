@@ -7400,3 +7400,14 @@ image with an opt-in EL2 trap-forward of the guest BAR window; discriminator = S
 DART criterion amended: the residual DART_ERROR value differs per boot; require "value at window-ready of the
 same boot, unchanged, bit 31 clear". Open: Stage=2 marker missing on disk after the crash; HV rendezvous panic on
 guest SError storms. Bench idle on RECANS001.
+
+UPDATE 2026-11-15T22:32Z (architect): Wi-Fi posted-write cause CONFIRMED on hardware (EXP2502-2505). With the
+EL2 trap-forward of the guest BAR window (m1n1 wifi/bench-int 53e85469, WOM1_WIFI_PCIE_BAR_TRAP=1) the same
+writes that raised SErrors in EXP2499/EXP2501 complete: S1 inventory, S2 CR4 passive + TCM size 0x1CE000,
+S3 OTP (module RASP, vendor u, version 6.5), S4 watchdog reset round trip all PASS in one boot, no SError.
+DART residual value is present before m1n1 installs the window and stays unchanged.
+EXP2506 S5 (firmware download + CR4 release) FAIL: DownloadStatus 6, the firmware did not replace the last RAM
+word within 5 s. Boot kept up for a driver swap. Next causal target (Wi-Fi session, offline): TCM read-back
+compare of the downloaded image (also validates the trap for bulk writes), activation sequence against
+brcmfmac, firmware/NVRAM form and variant. Owed for a production driver: the trap is a bring-up mechanism;
+the end state needs a posted guest mapping or an equivalent without per-access traps (design open).
