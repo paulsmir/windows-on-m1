@@ -7148,3 +7148,20 @@ boot was run. The previous entry stays as written.
 - CS placement on the E cluster: three architect hypotheses refuted tonight (harness priority, foreground, _CPC
   scale). Open: Windows parking / heterogeneous policy without vendor provisioning - needs the user's approval for
   any guest power-setting change, diagnostic or shipped.
+
+## UPDATE 2026-11-15T06:04Z - KMD design decisions (restart sizing, post-display hand-back); new completeness items
+
+- A5 restart sizing (design accepted, offline implementation ordered): segment 3 stays a CPU-visible
+  PopulatedFromSystemMemory segment (Microsoft documents no UMA-specific model; 4 KB-granular system memory cannot
+  back 16 KiB UAT pages); the previous instance's size is kept in a volatile subkey of the device key and applied
+  with the pairwise rule; a normal boot is unaffected. Stated limitation: an adapter restarted inside one boot gets
+  832 MiB with the bench share (desktop yes, heavy scenes no) until the next restart or reboot; Microsoft documents
+  no way to regain the full size. Open measurement: the size sequence over four restarts.
+- Post-display hand-back (design accepted): release DDI returns the active target and a validated, cleared surface
+  from the acquired POST information (no J313 literals), shared path for StopDevice and failed start, stop receipt.
+- NEW completeness items: DxgkDdiSystemDisplayEnable / DxgkDdiSystemDisplayWrite are not registered (Microsoft
+  lists them as mandatory for WDDM 1.2+; bugcheck screen); several DDIs return STATUS_NOT_SUPPORTED where their
+  documentation allows other codes (dxgkrnl logs "invalid NTSTATUS"; DDI not yet identified - receipt counter
+  planned).
+- m1n1 gpu/bench-next (local): ecc084da + PD-1 + capacity scale; flag-off image identical to 38bf6e3f, flag-on
+  image b1fb16de pairs with Mu MUCPC001. Not adopted.
