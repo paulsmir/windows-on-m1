@@ -103,7 +103,12 @@ int main(void)
         assert(ans_bounce_acquire(&q, 1) == 0 && ans_bounce_acquire(&q, 1) == 1);
         for (unsigned i = 0; i < 1000; i++) assert(ans_bounce_acquire(&q, 1) == -1 && ans_bounce_must_wait(&q) == 1);
         assert(!q.direct_exhausted && q.bounced_writes == 2);
+        /* The first and the latest request that waited for a buffer are kept for the receipt. */
+        struct ans_bounce_wait_record rec = {1000, 131072, 16, 0x140, 0x280120, 3, 2};
+        ans_bounce_wait_note(&q, &rec); ans_bounce_wait_note(NULL, &rec); ans_bounce_wait_note(&q, NULL);
         ans_bounce_wait_enter(&q, 1, 0); ans_bounce_wait_enter(&q, 1, 1); ans_bounce_wait_enter(&q, 1, 1);
+        rec.lba = 2000; rec.pa_low = 0x78; ans_bounce_wait_note(&q, &rec);
+        assert(q.first_wait.lba == 1000 && q.last_wait.lba == 2000);
         assert(q.waited == 1 && q.waited_behind == 2 && q.waiting == 3 && q.waiting_high == 3);
         ans_bounce_wait_leave(&q); ans_bounce_wait_enter(&q, 0, 0); /* head goes back: not counted again */
         assert(q.waited == 1 && q.waited_behind == 2 && q.waiting == 3 && q.waiting_high == 3);
@@ -122,10 +127,10 @@ int main(void)
         ans_bounce_build_failed(&q, ANS_BOUNCE_STEP_PHYSICAL, 6, 17); ans_bounce_build_failed(&q, 1, 7, 0);
         b[0] = 28; memcpy(b + 4, "APANS001", 8); b[12] = 10; b[16] = 0x0c; b[17] = 0x60; b[18] = 0x1b;
         b[24] = (uint8_t)ANS_BOUNCE_IOCTL_PAYLOAD; b[28] = ANS_BOUNCE_IOCTL_VERSION; b[32] = (uint8_t)ANS_BOUNCE_IOCTL_PAYLOAD;
-        assert(ANS_BOUNCE_IOCTL_TOTAL == 180 && ans_bounce_ioctl_validate(b, 180) && !ans_bounce_ioctl_validate(b, 140));
-        b[28] = 3; assert(!ans_bounce_ioctl_validate(b, 180)); b[28] = ANS_BOUNCE_IOCTL_VERSION;
-        b[16] = 8; assert(!ans_bounce_ioctl_reply(b, 180, &q)); b[16] = 0x0c;
-        assert(ans_bounce_ioctl_reply(b, 180, &q) && raw[0] == 0xee && raw[sizeof raw - 1] == 0xee);
+        assert(ANS_BOUNCE_IOCTL_TOTAL == 244 && ans_bounce_ioctl_validate(b, 244) && !ans_bounce_ioctl_validate(b, 140));
+        b[28] = 4; assert(!ans_bounce_ioctl_validate(b, 244)); b[28] = ANS_BOUNCE_IOCTL_VERSION;
+        b[16] = 8; assert(!ans_bounce_ioctl_reply(b, 244, &q)); b[16] = 0x0c;
+        assert(ans_bounce_ioctl_reply(b, 244, &q) && raw[0] == 0xee && raw[sizeof raw - 1] == 0xee);
         uint64_t v; uint32_t w; const uint8_t *p = b + 28;
         memcpy(&w, p + 8, 4); assert(w == 5); memcpy(&w, p + 28, 4); assert(w == 16); memcpy(&w, p + 12, 4); assert(w == 131072);
         memcpy(&w, p + 16, 4); assert(w == 4096); memcpy(&w, p + 20, 4); assert(w == 0x8001);
@@ -140,6 +145,11 @@ int main(void)
         memcpy(&w, p + 132, 4); assert(w == 1);
         memcpy(&w, p + 136, 4); assert(w == 3); memcpy(&w, p + 140, 4); assert(w == 9);
         memcpy(&v, p + 144, 8); assert(v == 21);
+        memcpy(&v, p + 152, 8); assert(v == 1000); memcpy(&w, p + 160, 4); assert(w == 131072);
+        memcpy(&w, p + 164, 4); assert(w == 16); memcpy(&w, p + 168, 4); assert(w == 0x140);
+        memcpy(&w, p + 172, 4); assert(w == 0x280120); memcpy(&w, p + 176, 4); assert(w == 3);
+        memcpy(&w, p + 180, 4); assert(w == 2);
+        memcpy(&v, p + 184, 8); assert(v == 2000); memcpy(&w, p + 196, 4); assert(w == 0x78);
     }
     puts("ANS bounce pool and PRP tests PASS");
     return 0;

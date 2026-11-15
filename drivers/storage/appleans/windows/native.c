@@ -383,7 +383,7 @@ VOID AppleAnsComplete(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, UCHAR statu
     /* The one place an SRB leaves the driver: a bounced READ that succeeded is copied to the
      * caller's buffer, and the bounce buffer is returned whatever the status. */
     PAPPLE_ANS_SRB bx = srb->SrbExtension;
-    if (!a->DumpMode && bx && bx->BounceIndex && bx->BounceIndex <= ANS_BOUNCE_COUNT &&
+    if (!a->DumpMode && bx && bx->Owner == srb && bx->BounceIndex && bx->BounceIndex <= ANS_BOUNCE_COUNT &&
         bx->BounceIndex <= a->Bounce.count) {
         unsigned index = (unsigned)bx->BounceIndex - 1;
         if (status == SRB_STATUS_SUCCESS && (srb->SrbFlags & SRB_FLAGS_DATA_IN) && bx->BounceVa &&
@@ -447,6 +447,7 @@ VOID AppleAnsDispatch(PAPPLE_ANS_ADAPTER a)
         struct ans_scsi_plan plan=slot->Plan;
         if (plan.action!=ANS_SCSI_SUBMIT) {
             PAPPLE_ANS_SRB x=srb->SrbExtension;
+            if (x && x->Owner!=srb) x=NULL;
             if (x && x->Cdb[0]==3)
                 plan=ans_scsi_prepare(&a->Namespace,x->Cdb,x->CdbLength,x->Length,&a->Sense);
             if (ans_order_complete(&a->Order,token)!=ANS_ORDER_OK) { quarantine(a);return; }
@@ -503,8 +504,10 @@ static VOID wait_append(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, BOOLEAN b
 static BOOLEAN start_request(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb);
 VOID AppleAnsWaitDrain(PAPPLE_ANS_ADAPTER a)
 {
-    /* start_request can complete requests itself; it must not re-enter this loop. */
-    if (a->WaitDraining) return;
+    /* start_request can complete requests itself; it must not re-enter this loop. A faulted or
+     * stopped adapter starts nothing: waiting requests stay, like the commands the controller
+     * owns, until the reset or stop retires them (AppleAnsWaitRetire). */
+    if (a->WaitDraining || !a->Ready || faulted(a)) return;
     a->WaitDraining=TRUE;
     while (a->WaitHead) {
         PSCSI_REQUEST_BLOCK srb=a->WaitHead;
@@ -541,8 +544,15 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
         /* The record lives in the device extension: nothing was allocated. */
         AppleAnsComplete(a,srb,SRB_STATUS_SUCCESS,0);return TRUE;
     }
-    /* Requests are waiting for a bounce buffer: this one keeps its place behind them. */
-    if (a->WaitHead && srb->SrbExtension) { wait_append(a,srb,TRUE);return TRUE; }
+    /* Requests are waiting for a bounce buffer: this one keeps its place behind them, if it is
+     * one that takes a turn in the command order (data, FLUSH, SHUTDOWN) and the adapter is
+     * serving. Everything else is answered now, as in 0.4.8.3: PNP, WMI and reset SRBs (a
+     * logical-unit reset must not sit behind a list a stalled controller no longer moves), and
+     * any request while the adapter is faulted or stopped. */
+    PAPPLE_ANS_SRB wx=srb->SrbExtension;
+    if (a->WaitHead && wx && wx->Owner==srb && a->Ready && !faulted(a) &&
+        (srb->Function==SRB_FUNCTION_EXECUTE_SCSI || srb->Function==SRB_FUNCTION_FLUSH ||
+         srb->Function==SRB_FUNCTION_SHUTDOWN)) { wait_append(a,srb,TRUE);return TRUE; }
     if (!start_request(a,srb)) wait_append(a,srb,FALSE);
     /* A request that ended here may have returned a buffer. */
     AppleAnsWaitDrain(a);
@@ -554,6 +564,8 @@ BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
 static BOOLEAN start_request(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
 {
     PAPPLE_ANS_SRB x=srb->SrbExtension;
+    /* An extension BuildIo did not prepare for this request is no extension (adapter.h). */
+    if (x && x->Owner!=srb) x=NULL;
     if(srb->Function==SRB_FUNCTION_EXECUTE_SCSI && x && x->PrpFailure) {
         ans_stats_add(&a->Stats,ANS_TELEM_PRP_TRANSLATION_FAILURES,1);x->PrpFailure=FALSE;
         AppleAnsDiag(a,srb,0xA2,x->DiagValue);
@@ -649,7 +661,21 @@ static BOOLEAN start_request(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)
         else if (x->NeedBounce && ans_bounce_size_ok(plan.transfer_bytes) && plan.transfer_bytes==x->Length) {
             int index=ans_bounce_acquire(&a->Bounce,plan.nvme_opcode==1);
             if (index < 0) {
-                if (ans_bounce_must_wait(&a->Bounce)) return FALSE;
+                if (ans_bounce_must_wait(&a->Bounce)) {
+                    if (!x->BounceWaited) {
+                        /* Receipt only: which request found the pool full (EXP2479: one more
+                         * misaligned request than a split transfer has pieces). */
+                        struct ans_bounce_wait_record w={0};
+                        w.lba=plan.lba;w.bytes=plan.transfer_bytes;
+                        w.pa_low=(ans_u32)(x->Prps.page[0] & (ANS_PRP_PAGE_SIZE-1));
+                        w.flags=srb->SrbFlags;
+                        w.tag=(ans_u32)srb->QueueTag|((ans_u32)srb->QueueAction<<8)|((ans_u32)x->Cdb[0]<<16);
+                        w.claimed=a->Bounce.claimed;
+                        for (unsigned i=ANS_ADMIN_TAGS;i<ANS_QUEUE_DEPTH;i++) if (a->Slots[i].Busy) w.outstanding++;
+                        ans_bounce_wait_note(&a->Bounce,&w);
+                    }
+                    return FALSE;
+                }
             } else {
                 x->BounceIndex=(UCHAR)(index+1);
                 if (plan.nvme_opcode==1) {
@@ -766,9 +792,8 @@ static VOID retire(PAPPLE_ANS_ADAPTER a, UCHAR status)
     a->Claimed=FALSE;a->MayOwn=FALSE;
     a->ShuttingDown=FALSE;a->ShutdownTag=ANS_QUEUE_DEPTH;
 }
-BOOLEAN AppleAnsNativeStop(PAPPLE_ANS_ADAPTER a)
+static BOOLEAN broker_stop(PAPPLE_ANS_ADAPTER a)
 {
-    if (a->Direct) return AppleAnsDirectStop(a);
     ans_stats_add(&a->Stats,ANS_TELEM_STOPS,1);
     a->Ready=FALSE;a->Namespace.ready=0;
     if (!a->MayOwn) { a->Stage=AppleAnsStageStopped;return TRUE; }
@@ -779,9 +804,24 @@ BOOLEAN AppleAnsNativeStop(PAPPLE_ANS_ADAPTER a)
     a->Stage=AppleAnsStageStopped;
     return TRUE;
 }
+BOOLEAN AppleAnsNativeStop(PAPPLE_ANS_ADAPTER a)
+{
+    BOOLEAN stopped=a->Direct?AppleAnsDirectStop(a):broker_stop(a);
+    /* Waiting requests own no DMA: they end here even when the stop could not be proved and
+     * the commands the controller owns are kept (a successful stop has retired them already). */
+    AppleAnsWaitRetire(a,SRB_STATUS_NO_DEVICE);
+    return stopped;
+}
+static BOOLEAN broker_reset(PAPPLE_ANS_ADAPTER a);
 BOOLEAN AppleAnsNativeReset(PAPPLE_ANS_ADAPTER a)
 {
-    if (a->Direct) return AppleAnsDirectReset(a);
+    BOOLEAN reset=a->Direct?AppleAnsDirectReset(a):broker_reset(a);
+    /* As for stop: a reset that failed (controller crashed, no stop proof) still ends them. */
+    AppleAnsWaitRetire(a,SRB_STATUS_BUS_RESET);
+    return reset;
+}
+static BOOLEAN broker_reset(PAPPLE_ANS_ADAPTER a)
+{
     ans_stats_add(&a->Stats,ANS_TELEM_RESETS,1);
     a->Ready=FALSE;a->Namespace.ready=0;a->Stage=AppleAnsStageReset;
     if (!a->Wire.bound) return FALSE;

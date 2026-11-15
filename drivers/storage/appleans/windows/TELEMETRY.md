@@ -149,8 +149,8 @@ that found no free slot, 40 sixteen entries of {kind 4, code 4, count 8} in firs
 
 ## Bounce receipt (control code 0x001b600c)
 
-Same header and signature, total size exactly 180 bytes (28 + 152). Read-only. Payload offsets
-(little-endian): 0 version = 4, 4 payload size = 152, 8 usable bounce buffers, 12 bytes per
+Same header and signature, total size exactly 244 bytes (28 + 216). Read-only. Payload offsets
+(little-endian): 0 version = 5, 4 payload size = 216, 8 usable bounce buffers, 12 bytes per
 buffer, 16 required first-address alignment, 20 bitmap of buffers in use now, 24 most in use at
 once, 28 buffers attempted (16); then 64-bit counters: 32 bounced reads, 40 bounced writes,
 48 requests that waited inside the driver because every buffer was in use, 56 misaligned
@@ -163,8 +163,11 @@ step (0 none, 1 allocation, 2 a page without a physical address, 3 not a control
 range, 4 not page-aligned or not contiguous), 116 the buffer attempt it happened on, 120 (64-bit)
 its address (allocator status for step 1, page index for step 2, guest address for steps 3
 and 4), 128 buffers that could not be built, 132 bouncing enabled (0 or 1), 136 requests waiting now, 140 most requests waiting at
-once, 144 (64-bit) requests that waited only to keep their place behind a waiting one. The same
-outcome is
+once, 144 (64-bit) requests that waited only to keep their place behind a waiting one; then two
+32-byte records, at 152 the first and at 184 the latest request counted at 48: 64-bit LBA, 32-bit
+transfer bytes, first data address within its page, SrbFlags, QueueTag | QueueAction << 8 | CDB
+opcode << 16, buffers claimed at that moment (bitmap), commands outstanding at that moment. The
+pool outcome is
 logged once as diagnostic 0xAB (enabled<<23 | usable<<16 | first failing step<<12 | buffers not
 built).
 
@@ -185,8 +188,12 @@ disk event 51 for paging requests). The BUSY answers that remain are those of 0.
 tag, an untagged request while commands are outstanding); they no longer change the request's
 transfer length.
 
-Versions 1 (140 bytes, 0.4.8.4/0.4.8.5), 2 (0.4.8.6, never installed) and 3 (164 bytes, 0.4.8.7)
-are not answered: 0.4.8.5 put the buffers in the uncached extension and did not boot (EXP2447).
+Only data, FLUSH and SHUTDOWN requests wait. PNP, WMI and reset requests, and every request
+while the adapter is faulted or stopped, are answered at once as in 0.4.8.3. Waiting requests
+are completed by every reset and stop, also one that fails to prove the controller stopped.
+
+Versions 1 (140 bytes, 0.4.8.4/0.4.8.5), 2 (0.4.8.6, never installed), 3 (164 bytes, 0.4.8.7) and
+4 (180 bytes, 0.4.8.8, never installed) are not answered: 0.4.8.5 put the buffers in the uncached extension and did not boot (EXP2447).
 
 The direct record's reads/writes/resets/flushes fields are NOT used for bounce counters (build
 0.4.8.4 did; that build was never installed). Reject-receipt kind 4 counts page-misaligned

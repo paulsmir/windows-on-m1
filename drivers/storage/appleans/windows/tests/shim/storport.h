@@ -24,7 +24,7 @@ typedef struct _PORT_CONFIGURATION_INFORMATION {
 } PORT_CONFIGURATION_INFORMATION, *PPORT_CONFIGURATION_INFORMATION;
 typedef struct _SCSI_REQUEST_BLOCK {
     USHORT Length;
-    UCHAR Function, SrbStatus, ScsiStatus, PathId, TargetId, Lun, QueueAction, CdbLength, SenseInfoBufferLength;
+    UCHAR Function, SrbStatus, ScsiStatus, PathId, TargetId, Lun, QueueTag, QueueAction, CdbLength, SenseInfoBufferLength;
     ULONG SrbFlags, DataTransferLength;
     PVOID DataBuffer, SenseInfoBuffer, SrbExtension;
     UCHAR Cdb[16];
@@ -86,6 +86,9 @@ typedef struct _HW_INITIALIZATION_DATA {
 #define SRB_FUNCTION_IO_CONTROL 0x02
 #define SRB_FUNCTION_SHUTDOWN 0x07
 #define SRB_FUNCTION_FLUSH 0x08
+#define SRB_FUNCTION_WMI 0x17
+#define SRB_FUNCTION_RESET_LOGICAL_UNIT 0x20
+#define SRB_FUNCTION_PNP 0x25
 #define SRB_FUNCTION_DUMP_POINTERS 0x26
 #define SRB_FUNCTION_FREE_DUMP_POINTERS 0x27
 #define SRB_STATUS_PENDING 0x00

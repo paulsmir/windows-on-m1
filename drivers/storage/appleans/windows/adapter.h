@@ -56,6 +56,10 @@ typedef struct _APPLE_ANS_SRB {
     UCHAR NeedBounce, BounceUnmapped, BounceMismatch, BounceIndex, BounceWaited;
     PVOID BounceVa;
     PSCSI_REQUEST_BLOCK WaitNext; /* next request of the adapter's waiting list (ans_bounce.h) */
+    /* The request BuildIo prepared this extension for. StartIo and completion act on the
+     * extension only for that request: one that reached StartIo without BuildIo would find its
+     * previous user's state here, including the address a bounced read is copied to. */
+    PSCSI_REQUEST_BLOCK Owner;
     ULONG Length, DiagValue, DiagCount;
     struct ans_logical_prps Prps;
 } APPLE_ANS_SRB, *PAPPLE_ANS_SRB;

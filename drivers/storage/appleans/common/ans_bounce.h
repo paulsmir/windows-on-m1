@@ -39,6 +39,12 @@ enum ans_bounce_step { /* where building one buffer failed */
     ANS_BOUNCE_STEP_TRANSLATE = 3,   /* not a controller-visible range; address = guest address */
     ANS_BOUNCE_STEP_LAYOUT = 4       /* not page-aligned or not contiguous; address = guest address */
 };
+struct ans_bounce_wait_record { /* a request that found every buffer in use (receipt only) */
+    ans_u64 lba;
+    ans_u32 bytes, pa_low;           /* transfer length; first data address within its page */
+    ans_u32 flags, tag;              /* SrbFlags; QueueTag | QueueAction << 8 | CDB opcode << 16 */
+    ans_u32 claimed, outstanding;    /* buffers claimed and commands outstanding at that moment */
+};
 struct ans_bounce_pool {
     ans_u32 count;                   /* usable buffers, 0..ANS_BOUNCE_COUNT; written once */
     ans_u32 enabled;                 /* configuration gate; written once, after count */
@@ -51,6 +57,7 @@ struct ans_bounce_pool {
     ans_u64 waited;                  /* requests that waited because every buffer was in use */
     ans_u64 waited_behind;           /* requests that waited only to keep their place behind one */
     ans_u32 waiting, waiting_high;   /* length of the waiting list now, and its maximum */
+    struct ans_bounce_wait_record first_wait, last_wait; /* first and latest counted in waited */
     /* Requests sent directly although misaligned (see above), by reason: */
     ans_u64 direct_exhausted;        /* no buffer free and none claimed (cannot happen with a pool) */
     ans_u64 direct_unmapped;         /* the data could not be mapped */
@@ -79,11 +86,14 @@ int ans_bounce_must_wait(struct ans_bounce_pool *pool);
  * behind = it joins only to keep its place (it did not ask for a buffer itself). */
 void ans_bounce_wait_enter(struct ans_bounce_pool *pool, int first, int behind);
 void ans_bounce_wait_leave(struct ans_bounce_pool *pool);
+/* Keeps the record of the first and of the latest request that waited for a buffer. Call it
+ * once per such request, before ans_bounce_wait_enter counts it. */
+void ans_bounce_wait_note(struct ans_bounce_pool *pool, const struct ans_bounce_wait_record *record);
 void ans_bounce_copy_timed(struct ans_bounce_pool *pool, ans_u64 ticks);
 
 /* Read-only bounce receipt: SRB_IO_CONTROL, signature "APANS001", control code
  * CTL_CODE(FILE_DEVICE_SCSI,0x803,METHOD_BUFFERED,FILE_READ_ACCESS), exactly
- * ANS_BOUNCE_IOCTL_TOTAL bytes. Payload (little-endian): 0 version = 4, 4 payload size, 8 usable
+ * ANS_BOUNCE_IOCTL_TOTAL bytes. Payload (little-endian): 0 version = 5, 4 payload size, 8 usable
  * buffers, 12 buffer bytes, 16 required alignment, 20 claimed bitmap, 24 high water, 28 buffers
  * attempted (ANS_BOUNCE_COUNT), then u64: 32 bounced reads, 40 bounced writes, 48 waited (every
  * buffer in use; the request waited in the driver), 56 sent directly: no buffer and no holder
@@ -92,10 +102,13 @@ void ans_bounce_copy_timed(struct ans_bounce_pool *pool, ans_u64 ticks);
  * 104 ticks/second; then the pool record: 112 first failing step (enum ans_bounce_step), 116 its
  * buffer attempt, 120 u64 its address, 128 buffers that could not be built, 132 bouncing
  * enabled (0: the pool exists but no request is bounced), 136 requests waiting now, 140 most
- * requests waiting at once, 144 u64 requests that waited only to keep their place. */
+ * requests waiting at once, 144 u64 requests that waited only to keep their place; then two
+ * records of 32 bytes, the first (152) and the latest (184) request counted at 48: u64 LBA, u32
+ * transfer bytes, u32 first data address within its page, u32 SrbFlags, u32 QueueTag |
+ * QueueAction << 8 | CDB opcode << 16, u32 claimed bitmap then, u32 commands outstanding then. */
 #define ANS_BOUNCE_IOCTL_QUERY 0x001b600cu
-#define ANS_BOUNCE_IOCTL_VERSION 4u
-#define ANS_BOUNCE_IOCTL_PAYLOAD 152u
+#define ANS_BOUNCE_IOCTL_VERSION 5u
+#define ANS_BOUNCE_IOCTL_PAYLOAD 216u
 #define ANS_BOUNCE_IOCTL_TOTAL (28u + ANS_BOUNCE_IOCTL_PAYLOAD)
 int ans_bounce_ioctl_validate(const void *buffer, ans_u32 bytes);
 int ans_bounce_ioctl_reply(void *buffer, ans_u32 bytes, const struct ans_bounce_pool *pool);

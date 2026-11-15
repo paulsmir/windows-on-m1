@@ -432,7 +432,7 @@ static struct req *req_new(int write, unsigned lba, unsigned pages, unsigned off
     r->srb.Cdb[0] = write ? 0x2a : 0x28;
     r->srb.Cdb[4] = (UCHAR)(lba >> 8); r->srb.Cdb[5] = (UCHAR)lba; r->srb.Cdb[8] = (UCHAR)pages;
     r->srb.SrbFlags = (write ? SRB_FLAGS_DATA_OUT : SRB_FLAGS_DATA_IN) | SRB_FLAGS_QUEUE_ACTION_ENABLE;
-    r->srb.QueueAction = SRB_SIMPLE_TAG_REQUEST;
+    r->srb.QueueAction = SRB_SIMPLE_TAG_REQUEST; r->srb.QueueTag = 0x55;
     r->srb.DataTransferLength = (ULONG)bytes; r->srb.DataBuffer = r->data;
     r->srb.SrbExtension = &r->ext;
     return r;
@@ -703,6 +703,13 @@ static void saturated_split_transfer(int write, unsigned offset)
     assert(F.device_busy == 0 && F.nops == PIECES && F.nio == PIECES && A->Bounce.claimed == 0xffff);
     const ans_u8 *p = receipt();
     assert(le(p + 136, 4) == EXTRA + 3 && le(p + 48, 8) == 1 && le(p + 144, 8) == EXTRA + 2);
+#ifndef HARNESS_0487
+    /* Receipt: the request that found the pool full is the 17th, with its place in memory. */
+    assert(le(p + 152, 8) == PIECES * PP && le(p + 160, 4) == PP * PAGE && le(p + 164, 4) == offset);
+    assert((le(p + 168, 4) & (SRB_FLAGS_DATA_IN | SRB_FLAGS_DATA_OUT)) == (write ? SRB_FLAGS_DATA_OUT : SRB_FLAGS_DATA_IN));
+    assert(le(p + 172, 4) == (0x55u | ((ULONG)SRB_SIMPLE_TAG_REQUEST << 8) | ((write ? 0x2au : 0x28u) << 16)));
+    assert(le(p + 176, 4) == 0xffff && le(p + 180, 4) == PIECES && le(p + 184, 8) == PIECES * PP);
+#endif
     /* Completions arrive one interrupt at a time; every waiting request gets a pool buffer. */
     F.hold = 0;
     for (unsigned round = 0; round < 48; round++) {
@@ -779,6 +786,77 @@ static void test_busy_answer_leaves_request_intact(void)
     assert(!memcmp(r->data, want, sizeof(want)));
     req_free(first); req_free(r);
 }
+/* Review of 0.4.8.8, F2: only requests that take a turn in the command order may wait. PNP,
+ * WMI and reset SRBs are answered at once as in 0.4.8.3 - a logical-unit reset queued behind a
+ * list that a stalled controller no longer moves would delay the port's recovery. */
+static void test_non_io_requests_do_not_wait(void)
+{
+    world_reset();
+    assert(port_start());
+    struct req *q[ANS_BOUNCE_COUNT + 1];
+    F.hold = 1;
+    for (unsigned i = 0; i <= ANS_BOUNCE_COUNT; i++) { q[i] = req_new(0, i * 4, 4, 0x20); port_submit(q[i]); }
+    assert(q[ANS_BOUNCE_COUNT]->srb.SrbStatus == SRB_STATUS_PENDING && le(receipt() + 136, 4) == 1);
+    static const UCHAR functions[] = {SRB_FUNCTION_RESET_LOGICAL_UNIT, SRB_FUNCTION_PNP, SRB_FUNCTION_WMI};
+    for (unsigned f = 0; f < 3; f++) {
+        struct req *r = flush_new(); ULONG done = F.completed;
+        r->srb.Function = functions[f]; r->srb.SrbStatus = SRB_STATUS_PENDING;
+        assert(init_data.HwBuildIo(adapter_mem, &r->srb) && init_data.HwStartIo(adapter_mem, &r->srb));
+        assert(r->srb.SrbStatus == SRB_STATUS_INVALID_REQUEST && F.completed == done + 1 &&
+               "answered at once, not queued behind waiting I/O");
+        req_free(r);
+    }
+    assert(le(receipt() + 136, 4) == 1 && WAIT_LIST_IS(&q[ANS_BOUNCE_COUNT]->srb, &q[ANS_BOUNCE_COUNT]->srb));
+    F.hold = 0; sim_release_held(); port_interrupt(); port_interrupt();
+    for (unsigned i = 0; i <= ANS_BOUNCE_COUNT; i++) { assert(q[i]->srb.SrbStatus == SRB_STATUS_SUCCESS); req_free(q[i]); }
+}
+/* Review F3: waiting requests own no DMA. When the adapter is faulted they stay until the reset
+ * or stop decides, like the commands the controller owns, and a reset that cannot prove the
+ * controller stopped (here: it crashed) still completes them - each exactly once - while the
+ * commands the controller may still write into stay outstanding. Meanwhile a new request is
+ * refused at once as in 0.4.8.3 and does not flush the list. */
+static void test_fault_with_waiting_requests(void)
+{
+    world_reset();
+    assert(port_start());
+    struct req *q[ANS_BOUNCE_COUNT + 2], *late;
+    F.hold = 1;
+    for (unsigned i = 0; i < ANS_BOUNCE_COUNT + 2; i++) { q[i] = req_new(0, i * 4, 4, 0x20); port_submit(q[i]); }
+    A->Ansd.crashed = 1; A->Ansd.faulted = 1; A->Ready = FALSE; /* what direct_fault leaves */
+    ULONG done = F.completed;
+    port_interrupt();
+    late = req_new(0, 200, 1, 0); port_submit(late);
+    assert(late->srb.SrbStatus == SRB_STATUS_NO_DEVICE && F.completed == done + 1);
+    for (unsigned i = 0; i < ANS_BOUNCE_COUNT + 2; i++) assert(q[i]->srb.SrbStatus == SRB_STATUS_PENDING);
+    assert(!init_data.HwResetBus(adapter_mem, 0));
+    for (unsigned i = 0; i < ANS_BOUNCE_COUNT; i++) assert(q[i]->srb.SrbStatus == SRB_STATUS_PENDING && "DMA may be live");
+    assert(q[ANS_BOUNCE_COUNT]->srb.SrbStatus == SRB_STATUS_BUS_RESET && q[ANS_BOUNCE_COUNT + 1]->srb.SrbStatus == SRB_STATUS_BUS_RESET);
+    assert(F.completed == done + 3 && WAIT_LIST_EMPTY());
+    assert(!init_data.HwResetBus(adapter_mem, 0) && F.completed == done + 3 && "exactly once");
+    F.hold = 0; F.nheld = 0;
+    for (unsigned i = 0; i < ANS_BOUNCE_COUNT + 2; i++) req_free(q[i]);
+    req_free(late);
+}
+/* Review F4: StartIo acts on what BuildIo wrote into the SRB extension. If a request ever
+ * reached StartIo without BuildIo, the extension would still describe its previous user, and a
+ * bounced read would be copied into that request's memory. The extension names its request. */
+static void test_foreign_extension_is_not_trusted(void)
+{
+    world_reset();
+    assert(port_start());
+    for (unsigned i = 0; i < 16; i++) pattern(disk + (size_t)i * PAGE, PAGE, 900 + i);
+    struct req *old = req_new(0, 0, 2, 0x20), *r = req_new(0, 8, 2, 0x20);
+    port_submit(old); port_interrupt();
+    assert(old->srb.SrbStatus == SRB_STATUS_SUCCESS);
+    memset(old->data, 0x5a, 2 * PAGE);
+    r->ext = old->ext; /* the extension as its previous user left it */
+    r->srb.SrbStatus = SRB_STATUS_PENDING; unsigned sent = F.nops;
+    assert(init_data.HwStartIo(adapter_mem, &r->srb)); port_interrupt();
+    assert(r->srb.SrbStatus == SRB_STATUS_INVALID_REQUEST && F.nops == sent && "not executed from a foreign extension");
+    for (unsigned i = 0; i < 2 * PAGE; i++) assert(old->data[i] == 0x5a && "nothing copied into the previous request");
+    assert(A->Bounce.claimed == 0);
+    req_free(old); req_free(r);
+}
 #ifdef HARNESS_0487
 /* Demonstration on the 0.4.8.7 sources only (SHIM_TEST=chain): what a port driver that
  * resubmits a BUSY request as it was returned gets from that driver. The 17th misaligned read
@@ -852,6 +930,9 @@ int main(int argc, char **argv)
         if (!strcmp(one, "saturated")) test_saturated_split_transfer();
         else if (!strcmp(one, "retired")) test_waiting_requests_are_retired();
         else if (!strcmp(one, "busy")) test_busy_answer_leaves_request_intact();
+        else if (!strcmp(one, "nonio")) test_non_io_requests_do_not_wait();
+        else if (!strcmp(one, "fault")) test_fault_with_waiting_requests();
+        else if (!strcmp(one, "foreign")) test_foreign_extension_is_not_trusted();
 #ifdef HARNESS_0487
         else if (!strcmp(one, "chain")) test_0487_busy_chain();
 #endif
@@ -870,6 +951,9 @@ int main(int argc, char **argv)
     test_saturated_split_transfer();
     test_waiting_requests_are_retired();
     test_busy_answer_leaves_request_intact();
+    test_non_io_requests_do_not_wait();
+    test_fault_with_waiting_requests();
+    test_foreign_extension_is_not_trusted();
     test_gate();
     test_dump_seal_is_083();
 #endif

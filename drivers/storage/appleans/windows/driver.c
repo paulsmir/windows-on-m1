@@ -231,6 +231,7 @@ BOOLEAN AppleAnsBuildIo(PVOID DeviceExtension, PSCSI_REQUEST_BLOCK Srb)
     PAPPLE_ANS_SRB x = Srb->SrbExtension;
     if (!x) return TRUE; /* StartIo returns failure. */
     RtlZeroMemory(x,sizeof(*x));
+    x->Owner = Srb;
     if (Srb->Function != SRB_FUNCTION_EXECUTE_SCSI) return TRUE;
     if (!Srb->CdbLength || Srb->CdbLength > sizeof(x->Cdb)) return TRUE;
     x->CdbLength = Srb->CdbLength;x->Length = Srb->DataTransferLength;

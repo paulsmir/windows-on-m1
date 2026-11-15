@@ -36,18 +36,27 @@ bounce = start[start.index('if (x->BounceMismatch)'):admit]
 assert 'SRB_STATUS_ERROR' not in bounce and 'SRB_STATUS_INVALID_REQUEST' not in bounce, \
     'a request that cannot be bounced is never failed for that reason'
 assert 'a->Bounce.direct_mismatch++' in bounce and 'a->Bounce.direct_unmapped++' in bounce
-assert 'if (ans_bounce_must_wait(&a->Bounce)) return FALSE;' in bounce, \
+assert 'if (ans_bounce_must_wait(&a->Bounce)) {' in bounce and 'ans_bounce_wait_note(&a->Bounce,&w);' in bounce, \
     'no buffer: the request waits in the driver while a release is expected, otherwise direct'
 # EXP2479: the pool being full is never answered BUSY, and no BUSY answer changes the request.
 assert 'SRB_STATUS_BUSY' not in bounce and 'StorPortDeviceBusy' not in NATIVE + DRIVER, \
     'a full pool is ordinary load, not a BUSY answer'
+comp_all = NATIVE[NATIVE.index('VOID AppleAnsComplete('):NATIVE.index('static VOID sense(')]
 entry = NATIVE[NATIVE.index('BOOLEAN AppleAnsNativeStart('):NATIVE.index('static BOOLEAN start_request(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb)\n{')]
-assert entry.index('if (a->WaitHead && srb->SrbExtension) { wait_append(a,srb,TRUE);return TRUE; }') < \
+assert 'srb->Function==SRB_FUNCTION_EXECUTE_SCSI || srb->Function==SRB_FUNCTION_FLUSH ||\n         srb->Function==SRB_FUNCTION_SHUTDOWN)) { wait_append(a,srb,TRUE);return TRUE; }' in entry, \
+    'only data, FLUSH and SHUTDOWN requests wait; PNP, WMI and resets are answered at once'
+assert entry.index('{ wait_append(a,srb,TRUE);return TRUE; }') < \
     entry.index('if (!start_request(a,srb)) wait_append(a,srb,FALSE);') < entry.index('AppleAnsWaitDrain(a);'), \
     'a later request never passes a waiting one'
 drain = NATIVE[NATIVE.index('VOID AppleAnsWaitDrain('):NATIVE.index('VOID AppleAnsWaitRetire(')]
 assert drain.index('a->WaitHead=x->WaitNext') < drain.index('if (!start_request(a,srb))'), \
     'a waiting request is unlinked before it is started (it may be completed inside)'
+assert 'if (a->WaitDraining || !a->Ready || faulted(a)) return;' in drain, 'a faulted adapter starts nothing'
+assert 'AppleAnsWaitRetire(a,SRB_STATUS_NO_DEVICE);\n    return stopped;' in NATIVE and \
+    'AppleAnsWaitRetire(a,SRB_STATUS_BUS_RESET);\n    return reset;' in NATIVE, \
+    'a failed stop or reset still ends the waiting requests'
+assert 'x->Owner = Srb;' in DRIVER and 'if (x && x->Owner!=srb) x=NULL;' in start and \
+    'bx && bx->Owner == srb && bx->BounceIndex' in comp_all, 'the extension is used only for its own request'
 assert NATIVE.count('AppleAnsWaitRetire(a,status);') == 1 and 'AppleAnsWaitRetire(a, status);' in DIRECT, \
     'reset and stop end the waiting requests too'
 assert 'AppleAnsDispatch(a);\n    AppleAnsWaitDrain(a);\n    return claimed;' in DIRECT, \
@@ -60,7 +69,7 @@ rel = comp.index('ans_bounce_release(&a->Bounce, (int)index)')
 done = comp.index('StorPortNotification(RequestComplete, a, srb)')
 assert back < rel < done, 'copy the read back and release before the SRB is completed'
 assert 'status == SRB_STATUS_SUCCESS && (srb->SrbFlags & SRB_FLAGS_DATA_IN)' in comp[:back]
-assert '!a->DumpMode && bx && bx->BounceIndex && bx->BounceIndex <= ANS_BOUNCE_COUNT' in comp[:back], \
+assert '!a->DumpMode && bx && bx->Owner == srb && bx->BounceIndex && bx->BounceIndex <= ANS_BOUNCE_COUNT' in comp[:back], \
     'the index is range-checked and the dump instance never touches the pool'
 assert 'peer->reads' not in DIRECT and 'peer->flushes' not in DIRECT, 'direct record fields are not reused'
 assert 'ans_bounce_ioctl_reply(srb->DataBuffer,srb->DataTransferLength,&a->Bounce)' in NATIVE

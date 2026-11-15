@@ -40,6 +40,12 @@ void ans_bounce_wait_enter(struct ans_bounce_pool *pool, int first, int behind)
     pool->waiting++;
     if (pool->waiting > pool->waiting_high) pool->waiting_high = pool->waiting;
 }
+void ans_bounce_wait_note(struct ans_bounce_pool *pool, const struct ans_bounce_wait_record *record)
+{
+    if (!pool || !record) return;
+    if (!pool->waited) pool->first_wait = *record;
+    pool->last_wait = *record;
+}
 void ans_bounce_wait_leave(struct ans_bounce_pool *pool)
 {
     if (pool && pool->waiting) pool->waiting--;
@@ -120,5 +126,12 @@ int ans_bounce_ioctl_reply(void *buffer, ans_u32 bytes, const struct ans_bounce_
     bounce_put_le(p + 132, pool->enabled ? 1 : 0, 4);
     bounce_put_le(p + 136, pool->waiting, 4);      bounce_put_le(p + 140, pool->waiting_high, 4);
     bounce_put_le(p + 144, pool->waited_behind, 8);
+    for (unsigned i = 0; i < 2; i++) {
+        const struct ans_bounce_wait_record *w = i ? &pool->last_wait : &pool->first_wait;
+        ans_u8 *q = p + 152 + 32 * i;
+        bounce_put_le(q, w->lba, 8);          bounce_put_le(q + 8, w->bytes, 4);  bounce_put_le(q + 12, w->pa_low, 4);
+        bounce_put_le(q + 16, w->flags, 4);   bounce_put_le(q + 20, w->tag, 4);
+        bounce_put_le(q + 24, w->claimed, 4); bounce_put_le(q + 28, w->outstanding, 4);
+    }
     return 1;
 }
