@@ -80619,3 +80619,11 @@ EXP2480 HARDWARE BEFORE 2026-11-15T13:08:29Z:
 - Hashes: sys 78360abd1852, UmdArm64 3bf463692e0e, UmdX64 9ac11e82eea5, Umd32 f02f48e05f9b; manifest cf682271e313, hardware-manifest 8b9c792211f8; probe2480.sh 2d2e46000f9a (PROBE_LINT_OK); visible recovery rec2480h a1b9989333135bc3; m1n1 0d3a75b3.
 - Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
 - Recovery rec2480h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2480-b1qai/run2480.sh.
+
+EXP2480 ACTUAL (2026-11-15 UTC): first launch refused at the recovery gate (LAUNCH_2480_FAIL recovery: EXACT_OWNER_REFUSED, the guest was the EXP2479 SSD launcher boot); ordered reboot 12:57:43Z, AT_PROXY rec2478h RECOVERY_DONE 13:00:45Z, relaunch LAUNCH_2480_STARTED 2db4cd136, pipeline RC 0. Lesson: an SSD/manual launcher session ends with the recognised recovery before any GPU chain.
+- Boot 13:09:07Z, device OK, guest surface latched; first DrvCaps status 0, wddm 0x3200, mpo 1.
+- Wom1MpoGateReceipt: refused [10, 15, 20, 24, 25, 27, 36] (EXP2475: [10, 15, 20, 24, 25, 26, 27, 36, 39]) = exactly 26 and 39 removed; query types unchanged; 24/25 counts 51 before GM -> 129 after. Wom1G1bQ39 0x0.
+- DxgKrnl ETW 13:11:31-13:15:21Z over GM w/r2 (ETL 343826432 bytes): "Driver returned an invalid NTSTATUS" 0, "Driver dedicated too much system memory" 0. Event 549 since boot 0. No stop this boot (the two System 1001/41 events in the 90-min window belong to the deliberate EXP2478 0xEF).
+- Perf gate PASS: GM w/r2 fps_frames 52.630/52.901, worst 47.466 (+0.98 %); CS warm 48.663, r2 52.291, r3 51.144 (-1.63 %), CS_MEM VALID.
+- Not measured: the start-time ETL count (needs an adapter restart or a boot autologger); D3DKMT read-back of 26/39.
+- Verdict: CONFIRMED - B1 behaves as designed: 26/39 answered, refusals in dxgkrnl's accepted set, no triage messages under perf polling, performance unchanged. Rollback rec2480h.
