@@ -372,6 +372,32 @@ unsigned long long AdmissionPoolDemandRestartBytes(
     unsigned long long SegmentBytes, unsigned long long ShareBytes,
     unsigned long long PreviousBytes);
 
+/* A5-F1b (KMD-D1): the previous-instance record behind PreviousBytes. It lives in
+ * a volatile subkey of the device hardware key, so it exists exactly as long as
+ * VidMm's in-memory limit (gone after a reboot). Previous = max(Confirmed,
+ * UnconfirmedMax) keeps the invariant Previous >= the size of the last instance
+ * VidMm budgeted even when an instance fails after its budget or confirmation
+ * never arrives; absent -> 0 (first start of the boot); corrupt, wrong version or
+ * a different share -> BaseBytes (conservative). */
+#define ADMISSION_POOL_RESTART_RECORD_VERSION 1u
+typedef struct _ADMISSION_POOL_RESTART_RECORD {
+  unsigned int Version, Bytes;
+  unsigned long long ShareBytes, ConfirmedBytes, UnconfirmedMaxBytes;
+  unsigned int Instances, UnconfirmedStarts;
+} ADMISSION_POOL_RESTART_RECORD;
+/* Valid: the record was read with the expected size. */
+unsigned long long AdmissionPoolRestartPrevious(
+    const ADMISSION_POOL_RESTART_RECORD *Record, int Valid,
+    unsigned long long ShareBytes, unsigned long long BaseBytes);
+/* StartDevice chose Chosen bytes (written before StartDevice returns). Starts a
+ * fresh record (Share, counters 0) when Record is absent or unusable. */
+void AdmissionPoolRestartOnStart(ADMISSION_POOL_RESTART_RECORD *Record,
+                                 int Valid, unsigned long long ShareBytes,
+                                 unsigned long long Chosen);
+/* The first non-system CreateDevice of the instance that started with Own. */
+void AdmissionPoolRestartOnConfirm(ADMISSION_POOL_RESTART_RECORD *Record,
+                                   unsigned long long Own);
+
 /* Granules and CandidateList hold Count zeroed entries each. */
 int AdmissionPoolDemandInit(ADMISSION_POOL_DEMAND *Pool,
                             ADMISSION_POOL_GRANULE *Granules,

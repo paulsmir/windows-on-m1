@@ -941,6 +941,11 @@ typedef struct _ADMISSION_CONTEXT {
   /* M2-f3: segment 3 backed on demand (pool_windows.c); NULL for the fixed
    * pool or no pool. */
   PVOID PoolDemand;
+  /* KMD-D1 (A5-F1b): previous-instance record receipt of this start and the
+   * once-only confirmation at the first non-system CreateDevice. */
+  volatile LONG PoolRestartConfirmed;
+  ULONG PoolRestartState; /* 0 absent, 1 valid, 2 corrupt, 3 write failed */
+  ULONGLONG PoolRestartShare, PoolRestartPrevious, PoolRestartBase;
   /* RC13: boot-only opt-in; GPU-only General may spill to system backing. */
   BOOLEAN SysmemSpill;
   /* RC23: requested policy only; eligible creates refuse until bridge exists. */
@@ -1944,6 +1949,9 @@ _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionMemoryPoolStart(_Inout_ ADMISSION_CONTEXT *Context);
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionMemoryPoolStop(_Inout_opt_ ADMISSION_CONTEXT *Context);
+/* KMD-D1: the first non-system CreateDevice of this instance (PASSIVE_LEVEL):
+ * confirms the started pool size in the previous-instance record. */
+VOID AdmissionMemoryPoolRestartConfirm(_Inout_ ADMISSION_CONTEXT *Context);
 /* M2-f7: the largest General-class BO (segment 3's size while the pool is
  * mapped, else the legacy 16 MiB); reported to the UMD and enforced by
  * CreateAllocation. */

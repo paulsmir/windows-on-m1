@@ -403,3 +403,50 @@ unsigned long long AdmissionPoolDemandRestartBytes(
   if (SegmentBytes < cap) cap = SegmentBytes;
   return cap < ADMISSION_POOL_DEMAND_MIN_BYTES ? 0u : cap;
 }
+
+/* KMD-D1: previous-instance record (see render_pool_demand.h). */
+static int AdmissionPoolRestartUsable(const ADMISSION_POOL_RESTART_RECORD *Record,
+                                      int Valid, unsigned long long ShareBytes) {
+  return Record != 0 && Valid &&
+         Record->Version == ADMISSION_POOL_RESTART_RECORD_VERSION &&
+         Record->Bytes == (unsigned int)sizeof(*Record) &&
+         Record->ShareBytes == ShareBytes;
+}
+
+unsigned long long AdmissionPoolRestartPrevious(
+    const ADMISSION_POOL_RESTART_RECORD *Record, int Valid,
+    unsigned long long ShareBytes, unsigned long long BaseBytes) {
+  if (Record == 0) return 0u;
+  if (!AdmissionPoolRestartUsable(Record, Valid, ShareBytes)) return BaseBytes;
+  return Record->ConfirmedBytes > Record->UnconfirmedMaxBytes
+             ? Record->ConfirmedBytes : Record->UnconfirmedMaxBytes;
+}
+
+void AdmissionPoolRestartOnStart(ADMISSION_POOL_RESTART_RECORD *Record,
+                                 int Valid, unsigned long long ShareBytes,
+                                 unsigned long long Chosen) {
+  if (Record == 0) return;
+  if (!AdmissionPoolRestartUsable(Record, Valid, ShareBytes)) {
+    /* Absent or unusable: a fresh record. Chosen was sized against the
+     * conservative Previous (BaseBytes for an unusable record). */
+    Record->Version = ADMISSION_POOL_RESTART_RECORD_VERSION;
+    Record->Bytes = (unsigned int)sizeof(*Record);
+    Record->ShareBytes = ShareBytes;
+    Record->ConfirmedBytes = 0u;
+    Record->UnconfirmedMaxBytes = 0u;
+    Record->Instances = 0u;
+    Record->UnconfirmedStarts = 0u;
+  }
+  if (Chosen > Record->UnconfirmedMaxBytes) Record->UnconfirmedMaxBytes = Chosen;
+  ++Record->Instances;
+  ++Record->UnconfirmedStarts;
+}
+
+void AdmissionPoolRestartOnConfirm(ADMISSION_POOL_RESTART_RECORD *Record,
+                                   unsigned long long Own) {
+  if (Record == 0 || Record->Version != ADMISSION_POOL_RESTART_RECORD_VERSION)
+    return;
+  Record->ConfirmedBytes = Own;
+  Record->UnconfirmedMaxBytes = 0u;
+  Record->UnconfirmedStarts = 0u;
+}
