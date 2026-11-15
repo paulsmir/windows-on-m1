@@ -80737,3 +80737,13 @@ EXP2488 ACTUAL (2026-11-15 UTC): AppleAns 0.4.8.9 adopted as the bench driver.
 - so_clear, reboot 17:09:36Z, AT_PROXY visible recovery rec2487h -> RECOVERY_DONE 17:12:25Z on the ANS disk (storage gate AppleAns OK); ImagePath 620c6c57 (0.4.8.9), BounceEnable 1.
 - Hash pins: none refuse the new driver (storage gate = device/service state; canary = System32\drivers\*.sys; ans_offline_patch SYS_0483 = fallback known-good). BENCH-M1N1.json storage_driver updated (backup .pre-ans0489): current 0.4.8.9 oem21 620c6c57 BounceEnable=1, rollback 0.4.8.3 452f0c0cf11d36f5 via ansrollback.ps1.
 - Verdict: ADOPTED (0.4.8.9 + BounceEnable=1 is the bench storage driver). Known limits for the SSD line: F6 bounced-write copies inside the ISR, F5 stale-CQE check, harness gaps.
+
+EXP2489 HARDWARE BEFORE 2026-11-15T17:39:22Z:
+- Boot: accepted line only (bench pair m1n1 a6916e26 + Mu MUKBD003 2ef00a13, package pkg/next 04fe217c2 EXP2489-kbdreset / X86B545, standard switches), AppleAns 0.4.8.9 (BounceEnable=1, adopted EXP2488), every-boot keyboard package 6648f764. No GPU candidate.
+- Steps: kbdblctl set 90 + status; so_clear; guest "shutdown /r /t 0"; reset poller; at the proxy (fresh m1n1 after the PSCI reset path, RST-1/RST-2: both RESET and OFF end in reboot()) read PMGR FPWM1 PS 0x23B7001E0; only if ACTUAL[7:4] = 0xF read FPWM 0x235044000 +0x00 control, +0x18 off, +0x1C on. No register write. EXP2490 repeats with "shutdown /s /t 0".
+- Question answered: is the keyboard PWM still powered/running after the guest's ordered restart (lamp left on through the reset)? No fix in this run (the keyboard session designs it).
+- Expected: either PS ACTUAL off (SoC reset turned the PMGR domain off -> lamp dark) or PS on with control 0x4021 / on 237 (lamp still lit). Both are results.
+- Failure: proxy read error/fault; no proxy within 60 s. Recovery: AT_PROXY rec2489h (visible, ANS; clear_so built in).
+- Hashes: sys 703cb5d4637e, UmdArm64 ddb879924b27, UmdX64 dd0932894d78, Umd32 0902caea901a; manifest 8a2a709a407a, hardware-manifest b33e92da7d82; probe2489.sh 11429d227758 (PROBE_LINT_OK); visible recovery rec2489h e1f7aef69f8c0718; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
+- Recovery rec2489h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2489-kbdreset/run2489.sh.
