@@ -7095,3 +7095,15 @@ boot was run. The previous entry stays as written.
   INCONCLUSIVE by construction (architect spec error: a perf gate must not share a boot with the half-size
   switch). EXP2466 = same image, standard 4 GiB, gate only + one disable receipt.
 - Bench image is still a6916e26; 38bf6e3f becomes the bench image only after its gate and the operator look.
+
+## UPDATE 2026-11-15T02:28Z - EXP2466: m1n1 38bf6e3f (PD-1 release fix) perf gate PASS; candidate bench image
+
+- Standard configuration (4 GiB segment), MUKBD003, package 536f2357: GM 52.070 / 52.863 (gate +0.75 %), CS r2
+  52.330, r3 51.351 (gate -1.23 %), first CS run 49.16 cold. One disable: one "release (guest) -> guest surface"
+  line, basic display monitor + desktop capture. Enable was refused as expected at 4 GiB (A5-D2); the failed
+  start's teardown released to the guest surface again and the swap latched, so a failed start no longer leaves
+  m1n1's image on the panel (by receipts; not seen by an operator).
+- Status: 38bf6e3f is the CANDIDATE bench image. The bench stays on a6916e26 until the operator look (part 2)
+  confirms that the panel shows the desktop in the disabled state. Still open on the KMD side: release-DDI
+  contract clean-up (clear the surface, TargetId, own-scanout route), A5-F1 Windows wiring.
+- Bench idle on the recovery profile, AppleAns 0.4.8.3, no pipeline.
