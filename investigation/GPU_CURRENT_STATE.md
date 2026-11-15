@@ -7119,3 +7119,17 @@ boot was run. The previous entry stays as written.
   discriminator (CPMINCORES1=100, values saved and restored with verification; diagnostic only, reported to the
   user as a temporary guest power-setting change). In design offline: the _CPC capacity-scale experiment (Mu + m1n1
   atomic, default image unchanged) and the documented OEM provisioning route.
+
+## UPDATE 2026-11-15T04:00Z - EXP2469 (CPC-1): _CPC capacity scale valid, gates pass, CS placement unchanged
+
+- Pair m1n1 6d51bd92 (gpu/cppc-capacity-scale 6f0a2646, flag build; default build = a6916e26) + Mu MUCPC001
+  d9fe3a34 (MUKBD003 + _CPC patch; AML diff = only the E-core _CPC constants). Validity PASS: E advertised
+  418..1439, E still reaches 2064 MHz under E-only load. Perf gate PASS: GM 52.741 / 52.733 (-0.36 %), CS 52.053 /
+  52.119 (+0.12 %). Idle gate borderline (P above ps1 in 1 of 5 samples, measured at uptime 72 s, no reference).
+- Placement: REJECTED as caused by the scale - CS stays on the E cluster (P parked 0.91-1.00, dram_fast=0); pinned
+  reference in the same boot 56.18 / 55.98. The architect's second firmware hypothesis for the placement is refuted.
+- Status of the change: contract-correct against Microsoft's one-scale rule (class C), no performance effect; NOT
+  adopted yet - a settled-idle comparison against the bench pair is ordered first. Bench pair unchanged.
+- What remains for the +8 %: Windows' parking/heterogeneous policy on a platform without vendor power provisioning.
+  The temporary parking discriminator (EXP2468) is held until the user approves a guest power-setting change; the
+  documented OEM route would be a provisioning package (power settings), i.e. a platform deliverable, also his call.
