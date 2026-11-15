@@ -80453,3 +80453,22 @@ EXP2469 HARDWARE ACTUAL 2026-11-15T03:55:49Z:
 - Perf gate (harness unchanged): GM gm1 52.741 / gm2 52.733 fps_frames -> PASS (worst 46.840 presents-based vs 47.007, -0.36 %); CS cold cs0 49.000 (discarded), ctl1 52.053, ctl2 52.119 -> PASS (+0.12 %). PERF_GATE_PASS.
 - Placement: unchanged. ctl1/ctl2 E cluster 2064 MHz busy 58/38-41/34-35/12-16 %; P cluster 727-855 MHz busy 2-6 %, Parking Status cores 4-7 0.91-1.00; m1n1 P ps=1 / dram_fast=0 in 9 of 10 samples. GM: P busy 26-37 %, parked 0.84-1.00. In-boot reference pinned 0xF0: pin1 56.179, pin2 55.981 (P 2797-2825 MHz, P ps=12 / dram_fast=1 in 5 of 6 samples).
 - Verdict: CPC-1 validity PASS, regression gates PASS (idle P gate borderline, boot-time window); placement REJECTED (thread stays on E, P parked >= 0.9, fps 52.05/52.12 within 1 % of 51.8). The capacity scale is a contract-correct change without a placement/performance effect (class C); keep-or-drop is the architect's decision. Bench pair stays a6916e26 + MUKBD003 2ef00a13; MUCPC001/6d51bd92 not adopted.
+
+EXP2470 HARDWARE BEFORE 2026-11-15T04:15:08Z:
+- Package exp/combo1-pkg 536f235737c0f11bd90bdb543929df7b5bae9aa1 (EXP2470), standard switches Wom1CrossProcessPairs Wom1SubmitRequeue Wom1MpoTwoPlanes Wom1StartPolicy=1, AGX_NO_ARM=1, AppleAns 0.4.8.3. No workload launched, no setting changed.
+- Steps: wait to uptime 540 s, quiet-guest check (qgate + top CPU list), wait to uptime 600 s, then two consecutive 5-minute windows A and B: m1n1 "HV: CPPC" lines (E/P ps distribution, dram_fast, desired-performance writes per cluster) and Windows counters 1/s (per-core MHz, % busy, Parking Status), summarised by idlesum.py (P above ps1 % by m1n1 lines, P above 600 MHz % by counters, E ps distribution, mean E MHz, writes E/P).
+- WHY THIS HYPOTHESIS: EXP2469's idle P gate was borderline (1 of 5 m1n1 lines above ps1 = the line covering the 90 s from boot to the window; counters showed P 2988 MHz for 18 s at uptime 72 s) - not a settled idle; a same-uptime comparison against the bench pair decides adoption.
+- Pass for adoption (architect): the scale pair's P-above-ps1 share and E mean MHz are not higher than the bench pair's by more than the A/B spread of the same pair.
+- RISK shared-domain teardown: none. SSD state: AppleAns 0.4.8.3, StartOverride cleared. Shared tables: none added.
+- Recovery: rec<N>h; bench pair a6916e26 + MUKBD003 for the next boots.
+- Hashes: sys 450f4feff4c7, UmdArm64 813797fbd7ce, UmdX64 f70fbed97aec, Umd32 0fadf59b69f9; manifest 1c6115fd2510, hardware-manifest 5124d3002551; probe2470.sh 45f3a5afc6f4 (PROBE_LINT_OK); visible recovery rec2470h 7f93b0eaf10d3a07; m1n1 0d3a75b3.
+- Device switches set on the staged devnode before the ordered restart: Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1.
+- Recovery rec2470h (run directly). Command bash $HOME/public_windows/.local/experiments/EXP2470-idleb/run2470.sh.
+
+EXP2470 HARDWARE ACTUAL 2026-11-15T04:43:42Z (settled idle, bench pair a6916e26 + MUKBD003):
+- Probe 04:16:59Z (uptime 52 s); quiet check at uptime 540 s ok (top CPU: System 27 s, MsMpEng 21 s, svchost 8/7 s, explorer 6 s, dwm 5 s); pipeline RC 0, STOPS 0.
+- Window A (uptime 608 s, 300 s): m1n1 31 lines, P ps=1 in 31/31 (P above ps1 0.0 %), E ps=1 31/31, dram_fast 0, desired writes E 2804 / P 24; counters: E mean 641 MHz, P 600 MHz (P above 600 MHz 0.0 %), E busy 9.7 %, E parked 0.63, P parked 1.00.
+- Window B (uptime 923 s): m1n1 30 lines, P ps=1 30/30, E ps=1 30/30, dram_fast 0, writes E 2628 / P 0; E mean 628 MHz, P 600 MHz, E busy 8.6 %, E parked 0.65, P parked 1.00.
+- Note: "% Processor Time" of parked P cores reads 90-93 % at 600 MHz with Parking Status 1.00 (counter artifact of parked cores; not load).
+- EXP2469 re-read with the fixed summary: its only P-above-ps1 m1n1 line covers the 90 s from boot to the window (dram_fast=-1, before the window), so inside that window P was at ps1 too.
+- Reference for EXP2471 (scale pair, same procedure).
