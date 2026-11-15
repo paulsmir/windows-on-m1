@@ -389,3 +389,17 @@ void AdmissionPoolPressureDone(ADMISSION_POOL_PRESSURE *Pressure,
     Pressure->FastFailUntilMs = NowMs + ADMISSION_POOL_PRESSURE_FAST_FAIL_MS;
   }
 }
+
+unsigned long long AdmissionPoolDemandRestartBytes(
+    unsigned long long SegmentBytes, unsigned long long ShareBytes,
+    unsigned long long PreviousBytes) {
+  unsigned long long cap;
+  if (PreviousBytes == 0u) return SegmentBytes;
+  if (ShareBytes <= PreviousBytes ||
+      ShareBytes - PreviousBytes <= ADMISSION_POOL_POLICY_SEGMENT_MARGIN)
+    return 0u;
+  cap = ShareBytes - PreviousBytes - ADMISSION_POOL_POLICY_SEGMENT_MARGIN;
+  cap -= cap % ADMISSION_POOL_DEMAND_SIZE_STEP;
+  if (SegmentBytes < cap) cap = SegmentBytes;
+  return cap < ADMISSION_POOL_DEMAND_MIN_BYTES ? 0u : cap;
+}

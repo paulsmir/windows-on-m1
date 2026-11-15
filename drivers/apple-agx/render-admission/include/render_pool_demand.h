@@ -355,6 +355,23 @@ unsigned long long AdmissionPoolDemandSegmentBytesShare(
     unsigned long long BrokerBytes, unsigned long long ApertureReserve,
     unsigned long long ShareBytes);
 
+/* A5-F1 (EXP2459/EXP2461): within one boot VidMm's dedicated-system-memory
+ * limit for a new adapter instance is the share less the dedicated bytes of
+ * an instance budgeted before it, and destroying that instance does not give
+ * them back (dxgmms2 disassembly; observed: a 4 GiB segment 3 fails the
+ * second in-boot restart with "Driver dedicated too much system memory for
+ * video" -> 0xC0000017, a 2 GiB one passes three restarts). A restarted
+ * instance therefore sizes segment 3 so that it and the previous instance of
+ * this boot fit the share together:
+ *   bytes <= ShareBytes - PreviousBytes - ADMISSION_POOL_POLICY_SEGMENT_MARGIN
+ * in ADMISSION_POOL_DEMAND_SIZE_STEP steps. PreviousBytes 0 (first start of
+ * the boot) keeps SegmentBytes; a result below ADMISSION_POOL_DEMAND_MIN_BYTES
+ * is 0 (no pool), as for AdmissionPoolDemandSegmentBytes. The rule holds
+ * whether or not the boot-time instance counts against the limit. */
+unsigned long long AdmissionPoolDemandRestartBytes(
+    unsigned long long SegmentBytes, unsigned long long ShareBytes,
+    unsigned long long PreviousBytes);
+
 /* Granules and CandidateList hold Count zeroed entries each. */
 int AdmissionPoolDemandInit(ADMISSION_POOL_DEMAND *Pool,
                             ADMISSION_POOL_GRANULE *Granules,

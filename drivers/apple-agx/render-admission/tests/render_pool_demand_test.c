@@ -504,6 +504,74 @@ static void test_graphics_policy(void)
                ADMISSION_POOL_DEMAND_APERTURE_RESERVE, 0) == GiB);
 }
 
+/* A5-F1: VidMm's in-boot dedicated-memory limit as observed (EXP2459: boot
+ * 4 GiB, restart 1 4 GiB OK, restart 2 4 GiB 0xC0000017; EXP2461: 2 GiB x 4
+ * OK). BootWrites selects whether the boot-time instance also lowers the limit
+ * (the architect's disassembly reading) or only restarted instances do (what
+ * EXP2459 shows); the restart rule must start every instance under both. */
+typedef struct {
+    unsigned long long Share, Limit;
+    int BootWrites;
+} VIDMM_MODEL;
+
+static int vidmm_start(VIDMM_MODEL *m, unsigned long long seg, int boot)
+{
+    if (seg + ADMISSION_POOL_POLICY_SEGMENT_MARGIN > m->Limit)
+        return 0; /* "Driver dedicated too much system memory for video" */
+    if (!boot || m->BootWrites)
+        m->Limit = m->Share - seg;
+    return 1;
+}
+
+/* Starts the boot instance and Restarts restarted ones with the driver rule;
+ * returns how many instances started, sizes in Sizes[0..]. */
+static unsigned run_boot(int boot_writes, unsigned long long share,
+                         unsigned long long base, unsigned restarts,
+                         int use_rule, unsigned long long *sizes)
+{
+    VIDMM_MODEL m = {share, share, boot_writes};
+    unsigned long long previous = 0; /* boot-stamped device-key record */
+    unsigned started = 0;
+    for (unsigned i = 0; i <= restarts; ++i) {
+        unsigned long long seg = use_rule
+            ? AdmissionPoolDemandRestartBytes(base, share, previous) : base;
+        sizes[i] = seg;
+        if (!vidmm_start(&m, seg, i == 0))
+            continue;
+        ++started;
+        previous = seg;
+    }
+    return started;
+}
+
+static void test_restart_segment_rule(void)
+{
+    const unsigned long long MiB = 1ULL << 20, GiB = 1ULL << 30;
+    const unsigned long long share = 5016 * MiB; /* bench: 4.898 GiB */
+    unsigned long long sizes[8];
+    /* The model reproduces the hardware without a restart rule. */
+    assert(run_boot(0, share, 4 * GiB, 2, 0, sizes) == 2);  /* EXP2459 */
+    assert(run_boot(0, share, 2 * GiB, 3, 0, sizes) == 4);  /* EXP2461 */
+    /* The rule: first start keeps the size; then the pair fits the share. */
+    assert(AdmissionPoolDemandRestartBytes(4 * GiB, share, 0) == 4 * GiB);
+    assert(AdmissionPoolDemandRestartBytes(4 * GiB, share, 4 * GiB) ==
+           (share - 4 * GiB - ADMISSION_POOL_POLICY_SEGMENT_MARGIN) /
+               ADMISSION_POOL_DEMAND_SIZE_STEP * ADMISSION_POOL_DEMAND_SIZE_STEP);
+    assert(AdmissionPoolDemandRestartBytes(4 * GiB, share, 832 * MiB) == 4 * GiB);
+    assert(AdmissionPoolDemandRestartBytes(2 * GiB, share, 2 * GiB) == 2 * GiB);
+    /* Too little left: no pool rather than a refused adapter. */
+    assert(AdmissionPoolDemandRestartBytes(4 * GiB, share, share) == 0);
+    assert(AdmissionPoolDemandRestartBytes(4 * GiB, share, share - 200 * MiB) == 0);
+    assert(AdmissionPoolDemandRestartBytes(0, share, 4 * GiB) == 0);
+    /* Every instance of a boot starts under both readings of VidMm. */
+    for (int boot_writes = 0; boot_writes <= 1; ++boot_writes) {
+        assert(run_boot(boot_writes, share, 4 * GiB, 7, 1, sizes) == 8);
+        for (unsigned i = 1; i < 8; ++i)
+            assert(sizes[i] == 0 ||
+                   sizes[i] + sizes[i - 1] + ADMISSION_POOL_POLICY_SEGMENT_MARGIN <= share);
+    }
+}
+
 int main(void)
 {
     test_large_placement_backs_the_tail();
@@ -521,5 +589,6 @@ int main(void)
     test_reuse_between_passes_restarts_the_clock();
     test_segment_size();
     test_graphics_policy();
+    test_restart_segment_rule();
     return 0;
 }
