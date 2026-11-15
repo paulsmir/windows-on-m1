@@ -7081,3 +7081,17 @@ boot was run. The previous entry stays as written.
 - A5-F1 gate: BASELINE_OK on 1fd8c09bc. The two "new" failures were missing git-ignored evidence directories in
   fresh worktrees (named cause; nothing added to known failures). Follow-up: worktree setup must link them.
 - Bench idle on the recovery profile; AppleAns 0.4.8.3; StartOverride absent; no pipeline.
+
+## UPDATE 2026-11-15T01:51Z - PD-1b part 1 (EXP2465): m1n1 release fix, non-visual criteria PASS
+
+- m1n1 gpu/pd1-release-guest-surface 73571ca8 (image 38bf6e3f, bench rebuild byte-identical; base procedure
+  reproduces a6916e26): at a guest scanout RELEASE the registered guest GOP surface is presented instead of m1n1's
+  boot framebuffer. Two disable/enable cycles (with Wom1PoolHalfSize=1 so that re-enable can start): exactly one
+  "release (guest) -> guest surface dva=0x4140000 2560x1600 stride=10240" per disable, no NOT_QUIESCED, basic
+  display monitor present and desktop captured while disabled, accelerated present back after each enable, ordered
+  reboot timing and bugcheck line as before.
+- NOT verified: what the panel shows in the disabled state (operator look = part 2); the perf gate of this image -
+  the 2 GiB diagnostic segment made GravityMark fail with out-of-memory and disturbed CS, so the gate of EXP2465 is
+  INCONCLUSIVE by construction (architect spec error: a perf gate must not share a boot with the half-size
+  switch). EXP2466 = same image, standard 4 GiB, gate only + one disable receipt.
+- Bench image is still a6916e26; 38bf6e3f becomes the bench image only after its gate and the operator look.
