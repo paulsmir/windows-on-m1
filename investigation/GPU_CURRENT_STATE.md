@@ -7523,3 +7523,15 @@ Channel census US -> FR: channels 12/13 passive -> active, channel 144 removed, 
 U-NII-3 149-165 kept active by this CLM's FR locale. With the property back to "Not set" the driver is
 passive-only again. Data TX still closed (no association code; all TX counters 0). Next: W5 (connect, WPA2-PSK
 with the host supplicant, keys, disconnect); needs a user-provided test access point.
+
+UPDATE 2026-11-16T11:54Z (architect): Wi-Fi first association attempts (EXP2537-2542), user's WPA2 network, UI
+step done on the user's side over RDP. Windows-side scan list first observed: with the BSS-entry blob in full
+frame form Windows showed only "Hidden Network" entries; frame BODY form (no MAC header) lists named networks
+(EXP2538 PASS; first positive Windows-side reading of W2; undocumented, now the default). Location Deny hides
+only netsh/API reads, not the flyout. Attempts 1 and 2 (AppleBcmWlan 0.1.13.0): association SUCCEEDS on 5 GHz
+channel 100 (DFS join works, 80 MHz), the AP's EAPOL message 1 is indicated to Windows and returned in both RX
+layouts (802.11+SNAP and Ethernet II), but Windows never queues a TX packet and the AP deauthenticates with
+reason 15 -> RX layout rejected as the cause (EXP2540). Defects found from sources: the miniport never called
+NetAdapterSetLinkState; assoc_info was read into 8 bytes instead of 512, so no association request/response IEs
+reached ASSOCIATION_RESULT. Both fixed in 0.1.16.0 (no-connect regression PASS, EXP2541); attempt 3 with it has
+not been made yet (window expired without an attempt).
