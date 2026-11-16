@@ -7464,3 +7464,13 @@ event mask length 43; scan_ver unsupported (v1 layout used). GATE: no transmit-c
 association) before the country policy is defined from Windows' regulatory interface in the real driver.
 Not done: a Windows network miniport (WiFiCx), association, data path, power, Bluetooth; BAR access still goes
 through the EL2 trap; platform data still staged by the bench. Bench rolled back to RECANS001.
+
+UPDATE 2026-11-16T02:07Z (architect): Wi-Fi W1 PASS (EXP2521 after EXP2520 FAIL): the WiFiCx miniport
+AppleBcmWlan on the shared bus layer creates its adapter; Windows lists one Native 802.11 interface,
+disconnected, bands 2.4/5 GHz. Cause of the EXP2520 failure (NetAdapterCreate 0xC000000D): INF form - the NDIS
+interface keywords must be INF directives as in Microsoft's in-box NetAdapterCx client INF. Windows sent
+TASK_SCAN, TASK_DOT11_RESET, GET_STATISTICS, SET_ADAPTER_CONFIGURATION; all but the last are refused by the
+skeleton, no firmware command and no transmission resulted. Firmware capability fact: SAE in firmware 1,
+external SAE 0 (bears on WPA3 under Windows). Windows starts WLAN AutoConfig itself while the device exists and
+restores it on uninstall. Probe refactor to the shared bus library regression-clean (W1a). Next: W2 passive
+scan through Windows; country gate unchanged.
