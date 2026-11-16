@@ -7648,3 +7648,13 @@ anything. Two request-form guesses (mpc, channel list) are now rejected -> METHO
 one boot, one variable per connect: scan-while-associated mode (current / served from cache / home channel
 only / passive / brcmfmac scan timing), stall recovery by flowring delete + create (ring-specific or whole
 TX path), join power mode (CAM / PM_FAST). Not verified: why EXP2553/2554 held 124 s with scans in window.
+
+UPDATE 2026-11-16T20:54Z (Wi-Fi, EXP2565, AppleBcmWlan 0.1.29.0 run-time variants, step S1 StallRecover=1):
+the stall after the first associated escan is RING-SPECIFIC. Reproduced 31 s after a 5 GHz UI join (11 frames
+outstanding); the driver deleted the station flowring (the 11 completed with status 6 at the delete) and the
+next frame created a new one, which the firmware fetches: 332 posted = 332 statuses at +5 s, traffic continues,
+no second episode in the following minute. So the station TX path and the radio slice work after the scan;
+only the pre-scan flowring stops being serviced. First connection that survived an associated scan (~10 s
+gap). Not verified yet: whether every later escan stalls the then-current ring (S1b), and the scan-form steps
+S2/S3/S5 and JoinPm S4 (running in the same boot, recovery kept on as a net; verdict per step = stall episode
+count per associated escan). Root cause still open; flowring recreate is a recovery, not the fix.
