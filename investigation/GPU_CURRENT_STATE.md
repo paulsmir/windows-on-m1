@@ -7634,3 +7634,17 @@ group slots (no firmware-refused delete). Next single change on the bench: 0.1.2
 20 MHz channel list (the form cfg80211 always gives brcmfmac) instead of the firmware's internal all-channels
 path; receipts add doorbell count, mailbox read-back and the firmware console at the stall. Next candidate if
 rejected: PM_FAST / passive scan time as brcmf_config_dongle.
+
+UPDATE 2026-11-16T19:58Z (Wi-Fi, EXP2564, AppleBcmWlan 0.1.28.0): the explicit 20 MHz channel list is REJECTED
+as the cause (kept: it is the brcmfmac request form). 5 GHz UI join, traffic fine (TX 567 = 567 statuses);
+the first escan with associated = 1 that actually ran (37 channels, 2.8 s, final 0) is followed by the same
+stall. New receipts narrow it: doorbells are rung for every posted frame, the write index is visible to the
+device, the device read index stays 11 behind; completion, RX and control rings are all caught up; RX and
+events continue; no mailbox data, no new event type. Firmware console: no assert or trap; at the stall one
+unscheduled DMA status line for the second radio core whose free-descriptor figure drops to the first core's
+value. An earlier scan task issued right at the join was refused by the firmware (busy), so it did not test
+anything. Two request-form guesses (mpc, channel list) are now rejected -> METHOD CHANGE: next package
+0.1.29.0 carries run-time selected variants (default = current behaviour) so several discriminators run in
+one boot, one variable per connect: scan-while-associated mode (current / served from cache / home channel
+only / passive / brcmfmac scan timing), stall recovery by flowring delete + create (ring-specific or whole
+TX path), join power mode (CAM / PM_FAST). Not verified: why EXP2553/2554 held 124 s with scans in window.
