@@ -7620,3 +7620,17 @@ Ethernet unplug, group rekey, ring/buffer exhaustion, mpc writes (none recorded)
 link-quality indication after association and an empty statistics answer -> Windows shows a weak-signal icon.
 Next causal target: our scan path on an associated interface versus brcmfmac (escan request/params, end-of-scan
 handling); fix build pending; pass criterion = TX statuses keep up across three scans while associated.
+
+UPDATE 2026-11-16T19:24Z (architect): Wi-Fi scan-while-associated stall (EXP2563, AppleBcmWlan 0.1.27.0). Removing
+the mpc 0/1 writes around every escan (a divergence from brcmfmac, kept removed) is REJECTED as the cause: the
+link stalled again at the first escan with associated = 1 (~3 min after a 5 GHz UI join). Snapshot evidence:
+the scan completes (final 0); afterwards the firmware stops fetching the station TX flowring (host w 441,
+device r 428) while RX, the control ring and interrupts continue; PM = CAM, no deep-sleep request, no non-zero
+status during the stall; at flow delete the outstanding frames return with TX status 3; Windows then reloads
+the adapter ~19 s after its own TASK_DISCONNECT. Correction: my earlier "no mpc writes recorded" came from
+last-status fields (0 = success), not counts. Confirmed in a real connect on this stack: RX hold opened at
+LINK (first EAPOL no longer dropped, M2 75 ms after the result), key flags as brcmfmac, teardown deletes only
+group slots (no firmware-refused delete). Next single change on the bench: 0.1.28.0 - escan with an explicit
+20 MHz channel list (the form cfg80211 always gives brcmfmac) instead of the firmware's internal all-channels
+path; receipts add doorbell count, mailbox read-back and the firmware console at the stall. Next candidate if
+rejected: PM_FAST / passive scan time as brcmf_config_dongle.
