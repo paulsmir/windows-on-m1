@@ -36,7 +36,7 @@ class BootstrapImageTests(unittest.TestCase):
             (b"", b"inner", 0x11, "Stage 0"),
             (b"unaligned", b"inner", 0x11, "aligned"),
             (b"s" * 0x4000, b"", 0x11, "inner"),
-            (b"s" * 0x4000, b"inner", 0x20, "flags"),
+            (b"s" * 0x4000, b"inner", 0x200, "flags"),
         )
         for stage0, inner, flags, message in cases:
             with self.subTest(message=message):
@@ -72,7 +72,7 @@ class BootstrapImageTests(unittest.TestCase):
 
         changed(8, "<H", 2, "version")
         changed(10, "<H", 63, "header")
-        changed(12, "<I", 0x20, "flags")
+        changed(12, "<I", 0x200, "flags")
         changed(16, "<I", 1, "reserved")
         changed(20, "<Q", 65, "aligned")
         changed(28, "<Q", 0, "size")

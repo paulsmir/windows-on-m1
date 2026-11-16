@@ -51,7 +51,7 @@ class StandaloneImageTests(unittest.TestCase):
     def test_pack_and_parse_reject_unknown_or_ambiguous_profile_flags(self):
         api = self.load_api()
 
-        for flags in (0xC, 0x14, 0x18, 0x1C, 0x20):
+        for flags in (0xC, 0x14, 0x18, 0x1C, 0x200, 0xD001):
             with self.subTest(flags=flags):
                 with self.assertRaisesRegex(api.ImageError, "flags"):
                     api.pack_image(b"m1n1", b"firmware", layout_version=1, flags=flags)
