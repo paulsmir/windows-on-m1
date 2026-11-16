@@ -7574,3 +7574,15 @@ steering controls are not named in any local source; fetching them needs the use
 target: make the driver handle a firmware re-association under the WiFiCx contract (host-driven roam:
 ROAMING_NEEDED / TASK_ROAM) so Windows' supplicant runs the second handshake; counts-only receipts for the BSS
 candidate list of TASK_CONNECT. The first association on 2.4 GHz stays functional in every run.
+
+UPDATE 2026-11-16T16:07Z (architect): Wi-Fi FIRST COMPLETE CONNECTION (EXP2553, AppleBcmWlan 0.1.20.0, user's WPA2
+network, 2.4 GHz channel 6): WPA2-PSK 4-way through Windows' supplicant, keys installed, link held 123.8 s,
+WiFi-bound ping 4/4 at +0 / +15 / +60 / +110 s, every data TX status complete (166 = 166), 367 RX frames, then a
+clean Windows-initiated disconnect (disassoc Fw 0, flowring created = deleted, key deletes without drain
+timeouts). This is the W5 pass list read for the first time. NOT attributable to the change under test:
+Windows passed a single BSS candidate (2.4 GHz), so the 5 GHz-first ordering of 0.1.20.0 could not act; the
+firmware simply did not re-associate to the 5 GHz BSS in this run (it did in EXP2545/2547/2549/2551 with the
+same join). The cause of that re-association is therefore NOT eliminated and not named (firmware reason 19;
+AP-side steering state is a candidate, unproven). Owed: handling of a firmware re-association under the WiFiCx
+contract (W6), a reproducibility repeat, and the parked fixes (key PRIMARY flags, first EAPOL dropped before the
+RX hold opens, drain reset on timeout).
