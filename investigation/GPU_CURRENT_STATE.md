@@ -7474,3 +7474,12 @@ skeleton, no firmware command and no transmission resulted. Firmware capability 
 external SAE 0 (bears on WPA3 under Windows). Windows starts WLAN AutoConfig itself while the device exists and
 restores it on uninstall. Probe refactor to the shared bus library regression-clean (W1a). Next: W2 passive
 scan through Windows; country gate unchanged.
+
+UPDATE 2026-11-16T02:38Z (architect): Wi-Fi W2 (EXP2522): driver side PASS by receipts - Windows issued six scan
+tasks, all served by the passive escan, 81 BSS entries indicated with 0 errors, reset and statistics answered;
+no transmit-capable command exists or ran. Windows-side checkpoint (networks listed) NOT READ: every documented
+BSS-list read is refused by the guest's machine-wide Location privacy setting (Deny), which is the user's to
+change. Findings from documentation: WiFiCx has no OS-to-driver country message (regulatory is the IHV's), and
+WPA3-SAE needs external SAE which this firmware does not advertise (WPA3-only networks out of scope; WPA2 and
+transition mode in scope). Open user decisions: country policy, Location for bench checks or a visual check.
+Bench work that transmits stays gated; W4 (data path) design proceeds offline.
