@@ -7681,3 +7681,16 @@ or reading the macOS driver's behaviour around an associated scan. Guard design 
 background scans + ring refresh after an off-channel scan), not built. Cache-served scan soak (S6) running.
 Windows refuses WlanScan from the SSH session (access denied, Location setting untouched): scans need the
 operator's network list or Windows' own timing.
+
+UPDATE 2026-11-16T22:24Z (Wi-Fi): S6 (EXP2565 series, cache-served scans while associated) PASS for
+10 min under load: 8 associated scan tasks skipped, no stall episode, TX 16905 = statuses; caveats: that
+connect was PM_FAST, the network list ages to the joined network only (operator saw it), and 8 of 110 HTTPS
+probes timed out singly with TX keeping up (separate open defect, also present in earlier healthy minutes).
+Firmware sent no RING_STATUS message in any step. Reading of the macOS driver's behaviour (binary on this
+host, behaviour only): it writes bus:fl_prio_map = 1 (flowrings in TID mode) and bus:h2dindx_w_d2hdma = 1
+after C_UP and before any flowring exists, on every firmware setup; brcmfmac and we never write either. The
+scan core is statistics only (no host action); macOS does not delete or flush flowrings at scan end; status 6
+= "returned because of flow ring flush or delete". Active hypothesis: the firmware's flowring suspend/resume
+around an off-channel dwell is keyed by its TID-mode mapping, and rings created in the default mode are not
+resumed. On the bench: 0.1.30.0 phase receipts (EXP2572, waiting for the operator's connect). Being built:
+0.1.31.0 with FlowPrioMap and H2dIdxD2hDma as separate run-time variants (default = current).
