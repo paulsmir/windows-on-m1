@@ -7493,3 +7493,13 @@ stale-event drop restores full scans (EXP2525: 7 scans of ~2.9 s, 10-14 BSS each
 Open: an aborted scan is completed only after the 15 s host timeout and its final arrives during the next scan
 (event servicing outside a scan to be checked). Bench work that transmits remains gated on the user's country
 decision; the Windows-side network list remains unread (Location setting).
+
+UPDATE 2026-11-16T05:11Z (architect): Wi-Fi (EXP2526-2527). Host-side scan abort (aborted scan completes in 2 ms;
+Windows aborts its first scan ~1 ms after requesting it) and event-buffer re-post from the DPC validated; the
+firmware reports the aborted escan as TIMEOUT (status 2) and delivers that final ~1.5 s into the next escan,
+where the sync_id rule drops it. Known-good for scan/abort: probe rev 23 / AppleBcmWlan 0.1.7.0.
+First data-path DMA validated without transmission (probe rev 24): 575 RX buffers posted from a second common
+buffer inside the DMA window, RX/TX completion rings drained from the DPC, one empty flowring created and
+deleted while unassociated (firmware accepts), all TX counters 0, DART unchanged.
+Remaining before a network connection: miniport data path (W4 4b), country policy (user decision), connect and
+keys (W5), power (W7), production items (posted mapping without full trap, platform data via Mu).
