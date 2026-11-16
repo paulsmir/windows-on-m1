@@ -7514,3 +7514,12 @@ end state without write traps, needs a full stage-2 mapping audit.
 USER DECISION 2026-11-16 ("Да, Франция вручную"): regulatory country = manual adapter property, FR on this
 machine; automatic layer later. Next on the bench: T1 = country FR set and read back, then the first active
 scan (probe requests only); data TX remains closed (no association code).
+
+UPDATE 2026-11-16T08:49Z (architect): Wi-Fi T1 PASS (EXP2530 passive baseline, EXP2531 country FR). AppleBcmWlan
+0.1.10.0: the manual adapter property FR is applied to the firmware and read back FR/FR/0 (re-read by a device
+restart, no reboot); with the gate open Windows' scans run active (first transmission of this driver: probe
+requests only), finding more BSS per scan in less time (mean 19.3 in ~2.1 s versus 13.9 in ~2.9 s passive).
+Channel census US -> FR: channels 12/13 passive -> active, channel 144 removed, DFS/radar-flagged 16 -> 15,
+U-NII-3 149-165 kept active by this CLM's FR locale. With the property back to "Not set" the driver is
+passive-only again. Data TX still closed (no association code; all TX counters 0). Next: W5 (connect, WPA2-PSK
+with the host supplicant, keys, disconnect); needs a user-provided test access point.
