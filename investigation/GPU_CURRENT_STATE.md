@@ -7548,3 +7548,16 @@ frame format, RSN IE and key derivation right); open: why the AP does not consid
 the drop and is not attributable. BAR option D confirmed a second time with the miniport (EXP2543, passive):
 0 trapped reads, no SError. Earlier sub-attempts of the day that never reached the driver (client-side profile
 import and transport problems in the user's tool) are recorded under EXP2544/2545 as not-run.
+
+UPDATE 2026-11-16T15:17Z (architect): Wi-Fi association (EXP2547, EXP2549). The ordered handshake trace shows the
+first WPA2 association is functional: 4-way in order (message 4 TX_STATUS before the pairwise key; the
+"key before M4" hypothesis REJECTED, the hold never engages), keys installed, unicast data both ways, all data
+TX statuses, first WiFi-bound ping reply. CAUSE of the reason-15 drops CONFIRMED by firmware-event trace
+(EXP2549): ~8 s after the join the firmware itself re-associates to another BSS of the same network on 5 GHz
+(ROAM_START / REASSOC / ROAM, firmware reason 19; chanspec 0x1006 -> 0xe06a); that BSS starts a new 4-way which
+Windows does not complete, and it deauthenticates. Setting roam_off as brcmfmac (reads back 1) is NOT sufficient
+to prevent it. Next causal target: what governs this re-association (AP band steering handled in firmware /
+band preference), then the smallest change for a stable first connection; contract-correct roaming under WiFiCx
+(host-driven) is owed as its own rung. Parked, confirmed deviations: key PRIMARY flags reversed versus
+brcmfmac; held first EAPOL delivered before CONNECT_COMPLETE (costs 1 s per connect); EAPOL drain not reset on
+timeout (4 x 1 s at teardown).
