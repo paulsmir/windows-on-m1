@@ -81695,3 +81695,35 @@ EXP2553 ACTUAL (2026-11-16 UTC): W5 pass list read for the first time - WPA2-PSK
 EXP2554 HARDWARE BEFORE 2026-11-16T16:09:04Z:
 Wi-Fi W5 / T2 REPRODUCIBILITY REPEAT of EXP2553, same boot, AppleBcmWlan 0.1.20.0 unchanged, CountryCode FR, Parameters at defaults. Hypothesis-free by design: single variable = none (repeat of EXP2553). WHY: one stable run after three roamed runs with an identical join cannot be attributed; the repeat shows whether the outcome is stable or the firmware's move returns (AP-side state is a candidate). Both outcomes are informative: stable again -> two in a row, attribute nothing; roam returns -> a fourth sample with timing.
 - Run: pnputil restart-device (fresh firmware download; CountryCode FR stays), pre-connect check (FR read-back, counters 0, profiles 0, cred-tmp and staged script absent, DART), fresh 1 s stream, netfacts2 at +0 / +15 / +60 / +110 s; connect step by the user's own tool over its own SSH session with one temporary manual-connect profile; the credential never passes through the bench or the architect. Afterwards: decoded trace, WlanConn* and list, roam/chanspec receipts, link duration, data TX vs statuses, ping tokens, disconnect path; profiles 0 / cred-tmp / staged script absent; stay in FR; wait for the architect's word.
+
+EXP2554 ACTUAL (2026-11-16 UTC): W5 pass list reproduced; nothing attributed - both stable runs and the four roamed runs used the same join; the roamed runs all came before 16:00Z; cause of the firmware re-association still open. Firmware-refused first key delete at teardown seen twice (EXP2553/2554): a defect to explain, not harmful.
+- Restart-device 16:09:41Z (fresh firmware download, FR kept); pre-connect check 16:10:12Z clean (FR/FR/0, CountryState 1, counters 0, WnmReadback 0, RoamOffReadback 1, profiles 0, cred-tmp and staged script absent, DART unchanged). Connect start 16:13:10.9Z; ConnHostBss 1, N2g 1, JoinedIdx 0, ConnList [band 2, ch 6, RSSI -65, rank 0]; join 2.4 GHz ch 6 chanspec 0x1006.
+- EapolTrace (24 events; ms): 37 FW 3 AUTH; 52 FW 16 LINK / 7 ASSOC; 84 RX M1; 115 FW 0 SET_SSID, assoc result 0; 1086 RX M1; 1101 TX M2 post (exempt action 2), TX_STATUS M2 0; 1133 RX M3, TX M4 post (exempt action 2), TX_STATUS M4 0; 1156 key pairwise drain 10; 1167 key group drain 0; 1192 first data TX; 1200 first data RX unicast; 4205 first data RX multicast; 123827 FW 16 LINK reason 2 (after the host disassoc); 123829 key delete drain 0 + fw refused; 123829 / 123833 / 123835 key delete drain 0. No roam-class event; chanspec Last/Changed/Reads 0/0/0.
+- Data: 16:14:03Z TX 136 = status 136, RX 71; 16:15:02Z 150 = 150, RX 114; at the disconnect 155 = 155, RX 124; TxStatusNonZero 1; WlanTxExempt 153/0/5; M4Holds 0.
+- netfacts2 (WiFi adapter only, ping bound to the WiFi source address): +0 16:13:22Z, +15 16:13:38Z, +60 16:14:24Z, +110 16:15:12Z - all YES, Up Connected, PING_WIFI_BOUND 4/4.
+- Disconnect 16:15:14.7Z: WlanDisconnectTasks 1, DisassocFwLast 0, LinkDownEvents 0, Disassociations 0, DataFlowCreates 1 = Deletes 1, key deletes 4 drain 0, EapolDrainTimeouts 0, KeysFailed 1 (KeyFwLast 0); profile count 0 at 16:15:19.7Z; after (16:15:40Z) profiles 0/0, cred-tmp and codex-run file absent.
+
+EXP2544 BOOT CLOSE (2026-11-16 UTC): bench stood down after EXP2554. CountryCode 0 + restart-device 16:16:51Z: CountryConfig 0, CountryState 0, scans passive (active refused 3), LinkState 1. wifi-swap uninstall deleted oem22 (0.1.16.0), oem23 (0.1.17.0), oem24 (0.1.18.0), oem25 (0.1.19.0), oem26 (0.1.20.0) at 16:17:25Z, device back to "Network Controller" (DEV OK); 0 AppleBcm packages; helper clear on both services (AppleBcmProbe Parameters absent; AppleBcmWlan keeps only FirmwareFile/NvramFile/ClmFile/TxcapFile/DmaWindowBase/DmaWindowLength - no MacAddress/cal, no switch values); profiles API 0 / xml 0, cred-tmp absent, codex-run file absent; routes/IPIF identical to the boot's before-state (adapter list gains the WAN Miniport entries, as before); location state identical; StartOverride clear OK. DART value unchanged all boot (0x5000400), no SError. Redaction gate over evidence and full.log OK. launch-wifi end + rec2493h AT_PROXY recovery: proxy answer 23.4 s, VISIBLE_INERT_PACKAGE_ABSENT_8CPU, RECOVERY_STORAGE_APPLEANS_OK, RECOVERY_DONE, ended 16:21:02Z. Known-good Wi-Fi package staged on the Mac: BCMWLAN-W520-726871e24-signed (0.1.20.0), predecessor BCMWLAN-W519-e5470029d-signed (0.1.19.0).
+Summary: 2026-11-16: Wi-Fi T2 connect experiments (bench), counts and codes only
+
+| EXP | AppleBcmWlan | What changed | Outcome |
+|---|---|---|---|
+| 2539 | 0.1.13.0 | T2 attempt 1, UI connect | associated 5 GHz ch 100; M1 returned x3, WlanTxSeen 0; deauth reason 15 |
+| 2540 | 0.1.13.0 | WlanRxFormat 1 | same failure; RX layout excluded |
+| 2541 | 0.1.16.0 | NetAdapter link state + assoc_info 512 (no-connect check) | PASS: LinkState 1, routes unchanged |
+| 2542 | 0.1.16.0 | attempt-3 window | expired, no attempt |
+| 2543 | 0.1.16.0 | BAR option D (m1n1 06208733), passive | confirmed: reads 0, writes 947180, unexpected 0; reset totals line missing |
+| 2544 | 0.1.16.0 | attempt 3/3B (tool profile import) | tool errors 1338 / 1206 before any connect; driver untouched |
+| 2545 | 0.1.16.0 | attempt 4 (tool transport fixed) | first assoc + keys + data (2.4 GHz ch 6); deauth 15 after ~10 s |
+| 2546 | 0.1.17.0 | M4 hold (no-connect check) | PASS |
+| 2547 | 0.1.17.0 | M4 hold, connect | M4 before key (hold not engaged): ordering rejected; AP restarts 4-way; deauth 15 at 5.9 s |
+| 2548 | 0.1.18.0 | roam_off 1 (no-connect check) | PASS, readback 1 |
+| 2549 | 0.1.18.0 | roam_off, connect | firmware roam to 5 GHz ch 100 at 8.4 s (reason 19); deauth 15 at 12.5 s |
+| 2550 | 0.1.19.0 | wnm 0 (no-connect check) | PASS, wnm 5 -> 0 |
+| 2551 | 0.1.19.0 | wnm 0, connect | bit 19 clear, roam at 1.7 s anyway; deauth 15 at 5.8 s |
+| 2552 | 0.1.20.0 | join order +8 dB 5 GHz (no-connect check) | PASS |
+| 2553 | 0.1.20.0 | join order, connect | single 2.4 GHz candidate (no reorder); 123.8 s stable, WiFi ping 4/4 x4, clean host disconnect |
+| 2554 | 0.1.20.0 | repeat of 2553 | same: 123.8 s stable, 4/4 x4, clean disconnect; nothing attributed |
+
+- Open: cause of the firmware re-association (all four roamed runs before 16:00Z); first key delete at teardown refused by the firmware (EXP2553/2554).
+- Known-good Wi-Fi package staged on the Mac: BCMWLAN-W520-726871e24-signed (0.1.20.0); predecessor BCMWLAN-W519-e5470029d-signed (0.1.19.0).
