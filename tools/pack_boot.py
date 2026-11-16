@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from guest_layout import load_layout
-from launch_profile import Debug, Display, parse_profile
+from launch_profile import Debug, Display, parse_profile, working_profile
 from bootstrap_image import pack_bootstrap, parse_bootstrap
 from standalone_image import IMAGE_ALIGNMENT, ImageError, pack_image, parse_image
 
@@ -45,10 +45,28 @@ def main() -> int:
     parser.add_argument("--compiler")
     parser.add_argument("--display", choices=[value.value for value in Display], default="physical")
     parser.add_argument("--debug", choices=[value.value for value in Debug], default="off")
+    parser.add_argument("--working-profile", action="store_true",
+                        help="add the bench working-profile knobs (ANS-DIRECT, AGX G2 broker, "
+                             "CPPC, expanded RAM, P-cluster P12) to the manifest flags")
+    parser.add_argument("--firmware-sha256",
+                        help="refuse to pack unless the Mu FD hashes to this pinned value")
     args = parser.parse_args()
 
     layout = load_layout(args.layout)
     profile = parse_profile(display=args.display, debug=args.debug)
+    if args.working_profile:
+        profile = working_profile(profile)
+    firmware_bytes = args.firmware.read_bytes()
+    firmware_sha256 = hashlib.sha256(firmware_bytes).hexdigest()
+    if args.firmware_sha256 is not None and firmware_sha256 != args.firmware_sha256.strip().lower():
+        raise ImageError(
+            f"firmware hash mismatch: {firmware_sha256} != {args.firmware_sha256}")
+    # The FD is placed at layout.firmware_base by both launch paths; it must fit
+    # the window the layout reserves (and the FDF Size the Mu build declares).
+    if len(firmware_bytes) > layout.firmware_max_size:
+        raise ImageError(
+            f"firmware is 0x{len(firmware_bytes):x} bytes, larger than the layout window "
+            f"0x{layout.firmware_max_size:x}")
     if args.stage0_m1n1 is not None and args.stage1_m1n1 is None:
         parser.error("--stage0-m1n1 requires --stage1-m1n1")
     if args.stage1_m1n1 is not None and args.stage0_m1n1 is None:
@@ -63,7 +81,7 @@ def main() -> int:
         )
     inner = pack_image(
         m1n1,
-        args.firmware.read_bytes(),
+        firmware_bytes,
         layout_version=layout.layout_version,
         flags=profile.manifest_flags,
     )
@@ -110,6 +128,9 @@ def main() -> int:
             "image": {"sha256": digest, "size": len(image)},
             "source_commit": args.source_commit,
             "compiler": args.compiler,
+            "manifest_flags": f"0x{profile.manifest_flags:x}",
+            "layout_version": layout.layout_version,
+            "firmware": {"sha256": firmware_sha256, "size": len(firmware_bytes)},
             **stages,
         }
         (args.output.parent / "BUILD-METADATA.json").write_text(
@@ -127,7 +148,13 @@ def main() -> int:
         print(f"manifest offset: 0x{inner_manifest.manifest_offset:x}")
         print(f"payload offset: 0x{inner_manifest.payload_offset:x}")
     print(f"firmware CRC32: {inner_manifest.crc32:08x}")
-    print(f"profile: display={profile.display.value} debug={profile.debug.value}")
+    print(f"profile: display={profile.display.value} debug={profile.debug.value} "
+          f"flags=0x{profile.manifest_flags:x}")
+    if args.working_profile:
+        print(f"working profile: ans_direct={int(profile.ans_direct)} "
+              f"agx_g2_broker={int(profile.agx_g2_broker)} cppc={int(profile.cppc)} "
+              f"expanded_ram={int(profile.expanded_ram)} pcpu_pstate={profile.pcpu_pstate}")
+    print(f"firmware SHA-256: {firmware_sha256}")
     print(f"SHA-256: {digest}")
     return 0
 
