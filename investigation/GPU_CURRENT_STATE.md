@@ -7535,3 +7535,16 @@ reason 15 -> RX layout rejected as the cause (EXP2540). Defects found from sourc
 NetAdapterSetLinkState; assoc_info was read into 8 bytes instead of 512, so no association request/response IEs
 reached ASSOCIATION_RESULT. Both fixed in 0.1.16.0 (no-connect regression PASS, EXP2541); attempt 3 with it has
 not been made yet (window expired without an attempt).
+
+UPDATE 2026-11-16T14:30Z (architect): Wi-Fi first association with keys and data (EXP2545, AppleBcmWlan 0.1.16.0,
+user's WPA2 network, connect issued on the user's side through a temporary profile). The two defects fixed in
+0.1.16.0 are CONFIRMED as the cause of attempts 1-2 failing: with the NetAdapter link state set and the
+association request/response IEs returned (assoc_info read into 512 bytes) Windows' supplicant answers -
+EAPOL TX 2 posted and completed, pairwise + group keys installed (KeysAdd 2), a flowring created, ~96 TX
+completions and 38 RX indications in ~10 s; joined 2.4 GHz channel 6. Then the AP deauthenticates with reason
+15 after further EAPOL from its side (RX EAPOL 2 -> 6, our TX 2 -> 3). Message 2 was therefore accepted (TX
+frame format, RSN IE and key derivation right); open: why the AP does not consider the handshake complete
+(candidate: message 4 versus pairwise-key install timing/encryption). Guest-side IPv4/ping read was taken after
+the drop and is not attributable. BAR option D confirmed a second time with the miniport (EXP2543, passive):
+0 trapped reads, no SError. Earlier sub-attempts of the day that never reached the driver (client-side profile
+import and transport problems in the user's tool) are recorded under EXP2544/2545 as not-run.
