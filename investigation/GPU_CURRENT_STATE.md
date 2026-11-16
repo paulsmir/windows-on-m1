@@ -7448,3 +7448,10 @@ platform macaddr in the NVRAM, BAR trap on - DownloadStatus 1, firmware up in 15
 EXP2515 (msgbuf rung): shared version 7 parsed, common buffer inside the DMA window, first INTx delivered end to
 end (MailboxClaims 1); the first ioctl timed out with no ring index movement and no DART change. Next causal
 target: DMA index mode / hostready per brcmfmac for SharedFlags 0x78810007 (rev 15, same boot).
+
+UPDATE 2026-11-16T00:04Z (architect): Wi-Fi msgbuf rung PASS under Windows (EXP2516, probe rev 15, same boot as
+EXP2514): with host-memory ring indices (firmware advertises DMA_INDEX) the dongle answered the first ioctl over
+DMA in both directions and INTx: firmware version 18.90.5.0.7.8.177, IoctlStatus 0, index and ring buffers inside
+the DART window, DART residual unchanged, no SError. Ladder state: link, inventory, CR4 passive, OTP, reset round
+trip, firmware download and start, msgbuf + first ioctl all proven on hardware in one boot without reboots
+between driver builds. Next: R5 (identity, preinit iovars, CLM/txcap, calibration) and R6 (passive scan).
