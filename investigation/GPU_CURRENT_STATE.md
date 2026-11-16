@@ -7694,3 +7694,14 @@ scan core is statistics only (no host action); macOS does not delete or flush fl
 around an off-channel dwell is keyed by its TID-mode mapping, and rings created in the default mode are not
 resumed. On the bench: 0.1.30.0 phase receipts (EXP2572, waiting for the operator's connect). Being built:
 0.1.31.0 with FlowPrioMap and H2dIdxD2hDma as separate run-time variants (default = current).
+
+UPDATE 2026-11-16T22:54Z (Wi-Fi): EXP2572 (0.1.30.0 phase receipts, two stalled scans): the ring is
+idle and caught up at the escan request; from the first TX post made after an off-channel dwell the device
+read index never moves again - not at home-channel returns inside the scan, not after scan end; no
+RING_STATUS; rings whose first destination was the AP and other unicast stall alike. Exit-vs-post not
+separable passively (no post preceded the first dwell). EXP2573 (0.1.32.0, FlowPrioMap=1): firmware default
+0, SET 1 accepted and read back before any ring, and the first associated scan froze the ring as before ->
+TID-mode mapping REJECTED as the cause. bus:h2dindx_w_d2hdma is unsupported by this firmware (GET -23):
+not applicable. Running: TxHoldScan=1 (no TX post or doorbell from the escan request to scan complete),
+clean reconnect in default mapping. Operator at the guest's screen is now Codex through Windows App on
+file commands (connect / open list / disconnect on the saved profile; no credential), by the user's decision.
