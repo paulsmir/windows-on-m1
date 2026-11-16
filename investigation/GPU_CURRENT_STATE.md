@@ -7705,3 +7705,19 @@ TID-mode mapping REJECTED as the cause. bus:h2dindx_w_d2hdma is unsupported by t
 not applicable. Running: TxHoldScan=1 (no TX post or doorbell from the escan request to scan complete),
 clean reconnect in default mapping. Operator at the guest's screen is now Codex through Windows App on
 file commands (connect / open list / disconnect on the saved profile; no credential), by the user's decision.
+
+UPDATE 2026-11-16T23:41Z (Wi-Fi): EXP2575 (0.1.32.0, TxHoldScan=1, two scans): no TX post from the escan
+request to scan complete, ring empty and untouched, frames released after the scan are never fetched ->
+FREEZE AT CHANNEL EXIT; host TX timing closed. Offline comparison: escan request (v1) is byte-equal to
+brcmfmac's on this firmware; init/join differences were roam_off 1 / bcn_timeout 4 and wnm 0 (ours only),
+ARP/ND offload, FAKEFRAG, join_pref, wsec re-SET after the group key (brcmfmac only). EXP2576 (0.1.33.0,
+AllAsBrcmfmac=1, all six applied and read back): first associated scan froze the ring as before, no firmware
+roam -> the whole brcmfmac difference set is CLEARED. Active hypothesis now: FIRMWARE VERSION - the host is
+brcmfmac-equal, but brcmfmac is only run against the 13.5-era firmware the Asahi installer pins, while we load
+the 15.7.8-era build whose own driver (macOS) speaks a newer dialect (message phase flag + host capability,
+escan v3, TID mode, TX-status format). Next: find an Asahi-supported firmware set locally (no download
+without the user's yes) and test it as one run-time variable; otherwise adopt the newer dialect item by item.
+Night organisation (user's order 23:05Z): parallel offline lines on Opus 5.5 for Bluetooth, power management,
+standalone boot of the working profile, external monitor, keyboard backlight, webcam (audio, USB, installer
+paused after their milestones); bench queue for idle gaps in .local/handoff/night-20261117/BENCH-QUEUE.md
+(Bluetooth B1-B4 first, USB U1b observer second); guest-screen operator = Codex on file commands.
