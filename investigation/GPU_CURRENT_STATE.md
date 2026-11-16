@@ -7503,3 +7503,14 @@ buffer inside the DMA window, RX/TX completion rings drained from the DPC, one e
 deleted while unassociated (firmware accepts), all TX counters 0, DART unchanged.
 Remaining before a network connection: miniport data path (W4 4b), country policy (user decision), connect and
 keys (W5), power (W7), production items (posted mapping without full trap, platform data via Mu).
+
+UPDATE 2026-11-16T08:27Z (architect): Wi-Fi (EXP2528-2529). Miniport with the data path present but closed
+(AppleBcmWlan 0.1.9.0): RX/TX queues created, 575 RX buffers posted, no packet queued by Windows while
+disconnected, all TX counters 0; scans and abort unchanged. BAR option D CONFIRMED (m1n1 wifi/bar-ro
+bb05566f): stage-2 read-only BAR window, reads direct, writes trapped and forwarded posted - probe ladder
+identical, 0 trapped reads (full trap: ~750 k per load), 947 k writes, no SError; firmware download roughly a
+third faster in the one boot measured. FEAT_S2FWB is present on this SoC (ID_AA64MMFR2_EL1 FWB = 1): candidate
+end state without write traps, needs a full stage-2 mapping audit.
+USER DECISION 2026-11-16 ("Да, Франция вручную"): regulatory country = manual adapter property, FR on this
+machine; automatic layer later. Next on the bench: T1 = country FR set and read back, then the first active
+scan (probe requests only); data TX remains closed (no association code).
