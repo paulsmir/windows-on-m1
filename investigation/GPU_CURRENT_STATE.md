@@ -7668,3 +7668,16 @@ off-channel excursion of an associated escan, not the escan command or its reque
 Windows issued no background scan on its own for 36 min; scans came only from the open network list; the link
 carried 6273 frames with no episode in that time. Pending in the same boot: home-channel repeat under load,
 S3 passive, S5 brcmfmac passive time, S4 PM_FAST (needs a reconnect), S6 cache-served soak.
+
+UPDATE 2026-11-16T22:08Z (Wi-Fi, EXP2566-2569 on 0.1.29.0, bench ping load): home channel only stays
+clean under load (5 of 5); passive all-channel scan STALLS; brcmfmac passive time (120) STALLS; PM_FAST at the
+join (written and read back) STALLS. Scan-form and power-mode families are closed: any off-channel dwell
+while associated leaves the pre-scan flowring unfetched; delete + create restored it 16 of 16 times. Offline
+source pass: our FLOW_RING_CREATE/TX_POST/doorbell/host-cap/preinit equal brcmfmac field by field (a station
+has one ring per FIFO, multicast shares it) -> the "wrong ring binding" hypothesis has no source support.
+Next (method, not a guess): 0.1.30.0 receipts only - phase-resolved device read index across one associated
+scan (freeze at channel exit vs at the first post made off-channel); then either a TX hold during the scan
+or reading the macOS driver's behaviour around an associated scan. Guard design recorded (home-channel
+background scans + ring refresh after an off-channel scan), not built. Cache-served scan soak (S6) running.
+Windows refuses WlanScan from the SSH session (access denied, Location setting untouched): scans need the
+operator's network list or Windows' own timing.
