@@ -7561,3 +7561,16 @@ band preference), then the smallest change for a stable first connection; contra
 (host-driven) is owed as its own rung. Parked, confirmed deviations: key PRIMARY flags reversed versus
 brcmfmac; held first EAPOL delivered before CONNECT_COMPLETE (costs 1 s per connect); EAPOL drain not reset on
 timeout (4 x 1 s at teardown).
+
+UPDATE 2026-11-16T15:54Z (architect): Wi-Fi (EXP2551, AppleBcmWlan 0.1.19.0). Switching the firmware's 802.11v
+features off before radio-up took effect (wnm 5 -> 0; BSS-transition bit clear in our association request;
+Windows' connect setting 0) and is REJECTED as sufficient: the firmware re-associated to the 5 GHz BSS of the
+same network 1.68 s after the connect (reason 19 again), followed by the same new-handshake / deauth-15
+sequence. Two firmware-side preventions are now rejected (roam_off, wnm). Observed from receipts: connects made
+through Windows' Wi-Fi UI joined the 5 GHz BSS directly (EXP2539/2540); connects issued through the WLAN API
+with a temporary manual profile join the 2.4 GHz BSS (EXP2545-2551) - the connect path decides Windows' first
+candidate. WHY CHANGE OF APPROACH: no further prevention guess without the vendor headers (reason 19 and the
+steering controls are not named in any local source; fetching them needs the user's permission). Next causal
+target: make the driver handle a firmware re-association under the WiFiCx contract (host-driven roam:
+ROAMING_NEEDED / TASK_ROAM) so Windows' supplicant runs the second handshake; counts-only receipts for the BSS
+candidate list of TASK_CONNECT. The first association on 2.4 GHz stays functional in every run.
