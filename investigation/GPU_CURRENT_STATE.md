@@ -7658,3 +7658,13 @@ only the pre-scan flowring stops being serviced. First connection that survived 
 gap). Not verified yet: whether every later escan stalls the then-current ring (S1b), and the scan-form steps
 S2/S3/S5 and JoinPm S4 (running in the same boot, recovery kept on as a net; verdict per step = stall episode
 count per associated escan). Root cause still open; flowring recreate is a recovery, not the fix.
+
+UPDATE 2026-11-16T21:54Z (Wi-Fi, EXP2565 series, 0.1.29.0, same connect, link up since 20:52Z):
+S1b: EVERY associated all-channel escan stalls the flowring current at that moment (10 of 10 attributable
+scans, 2-16 frames outstanding each), and every one is recovered by flowring delete + create. S2: an escan of
+the HOME CHANNEL ONLY does not stall (3 of 3 clean; two of them with almost no traffic - being repeated under
+a bench-side ping load); flip back to all channels under load stalls again (confirmed). So the trigger is the
+off-channel excursion of an associated escan, not the escan command or its request form. Also observed:
+Windows issued no background scan on its own for 36 min; scans came only from the open network list; the link
+carried 6273 frames with no episode in that time. Pending in the same boot: home-channel repeat under load,
+S3 passive, S5 brcmfmac passive time, S4 PM_FAST (needs a reconnect), S6 cache-served soak.
