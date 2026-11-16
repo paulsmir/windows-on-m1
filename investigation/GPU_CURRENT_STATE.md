@@ -7483,3 +7483,13 @@ change. Findings from documentation: WiFiCx has no OS-to-driver country message 
 WPA3-SAE needs external SAE which this firmware does not advertise (WPA3-only networks out of scope; WPA2 and
 transition mode in scope). Open user decisions: country policy, Location for bench checks or a visual check.
 Bench work that transmits stays gated; W4 (data path) design proceeds offline.
+
+UPDATE 2026-11-16T04:12Z (architect): Wi-Fi W2 hardening (EXP2523-2525). Receipt clearing at load, ABORT_TASK,
+SET_LOCATION_PRIVACY (Windows passes LocationAllowed 0 under the guest's Location Deny; per documentation it
+restricts only ranging-class operations) and the message-ID table validated. Defect chain found and fixed:
+scan-abort payload for scan_ver 1 was 2 bytes short (firmware -14) -> once accepted, a late final of the
+aborted escan ended every following scan early (1-60 ms, few BSS; EXP2524) -> per-scan sync_id with a
+stale-event drop restores full scans (EXP2525: 7 scans of ~2.9 s, 10-14 BSS each; firmware echoes the id).
+Open: an aborted scan is completed only after the 15 s host timeout and its final arrives during the next scan
+(event servicing outside a scan to be checked). Bench work that transmits remains gated on the user's country
+decision; the Windows-side network list remains unread (Location setting).
