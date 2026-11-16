@@ -7455,3 +7455,12 @@ DMA in both directions and INTx: firmware version 18.90.5.0.7.8.177, IoctlStatus
 the DART window, DART residual unchanged, no SError. Ladder state: link, inventory, CR4 passive, OTP, reset round
 trip, firmware download and start, msgbuf + first ioctl all proven on hardware in one boot without reboots
 between driver builds. Next: R5 (identity, preinit iovars, CLM/txcap, calibration) and R6 (passive scan).
+
+UPDATE 2026-11-16T00:30Z (architect): Wi-Fi probe ladder complete up to reception (EXP2517-2519, same boot as
+EXP2514): preinit iovars and identity (MAC from NVRAM applied and matches), CLM/txcap/calibration uploads
+accepted, first PASSIVE scan SUCCESS in 2.9 s with 8 unique BSS (5 on 2.4 GHz, 3 on 5 GHz, RSSI -92..-56 dBm).
+Recorded deviations: country "#n" before the CLM and US/US/0 after the CLM upload with nothing set by the host;
+event mask length 43; scan_ver unsupported (v1 layout used). GATE: no transmit-capable step (active scan,
+association) before the country policy is defined from Windows' regulatory interface in the real driver.
+Not done: a Windows network miniport (WiFiCx), association, data path, power, Bluetooth; BAR access still goes
+through the EL2 trap; platform data still staged by the bench. Bench rolled back to RECANS001.
