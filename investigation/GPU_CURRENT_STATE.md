@@ -7597,3 +7597,12 @@ candidate). Open: the firmware's re-association to the 5 GHz BSS seen in EXP2545
 PRIMARY flags, first EAPOL dropped before the RX hold opens, drain reset, firmware-refused first key delete at
 teardown); UI-connect path with a multi-candidate list; soak/throughput; power; platform data via Mu; posted
 BAR mapping end state; Bluetooth. Bench stood down to RECANS001.
+
+UPDATE 2026-11-16T16:54Z (architect): Wi-Fi follow-up builds 0.1.21.0-0.1.24.0 (teardown key deletes, key PRIMARY
+flags as brcmfmac, RX hold opened at the first ASSOC/LINK, pending-EAPOL reset) pass their no-connect
+regressions (EXP2555-2558, passive, one boot); their effect needs an association and is NOT validated.
+Known-good stays 0.1.20.0. W6 decision recorded in docs/drivers/wifi-bt/W6_ROAMING.md (Wi-Fi branch): the port
+must not roam on its own (Microsoft documentation); end state = firmware kept from moving + host-driven roam;
+interim guard = disassociate and indicate DISASSOCIATION when the firmware has moved to another BSS (not built).
+Waiting on the user: a connect session (his tool or himself at the machine), the vendor-header download
+question. Bench idle on RECANS001.
