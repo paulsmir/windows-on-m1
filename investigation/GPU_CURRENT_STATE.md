@@ -7586,3 +7586,14 @@ same join). The cause of that re-association is therefore NOT eliminated and not
 AP-side steering state is a candidate, unproven). Owed: handling of a firmware re-association under the WiFiCx
 contract (W6), a reproducibility repeat, and the parked fixes (key PRIMARY flags, first EAPOL dropped before the
 RX hold opens, drain reset on timeout).
+
+UPDATE 2026-11-16T16:16Z (architect): Wi-Fi W5 pass list REPRODUCED (EXP2554, repeat of EXP2553 after a device
+restart, AppleBcmWlan 0.1.20.0): second complete WPA2 connection in a row - 123.8 s link, WiFi-bound ping 4/4
+at four points, TX statuses complete, clean host-requested disconnect. Known-good Wi-Fi package: 0.1.20.0
+(launch: m1n1 609a98bc BAR_TRAP; BAR option D confirmed twice and due to become the Wi-Fi launch default).
+Nothing attributed to 0.1.20.0's candidate ordering (Windows' API/profile connect hands the driver one
+candidate). Open: the firmware's re-association to the 5 GHz BSS seen in EXP2545/2547/2549/2551 (all before
+16:00Z; reason 19 unnamed; vendor headers not local) and its handling under WiFiCx (W6); parked fixes (key
+PRIMARY flags, first EAPOL dropped before the RX hold opens, drain reset, firmware-refused first key delete at
+teardown); UI-connect path with a multi-candidate list; soak/throughput; power; platform data via Mu; posted
+BAR mapping end state; Bluetooth. Bench stood down to RECANS001.
