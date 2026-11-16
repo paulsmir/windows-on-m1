@@ -77,6 +77,67 @@ class BuildStandaloneTests(unittest.TestCase):
         ):
             self.assertIn(f"dist/j313/release-agx-g2/{artifact}", workflow)
 
+    def _working(self, *extra, env=None):
+        environment = dict(os.environ, BUILD_STANDALONE_DRY_RUN="1",
+                           STANDALONE_BUILD_CONTAINER="always", **(env or {}))
+        return subprocess.run(
+            [str(SCRIPT), "--working-profile", *extra],
+            cwd="/tmp", env=environment, text=True, capture_output=True, check=False)
+
+    BENCH_MU_SHA256 = "d9fe3a3483663f355e341c79f52f5a7a6eca25d6e726b9bce9138552765e8238"
+
+    def test_working_profile_packs_the_pinned_bench_fd_with_bench_m1n1_flags(self):
+        result = self._working("--mu-fd", "/bench/J313_EFI-mucpc001.fd",
+                               "--mu-fd-sha256", self.BENCH_MU_SHA256)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        out = result.stdout
+        # No Mu rebuild and no container: the hardware-validated FD is packed as is.
+        self.assertNotIn("stuart_build", out)
+        self.assertNotIn("docker", out)
+        self.assertIn(f"verify sha256(<mu-fd>) = {self.BENCH_MU_SHA256}", out)
+        self.assertIn("dist/j313/working/boot.bin", out)
+        flags = ("AGX_LOCAL_RESERVE_V2=1 IOMFB_FULL_OWNER=1 AGX_BROKER_LOCK_SPLIT=1 "
+                 "AGX_SCANOUT_TWO_LAYERS=1 CPPC_CAPACITY_SCALE=1")
+        for stage in ("EXTRA_CFLAGS=-DM1N1_STAGE0", "EXTRA_CFLAGS=-DM1N1_STAGE1"):
+            self.assertIn(f"{flags} {stage}", out)
+        self.assertNotIn("RELEASE=1", out)
+        self.assertIn("--working-profile --firmware-sha256 " + self.BENCH_MU_SHA256, out)
+        self.assertIn("--firmware <mu-fd> --layout config/j313-guest-layout.json", out)
+        for capability in ("working-profile", "ans-direct", "agx-g2", "cppc", "expanded-ram"):
+            self.assertIn(f"--capability {capability}", out)
+
+    def test_working_profile_debug_variant_has_its_own_artifact_directory(self):
+        result = self._working("--mu-fd", "/bench/fd", "--mu-fd-sha256", self.BENCH_MU_SHA256,
+                               "--debug", "monitor")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("dist/j313/working-monitor/boot.bin", result.stdout)
+        self.assertIn("--debug monitor --working-profile", result.stdout)
+
+    def test_working_profile_requires_a_pinned_fd(self):
+        for extra in ((), ("--mu-fd", "/bench/fd"),
+                      ("--mu-fd", "/bench/fd", "--mu-fd-sha256", "abc"),
+                      ("--mu-fd", "/bench/fd", "--mu-fd-sha256", "G" * 64)):
+            with self.subTest(extra=extra):
+                result = self._working(*extra)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("--mu-fd", result.stderr)
+
+    def test_working_profile_excludes_the_inert_gpu_recovery_profile(self):
+        result = self._working("--agx-g2-profile", "--mu-fd", "/bench/fd",
+                               "--mu-fd-sha256", self.BENCH_MU_SHA256)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("exclusive", result.stderr)
+
+    def test_default_profiles_carry_no_working_profile_flags(self):
+        environment = dict(os.environ, BUILD_STANDALONE_DRY_RUN="1",
+                           STANDALONE_BUILD_CONTAINER="never")
+        result = subprocess.run([str(SCRIPT)], cwd="/tmp", env=environment, text=True,
+                                capture_output=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("--working-profile", result.stdout)
+        self.assertNotIn("CPPC_CAPACITY_SCALE", result.stdout)
+        self.assertIn("stuart_build", result.stdout)
+
     def test_dry_run_has_the_complete_location_independent_pipeline(self):
         environment = dict(os.environ, BUILD_STANDALONE_DRY_RUN="1")
         result = subprocess.run(

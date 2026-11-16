@@ -15,6 +15,13 @@ M1N1_DIAG=
 APPLE_INPUT=on
 AGX_G2_PROFILE=0
 AGX_AML_VERIFIED=0
+WORKING=0
+MU_FD=
+MU_FD_SHA256=
+# Bench m1n1 make flags (BENCH-M1N1.json accepted.make_flags, m1n1 6a9c2435).
+WORKING_M1N1_FLAGS='AGX_LOCAL_RESERVE_V2=1 IOMFB_FULL_OWNER=1 AGX_BROKER_LOCK_SPLIT=1 AGX_SCANOUT_TWO_LAYERS=1 CPPC_CAPACITY_SCALE=1'
+M1N1_PROFILE_FLAGS=
+PACK_PROFILE_ARGS=
 VALIDATED_DARWIN_CLANG='Homebrew clang version 22.1.8'
 
 usage() {
@@ -22,6 +29,7 @@ usage() {
     echo "          [--display none|physical|virtual|both] [--debug off|uart|full|monitor]" >&2
     echo "          [--apple-input on|off]" >&2
     echo "          [--agx-g2-profile]" >&2
+    echo "          [--working-profile --mu-fd FILE --mu-fd-sha256 HEX]" >&2
     exit 2
 }
 
@@ -34,6 +42,9 @@ while [ "$#" -gt 0 ]; do
         --debug) [ "$#" -ge 2 ] || usage; DEBUG=$2; shift 2 ;;
         --apple-input) [ "$#" -ge 2 ] || usage; APPLE_INPUT=$2; shift 2 ;;
         --agx-g2-profile) AGX_G2_PROFILE=1; shift ;;
+        --working-profile) WORKING=1; shift ;;
+        --mu-fd) [ "$#" -ge 2 ] || usage; MU_FD=$2; shift 2 ;;
+        --mu-fd-sha256) [ "$#" -ge 2 ] || usage; MU_FD_SHA256=$2; shift 2 ;;
         -h|--help) usage ;;
         *) usage ;;
     esac
@@ -72,13 +83,39 @@ if [ "$AGX_G2_PROFILE" = 1 ]; then
     AGX_FORWARD_ARG=--agx-g2-profile
     AGX_CAPABILITY_ARG='--capability agx-g2'
 fi
+# Working profile: the bench standard as one standalone image. Mu is the pinned,
+# hardware-validated FD (no Mu rebuild); m1n1 is built like the bench m1n1 (bench
+# make flags, no RELEASE) and the manifest carries the working-profile knobs.
+if [ "$WORKING" = 1 ]; then
+    if [ "$AGX_G2_PROFILE" = 1 ]; then
+        echo "--working-profile and --agx-g2-profile are exclusive" >&2
+        exit 2
+    fi
+    if [ -z "$MU_FD" ] || [ -z "$MU_FD_SHA256" ]; then
+        echo "--working-profile requires --mu-fd FILE and --mu-fd-sha256 HEX" >&2
+        exit 2
+    fi
+    case "$MU_FD_SHA256" in
+        *[!0-9a-f]*) echo "--mu-fd-sha256 must be 64 lowercase hex digits" >&2; exit 2 ;;
+    esac
+    [ "${#MU_FD_SHA256}" -eq 64 ] || { echo "--mu-fd-sha256 must be 64 lowercase hex digits" >&2; exit 2; }
+    M1N1_RELEASE=
+    PROFILE=debug
+    if [ "$DEBUG" = off ]; then ARTIFACT_PROFILE=working; else ARTIFACT_PROFILE="working-$DEBUG"; fi
+    M1N1_PROFILE_FLAGS=$WORKING_M1N1_FLAGS
+    PACK_PROFILE_ARGS="--working-profile --firmware-sha256 $MU_FD_SHA256"
+    AGX_CAPABILITY_ARG='--capability working-profile --capability ans-direct --capability agx-g2 --capability cppc --capability expanded-ram'
+    SKIP_MU=1
+    CONTAINER_MODE_FORCED=never
+fi
 if [ "$PROFILE" = release ] && { [ "$DISPLAY" != physical ] || [ "$DEBUG" != off ]; }; then
     echo "release profile is fixed to --display physical --debug off; use --debug-build for diagnostics" >&2
     exit 2
 fi
 
-CONTAINER_MODE=${STANDALONE_BUILD_CONTAINER:-auto}
-SKIP_MU=${STANDALONE_SKIP_MU:-0}
+CONTAINER_MODE=${CONTAINER_MODE_FORCED:-${STANDALONE_BUILD_CONTAINER:-auto}}
+SKIP_MU=${SKIP_MU:-}
+[ -n "$SKIP_MU" ] || SKIP_MU=${STANDALONE_SKIP_MU:-0}
 MU_ONLY=${STANDALONE_BUILD_MU_ONLY:-0}
 PRESERVE_COMPONENTS=${STANDALONE_PRESERVE_COMPONENTS:-0}
 case "$PRESERVE_COMPONENTS" in
@@ -163,7 +200,7 @@ python_is_compatible() {
 }
 
 MU_PYTHON_SELECTED='<python3.10-through-3.12>'
-if [ "$DRY_RUN" != 1 ] || [ "$CHECK_PYTHON" = 1 ]; then
+if { [ "$DRY_RUN" != 1 ] && [ "$WORKING" = 0 ]; } || [ "$CHECK_PYTHON" = 1 ]; then
     MU_PYTHON_SELECTED=
     if [ -n "${MU_PYTHON:-}" ]; then
         if ! python_is_compatible "$MU_PYTHON"; then
@@ -204,29 +241,37 @@ else
     COMPONENT_SETUP='git submodule update --init --recursive'
 fi
 
+if [ "$WORKING" = 1 ]; then
+    FD_DRY="<mu-fd>"
+    MU_DRY="verify sha256(<mu-fd>) = $MU_FD_SHA256 (pinned bench Mu FD; no Mu build)"
+else
+    FD_DRY="mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd"
+    MU_DRY="$MU_PYTHON_SELECTED -m venv .build/mu-venv
+.build/mu-venv/bin/stuart_setup -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
+.build/mu-venv/bin/stuart_update -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
+.build/mu-venv/bin/stuart_build -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB TARGET=$BUILD_TARGET BLD_*_AIC_BUILD=FALSE $AGX_BUILD_ARG"
+fi
+
 if [ "$DRY_RUN" = 1 ]; then
     cat <<EOF
 cd <repository-root>
 $COMPONENT_SETUP
-$MU_PYTHON_SELECTED -m venv .build/mu-venv
-.build/mu-venv/bin/stuart_setup -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
-.build/mu-venv/bin/stuart_update -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
-.build/mu-venv/bin/stuart_build -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB TARGET=$BUILD_TARGET BLD_*_AIC_BUILD=FALSE $AGX_BUILD_ARG
+$MU_DRY
 [ "$AGX_G2_PROFILE" = 0 ] || copy J313AppleAgxSsdt.aml to a temporary directory, run iasl -d J313AppleAgxSsdt.aml, then verify J313AppleAgxSsdt.dsl with tools/verify_j313_agx_g2_aml.py
 mkdir -p dist/j313/$ARTIFACT_PROFILE
 create temporary sibling for dist/j313/$ARTIFACT_PROFILE
 make -C m1n1_windows clean
-make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} $M1N1_DIAG EXTRA_CFLAGS=-DM1N1_STAGE0
+make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} $M1N1_DIAG $M1N1_PROFILE_FLAGS EXTRA_CFLAGS=-DM1N1_STAGE0
 copy m1n1_windows/build/m1n1.bin to dist/j313/$ARTIFACT_PROFILE/m1n1-stage0.bin
 make -C m1n1_windows clean
-make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} $M1N1_DIAG EXTRA_CFLAGS=-DM1N1_STAGE1
+make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} $M1N1_DIAG $M1N1_PROFILE_FLAGS EXTRA_CFLAGS=-DM1N1_STAGE1
 copy m1n1_windows/build/m1n1.bin to dist/j313/$ARTIFACT_PROFILE/m1n1-stage1.bin
 make -C m1n1_windows clean
 build plain chainload m1n1.macho
-make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} $M1N1_DIAG
+make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} $M1N1_DIAG $M1N1_PROFILE_FLAGS
 copy plain m1n1.macho to dist/j313/$ARTIFACT_PROFILE/m1n1.macho
 python3 tools/generate_guest_layout.py --check
-python3 tools/pack_boot.py --stage0-m1n1 dist/j313/$ARTIFACT_PROFILE/m1n1-stage0.bin --stage1-m1n1 dist/j313/$ARTIFACT_PROFILE/m1n1-stage1.bin --firmware mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd --layout config/j313-guest-layout.json --output dist/j313/$ARTIFACT_PROFILE/boot.bin --display $DISPLAY --debug $DEBUG --source-commit <m1n1-source-commit> --compiler <compiler-identity>
+python3 tools/pack_boot.py --stage0-m1n1 dist/j313/$ARTIFACT_PROFILE/m1n1-stage0.bin --stage1-m1n1 dist/j313/$ARTIFACT_PROFILE/m1n1-stage1.bin --firmware $FD_DRY --layout config/j313-guest-layout.json --output dist/j313/$ARTIFACT_PROFILE/boot.bin --display $DISPLAY --debug $DEBUG ${PACK_PROFILE_ARGS:+$PACK_PROFILE_ARGS }--source-commit <m1n1-source-commit> --compiler <compiler-identity>
 PYTHONPATH=. python3 -c 'from pathlib import Path; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path("dist/j313/$ARTIFACT_PROFILE/boot.bin").read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print("validated outer parse_bootstrap and nested parse_image")'
 copy m1n1.macho and J313_EFI.fd to dist/j313/$ARTIFACT_PROFILE
 write dist/j313/$ARTIFACT_PROFILE/SHA256SUMS and dist/j313/$ARTIFACT_PROFILE/MANIFEST.json
@@ -281,6 +326,18 @@ if [ "$SKIP_MU" != 1 ]; then
     )
 fi
 
+if [ "$WORKING" = 1 ]; then
+    if command -v sha256sum >/dev/null 2>&1; then
+        MU_FD_ACTUAL=$(sha256sum "$MU_FD" | cut -d' ' -f1)
+    else
+        MU_FD_ACTUAL=$(shasum -a 256 "$MU_FD" | cut -d' ' -f1)
+    fi
+    if [ "$MU_FD_ACTUAL" != "$MU_FD_SHA256" ]; then
+        echo "pinned Mu FD mismatch: $MU_FD is $MU_FD_ACTUAL, expected $MU_FD_SHA256" >&2
+        exit 2
+    fi
+fi
+
 # EDK2's second Trim pass silently discards C-preprocessor include bodies from
 # ASL.  Gate the compiled table itself so a firmware image can never be
 # published after losing the generated APPL0001 resource contract.
@@ -289,7 +346,9 @@ if [ "$AGX_G2_PROFILE" = 1 ]; then
 else
     DSDT_AML="$ROOT/mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/AARCH64/MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables/OUTPUT/DSDT.aml"
 fi
-python3 "$ROOT/tools/verify_apple_input_acpi_aml.py" "$DSDT_AML"
+# A pinned working-profile FD was verified by hash above; its AML was verified
+# when it was built and validated on hardware.
+[ "$WORKING" = 1 ] || python3 "$ROOT/tools/verify_apple_input_acpi_aml.py" "$DSDT_AML"
 if [ "$AGX_G2_PROFILE" = 1 ] && [ "$AGX_AML_VERIFIED" != 1 ]; then
     AGX_SSDT_AML="$ROOT/mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/AARCH64/MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTablesG2/OUTPUT/J313AppleAgxSsdt.aml"
     (
@@ -320,7 +379,7 @@ trap cleanup_staging EXIT HUP INT TERM
     if [ -n "$M1N1_RELEASE" ]; then
         make -j"$JOBS" RELEASE=1 EXTRA_CFLAGS=-DM1N1_STAGE0
     else
-        make -j"$JOBS" $M1N1_DIAG EXTRA_CFLAGS=-DM1N1_STAGE0
+        make -j"$JOBS" $M1N1_DIAG $M1N1_PROFILE_FLAGS EXTRA_CFLAGS=-DM1N1_STAGE0
     fi
     cp build/m1n1.bin "$DIST/m1n1-stage0.bin"
 
@@ -328,7 +387,7 @@ trap cleanup_staging EXIT HUP INT TERM
     if [ -n "$M1N1_RELEASE" ]; then
         make -j"$JOBS" RELEASE=1 EXTRA_CFLAGS=-DM1N1_STAGE1
     else
-        make -j"$JOBS" $M1N1_DIAG EXTRA_CFLAGS=-DM1N1_STAGE1
+        make -j"$JOBS" $M1N1_DIAG $M1N1_PROFILE_FLAGS EXTRA_CFLAGS=-DM1N1_STAGE1
     fi
     cp build/m1n1.bin "$DIST/m1n1-stage1.bin"
 
@@ -339,7 +398,7 @@ trap cleanup_staging EXIT HUP INT TERM
     if [ -n "$M1N1_RELEASE" ]; then
         make -j"$JOBS" RELEASE=1
     else
-        make -j"$JOBS" $M1N1_DIAG
+        make -j"$JOBS" $M1N1_DIAG $M1N1_PROFILE_FLAGS
     fi
     cp build/m1n1.macho "$DIST/m1n1.macho"
     ./tests/run_host_tests.sh
@@ -348,6 +407,7 @@ trap cleanup_staging EXIT HUP INT TERM
 python3 "$ROOT/tools/generate_guest_layout.py" --check
 
 FD="$ROOT/mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd"
+[ "$WORKING" = 0 ] || FD=$MU_FD
 python3 "$ROOT/tools/pack_boot.py" \
     --stage0-m1n1 "$DIST/m1n1-stage0.bin" \
     --stage1-m1n1 "$DIST/m1n1-stage1.bin" \
@@ -356,6 +416,7 @@ python3 "$ROOT/tools/pack_boot.py" \
     --output "$DIST/boot.bin" \
     --display "$DISPLAY" \
     --debug "$DEBUG" \
+    $PACK_PROFILE_ARGS \
     --source-commit "$M1N1_SOURCE_COMMIT" \
     --compiler "$M1N1_COMPILER"
 PYTHONPATH="$ROOT" python3 -c \
