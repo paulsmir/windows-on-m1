@@ -7606,3 +7606,17 @@ must not roam on its own (Microsoft documentation); end state = firmware kept fr
 interim guard = disassociate and indicate DISASSOCIATION when the firmware has moved to another BSS (not built).
 Waiting on the user: a connect session (his tool or himself at the machine), the vendor-header download
 question. Bench idle on RECANS001.
+
+UPDATE 2026-11-16T18:54Z (architect): Wi-Fi operator session (EXP2560-2562, AppleBcmWlan 0.1.20.0, user at the
+panel). UI connect through Windows' Wi-Fi flyout: Windows offers both BSS of the network (5 GHz ch 100 ranked
+first), the driver joins 5 GHz directly, one 4-way in 150 ms, WiFi-bound ping 4/4; real browser traffic over
+Wi-Fi alone worked (TX 2759 = statuses, RX 7065, no drops). NEW TOP DEFECT, cause location CONFIRMED by an
+all-receipt sample (EXP2562): the first active background scan that Windows issues while the interface is
+ASSOCIATED stops TX completion for good on either band - stuck frames return with non-zero status only at flow
+delete; RX trickles; Windows then disconnects (and in two runs reset the adapter ~15 s later). Onsets: ~3.3 min
+after the join on 5 GHz (EXP2560, EXP2561), 12 s on 2.4 GHz (EXP2562) = Windows' scan timing. Excluded: band,
+Ethernet unplug, group rekey, ring/buffer exhaustion, mpc writes (none recorded), roam. Not explained: EXP2553/
+2554 held 124 s with scans in their windows (timing vs association not recorded). Reporting gap found: no
+link-quality indication after association and an empty statistics answer -> Windows shows a weak-signal icon.
+Next causal target: our scan path on an associated interface versus brcmfmac (escan request/params, end-of-scan
+handling); fix build pending; pass criterion = TX statuses keep up across three scans while associated.
