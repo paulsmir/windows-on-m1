@@ -96,8 +96,10 @@ class BuildStandaloneTests(unittest.TestCase):
         self.assertNotIn("docker", out)
         self.assertIn(f"verify sha256(<mu-fd>) = {self.BENCH_MU_SHA256}", out)
         self.assertIn("dist/j313/working/boot.bin", out)
+        # Bench flags plus IOMFB_UTC_UPTIME=1: no chainload host writes the D209
+        # UTC anchor in a standalone boot (m1n1 b2b07e10).
         flags = ("AGX_LOCAL_RESERVE_V2=1 IOMFB_FULL_OWNER=1 AGX_BROKER_LOCK_SPLIT=1 "
-                 "AGX_SCANOUT_TWO_LAYERS=1 CPPC_CAPACITY_SCALE=1")
+                 "AGX_SCANOUT_TWO_LAYERS=1 CPPC_CAPACITY_SCALE=1 IOMFB_UTC_UPTIME=1")
         for stage in ("EXTRA_CFLAGS=-DM1N1_STAGE0", "EXTRA_CFLAGS=-DM1N1_STAGE1"):
             self.assertIn(f"{flags} {stage}", out)
         self.assertNotIn("RELEASE=1", out)
