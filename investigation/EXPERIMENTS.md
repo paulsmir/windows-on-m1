@@ -82619,3 +82619,7 @@ W53: merged candidate AppleBcmWlan 0.1.53.0 on m1n1 f22f2186 (fixup + irqstat + 
 EXP2648 HARDWARE BEFORE 2026-11-17T13:33:41Z:
 W53 boot: m1n1 f22f2186 (fixup + irqstat + per-route pace) + MUCPCWIFI001 (--host-request launcher); preregistered text in the EXP2648 HARDWARE BEFORE entry above.
 - Launcher launch-kbd2648.sh sha256 0117dc820f503df6 (launch-kbd.sh 51d76b6354b693e4); m1n1 f22f218674da259bdcb38649baf23e556732fbf2d6c13efe8ca316556f33783c; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 0bec58e22.
+
+EXP2649 HARDWARE BEFORE 2026-11-17T13:37:27Z:
+W53 restart-cycle relaunch (part of EXP2648): m1n1 f22f2186 (fixup + irqstat + per-route pace) + MUCPCWIFI001, AppleBcmWlan 0.1.53.0 installed, FirmwareSet 1, FR, V1 keys after start; no Bluetooth package; no connect. Purpose: the ordered restart of the previous boot is one of the 3 W53 restarts; this boot is the gate after it. Single variable: none vs EXP2648.
+- Launcher launch-kbd2649.sh sha256 3ec4352e41f305c6 (launch-kbd.sh 51d76b6354b693e4); m1n1 f22f218674da259bdcb38649baf23e556732fbf2d6c13efe8ca316556f33783c; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD d9bb37e36.
