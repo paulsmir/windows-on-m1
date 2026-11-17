@@ -7876,3 +7876,25 @@ and port driver source; installer moved to the current driver set.
 - Bench state: EXP2651 boot, f22f2186 + MUCPCWIFI001, AppleBcmWlan 0.1.53.0 (only package in the store), FirmwareSet 1,
   StallRecover 1, ScanAssocMode 0, scan keys 0, FR, V1 armed. Next causal target unchanged: connect #1 (three mode-0
   associated scans under traffic) by the user or Codex. The TX stall after an associated off-channel scan is still open.
+
+## UPDATE 2026-11-17T14:53:39Z - evening session prepared (audio headphones, camera stage 0/1, Bluetooth mouse)
+
+- User decisions 2026-11-17: the J313 speaker-protection parameters from Asahi's speakersafetyd may be used (licence
+  hold D7 lifted; no speaker output follows from it yet); first hardware tests of sound, camera and a Bluetooth mouse
+  this evening with the user at the machine.
+- Evening order (bench's sequencing): Wi-Fi connect #1 in the armed boot -> Bluetooth B7-mouse in the same boot ->
+  camera E1-E3 -> audio A1 / H0 / H1 / H2 last -> back to the armed pair (also the recovery pair).
+- Bench state: EXP2657, f22f2186 + MUCPCWIFI001 (fd94b781) + AppleBcmWlan 0.1.53.0, FirmwareSet 1, V1 armed.
+- Bluetooth: 0.0.14.0 (7346aa5cf; tier 3 additionally admits sniff / exit sniff / sniff subrating / switch role /
+  flush and supervision timeouts for a connected HID link) reviewed GO; tier-1 PASS on f22f2186 EXP2653 (0.0.13.0:
+  EXP2652). B7 not run.
+- Camera: CAM-E0 live inventory PASS EXP2654; packages stage 0/1 signed (64fbc53a = reviewed b42e7f71 + VERSIONINFO);
+  Mu MUCAMWIFI001-cam 428bab9c (Wi-Fi Mu + camera SSDT/DXE only) and m1n1 u-cam 1f2dfaf2 (bench flags +
+  HV_CAMERA_ISP: two identity level routes 246 / 251, no register writes) verified by the bench offline. Stage 2 is NOT
+  ordered (terminal-ring ownership fix f7eac4d5 unreviewed, signed stage-2 package predates it). Camera lines 246 / 251
+  are registered in .local/handoff/IPA-GSIV-REGISTRY.md.
+- Audio: tonight's machos on integration/all-flags-v2 0ee428cc with the bench flags - M0 f911bd8e (PASS EXP2656, SDZ word
+  0x00076a02 unchanged), A1 bb91412e (10 s SoC watchdog window; waits for the user); A0 rev 5 live PASS EXP2655;
+  AppleAudio 0.1.11.0, Mu MUAUD004 (Wi-Fi Mu + AUDI). Speaker stage 3 is offline work only.
+- Open as before: Wi-Fi TX stall after an associated off-channel scan (connect #1 pending); SMC RTKit wake (AppleSmc
+  0.1.0.9, PWR-W0) needs the user's yes and presence.
