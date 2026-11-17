@@ -83033,3 +83033,7 @@ EXP2699-EXP2702 HARDWARE BEFORE 2026-11-17T22:43:32Z: one boot on m1n1 fab4356f 
 - EXP2701 C3: FlowCreateMaxItems 256 (Parameters, device restart, read back 256). Single variable vs X0.
 - EXP2702 C4: HostTrapBuf 1 (precondition HostTrapBufUsed 1 / Refused 0 / HostCapWritten with 0x20000); HostTrapWord/flags polled once a second around each scan. Single variable vs X0.
 - Every association: device restart -> gate -> wlanctl connect -> 60 s load 60/s (W-scans in the window restart it, max 3) -> scans ~60 s apart -> home-only control (an association without a clean control is void) -> disconnect. Verdicts by the sheet (codes 4/5). A clean C3 or C4 gets an immediate A/B/A. Disk check (system volume) before every launch and large read; stop below ~1 GiB.
+
+EXP2699 HARDWARE BEFORE 2026-11-17T22:44:09Z:
+EXP2699-2702 C3/C4 session on fab4356f + fd94b781; see ledger.
+- Launcher launch-kbd2699.sh sha256 89cc41aa59956705 (launch-kbd.sh 51d76b6354b693e4); m1n1 fab4356fd4443ed4f7b29778c7c400027a49b303adf241a853e7be3983460abf; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD a96960f30.
