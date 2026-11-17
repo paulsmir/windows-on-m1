@@ -82683,3 +82683,7 @@ EXP2654 HARDWARE BEFORE 2026-11-17T14:47:38Z (afternoon batch, architect order; 
 - EXP2657 re-arm: f22f2186 + fd94b781 + 0.1.53.0, gate, V1 keys, MAC staged, idle for the evening.
 - WHY: E0 and A0 gate tonight's camera and A1 steps from the live ADT; M0 v2 proves the audio guard on the profile base before A1; one exit keeps the armed state for the evening.
 - Fail/stop: E0 exit != 0 or A0 mismatches -> report, continue to M0 only if the other item does not concern it; M0 line missing/different or PACED/STORM -> restart, report, re-arm. Recovery pair for all: f22f2186 + MUCPCWIFI001 + 0.1.53.0.
+
+EXP2656 HARDWARE BEFORE 2026-11-17T14:48:54Z:
+AUDIO-M0 v2 boot: m1n1 f911bd8e (u-audsdz) + MUCPCWIFI001 (--host-request launcher); preregistered text in the EXP2654 batch HARDWARE BEFORE entry above.
+- Launcher launch-kbd2656.sh sha256 3915246b737fc106 (launch-kbd.sh 51d76b6354b693e4); m1n1 f911bd8e25b3a76f956b71fdd5df955bd0202e5c99931b0b504a06b4805ad6a4; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 35754a6b1.
