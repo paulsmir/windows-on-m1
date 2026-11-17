@@ -11,6 +11,11 @@ Request lines (``#`` starts a comment):
     refuse N   RQ-2 0x110b: the next N owner swaps fail at the A408 stage
     drop N     RQ-2 0x110c: the next N exact latches are treated as lost
     status     RQ-2 0x110d: print the scanout recovery counters
+    mse ECAM BUS DEV FN off|on
+               BAR-fault reproduction (EXP2613 class): clear or set Memory Space
+               Enable (Command bit 1) of one function through the physical ECAM, so
+               the guest driver's next forwarded BAR access completes with an error.
+               Prints the Command value before and after.  Nothing else is written.
 """
 
 import pathlib
@@ -24,6 +29,8 @@ STATUS_FIELDS = ("latch_deadline_expiries", "latch_poll_errors", "late_latches_i
                  "injected_refusals", "dropped_latches", "pending_refuse_swaps",
                  "pending_drop_latches", "abandoned_swap_id")
 MAX_COUNT = 64
+PCI_COMMAND = 0x04
+PCI_COMMAND_MSE = 0x2
 
 
 def parse(text):
@@ -37,6 +44,15 @@ def parse(text):
         verb = words[0].lower()
         if verb == "status" and len(words) == 1:
             requests.append(("status", 0))
+            continue
+        if verb == "mse" and len(words) == 6 and words[5].lower() in ("off", "on"):
+            try:
+                ecam, bus, dev, fn = (int(w, 0) for w in words[1:5])
+            except ValueError:
+                raise ValueError(f"line {number}: cannot parse {raw!r}") from None
+            if ecam & 0xfffff or not (1 <= bus <= 255 and 0 <= dev <= 31 and 0 <= fn <= 7):
+                raise ValueError(f"line {number}: bad ECAM/BDF in {raw!r}")
+            requests.append(("mse", (ecam, bus, dev, fn, words[5].lower() == "on")))
             continue
         if verb in ("refuse", "drop") and len(words) == 2 and words[1].isdigit():
             count = int(words[1])
@@ -65,6 +81,15 @@ def execute(proxy, requests):
                 proxy.heap.free(address)
             body = " ".join(f"{k}={v}" for k, v in status.items()) if status else "unavailable"
             lines.append(f"HOST_REQUEST status {body}")
+            continue
+        if verb == "mse":
+            ecam, bus, dev, fn, on = count
+            reg = ecam + (bus << 20) + (dev << 15) + (fn << 12) + PCI_COMMAND
+            before = proxy.read16(reg)
+            after = (before | PCI_COMMAND_MSE) if on else (before & ~PCI_COMMAND_MSE)
+            proxy.write16(reg, after)
+            lines.append(f"HOST_REQUEST mse {bus:02x}:{dev:02x}.{fn} {'on' if on else 'off'} "
+                         f"command 0x{before:04x} -> 0x{proxy.read16(reg):04x}")
             continue
         op = P_DISPLAY_INJECT_REFUSE_SWAPS if verb == "refuse" else P_DISPLAY_INJECT_DROP_LATCHES
         previous = proxy.request(op, count, signed=True)

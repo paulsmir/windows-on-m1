@@ -64,3 +64,37 @@ class HostRequestTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MseVerbTest(unittest.TestCase):
+    """BAR-fault reproduction verb (EXP2613): one Command register, MSE bit only."""
+
+    class FakeProxy:
+        def __init__(self, value):
+            self.mem = {}
+            self.value = value
+            self.writes = []
+        def read16(self, addr):
+            return self.mem.get(addr, self.value)
+        def write16(self, addr, value):
+            self.writes.append((addr, value))
+            self.mem[addr] = value
+
+    def test_parse_and_bounds(self):
+        self.assertEqual(host_request.parse("mse 0x690000000 1 0 0 off"),
+                         [("mse", (0x690000000, 1, 0, 0, False))])
+        for bad in ("mse 0x690000000 0 0 0 off", "mse 0x690000004 1 0 0 off",
+                    "mse 0x690000000 1 32 0 on", "mse 0x690000000 1 0 8 on",
+                    "mse 0x690000000 1 0 0 maybe", "mse 0x690000000 1 0 off"):
+            with self.assertRaises(ValueError):
+                host_request.parse(bad)
+
+    def test_off_clears_only_mse_and_on_restores(self):
+        proxy = self.FakeProxy(0x0406)
+        reg = 0x690000000 + (1 << 20) + 4
+        lines = host_request.execute(proxy, host_request.parse("mse 0x690000000 1 0 0 off"))
+        self.assertEqual(proxy.writes, [(reg, 0x0404)])
+        self.assertIn("command 0x0406 -> 0x0404", lines[0])
+        lines = host_request.execute(proxy, host_request.parse("mse 0x690000000 1 0 0 on"))
+        self.assertEqual(proxy.writes[-1], (reg, 0x0406))
+        self.assertIn("command 0x0404 -> 0x0406", lines[0])
