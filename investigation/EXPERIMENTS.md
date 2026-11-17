@@ -82645,3 +82645,14 @@ Bluetooth 0.0.13.0 tier-1 on m1n1 f22f2186 in the armed EXP2651 boot (architect 
 - Single variable vs EXP2616: the m1n1 20930bb0 -> f22f2186 (profile m1n1 with per-route pacing on 695).
 - WHY: the B7 package needs a tier-1 on the profile m1n1 before Pavel's mouse test tonight; the gate rule (PACED/STORM) has never seen the Bluetooth stack up.
 - Pass: B4b/B5 as EXP2616 (setup 25/0, BdAddrDecision 1, stack up, StackFailTotal 0, refusal set unchanged), B6a adverts > 0 with Started -> Stopped (Success), no IRQ PACED or IRQ STORM line; IRQSTAT v695 reported with the stack up. Wi-Fi state untouched (0.1.53.0, MAC staged, V1 keys) and checked after the rollback. Fail: any PACED/STORM line, stack failure, transmit-class opcode admitted. Recovery: rollback as above; the boot stays the armed pair.
+
+EXP2652 ACTUAL (2026-11-17 UTC): Bluetooth 0.0.13.0 tier-1 on f22f2186 PASS = EXP2616, plus B6a; no PACED, no STORM.
+- B4b: Stage 5 armed, install 14:35:23Z: BtFailStep 0, BtStatus 0x12, PtbVerdict 3, SetupSteps 25, SetupLastHciStatus 0, BdAddrDecision 1.
+- B5: Stage 6 --passive-scan, fn1 restart 14:35:38Z: 5 OK lines (radio, enumerators), bthserv Running; one BthMini 18, no 17 (= EXP2616). Service key RadioPolicy 1, PassiveScanAllowed 1.
+- B6a: lecount.exe passive 60 s 14:36:14-14:37:17Z: Started; adverts 174..990 at 10..60 s (992 total), 27 distinct sources (counted in memory only); Stopped, error Success.
+- Receipts at disable: StackFailTotal 0, PolicyRefused 2006 x1, 2008 x2, 200A x3, 0C1A x1 (total 7, = EXP2596/2616), CmdTx 79, EventsRx 1046, BtStatus 20; PolicyRefusalDropped 0, CmdSendFailed 0, AclRxOversize 0.
+- Gate rule: IRQ PACED 0, IRQ STORM 0 in the whole boot. IRQSTAT with the Bluetooth stack up (14:35:38-14:37:20Z, 10 s windows): v695 22, 0, 0, 0, 0, 0, 20, 0, 0, 0 (Wi-Fi INTx; Bluetooth runs polled, PollTicks 38961); v960 1..716; v857 90..672 with one window 6027 (not paced, not a storm line).
+- full.log: no SError (the one match is the boot policy line), the APCIE DART_ERROR line (stream 13, addr unchanged) is the same one printed since before the Bluetooth run (first at log line 2030, 8 repeats in the boot).
+- Rollback: fn1 disabled, subtree removed, package deleted, bt_param_stage clear (addr out, passive=0, radio=1), service PassiveScanAllowed 0, scan-devices -> fn1 CM_PROB_FAILED_INSTALL, store 0, bt_param_stage check rc 0.
+- Wi-Fi untouched and still armed: 0.1.53.0 (0x10035), 18.20.510, FR, LinkState 1, StallEpisodes 0, MAC staged, StallRecover 1, ScanAssocMode 0.
+Verdict: confirmed - 0.0.13.0 behaves on the profile m1n1 as on 20930bb0; eligible for B7 (whichever package B7 uses gets its own tier-1 on f22f2186).
