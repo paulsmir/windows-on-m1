@@ -82210,3 +82210,13 @@ BD-2: bounded BAR forward m1n1 (APCIE_BAR_DIAG + APCIE_BAR_BOUND) as the launch-
 - Expected: "HV: APCIE BAR bound on", "root port devcap2=0x... devctl2 0x... -> 0x...5 (readback 0x...5); trip 110 ms"; stats tripped=0 rearms=0 trip_ms=110 refused R=0 W=0 injected fault=0 refused=0 nested=0; BD-1 counters same shape (locked 0); Wi-Fi gate = EXP2606, BT = EXP2605.
 - Failure: readback != written; any trip/injection, nested > 0; a Wi-Fi/BT regression; a new bugcheck. Recovery: relaunch with 609a98bc (CTO value is volatile, reset restores the default). Guest hang: kill the exact run_uefi PID, AT_PROXY recovery.
 - Launcher launch-kbd2609.sh sha256 80e65b69f5371f48 (launch-kbd.sh 51d76b6354b693e4); m1n1 ff5236f7d239b9e425c7ac2ea451dec3bbe6e1a7b7ae4291163a140bc4efa48e; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 0212d8bf4.
+
+EXP2609 ACTUAL (2026-11-17 UTC): BD-2 PASS - root port Completion Timeout programmed and read back, bound path idle under the full workload.
+- Boot: SSH up, LAUNCH_WIFI_2609_UP 11:02:15Z; m1n1 ff5236f7 + Mu fd94b781.
+- "HV: APCIE BAR bound on"; "root port devcap2=0x10c1f devctl2 0x0 -> 0x5 (readback 0x5); trip 110 ms" (range B 16-55 ms, readback = written); diag root-port line now value=0x5 disabled=0.
+- Wi-Fi workload: MAC/cal staged, restart 11:02:45Z, V1 keys after start, FR; gate 18.20.510.0.7.8.206, CountryState 1, FR read back, scans, BSS 55, Unsupported 0, StallEpisodes 0, D2hPhaseMismatch 0, MbFwHalt 0 = EXP2606/2608.
+- Bluetooth workload (0.0.10.0, RadioPolicy 1, no scan/transmit): B4b 11:03:08Z -> BtStatus 18 at 11:03:11Z; B5 restart 11:03:34Z -> BtStatus 20 at 11:03:37Z, stack up, one BthMini 18, no 17; D0Exit StackFailTotal 0, refusals = EXP2605/2608; rollback (oem26 deleted, clear passive=0 radio=1, checks rc 0).
+- Stats after BT + two Wi-Fi restarts (accesses 4096, 11:05Z): diag R 776182/776182 max_us 94, W 948967/948967 max_us 4, outstanding 0, unlocked 1725149, locked 0; bound tripped=0 rearms=0 trip_ms=110 refused R=0 W=0 injected fault=0 refused=0 nested=0. No fault/refused/tripped/re-armed/outstanding/late line. Evidence evidence/bd2-lines.txt.
+- Same LINKSTS 0x99000211 print after the Wi-Fi restarts as in EXP2608 (so it is not caused by the CTO write).
+- full.log: only the two boot banners mention SError; no Data Abort/new SError; DART line unchanged.
+Verdict: confirmed. CTO range B is honoured as a register write (readback equal); the bound adds nothing to healthy traffic. Whether the port actually ends a stalled request in 16-55 ms is only testable with a real stall (B3-D, not ordered).
