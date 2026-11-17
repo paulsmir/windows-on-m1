@@ -7805,3 +7805,28 @@ and port driver source; installer moved to the current driver set.
 - Collision: audio Mu MUAUD002 / m1n1 route used GSIV 889 = AGX scanout vINTID; audio moved to 963/964 in
   .local/handoff/IPA-GSIV-REGISTRY.md (rebuild pending). Integration pair built offline: m1n1 integration/all-flags
   628318e7, Mu MUINT001 (Wi-Fi Mu + inert SMC0); ordered as INT-0a/INT-0b.
+
+## UPDATE 2026-11-17T11:35:15Z - integration image, EL2 abort at guest restart, Wi-Fi plan
+
+- Integration pair: INT-0a PASS EXP2612 (m1n1 integration/all-flags 628318e7 flags-off = 55bc0f71; vs 609a98bc only
+  hv_guest_cpu_state.o differs; no merged line's symbol linked). INT-0b EXP2613 CORRECTED to inconclusive: Mu MUINT001
+  (Wi-Fi Mu + inert SMC0) showed exactly +ACPI\APPL0008 Code 28, but the boot hung at the ordered guest restart.
+- The hang: EL2 data abort (error completion) on a forwarded guest read of Wi-Fi fn0 BAR2 (TCM) offset 0x509438,
+  guest PC 0xfffff801f381329c (volatile 32-bit read, LR 0x2c below), "HV UNHANDLED SYNC", guest loops. Rate 1 of 6
+  ordered restarts on Wi-Fi-profile boots since EXP2585. Same class as the EXP2579 hang. Not attributed (no module
+  bases; the bench records them from now on). Two owners: the guest driver that reads after the chip stopped
+  answering (HYPOTHESIS: a reader still running after the stop path lets the chip sleep) and m1n1, whose flags-off
+  forward dies on it (the APCIE_BAR_BOUND build completes it as all-ones + virtual SError). Fixes ordered, not built.
+- Wi-Fi: 0.1.44.0 (9627b184d; EscanTimesMac, ScanLowPrio, EscanReqRaw) E0 PASS and V1 armed EXP2614. FwWlcVer:
+  wlc_ver 12.2 on both firmware builds, so macOS itself uses escan params v1 (v3 question closed). macOS escan
+  differences read from its binaries: active dwell 20 ms while associated (ours 40), scan_home_away_time 110
+  (firmware default 100), scan flag 0x04 on every request (regulatory, NOT enabled, user decision), 0x02 for
+  low-priority scans. The macOS driver read pairs with FirmwareSet 1 (18.20.510): judge dialect keys there first.
+  Connect plan: .local/handoff/wifi-bt/WIFI-CONNECT-SESSION-PLAN.md (audit estimate: ~44 % that none of the keys is
+  the cause; lost-doorbell hypothesis already excluded by EXP2564/2575). Next causal target unchanged: connect #1 =
+  V1 with three associated scans under traffic, by the user or Codex.
+- Bluetooth: 0.0.13.0 (4d2145d71) is the pairing package; tier-1 receipt pending. B7 needs the user present.
+- Power: wake path reviewed against Asahi/m1n1 (.local/handoff/night-20261117/review-applesmc-rtkit-wake.md):
+  handshake matches; required before any run: fault latch must not stop mailbox servicing or block quiesce; one-shot
+  arming. AppleSmc 0.1.0.9 ordered. The wake still needs the user's yes.
+- Not to be staged (additions): AppleSmc 0.1.0.7, webcam b143e08e and fccc1c07, audio m1n1/Mu builds with GSIV 889.
