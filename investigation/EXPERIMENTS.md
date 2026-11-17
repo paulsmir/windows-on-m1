@@ -82663,3 +82663,13 @@ Bluetooth 0.0.14.0 tier-1 on m1n1 f22f2186 in the armed EXP2651 boot (architect 
 - Procedure as EXP2652: B4b, B5 (Stage 6 --passive-scan), B6a lecount.exe passive 60 s counts only, RadioPolicy 1, no transmit; rollback afterwards. Single variable vs EXP2652: the package 0.0.13.0 -> 0.0.14.0.
 - WHY: B7 tonight uses 0.0.14.0; tier 1 must be unchanged on the profile m1n1 before the mouse test.
 - Pass: = EXP2652 (setup 25/0, BdAddrDecision 1, stack up, StackFailTotal 0, refusal set unchanged, adverts > 0, new receipts present with ConnReq*/Accept/ConnComplete 0 at tier 1), no IRQ PACED / IRQ STORM; Wi-Fi state untouched. Fail: any difference in tier-1 behaviour, PACED/STORM, stack failure.
+
+EXP2653 ACTUAL (2026-11-17 UTC): Bluetooth 0.0.14.0 tier-1 on f22f2186 PASS = EXP2652; no PACED, no STORM.
+- B4b: install 14:41:37Z: BtFailStep 0, BtStatus 0x12, PtbVerdict 3, SetupSteps 25, SetupLastHciStatus 0, BdAddrDecision 1.
+- B5: fn1 restart 14:41:53Z: 5 OK lines, bthserv Running, one BthMini 18, no 17. RadioPolicy 1, PassiveScanAllowed 1.
+- B6a: passive 60 s 14:42:28-14:43:31Z: adverts 124..780, 18 distinct sources; Stopped, error Success.
+- Receipts at disable: StackFailTotal 0, PolicyRefused 2006 x1, 2008 x2, 200A x3, 0C1A x1 (total 7, = EXP2652), CmdTx 77, EventsRx 830, BtStatus 20; PolicyRefusalDropped 0, CmdSendFailed 0, AclRxOversize 0. Tier-1 behaviour identical to 0.0.13.0.
+- Not captured: the 14 new diag receipts (ConnReq*, ConnCompleteOk, LeConnCompleteOk, AcceptAdmitted, Mode*, LeCoded/LeExt*) - the bench receipt script reads a fixed name list and the device key was removed at rollback; to be read in B7 (bench script extended before it).
+- Gate rule: IRQ PACED 0, IRQ STORM 0 in the boot. IRQSTAT during the run: v695 absent (0) in all windows; v960 11..319; v857 84..893 with one window 6157 (as in EXP2652, one high v857 window during each Bluetooth run; not paced, no storm line).
+- Rollback: package deleted, bt_param_stage clear (addr out, passive=0, radio=1), PassiveScanAllowed 0, fn1 CM_PROB_FAILED_INSTALL, store 0, check rc 0. Wi-Fi untouched: StallRecover 1, ScanAssocMode 0 (armed state kept).
+Verdict: confirmed - 0.0.14.0 tier 1 unchanged on the profile m1n1; eligible for B7 subject to the two reviews.
