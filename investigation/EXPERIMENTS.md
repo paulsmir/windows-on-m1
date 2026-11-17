@@ -83016,3 +83016,7 @@ EXP2696-EXP2698 HARDWARE BEFORE 2026-11-17T22:26:56Z: Wi-Fi firmware-trap series
 - EXP2698 S3 (FwTrapReportOnly 0, HostTrapBuf 0): re-scan -> trap -> one automatic restart -> networks back within 60 s, PrevFwTrapAction 1 in the new start, then a second re-scan -> FwTrapRestarts 2; repeat-trap branch (restart's own enumeration trapping the fresh firmware) bounded at 3, then the device stays failed: a result; recover by re-enable or a boot.
 - Privacy: HostTrapBufDump and FwTrapRecord local-only like the console text; only flags, lengths and decoded bits quoted.
 - Afterwards: keys off (FwTrapReportOnly, HostTrapBuf), back to fab4356f + fd94b781, plain V1, AppleBcmWlan 0.1.58.0 in place, Bluetooth tier 3.
+
+EXP2696 HARDWARE BEFORE 2026-11-17T22:27:34Z:
+EXP2696-2698 Wi-Fi trap series on f22f2186 + fd94b781; AppleBcmWlan 0.1.58.0; see ledger.
+- Launcher launch-kbd2696.sh sha256 9bbbee7cb50a0269 (launch-kbd.sh 51d76b6354b693e4); m1n1 f22f218674da259bdcb38649baf23e556732fbf2d6c13efe8ca316556f33783c; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 4da841225.
