@@ -82495,3 +82495,7 @@ IP-1: the IS-1 sequence (EXP2636) with one variable, the m1n1: fdb55daa -> 36d44
 - Sequence: gate (no PACED line, IRQSTAT rates as EXP2636) -> mse off -> DeviceGone -> mse on -> Disable -> Enable (no Command-register writes in between this time) -> storm -> expect IRQ STORM then IRQ PACED for vINTID 695 within ~100 ms, v695 <= ~50,000 per 10 s, SSH alive, no bugcheck -> Disable again (PACED off?, guest back to normal) -> ordered restart.
 - WHY: (1) IS-1 named the storm (695 routed-level, 20.8k/s, 4 BAR reads each); (2) pacing bounds the guest's interrupt load without dropping a level event; (3) it keeps the guest alive for a driver-side fix.
 - Failure: PACED in normal operation, another line paced, SSH loss or bugcheck despite pacing -> rates to the architect; recovery as EXP2636. Afterwards: 20930bb0 + 0.1.45.0 armed (0.1.46.0 removed, device enabled).
+
+EXP2638 HARDWARE BEFORE 2026-11-17T12:57:53Z:
+IP-1 boot: m1n1 36d447c1 (fixup + irqstat + pace) + MUCPCWIFI001, --host-request launcher; preregistered text in the EXP2638 HARDWARE BEFORE entry above.
+- Launcher launch-kbd2638.sh sha256 7b9b7248e22aa28a (launch-kbd.sh 51d76b6354b693e4); m1n1 36d447c1c48cac03f695df76cbe343820804a366b93d06efacca4e6798d9a5eb; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD b12816025.
