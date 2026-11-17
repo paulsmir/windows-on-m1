@@ -82598,3 +82598,11 @@ W52 restart-cycle relaunch (part of EXP2642): m1n1 fdb55daa (fixup + irqstat) + 
 EXP2647 HARDWARE BEFORE 2026-11-17T13:31:00Z:
 W52 restart-cycle relaunch (part of EXP2642): m1n1 fdb55daa (fixup + irqstat) + MUCPCWIFI001, AppleBcmWlan 0.1.52.0 installed, FirmwareSet 1, FR, V1 keys after start; no Bluetooth package; no connect. Purpose: the ordered restart of the previous boot is one of the 5 W52 restarts; this boot is the gate after it. Single variable: none vs EXP2642.
 - Launcher launch-kbd2647.sh sha256 88231472c85a3b41 (launch-kbd.sh 51d76b6354b693e4); m1n1 fdb55daaa622d9b2084f4c63de6ea07bf832aa608efa1c08176efb4f3dd7abc3; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD e4e30e9ab.
+
+EXP2642 ACTUAL (2026-11-17 UTC; covers the restart-cycle relaunches EXP2643-EXP2647): W52 PASS - zero faulted BAR accesses at 6 ordered restarts.
+- Boot up 13:21:50Z (fdb55daa + fd94b781); 0.1.52.0 installed 13:22:29Z (oem29, ProbeVersion 0x10034); gate 18.20.510, FirmwareSet 1, FR, BSS 51, StallEpisodes 0.
+- Disable/Enable x2 (13:22:44Z, 13:23:02Z): receipts WlanD0ExitTarget 5, StopReaders 1, QuiesceChip 1; 0 faults, 0 STORM, UNHANDLED 0; Wi-Fi back each time (DownloadStatus 1, BSS 51 / 49).
+- Ordered restarts (module bases recorded before each, secrets cleared): EXP2642 ENDED 13:24:19Z, 2643 13:25:58Z, 2644 13:27:37Z, 2645 13:29:16Z, 2646 13:30:51Z, 2647 13:32:41Z. Shutdown phase each: marker burst 8/7/7/7/7/7 lines, APCIE BAR faults 0, STORM 0, UNHANDLED 0; fault counter R=0 W=0 throughout.
+- Relaunch gates EXP2643-2647: 0x10034, 18.20.510, FirmwareSet 1, FR (readback), BSS 48/50/58/54/59, LinkState 1, StallEpisodes 0.
+- Contrast: EXP2639 (0.1.50.0, same stop path without the new order) >= 32 faulted BAR0 reads after the burst at its restart.
+Verdict: confirmed - the D3Final quiesce order (ARM/D11 halted first, watchdog armed as the last chip access) removes the shutdown-phase BAR faults. Next (architect conditional order): W53 merged 0.1.53.0 on f22f2186.
