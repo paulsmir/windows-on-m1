@@ -82239,3 +82239,12 @@ Bluetooth 0.0.12.0 tier-1 regression in the EXP2610 boot (fn1 only; V1 armed on 
 - Single variable vs EXP2605: package 0.0.10.0 -> 0.0.12.0.
 - WHY: (1) the tier-1 path differs only in refusal event type for Command-Status opcodes and the credit give-back; (2) EXP2605 is the reference; (3) the new counters must be sane before B7.
 - Expected: = EXP2605 (setup 25/0, stack up ~3 s, BthMini 18 only, refusals 2006/2008/200A/0C1A, StackFailTotal 0, B6a adverts > 0 with 0 scan responses); AclRxOversize 0, CmdSendFailed 0, PolicyRefusalDropped 0; ScanEnableReq counts consistent with the 0C1A requests. Failure: stack not up / BthMini 17 / a nonzero failure counter. One attempt; rollback; V1 untouched.
+
+EXP2611 ACTUAL (2026-11-17 UTC): 0.0.12.0 tier-1 regression PASS = EXP2605.
+- B4b: install 11:09:45Z, BtStatus 18 at 11:09:48Z; PTB 3, calibration 4688, SetupSteps 25, status 0, BdAddrDecision 1 / set status 0.
+- B5: Stage 6 --passive-scan, restart 11:10:25Z, BtStatus 20 at 11:10:28Z (~3 s); Bluetooth Radio / enumerators OK, bthserv Running; one BthMini 18, no 17.
+- B6a passive 60 s (11:11:14Z): adverts 958, scan responses 0, 26 distinct; Stopped (Success).
+- D0Exit: StackFailTotal 0, PolicyRefused 2006 x1, 2008 x2, 200A x3, 0C1A x1 (= EXP2605), CmdTx 80, EventsRx 1011; PolicyRefusalDropped 0, CmdSendFailed 0, AclRxOversize 0; ScanEnableReq0 1 / Req2 1 / Req1, Req3 0 (the non-zero request is page scan 2, refused at tier 1); ACL buffers: controller 1021 x 8, LE 251 x 15, host (0C33) 1020 x 65535; AclTx 0, AclRx 0; BD_ADDR Same 1 / Reads 1; LogWrites 5, LogSkips 45.
+- Wi-Fi fn0 untouched (V1 armed, scans growing, StallEpisodes 0); full.log: no new SError.
+- Rollback 11:12Z: fn1 removed, oem26 deleted, clear -> passive=0 radio=1, CM_PROB_FAILED_INSTALL, store 0; checks rc 0. V1 still armed (FirmwareSet 1, FR, StallRecover 1, ScanAssocMode 0) on the reference boot EXP2610.
+Verdict: confirmed.
