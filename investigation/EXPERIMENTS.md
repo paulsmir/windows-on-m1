@@ -82452,3 +82452,7 @@ W47: AppleBcmWlan 0.1.46.0 -> 0.1.47.0 (Prev* stop record) on a fresh Wi-Fi-prof
 EXP2634 HARDWARE BEFORE 2026-11-17T12:38:27Z:
 W47 boot: fixup m1n1 20930bb0 + MUCPCWIFI001 (--host-request launcher); preregistered text in the EXP2634 HARDWARE BEFORE entry above.
 - Launcher launch-kbd2634.sh sha256 6d785a446b27654d (launch-kbd.sh 51d76b6354b693e4); m1n1 20930bb014872cd672568f3abe1e87b278e82631296fe26b6ccd2ea0a1f9cdf6; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD c5755981f.
+
+EXP2635 HARDWARE BEFORE 2026-11-17T12:40:46Z:
+W47 relaunch after the ordered restart of EXP2634 (part of EXP2634): fixup m1n1 20930bb0 + MUCPCWIFI001; read the Prev* stop record of 0.1.47.0; then AppleBcmWlan 0.1.45.0 (0bebb5399) installed and V1 armed (architect). No Bluetooth package.
+- Launcher launch-kbd2635.sh sha256 6b7f33449cfdea78 (launch-kbd.sh 51d76b6354b693e4); m1n1 20930bb014872cd672568f3abe1e87b278e82631296fe26b6ccd2ea0a1f9cdf6; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 6ba500c70.
