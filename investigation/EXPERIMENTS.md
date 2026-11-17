@@ -82578,3 +82578,7 @@ W52: AppleBcmWlan 0.1.52.0 quiesce order, m1n1 fdb55daa (fixup + IRQ_STAT, no pa
 EXP2642 HARDWARE BEFORE 2026-11-17T13:21:16Z:
 W52 boot: m1n1 fdb55daa (fixup + irqstat) + MUCPCWIFI001 (--host-request launcher); preregistered text in the EXP2642 HARDWARE BEFORE entry above.
 - Launcher launch-kbd2642.sh sha256 bd35b7815c6097b3 (launch-kbd.sh 51d76b6354b693e4); m1n1 fdb55daaa622d9b2084f4c63de6ea07bf832aa608efa1c08176efb4f3dd7abc3; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 88fd7f138.
+
+EXP2643 HARDWARE BEFORE 2026-11-17T13:24:29Z:
+W52 restart-cycle relaunch (part of EXP2642): m1n1 fdb55daa (fixup + irqstat) + MUCPCWIFI001, AppleBcmWlan 0.1.52.0 installed, FirmwareSet 1, FR, V1 keys after start; no Bluetooth package; no connect. Purpose: the ordered restart of the previous boot is one of the 5 W52 restarts; this boot is the gate after it. Single variable: none vs EXP2642.
+- Launcher launch-kbd2643.sh sha256 bfa66cf1436b8f0b (launch-kbd.sh 51d76b6354b693e4); m1n1 fdb55daaa622d9b2084f4c63de6ea07bf832aa608efa1c08176efb4f3dd7abc3; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 05a66c667.
