@@ -82537,3 +82537,7 @@ W51: AppleBcmWlan 0.1.51.0 start-after-gone fix, EXP2636 sequence, m1n1 fdb55daa
 - Single variable vs EXP2636: package 0.1.46.0 -> 0.1.51.0 (same m1n1).
 - WHY: (1) EXP2636/2638: the storm is the Wi-Fi level INTx with nothing claimed (BAR counter flat); (2) the start now quiets and acknowledges the mailbox before connecting; (3) the snapshot names the holding bit if it persists.
 - Expected/pass: no IRQ STORM line, Wi-Fi back (gate), receipts StartMbIntBefore/After, IsrEarly; if it storms: IsrUnclaimedSnap values, GuardFires, Command register (INTx Disable). Recovery as EXP2636 (self-reset or exact-PID kill).
+
+EXP2640 HARDWARE BEFORE 2026-11-17T13:09:13Z:
+W51 boot: m1n1 fdb55daa (fixup + irqstat) + MUCPCWIFI001 (--host-request launcher); preregistered text in the EXP2640 HARDWARE BEFORE entry above.
+- Launcher launch-kbd2640.sh sha256 81d30515770453a8 (launch-kbd.sh 51d76b6354b693e4); m1n1 fdb55daaa622d9b2084f4c63de6ea07bf832aa608efa1c08176efb4f3dd7abc3; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 7fcd9b9f1.
