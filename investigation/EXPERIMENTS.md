@@ -82821,3 +82821,6 @@ EXP2670 ACTUAL 2026-11-17T19:39:16Z: B7-mouse retry PASS for pairing and Bluetoo
 - Toggle (Quick settings off 19:37:22Z / on 19:37:37Z): DiscReason 0x16 x1 (local host); mouse reconnected by itself ~30 s after the on (operator; sheet expectation ~10 s; HYP: the mouse's advertising interval after a link loss), no Add-device step: LeConnCompleteOk 2, AclRx 637 = AclReadsDone 637, DiscTotal 1, BtStatus 20, CmdSendFailed 0 (ReceiptNow 5).
 - HV IRQ PACED 0, STORM 0, UNHANDLED 0. Wi-Fi in this boot: stack up, not associated (no auto-connect, as EXP2665), StallEpisodes 0.
 - State kept: bond kept (Pavel's mouse), AppleBcmBt 0.0.15.0 at tier 3 staged; the stage-6 one-shot arm is re-staged at each boot.
+
+EXP2669 exit 2026-11-17T19:40:40Z: ordered restart 19:39:55-19:40:22Z: faults in shutdown 0, markers 9, STORM 0, PACED 0, UNHANDLED 0, counter R=0 W=0 (Wi-Fi staged values cleared, module bases recorded; BT tier-3 staging and the bond kept).
+EXP2671 AUDIO-A0 rev 5 BEFORE/ACTUAL 2026-11-17T19:40:40Z (precondition of A1' rev 18d, same tool/command as EXP2667, read-only): 19:40:31Z A0_MISMATCHES 0, A0_DONE; receipt (audio worktree) .local/experiments/EXP2671-audio-a0/a0.json sha256 2a000ab32962d7d7240f60e8619bc7eb1a98c0c60513c5bebc12b7e4ee24f543; differs from EXP2667 only in /utc (bench JSON walk), so A1' launches without waiting (architect order).
