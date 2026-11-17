@@ -83066,3 +83066,7 @@ EXP2706 HARDWARE BEFORE 2026-11-17T23:21:49Z: step G of WIFI-SCBAUTH-0163 (archi
 - G: no-connect gate with the filter line, then ONE association at defaults: wlanctl connect, 60 s load, three self-scans, a flyout scan, the home-only control, disconnect. Expected: ScbAuthSent 1 / Status 0 / Fw 0, StaInfoKeys and every StaInfoScan with AUTHO, ScbFallback 0, ScbAuthTries 1, every scan clean, StallEpisodes 0, ScbDeauthSent 1 at disconnect. Authorize refused or fallback entered -> stop and report, no soak.
 - WHY: EXP2700/2701 + A/B/A: AUTHO clear without ioctl 121 -> frozen 3/3 twice; with it -> clean 3/3 twice.
 - If G is clean: step S (EXP2707), the overnight soak of WIFI-SCBAUTH-0163 section 5.
+
+EXP2706 HARDWARE BEFORE 2026-11-17T23:22:26Z:
+G: fab4356f + fd94b781, AppleBcmWlan 0.1.63.0 in place; see ledger.
+- Launcher launch-kbd2706.sh sha256 95d14f91df77a406 (launch-kbd.sh 51d76b6354b693e4); m1n1 fab4356fd4443ed4f7b29778c7c400027a49b303adf241a853e7be3983460abf; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD ac6229ba9.
