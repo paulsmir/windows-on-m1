@@ -82606,3 +82606,12 @@ EXP2642 ACTUAL (2026-11-17 UTC; covers the restart-cycle relaunches EXP2643-EXP2
 - Relaunch gates EXP2643-2647: 0x10034, 18.20.510, FirmwareSet 1, FR (readback), BSS 48/50/58/54/59, LinkState 1, StallEpisodes 0.
 - Contrast: EXP2639 (0.1.50.0, same stop path without the new order) >= 32 faulted BAR0 reads after the burst at its restart.
 Verdict: confirmed - the D3Final quiesce order (ARM/D11 halted first, watchdog armed as the last chip access) removes the shutdown-phase BAR faults. Next (architect conditional order): W53 merged 0.1.53.0 on f22f2186.
+
+EXP2648 HARDWARE BEFORE 2026-11-17T13:33:05Z:
+W53: merged candidate AppleBcmWlan 0.1.53.0 on m1n1 f22f2186 (fixup + irqstat + per-route pacing, 695 only; the Wi-Fi profile m1n1 since the architect's IP-2 decision) + MUCPCWIFI001, --host-request launcher, no Bluetooth package.
+- Package: branch wifi/merged-0153, commit 10482af3cab373b3d5d8cd75a69d4f0a5646662e (CHANGES 6b70c844a), builder bcmwlan-20261117T131712Z-w553x, provenance 44/44; signed sys 70769EAF25EF831F49F3C9CE28F2C5D380414F61194021F8E9D929497DD4ECD6, inf 80227025C759F11A335EAF46E523B8AABBE87C122023B99DC4540F83E89FCCCD, cat 81B13EC38C40DF47991C5629697627192FD48BF6CC8AD6AAE8317E57695C7CF8 (signer 35F48BAE).
+- Review: 10482af3c descends from 2f2543ae5 (0.1.51.0, EXP2640 PASS); its code diff vs 0.1.51.0 equals 4643c5213 (0.1.50.0 markers, EXP2639) + 5c4077a1c (0.1.52.0 quiesce order, EXP2642 PASS) line for line, apart from comments and WLAN_VERSION 53. Nothing in it has not been on the bench.
+- Variable: the package (merge of bench-proven parts) on the profile m1n1. Gate rule: any IRQ PACED or IRQ STORM line in normal operation fails; IRQSTAT/STORM/PACED reported.
+- Sequence: (1) install + gate: all scan keys 0, FirmwareSet 0 then 1, receipts StartMbInt*, GuardFires 0; (2) gone sequence once: mse off -> DeviceGone -> mse on -> Disable -> Enable: no storm, report whether PACED 695 appears, Wi-Fi back; (3) three ordered restarts with relaunch + gate (EXP2649-2651): marker burst, zero faulted BAR accesses, zero PACED/STORM.
+- WHY: (1) each part passed separately (EXP2640, EXP2639 markers, EXP2642); (2) the merge adds no code beyond them; (3) the armed package must carry all fixes at once.
+- Pass: all three parts. Then arm V1 on 0.1.53.0 + f22f2186 (FirmwareSet 1, StallRecover 1, ScanAssocMode 0, scan keys 0), other AppleBcmWlan packages removed from the guest store, device enabled. Fail: 0.1.45.0 armed on f22f2186. Recovery: launch-wifi end / AT_PROXY recovery.
