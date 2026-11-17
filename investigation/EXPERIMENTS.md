@@ -82267,3 +82267,7 @@ INT-0b: Mu MUCPCWIFI001 -> MUINT001 (J313_EFI-muint001.fd, sha256 40a8d7fdbf4d9d
 - Single variable vs EXP2612: the Mu FD.
 - WHY: (1) DSDT diff is one additive device; (2) without a driver Windows only enumerates it; (3) the power line needs the devnode verified inert before any driver decision.
 - Expected: exactly one new devnode ACPI\APPL0008\0 without driver (Code 28), nothing else changed in the PnP snapshot vs INT-0a, Wi-Fi gate + Bluetooth tier-1 as EXP2612. Failure: any other device change, a driver bound to APPL0008, a regression, a hang -> back to reference. Recovery: relaunch with MUCPCWIFI001.
+
+EXP2613 HARDWARE BEFORE 2026-11-17T11:21:59Z:
+INT-0b launch: m1n1 dcf1b9b8 + Mu MUINT001 40a8d7fd (preregistered text in the ledger entry EXP2613 HARDWARE BEFORE above).
+- Launcher launch-kbd2613.sh sha256 5e081c2f141ff8c1 (launch-kbd.sh 51d76b6354b693e4); m1n1 dcf1b9b8dfff03ba9b9d1677b25ece334dd50ea0b42e10e1488df64f5c9fd88c; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD f114ff2de.
