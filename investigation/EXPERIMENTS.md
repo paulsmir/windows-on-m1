@@ -82586,3 +82586,7 @@ W52 restart-cycle relaunch (part of EXP2642): m1n1 fdb55daa (fixup + irqstat) + 
 EXP2644 HARDWARE BEFORE 2026-11-17T13:26:07Z:
 W52 restart-cycle relaunch (part of EXP2642): m1n1 fdb55daa (fixup + irqstat) + MUCPCWIFI001, AppleBcmWlan 0.1.52.0 installed, FirmwareSet 1, FR, V1 keys after start; no Bluetooth package; no connect. Purpose: the ordered restart of the previous boot is one of the 5 W52 restarts; this boot is the gate after it. Single variable: none vs EXP2642.
 - Launcher launch-kbd2644.sh sha256 3f25e5762e6f88b3 (launch-kbd.sh 51d76b6354b693e4); m1n1 fdb55daaa622d9b2084f4c63de6ea07bf832aa608efa1c08176efb4f3dd7abc3; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 68b9a49e3.
+
+EXP2645 HARDWARE BEFORE 2026-11-17T13:27:46Z:
+W52 restart-cycle relaunch (part of EXP2642): m1n1 fdb55daa (fixup + irqstat) + MUCPCWIFI001, AppleBcmWlan 0.1.52.0 installed, FirmwareSet 1, FR, V1 keys after start; no Bluetooth package; no connect. Purpose: the ordered restart of the previous boot is one of the 5 W52 restarts; this boot is the gate after it. Single variable: none vs EXP2642.
+- Launcher launch-kbd2645.sh sha256 14b47d1c035668cd (launch-kbd.sh 51d76b6354b693e4); m1n1 fdb55daaa622d9b2084f4c63de6ea07bf832aa608efa1c08176efb4f3dd7abc3; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD d5f6ba5d2.
