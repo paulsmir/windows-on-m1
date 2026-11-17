@@ -82516,3 +82516,7 @@ W50: AppleBcmWlan 0.1.50.0 (stop-path markers, on 0.1.45.0) on a fresh Wi-Fi-pro
 - Single variable vs EXP2627 (0.1.45.0 on the same m1n1): the markers.
 - WHY: EXP2634 Prev* was empty after a restart; a log-side marker does not depend on the registry surviving shutdown.
 - Expected: Disable shows 0x33,0x45,0x35,0x36,0x37,0x39; the restart shows 0x33,0x44,0x35,0x36,0x37 (if D0Exit runs) and no 0x3a/0x3b after 0x35; faults 0.
+
+EXP2639 HARDWARE BEFORE 2026-11-17T13:04:16Z:
+W50 boot: fixup m1n1 20930bb0 + MUCPCWIFI001 (--host-request launcher); preregistered text in the EXP2639 HARDWARE BEFORE entry above.
+- Launcher launch-kbd2639.sh sha256 52bf1f2edb1a51fb (launch-kbd.sh 51d76b6354b693e4); m1n1 20930bb014872cd672568f3abe1e87b278e82631296fe26b6ccd2ea0a1f9cdf6; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 59467c0dc.
