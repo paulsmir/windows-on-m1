@@ -82977,3 +82977,5 @@ EXP2692 HARDWARE BEFORE 2026-11-17T21:58:10Z: final re-arm on the Wi-Fi pair f22
 EXP2692 HARDWARE BEFORE 2026-11-17T21:58:46Z:
 final re-arm: f22f2186 + fd94b781; Wi-Fi 0.1.54.0 plain V1; BT 0.0.16.0 tier 3.
 - Launcher launch-kbd2692.sh sha256 481e61b66bcae0bd (launch-kbd.sh 51d76b6354b693e4); m1n1 f22f218674da259bdcb38649baf23e556732fbf2d6c13efe8ca316556f33783c; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD bfcb44dfc.
+
+EXP2692 ACTUAL 2026-11-17T22:00:52Z: final re-arm PASS. Exit of EXP2691 21:58:39Z clean (faults 0, markers 8). Pair f22f2186 + fd94b781 up; Wi-Fi gate 21:59:49Z PASS (0.1.54.0 oem24, FW 18.20.510, FirmwareSet 1, FR, BSS 16, StallEpisodes 0, MbFwHalt 0), plain V1 (PhaseBits 0, StallRecover 1, ScanAssocMode 0, MAC staged), trap flags clean (LiveShTrapAddr 0, no FwConsoleTrap); WLAN profiles under the current interface 1; AppleBcmBt 0.0.16.0 tier 3: BtStatus 20, RadioPolicy 3, ReceiptGen 9, bond kept. HV IRQ PACED 0, STORM 0, UNHANDLED 0, BAR R=0 W=0.
