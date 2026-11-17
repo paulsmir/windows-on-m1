@@ -82110,3 +82110,13 @@ Bluetooth 0.0.9.0 tier-1 regression in the EXP2585 boot (V1 armed on Wi-Fi 0.1.4
 - Single variable vs EXP2599: package 0.0.8.0 -> 0.0.9.0 (B6a omitted by order).
 - WHY THIS HYPOTHESIS: (1) EXP2599 is the tier-1 reference; (2) the tier-1 path is code-identical; (3) the BD_ADDR counts test whether the stack sees the address set at setup (BthMini 18 lead).
 - Expected: = EXP2599 for B4b/B5 (stack up, BthMini 18 only, StackFailTotal 0, refusals of the EXP2599 set minus the scan-related ones), StackBdAddrSame = StackBdAddrReads, Diff 0. BTHPORT\Parameters\Keys subkey count only if readable without any permission change (else skipped). Wi-Fi fn0 untouched. Rollback as EXP2599; V1 stays armed.
+
+EXP2602 ACTUAL (2026-11-17 UTC): 0.0.9.0 tier-1 regression PASS = EXP2599 (B4b + B5, no scan, no transmit).
+- B4b: install 10:08:39Z, BtStatus 18 at 10:08:42Z; PtbVerdict 3, calibration 4688, SetupSteps 25, status 0, BdAddrDecision 1 / set status 0.
+- B5: Stage 6 (read back RadioPolicy 1, PassiveScanAllowed 0), fn1 restart 10:09:19Z, BtStatus 20 at 10:09:22Z; Bluetooth Radio / enumerators OK, bthserv Running; one BthMini 18 at 10:09:22Z, no 17.
+- D0Exit: StackCmdCount 56, StackFailTotal 0, PolicyRefused 2006 x1, 2008 x2, 200A x3, 0C1A x1 (= EXP2599), CmdTx 76, EventsRx 49; commands 0-31 identical, 32-41 the same 0C1A(0)/0C52/0C24 group. Capability receipts identical to EXP2599.
+- StackBdAddrReads 1, StackBdAddrSame 1, StackBdAddrDiff 0: the stack's one Read_BD_ADDR returned exactly the address left at setup (counts only).
+- BTHPORT\Parameters\Keys subkey count: not readable by the bench account (SecurityException); skipped, no permission or setting changed.
+- Wi-Fi fn0 untouched: 0.1.41.0 (ProbeVersion 0x10029), 18.20.510, CountryState 1, scans 15 -> 18, StallEpisodes 0, no connect; full.log: no new SError, DART line unchanged.
+- Rollback 10:10Z: fn1 removed, oem24 deleted, clear -> passive=0 radio=1, CM_PROB_FAILED_INSTALL, store 0; checks rc 0. V1 still armed (FirmwareSet 1, FR, StallRecover 1, ScanAssocMode 0).
+Verdict: confirmed. BthMini 18 is not an address mismatch.
