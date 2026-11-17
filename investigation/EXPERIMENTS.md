@@ -82412,3 +82412,7 @@ W45 restart-cycle relaunch (part of EXP2627): fixup m1n1 20930bb0 + MUCPCWIFI001
 EXP2630 HARDWARE BEFORE 2026-11-17T12:26:52Z:
 W45 restart-cycle relaunch (part of EXP2627): fixup m1n1 20930bb0 + MUCPCWIFI001, AppleBcmWlan 0.1.45.0 installed, FirmwareSet 1, FR, V1 keys after start; no Bluetooth package; no connect. Purpose: the ordered restart of the previous boot is one of the 5 W45 restarts; this boot is the gate after it. Single variable: none vs EXP2626.
 - Launcher launch-kbd2630.sh sha256 bb45f5b607ead041 (launch-kbd.sh 51d76b6354b693e4); m1n1 20930bb014872cd672568f3abe1e87b278e82631296fe26b6ccd2ea0a1f9cdf6; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD b8733ebb2.
+
+EXP2631 HARDWARE BEFORE 2026-11-17T12:28:29Z:
+W45 restart-cycle relaunch (part of EXP2627): fixup m1n1 20930bb0 + MUCPCWIFI001, AppleBcmWlan 0.1.45.0 installed, FirmwareSet 1, FR, V1 keys after start; no Bluetooth package; no connect. Purpose: the ordered restart of the previous boot is one of the 5 W45 restarts; this boot is the gate after it. Single variable: none vs EXP2626.
+- Launcher launch-kbd2631.sh sha256 d0d8337d34ec1c98 (launch-kbd.sh 51d76b6354b693e4); m1n1 20930bb014872cd672568f3abe1e87b278e82631296fe26b6ccd2ea0a1f9cdf6; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 9a76984d8.
