@@ -82470,3 +82470,7 @@ IS-1: repeat of the EXP2633 sequence with one variable, the m1n1: 20930bb0 -> fd
 - Sequence: gate (record normal IRQSTAT rates) -> mse off -> DeviceGone -> mse on -> Disable -> Command register -> Enable -> storm until two IRQSTAT prints and the STORM line -> recovery as EXP2633 (self-reset expected; else exact-PID kill).
 - WHY: (1) EXP2633's storm was real interrupts (ICC_IAR1/EOIR1 pairs) whose source the HV did not name; (2) the counting build names the vINTID and class; (3) the fix (Wi-Fi driver vs HV pacing) depends on that.
 - Expected: STORM line naming a vINTID (Wi-Fi fn0 INTx route expected) with class routed-level/edge; gone detection as EXP2633. Failure: no storm/no line (record), HV wedge (exact-PID kill). Afterwards the reference arm: 20930bb0 + 0.1.45.0 (0.1.46.0 removed from the store again), V1.
+
+EXP2636 HARDWARE BEFORE 2026-11-17T12:45:05Z:
+IS-1 boot: m1n1 fdb55daa (fixup + IRQ_STAT) + MUCPCWIFI001, --host-request launcher; preregistered text in the EXP2636 HARDWARE BEFORE entry above.
+- Launcher launch-kbd2636.sh sha256 8264791b24fec613 (launch-kbd.sh 51d76b6354b693e4); m1n1 fdb55daaa622d9b2084f4c63de6ea07bf832aa608efa1c08176efb4f3dd7abc3; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 7518086c7.
