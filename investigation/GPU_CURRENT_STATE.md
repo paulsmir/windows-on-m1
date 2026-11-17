@@ -7830,3 +7830,27 @@ and port driver source; installer moved to the current driver set.
   handshake matches; required before any run: fault latch must not stop mailbox servicing or block quiesce; one-shot
   arming. AppleSmc 0.1.0.9 ordered. The wake still needs the user's yes.
 - Not to be staged (additions): AppleSmc 0.1.0.7, webcam b143e08e and fccc1c07, audio m1n1/Mu builds with GSIV 889.
+
+## UPDATE 2026-11-17T12:54:12Z - EL2 abort fixed in m1n1, guest reader attributed, interrupt storm after device-gone, audio M0
+
+- m1n1: the EXP2613 wedge is reproduced on purpose (BF-0 EXP2617: host clears Memory Space Enable of 01:00.0, flags-off
+  image loops on "HV UNHANDLED SYNC" + "continuing guest") and fixed (BF-1a EXP2618 PASS: integration/all-flags-v2 +
+  APCIE_BAR_FAULT_FIXUP, macho 20930bb0, faulted reads complete as all-ones, counted, silent). 20930bb0 is the Wi-Fi
+  profile's bench m1n1 since EXP2621 (fallback/reference 609a98bc). Per-line interrupt counters: fdb55daa (IRQ_STAT).
+- Guest side attributed from PDBs: AppleBcmWlan BcmBusLiveTick (1 s passive timer) reads pciedev_shared.trap_addr in
+  TCM; the driver had no EvtDeviceD0Exit and stopped the tick only in ReleaseHardware. 0.1.45.0 (0bebb5399) adds the
+  stop order: W45 PASS EXP2627 (2 disables with receipts, 5 ordered restarts, 0 faults). NOT proven for the system
+  restart case: W47 EXP2634 (0.1.47.0) shows no stop record after an ordered restart (Prev* all 0xffffffff) - either
+  D0Exit does not run then or its registry write is lost; evidence via HV-visible markers is ordered.
+- Device-gone (0.1.46.0): detection PASS EXP2633 (2 faults then none). Recovery FAIL: Disable/Enable after a gone gives
+  an interrupt storm and a guest bugcheck reset. IS-1 EXP2636 names it: vINTID 695 (Wi-Fi INTx, routed-level),
+  ~20,800/s against a normal peak of ~22/s, 4 successful BAR reads per interrupt, no faulted access. Fix ordered in the
+  driver (0.1.48.0) and a paced-unmask option in m1n1 (defence in depth). 0.1.46.0/0.1.47.0 are not armed.
+- Bench state: 20930bb0 + MUCPCWIFI001, AppleBcmWlan 0.1.45.0, FirmwareSet 1, V1 armed (EXP2637). Next causal target
+  unchanged: connect #1 per .local/handoff/wifi-bt/WIFI-CONNECT-SESSION-PLAN.md, by the user or Codex.
+- Audio: A0 read-only inventory rev 4 PASS on the live ADT EXP2624 (after tool defects in rev 2/3: EXP2620, EXP2622).
+  M0 PASS EXP2625 (m1n1 8db52c08, SDZ pin 181 word 0x00076a02 -> 0x00076a02: the boot chain already holds the amps in
+  shutdown). A1 (macho 35e654ff, SoC watchdog 10 s around the plan, reset hook SDZ-only) is prepared and reviewed but
+  waits for the user at the machine: watchdog recovery from a fabric stall has never been observed here.
+- Bluetooth 0.0.13.0 tier-1 PASS EXP2616 (pairing package); AppleSmc 0.1.0.9 built (wake path reworked after review;
+  PWR-W0 needs the user's yes and presence).
