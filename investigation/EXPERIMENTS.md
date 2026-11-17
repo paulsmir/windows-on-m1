@@ -82146,3 +82146,12 @@ Bluetooth 0.0.10.0 tier-1 regression in the EXP2585 boot (fn1 only; Wi-Fi V1 arm
 - Single variable vs EXP2599/2602: package 0.0.9.0 -> 0.0.10.0.
 - WHY THIS HYPOTHESIS: (1) EXP2596/2599/2602 logs show the stack never sent 0C11/0C12 at tier 1; (2) the credit change only alters synthesized refusals; (3) the remaining changes are logging cadence.
 - Expected: = EXP2599/2602: setup 25/0, stack up (BthMini 18 only, no 17) in ~3 s after restart, StackCmdCount ~56-58 with the same refusal set, StackFailTotal 0, B6a adverts > 0 with 0 scan responses, BD_ADDR Same = Reads; LogWrites > 0, LogSkips >= 0, PolicyRefusalDropped 0. Failure: stack not up / BthMini 17 / fewer commands (credit stall) / a refusal of 0C11 or 0C12 appearing (would mean the stack needs them). One attempt; rollback; V1 untouched.
+
+EXP2605 ACTUAL (2026-11-17 UTC): 0.0.10.0 tier-1 regression PASS = EXP2599/2602.
+- B4b: install 10:37:39Z, BtStatus 18 at 10:37:42Z; PtbVerdict 3, calibration 4688, SetupSteps 25, status 0, BdAddrDecision 1 / set status 0.
+- B5: Stage 6 --passive-scan (read back RadioPolicy 1, PassiveScanAllowed 1), restart 10:38:20Z, BtStatus 20 at 10:38:23Z (~3 s, as EXP2602: 10:09:19 -> 10:09:22); Bluetooth Radio / enumerators OK, bthserv Running; one BthMini 18, no 17. 50 stack commands at first read (= EXP2599 B5 at the same point).
+- B6a passive 60 s (10:39:16-10:40:18Z): adverts 919, scan responses 0, 27 distinct; Stopped (Success).
+- D0Exit: StackCmdCount 60 (EXP2599 58: two extra 0C52 at the end, status 0), StackFailTotal 0, PolicyRefused 2006 x1, 2008 x2, 200A x3, 0C1A x1 (= EXP2599/2602; no 0C11/0C12 refusal - the stack did not send them), PolicyRefusalDropped 0, CmdTx 80, EventsRx 972; 200B/200C scan sequence status 0; LogWrites 5, LogSkips 47 (change-driven writing works); StackBdAddrReads 1 / Same 1 / Diff 0; capability receipts identical to EXP2599.
+- Wi-Fi fn0 untouched (0.1.42.0, CountryState 1, scans growing, StallEpisodes 0, no connect); full.log: no new SError, DART line unchanged.
+- Rollback 10:40Z: fn1 removed, oem25 deleted, clear -> passive=0 radio=1, CM_PROB_FAILED_INSTALL, store 0; checks rc 0. V1 armed.
+Verdict: confirmed - the two tier-1 removals and the credit logic do not affect bring-up or the passive scan.
