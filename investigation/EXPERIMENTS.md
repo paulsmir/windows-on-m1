@@ -82448,3 +82448,7 @@ W47: AppleBcmWlan 0.1.46.0 -> 0.1.47.0 (Prev* stop record) on a fresh Wi-Fi-prof
 - Single variable vs EXP2632/2627: package 0.1.45.0/0.1.46.0 -> 0.1.47.0.
 - WHY: (1) W45's restarts had no direct record of the D0Exit path; (2) Prev* is read before the clear; (3) the flush makes the shutdown write durable.
 - Expected: gate = EXP2627; restart with m1n1 faults 0; on the next boot PrevWlanD0ExitTarget 4 (D3), PrevStopReaders 1, PrevQuiesceChip 0, PrevReleaseAfterDx per the line's note. Then V1 armed on 0.1.47.0 if the gate passes.
+
+EXP2634 HARDWARE BEFORE 2026-11-17T12:38:27Z:
+W47 boot: fixup m1n1 20930bb0 + MUCPCWIFI001 (--host-request launcher); preregistered text in the EXP2634 HARDWARE BEFORE entry above.
+- Launcher launch-kbd2634.sh sha256 6d785a446b27654d (launch-kbd.sh 51d76b6354b693e4); m1n1 20930bb014872cd672568f3abe1e87b278e82631296fe26b6ccd2ea0a1f9cdf6; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD c5755981f.
