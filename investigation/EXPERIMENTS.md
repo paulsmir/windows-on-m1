@@ -82075,3 +82075,13 @@ Bluetooth 0.0.8.0 tier-1 regression in the EXP2585 boot: B4b, B5, B6a passive (6
 - WHY THIS HYPOTHESIS: (1) EXP2596 is the tier-1 reference; (2) the tier-1 path is code-identical apart from the mode mapping; (3) the Caps receipts give the controller's supported-commands bitmap the stack used before BthMini 18.
 - Expected: = EXP2596 (B4b setup 25/0, B5 stack up with BthMini 18 only, B6a adverts > 0, PolicyRefused 2006/2008/200A/0C1A only, StackFailTotal 0) plus CapsLocalCommands (64 B), CapsLocalFeatures, CapsLeFeatures (ext pages if the stack read them). Stop: any difference in the refused set or a hang.
 - Rollback as EXP2596 (clear reads back RadioPolicy 1 / PassiveScanAllowed 0); V1 left armed.
+
+EXP2599 ACTUAL (2026-11-17 UTC): 0.0.8.0 tier-1 regression PASS = EXP2596, plus capability receipts.
+- B4b: install 09:34:34Z, BtStatus 18 at 09:34:37Z; PtbVerdict 3, calibration 4688, SetupSteps 25, status 0, BdAddrDecision 1.
+- B5: Stage 6 --passive-scan (read back RadioPolicy 1, PassiveScanAllowed 1), fn1 restart 09:35:14Z, BtStatus 20 at 09:35:17Z; Bluetooth Radio / enumerators OK, bthserv Running; one BthMini 18 at 09:35:16Z, no 17.
+- B6a: btcount passive 60 s (09:36:08-09:37:11Z): adverts 854, scan responses 0 (consistent with passive), 24 distinct; Stopped (Success).
+- D0Exit: StackCmdCount 58, StackFailTotal 0, PolicyRefused 2006 x1, 2008 x2, 200A x3, 0C1A x1 = EXP2596 (same refused set), CmdTx 78, EventsRx 905, RadioPolicy 1. Command order 0-31 identical; 32-41 the same 0C1A(0)/0C52/0C24 group in a different interleave; 50 200B, 51/52 200C enable/disable status 0.
+- Capability receipts (CapsUpdates 3; raw values in evidence/w2/r8-caps.txt; bitmaps, no identifiers): CapsLocalCommands 64 bytes, octets 0-7 ff ff ff 03 cc ff ef ff (octet 6 = 0xEF, octet 7 = 0xFF); CapsLocalFeatures bffecffedbff7b87; CapsLeFeatures ff79010800000000; no extended-feature pages (the stack did not send 0x1004; CapsExtValid 0).
+- Wi-Fi fn0 unaffected (scans 512 -> 515, CountryState 1, LinkState 1, StallEpisodes 0, no connect); full.log: no new SError, DART line unchanged.
+- Rollback 09:37Z: fn1 removed, oem6 deleted, clear -> passive=0 radio=1 (read back), CM_PROB_FAILED_INSTALL, store 0; checks rc 0. V1 armed.
+Verdict: confirmed - tier 1 unchanged in behaviour; capability capture works.
