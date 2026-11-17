@@ -82474,3 +82474,11 @@ IS-1: repeat of the EXP2633 sequence with one variable, the m1n1: 20930bb0 -> fd
 EXP2636 HARDWARE BEFORE 2026-11-17T12:45:05Z:
 IS-1 boot: m1n1 fdb55daa (fixup + IRQ_STAT) + MUCPCWIFI001, --host-request launcher; preregistered text in the EXP2636 HARDWARE BEFORE entry above.
 - Launcher launch-kbd2636.sh sha256 8264791b24fec613 (launch-kbd.sh 51d76b6354b693e4); m1n1 fdb55daaa622d9b2084f4c63de6ea07bf832aa608efa1c08176efb4f3dd7abc3; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 7518086c7.
+
+EXP2636 ACTUAL (2026-11-17 UTC): IS-1 - storm attributed: vINTID 695 (AIC 695, routed-level) = the Wi-Fi INTx line.
+- Boot up 12:45:39Z (fdb55daa + fd94b781). IRQSTAT normal rates (per 10 s): at boot v960 23521/19065 (later 44-1598), v857 88-918, v865 2; after the Wi-Fi driver started v695 169-216 (~17-22/s).
+- 0.1.46.0 re-installed 12:46:21Z (oem28), gate 18.20.510, FR, BSS 58, StallEpisodes 0.
+- mse off: 0x0006 -> 0x0004; faults exactly 2 (gone check), DeviceGone 1, Where 1, AtMs 77887, IsrAllOnes 0; mse on 0x0404 -> 0x0406; Disable -> Error; while disabled: WlanD0ExitTarget 5, StopReaders 2, QuiesceChip 2. Command after Disable read with a repeated "mse off" = 0x0400 (decode/BME off, INTx Disable set), then "mse on" -> 0x0402 - deviation from EXP2633: MSE was set on the disabled device before the Enable (pci.sys sets it at Enable anyway).
+- Enable-PnpDevice 12:47:56Z (first attempt failed on quoting, re-run via script). Within the next window: EXITS irq 208067 per 10 s, dabt ~832 k (4 per interrupt), wfi 4000; "HV: IRQSTAT ... v695=208067" (v695 alone); "HV: IRQ STORM vINTID=695 rate=20806/s window_ms=10000 storm#=1 aic=695 routed-level", storm#2 20820/s, 4 STORM lines in total; fault counter stayed R=2 W=0 (no faulted reads in the storm). SSH lost.
+- ~12:50Z guest reset itself (m1n1 "BUGCHECK unknown-kernel" at PSCI reset), proxy answered 12:50:17Z without intervention. Log saved as evidence/full-storm.log.
+Verdict: confirmed - the storm is the Wi-Fi function's level-triggered INTx (AIC 695) staying asserted after a re-enable of a device that went away and came back without a chip reset; ~4 successful BAR reads per interrupt, no source cleared. Normal peak of v695 during the gate ~22/s.
