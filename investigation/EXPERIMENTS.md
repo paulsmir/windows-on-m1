@@ -82556,3 +82556,7 @@ IP-2: one variable against EXP2638, the m1n1: 36d447c1 -> f22f218674da259bdcb386
 - Part A: normal boot to the gate - no PACED line at all, v960 boot bursts unthrottled (first IRQSTAT windows recorded), gate rates as EXP2636/2638. Part B: mse off -> gone -> mse on -> Disable -> Enable - PACED 695 then PACED off, SSH alive, no bugcheck, Wi-Fi back; clean ordered restart.
 - WHY: (1) IP-1 paced ANS at boot because the trigger applied to all level routes; (2) the opt-in restricts it to 695; (3) part B repeats the storm that IP-1 contained.
 - Fail: any PACED line other than 695, or any PACED line in part A. Afterwards: 20930bb0 + 0.1.45.0 armed (other packages out of the guest store, device enabled).
+
+EXP2641 HARDWARE BEFORE 2026-11-17T13:13:53Z:
+IP-2 boot: m1n1 f22f2186 (fixup + irqstat + per-route pace) + MUCPCWIFI001 (--host-request launcher); preregistered text in the EXP2641 HARDWARE BEFORE entry above.
+- Launcher launch-kbd2641.sh sha256 f80a931b0b0b6f51 (launch-kbd.sh 51d76b6354b693e4); m1n1 f22f218674da259bdcb38649baf23e556732fbf2d6c13efe8ca316556f33783c; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 64a49ada9.
