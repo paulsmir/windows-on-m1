@@ -7854,3 +7854,25 @@ and port driver source; installer moved to the current driver set.
   waits for the user at the machine: watchdog recovery from a fabric stall has never been observed here.
 - Bluetooth 0.0.13.0 tier-1 PASS EXP2616 (pairing package); AppleSmc 0.1.0.9 built (wake path reworked after review;
   PWR-W0 needs the user's yes and presence).
+
+## UPDATE 2026-11-17T13:43:26Z - Wi-Fi stop path and storm closed on hardware; bench armed on 0.1.53.0 + f22f2186
+
+- Second guest-side cause of the restart faults: BcmBusQuiesceChip fired the chip watchdog reset and THEN read core
+  wrapper registers through BAR0 (BcmBpRd32, AI_IOCTL 0x408 / AI_RESET_CTL 0x800); seen as >= 32 faulted reads after
+  the D0Exit marker burst (W50 EXP2639, 0.1.50.0). An ordered system restart's D0Exit target is D3Final, so the quiesce
+  runs at every restart; D0Exit does run there (marker counts) and W47's missing record was a lost registry write.
+  Fixed in 0.1.52.0 (passive first, watchdog last): W52 PASS EXP2642 - 6 ordered restarts, shutdown-phase faults
+  0/0/0/0/0/0 after marker bursts, 2 Disable/Enable cycles clean. W45's zero faults on 0.1.45.0 were timing.
+- Interrupt storm after device-gone: an unclaimed pending mailbox bit in the driver's start window (ISR returned "not
+  mine" while the rings were down; zero forwarded BAR accesses per interrupt) - a livelock. Driver fix 0.1.51.0 (mask and
+  acknowledge before the interrupt is connected, early ISR claim, storm guard): W51 PASS EXP2640 on an unpaced m1n1,
+  StartMbIntBefore 1 / After 0.
+- m1n1 defence in depth: per-route paced unmask (opt-in, PCIe INTx 695 only) - IP-1 EXP2638 failed its trigger (paced ANS
+  v960), IP-2 PASS EXP2641 after the per-route rework. Wi-Fi profile bench m1n1 is now f22f2186 (fixup + irqstat +
+  pace-695). Gate rule: any PACED or STORM line in normal operation fails the gate.
+- Merged candidate AppleBcmWlan 0.1.53.0 (10482af3c: stop order, per-scan keys, device-gone, Prev* record, start-after-
+  gone set, markers as counts, quiesce order): W53 PASS EXP2648 on f22f2186 - both firmware sets, gone sequence with NO
+  PACED and NO STORM line, 3 restarts with 0 faults.
+- Bench state: EXP2651 boot, f22f2186 + MUCPCWIFI001, AppleBcmWlan 0.1.53.0 (only package in the store), FirmwareSet 1,
+  StallRecover 1, ScanAssocMode 0, scan keys 0, FR, V1 armed. Next causal target unchanged: connect #1 (three mode-0
+  associated scans under traffic) by the user or Codex. The TX stall after an associated off-channel scan is still open.
