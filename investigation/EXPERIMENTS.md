@@ -82889,3 +82889,7 @@ EXP2677/EXP2678 ACTUAL 2026-11-17T20:23:52Z: both FAILED at AddStep 105 (render 
 - Gate: HV IRQ PACED 0, STORM 0, UNHANDLED 0, no DART/SError, v963/v964 0, no sound. Evidence .local/experiments/EXP2677-aud-h1d/evidence/ (h1d-*, h1c-*). Both packages removed (/uninstall), store 0, APPL0006 removed. Audio ends tonight (architect rule); lead for the audio line: the render streaming-pin configuration given to AcxPinCreate.
 
 EXP2678 note 2026-11-17T20:24:21Z: all 0.1.12.0 changes (component id, AcxPinAddJacks 108/208, AcxCircuitAddPins 109/209, AcxDeviceAddCircuit in PrepareHardware 300/301) lie after step 105, so EXP2678 neither supports nor rejects them.
+
+EXP2679 HARDWARE BEFORE 2026-11-17T20:27:07Z:
+final re-arm: Wi-Fi profile pair m1n1 f22f2186 + Mu MUCPCWIFI001 fd94b781 (variable none vs EXP2676); Wi-Fi V1 armed (AppleBcmWlan 0.1.53.0, FirmwareSet 1, StallRecover 1, ScanAssocMode 0, FR, MAC staged); AppleBcmBt 0.0.15.0 tier 3 armed for a possible toggle probe. No camera/audio package. Expected: gate pass, no IRQ PACED / STORM / UNHANDLED.
+- Launcher launch-kbd2679.sh sha256 59b099a5454ecda8 (launch-kbd.sh 51d76b6354b693e4); m1n1 f22f218674da259bdcb38649baf23e556732fbf2d6c13efe8ca316556f33783c; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD de5a2028e.
