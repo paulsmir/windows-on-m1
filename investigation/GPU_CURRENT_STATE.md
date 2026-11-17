@@ -7781,3 +7781,27 @@ and port driver source; installer moved to the current driver set.
   order) + Mu MULPI001; m1n1 bounded BAR forward (BD-2), MDCR pre-entry fix, PSCI off-hold flag, standalone
   image with D209 uptime answer; external display second-target patches pass the WDK compile gate (default
   off); USB AppleTypeCPort rebuild; webcam AVStream stages compile; TDR H1 run sheet.
+
+## UPDATE 2026-11-17T11:13:53Z - morning 2026-11-17: m1n1 BAR diagnostics pass, SMC endpoint not live, review rounds
+
+- m1n1 (Wi-Fi bench line): BD-1 PASS EXP2608 (APCIE_BAR_DIAG, 49ee6ee1; 1.7 M forwarded BAR accesses, max read
+  88 us, none late or stuck, locked=0; root port completion-timeout ranges A-D, value 0). BD-2 PASS EXP2609
+  (bb27c56b, macho ff5236f7; completion timeout programmed to range B and read back, breaker 110 ms, tripped 0,
+  nested 0). Not shown: behaviour under a real stall. EXP2579 hang still unexplained.
+- Power: PWR-R1 rev 3 EXP2607 - SMC endpoint NOT live at Running proxy (READ_KEY timed out; 1 message sent,
+  0 received, 0 acked). PWR-R2/R2b skipped: a battery driver needs the RTKit wake (AllowRtkitWake), which is the
+  user's decision and is open. R1 rev 2 was withdrawn before running (it drained without acking SYSLOG/IOREPORT).
+- Wi-Fi: AppleBcmWlan 0.1.42.0 G0 EXP2603/2604 - scan iovars identical on 18.90.5 and 18.20.510
+  (scan_home_away_time 100, scan_home_time 45, assoc 40, unassoc 40, passive 110, nprobes 2, scan_ps 0,
+  ocl_enable unsupported). 0.1.43.0 (75c41d4da; RingSnap race fix, ScanHomeAwayMs restore) PASS EXP2606; reference
+  boot EXP2610 armed for V1 (FirmwareSet 1). The associated-scan test still needs the user's/Codex's connect click.
+  Codex was READY 07:49-08:49Z and got no command (architect's channel watcher was not running).
+- Bluetooth: 0.0.10.0 tier-1 PASS EXP2605; 0.0.12.0 (f18d875a8; credit un-count, per-peer pending-connection
+  table, Command Status refusals, 0x0C35 in tier 3, oversize ACL drop) tier-1 PASS EXP2611. B7 (pairing, tier 3,
+  classic phone first) needs the user present.
+- Cross-review rounds (offline) found defects in every package headed to hardware; superseded and NOT to be
+  staged: AppleAudio 0.1.2-0.1.8, AppleSmc 0.1.0.5/0.1.0.6, AppleBcmBt 0.0.9.0-0.0.11.0 for pairing, m1n1 BD-2
+  macho 6447a295, off-hold macho 563b9817, webcam builds before b143e08e, AppleInput B3-09949850.
+- Collision: audio Mu MUAUD002 / m1n1 route used GSIV 889 = AGX scanout vINTID; audio moved to 963/964 in
+  .local/handoff/IPA-GSIV-REGISTRY.md (rebuild pending). Integration pair built offline: m1n1 integration/all-flags
+  628318e7, Mu MUINT001 (Wi-Fi Mu + inert SMC0); ordered as INT-0a/INT-0b.
