@@ -7976,3 +7976,31 @@ and port driver source; installer moved to the current driver set.
   file - nobody handles the key.
 - Bench state: fab4356f + fd94b781, AppleBcmWlan 0.1.54.0 plain V1 (StallRecover 1, FR), AppleBcmBt 0.0.16.0 tier 3
   with the bond, no camera or audio package; S-series and X0/C3/C4 queued unattended.
+
+## UPDATE 2026-11-17T23:12:14Z - Wi-Fi TX freeze after associated scans: cause established (peer never authorized in the firmware)
+
+- VERDICT (EXP2700 / EXP2701 and their A/B/A repeat, fab4356f + fd94b781, AppleBcmWlan 0.1.60.0, single variable
+  ScbAuthorize): with our host-side WPA2 handshake nothing told the firmware that the peer is authorized. The firmware's
+  sta_info for the AP read flags 0x11c01b (AUTHO 0x20 clear) for the whole association and every associated
+  off-channel scan froze the TX flowring (3 of 3, twice). With ioctl 121 (SET_SCB_AUTHORIZE, as Linux brcmfmac sends
+  from change_station when the supplicant opens the port) sent once both keys are installed, the flags read 0x11c03b
+  and the scans are clean (3 of 3, twice, plus Windows-own scans): device r advances during the excursion, no stall
+  episode, no flush, 15270 of 15270 echoes against ~730 lost without it. macOS never sends it because its supplicant
+  runs in the firmware (sup_wpa 1); Windows keeps the 4-way in the OS (no PMK or handshake offload in WDI), so the
+  authorize ioctl is the correct form of the fix here. Hypotheses H1-H5 and the dialect set stay rejected; H6 is
+  replaced by this cause.
+- How it was found: the complete host-side diff against the macOS driver (926 iovar/ioctl call sites) after unattended
+  connects became possible (bench connects to the saved profile itself; scans by a driver self-scan key or the network
+  flyout URI, because WlanScan needs location consent on 24H2).
+- Fix package: AppleBcmWlan 0.1.63.0 (83a64d47) - authorization on by default (open: at association; WPA2-PSK: when
+  both keys are installed; verified through sta_info; one retry, then fallback to the ring re-create at scan end; 122
+  at disassociation; any other AKM is refused at connect). Cross-review GO for the gate run and for an overnight soak;
+  not run yet. StallRecover and RecreateAtScanEnd are kept until the soak shows no stall.
+- Also this night: S1/S2/S3 on the old hypervisor (EXP2696-2698) - the driver detects a trapped firmware and fails
+  scans visibly; the host trap buffer does not prevent the trap (the firmware writes its halt word 0x30000009 into it:
+  a working early notification); automatic restart cannot recover on an unfiltered hypervisor (each restart re-probes
+  and re-traps; bounded at 3, then the device stays failed). The m1n1 filter remains the protection.
+- Host note: the Mac's system volume ran out of space during the night (swap and session temp files); work resumed
+  after scratch build trees with archived outputs were removed. Free space stays small.
+- Next causal targets: G + soak on 0.1.63.0; audio H1s-2 (I2C controller enable, 0.1.12.4) on the audio image with the
+  filter; camera 0.7.1.1 at the next attended session; Bluetooth persistent start 0.0.19.0 (tier 1 first).
