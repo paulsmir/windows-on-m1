@@ -82687,3 +82687,7 @@ EXP2654 HARDWARE BEFORE 2026-11-17T14:47:38Z (afternoon batch, architect order; 
 EXP2656 HARDWARE BEFORE 2026-11-17T14:48:54Z:
 AUDIO-M0 v2 boot: m1n1 f911bd8e (u-audsdz) + MUCPCWIFI001 (--host-request launcher); preregistered text in the EXP2654 batch HARDWARE BEFORE entry above.
 - Launcher launch-kbd2656.sh sha256 3915246b737fc106 (launch-kbd.sh 51d76b6354b693e4); m1n1 f911bd8e25b3a76f956b71fdd5df955bd0202e5c99931b0b504a06b4805ad6a4; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 35754a6b1.
+
+EXP2657 HARDWARE BEFORE 2026-11-17T14:50:43Z:
+re-arm boot: m1n1 f22f2186 + MUCPCWIFI001 (--host-request launcher), AppleBcmWlan 0.1.53.0 V1 armed; preregistered text in the EXP2654 batch HARDWARE BEFORE entry above.
+- Launcher launch-kbd2657.sh sha256 50beaaec9c808c6d (launch-kbd.sh 51d76b6354b693e4); m1n1 f22f218674da259bdcb38649baf23e556732fbf2d6c13efe8ca316556f33783c; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 2c93fb317.
