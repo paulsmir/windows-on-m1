@@ -7935,3 +7935,44 @@ and port driver source; installer moved to the current driver set.
   staged), AppleBcmBt 0.0.15.0 with tier 3 armed and the bond present, no camera or audio package; gate clean.
 - Process: operator steps run at announced clock times (bench announces T at least 2 minutes ahead, architect notifies
   the user one minute before T). Before a connect session the bench counts WLAN profiles under the current interface.
+
+## UPDATE 2026-11-17T22:30:34Z - late session: PCI re-scan traps the Wi-Fi firmware (fixed in m1n1), connect #2, audio and camera causes narrowed (EXP2680-2695)
+
+- NEW DEFECT, confirmed and fixed at its owner: a guest PCI re-scan with the Wi-Fi firmware running traps the firmware.
+  EXP2686 (audio device start), EXP2689 (plain profile, one pnputil /scan-devices), EXP2691: firmware console "ERROR
+  ATTENTION", device TLP header log = CfgRd0 to bus 1 device 0 function 2 (absent), then TRAP 4 on a NULL read; scans
+  return nothing until a device restart. m1n1's ECAM policy passed functions 0-7 to the chip. Fix APCIE_ECAM_FN_SET
+  (m1n1 integration/all-flags-v2 a62d2ae4, cross-reviewed twice): the function set is learned once before guest entry,
+  accesses outside it are answered by m1n1. FS-1 EXP2693 (aa747405) and FS-2 EXP2694 (fab4356f) PASS: "function set
+  01:00 mask 0x03 learned", re-scans cause no attention log and no trap. Bench m1n1 for the Wi-Fi profile is now
+  fab4356f; recovery pair stays f22f2186 + fd94b781. Standing gate: every Wi-Fi-profile boot reads mask 0x03 as learned.
+  Not yet shown on a filter image: the real audio device enable as trigger. Earlier "no scan results / stopped
+  answering" observations that followed a PnP action in the same device start are candidates for this cause (not
+  reinterpreted).
+- Driver side of the same defect (not run yet): AppleBcmWlan 0.1.58.0 = trap detection, function gated off, bounded
+  restart (cross-review GO after W1/W2), plus opt-in HostTrapBuf - the macOS driver always publishes a host error/trap
+  buffer (shared +0x58/+0x5c, host_cap 0x20000) and we publish none; hypothesis: the firmware's NULL read is that
+  missing buffer. S1/S2/S3 queued on the old hypervisor f22f2186 on purpose.
+- Wi-Fi connect #2 (EXP2695, fab4356f, 0.1.54.0): run by the bench itself with the user's permission (wlanctl on the
+  saved profile; nobody reads or types the key). Variant C = PhaseBits (+ flag bit 0) + EventMaskMac + FlowPrioMap
+  (PktTxStatus refused by the firmware): frozen 3 of 3, home-only control clean - the dialect union is rejected.
+  PhaseBits is safe under traffic (~43 flowring wraps, no mismatch). WlanScan is ACCESS_DENIED without location consent
+  (24H2); the network flyout URI started in the interactive session is a working unattended trigger. In-place driver
+  update keeps the interface GUID and the saved profile (EXP2682). Next: X0 / FlowCreateMaxItems 256 / HostTrapBuf
+  connects on 0.1.59.0, then a halving plan over the complete macOS-versus-ours init diff.
+- Bluetooth: 0.0.16.0 (receipts, refusal layouts) is the armed package (EXP2681). Reconnect after a Bluetooth off/on
+  works twice; after a guest restart Windows issues no connect - cause open (bond and radio address are intact). The
+  persistent start (0.0.19.0) passed cross-review after a NO-GO round (uncounted crash window, alternating counters,
+  stale one-shot arm); not run. User decision: persistent tier 3 allowed once verified.
+- Audio: add path proven on the software-devnode gate (EXP2680/2684/2690) and on the real device (AddStep 301); causes
+  found in order - NULL attributes to AcxPinCreate (0.1.12.1), missing INF interfaces (0.1.12.2), and EXP2691: I2C3 is
+  controller revision 6 and our CTL write lacks the enable bit, so the codec probe never runs (fix 0.1.12.4 ordered).
+  No sound step has run.
+- Camera: DAPF programmed by the driver in all 16 slots (EXP2687, Mu MUCAMWIFI002-cam); the read-back predicate
+  rejected it because the END register keeps 4-byte granularity; corrected package 0.7.1.1 reviewed GO, waits for an
+  attended LED window. LED for EXP2666 / EXP2675 / EXP2687: not observed by the operator.
+- User decisions 2026-11-17 (late): bench scripts may connect to the saved Wi-Fi profile, trigger scans, toggle
+  Bluetooth and start tests unattended; reading public source online without saving files is allowed; no password
+  file - nobody handles the key.
+- Bench state: fab4356f + fd94b781, AppleBcmWlan 0.1.54.0 plain V1 (StallRecover 1, FR), AppleBcmBt 0.0.16.0 tier 3
+  with the bond, no camera or audio package; S-series and X0/C3/C4 queued unattended.
