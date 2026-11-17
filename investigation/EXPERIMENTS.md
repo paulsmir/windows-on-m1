@@ -82711,3 +82711,13 @@ EXP2658 HARDWARE BEFORE 2026-11-17T18:07:39Z: Wi-Fi connect #1 (V1, FirmwareSet 
 - Expected (scan 1 decisive): Clean or Frozen per the sheet definitions. Verdict 3 (IDLE) / EXIT invalid / RingSnapStale rising = not attributable.
 - Failure criteria: any IRQ PACED or IRQ STORM in the HV log (gate fail); HV UNHANDLED; guest hang; BAR fault counter rising outside a stop.
 - Recovery: none needed for a freeze (StallRecover 1 re-creates the ring); on a hang, exact-PID stop + AT_PROXY recovery to the same armed triple. Evidence: .local/experiments/EXP2658-wconn1/.
+
+EXP2659-EXP2663 HARDWARE BEFORE 2026-11-17T18:26:18Z: per-scan keys inside the EXP2658 association (architect order 18:25Z; plan section 3 "free additions inside the same connect"). Same boot, package, FirmwareSet 1, StallRecover 1, load 60/s (pl3, Wi-Fi-bound raw ICMP). Scans come from the Wi-Fi list Pavel leaves open (~1/min); the bench triggers none. One key per scan, written to the Wi-Fi device key after the previous RingSnap record closes and removed after its own record closes (sequencer kseq.py); every other key 0/absent; RingSnapKeys must equal the expected key word, else the scan is void. Scan flag 0x04 off; EscanParamsVer and ScanEndDoorbell not run.
+- EXP2659 K1 ScanLowPrio 1 (H4). Check: EscanReqRaw scan_type has 0x02; keys word 0x1002000.
+- EXP2660 K2 EscanTimesMac 1 (H3b). Check: EscanReqRaw active 20 / passive 110 / home 45; keys 0x1001000.
+- EXP2661 K3 ScanHomeAwayMs 110 (H3a). Check: ScanHomeAwayReadBack 110, ScanHomeAwayRestoreVal 100; keys 0x100006e.
+- EXP2662 K4 ScanAssocMode 2 (home only), positive control: expected clean (EXP2567); keys 0x1020000.
+- EXP2663 K5 mode 0, no key, closing control: expected frozen.
+- WHY THIS HYPOTHESIS: (1) EXP2658 W0 + scans 1-3 froze on FirmwareSet 1 with the H6 signature (ring 0/8 move, ring 2 not fetched even on home returns), so H1 is rejected and the remaining scan-level levers H4/H3b/H3a are next by the plan's ranking; (2) 0.1.53.0 reads these keys per scan (AppleBcmWlan.cpp 1809-1811 at 10482af3c), so each costs one scan, not a reconnect; (3) EXP2567 showed home-only is clean, which validates "clean" on this package.
+- Rules: frozen keyed scan -> next key; clean K1-K3 -> immediate mode-0 control then the same key again (A/B/A); EXIT invalid / verdict 3 / stale -> void, repeated once. Verdict per the run sheet by hand (RingSnapVerdict alone is not used: a mid-window ring re-creation makes it read 1, EXP2658).
+- Stop: any HV IRQ PACED / STORM / UNHANDLED or BAR fault; link lost > 30 s; load not back to 100 % within 30 s after a recovery. Recovery: keys removed; the boot stays armed. Evidence: .local/experiments/EXP2658-wconn1/keys/.
