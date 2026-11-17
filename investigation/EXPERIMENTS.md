@@ -82560,3 +82560,9 @@ IP-2: one variable against EXP2638, the m1n1: 36d447c1 -> f22f218674da259bdcb386
 EXP2641 HARDWARE BEFORE 2026-11-17T13:13:53Z:
 IP-2 boot: m1n1 f22f2186 (fixup + irqstat + per-route pace) + MUCPCWIFI001 (--host-request launcher); preregistered text in the EXP2641 HARDWARE BEFORE entry above.
 - Launcher launch-kbd2641.sh sha256 f80a931b0b0b6f51 (launch-kbd.sh 51d76b6354b693e4); m1n1 f22f218674da259bdcb38649baf23e556732fbf2d6c13efe8ca316556f33783c; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 64a49ada9.
+
+EXP2641 ACTUAL (2026-11-17 UTC): IP-2 PASS.
+- Part A (normal operation): boot up 13:14:22Z (f22f2186 + fd94b781); 0.1.50.0 (oem29) and 0.1.51.0 (oem30) deleted from the guest store so 0.1.46.0 (oem28) bound; Wi-Fi restart 13:15:06Z, gate 18.20.510, FR, BSS 57, StallEpisodes 0. IRQSTAT per 10 s: v960 23267, 18641, 1290 (boot bursts unthrottled), later 146-1529; v857 165-1157; v865 2; v695 215. IRQ PACED 0, IRQ STORM 0 in part A.
+- Part B: mse off 0x0006 -> 0x0004, faults 2, DeviceGone 1 (Where 1, AtMs 72523); mse on 0x0404 -> 0x0406; Disable (WlanD0ExitTarget 5, StopReaders 2, QuiesceChip 2); Enable 13:15:42Z -> OK: "IRQ PACED vINTID=695 aic=695 ... enter#=1" then "IRQ PACED off vINTID=695 after 143 ms, last window 26, deferred unmasks 240"; no STORM line; IRQSTAT v695 1401 then 63; EXITS irq 1746 / 535 / 230 (dabt 866267 one window, then ~1-2k); SSH alive; no bugcheck; Wi-Fi back: 18.20.510, FR, BSS 66, DownloadStatus 1. Only vINTID 695 ever paced.
+- Ordered restart (module bases recorded): ENDED 13:16:55Z; shutdown phase: 0 faults, 0 PACED, 0 STORM; UNHANDLED 0.
+Verdict: confirmed - per-route pacing touches only the PCIe INTx route; normal operation unpaced; the post-gone storm is contained.
