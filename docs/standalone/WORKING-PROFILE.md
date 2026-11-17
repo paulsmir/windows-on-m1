@@ -152,10 +152,36 @@ with its own golden routes. No code was written for it.
 ## 7. Hardware checkpoint (preregistered, not run)
 
 The run sheet is `.local/handoff/night-20261117/m1n1-standalone-working.md`, section
-HARDWARE-READY. Summary: one standalone cold boot of `dist/working/boot.bin` (sha256
-37309f5c…) plus one ordered restart after staging the GPU package. Success means the
+HARDWARE-READY. Summary: one standalone cold boot of `dist2/working/boot.bin` (sha256
+5a4dae7f…, m1n1 b2b07e10; supersedes `dist/working` 37309f5c…, which lacks the D209 fix
+P2) plus one ordered restart after staging the GPU package. Success means the
 installed Windows reaches the desktop on native AppleAns, with APPL0002 at Code 0 after
 that restart. The bench assisted launch remains the rollback.
+
+## 8. Proxy-side step audit (2026-11-17, second pass)
+
+Every step the bench launcher performs on the host before or after the m1n1 payload starts,
+for the working profile (EXP2491 `full-owner2491.sh`: chainload.py from
+integration-ad04 `m1n1_windows` 0d3a75b3, run_uefi.py with the proxyclient
+`m1n1-wt-ans-direct-slc`; Wi-Fi from EXP2585 `launch-wifi2585.sh`). Status is that of
+`standalone/working-profile` b2b07e10 + root bb153a97e.
+
+| # | Host step | Source | Standalone | Status |
+|---|---|---|---|---|
+| P1 | `PMU(u).reset_panic_counter()`, twice: SPMI write of 0 to the PMU scratchpad error-count byte | `m1n1/setup.py:29,33` (imported by chainload.py:20), `hw/pmu.py:28-31` | not done | **not done, decision**. It is an NVMEM write, under the "no NVRAM/SPI writes" rule and the open user decision of 2026-11-17. The standalone boot never resets it; macOS resets it when it boots (hypothesis, not measured). Consequence if it grows: iBoot may offer recoveryOS after repeated failed boots. The operator then picks the startup disk; nothing is lost. |
+| P2 | IOMFB UTC anchor in /chosen (`m1n1-iomfb-utc-ms/-cntpct/-cntfrq`) from the host clock | chainload.py:108-114 | none: no host. `dcp.c` D209 then failed the IOMFB bootstrap (`fail(bootstrap)`, dcp_iomfb_bootstrap.c:342-355) | **was missing, fixed**: m1n1 b2b07e10 `IOMFB_UTC_UPTIME=1` answers D209 from the uptime clock, as Linux without an RTC (Asahi iomfb_template.c:713 `ktime_get_real`); root bb153a97e adds the flag to the working build |
+| P3 | SEPFW and preoslog copied next to the new image, /chosen memory-map updated | chainload.py:42-74 | `prepare_boot_data` reads TrustCache, SEPFW and preoslog from the memory map (hv_autonomous_runtime.c:213-230) | done |
+| P4 | Secondary CPU RVBARs = entry & ~0xfff | chainload.py:116-124 | A18 | done |
+| P5 | Boot args, stub, `p.reload` into the new m1n1 | chainload.py:128-190 | iBoot -> stage1 -> boot.bin stage chainload in C | done (by design) |
+| P6 | run_uefi.py steps A1..A27 | section 2 | section 3 | done, except the by-design rows A14, A21, A23, A27 |
+| P7 | `WOM1_ALLOW_LEGACY_LAUNCH_CONTRACT=1` on every bench launcher | full-owner2491.sh:12, launch-wifi2585.sh:14 | golden contract enforced, fail closed | different by design. The bench does not prove the golden for itself; EXP2481 `contract.bin` matches it (hv_launch_golden_j313_test) |
+| P8 | `WOM1_ANS_CONTRACT=config/j313-ans.json`: broker base/size/GSIV/ABI | hv/__init__.py:1880-1931 | ABI constants in `hv_ans_broker_abi.h`, the same values | done (8a8b88be) |
+| P9 | ANS-PRIVATE / ANS-BROKER RESERVED tracers keep the broad /arm-io replay off the C ANS hooks | hv/__init__.py:1919-1931 | `map_arm_io_ranges` runs at STAGE2, before the ANS hooks at PCI_NVME, so the hooks win | done (order) |
+| P10 | `WOM1_AGX_G2_POWER_BROKER=1` map + retry | hv/__init__.py:1933-1942, 2397-2402 | flag 0x40, retry at READY | done (76a8c17b) |
+| P11 | `--guest-ram-profile expanded`, `--low-mem` | run_uefi.py:322-326, 553-559 | flag 0x100; low memory = A20 | done |
+| P12 | `WOM1_PCPU_PSTATE=12`, `WOM1_DRAMCFG_FOLLOW_PSTATE=1`, `WOM1_CPPC=1` | run_uefi.py:288-311, 614-617 | P-state bits, PLATFORM stage, flag 0x80 | done |
+| P13 | Wi-Fi: `WOM1_WIFI_PCIE=1` (pcie_init before hv_init), `_INTX`, `_DMA`, `_BAR_TRAP`, `WOM1_HV_SERROR_INJECT`, `_PERST_FIRST`; m1n1 build `WIFI_PCIE_LINK=1` (plus `APCIE_BAR_DIAG`/`APCIE_BAR_BOUND` on wifi/bar-diag) | hv/__init__.py (wifi bench-int) 1749-1760, 1929-1960; launch-wifi2585.sh:14 | none | **missing by decision**: optional second profile (section 5), not in the default image |
+| P14 | Host services while the guest runs: USB proxy console, Python traps, hang/reset pollers | hv/__init__.py, bench scripts | native C hooks; no host | by design (A21); evidence comes from the guest (SSH) and the monitor variant |
 
 ## PORTABILITY
 
