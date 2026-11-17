@@ -82220,3 +82220,11 @@ EXP2609 ACTUAL (2026-11-17 UTC): BD-2 PASS - root port Completion Timeout progra
 - Same LINKSTS 0x99000211 print after the Wi-Fi restarts as in EXP2608 (so it is not caused by the CTO write).
 - full.log: only the two boot banners mention SError; no Data Abort/new SError; DART line unchanged.
 Verdict: confirmed. CTO range B is honoured as a register write (readback equal); the bound adds nothing to healthy traffic. Whether the port actually ends a stalled request in 16-55 ms is only testable with a real stall (B3-D, not ordered).
+
+EXP2610 HARDWARE BEFORE 2026-11-17T11:06:59Z:
+reference Wi-Fi boot (operator-free queue, architect item 5): bench Wi-Fi m1n1 609a98bc (m1n1-wbi-257d408e-wifi.macho) + Mu MUCPCWIFI001 fd94b781, WOM1_WIFI_PCIE=1 _INTX=1 _DMA=1 _BAR_TRAP=1 WOM1_HV_SERROR_INJECT=1 = EXP2585 launch; AppleBcmWlan 0.1.43.0 installed, FirmwareSet 1, FR; MAC/cal re-staged after boot; StallRecover 1 / ScanAssocMode 0 written after the device start -> V1 armed (= EXP2606) for the user's/Codex's connect; no connect by the bench.
+- Single variable vs EXP2609: m1n1 macho ff5236f7 -> 609a98bc (back to the reference).
+- WHY: (1) BD-1/BD-2 are diagnostic images; (2) the connect evidence must come from the reference m1n1; (3) EXP2606 is the matching V1 gate.
+- Expected: boot to SSH, V1 gate = EXP2606 (18.20.510, FR read back, scans, no stall/trap). Queued in the same boot: Bluetooth 0.0.12.0 tier-1 regression (own entry) and a read-only Wi-Fi radio-state record (no netsh capture).
+- Failure: boot or gate regression -> relaunch; guest hang -> kill exact run_uefi PID, AT_PROXY recovery.
+- Launcher launch-kbd2610.sh sha256 1eba7c74549e1ae5 (launch-kbd.sh 51d76b6354b693e4); m1n1 609a98bc5a5799e8d70980642d87f98b83196af9761cbb68bba13ea70a318431; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 35bfa9fc2.
