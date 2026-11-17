@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "profile": "working-wifi",
+  "status": "design-only: not implemented in the autonomous runtime, NOT for SA-1, never install",
+  "base_profile": "working (docs/standalone/WORKING-PROFILE.md, manifest flags 0xc1e1)",
+  "assisted_source": {
+    "launcher": ".local/experiments/EXP2585-wifirest/launch-wifi2585.sh",
+    "m1n1_macho_sha256_prefix": "609a98bc",
+    "m1n1_branch": "wifi/bench-int 257d408e",
+    "mu_fd": "MUCPCWIFI001",
+    "mu_fd_sha256_prefix": "fd94b781",
+    "env": [
+      "WOM1_WIFI_PCIE=1",
+      "WOM1_WIFI_PCIE_INTX=1",
+      "WOM1_WIFI_PCIE_DMA=1",
+      "WOM1_WIFI_PCIE_BAR_TRAP=1",
+      "WOM1_HV_SERROR_INJECT=1"
+    ]
+  },
+  "m1n1_make_flags": [
+    "AGX_LOCAL_RESERVE_V2=1",
+    "IOMFB_FULL_OWNER=1",
+    "AGX_BROKER_LOCK_SPLIT=1",
+    "AGX_SCANOUT_TWO_LAYERS=1",
+    "CPPC_CAPACITY_SCALE=1",
+    "IOMFB_UTC_UPTIME=1",
+    "WIFI_PCIE_LINK=1"
+  ],
+  "m1n1_make_flags_optional": {
+    "APCIE_BAR_DIAG=1": "wifi/bar-diag 27a7283f..49ee6ee1; after BD-1",
+    "APCIE_BAR_BOUND=1": "wifi/bar-diag 211dd2ef..8f17fdfe; after BD-2"
+  },
+  "manifest_flags_proposed": {
+    "0x200": "Wi-Fi PCIe bundle: pcie_init before hv_init, ECAM filter, BAR trap, INTx route, DMA window, SError inject (one bit: the line only runs them together)",
+    "0x400": "reserved (PERST-first, opt-in on the assisted line)",
+    "0x800": "reserved"
+  },
+  "values_from_exp2585_full_log": {
+    "ecam_filter": "guest 0xbfe00000 -> phys 0x690000000 size 0x200000, root 0, bus 1",
+    "bar_window": "guest 0xc0000000 -> phys 0x6c0000000 size 0x1000000 (trap-forwarded)",
+    "intx_route": "AIC 695 -> vSPI 695 level, INTx mask 0x3",
+    "dma_window": "SID 1, IOVA 0x100000 + 0x3ff00000",
+    "serror_policy": "inject virtual SError"
+  },
+  "autonomous_runtime_work_missing": [
+    "PLATFORM stage: pcie_init() before hv_init (P_WLAN path), fail closed on rc != 0",
+    "PCI_NVME stage: hv_apcie_ecam_init, hv_apcie_bar_trap_init, hv_apcie_intx, hv_apcie_dma, hv_serror_policy with the values above",
+    "golden contract: 13th IRQ route 695->695 and the segment-1 windows, measured from a Wi-Fi contract.bin",
+    "pack_boot / launch_profile: bit 0x200 and the MUCPCWIFI001 FD pin"
+  ]
+}

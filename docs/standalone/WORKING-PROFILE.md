@@ -180,8 +180,26 @@ integration-ad04 `m1n1_windows` 0d3a75b3, run_uefi.py with the proxyclient
 | P10 | `WOM1_AGX_G2_POWER_BROKER=1` map + retry | hv/__init__.py:1933-1942, 2397-2402 | flag 0x40, retry at READY | done (76a8c17b) |
 | P11 | `--guest-ram-profile expanded`, `--low-mem` | run_uefi.py:322-326, 553-559 | flag 0x100; low memory = A20 | done |
 | P12 | `WOM1_PCPU_PSTATE=12`, `WOM1_DRAMCFG_FOLLOW_PSTATE=1`, `WOM1_CPPC=1` | run_uefi.py:288-311, 614-617 | P-state bits, PLATFORM stage, flag 0x80 | done |
-| P13 | Wi-Fi: `WOM1_WIFI_PCIE=1` (pcie_init before hv_init), `_INTX`, `_DMA`, `_BAR_TRAP`, `WOM1_HV_SERROR_INJECT`, `_PERST_FIRST`; m1n1 build `WIFI_PCIE_LINK=1` (plus `APCIE_BAR_DIAG`/`APCIE_BAR_BOUND` on wifi/bar-diag) | hv/__init__.py (wifi bench-int) 1749-1760, 1929-1960; launch-wifi2585.sh:14 | none | **missing by decision**: optional second profile (section 5), not in the default image |
+| P13 | Wi-Fi: `WOM1_WIFI_PCIE=1` (pcie_init before hv_init), `_INTX`, `_DMA`, `_BAR_TRAP`, `WOM1_HV_SERROR_INJECT`, `_PERST_FIRST`; m1n1 build `WIFI_PCIE_LINK=1` (plus `APCIE_BAR_DIAG`/`APCIE_BAR_BOUND` on wifi/bar-diag) | hv/__init__.py (wifi bench-int) 1749-1760, 1929-1960; launch-wifi2585.sh:14 | none | **missing by decision**: optional second profile (sections 5 and 9, `config/standalone-wifi-profile.json`), not in the default image |
 | P14 | Host services while the guest runs: USB proxy console, Python traps, hang/reset pollers | hv/__init__.py, bench scripts | native C hooks; no host | by design (A21); evidence comes from the guest (SSH) and the monitor variant |
+
+## 9. Optional second profile "working-wifi" (design only, NOT for SA-1)
+
+Build configuration: `config/standalone-wifi-profile.json` (root). Nothing reads it, and no
+image is built from it. The default working image above does not contain any of this.
+
+| # | Item | Assisted (EXP2585) | Standalone status |
+|---|---|---|---|
+| W1 | m1n1 make flags | bench flags + `WIFI_PCIE_LINK=1` (609a98bc) | config lists them plus `IOMFB_UTC_UPTIME=1`; `APCIE_BAR_DIAG`/`_BOUND` optional after BD-1/BD-2 |
+| W2 | Link bring-up before `hv_init` | `WOM1_WIFI_PCIE=1` -> `p.pcie_init()` (hv/__init__.py 1749-1760) | missing (PLATFORM stage) |
+| W3 | ECAM filter, segment 1 | guest 0xbfe00000 -> 0x690000000, 2 MiB, root 0, bus 1 | missing |
+| W4 | BAR window | `WOM1_WIFI_PCIE_BAR_TRAP=1`: guest 0xc0000000 -> 0x6c0000000, 16 MiB, trap-forwarded | missing |
+| W5 | INTx | `WOM1_WIFI_PCIE_INTX=1`: AIC 695 -> vSPI 695 level, mask 0x3 | missing; needs a 13th golden route from a Wi-Fi contract.bin |
+| W6 | DMA window | `WOM1_WIFI_PCIE_DMA=1`: SID 1, IOVA 0x100000+0x3ff00000 | missing |
+| W7 | Guest SError policy | `WOM1_HV_SERROR_INJECT=1` | missing |
+| W8 | Mu | MUCPCWIFI001 fd94b781 (MCFG entry 1, PCI1, _PRT) | pin in a second manifest profile |
+| W9 | Manifest | — | proposed bit 0x200 (one bundle), 0x400/0x800 reserved |
+| W10 | Bluetooth | AppleBcmBt on fn1 of the same device; B3 runs preregistered on the assisted line | nothing standalone-specific beyond W2..W7 |
 
 ## PORTABILITY
 
