@@ -7898,3 +7898,40 @@ and port driver source; installer moved to the current driver set.
   AppleAudio 0.1.11.0, Mu MUAUD004 (Wi-Fi Mu + AUDI). Speaker stage 3 is offline work only.
 - Open as before: Wi-Fi TX stall after an associated off-channel scan (connect #1 pending); SMC RTKit wake (AppleSmc
   0.1.0.9, PWR-W0) needs the user's yes and presence.
+
+## UPDATE 2026-11-17T20:30:28Z - evening session with the user at the machine: Wi-Fi connect #1, Bluetooth mouse, camera E1/E2/E2d, audio A1/H0/H1 (EXP2658-2679)
+
+- Wi-Fi (EXP2658-2663; f22f2186 + fd94b781 + AppleBcmWlan 0.1.53.0, FirmwareSet 1): connect #1 done by the user, who
+  typed the key himself - the saved profile was bound to an old interface GUID (driver swaps with /uninstall), so the
+  first click produced no connect request at all. Association, keys and traffic work (bound load 60 echo/s each way,
+  100 % between scans). The TX flowring freeze is reproduced on FirmwareSet 1: Windows' own post-connect scan and four
+  mode-0 scans frozen; ScanLowPrio 1, EscanTimesMac 1 (twice, formally void: AFTER sampled on a deleted ring, device r
+  fixed through FINAL) and ScanHomeAwayMs 110 frozen; home-only control clean; closing mode-0 control frozen.
+  New fact: a ring re-created during the scan is not fetched either; recovery works only after the scan end.
+  Verdict: H1 (firmware build), H3a, H3b, H4 rejected. Active hypothesis: H6, a firmware-internal gate on TX that
+  follows the interface/peer (control and RX rings keep moving). Next causal target: the mechanism table (macOS dext
+  and brcmfmac versus ours around a scan) from the Wi-Fi line, then ranked single-variable connects. No PACED, STORM,
+  UNHANDLED or BAR fault in the whole session.
+- Bluetooth: EXP2664 (0.0.14.0, tier 3) pairing FAILED twice - LE link up, then 0x2015 LE Read Channel Map refused with
+  a status-only synthesized completion, BthMini 5, SMP time-out 29-30 s later. AppleBcmBt 0.0.15.0 (165867b83: tier 3
+  admits 2015 / 1405 / 1403 / 0C2D; full-length synthesized refusals; StackTail, disconnect-reason, LE-meta and
+  per-channel ACL receipts; live ReceiptNow trigger) EXP2670 PASS: the user's LE mouse paired, HID up, AclRx =
+  AclReadsDone, reconnect after a Bluetooth off/on about 30 s. Accepted Bluetooth package: 0.0.15.0. Open: reconnect
+  after a guest restart FAILED (EXP2676: Windows issues no connect although the scan hears adverts; toggle probe not
+  done); the one-shot stage-6 arm means Bluetooth never starts by itself after a boot (persistent start = design task).
+- Camera: E1 PASS EXP2665 (Mu MUCAMWIFI001-cam, APPL0004 with stage 0). E2 FAILED EXP2666 (firmware boot handshake
+  time-out). Diagnostic E2d EXP2675 (0.1.1.1, 61ea7974, reads only): coprocessor running (CONTROL 0x10, STATUS&3 0), no
+  DART fault flag, power on, DAPF block all zero - hypothesis "DAPF unprogrammed" supported, not proven. DAPF step built
+  (Mu MUCAMWIFI002-cam abadb7e3 + driver 0.2.1.1 ea912140), cross-review GO after finding F1; not run. E3 not run. The
+  user's LED observations for EXP2666 / EXP2675 are missing.
+- Audio: A1 bb91412e FAILED before guest entry (EXP2668): its six stage-2 maps overflowed the 64-entry launch-contract
+  stage-2 record (61 + 6). A1' e0b245a2 (plan 16 -> 10 actions, no stage-2 map; bb91412e superseded) PASS EXP2672; H0
+  PASS EXP2673 (MUAUD004, APPL0006, IRQ 963/964). H1 FAILED: 0.1.11.0 Code 31 / 0xC000000D (EXP2674); diagnostic
+  0.1.11.1 names AddStep 105 = first AcxPinCreate of the render circuit (EXP2677); candidate 0.1.12.0 fails at the same
+  step, its changes lie after it (EXP2678). No sound step ran. Budget facts for every profile: the launch-contract
+  stage-2 record has 3 free slots on the Wi-Fi profile; the IRQ route table holds 15 of 16 (camera + audio routes in
+  one image would not fit).
+- Bench state: EXP2679, f22f2186 + fd94b781, AppleBcmWlan 0.1.53.0 (FirmwareSet 1, StallRecover 1, ScanAssocMode 0, FR,
+  staged), AppleBcmBt 0.0.15.0 with tier 3 armed and the bond present, no camera or audio package; gate clean.
+- Process: operator steps run at announced clock times (bench announces T at least 2 minutes ahead, architect notifies
+  the user one minute before T). Before a connect session the bench counts WLAN profiles under the current interface.
