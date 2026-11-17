@@ -82615,3 +82615,7 @@ W53: merged candidate AppleBcmWlan 0.1.53.0 on m1n1 f22f2186 (fixup + irqstat + 
 - Sequence: (1) install + gate: all scan keys 0, FirmwareSet 0 then 1, receipts StartMbInt*, GuardFires 0; (2) gone sequence once: mse off -> DeviceGone -> mse on -> Disable -> Enable: no storm, report whether PACED 695 appears, Wi-Fi back; (3) three ordered restarts with relaunch + gate (EXP2649-2651): marker burst, zero faulted BAR accesses, zero PACED/STORM.
 - WHY: (1) each part passed separately (EXP2640, EXP2639 markers, EXP2642); (2) the merge adds no code beyond them; (3) the armed package must carry all fixes at once.
 - Pass: all three parts. Then arm V1 on 0.1.53.0 + f22f2186 (FirmwareSet 1, StallRecover 1, ScanAssocMode 0, scan keys 0), other AppleBcmWlan packages removed from the guest store, device enabled. Fail: 0.1.45.0 armed on f22f2186. Recovery: launch-wifi end / AT_PROXY recovery.
+
+EXP2648 HARDWARE BEFORE 2026-11-17T13:33:41Z:
+W53 boot: m1n1 f22f2186 (fixup + irqstat + per-route pace) + MUCPCWIFI001 (--host-request launcher); preregistered text in the EXP2648 HARDWARE BEFORE entry above.
+- Launcher launch-kbd2648.sh sha256 0117dc820f503df6 (launch-kbd.sh 51d76b6354b693e4); m1n1 f22f218674da259bdcb38649baf23e556732fbf2d6c13efe8ca316556f33783c; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 0bec58e22.
