@@ -7721,3 +7721,21 @@ Night organisation (user's order 23:05Z): parallel offline lines on Opus 5.5 for
 standalone boot of the working profile, external monitor, keyboard backlight, webcam (audio, USB, installer
 paused after their milestones); bench queue for idle gaps in .local/handoff/night-20261117/BENCH-QUEUE.md
 (Bluetooth B1-B4 first, USB U1b observer second); guest-screen operator = Codex on file commands.
+
+UPDATE 2026-11-17T00:24Z (night lines, hardware):
+Bluetooth (new driver AppleBcmBt, same chip's second PCIe function, live launch-wifi boot, no m1n1/Mu change):
+B1 PASS (EXP2577, function binds), B2 PASS (EXP2578, function reset + OTP, Wi-Fi function untouched),
+B3 FAIL on 0.0.2.0 (EXP2579: start hung, guest degraded, restart needed) then B3 PASS on 0.0.3.0 (EXP2583:
+firmware booted in 457 ms, device DMA write proven) - the hang did NOT reproduce and its cause is not
+established (package timing, boot age, DART value and the Wi-Fi function's firmware set all differed).
+Source finding from EXP2579, a hypervisor defect independent of the cause: the EL2 BAR hook forwards guest
+MMIO with no timeout, marker or counter while holding the global HV lock, so one access the device never
+completes hangs every vCPU silently; a flag-gated fix is being prepared offline. B4 (one HCI command) running.
+Wi-Fi: EXP2581/2582 - AppleBcmWlan 0.1.39.0 can load a second firmware set; control on 18.90.5 as before;
+this host's 18.20.510 build boots, takes the CLM, country FR read back, scans (56 BSS). The associated-scan
+test on it waits for the connect step, which only the user or his tool performs (the Mac's lock screen
+blocks the tool; the bench refused, correctly, to connect with the saved profile on an architect request).
+Offline results tonight (built, hash-recorded, NOT run): standalone boot image of the working profile with
+all current drivers; headphone audio (driver + m1n1 + Mu candidates); battery read-only driver + Mu with the
+SMC device (PWR-R1..R3 sheets); webcam stage packages; external-monitor mirror path; USB Type-C observer image
+and port driver source; installer moved to the current driver set.
