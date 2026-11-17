@@ -7760,3 +7760,24 @@ and port driver source; installer moved to the current driver set.
 - Fact: chainload.py imports m1n1.setup, which resets the PMU panic counter (SPMI NVMEM write) at every
   bench boot and recovery; upstream behaviour, user informed, no decision yet.
 - Next causal target: V1 on a connect, then HdrFlagBit0, then PhaseBits 2/1 on firmware set 0, one connect each.
+
+## UPDATE 2026-11-17T10:11:45Z - Bluetooth to first transmit, Wi-Fi 0.1.41.0 armed for V1
+
+- Bluetooth AppleBcmBt: B6a passive LE scan PASS EXP2595 (0.0.6.0); 0.0.7.0 regression PASS EXP2596 (scan type
+  recorded on Command Complete, enable without confirmed passive type refused); B6b first transmit PASS EXP2598
+  on 0.0.7.0 open policy (inquiry status 0, LE active scan with scan responses; one 0x200A status 0x0C before
+  Set Random Address, read as stack ordering); user approval given directly in the bench session. EXP2597 = the
+  refused first attempt (no transmit). 0.0.8.0 (tiers: 1 receive, 2 discovery, 3 pairing; vendor range and
+  advertising refused in 1-3) tier-1 PASS EXP2599; 0.0.9.0 (a83da6953; +0x0C59 discovery, +0x1408 pairing,
+  BD_ADDR same/diff counts) tier-1 PASS EXP2602 (Same 1, Diff 0). BthMini 18 open: not a failing HCI command,
+  not an address mismatch; hypothesis "informational: no key storage on the adapter", to be settled by B7.
+- B7 (pairing) is fixed to tier 3 on 0.0.9.0 and waits for the user to name the device.
+- Wi-Fi AppleBcmWlan 0.1.41.0 (fe6203acc; per-ring receipts RingSnap/RingFrozenMask, keys EventMaskMac,
+  PktTxStatus, DsInbandDw default 0, KeysAddFail fix): N0 PASS EXP2600; V1 armed on it EXP2601 (FirmwareSet 1 =
+  18.20.510, StallRecover 1, ScanAssocMode 0). Next causal target unchanged: one connect + one associated scan
+  with a channel exit (run sheet R0 + V1), done by the user or Codex only.
+- Offline lines (local branches, nothing on hardware): audio 0.1.6.0 after an audit found five defects in the
+  earlier "hardware-ready" packages (0.1.2-0.1.5 must not be installed); power AppleSmc 0.1.0.4 (WMI, alert
+  order) + Mu MULPI001; m1n1 bounded BAR forward (BD-2), MDCR pre-entry fix, PSCI off-hold flag, standalone
+  image with D209 uptime answer; external display second-target patches pass the WDK compile gate (default
+  off); USB AppleTypeCPort rebuild; webcam AVStream stages compile; TDR H1 run sheet.
