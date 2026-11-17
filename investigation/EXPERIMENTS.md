@@ -82507,3 +82507,12 @@ EXP2638 ACTUAL (2026-11-17 UTC): IP-1 FAIL on the architect's rule (a legitimate
 - Answer to the architect's question (EXP2636 log): during the 20.8k/s storm the "BAR trap reads=771313 writes=948263" line did not change at all across 4 prints, so the ~4 dabt exits per interrupt were not forwarded Wi-Fi BAR accesses (likely the guest's interrupt-controller MMIO emulation).
 - Ordered restart 13:02:09Z (module bases first): no fault, UNHANDLED or PACED line in shutdown.
 Verdict: pacing as built paces the SSD interrupt during boot (trigger wrong); with 695 paced the post-gone storm did not develop and the guest stayed up.
+
+EXP2639 HARDWARE BEFORE 2026-11-17T13:03:40Z:
+W50: AppleBcmWlan 0.1.50.0 (stop-path markers, on 0.1.45.0) on a fresh Wi-Fi-profile boot (fixup m1n1 20930bb0 + MUCPCWIFI001, --host-request launcher). No Bluetooth package.
+- Package: branch wifi/markers-0150, commit 4643c5213e08a841396ac64572367401e6da24ea, builder bcmwlan-20261117T125158Z-w550x, provenance 44/44; unsigned sys AAD1B6A7BCBC994C53F92E1EE6A34A393E7EAD77F68471DBB101EE843AB1DD5B, inf A6E86165C90CD635E9BF8084FC3907F3D767C220CA8439A939E88AED3A551FAF (= CHANGES 6bfe96927); signed sys B4F3251515166F649B732CECD97DB6B8FF673725A99737FDF43792F58FA807A2, cat 4637C86B32816C34D317B0AA8816A5F1407623B83ACD1598D550B9807320361B (signer 35F48BAE).
+- Review 0bebb5399..4643c5213: only guest markers (Interrupt Line config writes, printed by m1n1 as "guest marker fn0 0xNN"): PreInterruptsDisabled 0x33 first / 0x4N target / 0x35 last, D0Exit 0x36 / 0x37, ReleaseHardware 0x39, D0Entry 0x3c, tick heartbeat 0x3a (first, then every 8th), tick after stop 0x3b; no other change.
+- Run: install + gate; one Disable/Enable (comparison: markers must appear); ordered restart (module bases first); from full.log: the D0Exit markers at the restart and any tick marker after them; fault counter at the restart.
+- Single variable vs EXP2627 (0.1.45.0 on the same m1n1): the markers.
+- WHY: EXP2634 Prev* was empty after a restart; a log-side marker does not depend on the registry surviving shutdown.
+- Expected: Disable shows 0x33,0x45,0x35,0x36,0x37,0x39; the restart shows 0x33,0x44,0x35,0x36,0x37 (if D0Exit runs) and no 0x3a/0x3b after 0x35; faults 0.
