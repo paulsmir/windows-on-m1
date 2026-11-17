@@ -82400,3 +82400,7 @@ W45: AppleBcmWlan 0.1.44.0 -> 0.1.45.0 stop-order fix in the EXP2626 boot (fixup
 - Single variable vs EXP2626: package 0.1.44.0 -> 0.1.45.0 (keys 0).
 - WHY THIS HYPOTHESIS: (1) EXP2613/2617 PCs map to BcmBusLiveTick and BcmEvtIsr reading the device after D0; (2) the driver had no D0Exit; (3) EXP2618 shows a gone device produces m1n1 fault lines, so faults=0 across restarts measures the fix.
 - Expected: gate = EXP2626; at each of 5 restarts m1n1 BAR faults R=0 W=0 and no UNHANDLED SYNC; at each disable: WlanD0ExitTarget 6, StopReaders 1, QuiesceChip 1, ReleaseAfterDx 1, then enable OK with a working gate. Failure: any fault line at a restart/disable, a restart wedge, Wi-Fi not recovering -> back to 0.1.44.0.
+
+EXP2628 HARDWARE BEFORE 2026-11-17T12:23:36Z:
+W45 restart-cycle relaunch (part of EXP2627): fixup m1n1 20930bb0 + MUCPCWIFI001, AppleBcmWlan 0.1.45.0 installed, FirmwareSet 1, FR, V1 keys after start; no Bluetooth package; no connect. Purpose: the ordered restart of the previous boot is one of the 5 W45 restarts; this boot is the gate after it. Single variable: none vs EXP2626.
+- Launcher launch-kbd2628.sh sha256 4f15d69b82675481 (launch-kbd.sh 51d76b6354b693e4); m1n1 20930bb014872cd672568f3abe1e87b278e82631296fe26b6ccd2ea0a1f9cdf6; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py d26594fa129cf890; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 4f2f9099b.
