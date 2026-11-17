@@ -7739,3 +7739,24 @@ Offline results tonight (built, hash-recorded, NOT run): standalone boot image o
 all current drivers; headphone audio (driver + m1n1 + Mu candidates); battery read-only driver + Mu with the
 SMC device (PWR-R1..R3 sheets); webcam stage packages; external-monitor mirror path; USB Type-C observer image
 and port driver source; installer moved to the current driver set.
+
+## UPDATE 2026-11-17T07:21:56Z - night 2026-11-17: Bluetooth B4-B5 PASS, Wi-Fi 0.1.40.0 no-connect steps, V1 armed
+
+- Bluetooth AppleBcmBt (fn1, live launch-wifi boot, no m1n1/Mu change): B4 PASS EXP2584 (Read_Local_Version),
+  B4b PASS EXP2586 on 0.0.5.0 (vendor setup 25 steps), B5 STOP EXP2587 (stack bound, refused local read 0x100C),
+  B4b PASS EXP2593 and B5 PASS EXP2594 on 0.0.6.0 (84c126ca2; default-deny allow-list +0x1007 +0x100C):
+  Bluetooth Radio, MS BT Enumerator, RFCOMM and LE Enumerator OK, bthserv running, no BthMini 17, one BthMini 18
+  (source among stack commands 32-55, beyond the 32-entry log - open). Policy refused LE advertising
+  params/data/enable and a non-zero Write Scan Enable; nothing transmitted. Rolled back after the run.
+  EXP2579 hang (0.0.2.0) remains unexplained and not reproduced. B6 (any scan) waits for the user's yes.
+- Wi-Fi AppleBcmWlan 0.1.40.0 (69d78ca8c) no-connect steps EXP2588-2592: control PASS; HdrFlagBit0 PASS;
+  PhaseBits 2 PASS; PhaseBits 1 (macOS form, trap on bad phase) PASS with no trap; EscanParamsVer 3 refused
+  by firmware (-37), v1 fallback works. Limit: only the control-submit ring wrapped (no traffic).
+- V1 (firmware-version hypothesis) armed: FirmwareSet 1 = 18.20.510.0.7.8.206 boots, FR read back, 377 scans,
+  no trap, no stall without a connect. The associated-scan test needs the user's/Codex's connect click.
+- The bench queue stood idle 01:06Z-07:13Z (bench session context reset; architect check-in did not fire).
+- m1n1: hv_apcie_bar_hook forwards guest MMIO with no timeout/marker while holding the global lock;
+  diagnostic build wifi/bar-diag 49ee6ee1 queued as BD-1 (not run).
+- Fact: chainload.py imports m1n1.setup, which resets the PMU panic counter (SPMI NVMEM write) at every
+  bench boot and recovery; upstream behaviour, user informed, no decision yet.
+- Next causal target: V1 on a connect, then HdrFlagBit0, then PhaseBits 2/1 on firmware set 0, one connect each.
