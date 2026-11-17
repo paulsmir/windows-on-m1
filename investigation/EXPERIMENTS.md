@@ -81968,3 +81968,8 @@ EXP2588 ACTUAL (2026-11-17 UTC): N0 PASS (control). Install 0.1.40.0 00:50:38Z (
 
 EXP2589 HARDWARE BEFORE 2026-11-17T00:53:28Z:
 Wi-Fi N1: HdrFlagBit0 = 1 (single variable vs EXP2588; service Parameters, read at device start), restart-device, no connect. Expected: HdrMode 1, host_cap unchanged 0x1407, ioctls/scans/events work (5 scans, BSS found, CountryState 1), no trap receipts (LiveShTrapAddr 0, MbFwHalt 0). Failure: ioctl timeouts, no scans, trap. Rollback: key 0 + restart.
+
+EXP2589 ACTUAL (2026-11-17 UTC): N1 PASS. HdrFlagBit0 1 written, restart 00:53:47Z, read ~00:55:50Z: HdrMode 1, HdrFlagBit0 1, HostCapWritten 0x1407 (unchanged), H2dRingWraps 5, D2hPhaseMismatch 0, LiveShTrapAddr 0, MbFwHalt 0, no trap console; ioctls/events work: CountryState 1, 5 active scans, 76 BSS, EscanFw 0, Unsupported 0, LinkState 1; FwVersion 18.90.5.
+
+EXP2590 HARDWARE BEFORE 2026-11-17T00:56:19Z:
+Wi-Fi N2: PhaseBits = 2 (VALID_PHASE only - a diagnostic, not the macOS pair; HdrFlagBit0 back to 0; single variable vs EXP2588), restart-device, no connect. Expected: HostCapWritten 0x1507, HdrMode 2 (every H2D item flags 0x01 | phase<<7, phase from 1, flipped at each wrap), scans/ioctls/events work, H2dRingWraps > 0 (sum; the control-submit ring wraps with ioctls/event reposts - the RX-post ring cannot wrap without RX traffic), D2hPhaseMismatch 0, no trap. Failure: ioctl timeouts, trap, scans stop. Rollback: key 0 + restart; device not back -> guest restart.
