@@ -14,7 +14,7 @@ class SdzgHold(unittest.TestCase):
         fn = SRC[SRC.index("def sdzg_hold_session():"):SRC.index("def unattended_control(")]
         self.assertIn('int(os.environ.get("WOM1_SDZG_HOLD_MS", "0"))', fn)
         self.assertRegex(fn, r"if hold_ms <= 0:\s+return")
-        self.assertEqual(fn.count("hv.p.hv_sdzg_report()"), 1)  # in the before/after loop
+        self.assertEqual(fn.count("hv.p.hv_sdzg_report(clear=(phase == \"before\"))"), 1)  # report+clear, hold, report
         self.assertIn('for phase in ("before", "after"):', fn)
         self.assertIn("time.sleep(hold_ms / 1000.0)", fn)
         self.assertIn("except Exception as error:", fn)  # an image without 0xc4b

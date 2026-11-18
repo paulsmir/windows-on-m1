@@ -383,7 +383,8 @@ def sdzg_hold_session():
     # that long, with the guard's report (P_HV_SDZG_REPORT, 0xc4b) before and after, so the other
     # CPUs sleep in the lock wait meanwhile and show the event-stream wake-ups in the report's
     # lock-wait receipt and per-CPU poll gaps.  Default 0: nothing changes.  Images without the
-    # guard answer 0xc4b with Bad Command; that is printed and the hold still runs.
+    # guard answer 0xc4b with Bad Command; that is printed and the hold still runs.  The first report
+    # also clears the guard's since-clear maxima (round 4), so the second shows the hold alone.
     try:
         hold_ms = int(os.environ.get("WOM1_SDZG_HOLD_MS", "0"))
     except ValueError:
@@ -393,7 +394,7 @@ def sdzg_hold_session():
     import time
     for phase in ("before", "after"):
         try:
-            hv.p.hv_sdzg_report()
+            hv.p.hv_sdzg_report(clear=(phase == "before"))  # the hold is its own window
         except Exception as error:  # an image without the guard: no report, the hold still runs
             print(f"SDZG_REPORT {phase}: unavailable ({error})")
         if phase == "before":
