@@ -8030,3 +8030,21 @@ and port driver source; installer moved to the current driver set.
 - Queue: Bluetooth persistent start P1 (0.0.19.0, tier 1), G-COMBO, DRAMFAST-1, audio H1s-3 (0.1.12.5), power
   W0-prep and S1, contract landing, Wi-Fi L1/T1 (0.1.66.0). Attended: audio plug + tone, camera 0.7.1.1 with the LED
   window, mouse click probe, PWR-W0.
+
+## UPDATE 2026-11-18T07:19:45Z - Wi-Fi chip watchdog does not disturb a scanning Bluetooth (EXP2709); Bluetooth readings of one night void
+
+- EXP2708 inconclusive: the Windows Bluetooth radio was Off (the operator had switched it off during the evening's
+  Wi-Fi episode), so the Windows stack was not driving the controller. Correction recorded by the bench: the radio was
+  Off from about 21:30Z on 2026-11-17 to 07:08Z on 2026-11-18. The Bluetooth columns of EXP2693, EXP2694,
+  EXP2699-2701, EXP2706 and EXP2707 are void. EXP2676 (no reconnect after a guest restart) and EXP2681 stand.
+- EXP2709 (fab4356f + fd94b781, AppleBcmWlan 0.1.63.0, radio On, one passive LE watcher across 200 s): verdicts
+  "stop disturbs Bluetooth: NO" and "start disturbs Bluetooth: NO". Advertisements stayed at 150-186 per 10 s through
+  the Wi-Fi disable and the enable; no Bluetooth error counter moved; Wi-Fi returned with its profile and no trap.
+  Limits: a gap shorter than 10 s would not show, and no Bluetooth connection was up.
+- Decision: the validated watchdog stop and start stay the default; RecoverStopReset stays an opt-in key; the
+  conditional start reset (S-A) and a channel between the two drivers stay proposals.
+- Bluetooth gate, from now on: Windows radio On, Microsoft enumerators present and the stack command count above
+  zero. BtStatus 20 alone does not mean the stack is running.
+- Next: Bluetooth persistent start P1 (AppleBcmBt 0.0.19.0, tier 1, three restarts, boot order of the two starts
+  recorded). Attended follow-up M1: the same Wi-Fi disable/enable with the mouse link up and moving, measured by a
+  raw-input gap counter (tools/wifi_bt/mouse_gap.cs, 81e690bf8, Wi-Fi line branch), with a control run first.
