@@ -98,6 +98,18 @@ compatibility review.
   and install the next hash-verified package; do not interpose a GPU-hidden boot
   between ordinary driver experiments.  Retain the immutable GPU-hidden image
   only as an emergency rollback when the GPU-visible guest cannot be recovered.
+- User decision 2026-11-18 (standing profile) amends the two package rules
+  above. The owner wants validated drivers to stay on together in one standing
+  bench profile and answered "Да, постоянно" to keeping the GPU driver
+  installed. The last ACCEPTED AppleAgx package (hardware-validated, perf gate
+  passed, hashes recorded in the bench profile record) may therefore stay
+  installed in the standing profile between experiments, next to the other
+  validated drivers. A GPU experiment still installs exactly its preregistered,
+  hash-verified candidate over it, collects the evidence first, and at rollback
+  returns to the accepted package with its hashes verified, not to an empty
+  devnode. An unaccepted or failed candidate is never left installed. The
+  recovery profiles do not change: the GPU-visible recovery guest carries no
+  AppleAgx package, and the GPU-hidden image stays the emergency rollback.
 - Before asking the operator to boot, reboot, power on, or report `Running
   proxy`, check both control planes yourself: attempt Windows SSH with a bounded
   timeout and inspect the expected proxy/vUART USB endpoints and active
