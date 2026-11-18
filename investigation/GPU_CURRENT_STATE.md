@@ -8228,3 +8228,23 @@ and port driver source; installer moved to the current driver set.
   accepted package too -, fault cause recorded at first fault, reserve 32 MiB, run-time drill) is built and
   cross-reviewed; its checkpoint and CACHE-1a run next. The bench goes into the overnight acceptance soak of
   AppleBcmWlan 0.1.69.1 with Bluetooth at tier 4.
+
+## UPDATE 2026-11-18T19:43:05Z - headphone audio from a browser is clean (EXP2748, AppleAudio 0.1.12.10)
+
+- Third audio cause of the evening: intermittent stutter in real playback on 0.1.12.7 while the DMA ran at exactly
+  the nominal rate with no error and the CPU at 10 %. The timer-driven stream reported its position in whole
+  26.67 ms chunks; the shared engine writes up to the reported position on a 10 ms period, so a low-latency client
+  was starved in bursts. Fix in 0.1.12.10: the position is read from the DMA channel's residue (about 0.25 ms), as
+  Linux does on this engine, with range and monotonic guards and a counted fallback to the old position.
+- EXP2748 on the audio image: regression intact (event-driven, timer-driven, shared tone). Owner on real browser
+  playback: no stutter over about ten minutes. That stream, 1013 s: 101301 position queries, all but 2 served from
+  the residue, no reject, no fallback, largest step 576 frames, largest gap 11.9 ms, no DMA error. A measuring tool
+  (rendered pattern against endpoint loopback): 0 events and 0 starvations in the browser-like and the deep-buffer
+  mode. 0.1.12.10 is the reference audio package for headphones.
+- Open in audio: what the stale-chunk counter means (3578 of 7153 probes, 3386 of them silence), live publication of
+  the position receipt, a capture volume control, the unattended regression with a forced jack state, cold plug.
+- Speakers: path to the first sound agreed in five bench steps (count-only GPIO filter, protection assembled with
+  release refused, release by lease without playback, sense capture at -60 dB, first sound at -30 dB with the owner
+  present and his explicit go). The launch contract v2 lands first; the audio image on v2 is built (c21d8254...),
+  the guard page and the amplifier-bus plan are written and host-tested, none on hardware.
+- The bench goes into the overnight acceptance soak of AppleBcmWlan 0.1.69.1 (Bluetooth 0.0.20.0 at tier 4).
