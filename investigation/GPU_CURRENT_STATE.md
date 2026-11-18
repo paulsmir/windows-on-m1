@@ -8302,3 +8302,28 @@ and port driver source; installer moved to the current driver set.
   read; whether a short low pulse resets the amplifier.
 - Not affected and still on the bench list: the unattended headphone regression on AppleAudio 0.1.12.11 and the
   tolerant-driver regression on 0.1.12.12.
+
+## UPDATE 2026-11-18T21:49:48Z - speaker SDZ guard, review round 2: GUARD-level boot conditional GO, RELEASE NO-GO
+
+- Reviewed offline by two independent readers: merged tree m1n1 integration/sdz-guard-v2 at f2af05a3 (guard, call
+  sites, GPIO filter, amp bus). Nothing ran on hardware.
+- GUARD-level image (page, tick, quiesce, poll; the code that raises the pin is absent): GO-with-conditions from
+  both. The image was rebuilt byte for byte by a reviewer; in the binary every write to the pin word writes low.
+  Conditions: boot the reviewed hash; check the prepare line (level, pin-word address); name the 1 Hz no-grant
+  SERDES read in BEFORE; A-B against the audio-deny image for lock-wait cost and guest performance.
+- RELEASE-level image: NO-GO as built. The lock-free deadline protocol is sound (no interleaving leaves the pin
+  high past lease plus one poll while any CPU polls). Blocking: D2 was vacuous - a poll counted as liveness and the
+  requesting CPU has always just polled (architect's wording; corrected to the executed guard tick only); terminal
+  quiesce reasons were a level, so a grant could return 11 ms after a fatal path on a non-tick CPU, before the
+  reset (D1 amended: terminal reasons latch); the online-CPU count could be inflated by a repeated CPU_ON
+  (replaced by a per-CPU bit set only by the CPU itself); waits on other locks and a guest write to the debug
+  serial port did not poll (every spinlock wait now polls under the flag).
+- General m1n1 defects found on the way, each on its own branch with its own bench check, none in any image:
+  PSCI never marked a CPU as on (cluster-off coordination and state after CPU_OFF/CPU_ON) and CPU_ON of a running
+  CPU hangs the caller; a guest write to the debug serial port blocks under the big lock until the host drains;
+  after a flag change a parallel build rebuilt only about two thirds of the objects (bench images unaffected:
+  fresh directory per build).
+- Guest side written offline (page protocol, amplifier write gate, refusal classes); protocol v4 decided
+  (command, lease and sequence in one write; result with echoed sequence in one read; no read with side effects).
+- Next: round 3 of the guard files, merge, one final incremental review; then the GUARD-level boot joins the bench
+  chain after the launch contract v2 landing. Soak EXP2750 is running.
