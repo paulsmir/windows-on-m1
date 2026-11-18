@@ -8070,3 +8070,22 @@ and port driver source; installer moved to the current driver set.
   was deleted.
 - Next: P2-u (persistent start at tier 3 without the mouse part, two restarts; on PASS it stays on in the standing
   profile), then G-COMBO-1/2 and DRAMFAST-1.
+
+## UPDATE 2026-11-18T07:59:27Z - Bluetooth starts by itself at every boot (EXP2715-2716); it stays on in the standing profile
+
+- P2-u PASS on fab4356f + fd94b781, AppleBcmBt 0.0.19.0: persistent start at tier 3 (StartMode 1, RadioPolicy 3,
+  ClearAtShutdown 1), two restarts, Bluetooth up at boot both times with the Windows stack driving the controller and
+  scanning LE, Wi-Fi clean (no trap, profile kept, self-scan completes), no hypervisor counter, orderly shutdowns
+  (PrevExit 3, BadBoots 0). Owner decision "Да, когда проверен" applied: persistent Bluetooth at tier 3 stays on as
+  part of the standing profile.
+- Not shown: the bonded mouse did not link by itself in either boot (no connection, observation only). The
+  reconnect question still needs the attended click step. Four commands were refused by the radio policy at tier 3;
+  which ones is being read.
+- Launcher finding (bench): the "no AppleAgx package" guard of the no-package launchers runs only when the guest is
+  up at launch; a start from proxy skipped it. Step L4(i), approved: a guard that accepts either no package or
+  exactly the package whose hashes are in the profile record, checked before the restart and again after boot, with
+  a last-known record for starts from proxy; it never blocks a recovery launch; the recovery boot keeps the AGX
+  power broker disabled. The GPU package stays experiment-local until G-COMBO-1 reads EQUAL and a recovery drill
+  with the package installed has passed.
+- Next: L4(i), then the G-COMBO block in one launch (G-COMBO-1, G-COMBO-2, DRAMFAST-1 if EQUAL) with the package
+  staged by hash and removed at the end.
