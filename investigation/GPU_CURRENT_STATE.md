@@ -8089,3 +8089,28 @@ and port driver source; installer moved to the current driver set.
   with the package installed has passed.
 - Next: L4(i), then the G-COMBO block in one launch (G-COMBO-1, G-COMBO-2, DRAMFAST-1 if EQUAL) with the package
   staged by hash and removed at the end.
+
+## UPDATE 2026-11-18T09:02:23Z - G-COMBO-1 EQUAL: the accepted GPU configuration runs on the standing profile at reference speed (EXP2719)
+
+- EXP2719 on fab4356f + fd94b781, Wi-Fi associated and idle, Bluetooth persistent at tier 3 and scanning: package
+  30.0.2481.0 with the device switches Wom1CrossProcessPairs, Wom1SubmitRequeue, Wom1MpoTwoPlanes, Wom1StartPolicy=1
+  starts (stage 12, status 0, broker init and arm consumed in the hypervisor log). CS gate worst 52.534 against
+  51.991 (+1.04 %); GravityMark HD PERF gate worst 46.870 against 47.007 (-0.29 %); FULL 8372 and 8381 (band
+  8256..8424). No hypervisor counter, no display event, Wi-Fi and Bluetooth undisturbed. The standing pair costs no
+  GPU performance. No hypervisor change was needed for the GPU to run there.
+- EXP2717 (first attempt) was INVALID for a staging reason: the device switches were not set, so the driver failed
+  closed at its start-policy gate before any hypervisor call (Wom1StartPolicy absent, one-shot arm absent). The
+  accepted configuration is therefore the package plus its four switches; the profile record carries both.
+- Finding during the run: GravityMark started at the instant the CS gate ended lost its device twice. Path named
+  from receipts and source: Windows low-memory refusal of the pool (about 3.0 GB available where GravityMark needs
+  3.4-3.5 GB; the pool waits 2 x 2 s under LowMemoryCondition), and the D3D12 owner reports a refused replay-time
+  buffer creation as DEVICE_HUNG because it never reads the creation error. Minutes later the same run fits. Not a
+  package regression and not a property of the pair. Gate rule: GravityMark starts only at 3300 MB available; a run
+  during which reserve failures increase is INVALID. Driver work approved offline (class C): a 64 MiB reserve for
+  replay-time creations and a truthful error code; package only after the block's verdicts.
+- Launcher guard (L4(i)) is in use: a standing or experiment launch accepts no package or exactly the recorded one,
+  checked before the restart and after boot (device must actually run), with a last-known record for starts from
+  proxy; recovery launches are never refused. Rollback order corrected: devnode first, then the package.
+- Open: why this boot had 0.5-0.7 GB less available memory than GPU-pair boots (the two radio drivers hold under
+  4 MiB together by code arithmetic; a settled-boot census is ordered). Next in the same boot: G-COMBO-2 (radio
+  load) and DRAMFAST-1. The package stays experiment-local until the block ends and a recovery drill has passed.
