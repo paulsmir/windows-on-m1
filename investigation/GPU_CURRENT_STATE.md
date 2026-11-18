@@ -8114,3 +8114,12 @@ and port driver source; installer moved to the current driver set.
 - Open: why this boot had 0.5-0.7 GB less available memory than GPU-pair boots (the two radio drivers hold under
   4 MiB together by code arithmetic; a settled-boot census is ordered). Next in the same boot: G-COMBO-2 (radio
   load) and DRAMFAST-1. The package stays experiment-local until the block ends and a recovery drill has passed.
+
+## CORRECTION 2026-11-18T09:02:51Z to the EXP2719 entry above
+
+- The entry says "Wi-Fi associated and idle". Wrong: in EXP2719 (and in the Bluetooth boots EXP2711-2716) the Wi-Fi
+  driver was up and scanning but NOT associated - the address staging had been cleared at the preceding restarts, so
+  no connection was made. G-COMBO-1 therefore measured "Wi-Fi driver present, not associated; Bluetooth persistent
+  and scanning". The associated case under load is G-COMBO-2 (EXP2721).
+- Consequence for the open memory question: the guest was not online in EXP2719, so Windows services that wake up
+  with a network connection do not explain the 0.5-0.7 GB tighter margin of that boot.
