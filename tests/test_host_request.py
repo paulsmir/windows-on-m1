@@ -180,3 +180,39 @@ class MseVerbTest(unittest.TestCase):
         lines = host_request.execute(proxy, host_request.parse("mse 0x690000000 1 0 0 on"))
         self.assertEqual(proxy.writes[-1], (reg, 0x0406))
         self.assertIn("command 0x0404 -> 0x0406", lines[0])
+
+
+class ApgpioVerb(unittest.TestCase):
+    """R3 count-only AP GPIO filter: `apgpio` asks m1n1 for the access summary (P_HV_APGPIO_STATS 0xc49).
+
+    m1n1 prints the summary line itself and returns the total access count; images built without
+    APGPIO_FILTER answer Bad Command, which must not take the launcher's interrupt path down."""
+
+    class Proxy:
+        def __init__(self, total=None, error=None):
+            self.calls, self.total, self.error = [], total, error
+
+        def request(self, op, *args, **kwargs):
+            self.calls.append((op, args))
+            if self.error:
+                raise self.error
+            return self.total
+
+    def test_parse(self):
+        self.assertEqual(host_request.parse("apgpio"), [("apgpio", 0)])
+        for bad in ("apgpio 1", "apgpio now"):
+            with self.assertRaises(ValueError):
+                host_request.parse(bad)
+
+    def test_stats_op_is_0xc49_without_arguments(self):
+        proxy = self.Proxy(total=4321)
+        lines = host_request.execute(proxy, host_request.parse("apgpio"))
+        self.assertEqual(proxy.calls, [(0xC49, ())])
+        self.assertEqual(lines, ["HOST_REQUEST apgpio total=4321 (summary line: HV: APGPIO stats ...)"])
+
+    def test_image_without_the_filter_reports_unavailable(self):
+        class ProxyCommandError(Exception):
+            pass
+        lines = host_request.execute(self.Proxy(error=ProxyCommandError("Bad Command")),
+                                     host_request.parse("apgpio"))
+        self.assertEqual(lines, ["HOST_REQUEST apgpio unavailable ProxyCommandError: Bad Command"])

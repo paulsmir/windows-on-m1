@@ -29,6 +29,10 @@ Request lines (``#`` starts a comment):
                ALL four planes (plane base + 0xa000 / 0xa400 / 0xc000 + 4 x group, groups
                0..31; the m1n1 MCCDSID receipt reads plane 0 only).  One line per plane,
                groups with a non-zero usage or count.  Nothing is written.
+    apgpio     R3 count-only AP GPIO filter (APGPIO_FILTER images, WOM1_APGPIO_FILTER=1): m1n1 prints
+               its access summary ("HV: APGPIO stats ...") and returns the total access count
+               (P_HV_APGPIO_STATS 0xc49).  Nothing is written.  An image without the filter answers
+               Bad Command; that is reported as unavailable, not raised.
 """
 
 import pathlib
@@ -37,6 +41,7 @@ import struct
 P_DISPLAY_INJECT_REFUSE_SWAPS = 0x110B
 P_DISPLAY_INJECT_DROP_LATCHES = 0x110C
 P_DISPLAY_SCANOUT_RECOVERY_STATUS = 0x110D
+P_HV_APGPIO_STATS = 0xC49
 SGX_MMUCFG_BASE = 0x204D08000
 SGX_MMUCFG_WORDS = 12
 MCC_PLANE_BASE = 0x200000000
@@ -80,6 +85,9 @@ def parse(text):
             continue
         if verb == "mccplanes" and len(words) == 1:
             requests.append(("mccplanes", 0))
+            continue
+        if verb == "apgpio" and len(words) == 1:
+            requests.append(("apgpio", 0))
             continue
         if verb == "mmucfg" and len(words) == 1:
             requests.append(("mmucfg", 0))
@@ -142,6 +150,14 @@ def execute(proxy, requests):
                 parts.append(f"p{plane}:enable=0x{enable:x},status=0x{status:x},"
                              f"data_ways={(status >> 10) & 0x1f},tag_ways={(status >> 5) & 0x1f}")
             lines.append("HOST_REQUEST mccplanes " + " ".join(parts))
+            continue
+        if verb == "apgpio":
+            try:
+                total = proxy.request(P_HV_APGPIO_STATS)
+            except Exception as error:  # Bad Command on images built without APGPIO_FILTER
+                lines.append(f"HOST_REQUEST apgpio unavailable {type(error).__name__}: {error}")
+                continue
+            lines.append(f"HOST_REQUEST apgpio total={total} (summary line: HV: APGPIO stats ...)")
             continue
         if verb == "mmucfg":
             values = [proxy.read32(SGX_MMUCFG_BASE + 4 * i) for i in range(SGX_MMUCFG_WORDS)]
