@@ -8277,3 +8277,28 @@ and port driver source; installer moved to the current driver set.
 - Packages built, none on hardware: AppleAudio 0.1.12.11 (receipts only; for the unattended regression) and
   0.1.12.12 (tolerates the two optional memory ranges); m1n1 count-only GPIO filter image for speaker step B1
   (3f8c4c30...).
+
+## UPDATE 2026-11-18T20:36:39Z - independent review of the speaker SDZ guard: NO-GO for B2 as built and for B3
+
+- Reviewed: m1n1 audio/p2-sdz-guard at 5cd8afa0 (lease page plus the quiesce entry point). Offline; nothing ran on
+  hardware. Verdicts: B2 (protection assembled, every release refused) NO-GO as built - no refuse-only level
+  exists and the tick-gap receipt cannot carry the pass line; B3 (first release by lease) NO-GO with eight blockers.
+- Sound: the lock-free layer on ARMv8 (both orderings the author could not prove hold), flag-off isolation, pin word
+  and polarity against the Linux driver and device tree.
+- Blockers, each shown by a probe or from source: no call sites at that commit; quiesce is an edge, so a later
+  RELEASE re-raises the pin with the tick stopped; expiry depends on one CPU's tick, the big lock and the guard
+  lock; quarantine parks every CPU forever with a live grant and is guest-reachable; the GPIO filter is not in the
+  image and not a grant condition; the PSCI hook runs after up to 3 s of diagnostics; the SERDES read from EL2 is
+  unguarded; an abandoned guard lock stops expiry and drops page accesses silently.
+- Decisions (architect), implementation ordered, incremental review required before any hardware:
+  D1 quiesce is a level (inhibited until an executed guard tick clears it); D2 tick liveness within 40 ms is a
+  grant condition; D3 lease expiry by a lock-free poll of one published deadline word, at the top of every vector
+  handler and inside every big-lock acquisition and proxy wait loop; D4 a grant exists only while at least two
+  guest CPUs are online; D5 the GPIO filter in deny mode is a grant fact and the tick re-asserts the pin low while
+  no grant is live; D6 a refused amplifier bus denies the grant; D7 a last backstop for "no CPU reaches a poll"
+  (watchdog while a grant is live) is a condition before unattended playback at open volume, not before B3-B5.
+- The hypervisor watchdog does not run in the bench profile (all eight CPUs belong to the guest), so it is no
+  backstop today. Unverified: the pin state at and after a SoC reset; what a gated MCA cluster returns to an EL2
+  read; whether a short low pulse resets the amplifier.
+- Not affected and still on the bench list: the unattended headphone regression on AppleAudio 0.1.12.11 and the
+  tolerant-driver regression on 0.1.12.12.
