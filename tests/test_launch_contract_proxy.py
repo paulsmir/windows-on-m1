@@ -30,26 +30,27 @@ class LaunchContractProxyTests(unittest.TestCase):
         self.assertIn("return EXC_RET.UNHANDLED", runner)
 
     def test_capture_path_has_no_silent_fallback(self):
-        # Contract v2: a size-probe or record mismatch raises inside p.hv_launch_capture
-        # (m1n1 proxyclient launch_record.py); nothing in capture_contract may swallow it, and a
-        # refused capture stops the launch.  Only the explicit legacy switch skips checkpoints.
+        # Contract v2: the launcher delegates to tools/launch_contract.py; run_uefi adds no
+        # exception handling around publish or capture (tests/test_launch_contract_publish.py
+        # covers the behaviour with the legacy switch set and unset).
         runner = (ROOT / "run_uefi.py").read_text()
-        body = runner.split("def capture_contract(checkpoint, sequence):", 1)[1].split("\ncapture_contract(0, 1)", 1)[0]
-        self.assertIn("payload = p.hv_launch_capture(checkpoint, sequence)", body)
-        self.assertIn('raise RuntimeError(f"launch contract checkpoint {checkpoint} failed")', body)
-        self.assertNotIn("try:", body)
-        self.assertNotIn("except", body)
-        self.assertIn("if not launch_contract_available:", body)
+        block = runner.split("launch_contract_available = publish_descriptor(", 1)[1].split(
+            "\ncapture_contract(0, 1)", 1)[0]
+        self.assertIn('allow_legacy=os.environ.get("WOM1_ALLOW_LEGACY_LAUNCH_CONTRACT") == "1"', block)
+        self.assertIn("command_error=ProxyCommandError", block)
+        self.assertIn("capture_checkpoint(p, checkpoint, sequence, launch_contract_available", block)
+        self.assertNotIn("try:", block)
+        self.assertNotIn("except", block)
 
     def test_legacy_launch_contract_fallback_is_explicit_and_fail_closed(self):
         runner = (ROOT / "run_uefi.py").read_text()
+        tool = (ROOT / "tools/launch_contract.py").read_text()
 
         self.assertIn("WOM1_ALLOW_LEGACY_LAUNCH_CONTRACT", runner)
-        self.assertIn("except ProxyCommandError", runner)
-        self.assertIn("legacy launch-contract opcodes unavailable", runner)
-        self.assertIn("launch_contract_available = False", runner)
-        self.assertIn("if not launch_contract_available:", runner)
-
+        self.assertNotIn("except ProxyCommandError", runner)
+        self.assertIn("legacy launch-contract opcodes unavailable", tool)
+        self.assertIn("p.request(p.P_HV_LAUNCH_CAPTURE, 0, 0, 0, 0)", tool)
+        self.assertIn("if not available:", tool)
 
 if __name__ == "__main__":
     unittest.main()

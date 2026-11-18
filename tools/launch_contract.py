@@ -166,6 +166,67 @@ def encode_record(payload: bytes) -> bytes:
     ) + payload
 
 
+class LaunchContractError(RuntimeError):
+    pass
+
+
+LEGACY_LINE = ("Compatibility: legacy launch-contract opcodes unavailable; "
+               "checkpoint publication disabled for this A/B")
+
+
+def publish_descriptor(p, descriptor: bytes, *, allow_legacy: bool, command_error,
+                       log=print) -> bool:
+    """Publish the launch descriptor; True when the launch contract is in force.
+
+    WOM1_ALLOW_LEGACY_LAUNCH_CONTRACT (allow_legacy) covers exactly one case: an image that
+    implements neither launch-contract opcode.  m1n1 answers an unknown opcode with S_BADCMD,
+    which the proxy client raises as command_error (ProxyCommandError).  A Bad Command on the
+    publish opcode is accepted as "legacy" only if the capture opcode is unknown as well (its
+    size-0 probe captures nothing on any image, src/proxy.c).  Every other failure - a refused
+    descriptor, any other proxy error, an image that knows capture but not publish - raises,
+    with or without the switch, so the launch stops.
+    """
+    try:
+        accepted = p.hv_launch_publish(descriptor)
+    except command_error:
+        if not allow_legacy:
+            raise
+        try:
+            p.request(p.P_HV_LAUNCH_CAPTURE, 0, 0, 0, 0)
+        except command_error:
+            log(LEGACY_LINE)
+            return False
+        raise LaunchContractError(
+            "m1n1 answers P_HV_LAUNCH_CAPTURE but reports P_HV_LAUNCH_PUBLISH as an unknown "
+            "command: the image implements the launch contract, so "
+            "WOM1_ALLOW_LEGACY_LAUNCH_CONTRACT does not apply")
+    if not accepted:
+        raise LaunchContractError("m1n1 rejected the J313 launch descriptor")
+    return True
+
+
+def capture_checkpoint(p, checkpoint: int, sequence: int, available: bool, output=None,
+                       log=print):
+    """Capture one checkpoint.  No exception is caught here: a refused capture, a size-probe or
+    record mismatch (proxyclient launch_record.LaunchRecordError) or a decode error stops the
+    launch.  Only a launch whose publish_descriptor() returned False (no opcodes) skips."""
+    if not available:
+        log(f"LAUNCH_CONTRACT checkpoint={checkpoint} skipped for legacy A/B")
+        return None
+    payload = p.hv_launch_capture(checkpoint, sequence)
+    if payload is None:
+        raise LaunchContractError(f"launch contract checkpoint {checkpoint} failed")
+    record = encode_record(payload)
+    if output:
+        import os
+        with Path(output).open("ab") as stream:
+            stream.write(record)
+            stream.flush()
+            os.fsync(stream.fileno())
+    log(f"LAUNCH_CONTRACT checkpoint={checkpoint} sequence={sequence} captured")
+    return record
+
+
 def _hex(value: int) -> str:
     return f"0x{value:x}"
 

@@ -107,7 +107,7 @@ class LauncherTest(unittest.TestCase):
     def test_run_uefi_decides_before_publishing(self):
         source = RUN_UEFI.read_text()
         self.assertLess(source.index("j313_ramdisk.check_fits("),
-                        source.index("p.hv_launch_publish(descriptor)"))
+                        source.index("launch_contract_available = publish_descriptor("))
         self.assertIn("j313_ramdisk.descriptor_region(args.ramdisk_base, args.ramdisk_max_size)",
                       source)
         self.assertIn(") + ramdisk_regions,", source)
