@@ -15,20 +15,49 @@ import zlib
 FRAME_MAGIC = b"J313CONTRACT"
 FRAME_VERSION = 1
 CONTRACT_MAGIC = 0x4A43314C
-CONTRACT_VERSION = 1
 MAX_REGIONS = 16
-MAX_MAPPINGS = 64
 MAX_CPUS = 8
-MAX_IRQ_ROUTES = 16
 REGIONS_OFFSET = 152
 MAPPINGS_OFFSET = REGIONS_OFFSET + MAX_REGIONS * 24
-CPUS_OFFSET = MAPPINGS_OFFSET + MAX_MAPPINGS * 32
-IRQ_ROUTES_OFFSET = CPUS_OFFSET + MAX_CPUS * 72
-DEVICES_OFFSET = IRQ_ROUTES_OFFSET + MAX_IRQ_ROUTES * 16
-SNAPSHOT_SIZE = DEVICES_OFFSET + 64
 FRAME = struct.Struct("<12sHHIIII")
 SNAPSHOT_HEADER = struct.Struct("<IHHIIII")
 COUNTS = struct.Struct("<IIII")
+
+
+@dataclass(frozen=True)
+class Layout:
+    """One launch-contract record version (m1n1 hv_launch_contract.h).
+
+    v2 (m1n1-standing-profile.md section 3) grows the mapping and IRQ-route tables; the field
+    order is unchanged, so every offset after the mappings depends on the version.
+    """
+
+    version: int
+    max_mappings: int
+    max_irq_routes: int
+
+    @property
+    def cpus_offset(self) -> int:
+        return MAPPINGS_OFFSET + self.max_mappings * 32
+
+    @property
+    def irq_routes_offset(self) -> int:
+        return self.cpus_offset + MAX_CPUS * 72
+
+    @property
+    def devices_offset(self) -> int:
+        return self.irq_routes_offset + self.max_irq_routes * 16
+
+    @property
+    def size(self) -> int:
+        return self.devices_offset + 64
+
+
+LAYOUTS = {1: Layout(1, 64, 16), 2: Layout(2, 128, 32)}
+CONTRACT_VERSION = max(LAYOUTS)  # what current m1n1 captures
+SNAPSHOT_SIZE_V1 = LAYOUTS[1].size  # 3480: every image built before contract v2
+SNAPSHOT_SIZE_V2 = LAYOUTS[2].size  # 5784
+LAYOUT_BY_SIZE = {layout.size: layout for layout in LAYOUTS.values()}
 
 
 class ContractDecodeError(ValueError):
@@ -43,9 +72,16 @@ class Snapshot:
 
 
 class Decoder:
-    def __init__(self) -> None:
+    """Fail-closed decoder.  accepted_versions models an older tool (e.g. {1} is the v1-only
+    decoder every pre-v2 checkout carries): a record of any other version is refused."""
+
+    def __init__(self, accepted_versions: frozenset[int] | set[int] = frozenset(LAYOUTS)) -> None:
         self._buffer = bytearray()
         self._seen: set[tuple[int, int]] = set()
+        unknown = set(accepted_versions) - set(LAYOUTS)
+        if unknown:
+            raise ValueError(f"no layout for contract versions {sorted(unknown)}")
+        self._accepted = frozenset(accepted_versions)
 
     def feed(self, data: bytes) -> list[Snapshot]:
         self._buffer.extend(data)
@@ -60,7 +96,8 @@ class Decoder:
                 raise ContractDecodeError("unsupported frame version")
             if header_size != FRAME.size:
                 raise ContractDecodeError("invalid frame header size")
-            if payload_size != SNAPSHOT_SIZE:
+            layout = LAYOUT_BY_SIZE.get(payload_size)
+            if layout is None or layout.version not in self._accepted:
                 raise ContractDecodeError("invalid payload length")
             record_size = header_size + payload_size
             if len(self._buffer) < record_size:
@@ -69,7 +106,7 @@ class Decoder:
             del self._buffer[:record_size]
             if zlib.crc32(payload) != crc:
                 raise ContractDecodeError("CRC mismatch")
-            self._validate_snapshot(payload, checkpoint, sequence)
+            self._validate_snapshot(payload, checkpoint, sequence, self._accepted)
             key = (checkpoint, sequence)
             if key in self._seen:
                 raise ContractDecodeError("duplicate checkpoint/sequence")
@@ -82,22 +119,27 @@ class Decoder:
             raise ContractDecodeError("trailing bytes")
 
     @staticmethod
-    def _validate_snapshot(payload: bytes, checkpoint: int, sequence: int) -> None:
+    def _validate_snapshot(payload: bytes, checkpoint: int, sequence: int,
+                           accepted: frozenset[int] = frozenset(LAYOUTS)) -> Layout:
         magic, version, header_size, payload_size, inner_checkpoint, inner_sequence, crc = (
             SNAPSHOT_HEADER.unpack_from(payload)
         )
-        if magic != CONTRACT_MAGIC or version != CONTRACT_VERSION:
+        if magic != CONTRACT_MAGIC or version not in LAYOUTS or version not in accepted:
             raise ContractDecodeError("unsupported contract version")
+        layout = LAYOUTS[version]
+        if len(payload) != layout.size:
+            raise ContractDecodeError("contract version/size mismatch")
         if header_size != SNAPSHOT_HEADER.size or payload_size != len(payload) - header_size:
             raise ContractDecodeError("invalid contract length")
         if inner_checkpoint != checkpoint or inner_sequence != sequence:
             raise ContractDecodeError("frame/snapshot identity mismatch")
         if zlib.crc32(payload[header_size:]) != crc:
             raise ContractDecodeError("contract CRC mismatch")
-        _, mapping_count, cpu_count, irq_count = COUNTS.unpack_from(payload, 96)
-        if (mapping_count > MAX_MAPPINGS or cpu_count > MAX_CPUS or
-                irq_count > MAX_IRQ_ROUTES):
+        region_count, mapping_count, cpu_count, irq_count = COUNTS.unpack_from(payload, 96)
+        if (region_count > MAX_REGIONS or mapping_count > layout.max_mappings or
+                cpu_count > MAX_CPUS or irq_count > layout.max_irq_routes):
             raise ContractDecodeError("contract count overflow")
+        return layout
 
 
 def decode_records(data: bytes) -> list[Snapshot]:
@@ -108,8 +150,8 @@ def decode_records(data: bytes) -> list[Snapshot]:
 
 
 def encode_record(payload: bytes) -> bytes:
-    """Frame one proxy-returned snapshot using the C transport ABI."""
-    if len(payload) != SNAPSHOT_SIZE:
+    """Frame one proxy-returned snapshot (v1 or v2) using the C transport ABI."""
+    if len(payload) not in LAYOUT_BY_SIZE:
         raise ContractDecodeError("invalid payload length")
     _, _, _, _, checkpoint, sequence, _ = SNAPSHOT_HEADER.unpack_from(payload)
     Decoder._validate_snapshot(payload, checkpoint, sequence)
@@ -129,7 +171,13 @@ def _hex(value: int) -> str:
 
 
 def normalize(snapshot: Snapshot) -> dict:
+    """Version-independent view: only counted entries, so a v1 and a v2 record of the same
+    machine state normalize (and compare) equal."""
     payload = snapshot.payload
+    version = SNAPSHOT_HEADER.unpack_from(payload)[1]
+    layout = LAYOUTS[version]
+    if len(payload) != layout.size:
+        raise ContractDecodeError("contract version/size mismatch")
     target, schema_revision, _ = struct.unpack_from("<IIQ", payload, 24)
     ram_base, ram_size, guest_entry, *args = struct.unpack_from("<7Q", payload, 40)
     region_count, mapping_count, cpu_count, irq_count = COUNTS.unpack_from(payload, 96)
@@ -155,19 +203,19 @@ def normalize(snapshot: Snapshot) -> dict:
     cpus = []
     cpu_fields = ("mpidr", "hacr", "mdcr", "mdscr", "amx_config", "apvmkeylo", "apvmkeyhi", "apsts", "actlr")
     for index in range(cpu_count):
-        values = struct.unpack_from("<9Q", payload, CPUS_OFFSET + index * 72)
+        values = struct.unpack_from("<9Q", payload, layout.cpus_offset + index * 72)
         cpus.append({name: _hex(value) for name, value in zip(cpu_fields, values)})
 
     irq_routes = []
     for index in range(irq_count):
         physical_irq, vintid, flags, device = struct.unpack_from(
-            "<4I", payload, IRQ_ROUTES_OFFSET + index * 16
+            "<4I", payload, layout.irq_routes_offset + index * 16
         )
         irq_routes.append(
             {"physical_irq": physical_irq, "vintid": vintid, "flags": flags, "device": device}
         )
 
-    device_values = struct.unpack_from("<6Q4I", payload, DEVICES_OFFSET)
+    device_values = struct.unpack_from("<6Q4I", payload, layout.devices_offset)
     devices = {
         "pci_ecam_base": _hex(device_values[0]),
         "nvme_bar_base": _hex(device_values[1]),

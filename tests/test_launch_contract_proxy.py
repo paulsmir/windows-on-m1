@@ -29,6 +29,18 @@ class LaunchContractProxyTests(unittest.TestCase):
         self.assertNotIn("p.hv_watchdog_dump()", runner)
         self.assertIn("return EXC_RET.UNHANDLED", runner)
 
+    def test_capture_path_has_no_silent_fallback(self):
+        # Contract v2: a size-probe or record mismatch raises inside p.hv_launch_capture
+        # (m1n1 proxyclient launch_record.py); nothing in capture_contract may swallow it, and a
+        # refused capture stops the launch.  Only the explicit legacy switch skips checkpoints.
+        runner = (ROOT / "run_uefi.py").read_text()
+        body = runner.split("def capture_contract(checkpoint, sequence):", 1)[1].split("\ncapture_contract(0, 1)", 1)[0]
+        self.assertIn("payload = p.hv_launch_capture(checkpoint, sequence)", body)
+        self.assertIn('raise RuntimeError(f"launch contract checkpoint {checkpoint} failed")', body)
+        self.assertNotIn("try:", body)
+        self.assertNotIn("except", body)
+        self.assertIn("if not launch_contract_available:", body)
+
     def test_legacy_launch_contract_fallback_is_explicit_and_fail_closed(self):
         runner = (ROOT / "run_uefi.py").read_text()
 
