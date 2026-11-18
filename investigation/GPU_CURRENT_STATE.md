@@ -8048,3 +8048,25 @@ and port driver source; installer moved to the current driver set.
 - Next: Bluetooth persistent start P1 (AppleBcmBt 0.0.19.0, tier 1, three restarts, boot order of the two starts
   recorded). Attended follow-up M1: the same Wi-Fi disable/enable with the mouse link up and moving, measured by a
   raw-input gap counter (tools/wifi_bt/mouse_gap.cs, 81e690bf8, Wi-Fi line branch), with a control run first.
+
+## UPDATE 2026-11-18T07:44:48Z - Bluetooth persistent start passed at tier 1 (EXP2710-2714); soak TX statuses decoded
+
+- P1 PASS on fab4356f + fd94b781, AppleBcmBt 0.0.19.0, tier 1: four boots with StartMode persistent, Bluetooth up
+  at every boot without arm or function restart, the Windows stack driving the controller (radio On, both Microsoft
+  enumerators, stack command count above zero), Wi-Fi clean, no hang at four orderly shutdowns. Decisions as the
+  model says: 0x2201 -> 0x52801 -> 0x52901 -> 0x32001.
+- Platform fact (EXP2712, EXP2714): at system shutdown the driver's D0Exit registry write does not reach the disk;
+  the shutdown-notification write does. Persistent start therefore needs ClearAtShutdown 1 on this platform. The
+  stager gets that as its default; the driver default changes in the next package.
+- Fast Startup does not exist on this guest (hibernate not enabled), so it needs no step. The start order of the two
+  chip functions cannot be read from Windows logs; both drivers get a start-time receipt in their next packages.
+- Tool defect found and fixed: the stager's persist step printed nothing, changed nothing and exited 0 (script fed
+  over standard input). Fixed in the Bluetooth line's branch (979a9cc7a): no echo line means a non-zero exit.
+- Wi-Fi soak EXP2707, decoded afterwards: every non-zero TX status of the night is code 4 (508 frames, 0.038 % of
+  the echo load, the same figure as the echo loss); the one non-VHT association with a band read was on 2.4 GHz.
+  Reading pending from the Wi-Fi line; no fault state is indicated.
+- Host disk: old evidence logs compressed losslessly and byte-identical old package files replaced by APFS clones
+  (manifests next to the experiments); 24 GiB free on the project volume, 10 GiB on the system volume. No evidence
+  was deleted.
+- Next: P2-u (persistent start at tier 3 without the mouse part, two restarts; on PASS it stays on in the standing
+  profile), then G-COMBO-1/2 and DRAMFAST-1.
