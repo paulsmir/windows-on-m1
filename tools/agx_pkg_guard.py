@@ -88,6 +88,8 @@ def decide(*, mode: str, phase: str, pair: str, staged: list | None, appl0002: d
     if phase == "post":
         if appl0002 is None:
             return REFUSE, "post-boot-without-APPL0002-read"
+        if int(appl0002.get("problem", -1)) != 0:   # EXP2717: Code 43 with the right version bound
+            return REFUSE, f"package-bound-but-APPL0002-problem-{appl0002.get('problem')}"
         if appl0002.get("version") != record.get("version"):
             return REFUSE, f"bound-version-{appl0002.get('version')}-not-{record.get('version')}"
     return ACCEPT, f"package-{record.get('version')}-matches-record"

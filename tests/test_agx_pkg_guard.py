@@ -77,6 +77,11 @@ class Decide(unittest.TestCase):
         self.assertEqual(v, "REFUSE")
         self.assertIn("bound-version", why)
 
+    def test_post_bound_but_failed_start_refuses(self):
+        v, why = d(phase="post", appl0002={"problem": 43, "version": "30.0.2481.0"})
+        self.assertEqual(v, "REFUSE")
+        self.assertIn("problem-43", why)
+
     def test_post_bound_equal_accepts(self):
         self.assertEqual(d(phase="post", appl0002=BOUND)[0], "ACCEPT")
 
