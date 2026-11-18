@@ -8248,3 +8248,32 @@ and port driver source; installer moved to the current driver set.
   present and his explicit go). The launch contract v2 lands first; the audio image on v2 is built (c21d8254...),
   the guard page and the amplifier-bus plan are written and host-tested, none on hardware.
 - The bench goes into the overnight acceptance soak of AppleBcmWlan 0.1.69.1 (Bluetooth 0.0.20.0 at tier 4).
+
+## UPDATE 2026-11-18T20:27:54Z - EXP2749 was a loose control cable; soak runs as EXP2750; two speaker safety decisions
+
+- EXP2749 (standing boot for the overnight soak) lost its control network about 40 s after boot and the relaunch
+  EXP2750 never came up. Cause: the Ethernet cable of the guest's USB network adapter had come loose (owner's
+  statement; the link returned in the running EXP2750 guest when he reconnected it, no stop needed). EXP2749 had
+  already been stopped hard with the guest alive; the health pass afterwards was clean (volume not dirty, one
+  unexpected-shutdown record). Not a guest, image or driver fault. The "standing pair versus audio pair" pattern
+  was a coincidence of time and is withdrawn.
+- Standing check before any hard stop for "guest unreachable": in the running boot's IRQSTAT lines, storage (v960)
+  still showing its boot-age bursts with the USB controller line (v857) flat at about 65-70 per 10 s means the
+  guest is alive and the control link is down. Launcher finding: an empty post-boot guard read is reported as a
+  guard failure instead of "control link down" (open).
+- Soak EXP2750 of AppleBcmWlan 0.1.69.1 with AppleBcmBt 0.0.20.0 at tier 4 running since 20:25:54Z until 07:30
+  local; it follows that hard stop. Bluetooth failure total is cumulative per boot; only its first 16 entries
+  carry opcode and status, so the per-minute gate samples the command tail (counter for non-pattern failures
+  ordered for the next Bluetooth package).
+- Speakers, offline only, nothing on hardware. D-SDZ-1: the amplifier shutdown pin may be released only while the
+  guard's tick runs; every hypervisor path that stops the tick drops it first and revokes the grant (entry point in
+  the guard at m1n1 5cd8afa0, call sites and a source-scan test on integration/sdz-quiesce 1b905584). D-SDZ-2:
+  lease expiry must not depend on the big hypervisor lock - a lock-free poll at the top of every vector handler
+  and inside the lock acquire loop (found necessary because a stuck forwarded PCIe access holds the lock without
+  a proxy entry; the watchdog does not run in the bench profile). Not implemented yet; waits for the independent
+  review of the guard. The first review (amp bus, optional roles, AppleAudio 0.1.12.11) returned three
+  GO-with-conditions and rejected bench step B2 as written; it is now a chain of single-variable links, and the
+  guard gets a refuse-only build level in which the code that raises the pin is absent.
+- Packages built, none on hardware: AppleAudio 0.1.12.11 (receipts only; for the unattended regression) and
+  0.1.12.12 (tolerates the two optional memory ranges); m1n1 count-only GPIO filter image for speaker step B1
+  (3f8c4c30...).
