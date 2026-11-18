@@ -8123,3 +8123,25 @@ and port driver source; installer moved to the current driver set.
   and scanning". The associated case under load is G-COMBO-2 (EXP2721).
 - Consequence for the open memory question: the guest was not online in EXP2719, so Windows services that wake up
   with a network connection do not explain the 0.5-0.7 GB tighter margin of that boot.
+
+## UPDATE 2026-11-18T09:56:19Z - G-COMBO-2 and DRAMFAST-1 on the standing profile (EXP2721, EXP2722)
+
+- G-COMBO-2 (EXP2721; Wi-Fi associated, 50 echo/s, self-scan every 2 min, Bluetooth persistent): the GPU load does
+  not disturb Wi-Fi (7 scans clean, authorization held, no stall, 1 echo lost of 48226, no hypervisor counter). CS
+  under radio load 51.840 (-0.29 % against the baseline). GravityMark half INCONCLUSIVE: two HD PERF runs invalid
+  (application-level out of memory, device intact), one valid FULL at 8216 (-1.9 % against the run without load).
+- Memory boundary measured: Windows raises LowMemoryCondition at about 0.42 GB available on this guest; GravityMark
+  holds about 3.5 GB (3.0-3.1 GB of locked pool pages plus its working set); starts at 3543 and 3778 MB available
+  were refused, starts at 3911, 4255 and 4280 MB were clean. Gate: GravityMark starts only at 4000 MB available;
+  a run during which reserve failures increase is INVALID. The earlier thresholds (3300, 3600) were wrong.
+- DRAMFAST-1 (EXP2722): hypothesis NOT supported as tested. With a spinner holding the P cluster (DRAM fast for the
+  whole arm by receipt) GravityMark was slower: HD PERF 51.256 and 47.061 against 52.8-53.2, FULL 6105 against 8199.
+  The arm is confounded: the spinner occupied processor 7, a P core. Occupying an E core costs nothing. The premise
+  "the P cluster is parked in GPU runs" does not hold here: GravityMark itself keeps it active 11-85 % of the time.
+  A spinner cannot test DRAM speed; the valid test is the hypervisor policy op without a spinner. Ordered: an
+  affinity discriminator (spinner on processor 4 versus 7) and the GPU line's bound on what the DRAM lever can
+  still give from the per-frame data of the control arms.
+- Driver work (class C), implemented offline, in cross-review, not built: 64 MiB reserve for replay-time creations
+  and DXGI_ERROR_DRIVER_INTERNAL_ERROR instead of DEVICE_HUNG for a clean creation refusal (branch
+  gpu/pool-reserve-r1r3-impl, af0aee76e). Next in rank: a bounded ask under the floor; a longer wait only if the
+  low-memory span receipt supports it; on-demand locking with eviction as a project of its own.
