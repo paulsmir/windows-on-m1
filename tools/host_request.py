@@ -16,6 +16,10 @@ Request lines (``#`` starts a comment):
                Enable (Command bit 1) of one function through the physical ECAM, so
                the guest driver's next forwarded BAR access completes with an error.
                Prints the Command value before and after.  Nothing else is written.
+    mmucfg     CACHE-1, read-only: the twelve 32-bit words of the GPU MMU configuration
+               block at SGX+0xd08000 (0x204d08000..0x204d0802c; the EXP2235 receipt read
+               the same words from EL2).  Nothing is written.  Issue it only while the GPU
+               is powered (during a GPU run): the block is in the GPU power domain.
 """
 
 import pathlib
@@ -24,6 +28,8 @@ import struct
 P_DISPLAY_INJECT_REFUSE_SWAPS = 0x110B
 P_DISPLAY_INJECT_DROP_LATCHES = 0x110C
 P_DISPLAY_SCANOUT_RECOVERY_STATUS = 0x110D
+SGX_MMUCFG_BASE = 0x204D08000
+SGX_MMUCFG_WORDS = 12
 STATUS_SIZE = 40
 STATUS_FIELDS = ("latch_deadline_expiries", "latch_poll_errors", "late_latches_ignored",
                  "injected_refusals", "dropped_latches", "pending_refuse_swaps",
@@ -53,6 +59,9 @@ def parse(text):
             if ecam & 0xfffff or not (1 <= bus <= 255 and 0 <= dev <= 31 and 0 <= fn <= 7):
                 raise ValueError(f"line {number}: bad ECAM/BDF in {raw!r}")
             requests.append(("mse", (ecam, bus, dev, fn, words[5].lower() == "on")))
+            continue
+        if verb == "mmucfg" and len(words) == 1:
+            requests.append(("mmucfg", 0))
             continue
         if verb in ("refuse", "drop") and len(words) == 2 and words[1].isdigit():
             count = int(words[1])
@@ -90,6 +99,10 @@ def execute(proxy, requests):
             proxy.write16(reg, after)
             lines.append(f"HOST_REQUEST mse {bus:02x}:{dev:02x}.{fn} {'on' if on else 'off'} "
                          f"command 0x{before:04x} -> 0x{proxy.read16(reg):04x}")
+            continue
+        if verb == "mmucfg":
+            values = [proxy.read32(SGX_MMUCFG_BASE + 4 * i) for i in range(SGX_MMUCFG_WORDS)]
+            lines.append("HOST_REQUEST mmucfg " + " ".join(f"{v:08x}" for v in values))
             continue
         op = P_DISPLAY_INJECT_REFUSE_SWAPS if verb == "refuse" else P_DISPLAY_INJECT_DROP_LATCHES
         previous = proxy.request(op, count, signed=True)

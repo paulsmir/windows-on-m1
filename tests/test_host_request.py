@@ -62,6 +62,34 @@ class HostRequestTests(unittest.TestCase):
             host_request.parse(f"drop {host_request.MAX_COUNT + 1}")
 
 
+class MmuCfgVerb(unittest.TestCase):
+    class Proxy:
+        def __init__(self):
+            self.reads, self.writes = [], []
+
+        def read32(self, address):
+            self.reads.append(address)
+            return {0x204D08000: 1, 0x204D0800C: 0x003680D8, 0x204D08010: 0x003680D8,
+                    0x204D08024: 0x0027FFEE}.get(address, 0)
+
+        def write32(self, address, value):
+            self.writes.append((address, value))
+
+    def test_parse(self):
+        self.assertEqual(host_request.parse("mmucfg"), [("mmucfg", 0)])
+        with self.assertRaises(ValueError):
+            host_request.parse("mmucfg 1")
+
+    def test_reads_exactly_the_twelve_words_and_writes_nothing(self):
+        proxy = self.Proxy()
+        lines = host_request.execute(proxy, host_request.parse("mmucfg"))
+        self.assertEqual(proxy.reads, [0x204D08000 + 4 * i for i in range(12)])
+        self.assertEqual(proxy.writes, [])
+        # the EXP2235 line, word for word
+        self.assertEqual(lines, ["HOST_REQUEST mmucfg 00000001 00000000 00000000 003680d8 003680d8 "
+                                 "00000000 00000000 00000000 00000000 0027ffee 00000000 00000000"])
+
+
 if __name__ == "__main__":
     unittest.main()
 
