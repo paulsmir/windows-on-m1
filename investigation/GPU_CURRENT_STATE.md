@@ -8327,3 +8327,29 @@ and port driver source; installer moved to the current driver set.
   (command, lease and sequence in one write; result with echoed sequence in one read; no read with side effects).
 - Next: round 3 of the guard files, merge, one final incremental review; then the GUARD-level boot joins the bench
   chain after the launch contract v2 landing. Soak EXP2750 is running.
+
+## UPDATE 2026-11-18T23:05:07Z - launch contract v2 landed on the bench; speaker guard passed review with conditions; driver gap found
+
+- Launch contract v2 landing, attended by the owner, all PASS: EXP2751 (legacy switch off on the old launcher),
+  EXP2755 (new launcher and proxy client 81c450e2 on the old image; EXP2752 before it was INVALID - the client copy
+  lacked the sibling tools/ directory, a gap also in the hand-over, now corrected), EXP2753 (standing image on v2,
+  68993d14). Contract decoded and equal to reference in each, budget 61/13, standing gates clean, no physical
+  recovery needed. The standing profile is on contract v2 from here.
+- Audio on v2, EXP2754: image c21d8254 + MUAUD004 with AppleAudio 0.1.12.10 - both exclusive modes and the shared
+  tone ran, glitch tool 0 events in both modes (one starvation at stream start before the signal), tone heard by
+  the owner at 00:04 local. Headset cold plug was detected at start this time.
+- The overnight Wi-Fi soak EXP2750 was ended as a planned stop by owner decision after 126 minute records, 2/2
+  reconnects, no flag. It is not the acceptance soak; that is rescheduled. Wi-Fi 0.1.70.0 moves behind the audio
+  block.
+- Speaker guard, review round 3 (offline): GO-with-conditions for the GUARD-level image and for the hypervisor side
+  of a first release. Remaining before a release: a fatal exception inside the quiesce primitive must still latch;
+  the GUARD-level boot must pass; the PSCI CPU_ON fix checked on hardware; the deny-mode proof in the launch log.
+  The filter fact now checks every stage-2 entry covering the GPIO block; reason classes are enforced at compile
+  time. Current reviewed GUARD image a842e702; the chain images are built after one more small guard round.
+- Guest side, independent review: the first conversation with the page (no amplifier write) GO-with-conditions;
+  first release and first sound NO-GO because the driver has no amplifier I2C path, no speaker stream and no
+  volume path yet. The estimate "first sound tomorrow evening" given to the owner was wrong and was corrected:
+  not before 20-21 November. Decisions: a compile-time stage ceiling inside the amplifier write gate, independent
+  of the protection model; first sound at a -30 dB ceiling without the sense loop, sense and model validation after.
+- Running unattended tonight: headphone regression R1 on AppleAudio 0.1.12.11, then the tolerant-driver regression
+  on 0.1.12.12, both on c21d8254.
