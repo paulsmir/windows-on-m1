@@ -8145,3 +8145,30 @@ and port driver source; installer moved to the current driver set.
   and DXGI_ERROR_DRIVER_INTERNAL_ERROR instead of DEVICE_HUNG for a clean creation refusal (branch
   gpu/pool-reserve-r1r3-impl, af0aee76e). Next in rank: a bounded ask under the floor; a longer wait only if the
   low-memory span receipt supports it; on-demand locking with eviction as a project of its own.
+
+## UPDATE 2026-11-18T10:36:08Z - DRAM lever closed by measurement; radio load costs the GPU nothing; where the gap to macOS now sits
+
+- EXP2723 (spinner-core discriminator): with the P cluster held busy on processor 4, DRAM fast for the whole arm,
+  GravityMark HD PERF reads 52.246 against controls 52.436 and 52.656 - no gain. The slowdown seen in DRAMFAST-1
+  is specific to processor 7 (44.921 with the spinner there, 52.459 with it on an E core): a property of where the
+  benchmark's critical thread runs, not of DRAM speed. The DRAM lever is closed; the hypervisor policy op is not
+  launched. The line's scene-matched estimate from the control arms had bounded it at 0.7 % +- 0.5 %.
+- EXP2724 (G-COMBO-2b): GravityMark HD PERF under Wi-Fi load (50 echo/s, scans) 52.699 and 52.845, gate +0.09 %;
+  Wi-Fi under GPU load: 12 scans clean, 1 echo lost of 34225. G-COMBO-2 closed: no effect in either direction.
+- Observation, cause unmeasured: GravityMark FULL drifts down over a long boot (8372 and 8381 early, 8199 and 8162
+  later, all valid). The machine is fanless; a thermal cap is the first candidate to check.
+- Gap accounting after today (GPU line): levers with a known mechanism sum to about 5 % of the 16 % gap (cross-frame
+  lead, hand-over floor about 0.2 ms - the firmware queue is already two deep in nearly every frame -, DRAM,
+  constant-buffer loads, store elision). About 2.4 of 3.1 ms per frame are GPU work time above Apple's on the same
+  work: compute 1.29 ms and render 1.13 ms. Arithmetic kernels are at parity; gathers are 1.19x / 1.43x / 1.0x /
+  1.32x at 1 / 4 / 16 / 64 MB. Clock, page granularity and contiguity are excluded. Live candidates: system-cache
+  service for GPU traffic and page-walk cost. Experiment CACHE-1 (two boots, cache on / off, gather probe with
+  per-group cache usage) is preregistered and is the next causal target for GPU parity.
+- Owner decisions 2026-11-18: unparking the P cluster in the guest is allowed (experiment PARK-1, ends with the
+  setting restored today; keeping it needs a re-established perf baseline); CS is the OpenGL regression check with
+  a target of 60 fps; parity is judged on GravityMark. Bluetooth tier 4 "full host" decided yes under delegation:
+  AppleBcmBt 0.0.20.0 built and cross-reviewed GO for checkpoint T4. The bench holds T4 and PARK-1 until the owner
+  repeats both permissions in the bench session.
+- Standing profile after cleanup (EXP2725): no AppleAgx package, guard ACCEPT, settled census 4146 MB available.
+  AppleBcmWlan 0.1.69.1 cross-reviewed GO; gate, L1/T1 and tonight's acceptance soak run on it. R1+R3 GPU package
+  (reserve + truthful error, head 3b51c10a9, re-review GO) is building.
