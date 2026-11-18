@@ -378,6 +378,29 @@ def request_snapshot_reboot(signum, frame):
 
 signal.signal(signal.SIGTERM, request_snapshot_reboot)
 
+def sdzg_hold_session():
+    # SDZ guard boot (L5 sheet): WOM1_SDZG_HOLD_MS=<ms> keeps this diagnostic host session open
+    # that long, with the guard's report (P_HV_SDZG_REPORT, 0xc4b) before and after, so the other
+    # CPUs sleep in the lock wait meanwhile and show the event-stream wake-ups in the report's
+    # lock-wait receipt and per-CPU poll gaps.  Default 0: nothing changes.  Images without the
+    # guard answer 0xc4b with Bad Command; that is printed and the hold still runs.
+    try:
+        hold_ms = int(os.environ.get("WOM1_SDZG_HOLD_MS", "0"))
+    except ValueError:
+        hold_ms = 0
+    if hold_ms <= 0:
+        return
+    import time
+    for phase in ("before", "after"):
+        try:
+            hv.p.hv_sdzg_report()
+        except Exception as error:  # an image without the guard: no report, the hold still runs
+            print(f"SDZG_REPORT {phase}: unavailable ({error})")
+        if phase == "before":
+            print(f"SDZG_HOLD: host session held {hold_ms} ms")
+            time.sleep(hold_ms / 1000.0)
+
+
 def unattended_control(*_args, **_kwargs):
     # The C side prints lock-free per-vCPU records before attempting its SMP
     # rendezvous.  Do not issue nested proxy commands from this handler: a
@@ -414,6 +437,7 @@ def unattended_control(*_args, **_kwargs):
                 print(line)
         except Exception as error:
             print(f"SNAPSHOT_MODULE error: {error}")
+    sdzg_hold_session()
     print("HOST CONTROL: diagnostic snapshot captured; continuing guest")
     return EXC_RET.HANDLED
 
