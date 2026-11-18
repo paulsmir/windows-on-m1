@@ -8004,3 +8004,29 @@ and port driver source; installer moved to the current driver set.
   after scratch build trees with archived outputs were removed. Free space stays small.
 - Next causal targets: G + soak on 0.1.63.0; audio H1s-2 (I2C controller enable, 0.1.12.4) on the audio image with the
   filter; camera 0.7.1.1 at the next attended session; Bluetooth persistent start 0.0.19.0 (tier 1 first).
+
+## UPDATE 2026-11-18T07:01:53Z - Wi-Fi authorization fix held overnight (EXP2707); standing profile and morning queue
+
+- EXP2706 (step G) and EXP2707 (soak) PASS on fab4356f + fd94b781, AppleBcmWlan 0.1.63.0 at defaults: 7 h 28 min
+  associated under 50 echo/s, 224 scans (209 driver self-scans, 7 flyout, 8 Windows-initiated) all clean, no stall
+  episode, no recovery run, AUTHO never lost, 7 of 7 hourly reconnects, 0.038 % echo loss, no trap, no HV counter.
+  Accepted Wi-Fi package: 0.1.63.0. Next: N2 (same package, StallRecover 0) the following night. Open observations:
+  bursts of non-zero TX status 7-15 min after association whose shape follows sta_info flag bit 0x100000.
+- Open question found during review: the Wi-Fi driver arms the chip-wide watchdog at every final stop and at every
+  start before the firmware download; its effect on a running Bluetooth function has never been measured. Split read
+  ordered as the first item of the morning block.
+- Owner decisions 2026-11-18: GPU hardware runs and combined GPU + Wi-Fi/Bluetooth boots are wanted; validated drivers
+  stay on in one standing profile; the accepted AppleAgx package may stay installed (AGENTS.md amended, 3ef6e48c9);
+  PWR-W0 (first SMC RTKit wake) allowed for the next attended session. GPU work runs on Fable (GPU line restarted).
+- Standing profile: standing-1 = fab4356f + fd94b781 as they are - the m1n1 line showed by build that this commit with
+  the GPU flags only differs from the GPU pair's hypervisor in two objects without guest-visible effect. Launch
+  contract v2 (128 stage-2 mappings, 32 routes, per-owner budgets with static asserts, size negotiation) is coded and
+  cross-reviewed GO; the bench found that every launcher sets the legacy switch, fixed in root 5e9f9b89d (the switch
+  now covers only an image without both opcodes). Landing: E0 (launchers without the switch), E(a), E(b).
+- GPU line pass 1: GravityMark FULL 83-85 % of macOS (19.2-19.6 ms versus 16.5 ms per frame; gap larger late in the
+  run); no macOS reference for the CS bench exists. Top lever DRAMFAST-1 (m1n1 holds the DRAM controller fast only
+  while the P cluster is above 2184 MHz; in every recorded GPU run the P cores were parked) is preregistered, tool
+  fixed after the bench review; G-COMBO-1/2 measure the perf gate on the standing pair, idle and under radio load.
+- Queue: Bluetooth persistent start P1 (0.0.19.0, tier 1), G-COMBO, DRAMFAST-1, audio H1s-3 (0.1.12.5), power
+  W0-prep and S1, contract landing, Wi-Fi L1/T1 (0.1.66.0). Attended: audio plug + tone, camera 0.7.1.1 with the LED
+  window, mouse click probe, PWR-W0.
