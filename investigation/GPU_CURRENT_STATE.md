@@ -8172,3 +8172,37 @@ and port driver source; installer moved to the current driver set.
 - Standing profile after cleanup (EXP2725): no AppleAgx package, guard ACCEPT, settled census 4146 MB available.
   AppleBcmWlan 0.1.69.1 cross-reviewed GO; gate, L1/T1 and tonight's acceptance soak run on it. R1+R3 GPU package
   (reserve + truthful error, head 3b51c10a9, re-review GO) is building.
+
+## UPDATE 2026-11-18T17:17:19Z - attended block with the owner: power controller wakes, camera firmware boots, audio stream does not start; GPU reserve package not accepted
+
+- PWR-W0 (EXP2734 series, GPU pair + MUSMC001, AppleSmc 0.1.0.9): the first SMC wake from Windows PASSED - RtkPhase 4,
+  no fault, Windows reports a battery (100 %, online). Open: capacity in relative units (no mWh), 17 usable keys
+  where the sheet expected 20, the device cannot be disabled ("critical system device"). The charger test was skipped.
+- Camera 0.7.1.1 (EXP2740, f22f2186 + MUCAMWIFI002-cam): stage 1 PASS with the indicator observed dark by the owner.
+  16 DAPF entries programmed and read back, the ISP firmware booted (one boot, revision 0xb0090, 7 channels), the
+  sensor answered; no interrupt, no frame, no timeout. First camera run with a real LED observation.
+- Audio 0.1.12.5 (EXP2739, audio image): jack detection works on plug (both endpoints become present, headset type
+  CTIA); the unplug was probably not detected; the tone did NOT play - the play call returned after 0.32 s and no
+  audio DMA interrupt moved, so the stream never ran. Cause open, with the audio line.
+- Bluetooth mouse across a Wi-Fi stop/start (sheet M1, EXP2738; AppleBcmBt 0.0.20.0 at tier 4, now the standing
+  tier after checkpoint T4, EXP2729): no stutter seen by the owner, at most 59 ms gap at the enable, reports never
+  stopped. Recurring 89-145 ms gaps about 1 s apart exist independently of Wi-Fi (they continue with the Wi-Fi
+  firmware halted) - open on the Bluetooth side. The mouse did not reconnect after a click following a restart
+  without re-pairing; cause still open.
+- Wi-Fi 0.1.69.1 (EXP2728, EXP2730, EXP2736): connect, authorization and reconnect after a forced drop pass;
+  throughput measured at about 310 Mbit/s up and 345 Mbit/s down. Two defects: no link-quality indication (cause
+  found - a 256-byte buffer for a 280-byte firmware structure; fixed in 0.1.70.0, built and reviewed, for after the
+  soak) and no automatic connection by Windows after an adapter arrival (profile scope, AutoConfig setting and
+  console session excluded by read; a scan abort at arrival ruled out; cause open). Address from the platform
+  through ACPI: Mu candidate MUCPCWIFI002 built and reviewed, driver side written, neither on hardware yet.
+- GPU package 30.0.2726.0 (reserve + truthful error; EXP2731, EXP2733): NOT accepted. The reserve works as designed
+  (three must-complete draws, refill). Findings: every first D3D12 application after a device restart loses its
+  device - by source a pre-existing restart-sizing effect (the segment alternates 4096 / 896 MiB), to be confirmed on
+  2481; the forced-empty arm ended in an access violation inside the shader compiler object of our UMD instead of
+  the relabelled device loss; GravityMark's start requirement of 4000 MB available was not reachable in that boot.
+  Next build: fix for the crash, drill armed at run time with a process filter, reserve 32 MiB.
+- CACHE-1: the preregistered cache-off boot was invalid by construction (the resident proxy stage enables the cache
+  before chainload). Boot 1 runs with the cache on and read-only cache reads; an actively cache-disabling twin image
+  exists and is reviewed but HELD until reads show that storage traffic holds no lines in the cache.
+- An attended-session failure of mine is recorded with EXP2737: a blocking question dialog stalled the relay of the
+  run times, so the operator was not notified and that run was invalid.
