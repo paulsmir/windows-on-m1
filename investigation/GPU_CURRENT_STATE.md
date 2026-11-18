@@ -8206,3 +8206,25 @@ and port driver source; installer moved to the current driver set.
   exists and is reviewed but HELD until reads show that storage traffic holds no lines in the cache.
 - An attended-session failure of mine is recorded with EXP2737: a blocking question dialog stalled the relay of the
   run times, so the operator was not notified and that run was invalid.
+
+## UPDATE 2026-11-18T18:53:22Z - headphone audio works: tone heard through the shared engine (EXP2743-2745, AppleAudio 0.1.12.7)
+
+- Cause of the afternoon's silent tone, found in two steps the same evening with the owner present. (1) The driver's
+  packet-allocation callback accepted only two-packet (event-driven) streams; the Windows shared engine opens
+  timer-driven with one packet. Fixed in 0.1.12.6. (2) For a one-packet stream the packet buffer's MDL described the
+  whole 16 KiB-rounded allocation instead of the requested size; the stream was then torn down before PREPARE with
+  0x800705AA. Fixed in 0.1.12.7 (MDL length = requested size rounded to a page, as Microsoft's sample).
+- EXP2743 on the audio image (3ed910f0 + MUAUD004): event-driven and timer-driven exclusive streams and the
+  shared-engine tone all run - every stream callback status 0, DMA interrupts at the expected rate, no DMA error,
+  no hypervisor counter. Owner's listening check: tone heard, even, at a moderate level (codec mixers at -20 dB).
+- EXP2744: the driver detects unplug and re-plug of the headset within seconds (both endpoints change state). The
+  afternoon's "unplug probably not detected" is withdrawn.
+- EXP2745: the capture stream runs; the headset microphone responds (tap: peak -41 dBFS against -65 dBFS quiet). The
+  absolute level looks low; gain and bias are with the audio line. Captured samples were not stored.
+- Not covered: other formats and rates, long playback, pause/resume, plug during playback. The speaker path is
+  untouched and stays blocked. Next for audio: an unattended regression with a forced jack state, the microphone
+  level, then the speaker protection prerequisites.
+- GPU package 30.0.2742.0 (crash fix for a draw with a NULL shader after a refused shader buffer - present in the
+  accepted package too -, fault cause recorded at first fault, reserve 32 MiB, run-time drill) is built and
+  cross-reviewed; its checkpoint and CACHE-1a run next. The bench goes into the overnight acceptance soak of
+  AppleBcmWlan 0.1.69.1 with Bluetooth at tier 4.
