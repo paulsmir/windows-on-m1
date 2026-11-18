@@ -116,6 +116,34 @@ class MccPlanesVerb(unittest.TestCase):
         self.assertEqual(lines[0].count("enable=0x0,status=0x0,data_ways=0,tag_ways=0"), 4)
 
 
+class MccGroupsVerb(unittest.TestCase):
+    class Proxy:
+        def __init__(self):
+            self.reads, self.writes = [], []
+
+        def read32(self, address):
+            self.reads.append(address)
+            plane, off = (address - 0x200000000) // 0x40000, (address - 0x200000000) % 0x40000
+            if plane == 2 and off == 0xA400 + 4 * 8:
+                return 0x1E          # usage of group 8 on plane 2
+            if off == 0xA000 + 4 * 8:
+                return 0x08          # quota of group 8
+            return 0
+
+        def write32(self, address, value):
+            self.writes.append((address, value))
+
+    def test_reads_three_registers_of_32_groups_on_four_planes_and_writes_nothing(self):
+        proxy = self.Proxy()
+        lines = host_request.execute(proxy, host_request.parse("mccgroups"))
+        self.assertEqual(len(proxy.reads), 4 * 32 * 3)
+        self.assertEqual(proxy.writes, [])
+        self.assertEqual(lines, ["HOST_REQUEST mccgroups p0 grp:quota/usage/cnt none",
+                                 "HOST_REQUEST mccgroups p1 grp:quota/usage/cnt none",
+                                 "HOST_REQUEST mccgroups p2 grp:quota/usage/cnt 8:8/1e/0",
+                                 "HOST_REQUEST mccgroups p3 grp:quota/usage/cnt none"])
+
+
 if __name__ == "__main__":
     unittest.main()
 

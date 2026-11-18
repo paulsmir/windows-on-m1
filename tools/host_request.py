@@ -25,6 +25,10 @@ Request lines (``#`` starts a comment):
                PLANE_CACHE_STATUS +0x1c04; m1n1 src/mcc.c; base from the device tree as read in
                EXP2242).  Prints enable, status, data ways (bits 14:10) and tag ways (bits 9:5)
                per plane.  Nothing is written; the controller is always powered.
+    mccgroups  CACHE-1, read-only: per-dataset-group cache quota / usage / use count of
+               ALL four planes (plane base + 0xa000 / 0xa400 / 0xc000 + 4 x group, groups
+               0..31; the m1n1 MCCDSID receipt reads plane 0 only).  One line per plane,
+               groups with a non-zero usage or count.  Nothing is written.
 """
 
 import pathlib
@@ -40,6 +44,7 @@ MCC_PLANE_STRIDE = 0x40000
 MCC_PLANES = 4
 MCC_PLANE_CACHE_ENABLE = 0x1C00
 MCC_PLANE_CACHE_STATUS = 0x1C04
+MCC_GROUP_QUOTA, MCC_GROUP_USAGE, MCC_GROUP_COUNT, MCC_GROUPS = 0xA000, 0xA400, 0xC000, 32
 STATUS_SIZE = 40
 STATUS_FIELDS = ("latch_deadline_expiries", "latch_poll_errors", "late_latches_ignored",
                  "injected_refusals", "dropped_latches", "pending_refuse_swaps",
@@ -69,6 +74,9 @@ def parse(text):
             if ecam & 0xfffff or not (1 <= bus <= 255 and 0 <= dev <= 31 and 0 <= fn <= 7):
                 raise ValueError(f"line {number}: bad ECAM/BDF in {raw!r}")
             requests.append(("mse", (ecam, bus, dev, fn, words[5].lower() == "on")))
+            continue
+        if verb == "mccgroups" and len(words) == 1:
+            requests.append(("mccgroups", 0))
             continue
         if verb == "mccplanes" and len(words) == 1:
             requests.append(("mccplanes", 0))
@@ -112,6 +120,18 @@ def execute(proxy, requests):
             proxy.write16(reg, after)
             lines.append(f"HOST_REQUEST mse {bus:02x}:{dev:02x}.{fn} {'on' if on else 'off'} "
                          f"command 0x{before:04x} -> 0x{proxy.read16(reg):04x}")
+            continue
+        if verb == "mccgroups":
+            for plane in range(MCC_PLANES):
+                base = MCC_PLANE_BASE + plane * MCC_PLANE_STRIDE
+                parts = []
+                for group in range(MCC_GROUPS):
+                    quota = proxy.read32(base + MCC_GROUP_QUOTA + 4 * group)
+                    usage = proxy.read32(base + MCC_GROUP_USAGE + 4 * group)
+                    count = proxy.read32(base + MCC_GROUP_COUNT + 4 * group)
+                    if usage or count:
+                        parts.append(f"{group:x}:{quota:x}/{usage:x}/{count:x}")
+                lines.append(f"HOST_REQUEST mccgroups p{plane} grp:quota/usage/cnt " + (" ".join(parts) or "none"))
             continue
         if verb == "mccplanes":
             parts = []
