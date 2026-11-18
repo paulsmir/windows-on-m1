@@ -20,6 +20,11 @@ Request lines (``#`` starts a comment):
                block at SGX+0xd08000 (0x204d08000..0x204d0802c; the EXP2235 receipt read
                the same words from EL2).  Nothing is written.  Issue it only while the GPU
                is powered (during a GPU run): the block is in the GPU power domain.
+    mccplanes  CACHE-1, read-only: the system-cache state of the four memory-controller
+               planes (plane base 0x200000000, stride 0x40000: PLANE_CACHE_ENABLE +0x1c00,
+               PLANE_CACHE_STATUS +0x1c04; m1n1 src/mcc.c; base from the device tree as read in
+               EXP2242).  Prints enable, status, data ways (bits 14:10) and tag ways (bits 9:5)
+               per plane.  Nothing is written; the controller is always powered.
 """
 
 import pathlib
@@ -30,6 +35,11 @@ P_DISPLAY_INJECT_DROP_LATCHES = 0x110C
 P_DISPLAY_SCANOUT_RECOVERY_STATUS = 0x110D
 SGX_MMUCFG_BASE = 0x204D08000
 SGX_MMUCFG_WORDS = 12
+MCC_PLANE_BASE = 0x200000000
+MCC_PLANE_STRIDE = 0x40000
+MCC_PLANES = 4
+MCC_PLANE_CACHE_ENABLE = 0x1C00
+MCC_PLANE_CACHE_STATUS = 0x1C04
 STATUS_SIZE = 40
 STATUS_FIELDS = ("latch_deadline_expiries", "latch_poll_errors", "late_latches_ignored",
                  "injected_refusals", "dropped_latches", "pending_refuse_swaps",
@@ -59,6 +69,9 @@ def parse(text):
             if ecam & 0xfffff or not (1 <= bus <= 255 and 0 <= dev <= 31 and 0 <= fn <= 7):
                 raise ValueError(f"line {number}: bad ECAM/BDF in {raw!r}")
             requests.append(("mse", (ecam, bus, dev, fn, words[5].lower() == "on")))
+            continue
+        if verb == "mccplanes" and len(words) == 1:
+            requests.append(("mccplanes", 0))
             continue
         if verb == "mmucfg" and len(words) == 1:
             requests.append(("mmucfg", 0))
@@ -99,6 +112,16 @@ def execute(proxy, requests):
             proxy.write16(reg, after)
             lines.append(f"HOST_REQUEST mse {bus:02x}:{dev:02x}.{fn} {'on' if on else 'off'} "
                          f"command 0x{before:04x} -> 0x{proxy.read16(reg):04x}")
+            continue
+        if verb == "mccplanes":
+            parts = []
+            for plane in range(MCC_PLANES):
+                base = MCC_PLANE_BASE + plane * MCC_PLANE_STRIDE
+                enable = proxy.read32(base + MCC_PLANE_CACHE_ENABLE)
+                status = proxy.read32(base + MCC_PLANE_CACHE_STATUS)
+                parts.append(f"p{plane}:enable=0x{enable:x},status=0x{status:x},"
+                             f"data_ways={(status >> 10) & 0x1f},tag_ways={(status >> 5) & 0x1f}")
+            lines.append("HOST_REQUEST mccplanes " + " ".join(parts))
             continue
         if verb == "mmucfg":
             values = [proxy.read32(SGX_MMUCFG_BASE + 4 * i) for i in range(SGX_MMUCFG_WORDS)]

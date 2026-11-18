@@ -90,6 +90,32 @@ class MmuCfgVerb(unittest.TestCase):
                                  "00000000 00000000 00000000 00000000 0027ffee 00000000 00000000"])
 
 
+class MccPlanesVerb(unittest.TestCase):
+    class Proxy:
+        def __init__(self, enable, status):
+            self.enable, self.status, self.reads, self.writes = enable, status, [], []
+
+        def read32(self, address):
+            self.reads.append(address)
+            return self.enable if address & 0xFFFF == 0x1C00 else self.status
+
+        def write32(self, address, value):
+            self.writes.append((address, value))
+
+    def test_reads_enable_and_status_of_four_planes_and_writes_nothing(self):
+        # enabled: 16 ways, status data count 16 (bits 14:10) and tag count 16 (bits 9:5)
+        proxy = self.Proxy(16, (16 << 10) | (16 << 5))
+        lines = host_request.execute(proxy, host_request.parse("mccplanes"))
+        self.assertEqual(proxy.reads, [0x200000000 + p * 0x40000 + o for p in range(4) for o in (0x1C00, 0x1C04)])
+        self.assertEqual(proxy.writes, [])
+        self.assertEqual(lines[0].count("enable=0x10,status=0x4200,data_ways=16,tag_ways=16"), 4)
+
+    def test_the_state_iboot_leaves_reads_as_zero_ways(self):
+        # EXP2242: cache_enable=0x0 status=0x0 data_ways=0 tag_ways=0 on every plane
+        lines = host_request.execute(self.Proxy(0, 0), host_request.parse("mccplanes"))
+        self.assertEqual(lines[0].count("enable=0x0,status=0x0,data_ways=0,tag_ways=0"), 4)
+
+
 if __name__ == "__main__":
     unittest.main()
 
