@@ -216,3 +216,44 @@ class ApgpioVerb(unittest.TestCase):
         lines = host_request.execute(self.Proxy(error=ProxyCommandError("Bad Command")),
                                      host_request.parse("apgpio"))
         self.assertEqual(lines, ["HOST_REQUEST apgpio unavailable ProxyCommandError: Bad Command"])
+
+
+class TrackbVerb(unittest.TestCase):
+    """Audio Track B live facts (TRACK_B_HW_FACTS.md table B, a05ce9046): fixed read-only list, H2 first; the
+    MCA cluster-1 / port registers (H4, H5) are read only when H2 shows MCA1 active (PS bits 7:4 = 0xf),
+    because a read of a gated block from EL2 may raise an SError."""
+
+    class Proxy:
+        def __init__(self, mca1):
+            self.reads, self.mca1 = [], mca1
+
+        def read32(self, address):
+            self.reads.append(address)
+            return self.mca1 if address == 0x23B7002C0 else 0x1234
+
+        def write32(self, *a):
+            raise AssertionError("trackb must not write")
+
+    H45 = {0x238400600, 0x238400604, 0x238400608, 0x238404600, 0x238404604, 0x238404608,
+           0x238404000, 0x238404100, 0x238404300}
+
+    def test_parse(self):
+        self.assertEqual(host_request.parse("trackb"), [("trackb", 0)])
+        with self.assertRaises(ValueError):
+            host_request.parse("trackb 0x238200094")
+
+    def test_h2_first_and_cluster1_read_when_active(self):
+        proxy = self.Proxy(0xFF)
+        lines = host_request.execute(proxy, host_request.parse("trackb"))
+        self.assertEqual(proxy.reads[0], 0x23B7002C0)
+        self.assertTrue(self.H45 <= set(proxy.reads))
+        self.assertTrue(any("H2" in l and "mca1_active=1" in l for l in lines))
+        self.assertTrue(any(l.startswith("HOST_REQUEST trackb H5 0x238404300=0x00001234") for l in lines))
+
+    def test_gated_mca1_skips_h4_h5(self):
+        proxy = self.Proxy(0x0F)   # actual state 0: not active
+        lines = host_request.execute(proxy, host_request.parse("trackb"))
+        self.assertFalse(self.H45 & set(proxy.reads))
+        self.assertTrue(any("H4 skipped" in l for l in lines) and any("H5 skipped" in l for l in lines))
+        self.assertIn(0x238200094, proxy.reads)   # H1 still read
+        self.assertIn(0x23B048000, proxy.reads)   # H6 still read

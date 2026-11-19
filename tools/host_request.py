@@ -33,6 +33,11 @@ Request lines (``#`` starts a comment):
                its access summary ("HV: APGPIO stats ...") and returns the total access count
                (P_HV_APGPIO_STATS 0xc49).  Nothing is written.  An image without the filter answers
                Bad Command; that is reported as unavailable, not raised.
+    trackb     audio Track B live facts (TRACK_B_HW_FACTS.md table B, audio a05ce9046): a fixed list of
+               32-bit reads, H2 (PMGR PS of MCA0/1/2) first; H4/H5 (MCA cluster 1 and port blocks) only
+               when MCA1 reads active (PS bits 7:4 = 0xf) - a gated block may SError from EL2; H1 (ADMAC SRAM
+               sizes), H3 (clock mux 1), H6 (NCO 1 CTRL), H7 (ADMAC channel 4, TX_START) always.  Nothing is
+               written.
 """
 
 import pathlib
@@ -42,6 +47,11 @@ P_DISPLAY_INJECT_REFUSE_SWAPS = 0x110B
 P_DISPLAY_INJECT_DROP_LATCHES = 0x110C
 P_DISPLAY_SCANOUT_RECOVERY_STATUS = 0x110D
 P_HV_APGPIO_STATS = 0xC49
+TRACKB_H2 = (("MCA1", 0x23B7002C0), ("MCA0", 0x23B7002B8), ("MCA2", 0x23B7002C8))
+TRACKB_ALWAYS = (("H1", (0x238200094, 0x238200098)), ("H3", (0x23B0400D8,)), ("H6", (0x23B048000,)),
+                 ("H7", (0x238208800, 0x238208850, 0x238200000)))
+TRACKB_CLUSTER1 = (("H4", (0x238400600, 0x238400604, 0x238400608, 0x238404600, 0x238404604, 0x238404608)),
+                   ("H5", (0x238404000, 0x238404100, 0x238404300)))
 SGX_MMUCFG_BASE = 0x204D08000
 SGX_MMUCFG_WORDS = 12
 MCC_PLANE_BASE = 0x200000000
@@ -85,6 +95,9 @@ def parse(text):
             continue
         if verb == "mccplanes" and len(words) == 1:
             requests.append(("mccplanes", 0))
+            continue
+        if verb == "trackb" and len(words) == 1:
+            requests.append(("trackb", 0))
             continue
         if verb == "apgpio" and len(words) == 1:
             requests.append(("apgpio", 0))
@@ -150,6 +163,17 @@ def execute(proxy, requests):
                 parts.append(f"p{plane}:enable=0x{enable:x},status=0x{status:x},"
                              f"data_ways={(status >> 10) & 0x1f},tag_ways={(status >> 5) & 0x1f}")
             lines.append("HOST_REQUEST mccplanes " + " ".join(parts))
+            continue
+        if verb == "trackb":
+            h2 = [(name, addr, proxy.read32(addr)) for name, addr in TRACKB_H2]
+            active = ((h2[0][2] >> 4) & 0xF) == 0xF
+            lines.append("HOST_REQUEST trackb H2 " + " ".join(f"{n} 0x{a:x}=0x{v:08x}" for n, a, v in h2)
+                         + f" mca1_active={int(active)}")
+            for tag, addrs in TRACKB_ALWAYS[:2] + (TRACKB_CLUSTER1 if active else ()) + TRACKB_ALWAYS[2:]:
+                for a in addrs:
+                    lines.append(f"HOST_REQUEST trackb {tag} 0x{a:x}=0x{proxy.read32(a):08x}")
+            if not active:
+                lines.extend(f"HOST_REQUEST trackb {tag} skipped (MCA1 not active)" for tag, _ in TRACKB_CLUSTER1)
             continue
         if verb == "apgpio":
             try:
