@@ -83792,3 +83792,6 @@ PASS (sheet): B0 gate with identity at start and +100 s; TelemetryWrites/Polls/C
 Stop/recovery: gate FAIL after the swap -> rollback in the script (delete the 0.1.0.14 oem /uninstall, reinstall 0.1.0.12 from C:\stage\PWR-SMC-0.1.0.12, verify sys 4e0410cb), then ordered end. Freeze: needs Pavel's power button after 23:00 (sheet).
 Evidence: .local/experiments/EXP2792-b0/evidence/b0/.
 - Launcher launch-kbd2792.sh sha256 442216d9fc8d9ada (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD c8c7e7b1d.
+
+EXP2792 ACTUAL 2026-11-19T19:13:02Z:
+Launch READY, budget 61/13, HV clean. Bench-script false STOP before any change: the pre-state check expected StartCount 5 (EXP2791's value) but the cold boot's own start had already made it 6 (device OK, CM_PROB_NONE) - correct driver behaviour, wrong bench expectation. Nothing staged, no driver change; ordered end. VERDICT: superseded (bench defect). Fix: bf.sh's argument is the StartCount expected after the boot's own start (previous + 1); install = +1, restart = +2 from it. Rerun as EXP2793 with 7.
