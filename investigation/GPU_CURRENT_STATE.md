@@ -8456,3 +8456,24 @@ and port driver source; installer moved to the current driver set.
   no owner judgement.
 - The safe-level design did what it was for: a distorted signal at S stayed within the reviewed bound (any signal,
   about 16 mW square into the speaker); the absolute level remains an assumption.
+
+## UPDATE 2026-11-19T13:02:24Z - silent receipts run (EXP2772), Wi-Fi 0.1.70.0 (EXP2771); where the speaker work stands
+
+- EXP2772, AppleAudio 0.1.12.17 (receipts only, floor stage), shared pass: the words the DMA fetched are a clean
+  sine about 0.1 dB below full scale, 24 valid bits MSB-aligned, no jumps (136 chunks) - the data fed to the link
+  is right. Link registers read back as planned except: DMA adapter bit 30 and DMA channel control 0x00050000
+  (probably status), page-table slot 5 (probably an error of the expected table), and oscillator control bits
+  20-21 kept from firmware (open). NOT established: the amplifiers' TDM/format registers - the floor build never
+  asks for a release, so the amplifiers were unpowered (error of sheet and package, not of the run).
+- Analysis by the audio line (FIRST_SOUND_EXP2770_ANALYSIS.md): the plan equals Linux on paper in every field
+  that affects the decoded value; candidates not separable yet - A no defect (a 0 dBFS 1 kHz tone at S is
+  60-73 dB SPL at 0.5 m by estimate), B hardware state differs from the plan (a one-bit-late frame start would
+  double and wrap every sample: harsh and louder), D absolute level higher than assumed. Next: receipts package at
+  stage S (0.1.12.18) run only at the lowest volume step to read the amplifier side under a real grant; fix
+  candidates ready on audio/fix-candidates (full writes with no kept firmware bits in cluster 1; the two fields
+  that deviate from Linux; initial endpoint level at the lowest step). A phone recording of one tone offered to
+  the owner as the fastest A-versus-B discriminator.
+- EXP2771, AppleBcmWlan 0.1.70.0 on standing v2: L1-a PASS, L1-b PASS (10 of 10 reconnects within 1 s), L1-d PASS
+  (sta_info rate source in use); the link-quality indication to Windows is still 0 (as on 0.1.69.1) - open.
+- Usage quota reset by the owner at about 14:00 local; held lines can resume. Steam-dependent items (GPU equality
+  check on contract v2, the guard's performance A-B, every GPU queue kit) still wait for his answer.
