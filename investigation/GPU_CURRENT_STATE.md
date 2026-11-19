@@ -8385,3 +8385,32 @@ and port driver source; installer moved to the current driver set.
   adapter arrival is Windows' policy while the wired link has Internet, not the driver. Power - capacity units
   were a read defect in the key gate. m1n1 - PSCI call counters as a flag; PSCI never marked CPUs on and has
   unanswered SMC64 IDs (own branch). Weekly usage quota near its limit; lower-priority lines held until the reset.
+
+## UPDATE 2026-11-19T07:41:11Z - speaker chain: every silent link up to the first release has passed; B3 waits for the owner's own word
+
+- Bench, all PASS, no sound, SDZ low throughout, headphones playing in each:
+  L3 EXP2761 - GPIO filter in deny mode (image 9c36758d): pin 195 forwarded (trap shown in the same boot); the
+  hypervisor probe on pin 181 twice: stage 2 resolves to the filter hook, write refused, word unchanged.
+  L5-COND EXP2762 - guard at GUARD level (77b1c92f): prepare line correct; during a deliberate 2 s host session the
+  waiters on seven CPUs kept polling at <= 10 ms (the event stream wakes them); the 1 Hz EL2 read of the gated
+  speaker SERDES status returned 0 with no fault in 443 reads (hardware unknown closed for a quiet cluster).
+  L6 EXP2763 - tables MUAUDSPK001 (f839992a): AppleAudio 0.1.12.12 starts on eight ranges.
+  L6b EXP2764 - GUARD image of the RELEASE head (9ae0c56a, m1n1 bcdca88a): early-boot pin word 0x00076a02, data
+  bit 0; no uncovered tick gap after clearing; since-clear poll gap <= 10016 us on all eight CPUs.
+  L7 EXP2765 - AppleAudio 0.1.12.14 (flag build with the L7 probe): one release asked, DENIED NOT_BUILT, the page
+  and the driver count the same denial, the page ends LOW and hard-latched as designed.
+- A boot-time uncovered tick gap of about 125 ms is the one-CPU storage hand-off before the secondaries start
+  (placed by source and log order, not timed); a grant is impossible then (fewer than two CPUs, no driver).
+- Reviews, all offline: RELEASE image B3-release 4acb7e00 (m1n1 bcdca88a) rebuilt byte for byte, raise path exactly
+  once, GUARD of the same head differs in the guard object only - GO-with-conditions; guard files round 5 -
+  GO-with-conditions, lock-free protocol untouched; merged driver branch audio/speaker-first-sound 4add16997 -
+  L7, B3 and first sound GO-with-conditions. Loudest reachable state by review: volume code 0x3c (-30 dB) at gain
+  step 10, 8.1 mW sine / 16.25 mW square into 4.9 ohm, cut by a compile-time ceiling in every model state; the
+  absolute level, the impedance and the speaker rating are assumptions, not source facts.
+- B3 (first release, "prepare without run", no stream, amplifiers never set active) is ready on the bench side;
+  the bench refuses it on a relayed word and asks the owner directly, since his delegation excluded speaker
+  output. First sound additionally needs: a sheet for sound at the safe level without sense, an amplifier
+  read-back receipt in the stream path, the owner present.
+- Not run: the GPU equality check on contract v2 and the guard's performance A-B - both start Steam, which needs
+  the owner's answer (rule of 2026-10-22; the architect's reading that a later permission covered it was wrong).
+- Weekly usage quota about 92 %; lower-priority lines held.
