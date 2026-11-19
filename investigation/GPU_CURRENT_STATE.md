@@ -8414,3 +8414,25 @@ and port driver source; installer moved to the current driver set.
 - Not run: the GPU equality check on contract v2 and the guard's performance A-B - both start Steam, which needs
   the owner's answer (rule of 2026-10-22; the architect's reading that a later permission covered it was wrong).
 - Weekly usage quota about 92 %; lower-priority lines held.
+
+## UPDATE 2026-11-19T10:14:23Z - B3 PASS: first release of the speaker amplifiers' shutdown pin on hardware (EXP2768)
+
+- With the owner's word ("Разрешаю B3"), unattended: image B3-release 4acb7e00 (m1n1 bcdca88a) + tables
+  MUAUDSPK001 + AppleAudio 0.1.12.15. The eight-line gate passed before any release (early-boot pin word with data
+  bit 0, plan 11 actions without failure, amp bus planned, filter in deny mode, prepare line at RELEASE level,
+  clean report, lock-wait mode, pin-181 probe refused).
+- "Prepare without run": grants 2, drops 2, none failed; both amplifiers answered on their buses and read back
+  PAGE 0x00, PLAY_CFG2 0xc8 (the floor), PWR_CTRL 0x02 (software shutdown); no refused plan, no I2C failure.
+  Hypervisor: no violation, no fault, SERDES read 105 times without fault, pin word low afterwards. No stream, no
+  ACTIVE; silence is by construction and receipts, nobody listened.
+- New hardware fact: a short SDZ low pulse resets the amplifier - the volume register written 0xc9 read back 0x00
+  after the pulse. The reset default of that register is the loudest code, so the gate rule "ACTIVE only after a
+  volume and a gain write since the last reset or SDZ low" is what keeps a re-grant quiet.
+- EXP2766: PSCI call census on standing v2 - 41 calls, all at boot on cpu0 (version, features, 7 CPU_ON, one
+  MEM_PROTECT); after boot Windows makes no PSCI call at idle or under light use. The PSCI affinity defect is
+  therefore outside today's bench paths; the fix stays needed for sleep and CPU_OFF.
+- EXP2767: AppleBcmWlan 0.1.70.0 installed in place; the L1 runs did not happen because the bench gate carried the
+  previous package's ProbeVersion constant (bench error, not the driver); rerun ordered.
+- Next for the speakers: first sound at the safe level S (-30 dB) without sense capture, owner present. Its
+  conditions: the delta review of the driver head 36077e4c5 (amplifier read-back in the stream path, SDZ held only
+  while streaming, the sheet S-FS), then the package.
