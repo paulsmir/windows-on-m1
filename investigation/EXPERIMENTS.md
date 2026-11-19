@@ -83901,3 +83901,5 @@ Steps: scratchpad cf.sh EXP2797-bg 14: every 60 s wired probe (expected DOWN aft
 PASS: Wi-Fi SSH answers in every minute without the cable, Broadcom adapter Up, P6 ALIVE; wire back OK. FAIL: Wi-Fi SSH lost for 2 consecutive minutes (Pavel plugs the cable back at once; collect), any bugcheck.
 Recovery: cable back in; standing launch.
 Evidence: .local/experiments/EXP2797-bg/evidence/cablefree/run.log (no address or network name recorded).
+
+EXP2797 ADDENDUM 2026-11-19T22:23:36Z: architect decision - AppleSmc 0.1.0.15 (sys 37f519348e18a54d...) replaces 0.1.0.14 as standing (CHANGES C-BENCH-PWR-B0G-0115); 0.1.0.14 stays staged as the fallback; StartCount restarting at 1 after an uninstall of the bound package is the accepted reading rule. Window order changed: camera chain first (EXP2799 S1a2 with the Bluetooth mouse and kbd part B folded in), then cable-free (EXP2798 BEFORE stands, run later on the then-current guest), then WPA3.
