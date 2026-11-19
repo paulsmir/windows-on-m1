@@ -83733,3 +83733,7 @@ PASS: device enabled and started on this boot with fresh receipts; B0_GATE PASS 
 Recovery: standing v2 pair (Mu fd94b781).
 Evidence: .local/experiments/EXP2789-b0/evidence/b0/.
 - Launcher launch-kbd2789.sh sha256 20015c436e9844af (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD fafe72763.
+
+EXP2789 BEFORE ADDENDUM 2026-11-19T18:56:47Z (architect additions, received during the boot, before any gate was judged):
+GATE RULE until the receipts carry a boot identity - a B0 gate counts only when ALL hold: (1) the driver's receipt values were deleted before the boot or step being judged; (2) StartCount equals the value that boot/step must produce (previous value + 1 for one start); (3) APPL0008 Status Started, problem 0; (4) the running AppleSmc.sys hash equals the staged 4e0410cbd7e42219... The bench checks (2) and (4) on the live guest after the script's gates (the guest is left up) and judges with all four.
+Enable fallback: if pnputil /enable-device and Enable-PnpDevice are both refused, no ConfigFlags edit; use 'pnputil /remove-device "ACPI\APPL0008\0"' then 'pnputil /scan-devices' (EXP2428 route) and require Started/problem 0; if that fails, stop and report. Stop test stays /restart-device only; no disable in any form tonight.
