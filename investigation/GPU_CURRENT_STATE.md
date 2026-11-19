@@ -8477,3 +8477,47 @@ and port driver source; installer moved to the current driver set.
   (sta_info rate source in use); the link-quality indication to Windows is still 0 (as on 0.1.69.1) - open.
 - Usage quota reset by the owner at about 14:00 local; held lines can resume. Steam-dependent items (GPU equality
   check on contract v2, the guard's performance A-B, every GPU queue kit) still wait for his answer.
+
+## UPDATE 2026-11-19T14:22:48Z - Wi-Fi 0.1.70.1 PASS (EXP2773), amplifier receipts (EXP2774), camera privacy review FAIL, GPU out-of-memory decisions
+
+- EXP2773, AppleBcmWlan 0.1.70.1 on standing v2: PASS. Link-quality indications reach Windows (82 in the run, 0 on
+  0.1.70.0 and 0.1.69.1); L1-a 170/170, L1-b 10 of 10 reconnects within 1 s, L1-d clean. Observation, not a
+  regression: the link sat on another channel class at 195-229 Mbit/s (866 in EXP2771). The source diff
+  2216e623c..6b92d76ae touches only the LinkInfo fill and its use in the link-state indication; scan, join, roam
+  and country code are unchanged. Tonight's acceptance soak runs with 0.1.70.1 as its single variable (Bluetooth
+  0.0.20.0 unchanged) and records the channel class per sample.
+- EXP2774, AppleAudio 0.1.12.18 (receipts at stage S, run at the lowest volume step only): both amplifiers read
+  back every planned register as written, left = right; link registers as planned while running; the transmitter
+  word reads 0x00027107 with no firmware residue bits; TX slot masks equal Linux (mca.c:469-475); the amplifiers'
+  clock-detect register reads 0x43 on both (inference from the register encodings: SBCLK/FS 256, 48 kHz - to be
+  confirmed from the TI table).
+- The same run's PCM receipt reports discontinuities (247 jumps in 379 chunks; 0 in EXP2772). Architect reading
+  (SPK-EXP2774-ARCHITECT-READING.md, hypothesis with two independent fits): a receipt artefact. The receipt
+  analyses the just-completed chunk and assumes it is intact; with a two-chunk ring and an engine lead above one
+  chunk the start of that chunk already holds the next lap's data. A lead of 31.7-36.7 ms predicts jumps in 2 of
+  3 chunks and the stale probe in 1 of 3 with exactly probes 0 and 1 - both measured (0.65-0.67, 0.33, bitmap
+  0x0003). EXP2772 remains the direct proof that the DMA fetches a clean sine. Feed glitches are not supported.
+- Where the distorted first sound (EXP2770) stands: fed data, link registers, amplifier registers and the detected
+  clock all match the plan. Remaining: hardware state that registers do not show (bit alignment on the wire), or
+  no signal defect at all (a full-scale 1 kHz tone at an unmeasured level, heard once). Fix candidate "no kept
+  bits in cluster 1" is hygiene only. Next discriminator: an objective capture of the output - a recording of the
+  tone at two digital levels (asked of the owner), then the amplifiers' V/I sense capture (plan ordered).
+- Owner, 2026-11-19 in the bench chat: speaker sound tests allowed when the diagnosis needs them, no word per run;
+  limits confirmed by him: the architect orders each step, the bench announces it with a clock time, anything above
+  the lowest volume step only while he is at the machine, nothing above the stage-S ceiling. Steam allowed for
+  today.
+- Camera: independent review of docs/drivers/webcam/PRIVACY.md is FAIL (review-webcam-privacy-20261119.md). Two
+  code defects confirmed by re-reading: a start whose last step fails leaves the sensor channel streaming with no
+  client (hw.c AispHwStartStream returns without teardown after the CH_START ack); a firmware boot failure after
+  power-on returns without power-off. Also: the sensor serial in the registry receipt, frame buffers not zeroed at
+  teardown, start-capable build as the default, indicator claims stronger than the one observation (EXP2740).
+  Fixes with regression tests and a rewritten document ordered; second review after them; the first camera stream
+  (S2) stays blocked. No start-capable camera build has run on the bench.
+- GPU out-of-memory chain (design note 0bbbf5c71): decisions D1-D7 in GPU-OOM-DECISIONS-2026-11-19.md. The lock
+  belongs to residency, not lifetime (B1 is the target), measured before built: receipts U1/U3/U8 and the U9
+  refusal receipt first; no zero page for unresolved addresses - refuse only when a shader of the bound pipeline
+  declares the parameter (already true for SM5.1 DXBC and DXIL; SM5.0 path waits for one U9 reading); reason 6
+  reports E_INVALIDARG; execute has no recoverable failure, so the recoverable point is the application's own
+  MakeResident.
+- Weekly quota: 58 % (all models) at 15:02 local with 4 d 21 h to the reset, about 4 % in the preceding hour.
+  Offline lines are held to small orders until the owner chooses the pace.
