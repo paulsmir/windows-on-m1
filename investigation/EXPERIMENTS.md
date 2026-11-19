@@ -83667,3 +83667,6 @@ Script: scratchpad b0.sh 1 2784 EXP2784-b0 2781 EXP2781-prep (sha aa928a89532590
 PASS: B0_GATE PASS at start and end (0 RTKit management messages, battery DesignedCapacity 49954, Full within 3 % of 40481), stop test receipts, Wi-Fi and BT up, HV clean (no SError besides policy, no PACED/STORM/UNHANDLED/bugcheck). FAIL: any gate not PASS, launch/contract/budget change, bugcheck, freeze (a freeze needs Pavel's power button after 23:00; recorded as such).
 Recovery: standing v2 pair (fd94b781 Mu) on the next boot; AppleSmc removal by pnputil /delete-driver /uninstall if the gate fails.
 Evidence: .local/experiments/EXP2784-b0/evidence/b0/ (run.log, b0-boot1-*.txt, decode-*.txt, launch.out, end.out) + full.log.
+
+EXP2784 ACTUAL 2026-11-19T18:40:21Z:
+Not launched. The previous guest (EXP2781/EXP2782) was ended in order (MAC cleared, LAUNCH_WIFI_2781_ENDED 18:39:51Z); then chainl.sh failed at once with LAUNCH_WIFI_2784_FAIL before-text-missing: b0.sh did not create <dir>/before-text.txt, which the launcher needs and itself appends to the ledger. No m1n1/Mu/Windows boot happened and no package was touched. VERDICT: superseded (bench script defect, not a result). Rerun as EXP2785 with the same variable, b0.sh writing the before-text file first; previous boot = none (the machine is at the proxy after the ordered end).
