@@ -83825,3 +83825,7 @@ PASS: Wi-Fi connected, P6 FOUND/ALIVE, whoami/scp/receipt over Wi-Fi OK with the
 Recovery: wired control unchanged; standing pair.
 Evidence: .local/experiments/EXP2794-wf/evidence/b0/ (run.log may hold network names from wlanctl: local only, never quoted into the ledger).
 - Launcher launch-kbd2794.sh sha256 aec5a97820a9c51d (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 84f31fd7e.
+
+EXP2794 BEFORE ADDENDUM 2026-11-19T19:20:01Z (architect, after B0-F acceptance; added during the boot, before these steps run):
+(a) Standing confirmation of AppleSmc 0.1.0.14: this is the next cold standing boot (receipts deleted at EXP2793's end). After the script's steps, on the live guest: reg query APPL0008 Device Parameters -> identity gate pinned at af754849e (--boot-time LastBootUpTime, --start-count 10, --device-status from pnputil) plus running sys 3d70c0ff. FAIL -> standing goes back to 0.1.0.12 and the architect is told.
+(b) Old package: if oem7.inf (AppleSmc 0.1.0.9) is not the driver bound to ACPI\APPL0008\0, 'pnputil /delete-driver oem7.inf' (no /uninstall, no /force); afterwards only 0.1.0.14 may be listed for applesmc.inf and APPL0008 must still be Started on it.
