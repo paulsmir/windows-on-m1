@@ -83774,3 +83774,10 @@ PASS: all four conditions, B0_GATE PASS start and end (live path, SentMgmt 0, Wa
 Recovery: standing v2 pair (Mu fd94b781).
 Evidence: .local/experiments/EXP2791-b0/evidence/b0/.
 - Launcher launch-kbd2791.sh sha256 f9cb84df266ce87c (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 94b36a037.
+
+EXP2791 ACTUAL 2026-11-19T19:08:19Z:
+Cold boot, no guest action. Launch READY, contract/budget 61/13 PASS, BT/Wi-Fi up (0.0.20.0 / 0.1.70.1), HV clean at READY and end (SERROR_OTHER 0, PACED 0, STORM 0, UNHANDLED 0, BUGCHECK 0).
+Freshness (all four): (1) receipt values deleted at EXP2790's end and verified absent; (2) StartCount 5 (= 4 + 1); (3) APPL0008 OK / CM_PROB_NONE / ConfigFlags 0; (4) running AppleSmc.sys sha 4e0410cbd7e42219da47e3821a12233efb422a0cd6c856382cd148d7121e535b = staged.
+B0_GATE PASS (pinned 2e2d36dcb) at start and at +60 s: StartReceipt v2 StartCount 5, Path live, Mode 1, NtStatus 0, SentMgmt 0, SentSystem 0, SentSmc 52, WakeFallback 0, RtkFault 0, Timeouts 0; Capacity 39957, FullCapacity 40367 (-0.28 % vs 40481), Design 49954. Windows: AC online, 99 %, charging, FULL 40378 mWh; Win32_Battery count 0 (known 0.1.0.12 live-mode string defect, fixed in 0.1.0.14).
+Receipt values deleted before the ordered end (StartCount 5 kept); ended 19:07:59Z.
+VERDICT: confirmed - PWR-B0 boot 2 PASS. With EXP2789 (boot 1) and EXP2790 (stop test) the B0 criteria hold: MUCPCWIFISMC001 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d + AppleSmc 0.1.0.12 (sys 4e0410cb...) join the standing profile (STANDING.json updated, previous Mu fd94b781 kept as previous_standing_mu). NEXT: B0-F (0.1.0.12 -> 0.1.0.14, gate tool pinned at af754849e) as its own step.
