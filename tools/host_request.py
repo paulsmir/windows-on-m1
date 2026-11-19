@@ -44,6 +44,9 @@ Request lines (``#`` starts a comment):
                prints the detail line; it never writes hardware in a deny build.  Host-side guards: never
                the guest's pin 195, never a value with the data bit (bit 0) set, pins 0..211; VALUE defaults
                to 0x2.  The return word is decoded.
+    sdzg [clear] SDZ guard images (m1n1 ed8f1677 P_HV_SDZG_REPORT 0xc4b): m1n1 prints the guard report and the
+               lock-wait receipt; with "clear" it then clears the guard's since-clear maxima (opens a measurement
+               window).  Nothing is written to hardware.  Bad Command (no guard) is reported, not raised.
 """
 
 import pathlib
@@ -54,6 +57,7 @@ P_DISPLAY_INJECT_DROP_LATCHES = 0x110C
 P_DISPLAY_SCANOUT_RECOVERY_STATUS = 0x110D
 P_HV_APGPIO_STATS = 0xC49
 P_HV_APGPIO_PROBE = 0xC4C
+P_HV_SDZG_REPORT = 0xC4B
 APGPIO_GUEST_PIN, APGPIO_PINS = 195, 212
 APGPIO_PROBE_ACTIONS = ("called-hook", "would-forward", "not-hooked", "refused-pin", "refused-guest-pin",
                         "refused-value", "not-installed")
@@ -106,6 +110,9 @@ def parse(text):
             continue
         if verb == "mccplanes" and len(words) == 1:
             requests.append(("mccplanes", 0))
+            continue
+        if verb == "sdzg" and (len(words) == 1 or (len(words) == 2 and words[1].lower() == "clear")):
+            requests.append(("sdzg", int(len(words) == 2)))
             continue
         if verb == "apgpioprobe" and len(words) in (2, 3):
             try:
@@ -184,6 +191,14 @@ def execute(proxy, requests):
                 parts.append(f"p{plane}:enable=0x{enable:x},status=0x{status:x},"
                              f"data_ways={(status >> 10) & 0x1f},tag_ways={(status >> 5) & 0x1f}")
             lines.append("HOST_REQUEST mccplanes " + " ".join(parts))
+            continue
+        if verb == "sdzg":
+            try:
+                proxy.request(P_HV_SDZG_REPORT, count)
+            except Exception as error:
+                lines.append(f"HOST_REQUEST sdzg unavailable {type(error).__name__}: {error}")
+                continue
+            lines.append(f"HOST_REQUEST sdzg report (clear={count}) printed")
             continue
         if verb == "apgpioprobe":
             pin, value = count

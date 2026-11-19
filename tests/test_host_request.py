@@ -287,3 +287,34 @@ class ApgpioProbeVerb(unittest.TestCase):
         self.assertEqual(proxy.calls, [(0xC4C, (181, 0x2))])
         self.assertEqual(lines, ["HOST_REQUEST apgpioprobe pin 181 value 0x2 action=called-hook stage2=filter-hook "
                                  "refused_delta=1 pin_write_delta=0 (detail line: HV: APGPIO probe ...)"])
+
+
+class SdzgVerb(unittest.TestCase):
+    """L5 guard report (m1n1 ed8f1677 P_HV_SDZG_REPORT 0xc4b): m1n1 prints the guard report and the lock-wait
+    receipt; `sdzg clear` then clears the since-clear maxima (opens a window).  Bad Command on a non-guard image
+    is reported, not raised."""
+
+    class Proxy:
+        def __init__(self, error=None):
+            self.calls, self.error = [], error
+
+        def request(self, op, *args, **kwargs):
+            self.calls.append((op, args))
+            if self.error:
+                raise self.error
+            return 1
+
+    def test_parse(self):
+        self.assertEqual(host_request.parse("sdzg\nsdzg clear"), [("sdzg", 0), ("sdzg", 1)])
+        with self.assertRaises(ValueError):
+            host_request.parse("sdzg now")
+
+    def test_report_then_clear(self):
+        proxy = self.Proxy()
+        lines = host_request.execute(proxy, host_request.parse("sdzg\nsdzg clear"))
+        self.assertEqual(proxy.calls, [(0xC4B, (0,)), (0xC4B, (1,))])
+        self.assertEqual(lines, ["HOST_REQUEST sdzg report (clear=0) printed", "HOST_REQUEST sdzg report (clear=1) printed"])
+
+    def test_no_guard_image(self):
+        lines = host_request.execute(self.Proxy(error=RuntimeError("Bad Command")), host_request.parse("sdzg"))
+        self.assertEqual(lines, ["HOST_REQUEST sdzg unavailable RuntimeError: Bad Command"])
