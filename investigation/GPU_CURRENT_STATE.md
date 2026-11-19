@@ -8353,3 +8353,35 @@ and port driver source; installer moved to the current driver set.
   of the protection model; first sound at a -30 dB ceiling without the sense loop, sense and model validation after.
 - Running unattended tonight: headphone regression R1 on AppleAudio 0.1.12.11, then the tolerant-driver regression
   on 0.1.12.12, both on c21d8254.
+
+## UPDATE 2026-11-19T01:09:21Z - night: headphone regressions, speaker chain links L1 and L2 pass; guard and driver cleared for a release with conditions
+
+- EXP2756, AppleAudio 0.1.12.11 on c21d8254: steps 0-7 pass (one stream of 1800 s without error, 179985 position
+  queries, none rejected); step 8 failed by the sheet's rule on a starvation at t=0 that the audio line showed to
+  be the measuring tool's own start (tool v3 counts it apart). EXP2757, 0.1.12.12: steps 0-7 pass; step 8 had one
+  63 ms untrusted window with a late render wake (24.7 ms) and 3 ms of capture loss on an idle guest; repeat
+  EXP2760 with tool v3 passed with no loss. 0.1.12.12 accepted for the chain; "late render wakes of 18-25 ms on an
+  idle guest" is an open observation (also seen on 0.1.12.10 in EXP2748), cause unknown. A count of 191 missing
+  completions was the bench's census-window arithmetic, not the driver (receipt: 67504 of 67500).
+- Speaker chain, images from m1n1 integration/sdz-guard-v2 ed8f1677, no sound, SDZ low throughout:
+  L1 EXP2758 PASS - GPIO filter count-only: in ten minutes of use only pin 195 (keyboard/trackpad) touched the AP
+  GPIO block, 7 accesses; deny mode breaks no other guest user. L2 EXP2759 PASS - amplifier bus power action: 11
+  actions, failed mask 0, SDZ word unchanged with data bit 0. A host CPU load from a review agent overlapped L2 for
+  about a minute (recorded). Next: L3 (deny, proven by a hypervisor probe verb that cannot write hardware), L5
+  (guard at GUARD level with a performance A-B), L6 (tables), L7 (first driver talking to the page), B3.
+- Read-only facts for the speaker stream taken in L1: the firmware leaves NCO 1 running and speaker ports 0 and 1
+  already routed to MCA cluster 1; the other five reads as expected. With the audio line.
+- Reviews (offline): guard round 4 at b618a0dc - hypervisor side of a first release GO-with-conditions, GUARD
+  verdict carries over; driver Track A at d74170550 - L7 and B3 GO-with-conditions (B3 cannot make sound: no TX
+  link, never ACTIVE, volume at the compile-time floor, SDZ bound by the lease). Open before the RELEASE image is
+  built: one small guard round (a re-entry that never confirms the pin low; DROP honoured whatever the sequence)
+  and the Track A fix list. The driver's speaker stream (Track B) and the merged branch are not reviewed yet.
+  Decision: the PSCI CPU_ON fix is not part of the B3 image (availability defect, the guard keeps polling); it
+  stays a condition before unattended playback at open volume.
+- Other lines, offline candidates only, nothing on hardware: GPU - five bench kits; Counter-Strike cannot average
+  60 fps with gl_vsync on at a 60 Hz panel (steady 16.73 ms on P cores); no unsupported D3D12 entry point is hit
+  in any of 2230 traces, real failures come only through the out-of-memory chain; the accepted GPU package has
+  never run on the contract v2 image (first GPU boot on v2 is its own equality check). Wi-Fi - no auto-connect at
+  adapter arrival is Windows' policy while the wired link has Internet, not the driver. Power - capacity units
+  were a read defect in the key gate. m1n1 - PSCI call counters as a flag; PSCI never marked CPUs on and has
+  unanswered SMC64 IDs (own branch). Weekly usage quota near its limit; lower-priority lines held until the reset.
