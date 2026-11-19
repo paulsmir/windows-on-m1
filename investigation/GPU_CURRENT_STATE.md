@@ -8559,3 +8559,30 @@ and port driver source; installer moved to the current driver set.
   sleep and wake could restart the stream by itself (review-webcam-privacy-round2-20261119.md). Round 2 held.
 - GPU queue for after Wi-Fi: V2-EQUAL-GM, R1R3V2-CHK, OOM-U9 (receipts U1/U3/U8/U9, reason-6 code, U4 probe steps,
   F1 trap fix, pool page-in fix; first MSVC compile of the KMD parts happens at the bench build), then the rest.
+
+## UPDATE 2026-11-19T16:56:02Z - Wi-Fi evening: packages 0.1.70.2-.4 built and source-reviewed, WPA3 limit, plan for the Wi-Fi day
+
+- Built by the Wi-Fi line, none on hardware yet (worktree driver-wifi-bt, .local/experiments, signed 35F48BAE):
+  0.1.70.2 BCMWLAN-W5702-8ff34e306-signed (receipts only: TX-burst sliding window, what Windows asks at connect,
+  scan SSID count, idle seconds); 0.1.70.3 BCMWLAN-W5703-f7c9e921e-signed (PMF: plan per BSS, RSN element with
+  MFP bits and BIP-CMAC-128, mfp iovar, IGTK install; refusals 0x12 / 0x14 / 0x15; AP AKM mask receipt;
+  static_asserts on the WDI key-type values); 0.1.70.4 BCMWLAN-W5704-89fe9b99c-signed (hidden SSID: Windows' scan
+  SSID list as directed probes in active scans). Architect source review: PASS for .3 and .4. Earlier builds of
+  .3/.4 with the same DriverVer are marked SUPERSEDED-do-not-install; identify by sys hash and marker receipt.
+- WPA3-SAE: documented limit, no implementation. All 30 firmware images held report "sae " (firmware-run SAE
+  that needs the password) and none "sae_ext" (host-run); WiFiCx never passes the password to the driver. WPA3-only
+  networks cannot be joined; transition networks connect as WPA2-PSK (with PMF from 0.1.70.3). Reopens only with a
+  firmware image whose capability list has sae_ext. A helper reading saved passwords is ruled out.
+- 0.1.70.1 checked for a suspected pool overrun in the work-payload free path: none (two payload kinds, each
+  zeroed with its own size); cable-free acceptance stays on 0.1.70.1.
+- Plan for the Wi-Fi day (sheets WIFI-SHEET-CABLE-FREE.md, WIFI-SHEET-STEP-ACCEPT.md, WIFI-SHEET-SEC-MATRIX.md):
+  soak verdict (EXP2778, 07:30 local) -> sitting A with the owner on 0.1.70.1 (Bluetooth mouse reconnect, cable
+  unplugged by him, automatic connect + SSH over Wi-Fi within 3 min, one router restart) -> at least 2 h
+  cable-free with the GPU queue as load (V2-EQUAL-GM, R1R3V2-CHK) -> cable back, step acceptances .2, .3, .4 one
+  variable each -> sitting B: SEC-MATRIX once on .4. Preconditions read on the soak boot: saved profile all-user
+  with automatic connection; Wi-Fi category Private with SSH allowed. Address discovery tool
+  tools/wifi_bt/guest_wifi_find.py at b2847c204 (host-tested, not run live).
+- Soak side loggers running since 16:18Z (host and guest pings, wired adapter counters); the wired adapter has
+  selective suspend enabled (read only, unchanged).
+- Still owed for "Wi-Fi finished": MAC from the platform (D17, needs the Mu gate of MUCPCWIFI002), automatic
+  country (D18, owner decision), no stage step (D20), sleep/resume, cause of the code-4 TX bursts, PSK-SHA256.
