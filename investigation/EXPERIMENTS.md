@@ -83755,3 +83755,11 @@ PASS: freshness facts hold; gate start/end PASS (live path, SentMgmt 0, WakeFall
 Recovery: standing v2 pair (Mu fd94b781).
 Evidence: .local/experiments/EXP2790-b0/evidence/b0/.
 - Launcher launch-kbd2790.sh sha256 7db902aadaf3b8d3 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 8f7fa7ebd.
+
+EXP2790 ACTUAL 2026-11-19T19:04:39Z:
+Counts as neither B0 boot (architect option A); restart-device stop test + supporting evidence. Launch READY, contract/budget 61/13 PASS, BT up, HV clean throughout (SERROR_OTHER 0, PACED 0, STORM 0, UNHANDLED 0, BUGCHECK 0).
+Freshness facts: StartCount 3 (= 2 + 1), SmcTelemetry/StartReceipt present, APPL0008 OK / CM_PROB_NONE / ConfigFlags 0, running AppleSmc.sys sha 4e0410cbd7e42219... = staged.
+Gate (pinned 2e2d36dcb) start PASS and +60 s end PASS: StartReceipt v2 StartCount 3, Path live, SentMgmt 0, SentSystem 0, WakeFallback 0, RtkFault 0, Timeouts 0; telemetry Polls 5 / Commands 148 at both reads (snapshot written only on change - power line), Capacity 40025, Full 40344, Design 49954.
+STOP TEST 'pnputil /restart-device "ACPI\APPL0008\0"': "Device restarted successfully"; +15 s device OK / CM_PROB_NONE; QuiesceReceipt 1 (= not owned, nothing sent); a NEW StartReceipt StartCount 4, PrevQuiesce not-owned, Path live, SentMgmt 0, SentSystem 0, WakeFallback 0; battery values back (Capacity 39934, Full 40344, Design 49954); gate 'restart' PASS. Note: the power line expected 0.1.0.12 to write no new StartReceipt after restart over a live session; it did (StartCount 3 -> 4).
+Receipt values SmcTelemetry, StartReceipt, QuiesceReceipt, RtkitWakeReceipt deleted and verified absent before the ordered end (StartCount 4 kept). Ordered end 19:04:28Z.
+VERDICT: confirmed - stop-test criterion PASS on 0.1.0.12. NEXT: EXP2791 = B0 boot 2, cold, judged (expected StartCount 5).
