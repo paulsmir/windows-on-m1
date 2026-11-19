@@ -8436,3 +8436,23 @@ and port driver source; installer moved to the current driver set.
 - Next for the speakers: first sound at the safe level S (-30 dB) without sense capture, owner present. Its
   conditions: the delta review of the driver head 36077e4c5 (amplifier read-back in the stream path, SDZ held only
   while streaming, the sheet S-FS), then the package.
+
+## UPDATE 2026-11-19T11:54:10Z - first sound from the speakers (EXP2770): protections held, the signal is wrong
+
+- Attended by the owner, AppleAudio 0.1.12.16 (stage S, ceiling -30 dB) on B3-release 4acb7e00 + MUAUDSPK001.
+  The speakers played for the first time. Level protection verified on hardware: the endpoint appeared at S and
+  was set to the lowest step within 18-33 ms; a full 10 s pass at -95.5 dB (volume code 0xbf), one at -68 dB
+  (0x88, after the endpoint volume had been moved 58 times at the guest - the amplifiers followed, no clamp), and
+  the S step at -30.00 dB (0x3c): gain 0x0a, power active, no latched fault, 376 of 376 lease renewals, no revoke,
+  no short grant; the owner's stop word honoured in 1-2 s and the rollback verified.
+- Signal fidelity FAILED: a 1 kHz sine at 0 dBFS at S was heard by the owner as relatively loud and "electric",
+  "like a bare wire", not an even tone; nothing heard at -68 dB. Cause unknown. Hypothesis only: a framing or
+  sample-format mismatch between what MCA cluster 1 sends and what the amplifiers decode, or how samples are
+  packed into the DMA buffer. No clock error latched in the amplifiers. No more sound until the audio line has
+  derived the candidates from source and named a discriminator that needs no listener.
+- Bench notes: the first low pass was cut by a bench script check that read a persisted receipt of the earlier
+  B3 step (INVALID stop, fixed and re-verified on the real receipt); one arming attempt was lost to the control
+  Ethernet cable coming loose again (recognised from the hypervisor trace, no hard stop); the first cut pass had
+  no owner judgement.
+- The safe-level design did what it was for: a distorted signal at S stayed within the reviewed bound (any signal,
+  about 16 mW square into the speaker); the absolute level remains an assumption.
