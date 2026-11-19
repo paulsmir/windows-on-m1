@@ -83892,3 +83892,12 @@ EXP2794/2796 guest ended by stdend.sh (receipts deleted, MAC cleared) 22:19:53Z;
 B0-G cold-boot gate (pinned c0c70044a): BootId 5204 (previous boot 5203), B0_GATE PASS - StartReceipt v4 State RESULT, BootId 5204, StartCount 3 (= 2 + 1), Path live, SentMgmt 0, SentSystem 0; running AppleSmc.sys 37f51934 (0.1.0.15).
 Wi-Fi bring-up (wfup.sh): MAC staged, Wi-Fi device restart, connect OK, P6 FOUND/ALIVE, AGX_GUEST_VIA=wifi SSH/scp/receipt read OK.
 VERDICT: B0-G PASS (install, restart and cold-boot identity gates). AppleSmc 0.1.0.15 is the standing candidate in place of 0.1.0.14 (architect to confirm); 0.1.0.14 stays staged as the fallback. Guest LEFT UP (Wi-Fi up, cable in) for the window.
+
+EXP2798 HARDWARE BEFORE 2026-11-19T22:23:08Z:
+CABLE-FREE sitting (window step b, Pavel present 23:00-01:00; sheet WIFI-SHEET-CABLE-FREE as amended by the bench review; architect: MAC kept until the end of this sitting). Repeat of EXP2795 (operator absent). No boot: the live EXP2797 standing guest (m1n1 68993d14 + Mu MUCPCWIFISMC001 40a8d7fd, AppleSmc 0.1.0.15, AppleBcmWlan 0.1.70.1, Wi-Fi connected since 22:22Z, P6 FOUND/ALIVE, AGX_GUEST_VIA=wifi control proven with the cable in).
+WHY THIS HYPOTHESIS: EXP2794 proved the Wi-Fi control path while the wire was also up; the remaining question is whether the guest stays controllable and the Wi-Fi link stays up when the wire is physically absent (Windows' route/metric change, WCM behaviour on wire loss).
+Single variable: the Ethernet cable at the USB adapter, pulled by Pavel at an announced time T and plugged back at T + 10 min (the adapter itself stays in the port).
+Steps: scratchpad cf.sh EXP2797-bg 14: every 60 s wired probe (expected DOWN after T), AGX_GUEST_VIA=wifi probe of the Broadcom adapter (wifistat.ps1: status, link speed, other adapters up), guest_wifi_find check; after the plug-back: wired probe OK again within 2 min, then the standing ordered end later uses stdend.sh (SMC receipts deleted, MAC cleared).
+PASS: Wi-Fi SSH answers in every minute without the cable, Broadcom adapter Up, P6 ALIVE; wire back OK. FAIL: Wi-Fi SSH lost for 2 consecutive minutes (Pavel plugs the cable back at once; collect), any bugcheck.
+Recovery: cable back in; standing launch.
+Evidence: .local/experiments/EXP2797-bg/evidence/cablefree/run.log (no address or network name recorded).
