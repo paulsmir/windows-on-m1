@@ -83763,3 +83763,14 @@ Gate (pinned 2e2d36dcb) start PASS and +60 s end PASS: StartReceipt v2 StartCoun
 STOP TEST 'pnputil /restart-device "ACPI\APPL0008\0"': "Device restarted successfully"; +15 s device OK / CM_PROB_NONE; QuiesceReceipt 1 (= not owned, nothing sent); a NEW StartReceipt StartCount 4, PrevQuiesce not-owned, Path live, SentMgmt 0, SentSystem 0, WakeFallback 0; battery values back (Capacity 39934, Full 40344, Design 49954); gate 'restart' PASS. Note: the power line expected 0.1.0.12 to write no new StartReceipt after restart over a live session; it did (StartCount 3 -> 4).
 Receipt values SmcTelemetry, StartReceipt, QuiesceReceipt, RtkitWakeReceipt deleted and verified absent before the ordered end (StartCount 4 kept). Ordered end 19:04:28Z.
 VERDICT: confirmed - stop-test criterion PASS on 0.1.0.12. NEXT: EXP2791 = B0 boot 2, cold, judged (expected StartCount 5).
+
+EXP2791 HARDWARE BEFORE 2026-11-19T19:04:55Z:
+PWR-B0 boot 2 of 2 (architect option A: EXP2789 = boot 1; EXP2790 = stop test only). Cold boot, no guest action. Previous boot: none (EXP2790 ended in order 19:04:28Z after deleting the driver's receipt values; machine at the proxy).
+Pair: m1n1 standing-v2 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920 + Mu MUCPCWIFISMC001 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; AppleSmc 0.1.0.12 installed (oem35, sys 4e0410cbd7e42219...); v2 launcher f20d9a2d, client LCV2-pc-81c450e2, budget 61/13. Gate tool pinned at 2e2d36dcb (scratchpad smcgate0112, sha f73376850dd534be).
+WHY THIS HYPOTHESIS: boot 1 (EXP2789) and the stop test (EXP2790) passed on fresh receipts; this boot shows the installed driver starting from a cold boot, the every-launch case.
+JUDGED ONLY WITH ALL FOUR (architect rule): (1) receipt values deleted before this boot - done at EXP2790's end; (2) StartCount = 5 (EXP2790 left 4); (3) APPL0008 Status OK / CM_PROB_NONE; (4) running AppleSmc.sys sha = 4e0410cbd7e42219...
+Steps (scratchpad b0c.sh c 2791 EXP2791-b0 none none <this text> 5): launch + contract + budget, SMC/rail/filter lines, versions, UMD check, RCPT_START + running driver hash, gate start, battery block, +60 s gate end, HV counters, delete receipt values, ordered end.
+PASS: all four conditions, B0_GATE PASS start and end (live path, SentMgmt 0, WakeFallback 0, battery in range), Wi-Fi/BT up, HV clean -> MUCPCWIFISMC001 + AppleSmc 0.1.0.12 join the standing profile (CHANGES row with both hashes). FAIL: any condition or gate miss, bugcheck.
+Recovery: standing v2 pair (Mu fd94b781).
+Evidence: .local/experiments/EXP2791-b0/evidence/b0/.
+- Launcher launch-kbd2791.sh sha256 f9cb84df266ce87c (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 94b36a037.
