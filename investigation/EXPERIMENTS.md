@@ -83915,3 +83915,5 @@ STOP (ends the camera chain): indicator lit, any receipt differs, DiagTaken 1, b
 Recovery: pnputil /delete-driver <appleisp oem> /uninstall (no disable), standing pair.
 Evidence: .local/experiments/<ND>/evidence/cam/, btmouse/, wifi/.
 - Launcher launch-kbd2799.sh sha256 9f9985e7aa9edeed (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu abadb7e3b6d1d21c0f5ae5562405a24b60376847c850e581a922530bba17bf17; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD f7d74c6c9.
+
+EXP2799 BEFORE ADDENDUM 2026-11-19T23:10:46Z (during the boot, before T): ACPI\APPL0004\0 found Disabled (problem 22, ConfigFlags 0x1, no driver bound) - left by EXP2740's ending 'pnputil /disable-device'. A stage-1 install on a disabled devnode cannot start, so before T: 'pnputil /enable-device "ACPI\APPL0004\0"' (no driver bound: nothing loads, the ISP firmware is not touched, the indicator cannot be affected); verify the device leaves problem 22. The camera chain's own removal at the end uses delete-driver /uninstall only, never disable (EXP2788 lesson).
