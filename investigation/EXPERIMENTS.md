@@ -83860,3 +83860,14 @@ Steps: scratchpad cf.sh EXP2794-wf 12: every 60 s wired probe (expected DOWN aft
 PASS: Wi-Fi SSH answers in every minute without the cable, Broadcom adapter Up, P6 ALIVE; wire back OK. FAIL: Wi-Fi SSH lost for 2 consecutive minutes (Pavel plugs the cable back at once; collect), any bugcheck.
 Recovery: cable back in; standing launch.
 Evidence: .local/experiments/EXP2794-wf/evidence/cablefree/run.log (no address or network name recorded).
+
+EXP2795 ACTUAL 2026-11-19T22:17:20Z:
+Cable-free sitting not performed: Pavel was not at the machine 23:01-23:15 local (he answered at ~23:17 that he arrives in ~40 min). cf.sh ran 14 one-minute probes with the cable IN: wired ok and Wi-Fi SSH (AGX_GUEST_VIA=wifi) ok in every probe, Broadcom adapter Up 648-720 Mbps. VERDICT: superseded (operator absent); the sitting is repeated on the guest that will be up at ~23:57.
+
+EXP2796 HARDWARE BEFORE 2026-11-19T22:17:20Z:
+B0-G part 1 (RUNSHEETS B0-G at ae80b366a; architect phase-3 item "B0-G in a gap", gap = the 40 min before Pavel arrives): live swap AppleSmc 0.1.0.14 -> 0.1.0.15 on the running EXP2794 standing guest (BootId 5203, StartCount 1), no new boot.
+Package 0.1.0.15: commit c0c70044a642463ce004a9eea6ee6356fccd2563, folder .claude/worktrees/driver-power-934be9/.local/handoff/night-20261119/drv-power-pkg-PWR-SMC-0.1.0.15, SHA256SUMS 6/6 reproduced, sys 37f519348e18a54dc00afdca310f42dc7b9f8a5c5bbd715f1c486315d3cafe0d, inf 4435e4c68c79a88f..., cat 6af19d6e837c5d72..., DriverVer 0.1.0.15; START-PATH-DIFF: 12 functions identical to 0.1.0.14. Gate tool pinned: git show c0c70044a:tools/smc_receipt_decode.py (selftest OK), --boot-id (KUSER_SHARED_DATA.BootId) --start-count --device-status.
+WHY THIS HYPOTHESIS: EXP2794 showed the wall-clock identity failing on a cold boot; 0.1.0.15 replaces it with BootId + StartCount, start path unchanged.
+Steps (scratchpad bg.sh EXP2794-wf 1): pre StartCount 1 / device OK / running 3d70c0ff; BootId; copy + guest hash; delete receipts; delete the 0.1.0.14 oem /uninstall; install 0.1.0.15; +20 s running sys 37f51934, gate 'install' (StartCount as read, BootId 5203); battery block (CapacityPermille cross-check); restart-device + gate 'restart' (StartCount +1, same BootId). Rollback on a gate FAIL: reinstall 0.1.0.14 from C:\stage.
+Part 2 (EXP2797, own BEFORE): stdend + cold standing boot, judged gate with the new BootId and StartCount +1, Wi-Fi bring-up, guest left up for the window.
+Evidence: .local/experiments/EXP2794-wf/evidence/b0g/.
