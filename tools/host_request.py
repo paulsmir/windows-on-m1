@@ -38,6 +38,12 @@ Request lines (``#`` starts a comment):
                when MCA1 reads active (PS bits 7:4 = 0xf) - a gated block may SError from EL2; H1 (ADMAC SRAM
                sizes), H3 (clock mux 1), H6 (NCO 1 CTRL), H7 (ADMAC channel 4, TX_START) always.  Nothing is
                written.
+    apgpioprobe PIN [VALUE]
+               L3/B3 deny proof (APGPIO_FILTER images, m1n1 ed8f1677 P_HV_APGPIO_PROBE 0xc4c): m1n1 takes
+               PIN's config word through the guest write path (stage-2 lookup, hook, filter decision) and
+               prints the detail line; it never writes hardware in a deny build.  Host-side guards: never
+               the guest's pin 195, never a value with the data bit (bit 0) set, pins 0..211; VALUE defaults
+               to 0x2.  The return word is decoded.
 """
 
 import pathlib
@@ -47,6 +53,11 @@ P_DISPLAY_INJECT_REFUSE_SWAPS = 0x110B
 P_DISPLAY_INJECT_DROP_LATCHES = 0x110C
 P_DISPLAY_SCANOUT_RECOVERY_STATUS = 0x110D
 P_HV_APGPIO_STATS = 0xC49
+P_HV_APGPIO_PROBE = 0xC4C
+APGPIO_GUEST_PIN, APGPIO_PINS = 195, 212
+APGPIO_PROBE_ACTIONS = ("called-hook", "would-forward", "not-hooked", "refused-pin", "refused-guest-pin",
+                        "refused-value", "not-installed")
+APGPIO_PROBE_KINDS = ("unmapped", "filter-hook", "other-hook", "hardware", "other-sw")
 TRACKB_H2 = (("MCA1", 0x23B7002C0), ("MCA0", 0x23B7002B8), ("MCA2", 0x23B7002C8))
 TRACKB_ALWAYS = (("H1", (0x238200094, 0x238200098)), ("H3", (0x23B0400D8,)), ("H6", (0x23B048000,)),
                  ("H7", (0x238208800, 0x238208850, 0x238200000)))
@@ -95,6 +106,16 @@ def parse(text):
             continue
         if verb == "mccplanes" and len(words) == 1:
             requests.append(("mccplanes", 0))
+            continue
+        if verb == "apgpioprobe" and len(words) in (2, 3):
+            try:
+                pin = int(words[1], 0)
+                value = int(words[2], 0) if len(words) == 3 else 0x2
+            except ValueError:
+                raise ValueError(f"line {number}: cannot parse {raw!r}") from None
+            if not 0 <= pin < APGPIO_PINS or pin == APGPIO_GUEST_PIN or value & 1 or not 0 <= value <= 0xFFFFFFFF:
+                raise ValueError(f"line {number}: refused probe {raw!r} (guest pin, data bit or range)")
+            requests.append(("apgpioprobe", (pin, value)))
             continue
         if verb == "trackb" and len(words) == 1:
             requests.append(("trackb", 0))
@@ -163,6 +184,16 @@ def execute(proxy, requests):
                 parts.append(f"p{plane}:enable=0x{enable:x},status=0x{status:x},"
                              f"data_ways={(status >> 10) & 0x1f},tag_ways={(status >> 5) & 0x1f}")
             lines.append("HOST_REQUEST mccplanes " + " ".join(parts))
+            continue
+        if verb == "apgpioprobe":
+            pin, value = count
+            r = int(proxy.request(P_HV_APGPIO_PROBE, pin, value))
+            act, kind = r & 0xFF, (r >> 8) & 0xFF
+            an = APGPIO_PROBE_ACTIONS[act] if act < len(APGPIO_PROBE_ACTIONS) else f"action{act}"
+            kn = APGPIO_PROBE_KINDS[kind] if kind < len(APGPIO_PROBE_KINDS) else f"kind{kind}"
+            lines.append(f"HOST_REQUEST apgpioprobe pin {pin} value 0x{value:x} action={an} stage2={kn} "
+                         f"refused_delta={(r >> 16) & 0xFF} pin_write_delta={(r >> 24) & 0xFF} "
+                         f"(detail line: HV: APGPIO probe ...)")
             continue
         if verb == "trackb":
             h2 = [(name, addr, proxy.read32(addr)) for name, addr in TRACKB_H2]

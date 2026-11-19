@@ -257,3 +257,33 @@ class TrackbVerb(unittest.TestCase):
         self.assertTrue(any("H4 skipped" in l for l in lines) and any("H5 skipped" in l for l in lines))
         self.assertIn(0x238200094, proxy.reads)   # H1 still read
         self.assertIn(0x23B048000, proxy.reads)   # H6 still read
+
+
+class ApgpioProbeVerb(unittest.TestCase):
+    """L3/B3 deny proof (m1n1 ed8f1677 P_HV_APGPIO_PROBE 0xc4c): host-side guards mirror m1n1's plan - never the
+    guest's pin 195, never a value with the data bit (bit 0) set, pins 0..211 only - so a bad request never reaches
+    the proxy; the return word is decoded (action | kind << 8 | refused delta << 16 | pin-write delta << 24)."""
+
+    class Proxy:
+        def __init__(self, ret=0):
+            self.calls, self.ret = [], ret
+
+        def request(self, op, *args, **kwargs):
+            self.calls.append((op, args))
+            return self.ret
+
+    def test_parse_and_guards(self):
+        self.assertEqual(host_request.parse("apgpioprobe 181"), [("apgpioprobe", (181, 0x2))])
+        self.assertEqual(host_request.parse("apgpioprobe 181 0x0"), [("apgpioprobe", (181, 0x0))])
+        for bad in ("apgpioprobe 195", "apgpioprobe 181 0x3", "apgpioprobe 181 1", "apgpioprobe 212",
+                    "apgpioprobe", "apgpioprobe x"):
+            with self.assertRaises(ValueError):
+                host_request.parse(bad)
+
+    def test_decodes_called_hook_with_one_refusal(self):
+        # action 0 called-hook, kind 1 filter-hook, refused delta 1, pin-write delta 0
+        proxy = self.Proxy(ret=0 | (1 << 8) | (1 << 16))
+        lines = host_request.execute(proxy, host_request.parse("apgpioprobe 181"))
+        self.assertEqual(proxy.calls, [(0xC4C, (181, 0x2))])
+        self.assertEqual(lines, ["HOST_REQUEST apgpioprobe pin 181 value 0x2 action=called-hook stage2=filter-hook "
+                                 "refused_delta=1 pin_write_delta=0 (detail line: HV: APGPIO probe ...)"])
