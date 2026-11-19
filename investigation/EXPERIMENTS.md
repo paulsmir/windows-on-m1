@@ -83713,3 +83713,13 @@ PASS: B0_GATE PASS at start and end (SentMgmt 0, WakeFallback 0, battery DesignC
 Recovery: standing v2 pair (Mu fd94b781); pnputil /delete-driver oem35.inf /uninstall if the gate fails.
 Evidence: .local/experiments/EXP2788-b0/evidence/b0/ + full.log.
 - Launcher launch-kbd2788.sh sha256 41cbe315b165a577 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 7041ce967.
+
+EXP2788 ACTUAL 2026-11-19T18:52:10Z:
+Launch READY, contract and budget 61/13 PASS, HV clean at start and end (SERROR_OTHER 0, PACED 0, STORM 0, UNHANDLED 0, BUGCHECK 0), Wi-Fi 0.1.70.1 / BT 0.0.20.0 up, ordered end 18:51:58Z.
+INVALID AS A B0 RESULT: ACPI\APPL0008\0 was Disabled (problem 22; ConfigFlags 0x1 = CONFIGFLAG_DISABLED, DevNodeStatus 0x01802400) - AppleSmc did not start on this boot. The b0 gate printed B0_GATE PASS at start and end only because it decodes the receipt values persisted in Device Parameters by EXP2787's start (identical TELEMETRY/START_RECEIPT, StartCount 1); the gate has no freshness check. Windows power status: NoSystemBattery, percent 100.
+Cause: EXP2787's stop-test step 'pnputil /disable-device "ACPI\APPL0008\0" /force' persisted the disable for the next boot; the following /enable-device was refused ('This command is not supported on this OS product'), so the flag stayed set. See the EXP2787 correction below.
+VERDICT: rejected as evidence (stale receipts); boot 2 of PWR-B0 must be repeated after the device is re-enabled. The standing-profile change does NOT happen on this result.
+Bench gate defect: tools/smc_receipt_decode.py --b0-gate accepts stale receipts. Bench fix before the rerun: require APPL0008 Status Started / problem 0 on the boot and a freshness proof (delete the driver's receipt values at the ordered end of a B0 boot, or a boot identity in the receipt - power line).
+
+EXP2787 CORRECTION 2026-11-19T18:52:10Z (to EXP2787 ACTUAL, not replacing it):
+"the device stayed Started" was true during EXP2787 only: the /disable-device /force was recorded as a pending disable (ConfigFlags 0x1) that took effect at the next boot (EXP2788: problem 22). EXP2787's own gate values are fresh (APPL0008 started on oem35 after the install on that boot).
