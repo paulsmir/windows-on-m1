@@ -8521,3 +8521,41 @@ and port driver source; installer moved to the current driver set.
   MakeResident.
 - Weekly quota: 58 % (all models) at 15:02 local with 4 d 21 h to the reset, about 4 % in the preceding hour.
   Offline lines are held to small orders until the owner chooses the pace.
+
+## UPDATE 2026-11-19T16:16:50Z - owner priority: Wi-Fi/Bluetooth first (cable-free bench); USB-X1 PASS, V2-EQUAL not comparable, sense capture works, control-link stalls reclassified
+
+- OWNER DECISION 2026-11-19 (~17:10 local, architect chat): finish one thing first - Wi-Fi/Bluetooth; goal: the
+  bench works without the Ethernet cable; he creates test networks with other encryption types on request.
+  Audible audio steps and the GPU queue go behind it. Wi-Fi line writes sheets CABLE-FREE and SEC-MATRIX; the
+  driver today offers only open and WPA2-PSK/CCMP (SAE off, MFPCapable 0).
+- EXP2778 (running until 07:30 local): acceptance soak of AppleBcmWlan 0.1.70.1; functional variable = that
+  package; diagnostic-only second difference = the read-only xHCI observer image (EXP2775 m1n1).
+- EXP2775 USB-X1: PASS. Observer on two root ports, budget 61 maps / 13 routes unchanged, guest alive, no new
+  fault lines. Merge into the standing image not ordered yet.
+- EXP2777: stopped by a kit defect before any measurement (a PowerShell function named like a built-in alias made
+  every hash check read "missing"). Kits fixed and re-issued; removal now deletes the four user-mode driver
+  copies and the removed-check gates on their absence (they were left behind by pnputil's uninstall).
+- EXP2779 (V2-EQUAL repeat): EQUAL_PARTIAL, all three halves NOT_COMPARABLE. Accepted package 30.0.2481.0 on
+  contract v2: binding PASS, resets/TDR/HV 0, tool suite 119/0 - no regression seen. GravityMark never started:
+  available 3671-3825 MB against the kit's 4000 MB gate; EXP2719's own starts were 3543, 3778, 3911, then
+  4111-4235 MB, so the gate described its state after several runs (hypothesis: each run trims other processes).
+  CS invalid: control link stalled during the warm run. Tomorrow's kit V2-EQUAL-GM: one unmeasured warm-up run,
+  then gate 3900 MB and validity from the pool receipt (five counters unchanged, no 0x8007000e line). Idle AGX
+  pool held 158 MiB.
+- Control-link stalls (EXP2770 12:17, EXP2779): the guest logged no media, PnP or NDIS event, the adapter read
+  Up/Connected, the second stall ended by itself after about 11 min. Not a loose plug (EXP2749 remains one).
+  Cause open; USB line's ranking (usb-control-link-stalls.md): network path outside the guest first (the host
+  reaches the guest over the host's own Wi-Fi), then receive-buffer starvation, adapter power saving, selective
+  suspend. Side loggers requested for the soak (host and guest pings, adapter counters).
+- EXP2780, AppleAudio 0.1.12.19, S-SENSE step 1a (silent): the amplifiers' V/I sense capture works (cluster 2
+  RXB, ADMAC 11; 48000.1 frames/s, errors 0, read-backs as written), playback and headphones undisturbed. Sense
+  noise with amplifiers active: 7.0-9.8 LSB rms. Consequence: broadband THD+N is noise-limited at the allowed
+  levels (about 6 % for a clean output at -40 dB); the next package measures harmonic bins instead
+  (SPK-SENSE-EXP2780-READING.md). The EXP2774 "PCM jumps" artefact was confirmed from source by the audio line
+  (84 I2C reads after the DMA start delayed Run by ~31 ms; receipt v2 and the run-order change are in 0.1.12.19).
+  Audio paused here by the priority decision.
+- Camera: second independent review of 91f279769 = PASS WITH CONDITIONS. Stage-1 packages 0.10.1.1 / 0.10.1.3
+  cleared for hardware (indicator must be observed again); start-capable builds blocked - a fault followed by
+  sleep and wake could restart the stream by itself (review-webcam-privacy-round2-20261119.md). Round 2 held.
+- GPU queue for after Wi-Fi: V2-EQUAL-GM, R1R3V2-CHK, OOM-U9 (receipts U1/U3/U8/U9, reason-6 code, U4 probe steps,
+  F1 trap fix, pool page-in fix; first MSVC compile of the KMD parts happens at the bench build), then the rest.
