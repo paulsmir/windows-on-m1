@@ -83886,3 +83886,9 @@ Steps (scratchpad bgc.sh c <N> <ND> 2794 EXP2794-wf <this text> 3): stdend prev;
 PASS: B0_GATE PASS (receipt v4 State RESULT, BootId = this boot, StartCount 3, Path live, SentMgmt 0, SentSystem 0), running sys 37f51934; Wi-Fi up; HV clean. FAIL: gate FAIL -> standing back to 0.1.0.14 (staged C:\stage) and the architect is told.
 Evidence: .local/experiments/<ND>/evidence/b0/, wifi/.
 - Launcher launch-kbd2797.sh sha256 87b0326d2ab1f4cc (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD fefd1bd7f.
+
+EXP2797 ACTUAL 2026-11-19T22:22:44Z:
+EXP2794/2796 guest ended by stdend.sh (receipts deleted, MAC cleared) 22:19:53Z; EXP2797 READY, contract/budget 61/13, HV clean (SERROR_OTHER/PACED/STORM/UNHANDLED/BUGCHECK 0).
+B0-G cold-boot gate (pinned c0c70044a): BootId 5204 (previous boot 5203), B0_GATE PASS - StartReceipt v4 State RESULT, BootId 5204, StartCount 3 (= 2 + 1), Path live, SentMgmt 0, SentSystem 0; running AppleSmc.sys 37f51934 (0.1.0.15).
+Wi-Fi bring-up (wfup.sh): MAC staged, Wi-Fi device restart, connect OK, P6 FOUND/ALIVE, AGX_GUEST_VIA=wifi SSH/scp/receipt read OK.
+VERDICT: B0-G PASS (install, restart and cold-boot identity gates). AppleSmc 0.1.0.15 is the standing candidate in place of 0.1.0.14 (architect to confirm); 0.1.0.14 stays staged as the fallback. Guest LEFT UP (Wi-Fi up, cable in) for the window.
