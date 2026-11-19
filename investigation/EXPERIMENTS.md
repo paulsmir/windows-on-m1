@@ -83648,3 +83648,13 @@ WHY THIS HYPOTHESIS: (1) d34245a9 serialises the S0-idle power reference (no Res
 Script: scratchpad kbdA.ps1 (sha 8cadf88a3ae10ed0) on the guest, pnputil only: step 0 records the installed BL/AppleInput oems, running sys hashes, status, user_level and AppleInput Parameters, exports the current BL oem to C:\kbn\prevbl; A1 install + restart APPL0005; A2 set 120; A3 remove-device + scan; A4 reinstall; A5 powercfg /a; A6 20 D3 cycles; A7 restore the step-0 level.
 PASS (card): A1 running sys b51ebf5d, APPL0005 OK, user_level = step 0, hardware_fault 0, power 0xf; A2 UserLevel 120 in ~1 s; A3 and A4 user_level 120; A6 ps0_count = start + 20, hardware_fault 0, live_consistent 1. FAIL: level lost, start failure, ps0_count not advancing, bugcheck. Rollback A: delete the BL-dee0c2e0 oem /uninstall /force, add C:\kbn\prevbl\<oem>.inf /install, restart APPL0005, verify the step-0 sys sha.
 Evidence: .local/experiments/EXP2783-kbdA/evidence/ (kbdA.txt, run.log).
+
+EXP2783 ACTUAL 2026-11-19T18:38:19Z:
+kbdA.ps1 ran to KBDA_DONE (~2 min, unattended); evidence .local/experiments/EXP2783-kbdA/evidence/kbdA.txt. Guest package copy hashes cat C466FEEF, inf 3AA84F2C, sys B51EBF5D, kbdblctl ED046905; catalog Valid.
+Step 0: BL oem20.inf 19.38.54.183 (running sys 2b1e3706...), AppleInput oem2.inf (running 15fbb42e...), AppleInput Parameters 0/1/1, user_level 137, hardware_fault 0, power 0xf, ps0_count 1, live_consistent 1; oem20 exported to C:\kbn\prevbl.
+A1 PASS: installed as oem34.inf on ACPI\APPL0005\0; running sys b51ebf5dbe532a33579c477c8b0de44b7af940af62178bdbfc1c1943a9b42868; APPL0005 OK; user_level 137 = step 0; hardware_fault 0; power 0xf.
+A2 PASS: Parameters\UserLevel 120. A3 PASS: after remove-device + scan user_level 120. A4 PASS: after reinstall user_level 120.
+A5 powercfg /a: only S0 Low Power Idle (Network Connected); S1-S3 disabled (S0ix + Graphics), hibernate not enabled -> input for part D.
+A6 PASS: ps0_count 1 -> 21 (start + 20), hardware_fault 0, live_consistent 1. A7: level restored to 137.
+No bugcheck; guest and SSH alive throughout. VERDICT: confirmed - part A PASS; BL-dee0c2e0 stays installed as the every-boot backlight package (card rule). Rollback not needed; C:\kbn\prevbl (oem20 export) kept on the guest.
+NEXT: PWR-B0 boot 1 (UMD clean first); kbd part B (AI-068bbbfa, Fn+F11) attended in the window.
