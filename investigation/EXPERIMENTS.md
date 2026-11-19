@@ -83832,3 +83832,6 @@ EXP2794 BEFORE ADDENDUM 2026-11-19T19:20:01Z (architect, after B0-F acceptance; 
 
 EXP2794 BEFORE ADDENDUM 2 2026-11-19T19:22:11Z (during the boot; wf.sh stopped at P6 because the connect failed: wlanctl connect code 11 reason 0x38014 twice, scan err 5 - the standing launch does not bring Wi-Fi up):
 PnP step as in EXP2778 (soakgo3.sh lines 29-32): wlan_mac_stage.py stage (private MAC to the AppleBcmWlan parameters), 'pnputil /restart-device' of the Broadcom Wi-Fi PCI device, wait until WlanScanTasks >= 2 (<= 4 min), then wlanctl connect 60 (standing profile), then P6 find/check and the AGX_GUEST_VIA=wifi checks. The MAC is cleared again before the next ordered restart (standing rule). Stop if the device does not come back OK or no IPv4 on Wi-Fi.
+
+EXP2794 BEFORE ADDENDUM 3 2026-11-19T19:24:15Z (after the standing-confirmation gate FAILED on the boot identity; architect's rule: standing returns to 0.1.0.12):
+Rollback on the live guest: 'pnputil /delete-driver oem35.inf /uninstall' (= 0.1.0.14, the bound package), 'pnputil /add-driver C:\stage\PWR-SMC-0.1.0.12\AppleSmc.inf /install', +20 s verify APPL0008 Started and running sys 4e0410cbd7e42219...; then 'pnputil /delete-driver oem7.inf' (0.1.0.9, verified not bound) and verify that only 0.1.0.12 remains for applesmc.inf. Stop and report if the device is not Started on 0.1.0.12.
