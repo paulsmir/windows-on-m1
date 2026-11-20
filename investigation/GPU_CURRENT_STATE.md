@@ -8777,3 +8777,22 @@ and port driver source; installer moved to the current driver set.
   completion, live read-back of the controller words - and kit DRIFT3 on the unchanged DRIFT2 procedure, switch absent:
   the control on today's power and the discriminating measurement in one run.
 - Bench condition: guest C: at 1.43 GiB free (page file 6.9 GB), base package not restorable until space is back.
+
+## UPDATE 2026-11-20T20:53:35Z - DRIFT3 (EXP2848): a thermal ceiling at temp_c 88-93; next = P-cluster cap
+
+- GP1c (126a2eb0f, 30.0.2850.0, instrument only, architect review PASS) works: Wom1GpuPerfHist and Wom1FastDieLive.
+- EXP2848, kit 5d7273f1, switch absent, hub power (architect's reading of the tables, confirmed over all 14 runs in
+  GPU-THERM-3.md; the bench's ACTUAL is the record): f1 8464, f2 7647 VALID, f2/f1 0.903 - reproduces EXP2833.
+  Below 86 C the target state is 6 for 99.7-99.9 % of loaded time in every run. It leaves 6 only at temp_c 88-93 and
+  the die never passes that row. Share of 6 at 88+: f1 0.95, l06 0.96, l12 0.72, f2 0.44; time at 88+: 0-32 s per
+  load run, 102 s in f2. State 6 holds at 7-8 W of the firmware's power estimate: POWER rejected, THERMAL confirmed.
+  Live words unchanged under load (release 8000, target 9880, offset -220; flag, control, transfer, override 0).
+- macOS under the same load (EXP2831 powermetrics, GPU line's reading): P-cluster 600 MHz for 86.5 % of its active
+  time and 0.8 % active, E-cluster ~1 GHz, CPU median 63 mW, GPU 4.6 W, hottest sensor GPU_MTR_Temp_Sensor4 98.5 C.
+  Windows: P cores at 2988 MHz (launcher cap 12), parking off (standing since EXP2812), E-cluster at its top.
+- ACTIVE HYPOTHESIS (labelled): same physical limit as macOS (temp_c reads ~5-6 C below the controller's input,
+  target 98.8 - 2.2), reached because the CPU side makes more heat under Windows. Not proven: no read of the
+  controller's input; Windows CPU power unmeasured.
+- NEXT: DRIFT3 with one change, launch token WOM1_PCPU_PSTATE=8 (2184 MHz), host side, no guest setting. Prediction
+  f2/f1 >= 0.95, share of 6 at 88+ in f2 >= 0.70; falsified at f2/f1 <= 0.92 with the same hot rows. Not a promotion
+  candidate (static cap costs CPU-bound workloads). Alternative kept in design: TH2-DOWN (target -5 C, both copies).
