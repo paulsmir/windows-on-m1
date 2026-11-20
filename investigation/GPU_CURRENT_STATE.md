@@ -8829,3 +8829,19 @@ and port driver source; installer moved to the current driver set.
 - Until the reset (weekly quota 90 %): bench holds on the standing profile; GPU line offline only - order GPU-THERM-5:
   the thermal-zone spec from a verbatim re-read of Microsoft's documentation, and a refresh of the cold-gap frame
   budget from today's PERF logs (the cold gap is now the whole gap: about 8330-8464 against 10096-10117).
+
+## UPDATE 2026-11-20T23:14:15Z - thermal-zone hand-over spec accepted (GPU-THERM-5); cold-gap budget refreshed
+
+- Hand-over spec: GPU-THERM-5.md (architect's notes folder), from Microsoft's PC thermal management design guide read
+  online. Zone TZGP: P cores in _PSL, passive only, _TSP 2 s, minimum throttle limit 60 %, no _CRT; sensor bound by
+  the thermal _DSM (function 2) to the existing SMC device, whose driver serves IOCTL_THERMAL_READ_TEMPERATURE in
+  tenths of a Kelvin. A second zone for the SoC die carries the system's _CRT later, only on a validated sensor.
+  Step 0 before any zone: read-only SMC key enumeration - Asahi names no die temperature key for J313.
+  First thing the zone experiment must show: PPM's thermal limit reaches CPPC Desired (m1n1 ignores other fields).
+  Owners: Mu line (ASL), SMC line (keys, sensor IOCTL) - after the quota reset on 24 Nov.
+- Cold-gap budget on today's package (PERF load run, cool, unclamped; shares, not FULL frame times): wall 21.48 ms =
+  compute 13.70 + render spans 7.03 + completion detection 0.66 + kicks 0.27; no GPU idle; late/foreign jobs <= 0.2 %.
+  Serial structure (TA under compute) upper bound 3.06 ms, but prelude-bearing pairs are refused (firmware crash
+  class) - reachable share unknown until the prelude count. The DWM-ahead item of 2026-11-08 is ~0 in this config.
+- NEXT (offline, order GPU-COLD-1): prelude share; scene-aligned per-job comparison against Apple's per-encoder
+  timings on today's log; whether the memory controller's fast mode follows the P-cluster frequency here.
