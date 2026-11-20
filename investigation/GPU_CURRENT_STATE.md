@@ -8673,3 +8673,26 @@ and port driver source; installer moved to the current driver set.
   is next: Windows GPU state share, temperature and power per run beside the macOS figures.
 - BASELINE-V3 (EXP2823, incomplete): cold PERF 53.845 / 53.531, FULL 8428; FULL-only part pending.
 - OWNER 2026-11-20: until the quota reset on 24 Nov only the bench and the GPU line work.
+
+## UPDATE 2026-11-20T13:35:45Z - DRIFT2 (EXP2833): the firmware's target state falls with heat; GP1b works
+
+- GP1b (4bb084f52, 30.0.2830.0) exports Wom1GpuPerf on the standing profile. KEEP as the instrument base for the
+  thermal work; not promoted (an instrument, no improvement); cold cost not visible (f1 8434 against 8427-8428).
+- Windows FULL: f1 8434, target state 6 97.6 %, firmware temp_c 53; f2 after 40 min 7554 (0.896), mean MHz 0.906,
+  target6 60.5 %, states 4/5 18/21 %, temp_c 83-86, limited 0.1 %; f3 after 900 s idle 8374. The FULL loss equals
+  the frequency loss, and the actual state follows the target: the target itself falls.
+- The kit's PERF series did not fall (load duty ~0.5 against DRIFT1's ~0.84): DRIFT2 is lighter than DRIFT1.
+- NOT YET LIKE FOR LIKE: temp_c is the firmware's HwDataA field, macOS's 98.5 C is an SMC sensor; 7.6 W is the
+  firmware's avg_power_mw, macOS's 4.6 W is powermetrics. Clamp against demand is undecided until the firmware
+  utilisation (UtilBits) of f1/f2 is read from the EXP2833 receipts.
+- ACTIVE HYPOTHESIS (labelled): the fast-die0 thermal controller regulates near its release temperature. Source:
+  our initdata is the EXP208 template (m1n1-proxyclient build); Asahi defaults fast_die0_release_temp to 80 C when
+  the DT has no property (hw/mod.rs:605), t8103 unk_87c -220, unk_8cc 9880 (hw/t8103.rs:35-36).
+- NEXT CAUSAL TARGET: order GPU-THERM-1 (offline): our HwDataA/HwDataB/Globals thermal and power fields against
+  Asahi, m1n1 initdata.py, the J313 ADT and what the macOS 15.7.8 kext writes at init and at run time. A candidate
+  that changes a firmware thermal threshold needs the architect's review, a temperature stop in its kit, a value
+  never above macOS's, and the owner's word.
+- Two separate gaps: cold 8434 against 10117 at the same top state (work per frame, untouched by this), and the
+  sustained-load loss (this entry).
+- Condition: battery 99 -> 70 % under Windows load while on AC; battery guard ordered (no measured kit below 40 %).
+- Bench next: EXP2834 standing boot, EXP2835 BASELINE-V3 FULL-only (03f0c503) on the accepted package.
