@@ -84809,3 +84809,8 @@ EXP2846 HARDWARE BEFORE 2026-11-20T19:14:12Z:
 Re-stage the accepted base 30.0.2481.0 + 4 switches on the running EXP2845 recovery guest (package-free, problem 28, C: 18.71 GB free) with baseinst.sh 2846 EXP2845-rec, same steps as EXP2820/2837/2841. Then EXP2847 standing boot binds it. Power: host port + hub.
 
 EXP2846 ACTUAL 2026-11-20T19:14:58Z: base 30.0.2481.0 staged on the EXP2845 guest (problem 28, switches 4 x 1, guard experiment ACCEPT). VERDICT: confirmed (binds at EXP2847).
+
+EXP2847 HARDWARE BEFORE 2026-11-20T19:15:47Z:
+Standing boot to bind the accepted base re-staged by EXP2846 (after the TH1-DOWN rollback EXP2843, the guard refusal EXP2844 and the recovery EXP2845 that refreshed the record and recovered the guest disk to 18.71 GB). stdend.sh 2845 EXP2845-rec, then std.sh 2847 EXP2847-std: full standing pair, guard STANDING pre/post, BT, AppleSmc, Wi-Fi (wfup), camera none; baseverify (bound PASS at 30.0.2481.0), battery read, presence check. No variable: same steps as EXP2826/2828/2834/2838/2842. Power: host port + hub. Purpose: standing profile; hold for the GP1c/DRIFT3 hand-over.
+Expected: STD_DONE, guard ACCEPT, bound PASS, Wi-Fi connected. Evidence .local/experiments/EXP2847-std/evidence/.
+- Launcher launch-kbd2847.sh sha256 1e751aaa227ea2bc (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 1af8f3907.
