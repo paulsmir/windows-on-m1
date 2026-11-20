@@ -84750,3 +84750,10 @@ EXP2841 HARDWARE BEFORE 2026-11-20T15:25:57Z:
 Re-stage the accepted base 30.0.2481.0 + 4 switches on the running EXP2839 guest (package-free after the TH1-DOWN repeat rollback, APPL0002 problem 28, C: 4.80 GiB free) with baseinst.sh 2841 EXP2839-th1down, same steps as EXP2820/2837. Power: host port + hub. Expected BASEINST_2841_STAGED. (Id 2840 is the TH1 package build number.)
 
 EXP2841 ACTUAL 2026-11-20T15:26:48Z: base 30.0.2481.0 staged on the EXP2839 guest (problem 28, switches 4 x 1, guard experiment ACCEPT). VERDICT: confirmed (binds at the next standing boot EXP2842).
+
+EXP2842 HARDWARE BEFORE 2026-11-20T15:27:43Z:
+Standing boot to bind the re-staged accepted base after the stopped TH1-DOWN repeat (EXP2839, base re-staged by EXP2841; left 30.0.2481.0 + 4 switches staged on APPL0002 problem 28, candidate removed). stdend.sh 2839 EXP2839-th1down (SMC receipts deleted, Settings closed, MAC cleared, ordered end), then std.sh 2842 EXP2842-std: full standing pair 68993d14 + MUCPCWIFISMC001 40a8d7fd, guard STANDING pre (last-known) + post (live), BT read, AppleSmc read, Wi-Fi bring-up (wfup), camera packages none; then baseverify.sh (check_installed bound PASS at 30.0.2481.0, switches, guard standing post). No variable: same steps as EXP2826/2828, plus the read-only .del check and the presence check. Note: id 2825 is the GP1 package build number (30.0.2825.0), not an experiment.
+Expected: STD_DONE, guard ACCEPT pre+post, bound PASS, Wi-Fi connected. Stop: guard REFUSE or bound FAIL -> remove in the bench order and report.
+Evidence .local/experiments/EXP2842-std/evidence/{std,lc,wifi,baseinst-verify}/.
+Power: J313 on the host port + the new hub cable (Pavel ~15:05Z); battery read at start and end. Purpose: standing profile while the TH1 kits are re-issued.
+- Launcher launch-kbd2842.sh sha256 d5cca98d77811bbf (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD e08689124.
