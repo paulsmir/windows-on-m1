@@ -84816,3 +84816,41 @@ Expected: STD_DONE, guard ACCEPT, bound PASS, Wi-Fi connected. Evidence .local/e
 - Launcher launch-kbd2847.sh sha256 1e751aaa227ea2bc (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 1af8f3907.
 
 EXP2847 ACTUAL 2026-11-20T19:18:30Z: stdend 2845 (19:15:31Z); standing launch: budget 61/13, guard standing post ACCEPT; BT 0x14; AppleSmc DEV OK StartCount 24; Wi-Fi connected; HV 0/0/0/0; STD_DONE; baseverify bound PASS (30.0.2481.0, switches 4 x 1); PRESENCE_CLEAR. The architect-placed clean-up scripts on the guest Desktop (Free-Disk-Space.ps1 546ab6f2c6b9, Free-Disk-Space.cmd 79bfe93e7552) read back unchanged after the reboot. VERDICT: confirmed (standing profile; guest free for the operator; GP1c build next).
+
+EXP2848 HARDWARE BEFORE 2026-11-20T19:36:07Z:
+HARDWARE BEFORE 2026-11-20T19:34:03Z:
+DRIFT3 - GPU-THERM-2 measurement: the DRIFT2 procedure UNCHANGED (807c149f lineage: v3 standing profile, F1 -> 2400 s of back-to-back HD PERF -> F2 -> 900 s idle -> F3, same duty, fail-closed temperature stop at 94 C on boot_temp_max) on the GP1c instrument package with the TH1 lever ABSENT (release 8000 in both copies). It is at once the control on today's power (hub, charging) and the measurement.
+PACKAGE: gpu/gp1c-readback 126a2eb0fd753cc0bde777d739ecbed9887787a2 = TH1 715eee46c + GP1c (instrument only, no behaviour change; the TH1 lever stays default absent).
+- New receipts:
+  - Wom1GpuPerfHist v1: temp_c 2-C buckets 40..100 (+ under/over) x target state, and avg_power_mw 500-mW buckets 0..10 W (+ over) x target state. Counts and ticks, at every job completion in GP1's sample path under JobTimingLock, with GP1's tick rule.
+  - Wom1FastDieLive v1: the live HwDataA (release, target, offset, temp_c, actual/target pstate) and Globals (flag 0x8a64, target, release, analog_offset, targetDelta, Kp, Ki, control, transfer, override) words, read-only at GP1's 2-s export, ring of 16.
+- Both are exported only without job diagnostics and are absent with Wom1GpuPerfReceipt = 0.
+WHY THIS HYPOTHESIS:
+ (1) EXP2833 / EXP2843: the firmware's target falls (target6 97 -> 60-64 % by F2) while the in-run temperature stays <= 92 C (boot_temp_max), below the fast-die target 98.8 - 2.2 = 96.6 C.
+ (2) No static field in HwDataA, HwDataB or Globals holds an 83-87 C value (GPU-THERM-2), and moving the release by -5 C (EXP2843, TH1-DOWN) had no visible effect on the in-run target share.
+ (3) The firmware's power estimate reaches 7.6 W from m1n1's t8103 tables, which macOS replaces with its own (populatePowerEstimationConfigData and related).
+- Offline cannot separate two causes: the thermal loop, or a power / utilisation loop. The post-run ring cannot either, because its samples are idle desktop jobs of uncontrolled age (GPU-THERM-2 section 1).
+SINGLE VARIABLE vs EXP2843: the instrument (GP1c receipts) and the TH1 lever absent (EXP2843: 7500). Procedure, duty and stops unchanged.
+PREDICTIONS (drift3_verdict.py; table = sum of the per-run histogram deltas of the VALID load runs and F2; share s6 = time at target 6 / time at targets 4..6 per row, rows with >= 1 s; step = an onset row from which every row is <= 0.60 while every row more than 4 C / 1 W below it is >= 0.90):
+- THERMAL (the fast-die or another temperature loop): target6 share collapses above ONE temperature bucket whatever the power - a temperature step and no power step.
+  - Expected onset in 86..92 C (EXP2843's in-run maximum 92).
+  - The live Globals words may show the loop state (flag / control / transfer non-zero while clamping).
+- POWER: target6 share follows the avg_power bucket at equal temperature - a power step and no temperature step.
+- BOTH: both thresholds together (temperature and power rise together; not separable in this run).
+- NEITHER: no threshold in either (utilisation loop or other).
+- NO_CLAMP: overall s6 >= 0.95 (today's power/thermal state does not clamp; then compare with EXP2833/EXP2843 on the hub/charging difference).
+ALSO RECORDED:
+- the live words at every snapshot (does any release copy move from 8000; is the 0x8a64 flag or control/transfer ever non-zero);
+- the per-run temp x target and power x target tables (gm-*/gp1c-tables.txt);
+- GPUCOL as in DRIFT2.
+STOP CRITERIA: as DRIFT2.
+- bugcheck, TDR, GPU reset, Display 4101, candidate not bound, GP1 receipt absent, parking not 100, no APPL0008;
+- Wom1FastDieReleaseCc present or the TH1 receipt not "absent";
+- GP1c receipts missing or undecodable (GP1C_CHECK);
+- STOP_TEMP (boot_temp_max >= 94) or STOP_TEMP_UNKNOWN (no numeric value).
+ROLLBACK and RECOVERY: as DRIFT2 (w2-agxremove v2, base re-staged, binds at the next standing boot).
+EVIDENCE: evidence/drift2/run.log (GP1C_CHECK, GM_RESULT with GPUCOL and GP1C columns, DRIFT3_TEMP / DRIFT3_POWER / DRIFT3_STEPS / DRIFT3_LOOP_STATE / DRIFT3_VERDICT), Wom1GpuPerfHist-*.bin, Wom1FastDieLive-*.bin, gm-*/gp1c-tables.txt.
+BENCH (2026-11-20): kit copy .local/experiments/KIT-DRIFT3-5d7273f1 (SHA256SUMS sha256 5d7273f1..., 62/62 OK, SELFTEST_PASS; architect review PASS of git diff 715eee46c 126a2eb0f). CANDIDATE built by the bench with mkpkg-inputs.sh (GP1b/TH1 recipe): .local/experiments/AGX-GP1C-126a2eb0f-signed, 30.0.2850.0, receipt SourceCommit 126a2eb0fd753cc0bde777d739ecbed9887787a2 PackageBuild 2850; KMD /W4 /WX 0 errors (49 PREfast warnings, same set as 2825/2830/2840, none in the GP1c hunks); STACK_FRAMES PASS x4; Package versions coherent 30.0.2850.0; hashes: AppleAgxOpenGL32.dll c6795379;AppleAgxRenderAdmission.inf f43f1828;AppleAgxRenderAdmission.sys b7a4c65d;AppleAgxRenderAdmissionUmd.dll c2849896;AppleAgxRenderAdmissionUmd32.dll 0459871e;AppleAgxRenderAdmissionUmdArm64.dll 67dc8b3e;AppleAgxRenderAdmissionUmdX64.dll d7c6ce10;appleagxrenderadmission.cat 363c7ce6;. drift2_cand.py: PASS. Wom1FastDieReleaseCc ABSENT (release 8000, the profile value). Previous boot EXP2847-std (full standing profile, base bound, PRESENCE_CLEAR; guest C: 18.6 GB free).
+POWER SOURCE: J313 on the host MacBook Pro port + the USB-C hub (Ethernet + charging input), unchanged since ~15:05Z; at 19:33:51Z battery 99 %, PowerOnline True, not charging (full). The read-only battery sampler (one ssh call / 120 s) runs beside the kit. After the run: the kit's guest UMD logs are deleted once fetched and hash-verified (architect rule). First-run gate: GP1C_CHECK is read as soon as it prints (no real GP1c snapshot existed before this run).
+Command: CAND_DIR=/Volumes/pwdev/public_windows/.local/experiments/AGX-GP1C-126a2eb0f-signed bash /Volumes/pwdev/public_windows/.local/experiments/KIT-DRIFT3-5d7273f1/drift2-boot.sh 2848 2847 EXP2847-std /private/tmp/claude-502/-Volumes-pwdev-public-windows/8fb8f1f9-56dc-46ab-b494-4d6264dd5576/scratchpad/bef2848.txt
+- Launcher launch-kbd2848.sh sha256 a7f29b27d29b8b9c (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD fa74e659e.
