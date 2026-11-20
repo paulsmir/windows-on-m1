@@ -8586,3 +8586,41 @@ and port driver source; installer moved to the current driver set.
   selective suspend enabled (read only, unchanged).
 - Still owed for "Wi-Fi finished": MAC from the platform (D17, needs the Mu gate of MUCPCWIFI002), automatic
   country (D18, owner decision), no stage step (D20), sleep/resume, cause of the code-4 TX bursts, PSK-SHA256.
+
+## UPDATE 2026-11-20T00:21:09Z - night of 19/20 Nov: power standing, cable-free PASS, WPA3 firmware SAE PASS, camera stopped by an IRQ storm
+
+- OWNER ORDER 2026-11-19 ~19:00 (supersedes "Wi-Fi first"): power management now and in every launch; Wi-Fi and
+  Bluetooth in every launch; then camera and GPU in parallel, Thunderbolt if possible; small drivers fast; minimum
+  tokens. He keeps what is needed from him in .local/PAVEL-CHECKLIST.md (untracked).
+- POWER, standing since EXP2791/EXP2797: Mu MUCPCWIFISMC001 (40a8d7fd = MUCPCWIFI001 + the SMC device only,
+  0 maps / 0 routes) + AppleSmc 0.1.0.15. The standing m1n1 already boots the SMC for the Wi-Fi rail and leaves
+  it running, so the driver only attaches to the live session: no wake, no RTKit management message, no quiesce
+  (wake fallback opt-in, off). B0 PASS (EXP2789, EXP2791; stop test by restart-device EXP2790), 0.1.0.14 B0-F
+  (EXP2793), 0.1.0.15 BootId receipts (EXP2796/2797). EXP2788 rejected (device left disabled by a sheet command;
+  gate passed on stale receipts - fixed by boot-identity receipts). Open: BatteryStaticData empty (needs the SMC
+  shared-buffer address from m1n1), next step E1 (SMC interrupt, image 21f2778c built, not run).
+- WI-FI: control over Wi-Fi PASS with the cable in (EXP2794) and with the cable out for more than 8 minutes
+  (EXP2798, 720 Mbit/s); Wi-Fi bring-up is part of every standing boot. Soak EXP2778 ended early by the new order.
+- WPA3: Form 2 on hardware - the firmware refuses the host-auth iovars (-23). U-FW probe EXP2802 PASS: with the
+  password given by the owner through a SYSTEM-only test IOCTL the firmware's own SAE and 4-way completed
+  (SET_SSID 0, PSK_SUP 6, sta_info AUTHO held 10 s), codes only, no data path by design. Restore to 0.1.70.1
+  verified, standing profile not orphaned. Next question (owner's decision): whether Windows accepts a link
+  authorised below it (study WIFI-WPA3-SAE-WORKAROUND-STUDY.md, option a).
+- BLUETOOTH: mouse reconnect after a guest restart with the stored key CONFIRMED (EXP2801: direct create, no SMP),
+  about 70 s. EXP2799 was a re-pairing by the owner, not a reconnect.
+- KEYBOARD BACKLIGHT: part A PASS unattended (EXP2783), part B by counters and the owner's eyes (Fn+F5 / Fn+F6);
+  F5 alone not reported.
+- GPU on contract v2: V2-EQUAL-GM (EXP2782) gate PASS +0.58 %, one in-window full point 8275 vs 8372-8381; the
+  warm-up hypothesis held (3966 MB after the warm-up run). CS still open (needs the owner's word for Steam).
+- CAMERA: chain stopped at S1b (EXP2800) - 0.12.1.3 connected the DART line 251 while asserted and answered "not
+  mine": 171k interrupts/s, guest livelock, Windows PSCI reset. Indicator dark by the owner over the window. Also
+  a firmware boot at Windows start on a leftover package, unobserved. Fixes built, not run: driver 0.16 (status
+  cleared and gate open before connect, storm guard at 2000/s, one-shot arm so a leftover package starts inert),
+  m1n1 camera image 26e5e1df with IRQ_PACE opt-in on 246/251 (flag-off = 68993d14). Third privacy review of the
+  round-2 code: one watched start-capable run allowed; rounds 3 fixes (0.13/0.14 line) await a targeted re-check
+  before any standing or resume run. First video not reached.
+- m1n1: IRQ pacing was opt-in per route and only Wi-Fi INTx used it. Now opt-in for camera and SMC routes with an
+  owner contract test (opt-in / exempt / deferred lists); throttle design implemented with host test, lands with a
+  later standing landing after an SW_SET proof.
+- AUDIO: 0.1.12.20 (chunk tagging, harmonic THD) built and with the bench; steps 1a' / 1b not run.
+- Not run tonight: Thunderbolt (TBX-V2-ATT1 staged), audio sense steps, SEC-MATRIX, Wi-Fi STEP-ACCEPT.
