@@ -8624,3 +8624,37 @@ and port driver source; installer moved to the current driver set.
   later standing landing after an SW_SET proof.
 - AUDIO: 0.1.12.20 (chunk tagging, harmonic THD) built and with the bench; steps 1a' / 1b not run.
 - Not run tonight: Thunderbolt (TBX-V2-ATT1 staged), audio sense steps, SEC-MATRIX, Wi-Fi STEP-ACCEPT.
+
+## UPDATE 2026-11-20T07:12:30Z - GPU night 20 Nov: parking promoted, sustained-load loss found, standing standard and owner rules
+
+- OWNER RULES 2026-11-20: (1) the standing standard - every standing launch has SSD, keyboard and trackpad, keyboard
+  backlight, Wi-Fi, Bluetooth, GPU and the battery; the accepted AppleAgx package stays installed and kits roll
+  back to it. (2) An experiment that improves its target with every regression gate passed becomes standing
+  automatically; a mixed or in-noise result does not. (3) Every non-improving change gets an explicit KEEP or DROP
+  with the reason. Bench record: STANDING.json and STANDING-PROFILE.md (live inventory, EXP2804). Formally accepted
+  that night: AppleBcmWlan 0.1.70.1, AppleInput AI-068bbbfa. Headphone audio is NOT standing: the standing Mu has
+  no audio device (0.1.12.15 sits on a phantom devnode).
+- PARK-1 PROMOTED (first automatic promotion): CPMINCORES1 = 100 is standing. EXP2808 (A-B-A): CS 51.6 -> 56.4 ->
+  51.6/51.9 (+9.3 %, reversible), GM HD not regressed, PSCI zero, idle not held high; single FULL 8178 -> 7520
+  was not the setting: EXP2812 (FULL x2 per part) A 8277/8235 and 8347/8377, B 8385/8173. Processor-7 spinner arm
+  -27 % with all P cores unparked: the prediction "cost disappears" REJECTED; the sampler shows no DPC or interrupt
+  load on cpu7, so the cost is a thread there - open.
+- DRIFT1 (EXP2816), the night's main finding: under sustained load GravityMark HD PERF fell monotonically 53.8 ->
+  42.0 fps over 20 runs (-17.4 %), FULL 8427 -> 6571 (-22.0 %), and 88 % of the loss came back after 900 s idle
+  (FULL 8206). No memory refusal. Kit verdict H-STATE by its rule; the reading is a large recoverable, thermal-like
+  component plus a 2.6 % residual. GPU state and temperature unmeasured (2481 has no GPU-state receipt). Consequence
+  for method: every GPU result depends on thermal state; BASELINE-V3 is being amended with fixed cool-downs before
+  it runs. Next: an instrument (GPU frequency state, die temperature via the SMC now present in the guest) and a
+  macOS reference with the same sustained pattern - decides hardware behaviour versus ours.
+- R1R3V2-CHK (EXP2810, after two kit-defect runs EXP2803/2805): 30.0.2742.0 NOT promoted. A0, A1, A2N PASS (normal
+  operation +0.8 % CS; the 32 MiB reserve covered a running application's must-complete refusals and refilled);
+  A2s FAIL (exhaustion at start gives DEVICE_HUNG instead of the truthful code), A2m and A3 off-prediction. KEEP the
+  reserve. OOM-U9 (30.0.2807.0, measurement only) built clean (first MSVC compile of the KMD parts) and running as
+  EXP2818.
+- CACHE-1a (EXP2806): system-cache service and page-walk cost rejected as owners of the gap (kit validity check
+  failed on a GPU-state reading; data read offline). DF1 (EXP2814): HOLDS - restart after a zero-dedicated restart
+  starts at 4096 MiB. V2-EQUAL-GM (EXP2782): gate PASS +0.58 %.
+- GPU kits move to the full standing profile from the next issue (68993d14 + MUCPCWIFISMC001, AppleSmc present,
+  parking 100, accepted package installed); BASELINE-V3 replaces EXP2719's reference bands.
+- Process: the app pauses a line's outgoing cross-session messages after many automated turns without the owner
+  typing there (GPU and power lines that night); their reports are read from the notes folder and relayed.
