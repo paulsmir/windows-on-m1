@@ -8730,3 +8730,12 @@ and port driver source; installer moved to the current driver set.
   the ring is >= 84.5 and f2 target6 >= 55 % (then: read-back build, then the run-time re-send macOS does).
 - Unresolved offline: the default of the macOS config value that bounds the release temperature (no explicit store
   found); SMC die sensors have no read path in the standing AppleSmc.
+
+## UPDATE 2026-11-20T14:42:21Z - owner's word for TH1-UP; kit re-issued
+
+- OWNER 2026-11-20 14:42Z: yes to ONE run of TH1-UP (release 8700, stop at firmware TempMax >= 94). Not covered:
+  9380, a second UP run, making the value standing.
+- TH1-UP re-issued as SHA256SUMS c910dbab (replaces 264bed4b): the stop also fires when boot_temp_max is missing or
+  not numeric (STOP_TEMP_UNKNOWN). TH1-DOWN unchanged at 0398c4fc.
+- Bench order: EXP2835 baseline, TH1-DOWN, then TH1-UP only if DOWN is CONFIRMED; DOWN REJECTED / STOPPED / INVALID
+  -> no UP, report.
