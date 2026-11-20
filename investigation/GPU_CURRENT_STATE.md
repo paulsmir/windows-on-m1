@@ -8716,3 +8716,17 @@ and port driver source; installer moved to the current driver set.
 - NEXT: TH1 switch Wom1FastDieReleaseCc (absent = unchanged, 7500..9380, both copies) on the GP1b lineage; kits on
   the unchanged DRIFT2 procedure, EXP2833 as control, stop between runs at TempMax >= 94. TH1-DOWN 7500 needs no
   owner word and proves the field's role; TH1-UP 8700 needs the owner's word. Diff review by the architect first.
+
+## UPDATE 2026-11-20T13:56:22Z - TH1 reviewed: DOWN released, UP held
+
+- TH1 = 715eee46c on gpu/th1-release (parent GP1b 4bb084f52): Wom1FastDieReleaseCc, 7500..9380, written to HwDataA
+  0x8b4 and Globals/RegionC 0x8a6c or to neither, before the firmware starts on the cold and the warm path. Under
+  V13_5 the Globals pair sits at 0x8a68 (target) / 0x8a6c (release); our materialised words there are 9880 / 8000.
+  Architect review of the diff: PASS. Known limit: no live read-back of the two words after a run.
+- Kits on the unchanged DRIFT2 procedure, control EXP2833: TH1-DOWN (7500) SHA256SUMS 0398c4fc - released, no owner
+  word needed; TH1-UP (8700) 264bed4b - HELD: its stop fails open when boot_temp_max is missing (re-issue ordered),
+  and it needs the owner's own word. Stop between runs at firmware TempMax >= 94 (ADT alarm threshold).
+- Predictions: DOWN confirmed when the post-run ring is <= 83.5, f2/f1 < 0.896 and f2 target6 < 60.5 %; rejected when
+  the ring is >= 84.5 and f2 target6 >= 55 % (then: read-back build, then the run-time re-send macOS does).
+- Unresolved offline: the default of the macOS config value that bounds the release temperature (no explicit store
+  found); SMC die sensors have no read path in the standing AppleSmc.
