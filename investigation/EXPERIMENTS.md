@@ -84095,3 +84095,6 @@ Steps (scratchpad rec2786.sh, derived from prep2781.sh): launch + contract + bud
 Expected: staged [] and APPL0002 problem 28; UMD_CLEAN deletes both files. Stop: launch/contract not PASS, budget changed, any AppleAgx package staged (then the recovery path of the GPU line, not PWR-B0).
 Evidence .local/experiments/EXP2807-rec/evidence/prep/.
 - Launcher launch-kbd2807.sh sha256 b621e064c986864d (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD d591ccca4.
+
+EXP2807 ACTUAL 2026-11-20T02:22:24Z:
+EXP2806 ended by stdend; recovery-mode standing boot READY, budget 61/13; AGXPKG staged [] / APPL0002 problem 28; UMD_CLEAN deleted System32 AppleAgxRenderAdmissionUmd.dll (0fa2de2b...) and UmdArm64.dll (84ddf540...), the others absent; AGX-LAST-KNOWN refreshed by the live read (02:20:51Z, staged []). VERDICT: confirmed - package-free previous boot for PARK1 (EXP2808).
