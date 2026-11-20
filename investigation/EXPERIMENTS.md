@@ -84649,3 +84649,6 @@ Standing boot to bind the re-staged accepted base after DRIFT2 GP1b (EXP2833 lef
 Expected: STD_DONE, guard ACCEPT pre+post, bound PASS, Wi-Fi connected. Stop: guard REFUSE or bound FAIL -> remove in the bench order and report.
 Evidence .local/experiments/EXP2834-std/evidence/{std,lc,wifi,baseinst-verify}/.
 - Launcher launch-kbd2834.sh sha256 ed6f92be4fbee667 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 65cef5cd2.
+
+EXP2834 ACTUAL 2026-11-20T13:33:26Z:
+stdend 2833 (13:30:31Z). Standing launch: budget 61/13, filter 1, guard standing post ACCEPT; BT 0x14; AppleSmc DEV OK StartCount 16; Wi-Fi connected (WFUP_DONE); CAM_LEFT 0; HV 0/0/0/0; STD_DONE. baseverify bound PASS, switches 4 x 1, APPL0002 problem 0 version 30.0.2481.0. DEL_LEFT 0, PENDING_AGX 0. PRESENCE_CLEAR. Guest clock back in step (boot stamp 13:30:35Z). VERDICT: confirmed (standing profile, base bound; previous boot for BASELINE-V3 FULL-only EXP2835).
