@@ -84338,3 +84338,6 @@ Expected: staged [] and APPL0002 problem 28; UMD_CLEAN deletes both files. Stop:
 Evidence .local/experiments/EXP2817-rec/evidence/prep/.
 PLUS a read-only check of the standing PARK-1 setting (powercfg /qh only, no write): expect PARK_READ CPMINCORES1 AC=100 DC=100. ORDER: stdend.sh 2816 EXP2816-drift1 first (SMC receipts delete, Settings closed, MAC clear, ordered end), then this boot.
 - Launcher launch-kbd2817.sh sha256 bb356994d9ea1a40 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 77f69f8f7.
+
+EXP2817 ACTUAL 2026-11-20T07:10:35Z:
+EXP2816 ended by stdend (SMC receipts absent: kit profile without AppleSmc; Settings closed; MAC cleared; ordered end 07:08:47Z). Recovery-mode standing boot READY, budget 61/13; UMD_CLEAN deleted System32 Umd.dll 0fa2de2b and UmdArm64.dll 84ddf540; staged [], APPL0002 problem 28; AGX-LAST-KNOWN refreshed (boot 07:09:21Z); PARK_READ AC=100 DC=100. VERDICT: confirmed (package-free previous boot for OOM-U9 EXP2818).
