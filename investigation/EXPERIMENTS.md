@@ -84881,3 +84881,43 @@ EXP2852 HARDWARE BEFORE 2026-11-20T21:11:42Z:
 Calibration for the P-core maximum-state experiment (architect order; owner's word relayed verbatim by the architect at 21:11Z: question "Разрешаете на один опыт ограничить максимальную частоту быстрых ядер в плане питания Windows? ..." answer "Да, на один опыт"; scope: PROCTHROTTLEMAX1 (P-core class) on the active scheme, AC and DC, for this calibration and ONE DRIFT3 run, then restored to the saved values and read back; nothing else in the power plan; not standing). On the running EXP2851 standing guest: pmax1.ps1 saves the current AC/DC values (C:\Users\pavel\pmax1-saved.txt), sets N %, an 8-thread 60-s CPU load runs, the m1n1 CPPC lines of that minute give the highest P-cluster ps and the "want" maximum; N = 73 then 70 (2184/2988 = 73 %); then restore and read back. Target: the largest N whose highest P-cluster ps under load is <= 8 (2184 MHz). Power: host port + hub. Evidence: scratchpad pmax1-calib output, EXP2851-std/full.log CPPC lines.
 
 EXP2852 ACTUAL 2026-11-20T21:16:38Z: saved PROCTHROTTLEMAX1 AC=100 DC=100; 73 %: Windows CPPC "want" for the P-cluster capped at 600..2181 MHz, highest P-cluster ps under the 8-thread 60-s load = 8 (2184 MHz); 70 %: want 600..2092, highest ps 8; (one want=2988 window in the 73 % block is the interval before the setting took effect). Restored and read back: AC=100 DC=100, saved file removed. CPPC lines: EXP2851-std/full.log (HV: CPPC ... P ... want=600..2181 ... ps=8 / want=600..2092 ... ps=8). Bench fix before any write: pmax1.ps1 function renamed from rd (PowerShell alias of Remove-Item) to Read-PMax1. VERDICT: calibration done - the run uses 73 % (largest tested value whose observed ceiling is ps 8).
+
+EXP2853 HARDWARE BEFORE 2026-11-20T21:38:13Z:
+HARDWARE BEFORE 2026-11-20T21:36:17Z:
+DRIFT3 - GPU-THERM-2 measurement: the DRIFT2 procedure UNCHANGED (807c149f lineage: v3 standing profile, F1 -> 2400 s of back-to-back HD PERF -> F2 -> 900 s idle -> F3, same duty, fail-closed temperature stop at 94 C on boot_temp_max) on the GP1c instrument package with the TH1 lever ABSENT (release 8000 in both copies). It is at once the control on today's power (hub, charging) and the measurement.
+PACKAGE: gpu/gp1c-readback 126a2eb0fd753cc0bde777d739ecbed9887787a2 = TH1 715eee46c + GP1c (instrument only, no behaviour change; the TH1 lever stays default absent).
+- New receipts:
+  - Wom1GpuPerfHist v1: temp_c 2-C buckets 40..100 (+ under/over) x target state, and avg_power_mw 500-mW buckets 0..10 W (+ over) x target state. Counts and ticks, at every job completion in GP1's sample path under JobTimingLock, with GP1's tick rule.
+  - Wom1FastDieLive v1: the live HwDataA (release, target, offset, temp_c, actual/target pstate) and Globals (flag 0x8a64, target, release, analog_offset, targetDelta, Kp, Ki, control, transfer, override) words, read-only at GP1's 2-s export, ring of 16.
+- Both are exported only without job diagnostics and are absent with Wom1GpuPerfReceipt = 0.
+WHY THIS HYPOTHESIS:
+ (1) EXP2833 / EXP2843: the firmware's target falls (target6 97 -> 60-64 % by F2) while the in-run temperature stays <= 92 C (boot_temp_max), below the fast-die target 98.8 - 2.2 = 96.6 C.
+ (2) No static field in HwDataA, HwDataB or Globals holds an 83-87 C value (GPU-THERM-2), and moving the release by -5 C (EXP2843, TH1-DOWN) had no visible effect on the in-run target share.
+ (3) The firmware's power estimate reaches 7.6 W from m1n1's t8103 tables, which macOS replaces with its own (populatePowerEstimationConfigData and related).
+- Offline cannot separate two causes: the thermal loop, or a power / utilisation loop. The post-run ring cannot either, because its samples are idle desktop jobs of uncontrolled age (GPU-THERM-2 section 1).
+SINGLE VARIABLE vs EXP2843: the instrument (GP1c receipts) and the TH1 lever absent (EXP2843: 7500). Procedure, duty and stops unchanged.
+PREDICTIONS (drift3_verdict.py; table = sum of the per-run histogram deltas of the VALID load runs and F2; share s6 = time at target 6 / time at targets 4..6 per row, rows with >= 1 s; step = an onset row from which every row is <= 0.60 while every row more than 4 C / 1 W below it is >= 0.90):
+- THERMAL (the fast-die or another temperature loop): target6 share collapses above ONE temperature bucket whatever the power - a temperature step and no power step.
+  - Expected onset in 86..92 C (EXP2843's in-run maximum 92).
+  - The live Globals words may show the loop state (flag / control / transfer non-zero while clamping).
+- POWER: target6 share follows the avg_power bucket at equal temperature - a power step and no temperature step.
+- BOTH: both thresholds together (temperature and power rise together; not separable in this run).
+- NEITHER: no threshold in either (utilisation loop or other).
+- NO_CLAMP: overall s6 >= 0.95 (today's power/thermal state does not clamp; then compare with EXP2833/EXP2843 on the hub/charging difference).
+ALSO RECORDED:
+- the live words at every snapshot (does any release copy move from 8000; is the 0x8a64 flag or control/transfer ever non-zero);
+- the per-run temp x target and power x target tables (gm-*/gp1c-tables.txt);
+- GPUCOL as in DRIFT2.
+STOP CRITERIA: as DRIFT2.
+- bugcheck, TDR, GPU reset, Display 4101, candidate not bound, GP1 receipt absent, parking not 100, no APPL0008;
+- Wom1FastDieReleaseCc present or the TH1 receipt not "absent";
+- GP1c receipts missing or undecodable (GP1C_CHECK);
+- STOP_TEMP (boot_temp_max >= 94) or STOP_TEMP_UNKNOWN (no numeric value).
+ROLLBACK and RECOVERY: as DRIFT2 (w2-agxremove v2, base re-staged, binds at the next standing boot).
+EVIDENCE: evidence/drift2/run.log (GP1C_CHECK, GM_RESULT with GPUCOL and GP1C columns, DRIFT3_TEMP / DRIFT3_POWER / DRIFT3_STEPS / DRIFT3_LOOP_STATE / DRIFT3_VERDICT), Wom1GpuPerfHist-*.bin, Wom1FastDieLive-*.bin, gm-*/gp1c-tables.txt.
+BENCH (2026-11-20): DRIFT3 repeat with ONE variable vs EXP2848: P-core maximum state 73 % (PROCTHROTTLEMAX1, AC and DC, set on the previous guest before the launch; observed ceiling in the EXP2852 calibration: P-cluster ps 8 = 2184 MHz instead of ps 12 = 2988 MHz under CPPC). Kit 5d7273f1 and candidate 30.0.2850.0 (126a2eb0f) unchanged, Wom1FastDieReleaseCc absent, standing launch token WOM1_PCPU_PSTATE 12 (launcher default). OWNER'S WORD (relayed verbatim by the architect at 21:11Z): "Да, на один опыт" - scope PROCTHROTTLEMAX1 AC/DC for the calibration and this ONE run, restored afterwards; not standing.
+WHY THIS HYPOTHESIS (architect): (1) EXP2848 - the target state leaves 6 only at temp_c 88-93 at any power estimate, a thermal ceiling (GPU-THERM-3.md, all 14 runs); (2) macOS under the same load (EXP2831 powermetrics): P-cluster at 600 MHz for 86.5 % of its active time, 0.8 % active, CPU median 63 mW, while Windows holds the P cores at 2988 MHz with parking off and the E-cluster at its top; (3) the battery fell under Windows load on host-port power.
+PREDICTION: f1 within 1.5 % of 8464; time at temp_c >= 88 per load run under 15 s (EXP2848: 16-32 s); in f2 the share of state 6 at >= 88 C at least 0.70 (EXP2848: 0.44), f2 target6 >= 80 % (65.7), f2/f1 >= 0.95 (0.903). FALSIFIED: f2/f1 <= 0.92 with the same 88-93 rows. VALIDITY: the highest P-cluster ps seen under load in this run's m1n1 CPPC lines (must be <= 8); f1 more than 2 % below 8464 = the cap starves the CPU side (reported first).
+CONDITIONS: >= 20 min idle after the calibration load (ended ~21:15Z) before the launch; power host port + hub, battery % at the start; PRESENCE_CLEAR; guest C: 17.3 GB free. After the run: PROCTHROTTLEMAX1 restored to the saved AC/DC values and read back ("restored" in the ACTUAL); the kit's rollback as usual; the run's guest UMD logs deleted after host SHA-256 match.
+Command: CAND_DIR=/Volumes/pwdev/public_windows/.local/experiments/AGX-GP1C-126a2eb0f-signed bash /Volumes/pwdev/public_windows/.local/experiments/KIT-DRIFT3-5d7273f1/drift2-boot.sh 2853 2851 EXP2851-std /private/tmp/claude-502/-Volumes-pwdev-public-windows/8fb8f1f9-56dc-46ab-b494-4d6264dd5576/scratchpad/bef2853.txt
+- Launcher launch-kbd2853.sh sha256 7c8fe1d5b35cbfac (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 612d2e9b2.
