@@ -84281,3 +84281,6 @@ Expected: staged [] and APPL0002 problem 28; UMD_CLEAN deletes both files. Stop:
 Evidence .local/experiments/EXP2815-rec/evidence/prep/.
 PLUS a read-only check of the standing PARK-1 setting (powercfg /qh only, no write): expect PARK_READ CPMINCORES1 AC=100 DC=100. ORDER: stdend.sh 2814 EXP2814-df1 first (SMC receipts delete, Settings closed, MAC clear, ordered end), then this boot.
 - Launcher launch-kbd2815.sh sha256 08b18729d45d20ec (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu fd94b781b9f674e4bb06c71b25560bb0d75a1f3f9aaa37a06bdf6c5807cd9fa8; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD d8f1b4180.
+
+EXP2815 ACTUAL 2026-11-20T05:34:26Z:
+EXP2814 ended by stdend (SMC receipts absent: the DF1 kit profile has no AppleSmc, DEV phantom; MAC cleared; ordered end 05:32:21Z). Recovery-mode standing boot READY, contract budget 61/13, filter 1; AGXCHECK showed the leftover System32 Umd.dll 0fa2de2b and UmdArm64.dll 84ddf540; UMD_CLEAN deleted both; w2-agxpkg staged [] and APPL0002 problem 28 (not 22: no pending disable left by the DF1 pnputil disable/enable cycles); AGX-LAST-KNOWN refreshed (boot 05:32:57Z). PARK_READ CPMINCORES1 AC=100 DC=100 (read only). VERDICT: confirmed (package-free previous boot for the next GPU kit).
