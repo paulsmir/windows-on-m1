@@ -8658,3 +8658,18 @@ and port driver source; installer moved to the current driver set.
   parking 100, accepted package installed); BASELINE-V3 replaces EXP2719's reference bands.
 - Process: the app pauses a line's outgoing cross-session messages after many automated turns without the owner
   typing there (GPU and power lines that night); their reports are read from the notes folder and relayed.
+
+## UPDATE 2026-11-20T11:29:23Z - macOS reference under sustained load (EXP2831): the loss is ours
+
+- macOS 15.7.8, Metal, GravityMark HD 100k temporal 0, same pattern as DRIFT1: F1 10117; twelve load runs
+  9980-10105 (worst -1.4 %); F2 10096 (-0.2 %); F3 after 900 s idle 10111. GPU at the top P-state 82.7 % of the
+  load (the rest OFF between runs, intermediate states 0 %), GPU sensor up to 98.5 C, SoC die 96 C, no thermal
+  warning. Owner-run powermetrics (1 Hz power and frequency) recorded alongside.
+- Against Windows on the same machine: cold 8427-8428 (EXP2816, EXP2823) = 83 % of macOS; under the same load
+  Windows falls 22 % (EXP2816) and macOS does not. So the sustained-load loss is in our stack (power/frequency
+  policy, the firmware performance-state request, or accumulated state), not the fanless hardware.
+- Instrument: GP1 (30.0.2825.0) exported nothing - the export's call site was gated on diagnostic switches
+  (EXP2827); GP1b (4bb084f52, 30.0.2830.0) fixes the call site, built, gates passed. DRIFT2 (807c149f) with GP1b
+  is next: Windows GPU state share, temperature and power per run beside the macOS figures.
+- BASELINE-V3 (EXP2823, incomplete): cold PERF 53.845 / 53.531, FULL 8428; FULL-only part pending.
+- OWNER 2026-11-20: until the quota reset on 24 Nov only the bench and the GPU line work.
