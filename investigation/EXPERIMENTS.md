@@ -84503,3 +84503,6 @@ Standing boot to bind the re-staged accepted base after the DRIFT2 kit stop (EXP
 Expected: STD_DONE, guard ACCEPT pre+post, bound PASS, Wi-Fi connected. Stop: guard REFUSE or bound FAIL -> remove in the bench order and report.
 Evidence .local/experiments/EXP2826-std/evidence/{std,lc,wifi,baseinst-verify}/.
 - Launcher launch-kbd2826.sh sha256 39ecd002252e5214 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 45ab93825.
+
+EXP2826 ACTUAL 2026-11-20T09:40:18Z:
+stdend 2824 (ordered end 09:37:37Z). Standing launch on the full standing pair: budget 61/13, filter 1, AGX_GUARD ACCEPT standing post (package-30.0.2481.0-matches-record); BT BtStatus 0x14; AppleSmc sys 37f51934 DEV OK StartCount 10; Wi-Fi connected (WLAN_CONNECT2, guest found over Wi-Fi, WFUP_DONE); CAM_LEFT 0; HV 0/0/0/0; STD_DONE. baseverify: CHECK_INSTALLED bound PASS, switches 4 x 1, APPL0002 problem 0 version 30.0.2481.0 (oem13.inf), guard standing post ACCEPT. VERDICT: confirmed - guest back on the full standing profile with the accepted base bound; waits for the DRIFT2 re-issue.
