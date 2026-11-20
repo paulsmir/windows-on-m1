@@ -84401,3 +84401,9 @@ Standing install, part 1 (architect end-of-night order 2026-11-20): stage the AC
 Expected: BASEINST_2820_STAGED. Stop: any gate fails (then the guest stays as is; removal by w2-agxremove in the bench order).
 Then EXP2821 (separate BEFORE): STANDING.json accepted_gpu_package <- that record, ordered end, standing launch std.sh (guard standing pre+post), verification bound PASS.
 Evidence .local/experiments/EXP2819-rec/evidence/baseinst/.
+
+EXP2821 HARDWARE BEFORE 2026-11-20T07:30:09Z:
+Standing install, part 2: the accepted 30.0.2481.0 + 4 switches (staged EXP2820, oem35.inf) becomes the standing GPU package. STANDING.json accepted_gpu_package set to the EXP2820 record (version 30.0.2481.0, 8 file hashes = EXP2719 sheet, valid_on_pairs 68993d14+40a8d7fd, switches) - the pre-change copy kept in the scratchpad. Then stdend.sh 2819 EXP2819-rec (SMC receipts deleted, Settings closed, MAC cleared, ordered end) and the standing launch std.sh 2821 EXP2821-std: full standing pair 68993d14 + MUCPCWIFISMC001 40a8d7fd, guard STANDING mode pre (last-known) and post (live read must match the accepted record, APPL0002 bound with version 30.0.2481.0), BT read, AppleSmc read, Wi-Fi bring-up (wfup), camera packages removed (none expected). Verification after boot: w2-agxinstalled + check_installed --mode bound (DriverStore 8/8, System32/SysWOW64 UMDs, service binary, Problem 0, DriverVersion 30.0.2481.0, StartStage 12, StartStatus 0) and the four switches read back.
+Expected: STD_DONE, AGX_GUARD ACCEPT standing pre+post, BASE bound PASS, AppleSmc OK, Wi-Fi connected. Stop: guard REFUSE or bound FAIL -> remove the package in the bench order (w2-agxremove) and restore STANDING.json from the copy.
+Then (architect item 3): 15-min read-only idle thermal observation idleobs.sh EXP2821-std, then BASELINE-V3 af7ad6d8.
+Evidence .local/experiments/EXP2821-std/evidence/{std,lc,wifi,baseinst-verify}/.
