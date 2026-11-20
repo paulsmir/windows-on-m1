@@ -84382,3 +84382,13 @@ Expected: staged [] and APPL0002 problem 28; UMD_CLEAN deletes both files. Stop:
 Evidence .local/experiments/EXP2819-rec/evidence/prep/.
 PLUS a read-only check of the standing PARK-1 setting (powercfg /qh only, no write): expect PARK_READ CPMINCORES1 AC=100 DC=100. ORDER: stdend.sh 2818 EXP2818-oomu9 first (SMC receipts delete, Settings closed, MAC clear, ordered end), then this boot.
 PLUS an AppleSmc read (smcsys sha + receipts) as in std.sh: expect AppleSmc 0.1.0.15 (sys 37f51934) started.
+
+EXP2819 HARDWARE BEFORE 2026-11-20T07:27:33Z:
+Standing-v2 boot in the AppleAgx guard's recovery mode (chainl.sh CHAIN_AGX_MODE=recovery; the guard never refuses in recovery mode and every live read rewrites AGX-LAST-KNOWN). Pair m1n1 standing-v2 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920 + Mu MUCPCWIFISMC001 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d (FULL standing pair: AppleSmc present), v2 launcher f20d9a2d, client LCV2-pc-81c450e2, budget 61/13. Mu differs from EXP2815/2817 (fd94b781) on purpose: the architect ordered the full standing pair from here on.
+WHY: EXP2818 (OOM-U9) left a locked System32 AppleAgxRenderAdmissionUmd.dll and its removal gate failed before any refreshing guard read; the next GPU kit stages on the previous guest, so the locked file must be deleted and the guard record refreshed first (same procedure as EXP2786).
+Steps (scratchpad rec2786.sh, derived from prep2781.sh): launch + contract + budget, filter line, versions, AGXCHECK, w2-agxpkg live read, UMD clean of the two locked AppleAgx UMDs (System32 Umd.dll, UmdArm64.dll), record the refreshed AGX-LAST-KNOWN; the guest is left up as the guest for the standing install of 30.0.2481.0 + 4 switches (baseinst.sh).
+Expected: staged [] and APPL0002 problem 28; UMD_CLEAN deletes both files. Stop: launch/contract not PASS, budget changed, any AppleAgx package staged (then the recovery path of the GPU line, not PWR-B0).
+Evidence .local/experiments/EXP2819-rec/evidence/prep/.
+PLUS a read-only check of the standing PARK-1 setting (powercfg /qh only, no write): expect PARK_READ CPMINCORES1 AC=100 DC=100. ORDER: stdend.sh 2818 EXP2818-oomu9 first (SMC receipts delete, Settings closed, MAC clear, ordered end), then this boot.
+PLUS an AppleSmc read (smcsys sha + receipts) as in std.sh: expect AppleSmc 0.1.0.15 (sys 37f51934) started.
+- Launcher launch-kbd2819.sh sha256 042e90f6d341e0e3 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD bddc9a274.
