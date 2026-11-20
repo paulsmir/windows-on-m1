@@ -84748,3 +84748,5 @@ VERDICT: inconclusive (kit defect, no GPU run). TH1 application itself confirmed
 
 EXP2841 HARDWARE BEFORE 2026-11-20T15:25:57Z:
 Re-stage the accepted base 30.0.2481.0 + 4 switches on the running EXP2839 guest (package-free after the TH1-DOWN repeat rollback, APPL0002 problem 28, C: 4.80 GiB free) with baseinst.sh 2841 EXP2839-th1down, same steps as EXP2820/2837. Power: host port + hub. Expected BASEINST_2841_STAGED. (Id 2840 is the TH1 package build number.)
+
+EXP2841 ACTUAL 2026-11-20T15:26:48Z: base 30.0.2481.0 staged on the EXP2839 guest (problem 28, switches 4 x 1, guard experiment ACCEPT). VERDICT: confirmed (binds at the next standing boot EXP2842).
