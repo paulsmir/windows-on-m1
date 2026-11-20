@@ -8845,3 +8845,22 @@ and port driver source; installer moved to the current driver set.
   class) - reachable share unknown until the prelude count. The DWM-ahead item of 2026-11-08 is ~0 in this config.
 - NEXT (offline, order GPU-COLD-1): prelude share; scene-aligned per-job comparison against Apple's per-encoder
   timings on today's log; whether the memory controller's fast mode follows the P-cluster frequency here.
+
+## UPDATE 2026-11-20T23:21:43Z - GPU-COLD-1 (offline): the cold gap is a uniform per-job kernel slowdown
+
+- Report: GPU-COLD-1.md (architect's notes folder). CORRECTION to the previous UPDATE's "serial structure" item: by the
+  2026-11-10 ledger correction Apple's frame is serial too, so "TA under compute" (up to 3.06 ms) is a possible gain
+  beyond Apple, not part of the gap to Apple. Its prelude share is not countable from today's logs (no prelude rows).
+- Scene-aligned against Apple's per-encoder timings (EXP2853 l01, C2 correlation 0.981): C0 block 1.113, C2 1.142,
+  C4 lighting 1.170, C6 1.137; compute sum 12.77 against 11.29 ms = +1.48 ms per frame, flat over the run, the same in
+  EXP2848. Our overhead outside job spans 0.54 ms. Render not comparable in this log (different resolution).
+- Memory side, read from m1n1 source: the DRAM fast configuration follows only the P-cluster frequency
+  (>= mcx-fast-pcpu-frequency 2184 MHz = ps 8). Its duty was the same in the f1 runs of EXP2848 and EXP2853 (the kit's
+  "0.000" is a comparison artefact, 2181 against 2184); exact duty not determinable from our logs. macOS runs the
+  P-cluster at 600 MHz under this load, i.e. slow configuration by that rule, and is still ~13 % faster per job -
+  this argues against DRAMCFG as the cause.
+- OPEN: what makes every compute job ~13 % slower at equal GPU frequency. Candidates ranked by the GPU line:
+  (1) DRAMFAST-2 held arms in one boot (m1n1 DRAM_POLICY_OP exists, never run) - predicted to exclude DRAMCFG;
+  (2) a memory-controller performance state macOS may raise under GPU load - offline read of the macOS kernelcache
+  first, then a proxy-side register read; (3) the C4 lighting kernel's extra code (~0.1 ms).
+- No order issued: weekly quota at 90 %, the GPU line idles and the bench holds until the owner rules on the remainder.
