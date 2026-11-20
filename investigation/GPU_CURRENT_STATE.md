@@ -8796,3 +8796,21 @@ and port driver source; installer moved to the current driver set.
 - NEXT: DRIFT3 with one change, launch token WOM1_PCPU_PSTATE=8 (2184 MHz), host side, no guest setting. Prediction
   f2/f1 >= 0.95, share of 6 at 88+ in f2 >= 0.70; falsified at f2/f1 <= 0.92 with the same hot rows. Not a promotion
   candidate (static cap costs CPU-bound workloads). Alternative kept in design: TH2-DOWN (target -5 C, both copies).
+
+## UPDATE 2026-11-20T22:59:11Z - EXP2853: CPU-side heat CONFIRMED as the cause of the sustained-load loss
+
+- The launch token WOM1_PCPU_PSTATE cannot cap the P-cluster under CPPC (Windows drives it; hv_cppc.c clamps only to
+  the table top; bench hold before launch). The variable was therefore the Windows power-plan value PROCTHROTTLEMAX1 =
+  73 % (owner's word for one run, used up; calibration EXP2852: CPPC want 600..2181, highest P ps 8 = 2184 MHz).
+- EXP2853, DRIFT3 5d7273f1 on GP1c 30.0.2850.0, that one change: f1 8330 / f2 8327 / f3 8273, f2/f1 1.000 (control
+  EXP2848 0.903); f2 target6 98.1 % (65.7); no time at temp_c 88 or above, highest row 84-85; share of state 6 = 1.00
+  from 58 to 85 C; load runs 96-98 % target6 throughout. Cold cost: f1 1.6 % below the control. Value restored and
+  read back. Conditions: one run; idle start 48 C against the control's 54.
+- VERDICT: CONFIRMED - the sustained-load loss is the firmware's thermal ceiling (temp_c 88-93) reached because the
+  CPU side makes more heat under Windows than under macOS. Hot now equals cold; the remaining gap to macOS is the
+  cold one (about 8330-8464 against 10096-10117).
+- KEEP/DROP: the static cap is KEPT as a documented knob, default off; NOT standing and not auto-promoted (it would
+  cost CPU-bound workloads; Counter-Strike is the gate and was not run).
+- NEXT CAUSAL TARGET: order GPU-THERM-4 (offline design): a policy that lowers P-cluster heat only while the GPU is
+  near its ceiling - ACPI thermal zone with passive cooling, scheduler/parking policy, or a hypervisor-side ceiling -
+  with its first single-variable experiment; and the ranked items of the cold gap.
