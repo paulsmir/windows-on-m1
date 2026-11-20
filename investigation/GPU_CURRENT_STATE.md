@@ -8814,3 +8814,18 @@ and port driver source; installer moved to the current driver set.
 - NEXT CAUSAL TARGET: order GPU-THERM-4 (offline design): a policy that lowers P-cluster heat only while the GPU is
   near its ceiling - ACPI thermal zone with passive cooling, scheduler/parking policy, or a hypervisor-side ceiling -
   with its first single-variable experiment; and the ranked items of the cold gap.
+
+## UPDATE 2026-11-20T23:07:48Z - architect ruling on the production form of the thermal fix (GPU-THERM-4)
+
+- Three forms compared in GPU-THERM-4.md (architect's notes folder): A an ACPI thermal zone with passive cooling of
+  the P cores, B a scheduler/parking power-plan policy, C a P-cluster ceiling in m1n1's CPPC path driven by a KMD
+  hint. The standing ACPI (MUCPCWIFISMC001) has no thermal zone and no thermal object at all.
+- RULING: A is the production form; C is not built (KEEP as a reserve design). Reasons: the processor-throttling
+  contract on Windows is owned by thermal zones (Mu ACPI), not by the GPU miniport or the hypervisor; nothing manages
+  CPU temperature under Windows today, and a zone closes that for every load; the actuation path (PPM limit on the P
+  cores -> CPPC Desired -> m1n1 P-state) is the one EXP2853 proved. Temperature source: a sensor driver on the SMC
+  temperature keys, not temp_c through a hypercall. Needs the Mu and SMC lines - after the quota reset (24 Nov).
+- B stays an experiment option (SHORTSCHEDPOLICY needs the owner's word; P-core parking is permitted, PARK-1).
+- Until the reset (weekly quota 90 %): bench holds on the standing profile; GPU line offline only - order GPU-THERM-5:
+  the thermal-zone spec from a verbatim re-read of Microsoft's documentation, and a refresh of the cold-gap frame
+  budget from today's PERF logs (the cold gap is now the whole gap: about 8330-8464 against 10096-10117).
