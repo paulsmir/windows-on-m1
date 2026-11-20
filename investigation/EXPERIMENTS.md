@@ -84807,3 +84807,5 @@ Recovery-mode boot on the full standing pair: budget 61/13; w2-agxpkg staged [],
 
 EXP2846 HARDWARE BEFORE 2026-11-20T19:14:12Z:
 Re-stage the accepted base 30.0.2481.0 + 4 switches on the running EXP2845 recovery guest (package-free, problem 28, C: 18.71 GB free) with baseinst.sh 2846 EXP2845-rec, same steps as EXP2820/2837/2841. Then EXP2847 standing boot binds it. Power: host port + hub.
+
+EXP2846 ACTUAL 2026-11-20T19:14:58Z: base 30.0.2481.0 staged on the EXP2845 guest (problem 28, switches 4 x 1, guard experiment ACCEPT). VERDICT: confirmed (binds at EXP2847).
