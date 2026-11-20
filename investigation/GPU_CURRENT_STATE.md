@@ -8696,3 +8696,23 @@ and port driver source; installer moved to the current driver set.
   sustained-load loss (this entry).
 - Condition: battery 99 -> 70 % under Windows load while on AC; battery guard ordered (no measured kit below 40 %).
 - Bench next: EXP2834 standing boot, EXP2835 BASELINE-V3 FULL-only (03f0c503) on the accepted package.
+
+## UPDATE 2026-11-20T13:44:43Z - GPU-THERM-1 (offline): our thermal fields equal m1n1/Asahi; release temperature is the suspect
+
+- Report: GPU-THERM-1.md (architect's notes folder). Our HwDataA thermal, PPM, average-power, power-zone and per-state
+  fields equal m1n1 initdata.py and Asahi for t8103; the J313 ADT has no gpu-fast-die0-release-temp, so the release
+  temperature is the default 80 C; the high target is 98.8 C with offset -2.2 (macOS's G13G_B0 forces the same).
+- The word at HwDataA 0x7e8 reads 85.0 in every GP1b sample: it is the set point, not a measured utilisation.
+  Clamp against demand rests on indirect evidence (score follows frequency; actual follows target).
+- macOS 15.7.8 kext (line's reading of the disassembly, labelled): re-sends target and release at run time, release =
+  min(target - 5 C, a config value whose default is unresolved). NOT established that macOS's static value differs
+  from ours; the kext is 15.7.8, our firmware is 13.5.
+- ARCHITECT CORRECTION to the candidate: the pair exists twice. Asahi globals() has unk_89bc = target,
+  fast_die0_release_temp at 0x89c0, unk_89c4 (initdata.rs:751-753); macOS's run-time write at +0xa8 / +0xac of its
+  object matches a Globals block at 0x8914. A HwDataA-only change could show no effect. TH1 writes both copies.
+  ATOMIC CONTRACT: one logical parameter, written from one property by every generator.
+- ACTIVE HYPOTHESIS (labelled): the fast-die loop regulates on the release temperature; load ran at 83-92 C by the
+  firmware's temp_c, above 80 and below the high target 96.6.
+- NEXT: TH1 switch Wom1FastDieReleaseCc (absent = unchanged, 7500..9380, both copies) on the GP1b lineage; kits on
+  the unchanged DRIFT2 procedure, EXP2833 as control, stop between runs at TempMax >= 94. TH1-DOWN 7500 needs no
+  owner word and proves the field's role; TH1-UP 8700 needs the owner's word. Diff review by the architect first.
