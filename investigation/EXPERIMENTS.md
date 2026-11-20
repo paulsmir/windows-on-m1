@@ -84407,3 +84407,6 @@ Standing install, part 2: the accepted 30.0.2481.0 + 4 switches (staged EXP2820,
 Expected: STD_DONE, AGX_GUARD ACCEPT standing pre+post, BASE bound PASS, AppleSmc OK, Wi-Fi connected. Stop: guard REFUSE or bound FAIL -> remove the package in the bench order (w2-agxremove) and restore STANDING.json from the copy.
 Then (architect item 3): 15-min read-only idle thermal observation idleobs.sh EXP2821-std, then BASELINE-V3 af7ad6d8.
 Evidence .local/experiments/EXP2821-std/evidence/{std,lc,wifi,baseinst-verify}/.
+
+EXP2820 ACTUAL 2026-11-20T07:30:52Z:
+baseinst.sh 2820 EXP2819-rec: kit/package/cer hash gates PASS; guest before: staged [], APPL0002 problem 28; gstage 07:29:45Z: oem35.inf, Version 30.0.2481.0, InfHash 51C368DF403CBAC880327146E28CDF8C2BB7879A33A043334929249ED4E52FF8, Problem 28 (staged on the inert devnode, binds at the next boot); switches read back Wom1CrossProcessPairs=1 Wom1SubmitRequeue=1 Wom1MpoTwoPlanes=1 Wom1StartPolicy=1; live w2-agxpkg: one AppleAgx package 30.0.2481.0 with the sheet hashes; GUARD_STAGED AGX_GUARD ACCEPT mode=experiment package-30.0.2481.0-matches-record. BASEINST_2820_STAGED. VERDICT: confirmed (part 1 done; part 2 = EXP2821).
