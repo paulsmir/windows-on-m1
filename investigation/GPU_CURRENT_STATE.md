@@ -8739,3 +8739,22 @@ and port driver source; installer moved to the current driver set.
   not numeric (STOP_TEMP_UNKNOWN). TH1-DOWN unchanged at 0398c4fc.
 - Bench order: EXP2835 baseline, TH1-DOWN, then TH1-UP only if DOWN is CONFIRMED; DOWN REJECTED / STOPPED / INVALID
   -> no UP, report.
+
+## UPDATE 2026-11-20T16:58:39Z - TH1-DOWN (EXP2843): the release temperature is not the reference; TH1-UP cancelled
+
+- EXP2836 gave no verdict (operator activity and a cable change mid-run; the black screen was the kit's rollback,
+  PNP 15:07:22Z, no driver fault). EXP2839 stopped on a kit defect (receipt read from an empty delta). Kits re-issued:
+  TH1-DOWN 08c111f5, TH1-UP edb3630d. Package 30.0.2840.0 (715eee46c).
+- EXP2843, release 7500 applied to both copies before the firmware start (architect's reading of the raw log; the
+  bench's ACTUAL is the record): load runs target6 94.6 -> 85.9 % (control EXP2833 97.0 -> 88.9), post-run temp_c
+  85.3-86.5 (control ring 85.5); f1 8291, f2 7595 with target6 63.8 % (flagged INVALID: TiWorker at the end; control
+  7554 / 60.5 %), f3 8433. Kit verdict MIXED. Substance: 5 C lower release, same regulated temperature, same fall.
+- VERDICT: the hypothesis "the fast-die loop regulates on the release temperature" is rejected in the safe direction,
+  unless the value does not stay in place (no read-back yet). TH1-UP (8700) cancelled; the owner's word is unused and
+  closed. KEEP: the switch stays in the tree, default absent, until the read-back decides; never standing.
+- Still holds: the FULL loss follows the frequency loss; GPU-bound (main thread 26-33 % of a core, jobs per run follow
+  the score); recovery after 900 s idle. Open anomaly: two load runs ended at temp_c 62-64 with the lowest target6.
+- Conditions changed today: the J313 now charges through the hub (battery 77 %, charging); EXP2833 ran discharging.
+- NEXT CAUSAL TARGET: order GPU-THERM-2 (offline): the anomaly; every firmware-visible value near 85 C in our objects;
+  how macOS's run-time fast-die update reaches the firmware and what the firmware uses before the first update;
+  read-back of the live words (GP1c) to ride with the next candidate.
