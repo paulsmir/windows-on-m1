@@ -8758,3 +8758,22 @@ and port driver source; installer moved to the current driver set.
 - NEXT CAUSAL TARGET: order GPU-THERM-2 (offline): the anomaly; every firmware-visible value near 85 C in our objects;
   how macOS's run-time fast-die update reaches the firmware and what the firmware uses before the first update;
   read-back of the live words (GP1c) to ride with the next candidate.
+
+## UPDATE 2026-11-20T17:03:38Z - CORRECTION to the EXP2843 reading; GPU-THERM-2; next = instrument GP1c
+
+- CORRECTION (refers to the UPDATE "TH1-DOWN (EXP2843): the release temperature is not the reference"): the
+  post-run temp_c values (85.3-86.5, control "ring 85.5", the bench's 80.4) are means of the 32 newest ring samples,
+  which after a run are idle desktop jobs 0.2 s to ~60 s old. They are NOT load temperatures. "~85 C is the regulated
+  temperature" was never established; the only in-run figure is the boot maximum, 92 in EXP2833 and EXP2843.
+- What stands for TH1-DOWN: no effect of release 7500 on the in-run target6 share beyond boot-to-boot spread; f2
+  flagged invalid. Hypothesis not supported, not strictly excluded (no read-back). TH1-UP stays cancelled.
+- GPU-THERM-2 (architect's notes folder): no static word in HwDataA / HwDataB / Globals is a temperature in 83-87;
+  macOS's run-time fast-die update is a shared-memory write into Globals at base 0x89c0 (target 0x8a68, release 0x8a6c,
+  analog offset, delta, Kp, Ki, control, transfer, override) plus a flag at 0x8a64, no message; when macOS first sends
+  it was not found in the bound; kext 15.7.8 against our 13.5 firmware - layout matches, semantics not proven.
+- OPEN, offline cannot separate: the thermal loop (target 98.8 - 2.2 with a long integral, in-run <= 92) against the
+  power or utilisation loop (firmware power estimate up to 7.6 W from m1n1's tables; macOS builds its own).
+- NEXT: GP1c, instrument only - joint histograms temp_c x target state and avg_power x target state per job
+  completion, live read-back of the controller words - and kit DRIFT3 on the unchanged DRIFT2 procedure, switch absent:
+  the control on today's power and the discriminating measurement in one run.
+- Bench condition: guest C: at 1.43 GiB free (page file 6.9 GB), base package not restorable until space is back.
