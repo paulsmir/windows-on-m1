@@ -84705,3 +84705,5 @@ VERDICT: superseded (no verdict: power source changed mid-run). F1 first reading
 
 EXP2837 HARDWARE BEFORE 2026-11-20T15:10:22Z:
 Re-stage the accepted base 30.0.2481.0 + 4 switches on the running EXP2836 guest (package-free after the TH1-DOWN rollback, APPL0002 problem 28, C: 4.12 GiB free) with the bench baseinst.sh 2837 EXP2836-th1down (same steps as EXP2820: DRIFT1-kit renderers, hash gates, gstage, switches read back, guard experiment ACCEPT). No reboot in this step; the next standing boot binds it. Power: J313 on the host port + the new hub cable (Pavel, ~15:05Z). Expected BASEINST_2837_STAGED. Stop: any gate -> report.
+
+EXP2837 ACTUAL 2026-11-20T15:11:02Z: base 30.0.2481.0 staged on the EXP2836 guest (oem13.inf, InfHash 51C368DF..., problem 28; switches 4 x 1; guard experiment ACCEPT). STANDING.json accepted_gpu_package unchanged (already the 2481 record since EXP2821). VERDICT: confirmed (binds at the next standing boot EXP2838).
