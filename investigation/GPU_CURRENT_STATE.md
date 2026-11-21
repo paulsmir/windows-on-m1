@@ -8864,3 +8864,19 @@ and port driver source; installer moved to the current driver set.
   (2) a memory-controller performance state macOS may raise under GPU load - offline read of the macOS kernelcache
   first, then a proxy-side register read; (3) the C4 lighting kernel's extra code (~0.1 ms).
 - No order issued: weekly quota at 90 %, the GPU line idles and the bench holds until the owner rules on the remainder.
+
+## UPDATE 2026-11-21T01:08:06Z - COLD2 (EXP2857): DRAM configuration rejected; cold gap decomposed (GPU-COLD-2/3)
+
+- EXP2857, kit a60cf554, m1n1 a0d6aae1 (standing + DRAM_POLICY_OP, architect and bench review PASS): slow/fast per-job
+  ratio 1.019 and 1.009 - REJECTED_DRAMCFG. PMP is not running under our stack (CPU_CONTROL 0 at idle and under load);
+  no PMGR perf-state word moves with GPU load (the two "changed" words are a timestamp and a counter). Per-job ratio
+  against Apple 1.15-1.18 in every arm. Offline: DCS likely already at its top state (stream 55-63 GB/s needs it).
+- GPU-COLD-3 (architect's notes folder): the 13 % is real and decomposes. C0/C2/C6: Apple's encoder sharing saves
+  0.46 / 0.43 / 0.09 ms against our excess 0.68 / 0.39 / 0.09 ms - we emit a full CDM barrier before every dispatch.
+  C4: code size, 3543 against 1913 instructions. Job fields, UAT, SLC, barrier bits equal Asahi or already rejected.
+  Nobody runs PMP or delivers the GPU's virtual PMGR votes (GFX-BUSY) for us - inferred, open.
+- OWNER 2026-11-21: quota is no brake; "делать как в apple точно так же"; macOS under the upstream m1n1 hypervisor
+  allowed (the installed macOS is disposable), downloads for it allowed.
+- NEXT: (1) barrier measurement switch on the GP1c lineage, ABAB, then the production form - dispatch grouping with
+  barriers only where the D3D12 contract requires them; (2) C4 compiler work within what the DXIL permits;
+  (3) order M1N1-MACOS-HV: trace macOS's PMGR / PMP / AGX initdata under GPU load.
