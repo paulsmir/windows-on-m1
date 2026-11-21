@@ -84942,3 +84942,56 @@ Expected: STD_DONE, guard ACCEPT, bound PASS, Wi-Fi connected. Evidence .local/e
 - Launcher launch-kbd2856.sh sha256 ea1edf343fc435b4 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 314afca7b.
 
 EXP2856 ACTUAL 2026-11-20T23:06:21Z: standing launch (std.sh with the ld.lld restore): budget 61/13, guard standing pre/post ACCEPT; BT 0x14; AppleSmc DEV OK StartCount 28; Wi-Fi connected; HV 0/0/0/0; STD_DONE; baseverify bound PASS (30.0.2481.0, switches 4 x 1); PROCTHROTTLEMAX1 read after the reboot AC=100 DC=100 (the EXP2853 restore holds); guest C: 15.41 GB free (pagefile.sys 6912 MB), no servicing process running; PRESENCE_CLEAR. VERDICT: confirmed - standing profile, guest idle; bench holds until the GPU line's next kit (architect).
+
+EXP2857 HARDWARE BEFORE 2026-11-21T00:35:51Z:
+HARDWARE BEFORE 2026-11-21T00:34:10Z:
+GPU-COLD-2 kit A - one boot that separates the memory side from everything else (architect order 2026-11-21)
+
+HYPOTHESIS: the uniform ~13 % per-job excess of every GravityMark compute job over Apple's per-encoder time is set on the
+memory side, not by the shader code or the GPU clock. Two candidates, one boot:
+ (1) DRAMCFG (m1n1's only memory knob, switched by the P-cluster rule): tested by HOLDING it fast and slow (dram op 0xc31).
+ (2) the DRAM/fabric frequency domain (PMGR perf domain DCS, PMP-managed on t8103): not switchable yet; this boot READS
+     whether PMP runs and which PMGR perf / power-state / DCS words move between idle and GPU load (memperf).
+
+WHY THIS HYPOTHESIS:
+ 1. Every compute job is 1.11-1.17x Apple's per-encoder time at the same scene, flat over the run, in EXP2853 and EXP2848
+    (GPU-COLD-1 §2), while arithmetic kernels are at parity (EXP2345) and memory-gather probes are 1.19-1.43x (EXP2388).
+ 2. macOS 15.7.8 flags DCS / SOC / DISP perf domains PMP-managed (ApplePMGR assert kPerfDomainFlagPMPManaged on ADT
+    perf-domains flags 0x04) and runs memory DVFS in PMP firmware from bandwidth / AGX statistics (CLPC "DCS DVFM");
+    neither m1n1 nor Asahi starts PMP on t8103, so DCS stays where iBoot left it (GPU-COLD-2 §B).
+ 3. DRAMCFG duty was the same in EXP2848 f1 and EXP2853 f1 and kernel times were identical (GPU-COLD-1 §3), and macOS's
+    P cluster sits at 600 MHz (DRAMCFG slow by the same rule) while macOS is faster: DRAMCFG is expected NOT to matter.
+
+SINGLE VARIABLE OF THE BOOT: the m1n1 image a0d6aae1 = standing 81c450e2 + DRAM_POLICY_OP (gpu/dram-policy-std 1beede27;
+ the same tree without the flag builds the standing 68993d14 bit for bit; the flag compiles code only under
+ #ifdef HV_DRAM_POLICY in hv_cppc.c / proxy.c / hv_cppc.h). Mu, package (GP1c, DRIFT3's), switches, parking, launcher flags
+ = DRIFT3 / EXP2853's control. Within the boot the ONE variable between arms is the DRAMCFG policy.
+
+ARMS (cold-gated: newest GP1c live temp_c <= 58 before each): follow, fast, slow, slow, fast, follow;
+ GravityMark 1280x720 100k -temporal 0 PERF (the DRIFT3 load-run config), memperf at idle, 50 s into the window, after.
+
+PREDICTION:
+ - DRAMCFG: per-job compute ratio slow/fast within 1.00 +- 0.02 in both pairs -> REJECTED_DRAMCFG (from WHY 3).
+ - Memory side: PMP CPU_CONTROL running = 0 at idle and under load; no PMGR perf-regs word moves with GPU load
+   (nothing drives DCS); DCS0..7 power states active, unchanged.
+ - Per-job vs Apple: 1.11-1.17x in every arm (unchanged from GPU-COLD-1).
+FALSIFIED IF: R(slow/fast) >= 1.065 in both pairs (CONFIRMED_DRAMCFG: hold fast while the GPU is busy becomes the fix,
+ worth up to ~1.5 ms per frame), or PMP reads running (then the DCS hypothesis (2) is wrong as stated), or a perf-regs
+ word follows GPU load (then something already drives DCS and its value is the next read).
+NEXT (preregistered direction): REJECTED_DRAMCFG + PMP not running -> name the DCS perf register from the perf-regs reads
+ and design the DCS pin-high step (separate BEFORE); CONFIRMED_DRAMCFG -> policy "fast while GPU busy" in m1n1.
+
+VALIDITY: m1n1 line "DRAMCFG fast >= 2184 MHz"; dram op answers previous_policy=0 at boot; candidate bound with hashes;
+ GP1c receipts readable; per arm GM_RESULT VALID, cold gate OK, DCS fast_channels 8/8 (fast) / 0/8 (slow) at the idle AND
+ mid reads, >= 1000 CRCRCRCR frames; contract CONTRACT_SAME against EXP2753 (budget cp2 61/13).
+STOPS: fail-closed temperature stop (post-run firmware TempMax >= 94 or unreadable -> no further arm); the policy is set
+ back to follow at the end of the arms and in the kit's stop path.
+RECOVERY: rollback to the accepted base as DRIFT3 (candidate removed, base staged); next boot = the standing pair
+ (68993d14 + MUCPCWIFISMC001); no package or setting outlives the boot except the staged base.
+POWER: as the bench's standing launches (hub charging input; name it in the run line). Battery guard >= 40 %.
+EVIDENCE: evidence/cold2/run.log (ARM_RESULT, HOSTREQ, GM_RESULT, COLD_GATE, COLD2_* verdict lines), hostreq-*.txt,
+ gm-*/ (umd.log per arm), full.log (HOST_REQUEST, "HV: CPPC dram policy" lines).
+BENCH (2026-11-21): kit COLD2 pinned as KIT-COLD2-a60cf554 (SHA256SUMS a60cf554bdf479a5..., 36 files OK, SELFTEST_PASS on the pinned copy). Bench review: m1n1 1beede27 reproduced on the bench from the clean worktree under bash (flag-off 68993d14 = standing, flag-on a0d6aae1, both bit for bit); diff 81c450e2..1beede27 read: op 0xc31 only under HV_DRAM_POLICY, same mcc_dramcfg_set_fast under cppc_lock, invalid values refused, default follow; 0xc31 collides with nothing in the launcher tree (git grep) or in other m1n1 branches except the dram-policy siblings. Launcher tree fast-forwarded 656397020 -> b80e4716f (host verbs dram/memperf; test_host_request 30 OK). memperf reads only blocks that are powered while the guest runs (PMGR, DCS channels; PMP ASC gated on its power state) - first hardware use of the verb, watched by the first-run gate.
+CONDITIONS: power hub charging input + host port, battery % at the start (wrapper line); PRESENCE_CLEAR; guest C: 15.4 GB free; host /Volumes/pwdev 13 GiB. PROCTHROTTLEMAX1 100/100 (standing, as EXP2848 control). Standing boot after the kit.
+Command: CAND_DIR=/Volumes/pwdev/public_windows/.local/experiments/AGX-GP1C-126a2eb0f-signed bash /Volumes/pwdev/public_windows/.local/experiments/KIT-COLD2-a60cf554/cold2-boot.sh 2857 2856 EXP2856-std /private/tmp/claude-502/-Volumes-pwdev-public-windows/8fb8f1f9-56dc-46ab-b494-4d6264dd5576/scratchpad/bef2857.txt
+- Launcher launch-kbd2857.sh sha256 9de2cb4a4955cb6e (launch-kbd.sh 51d76b6354b693e4); m1n1 a0d6aae1d81858f2f6b4bee25c4982720083ff46b4faff54f119d8fe1d1a1a24; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD b80e4716f.
