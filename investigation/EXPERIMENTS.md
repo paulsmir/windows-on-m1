@@ -85290,3 +85290,64 @@ Expected: STD_DONE, guard ACCEPT, bound PASS, Wi-Fi connected. Evidence .local/e
 - Launcher launch-kbd2873.sh sha256 aff04b7e172559f6 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 6fcd0e7b1.
 
 EXP2873 ACTUAL 2026-11-21T03:08:11Z: stdend.sh 2872 (LAUNCH_WIFI_2872_ENDED 03:05:31Z), standing launch std.sh 2873 (68993d14 + MUCPCWIFISMC001): guard standing pre/post ACCEPT, STD_DONE 03:07:49Z, baseverify bound PASS (30.0.2481.0, problem 0; restaged by the EXP2872 rollback), PRESENCE_CLEAR 03:05:04Z. VERDICT: confirmed - standing profile; next = GSHAPE (EXP2874).
+
+EXP2874 HARDWARE BEFORE 2026-11-21T03:09:57Z:
+GPU-COLD-3 §6 GATHER-SHAPE - pages against bytes, and the physical shape of our allocations (architect order 2026-11-21)
+
+HYPOTHESIS: the GPU memory-service deficit (C4 + ~1/3 of C0; gather 1.19-1.43x macOS) is two regimes: (i) 1-4 MB, cost follows
+BYTES (GPU cache / data service), (ii) 64 MB, cost follows PAGES (translation / page walk past the TLB reach); and neither is set
+by the physical shape of our allocations (2 MiB contiguous slabs against 64 KiB chunks).
+
+WHY THIS HYPOTHESIS:
+ 1. EXP2390 (P6 99-100 %, identical inner loops): dense random gather G1u 1.19 / 1.43 / 0.99 / 1.32x macOS at 1 / 4 / 16 / 64 MB,
+    but the one-new-page-per-load row G1cu is 0.91x at 1 MB (we are FASTER) and 2.30x (N32) / 1.41x (GM) at 64 MB: at small
+    footprints translation is cheap and the excess is data service; at 64 MB a per-page cost appears that dense 16 MB (1024
+    pages ~ the TLB reach) does not show.
+ 2. EXP2806 (CACHE-1a): our own knees - GPU cache 1 -> 2 MB (2.5x full width), SLC 8 -> 16 MB; enabling the SLC moved none of
+    these rows (EXP2806 = pre-SLC EXP2393 within 2 %); SLC quotas = macOS (EXP2258); AttrIndx 0 neutral (EXP2392).
+ 3. Our big buffers are 2 MiB physically contiguous pool slabs with a 32 x 64 KiB fallback (pool_windows.c AdmissionPoolAllocSlab);
+    in EXP2853's boot 11783 of 22101 created slabs (53 %) were already chunked (real Wom1M2PoolDemand receipt) - so shape
+    varies in practice and must be tested, not assumed.
+
+SINGLE VARIABLE OF THE BOOT: the candidate package = GP1c lineage (126a2eb0f) + Wom1PoolForceChunks (gpu/gshape-force-chunks,
+ GSHAPE_COMMIT; absent = today's slab policy bit for bit, test-pinned; the switch changes only the first slab attempt: same
+ slab layout, 64 KiB slot checks, granule mapping, residency and unmap). Probe egshape1 (gpu/gshape-probe fa347b9c,
+ arm64 f8084d8a) is the measuring instrument (probe-only rows). Within the boot the ONE variable between arm groups is
+ REG_DWORD Wom1PoolForceChunks (absent -> 1 -> absent), each change applied by ONE pnputil disable/enable of ACPI\APPL0002\0
+ (the CACHE-1a rider form) so the pool restarts and reads it.
+
+ARMS (cold-gated, GP1c live temp_c <= 58 before each): S0a S0b | cycle (switch = 1) | S1a S1b | cycle (switch removed) | S0c.
+ Rows per arm (one probe invocation each, hold 20 s, shapes N32 and GM): G1u 1/4/16/64 MB, G1cu 1/4/16/32/64 MB,
+ G1pu_4M64M (4 MB of bytes over the 4096 pages of 64 MB), S1_256 (arithmetic control).
+
+PREDICTION:
+ - Noise: same-arm pairs S0b/S0a and S1b/S1a within 2 % on every row (EXP2806 asc/desc agreed to 0.1 %).
+ - Pages vs bytes (S0): G1pu_4M64M N32 close to G1u_64M (f >= 0.5: FOLLOWS_PAGES) - the 64 MB N32 cost is per page; at GM
+   (throughput) closer to G1u_4M (FOLLOWS_BYTES) is possible, reported as measured. G1cu N32 knee at 2048 pages (32 MB), after
+   flat 64..1024 pages.
+ - Shape: S1 / S0c within the noise threshold on G1u_4M, G1u_64M, G1cu_64M, G1pu (SHAPE_EXCLUDED).
+ - S1 arms' pool creates only chunked slabs (d_contiguous = 0); S0c only contiguous (else S0C_SHAPE_MIXED -> S0a/S0b reference).
+FALSIFIED IF: SHAPE_MATTERS (allocation shape owns part of the deficit -> an allocator / placement fix, measured against macOS
+ next); or G1pu follows bytes at N32 (the 64 MB excess is data service, not translation -> regime (ii) goes to the cache /
+ fabric owner, not the walker).
+NEXT: FOLLOWS_PAGES + SHAPE_EXCLUDED -> regime (ii) is translation service: diff our UAT / walker-facing state (HwDataA/B,
+ Globals from the A13 macOS 13.5 initdata, mmucfg) before any walker experiment; regime (i) stays with chip configuration.
+ The macOS twin of the same rows (optwin_metal.m, same shared block) runs in the next macOS session for the absolute numbers.
+
+VALIDITY: candidate bound with its hashes; GP1c receipts readable; probe hash local + guest; every row oracle_bad 0 and records
+ missing 0 (else KIT_STOP); a row counts only with P6 >= 90 % (probe p6_pct or the KMD state-6 share); each cycle returns
+ APPL0002 to OK problem 0 (else KIT_STOP); S1a's pool must create no contiguous slab (else KIT_STOP); contract CONTRACT_SAME
+ against EXP2753 (budget cp2 61/13).
+STOPS: fail-closed temperature stop (TempMax >= 94 or unreadable -> no further arm); a GPU reset or new TDR during an arm; any
+ KIT_STOP removes Wom1PoolForceChunks first (stop hook). The device cycle is the CACHE-1a rider form (EXP2806: OK problem 0;
+ its GravityMark F1 chain does not apply - no GravityMark runs after a cycle here, the probe's regions are <= 64 MB).
+RECOVERY: the switch is removed in the final step and by the stop hook; rollback to the accepted base as BAR1 / COLD2 (candidate
+ and its devnode removed - the switch goes with the devnode - base staged); next boot = the standing pair. Guest hang -> the
+ bench's watchdog / recovery as standing.
+POWER: as the bench's standing launches (name it in the run line). Battery guard >= 40 %.
+EVIDENCE: evidence/gshape/run.log (ROW_DONE, ARM_RESULT with POOLSHAPE, CYCLE / CYCLE_POOL, SWITCH_*, GSHAPE_* verdict lines),
+ rows/<tag>-{std,err,done,umd.log}, rows/gpuperf-<tag>.txt, cycle-*.txt, kmd-receipts-* (Wom1M2PoolDemand), full.log.
+BENCH (2026-11-21): kit GSHAPE pinned as KIT-GSHAPE-4a295c21 (SHA256SUMS 4a295c21136e5f94..., 34 files OK, SELFTEST_PASS on the pinned copy). Device cycle form checked: guest/gshape-devcycle.ps1 = CACHE-1a k2-devcycle.ps1, ONE pnputil /disable-device + /enable-device of ACPI\APPL0002\0 without /force (worked on hardware in EXP2806: problem 22 -> OK problem 0 in 2 s); the switch Wom1PoolForceChunks is removed by the stop() hook and the final step. CANDIDATE built by the bench (mkpkg-inputs GP1c recipe, X86B558): .local/experiments/AGX-GSHAPE-6c67f9ee7-signed, 30.0.2863.0, receipt SourceCommit 6c67f9ee786c1acaea9f2d5f9da785e2c30153c3 PackageBuild 2863; /W4 0 errors (the GP1c set); STACK_FRAMES PASS x4; Package versions coherent 30.0.2863.0; GSHAPE_FINAL_PACKAGE_PASS; hashes: AppleAgxOpenGL32.dll a9aa3200;AppleAgxRenderAdmission.inf daa8f75e;AppleAgxRenderAdmission.sys 53c1cf2c;AppleAgxRenderAdmissionUmd.dll d3774f12;AppleAgxRenderAdmissionUmd32.dll 7e9586b6;AppleAgxRenderAdmissionUmdArm64.dll c87873d6;AppleAgxRenderAdmissionUmdX64.dll 590599ae;appleagxrenderadmission.cat 9c6f7ea5;.
+CONDITIONS: previous boot EXP2873-std (standing profile); power hub charging input + host port, battery in the wrapper line; guest C: ~14.7 GB; host disk >= 8 GiB. Recovery rule: after any TDR/0x116 the KMD receipts (Wom1GpuReset, pool) are read before any devnode removal. Standing boot after the kit; guest UMD logs deleted after host SHA-256 match.
+Command: CAND_DIR=/Volumes/pwdev/public_windows/.local/experiments/AGX-GSHAPE-6c67f9ee7-signed bash /Volumes/pwdev/public_windows/.local/experiments/KIT-GSHAPE-4a295c21/gshape-boot.sh 2874 2873 EXP2873-std /private/tmp/claude-502/-Volumes-pwdev-public-windows/8fb8f1f9-56dc-46ab-b494-4d6264dd5576/scratchpad/bef2874.txt
+- Launcher launch-kbd2874.sh sha256 30097e7c4e5dddda (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD e6795dd50.
