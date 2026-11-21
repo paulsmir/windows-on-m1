@@ -318,3 +318,98 @@ class SdzgVerb(unittest.TestCase):
     def test_no_guard_image(self):
         lines = host_request.execute(self.Proxy(error=RuntimeError("Bad Command")), host_request.parse("sdzg"))
         self.assertEqual(lines, ["HOST_REQUEST sdzg unavailable RuntimeError: Bad Command"])
+
+
+class DramPolicyVerb(unittest.TestCase):
+    """GPU-COLD-2: 'dram follow|fast|slow' -> proxy op 0xc31 (m1n1 DRAM_POLICY_OP images)."""
+    class Proxy:
+        def __init__(self, answer=0, error=None):
+            self.answer, self.error, self.calls = answer, error, []
+
+        def request(self, op, *args, **kwargs):
+            self.calls.append((op, args, kwargs))
+            if self.error:
+                raise self.error
+            return self.answer
+
+    def test_parse_accepts_only_the_three_policies(self):
+        self.assertEqual(host_request.parse("dram fast\ndram slow\ndram follow"),
+                         [("dram", 1), ("dram", 2), ("dram", 0)])
+        for bad in ("dram", "dram 1", "dram faster", "dram fast now"):
+            with self.assertRaises(ValueError):
+                host_request.parse(bad)
+
+    def test_execute_sends_op_0xc31_and_reports_the_previous_policy(self):
+        proxy = self.Proxy(0)
+        lines = host_request.execute(proxy, host_request.parse("dram fast"))
+        self.assertEqual(proxy.calls, [(0xC31, (1,), {"signed": True})])
+        self.assertEqual(lines, ["HOST_REQUEST dram fast previous_policy=0"])
+
+    def test_a_refusal_is_visible(self):
+        lines = host_request.execute(self.Proxy(-1), host_request.parse("dram slow"))
+        self.assertEqual(lines, ["HOST_REQUEST dram slow previous_policy=-1 REFUSED"])
+
+    def test_image_without_the_op_reports_unavailable(self):
+        lines = host_request.execute(self.Proxy(error=RuntimeError("Bad Command")), host_request.parse("dram fast"))
+        self.assertEqual(lines, ["HOST_REQUEST dram fast unavailable RuntimeError: Bad Command"])
+
+
+class MemPerfVerb(unittest.TestCase):
+    """GPU-COLD-2: read-only memory-side state - PMGR perf-regs blocks and DCS DRAMCFG of 8 channels."""
+    class Proxy:
+        def __init__(self, values=None):
+            self.values, self.reads, self.writes, self.requests = values or {}, [], [], []
+
+        def read32(self, address):
+            self.reads.append(address)
+            return self.values.get(address, 0)
+
+        def write32(self, address, value):
+            self.writes.append((address, value))
+
+        def request(self, *args, **kwargs):
+            self.requests.append(args)
+
+    def test_parse(self):
+        self.assertEqual(host_request.parse("memperf"), [("memperf", 0)])
+        with self.assertRaises(ValueError):
+            host_request.parse("memperf 1")
+
+    def test_reads_exactly_the_fixed_list_and_writes_nothing(self):
+        proxy = self.Proxy()
+        host_request.execute(proxy, host_request.parse("memperf"))
+        expected = ([0x23B734000 + 4 * i for i in range(64)] + [0x23D2B4000 + 4 * i for i in range(64)]
+                    + [0x23B778000, 0x23B778004, 0x23B77C000, 0x23B77C004])
+        for ch in range(8):
+            expected += [0x200200000 + ch * 0x40000 + 0xDC4, 0x200200000 + ch * 0x40000 + 0xDBC]
+        expected += [0x23B7002F8, 0x23B700300, 0x23B700310, 0x23B700308, 0x23B700318, 0x23B700320, 0x23B700330,
+                     0x23B700328, 0x23B700338, 0x23B7003D8]
+        expected += [0x200204000 + 4 * i for i in range(16)]   # PMP power state reads 0: its ASC is NOT read
+        self.assertEqual(proxy.reads, expected)
+        self.assertEqual(proxy.writes, [])
+        self.assertEqual(proxy.requests, [])
+
+    def test_dcs_line_decodes_fast_and_boot(self):
+        base = 0x200200000
+        values = {base + 0xDC4: 0x133, base + 0xDBC: 0x55555340,
+                  base + 0x40000 + 0xDC4: 0x813057F, base + 0x40000 + 0xDBC: 0x1800180,
+                  0x23B734010: 0x5}
+        lines = host_request.execute(self.Proxy(values), host_request.parse("memperf"))
+        self.assertIn("HOST_REQUEST memperf pmgr_perf0 0x23b734000 +010=00000005", lines[0])
+        self.assertTrue(lines[0].endswith("nonzero=1"))
+        dcs = [l for l in lines if l.startswith("HOST_REQUEST memperf dcs ")][0]
+        self.assertIn("ch0=00000133/55555340:fast", dcs)
+        self.assertIn("ch1=0813057f/01800180:boot", dcs)
+        self.assertIn("fast_channels=1/8", dcs)
+
+    def test_pmp_asc_read_only_when_pmp_is_powered(self):
+        proxy = self.Proxy({0x23B7003D8: 0x0F00_00FF, 0x23BC00044: 0x10})
+        lines = host_request.execute(proxy, host_request.parse("memperf"))
+        self.assertIn(0x23BC00044, proxy.reads)
+        self.assertIn("HOST_REQUEST memperf pmp cpu_control=0x00000010 running=1", lines)
+        self.assertIn("PMP=0f0000ff:aftf", [l for l in lines if l.startswith("HOST_REQUEST memperf ps ")][0])
+        self.assertEqual(proxy.writes, [])
+
+    def test_pmp_gated_is_reported_not_read(self):
+        lines = host_request.execute(self.Proxy(), host_request.parse("memperf"))
+        self.assertIn("HOST_REQUEST memperf pmp skipped (PMP power state not active)", lines)
