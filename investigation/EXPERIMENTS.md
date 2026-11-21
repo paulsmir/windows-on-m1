@@ -85020,3 +85020,8 @@ EXPECTED: checkpoints (a) Jumping to entrypoint, (b) XNU banner Darwin 22.6.0 on
 CONDITIONS: power host port + hub, battery % in the wrapper log, PRESENCE_CLEAR checked by the wrapper; host disk >= 8 GiB. Standing boot after.
 EVIDENCE: .local/experiments/EXP2859-a13/evidence/a13/ (run.log, hv.log, run_guest.out, vuart.log, out/ initdata dumps, SHA256SUMS).
 Command: bash <scratchpad>/a13run.sh 2859
+
+EXP2859 ACTUAL 2026-11-21T01:16:29Z: A13 wrapper ran 01:14:53Z-01:15:26Z. Gates OK (kit + guard hashes, PRESENCE_CLEAR, battery 96 % on AC), ordered end of EXP2858 (LAUNCH_WIFI_2858_ENDED 01:15:25Z, J313 at Running proxy), then chainload.py failed on the HOST before any proxy write: the proxyclient asm stub link used the default /opt/homebrew/opt/lld ld.lld, which died with SIGABRT. Bench defect: the wrapper did not export LLDDIR=/tmp/agx-lld-dir/ as every bench launcher does. Offline after the fix: ARMAsm links in both clients (fork 81c450e2 and upstream faa73cd8); the resident proxy answers a nop. Nothing was loaded on the J313. VERDICT: inconclusive (bench defect, no hardware result). NEXT: EXP2860 = the same A13 run with LLDDIR exported, from Running proxy (stdend/presence skipped: the Windows guest is already down).
+
+EXP2860 HARDWARE BEFORE 2026-11-21T01:16:29Z:
+A13 rerun of EXP2859 (same preregistration, same kit/guard/kernelcache hashes, same stops and recovery) with the one wrapper fix: LLDDIR=/tmp/agx-lld-dir/ exported for the proxyclient asm stubs. Starts at Running proxy (the EXP2858 guest was ended in EXP2859); presence n/a (Windows down), battery 96 % on AC at 01:14:55Z. Command: SKIP_STDEND=1 bash <scratchpad>/a13run.sh 2860. Evidence .local/experiments/EXP2860-a13/evidence/a13/.
