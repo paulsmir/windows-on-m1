@@ -85446,3 +85446,53 @@ Expected: FUSE2_STEP1 line, STD_DONE, guard ACCEPT, bound PASS, Wi-Fi connected.
 - Launcher launch-kbd2879.sh sha256 c2c9cad24d960116 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 2fcecb8f8.
 
 EXP2879 ACTUAL 2026-11-21T05:07:10Z: stdend.sh 2878 (LAUNCH_WIFI_2878_ENDED 05:04:28Z); at the resident proxy, read-only (architect + GPU line): u64 at physical 0x23d2bc4e8 decoded bits[39:28] = 609, bits[49:40] = 120 - MATCH with the prediction (macOS core 2x(609+1) = 1220, SRAM 0.5x(120+1) = 60.5); step 2 not needed, no dump taken. Standing launch std.sh 2879: guard standing pre/post ACCEPT, STD_DONE 05:06:39Z, baseverify bound PASS (30.0.2481.0, problem 0; restaged by the EXP2878 rollback), PRESENCE_CLEAR 05:04:00Z. VERDICT: confirmed - standing profile + fuse field located; next = HWS3 boot A1 (EXP2880).
+
+EXP2880 HARDWARE BEFORE 2026-11-21T05:08:59Z:
+INITDATA-DIFF-13.5 HWS3 - HwDataShared3 in macOS's form (off) against our builder's form (on, zero table): three boots A / B / A
+(architect order 2026-11-21)
+
+HYPOTHESIS: the enabled HwDataShared3 block with an all-zero table (our profile, both firmware copies) changes how the firmware
+runs GPU work - throughput per job and/or its power/thermal behaviour - against macOS's form (all three words 0).
+
+WHY THIS HYPOTHESIS:
+ 1. A13 EXP2870 initdata against ours (INITDATA-DIFF-13.5): hws3.unk_0 / unk_4 / unk_4c = 1 / 500 / 1 in HwDataA 0x407c and
+    Globals/RegionC 0x90f0, against 0 / 0 / 0 on macOS 13.5 on this J313; every controller, pstate, fast-die and core/frag field
+    is identical - hws3 is the only static difference whose semantics are unknown and could plausibly touch throughput.
+ 2. Source: m1n1's Python builder enables the block whenever shared3_tab is not None and t8103's is [0]*16; Asahi's Rust driver
+    enables it only for a non-empty table (t8112 / t602x), so macOS = Asahi = off; ours is a builder defect.
+ 3. We still reach P6 (GPU-THERM-3), so it is no hard pstate cap; a limiter that reads zeros as limits or durations (duty,
+    per-cluster) is not excluded and is what this run measures.
+
+SINGLE VARIABLE: the candidate package = GP1c lineage + HWS3 (gpu/hws3-off 70781e69e, accepted). The ONE variable between the
+ boots is REG_DWORD Wom1Hws3Off: absent (A) / 1 (B), staged with the candidate, read by the KMD once before the firmware starts
+ (both copies or neither, guarded on the builder form). Boots A / B / A are fresh launches with the same procedure; no device
+ cycle (the firmware reads initdata at start; that a PnP cycle restarts it and re-reads initdata is not shown from
+ our source, so it is not used). m1n1, Mu, switches,
+ parking, launcher flags = the standing profile.
+
+PER BOOT: validity (switch read-back per arm AND the KMD receipt in the Wom1GpuPerf samples: A absent, B applied), quiet gate,
+ settle, two cold-gated GravityMark PERF windows (1280x720 100k -temporal 0) and one cold-gated FULL run (the hot window:
+ GPUCOL state shares, mean MHz, limited share, target-6 share, temperature, power, score), final reads, rollback.
+
+PREDICTION (I): HWS3_NO_EFFECT - every B/A compute ratio within 2 % and every job within 3 %; the hot window's GPUCOL within the
+ A boots' spread. Either way B is macOS's own form, so the production default follows the verdict:
+ - HWS3_GAIN (every valid pair compute <= 0.98) -> auto-promotion (all gates PASS): Wom1Hws3Off becomes the production form;
+ - HWS3_NO_EFFECT -> explicit KEEP/DROP line (recommendation KEEP: it removes a builder defect and matches macOS);
+ - HWS3_LOSS (every valid pair >= 1.02) -> DROP and report: the zero-table form changes firmware behaviour in our favour;
+ - HWS3_MIXED / INCONCLUSIVE / DRIFT_LIMITED -> no decision, report.
+FALSIFIED IF: GAIN or LOSS (the block is not inert on J313), or the hot window moves beyond the A boots' spread (power/thermal
+ behaviour depends on it).
+
+VALIDITY: candidate bound with its hashes; GP1c receipts readable; HWS3_RECEIPT matches the arm (else KIT_STOP: the variable is
+ not in place); per window GM_RESULT VALID, COLD_GATE OK, PERF >= 1000 CRCRCRCR frames; contract CONTRACT_SAME against EXP2753.
+STOPS: fail-closed temperature stop (TempMax >= 94 or unreadable -> no further window); a GPU reset, TDR, fault or bugcheck in
+ a window or step -> KIT_STOP; stop() reads the KMD receipts (GPU_RESET / GPU_FAULT) and WER/1001 before the boot's removal.
+RECOVERY: rollback to the accepted base as RANGE / ACCESS2 (candidate and its devnode removed - the switch goes with the
+ devnode, HWS3_SWITCH_AFTER_ROLLBACK must read 0 values - base staged); next boot = the standing pair.
+POWER: as the bench's standing launches (name it in each run line). Battery guard >= 40 %.
+EVIDENCE: per boot evidence/hws3/run.log (SWITCH Wom1Hws3Off, HWS3_RECEIPT, ARM_RESULT, GM_RESULT with GPUCOL, COLD_GATE,
+ HWS3_BOOT_RESULT), gm-*/ (umd.log for P windows), full.log; the verdict: hws3_verdict.py <A1 dir> <B dir> <A2 dir>.
+BENCH (2026-11-21): HWS3 boot A of A/B/A (this is EXP2880). Kit KIT-HWS3-9095d41f pinned by the FULL SHA256SUMS hash 9095d41ff19be88e1043b0f2029c96d693d15ba02ef53d8d04beac67bf8905e0 (29 files OK, SELFTEST_PASS). CANDIDATE built by the bench (bkit.sh, GP1c recipe, X86B562): .local/experiments/AGX-HWS3-70781e69e-signed, 30.0.2877.0, receipt SourceCommit 70781e69e13bbfd0047907f853a591e9ac999a47 PackageBuild 2877; /W4 0 errors (49-warning GP1c set; the package /W4 build is this KMD change's compile gate); STACK_FRAMES PASS x4; Package versions coherent 30.0.2877.0; HWS3_FINAL_PACKAGE_PASS; drift2_cand PASS; hashes: AppleAgxOpenGL32.dll c0e41e9a;AppleAgxRenderAdmission.inf a312fe35;AppleAgxRenderAdmission.sys 236422b0;AppleAgxRenderAdmissionUmd.dll 4fb05b5d;AppleAgxRenderAdmissionUmd32.dll 4fc8e595;AppleAgxRenderAdmissionUmdArm64.dll ef6ab998;AppleAgxRenderAdmissionUmdX64.dll f53a979c;appleagxrenderadmission.cat d54b7c00;. Arm A: switch Wom1Hws3Off absent (today).
+CONDITIONS: previous boot EXP2879-std; power hub charging input + host port, battery in the wrapper line; host disk >= 8 GiB. Stops: GPU reset, TDR, fault or bugcheck -> receipts read before removal. Verdict after the third boot (hws3_verdict.py A1 B A2).
+Command: CAND_DIR=/Volumes/pwdev/public_windows/.local/experiments/AGX-HWS3-70781e69e-signed HWS3_ARM=A bash /Volumes/pwdev/public_windows/.local/experiments/KIT-HWS3-9095d41f/hws3-boot.sh 2880 2879 EXP2879-std /private/tmp/claude-502/-Volumes-pwdev-public-windows/8fb8f1f9-56dc-46ab-b494-4d6264dd5576/scratchpad/bef2880.txt
+- Launcher launch-kbd2880.sh sha256 e82d375ad0f49b53 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD b511ca552.
