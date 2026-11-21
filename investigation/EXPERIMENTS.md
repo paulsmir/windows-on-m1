@@ -85612,3 +85612,52 @@ Expected: STD_DONE, guard ACCEPT, bound PASS, Wi-Fi connected. Evidence .local/e
 HWS3 RULING (architect, 2026-11-21T06:15:23Z, recorded by the bench): KEEP the Wom1Hws3Off lever in the tree, default absent; NOT default now, not promoted. Reason to keep: the form macOS writes on this unit, removes a builder defect. Reason not default yet: B's single FULL hot window ended 2.6 C warmer (inside noise, wrong direction for a default change). Becomes default together with the CAL1 power-model correction, whose DRIFT3-procedure kit carries the HWS3 arm as its own boot.
 
 EXP2883 ACTUAL 2026-11-21T06:17:51Z: stdend.sh 2882 (LAUNCH_WIFI_2882_ENDED 06:15:15Z), standing launch std.sh 2883 (68993d14 + MUCPCWIFISMC001): guard standing pre/post ACCEPT, STD_DONE 06:17:27Z, baseverify bound PASS (30.0.2481.0, problem 0; restaged by the EXP2882 rollback). VERDICT: confirmed - standing profile; next = GATE (EXP2884, main part only, no Steam).
+
+EXP2884 HARDWARE BEFORE 2026-11-21T06:19:40Z:
+GATE-PROMO - the promotion package (RESOLVE-RANGE ON by default) against the accepted 30.0.2481.0: the full baseline set
+before acceptance (architect order 2026-11-21)
+
+PURPOSE: a gate, not a hypothesis test. RANGE (EXP2878) gave IMPROVES with all gates; the owner's rule promotes it, but the
+switch was a process environment value, so promotion needs a package whose DEFAULT is the range resolve. This boot proves
+that package is at least as good as the accepted one on every standing measurement and that the default is really on.
+
+PACKAGE (gpu/promote-range, PROMOTE_COMMIT in gate-boot.sh), beyond the accepted 30.0.2481.0 (pkg/next 04fe217c2):
+ - GP1 / GP1b / GP1c instrument (Wom1GpuPerf + Hist + FastDieLive receipts; on by default, receipts only; Wom1GpuPerfReceipt=0
+   stops them) - the lineage of every v3 kit since DRIFT2;
+ - TH1 Wom1FastDieReleaseCc, HWS3 Wom1Hws3Off, CAL1 Wom1PowerModel firmware levers - registry, ABSENT by default = profile
+   bytes unchanged (CAL1 / HWS3 kits decide them separately);
+ - BAR1 per-job counts, ACCESS-SET, LAUNCH-KINDS, COPY-RUNS receipts - environment, off by default; the BAR1 omit mode is
+   CLOSED in this commit ("3" reads as the full barrier; EXP2862 hung the GPU);
+ - RESOLVE-RANGE - ON by default; exactly APPLE_AGX_D3D12_RESOLVE_RANGE=0 restores the per-query path for bisecting.
+ tests/test_default_switches.py pins every reader's default; the full suite matches the pristine baseline.
+
+STEPS: validity, quiet gate, settle (GP1/GP1c instrument alive; LEVER_RECEIPTS th1 / hws3 / cal1 all absent in the KMD's own
+ receipt - the merged tree carries the levers default-inert, else KIT_STOP), tool suite e2459, RRQ default vs explicit 0, GravityMark warm-up +
+ PERF p1 p2 + FULL f1 f2 f3 (900 s cool-down before each measured run, memory validity per run, no environment word),
+ receipt window (unmeasured PERF with the job tracker + receipts: the default visible as C6 driver launches 1, COPY-RUNS rows
+ for draft (C)), CS ONLY with STEAM_OK=1 (separable last part; later boot: GATE_PARTS=cs STEAM_OK=1), final, rollback to base.
+
+GATE (gate_verdict.py; reference EXP2835 BASELINE-V3 + tools/perf-baseline.json):
+ - SUITE: >= 119 PASS, 0 FAIL;
+ - RRQ: IDENTICAL (default = per-query fallback on hardware);
+ - PERF: both points VALID, PERF_GATE gravitymark PASS (-2 % tolerance vs perf-baseline 47.007);
+ - FULL: >= 2 of 3 VALID, mean >= 8223 (EXP2835 8428 - 2.43 %), no valid point below 8023;
+ - DEFAULT: receipt window C6 median driver launches == 1 with no RESOLVE_RANGE word;
+ - HEALTH: no KIT_STOP / STOP_TEMP; every measured GM_RESULT VALID.
+ GATE_PASS -> the package is ready for the owner's acceptance as the next accepted package (the bench installs it as the
+ standing GPU driver only on that decision). GATE_FAIL -> not accepted; the failed check names the next step. CS: GATE_CS
+ PASS / FAIL / SKIPPED, judged on its own boot when the owner gives the word.
+PREDICTION: GATE_PASS; PERF and FULL equal to the accepted package within noise (RANGE's gain is ~0.1-0.6 % of compute, below
+ these instruments' noise); suite 119/0; DEFAULT C6 = 1; COPY-RUNS rows present.
+
+STOPS: fail-closed temperature stop; a GPU reset / TDR / bugcheck in any step; RRQ identity failure. stop() reads the KMD
+ receipts (GPU_RESET / GPU_FAULT) and WER/1001 before the boot's removal.
+RECOVERY: rollback to the accepted base as RANGE (candidate removed, base staged); next boot = the standing pair.
+POWER: as the bench's standing launches (name it in the run line). Battery guard >= 40 %.
+EVIDENCE: evidence/gate/run.log (TOOL_SUITE, RRQ_ROW / RRQ_IDENTITY, PERF_POINT, GATE_GM, FULL_POINT, RECEIPT_WINDOW, GATE_*
+ lines), tool-suite-std.txt, rrq/, gm-*/, cs-*/ (CS boot), full.log.
+BENCH (2026-11-21): kit GATE pinned as KIT-GATE-38715cc3 by the FULL SHA256SUMS hash 38715cc3817122392df8c74742be8009e0436fa87d59a1987092e49228d11dc2 (35 files OK, SELFTEST_PASS). CANDIDATE built by the bench (bkit.sh, ACCESS2/RANGE recipe, X86B563): .local/experiments/AGX-GATE-e783c48bb-signed, 30.0.2883.0, receipt SourceCommit e783c48bb144a44126931522b131898430b6166a PackageBuild 2883; KMD /W4 /WX 0 errors (49-warning set) and UMD /W4 /WX clean (build PASS); STACK_FRAMES PASS x4; Package versions coherent 30.0.2883.0; GATE_FINAL_PACKAGE_PASS; drift2_cand PASS; hashes: AppleAgxOpenGL32.dll 8eb371b0;AppleAgxRenderAdmission.inf 45c1e2b8;AppleAgxRenderAdmission.sys 779d90dd;AppleAgxRenderAdmissionUmd.dll dbf7b089;AppleAgxRenderAdmissionUmd32.dll 3f8c6168;AppleAgxRenderAdmissionUmdArm64.dll 65d0f316;AppleAgxRenderAdmissionUmdX64.dll 1d46d43d;appleagxrenderadmission.cat 07c4a323;. libagx_shaders.h: .local/experiments/AGX-GATE-e783c48bb-signed-libagx/ (c3e3c136).
+THIS BOOT: GATE_PARTS=main only. The Counter-Strike part is NOT run: it needs Pavel's own Steam word for that day (none today); STEAM_OK unset (0). The kit rolls back at the end and promotes nothing by itself; on GATE_PASS the architect records "gate passed, CS pending" (30.0.2481.0 stays the accepted package until the CS part also passes).
+CONDITIONS: previous boot EXP2883-std (standing profile); power hub charging input + host port, battery in the wrapper line; host disk >= 8 GiB. Recovery rule: after any GPU reset/TDR/bugcheck the KMD receipts are read before removal.
+Command: GATE_PARTS=main CAND_DIR=/Volumes/pwdev/public_windows/.local/experiments/AGX-GATE-e783c48bb-signed bash /Volumes/pwdev/public_windows/.local/experiments/KIT-GATE-38715cc3/gate-boot.sh 2884 2883 EXP2883-std /private/tmp/claude-502/-Volumes-pwdev-public-windows/8fb8f1f9-56dc-46ab-b494-4d6264dd5576/scratchpad/bef2884.txt
+- Launcher launch-kbd2884.sh sha256 a6c5e40b301549df (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 559fd5246.
