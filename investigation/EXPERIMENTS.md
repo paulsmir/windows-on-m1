@@ -85159,3 +85159,50 @@ Expected: STD_DONE, guard ACCEPT, bound PASS, Wi-Fi connected. Evidence .local/e
 - Launcher launch-kbd2868.sh sha256 686aafaa3a84cb9c (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 852fcea76.
 
 EXP2868 ACTUAL 2026-11-21T02:20:11Z: standing launch from the resident proxy (std.sh 2868): budget 61/13, guard standing pre/post ACCEPT, AppleSmc OK, Wi-Fi connected (WFUP_DONE), STD_DONE 02:19:38Z, baseverify bound PASS (30.0.2481.0, problem 0), PRESENCE_CLEAR 02:19:49Z. CORRECTION to the EXP2868 BEFORE text: the J313 reached the resident proxy after EXP2867 through m1n1's own "Unhandled exception, rebooting..." (data abort on the host read of DVA 0x34000), not through hv.reboot(). VERDICT: confirmed - standing profile; next = ACCESS (EXP2869), then A13 run 3 (trace script 7e2a0286).
+
+EXP2869 HARDWARE BEFORE 2026-11-21T02:22:05Z:
+GPU-COLD-3 §4 ACCESS-SET - how many of GravityMark's dispatch barriers the Windows contract lets the production form drop
+(architect order 2026-11-21; receipt only)
+
+HYPOTHESIS: under the D3D12 contract a full CDM barrier is required before a dispatch only when an application-recorded
+ordering event (UAV barrier on a resource the dispatch touches, a transition of such a resource, a global UAV or aliasing
+barrier) is pending; GravityMark records a barrier after 172 of 174 dispatches (EXP1994), so the production form gains on
+GravityMark only if many of those barriers name resources the NEXT dispatch does not touch.
+
+WHY THIS HYPOTHESIS:
+ 1. Apple's own per-dispatch split loses 0.43-0.46 ms on C2/C0 when dispatches stop sharing an encoder (GPU-COLD-3 §1-2);
+    BAR1 bounds what our per-launch barrier costs, this run says how much of it is legally removable.
+ 2. Microsoft Learn ("Using Resource Barriers..."): a UAV barrier orders accesses to ITS resource; no barrier is needed between
+    dispatches that only read, or that write in any safe order; transitions order the transitioned resource.
+ 3. The job tracker already records barrier ranges and per-dispatch access ranges (OV1/OV5/OV8, receipt only); the new
+    counters only classify each dispatch against them (agx_d3d12_job_barriers.h AgxD3d12AccessSet*, tests RED -> GREEN).
+
+SINGLE VARIABLE OF THE BOOT: the candidate package = GP1c lineage (126a2eb0f) + the receipt-only access-set counters
+ (gpu/access-set, ACCESS_COMMIT; switch absent = nothing computed, no row, test-pinned). In the boot both GravityMark windows
+ set the process environment APPLE_AGX_D3D12_JOB_BARRIERS=1 APPLE_AGX_D3D12_ACCESS_SET=1 (receipt only: the command stream,
+ the CDM barrier mode and the submission order are today's). Times of this run are NOT results (per-command bookkeeping).
+
+RUNS (cold-gated, GP1c live temp_c <= 58): two GravityMark 1280x720 100k -temporal 0 PERF windows (the BAR1 config).
+
+PREDICTION: per submit ~174 application dispatches, today ~236 full barriers (every launch); emit hit dominant (GravityMark's
+ barriers mostly name the next dispatch's resources), reachable (skip + held) / dispatches < 0.25, unknown < 0.25 (most
+ GravityMark buffers are root raw UAVs, placed without the table walk) -> SMALL or NOTHING_HERE: the gain on GravityMark is
+ the barrier FORM (BAR1 bound, Apple's in-encoder ordering), not the count.
+FALSIFIED IF: WORTH_IT (reachable >= 0.25 in both runs, agreeing within 0.05) -> the production form of §4 is worth building
+ for GravityMark; UNKNOWN_BOUND (unknown >= 0.25) -> placement too coarse, the table walk (cross-lead placement) is needed to
+ decide.
+NEXT: WORTH_IT -> implement §4's policy (pending events + access sets) behind a switch, tests from this classification;
+ NOTHING_HERE / SMALL -> the C0/C2/C6 part goes to the barrier form (BAR1 result + trace question 5.8).
+
+VALIDITY: candidate bound with its hashes; GP1c receipts readable; per run >= 500 access-set rows, dispatches > 0, only mode-0
+ cdm-barriers rows (default stream); contract CONTRACT_SAME against EXP2753 (budget cp2 61/13).
+STOPS: fail-closed temperature stop (TempMax >= 94 or unreadable); a GPU reset or new TDR during a window -> no further run.
+RECOVERY: rollback to the accepted base as BAR1 (candidate removed, base staged); next boot = the standing pair; the switches
+ are process environment of the GravityMark runs only (no registry value).
+POWER: as the bench's standing launches (name it in the run line). Battery guard >= 40 %.
+EVIDENCE: evidence/access/run.log (ARM_RESULT with ACCESS_SUM, GM_RESULT, COLD_GATE, ACCESS_* verdict lines), gm-*/ umd.log
+ (measure-d3d12-access-set / -cdm-barriers / -job-barriers rows), full.log.
+BENCH (2026-11-21): kit ACCESS pinned as KIT-ACCESS-db75fed6 (SHA256SUMS db75fed6b82854a0..., 29 files OK, SELFTEST_PASS on the pinned copy; access-boot.sh = bar1-boot.sh with the ACCESS commit and no screenshot step). CANDIDATE built by the bench with mkpkg-inputs.sh (GP1c recipe, X86B559): .local/experiments/AGX-ACCESS-b8b4e23e5-signed, 30.0.2865.0, receipt SourceCommit b8b4e23e588f464f6649ae7acd1433426fdac7cf PackageBuild 2865; /W4 0 errors (the GP1c 49-warning set); STACK_FRAMES PASS x4; Package versions coherent 30.0.2865.0; ACCESS_FINAL_PACKAGE_PASS; hashes: AppleAgxOpenGL32.dll f119b537;AppleAgxRenderAdmission.inf 03517dc4;AppleAgxRenderAdmission.sys 9dcc3270;AppleAgxRenderAdmissionUmd.dll 39534fa8;AppleAgxRenderAdmissionUmd32.dll 043fe3fc;AppleAgxRenderAdmissionUmdArm64.dll 511e9826;AppleAgxRenderAdmissionUmdX64.dll 462e2e90;appleagxrenderadmission.cat 7095dd1e;.
+CONDITIONS: previous boot EXP2868-std (standing profile); power hub charging input + host port, battery % in the wrapper line; guest C: ~14.9 GB free; host disk >= 8 GiB. Recovery rule (architect 2026-11-21): after any TDR/0x116 the KMD receipts are read before any devnode removal. Standing boot after the kit; the arms' guest UMD logs deleted after host SHA-256 match.
+Command: CAND_DIR=/Volumes/pwdev/public_windows/.local/experiments/AGX-ACCESS-b8b4e23e5-signed bash /Volumes/pwdev/public_windows/.local/experiments/KIT-ACCESS-db75fed6/access-boot.sh 2869 2868 EXP2868-std /private/tmp/claude-502/-Volumes-pwdev-public-windows/8fb8f1f9-56dc-46ab-b494-4d6264dd5576/scratchpad/bef2869.txt
+- Launcher launch-kbd2869.sh sha256 9fba5a2f53f7fa03 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 59c5b43e6.
