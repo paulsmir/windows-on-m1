@@ -8880,3 +8880,29 @@ and port driver source; installer moved to the current driver set.
 - NEXT: (1) barrier measurement switch on the GP1c lineage, ABAB, then the production form - dispatch grouping with
   barriers only where the D3D12 contract requires them; (2) C4 compiler work within what the DXIL permits;
   (3) order M1N1-MACOS-HV: trace macOS's PMGR / PMP / AGX initdata under GPU load.
+
+## UPDATE 2026-11-21T04:00:26Z - night of 21 Nov: ground truth from macOS 13.5, driver launches named, kits queued
+
+- A13 (macOS 13.5 kernel under upstream m1n1 faa73cd8, EXP2860/2865/2867/2870): macOS boots on this J313 under the
+  hypervisor; it starts PMP before gfx-asc (CPU_CONTROL RUN=1; PMP does not run under our stack, EXP2857); its own AGX
+  initdata was dumped and decoded V13_5 (EXP2870). The "DCS power" panic at 43.5 s was a time-stealing artefact of our
+  trace script (it traced XNU's console window), not evidence about DCS.
+- INITDATA-DIFF-13.5.md (architect's notes folder): fast-die block incl. release 8000 and the flag, perf controller,
+  ppm/avg_power gains, pstate scaling, cores/frags are IDENTICAL to macOS. Real differences: HwDataShared3 enabled with
+  a zero table (macOS off) - candidate HWS3 70781e69e; swapped power-zone filter coefficients; voltages_sram columns;
+  and per-device power calibration (max_power 19803 = V_top x 21, leak from eFuse) - candidate CAL1 08634fbf5, source
+  formulas in CAL1-SOURCE.md. No static field explains the per-job compute deficit.
+- BAR1 (EXP2862): omitting the CDM barrier between dependent dispatches hung the GPU in the first frames; the reset's
+  quiesce stage returned STATUS_DEVICE_HARDWARE_ERROR -> 0x116. Form closed. Production item filed: a reset that
+  aborts a hung job (GPU-PRODUCTION-ITEM-TDR-RESET.md).
+- ACCESS (EXP2869): the application's barriers hit in 97.7 % of dispatches, reachable 1.2 % - nothing to defer.
+  We emit 236 full barriers against 169 required: the difference fences the driver's own launches.
+- ACCESS2 (EXP2872): 63 driver launches per frame by kind - 33 COPY_QUERY_GL (GravityMark's pipeline-statistics
+  resolves, 11 per query), 23 buffer copies (GravityMark's CopyBufferRegion), 7 WIN32_INDIRECT_STREAM.
+  Candidate RANGE ecd805d43 (one launch per run of slots; replay byte-identical offline). Drafts (C) copies and
+  (I) indirect expander; estimate 63 -> ~11 per frame.
+- Kits released to the bench, in order: GSHAPE 4a295c21 (running, EXP2874), last A13 run with script d3215291,
+  RANGE ab0e83c0, HWS3 9095d41f (three boots A/B/A); CAL1 kit assembled, sealed after those.
+- OWNER: path B (upstream m1n1 as custom kernel of his macOS 15.7.8, 1TR steps by him) approved, planned for
+  24 Nov; instruction M1N1-PATH-B-OWNER-STEPS.md. Upstream rebase rejected (stay on our fork, five pre-relicence
+  cherry-picks queued; upstream is GPL-2.0 since 2026-09-30).
