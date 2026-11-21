@@ -60,6 +60,13 @@ Request lines (``#`` starts a comment):
                + n x 0x40000, decoded fast (ADT dramcfg-data 0x133/0x55555340) or boot; the PMGR power-state
                words of MCC, DCS0..7 and PMP; PMP's ASC CPU_CONTROL (running bit 0x10) only when PMP's power
                state reads active; 16 words of DCS channel 0's PMP window (0x200204000).  Nothing is written.
+    pmgrdump   GPU-COLD-3 / BAR1, read-only: the PMGR device power-state words of both PMGR blocks
+               (ADT /arm-io/pmgr devices + ps-regs: 0x23b700040..0x23b7003fc, 240 words, the reg0 devices
+               ECPM .. GFX; 0x23d280040..0x23d2800bc, 32 words, the reg1 NUB devices incl. the word
+               0x23d280058 that the virtual vote devices GFX-SGX / GFX-BUSY / SOC-V* / DCS-V* name) and
+               64 words of the PMGR scratch page 0x23b738000 (ADT / Asahi pmgr_dcp dcp-bw-scratch; the
+               G13 firmware maps it as PMGRScratch).  The doorbell page 0x23bc3c000 is NOT read (a doorbell
+               read may have side effects).  Printed as nonzero words per block.  Nothing is written.
 """
 
 import pathlib
@@ -85,6 +92,8 @@ MEM_PS = (("MCC", 0x23B7002F8), ("DCS0", 0x23B700300), ("DCS1", 0x23B700310), ("
           ("DCS3", 0x23B700318), ("DCS4", 0x23B700320), ("DCS5", 0x23B700330), ("DCS6", 0x23B700328),
           ("DCS7", 0x23B700338), ("PMP", 0x23B7003D8))
 PMP_ASC_CPU_CONTROL = 0x23BC00044
+# GPU-COLD-3 / BAR1 pmgrdump: (tag, base, words); all inside blocks m1n1 pmgr.c / memperf already read.
+PMGR_DUMP_BLOCKS = (("ps0", 0x23B700040, 240), ("ps1", 0x23D280040, 32), ("scratch", 0x23B738000, 64))
 # DCS channel 0 window that ADT /arm-io/pmp lists among PMP's own registers (reg 0x200204000, 0x4000): 16 words.
 DCS0_PMP_WINDOW, DCS0_PMP_WORDS = 0x200204000, 16
 APGPIO_GUEST_PIN, APGPIO_PINS = 195, 212
@@ -167,6 +176,9 @@ def parse(text):
             continue
         if verb == "memperf" and len(words) == 1:
             requests.append(("memperf", 0))
+            continue
+        if verb == "pmgrdump" and len(words) == 1:
+            requests.append(("pmgrdump", 0))
             continue
         if verb in ("refuse", "drop") and len(words) == 2 and words[1].isdigit():
             count = int(words[1])
@@ -302,6 +314,13 @@ def execute(proxy, requests):
                 lines.append("HOST_REQUEST memperf pmp skipped (PMP power state not active)")
             values = [proxy.read32(DCS0_PMP_WINDOW + 4 * i) for i in range(DCS0_PMP_WORDS)]
             lines.append("HOST_REQUEST memperf dcs0_pmp_window " + " ".join(f"{v:08x}" for v in values))
+            continue
+        if verb == "pmgrdump":
+            for tag, base, words in PMGR_DUMP_BLOCKS:
+                values = [proxy.read32(base + 4 * i) for i in range(words)]
+                nonzero = " ".join(f"{base + 4 * i:x}={v:08x}" for i, v in enumerate(values) if v)
+                lines.append(f"HOST_REQUEST pmgrdump {tag} 0x{base:x} words={words} "
+                             f"nonzero={sum(1 for v in values if v)} {nonzero or 'all-zero'}")
             continue
         op = P_DISPLAY_INJECT_REFUSE_SWAPS if verb == "refuse" else P_DISPLAY_INJECT_DROP_LATCHES
         previous = proxy.request(op, count, signed=True)

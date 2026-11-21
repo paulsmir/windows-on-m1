@@ -354,6 +354,47 @@ class DramPolicyVerb(unittest.TestCase):
         self.assertEqual(lines, ["HOST_REQUEST dram fast unavailable RuntimeError: Bad Command"])
 
 
+class PmgrDumpVerb(unittest.TestCase):
+    """GPU-COLD-3 / BAR1: read-only PMGR power-state words and the PMGR scratch page; no doorbell read."""
+    class Proxy:
+        def __init__(self, values=None):
+            self.values, self.reads, self.writes, self.requests = values or {}, [], [], []
+
+        def read32(self, address):
+            self.reads.append(address)
+            return self.values.get(address, 0)
+
+        def write32(self, address, value):
+            self.writes.append((address, value))
+
+        def request(self, *args, **kwargs):
+            self.requests.append(args)
+
+    def test_parse(self):
+        self.assertEqual(host_request.parse("pmgrdump"), [("pmgrdump", 0)])
+        with self.assertRaises(ValueError):
+            host_request.parse("pmgrdump all")
+
+    def test_reads_exactly_the_fixed_list_and_writes_nothing(self):
+        proxy = self.Proxy()
+        lines = host_request.execute(proxy, host_request.parse("pmgrdump"))
+        expected = ([0x23B700040 + 4 * i for i in range(240)] + [0x23D280040 + 4 * i for i in range(32)]
+                    + [0x23B738000 + 4 * i for i in range(64)])
+        self.assertEqual(proxy.reads, expected)
+        self.assertNotIn(0x23BC3C000, proxy.reads)
+        self.assertEqual(proxy.writes, [])
+        self.assertEqual(proxy.requests, [])
+        self.assertEqual(lines, ["HOST_REQUEST pmgrdump ps0 0x23b700040 words=240 nonzero=0 all-zero",
+                                 "HOST_REQUEST pmgrdump ps1 0x23d280040 words=32 nonzero=0 all-zero",
+                                 "HOST_REQUEST pmgrdump scratch 0x23b738000 words=64 nonzero=0 all-zero"])
+
+    def test_nonzero_words_carry_their_address(self):
+        lines = host_request.execute(self.Proxy({0x23B7003F8: 0x0F0000FF, 0x23D280058: 0x4}),
+                                     host_request.parse("pmgrdump"))
+        self.assertEqual(lines[0], "HOST_REQUEST pmgrdump ps0 0x23b700040 words=240 nonzero=1 23b7003f8=0f0000ff")
+        self.assertEqual(lines[1], "HOST_REQUEST pmgrdump ps1 0x23d280040 words=32 nonzero=1 23d280058=00000004")
+
+
 class MemPerfVerb(unittest.TestCase):
     """GPU-COLD-2: read-only memory-side state - PMGR perf-regs blocks and DCS DRAMCFG of 8 channels."""
     class Proxy:
