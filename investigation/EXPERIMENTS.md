@@ -85376,3 +85376,63 @@ Expected: STD_DONE, guard ACCEPT, bound PASS, Wi-Fi connected. Evidence .local/e
 - Launcher launch-kbd2877.sh sha256 448fb2edeb6b1fdd (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 65da46d36.
 
 EXP2877 ACTUAL 2026-11-21T04:39:56Z: standing launch from the resident proxy after EXP2876 (std.sh 2877): guard standing pre/post ACCEPT, STD_DONE 04:39:17Z, baseverify bound PASS (30.0.2481.0, problem 0; restaged by the EXP2874 rollback), PRESENCE_CLEAR 04:39:27Z. VERDICT: confirmed - standing profile; next = RANGE (EXP2878).
+
+EXP2878 HARDWARE BEFORE 2026-11-21T04:41:45Z:
+GPU-COLD-3 §9 (T) RESOLVE-RANGE - one driver launch per run of resolved query slots instead of one per slot (architect order 2026-11-21)
+
+HYPOTHESIS: most of the driver launches inside GravityMark's compute jobs C6 (11 per job) and C4 (15) are the per-value copies of
+pipeline-statistics query resolves (one libagx_copy_query_gl launch + one full CDM barrier per statistic). Resolving a run of
+slots with one launch removes them without changing a single resolved byte.
+
+WHOSE QUERIES: GravityMark's own. It creates 3 PIPELINE_STATISTICS query heaps (D3D12DDI type 2) of 1024 queries and resolves
+them per pass; our driver adds none on this path. Our owner keeps each D3D12 statistics query as 11 pipe queries
+(PIPE_QUERY_PIPELINE_STATISTICS_SINGLE), and the native resolve calls get_query_result_resource per value: 11 launches per query.
+APPLE'S METAL PATH: GravityMark's Metal backend (Tellusim) references sampleCountersInBuffer / newCounterSampleBuffer /
+GPUStartTime / GPUEndTime and counter sets: Metal samples counters from the encoder into a sample buffer with no compute kernel
+per query. Whether GravityMark samples per pass on Metal at run time is NOT measured; Apple has no per-query resolve kernel in
+any case, so the launches this change removes have no counterpart in Apple's per-job times.
+
+WHY THIS HYPOTHESIS:
+ 1. EXP2862 A1 receipt (one frame segmented by draws): C6 has 6 dispatches, 0 ExecuteIndirect and 11 driver launches; C4 1
+    dispatch, 1 ExecuteIndirect, 15 driver launches - not the indirect expander; 11 = exactly one statistics query resolved.
+ 2. Source: AgxD3d12OwnerResolveQueries loops get_query_result_resource over count x 11 values (agx_d3d12_windows.cpp), each a
+    libagx_copy_query_gl launch in the compute batch followed by the full barrier word 0x600fffff; Honeykrisp copies a whole
+    query range with one libagx_copy_query dispatch.
+ 3. Offline: the owner replay of a recorded resolve sequence gives identical destination bytes with the switch off and on and
+    launches 88/66/132/11/6/1 -> 4/4/132/1/3/1 (tests/test_resolve_range.py, ecd805d43).
+
+SINGLE VARIABLE OF THE BOOT: the candidate package = GP1c lineage + receipts (access-set, BAR1 counts with mode 3 unreachable,
+ launch kinds: ddcf8a2a0) + RESOLVE-RANGE (gpu/launch-kinds ecd805d43; switch absent = the per-query resolve, byte-identical,
+ test-pinned). Within the boot the ONE variable between arms is the process environment APPLE_AGX_D3D12_RESOLVE_RANGE absent (A)
+ / 1 (B); both arms set APPLE_AGX_D3D12_CDM_JOB_RECEIPT=1 (per-job launch counts and kinds). Probe errq1 (gpu/rrq-probe
+ d308daec, arm64 86c101b2) is the identity instrument. m1n1, Mu, switches, parking, launcher flags = the standing profile.
+
+STEPS: validity, quiet gate, settle; RRQ (switch absent, then = 1); GravityMark PERF A B A B (1280x720 100k -temporal 0), each
+ cold-gated (GP1c live temp_c <= 58); final reads; range_verdict.py.
+
+PREDICTION:
+ - RRQ: both PASS, RRQ_STATS fnv identical (IDENTICAL).
+ - Driver launches per job (receipt medians): C6 11 -> 1, C4 15 -> <= 5 (the other ~4 of C4 are named by RANGE_KINDS).
+ - Per job, scene-aligned B against A: C6 <= -0.05 ms, C4 <= -0.05 ms, C0 / C2 not worse than 1.02; frame <= -0.15 ms.
+FALSIFIED IF: RRQ DIFFERENT (BROKEN: the range resolve is wrong); A's C6 driver launches < 10 (NOT_EXERCISED: GravityMark did
+ not resolve per pass here); B's C6 > 2 (NOT_MET: the resolves took another path, e.g. OV3 deferral); any job B/A > 1.02 in both
+ pairs (REGRESSES).
+VERDICT: IMPROVES (identical, launches MET, C6 r <= 0.98 or compute <= 0.99 in both pairs) -> auto-promotion rule (all gates
+ PASS): RESOLVE_RANGE becomes the default in the next production package. NEUTRAL_KEEP_QUESTION -> explicit KEEP/DROP line.
+
+VALIDITY: candidate bound with its hashes; GP1c receipts readable; probe hash local + guest; per arm GM_RESULT VALID, COLD_GATE
+ OK, >= 1000 CRCRCRCR frames, >= 500 cdm-jobs rows, only CDM mode-0 barrier rows; contract CONTRACT_SAME against EXP2753.
+STOPS: fail-closed temperature stop (TempMax >= 94 or unreadable -> no further arm); a GPU reset or new TDR during RRQ or an arm
+ (KIT_STOP); RRQ identity failure (KIT_STOP before any GravityMark arm).
+SAFETY: the package carries the BAR1 code; its mode 3 hung the GPU (EXP2862). Every guest script clears
+ APPLE_AGX_D3D12_LEAN_CDM_BARRIER / _BITS and refuses any LEAN_CDM_* word (self-test asserts it, including an arm trying =3).
+ RESOLVE_RANGE changes only which kernel copies query results; a wrong range would show as wrong statistics, caught by RRQ.
+RECOVERY: rollback to the accepted base as ACCESS2 / BAR1 (candidate removed, base staged); next boot = the standing pair. The
+ switch is a process environment variable only; no registry or device switch is set.
+POWER: as the bench's standing launches (name it in the run line). Battery guard >= 40 %.
+EVIDENCE: evidence/range/run.log (RRQ_ROW, RRQ_IDENTITY, ARM_RESULT, GM_RESULT, COLD_GATE, RANGE_* verdict lines), rrq/<tag>-*,
+ gm-*/ (umd.log per arm with measure-d3d12-cdm-jobs / -kinds rows), full.log.
+BENCH (2026-11-21): kit RANGE pinned as KIT-RANGE-ab0e83c0 by the FULL SHA256SUMS hash ab0e83c0652517bc94792bdb45b5820d957a7a9b24ee535cc96a7f61142525e6 (32 files OK, SELFTEST_PASS); probe errq1 arm64 in the kit = 86c101b2b53b93c2ecd9393b728c1107ee623c874c20e29951964478082122eb (as named by the architect); kitlib.sh clears APPLE_AGX_D3D12_LEAN_CDM_BARRIER/BITS in every guest script. CANDIDATE built by the bench (bkit.sh = GP1c/ACCESS2 recipe, X86B561): .local/experiments/AGX-RANGE-ecd805d43-signed, 30.0.2875.0, receipt SourceCommit ecd805d43f8422ef2c132263732532f534438730 PackageBuild 2875; /W4 0 errors (49-warning GP1c set); STACK_FRAMES PASS x4; Package versions coherent 30.0.2875.0; RANGE_FINAL_PACKAGE_PASS; drift2_cand PASS; hashes: AppleAgxOpenGL32.dll 61fe5bff;AppleAgxRenderAdmission.inf 68c19e13;AppleAgxRenderAdmission.sys 0cc66f77;AppleAgxRenderAdmissionUmd.dll ddc3bf17;AppleAgxRenderAdmissionUmd32.dll 2be7c93b;AppleAgxRenderAdmissionUmdArm64.dll b29855a8;AppleAgxRenderAdmissionUmdX64.dll 32c6ad81;appleagxrenderadmission.cat 52f59f33;. Build's libagx_shaders.h: .local/experiments/AGX-RANGE-ecd805d43-signed-libagx/ (arm64 = x64 = x86, sha256 c3e3c136).
+CONDITIONS: previous boot EXP2877-std (standing profile); power hub charging input + host port, battery in the wrapper line; guest C: ~14.7 GB; host disk >= 8 GiB. Promotion rule: verdict IMPROVES with all gates = automatic promotion (owner's rule); NEUTRAL -> architect. Recovery rule: after any GPU reset/TDR/bugcheck the KMD receipts are read before any devnode removal. Standing boot or the next kit after; guest UMD logs deleted after host SHA-256 match.
+Command: CAND_DIR=/Volumes/pwdev/public_windows/.local/experiments/AGX-RANGE-ecd805d43-signed bash /Volumes/pwdev/public_windows/.local/experiments/KIT-RANGE-ab0e83c0/range-boot.sh 2878 2877 EXP2877-std /private/tmp/claude-502/-Volumes-pwdev-public-windows/8fb8f1f9-56dc-46ab-b494-4d6264dd5576/scratchpad/bef2878.txt
+- Launcher launch-kbd2878.sh sha256 4ffe828d492a4eb5 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 7baaa2681.
