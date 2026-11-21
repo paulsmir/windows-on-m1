@@ -85034,3 +85034,69 @@ Expected: STD_DONE, guard ACCEPT, bound PASS, Wi-Fi connected. Evidence .local/e
 - Launcher launch-kbd2861.sh sha256 e95740e558122bdb (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD ed78dc139.
 
 EXP2861 ACTUAL 2026-11-21T01:36:07Z: standing launch from Running proxy (std.sh 2861: m1n1 68993d14 + MUCPCWIFISMC001): budget 61/13, ECAM filter 1, guard standing pre/post ACCEPT; BT 0x14; AppleSmc DEV OK StartCount 31; Wi-Fi connected (WFUP_DONE, Wi-Fi SSH); HV 0/0/0/0; STD_DONE 01:35:40Z; baseverify bound PASS (30.0.2481.0, problem 0); PRESENCE_CLEAR. VERDICT: confirmed - standing profile after the A13 attempts; next slot BAR1.
+
+EXP2862 HARDWARE BEFORE 2026-11-21T01:38:50Z:
+GPU-COLD-3 BAR1 - bound the cost of the full CDM barrier after every compute launch (architect order 2026-11-21)
+
+HYPOTHESIS: the per-job excess of the multi-dispatch compute jobs C0 / C2 / C6 over Apple (+0.675 / +0.386 / +0.088 ms,
+GPU-COLD-1) is mostly the cost of the full CDM barrier (wait + flush / invalidate word 0x600fffff) that Asahi and we emit
+after every launch, against Apple's in-encoder ordering. C4 (one dispatch) carries a separate latency / sample deficit.
+
+WHY THIS HYPOTHESIS:
+ 1. Apple's own per-dispatch split (EXP2226 splitd, every dispatch its own command buffer) costs Apple +0.46 / +0.43 /
+    +0.09 / 0 ms on C0 / C2 / C6 / C4 beyond its ~3.5 us per-CB overhead: Apple gains exactly that much when consecutive
+    dispatches share an encoder, which matches our C2 / C6 excess fully and C0's two thirds (GPU-COLD-3 §1-2).
+ 2. The scene-aligned fit of our C2 against Apple has a constant of +0.18 ms (1 s bins) = ~4 us x 44 dispatches, a
+    per-dispatch cost; the single-dispatch C4 is purely proportional (1.15x + 0.06 ms) (GPU-COLD-3 §1).
+ 3. Everything else common to these jobs was excluded on hardware or in source: job fields (CM-1 EXP2347), UAT attribute
+    (EXP2392), SLC quotas (EXP2258), lean barrier bits (EXP2036), DRAM state (GPU-COLD-2 FIX PREP); C4's static gap is dxc's
+    unroll (executed instructions 1.06x, not ALU-bound) (GPU-COLD-3 §2, §3b).
+
+SINGLE VARIABLE OF THE BOOT: the candidate package = GP1c lineage (126a2eb0f) + BAR1 commit (gpu/bar1-cdm-omit): with the
+ switch absent the CDM control stream is byte-identical (test-pinned). Within the boot the ONE variable between arms is the
+ process environment APPLE_AGX_D3D12_LEAN_CDM_BARRIER = 0 (A) / 3 (B); both arms set APPLE_AGX_D3D12_CDM_JOB_RECEIPT=1.
+ m1n1, Mu, switches, parking, launcher flags = the standing profile (DRIFT3 / COLD2 control without the experiment m1n1).
+
+WHICH D3D12 GUARANTEE MODE 3 SUSPENDS, AND WHY GRAVITYMARK IS EXPECTED TO SURVIVE IT:
+ - Suspended: the ordering of dependent dispatches inside one CDM stream (one compute job). D3D12 orders a writer and a later
+   reader of the same UAV through the application's UAV barrier (Microsoft Learn, "Using Resource Barriers..."); our driver
+   records those barriers but does not emit them into the stream - today the full barrier after every launch provides the
+   ordering. GravityMark records an app barrier after 172 of 174 dispatches (EXP1994), so B arms run genuinely dependent
+   dispatches without ordering: a reader may start while its writer's tail is still running.
+ - Kept: a full barrier before every indirect dispatch (its arguments are never fetched early: no garbage grid size), on
+   both sides of every driver-internal launch (copies, blits, queries, precompiled kernels), and at the end of every CDM
+   stream (before render jobs, copies, CPU access, the next submission). Render work and presentation are untouched.
+ - Expected survival: an overlapping reader sees either the new value or the previous frame's value of the same buffers
+   (GravityMark reuses its buffers every frame), both inside the buffers' valid ranges; with indirect grids protected the
+   hazard is wrong numbers, not wrong addresses. NOT guaranteed: data-dependent addressing into root UAVs (unchecked) could
+   read out of range -> a GPU page fault / device removal; that is the abort rule below, not an assumption.
+ - Image: not judged by the verdict; one screenshot per arm is taken ~35 s into the window and hashed (SHOT lines; the PNGs
+   are kept) so a broken picture is recorded.
+
+ARMS (cold-gated: newest GP1c live temp_c <= 58 before each): A B A B; GravityMark 1280x720 100k -temporal 0 PERF (the
+ COLD2 / DRIFT3 load-run config); pmgrdump + memperf at idle, ~50 s into the window and after it.
+
+PREDICTION (scene-aligned per job, B against A in the same boot; Apple = per-encoder HD split):
+ - C0: B/A <= 0.95, B vs Apple 1.11 -> <= 1.04;   C2: B/A <= 0.95, B vs Apple 1.14 -> <= 1.02;
+ - C6: B vs Apple 1.14 -> ~1.00;   C4 (no omitted barrier inside the job): B/A within 0.98..1.02 (control).
+ - receipt: A mode 0 and 0 omitted; B mode 3 and per job omitted > 0 (C0 ~130, C2 ~40, C6 ~5, C4 0).
+REJECTED IF: C0 and C2 move less than 2 % (B/A > 0.98 in both pairs) -> the barrier is not where the excess sits; the C0 /
+ C2 / C6 gap is then inside the kernels (memory / sample service, the C4 owner) and §4's production form gains nothing.
+CONFIRMED (bound) IF: C0 and C2 B/A <= 0.95 in both pairs -> the barrier owns >= ~40 % of their excess; next = §4 production
+ form (barriers only where the Windows contract requires them) + the access-set receipt.
+
+VALIDITY: candidate bound with its hashes; GP1c receipts readable; per arm GM_RESULT VALID, COLD_GATE OK, >= 1000 CRCRCRCR
+ frames, the arm's barrier receipt in the expected mode; contract CONTRACT_SAME against EXP2753 (budget cp2 61/13).
+STOPS: fail-closed temperature stop (post-run firmware TempMax >= 94 or unreadable -> no further arm); a GPU reset or a new
+ TDR (Display 4101) during an arm -> no further arm (KIT_STOP), final reads, rollback; a guest hang -> the bench's watchdog /
+ recovery as standing (the package rolls back to the accepted base).
+RECOVERY: rollback to the accepted base as DRIFT3 / COLD2 (candidate removed, base staged); next boot = the standing pair
+ (68993d14 + MUCPCWIFISMC001); no package or setting outlives the boot except the staged base. The switch is a process
+ environment variable of the GravityMark arm only; no registry or device switch is set.
+POWER: as the bench's standing launches (hub charging input; name it in the run line). Battery guard >= 40 %.
+EVIDENCE: evidence/bar1/run.log (ARM_RESULT, HOSTREQ, GM_RESULT, COLD_GATE, SHOT, BAR1_* verdict lines), hostreq-*-pmgr/mem
+ .txt, shot-*.png, gm-*/ (umd.log per arm with measure-d3d12-cdm-jobs / -cdm-barriers rows), full.log.
+BENCH (2026-11-21): kit BAR1 pinned as KIT-BAR1-274d8988 (SHA256SUMS 274d89885d33809a..., 32 files OK, SELFTEST_PASS on the pinned copy; bar1-boot.sh = cold2-boot.sh with the standing m1n1 and the BAR1 commit). CANDIDATE built by the bench with mkpkg-inputs.sh (GP1c recipe, x86 UMD rebuilt as X86B557 from the same source): .local/experiments/AGX-BAR1-038c726bd-signed, 30.0.2861.0, receipt SourceCommit 038c726bd2f9a50317d4caaa99bbba6a89720d27 PackageBuild 2861; KMD /W4 /WX 0 errors (49 PREfast warnings, the GP1c set; KMD sources unchanged); STACK_FRAMES PASS x4 (arm64 14576, wow 14416, x64 14744, kmd 8928); Package versions coherent 30.0.2861.0; BAR1_FINAL_PACKAGE_PASS; drift2_cand.py PASS; hashes: AppleAgxOpenGL32.dll 2dc9bed2;AppleAgxRenderAdmission.inf 8826e531;AppleAgxRenderAdmission.sys 0e8e82ea;AppleAgxRenderAdmissionUmd.dll b0068484;AppleAgxRenderAdmissionUmd32.dll 0e3d7b8f;AppleAgxRenderAdmissionUmdArm64.dll 47807601;AppleAgxRenderAdmissionUmdX64.dll 8d062b58;appleagxrenderadmission.cat c3008ab9;. Launcher tree: pmgrdump verb cherry-picked as 5843cdef2 (= d88d01180 onto the rebased b80e4716f; test_host_request OK).
+CONDITIONS: previous boot EXP2861-std (standing profile, base bound, PRESENCE_CLEAR 01:35:51Z); power hub charging input + host port, battery % in the wrapper line; guest C: ~15.3 GB free; host /Volumes/pwdev >= 8 GiB. Standing boot after the kit; the guest UMD logs of the arms deleted after host SHA-256 match.
+Command: CAND_DIR=/Volumes/pwdev/public_windows/.local/experiments/AGX-BAR1-038c726bd-signed bash /Volumes/pwdev/public_windows/.local/experiments/KIT-BAR1-274d8988/bar1-boot.sh 2862 2861 EXP2861-std /private/tmp/claude-502/-Volumes-pwdev-public-windows/8fb8f1f9-56dc-46ab-b494-4d6264dd5576/scratchpad/bef2862.txt
+- Launcher launch-kbd2862.sh sha256 7b55d0e84c8c25c1 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 5843cdef2.
