@@ -8925,3 +8925,5 @@ and port driver source; installer moved to the current driver set.
   list GPU-PATH-B-QUESTIONS.md.
 - Bench queue now: standing, GATE main, GATE CS (owner's Steam word for 25 Nov), A13 rehearsal with the fixed trace,
   CAL1 overnight.
+
+UPDATE 2026-11-25T04:18Z (architect): PROMOTION RULING. Package 30.0.2883.0 (gpu/promote-range e783c48bb, range resolve on by default, levers absent by default, BAR1 omit mode removed) passed the full gate: EXP2895 GATE main = GATE_PASS (suite 119/0, FULL mean 8421.7 vs gate 8223, PERF_GATE -0.61 %, DEFAULT C6 driver launches 1, no GPU reset) and EXP2896 GATE CS = PASS (CS 1.6 worst 53.99 vs baseline 51.99, +3.85 %). Under the owner's standing auto-promotion rule (2026-11-20: an improving experiment with all gates PASS becomes standing) 30.0.2883.0 is the accepted GPU package from the next standing boot. 30.0.2481.0 is kept as the recovery artifact. GravityMark score is unchanged by this package (8421.7 vs 8428); the cold gap to macOS stays open.
