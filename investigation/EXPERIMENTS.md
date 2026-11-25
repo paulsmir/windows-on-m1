@@ -85996,3 +85996,77 @@ Command: CAL1_ARM=A bash /Volumes/pwdev/public_windows/.local/experiments/KIT-CA
 - Launcher launch-kbd2900.sh sha256 bed9116f05dc7cc4 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 2a106b2f1.
 
 EXP2900 ACTUAL 2026-11-25T05:52:43Z: CAL1-2883 arm A (both levers absent; KIT-CAL1-2883-29d22454, first run of the re-issued kit) 04:34:14Z-05:52:25Z, KIT_RC 0. Gates: hashes (pair, base 30.0.2883.0 = e783c48bb, record 72068965), base in place (bound), LEVERS_BEFORE PM=0 H3=0, LEVERS_arm A both absent + four base switches = 1, contract 4/0, Wi-Fi up, Wom1FastDieReleaseCc absent, TH1 receipt absent, Steam 0. DRIFT3: F1 8337, 40-min PERF loop (all VALID, first 54.02 fps), F2 7580 (f2/f1 0.909), 900 s idle, F3 8405; runs 13, s6 0.891, p6 4.695 W, boot temp max 92 C (stop 94 not reached), onset none; DRIFT2 NO_FALL (r_fps 0.988); DRIFT3_VERDICT NEITHER (no temperature or power step; s6 drops to 0.63-0.69 only in the 88-91 C rows); loop state all zero, release 8000. FINAL_RECEIPTS GPU_RESET none, pool failures 0. End: LEVERS_CLEARED both absent, LEVER_RECEIPT_RUNNING CAL1 absent / HWS3 absent, BASE_KEPT 30.0.2883.0 bound, guard ACCEPT. Battery 100 % -> 94 % (online). VERDICT: valid arm A (reference). Next: arm B (Wom1PowerModel=1) EXP2901.
+
+EXP2901 HARDWARE BEFORE 2026-11-25T05:53:35Z:
+CAL1 (+ HWS3 re-check) - the GPU power model as macOS builds it (Wom1PowerModel), and HwDataShared3 off (Wom1Hws3Off), each
+against the builder's form: three boots A / B / C, each the DRIFT3 procedure (CAL1-SOURCE, architect orders 2026-11-21 / 25)
+
+HYPOTHESIS: writing macOS's per-device power model (max_power 19803 from V_top 943 mV x 21, k, rel_max_powers, hws1 from the
+perf-states; power_zones[0] filter order; voltages_sram columns 0; leak unchanged 1000 / 45 because the eFuse is not handed
+over in this package) changes what the firmware believes it draws by about +1.3 % at equal state, and does NOT change its
+thermal behaviour: the clamp onset temperature, the loaded target-6 share and the sustained F2/F1 stay those of A.
+
+WHY THIS HYPOTHESIS:
+ 1. CAL1-SOURCE: macOS 13.5's kext computes these words from the ADT perf-states; our 08634fbf5 reproduces every one of
+    macOS's J313 words bit for bit (19803, k 0xbcf8346f, rel {19,26,37,58,87,100}, hws1 0x70d3..0x16b0).
+ 2. The estimator inputs change by +1.3 % (max_power), -1.3..+1.1 % (hws1 per pstate) and rel_max_powers[3,4] -1 / -2:
+    a small rescaling of the power estimate, not a new control law; the thermal (fast-die) block is identical to macOS
+    (INITDATA-DIFF-13.5), so the temperature loop is not touched.
+ 3. GPU-THERM: our sustained loss came from CPU heat (EXP2853: 73 % P-core cap removes it); DRIFT3 (EXP2853) shows
+    s6 0.999, no onset, F2/F1 0.9996 on today's standing state - the A boot reproduces that control.
+
+SINGLE VARIABLE PER BOOT against A: B = REG_DWORD Wom1PowerModel=1, C = REG_DWORD Wom1Hws3Off=1 (A: both absent), set on the
+ INSTALLED accepted base (CAL1-2883 re-issue, architect 2026-11-25: no package removal, install or restage in any boot) =
+ the promotion package gpu/promote-range e783c48bb (accepted after GATE EXP2895 / EXP2896 as 30.0.2883.0; it carries
+ CAL1 08634fbf5 and HWS3 70781e69e default-absent, and RESOLVE-RANGE on - identical in all three boots), applied by the KMD
+ once before the firmware starts (all copies or none, guarded on the builder words).
+ Both boots: the DRIFT3 procedure unchanged (F1 -> 2400 s back-to-back HD PERF -> F2 -> 900 s idle -> F3, same duty, GP1c
+ tables, TH1 and HWS3 levers absent), fresh launches, standing m1n1 / Mu / switches / parking.
+
+PREDICTION (cal1_verdict.py):
+ - CAL1_POWER: firmware avg_power at target 6 (GP1c power histogram, 0.5-W buckets) B/A within 1.00..1.03 (expected ~1.013;
+   near the instrument's resolution, judged loosely).
+ - CAL1_THERMAL: onset temperature unchanged (A none -> B none, or within one 2-C row); overall loaded s6 within 0.05;
+   boot_temp_max within 1 C.
+ - CAL1_SUSTAINED: |F2/F1_B - F2/F1_A| <= 0.02.
+ - CAL1_VERDICT NO_BEHAVIOUR_CHANGE.
+WHAT COUNTS AS A BEHAVIOUR CHANGE, AND WHICH DIRECTION WORRIES:
+ - HOTTER_DIE (worrying): the firmware lets the die run hotter under the new model - B's boot_temp_max >= A's + 2 C, or B's
+   onset >= 2 rows (4 C) above A's, or A clamps and B does not while running hotter. A power estimate that reads HIGHER
+   should, if anything, clamp earlier and cooler; hotter would mean a coefficient acts opposite to its reading -> DROP CAL1
+   and report before any production use.
+ - EARLIER_CLAMP: B's onset >= 2 rows below A's, or loaded s6 lower by > 0.05 - the estimate now limits sooner; not a safety
+   problem, a throughput cost to weigh against matching macOS (KEEP/DROP line).
+ - SUSTAINED_CHANGED: F2/F1 moves by > 0.02 without either of the above - report, no decision.
+ - POWER out of 1.00..1.03 alone is not a verdict: it says the estimator's reading is not the simple rescale assumed.
+HWS3 (arm C, architect ruling 2026-11-25: KEEP, default absent; re-checked here): EXP2880-2882 found HWS3_NO_EFFECT on
+ throughput, but B's single FULL hot window ended 2.6 C warmer at a lower end-power reading - one FULL run per boot cannot
+ separate that from noise. The DRIFT3 procedure (2400 s of sustained load + GP1c temperature x target tables) can:
+ - prediction: HWS3_VERDICT NO_BEHAVIOUR_CHANGE - onset unchanged, loaded s6 within 0.05, boot_temp_max within 1 C of A;
+ - HOTTER_DIE for C (boot_temp_max >= A + 2 C, onset >= 4 C higher) would confirm EXP2881's +2.6 C as real: then HWS3 is not
+   inert and its KEEP is revisited (macOS-conformant but thermally different on our stack -> report, owner/architect decide);
+ - EARLIER_CLAMP / SUSTAINED_CHANGED: report.
+ HWS3_POWER is reported without a prediction.
+DECISION: NO_BEHAVIOUR_CHANGE -> KEEP line (recommendation KEEP: macOS's own model on this unit; the eFuse leak follows as its
+ own commit with the prefix-window contract). HOTTER_DIE -> DROP. EARLIER_CLAMP / SUSTAINED_CHANGED -> report, KEEP/DROP.
+
+VALIDITY: the accepted base 30.0.2883.0 in place before the boot (bound, or staged-only on Problem 28 = DEVIATION line;
+ anything else = BASE_NOT_IN_PLACE, the kit installs nothing) and bound with its hashes in the boot; GP1 / GP1c receipts readable; switches AND KMD receipts match the arm (A: CAL1
+ absent / HWS3 absent; B: applied / absent; C: absent / applied; "applied-fuse" is a defect in this package); TH1 receipt
+ absent; Wom1FastDieReleaseCc absent; contract
+ CONTRACT_SAME; the DRIFT3 run validity (GM_RESULT VALID per run, memstate, quiet guest).
+STOPS: as DRIFT3 - fail-closed temperature stop (boot_temp_max >= 94 or unreadable -> no further run), bugcheck, TDR, GPU
+ reset, Display 4101 -> KIT_STOP; stop() reads the KMD receipts (GPU_RESET / GPU_FAULT) and WER/1001 before the removal.
+END OF EACH BOOT: both levers removed from Device Parameters and read back absent, BASE switches unchanged, 30.0.2883.0
+ still bound with its hashes, guard experiment ACCEPT on the base record (LEVERS_CLEARED / BASE_KEPT). The running KMD keeps
+ the arm's lever until the next boot (LEVER_RECEIPT_RUNNING); the next boot's receipt check proves it absent.
+RECOVERY: none of the package (the accepted base stays installed); an unreachable guest at the end = LEVER_CLEAR_SKIPPED
+ rc 8, recovery owns the guest and the next arm boot sets both levers exactly; next boot = the standing pair.
+POWER: as the bench's standing launches (name it in each run line); battery guard >= 40 %.
+EVIDENCE: per boot evidence/drift2/run.log (SWITCH Wom1PowerModel, CAL1_RECEIPT, GM_RESULT + GPUCOL + GP1C, DRIFT3_* lines,
+ CAL1_BOOT_RESULT), Wom1GpuPerfHist-*.bin, Wom1FastDieLive-*.bin; the verdict: cal1_verdict.py <A dir> <A N> <B dir> <B N> <C dir> <C N>.
+
+BENCH 2026-11-25T05:52:49Z: arm B of three (A / B / C), EXP2901; kit KIT-CAL1-2883-29d22454 pinned by the FULL SHA256SUMS hash 29d22454de0b6557100d333f4e483871979617933c5d4e14850013af8f86ca4a (68 entries OK, SELFTEST_PASS, ref/base-sheet-2883 = GATE EXP2895 cand-sheet).
+CONDITIONS: previous boot EXP2900-cal1; base 30.0.2883.0 installed as standing (EXP2898 staging, EXP2899 first clean standing boot, guard ACCEPT); power: host-Mac port (proxy) + hub charging input, battery 94 %; presence clear; host disk >= 8 GiB. Arm B/C levers are switch-only; the running KMD keeps the lever until the next boot (LEVER_RECEIPT_RUNNING); the next boot must read it absent.
+Command: CAL1_ARM=B bash /Volumes/pwdev/public_windows/.local/experiments/KIT-CAL1-2883-29d22454/cal1-boot.sh 2901 2900 EXP2900-cal1 <this file>
+- Launcher launch-kbd2901.sh sha256 b18ff2bd714a1149 (launch-kbd.sh 51d76b6354b693e4); m1n1 68993d140c8fe68b24470f9c920698ca955dae1acdb6e6f40bd10919c6be2920; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD ed597fecf.
