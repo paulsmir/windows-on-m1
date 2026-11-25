@@ -8906,3 +8906,22 @@ and port driver source; installer moved to the current driver set.
 - OWNER: path B (upstream m1n1 as custom kernel of his macOS 15.7.8, 1TR steps by him) approved, planned for
   24 Nov; instruction M1N1-PATH-B-OWNER-STEPS.md. Upstream rebase rejected (stay on our fork, five pre-relicence
   cherry-picks queued; upstream is GPL-2.0 since 2026-09-30).
+
+## UPDATE 2026-11-25T01:31:09Z - 25 Nov: path B installed by the owner; macOS 15.7.8 starts under upstream m1n1
+
+- Work stopped on 21 Nov ~06:25Z at the weekly quota; resumed 25 Nov. EXP2885 (rehearsal) never started a guest
+  (host toolchain shim); GATE EXP2884 died on a kit defect, re-sealed as b7b05055; CAL1 sealed 42101f21 (three
+  boots A / power model / HWS3 on candidate e783c48b = 30.0.2883.0); HWS3 ruling KEEP, default absent.
+- OWNER, 25 Nov, path B Part 1 done by him in 1TR: Macintosh HD set to Permissive Security and upstream m1n1 HEAD
+  5e3a7563 (d919c6e6) installed as its custom boot object; Startup Disk back to Secondary OS; the resident stage is
+  unchanged (bench step 11: iBoot-8422.141.2). Native macOS is unavailable until the revert. B-0 (native twin rows)
+  was skipped - its kit was never delivered; take it at the revert. A 26.x update is staged on that volume.
+- First B runs with the owner (async tracing, time stealing off): EXP2890 wedged the HV 2 s after XNU start - a PMP
+  tracer target read from async context; EXP2891 with that fixed reached AGX init at 1.8 s (79 SGX writes) and late
+  driver init, no energy panic, no guest panic, stopped by the bench for a host-log flood from the AGX tracer's kick
+  handler. Both fixed in trace 0a7d7178 (mocks RED/GREEN). Login window not reached yet; next attempt needs the owner
+  to pick Macintosh HD in the startup picker once.
+- Ready for B's trace: our SGX bring-up write list and the diff script (gpu/sgx-trace-diff 678b04f7c), question
+  list GPU-PATH-B-QUESTIONS.md.
+- Bench queue now: standing, GATE main, GATE CS (owner's Steam word for 25 Nov), A13 rehearsal with the fixed trace,
+  CAL1 overnight.
