@@ -87089,3 +87089,120 @@ EXP2972 HARDWARE BEFORE 2026-11-26T20:06:55Z:
 Standing boot (no measurement) as the staging guest for OV6C (architect queue change ~19:55Z): the OV6C kit (KIT-OV6C-bench ov6c-boot.sh, from KIT-GATE gate-boot.sh) removes the bound accepted 30.0.2883.0 on this running guest, stages the candidate 30.0.2975.0 (AGX-OV6C-913609a9b-signed, SHA256SUMS 0fabee3f, 9 OK) with the base switches, guard-checks it, and ends this boot in order; the candidate binds at the next boot (EXP2973). Standing pair m1n1 9bddd9aa + Mu IRQ01 170a91b4 (standing since EXP2970), AppleSmc 0.1.0.20 installed. CPU-check A (EXP2971) was stopped by priority before any load and re-queues after OV6C.
 WHY: staging needs a running guest with the APPL0002 devnode at Problem 28 after the removal (KIT-GATE DR2 order). Expected: STD_DONE, then the kit's REMOVAL_base gates, STAGE_cand Problem 28 + Version 30.0.2975.0 + InfHash, switches read back, GUARD_STAGED ACCEPT, LAUNCH_WIFI_2972_ENDED. Recovery: restage 2883 (agxrestage.sh) on this guest if staging fails.
 - Launcher launch-kbd2972.sh sha256 ce7264bc996d4a60 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 262a72555.
+
+EXP2973 HARDWARE BEFORE 2026-11-26T20:11:55Z:
+OV6C - preregistration (architect order 2026-11-26; written before any run; the verdict code is agx_r6_admission_decode.py)
+
+WHAT: one candidate package, AppleAgx 30.0.2975.0, built from gpu/ov6c-r6-admission 913609a9b01d4cc7cb48bdc41e5d41a4289de364 = e783c48bb (accepted
+30.0.2883.0) plus one commit with three parts:
+- OV6c (UMD job tracker only): a VS UAV binding counts as a write only when the compiled VS really stores.
+  - dxbc_nir_memory_access classifies the translated VS: none / read / write.
+  - none: the VS UAV bindings are left out of the render's ranges. read: read ranges. write, or not compiled: write
+    ranges, as before.
+  - VB/IB ranges by view size are already in 2883 (OV8, 0619a8ac0, 2026-11-09). This package adds nothing there.
+- R6-ADMIT receipt (UMD, measure-d3d12-r6-admission): per position 0-7 of the render-after-compute batches in one
+  ExecuteCommandLists, the OV5 verdict (AgxD3d12JobRenderTaRefusal) counted in buckets: admitted, 9 prelude, 10 vertex
+  conflict, 11 unplaceable, 6 foreign, other. It is counted twice: with the real prelude flag and as if no prelude.
+  Cumulative rows every 64th execution. It runs under any job tracker; the OV2/OV5 features are not needed.
+- L1b receipt (KMD): REG_DWORD Wom1IrqCompletionState, written once per start. Low byte: 1 armed, 2 inert (no mailbox
+  line listed), 3 disabled (Wom1IrqCompletion=0), 4 disabled and no line. Bit 8: line listed; bit 9: switch on.
+No waiver: Wom1Ov5TaWaiver, Wom1Ov2NoHazardLead and APPLE_AGX_D3D12_COMPUTE_FIRST stay absent.
+PACKAGE: .local/experiments/AGX-OV6C-913609a9b-signed (SHA256SUMS sha256 0fabee3fbc17d54a6c050c7633243b0628e768e243a0fe101b4c2398bcc377cd;
+  AppleAgxRenderAdmission.sys cd52223a2854a3373cc4e06168fffe6501712b8b4e793176cf642043426198b0 30.0.2975.0;
+  UmdArm64 3ce1cd7a539f3c5b750bf007d6bf9e0413b2a5b3001b3ef8e0336cd04e176d96; inf 815e9c2f...; cat cd2fa1d0...).
+  ARM64 KMD/UMD PDBs in pdb/ (PDB-SHA256SUMS). Builder: OV6C-2975-final, recipe = B6L 2940 recipe with new pins
+  (manifest 64fe2cadc96d..., archive bbdcd1391383...), 0 errors under /W4 /WX, STACK_FRAMES PASS x4.
+Base profile: standing m1n1 9bddd9aa, Mu MUCPCWIFISMCIRQ01 170a91b4 (after its restart confirmation), standing switches.
+
+BEHAVIOURAL CHANGES vs 30.0.2883.0 (diff e783c48bb..913609a9b01d4cc7cb48bdc41e5d41a4289de364 -- drivers/apple-agx, 8 files):
+1. Every graphics PSO compile: one extra read-only walk of the VS NIR (dxbc_nir_memory_access). This costs CPU at PSO
+   creation only; the NIR, the shader state and the binding maps are unchanged.
+2. With the job tracker on (APPLE_AGX_D3D12_JOB_BARRIERS=1 plus a UMD trace, or an OV2 feature switch), the render's
+   range set changes for VS UAV bindings.
+   - Consumers of that set: the OV5 TA verdict, which reaches the KMD only with AgxWin32Ov5Feature (off here); the OV2
+     ranges rule (opt-in env, off); and the receipts.
+   - Without the tracker, JobDrawRanges does not run (ReplayDraw: `if (job)`), so a production run is unaffected.
+3. With the tracker on, the R6-ADMIT counters: about 12 integer adds per render batch, and 8 log rows every 64th
+   execution.
+4. KMD runtime start: one registry value write after the switch read; nothing reads it back.
+Nothing reaches the command stream, the submission, the firmware or the scheduling. A production (receipts-off) run
+must therefore score as 30.0.2883.0.
+
+INDEPENDENCE: OV6c changes only tracker inputs. R6-ADMIT only reads verdicts. The KMD receipt is a separate layer. The
+receipt reports OV6c's effect on the verdict, which is its purpose, and neither part changes the other's behaviour. Not
+split.
+
+WINDOWS CONTRACT: D3D12 lets a render's vertex work run before a preceding independent compute only when no resource
+both of them access is written by one of them (ResourceBarrier/UAV hazards; a root UAV is bound but only accessed by
+the shader's own instructions). Hypothesis used here (not a quoted rule): a bound UAV that the compiled shader never
+loads from or stores to is never accessed by the GPU on that stage.
+AGX/ASAHI CONTRACT: Metal starts a render's vertex/TA work while the compute encoder before it runs (EXP2201, c15||R16);
+Asahi's queue orders through firmware barriers (CdmBarrier, stamps). Our OV5 path makes the TA independent of the
+compute only when the KMD flag says so (not in this package).
+TRANSLATION: the classifier reads the translated VS: nir_intrinsic_writes_external_memory gives write; any image, SSBO,
+global or atomic intrinsic, or a deref to SSBO/global/image variables, gives read; else none. That class decides
+whether the VS UAV bindings are write ranges, read ranges or absent in the job tracker.
+WHAT IS STILL UNKNOWN:
+(a) whether R6's refusal is reason 9 (CDM prelude: its ExecuteIndirect stream expansion queued behind C5) or 10
+    (resource-granular ranges) after OV6c;
+(b) whether the compute side's root UAV (unsized: to the heap end) still overlaps R6's other vertex-stage accesses.
+    The no-prelude column answers (b) next to (a).
+
+WHY THIS HYPOTHESIS:
+1. EXP2962 frame budget, 2895 frames: non-work is now ~0.55 ms/frame; earlier it was 4.7 ms (launch 1.28, late 1.40,
+   DWM 0.99, detect 0.81 on 2026-11-08). GPU work matched Apple's split encoder sum after scene alignment. So the 13 %
+   cold gap (8776 vs ~10140, ~2.7 ms/frame) is mostly Apple's render||compute overlap, measured at c15||R16 0.95 +
+   c19||R20 0.72 = 1.67 ms in HD.
+2. R8 alone gave nothing (EXP2294-2297 A/B, +0.02 %/-0.28 %): it is 0.21 ms. R6 is the c15||R16 analogue and was refused
+   with 9 (prelude) and 10, its 10 coming from a vertex-stage root UAV *binding* counted as a write (EXP2274, EXP2280
+   OV6b: overlap ~221 MB).
+3. GMCPU A/B (EXP2968/2969) closed the CPU and sustained-loss causes; the cold gap did not move (8776 vs 8803).
+
+PROCEDURE (one boot on the standing profile; the candidate installed over the accepted 30.0.2883.0, rollback to 2883
+with its hashes verified):
+1. validity:
+   - the candidate is bound with its hashes; standing switches as in STANDING.json;
+   - Wom1Ov5TaWaiver, Wom1Ov2NoHazardLead, Wom1Ov2CrossLead and Wom1JobDiagnostics are absent;
+   - no OV2 device feature.
+2. KMD receipt at start: `check_standing_gpu_irq.py kmd-receipts-early.txt` must print STANDING_GPU_IRQ PASS without the
+   "absent" note (Wom1IrqCompletionState = 0x301 = 769).
+3. perf gate (production class, receipts off, first): post-exp-gate.sh with the default GM HD PERF arm and the CS bench
+   if STEAM_OK. PERF_GATE vs investigation/perf-baseline.json; expected within the gate's 2 %, as 2883.
+4. tool suite: the GATE e2459 suite, 119 steps; reference 119/0.
+5. admission run (receipt class): one GravityMark HD PERF run, traced (UMD trace on, as the EXP2962 traced arm), with
+   APPLE_AGX_D3D12_JOB_BARRIERS=1 in GravityMark's environment only. No device switch.
+   Fetch the umd.log, then `python3 tools/agx_r6_admission_decode.py <umd.log>`.
+6. KMD receipt after load: `check_standing_gpu_irq.py <post> --before <pre>` must pass, with the wake share > 0.50 and the
+   value reported.
+7. rollback to 30.0.2883.0, hashes verified.
+
+EXPECTED RECEIPT NAMES:
+- UMD: measure-d3d12-r6-admission. 15 values per row: position, executions, renders, real[6], noprelude[6]. 8 rows per
+  block; the last block is the total.
+- UMD (existing, unchanged): measure-d3d12-graphics-shader.
+- KMD: Wom1IrqCompletionState (REG_DWORD 769 expected), Wom1IrqRx, Wom1JobPoll.
+
+VERDICT RULE (architect, as stated; code: agx_r6_admission_decode.py on position 2 = R6):
+- R6 admitted 0 % with reason 9 the dominant refusal -> UNROLL_R6_STREAM_BEFORE_C5: next, expand R6's ExecuteIndirect
+  stream before C5.
+- R6 admitted > 50 % -> WAIVER_AB_BEHIND_EXP2293_GATE: next, A/B of the waiver on R6 behind the EXP2293 compute-start
+  gate, with the three-launch reset check repeated (the old reset race was timing-dependent, and IRQ completion changed
+  the worker's timing).
+- anything else -> NEITHER: report the buckets (real and no-prelude) and the refusal mix; no next step is implied.
+- no receipt rows -> NO_RECEIPT: the run is invalid (tracker or trace was off), rerun once.
+
+STOP / FAIL:
+- PERF_GATE_FAIL (> 2 % below the baseline) -> the package is refused; it should be behaviour-identical, so this is a
+  defect to bisect.
+- suite FAIL above the reference, a bugcheck, TDR or GPU reset -> stop, dump first, rollback.
+- Wom1IrqCompletionState absent or not 769 on IRQ01 -> L1b FAIL (the package or the Mu is wrong).
+
+KEEP / DROP:
+- OV6c: KEEP when the perf gate passes (class C correctness of the tracker: it stops counting accesses the shader
+  cannot make). It decides nothing in production until a waiver/overlap feature uses it.
+- R6-ADMIT: KEEP as an instrument (receipt class only).
+- L1b: KEEP when the state reads 769 on IRQ01 (production self-report of the silent-fallback defect).
+
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record); the GPU-visible recovery guest and the
+GPU-hidden image are unchanged.
+- Launcher launch-kbd2973.sh sha256 40f33fcb08c782dc (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 8287df4c7.
