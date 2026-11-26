@@ -87040,3 +87040,12 @@ Procedure (confirm.sh): std boot with the Mu override; soft quiet gate (3700); A
 PASS (all): start gate PASS; cold FULL >= 8622; load gate wake share > 0.50 and lost 0. On PASS IRQ01 is standing from this boot; standing-verify threshold: armed, DpcWakes > 0, wake share >= 0.50. On FAIL: stop and report.
 Recovery: standing 40a8d7fd pair (recovery pair 68993d14 + 40a8d7fd). Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2970-lev-irqconf/evidence/lev/.
 - Launcher launch-kbd2970.sh sha256 7f6f0d1a31531fb9 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 0bbd1bd01.
+
+EXP2970 ACTUAL 2026-11-26T19:40:03Z: restart confirmation of Mu MUCPCWIFISMCIRQ01 170a91b4 (confirm.sh d305954e; m1n1 9bddd9aa, package 2883, AppleSmc 0.1.0.19 as installed). HV_START_OK; STD_DONE 19:08:34Z. Quiet gate soft (11 tries, last 3518 MB, servicing 0).
+- Start gate: STANDING_GPU_IRQ PASS (armed, vector 2817, DpcWakes 55684).
+- TCMz cool-down 902 s (76.3 -> 70.0 C).
+- Cold FULL: 8770 (Available 3697 MB; >= 8622).
+- Load gate (FULL pre/post): PASS, wake share 0.581 over 263774 waits, DpcWakes 210865, lost 0.
+- SMC: TCMz 63.1 -> 106.7 C; s Tp4z / Te3z > 110 = 0 / 0; PSTR max 21.6 W; KMD TempMax 77; low P-states 4+5 = 13.
+- TDR 0, bugcheck 0.
+CONFIRM_PASS 19:38:48Z. Per the architect's ruling (~19:10Z), MUCPCWIFISMCIRQ01 170a91b4 is the STANDING Mu from this boot (previous standing 40a8d7fd kept as previous_standing_mu in STANDING.json; std launcher MU line updated; accepted package valid on 9bddd9aa+170a91b4). Standing-verify threshold: armed, DpcWakes > 0, wake share >= 0.50 under load, RingDrops / Discarded / Overflow 0, AML gate PASS. The guest was left up for step 2+2b of the same boot (Wi-Fi/BT active tests, then AppleSmc 0.1.0.20 install), recorded below. Evidence .local/experiments/EXP2970-lev-irqconf/evidence/lev/.
