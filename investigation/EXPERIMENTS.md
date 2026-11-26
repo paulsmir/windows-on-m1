@@ -87073,3 +87073,12 @@ Procedure (cpurun.sh, TZ_MU=TZ0003, SMC_VER 0.1.0.20 SMC_SYS_SHA 27cac3cb, SMC_T
 ACCEPTANCE (0.1.0.20, architect): client Timeouts 0, IdMismatch 0, KeyTimeouts 0 over both 600 s blocks with zones active; any ThermalPath miss or failsafe entry is a finding to report. INERT_GUARD: % Passive Limit 100 and Throttle Reasons 0 throughout, else arm A void. Outcomes declared by the power line: (a) TCMz < 110 and Te3z < 108 -> keep trips, zones inert; (b) a z key above 111 with an unexplained clamp -> lower that zone's _PSV 2 K per step; (c) zone costs CPU score with no clamp -> raise toward 111. Te3x is logged against E/P load (decides T1 vs T1E).
 Failure / STOP: SMC stop watcher (TCMz > 122 for 10 s, TB0T > 45, key timeout), TempMax >= 94, a load task without a done file, a zone/sensor gate FAIL, guest hang. Recovery: ordered end; standing pair 9bddd9aa + 170a91b4; AppleSmc rollback to 0.1.0.19/0.1.0.16 if 0.1.0.20 fails acceptance. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2971-lev-cpua/evidence/lev/.
 - Launcher launch-kbd2971.sh sha256 a2338d9756248f0f (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 810b821005f9c083df969c10fa5d3b2cfc79883ae5ca9da799646dd5333d064c; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 5745bc80a.
+
+EXP2971 BEFORE NOTE 2026-11-26T19:52:17Z (reproduce line): bench bit-for-bit reproduction of the IRQ01-based zone images, before first use. Power line repro-thermal.sh d23b296d (handoff SHA256SUMS c918cc7a, 15 OK), run from a copy with only O= (fresh folder pwdev-offload/MUCPCWIFISMCTZ003-bench) and R= (the power worktree) changed; no launcher active.
+- G1 BASE 170a91b4 (= standing IRQ01).
+- IMG tz0003 810b8210, tz1003 0eae916d, tz1e02 52bebd2c: equal to the delivered images.
+- G2: 27 tables SAME, the AGX SSDT equal to IRQ01's.
+- G3 verify_j313_agx_irq_aml: PASS x3 (889 x2, 887 x2).
+- G4 check_thermal_aml: t0-unreachable / t1 / t1e PASS, 0 failures.
+- GATES_PASS.
+The smcstand.sh logger now has knobs SMCLOG_ABOVENORMAL (0 = the task default priority, used here for the acceptance gate) and SMC_TOOL / SMC_TOOLSHA (here the 0.1.0.20 package smcsensor a291d946). Per-block counters come from smcmid.sh.
