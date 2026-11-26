@@ -87430,3 +87430,18 @@ No network name, MAC, address or credential in any file.
 
 Bench: runner wifi71.sh (first-run gate: devnode started without Code 10/31/43, DriverVer 0.1.71.0, ProbeVersion 65607, WlanRadioStatusInds present, connected before any toggle, else immediate rollback); arm A evaluated by wifieval.py against the lines above; arm B = standing bring-up again (MAC stage + devnode restart + wlanctl connect 60); interactive arm A via schtasks /IT. PASS in both contexts keeps 0.1.71.0 installed (architect rules on standing after one further ordinary boot shows auto-connect); FAIL rolls back to 0.1.70.1 in this boot. Evidence evidence/wbt71/.
 - Launcher launch-kbd2975.sh sha256 26f678dd46ffa2a4 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD db08d3a9d.
+
+EXP2975 ACTUAL 2026-11-26T20:54:55Z: AppleBcmWlan 0.1.71.0 radio-fix run (wifi71.sh e5cd427e; package BCMWLAN-W5710-b59ed4cc7-signed, sys 52b9fb85, ProbeVersion 65607) on the standing boot (std, m1n1 9bddd9aa + Mu IRQ01, 2883 bound again; Wi-Fi up). Ethernet Up as the control link throughout.
+- Arm 0 (0.1.70.1): devnode OK, connected, ProbeVersion 65606, WlanRadioOn 1, WlanRadioTasks 0, WlanRadioUpStatus 0, WlanScanTasks 2.
+- Install forward: pnputil /add-driver /install (oem17.inf), then the standing bring-up (MAC stage, devnode restart, wlanctl connect 60).
+- First-run gate PASS: devnode OK problem 0, DriverVer 0.1.71.0, ProbeVersion 65607, WlanRadioStatusInds present (0 at start: WiFiCx sent no init SET_RADIO_STATE), connected.
+- Arm A1 (SSH, WinRT Wi-Fi Off, 10 s, On):
+  - Off result empty; after Off + 10 s WinRT still WiFi=On, adapter Disconnected, WlanRadioTaskOps 0 -> 5, WlanRadioStatusInds 0 -> 5, WlanRadioStatusLast 2, WlanRadioOn 0, WlanRadioDownFw 0.
+  - After On + 10 s: no new radio task (TaskOps 5, StatusInds 5, StatusLast 2), WlanRadioOn 0.
+  - No auto-connect in 30 s; wlanctl connect FAIL code 11 reason 0x38014 at On + 31 s; WLAN 8003 / 8000 / 8002.
+  - ARM_A_FAIL. Hint (preregistered discriminator 1): the host did not take our indication; WlanRadioStatusGen 0.
+- Arm A2: the same pattern, FAIL.
+- Arm B (MAC stage + devnode restart + wlanctl connect 60): connected, WlanRadioOn 1 (the restart recovers the radio).
+- Arm A interactive (schtasks /IT): the same pattern, FAIL.
+- Rollback: oem17.inf /delete-driver /uninstall; 0.1.70.1 already in the store (oem33, 'added 0'), the device fell back to it; bring-up; ROLLBACK_VERIFY devnode OK, DriverVer 0.1.70.1, connected, WlanRadioStatusInds absent.
+VERDICT: FAIL; rolled back to 0.1.70.1 in this boot. Discriminator 1: the driver now receives the host's Off (5 SET_RADIO_STATE tasks for one WinRT Off) and sends WDI_INDICATION_RADIO_STATUS each time with software-off. Windows keeps the radio 'On', so the following On is a no-op and the firmware stays down until a devnode restart. Next single variable per the BEFORE: the indication header PortId (station adapter port via WifiAdapterGetPortId, else WDI_PORT_ID_ADAPTER). Evidence .local/experiments/EXP2975-std/evidence/wbt71/ (wifiarm-A1/A2/IT.txt, eval-*.txt, rcpt-*.txt).
