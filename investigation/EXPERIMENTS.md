@@ -87463,3 +87463,81 @@ EXP2976 HARDWARE ACTUAL 2026-11-26T21:19:30Z:
 - Ordered end stdend 21:18:40Z (LAUNCH_WIFI_2976_ENDED). Display/USB/SSH alive until the end; no bugcheck.
 - VERDICT: INCONCLUSIVE for the 0.1.0.20 acceptance and CPU check A (measurement tool defect, not a driver finding: no timeout, no id mismatch). Arm A outcome (a)/(b)/(c), INERT_GUARD and Te3x vs E/P load not measured.
 - Next: smcsensor fix (skip missed ticks: advance tick to the elapsed second instead of replaying, power line) then a rerun of CPU check A on a fresh boot at the default logger priority; architect rules. The SMC stop watcher keeps treating "rate" rows as non-ok.
+
+EXP2977 HARDWARE BEFORE 2026-11-26T21:20:40Z:
+# BEFORE body (draft for the architect to queue): AppleBcmWlan 0.1.71.1, RADIO_STATUS PortId WDI_PORT_ANY
+
+Header-less body: the launcher writes the header and the ID.
+
+**One variable vs 0.1.71.0 (EXP2975):** the PortId in the WDI_MESSAGE_HEADER of WDI_INDICATION_RADIO_STATUS. It changes from the station adapter's port (`WifiAdapterGetPortId`) to **WDI_PORT_ANY (0xFFFF)**.
+
+Also in the package: a receipt-only per-task ring (`WlanRadioTaskRing`, `WlanRadioTaskSeq`). It changes nothing toward the chip or Windows.
+
+Commits: 39175d042 (change and tests), e539646c8 (version). Branch wifi/radio-0171.
+
+**Package:** `.local/experiments/BCMWLAN-W5711-e539646c8-signed`. DriverVer 0.1.71.1, sys SHA-256 `48BE07790EBA62B4961CEFFB8299C8CC819F63CAA8F516518D21FE3B40FD74A0`, ProbeVersion 65607, test certificate 35F48BAE. GATES.txt has the ring decode.
+
+**Boot:** standing pair, std launcher, Ethernet up as the control link (as EXP2975). Installed package before the run: 0.1.70.1 (EXP2975 rolled back).
+
+## WHY THIS HYPOTHESIS
+
+1. **EXP2975 discriminator 1 hit.** For one WinRT Off there were 5 SET_RADIO_STATE tasks and 5 RADIO_STATUS indications:
+   - `WlanRadioStatusGen` 0 (generated);
+   - handed to WifiDeviceReceiveIndication (`WlanRadioStatusInds` 0→5);
+   - the firmware really down (`WlanRadioDownFw` 0, `WlanRadioOn` 0).
+   - Yet WinRT still read On and no radio-on task came. The host did not take the indication.
+2. **Microsoft's WDI sample driver** (github.com/microsoft/Windows-driver-samples, network/wlan/WDI/PLATFORM/NDIS6) does this:
+   - Path: `Wdi_Task_Set_Radio_State` → `SetRFPowerStateWorkItemCallback` → `DrvIFIndicateCurrentPhyStatus` → `wdiext_IndicateRadioStatus` (WDI_Common.c).
+   - It sends the same generated TLV inside the task handler, before the framework's SET_RADIO_STATE_COMPLETE. That is our order.
+   - It sends it through `wdi_UnsolicitedIndication(bAdapterObj = TRUE)`, whose header is **PortId = WDI_PORT_ANY**, Reserved 0, Status SUCCESS, TransactionId 0, IhvSpecificId 0.
+3. **Our header differs from it in PortId only.** The TLV body comes from the same WDK generator (`GenerateWdiIndicationRadioStatusFromIhv`), so it is byte-identical by construction.
+
+## Steps (as EXP2975, same scripts and gates; constants re-derived from GATES.txt)
+
+0. Arm 0 receipts on 0.1.70.1.
+1. Install 0.1.71.1 forward, then the standing bring-up.
+   - Identity: DriverVer **0.1.71.1**, sys = GATES, ProbeVersion **65607**, **`WlanRadioTaskSeq` present** (0 at start).
+   - Connected before arm A.
+2. **Arm A twice:** WinRT Off, 10 s, On, 10 s, then `wlanctl connect 60`. Plus the interactive repeat once.
+3. **Arm B:** devnode restart, then `wlanctl connect 60`.
+4. **Collect** `WlanRadioTaskRing` / `WlanRadioTaskSeq` after every S-snapshot, plus the WLAN AutoConfig event IDs.
+
+## Pass (unchanged from the 0.1.71.0 BEFORE except the counts)
+
+- **After Off + 10 s:**
+  - **WinRT Wi-Fi Off**;
+  - adapter Disconnected;
+  - `WlanRadioTaskOps` ≥ +1 and `WlanRadioStatusInds` the same delta;
+  - `WlanRadioStatusLast` 2, `WlanRadioOn` 0, `WlanRadioDownFw` 0.
+  - EXP2975 showed 5 tasks per Off. The count is recorded, not gated.
+- **After On + 10 s:**
+  - **WinRT On**;
+  - `WlanRadioTaskOps` +≥1 (a radio-on task arrives);
+  - `WlanRadioStatusLast` 3, `WlanRadioOn` 1, `WlanRadioUpStatus` 0;
+  - `WlanScanTasks` rising.
+- **Connected within 60 s of On** (`wlanctl connect 60`; AutoConfig auto-connect only observed).
+- **Arm B** connected.
+
+## What the ring decides (whatever the verdict)
+
+- **Each entry** carries: the task's header PortId, TransactionId, asked / was / now / op, completed OK, the DOT11_RESET count at the task, and ms.
+- **5 Off tasks with distinct TransactionIds and no resets between them:** one task per PHY type. We report 5 PHY types (HRDSSS, ERP, OFDM, HT, VHT). That is normal host behaviour.
+- **Resets between repeated Off tasks:** the host is retrying because it did not see the state change.
+- **If WinRT is still On with WDI_PORT_ANY:** the port is excluded.
+  - The remaining candidate is that WiFiCx does not take the radio state from this indication at all.
+  - Next step: the WiFiCx capability path. The Microsoft sample reports `SoftwareRadioState` from its persisted state in the capabilities.
+  - Decide this offline from the ring before any further package.
+
+## Rollback / recovery
+
+- Rollback: `/uninstall` the 0.1.71.1 oem, then install 0.1.70.1 (`BCMWLAN-W5701-6b92d76ae-signed`, sys `6220B654…`). Verify DriverVer 0.1.70.1 and that `WlanRadioTaskSeq` is absent.
+- Guest hang: watchdog and the standard recovery.
+
+No network name, MAC, address or credential in any file.
+
+## Bench conditions (EXP2977)
+
+- Boot: std-el2v3.sh, m1n1 9bddd9aa (standing), Mu MUCPCWIFISMCIRQ01 170a91b4 (standing since EXP2970), package 2883, AppleSmc 0.1.0.20 installed (EXP2970; its acceptance run EXP2976 was inconclusive on a logger-tool defect, so it is not standing; not a Wi-Fi variable). No thermal-zone image.
+- Runner: wifi711.sh (RULE=v2, identity check WlanRadioTaskSeq). Ring decoder per the Wi-Fi line's layout (bcm_msgbuf.c bcm_radio_ring_push): wifieval.py reads in sequence order (n = max(0,S-8)..S-1, slot n % 8, S from the same snapshot), prints dreset; wifiarm.ps1 Snap() reads wlrcpt.ps1 once, so Seq and ring come from one registry read. Dry-run on a synthetic S=10 ring OK.
+- Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2977-std/evidence/wbt711/ (std boot evidence/std/). Raw files to the Wi-Fi line, verdict to the architect.
+- Launcher launch-kbd2977.sh sha256 11cb71d72f99fdcd (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 6d7ebf953.
