@@ -87006,3 +87006,29 @@ ARM B of the GMCPU A/B (architect ~16:55Z): the ONE variable vs arm A EXP2968 is
 WHY THIS HYPOTHESIS: (1) EXP2968: one System thread (TID 824, start AppleAgxRenderAdmission.sys!0xfffff8006b046fc0) runs 494 ms/s on cpu7 during the FULL (cpu7 43.9 % privileged), while GravityMark's main thread runs 86 ms/s; (2) no EXP29xx receipt has Wom1IrqRx/Wom1JobPoll, so the 2883 KMD completes jobs by predictive sleep + 20 us stall polling; (3) EXP2267 vs EXP2273: the spin was 49 % of job time without the line and 2.5 % with it.
 Proof lines (check_standing_gpu_irq.py): start = Wom1IrqRx + Wom1JobPoll present, Armed 1, MailboxVector != 0, IrqCompletionOn 1, DpcWakes > 0; load (FULL1 pre/post) = wake share WaitEarly/(WaitEarly+WaitTimeout) > 0.50 (report the value; 0.50-0.57 with lost 0 = margin), RingDrops / Discarded / Overflow 0. Added: after the clean FULL2 (cold), FULL3 and FULL4 back to back (B_EXTRA=1) with the SMC logger, against T0 EXP2960 (seconds Tp4z > 110, PSTR, low-P-state counts) and the 1.2 % cold rule against the 9bddd9aa cold set (8727 / 8861 / 8843 / 8803). Before any verdict on a score drop: the HV CPPC P ps / dram_fast lines and the SOCPS summary.
 - Launcher launch-kbd2969.sh sha256 dd4b947ca51392c4 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 4834abee1.
+
+EXP2969 ACTUAL 2026-11-26T19:03:35Z: GMCPU B. Same runner form as A (gmcpu.sh 2c3932fa, custom wprp verified by wpr -status, B_EXTRA=1), with ONE variable: Mu MUCPCWIFISMCIRQ01 170a91b4 (= 40a8d7fd + AGX mailbox IRQ line 887). Reproduced on the bench before the run: repro-agxirq.sh BASE 40a8d7fd, IRQ 170a91b4, G3 8 tables SAME, AML gate base FAIL / irq PASS / fd PASS. m1n1 9bddd9aa, package 2883, AppleSmc 0.1.0.19 (logger AboveNormal).
+Boot: HV_START_OK; STD_DONE 17:57:37Z; the battery was 99-100 %, charging=False, at the block ends.
+IRQ gates (check_standing_gpu_irq.py, commit a3fc67ce):
+- start: early read and f1pre both PASS (armed, vector 2817, DpcWakes 14845 -> 80122);
+- load, FULL1 pre/post: PASS, wake share 0.572 over 269423 waits, DpcWakes 211129, lost 0; decoder: wait early share 57.189 %, worker self-pop 0.627 %, WaitSkipped 71929, RingDrops / Discarded / Overflow 0.
+Runner defect, both A and B: the KMD_RECEIPTS 'present=' grep read the receipt script's stdout (.out) instead of the receipt file (.txt), so it printed 0 in both arms. The real .txt counts are A 0 and B 2 (fixed in gmcpu.sh for later runs).
+Scores:
+- FULL1 traced: 8783 (A traced 8649, +1.5 %).
+- FULL2 clean cold: 8776 (A clean 8803, -0.3 %; within the 1.2 % rule; cold set 8727 / 8861 / 8843 / 8803).
+- Back to back: FULL3 8777, FULL4 8774. FULL4/FULL2 = 1.000. T0 EXP2960 without zones: 0.797; T1 EXP2961 with zones: 0.986.
+SMC per FULL1..4: TCMz max 106.8 / 106.8 / 114.7 / 117.8 C (A 119.4 / 119.5); s Tp4z > 110 = 0 / 0 / 6 / 15 (A 61 / 64; T0 57 / 177 / 183); s Te3z > 110 = 0 / 0 / 0 / 0; PSTR max 24.6 / 21.1 / 23.1 / 22.4 W. KMD TempMax 77 / 77 / 84 / 86 (A 91). Low P-states 4+5 per FULL: 27 / 20 / 22 / 25 (rule-2 bound 365; A f2 1295).
+CPU (typeperf, FULL2): System 13.4 % of a core (A 49.5 %). P cores privileged %: cpu4 11.3 / cpu5 7.3 / cpu6 4.8 / cpu7 3.7 (A cpu7 43.9). P-cluster frequency 1305 MHz, 43.7 % of max (A 2962 MHz, 99 %); utility 4.6-11.6 %. HV CPPC P ps per FULL2: {1:5, 2:4, 3:5, 5:1, 8:1, 12:1}. E ps stays 5.
+DRAM: dram_fast=1 in 12-18 % of the CPPC windows per FULL (A: 100 %, but only 1-2 windows, because the P state did not change). DRAM drops with the P cluster now (_PSD HW_ALL / DRAMCFG); the score held (-0.3 %).
+ETL FULL1 +40..+100 s (194 MB, sha d9354cef):
+- KMD worker TID 816 (start AppleAgxRenderAdmission.sys RVA 0x56fc0) = 69.5 ms/s (A TID 824 493.5 ms/s, -86 %), 1168 context switches/s (IRQ-driven wakes);
+- GravityMark main thread 199.8 ms/s (A 86.1);
+- per CPU: cpu4 Idle 84.1 % (System 8.1, GravityMark 4.4, bench sshd/powershell 2.2), cpu7 Idle 91.0 % (A cpu7 50.6 %).
+- Idle ETL 60 s (69 MB, sha 9ce38d83).
+GPU-line preregistered criteria:
+1. Worker <= 50 ms/s: NOT MET (69.5 ms/s = 14 % of A, against the 10 % bound).
+2. The worker's core > 90 % idle: cpu4 84.1 % NOT MET; cpu7 91.0 %.
+3. IRQ gates: PASS (0.572).
+4. FULL1 vs A: traced 8783 vs 8649 (+1.5 %); clean 8776 vs 8803 (-0.3 %), within 1.2 %.
+5. No score drop, so no CPPC verdict was needed; dram_fast is reported above.
+VERDICT: the AGX mailbox IRQ line removes the completion spin and the sustained decay. KMD worker -86 %; P cluster off its top state (1305 vs 2962 MHz); Tp4z > 110 near zero; FULL x3 back to back flat at 1.000 with no thermal zone; cold score within 1.2 %. Two preregistered bounds (worker <= 50 ms/s; that core > 90 % idle) are missed by a margin and go to the GPU line. Nothing becomes standing without the architect's ruling. Evidence .local/experiments/EXP2969-lev-gmcpub/evidence/lev/ (tp.csv, *.etl, kmd-receipts-*.txt, irq-decode-f1.txt, cppc-ts.log, smc-log.csv).
