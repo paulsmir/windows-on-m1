@@ -33,6 +33,7 @@ Status words: OPEN (not started), DESIGN, BUILT (offline), BENCH (queued or runn
 | A8 | Memory-cache (AMCC) DSID priority and timeout acknowledge | macOS deprioritises two DSIDs and acks a DSID-timeout error at GPU start | Unknown; first read attempt stalled the bus (EXP2931) | PARKED until daytime | `mccrd_probe` at the proxy with the owner present; MCCRD returns only for offsets shown safe | Correctness question (unacked error) |
 | A9 | Upstream m1n1 fixes selected before the licence change (5 commits) and the fuse hand-over ('AGXF' window) | — | Listed, not applied | OPEN | Re-read each commit's subject against this plan; apply or drop with a reason | — |
 | A10 | Audit: Linux-only setup in m1n1 that the Windows path skips | — | Done: LINUX-ONLY-SETUP-AUDIT.md; found A1 and A2 | DONE | — | — |
+| A11 | Broker power-off of the GPU domain | macOS/Asahi: GFX PS register 0x23b7003f8 with AUTO_ENABLE (macOS 0x0f00200f -> 0x1f00200f) | Found 2026-11-26 (m1n1 line, source): /arm-io/sgx clock-gates are virtual (GFX-SGX 314, GFX-BUSY 315); pmgr_adt_power_disable writes nothing for them, so the broker's OFF never gates GFX at PMGR level; idle saving comes only from the firmware's internal gating. The instr-v6 "PS active" pre-check read the wrong register (fixed in instr-v6b e8b985ed by a tested resolver) | BUILT: PS AUTO lever (image 4331eb21) against instr-v6b | Bench after the perf-state runs; verdict heat-first (Wom1FwPower gated fraction, idle temperature); then a separate lever for a real OFF | Correctness and heat |
 
 ## B. GPU driver
 
