@@ -86960,3 +86960,18 @@ Zone pre checks: 3 + 3 OK, SENSOR_GATE PASS x3, B0 PASS; typeperf with the PX co
 Block 1 (8 threads, 0xFF) started 16:36:47Z (Available 3806 MB). 6 s later, at 16:36:53.772Z, the 1 Hz SMC logger read 'Tc7z smc-error:0x00' and every key then read 'disabled'; smclog.out says "key path disabled after a timeout; stopping". TELEMETRY_AFTER: Timeouts=1, KeyRequests=14851, KeyRefused=1, KeyTimeouts=1, KeyDisabled=1, KeyErrors=1, SentMgmt=0. Before the load: 931 s of clean reads. At the stop: TCMz 67.0 C, PSTR 13.9 W (not thermal).
 The SMC stop watcher fired at 16:37:01Z; the runner ended the load task (LEVRUN_2967_FAIL, guest left up) and restored STANDING.json; ordered end 16:38:08Z. No CPULOAD result, no block 2, no zone post checks.
 VERDICT: inconclusive for the CPU check. Defect found: AppleSmc 0.1.0.19 disables its key path after one key timeout under full CPU saturation (inferred: the SMC reply wait exceeds the driver timeout when all cores run Normal-priority threads). Sent to the power line (owner). CPU-check A/B is blocked on that fix. Evidence .local/experiments/EXP2967-lev-cpua/evidence/lev/ (smc-log.csv, smclog.out, smcwatch.log, typeperf.csv, run.log) and evidence/wlbt.txt.
+
+CORRECTION 2026-11-26T16:40:55Z (GPU line, architect order; refs EXP2272, EXP2273, EXP2306): the standing Mu has NEVER carried the AGX mailbox line 887, so default-on Wom1IrqCompletion has been inert on every standing profile.
+- Defect class: a platform resource that a default-on driver feature needs was missing from the standing image, and nothing checked it. Found offline by GMCPU on 2026-11-26: Wom1IrqRx and Wom1JobPoll are absent from every EXP29xx KMD receipt. The KMD writes them only when MailboxInterruptVector != 0.
+- History (git and ledger):
+  - Mu 95263b97 (2026-11-08, "opt-in ASC mailbox recv-not-empty interrupt", J313_AGX_MAILBOX_IRQ, default FALSE) exists only on mu branch feature/j313-agx-mailbox-irq. It was never merged into any standing lineage.
+  - The only image ever built with it is MUIRQ001-95263b97 (FD 0fa3cea5…b46c0), used in EXP2272/2273 (step 1/2 CONFIRMED) and EXP2306 (IRQD2).
+  - IRQD2 (EXP2306, 2026-11-09) was INCONCLUSIVE on an m1n1 EL2 defect at the first adapter disable; arm A1 was valid (wake share 0.569, lost 0). The promotion rule was "Mu becomes MUIRQ001 only on PASS", and IRQD2 was never rerun (queue order: GM-gap experiments first).
+  - The KMD side went default-on (212f09e0e, an ancestor of every package since, including accepted 2883). Its "inert without the line" fallback hid the missing Mu half.
+  - Every later standing Mu was built from the MUANSCPPC002 lineage without 95263b97: MUANSCPPC002, MUCPC001, MUCPCWIFI001/002, MUCPCWIFISMC001 (40a8d7fd, current).
+  - So the line was not dropped by one image: the first standing Mu after IRQD2 already lacked it, and the gap persisted through every promotion since 2026-11-09.
+- Cost: the KMD worker spin-polls GPU completion, ~49 % of job time (EXP2267) instead of ~2.5 % (EXP2273). Under _PSD HW_ALL it likely pins the P cluster at its top P-state; GMCPU arm A measures this.
+- Fix path (architect 2026-11-26): MUCPCWIFISMCIRQ01 = 40a8d7fd + J313_AGX_MAILBOX_IRQ only, as GMCPU arm B.
+- Regression gates added on the GPU line:
+  - tools/verify_j313_agx_irq_aml.py: Mu build/promotion gate on the AML or .fd; AGX0 must list 889 (Edge) and 887 (Level, ActiveHigh, Exclusive) in every template. RED on 40a8d7fd, GREEN on MUIRQ001.
+  - tools/check_standing_gpu_irq.py: standing-verify receipt gate; Wom1IrqRx and Wom1JobPoll present, Armed, DpcWakes > 0; under load wake share > 0.50 and lost 0. PASS on EXP2306, FAIL on EXP2961.
