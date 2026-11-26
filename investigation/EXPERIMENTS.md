@@ -87600,3 +87600,99 @@ EXP2979 HARDWARE ACTUAL 2026-11-26T23:39:56Z (lever pair TUN-AGX-FULL, arm B = l
 - SMC: 54689 rows, Timeouts 0, KeyRefused 0, KeyTimeouts 0; TCMz max 108.3/107.8/103.6, Tp4z/Te3z > 110 for 0 s. End: TDR 0, bugcheck 0; PRE_SHUTDOWN no pending reboot/packages; STDEND 23:39:13Z; STANDING restored.
 - PAIR (paircmp.py, fixed before arm B; evidence/lev/paircmp.txt): cold mean B 8778.0 vs A 8772.5 = +5.5 (+0.06 %), floor 0.70 % -> NO_EFFECT. PERF 55.963 vs 55.838 (+0.2 %). Frame-breakdown medians B-A: gpu_span -0.1 %, c_work_span -0.2 %, rc_big_span -0.1 %, main_span +0.1 %, wall 0.0 %. TempMax 78 / 78.
 - VERDICT: APPLIED yes, PERSISTENT yes, EFFECT NO_EFFECT. The macOS SGX power-on block (46 writes after GFX power-on) brings the SGX register state to the macOS reading (c2_diff 4/44) without any change in score, per-job GPU time or temperature: the power-on SGX tunables are excluded as a cause of the cold gap to macOS. Recommendation DROP (non-improving; architect rules KEEP/DROP). Raw files (gm2979p1/, fb-gm2979p1.json, tool-jfl2979r*-std.txt) to the GPU line.
+
+EXP2980 HARDWARE BEFORE 2026-11-26T23:40:36Z:
+# BEFORE body (draft for the architect to queue): AppleBcmWlan 0.1.71.2 = 0.1.71.1 + receipts only
+
+Header-less body: the launcher writes the header and the ID.
+
+**Change vs 0.1.71.1 (EXP2977):** receipts only, commit 0df91a321; version commit 0f51aefd2; branch wifi/radio-0171.
+- No change to what is scanned, queued, flushed, connected or indicated. Diff listing below.
+- The radio-state fix (39175d042, validated by EXP2977) is carried unchanged.
+
+**Package:** `.local/experiments/BCMWLAN-W5712-0f51aefd2-signed`. DriverVer 0.1.71.2, sys SHA-256 `F3CD855BB55D925562942408189871A047B5DCBF03B9EB787CF3C0F99DB8D5CE`, ProbeVersion 65607, test certificate 35F48BAE.
+
+**Boot:** standing pair, std launcher, Ethernet up as the control link. Installed package before the run: 0.1.70.1.
+
+## WHY THIS HYPOTHESIS
+
+1. **EXP2977:** the radio contract passed 3/3 (WinRT followed Off/On, one task per toggle, port 0xffff). Two cycles connected 33-34 s after On.
+2. **A2's only failure:** wlanctl reason 0x38014 = `WLAN_REASON_CODE_NO_VISIBLE_AP` (SDK wlanapi.h, MSM_CONNECT_BASE + 20). Windows never sent TASK_CONNECT (`WlanConnectTasks` 2→2).
+3. **No receipt says** whether the joined AP's channel (100, 5 GHz DFS, scanned passively) had any BSS in the scans since On. 0.1.71.2 records exactly that, per scan.
+
+## Arm rule (architect, fixed for this run)
+
+**Arm A passes when all of these hold:**
+- WinRT follows Off and On;
+- **one radio task per toggle**: ring deltas of 1 and 1, op down then up, ok;
+- `WlanRadioOn` 0 then 1;
+- `WlanRadioUpStatus` 0;
+- the station is **connected within 60 s of On using at most 3 `wlanctl connect` attempts, 15 s apart**, with every attempt's code and reason recorded.
+
+**A1, A2 and the interactive repeat must all pass.** Arm B: devnode restart, then `wlanctl connect 60`, connected.
+
+**Reported, not gated:**
+- the attempts needed per cycle;
+- for any NO_VISIBLE_AP attempt, the scan receipts below.
+
+## Reading (architect, fixed now)
+
+- **NO_VISIBLE_AP attempt and the join channel had 0 results in the scans since On** (`WlanScanJoinBssSinceUp` 0, or every `WlanScanRing` entry since On with join-channel count 0): a firmware/driver scan miss after C_UP. That is ours.
+  - Next step: the passive dwell, or a scan on radio up, from the brcmfmac sequence.
+  - The run may still pass by the rule, but the defect gets its own open row.
+- **Join channel results > 0 in our reports but Windows still says no visible AP:** host-side list or aging, not ours.
+
+## Identity (re-derived from GATES.txt)
+
+- DriverVer **0.1.71.2**, sys = GATES, ProbeVersion **65607**.
+- **`WlanScanRingSeq` present** at start.
+- `WlanMonoMs` rising.
+
+## Receipts per snapshot (S0..S3, every arm)
+
+- **Radio:** `WlanRadioTaskRing` / `WlanRadioTaskSeq`, layout as 0.1.71.1. Word 2 is now **ms since the device was added** (`WlanMonoMs` base, never reset).
+- **Scans:** `WlanScanRing` (REG_BINARY, 8 slots x 5 little-endian u32, slot = seq % 8, read in seq order with `WlanScanRingSeq`):
+  - [0] ms (same base as `WlanMonoMs`);
+  - [1] the escan's final status (0 = success, 0xffffffff = no escan ran);
+  - [2] results on the join channel << 16 | results reported;
+  - [3] channels the firmware scans passively << 16 | channels requested. 0xffff = "all channels" or unknown. Active scan: the DFS channels in the request. Passive scan: all of them.
+  - [4] join key << 16 | flags.
+    - Join key: WDI band << 8 | channel of the last join (2 = 5 GHz; channel 100 → 0x0264).
+    - Flags: bit0 escan ran, bit1 probing allowed, bit4 bench self-scan.
+- **Since radio up:** `WlanScansSinceUp`, `WlanScanJoinBssSinceUp` (both reset at every successful radio up), `WlanScanJoinKey`.
+- **Wording:** "results" means escan results we queued to Windows. A BSS seen several times in one scan counts each time, so 0 versus > 0 is the reading that matters.
+
+## On PASS (architect)
+
+0.1.71.2 stays installed as the standing candidate. It becomes standing after one ordinary boot with the usual auto-connect.
+
+## Rollback / recovery
+
+- Rollback: `/uninstall` the 0.1.71.2 oem, then install 0.1.70.1 (`BCMWLAN-W5701-6b92d76ae-signed`, sys `6220B654…`). Verify DriverVer 0.1.70.1 and that `WlanScanRingSeq` is absent.
+- Guest hang: watchdog and the standard recovery.
+
+## Diff 0.1.71.1 (e539646c8) → 0.1.71.2 (0f51aefd2)
+
+Files: bcm_msgbuf.c/.h (+60, new helpers only), test_bcm_msgbuf.c, AppleBcmWlan.cpp (+61 / -2), AppleBcmWlan.inf/.vcxproj (version), tests/test_wifi_bt_scanrcpt_07112.py.
+
+The two removed AppleBcmWlan.cpp lines:
+- the radio ring's time argument `BcmBusNowMs(bus)` → `WlanMonoMs(w)`;
+- the D0 radio-up `if` gains braces to add `WlanScanSinceUpReset(w)` after `WlanRadioUp`.
+
+Additions in the scan path:
+- `WlanScanHook`: `onJoin` computed before `InsertTailList`, three `InterlockedIncrement`s after the lock is released. The queue limit, drop path, frame and order are unchanged.
+- `WLAN_WORK_SCAN`: counter zeroing at the start; a block that reads `bus->ScanOneCs` / `ScanCs` / `ScanCsN` / the country state to count channels. It writes no bus field and runs before `BcmBusEscanRunEx`, whose arguments are unchanged. `bcm_scan_ring_push` runs after the flush and before SCAN_COMPLETE.
+- The connect, keys, disconnect and reset paths are untouched.
+
+No network name, MAC, address or credential in any file.
+
+## Bench conditions (bench, before the run)
+
+- Boot: std-el2v3.sh, m1n1 9bddd9aa, Mu MUCPCWIFISMCIRQ01 170a91b4, package 2883, AppleSmc 0.1.0.20 installed (not a Wi-Fi variable). Installed Wi-Fi package before the run 0.1.70.1 (EXP2977 rollback verified). Package SHA256SUMS sha256 ad2ffaee (3 OK), sys f3cd855b.
+- Runner wifi712.sh (= wifi711.sh with the 0.1.71.2 constants; identity WlanScanRingSeq present; rollback verify WlanScanRingSeq absent). Guest arm script wifiarm712.ps1 + evaluator wifieval712.py (rule above, fixed):
+  - auto-connect observation window ends 15 s after On (was 20 s after S2) so the 3 attempts fit the 60 s window: attempts start at ~15, ~30, ~45 s after On, each `wlanctl connect 15`, the next one 15 s after the previous start; code and reason of every attempt logged (CONNECT_ATTEMPT lines);
+  - after an attempt with reason 0x38014 (NO_VISIBLE_AP) the receipts and both rings are snapshotted at once (S3_nvaK);
+  - rings decoded in sequence order (WlanRadioTaskRing 8x3, WlanScanRing 8x5, GATES.txt layout, WlanMonoMs base); one radio task per toggle = TaskSeq +1 with op down / up and ok; NVA reading per the fixed rule (join channel 0 results since On = ours; > 0 = host list/aging; no receipts = UNKNOWN).
+  - dry-run on synthetic 712-format files built from EXP2977 A1's real snapshots: attempt-1 OK -> PASS; NVA then OK with join 0 -> PASS + OURS row; NVA x3 with join 2 -> FAIL + HOST reading.
+- Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2980-std/evidence/wbt712/. Raw files to the Wi-Fi line, verdict to the architect. On PASS 0.1.71.2 stays installed; standing decided by the next ordinary boot's auto-connect check (reported in that boot's ACTUAL).
+- Launcher launch-kbd2980.sh sha256 946944e6836e95f7 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD fea3900e8.
