@@ -86913,3 +86913,23 @@ WHY THIS HYPOTHESIS: (1) no macOS reference yet for sustained GPU throughput und
 Expected: three GM scores (GM1 traced, GM2 and GM3 clean); powermetrics file covering 300 s idle + 3 GM; DVFSRUN scene ~100 samples; SCRWATCH word-7 writers; every SLEEPCHECK AWAKE_OK; order IN_ORDER through stop.
 STOP: SLEEP_SEEN, stall guard (120 s), firmware gate not iBoot-11881, booted object BCF7E9C6, run_guest exit, energy panic. Not available in v4c: a PMGR census command and PERFST; per-core idle and cluster residency come from powermetrics instead.
 Recovery: ordered stop -> reboot.py -> proxy; cold restart if unclean (Pavel present); then the standing Windows boot with the network discriminator. CAP_S 4800, FW_WAIT_S 1800. Evidence .local/experiments/EXP2965-pathb4/evidence/pathb3/.
+
+EXP2965 ACTUAL 2026-11-26T16:06:27Z: second attended macOS 15.7.8 session under the HV (pathb4.sh a1ccd3de, command file 87b3c270, hv_control v4c).
+Attempt 1: the firmware gate waited 15:07:59-15:37:59Z with no operator boot and timed out harmlessly (PATHB3_2965_FAIL firmware gate; log kept as run-gate1-timeout.log). Attempt 2 started at 15:38:06Z.
+Boot and login: Pavel booted Macintosh HD; FW_GATE iBoot-11881 at 15:44:03Z; kmutil custom object CDF7CE36 -> kc 5fc68feb; AGX init 15:44:13Z; login seen 15:44:46Z; caffeinate assertions 1/1.
+powermetrics: started by Pavel from a desktop file ~/Desktop/pm-2965.command. The bench wrote it over SSH at his request; he typed sudo himself. The bench detected it at 15:49:00Z. 300 s quiet idle 15:49:04-15:54:04Z, then the idle captures.
+GravityMark (bench over SSH: -metal -asteroids 100000 -width 1280 -height 720 -temporal 0 -benchmark 1 -close 1), back to back:
+- GM1 15:54:22Z, with the scene captures: 10068 (2:49.707);
+- GM2 15:58:41Z, clean: 10191;
+- GM3 16:01:43Z, clean: 10160.
+GM3/GM1 = 1.009 and GM3/GM2 = 0.997: no sustained decay under macOS (ours: T0 0.797, T1 0.986). The GM file from the last session (EXP2915, fetched at login) shows 10123.
+Scene captures: DVFSRUN scene 98 samples (skipped 2). SCRWATCH during the GM1 scene: AP writes to PMGRScratch word 7 = 0, pmp_sends = 62, w7_then_pmp_1ms = 0, so word 7 is not written by the AP under load: a coprocessor writer (I).
+Checks: uatself=4 uatdone_trunc0=4 agxchan_v15=1 agxchan_plaus=0 agxwi_ok=0 awake_ok=6 sleep_seen=0 cmd_failed=115 hwdump_done=2 adtdump=1 sgxrd=6. PASS_CHECK order=IN_ORDER, stops=[1 stop: cmd stop], rebooting=1, doorbell_resend=24. SUMMARY pmgr=182924 sgxw=54393 pmpraw=3369, energy_panic 0, panic 0, wdt_drop 0, 62 out files. PROXY_OK 16:05:36Z.
+DEFECT (bench, mine): the command file put 'stop' right after GM3, with no hold for the operator's Ctrl-C and the fetch. The HV ended macOS 9 s after the GM3 score, so ~/pm-2965.txt (idle 300 s + GM x3) was not fetched in this boot; it is fetched in EXP2966.
+VERDICT: session PASS for (a) the GM x3 reference and (b) the scene DVFS and word-7 writer evidence; (c) powermetrics pending the fetch; (d) the PMGR census is not available in v4c (powermetrics residency instead); (e) captures taken (UAT walks, work items, HwData dumps, sgxrd, ADT). Evidence .local/experiments/EXP2965-pathb4/evidence/pathb3/.
+
+EXP2966 HARDWARE BEFORE 2026-11-26T16:06:27Z: fetch-only macOS 15.7.8 boot under the HV (pathbfetch.sh 2438bc34b33d37b8, command file pathb-15.7.8-fetch-v4c.cmd: BOOT_SEEN, login and caffeinate holds, an operator hold released by the bench after the fetch, stop). Purpose: copy ~/pm-2965.txt over SSH with a hash check against the guest's shasum. No captures beyond the wrapper defaults; no GravityMark. Operator: Pavel boots Macintosh HD and logs in himself.
+WHY: EXP2965's powermetrics evidence (A12 controller behaviour, A13 macOS idle and per-CPU interrupts reference) exists only on the macOS disk.
+Expected: PM_FETCH_OK with a matching sha256 and about 1100+ samples.
+STOP: firmware gate not iBoot-11881, stall guard, SLEEP_SEEN.
+Recovery: stop -> reboot.py -> proxy; then the standing Windows boot. Evidence .local/experiments/EXP2966-pathbfetch/ and EXP2965-pathb4/evidence/pathb3/pm-2965.*.
