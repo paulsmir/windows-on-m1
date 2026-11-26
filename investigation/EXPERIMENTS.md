@@ -87696,3 +87696,14 @@ No network name, MAC, address or credential in any file.
   - dry-run on synthetic 712-format files built from EXP2977 A1's real snapshots: attempt-1 OK -> PASS; NVA then OK with join 0 -> PASS + OURS row; NVA x3 with join 2 -> FAIL + HOST reading.
 - Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2980-std/evidence/wbt712/. Raw files to the Wi-Fi line, verdict to the architect. On PASS 0.1.71.2 stays installed; standing decided by the next ordinary boot's auto-connect check (reported in that boot's ACTUAL).
 - Launcher launch-kbd2980.sh sha256 946944e6836e95f7 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD fea3900e8.
+
+EXP2980 HARDWARE ACTUAL 2026-11-26T23:46:36Z (AppleBcmWlan 0.1.71.2 = 0.1.71.1 + scan receipts):
+- Boot: std-el2v3.sh (m1n1 9bddd9aa, Mu IRQ01 170a91b4, package 2883); wifi712.sh start 23:42:45Z (script ea92ca52c9d6161c); package SHA256SUMS ad2ffaee 3 OK, sys f3cd855b.
+- Install + bring-up: oem17 0.1.71.2; FIRST_RUN_GATE PASS 23:43:39Z (devnode started, ProbeVersion 65607, WlanScanRingSeq present, connected).
+- Arm A1 (SSH) 23:44:09Z PASS: one down task (tx 22) + one up task (tx 23), ok; connected on attempt 1 at 15931 ms after On (code 10). Scan ring: the first scan after On (n=2) reported 3 join-channel results (join key 0x0264 = 5 GHz) of 17, 15 of 37 channels passive.
+- Arm A2 (SSH) 23:44:38Z PASS: one down (tx 39) + one up (tx 40), ok; attempt 1 at 15869 ms. Scan after On: join-channel results 2 of 21.
+- Arm B 23:45:20Z devnode restart + connect: connected. Arm A interactive 23:45:55Z PASS: attempt 1 at 15857 ms; join-channel results 2-3 per scan after On.
+- No NO_VISIBLE_AP attempt in any cycle (no S3_nva snapshot needed). Radio ring word2 restarts after arm B's devnode restart (base = device add), as specified.
+- WIFI712_DONE 23:45:58Z verdict=PASS: 0.1.71.2 stays installed (DEV OK, connected) as the standing candidate; standing decided by the next ordinary boot's auto-connect check (EXP2981 boot ACTUAL).
+- Tool check (preflight rule 15): both rings decoded from the real wifiarm712 output (RING and SCANRING lines present in every snapshot).
+- VERDICT: PASS by the fixed rule (3/3 arm A on attempt 1, arm B connected). Raw files .local/experiments/EXP2980-std/evidence/wbt712/ to the Wi-Fi line.
