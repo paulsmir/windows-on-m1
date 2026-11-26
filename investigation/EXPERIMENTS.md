@@ -87332,3 +87332,21 @@ GPU-hidden image are unchanged.
 
 BENCH RERUN NOTE: EXP2974 repeats the OV6C run after EXP2973 stopped falsely at validity: the bench gate grepped Wom1IrqCompletionState as hex while the receipt prints decimal (the early dump read "Wom1IrqCompletionState = 769" = the expected value; IRQ start gate PASS, DpcWakes 7022). Kit fix: last-field parse with hex conversion (ov6c-steps.sh), dry-run on the real receipt. Same package, kit, pair and procedure.
 - Launcher launch-kbd2974.sh sha256 bba6376a208642d3 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 2a92ce6ce.
+
+EXP2974 ACTUAL 2026-11-26T20:32:08Z: OV6C admission run (rerun of EXP2973; KIT-OV6C-bench, ov6c-steps.sh a1979b9b with the decimal-receipt fix). Staging on the EXP2973 guest: the staged 2883 removed (DEVIATION path: base staged, not bound), 30.0.2975.0 staged (InfHash 815E9C2F, Problem 28), GUARD_STAGED ACCEPT; launch 2974 UP 20:17:27Z, CONTRACT_CHECKS PASS, Wi-Fi up.
+1. Validity: PKG_BOUND 30.0.2975.0 PASS; base switches read back; Wom1Ov5TaWaiver / Wom1Ov2NoHazardLead / Wom1Ov2CrossLead / Wom1JobDiagnostics absent; no OV2 device feature.
+2. IRQ start gate: STANDING_GPU_IRQ PASS (armed, vector 2817, DpcWakes 7319, no absent note); Wom1IrqCompletionState = 769 (0x301: armed, line listed, switch on) -> L1b PASS.
+3. Perf gate (receipts off): GM HD PERF p1 55.704 / p2 55.766 fps_frames, both VALID (GPU state 6 93.7 / 94.0 %, limited 0.3 / 0.1 %); agx_perf_gate PASS, worst 47.628 vs 47.007 (+1.32 %, tolerance -2 %). CS NOT_RUN (no Steam word).
+4. Suite e2459: 119 PASS / 0 FAIL.
+5. Admission run: traced GM HD PERF gm2974r6 with APPLE_AGX_D3D12_JOB_BARRIERS=1 in GravityMark's script only, VALID, 55.744 fps_frames. UMD log 239582079 bytes, sha 5955e7ba, fetched hash-verified, guest copy deleted.
+   agx_r6_admission_decode.py: executions 4672, renders 18671.
+   - pos2 (R6): real admitted 3 / r9 0 / r10 0 / r11 0 / r6 0 / other 4664 (admitted 0.001); no-prelude identical.
+   - pos0: admitted 5, other 4666, r6_foreign 1. pos1: admitted 1, other 4667. pos3: admitted 4664 (1.000).
+   - R6_ADMIT_VERDICT NEITHER position=2 admitted=0.001.
+6. IRQ load gate: PASS, wake share 0.587 over 142062 waits, DpcWakes 89500, lost 0.
+No GPU reset, TDR, bugcheck or HV PACED/STORM/UNHANDLED in any step.
+7. Rollback: 2975 removed (all removal gates), 30.0.2883.0 restaged (GUARD_END ACCEPT, binds at the next standing boot).
+GATE_BOOT_2974_DONE rc=0 20:31:47Z.
+VERDICT (preregistered decoder): NEITHER. R6 is refused almost always, but by neither reason 9 (CDM prelude) nor reason 10 (vertex conflict); the dominant bucket is 'other', identical with and without the prelude flag. Neither UNROLL_R6_STREAM_BEFORE_C5 nor WAIVER_AB is implied.
+KEEP per the BEFORE: OV6c (perf gate PASS), R6-ADMIT (instrument), L1b (769 on IRQ01). 2975 does not become standing from this run.
+Evidence .local/experiments/EXP2974-ov6c/evidence/gate/ (r6-admission.txt, gm-gm2974r6/, perf-gate.txt, kmd-receipts-*.txt, irq-decode-r6.txt, tool-suite-std.txt).
