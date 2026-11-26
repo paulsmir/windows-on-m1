@@ -86857,3 +86857,24 @@ Expected: gate PASS; per-CPU idle share and wake rates in the idle block, the dl
 Failure criteria / STOP: no ready line, ps != 10/10, missing IDLE cpu lines, 'HV: IDLE off', IDLEPS faults > 0, HV UNHANDLED, SError, BUGCHECK, watchdog; SMC stop watcher (TCMz > 122 for 10 s, TB0T > 45, key timeout); TempMax >= 94. Verdict is data for the architect and the m1n1 line (raw IDLESTATS/IDLE/IDLEPS lines in evidence/lev/idle-lines.txt); nothing becomes standing.
 Recovery: gate failure leaves the guest up on the M1 image -> ordered end, next boot standing 9bddd9aa (recovery pair 68993d14 + 40a8d7fd). Hang -> HV watchdog -> proxy -> recover.sh. Read-only image: no register writes beyond the standing image. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2962-lev-m1idle/evidence/lev/.
 - Launcher launch-kbd2962.sh sha256 59bbb098fad8897f (launch-kbd.sh 51d76b6354b693e4); m1n1 f34b8efd164814ad16549e5c8501f60a89892bb6dde146cb688d926b21d0a737; Mu 40a8d7fdbf4d9d5503a8d1e90c2722e9cc90fb0360c8596885433b549c22838d; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 065d35057.
+
+
+EXP2962 ACTUAL 2026-11-26T14:59:58Z: M1 on m1n1-idle-m1-f34b8efd. Boot: HV_START_OK 13:51:39Z; STD_DONE 13:53:36Z; console session Active; quiet gate PASS at try 1 (3778 MB, servicing 0).
+First-run gate: FAILED on my own parser. The real ready line is 'cpus=EEEEPPPP----------------': hv_idle.c pads the map with '-' for absent MAX_CPUS slots, and the parser required an exact match. The m1n1 lines themselves were correct (IDLE cpu0-7, IDLEPS faults=0). Fixed with rstrip('-'), re-checked on the real lines, and the same boot was resumed at 13:55:35Z (RESUME=1). Gate PASS 13:55:50Z. Liveness: 27 devices OK, Ethernet 1 Gbps + Wi-Fi 720 Mbps up, before and after the idle block.
+Idle block 600 s (14:11-14:21Z, after the 900 s TCMz cool-down), HV IDLE per CPU (idle % / wakes per s / mean sleep / sleep bins <200us,<1ms,<10ms,>=10ms / main wake source):
+- cpu0 E (HV tick CPU): 92.7 % / 5457 / 170 us / 100-0-0-0 / tick 86.6 %;
+- cpu1 E: 99.0 / 442 / 2.2 ms / ipi 68 %;
+- cpu2-3 E: 99.7-99.8 / 118-120 / 8.3-8.5 ms / tick 83-85 %;
+- cpu4 P: 84.3 / 3262 / 258 us / 97 % below 200 us / ipi 83 %;
+- cpu5, cpu7 P: 97.8-98.7 / 158-162 / 6.1-6.2 ms / tick 61 %;
+- cpu6 P: 95.1 / 1305 / 728 us / ipi 79 %.
+Deadline bin >=10 ms is 0 % on every CPU, so the Asahi 10 ms residency bound would admit no entry (as the A13 note predicted); dl < 10 ms is 84-99 % on cpu1-7.
+IDLEPS: 59005 samples, faults 0; off = 0.00 % on ECPM/ECPU0-3/PCPM/PCPU0-3: no core or cluster leaves ACTIVE at idle today.
+Windows per-core counters (typeperf 1 s, 590 rows): C1 only (C2/C3 0 %). C1 transitions match the HV wakes per CPU (cpu0 5460 vs 5457, cpu4 3311 vs 3262). Interrupts/s: cpu4 3354, cpu6 1295, cpu0 872, others 18-358. Device interrupts land on P core cpu4 and arrive there as HV IPI wakes.
+HV exit rate in the idle block: 98436/s (EXP2959 standing 104084, EXP2953 108695), so there are no extra exits.
+SMC idle: PSTR mean 7.64 W, median 7.49, per-minute 7.60-7.79; PHPC 2.87; TCMz 63.0. Standing: EXP2959 7.28 (median 6.91, per-minute 7.23-7.42, PHPC 2.96) and EXP2953 7.25. That is a steady +0.36 W on M1, outside the +-0.05 W noise, with fewer exits and lower PHPC. Cause UNKNOWN; the A13 cost estimate was <= 0.13 % of CPU time.
+PERF gm2962p1: fps_frames 56.665; agx_perf_gate PASS (worst 47.876 vs baseline 47.007, +1.85 %).
+Cold FULL gm2962f1: 8906 (Available 4369 MB; >= 8622). This is the M1 image, so it is reported separately from the 9bddd9aa reference set 8727/8861/8843. TempMax 91; s Te3z>110 = 14, s Tp4z>110 = 64, TCMz max 119.4; low P-states (4+5) in the FULL: 27 + 273.
+STOP lines 0 (IDLE off 0, IDLEPS faults 0, HV UNHANDLED/SError 0); TDR 0, bugcheck 0, clock_watchdog 0. Ordered end 14:59:22Z.
+Raw lines: evidence/lev/idle-lines.txt (3637 lines).
+VERDICT: M1 instrument works on hardware (all gates, read-only, no fault, PERF in window). Data for the architect and the m1n1 line; nothing becomes standing. Open: the +0.36 W idle PSTR difference vs standing. Next: CPU-check arm A (TZ0002, inert guard), then T1R.
