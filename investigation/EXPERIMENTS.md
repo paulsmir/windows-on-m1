@@ -87350,3 +87350,83 @@ GATE_BOOT_2974_DONE rc=0 20:31:47Z.
 VERDICT (preregistered decoder): NEITHER. R6 is refused almost always, but by neither reason 9 (CDM prelude) nor reason 10 (vertex conflict); the dominant bucket is 'other', identical with and without the prelude flag. Neither UNROLL_R6_STREAM_BEFORE_C5 nor WAIVER_AB is implied.
 KEEP per the BEFORE: OV6c (perf gate PASS), R6-ADMIT (instrument), L1b (769 on IRQ01). 2975 does not become standing from this run.
 Evidence .local/experiments/EXP2974-ov6c/evidence/gate/ (r6-admission.txt, gm-gm2974r6/, perf-gate.txt, kmd-receipts-*.txt, irq-decode-r6.txt, tool-suite-std.txt).
+
+EXP2975 HARDWARE BEFORE 2026-11-26T20:47:08Z:
+# BEFORE body (draft for the architect to queue): AppleBcmWlan 0.1.71.0, radio Off -> On -> connected
+
+Header-less body: the launcher writes the header and the ID.
+
+**One variable vs the installed standing 0.1.70.1:** the radio-state fix (commit 2e8909b5d; package commit b59ed4cc7). No m1n1, Mu, launch-contract or other driver change.
+
+**Package:** `.local/experiments/BCMWLAN-W5710-b59ed4cc7-signed`. DriverVer 0.1.71.0, sys SHA-256 `52B9FB850CB23AC7FB0948CB7E7DFB5746E9701A73FE4F2D4BB8D2852D8591E8`, ProbeVersion 65607 (0x10047, changed), test certificate 35F48BAE.
+
+**Boot:** the standing pair as in EXP2970 (std launcher). No new image.
+
+**Control link:** Ethernet stays up the whole run. It is the control link and the comparison context of EXP2970.
+
+## WHY THIS HYPOTHESIS
+
+1. **EXP2970 wbtact (19:41Z):** after the WinRT Wi-Fi radio Off, WinRT still read the Wi-Fi radio as **On**, while Bluetooth read Off after its own Off.
+   - The host's Wi-Fi software radio state never changed.
+   - The adapter went Disconnected (WLAN 8003 "Operation state change").
+   - After On: no 8000 in 50 s, still disconnected.
+2. **Source:** 0.1.70.1's `WLAN_WORK_RADIO` (6b92d76ae, AppleBcmWlan.cpp:2147-2165) C_DOWNs the firmware and completes the task, but **never sends `WDI_INDICATION_RADIO_STATUS`**. Microsoft documents that this indication "is sent both when a software radio change is triggered by the host and when a hardware radio state change is detected by the adapter".
+   - So the host kept "On", treated the On request as a no-op and never sent SET_RADIO_STATE(on).
+   - The firmware stayed down: our scans are refused while `RadioOn` is 0, so no network, so no 8000.
+3. **The D0 path** always brought the radio up, whatever the host's last software state. A software Off persisted by Windows across a reboot therefore left the host and the radio disagreeing in the other direction too.
+
+## Steps
+
+0. **Before** (std launch, standing bring-up exactly as now: MAC stage, restart, `wlanctl connect 60`):
+   - Record `wlanctl state`, the WinRT radio states and the receipts `WlanRadioTasks`, `WlanRadioOn`, `WlanRadioUpStatus`, `WlanScanTasks`.
+   - These are the 0.1.70.1 values: arm 0, the discriminator for the old package.
+1. **Install 0.1.71.0 forward**, in place (`pnputil /add-driver …\AppleBcmWlan.inf /install`), then the standing bring-up (MAC stage, device restart, `wlanctl connect 60`).
+   - Identity: DriverVer **0.1.71.0**, sys SHA-256 = GATES, `ProbeVersion` **65607 (0x10047)**, receipt **`WlanRadioStatusInds` present**.
+   - Record `WlanRadioTaskOps` and `WlanRadioStatusInds` at start: WiFiCx may send its init SET_RADIO_STATE.
+   - Connected before arm A.
+2. **Arm A (the fix), twice back to back:** the wbtact radio cycle (WinRT Wi-Fi radio Off, 10 s, On), from the SSH context.
+   - **After Off + 10 s:**
+     - WinRT Wi-Fi state **Off**;
+     - adapter Disconnected;
+     - `WlanRadioTaskOps` +1;
+     - `WlanRadioStatusInds` +1;
+     - `WlanRadioStatusLast` **2** (software off, hardware on);
+     - `WlanRadioOn` 0;
+     - `WlanRadioDownFw` 0.
+   - **After On + 10 s:**
+     - WinRT state **On**;
+     - `WlanRadioTaskOps` +1;
+     - `WlanRadioStatusInds` +1;
+     - `WlanRadioStatusLast` **3**;
+     - `WlanRadioOn` 1;
+     - `WlanRadioUpStatus` 0;
+     - `WlanScanTasks` rising.
+   - **Then:**
+     - **AutoConfig observation:** event 8000 / 8001 and `wlanctl state connected` within 60 s of On without help. This is recorded but not required: with Ethernet up, WCM may hold Wi-Fi auto-connect (L1-c).
+     - Then **`wlanctl connect 60`** (saved profile) → **connected within 60 s of On**.
+3. **Arm B (comparison):** devnode restart of the Broadcom Wi-Fi PCI function (`pnputil /restart-device`, standing order: MAC staged) → `wlanctl connect 60` → connected. Same bound.
+4. Interactive-session repeat of arm A once (the WBTIT task as in EXP2970).
+5. End: standing bring-up state, MAC cleared at stdend as usual.
+
+## Pass / fail
+
+- **Pass:** both arm-A cycles meet every line above, including **connected within 60 s of On**. Arm B passes.
+- **Discriminators if arm A fails:**
+  - **WinRT still On after Off, with `WlanRadioStatusInds` +1:** the host did not take our indication. The open choice is the header PortId (station adapter port via `WifiAdapterGetPortId`, else `WDI_PORT_ID_ADAPTER`). That is the next single variable; `WlanRadioStatusGen` must be 0.
+  - **WinRT Off/On correct, `WlanRadioTaskOps` +2, but `WlanRadioUpStatus` ≠ 0 or `WlanRadioOn` 0:** the firmware does not come back from C_DOWN. The next step is the brcmfmac down path (no C_DOWN: disassociate and abort scans only, `__brcmf_cfg80211_down`).
+  - **All receipts right, scans run, `wlanctl connect` fails:** a connect-path problem after the cycle. Collect the connect receipts (`WlanAssocLastIhv`, `ConnectStepLast`, `ConnectFwLast`).
+- **Fail of arm B only:** not this change. Record and roll back.
+
+## Rollback / recovery
+
+- Rollback: `/uninstall` the 0.1.71.0 oem, then install 0.1.70.1 (`BCMWLAN-W5701-6b92d76ae-signed`, sys `6220B654…`). Verify DriverVer 0.1.70.1 and that `WlanRadioStatusInds` is absent.
+- Guest hang: watchdog and the standard recovery.
+
+## Evidence paths
+
+`evidence/wbt/` (wbtact SSH and interactive logs, receipts before / after each step, WLAN AutoConfig event IDs only).
+
+No network name, MAC, address or credential in any file.
+
+Bench: runner wifi71.sh (first-run gate: devnode started without Code 10/31/43, DriverVer 0.1.71.0, ProbeVersion 65607, WlanRadioStatusInds present, connected before any toggle, else immediate rollback); arm A evaluated by wifieval.py against the lines above; arm B = standing bring-up again (MAC stage + devnode restart + wlanctl connect 60); interactive arm A via schtasks /IT. PASS in both contexts keeps 0.1.71.0 installed (architect rules on standing after one further ordinary boot shows auto-connect); FAIL rolls back to 0.1.70.1 in this boot. Evidence evidence/wbt71/.
+- Launcher launch-kbd2975.sh sha256 26f678dd46ffa2a4 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD db08d3a9d.
