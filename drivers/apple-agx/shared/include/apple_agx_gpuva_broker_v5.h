@@ -30,6 +30,15 @@
 /* GC (experiment): UPDATE_LEAF accepts AGX_GPUVA_V5_LEAF_PRIVATE_CACHED. */
 #define AGX_GPUVA_V5_CAP_PRIVATE_CACHED 4ULL
 #define AGX_GPUVA_V5_LIVE_ABI 1u
+/* B23 H1: optional exclusive local-reserve grants. Test the cap bit only
+ * (Reserved[1] is not a per-cap version). NEGOTIATE_LOCAL makes the broker
+ * strict for the epoch: every local (segment 2) page is then granted only via
+ * REGISTER_LOCAL_BACKING, exclusive or shared by allocation identity; a
+ * conflict is OWNERSHIP with no state change, never a silent share. */
+#define AGX_GPUVA_V5_CAP_LOCAL_EXCLUSIVE 8ULL
+#define AGX_GPUVA_V5_LOCAL_ABI 1u
+/* REGISTER_LOCAL_BACKING Flags bit 0: shared (else exclusive). */
+#define AGX_GPUVA_V5_LOCAL_SHARED 1u
 
 enum {
     AGX_GPUVA_V5_CREATE = 1,
@@ -58,6 +67,16 @@ enum {
      * capability (LIVE_ADDITIVE or zero), AllocationGeneration is LIVE_ABI.
      * All other payload fields are zero. Negotiation requires no live jobs. */
     AGX_GPUVA_V5_NEGOTIATE_LIVE,
+    /* B23 H1, broker-wide: Token = CAP_LOCAL_EXCLUSIVE, AllocationGeneration =
+     * LOCAL_ABI, all other payload fields zero. BUSY once any local grant
+     * exists; send after ATTACH_MAILBOX, before the first CREATE. */
+    AGX_GPUVA_V5_NEGOTIATE_LOCAL,
+    /* B23 H1, after NEGOTIATE_LOCAL: ProcessId/ProcessGeneration, AuxIpa =
+     * local page IPA, AllocationGeneration = allocation identity (nonzero, not
+     * the local base, the same in every process that opens the allocation),
+     * Flags = AGX_GPUVA_V5_LOCAL_SHARED or 0. REVOKE_BACKING of such a page
+     * carries the same identity (else STALE). */
+    AGX_GPUVA_V5_REGISTER_LOCAL_BACKING,
 };
 
 /* GC (experiment, m1n1 AGX_GPUVA_PRIVATE_CACHED builds only): UPDATE_LEAF
