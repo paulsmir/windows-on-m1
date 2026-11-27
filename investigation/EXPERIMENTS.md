@@ -90003,3 +90003,13 @@ EXP3024 ACTUAL 2026-11-27T19:55:29Z (refs EXP3024 BEFORE; evidence .local/experi
   A ratio of about 1.0 is expected for a software or basic adapter whose staging memory is ordinary cached memory. This is not a measurement of our driver.
 - Verdict: inconclusive - not measured on the accepted driver. The risk was noted in the BEFORE: a post-rollback guest has no bound AGX driver. First-run gate: both binaries start and exit cleanly. The D3D12 probe fails closed without an AGX adapter; the D3D11 probe reports which path it measured only through its numbers, not through an adapter line.
 - Next: rerun on a guest where 2883 is bound, e.g. the first standing boot, or a kit's base phase before the candidate install. Slot by the architect.
+
+BENCH TOOLING CORRECTION 2026-11-27T19:56:55Z (architect ruling 2026-11-27; no hardware run): disk gates for pwdev as a sparsebundle on the exFAT SSD.
+- Reasoning: df "avail" for /Volumes/pwdev is the SSD's free space, not the space inside the image. The SSD can lose at most (38400 - bands) x (8 MiB + one 128 KiB exFAT cluster for the ._ AppleDouble file) + the short-band deficit (4142 MiB at 37921 bands); once all bands exist, writes inside the image cost the SSD nothing. Verified on K48MUT (EXP3023): 400 new bands, SSD drop 3243 MiB against a predicted maximum of 3502.
+- tools/bench/diskgate2.sh (sha256 618cb6829f786233): PASS needs inside-image free >= 8192 MiB AND SSD free >= worst-case growth + 1024 MiB AND system data >= 2048 MiB. It replaces diskgate.sh as the standing bench gate.
+- Launcher rev2, installed between experiments at 2026-11-27T19:56:55Z:
+  - scratchpad-tools-backup/launch-kbd.sh 51d76b63 -> 26ea26b598a9d2b9 (old kept as launch-kbd-51d76b63.sh);
+  - scratchpad launch-kbd-hr.sh 9790288f -> 4e1023b06e6a7872 (old kept as launch-kbd-hr-9790288f.sh);
+  - change: line 35 only. The df-avail 6 GiB check becomes inside-free >= 6144 MiB AND SSD free >= worst-case growth + 1024 MiB, and the LK_DISK figures are printed;
+  - mock dry run: today's figures PASS; SSD 4000 and inside 5000 are refused;
+  - future BEFOREs cite the new hashes; the first launch uses the first-run gate.
