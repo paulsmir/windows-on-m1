@@ -90159,3 +90159,109 @@ EXP3029 ACTUAL 2026-11-27T20:29:42Z (refs EXP3029 BEFORE; STAGERB2 on EXP3028-st
   AGX_D3D11_STAGERB: FAIL size_mib=64 rb_mbps=258.1 ref_mbps=28819.1 ratio=0.009 pattern=ok stale=ok
   AGX_D3D11_FL111_PROBE_DONE failures=1
 - Verdict: confirmed. The B21 defect is measured on the D3D11 path of the accepted driver (adapter 0 = AGX, agx=1): staging readback runs at 256-258 MB/s against 28.8-48.0 GB/s cached (ratio 0.005-0.009). Pattern and stale are ok at every size (the D3D11 stale check is weaker: Unmap/Map between patterns). This is the same class as D3D12 RBBW (EXP3026, 257-259 MB/s). failures=1 is the ratio FAIL by design. First-run gate: the adapter line is printed first and is AGX.
+
+EXP3030 HARDWARE BEFORE 2026-11-27T20:32:03Z:
+STDC4C (v2 of STDC4B: standing-pair reference, Defender per arm, corpus waiver) - standing candidate: accepted 2883 + PIPE-PRIO2 + kept receipts + C4 core mask default + B19 C2/C3/C5/C6 defaults
+- full acceptance preregistration (architect order 2026-11-27 after EXP3021 / EXP3016-3019; written before any run)
+
+WHAT: AppleAgx 30.0.3015.0 from gpu/standing-b19c4 e1f86b64d06e3ffed04db49075f352ff9923df56 = c7a019f2b (accepted 2883 e783c48bb
++ PIPE-PRIO2 e52858ee8 (EXP2985 KEEP) + kept receipts OV6c / R6-ADMIT v2 6b7d7c77e) merged with gpu/c4-coremask (9945c13b7) and
+gpu/b19-conformance (2852372db, 6df4531ac), then:
+- C4 (EXP3016-3019 NO_EFFECT; KEEP on parity / portability): the present-core mask from the GPU ID registers (Asahi
+  core_masks_packed = raw CORE_MASK_0/1; this J313 0xfe) in every TA work item's core_mask (RunVertex +0xa8) instead of the
+  template's all-ones, by default. Removed: the Wom1TaCoreMask switch and the Wom1TaCoreMaskSent read-back export.
+  Fail-safe kept: a topology or layout refusal leaves the template words and the job (receipt TACM_IGNORED in Wom1GpuPerf).
+  What a G14 / G14X part gets: the topology check accepts only the G13 generation byte (ID_VERSION >> 24 == 4) with one
+  cluster, so M2 (G14) and the G14X+ parts (M2 Pro/Max, M3, M4 class; their RunVertex has no core_mask field) are refused
+  and keep the template's all-ones; each needs its topology model and layout entry first.
+- B19 (EXP3021: C2, C3, C5, C6 NO_REGRESSION, suite 119/0 every arm; KEEP on parity): the builder writes Asahi's values on
+  every render: C2 RunVertex tpc_size = queue/render.rs tpc_size for one cluster (0x3000 at 1280x720, 0x20000 at 4096^2;
+  template 0x4000), C3 JP1 unk_f0 = 0x1c (template 0x20), C5 JP3 unk_290 = the per-generation table (G13 0, G14 0x4040404,
+  later generations unknown -> the render is refused, fail closed; template 0x4040404), C6 aux_fb width/height = the
+  render's pixels (template 16x16). Removed: APPLE_AGX_D3D12_CONFORMANCE, agx_win32_conformance.h, the
+  measure-d3d12-conformance receipt and render flags 1<<24..27 (the KMD's submit view parser and builder refusal 9 accept
+  the UAPI bits only again). What a G14 part gets for C5: the table holds 0x4040404, but this builder layout is G13 / V13_5
+  only; a G14 part needs its own layout entry before any render runs there.
+- No diagnostic feature compiled in: tools/agx_diag_absent.py (on this lineage, UTF-16LE KMD markers) on the package must
+  report c84-ingress, k48-replace, wic-dump, c4-switch and b19-conformance ABSENT (the boot fails otherwise).
+Each change was validated alone; this candidate is the first time they run together.
+
+WHY THIS HYPOTHESIS (the combination is behaviour-identical to its parts):
+1. Every item ran alone on hardware on this lineage without a regression: C4 EXP3016-3019 NO_EFFECT (TA timing equal,
+   read-back APPLIED); B19 EXP3021 NO_REGRESSION for all four (off 55.706 / 55.796, items 55.911 / 55.790 / 55.783 / 55.744).
+2. The items touch disjoint code: C4 the KMD's per-job TA object (object 19 +0xa8, after the retarget), B19 the shared
+   builder's scalar patch (objects 18 / 19 at other offsets) and the flag checks; no shared field (tests pin both).
+3. The removals take out switch reads and a receipt only; the default paths are the hardware-validated "on" paths.
+
+PREREGISTERED VERDICT (gate_verdict.py). REFERENCE = accepted 2883 on the STANDING PAIR: Mu MUCPCWIFISMCIRQ01 170a91b4 + m1n1
+9bddd9aa (STANDING.json; this kit's BASE.env pins both). Values checked in the ledger ACTUALs (integration worktree
+EXPERIMENTS.md) and the run logs:
+  EXP2969 ACTUAL (Mu 170a91b4, m1n1 9bddd9aa, package 2883): FULL2 clean cold 8776, FULL3 8777, FULL4 8774 (FULL1 traced 8783,
+          not a reference score);
+  EXP2970 ACTUAL (restart confirmation of 170a91b4 as the standing Mu): cold FULL 8770;
+  near-standing, not the exact pair: EXP2995 ACTUAL (Mu TZ1003 zone image) 8740 / 8767 / 8768; EXP3000 ACTUAL (L1 image
+          f34b8efd) cold 8748.
+  EXP2895 (8365 / 8437 / 8463) predates the IRQ01 Mu and is no longer a reference (STDC4B used it; a 5 % regression passed).
+  Derivation: lowest clean standing FULL = 8770 (EXP2970 cold); the cold-first spread seen on the standing family is ~30
+  (EXP2995 8740 cold vs 8768); mean floor 8740 = 8770 - 30; point floor 8700 = one cold outlier 40 below the mean floor.
+  SUITE   TOOL_SUITE PASS >= 119 and FAIL == 0
+  RRQ     RRQ_IDENTITY IDENTICAL
+  PERF    both PERF points VALID and GATE_GM PASS against the kit's standing-perf-baseline.json (read by agx_perf_gate.py
+          --baseline): GM HD PERF 47.551 fps = mean of the per-boot worst fps_presents over the 16 standing-pair boots
+          EXP2974-EXP3021 with HASHES_OK m1n1 9bddd9aa / Mu 170a91b4 (min 47.316 = -0.49 %); -2 % floor 46.600. Previous
+          investigation/perf-baseline.json 47.007 (2026-11-12, pre-IRQ01) is not used.
+  FULL    >= 2 of 3 FULL points VALID, mean >= 8740, no VALID point < 8700
+  DEFAULT receipt window: median C6 driver launches == 1 (RESOLVE-RANGE default, as 2883)
+  TACM    TACM_CHECK APPLIED (GP1 samples carry TACM_APPLIED, none IGNORED)
+  DWM     DWM_FAULTS new 0
+  HEALTH  no KIT_STOP / STOP_TEMP; measured points VALID (memory counters); no GPU reset / TDR / BUGCHECK
+  CS      separate (STEAM_OK=1 only): GATE_CS vs the CS line of the same file (51.991, unchanged: no CS run on the standing
+          pair yet); never blocks the main verdict
+  GATE_PASS = all main checks. Any correctness failure (suite FAIL, image defect, reset, firmware fault, DWM dump) ->
+  bisect by item (C4 alone = KIT-C4CM package, B19 items one at a time), not by guess.
+  RESTART: the rollback restart must show BUGCHECK code=0x0 (orderly PSCI reset) in the m1n1 log and the base 2883 bound
+  again (gate-boot.sh rollback; the bench records it).
+  CORPUS: NOT RUN - waived for this candidate by the architect (2026-11-27). Reason: the changes are firmware work-item fields
+  (tpc_size, vtx unk_f0, unk_290, aux_fb) and the TA core mask; no shader, compiler or D3D translation path changes; suite
+  119/0 and RRQ IDENTICAL cover correctness. Reported as "not run", never as passed. The bench restores a corpus runner as its
+  own task.
+
+DEFENDER RULE (architect 2026-11-27): the kit reads the Defender signature and engine versions before and after EVERY measured
+arm - PERF p1 p2, FULL f1 f2 f3 and the CS block (this candidate has no reference arms in the boot; the reference is the
+ledger set above). A change or an unreadable version makes the arm INVALID (*_POINT_DEFENDER / GATE_CS_DEFENDER line); a PERF
+or FULL arm is repeated once as <arm>b and the repeat is the point the verdict reads; a second change stops the kit.
+STOP: Code 43/31, GPU reset / TDR / bugcheck, firmware error receipt, suite FAIL.
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record; gate-boot.sh does it at the end).
+
+PACKAGE: .local/experiments/AGX-STDC4B-e1f86b64d-signed
+- SHA256SUMS sha256 f68144eef58a8907b8108314b85e98f811056b730492c4ed78ea6b5f6d8975f1
+- AppleAgxRenderAdmission.sys d6b39ccaf9e4390fe14a989733c6819512fe0b33d8c7798a9679bdbd37008dd4
+- kmd-build-receipt.json SourceCommit e1f86b64d06e3ffed04db49075f352ff9923df56, PackageBuild 3015, Umd32Source X86B582 (x86 chain
+  rebuilt from the same source); builder STDC4B_3015_PACKAGE_BUILD_PASS, STDC4B_FINAL_PACKAGE_PASS, versions coherent
+  30.0.3015.0, source integrity PASS 1009 files, STACK_FRAMES PASS, X64 gates PASS. Standing recipe: no AppleAgxDiag* define.
+- tools/agx_diag_absent.py: all five features ABSENT, DIAG_CHECK PASS (the same tool flags C4CM 3009 c4-switch, B19 3010
+  b19-conformance and K48W2G 3014 k48-replace).
+- Host: full suite NEW = the 113 environment entries of the worktree (identical set to the K48 branch run; no new failure);
+  builder default-path test (fresh template 0x4000 / 0x20 / 0x4040404 / 16x16 -> 0x3000 / 0x1c / 0 / 1280x720, 4096^2
+  tpc 0x20000 within the TPC range), test_b19_defaults, test_c4_coremask, test_default_switches, test_agx_diag_absent;
+  syncheck (DDI + owner, /Zs, /O2 /W4 /WX, x86) SYNCHECK_OK.
+- Kit checks dry-run: gate_verdict.py on EXP2895 (2883) run.log -> GATE_PASS with TACM/DWM lines, INCOMPLETE without, FAIL on a
+  new DWM dump; tacm_check.py on EXP3017 (C4 on) APPLIED 32/32, EXP3016 (off) NONE. STDC4C selftest: a 3015 run at the EXP2895
+  level (mean 8421.7) FAILs, mean 8740 passes and 8739.7 fails, a point at 8690 fails, a Defender-invalid arm is not a point;
+  agx_perf_gate.py --baseline standing-perf-baseline.json on EXP3021 p1/p2: PASS worst 47.522 (-0.06 %).
+- Kit selftest: SELFTEST_PASS (template KIT-PRIO2-bench failed its pkg_bound case: 2481 fixture against the 2883 sheet;
+  fixture replaced by the real 2883-bound report EXP3015 agxinstalled-prev.txt; TACM / DWM / 2883-floor cases added).
+KIT: .local/experiments/KIT-STDC4C-e1f86b64d (= KIT-STDC4B-e1f86b64d with the standing-pair FULL reference, standing-perf-baseline.json,
+the Defender rule on every measured arm and the corpus waiver; that kit = KIT-PRIO2-bench gate-boot.sh / gate-steps.sh on the current kitlib, base 2883, with
+the candidate commit, the standing diag check, Wom1TaCoreMask / Wom1WorkItemDump in the absent-switch list, DWM and TACM lines,
+the 2883 FULL reference in gate_verdict.py, tools/tacm_check.py, this BEFORE).
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-STDC4C-e1f86b64d SHA256SUMS b2f8eb9a (42 OK, bench + architect), BEFORE-STDC4C 8aba93d4; package AGX-STDC4B-e1f86b64d-signed 30.0.3015.0 SHA256SUMS f68144ee (8 OK, bench + architect). KIT-STDC4B is not used. Run: CAND_DIR=<package> gate-boot.sh 3030 3028 EXP3028-std <this body>. CS: not in this boot (no Steam word); corpus waived (not run).
+- Sequencing (architect): after C84R (EXP3027) and the STAGERB2 standing boot (EXP3028/3029), before TRK49. Previous guest EXP3028-std: a standing boot with 2883 bound (verified, adapter OK).
+- Launcher rev2 (launch-kbd.sh 26ea26b5..., launch-kbd-hr.sh 4e1023b0...); diskgate2 before launch; diskwatch every 60 s (BREACH or SSD < 1536 MiB = stop at the arm boundary).
+- Defender: the kit reads it before and after every measured arm with one repeat; the bench watcher (defwatch2, WU installs only) and defjudge.py cross-check it. Reference-arm rule (architect): a reference arm with a change is INVALID like any measured arm.
+- Bench gates: AppX v3, early USB gate (v857gate). Power: host-Mac port + hub charging input. Wi-Fi profile orphaned (Ethernet used); owner to reconnect.
+- PASS -> standing candidate; standing after its restart confirmation; rollback 2883. Correctness failure -> stop, bisect on the architect's order.
+- Evidence .local/experiments/EXP3030-std/.
+- Launcher launch-kbd3030.sh sha256 2d05cd572c7f0e0e (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 339233e5b.
