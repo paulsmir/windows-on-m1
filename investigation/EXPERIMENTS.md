@@ -90025,3 +90025,22 @@ EXP3025 HARDWARE BEFORE 2026-11-27T19:59:01Z:
 Plain standing staging boot for the B21 readback-probe rerun with 2883 bound (architect 2026-11-27) and then the C84R kit. Standing m1n1 9bddd9aa + Mu IRQ01 170a91b4, package 2883 bound, nothing staged, AppleSmc 0.1.0.23 (standing since EXP3000), Wi-Fi 0.1.71.2, PARK1. No measurement; guest LEFT UP as the staging guest for EXP3026 (B21 probes) and the C84R kit. Checks logged: presence, battery, APPL0002 status, AppleSmc DriverVer. Mac disk >= 8 GiB. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP3025-std/.
 First standing boot with launcher rev2 (launch-kbd-hr.sh 4e1023b0, two-part disk check; first-run gate: the LK_DISK line must appear and pass) and diskgate2. Previous guest EXP3023-k48 ended in order (stdend2) first. After the boot: APPL0002 Started and the display adapters are read before any probe runs.
 - Launcher launch-kbd3025.sh sha256 5f48a6a553a1fe6e (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD f522e3b71.
+
+EXP3025 ACTUAL 2026-11-27T20:02:13Z (refs EXP3025 BEFORE): plain standing boot after the EXP3023 ordered end.
+- The first attempt (19:58:31Z) refused at stagerun2's leftover old floor ("mac disk 3 GiB": df avail on the SSD). The line was removed and the boot relaunched; no boot had started.
+- The boot, 20:01:18Z: STAGERUN_3025_DONE. First run of launcher rev2: "LK_DISK inside_free_mib=26594 ssd_free_mib=3504 worst_growth_mib=826 need_ssd_mib=1850", passed.
+- After the boot: one adapter, "Apple AGX clean WDDM render-admission experiment", ACPI\APPL0002\0, status OK, driver 30.0.2883.0; APPL0002 status OK, CM_PROB_NONE.
+- The chain's predicate expected "problem=0" while Windows prints CM_PROB_NONE, so it held before the probes (a bench predicate bug, dry-run gap). The probe was then started by hand on the same verified state.
+- Guest left up as the C84R staging guest.
+
+EXP3026 ACTUAL 2026-11-27T20:02:13Z (refs EXP3026 BEFORE; RBBW only, on EXP3025-std with AGX 2883 bound; evidence .local/experiments/EXP3026-rbbw/evidence):
+- Hash-verified copy ran (guest exe re-hashed), rc=0, 10 s. Outputs fetched with sha256 on both sides; guest outputs and the exe deleted. Output, verbatim:
+  RBBW fresh device/queue/fence hr=0x00000000
+  AGX_D3D12_RBBW_DEFECT B21 (a ratio FAIL is the known write-combined readback defect until B21 is fixed)
+  RBBW size_mib=1 rb_ms=4.052,4.127,4.208 ref_ms=0.024,0.022,0.022 bad_a=0 bad_b=0 bad_partial=0 partial_offset=16344 partial_bytes=100
+  AGX_D3D12_RBBW: FAIL size_mib=1 rb_mbps=258.8 ref_mbps=47572.4 ratio=0.005 pattern=ok stale=ok
+  RBBW size_mib=32 rb_ms=135.092,131.953,130.643 ref_ms=1.129,1.183,1.165 bad_a=0 bad_b=0 bad_partial=0 partial_offset=16344 partial_bytes=100
+  AGX_D3D12_RBBW: FAIL size_mib=32 rb_mbps=256.8 ref_mbps=29721.6 ratio=0.009 pattern=ok stale=ok
+  RBBW size_mib=64 rb_ms=260.282,262.674,260.925 ref_ms=2.428,2.449,2.437 bad_a=0 bad_b=0 bad_partial=0 partial_offset=16344 partial_bytes=100
+  AGX_D3D12_RBBW: FAIL size_mib=64 rb_mbps=257.8 ref_mbps=27637.7 ratio=0.009 pattern=ok stale=ok
+- Verdict: confirmed - B21 defect measured on the accepted driver. Readback from the D3D12 readback heap runs at 257-259 MB/s against 27.6-47.6 GB/s for a cached copy (ratio 0.005-0.009, worse than the expected about 0.05). Pattern and stale-line checks are ok at every size (bad_a=bad_b=bad_partial=0). It matches the K48 gate copy (about 250 MB/s, EXP3023). STAGERB was not run (it does not state its adapter).
