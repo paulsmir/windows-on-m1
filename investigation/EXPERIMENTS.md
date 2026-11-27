@@ -89848,3 +89848,97 @@ EXP3022 ACTUAL 2026-11-27T17:50:07Z (refs EXP3022 BEFORE; K48W2H, package 30.0.3
   - No <arm>b repeat: Defender 1.463.497.0 at every arm's start and end.
 - Health: no reset or TDR in any arm. Rollback: candidate removed, 2883 re-staged, GATE_BOOT_3022_DONE rc=0.
 - Verdict: confirmed. Gate PASS_FLOAT (counts, IDs, slots, counter and integer words exact; word8 float within rel 3.13e-6, p50 1 ULP, max 47 ULP). Timing CODE_OWNS, code_share 0.906: D 0.1893 ms, CI [0.1883, 0.1902], off_drift 0.0008 ms, gap 0.209 ms. Apple's m208 kernel code runs the K48 job 0.189 ms faster (0.541 vs 0.731 ms median); about 91 % of the K48 gap is the kernel code itself.
+
+EXP3023 HARDWARE BEFORE 2026-11-27T18:51:24Z:
+K48MUT - mutations of Apple's k48 binary: price each of our code forms on Apple's code (architect order 2026-11-27, after
+CODE_OWNS 0.906 and the source-vs-compiler verdict (C)) - preregistration, written before any run
+
+WHAT: AppleAgx 30.0.3016.0 from gpu/k48-replace 8729d2a8e133f3bd2e6d4a080e1bed30da28b9f0 = K48W2G (ce51b949d, EXP3022 driver) + the
+audited timing tool (bd0304e2c, a49bb084c, 460e3afaa series mode) + the gate's staged copy and per-step receipt (8729d2a8e:
+measure-d3d12-k48-gate-steps {map, copy, write, hash, free us, staged}; EXP3022 held 4240 ms with ~4.04 s uninstrumented).
+Diagnostic build (AppleAgxDiagShaderReplace=true); inert without APPLE_AGX_D3D12_SHADER_REPLACE.
+The variable under test: which of our forms makes Apple's k48 code slower toward ours. Each variant = Apple's binary with
+exactly one of our forms applied, bit-identical elsewhere (blobs under .local only, Apple bytes):
+- base   k48t.agxr (the EXP3022 transplant), sha256 d7ae1dd78ff29ba4e1fb4ff0c02e049577e1b7fc0638942bed4e144b8628761d - the "off" arms
+- M1     our wait split: in 18 "loads + one wait" groups the loads alternate slots and the wait becomes wait 0 + wait 1 (19 loads moved
+         to slot 1); sha256 ff75a747297d36513a97a9ff68f22061ec0be332530f0e03db51c6a4388380f7
+- M2     our load address form: at 30 indexed loads (uniform base + index register, lsl 2) the shift moves into a separate
+         iadd rT, 0, rN, lsl 2 (rT = r60..r63, unused by Apple) and the load takes rT with lsl 0, as our compiler emits (our 69 loads
+         all use lsl 0); 1 site skipped (an encoding applegpu cannot re-assemble, copied verbatim); nr_gprs 128 (tier 832 kept);
+         sha256 c55f94f5a20a3eebeab65577caf6be2d7ba4917c16c338501115f253e3b5b6c3
+- M3     register-cache / discard hints cleared: 475 instructions, 1130 operand hints, no length change (22 on pop_exec r0l assumed
+         to be the same hint: labelled uncertain); sha256 14452f448caa566650a4ee01c265e0b21a33ad9ba39057fd110f24158f934524
+- M4a    31 independent mov_imm (r60..r63) at the top of the loop body (every iteration); nr_gprs 128;
+         sha256 bcefe7cacfdeb020456fe9353aeed76ead4440b007febfbfdaaf6b137868ca10
+- M4b    the same 31 instructions once before the loop (threads that skip the loop skip them too); nr_gprs 128;
+         sha256 e4b2588b9984177e558f1443694a0751aa7440709bab15a1f4537bd8130ed15a
+- M_all  M1 + M2 + M3 together; sha256 644c486eb9ef5a1d77c518861ac4f30a770a1c4b85bd2fe188aa9f0dac082705
+Construction proof (.local/k48-mutations/tools): agx_rewrite.py keeps every instruction's original bytes unless declared and re-encodes
+the 37 branches (36 jmp_exec_none, 1 jmp_exec_any) to their moved targets; a no-op rewrite reproduces Apple's main byte for byte
+(NOOP_IDENTITY PASS); check_mutation.py (independent decoder) aligns original and mutated streams and fails on any undeclared byte:
+CHECK PASS for all six, undeclared_diffs 0 (verified here, not only by the builder); abi_equality.py ABI_EQUALITY PASS (20 rows,
+2000 trials, 0 mismatches) for all six (the preamble is unchanged).
+
+WHY THIS HYPOTHESIS:
+1. EXP3022: Apple's binary on our binding / launch / firmware runs k48 0.189 ms faster (code_share 0.906); the source and loop shape
+   are the same (AIR twin lib184/lib200; plan note section 5), so the gap is code form.
+2. The static differences are small (801 vs 745 instructions, +23 waits, +5 shared ops) and the wait part was priced at 0.005 ms
+   (EXP2315); static counting cannot attribute 0.189 ms, so each form is measured by applying it to Apple's code.
+3. The forms chosen are the ones present in our listing and absent in Apple's: per-slot waits, the separate shift before each indexed
+   load, no register-cache/discard hints; M4a/M4b price instruction count per iteration vs once and give the iteration count.
+
+PRICED EXPECTATIONS (per variant, dT = median(variant) - median(off pooled)):
+- M1 ~0.005 ms (EXP2315 removed 27 waits from k48 for -0.005 ms): NONE expected.
+- M2 ~0.03-0.06 ms: 30 extra dependent ALU ops per thread on the load-address path; at the measured ALU price (0.97-1.95 ps per
+  thread-op, 1024/512 threads per core) x 447,488 threads = 0.013-0.026 ms of issue, plus the latency each extra op adds before its
+  load in the guard chain (loads -> compare -> early exit, serial per thread): CONTRIBUTES expected, OWNS possible.
+- M3 0.01-0.03 ms (I): without hints every operand read goes to the register file; the price on AGX is not measured; NONE or
+  CONTRIBUTES expected.
+- M4b ~0.014 ms (31 ops x 447,488 threads x ~1 ps); M4a = M4b x mean iterations per thread (the ratio M4a/M4b is the iteration
+  count); if M4a >= 0.05 ms the 31 extra loop instructions per iteration of our code (173 vs 142) are a priced item.
+CLASSES (fixed): OWNS dT >= 0.05 ms; CONTRIBUTES 0.02-0.05; NONE < 0.02; INVALID per variant on < 500 jobs or CI width > 0.02; whole
+series INVALID on off drift > 0.02 ms or < 500 off jobs.
+RESIDUAL RULE (fixed now): if dT(M1)+dT(M2)+dT(M3) < 0.6 x 0.189 = 0.113 ms, the named forms do not explain the gap; the next set is,
+in this priority order: (1) instruction ordering / scheduling distance between each load and its first use (our order applied to
+Apple's code); (2) register-cache and discard hints split by kind (cache vs discard) if M3 is CONTRIBUTES or OWNS; (3) the 31 extra
+loop instructions per iteration in our form (needs our loop body form, priced by M4a first); (4) the 5 extra shared-memory
+operations; (5) 16- vs 32-bit operation forms; (6) the float forms from the gate analysis (one sqrt of a product vs two, fused vs
+rounded sqrt(d2), x-y-z vs y-x-z accumulation).
+INTERACTION: M_all vs dT(M1)+dT(M2)+dT(M3); if M_all is about 0.189 the named set is complete; if M_all differs from the sum by more
+than the CI, the forms interact and the report says so.
+
+GATE: every variant first runs the output gate (gate mode at the 600th k48 dispatch, the variant as the shadow); PASS_EXACT /
+PASS_SORTED / PASS_FLOAT (criterion unchanged from BEFORE-K48W2F) admits it to timing; any other verdict excludes it and is reported.
+TIMING: same boot, GM HD PERF traced, APPLE_AGX_D3D12_SPLIT_TAGS=97efffb3,b1db88bf in every arm; arms off1 (base) M1 M2 M3 M4a M4b
+M_all off2 (base), GPU cold gate before each; agx_k48_timing.py --variant (series mode, UMD-clock job mapping, alignment printed).
+DEFENDER RULE: read before / after every arm; gate arm recorded; a timing arm with a change or unreadable version is repeated once
+(<arm>b), a second change stops the kit.
+KNOBS: K48_GATE_ONLY=1 (gates only), K48_TIMING_ONLY=1 (timing arms only, after the gates passed in an earlier boot of this package).
+LENGTH: 6 gate arms + 8 timing arms (~17 min each with the cool-down) ~ 4 h after the suite and perf gate; if one boot cannot hold it,
+run K48_GATE_ONLY=1 first and K48_TIMING_ONLY=1 in the next boot.
+STOP: Code 43/31, GPU reset / TDR / bugcheck, firmware error receipt, suite FAIL, perf gate FAIL with every switch unset.
+RECOVERY: rollback to 30.0.2883.0 (accepted).
+
+PACKAGE: .local/experiments/AGX-K48MUT-8729d2a8e-signed
+- SHA256SUMS sha256 bd0cc042bb394dad7614e724e704f64a5cad8a8a461a0c82fa9b5f61f3f1a621
+- AppleAgxRenderAdmission.sys c001e72f6af27eae3c30e79a07b005f86a16297e6ce3a1ad3a8990c40bc87c03
+- kmd-build-receipt.json SourceCommit 8729d2a8e133f3bd2e6d4a080e1bed30da28b9f0, PackageBuild 3016, Umd32Source X86B583;
+  K48MUT_3016_PACKAGE_BUILD_PASS, K48MUT_FINAL_PACKAGE_PASS, versions coherent 30.0.3016.0, source integrity PASS 1011 files.
+- agx_diag_absent.py --expect k48-replace: DIAG_PRESENT 6/6, DIAG_CHECK PASS.
+- Host tests: test_agx_k48_gate_host (steps receipt staged 1, verdict unchanged), test_agx_k48_gate, test_agx_shader_replace,
+  test_agx_k48_timing (MutationSeries: classes, residual rule, invalid cases) - 39 + 15 OK.
+- Tools: tools/agx_k48_timing.py and tools/agx_k48_gate.py from 8729d2a8e. Series mode dry-run on the EXP3022 logs (our arms as a
+  stand-in variant) reproduces dT 0.189-0.190 ms, share 1.00, alignment 1.0000.
+- Kit selftest: SELFTEST_PASS (pkg_bound fixture replaced by the real 2883-bound report, as in KIT-STDC4C).
+KIT: .local/experiments/KIT-K48MUT-8729d2a8e (= KIT-K48W2H-bd0304e2c with step 7 replaced, the 7 blobs, the tools, this BEFORE).
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-K48MUT-8729d2a8e SHA256SUMS 2bba17a9 (51 OK, bench + architect), BEFORE-K48MUT dd721a0f; package AGX-K48MUT-8729d2a8e-signed 30.0.3016.0 SHA256SUMS bd0cc042 (8 OK, bench + architect). Run: CAND_DIR=<package> k48-boot.sh 3023 3022 EXP3022-k48 <this body>, one boot (no K48_GATE_ONLY / K48_TIMING_ONLY unless the architect splits it).
+- Sequencing (architect): first after the disk hold, ahead of C84R and STDC4C. Previous guest EXP3022-k48 (post-rollback, 2883 staged).
+- Disk (architect + bench, band arithmetic verified 2026-11-27): diskgate2 - inside-image free >= 8192 MiB AND SSD free >= worst-case band growth + 1024 MiB (worst = unallocated bands x (8 MiB + 128 KiB AppleDouble cluster) + short-band deficit; 4142 MiB today) AND system data >= 2048 MiB. Estimated kit writes about 4.0 GiB inside the image (16 GM arms x about 225 MiB + 6 gate files x about 69 MiB, from EXP3022). SSD free and band count are logged at start and end; if the SSD drop exceeds the band arithmetic, the bench stops after this kit and reports.
+- Defender: the kit's K48_DEFENDER lines (gate arm: recorded; timing arm: INVALID, one <arm>b repeat). Reference-arm rule for future kits noted (architect).
+- Bench gates: AppX v3, early USB gate (v857gate). Power: host-Mac port + hub charging input. Wi-Fi: profile orphaned since EXP3011 (owner to reconnect), Ethernet used.
+- Watched live: reset/TDR in a variant arm (stop that variant, continue only after a clean device recovery), the new gate-steps receipt (map/copy/write/hash/free in us). Verdict lines per variant verbatim, the sum M1+M2+M3 against 0.113 ms, M_all against the sum.
+- Evidence .local/experiments/EXP3023-k48/.
+- Disk watch (architect ruling 2026-11-27): diskwatch.sh logs SSD free, bands and inside-free every 60 s, once after the gate arms, and at the end; BREACH when the SSD drop exceeds new_bands x (8 MiB + 128 KiB) + 64 MiB or SSD free < 1536 MiB -> the bench stops the kit after the current arm (at an arm boundary, exact PIDs) and reports. One boot; launcher launch-kbd.sh unchanged (its df check passes at launch).
+- Launcher launch-kbd3023.sh sha256 3b47b0608817f3ab (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD e0adb6786.
