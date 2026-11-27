@@ -89601,3 +89601,26 @@ BENCH ADDENDUM (before the run):
 - Bench gates: disk gate at the standing floor (pwdev >= 8192 MiB, system data >= 2048 MiB; pwdev is a sparsebundle on the external SSD), AppX v3, early USB gate (v857gate) in the background. Power: host-Mac port + hub charging input.
 - Verdict: tools/agx_b19_verdict.py run.log, lines reported verbatim. Evidence .local/experiments/EXP3021-b19/.
 - Launcher launch-kbd3021.sh sha256 ac38a398d50f77c5 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 6406022f2.
+
+EXP3021 ACTUAL 2026-11-27T16:56:11Z (refs EXP3021 BEFORE; B19 conformance set, package 30.0.3010.0, one boot on EXP3020-k48; evidence .local/experiments/EXP3021-b19/evidence):
+- Disk gate pwdev 9471 MiB (floor 8192). AppX busy on try 1, OK on try 2. V857GATE OK. Wi-Fi not reachable (orphaned profile). IRQ gate PASS (769). Suite 119/0.
+- Base perf: gm3021p1 VALID 55.832; gm3021p2 INVALID (Windows Update worker at its end, cpu_s unknown > 5), fps_frames 55.876. PERF_GATE PASS worst=47.522 (+1.10 %).
+- Arms, verbatim:
+  B19_ARM off_a mask 0 suite 119/0 fps 55.706 conf_receipt 0 faults 0 resets 0 tdr 0 defender 1
+  B19_DEFENDER off_a before=2026-11-27T08:52:24.0000000+01:00 after=2026-11-27T12:04:28.0000000+01:00
+  B19_ARM C2 mask 1 suite 119/0 fps 55.911 conf_receipt 1 faults 0 resets 0 tdr 0 defender 0
+  B19_DEFENDER C2 before=2026-11-27T12:04:28.0000000+01:00 after=2026-11-27T12:04:28.0000000+01:00
+  B19_ARM C3 mask 2 suite 119/0 fps 55.79 conf_receipt 2 faults 0 resets 0 tdr 0 defender 0
+  B19_DEFENDER C3 before=2026-11-27T12:04:28.0000000+01:00 after=2026-11-27T12:04:28.0000000+01:00
+  B19_ARM C5 mask 4 suite 119/0 fps 55.783 conf_receipt 4 faults 0 resets 0 tdr 0 defender 0
+  B19_DEFENDER C5 before=2026-11-27T12:04:28.0000000+01:00 after=2026-11-27T12:04:28.0000000+01:00
+  B19_ARM C6 mask 8 suite 119/0 fps 55.744 conf_receipt 8 faults 0 resets 0 tdr 0 defender 0
+  B19_DEFENDER C6 before=2026-11-27T12:04:28.0000000+01:00 after=2026-11-27T12:04:28.0000000+01:00
+  B19_ARM off_b mask 0 suite 119/0 fps 55.796 conf_receipt 0 faults 0 resets 0 tdr 0 defender 0
+  B19_DEFENDER off_b before=2026-11-27T12:04:28.0000000+01:00 after=2026-11-27T12:04:28.0000000+01:00
+- Verdict, verbatim:
+  B19_VERDICT B19_OFF fps 55.706 55.796 mean 55.751 spread 0.0016 thr 0.0100 B19_ITEM C2 NO_REGRESSION (fps 55.911 (+0.29 %)) B19_ITEM C3 NO_REGRESSION (fps 55.790 (+0.07 %)) B19_ITEM C5 NO_REGRESSION (fps 55.783 (+0.06 %)) B19_ITEM C6 NO_REGRESSION (fps 55.744 (-0.01 %)) 
+- Bench flag: the reference arm off_a carries defender 1 (signature LastUpdated changed during it). The preregistered rule voids only item arms with defender 1, so the verdict stands as produced. With off_b alone (55.796) the reading is unchanged: C2 +0.21 %, C3 -0.01 %, C5 -0.02 %, C6 -0.09 % against the 1 % threshold.
+- Rollback to 2883: GATE_BOOT_3021_DONE.
+- Architect ruling: verdict accepted. KEEP all four (C2, C3, C5, C6) on parity grounds. They become defaults in the next standing-candidate package, and the per-process switch is removed there. Nothing changes in standing today.
+- Rule for FUTURE kits (next BEFOREs): a reference arm with a Defender change is INVALID like any measured arm; when two reference arms exist the clean one is used and the verdict says so.
