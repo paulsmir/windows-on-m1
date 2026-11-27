@@ -89157,3 +89157,11 @@ EXP3016 ACTUAL 2026-11-27T15:21:22Z (refs EXP3016 BEFORE 14:58:04Z; C4CM arm off
 - Health: STEP_END c4 with all deltas 0, gpu_resets 0, tdr4101 0. Rollback to 2883: GATE_BOOT_3016_DONE rc=0.
 - Outside the measured part, between arms (15:09:46Z): the B20 read-only time-zone query. RealTimeIsUniversal is absent; TimeZoneKeyName Romance Standard Time, Bias -60. Sent to the m1n1 line.
 - Verdict: valid off arm; the C4 verdict is taken after the four arms (agx_c4_verdict.py).
+
+EXP3017 ACTUAL 2026-11-27T15:25:57Z (refs EXP3017 BEFORE 15:12:32Z; C4CM arm on1, boot 2 of 4; evidence .local/experiments/EXP3017-c4/evidence):
+- SWITCH Wom1TaCoreMask 0x1 (arm on1 needs 0x1); the other switches are the standing base set. V857GATE OK [1429, 592, 447, 666]. PROFILE: SMC OK, battery 99 %, Wi-Fi not reachable on this boot. IRQ gate PASS (769). Suite 119/0.
+- gm3017p1 fps_frames 55.778 and gm3017p2 55.756, both VALID. PERF_GATE PASS worst=47.670 (+1.41 %); recorded only, since this is an on arm. defjudge: p1 OK, p2 OK.
+- C4_TACM arm on1 TACM_SENT version 1 receipt 0x02000000 refusal ok packed 0xfe 0x0 sent 0xfe 0x0 jobs 43392 TACM_VERDICT APPLIED (expect 0xfe).
+- C4_RESULT arm on1 switch [Wom1TaCoreMask=1] tacm APPLIED, signature CRCRCRCR, frames 4798, to_ta 1.3975 1.3930 0.1896 0.1875, sum_r5_r7 0.3771, r7 0.1875.
+- Health: STEP_END c4 with all deltas 0, gpu_resets 0, tdr4101 0, so there is no C4_DROP. GATE_BOOT_3017_DONE rc=0 (rolled back to 2883).
+- Verdict: valid on arm; the C4 verdict follows after four arms.
