@@ -87847,3 +87847,75 @@ EXP2984 HARDWARE ACTUAL 2026-11-27T01:36:10Z (PIPE-PRIO2 candidate 30.0.2977.0, 
 - First-run gate: candidate bound; IRQ start gate PASS (armed, vector 2817, DpcWakes 8347) = the GPU started and its first jobs completed. KIT_STOP 01:34:08Z on "IRQ start gate carries an absent note ... (Wom1IrqCompletionState absent: pre-L1b package)": a KIT DEFECT - the check (and the 769 L1b check after it) was carried over from the OV6C kit, whose candidate carried L1b; 2977 = 2883 + one commit is a pre-L1b package, so the receipt is legitimately absent.
 - Rollback: KMD receipts read before the removal (prerollback: GPU_RESET none, Wom1SoftFaultState recorded), candidate removed, 2883 restaged, GUARD_END AGX_GUARD ACCEPT (package 30.0.2883.0 matches the record); GATE_BOOT_2984_DONE rc=9; guest left up.
 - VERDICT: INCONCLUSIVE (bench kit defect; no PRIO2 measurement). Not a candidate failure: the ordered first-run gate (devnode bound + first GPU job completes) PASSED. Fix in KIT-PRIO2-bench (SHA256SUMS 79790db4): only the exact pre-L1b note is accepted, any other absent note still stops; the 769 check runs only with L1B_EXPECTED=1. Rerun as EXP2985 on this guest.
+
+EXP2985 HARDWARE BEFORE 2026-11-27T01:38:09Z:
+PIPE-PRIO2 - preregistration (architect order 2026-11-27; written before any run)
+
+WHAT: one candidate package, AppleAgx 30.0.2977.0, from gpu/pipe-priority2 e52858ee81adb8e9df8cc63274ae5ca5031b9725 = e783c48bb (accepted 30.0.2883.0)
+plus one commit: the KMD binds the priority-2 command channels (TA_2/3D_2/CL_2 = channel index 6/7/8) and rings
+doorbells 8/9/10 instead of the priority-1 channels 3/4/5 and doorbells 4/5/6. Nothing else changes (QueueInfo priority
+tuple, init data, UMD, m1n1, Mu unchanged).
+
+WHY THIS HYPOTHESIS (v3, 2026-11-27 before any run; v1 said "macOS rings 0x08/0x09/0x0a" (wrong: no 0x09), v2 said the
+15.x mapping is unknown; v3 reads it from the EXP2965 rings):
+1. Asahi on this firmware (G13 V13_5) puts every default (Mesa MEDIUM) queue on priority 2 (file.rs queue_create:
+   REALTIME - MEDIUM = 2; gpu.rs run_job doorbell pipe | index << 2). Our priority 1 is Asahi's HIGH, which Asahi refuses
+   to userspace: we run on the least exercised firmware pipe.
+2. macOS 15.7.8 runs GravityMark on the priority-2 rings (R, EXP2965 agxring-scene-ch01..12 under v4c's v15 table): every
+   0x18-byte ring message carries the pipe type at +0x10 (0 TA, 1 3D, 2 compute) and the rings come in groups
+   TA/3D/CL = 1-3 (busy: compositor), 4-6 (idle), 7-9 (busy: GravityMark, one context, sequence step 3 across the three),
+   10-12 (idle). Doorbell = pipe | group << 2 fits every observed kick: 0x08 = TA group 2, 0x0a = CL group 2,
+   0x00 = TA group 0 (EXP2965 GM1 0x0a 59771 / 0x08 22555 / 0x00 3469). The 3D ring of group 2 is fed (ch08, 256
+   messages) but macOS never rings its doorbell (no 0x09): on 15.x the firmware starts the 3D job without a host kick.
+   PIPE-PRIO2 matches macOS's ring choice; it keeps the separate 3D doorbell (9) that Asahi rings on 13.5.
+3. Row 1 renders keep fixed per-job offsets (R5 +0.67, R7 +0.47 ms HD) that no tested lever moved; a per-priority firmware
+   policy is a cheap untested firmware-side difference. Expected effect: small (one client per pipe, no arbitration
+   change), so the run is mainly a contract-alignment check against Asahi's default.
+
+SAFETY (source): the driver allocates and publishes all 12 command channels at full size (apple_agx_channel_memory.c
+Build loop; J313_AGX_G2_CMD_QUEUE_RING_SIZE for each) and the firmware services every pipe (Asahi binds four per type);
+the KMD transport admits exactly the bound doorbells (test_kmd_doorbell_admission); channel-error recovery is
+pipe/queue-addressed, not index-addressed; m1n1 does not filter AGX doorbells.
+
+VARIABLE: the package (one commit). Base / rollback: accepted 30.0.2883.0 on the standing pair.
+
+PROCEDURE: the standard gate boot for a KMD-only candidate (install over 2883 with hashes, gates, cold FULL x2, PERF
+traced (UMD trace, as the EXP2978/2979 arms) -> agx_gpu_frame_breakdown.py --jobs, CS, rollback to 2883 with hashes).
+Self-check: the doorbell values are compile-time constants, so the arm is identified by the bound package hashes
+(30.0.2977.0, SHA256SUMS) alone; the queue progress receipt (Receipt->TaDoorbell / D3Doorbell = 8 / 9) is written
+only on a timeout diagnostic and is a cross-check if one exists.
+
+VERDICT RULE (fixed now):
+- STOP/REJECT: GPU does not start (Code 43/31), any firmware ChannelError / Timeout / Fault receipt, TDR, perf gate FAIL
+  (> 2 % below perf-baseline), or any GM job position slower by >= 0.10 ms in the breakdown medians vs 2883 (EXP2978 A).
+- IMPROVING (auto-promote): perf gate PASS and (cold FULL mean >= +1.0 % vs 2883's band, or breakdown gpu_span median
+  <= -0.20 ms with no position worse than +0.05 ms).
+- NEUTRAL: everything within those bands -> explicit KEEP/DROP line. Recommendation KEEP (contract alignment with
+  Asahi's default pipe, zero cost).
+- Breakdown comparison: positions C0..C6, R1..R7 medians and aligned (aligned_positions_enc.py vs split-hd.csv) against
+  EXP2978 arm A (same tool).
+
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record); GPU-visible recovery guest; GPU-hidden image
+emergency only.
+
+PACKAGE: .local/experiments/AGX-PRIO2-e52858ee8-signed
+- SHA256SUMS sha256 58cb99909d4b41579d8b88785777a98ce1de6a52d484737579a5bef2dc38c266
+- sys fe04af9359fbdb0e8f0673eb48b2a3e4f1d7aa70da4f46a658962828a89a9d1b; UmdArm64 4b10c45870c38bced26f3711fbad7b08dbe609960b419138d61ac454fd3559fe
+- kmd-build-receipt SourceCommit e52858ee8, PackageBuild 2977; drift2_cand.py PASS 30.0.2977.0
+- Builder PRIO2-2977-final (mkpkg recipe = OV6D/B6L lineage, X86B567): 0 errors /W4 /WX (PREfast warnings only in pre-existing
+  lines 3098/3100/8987/11194, none in the change), STACK_FRAMES PASS x4, "Package versions coherent: 30.0.2977.0".
+- Every file hash differs from 2883 (version stamps); source diff e783c48bb..e52858ee8 -- drivers/apple-agx = 3 files:
+  apple_agx_platform_provider.h (channel index 3/4/5 -> 6/7/8, doorbell 4/5/6 -> 8/9/10), one comment in
+  backend_platform_windows.c, the provider host test.
+TESTS: test_kmd_doorbell_admission (new: channel index and doorbell name the same ring), test_apple_agx_platform_provider,
+test_g4_channel_recovery OK (RED on the old constants); full suite: no NEW failure caused by the change (the 3 extra
+d3d12 volume NEWs fail identically on pristine e783c48bb: environment).
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-PRIO2-bench (SHA256SUMS sha256 79790db4 after the EXP2984 fix, 43 files OK) = KIT-OV6C-bench (EXP2973/2974 lineage: candidate over accepted 2883 with hashes, standing pair 9bddd9aa + IRQ01 170a91b4, contract checks, guard, Wi-Fi up, DR2 rollback to 2883) with: GP1_COMMIT e52858ee8, the OV6C admission step replaced by the PRIO2 measurement step (frame breakdown --jobs on the traced PERF p1 = perf-gate run 1, cold FULL x2 KITBASE2 traceless with the GPU cold gate, IRQ load gate around FULL 1, fault receipts at the end), hash-verified guest UMD-log deletion, KMD receipts read before the candidate removal (prerollback), wfup.sh pin ff39dc91 (AUTOPOLL_S knob default 0 = behaviour of 47825a49).
+- First-run gate as ordered: candidate bound with its hashes + devnode problem 0 + IRQ start gate PASS (first GPU job completed) + L1b Wom1IrqCompletionState 769, before any other step; a failure stops the steps, receipts are read, the candidate is removed and 2883 restaged.
+- Steps: validity -> quiet gate (15 min) -> settle -> suite (119/0 reference EXP2835) -> perf gate (GM HD PERF x2, perf-baseline -2 %) -> measure -> rollback. CS NOT_RUN (no Steam word).
+- Comparison base: EXP2978 arm A (cold 8765/8780, PERF 55.838, fb-gm2978p1.json medians) with paircmp-style per-position medians; the GPU line runs aligned_positions_enc.py.
+- Power: host-Mac port + hub charging input; battery >= 40 %. Evidence .local/experiments/EXP2985-prio2/evidence/gate/. Raw files to the GPU line, verdict to the architect. 2977 does not become standing from this run.
+- RERUN of EXP2984 (stopped at the first-run gate by a KIT defect: the OV6C-lineage L1b check required Wom1IrqCompletionState 769, which a 2883-based pre-L1b candidate legitimately lacks; the IRQ start gate itself PASSED, armed, vector 2817, DpcWakes 8347; rolled back to 2883, guard ACCEPT). Fix: the one note "(Wom1IrqCompletionState absent: pre-L1b package)" is accepted, any other absent note still stops; the 769 check only with L1B_EXPECTED=1. Staging guest = EXP2984's post-rollback guest.
+- Launcher launch-kbd2985.sh sha256 35df4089987c2dd3 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 5947685b8.
