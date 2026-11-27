@@ -88425,3 +88425,17 @@ BENCH ADDENDUM (before the run):
 - Sequencing (architect, own message): after EXP2995 (T1R + CPU-check B) and EXP2996-dx (plain standing staging boot with the DxgKrnl ETW GM run; ETW session verified absent before this run). Staging guest = EXP2996-dx (2883 bound, nothing staged).
 - MEMORY FLOOR (architect): GM_GATE_MB=3450 for this run. AppX gate v3 (appxcheck3.ps1). Mac disk >= 8 GiB checked before the boot. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2997-wicd/.
 - Launcher launch-kbd2997.sh sha256 fbf377e436c54ffa (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 9f823d67e.
+
+EXP2997 ACTUAL 2026-11-27T07:28:25Z:
+- Kit KIT-WICDUMP-d4b61c95c with candidate AGX-WICD5-d4b61c95c-signed (30.0.2996.0, sys 231cc4a6), on the EXP2996-dx staging guest. AppX gate v3 try 1 busy=0 at 07:10:40Z. Mac free 14 GiB. BASE_PREV bound PASS (2883); base removed cleanly; candidate staged.
+- Baseline: 0 GPU resets, 0 TDRs, memstate clean. IRQ_GATE PASS (vector 2817, state 769). TOOL_SUITE 119/0.
+- Perf: gm2997p1/p2 memory clean. PERF_GATE gravitymark_hd_perf PASS, worst 47.632 vs 47.007 (+1.33 %).
+- WICDUMP (armed in gm2997wd): WICDUMP_STATUS st 0, status 2. TA/3D/CL 144 each, 432 kicks, drops/skipped/misses/kick_drops 0. AGX_D3D12_WICDUMP PASS. Armed PERF_GATE PASS 47.201 (+0.41 %). Dump wicdump-2997.bin sha f92d00b4190790ad (5896945 bytes); guest copy deleted after a hash match. Switch set for the step only, then deleted.
+- Decode (af0c756bd):
+  - complete_frames 36.
+  - Render microsequences, each x36 on R1/R3/R5/R7: TA = StartVertex..FinalizeVertex..RetireStamp; 3D = StartFragment..FinalizeFragment..RetireStamp.
+  - CL C0/C2/C4/C6 x36.
+  - Checks: R5 TA 36, R5 3D 36, R7 TA 36, R7 3D 36, low_subs 0 -> WIC_CHECK_VERDICT PASS.
+- Rollback: GPU_RESET none; candidate removed cleanly; AGX_GUARD ACCEPT; base 30.0.2883.0 re-staged. POST_KIT: no pending reboot. Appx v3 busy=1 came from MoUsoCoreWorker only; nothing in progress, 0 deployment events.
+- No TDR and no bugcheck. Display, input, SSH and storage alive.
+- Verdict: WICDUMP_VERDICT PASS (all preregistered predicates). The pointee-order fix (d4b61c95c) captures the TA microsequence in every frame. Raw files to the GPU line. Next: AppleSmc 0.1.0.23 acceptance (install boot + CPU check on TZ0003), then the L1 pair, AGXPWRON, and the DRAM pair.
