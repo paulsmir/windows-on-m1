@@ -89148,3 +89148,12 @@ BENCH ADDENDUM (before the run; arm on1 = boot 2 of 4: EXP3016 off1 / EXP3017 on
 - Stop: GATE_BOOT_<N>_FAIL, C4_DROP (reset/TDR in an on arm), or a perf-gate FAIL in an off arm -> no further arms; architect informed.
 - Evidence .local/experiments/EXP3017-c4/.
 - Launcher launch-kbd3017.sh sha256 fa2fb42af0e0c909 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 6eabf522b.
+
+EXP3016 ACTUAL 2026-11-27T15:21:22Z (refs EXP3016 BEFORE 14:58:04Z; C4CM arm off1, boot 1 of 4; evidence .local/experiments/EXP3016-c4/evidence):
+- Disk gate and AppX v3 passed; V857GATE OK W004-W007 [1342, 646, 291, 401]. PROFILE: SMC APPL0008 OK, battery 99 %, Wi-Fi not reachable on this boot (Ethernet fine). IRQ gate PASS (769). Suite 119/0.
+- gm3016p1 fps_frames 55.946 and gm3016p2 55.621, both VALID. PERF_GATE PASS worst=47.435 vs 47.007 (+0.91 %). defjudge: p1 OK, p2 OK (signature 1.463.495.0 throughout).
+- C4_TACM arm off1 TACM_VERDICT ABSENT (no Wom1TaCoreMaskSent), as expected.
+- C4_RESULT arm off1 switch [none] tacm ABSENT, signature CRCRCRCR, frames 4754, to_ta 1.4007 1.3961 0.1916 0.1879, sum_r5_r7 0.3795, r7 0.1879.
+- Health: STEP_END c4 with all deltas 0, gpu_resets 0, tdr4101 0. Rollback to 2883: GATE_BOOT_3016_DONE rc=0.
+- Outside the measured part, between arms (15:09:46Z): the B20 read-only time-zone query. RealTimeIsUniversal is absent; TimeZoneKeyName Romance Standard Time, Bias -60. Sent to the m1n1 line.
+- Verdict: valid off arm; the C4 verdict is taken after the four arms (agx_c4_verdict.py).
