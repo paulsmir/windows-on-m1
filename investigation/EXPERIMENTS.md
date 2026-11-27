@@ -90469,3 +90469,22 @@ BENCH ADDENDUM (before the run; boot 1 of 2, K48_GATE_ONLY=1):
 - Bench gates: AppX v3, v857gate. Power: host-Mac port + hub charging input.
 - Evidence .local/experiments/EXP3034-k48/.
 - Launcher launch-kbd3034.sh sha256 386308260538c48e (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 4918148e0.
+
+EXP3034 ACTUAL 2026-11-27T23:21:50Z (refs EXP3034 BEFORE; TRK49 boot 1 of 2, K48_GATE_ONLY=1, k48-boot.sh 3034 3033 EXP3033-d1; evidence .local/experiments/EXP3034-k48/evidence):
+- DISKGATE2 PASS (inside 24783, SSD 5087). AppX busy=0. GATE_BOOT_START 22:47:22Z; contract checks PASS. Wi-Fi not found (orphaned profile, known; Ethernet used). GATE_BOOT_3034_DONE rc=0 at 23:20:46Z; CHAIN3034_END rc=0.
+- Gate verdicts:
+  - T0 (pos 0, seq 601): TRAV_GATE_VERDICT PASS_FLOAT (records 2, leaves 238; ulpmax 1).
+  - T1 (pos 1, seq 602): TRAV_GATE_VERDICT FAIL (records differ (w11 rel,w12 rel,w5 rel)). Counters [2,1462,1462] / [0,3999,3999]; 3 values outside 1e-4.
+  - T2 (pos 2, seq 603): FAIL. Counters [1469,41258,41258] / [0,2097,2097]; 36 values outside 1e-4 across w4-w14.
+  - T3: GM_RESULT NOT_STARTED, not_quiet=[MoUsoCoreWorker.exe] after 120 s (23:04:52Z). Recorded INCONCLUSIVE (guest not quiet: Windows Update orchestrator), not a gate result.
+  - T4 (pos 4): INCONCLUSIVE (nothing appended), records 46155 both.
+  - K (k49): K48_GATE_VERDICT PASS_FLOAT (53248 items; ulp max 31, rel max 2.07e-06).
+  - H: PASS_FLOAT (50248; ulp max 53, rel max 4.09e-06).
+  - C: PASS_FLOAT (50217; ulp max 46, rel max 3.52e-06).
+  - TRK49_GATES traversal=0 (pos0 pass 1) k49=1 h1=1. Traversal timing withheld (T1/T2 FAIL).
+- relxN in TRAV_GATE_FLOAT_DIST = N values outside the relative tolerance (agx_trav_gate.py:250-274). Records are paired by sorted order within identical-integer groups; the GPU line is asked to check for cross-pairing.
+- Guest updates: Defender changed 1.463.499.0 -> 1.463.500.0 during T2 (TRK49_DEFENDER kgT2 end 23:02:32Z; lastWUinstall 2026-11-27T22:59:59Z, Security Intelligence). DEFJUDGE: T2 INVALID (install in arm); T0, T1, T4, K, H, C OK. The kit records gate arms only; T2's FAIL stands. MoUsoCoreWorker blocked T3 (GM_GATE_WAIT not_quiet from 23:02:49Z, 120 s) and delayed T4 (waited_s=3 at 23:05:01Z, then ran). Fourth measurement today disturbed by guest updates; the owner decision stays open with the architect.
+- Rollback: candidate removed, 2883 restaged on Problem 28; GUARD_END ACCEPT. V857GATE OK; DW_BREACH_LINES 0; DISK_END ssd=3556 inside=22710 OK.
+- Boot 2 (EXP3035 timing-only): HELD by architect ruling. The timing-only mode cannot select classes (k48-steps.sh:174 sets TRAV_OK=K49_OK=H1_OK=1) and would run the withheld traversal timing.
+- Owed in a resealed TRK49 revision: k49 timing, H1 timing (both admitted here), traversal gates T1-T3 after the pairing question, retry for not-quiet arms.
+- Gate files with sha256: evidence/gate/GATE-FILES-SHA256.txt, handed to the GPU line.
