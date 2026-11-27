@@ -87770,3 +87770,74 @@ EXP2983 HARDWARE ACTUAL 2026-11-27T01:30:57Z (plain standing boot + B15 guest-si
 - B3: hook defect - its CPMINCORES1 read-back check expected single spaces, the joined powercfg output had two -> B3 skipped at 01:26:22Z although the value read 0x0/0x0, and the restore loop logged a FALSE "B15_PARK_RESTORE_FAILED" (all three read-backs show 0x64/0x64). Hook fixed (parsed hex values). B3 re-run in the SAME boot by b15b3fix.sh (01:27-01:30Z, own typeperf tp3.csv, own plan snapshot b15-powercfg-b3.txt showing CPMINCORES1 100/100 before the change): CPMINCORES1 -> 0/0 (read back), SYSTEM task session 0, priority Normal, no EcoQoS: 4930.0 MB/s; CPU0-3 97.0-97.7 % at 2052 MHz, CPU4-7 util 0.7-1.5 % at 600 MHz, parking 1.00 (parked); HV CPPC P mean 865 MHz. CPMINCORES1 restored 100/100 and verified on try 1 (01:29:59Z).
 - typeperf CSVs fetched with a sha256 match (b15-tp.csv 48f4c210cbbb048b, b15-tp3.csv 3a7dbe6eeb8114e7), guest copies deleted. "columns=81" is a split-on-comma miscount of names containing "(0,N)" (41 columns).
 - VERDICT (architect's fixed reading): fixed by B2 only -> LAUNCH CONTEXT. A load started as a SYSTEM task in session 0 runs only on the E cluster (P cores idle: unparked under PARK1, parked at the Windows default); the same load in the interactive session uses all 8 cores (P at 2988 MHz) and runs 2.4x faster. PARK1 is not the cause (B3 = B1). The process EcoQoS flag is off in all blocks, so the placement comes from Windows' scheduling of the session-0/background context, not an explicit process power-throttling setting. Consequence: every cpurun 8-thread block so far (SYSTEM task) loaded the E cluster only; CPU-bound 8-core thermal loads need an interactive launch. Raw files (b15-tp*.csv, b15-powercfg*.txt, b15-cppc*.txt, block CSVs) to the m1n1 line.
+
+EXP2984 HARDWARE BEFORE 2026-11-27T01:32:17Z:
+PIPE-PRIO2 - preregistration (architect order 2026-11-27; written before any run)
+
+WHAT: one candidate package, AppleAgx 30.0.2977.0, from gpu/pipe-priority2 e52858ee81adb8e9df8cc63274ae5ca5031b9725 = e783c48bb (accepted 30.0.2883.0)
+plus one commit: the KMD binds the priority-2 command channels (TA_2/3D_2/CL_2 = channel index 6/7/8) and rings
+doorbells 8/9/10 instead of the priority-1 channels 3/4/5 and doorbells 4/5/6. Nothing else changes (QueueInfo priority
+tuple, init data, UMD, m1n1, Mu unchanged).
+
+WHY THIS HYPOTHESIS (v3, 2026-11-27 before any run; v1 said "macOS rings 0x08/0x09/0x0a" (wrong: no 0x09), v2 said the
+15.x mapping is unknown; v3 reads it from the EXP2965 rings):
+1. Asahi on this firmware (G13 V13_5) puts every default (Mesa MEDIUM) queue on priority 2 (file.rs queue_create:
+   REALTIME - MEDIUM = 2; gpu.rs run_job doorbell pipe | index << 2). Our priority 1 is Asahi's HIGH, which Asahi refuses
+   to userspace: we run on the least exercised firmware pipe.
+2. macOS 15.7.8 runs GravityMark on the priority-2 rings (R, EXP2965 agxring-scene-ch01..12 under v4c's v15 table): every
+   0x18-byte ring message carries the pipe type at +0x10 (0 TA, 1 3D, 2 compute) and the rings come in groups
+   TA/3D/CL = 1-3 (busy: compositor), 4-6 (idle), 7-9 (busy: GravityMark, one context, sequence step 3 across the three),
+   10-12 (idle). Doorbell = pipe | group << 2 fits every observed kick: 0x08 = TA group 2, 0x0a = CL group 2,
+   0x00 = TA group 0 (EXP2965 GM1 0x0a 59771 / 0x08 22555 / 0x00 3469). The 3D ring of group 2 is fed (ch08, 256
+   messages) but macOS never rings its doorbell (no 0x09): on 15.x the firmware starts the 3D job without a host kick.
+   PIPE-PRIO2 matches macOS's ring choice; it keeps the separate 3D doorbell (9) that Asahi rings on 13.5.
+3. Row 1 renders keep fixed per-job offsets (R5 +0.67, R7 +0.47 ms HD) that no tested lever moved; a per-priority firmware
+   policy is a cheap untested firmware-side difference. Expected effect: small (one client per pipe, no arbitration
+   change), so the run is mainly a contract-alignment check against Asahi's default.
+
+SAFETY (source): the driver allocates and publishes all 12 command channels at full size (apple_agx_channel_memory.c
+Build loop; J313_AGX_G2_CMD_QUEUE_RING_SIZE for each) and the firmware services every pipe (Asahi binds four per type);
+the KMD transport admits exactly the bound doorbells (test_kmd_doorbell_admission); channel-error recovery is
+pipe/queue-addressed, not index-addressed; m1n1 does not filter AGX doorbells.
+
+VARIABLE: the package (one commit). Base / rollback: accepted 30.0.2883.0 on the standing pair.
+
+PROCEDURE: the standard gate boot for a KMD-only candidate (install over 2883 with hashes, gates, cold FULL x2, PERF
+traced (UMD trace, as the EXP2978/2979 arms) -> agx_gpu_frame_breakdown.py --jobs, CS, rollback to 2883 with hashes).
+Self-check: the doorbell values are compile-time constants, so the arm is identified by the bound package hashes
+(30.0.2977.0, SHA256SUMS) alone; the queue progress receipt (Receipt->TaDoorbell / D3Doorbell = 8 / 9) is written
+only on a timeout diagnostic and is a cross-check if one exists.
+
+VERDICT RULE (fixed now):
+- STOP/REJECT: GPU does not start (Code 43/31), any firmware ChannelError / Timeout / Fault receipt, TDR, perf gate FAIL
+  (> 2 % below perf-baseline), or any GM job position slower by >= 0.10 ms in the breakdown medians vs 2883 (EXP2978 A).
+- IMPROVING (auto-promote): perf gate PASS and (cold FULL mean >= +1.0 % vs 2883's band, or breakdown gpu_span median
+  <= -0.20 ms with no position worse than +0.05 ms).
+- NEUTRAL: everything within those bands -> explicit KEEP/DROP line. Recommendation KEEP (contract alignment with
+  Asahi's default pipe, zero cost).
+- Breakdown comparison: positions C0..C6, R1..R7 medians and aligned (aligned_positions_enc.py vs split-hd.csv) against
+  EXP2978 arm A (same tool).
+
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record); GPU-visible recovery guest; GPU-hidden image
+emergency only.
+
+PACKAGE: .local/experiments/AGX-PRIO2-e52858ee8-signed
+- SHA256SUMS sha256 58cb99909d4b41579d8b88785777a98ce1de6a52d484737579a5bef2dc38c266
+- sys fe04af9359fbdb0e8f0673eb48b2a3e4f1d7aa70da4f46a658962828a89a9d1b; UmdArm64 4b10c45870c38bced26f3711fbad7b08dbe609960b419138d61ac454fd3559fe
+- kmd-build-receipt SourceCommit e52858ee8, PackageBuild 2977; drift2_cand.py PASS 30.0.2977.0
+- Builder PRIO2-2977-final (mkpkg recipe = OV6D/B6L lineage, X86B567): 0 errors /W4 /WX (PREfast warnings only in pre-existing
+  lines 3098/3100/8987/11194, none in the change), STACK_FRAMES PASS x4, "Package versions coherent: 30.0.2977.0".
+- Every file hash differs from 2883 (version stamps); source diff e783c48bb..e52858ee8 -- drivers/apple-agx = 3 files:
+  apple_agx_platform_provider.h (channel index 3/4/5 -> 6/7/8, doorbell 4/5/6 -> 8/9/10), one comment in
+  backend_platform_windows.c, the provider host test.
+TESTS: test_kmd_doorbell_admission (new: channel index and doorbell name the same ring), test_apple_agx_platform_provider,
+test_g4_channel_recovery OK (RED on the old constants); full suite: no NEW failure caused by the change (the 3 extra
+d3d12 volume NEWs fail identically on pristine e783c48bb: environment).
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-PRIO2-bench (SHA256SUMS sha256 75e63a15, 43 files OK) = KIT-OV6C-bench (EXP2973/2974 lineage: candidate over accepted 2883 with hashes, standing pair 9bddd9aa + IRQ01 170a91b4, contract checks, guard, Wi-Fi up, DR2 rollback to 2883) with: GP1_COMMIT e52858ee8, the OV6C admission step replaced by the PRIO2 measurement step (frame breakdown --jobs on the traced PERF p1 = perf-gate run 1, cold FULL x2 KITBASE2 traceless with the GPU cold gate, IRQ load gate around FULL 1, fault receipts at the end), hash-verified guest UMD-log deletion, KMD receipts read before the candidate removal (prerollback), wfup.sh pin ff39dc91 (AUTOPOLL_S knob default 0 = behaviour of 47825a49).
+- First-run gate as ordered: candidate bound with its hashes + devnode problem 0 + IRQ start gate PASS (first GPU job completed) + L1b Wom1IrqCompletionState 769, before any other step; a failure stops the steps, receipts are read, the candidate is removed and 2883 restaged.
+- Steps: validity -> quiet gate (15 min) -> settle -> suite (119/0 reference EXP2835) -> perf gate (GM HD PERF x2, perf-baseline -2 %) -> measure -> rollback. CS NOT_RUN (no Steam word).
+- Comparison base: EXP2978 arm A (cold 8765/8780, PERF 55.838, fb-gm2978p1.json medians) with paircmp-style per-position medians; the GPU line runs aligned_positions_enc.py.
+- Power: host-Mac port + hub charging input; battery >= 40 %. Evidence .local/experiments/EXP2984-prio2/evidence/gate/. Raw files to the GPU line, verdict to the architect. 2977 does not become standing from this run.
+- Launcher launch-kbd2984.sh sha256 f3592933f7a84197 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 2980eaf6f.
