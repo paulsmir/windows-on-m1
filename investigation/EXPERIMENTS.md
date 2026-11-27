@@ -88970,3 +88970,19 @@ BENCH ADDENDUM (before the run):
 - Gate first: the G2 verdict line and the gate receipt are reported verbatim to the architect before the timing arms are read.
 - Evidence .local/experiments/EXP3015-k48/.
 - Launcher launch-kbd3015.sh sha256 b3c17f521cda2540 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 3f4b8a6b7.
+
+EXP3015 ACTUAL 2026-11-27T14:54:51Z (refs EXP3015 BEFORE; K48W, candidate 30.0.3008.0 on the EXP3014-std staging guest; evidence .local/experiments/EXP3015-k48/evidence):
+- Disk gate PASS (pwdev 9939 MiB, sysdata 15292 MiB). AppX v3 busy=0 on try 1. PROFILE: SMC APPL0008 OK, battery 99 %, Wi-Fi not reachable on this boot (P6 GUEST_WIFI_NOT_FOUND; Ethernet fine). IRQ gate PASS (769). Suite 119/0.
+- Perf arms: gm3015p1 fps_frames 55.776, gm3015p2 55.705, both VALID. PERF_GATE PASS worst=47.521 vs 47.007 (+1.09 %). defjudge: p1 OK, p2 OK.
+- K48 step, verbatim:
+  K48_GATE_FILE local=b3b1745b07b66771 guest=b3b1745b07b66771 bytes=72328000
+  K48_RECEIPTS setup=[hr=0x00000000 00000003 000015a4 a8260e42 97efffb3] replace=[   1 hr=0x00000000 a8260e42 97efffb3 00000001 00001584 912cec80 00000042;] gate=[hr=0x00000000 00000001 0000000a 016f3600 97efffb3 00000000 00000000;hr=0x00000000 00000002 0000000a 016f3600 97efffb3 e4aa64e4 0527d560;]
+  K48_GATE tag 97efffb3 uavs [0, 1, 2, 3, 4] cbvs [0, 1] windowed True K48_GATE_VERDICT INCONCLUSIVE (counter UAV not found: [3, 4]; exact False)
+  GM_RESULT gm3015kg INVALID(memory refusal or low-memory wait during the run) fps_frames=54.531 start_avail=4516MB
+- Defender: signature 1.463.493.0 -> 1.463.495.0, System Id 19 install at 14:49:31Z, 19 s into the gate arm (GM_START gm3015kg 14:49:12Z). defjudge: gm3015kg INVALID. Architect ruling: the BEFORE's rule applies as written, so the gate arm is INVALID.
+- Timing arms not run: the preregistered stop on a gate that is not PASS.
+- Health: STEP_END k48 with all deltas 0, gpu_resets 0, tdr4101 0; KMD receipts GPU_RESET none.
+- Rollback: candidate removed (REMOVE1 rc=0, oem inf deleted, nothing staged or left), 2883 re-staged, AGX_GUARD ACCEPT, GATE_BOOT_3015_DONE rc=0. Post-kit PendingFileRename=4.
+- After the kit, outside measured parts: the B20 clockcheck (m1n1 line, read-only) ran on this guest; result in evidence/clockcheck (sha256 db43b794). Windows starts from its saved shutdown time; the downtime lag is removed by one time jump at the first network sync (EXP3013 +25.1 min, EXP3006 +1 h 54.9 min).
+- Verdict: inconclusive. The gate file now exists (fix 33d3ede6c works), but the gate tool cannot locate the counter UAV among slots 3/4, and the gate arm is INVALID anyway (Defender, plus a low-memory wait). The repeat waits for a GPU-line fix of the counter-UAV identification and of the gate's memory use.
+- Next: C4CM.
