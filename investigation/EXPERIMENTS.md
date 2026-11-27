@@ -90013,3 +90013,10 @@ BENCH TOOLING CORRECTION 2026-11-27T19:56:55Z (architect ruling 2026-11-27; no h
   - change: line 35 only. The df-avail 6 GiB check becomes inside-free >= 6144 MiB AND SSD free >= worst-case growth + 1024 MiB, and the LK_DISK figures are printed;
   - mock dry run: today's figures PASS; SSD 4000 and inside 5000 are refused;
   - future BEFOREs cite the new hashes; the first launch uses the first-run gate.
+
+EXP3026 HARDWARE BEFORE 2026-11-27T19:58:00Z:
+B21 readback probe rerun (architect 2026-11-27), RBBW only, on the EXP3025-std standing guest with 2883 bound. The chain runs the probe only if APPL0002 reads Started (status OK, problem 0); the display adapters are read and logged first.
+WHY: EXP3024 ran without a bound AGX driver (inconclusive). The K48 gate copy at about 250 MB/s (EXP3023) points at a write-combined readback mapping.
+Probe: PROBE-RBBW-5a30c7ae1/agx_d3d12_probe_rbbw_arm64.exe 2013c387 "only RBBW". STAGERB is NOT run: it neither prints nor enforces its adapter, and EXP3024 showed it falls back to a non-AGX adapter. Per the architect, a probe that targets our driver must state its adapter in its first output line, or no verdict is recorded.
+Expected: the speed ratio FAILs by design (about 0.05) = defect measured; pattern checks PASS; "AGX adapter not found" = no verdict.
+Evidence .local/experiments/EXP3026-rbbw/.
