@@ -89951,3 +89951,42 @@ Runner rbbw-run.sh: pins re-checked, console-session task via run-tool-long, gue
 Expected: speed-ratio checks FAIL by design (about 0.05 against a cached copy) = defect measured, not a regression; pattern checks PASS. A pattern or stale-line FAIL = a different, more serious finding, reported at once. Not part of the 119 suite.
 Note: the guest's APPL0002 runs on the state the K48MUT rollback left (candidate removed, 2883 staged, binds at the next boot). Whether the probes see 2883 or the basic display driver is read from the probe's own adapter line and reported.
 Evidence .local/experiments/EXP3024-rbbw/.
+
+EXP3023 ACTUAL 2026-11-27T19:54:27Z (refs EXP3023 BEFORE; K48MUT, package 30.0.3016.0, one boot on EXP3022-k48; evidence .local/experiments/EXP3023-k48/evidence):
+- DISKGATE2 PASS (inside 27585, SSD 6821, bands 37921/38400, worst 4142, need 5166). AppX OK on try 1. V857GATE OK. Wi-Fi profile still orphaned (Ethernet used). IRQ gate PASS (769). Suite 119/0. PERF_GATE PASS worst=47.533 (+1.12 %).
+- Variant gates, all PASS_FLOAT. In each, item counts are equal (ours = transplant), w8 is the only differing word (about 50 % of items, ulp p50 1), and rel max is 2.8-3.4e-06:
+  M1 ours=50230 transplant=50230 rel_p50=1.03e-07 rel_max=2.8e-06 PASS_FLOAT
+  M2 ours=50245 transplant=50245 rel_p50=1.04e-07 rel_max=3.25e-06 PASS_FLOAT
+  M3 ours=50251 transplant=50251 rel_p50=1.03e-07 rel_max=3.38e-06 PASS_FLOAT
+  M4a ours=50260 transplant=50260 rel_p50=1.04e-07 rel_max=3.1e-06 PASS_FLOAT
+  M4b ours=50242 transplant=50242 rel_p50=1.04e-07 rel_max=3.38e-06 PASS_FLOAT
+  M_all ours=50272 transplant=50272 rel_p50=1.04e-07 rel_max=3.3e-06 PASS_FLOAT
+- Gate-steps receipts (field order confirmed by the GPU line from agx_d3d12_k48_gate.h:361: map/copy/write/hash/free in us, then the staged flag; file success = gate receipt state 2). M1 example: steps=[000079ce 00047193 00005d40 0000fc88 000064eb 00000001] = 31182 / 291219 / 23872 / 64648 / 25835 us, staged 1. held_ms 613-634 in all six variants (was 4240 in EXP3022): the cached copy works. The copy runs at about 250 MB/s from the uncached readback mapping (B21).
+- Timing, verbatim (k48-mut.txt):
+  K48_TIMING_ALIGN gm3023off1-umd.log jobs 47559 submits 47559 va_match 1.0000 replays 9454
+  K48_TIMING_ALIGN gm3023off2-umd.log jobs 47239 submits 47239 va_match 1.0000 replays 9390
+  K48_TIMING_ALIGN gm3023M1-umd.log jobs 47308 submits 47308 va_match 1.0000 replays 9404
+  K48_TIMING_ALIGN gm3023M2-umd.log jobs 47009 submits 47009 va_match 1.0000 replays 9344
+  K48_TIMING_ALIGN gm3023M3-umd.log jobs 47229 submits 47229 va_match 1.0000 replays 9388
+  K48_TIMING_ALIGN gm3023M4a-umd.log jobs 47089 submits 47089 va_match 1.0000 replays 9360
+  K48_TIMING_ALIGN gm3023M4b-umd.log jobs 47408 submits 47408 va_match 1.0000 replays 9424
+  K48_TIMING_ALIGN gm3023M_all-umd.log jobs 46939 submits 46939 va_match 1.0000 replays 9330
+  K48_MUT off1 n 3254 median 0.5416 off2 n 3224 median 0.5418
+  K48_MUT M1 n 3221 median 0.5399 dT -0.0018 ms CI [-0.0028, -0.0007] share -0.010 class NONE
+  K48_MUT M2 n 3213 median 0.6358 dT 0.0941 ms CI [0.0932, 0.0953] share 0.498 class OWNS
+  K48_MUT M3 n 3219 median 0.5624 dT 0.0207 ms CI [0.0192, 0.0222] share 0.109 class CONTRIBUTES
+  K48_MUT M4a n 3216 median 0.5426 dT 0.0009 ms CI [-0.0001, 0.0019] share 0.005 class NONE
+  K48_MUT M4b n 3237 median 0.5410 dT -0.0006 ms CI [-0.0018, 0.0004] share -0.003 class NONE
+  K48_MUT M_all n 3206 median 0.6580 dT 0.1163 ms CI [0.1152, 0.1176] share 0.615 class OWNS
+  K48_MUT_SUM M1+M2+M3 0.1129 ms = 0.598 of 0.189 -> RESIDUAL (next set from the preregistered list)
+  K48_MUT_INTERACTION M_all 0.1163 vs sum 0.1129 (difference +0.0033)
+  K48_MUT_ITER M4a/M4b = -1.35 (mean loop iterations per thread, proxy)
+- Per arm: Defender 1.463.497.0 unchanged at every arm's start and end; no <arm>b repeat; no reset or TDR; every GM run VALID.
+- Disk model check: DISK_START SSD 6821 MiB / bands 37921; DISK_END SSD 3578 MiB / bands 38321. SSD drop 3243 MiB against a predicted maximum of 3502 for 400 new bands: DISK_MODEL OK, 0 BREACH lines. Inside used +4267 MiB, so about 76 % of the written bytes landed in new bands (85 % in the first 15 min). 79 bands remain before the ceiling.
+- Rollback: GATE_BOOT_3023_DONE rc=0 (2883 re-staged). Post-kit PendingFileRename=4.
+- Verdict: confirmed (all arms valid). RESIDUAL by the preregistered rule.
+  - M2 (address form) OWNS: dT 0.0941 ms, share 0.498.
+  - M3 (cache/discard hints removed) CONTRIBUTES: dT 0.0207 ms, share 0.109.
+  - M1, M4a, M4b: NONE.
+  - Sum M1+M2+M3 = 0.1129 ms = 0.598 of the 0.189 ms gap; M_all 0.1163 ms (interaction +0.0033 ms).
+  - The remaining about 40 % needs the next preregistered set.
