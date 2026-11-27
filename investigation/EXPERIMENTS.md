@@ -88782,3 +88782,14 @@ Owner steps: step 0 power off (hold), power on holding power, Macintosh HD, wait
 Expected: FW_GATE iBoot-11881, AGX init, login, FETCH_DONE OK, stop: cmd stop + rebooting J313. Failure: any FETCH_VERIFY FAIL (tar kept, report), any other stop: line, PROXY_STALL_STOP.
 Recovery: after the stop the machine reboots (reboot.py if no USB reset) to the Windows stage; the next Windows launch needs no owner step. K48W follows.
 Evidence: .local/experiments/EXP3010-pathb13/evidence/pathb13.
+
+EXP3010 ACTUAL 2026-11-27T13:04:24Z (refs EXP3010 BEFORE; evidence .local/experiments/EXP3010-pathb13/evidence/pathb13):
+- Owner step 0 seen by the FW gate at 12:55:32Z: firmware-version iBoot-11881.140.96.701.1; boot object kmutil custom CDF7CE36 (cache0 == 8532CDBC) -> kc 5fc68feb. AGX init 12:55:42Z; owner login 12:57:03Z (bench word 12:56Z); caffeinate hold released 12:57:05Z. Mac battery 100 %, charged, AC, at both ends.
+- Fetch (12:57:09Z -> 12:57:11Z): twin-20261127T104855Z 15 files (4188 KiB on the Mac, tar 3256320 bytes) FETCH_VERIFY OK 15/15 against the Mac's sha256 manifest; pm1.txt 8470726 bytes sha256 025991977cd504d9 FETCH_VERIFY OK. Host manifest HOST-SHA256SUMS 5f7d3834455d772f (23 lines). Nothing deleted on the Mac.
+- B17 macOS arm (power line b17mac-1, commit 0b2c270f; hook ad181eea): deploy b17mac.c b53ead2b, sha256_i.c 1681697c, sha256_i.h 42ae5970 re-hashed on the Mac; clang = /Library/Developer/CommandLineTools/usr/bin/clang (nothing installed); build_rc=0; run 12:57:18Z -> 13:03:20Z "B17MAC SELFTEST PASS backend=armv8-sha2", all five blocks, B17MAC_DONE, rc=0. Fetched with sha256 on both sides: b17mac-out.csv 4865e5a1b5d5d2cf, b17mac-run.txt 360c61caa4fc0805.
+- Verdict, verbatim from b17mac_verdict.py a8adaed2 (exit 0):
+  B17MAC_MEDIANS F=2975MHz CC64=2188.8 I64=1951.3 fpre_I64=2934 r_same_code=0.997 cc_vs_bcrypt=1.107
+  B17MAC_VERDICT LIBRARY r=0.997: same code same speed per clock; gap is SymCrypt vs corecrypto
+- Session: PASS_CHECK order=IN_ORDER, stops=[1 stop: cmd stop], rebooting=1, proxy_stall=0, EXEC lines 5 (wait_s 0.002 each). Reset: USB_GONE, proxy answered after 7.8 s; 13:04:02Z proxy on the Windows stage (iBoot-8422.141.2).
+- Verdict: confirmed (session checkpoint reached: both fetches verified, B17 macOS arm decided). B17 closes as LIBRARY: the same portable SHA-256 code runs at the same speed per clock on macOS and on the Windows guest (r 0.997); the 9.1 % gap at equal clock is SymCrypt vs corecrypto, not the core or the HV.
+- Next: power line runs twin_check.py on the fetched twin folder; bench queue K48W -> EXP3001 remainder (+ cpuload P4 Normal) -> AGXPWRON -> DRAM pair.
