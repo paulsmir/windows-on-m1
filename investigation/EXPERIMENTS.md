@@ -88706,3 +88706,21 @@ BENCH ADDENDUM (before the run):
 - Stop: rc=3 = STOP (no verdict); no rc line after 18 min = b17bench killed, no verdict.
 - Evidence: .local/experiments/EXP3008-b17/evidence/b17 (b17-EXP3008.csv/.out, verdict.txt, tp.csv, tpsum.txt, cppc.txt, run.log); guest copies deleted only after a hash-verified fetch.
 - Launcher launch-kbd3008.sh sha256 ec9e4dffad17c63e (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 8eb01c232.
+
+EXP3008 ACTUAL 2026-11-27T12:43:27Z (refs EXP3008 BEFORE 12:30:05Z; evidence .local/experiments/EXP3008-b17/evidence/b17):
+- EXP3007 guest ended in order (12:29:57Z). Mac free 10 GiB. Standing boot STD_DONE 12:32:23Z. Presence clear, console session active. Battery 93 % charging at 9.0 W at the start, 96 % charging at 5.9 W at the end. Quiet gate passed on try 1 (3805 MB, no servicing). Kit re-hashed on the guest (6e17cf39, 6bb3edbf).
+- Process: b17bench pid in session 1, priority Normal, affinity 0xF0, 7 threads (start /NORMAL wrapper; the task's own cmd.exe is BelowNormal).
+- Run 12:33:57Z -> 12:42:15Z. B17_DONE rc=0, final rc=0, 7 blocks x 4 rows, no thread error. Hash-verified fetches: csv 2b6cc79c, out e155ad76, tp.csv 8309cebc; guest copies deleted.
+- Verdict, verbatim from b17_verdict.py (exit 0):
+  B17_MEDIANS soc=t8103 F=2916MHz C8=1928.4 C64=1937.8 I8=1913.2 I64=1918.7 MB/s Rm=2174.0(summary)
+  B17_SHARES clock=0.024 memory=0.005 lib_vs_portable=-0.010 gap_at_equal_clock=0.091
+  B17_E C8 median=1355.5 MB/s fpre=2045MHz (reported, not in the rule)
+  B17_E I8 median=1376.8 MB/s fpre=2044MHz (reported, not in the rule)
+  B17_VERDICT LIBRARY_OR_CORE_PENDING_IMAC clock full, memory flat (C64/C8=1.005), I64/C64=0.990; gap at equal clock 0.091 needs sha256_i on macOS
+- B18: no HALF line. Every P thread in every block is within 0.97-1.02 of its block median; each thread stayed on one CPU (cpu_hist single core).
+- Observed: the thread on CPU4 shows kernel_s 11.9-12.9 s of 60 s in every P block (others <= 0.1 s), with its rate within about 2 % of the block median. typeperf b17 window: CPU4 priv 16.5 %, 1840 interrupts/s, DPCs queued 107/s; CPU5-7 priv 0.8-1.9 %, 395-741 interrupts/s.
+- Hypothesis, not tested: the B18 half-rate thread of the cpuload runs (EXP2981/2990/2995/2999) came from those loads running at BelowNormal as task actions; here at Normal there is none. The tools differ, so this is not a like-for-like repeat.
+- HV CPPC: idle_ref P 600 MHz, dram_fast 0; b17 window P mean 1831 MHz (min 600, max 2988; includes gaps and E blocks), dram_fast1 share 0.51. Typeperf P-core mean 2209 MHz over the whole window.
+- TDR 0, bugcheck 0. Display, input, SSH, storage and all CPUs alive. Ordered end LAUNCH_WIFI_3008_ENDED 12:43:04Z.
+- Verdict: confirmed (preregistered checkpoint reached); rule result R4 LIBRARY_OR_CORE_PENDING_IMAC.
+- Next: sha256_i on macOS (cpuload_mac -DWITH_SHA256_I) at the next macOS session to split library from core. Optional: re-run the cpuload P4 block at Normal priority to test the B18 priority hypothesis. Queue: EXP3001 remainder -> AGXPWRON -> DRAM pair.
