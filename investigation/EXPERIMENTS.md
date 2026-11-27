@@ -88632,3 +88632,22 @@ EXP3005 CORRECTION 2026-11-27T12:08:43Z (refs EXP3005 ACTUAL, additions):
 - Battery/AC (pmset, host stamps): 10:38:27Z "AC Power, 100 %; charged"; 11:59:13Z "AC Power, 80 %; AC attached; not charging". At the next Windows boot (EXP3006, 12:05:51Z) Windows reported 80 % charging=True at 15.8 W.
 
 EXP3003 CORRECTION 2026-11-27T12:09:53Z (refs EXP3003 ACTUAL; m1n1 line reading of run_guest.out via the architect): the cause "mark QUIET waited for a GPU doorbell" is withdrawn. m1n1 took the command exit (123 user-interrupt exits, 122 cmd lines) and the HOST then hung inside it: hv_control v4c reads the proxy with no timeout; which side went silent is unknown. The bench stall guard (120 s) then killed run_guest. Fix on the host side: hv_control v4d 351f83cb (PROXY_STALL at 10 s silence, PROXY_STALL_STOP at 90 s, EXEC lines with seen_wall/wait_s), for the next macOS session.
+
+EXP3006 ACTUAL 2026-11-27T12:26:01Z (refs EXP3006 BEFORE 12:03:26Z):
+- Plain standing staging boot (stagerun fff8569f, Mac free 10 GiB). Guest up 12:05:51Z: battery 80 %, charging=True, 15.8 W on AC; APPL0002 Started (2883 bound); SMCDV 0.1.0.23 status=OK. STAGERUN_3006_DONE; guest left up as the staging guest for EXP3007.
+- Verdict: confirmed (staging checkpoint reached). Next: EXP3007 kit boot.
+
+EXP3007 ACTUAL 2026-11-27T12:26:01Z (refs EXP3007 BEFORE 12:08:42Z; evidence .local/experiments/EXP3007-k48/evidence/gate):
+- Boot and validity: PROFILE SMC_DEVICES 1 (APPL0008 OK), battery 83 %, Wi-Fi up; IRQ gate PASS (Wom1IrqCompletionState=769); suite PASS=119 FAIL=0.
+- Perf gate: PASS worst=47.511 vs 47.007 (+1.07 %); gm3007p1 fps_frames 55.932, gm3007p2 55.796; GM_MEM all zero; no OOM lines.
+- K48 step (step 7), GM gm3007kg VALID fps_frames 55.63 (102 s, temp 59.3 -> 61.6 C):
+  - setup receipt hr=0x00000000 (00000003 000015a4 a8260e42 97efffb3);
+  - replace receipt: 1 record, hr=0x00000000 (a8260e42 97efffb3 00000001 00001584 912cec80 00000042), so the transplant was applied once;
+  - gate receipt (measure-d3d12-k48-gate) hr=0x80004005 with zero fields (00000003 00000000 00000000 97efffb3 00000000 00000000);
+  - no k48gate.bin on the guest (K48_GATE_FILE local/guest/bytes empty); agx_k48_gate.py raised in load() on the missing file, so there is no G2 verdict and the timing arms were not run (fail-closed as preregistered).
+- Health: every STEP_END dPACED=0 dSTORM=0 dUNHANDLED=0 dBUGCHECK=0, gpu_resets=0, tdr4101=0. KMD receipts before removal: GPU_RESET none.
+- Rollback: candidate devnode removed (REMOVE1 rc=0, oem inf deleted, STAGED_LEFT 0, certs and trace env absent, UMD renamed .del), 2883 re-staged on Problem 28 (Inf hash 45C1E2B8...), switches CrossProcessPairs/SubmitRequeue/MpoTwoPlanes/StartPolicy=1, AGX_GUARD ACCEPT package matches record. GATE_BOOT_3007_DONE rc=0.
+- Post-kit: RebootPending=0, PackagesPending=0, PendingFileRename=4. During the K48 GM run (12:19:27Z) Windows installed a Defender Security Intelligence Update (KB2267602); the WU policy pause does not cover signatures. MoUsoCoreWorker was alive at the end (not killed). Battery 12:25:37Z 91 %, charging=True, 11.6 W.
+- Display, input, SSH, storage and all CPUs alive throughout.
+- Verdict: inconclusive for K48 (G2 output gate produced no file: measure tool E_FAIL, not a mismatch); no regression from the candidate (perf +1.07 %, suite 119/0).
+- Next: the GPU line diagnoses why measure-d3d12-k48-gate returns E_FAIL after a successful replace (the gate receipt's first field 3 equals the setup's, the rest are zero). Bench queue continues: b17bench -> EXP3001 remainder -> AGXPWRON -> DRAM pair.
