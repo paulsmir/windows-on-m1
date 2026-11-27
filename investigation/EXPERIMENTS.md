@@ -90121,3 +90121,8 @@ BENCH ADDENDUM (before the run):
 - Diagnostic package: removed after the evidence, back to 2883 (kit rollback).
 - Evidence .local/experiments/EXP3027-c84/.
 - Launcher launch-kbd3027.sh sha256 300ea481adec68bb (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD d619d6960.
+
+EXP3028 HARDWARE BEFORE 2026-11-27T20:26:59Z:
+Plain standing staging boot for the B21 D3D11 STAGERB2 probe with 2883 bound and then the STDC4C kit (architect 2026-11-27, option a). Standing m1n1 9bddd9aa + Mu IRQ01 170a91b4, package 2883 bound, nothing staged, AppleSmc 0.1.0.23 (standing since EXP3000), Wi-Fi 0.1.71.2, PARK1. No measurement; guest LEFT UP as the staging guest for EXP3029 (STAGERB2) and the STDC4C kit. Checks logged: presence, battery, APPL0002 status, AppleSmc DriverVer. Mac disk >= 8 GiB. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP3028-std/.
+Launcher rev2 (launch-kbd-hr.sh 4e1023b0) and diskgate2. Previous guest EXP3027-c84 ended in order (stdend2) first. After the boot: APPL0002 Started and the display adapters are read before any probe runs.
+- Launcher launch-kbd3028.sh sha256 2ad8b233dc04d93d (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 059bbae94.
