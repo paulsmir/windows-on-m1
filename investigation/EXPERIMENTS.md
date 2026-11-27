@@ -90050,3 +90050,74 @@ B21 D3D11 half (architect 2026-11-27): STAGERB2 on the EXP3028-std standing gues
 Probe: PROBE-RBBW2-4341bec67 (SHA256SUMS 33f9a6a9, 6 OK) agx_d3d11_fl111_probe_stagerb2_arm64.exe e31393c0 "only STAGERB". Its first line is "AGX_D3D11_ADAPTER [...] agx=1"; with agx=0 it refuses with rc 2, and then only the refusal is recorded. First-run gate: never run on hardware before.
 Expected: a ratio FAIL of the same class as EXP3026 (D3D12 257 MB/s) and pattern ok. In D3D11 the stale check is weaker (Unmap/Map between patterns).
 Evidence .local/experiments/EXP3029-stagerb2/; the guest is then the STDC4C staging guest.
+
+EXP3027 HARDWARE BEFORE 2026-11-27T20:04:49Z:
+C84R - C84 receipt run (prices C2 and N from one boot) - preregistration (architect review 2026-11-27 point 5; written
+before any run). Diagnostic build; nothing is held: the receipt only observes.
+
+WHAT: AppleAgx 30.0.3012.0 from gpu/c84-receipt f5be6bb774ef13826ec936359fee23234ae297a2 = gpu/c84-diag 0ced2a657 (accepted
+2883 + PIPE-PRIO2 + kept receipts + the C84 premise diagnostic) + receipt mode 2, built with AppleAgxDiagIngress=true
+(APPLE_AGX_D3D12_DIAG_INGRESS; the standing recipe never sets it; agx_diag_absent refuses a standing candidate carrying its
+markers). Inert unless the process has APPLE_AGX_D3D12_INGRESS_PROBE=2 (1 = the EXP2994 premise probe, unchanged).
+Mode 2 per Execute: one ingress signal on the queue's second context (the queue context untouched), one non-blocking read;
+pending -> an OS wait armed with hAsyncEvent; one persistent worker per queue waits on the events (no polling, no runtime
+call) and writes measure-d3d12-ingress-exec {Execute number, value, pending at issue, writes a swapchain buffer, position
+since the queue's Present, issue qpc, us from issue to pass}. The pass time uses the same OS wait C2 would use, so the run
+also tests C2's mechanism. Single variable: APPLE_AGX_D3D12_INGRESS_PROBE=2 per process.
+
+WHY THIS HYPOTHESIS (that C2's cost is the release-wait structure seen in ETW):
+1. EXP2996-dx (DxgKrnl ETW): every GM frame the runtime queues the swapchain back-buffer release wait on the queue
+   (CPU-signalled by pid 0x540, FUTURE at issue 413/413, unwait p50 29 ms, 17-43 ms); 130/411 frames (32 %) had owner
+   work start on the GPU before the release, p50 2.7 ms early; upper bound 4.2 % GPU time.
+2. EXP2994 PREMISE_HOLDS: a pending runtime Wait holds the second context; unwaited ingress passes in 0-1 us; in GM 4267 of
+   4706 ingress signals were held past a 5 ms poll (91 %).
+3. Which Executes write the back buffer (frame end, where the release has usually arrived, or frame start) decides N's cost;
+   no receipt has measured it.
+
+EXPECTED (fixed before the run; tools/agx_ingress_exec.py):
+- GM PERF (traced): pending share >= 0.80 (ETW/EXP2994 ~0.91); wait p50 in [5, 45] ms (the release arrives up to ~29 ms
+  after the wait is queued; an Execute is issued after it) -> ETW_CHECK CONSISTENT. Not-pending Executes pass at the single
+  read (INGRESS_IMMEDIATE = 1 - share), i.e. no added latency without a wait.
+- C2_PRICE <= 0.042 of the frame (the ETW bound; upper bound without GPU backlog credit). N_PRICE < C2_PRICE.
+- QWAIT with the switch: the CPULATE / OTHERQ Executes pending with wait ~= the time to the probe's CPU Signal, ALREADY
+  Executes not pending; QWAIT CPULATE / OTHERQ still FAIL (nothing is held: the defect is unchanged).
+WHAT WOULD CONTRADICT THE ETW READING: pending share < 0.5, or wait p50 < 2 ms (ETW_CHECK CONTRADICTS): the release wait
+does not hold the queue at issue, or it is already satisfied - C2 would then cost far less than 4.2 %, and the 32 % early
+starts would need another explanation. A wait p50 > 45 ms: the wait is something other than the per-frame release.
+PRESENTATION MODES COVERED: GM windowed 1280x720 through DWM (flip model; the bench's GM configuration) in the traced PERF
+and the traceless FULL; the QWAIT probe (application Wait, no swapchain). Not covered: exclusive fullscreen / independent
+flip, DWM-off paths, multi-adapter. CS (Counter-Strike) runs on our OpenGL path, not the D3D12 queue: the receipt does not
+apply; CS only with STEAM_OK=1, recorded as a regression check.
+
+STEPS (c84r-steps.sh, after validity / suite 119/0 / perf gate with the switch unset, as C84E):
+ a. qr0: QWAIT, switch unset (reference); qr2: QWAIT with =2 -> agx_ingress_exec on its UMD log.
+ b. gm<N>ir: one traced GM HD PERF with =2 -> agx_ingress_exec --jobs (C2 / N price from today's GPU job starts);
+    its perf gate is recorded only (diagnostic receipts on).
+ c. gm<N>if: one GM FULL with =2 (score only; the FULL runner is traceless).
+ d. CS only with STEAM_OK=1.
+DEFENDER: a Defender signature or engine update during a measured run makes that run INVALID; repeat it.
+STOP: Code 43/31, GPU reset / TDR / bugcheck, firmware error receipt, perf gate FAIL with the switch unset, a QWAIT TIMEOUT that
+leaves the guest unreachable, an ingress-exec receipt with code 0xfffffffc (wait arm failed) in GM (report: C2's mechanism
+does not arm).
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record).
+
+PACKAGE: .local/experiments/AGX-C84R-f5be6bb77-signed
+- SHA256SUMS sha256 4068a4b8405a5bbf330247e6cbae975f22c58012d425e6e0ce58d1a3ab82922e
+- AppleAgxRenderAdmission.sys fe8a1f21e51aa1675f335ff5e35c4d8a9defe5c2a8e606a2988345f76aa5e654
+- kmd-build-receipt.json SourceCommit f5be6bb774ef13826ec936359fee23234ae297a2, PackageBuild 3012, Umd32Source X86B579;
+  builder C84R_3012_PACKAGE_BUILD_PASS, C84R_FINAL_PACKAGE_PASS, versions coherent 30.0.3012.0, STACK_FRAMES PASS x4.
+- agx_diag_absent.py --expect c84-ingress: DIAG_PRESENT 5/5.
+- Tests: test_d3d12_ingress_receipt 7/7 (ring FIFO host-compiled; one signal / one read / async wait; worker waits only on
+  events; shutdown drain before fence destroy; swapchain flag sites; all under the define; analysis rules), the EXP2994
+  premise-probe tests; full suite NEW set = the 96 environment entries.
+KIT: .local/experiments/KIT-C84R-f5be6bb77 (c84r-boot.sh / c84r-steps.sh from KIT-C84E-0ced2a657; step 7 = the receipt run).
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-C84R-f5be6bb77 SHA256SUMS 702ce087 (45 OK, bench + architect), BEFORE-C84R 81f45570; package AGX-C84R-f5be6bb77-signed 30.0.3012.0 SHA256SUMS 4068a4b8 (8 OK). Run: CAND_DIR=<package> c84r-boot.sh 3027 3025 EXP3025-std <this body>. CS: NOT_RUN (no STEAM_OK today).
+- Sequencing (architect): after the B21 rerun (EXP3026), before STDC4C. Previous guest EXP3025-std (standing boot, 2883 bound).
+- Disk: diskgate2 before launch; launcher rev2 (launch-kbd.sh 26ea26b5 / launch-kbd-hr.sh 4e1023b0); diskwatch every 60 s (BREACH or SSD < 1536 MiB = stop at the arm boundary).
+- Defender: future-kit rules apply (a reference or measured arm with a signature/engine change is INVALID; one repeat); this kit's step 7 is read with defjudge.py against the bench watcher (defwatch2, WU installs only).
+- Bench gates: AppX v3, early USB gate (v857gate). Power: host-Mac port + hub charging input. Wi-Fi profile still orphaned (Ethernet used).
+- Diagnostic package: removed after the evidence, back to 2883 (kit rollback).
+- Evidence .local/experiments/EXP3027-c84/.
+- Launcher launch-kbd3027.sh sha256 300ea481adec68bb (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD d619d6960.
