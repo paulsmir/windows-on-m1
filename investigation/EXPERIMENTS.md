@@ -90353,3 +90353,18 @@ AFTER: guest left up with 2883 bound as the TRK49 staging guest (EXP3034). Exe a
 Power: host-Mac port + hub charging input. Disk: diskgate2 before; diskwatch during. Evidence .local/experiments/EXP3033-d1/.
 - Runner proof (architect order, before the run): a mock (d1mock.cmd, prints argc/args) was run on the guest through both runners. Old run-tool-long.sh: "MOCK argc=2 args=[...\d1mocko-out.txt B]", which reproduces EXP3032. New run-d1tool.sh: "MOCK argc=1 args=[B]" and "MOCK argc=1 args=[A]", MOCK_CONTRACT OK. Mock files were deleted from the guest. 2883 and 3015 are identical in the four KMD files on the D1 path (GPU line, from source), so the result stands for both.
 - Launcher launch-kbd3033.sh sha256 ef92a01de6f63549 (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 94411e4a3.
+
+EXP3033 ACTUAL 2026-11-27T22:47:02Z (refs EXP3033 BEFORE; chain3033 + d1run.sh std; evidence .local/experiments/EXP3033-d1/evidence/d1):
+- Ordered end of EXP3031 at 22:43:03Z. DISKGATE2 PASS (inside 24795, SSD 5112). Boot 22:43:51Z, STD_DONE 22:45:34Z. PRESENCE_CLEAR.
+- ADAPTER status=OK drv=30.0.2883.0; APPL0002 problem=CM_PROB_NONE.
+- D1 v2 via run-d1tool.sh (argv proven on a mock: old runner argc=2, new argc=1 for A and B). Each variant ran exactly once.
+- B (control): AGX_D1_ADAPTER ... agx=1; AGX_D1_B_READY legacy=0 blob_bytes=16 hold_ms=8000; AGX_D1_B legacy=0 open=0x00000000 create_device=0x00000000 create_context=0x00000000 alloc_list=64 patch_list=64 cmdbuf=327680; destroy_context/device 0x00000000; AGX_D1_CONTROL created.
+- A: AGX_D1_ADAPTER ... agx=1; AGX_D1_A_READY legacy=1 blob_bytes=16 hold_ms=8000; AGX_D1_A legacy=1 open=0x00000000 create_device=0x00000000 create_context=0x00000000 alloc_list=64 patch_list=64 cmdbuf=327680; destroy 0x00000000; AGX_D1_VERDICT OPEN (non-VA context admitted: patch list returned).
+- Receipt Wom1G3ContextInput:
+  - pre-B: Flags 0x4 (VA), PrivDataSize 16 (foreign).
+  - hold-B (READY seen at 4.55 s, 22:45:44.857Z): Flags 0x0, Node 0, Aff 1, Priv 16. This changed inside B's hold. Recorded FINGERPRINT_ONLY per the rule (consistent with B non-VA).
+  - pre-A, hold-A (4.32 s, 22:46:05.050Z) and post-A: byte-identical to B's leftover, so NOT ATTRIBUTABLE. The decoder label "attribution_A=ATTRIBUTABLE" in run.log is wrong: it did not compare against the pre value. Corrected here.
+- Finding: the control (LegacyMode=0) returns the same non-VA shape as A (patch_list 64). On this KMD the non-Virtual D3DKMTCreateContext path is admitted as non-VA independent of LegacyMode.
+- 2883 and 3015 are identical in the four KMD files on the D1 path (GPU line, from source), so this result stands for 3015 as well.
+- Fetch hash-verified; outputs and exe deleted from the guest. TDRCOUNT tdr4101=0 bugcheck1001=0. V857GATE OK. DW_BREACH_LINES 0.
+- VERDICT (preregistered criterion): OPEN, from stdout (create_context 0, patch_list 64 > 0). The receipt corroboration is not attributable for A. Guest left up with 2883 bound as the TRK49 staging guest (EXP3034).
