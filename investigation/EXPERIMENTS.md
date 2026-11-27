@@ -90341,3 +90341,15 @@ EXP3032 ACTUAL 2026-11-27T22:40:23Z (refs EXP3032 BEFORE; d1run.sh here on the E
 - VERDICT: NOT RUN (inconclusive, runner defect). Not a probe or driver result.
 - Fix: scratchpad d1toolrun.ps1 + arm-d1toolrun.ps1 + run-d1tool.sh (no leading out.txt argument); d1run.sh now uses run-d1tool.sh.
 - Next: D1 v2 on the next bound guest (architect slot ruling pending).
+
+EXP3033 HARDWARE BEFORE 2026-11-27T22:43:30Z:
+Plain 2883 standing boot + B23 D1 admission probe v2 (D1 rerun after EXP3032 NOT RUN; architect fallback slot: a plain standing boot on 2883, which then stages TRK49)
+
+WHAT: ordered end of EXP3031 (2883 staged on Problem 28 by conf3015 rollback, guard standing ACCEPT); standing-pair boot (m1n1 9bddd9aa + Mu IRQ01 170a91b4, launcher guard standing on STANDING.json = 2883) -> 30.0.2883.0 binds; then D1 v2 (PROBE-D1-a59528bc1, exe 4dfca66b, BEFORE-D1 0c775a78), "B" then "A", each exactly once, through run-d1tool.sh (d1toolrun.ps1: argv = the variant word only; EXP3032's runner passed <tag>-out.txt first and the probe printed usage).
+WHY: B23 D1 (does our KMD admit a non-VA LegacyMode context on node 0?) - EXP3032 produced no probe result (runner defect); the confirmed-3015 guest was already rolled back, so D1 takes this bound 2883 guest. 2883 is the accepted driver named in BEFORE-D1 ("guest with the accepted driver bound").
+GATES: APPL0002 status=OK problem=CM_PROB_NONE, drv=30.0.2883.0 recorded; probe first line AGX_D1_ADAPTER ... agx=1 (else the record is invalid and A is not run).
+RECEIPT: Wom1G3ContextInput read before, inside the READY hold (d1hold.ps1), after each run; attribution A = PrivDataSize 16 and VA clear, B = FINGERPRINT_ONLY; not attributable recorded as such. Primary evidence = stdout (AGX_D1_CONTROL created|refused for B; status, patch_list, AGX_D1_VERDICT OPEN|ADMITTED_AS_VA|CLOSED for A).
+AFTER: guest left up with 2883 bound as the TRK49 staging guest (EXP3034). Exe and outputs deleted from the guest after a hash-verified fetch.
+Power: host-Mac port + hub charging input. Disk: diskgate2 before; diskwatch during. Evidence .local/experiments/EXP3033-d1/.
+- Runner proof (architect order, before the run): a mock (d1mock.cmd, prints argc/args) was run on the guest through both runners. Old run-tool-long.sh: "MOCK argc=2 args=[...\d1mocko-out.txt B]", which reproduces EXP3032. New run-d1tool.sh: "MOCK argc=1 args=[B]" and "MOCK argc=1 args=[A]", MOCK_CONTRACT OK. Mock files were deleted from the guest. 2883 and 3015 are identical in the four KMD files on the D1 path (GPU line, from source), so the result stands for both.
+- Launcher launch-kbd3033.sh sha256 ef92a01de6f63549 (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 94411e4a3.
