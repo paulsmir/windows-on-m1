@@ -88456,3 +88456,17 @@ Gate (architect, fixed): GATE_0123 decides - FAIL if the SMC had < 500 ms after 
 CPU bounds (report): 8-thread vs EXP2990 12101.8 MB/s; P-only vs 7766.3 (EXP2981).
 PASS -> standing candidate; standing after one restart confirmation. Power: host-Mac port + hub charging input. Mac disk >= 8 GiB checked. Evidence .local/experiments/EXP2999-lev-smc23cpu/.
 - Launcher launch-kbd2999.sh sha256 09a324638d8402cb (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 810b821005f9c083df969c10fa5d3b2cfc79883ae5ca9da799646dd5333d064c; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD a1facc687.
+
+EXP2998 ACTUAL 2026-11-27T07:38:27Z (AppleSmc 0.1.0.23 acceptance, boot 1 of 2 = install boot):
+- Pre-boot: v13 two-sample dry check on the pinned decoder 139f037c, diff 0 for A and B. EXP2997 kit guest ended by stdend2.
+- Boot STD_DONE 07:34:17Z. Presence clear; battery 99 % on AC; quiet gate try 1 (3804 MB).
+- Install: add-driver /install, APPLESMC_STANDING "installed 0.1.0.23 this boot", battery visible after the install.
+- IDENTITY_023: DriverVer 0.1.0.23, telemetry Version 13, sys 79834c2e -> PASS.
+- swdevgate x3 (accepted binary f254d43e):
+  - sensor: role 2, problem 10, SMSR receipt config=1, no start receipt.
+  - smc: role 1, stopped at _CRS (0xc0000182), start receipt.
+  - none: role 0, Code 31.
+  - No devnode left; APPL0008 Started; B0_GATE PASS -> STEP_2B_PASS.
+- 60 s logger: 960 rows, 16 keys, 0 non-ok (969 requests; refused, errors, timeouts, held-off and skipped all 0); TCMz 75.4.
+- No TDR and no bugcheck. STANDING restored by the trap; guest ended in order (LEVRUN_2998_DONE 07:38:01Z).
+- Verdict: install boot PASS (identity, swdevgate x3, B0, logger). Next: EXP2999 CPU check on TZ0003 with GATE_0123 (started 07:38:01Z).
