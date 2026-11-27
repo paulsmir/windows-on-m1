@@ -87927,3 +87927,57 @@ EXP2985 HARDWARE ACTUAL 2026-11-27T02:02:36Z (PIPE-PRIO2 rerun: candidate 30.0.2
 - Measure: frame breakdown fb-gm2985p1.json vs EXP2978 arm A (2883): medians wall 21.176 vs 21.182, gpu_span 20.746 vs 20.787 (-0.041 ms), c_work_span 13.598 vs 13.658 (-0.059), rc_big_span 4.633 vs 4.641, main_span +0.006, r_small_span +0.009; per-position spans (C0 R1 C2 R3 C4 R5 C6 R7) within -0.026..+0.011 ms (worst +0.011 ms at R5). Cold FULL (traceless): gm2985f1 8786, gm2985f2 8801, mean 8793.5 vs 2883's 8772.5 (EXP2978 A) = +0.24 %. IRQ load gate PASS (wake share 0.585 over 262527 waits, lost 0). Fault receipts at end: 0 lines; TDR 0.
 - Rollback: KMD receipts before removal GPU_RESET none; candidate devnode removed, oem13 deleted, nothing staged left, certificates/trace env clean; 2883 restaged; GUARD_END ACCEPT (30.0.2883.0 matches the record); GATE_BOOT_2985_DONE rc=0; guest left up (staging guest for EXP2986).
 - VERDICT (BEFORE-PIPE-PRIO2 v3 rule, fixed before the run): NEUTRAL - no STOP/REJECT condition (no Code 43/31, no fault receipt, no TDR, perf gate PASS, no position >= +0.10 ms); not IMPROVING (cold FULL +0.24 % < +1.0 %; gpu_span -0.041 ms > -0.20 ms). KEEP/DROP is the architect's; the BEFORE's recommendation for NEUTRAL is KEEP (contract alignment with the Asahi default queue and the macOS 15.7.8 ring mapping). 2977 not standing from this run. Raw files to the GPU line.
+
+EXP2986 HARDWARE BEFORE 2026-11-27T02:04:00Z:
+WICDUMP - preregistration (architect order 2026-11-27; written before any run)
+
+WHAT: one candidate package, AppleAgx 30.0.2979.0, from gpu/wicdump 165f578c717ae8653086b70ef8e27eb84dd47db3 =
+6b7d7c77e (accepted 30.0.2883.0 + the kept receipts OV6c/L1b/R6-ADMIT v2) + the WICDUMP receipt-only dump of our own
+TA / 3D / compute work items (render_wic_dump.h, device value Wom1WorkItemDump, absent by default) + probe step WICDUMP.
+(2978 = the TA/3D-only build of fb1565dd5; built, never delivered, superseded by 2979 when compute was added.)
+
+WHY: the diff against macOS 15.7.8's work items (WIC capture, next owner session) starts the day that file arrives only
+if our half exists. Row 1: compute +1.43 ms and renders +0.9 ms HD have no owner after memory parity (EXP2982), codegen
+<= ~0.45 ms and completion path <= ~0.17 ms; the job / launch parameters are the untested remainder.
+
+CONTRACT (receipt only):
+- Switch absent: the publish path is unchanged; the only addition is one interlocked read of WicArmed in the pipe
+  doorbell and before the two backend submits (tests: test_render_wic_dump Wiring).
+- Switch present: nothing runs until an ARM escape; buffers are allocated at ARM (<= 448 slots x 0x5400 B = 9.4 MiB
+  nonpaged + 64 KiB kick ring), freed at FREE and at runtime stop; captures never allocate or wait; drops are counted.
+- Copies only firmware objects (render template queue objects + render shared memory objects), bounded: run message
+  0x30 B, <= 2 work items x 0x1000 B, <= 24 pointees x 0x200 B per publish. No user memory, shaders or attachments.
+
+PROCEDURE (kit KIT-WICDUMP-165f578c7, one boot on the standing pair, candidate over 2883, rollback to 2883):
+validity (Wom1WorkItemDump must read absent) -> quiet gate -> settle -> suite e2459 -> perf gate GM HD PERF x2 with the
+switch ABSENT -> WICDUMP step: Wom1WorkItemDump=1 (no restart: re-read at every escape), GM HD PERF with the probe step
+armed 45 s after GravityMark appears (144 TA + 144 3D + 144 CL), switch deleted, file fetched with hash and decoded by
+agx_wic15.py, perf gate on the armed run -> rollback to 2883 with hashes.
+
+PASS (architect's criterion, fixed now):
+1. agx_wic15.py on the dump: complete_frames >= 32 (R1/R3/R5/R7 TA items each paired with a 3D item);
+2. perf gate PASS with the switch absent (p1/p2);
+3. score unaffected outside the armed window: perf gate PASS on the armed run itself (the armed capture lasts ~1-2 s of
+   the 60 s window);
+4. AGX_D3D12_WICDUMP: PASS (DONE, all slots read, drops 0).
+STOP: Code 43/31, any GPU reset / TDR / bugcheck, ChannelError/Timeout/Fault receipt, Wom1WorkItemDump left present after
+the step, perf gate FAIL with the switch absent (defect to bisect).
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record); GPU-visible recovery guest; GPU-hidden image
+emergency only.
+
+PACKAGE: .local/experiments/AGX-WICD-165f578c7-signed
+- SHA256SUMS sha256 a1307e507a29c594d7cd99cb3bc30914d2213adbb79299594f2d9c5370f85898
+- sys d7df1a18cf1d0e565068914470ec44c36abbb420836d3adcca48b7437bdc7e7a; UmdArm64 36e3f7f9c392bbdfff8cc7867c3d7c74a3db76a7117daef37803506dda6c30c7
+- kmd-build-receipt SourceCommit 165f578c7, PackageBuild 2979; drift2_cand.py PASS 30.0.2979.0
+- Builder WICD2-2979-final (mkpkg recipe, X86B569): 0 errors /W4 /WX (PREfast warnings in pre-existing lines only),
+  STACK_FRAMES PASS x4, "Package versions coherent: 30.0.2979.0".
+PROBE: KIT/probe/agx_d3d12_probe_wicdump_arm64.exe sha256 8b5ea11e107c65f1946c04ba9316f84c03edcdb4ece4289cdaf2e77070cee577
+(gpu/wicdump 165f578c7, builder probe-wicdump-src BUILD_PASS arm64/x64/x86, no warning in agx_d3d12_probe_wicdump.h).
+TESTS: tests/test_render_wic_dump.py (host C core under ASan/UBSan + KMD wiring + probe/KMD struct mirror),
+tests/test_agx_wic15.py; full suite: no NEW failure (NEW set = the environment set of the pristine 2883 tree).
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-WICDUMP-165f578c7 as issued (SHA256SUMS c92cc475, 44 OK; kept as SHA256SUMS.orig-c92cc475) + four bench fixes, re-pinned SHA256SUMS af7d6442: (1) after the WICDUMP step the kit reads Wom1WorkItemDump back and STOPS before the rollback unless it reads "absent" (architect's stop rule; the issued kit only logged it); (2) guest UMD logs of the perf-gate runs and of the armed run are deleted only after a sha256 match; (3) wfup.sh pin ff39dc91 (AUTOPOLL_S knob, default 0 = behaviour of 47825a49; the issued pin would have skipped Wi-Fi as a PROFILE_GAP); (4) KMD receipts read before the candidate removal (prerollback).
+- Reviewed new parts: GM_MID_HOOK (subshell inherits wicd_arm; gm_run waits for it before collecting) and the step's own toolrun/arm-toolrun copy (same -ToolArgs form as run-tool-long). L1b: 2979 is an L1b package -> the strict Wom1IrqCompletionState 769 check and "any absent note stops" stay (dry-run on EXP2974's real L1b IRQ_GATE line: passes). drift2_cand dry-run under bash: 30.0.2979.0, commit 165f578c, rc 0.
+- Staging guest = EXP2985 (PIPE-PRIO2) post-rollback guest; standing pair 9bddd9aa + IRQ01, 2883 restored before. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2986-wicd/evidence/gate/. The dump stays in the experiment folder (untracked). Raw files to the GPU line, verdict to the architect.
+- Launcher launch-kbd2986.sh sha256 47fce55779de7811 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD ac6a93ca5.
