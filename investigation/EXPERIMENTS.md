@@ -90292,3 +90292,25 @@ BENCH ADDENDUM (before the run):
   - Attribution, B: FINGERPRINT_ONLY. An ordinary VA context with a 16-byte blob is byte-identical, as the foreign value in EXP3030 post-perf shows.
   - Not attributable = recorded as such. The primary evidence is stdout.
 - Output verbatim to the architect and the GPU line. Exe and outputs deleted from the guest after a hash-verified fetch. Evidence .local/experiments/EXP3032-d1/.
+
+EXP3031 HARDWARE BEFORE 2026-11-27T22:35:04Z:
+STDC4C restart confirmation: 30.0.3015.0 (STDC4B, gpu/standing-b19c4 e1f86b64d) bound from a cold standing boot (architect ruling 2026-11-27 on EXP3030 GATE_PASS, option 1)
+
+WHAT: the bench stages the EXP3030 candidate on the running EXP3030-std guest, where 2883 is staged on Problem 28 after the kit rollback. Script: conf3015.sh.
+- Removal in the bench order: the STDC4C kit's w2-agxremove.ps1 and its seven gates.
+- need28, then stage 3015 through the kit's gstage template and base_render, the path that staged 3015 in EXP3030. The 8 files equal the EXP3030 cand-sheet. Base switches Wom1CrossProcessPairs/SubmitRequeue/MpoTwoPlanes/StartPolicy=1 are read back.
+- Guard experiment against cand-EXP3031.json (EXP3030's 8 files, experiment_id EXP3031).
+- Ordered end of EXP3030, then a standing-pair boot (m1n1 9bddd9aa + Mu IRQ01 170a91b4) with the launcher guard pre/post in experiment mode on that record.
+WHY: the architect requires a restart confirmation before 30.0.3015.0 can become standing. EXP3030 bound 3015 only inside the kit boot, after a live stage.
+CHECKS (preregistered PASS = all):
+- APPL0002 status=OK problem CM_PROB_NONE, driver 30.0.3015.0.
+- Tool suite e2459 (eb8e3291) PASS=119 FAIL=0.
+- TACM_CHECK APPLIED from Wom1GpuPerf after the suite.
+- DWM dump count unchanged.
+- HV PACED/STORM/UNH/BUGCHECK and TDR counts recorded.
+THEN: D1 v2 as its own experiment EXP3032 on this guest, run only on a PASS.
+AFTER: remove 3015, need28, stage 2883 (BASE-2883-bench, 8/8 sheet) with the base switches, guard standing pre against STANDING.json (2883) = ACCEPT. Guest left up as the TRK49 staging guest (EXP3033). STANDING.json is not changed: it switches to 3015 only after the 2883-pinned kits (TRK49, K48MUT3, FOLDAB) per the architect.
+FAILURE: any check FAIL = CONF_VERDICT FAIL, D1 skipped, rollback to 2883 still runs, report. A guard refusal stops the script before the boot.
+RECOVERY: 2883 restaged by the script; recover.sh path if the guest is unreachable.
+Power: host-Mac port + hub charging input. Disk: diskgate2 before; diskwatch during. Evidence .local/experiments/EXP3031-std/.
+- Launcher launch-kbd3031.sh sha256 4691e3d3e8cb9af4 (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 7ca117113.
