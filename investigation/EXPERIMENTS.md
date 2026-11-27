@@ -90314,3 +90314,30 @@ FAILURE: any check FAIL = CONF_VERDICT FAIL, D1 skipped, rollback to 2883 still 
 RECOVERY: 2883 restaged by the script; recover.sh path if the guest is unreachable.
 Power: host-Mac port + hub charging input. Disk: diskgate2 before; diskwatch during. Evidence .local/experiments/EXP3031-std/.
 - Launcher launch-kbd3031.sh sha256 4691e3d3e8cb9af4 (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 7ca117113.
+
+EXP3031 ACTUAL 2026-11-27T22:40:23Z (refs EXP3031 BEFORE; conf3015.sh a7112a26; evidence .local/experiments/EXP3031-std/evidence):
+- Staging on the EXP3030 guest: 2883 staged was removed (7 gates PASS), devnode absent then rescan to 28. 3015 staged (InfHash 8BB9339A..., equal to EXP3030), 4 base switches read back. GUARD_STAGED AGX_GUARD ACCEPT mode=experiment package-30.0.3015.0-matches-record.
+- Boot: ordered end of EXP3030 at 22:34:56Z, boot 22:34:58Z, STD_DONE 22:37:14Z. Launcher guard ACCEPT pre (last-known) and post (live), experiment mode.
+- Confirmation (all PASS):
+  - ADAPTER status=OK drv=30.0.3015.0; APPL0002 problem=CM_PROB_NONE.
+  - TOOL_SUITE PASS=119 FAIL=0.
+  - TACM_CHECK APPLIED samples 32 applied 32 ignored 0.
+  - GPU_RESET none.
+  - DWM_FAULTS 0 start 0 new 0.
+  - HV PACED=0 STORM=0 UNH=0 BUGCHECK=0.
+  - TDRCOUNT tdr4101=0 bugcheck1001=0.
+  - V857GATE OK.
+- VERDICT: CONF_VERDICT PASS. 30.0.3015.0 is a confirmed standing candidate. STANDING.json is unchanged (2883) until the 2883-pinned kits have run, per the architect.
+- Rollback: 3015 removed (7 gates PASS), devnode rescan 28, 2883 staged (InfHash 45C1E2B8...), switches read back. GUARD_END AGX_GUARD ACCEPT mode=standing package-30.0.2883.0-matches-record. CONF_3031_DONE PASS at 22:39:58Z; guest left up.
+- Disk: DW_BREACH_LINES 0; DISK_END ssd=5112 inside=24641 OK.
+
+EXP3032 ACTUAL 2026-11-27T22:40:23Z (refs EXP3032 BEFORE; d1run.sh here on the EXP3031 guest with 30.0.3015.0 bound; evidence .local/experiments/EXP3032-d1/evidence/d1):
+- Gates passed: PRESENCE_CLEAR; APPL0002 OK, CM_PROB_NONE; drv=30.0.3015.0.
+- Run B: the probe printed only "usage: agx_d1_legacy_context_probe A|B ..." (exit 0, 0 s). No device or context was created.
+- Root cause (bench runner defect): toolrun.ps1 always passes <tag>-out.txt as argv[1] (the d3d12-probe convention), so the D1 probe saw argc=3.
+- D1_ADAPTER_GATE FAIL on run B, so run A was not run.
+- Receipt: pre-B and post-B both show the foreign value Flags 0x4 VA PrivDataSize 16 (FINGERPRINT_ONLY). The hold saw no READY.
+- Fetch hash-verified; outputs and exe deleted from the guest; TDR 0.
+- VERDICT: NOT RUN (inconclusive, runner defect). Not a probe or driver result.
+- Fix: scratchpad d1toolrun.ps1 + arm-d1toolrun.ps1 + run-d1tool.sh (no leading out.txt argument); d1run.sh now uses run-d1tool.sh.
+- Next: D1 v2 on the next bound guest (architect slot ruling pending).
