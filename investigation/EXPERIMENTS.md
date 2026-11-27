@@ -89519,3 +89519,18 @@ BENCH ADDENDUM (before the run):
 - Evidence .local/experiments/EXP3020-k48/.
 - Disk (architect ruling, this kit only): temporary pwdev floor 7168 MiB (the launcher's own 6 GiB limit untouched). pwdev free at the pre-launch check 16:00:56Z: 8021 MiB (pwdev is a sparsebundle on the external SSD; SSD free = pwdev free). After this kit the floor returns to 8192 MiB.
 - Launcher launch-kbd3020.sh sha256 c14263bef94c9542 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD e686b6437.
+
+EXP3020 ACTUAL 2026-11-27T16:19:15Z (refs EXP3020 BEFORE; K48W2F, package 30.0.3013.0 on the EXP3019-c4 post-rollback guest; evidence .local/experiments/EXP3020-k48/evidence):
+- Pre-launch: disk gate under the architect's temporary floor 7168 MiB (pwdev 8021 MiB). AppX busy on try 1, OK on try 2. V857GATE OK [1247, 643, 384, 493]. Wi-Fi not reachable on this boot. IRQ gate PASS (769). Suite 119/0.
+- Perf: gm3020p1 fps_frames 55.867, gm3020p2 55.831, both VALID. PERF_GATE PASS worst=47.662 (+1.39 %).
+- Gate arm, gm3020kg: VALID 55.736, with no low-memory wait. K48 lines verbatim:
+  K48_DEFENDER kg start sig=1.463.495.0 engine=1.1.26100.4
+  K48_DEFENDER kg end sig=1.463.495.0 engine=1.1.26100.4 unchanged (gate arm: recorded; does not void a gate PASS)
+  K48_GATE_FILE local= guest= bytes=
+  K48_RECEIPTS setup=[hr=0x00000000 00000003 000015a4 a8260e42 97efffb3] replace=[   1 hr=0x00000000 a8260e42 97efffb3 00000001 00001584 912cec80 00000042;] gate=[hr=0x80004005 00000003 0000000a 016f3600 97efffb3 00000006 0000041d;]
+  K48_AVAIL kg arm_start=4516MB gate=[phase=0 avail_mb=1053 sets_kb=70504 held_ms=0; ] floor_mb=4096+sets (gate refuses below: reason 6)
+  K48_GATE K48_GATE_VERDICT INCONCLUSIVE (no gate file (No such file or directory)) 
+  K48_GATE_DIST 
+- Reading: the gate refused itself with reason 6. Its new memory floor is 4096 MB + sets (about 69 MB), and 1053 MB was available at the dispatch inside GravityMark (4516 MB at arm start). So no copy was made, there is no gate file, and the verdict is INCONCLUSIVE. The floor was a design value that cannot be met under GM (architect: traced to a figure of his), not a bench condition. Defender did not change during the gate arm.
+- Timing arms not run (preregistered stop). Rollback: candidate removed, 2883 re-staged, GATE_BOOT_3020_DONE rc=0. Post-kit PendingFileRename=4.
+- Verdict: inconclusive (the gate floor is a design defect). Next K48 repeat: a full kit under a new ID once the GPU line has fixed the floor and audited the gate constants, and the architect has sent verified hashes. The temporary 7168 MiB disk floor is now retired; the floor is back at 8192.
