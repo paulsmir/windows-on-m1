@@ -90044,3 +90044,9 @@ EXP3026 ACTUAL 2026-11-27T20:02:13Z (refs EXP3026 BEFORE; RBBW only, on EXP3025-
   RBBW size_mib=64 rb_ms=260.282,262.674,260.925 ref_ms=2.428,2.449,2.437 bad_a=0 bad_b=0 bad_partial=0 partial_offset=16344 partial_bytes=100
   AGX_D3D12_RBBW: FAIL size_mib=64 rb_mbps=257.8 ref_mbps=27637.7 ratio=0.009 pattern=ok stale=ok
 - Verdict: confirmed - B21 defect measured on the accepted driver. Readback from the D3D12 readback heap runs at 257-259 MB/s against 27.6-47.6 GB/s for a cached copy (ratio 0.005-0.009, worse than the expected about 0.05). Pattern and stale-line checks are ok at every size (bad_a=bad_b=bad_partial=0). It matches the K48 gate copy (about 250 MB/s, EXP3023). STAGERB was not run (it does not state its adapter).
+
+EXP3029 HARDWARE BEFORE 2026-11-27T20:04:20Z:
+B21 D3D11 half (architect 2026-11-27): STAGERB2 on the EXP3028-std standing guest with 2883 bound. This is a plain standing boot inserted between C84R and STDC4C, option (a). The chain runs the probe only when APPL0002 reads status OK, problem 0 or CM_PROB_NONE, and the adapter driver reads 30.0.2883.0. The predicate was dry-run on the real EXP3025 lines (pass) and on a wrong-driver line (refused).
+Probe: PROBE-RBBW2-4341bec67 (SHA256SUMS 33f9a6a9, 6 OK) agx_d3d11_fl111_probe_stagerb2_arm64.exe e31393c0 "only STAGERB". Its first line is "AGX_D3D11_ADAPTER [...] agx=1"; with agx=0 it refuses with rc 2, and then only the refusal is recorded. First-run gate: never run on hardware before.
+Expected: a ratio FAIL of the same class as EXP3026 (D3D12 257 MB/s) and pattern ok. In D3D11 the stale check is weaker (Unmap/Map between patterns).
+Evidence .local/experiments/EXP3029-stagerb2/; the guest is then the STDC4C staging guest.
