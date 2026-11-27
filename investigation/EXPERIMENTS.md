@@ -89351,3 +89351,5 @@ C4_EFFECT ta_sum_effect +0.0023 ms r7_effect +0.0008 ms spread 0.0013 thr 0.0100
 C4_VERDICT NO_EFFECT
 - Reading: Wom1TaCoreMask=1 is APPLIED exactly ({0xfe, 0}) in both on arms and ABSENT in both off arms. The R5+R7 to_ta effect is +0.0023 ms against a threshold of max(0.01 ms, 2 x off/off spread 0.0013) = 0.01 ms, so NO_EFFECT. Stability is unaffected (four boots, no reset or TDR, perf gate PASS in all). Nothing becomes standing; the KEEP/DROP ruling is the architect's.
 - Disk note: after the verdict, the UMD logs of EXP3007/3015-3019 were gzipped losslessly (manifest COMPRESSED_LOGS_MANIFEST.tsv). /Volumes/pwdev is a sparsebundle on an external SSD with about 8 GB free, so space freed inside pwdev is not returned until a compaction. EXP3020 (K48W2F) is held at its disk gate pending the architect's ruling.
+
+C4CM RULING 2026-11-27T16:00:55Z (refs the C4CM VERDICT under EXP3019): the architect accepts NO_EFFECT and rules KEEP on parity and portability grounds. The register-derived TA core mask becomes the default in the next standing-candidate package; nothing changes in standing today.
