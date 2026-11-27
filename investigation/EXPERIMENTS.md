@@ -89331,3 +89331,23 @@ BENCH ADDENDUM (before the run; arm on2 = boot 4 of 4: EXP3016 off1 / EXP3017 on
 - Stop: GATE_BOOT_<N>_FAIL, C4_DROP (reset/TDR in an on arm), or a perf-gate FAIL in an off arm -> no further arms; architect informed.
 - Evidence .local/experiments/EXP3019-c4/.
 - Launcher launch-kbd3019.sh sha256 30d2af6240fd3e13 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 0831ef9af.
+
+EXP3019 ACTUAL 2026-11-27T16:00:26Z (refs EXP3019 BEFORE; C4CM arm on2, boot 4 of 4; evidence .local/experiments/EXP3019-c4/evidence):
+- V857GATE OK [1175, 547, 420, 740]. AppX was busy on tries 1-3 and passed on try 4. Suite 119/0. gm3019p1 fps_frames 55.937 and gm3019p2 55.788, both VALID. PERF_GATE PASS worst=47.503 (+1.06 %). defjudge: p1 OK, p2 OK.
+- C4_TACM arm on2 TACM_SENT version 1 receipt 0x02000000 refusal ok packed 0xfe 0x0 sent 0xfe 0x0 jobs 43228 TACM_VERDICT APPLIED (expect 0xfe) 
+- C4_RESULT arm on2 switch [Wom1TaCoreMask=1] tacm APPLIED, signature CRCRCRCR, frames 4762, to_ta 1.3996 1.3961 0.1904 0.1881, sum_r5_r7 0.3785, r7 0.1881.
+- No reset or TDR (no C4_DROP). GATE_BOOT_3019_DONE rc=0; rolled back to 2883.
+
+C4CM VERDICT (EXP3016-3019, agx_c4_verdict.py from the kit, all four arms valid, no --invalid; output evidence/c4-verdict.txt sha256 5c43494f), verbatim:
+C4_ARM off1 signature CRCRCRCR frames 4754 ta 1.4007 1.3961 0.1916 0.1879 sum 0.3795 r7 0.1879
+C4_ARM on1 signature CRCRCRCR frames 4798 ta 1.3975 1.3930 0.1896 0.1875 sum 0.3771 r7 0.1875
+C4_ARM off2 signature CRCRCRCR frames 4789 ta 1.3996 1.3963 0.1914 0.1894 sum 0.3807 r7 0.1894
+C4_ARM on2 signature CRCRCRCR frames 4762 ta 1.3996 1.3961 0.1904 0.1881 sum 0.3785 r7 0.1881
+C4_TACM off1 ABSENT (want ABSENT)
+C4_TACM on1 APPLIED (want APPLIED)
+C4_TACM off2 ABSENT (want ABSENT)
+C4_TACM on2 APPLIED (want APPLIED)
+C4_EFFECT ta_sum_effect +0.0023 ms r7_effect +0.0008 ms spread 0.0013 thr 0.0100
+C4_VERDICT NO_EFFECT
+- Reading: Wom1TaCoreMask=1 is APPLIED exactly ({0xfe, 0}) in both on arms and ABSENT in both off arms. The R5+R7 to_ta effect is +0.0023 ms against a threshold of max(0.01 ms, 2 x off/off spread 0.0013) = 0.01 ms, so NO_EFFECT. Stability is unaffected (four boots, no reset or TDR, perf gate PASS in all). Nothing becomes standing; the KEEP/DROP ruling is the architect's.
+- Disk note: after the verdict, the UMD logs of EXP3007/3015-3019 were gzipped losslessly (manifest COMPRESSED_LOGS_MANIFEST.tsv). /Volumes/pwdev is a sparsebundle on an external SSD with about 8 GB free, so space freed inside pwdev is not returned until a compaction. EXP3020 (K48W2F) is held at its disk gate pending the architect's ruling.
