@@ -88107,3 +88107,15 @@ JFLOOR v2.3: .local/experiments/PROBE-JFLOOR23, SHA256SUMS 5a84ea2c (4 OK), exe 
 Steps (jf23run.sh): std boot; presence; battery >= 40 %; quiet gate; toolrun copy from the backup (pinned 1d534b13/feaa80fa); JFLOOR v2.3 x1 (+1 if late > 0); state report; guest left up.
 Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2991-std/evidence/jf23/.
 - Launcher launch-kbd2991.sh sha256 9d96873f58001ab0 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD c6d55219d.
+
+EXP2991 ACTUAL 2026-11-27T04:05:25Z:
+- Boot: std launch 03:44:32Z -> STD_DONE 03:46:51Z (2 min 19 s), console session 1 Active, battery 99 % on AC (online, not charging). APPL0002 inert, 2883 bound, no candidate staged, GPU idle.
+- Quiet gate NOT reached (flagged): 11 tries 03:47-03:58Z, avail_mb 3489-3598 (< 3700 floor), servicing 0 except tries 6-7 (1). JFLOOR ran anyway per jf23run's flag rule. Memory census (memcensus2.txt sha b583a1c61eea2dbb): avail 3591 MB, pool nonpaged 196 / paged 211 MB (unchanged vs previous boots, not a driver leak); session-1 growth is M365Copilot (WS 147 / private 68 MB) and SystemSettings (private 112 MB), owner apps, left running.
+- WUHIST (wuhist.txt sha 5b8238208c96d48b): the 2026-11-27T03:02:17Z install seen in EXP2990's PRE_SHUTDOWN = 9NSTH9KHZDLQ-Microsoft.UI.Xaml.2.8 (Store framework package); all other recent rows are Defender KB2267602 intelligence updates. No OS/driver update.
+- JFLOOR v2.3 r1 (03:59:46Z, std sha 02ee8e7e823ef816): AGX_D3D12_JFLOOR PASS shapes_complete 15/15, JFLOOR_GATE late 1 on every shape, late_total 15 -> second run per the rule.
+- JFLOOR v2.3 r2 (04:00:47Z, std sha 5d84ffcbf6681f61): PASS 15/15, late_total 15 again. Success criterion (late 0) NOT met; v2.3 is not better than v2.2 (EXP2989 late 1 total) on this measure.
+- DRAM/fabric per window (optwin): r1 P mean 828 MHz (600-1056), dram_fast1_share 0.00; r2 P mean 2644 MHz (1956-2988), dram_fast1_share 0.67. late_total identical at both states -> the late flag is not a DVFS/DRAM-state effect.
+- AppleSmc 0.1.0.21 restart confirmation (smc21confirm.sh, 04:02-04:03Z): SMC21_CONFIRM PASS - DriverVer 0.1.0.21, sys 23715f04, telemetry v11, B0 PASS, battery visible, 60 s logger 960 rows non-ok 0 (969 requests, refused/errors/timeouts/held-off 0).
+- STANDING.json updated per the architect's ruling: standing_guest_packages.AppleSmc = 0.1.0.21 (validated_by EXP2989/EXP2990/EXP2991), rollback = 0.1.0.16, 0.1.0.20 retired; backup .pre-smc021-*.bak; read-back 0.1.0.21 / Wi-Fi 0.1.71.2.
+- No TDR, no bugcheck; display, USB input, SSH, storage alive. Guest left up as the EXP2992 staging guest.
+- Verdict: JFLOOR v2.3 late-0 criterion REJECTED (late 15 in both runs, state-independent); AppleSmc 0.1.0.21 CONFIRMED standing. Raw JFLOOR files to the GPU line. Next: EXP2992 WICDUMP re-dump on this guest (AppX gate, GM floor 3450 for that run only).
