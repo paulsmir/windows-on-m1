@@ -90277,3 +90277,18 @@ EXP3030 ACTUAL 2026-11-27T22:27:08Z (refs EXP3030 BEFORE; STDC4C on EXP3029/EXP3
 - Disk: DW_BREACH_LINES 0; DISK_END ssd=4931 bands=38159 inside=24651 OK. Battery 99 %. Wi-Fi Disconnected (orphaned profile, known).
 - End state: rollback to 2883 staged (APPL0002 CM_PROB_FAILED_INSTALL until the next boot). Guest left up. POST_KIT RebootPending=0 PackagesPending=0 PendingFileRename=4.
 - Next: STDC4C restart confirmation (architect to sequence it with D1); then TRK49.
+
+EXP3032 HARDWARE BEFORE 2026-11-27T22:32:50Z:
+B23 D1 admission probe v2 (probe/d1-legacy a59528bc1, agx_d1_legacy_context_probe_arm64.exe), guest with the accepted driver bound, own experiment ID; one variant per run: "agx_d1_legacy_context_probe_arm64.exe B" (control) FIRST, then "... A" (LegacyMode=1); each opens the adapter, creates the device and one context on node 0 with a well-formed Win32 blob (16 bytes), prints AGX_D1_<v>_READY and holds the context 8 s (read Wom1G3ContextInput during that window), then destroys; no allocation, Render, submit or retry; first line AGX_D1_ADAPTER, a non-AGX adapter is refused; no argument = usage, refused.
+OPEN: run A prints create_context=0x00000000 with patch_list > 0 (PRIMARY, stdout); corroboration: the receipt read during A's READY window shows VirtualAddressing clear and PrivDataSize=16 (the probe's blob, not a DWM context); if the receipt is not attributable (another writer, PrivDataSize != 16) that is stated, the verdict rests on stdout.
+CLOSED: run A refused (create_device or create_context non-zero, status named) or created as VA (AGX_D1_VERDICT ADMITTED_AS_VA, patch_list 0); run B shows the ordinary context's status, list sizes and receipt for comparison; on a driver with the B23 fix, run A must be refused by our KMD with a named status.
+BENCH ADDENDUM (before the run):
+- Probe v2 PROBE-D1-a59528bc1/agx_d1_legacy_context_probe_arm64.exe sha256 4dfca66b01f217a62e75d149481ba10fd1e26bbcd75137cf1acc709f886047a4, BEFORE-D1 0c775a78 (bench + architect). PROBE-D1-858893b9c superseded, never run.
+- Slot (architect ruling on EXP3030): on the EXP3031 restart-confirmation guest with 30.0.3015.0 bound, only after CONF_VERDICT PASS. Driver version recorded from adapters.ps1 (drv= on the APPL0002 adapter line). Gate: APPL0002 status=OK problem=CM_PROB_NONE.
+- Runner d1run.sh (here mode), called by conf3015.sh:
+  - Order: "B" then "A", each exactly once. The adapter line must read agx=1; if run B fails it, A does not run.
+  - Wom1G3ContextInput read before each run, inside the READY hold (guest d1hold.ps1), and after; decoded by d1dec.py.
+  - Attribution, A: PrivDataSize=16 and VirtualAddressing clear.
+  - Attribution, B: FINGERPRINT_ONLY. An ordinary VA context with a 16-byte blob is byte-identical, as the foreign value in EXP3030 post-perf shows.
+  - Not attributable = recorded as such. The primary evidence is stdout.
+- Output verbatim to the architect and the GPU line. Exe and outputs deleted from the guest after a hash-verified fetch. Evidence .local/experiments/EXP3032-d1/.
