@@ -88390,3 +88390,38 @@ EXP2996 ACTUAL 2026-11-27T07:11:28Z:
 - ETW_POST: sessions named agxsync 0 (stop condition met: session verified absent).
 - No TDR, no bugcheck. Guest left up as the EXP2997 staging guest.
 - Verdict: measurement complete (ran, files as listed). Decoding offline by the GPU line. Evidence .local/experiments/EXP2996-dx/evidence/dx/.
+
+EXP2997 HARDWARE BEFORE 2026-11-27T07:12:28Z:
+WICDUMP re-dump 2996 - preregistration (architect order 2026-11-27, EXP2993 follow-up; written before any run)
+
+WHAT: AppleAgx 30.0.2996.0 from gpu/wicdump d4b61c95c34d80138d167438178b342bb422e233 = 2993 (a669201a4) + d4b61c95c only.
+One variable vs 2993: pointee order. The work-item records come first, then phase 0 = pointees into GPUMicroSequence
+objects at any 4-byte offset of every work item of the publish, then the other 8-aligned, then the other 4-mod-8
+pointees. Budgets are unchanged (24 pointees per slot, 2 at 0x800, slot 0x6000). Probe, decoder (af0c756bd), switches and
+staging are unchanged from KIT-WICDUMP-a669201a4.
+
+WHY: EXP2993 (wicdump-2993.bin). 3D render microsequence was in 36/36 frames for R1-R7. The TA microsequence was missing
+in every TA item that held exactly 24 SUBs and 0 big ones: R1 34, R3 35, R5 3, R7 36. In those publishes the barrier
+sidecar work item (0xffffffa0004a0800, ~14 pointees) precedes WorkCommandTA, whose aligned pointees fill the 24-pointee
+slot budget before the 4-mod-8 pass reaches its microsequence pointer at +0x474. R5 publishes mostly carry one work item
+(R5 TA captured 33/36). Ruled out: shared microsequence objects (two alternate, 0x…3ea000 / 0x…3eb000) and labelling (the
+misses follow the SUB count, not the label).
+
+PASS (unchanged; all required): complete_frames >= 32; render microsequence for R5 and R7, TA (StartVertex..FinalizeVertex)
+and 3D (StartFragment..FinalizeFragment), in >= 32 frames each; 0 SUBs below 4 GiB; perf gate PASS with the switch absent
+and on the armed run; AGX_D3D12_WICDUMP: PASS.
+Proof before the boot: tests/test_render_wic_dump.py WicDumpAlignment. A sidecar whose 30 pointees alone exceed the
+budget still leaves the TA microsequence at 0x800 (RED on a669201a4, GREEN on d4b61c95c).
+STOP / RECOVERY: as KIT-WICDUMP-a669201a4 (rollback to accepted 30.0.2883.0).
+
+PACKAGE: .local/experiments/AGX-WICD5-d4b61c95c-signed
+- SHA256SUMS sha256 eabed5f23aba45cd66a7dfcbd24259a409a9977cc493b6b44d04bc85a0fe2ad1
+- AppleAgxRenderAdmission.sys 231cc4a6d252c5fc5a384c14fb26d0d9f88976304ab4335a678217113729b706
+- kmd-build-receipt.json SourceCommit d4b61c95c34d80138d167438178b342bb422e233, PackageBuild 2996; builder
+  WICD5_2996_PACKAGE_BUILD_PASS, WICD5_FINAL_PACKAGE_PASS, STACK_FRAMES PASS arm64/wow/x64/kmd, versions coherent.
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-WICDUMP-d4b61c95c (SHA256SUMS 8084b606, 44 OK); diff vs KIT-WICDUMP-a669201a4 = commit/version strings + BEFORE/README only (probe e45d0c41, decoder af0c756bd, switch handling, staging unchanged). Package AGX-WICD5-d4b61c95c-signed SHA256SUMS eabed5f2 (8 OK; unlisted file kmd-build-receipt.json, not installed), sys 231cc4a6.
+- Sequencing (architect, own message): after EXP2995 (T1R + CPU-check B) and EXP2996-dx (plain standing staging boot with the DxgKrnl ETW GM run; ETW session verified absent before this run). Staging guest = EXP2996-dx (2883 bound, nothing staged).
+- MEMORY FLOOR (architect): GM_GATE_MB=3450 for this run. AppX gate v3 (appxcheck3.ps1). Mac disk >= 8 GiB checked before the boot. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2997-wicd/.
+- Launcher launch-kbd2997.sh sha256 fbf377e436c54ffa (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 9f823d67e.
