@@ -88244,3 +88244,67 @@ EXP2993 ACTUAL 2026-11-27T05:17:42Z:
 - Rollback: GPU_RESET none; candidate removed cleanly; AGX_GUARD ACCEPT; base 30.0.2883.0 re-staged. POST_KIT: no pending reboot. Appx v3 busy=1 came from MoUsoCoreWorker only; no package in progress and 0 deployment events.
 - No TDR and no bugcheck. Display, input, SSH and storage alive.
 - Verdict: REJECTED on the pass rule (R7 TA 0). The capture fix is CONFIRMED for 3D (all positions) and for R5 TA. Raw files sent to the GPU line. The architect and the m1n1 line were told about the TA pattern because the macOS capture uses a similar sub4 cap.
+
+EXP2994 HARDWARE BEFORE 2026-11-27T05:21:31Z:
+C84E - C84 premise diagnostic - preregistration (architect go 2026-11-27; written before any run)
+
+WHAT: AppleAgx 30.0.2995.0 from gpu/c84-diag 0ced2a657d6b8b1ed8f3e7a48d2629b66cf9bbb9 = accepted 2883 (e783c48bb) +
+kept receipts (OV6c / R6-ADMIT v2, 6b7d7c77e) + PIPE-PRIO2 (e52858ee8) + the C84 diagnostic (8c4968817, 1f22ea16f),
+built with AppleAgxDiagIngress=true, i.e. APPLE_AGX_D3D12_DIAG_INGRESS (diagnostic build; the standing recipe never sets it,
+and tools/agx_diag_absent.py refuses a standing candidate carrying its markers: accepted 2883 and PRIO2 packages DIAG_ABSENT).
+The diagnostic is inert unless the process environment has APPLE_AGX_D3D12_INGRESS_PROBE=1.
+Single variable of the measurement: APPLE_AGX_D3D12_INGRESS_PROBE (per process; nothing persists on the guest).
+
+WHY THIS HYPOTHESIS:
+1. EXP2991 (JFLOOR v2.3, umd.log receipts): lists executed after ID3D12CommandQueue::Wait(gate) were KMD-submitted and
+   completed inside the app's Execute loop, before the CPU signalled the gate. The runtime's Wait lands on the queue
+   context, while replay submits on the owner context (D3D12-C84, JFLOOR-GATE-LATE-ROOT).
+2. The fix (C84 option C) needs an ingress fence that a pending runtime Wait holds, but that does not sit behind C83's
+   per-Execute egress wait on the queue context. GM's CPU replay is 9.9 ms per Execute (EXP2985 p1) and must overlap the
+   GPU. A second context on the same runtime queue is the only UMD-only placement, and it is correct only if the runtime
+   applies a queue Wait to every context the queue owns. Neither the WDK headers nor learn.microsoft.com state this.
+3. The runtime never calls pfnWaitForFence (0 rejected receipts in EXP2991), so no DDI tells the UMD a Wait exists.
+
+WINDOWS CONTRACT: d3d12umddi.h CreateContextVirtualCb(hRTCommandQueue) may be called more than once per queue. The runtime
+issues Wait/Signal through the kernel contexts it knows for the queue (C3b). d3dumddi.h SignalSynchronizationObjectFromGpu
+on a context is ordered behind that context's pending GPU waits. Monitored fence CPU VA = completed value.
+AGX CONTRACT: no KMD or firmware change. The second context uses the queue's KMD context contract
+(ADMISSION_WIN32_CONTEXT_CREATE, same generation). The UMD fences are ordinary monitored fences; nothing waits on them.
+Poll bounded at 5 ms per Execute.
+TRANSLATION: per Execute, signal value s on (queue context, fence 0) and (second context, fence 1), poll both, receipt
+measure-d3d12-ingress-probe {s, us to pass on queue ctx, us to pass on second ctx (0xffffffff = not within 5 ms), seen0,
+seen1, qpc}. Setup and final receipts per queue.
+WHAT IS STILL UNKNOWN: exactly the hypothesis. Does a pending runtime queue Wait hold the queue's second kernel context?
+
+STEPS (c84-steps.sh step 7, after the bench's validity / suite 119/0 / perf gate with the switch unset):
+ a. qw0: QWAIT probe step, switch unset. Expected RED: AGX_D3D12_QWAIT_CPULATE and _OTHERQ FAIL (the defect on hardware);
+    ALREADY / CROSS / TEARDOWN reported.
+ b. qw1: QWAIT, switch set. agx_ingress_verdict.py (fixed before the run):
+    PREMISE_HOLDS: every waited Execute (CPULATE 1-8, OTHERQ 9-16) had its second-context fence NOT pass within the poll;
+      the first Execute after each releasing Signal saw it passed (seen1 >= 8 / >= 16); and every unwaited Execute
+      (ALREADY 17-24) passed within the poll.
+    PREMISE_FAILS: any waited Execute's second-context fence passed within the poll.
+    INCONCLUSIVE: anything else.
+ c. gm<N>ig: one traced GM HD PERF with the switch set. The distribution of the second-context pass latency (p50/p90/p99,
+    share <= 50 us) is the fix's hot-path cost at GM's cadence. Its perf gate is recorded only (5 ms-bounded poll per
+    Execute). Architect rule: if unwaited passes are not well under 50 us, the design changes.
+DECISION: PREMISE_FAILS -> report; no per-queue owner redesign starts (architect and owner decide scope).
+PREMISE_HOLDS -> the C84 design (C) stands, pending the architect's review of the note.
+STOP: Code 43/31, GPU reset / TDR / bugcheck, firmware error receipt, perf gate FAIL with the switch unset (steps 1-6),
+QWAIT probe TIMEOUT that leaves the guest unreachable.
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record).
+
+PACKAGE: .local/experiments/AGX-C84E-0ced2a657-signed
+- SHA256SUMS sha256 bcde40b17dbd8bb94f7c3e9bc1984246d395d17a826f2c11d26b935012996ec3
+- AppleAgxRenderAdmission.sys c2df2f41878399f77f4d4dec408022296b75f7eb6663c20ae942a16cad3551f0
+- kmd-build-receipt.json SourceCommit 0ced2a657d6b8b1ed8f3e7a48d2629b66cf9bbb9, PackageBuild 2995; builder
+  C84E_2995_PACKAGE_BUILD_PASS, C84E_FINAL_PACKAGE_PASS, STACK_FRAMES PASS arm64/wow/x64/kmd, versions coherent.
+- agx_diag_absent.py --expect c84-ingress: DIAG_PRESENT 4/4 (arm64, x64, x86 UMDs carry the receipt tag).
+- QWAIT probe fa0491a213cd64dd012e68681909b01a6a17583f7f521d0a62cafc5c4ecda398 (claude/gpu-perf-parity-aaa98a 88a04ed14).
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-C84E-0ced2a657 (SHA256SUMS d24c32c7, 45 OK). Diff vs KIT-WICDUMP-a669201a4 checked: c84-boot.sh = wicd-boot.sh + candidate commit/version + agx_diag_absent --expect c84-ingress before staging; c84-steps.sh = wicd-steps.sh with step 7 replaced (qrun QWAIT qw0 unset / qw1 APPLE_AGX_D3D12_INGRESS_PROBE=1, agx_ingress_verdict.py, one traced GM HD PERF gm<N>ig recorded only). Probe qwait fa0491a2 pinned local+guest.
+- Package AGX-C84E-0ced2a657-signed SHA256SUMS bcde40b1 (8 OK); the unlisted file is kmd-build-receipt.json (not installed). agx_diag_absent on the package: DIAG_PRESENT c84-ingress 4/4, DIAG_CHECK PASS. L1b source (Wom1IrqCompletionState) present in 0ced2a657, so the kit's unconditional IRQ 769 gate applies.
+- Bench preflight of the new qrun: arm-toolrun/toolrun backup copies take -EnvName/-EnvValue and write <tag>-umd.log (APPLE_AGX_UMD_TRACE_FILE); gate()/coldgate()/kmd() defined; agx_ingress_verdict.py on empty inputs prints C84_PREMISE INCONCLUSIVE (rc 0), on a missing qw1 file it raises (verdict line absent -> premise=[none] in the log). First qrun watched live by the bench.
+- Staging guest = the EXP2993 kit boot's guest (base 30.0.2883.0 staged, not bound; the kit's documented deviation path removes it). AppX gate v3 (appxcheck3.ps1). Memory floor = kit default 3700 MB. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2994-c84/.
+- Launcher launch-kbd2994.sh sha256 4d086c34e9d562dc (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD cb102aeaa.
