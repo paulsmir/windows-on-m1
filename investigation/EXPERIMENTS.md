@@ -90580,3 +90580,23 @@ BENCH ADDENDUM (before the run):
 - Pre-kit: presence clear; AppX busy=0; MoUsoCoreWorker absent, waited for up to 10 min, after which the kit's quiet gate decides (EXP3034 lost T3 to the WU orchestrator).
 - Disk: diskgate2 before; diskwatch during; defwatch2 + defjudge per arm. Launcher rev2. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP3035-b23/.
 - Launcher launch-kbd3035.sh sha256 4710832355601c11 (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 8bd4a97f0.
+
+EXP3035 ACTUAL 2026-11-27T23:28:00Z (refs EXP3035 BEFORE; B23A 30.0.3021.0 acceptance, gate-boot.sh 3035 3034 EXP3034-k48; evidence .local/experiments/EXP3035-b23/evidence):
+- Launch attempt 1 (23:22:14Z) aborted before any guest change. Bench chain defect: a presence line reused P, so CAND_DIR was the presence string. The kit failed "candidate SHA256SUMS" at its first gate. Evidence was moved to EXP3035-b23-abort1. The chain now HOLDs unless $P/SHA256SUMS exists, and chainlint.py checks for reassignment.
+- Attempt 2: DISKGATE2 PASS (inside 22698, SSD 3556); presence clear; AppX busy=0, mousocore=0.
+- Staging: base not bound (2883 staged), removed through the kit's path. 3021 staged (InfHash 28FF7E1B...). GUARD_STAGED ACCEPT, launcher guard post ACCEPT package-30.0.3021.0.
+- Validity step: STEP_BEGIN validity at boot_age 56 s; DWM_DUMPS_START 0.
+  - BASELINE gpu_resets=15 tdr4101=0 boot_age_s=81.
+  - STEP_END validity gpu_resets=18 (boot 15), tdr4101=0, dPACED/STORM/UNHANDLED/BUGCHECK 0.
+  - KIT_STOP GPU reset receipt Wom1GpuReset resets 15 -> 18 during validity.
+- STOP_RECEIPTS: GPU_RESET resets 19 ok 19 entry ENGINE status 0x0 faulted tag 4 line 8236 packet 3 fence 0x2dc completed 0x2db last 0x2dc active 0x2dc halted 0; POOL failures 0. STOP_WER WER_REPORTS 2 STOPS 0.
+- B23 receipts:
+  - Wom1B23Counters v1 40 bytes, all zero.
+  - b23_check: B23_CHECK FAIL (ListRestoreChecks 0, restore never ran; Wom1GpuFault absent).
+  - Wom1SoftFaultState and Wom1GpuFaultPostResume present (raw in kmd-receipts-stop.txt).
+- Not run: suite, RRQ, D1, D3D11 FL11.1, PERF, FULL.
+- Comparison: 3015 (EXP3030/3031) and 3017 (EXP3034) on the same profile had GPU_RESET none.
+- Rollback: 3021 removed, 2883 restaged (InfHash 45C1E2B8...), GUARD_END ACCEPT. GATE_BOOT_3035_DONE rc=9. V857GATE OK; DW_BREACH_LINES 0; DISK_END ssd=3540 inside=22692 OK.
+- VERDICT: REJECTED (repeated GPU ENGINE resets from boot on 30.0.3021.0; KIT_STOP in validity). B23A does not supersede 3015; 3015 stays the confirmed standing candidate.
+- Receipts handed to the architect and the GPU line.
+- Next: TDRH1 (EXP3036) on this guest per the queue, unless the architect rules otherwise.
