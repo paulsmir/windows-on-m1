@@ -90611,3 +90611,160 @@ EXP3035 ROLLBACK-VERIFY 2026-11-27T23:28:45Z (refs EXP3035 ACTUAL; read-only rbv
 - Receipts: Wom1GpuReset, Wom1GpuFaultPostResume, Wom1SoftFaultState, Wom1B23Counters and Wom1GpuFault are all absent. Device Parameters holds 4 values (the base switches).
 - So the reset and fault receipts are cleared by the devnode removal (they live in Device Parameters); they are not boot-scoped. In EXP3035 the 15 resets at boot +81 s therefore all came from the 3021 boot.
 - GUARD_END ACCEPT package-30.0.2883.0.
+
+EXP3036 HARDWARE BEFORE 2026-11-27T23:29:58Z:
+TDR-H1 (work item W0 of investigation/analysis/TDR-RECOVERY-WORKLIST.md): idle warm restart of a healthy GFX firmware, three
+cycles in one boot, then a smoke render - preregistration, written offline 2026-11-27 before any run
+
+WHAT: one ordinary boot of the standing pair (m1n1 9bddd9aa = el2/levers 8e3f2749, Mu MUCPCWIFISMCIRQ01 170a91b4; both unchanged)
+with the ACCEPTED AppleAgx 30.0.2883.0 bound (AGX-GATE-e783c48bb-signed, bench base dir BASE-2883-bench, 8/8 = STANDING.json
+accepted_gpu_package), the four base switches, and ONE added device value Wom1FwRestartDrillAllowed=1 (REG_DWORD) set on the
+previous guest before the ordered end. In the boot: baseline, then agx_fw_restart_drill.exe three times (one cycle per run, ~10 s
+apart, idle desktop), then the errq1 probe in fresh processes (C30A pixels + RRQ fingerprint). No package is staged or removed.
+Single variable: the three warm restarts the switch admits (the switch alone only opens the escape; the baseline step shows the
+boot behaves as every 2883 boot before the first restart).
+Package choice: 2883 (bench base) over 3015 (STDC4B, restart confirmation EXP3031 still pending; STANDING.json stays on 2883 until
+the 2883-pinned kits finish). Stage 2b is in 2883's tree (git show e783c48bb:<path>):
+- render-admission/src/backend_platform_windows.c:9831-9833 Context->FwRestartDrillAllowed = AdmissionPlatformSwitchEnabled(
+  Context, L"Wom1FwRestartDrillAllowed") (read once at runtime start); :10122 AdmissionPlatformRuntimeRestartOwned (stop-warm,
+  stop-proof, provider-destroy, queue-lifetime, graph-rebuild, provider-initialize, isr-reopen, start-warm, lifetime-fresh;
+  :10159 "keeps its UAT and its power"); :10333 AdmissionPlatformRuntimeRestart (entry, idle check, :10391-10393 fail-closed
+  SchedulerFaulted = 0x40000|__LINE__); :10404 AdmissionPlatformFwRestartDrillEscape (gate -> STATUS_NOT_SUPPORTED, payload
+  check, verdict copied into the payload, always STATUS_SUCCESS).
+- render-admission/src/callbacks.c:370-371 escape dispatch on magic 0x52525746 "FWRR".
+- render-admission/include/render_gpu_fault.h:251-320 restart record (stage enum, flags, refusal reasons), :386-399 Restart inside
+  Wom1GpuReset v5, v6 (1144 bytes), :404-414 ADMISSION_FW_RESTART_DRILL v1.
+- The signed .sys (779d90dd...) carries the UTF-16 name Wom1FwRestartDrillAllowed (1 occurrence).
+- drivers/apple-agx/windows/icd/agx_fw_restart_drill.c at e783c48bb is blob 56e78789 (sha256 7e7cc97c...), the source of the
+  built tool below; its payload layout equals render_gpu_fault.h:408-414.
+
+WHY THIS HYPOTHESIS:
+1. Every recovery design for an unresponsive firmware (W4 warm half, W5) depends on U1 - does the iBoot-loaded GFX image boot a
+   second time after AP 0x10 / IOP 0x10 / RUN off / RUN on with the retained root Active and power on - and no experiment has
+   ever restarted the GFX firmware within one boot (EXP589 built, never run; EXP1241/1278/1296 refused by design; no
+   FwRestartDrill/FWRR entry in EXPERIMENTS.md).
+2. The broker side is closed from the bench m1n1 source: the restart sends no PREPARE/ACTIVATE/CLOSE (RetainedCommandMask; a second
+   ACTIVATE on an Active root returns STATE with no side effect, hv_agx_retained_root.c:280 at 8e3f2749; GPUVA v5 init only under
+   a successful ACTIVATE, hv_agx_retained_platform.c:366-401), so a failure cannot come from a refused ACTIVATE; the KMD start/stop
+   state machines accept a second start (apple_agx_rtkit_session.c:93-135, 361-413) and Linux RTKit supports quiesce -> INIT wake.
+3. At idle with a healthy firmware no job, lease or stalled GPU is involved (U3, U4, U7 out): a failure can only mean "this image
+   / handoff / pre-populated slot 0 does not survive a second boot this way" - the slot-0 confound named below.
+
+WINDOWS CONTRACT: none exercised. The restart runs inside DxgkDdiEscape (D3DKMT_ESCAPE_DRIVERPRIVATE, PASSIVE_LEVEL) with no job in
+flight (refused with STATUS_DEVICE_BUSY otherwise, the tool retries); no TDR, no DxgkDdiResetFromTimeout / RestartFromTimeout, no
+fence aborted. DWM submissions during the restart wait (design note 10.3 E6). What dxgkrnl / DWM do with an engine that takes no
+work after a FAILED restart is unknown (U6): a later TDR / 0x116 is then a consequence, not a second finding.
+AGX-ASAHI CONTRACT: Asahi never restarts the GFX ASC; the sequence replays the boot order of design note 3.2 steps 2-10 on the same
+image: orderly stop (RTKit AP 0x10, IOP 0x10, CPU_CONTROL RUN bit 4 off, asc.c:73-81 semantics), stop proof (RUN reads 0, ISR
+closed, no context-0 lease), initdata graph rebuilt, CPU start, HELLO / EPMAP, handoff MAGIC_FW, firmware + doorbell endpoints,
+initdata sent, device control init, idle timestamp (APPLE_AGX_FIRMWARE_ALL_COMPLETED 0x1ff). Broker: context-0 retire (UNMAP +
+VERIFY_ABSENT per leaf), QUERY_ARENA, republish (MAP / QUERY); m1n1 compares TTB slot 0 after every retained command and latches
+TAINTED on a difference (hv_agx_retained_platform.c:457-463 at 8e3f2749).
+TRANSLATION: stage 2b AdmissionPlatformRuntimeRestart, warm, reached only from the drill escape; power domains on (no broker power
+command), retained root kept Prepared + Active, epoch unchanged; the queue runtime starts a fresh lifetime (first job InitBM,
+sequence 1; flag lifetime_fresh).
+WHAT IS STILL UNKNOWN: U1 itself; whether the restarted firmware or the handoff replay rewrites TTB slot 0 (no source); whether a
+stopped ASC keeps messages in its outbox FIFO (raw inbox/outbox words recorded after the stop, not judged); the firmware status
+block before / after (recorded, no expected value); timestamp calibration and owner lifetime words after a restart (10.6, not
+judged here); U6 (dxgkrnl behaviour after a failed restart).
+
+HV_AGX_REAL_OFF: absent from the standing image. 9bddd9aa is built from el2/levers 8e3f2749, which does not contain 90f2878f
+(git merge-base --is-ancestor: no); there the broker OFF calls pmgr_adt_power_disable on /arm-io/sgx and /arm-io/gfx-asc, whose
+clock gates are virtual, so OFF writes nothing and GFX stays ACTIVE (90f2878f message, pmgr.c:151-157, :318-321). Consequence:
+H1 CAN prove that the firmware CPU can be stopped and restarted, and the RTKit / handoff / initdata / queue state replayed, on a GFX
+domain that stays powered and clocked with the retained root untouched (the warm path, W4 warm half). H1 CANNOT prove anything about
+a power cycle (cold path W5 / U3): no SGX or gfx-asc gate happens, and on this image none could happen even if requested; a forced
+stop (U2, H1b) and a stalled GPU (H2) are not exercised either. To keep the PASS about the warm contract only, a cycle window with
+any "HV: AGX power receipt" line fails (BROKER_CONTRACT) and Wom1FirmwarePowerState is recorded before / after.
+
+SLOT-0 CONFOUND (design note 9.3): a failed boot alone does not separate "the image does not boot twice" from "the firmware rejects a
+pre-populated slot 0". Control in this run: (a) idle desktop, no job, so the only differences from the first boot are the second
+execution of the image and the slot 0 the broker keeps populated; (b) m1n1 TAINTED on the first retained command after the boot =
+the firmware or the handoff rewrote slot 0 (BROKER_TAINTED, read from the cycle's full.log window); (c) the receipt locates the stop
+point: stop-proof vs start-warm, CompletedMask (no ASC_RUNNING = no HELLO / no MAGIC_FW; later bits = endpoints / initdata / DC init)
+and Wom1ProviderBootFailurePhase (1 CPU/handoff, 2 roots, 3 management); (d) a PASS refutes both alternatives at once. A failure
+inside BootAsc (no HELLO / no MAGIC_FW) with no TAINTED line remains undecided between the two; that is reported, not resolved
+(depopulating slot 0 needs an m1n1 change = a different experiment).
+
+RUN (tdrh1-steps.sh): validity (2883 bound with hashes, base switches, Wom1FwRestartDrillAllowed 0x1, Wom1TdrHaltObserve /
+Wom1TdrDrillAllowed / Wom1GpuFaultDrillAllowed / Wom1FwStallDrillAllowed / Wom1JobDiagnostics / G3Armed absent, IRQ start gate,
+exactly one "GPUVA broker v5 init" line) -> quiet-guest gate -> A baseline (Wom1GpuReset, host-log counts, DWM PID, Display 4101 = 0,
+C30A + RRQ PASS in fresh processes) -> cycles 1, 2, 3: agx_fw_restart_drill.exe <out> 1 2000 20 through the interactive-session
+task, then Wom1GpuReset, h1_hostlog.py on the cycle's full.log window, desktop state -> E smoke C30A + RRQ in fresh processes ->
+H1_VERDICT. Cleanup in tdrh1-boot.sh: receipts first, Wom1FwRestartDrillAllowed REMOVED and its absence read back twice
+(SWITCH_REMOVED_OK), drill tool deleted from the guest.
+
+PASS (every cycle k = 1, 2, 3; h1_verdict.py cycle):
+- tool: "CYCLE 1 ATTEMPT n escape 0x00000000 status 0x00000000 stage 11 restarts k succeeded k" and "FW_RESTART_DRILL_DONE passed
+  1 of 1" (STATUS_DEVICE_BUSY retries allowed);
+- Wom1GpuReset v6, Resets 0 (no reset in this boot); Restart: Restarts k, Succeeded k, Stage complete (11), Status 0, StopKind
+  orderly, CpuControlAfterStop RUN (bit 4) clear with cpu_control_read set; flags isr_closed, isr_reopened, warm_publish,
+  lifetime_fresh set, forced_after_boot clear; HELLO / handoff / endpoints / initdata / DC init: FirmwareCompletedMask 0x1ff and
+  FirmwareLastResult 0; BootMs in (0, 3000) (J313_AGX_G2_ASC_BOOT_TIMEOUT_MS); RetainedCommandMask without PREPARE/ACTIVATE/CLOSE
+  and with QUERY_ARENA; RetainedFlags 0x7 (PREPARED|ACTIVE|PREFIX_UNCHANGED); EpochAfter == EpochBefore; RTKit crash latch clear;
+  SchedulerFaulted not set (it is set only on a failed restart, backend_platform_windows.c:10391-10393; a refused 4th call would
+  read RefusedReason faulted - not attempted);
+- broker (full.log window of the cycle): every "HV: retained op=" line status=0 (no TAINTED = 6), no op 1/2/6, flags=7, epoch =
+  the boot epoch, at least one op=8 (QUERY_ARENA); still exactly one "GPUVA broker v5 init"; no "HV: AGX power receipt"; no m1n1
+  "Exception" line; no nonzero BUGCHECK;
+- desktop: DWM PID unchanged from the baseline, Display 4101 count unchanged (0), APPL0002 OK / problem 0.
+Smoke after cycle 3 (h1_verdict.py smoke): AGX_D3D12_C30A: PASS (bundle-recorded green triangle: centre green, corner red,
+448..576 drawn, no other pixel = correct pixels from the first job of the new lifetime), AGX_D3D12_RRQ: PASS with fnv
+f0188f81facdd45e (the 2883 / standing reference, EXP2895, EXP3030), DWM PID and TDR count unchanged. A process that renders after
+the restart re-leases context slots used before it (design note 9.3 (3)); its PASS is that evidence.
+H1_VERDICT PASS = 3 cycle PASS + smoke PASS -> U1 closed for the warm path; W4 may proceed on the warm restart.
+
+FAILURE SIGNATURES (first non-PASS stops the kit; recovery for each):
+- no HELLO / no handoff magic: Stage start-warm, CompletedMask without ASC_RUNNING (bit 2), FirmwareLastResult timeout,
+  Wom1ProviderBootFailurePhase 1 -> NO_HELLO_OR_HANDOFF; SchedulerFaulted set (file tag 4, line 10393), adapter fails closed
+  (render device errors, DWM may fall back; SSH stays up - the display path does not depend on the GFX ASC). Recovery: ORDERED.
+- start-warm with ASC_RUNNING but CompletedMask != 0x1ff -> BOOT_PHASE_FAILED (SchedulerFaulted, fail-closed). ORDERED.
+- SchedulerFaulted with a fail-closed adapter at any other stage (provider-destroy .. lifetime-fresh, Status != 0) ->
+  RESTART_FAILED; stop not acknowledged / RUN still set -> STOP_NOT_PROVEN (forced_after_boot may be set). ORDERED.
+- broker TAINTED (status=6 in the window) -> BROKER_TAINTED: unrecoverable in this boot (m1n1 RAM state); a forbidden op, nonzero
+  status, flags != 7, epoch change, no QUERY_ARENA, second init or a power receipt -> BROKER_CONTRACT. ORDERED (the reboot clears it).
+- wrong pixels after the restarts (C30A not PASS, RRQ not PASS or fnv differs) -> WRONG_PIXELS. ORDERED.
+- DWM PID change, Display 4101, Wom1GpuReset.Resets > 0, devnode not OK/0 -> DESKTOP. ORDERED.
+- not a firmware verdict (no restart ran, firmware untouched): escape refused 0xC00000BB / RefusedReason not-allowed ->
+  INVALID GATE_CLOSED; 20 busy refusals -> INCONCLUSIVE IDLE_NOT_REACHED. Recovery: none for the GPU; switch cleanup.
+STOP RULE: any bugcheck (BUGCHECK code=0x[1-9a-f] in full.log, WER 1001/41 after recovery), an unrecovered adapter (any FAIL class
+above), guest unreachable, a TDR or a GPU reset ends the kit at once (kitlib stop: receipts first, exit 9) and goes to the ordered
+recovery; the drill tool stops at its first failure and is never re-invoked; no second attempt in the same run. H1b (forced stop)
+is not run in this boot.
+RECOVERY (ORDERED): collect first (tool logs, Wom1GpuReset raw + decode, Device Parameters snapshot, full.log window), remove the
+switch (read back absent), then the bench's standard path: ordered end (launch-wifi.sh end) and a standing boot (cold firmware
+start; broker TAINTED does not survive the reboot). Guest unreachable or reset -> HV watchdog -> proxy -> recover.sh with
+AGX_RECOVERY_ALLOW_AT_PROXY=1, dump first (WER 1001 after recovery is the valid stop-code reading on ntoskrnl 26100.9974+). If the
+guest was unreachable at cleanup, the first reachable guest runs guest/h1-switch.ps1 -Op remove before any other GPU work.
+Recovery artifacts unchanged: standing pair 9bddd9aa + 170a91b4, recovery pair 68993d14 + 40a8d7fd, GPU-visible recovery profile
+without AppleAgx, GPU-hidden image as emergency rollback; previous accepted 30.0.2481.0 as package recovery artifact.
+
+ARTIFACTS (sha256 from shasum):
+- package BASE-2883-bench/package: AppleAgxRenderAdmission.sys 779d90dd914f1e4340711d1f20c2515b7da09172ded9e3a277ea65a2c4949782,
+  .inf 45c1e2b86ba804409ca8271062b63a54af9a44c6a52150df57238b6f248ad2b5, .cat 07c4a32330f068834327c19d758f7d07976587bbfd2a990acd403dc7dbe1a2f1,
+  UmdArm64 65d0f3162d7f7eee2eca1ccc9fa5bd1c1dc72e1bdb71d07f85e3ca32ce354d6f (full 8/8 sheet = STANDING.json accepted_gpu_package);
+  pinned.cer 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
+- drill tool tool/agx_fw_restart_drill.exe (arm64, built 2026-11-17 from source sha256
+  7e7cc97c2da6be5bd7304082686a8cd5d06d6af5bbe62bdd29fb32d3c8e6abde, clang-cl 20 + MSVC 14.44.35207 + SDK 10.0.26100.0, cl /W4 /WX
+  /Zs PASS; never run) 3553140c0aada97c0b4761cbb77d4a19fe663f1efc09330e16f35400c4edc13d. Invocation per cycle:
+  agx_fw_restart_drill.exe C:\Users\pavel\icd-sys\h1<N>d<k>-out.txt 1 2000 20 (cache1a-toolrun.ps1 passes the out file first).
+- smoke probe/agx_d3d12_probe_errq1_arm64.exe (gpu/rrq-probe d308daecf) 86c101b2b53b93c2ecd9393b728c1107ee623c874c20e29951964478082122eb,
+  "only C30A" and "only RRQ".
+- decoder tools/decode_wom1_gpu_fault.py = git show e783c48bb:tools/decode_wom1_gpu_fault.py,
+  042fb4f8addf6c8474cb3635cae1083f3077f6d7a18ef2518a5f579897d51467.
+- m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691, Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b.
+EVIDENCE: .local/experiments/EXP<N>-tdrh1/ (full.log, contract.bin); evidence/tdrh1/: boot.log, run.log, tool-h1<N>d<k>-{std,out,
+err,done}.txt, kmd-receipts-{base,cycle<k>,final,cleanup,stop}.txt, rcpt-*/Wom1GpuReset, hostlog-<k>.txt, fulllog-cycle<k>.log,
+state-*.txt, verdict-<k>.txt, smoke-{a,e}.txt, h1-verdict.txt; evidence/switch-{before,set,remove,after-remove}.txt.
+Power: host-Mac port + hub charging input, no cable change during the run. Mac disk gate as the launcher (inside >= 6144 MiB).
+Kit: .local/experiments/KIT-TDRH1-e783c48bb (SHA256SUMS; selftest SELFTEST_PASS). Run:
+bash tdrh1-boot.sh <N> <prevN> <prevDir> <BEFORE-TDRH1.txt copy>; the bench runs it under its guest watchdog as usual.
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-TDRH1-e783c48bb SHA256SUMS 65f2a90e (30 OK, bench + architect); BEFORE-TDRH1 a9952ce4. Drill tool tool/agx_fw_restart_drill.exe 3553140c0aada97c (kit SHA256SUMS; never run before).
+- Run: tdrh1-boot.sh 3036 3035 EXP3035-b23 <this body>. Previous guest: EXP3035-b23 (B23A acceptance; its rollback leaves 2883 staged on Problem 28; the kit standing launch binds 2883). Bench m1n1 9bddd9aa, Mu IRQ01 170a91b4 unchanged.
+- Sequencing (architect): after TRK49 boot 1 (boot 2 held: timing-only mode cannot select classes); after B23A (EXP3035); before C2P.
+- Presence check before the run (firmware restarts under the desktop); nothing else running. Pre-kit quiet: AppX busy=0 and no MoUsoCoreWorker (EXP3034 lost T3/T4 to the WU orchestrator), up to 10 min, then the kit's own quiet gate decides.
+- STOP classes per the BEFORE: receipts first, ORDERED_RECOVERY_REQUIRED, no second attempt; unreachable guest -> recover.sh at proxy, dump first. SWITCH_REMOVAL_PENDING -> the next boot removes Wom1FwRestartDrillAllowed before anything else.
+- Disk: diskgate2 before; diskwatch during. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP3036-tdrh1/.
+- Launcher launch-kbd3036.sh sha256 b0b81c9f5e2fd7a9 (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 2e73bb2e6.
