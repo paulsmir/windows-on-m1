@@ -88177,3 +88177,55 @@ EXP2992 ACTUAL 2026-11-27T04:32:29Z:
 - Verdict: INCONCLUSIVE for the render-microsequence criterion (decoder regression suspected, evidence above); capture, frame count, low-SUB and both perf gates PASS. Next: GPU line decoder fix -> offline re-decode; then T1R + CPU-check B per the queue.
 
 EXP2992 CORRECTION 2026-11-27T04:38:47Z (refs EXP2992 ACTUAL): the claim "R5/R7 FAIL follows the decoder version, not the capture" is wrong. The GPU line read wicdump-2992.bin and found a capture gap. The KMD scans work items for pointers in 8-byte steps, but the microsequence pointers sit at 4-mod-8 offsets (TA +0x474, 3D +0x14), so their pointees were never captured. EXP2987's stored R-lines were compute-sidecar ops mislabelled as render (the identical op list on TA and 3D, including StartCompute/FinalizeCompute, was the tell). The newer decoder stopped making that false match. The render-microsequence criterion is therefore FAIL from a KMD capture defect, not inconclusive. The GPU line is building a KMD + decoder fix with a new package and kit; one re-dump run is planned when the kit is issued.
+
+EXP2993 HARDWARE BEFORE 2026-11-27T05:01:41Z:
+WICDUMP re-dump 2993 - preregistration (architect order 2026-11-27, EXP2992 follow-up; written before any run)
+
+WHAT: AppleAgx 30.0.2993.0 from gpu/wicdump a669201a48ef794e251c425584347ebcb092d75c = 2980 (5013a301d) + a669201a4 only.
+One variable vs 2980: the dump's pointee scan. The capture reads pointers at offsets 4 mod 8 after the 8-aligned pass,
+and pointees inside the template GPUMicroSequence objects get 0x800 bytes (at most 2 per slot); slot and escape Data
+0x5400 -> 0x6000 (WICDUMP probe rebuilt for it). Receipt-only path: absent switch = unchanged publish path. No PIPE-PRIO2.
+Decoder: gpu/wicdump af0c756bd (render microsequence from pointees only, full length, role-specific).
+
+WHY: EXP2992 (2980) decoded 0 render microsequence frames with every other predicate PASS. From wicdump-2992.bin:
+WorkCommandTA holds its microsequence pointer at +0x474 (0xffffffa0003eb000) and WorkCommand3D at +0x14
+(0xffffffa0003db000), per the template relocations 19:1140->17 and 18:20->15. Both offsets are 4 mod 8, and neither pointee
+has a SUB record because the 8-step scan never read them. No TA/3D record carries a StartVertex/StartFragment/Finalize*
+header. EXP2987's earlier "R" lines were the TA-ring barrier's compute sequence inside the work item's own bytes.
+
+KIT: KIT-WICDUMP-a669201a4 = KIT-WICDUMP-5013a301d (the bench-corrected kit EXP2992 ran) with commit/version 2993, the
+rebuilt WICDUMP probe (WSHA) and the af0c756bd decoder. No other change.
+
+PASS (unchanged from 2980; all required):
+1. complete_frames >= 32 (R1/R3/R5/R7 TA each paired with a 3D item);
+2. render microsequence captured for R5 and R7 in >= 32 frames each: TA = StartVertex..FinalizeVertex,
+   3D = StartFragment..FinalizeFragment, found in a pointee (SUB);
+3. 0 SUB records resolved below 4 GiB;
+4. perf gate PASS with the switch absent; perf gate PASS on the armed run;
+5. AGX_D3D12_WICDUMP: PASS (DONE, all slots read, drops 0).
+Predicate proof before the boot: `agx_wic15.py --check wicdump-2992.bin` (af0c756bd) prints complete_frames 35 OK, render
+R5/R7 TA/3D frames 0 FAIL x4, low_subs 0 OK, VERDICT FAIL. It fails for the right reason, and the CL compute sequences still decode
+(C0 x38, C2/C4/C6 x35). Positive and negative paths: tests/test_agx_wic15.py (role-specific, full-length, in-WI-only and
+compute-in-TA cases) and tests/test_render_wic_dump.py WicDumpAlignment (the EXP2992 layout is RED on the old scan, GREEN now).
+UNKNOWN: whether the 3D microsequence ends within 0x800 (it is template object size 4096); a FinalizeFragment past 0x800
+would show as 3D frames 0 with TA frames >= 32, a finding in itself, not a capture failure.
+STOP: Code 43/31, GPU reset / TDR / bugcheck, firmware error receipt, Wom1WorkItemDump left present, perf gate FAIL with
+the switch absent.
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record).
+
+PACKAGE: .local/experiments/AGX-WICD4-a669201a4-signed
+- SHA256SUMS sha256 40ef3d8382e89ddac2a46dfea2b0ef6b9501599d99e2b12c7fbf4c6de5ee0534
+- AppleAgxRenderAdmission.sys da99e2a95452dfadfd29d1f264e109d1da127a48b7bc8809806aaaf3e925d95e
+- kmd-build-receipt.json: SourceCommit a669201a48ef794e251c425584347ebcb092d75c, PackageBuild 2993, x86 UMD/ICD X86B571;
+  builder WICD4_2993_PACKAGE_BUILD_PASS, WICD4_FINAL_PACKAGE_PASS, STACK_FRAMES PASS arm64/wow/x64/kmd, versions coherent.
+- WICDUMP probe e45d0c41beba83db1d458827894eba2db497ccc8737fd08adb9058331423aca7 (builder BUILD_PASS arm64).
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-WICDUMP-a669201a4 (SHA256SUMS 8f199885, 44 OK); diff vs KIT-WICDUMP-5013a301d checked by the bench: version/commit strings, WSHA (probe e45d0c41 verified), agx_wic15.py (af0c756bd), README/BEFORE only. The five bench fixes carried over unchanged. Package SHA256SUMS 40ef3d83 (8 OK), .sys da99e2a9 verified.
+- Predicate proof re-run by the bench: kit decoder on wicdump-2992.bin -> complete_frames 35 OK, render R5/R7 TA/3D 0 FAIL x4, low_subs 0 OK, VERDICT FAIL; CL compute decodes (C0 x38, C2/C4/C6 x35).
+- Staging guest = the EXP2992 kit boot's guest (boot 04:16Z, base 30.0.2883.0 re-staged, console session 1 Active). AppX gate v2 (appxcheck2.ps1, as EXP2992) before the boot. MEMORY FLOOR (architect release 2026-11-27 ~05:00Z): GM_GATE_MB=3450 for this run, as EXP2992. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2993-wicd/.
+- Package file list: SHA256SUMS lists 8 files; the 9th file in the directory is kmd-build-receipt.json (build receipt, not installed; SourceCommit a669201a4, PackageBuild 2993). All installed files are hash-listed.
+- Preregistered open outcome (architect): TA >= 32 with 3D 0 = the 3D microsequence runs past 0x800 -> FINDING, not a capture failure; architect and m1n1 line told at once.
+- First launch at 04:57Z was stopped by the bench in the AppX gate (nothing staged or booted) to apply the 3450 floor; log appxcheck-attempt1.log.
+- AppX gate v3 (bench ~05:03Z): attempt 2 waited on AppXDeploymentServer events that were only AppXSvc lifecycle transitions (ids 939-942) demand-started by the gate's own Get-AppxPackage; v3 excludes those ids, all else as v2. Attempt 2 stopped in the gate, nothing staged; log appxcheck-attempt2.log.
+- Launcher launch-kbd2993.sh sha256 891579b5fbd559e2 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 07d2de183.
