@@ -88651,3 +88651,58 @@ EXP3007 ACTUAL 2026-11-27T12:26:01Z (refs EXP3007 BEFORE 12:08:42Z; evidence .lo
 - Display, input, SSH, storage and all CPUs alive throughout.
 - Verdict: inconclusive for K48 (G2 output gate produced no file: measure tool E_FAIL, not a mismatch); no regression from the candidate (perf +1.07 %, suite 119/0).
 - Next: the GPU line diagnoses why measure-d3d12-k48-gate returns E_FAIL after a successful replace (the gate receipt's first field 3 equals the setup's, the rest are zero). Bench queue continues: b17bench -> EXP3001 remainder -> AGXPWRON -> DRAM pair.
+
+EXP3008 HARDWARE BEFORE 2026-11-27T12:30:05Z:
+B17/B18 user-mode CPU split (PWR11; architect go 2026-11-27, plan rows B17 corrected + B18 at f36d2b70 on gpu/memory-latency).
+WHY THIS HYPOTHESIS:
+1. Windows full-rate P threads hash 8 MiB SHA256 at 1925-1957 MB/s in EXP2981/2990/2995/2999 p4. macOS on the same machine and the same HV (EXP3005 twin) did 8695.8/4 = 2174 MB/s at a constant 2988 MHz. That is about 11 % per thread.
+2. The candidates differ in what they predict:
+   - clock or time stolen from the vCPU lowers F;
+   - the memory path (4K stage-1 pages, prefetch, fabric/DRAM state; dram_fast=0 at idle in EXP2999 cppc-ts.log) makes C64 > C8;
+   - the hash library makes the portable code beat SymCrypt (I64 > C64).
+   Windows has no evidence for the P clock under load: EXP2999 cppc-ts.log has no lines inside either load block.
+3. B18: in every full-speed all8 run and in 2 of 4 p4 runs, one thread runs at 0.50-0.55x, and no process accounts for the lost time. Per-thread GetThreadTimes against work done separates three cases: invisible time (hypothesis: HV steal), core sharing, and uncharged time (hypothesis: DPC/ISR).
+Single variable: none in the platform. The standing image, profile and drivers are unchanged. The only addition is one user-mode tool run, about 9 min, with nothing installed.
+Tool: tools/b17_cpubench at e638ef7e3edcb006c22dfa6451ccae069d29e517.
+Build: build-b17.ps1 on the builder (MSVC x64_arm64, /W4 /WX /O2 /MT), built from git archive of that commit.
+Offline checks:
+- x64 --selftest PASS: FIPS vectors plus BCrypt = sha256_i on the 8 MiB and 64 KiB x128 messages.
+- x64 smoke run of every block: rc=0.
+- ARM64 path of sha256_i tested on macOS clang: vectors plus 300 random split messages vs CommonCrypto.
+- MSVC ARM64 listing: 16 sha256h, 16 sha256h2, 12 su0, 12 su1; the F chain is 32 dependent add/eor per loop.
+- The exe repeats --selftest itself and exits 3 before measuring if any hash disagrees.
+Artifacts (.local/handoff/night-20261126/b17bench-1, SHA256SUMS):
+- b17bench.exe 6e17cf393a0a49e42670cabec79537c1885ad58a4c46d0f2ecc401c4eec81832
+- b17-run.cmd 6bb3edbf458b95816bca27b38eb0a270dcf2a3cc6c26192f65c296dde0326504
+- b17_verdict.py 451f9d94b23249739e6ae6601695c2d187458a7e998ab1b2d5363c775f7b0d11
+Run on the guest: copy the kit folder to C:\Users\pavel\b17\, then run b17-run.cmd <EXP> as cpuload runs (scheduled task, interactive user, Normal priority). Quiet guest, AC on the hub charging input, same zone profile as EXP2999.
+Blocks:
+- P (affinity 0xF0, 4 threads): F 60 s; C8, C64, I8, I64 at 3 s fpre + 60 s each; 10 s gaps.
+- E (0x0F): C8 and I8, reported only.
+Expected checkpoint: b17-<EXP>.out ends "B17_DONE rc=0" and "rc=0", and the CSV has 7 blocks x 4 rows.
+Failure criterion: rc=3 (self-test mismatch on ARM64), any thread error=1, or a missing block. On failure, no rule verdict.
+Verdict, run on the host: python3 b17_verdict.py b17-<EXP>.csv --rm 2174 --rm-source summary. The rule order and constants are preregistered in the b17_verdict.py docstring:
+- MODEL: fastest F thread in [2540, 3524] MHz, else INCONCLUSIVE.
+- DRIFT: every block's fpre median within 3 % of F, else INCONCLUSIVE.
+- R1: median F < 2839 MHz -> CLOCK_STEAL.
+- R2: C64 >= 1.07 x C8 -> MEMORY_PATH.
+- R3: I64 >= 1.07 x C64 -> LIBRARY.
+- R4: otherwise LIBRARY_OR_CORE_PENDING_IMAC.
+- B18_HALF lines per thread.
+Rm enters only the printed gap_at_equal_clock, not the rule.
+Evidence: b17-<EXP>.csv, b17-<EXP>.out, the verdict output, and the proc CSV if the bench samples processes as in EXP2999.
+Recovery: none needed. User-mode only; stop with taskkill /im b17bench.exe.
+Stated limits (architect 2026-11-27, no rule change):
+(a) R3 not firing does not exclude the library. If SymCrypt equals sha256_i and both are below corecrypto, the run lands in R4; only the sha256_i run on macOS settles it.
+(b) The F chain measures the effective clock including time stolen from the vCPU. It cannot separate the two, so R1 names both.
+Rule confirmed by the architect before data: MODEL -> DRIFT -> R1 (F < 2839) -> R2 (C64 >= 1.07 x C8) -> R3 (I64 >= 1.07 x C64 -> LIBRARY) -> R4 LIBRARY_OR_CORE_PENDING_IMAC; B18_HALF per thread; Rm outside the rule.
+
+BENCH ADDENDUM (before the run):
+- Kit by hash from .local/handoff/night-20261126/b17bench-1 (b17bench.exe 6e17cf39, b17-run.cmd 6bb3edbf, b17_verdict.py 451f9d94, bef-b17-v2.txt b364f545); copied to the guest C:\Users\pavel\b17\ and re-hashed there before the run.
+- Boot: own plain standing boot (std-el2v3 defaults: m1n1 9bddd9aa + Mu IRQ01 170a91b4, package 2883, AppleSmc 0.1.0.23, Wi-Fi 0.1.71.2); no GPU step, no zone image, no GravityMark in this boot. Previous guest EXP3007 ended in order first (stdend2).
+- Launch: scheduled task /RU pavel /IT in the console session (presence and console session checked first). The task wrapper itself runs at BelowNormal (Task Scheduler default, verified on the guest 2026-11-27 13:08 local); b17go.cmd starts b17-run.cmd with start /NORMAL, so b17bench runs at Normal in session 1 (checked: child Normal, session 1). The running process's priority, session, affinity and thread count are logged (b17prio.ps1).
+- Gates: battery >= 40 %, quiet guest (AVAIL_MB >= 3700, no servicing processes), Mac disk >= 8 GiB. Power: host-Mac port + hub charging input; battery and charging read at start and end.
+- Instruments (read-only): typeperf 1 s as a SYSTEM task on CPU0-7 (% Processor/Privileged/User/DPC/Interrupt Time, Interrupts/sec, DPCs Queued/sec, Parking Status, % Processor Utility, Processor Frequency, % Processor Performance, % of Maximum Frequency), System context switches and queue length, Process(*) % Processor/Privileged Time and Thread Count; a 60 s idle reference window before the run; HV CPPC lines per window (optwin.py). typeperf's own CPU shows in the Process rows.
+- Stop: rc=3 = STOP (no verdict); no rc line after 18 min = b17bench killed, no verdict.
+- Evidence: .local/experiments/EXP3008-b17/evidence/b17 (b17-EXP3008.csv/.out, verdict.txt, tp.csv, tpsum.txt, cppc.txt, run.log); guest copies deleted only after a hash-verified fetch.
+- Launcher launch-kbd3008.sh sha256 ec9e4dffad17c63e (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 8eb01c232.
