@@ -89942,3 +89942,12 @@ BENCH ADDENDUM (before the run):
 - Evidence .local/experiments/EXP3023-k48/.
 - Disk watch (architect ruling 2026-11-27): diskwatch.sh logs SSD free, bands and inside-free every 60 s, once after the gate arms, and at the end; BREACH when the SSD drop exceeds new_bands x (8 MiB + 128 KiB) + 64 MiB or SSD free < 1536 MiB -> the bench stops the kit after the current arm (at an arm boundary, exact PIDs) and reports. One boot; launcher launch-kbd.sh unchanged (its df check passes at launch).
 - Launcher launch-kbd3023.sh sha256 3b47b0608817f3ab (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD e0adb6786.
+
+EXP3024 HARDWARE BEFORE 2026-11-27T19:54:01Z:
+B21 readback-memory probes (architect 2026-11-27, plan row B21: readback memory is mapped write-combined), no boot. Run on the idle EXP3023-k48 post-rollback guest (accepted driver 2883 staged on Problem 28; the running driver is the K48MUT candidate's rollback state - see note).
+WHY: the K48 gate copy read 72 MB from the readback mapping at about 250 MB/s (gate-steps receipt EXP3023, copy 291219 us), which points at an uncached mapping. These probes measure that defect directly.
+Probes: .local/experiments/PROBE-RBBW-5a30c7ae1 (SHA256SUMS 2e0d2656, 6 OK): agx_d3d12_probe_rbbw_arm64.exe 2013c387 "only RBBW"; agx_d3d11_fl111_probe_stagerb_arm64.exe b7126c11 "only STAGERB". Never run on hardware before (first-run gate: watch the first run).
+Runner rbbw-run.sh: pins re-checked, console-session task via run-tool-long, guest exe re-hashed after the run, outputs fetched with sha256 on both sides, guest outputs and exes deleted after a verified fetch.
+Expected: speed-ratio checks FAIL by design (about 0.05 against a cached copy) = defect measured, not a regression; pattern checks PASS. A pattern or stale-line FAIL = a different, more serious finding, reported at once. Not part of the 119 suite.
+Note: the guest's APPL0002 runs on the state the K48MUT rollback left (candidate removed, 2883 staged, binds at the next boot). Whether the probes see 2883 or the basic display driver is read from the probe's own adapter line and reported.
+Evidence .local/experiments/EXP3024-rbbw/.
