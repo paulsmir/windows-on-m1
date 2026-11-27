@@ -90768,3 +90768,15 @@ BENCH ADDENDUM (before the run):
 - STOP classes per the BEFORE: receipts first, ORDERED_RECOVERY_REQUIRED, no second attempt; unreachable guest -> recover.sh at proxy, dump first. SWITCH_REMOVAL_PENDING -> the next boot removes Wom1FwRestartDrillAllowed before anything else.
 - Disk: diskgate2 before; diskwatch during. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP3036-tdrh1/.
 - Launcher launch-kbd3036.sh sha256 b0b81c9f5e2fd7a9 (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 2e73bb2e6.
+
+EXP3036 ACTUAL 2026-11-27T23:32:50Z (refs EXP3036 BEFORE; TDRH1, tdrh1-boot.sh 3036 3035 EXP3035-b23; evidence .local/experiments/EXP3036-tdrh1/evidence):
+- Pre-kit: DISKGATE2 PASS (inside 22677, SSD 3540); presence clear; AppX busy=0, mousocore=0. HASHES_OK (m1n1 9bddd9aa, Mu 170a91b4, base 2883, drill 3553140c, kit 65f2a90e). GUARD_PREV ACCEPT 2883 (staged).
+- Switch set on the previous guest: Wom1FwRestartDrillAllowed 0x1 Int32, read back. Ordered end of EXP3035 at 23:29:50Z.
+- Boot 23:29:54Z: launcher guard post ACCEPT 2883; LAUNCH_WIFI_3036_READY 23:30:43Z; CONTRACT_CHECKS PASS. Wi-Fi not found (orphaned profile; PROFILE_GAP recorded).
+- Validity: VALIDITY filter=1 cppc_scale_lines=2 broker_init=1; PKG_BOUND 30.0.2883.0 CHECK_INSTALLED bound PASS; four base switches 0x1; Wom1FwRestartDrillAllowed 0x1; other drill switches absent. GUEST_HASHES probe 86c101b2, drill 3553140c.
+- KIT_STOP at the IRQ start gate: "ModuleNotFoundError: No module named 'agx_irq_rx_decode'". Kit defect: tools/check_standing_gpu_irq.py imports agx_irq_rx_decode from its own directory, and the kit's tools/ does not contain agx_irq_rx_decode.py. The selftest did not exercise this gate.
+- STOP_RECEIPTS GPU_RESET none; STOP_STATE TDR4101 0, STOPS1001_41 0, DEVNODE OK 0, adapter OK.
+- No drill cycle and no smoke ran. STEPS_RC 9, H1_VERDICT INCOMPLETE.
+- Cleanup: KMD receipts read before the switch removal (GPU_RESET none). Switch removed and read back absent twice (SWITCH_REMOVED_OK). NO_H1_RECOVERY_NEEDED. TDRH1_BOOT_3036_DONE rc=9. V857GATE OK; DW_BREACH_LINES 0.
+- VERDICT: INCOMPLETE (kit packaging defect, no restart ran). Not a driver or firmware result.
+- Guest left up with 2883 bound and the switch absent. Owed: TDRH1 rerun on a resealed kit that includes agx_irq_rx_decode.py.
