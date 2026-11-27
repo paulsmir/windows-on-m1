@@ -89245,3 +89245,11 @@ BENCH ADDENDUM (before the run; arm off2 = boot 3 of 4: EXP3016 off1 / EXP3017 o
 - Launcher launch-kbd3018.sh sha256 4c37b78564c0bf31 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD c16186ff5.
 
 EXP3015 NOTE 2 2026-11-27T15:38:46Z (refs EXP3015 ACTUAL and NOTE; GPU line's precise counts, appended): offline re-evaluation (tool c2b6c86c7, same k48gate.bin, guest and host hashes equal) gives K48_GATE_VERDICT FAIL. The whole difference is float rounding in word8: 23849 of 48244 items with a unique ID (24939 of 50266 counting repeats), p50 1 ULP, max 46 ULP, relative max 3.31e-6. IDs, slots, counter (2 -> 50268) and every integer word are equal. My NOTE's "23849 of 50268 items" mixes the two bases; this note supersedes that figure. The gate arm overlapped the Defender signature install at 14:49:31Z. Memory: one pool refusal by floor in the gate run, not shown to be caused by the gate (72.3 MB, not the pool-OOM class). No retroactive PASS. GPU-line CHANGES row c15e1fa53.
+
+EXP3018 ACTUAL 2026-11-27T15:40:26Z (refs EXP3018 BEFORE; C4CM arm off2, boot 3 of 4; evidence .local/experiments/EXP3018-c4/evidence):
+- V857GATE OK [1227, 653, 439, 550]. PROFILE: SMC OK, battery 99 %, Wi-Fi not reachable on this boot. IRQ gate PASS (769). Suite 119/0.
+- gm3018p1 fps_frames 55.804 and gm3018p2 55.803, both VALID. PERF_GATE PASS worst=47.617 (+1.30 %). defjudge: p1 OK, p2 OK.
+- C4_TACM arm off2 TACM_VERDICT ABSENT (no Wom1TaCoreMaskSent).
+- C4_RESULT arm off2 switch [none] tacm ABSENT, signature CRCRCRCR, frames 4789, to_ta 1.3996 1.3963 0.1914 0.1894, sum_r5_r7 0.3807, r7 0.1894.
+- Health: STEP_END c4 with all deltas 0, gpu_resets 0, tdr4101 0. GATE_BOOT_3018_DONE rc=0.
+- Verdict: valid off arm.
