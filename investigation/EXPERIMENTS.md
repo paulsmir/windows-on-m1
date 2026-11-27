@@ -90600,3 +90600,14 @@ EXP3035 ACTUAL 2026-11-27T23:28:00Z (refs EXP3035 BEFORE; B23A 30.0.3021.0 accep
 - VERDICT: REJECTED (repeated GPU ENGINE resets from boot on 30.0.3021.0; KIT_STOP in validity). B23A does not supersede 3015; 3015 stays the confirmed standing candidate.
 - Receipts handed to the architect and the GPU line.
 - Next: TDRH1 (EXP3036) on this guest per the queue, unless the architect rules otherwise.
+
+EXP3035 ABORT-1 2026-11-27T23:28:45Z (refs EXP3035; separate line per the architect): launch attempt 1 at 23:22:14Z aborted with no guest change. The bench chain reused variable P for a presence line, so CAND_DIR was the presence string. The kit stopped at its first gate, "GATE_BOOT_3035_FAIL candidate SHA256SUMS" (cd failed). Nothing was removed, staged or booted, and the launcher wrote no BEFORE. Evidence: EXP3035-b23-abort1. Fix: the chain HOLDs unless $P/SHA256SUMS exists, and chainlint.py checks for reassignment. Attempt 2 is the run recorded in EXP3035 ACTUAL.
+
+EXP3035 ROLLBACK-VERIFY 2026-11-27T23:28:45Z (refs EXP3035 ACTUAL; read-only rbverify.ps1 on the guest after GATE_BOOT_3035_DONE; boot 23:25:03Z):
+- Driver store: one AppleAgx package, oem13.inf 30.0.2883.0. agxpkg-end shows staged [oem13.inf 30.0.2883.0] and APPL0002 problem 28, version none.
+- Removal gates (removal-cand-end): DEVNODE_REMAINS False, STAGED_LEFT 0, CERT_Root False, CERT_TrustedPublisher False, TRACE_ENV False.
+- No AppleAgx system driver/service; no AppleAgx*.sys in System32\drivers; no AGX certificate in LocalMachine Root/TrustedPublisher.
+- UMD leftovers in System32: two .del-20261127T232642582Z files (delete-at-boot scheduled by w2-agxremove), plus AppleAgxRenderAdmissionUmdArm64.dll.old213117 and .orig (older names, not from this run).
+- Receipts: Wom1GpuReset, Wom1GpuFaultPostResume, Wom1SoftFaultState, Wom1B23Counters and Wom1GpuFault are all absent. Device Parameters holds 4 values (the base switches).
+- So the reset and fault receipts are cleared by the devnode removal (they live in Device Parameters); they are not boot-scoped. In EXP3035 the 15 resets at boot +81 s therefore all came from the 3021 boot.
+- GUARD_END ACCEPT package-30.0.2883.0.
