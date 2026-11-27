@@ -89064,3 +89064,9 @@ BENCH ADDENDUM (before the run; arm off1 = boot 1 of 4: EXP3016 off1 / EXP3017 o
 - Stop: GATE_BOOT_<N>_FAIL, C4_DROP (reset/TDR in an on arm), or a perf-gate FAIL in an off arm -> no further arms; architect informed.
 - Evidence .local/experiments/EXP3016-c4/.
 - Launcher launch-kbd3016.sh sha256 896772f0945725ea (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 32c40909e.
+
+EXP3015 NOTE 2026-11-27T14:58:58Z (refs EXP3015 ACTUAL; architect ruling, appended, nothing above edited):
+- Run verdict, as produced by the registered kit: INCONCLUSIVE (unchanged).
+- Offline re-evaluation with the fixed gate tool (KIT-K48W-GATE-c2b6c86c7/agx_k48_gate.py 3da87676, GPU line c2b6c86c7, reproduced by the bench on the same k48gate.bin b3b1745b): FAIL under the registered byte-equality criterion. The whole difference is float rounding in word8 (23849 of 50268 items, p50 1 ULP, max 46 ULP). Item count (50268 ours = 50268 transplant), IDs, slots, counter (slot 4) and every integer word are equal. The gate arm also carries INVALID (Defender). No retroactive PASS.
+- Criterion registered for FUTURE runs, before any repeat: PASS_FLOAT = item count, IDs, slots, counter and every integer word exactly equal (sorted-set form allowed); every float word equal in sign and class and within relative error 1e-4 (absolute floor 1e-30); anything outside is FAIL; the tool prints the distribution on every run. PASS_FLOAT is read like PASS for the timing arms.
+- Repeat: driver package 3008 with a new kit (v2 BEFORE with this criterion verbatim, the amended Defender rule, a gate-only knob, available-memory lines), right after C4CM, once the architect has verified and sent the kit hashes.
