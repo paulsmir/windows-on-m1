@@ -90144,3 +90144,18 @@ EXP3027 ACTUAL 2026-11-27T20:27:10Z (refs EXP3027 BEFORE; C84R, package 30.0.301
   - What stands, being structural rather than a timing figure: every pending Execute writes a swapchain buffer (variant N dropped); the pending share is about 0.92, consistent with the ETW run; the mechanism works (immediate pass at the single read, the OS-wait arm without failures).
   - What does not stand as a measurement: the wait distribution and C2_PRICE / C2_IDLE, quoted only as indicative from an invalid arm. No decision rests on them; the C2 prototype is the direct measurement and is ordered.
   - FULL 8791 with the switch set is a valid point.
+
+EXP3028 ACTUAL 2026-11-27T20:29:42Z (refs EXP3028 BEFORE): plain standing boot between C84R and STDC4C (option a). EXP3027 ended in order at 20:26:48Z. DISKGATE2 PASS (inside 25749, SSD 5688, bands 38061/38400, worst 3010, need 4034). STAGERUN_3028_DONE at 20:29:05Z. Adapter "Apple AGX clean WDDM render-admission experiment", ACPI\APPL0002\0, status OK, driver 30.0.2883.0, CM_PROB_NONE; the fixed predicate passed on the live line. Guest left up as the STDC4C staging guest.
+
+EXP3029 ACTUAL 2026-11-27T20:29:42Z (refs EXP3029 BEFORE; STAGERB2 on EXP3028-std with AGX 2883 bound; evidence .local/experiments/EXP3029-stagerb2/evidence):
+- The hash-verified copy ran (guest exe re-hashed), rc=0, 10 s. Outputs were fetched with sha256 on both sides; the guest outputs and the exe were deleted. Output, verbatim:
+  AGX_D3D11_ADAPTER [0 "Apple AGX clean WDDM render-admission experiment" vendor=0x4c505041 device=0x32303030 AGX] [1 "Microsoft Basic Render Driver" vendor=0x1414 device=0x008c] agx=1
+  AGX_D3D11_STAGERB_DEFECT B21 (a ratio FAIL is the known write-combined readback defect until B21 is fixed)
+  STAGERB size_mib=1 rb_ms=4.090,4.119,4.122 ref_ms=0.023,0.022,0.022 bad_a=0 bad_b=0 bad_partial=0
+  AGX_D3D11_STAGERB: FAIL size_mib=1 rb_mbps=256.4 ref_mbps=48026.4 ratio=0.005 pattern=ok stale=ok
+  STAGERB size_mib=32 rb_ms=130.835,130.855,130.642 ref_ms=1.127,1.173,1.161 bad_a=0 bad_b=0 bad_partial=0
+  AGX_D3D11_STAGERB: FAIL size_mib=32 rb_mbps=256.8 ref_mbps=29774.3 ratio=0.009 pattern=ok stale=ok
+  STAGERB size_mib=64 rb_ms=261.339,260.863,259.997 ref_ms=2.329,2.367,2.363 bad_a=0 bad_b=0 bad_partial=0
+  AGX_D3D11_STAGERB: FAIL size_mib=64 rb_mbps=258.1 ref_mbps=28819.1 ratio=0.009 pattern=ok stale=ok
+  AGX_D3D11_FL111_PROBE_DONE failures=1
+- Verdict: confirmed. The B21 defect is measured on the D3D11 path of the accepted driver (adapter 0 = AGX, agx=1): staging readback runs at 256-258 MB/s against 28.8-48.0 GB/s cached (ratio 0.005-0.009). Pattern and stale are ok at every size (the D3D11 stale check is weaker: Unmap/Map between patterns). This is the same class as D3D12 RBBW (EXP3026, 257-259 MB/s). failures=1 is the ratio FAIL by design. First-run gate: the adapter line is printed first and is AGX.
