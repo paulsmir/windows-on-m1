@@ -88470,3 +88470,21 @@ EXP2998 ACTUAL 2026-11-27T07:38:27Z (AppleSmc 0.1.0.23 acceptance, boot 1 of 2 =
 - 60 s logger: 960 rows, 16 keys, 0 non-ok (969 requests; refused, errors, timeouts, held-off and skipped all 0); TCMz 75.4.
 - No TDR and no bugcheck. STANDING restored by the trap; guest ended in order (LEVRUN_2998_DONE 07:38:01Z).
 - Verdict: install boot PASS (identity, swdevgate x3, B0, logger). Next: EXP2999 CPU check on TZ0003 with GATE_0123 (started 07:38:01Z).
+
+EXP2999 ACTUAL 2026-11-27T08:36:17Z (AppleSmc 0.1.0.23 acceptance, boot 2 of 2 = CPU check on Mu TZ0003):
+- Boot STD_DONE 07:40:19Z with 0.1.0.23 installed by EXP2998. Presence clear; quiet gate try 1 (3784 MB). Preload SMC read: GATE_0123 PASS, RETRY_GATE PASS. Logger at default priority (acceptance run). Decoder: pinned 139f037c.
+- 8-thread block (/IT, session 1; cool gate 902 s):
+  - 12090.8 MB/s vs arm A 12101.8 (-0.1 %). BVSA first 60 s 0.3 % loss (<= 3), sustained 0.1 % (<= 10) -> WITHIN_BOUNDS.
+  - procsample: load 674 % of 800 %; MsMpEng 6.4 %, dwm 4.7 %.
+  - SMC: 30841 commands; Timeouts 0, Errors 0, IdMismatch 0, MboxFull 0; KeyErrors/Refused/Disabled 0 -> GATE_0123 PASS (RETRY_GATE PASS).
+  - Sensors clean: TCMz 115.5, Te3z 106.8; failsafe 0.
+  - SMCFULL: TCMz max 117.7, Tp4z > 110 for 81 s (arm A EXP2990: 117.3 / 85 s). P clock 2978 MHz.
+- P-only block (SYSTEM, 0xF0; cool gate 901 s):
+  - 6828.7 MB/s vs the reference 7766.3 (-12.1 %). BVSA vs EXP2990's P-only CSV: 0.1 % loss -> WITHIN_BOUNDS against arm A. GATE_0123 PASS; cumulative 67078 commands, Timeouts 0.
+  - One slow thread, as in EXP2990: per-thread means t0 19433 / t1 19412 / t2 10570 / t3 19335 MB/s (EXP2990: t0 10682 slow; EXP2995 on TZ1003: all four ~19.2-19.3k).
+  - procsample shows no process large enough to take half a core (MsMpEng 7.3 %, System 2.1 %, TiWorker 0.2 % briefly).
+  - typeperf: CPU4 at 2984-2988 MHz, % Performance Limit 100 on CPU4-7, Performance Limit Flags 0 -> not thermal and not frequency.
+  - Cause not identified; the per-core % Processor Time / Parking counters were not in this typeperf set (TPEXTRA lacks them). Open finding.
+- INERT_GUARD PASS (3 zones: Passive Limit 100, Throttle Reasons 0 throughout). TZ post B0_GATE PASS.
+- No TDR, no bugcheck (tdr4101 0). STANDING restored by the trap; guest ended in order (LEVRUN_2999_DONE 08:35:55Z).
+- Verdict: AppleSmc 0.1.0.23 acceptance PASS by GATE_0123 (0 timeouts across 67078 commands under the 8-thread interactive load and the P-only block; no KeyErrors/RetriesFailed/IdMismatch/KeyRefused; zone sensors clean). 0.1.0.23 is the standing candidate; standing after one restart confirmation (smc23confirm.sh ready). CPU: the 8-thread block equals arm A. The P-only one-slow-thread pattern recurs on TZ0003 (2 of 2 runs) but not on TZ1003 (1 of 1) -> open finding for the architect.
