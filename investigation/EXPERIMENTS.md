@@ -89253,3 +89253,81 @@ EXP3018 ACTUAL 2026-11-27T15:40:26Z (refs EXP3018 BEFORE; C4CM arm off2, boot 3 
 - C4_RESULT arm off2 switch [none] tacm ABSENT, signature CRCRCRCR, frames 4789, to_ta 1.3996 1.3963 0.1914 0.1894, sum_r5_r7 0.3807, r7 0.1894.
 - Health: STEP_END c4 with all deltas 0, gpu_resets 0, tdr4101 0. GATE_BOOT_3018_DONE rc=0.
 - Verdict: valid off arm.
+
+EXP3019 HARDWARE BEFORE 2026-11-27T15:45:14Z:
+C4CM - TA core_mask from the GPU ID registers (Asahi form) on the standing-candidate lineage - preregistration
+(architect order 2026-11-27, WIC field diff C4; written before any run)
+
+WHAT: AppleAgx 30.0.3009.0 from gpu/c4-coremask 9945c13b7e80385afeb2a32258fc9f7c22b65aa2 = c7a019f2b (accepted 2883 e783c48bb + PIPE-PRIO2 e52858ee8 + kept
+receipts OV6c / R6-ADMIT v2 6b7d7c77e) + the B8 lever alone, ported from c5ebf6e8f (B9, A4 and the B6 instruments not
+included). Default absent: without REG_DWORD Wom1TaCoreMask = 1 the TA work item keeps the template's {0xffffffff, 0xffffffff}
+and the KMD writes no new value (tests/test_c4_coremask.py, test_default_switches). Not the B6L package.
+Single variable of the measurement: Wom1TaCoreMask (device registry, read at runtime start; staged with the arm).
+
+WHAT THE SWITCH DOES (apple_agx_ta_core_mask.h, backend_platform_windows.c):
+- At the first power-on the KMD reads ID_VERSION, ID_COUNTS_1, ID_CLUSTERS, CORE_MASK_0 (0xd01500), CORE_MASK_1 (0xd01514)
+  (already read for EXP1317's topology), checks the one-cluster G13 topology and packs {CORE_MASK_0, CORE_MASK_1} exactly as
+  Asahi regs.rs get_gpu_id fills core_masks_packed (queue/render.rs 1119, 1158-1160 pass it to JobParameters1.core_mask).
+- Per render job, after the arena retarget and before StageJob, it writes the two words at RunVertex +0xa8 (G13 / V13_5
+  JobParameters1 +0x68), only over the template's all-ones form or the same mask (layout guard; a refusal keeps the template
+  and the job, sticky for the start).
+- Read-back: the words are read back from the TA object after the write and exported with the GP1 export as
+  Wom1TaCoreMaskSent {1, receipt, refusal, packed0, packed1, sent0, sent1, jobs}; tools/agx_tacm_decode.py prints
+  TACM_SENT and TACM_VERDICT APPLIED / MISMATCH / REFUSED / ABSENT. Expected on this unit: packed = sent = {0xfe, 0}
+  (EXP1317 CoreMask 0xfe, core 0 fused off), jobs > 0. The Wom1GpuPerf Reserved bit TACM_APPLIED 0x02000000 rides every sample.
+
+WHY THIS HYPOTHESIS:
+1. WIC field diff (EXP3005 vs EXP2997, investigation/analysis/WIC-FIELDDIFF-render-15.7.8-vs-13.5.md): every TA job
+   parameter equals Apple's except core_mask (ours all-ones), tpc_size and unk_f0; the latter two are bounded at ~0
+   (equal hardware path / no TVB overflow), so core_mask is the only TA parameter with an unbounded price.
+2. Ours names 32+32 cores to the firmware on a 7-core part (bit 0 = the fused-off core 0); Asahi, which sets the
+   contract for our firmware generation, passes the register mask. If the firmware distributes TA work by this mask, a
+   share of it may be routed to, or wait on, an absent core.
+3. TA is 0.37 ms of the ~0.9 ms render residual (ROW1-REPORT-2 sec. 3) and R7's TA is ~0.18 ms of 0.485 ms.
+Apple 15.7.8 writes 0 in this field: recorded as a firmware-version difference (15.x fills or ignores it), not copied.
+
+MEASURED QUANTITY: per-render TA from the boot's two perf-gate runs (GM HD PERF, traced: measure-gpu-stages), via
+agx_gpu_frame_breakdown.positions() (dominant signature CRCRCRCR): to_ta = render lo -> TA end (launch + prelude + TA; the
+standing trace has no prelude stamps, so 'ta' alone is not available). Scored: TA_sum = to_ta(R5) + to_ta(R7), the two
+renders whose to_ta is TA work (R1/R3 to_ta ~1.40 ms include the wait on their compute; reported, not scored); also R7
+alone (the 4096x4096 pass). p1 and p2 averaged per arm. Reference (EXP3007 standing, switch absent): R5 0.191 / R7 0.186 and
+0.192 / 0.191 ms, TA_sum 0.378 / 0.383, off/off spread 0.0048 ms.
+ARMS: off1, on1, off2, on2, ONE BOOT EACH (the switch is read at runtime start; the candidate is staged with the base
+switches plus, in on arms, Wom1TaCoreMask=1, read back after staging and in step 1); GPU cold gate before each GM run.
+VERDICT (tools/agx_c4_verdict.py, fixed before the run): spread = |TA_sum(off1) - TA_sum(off2)|, effect = mean(off) -
+mean(on), thr = max(0.01 ms, 2 x spread).
+  effect >= thr and both on arms below both off arms -> LEVER (TA cost from the mask)
+  effect <= -thr                                     -> REGRESSION
+  otherwise                                          -> NO_EFFECT
+  INVALID: spread > 0.02 ms (repeat off2); a read-back not APPLIED (on) / ABSENT (off); a different frame signature between
+  arms; a Defender signature/engine update during an arm (repeat that arm).
+Perf gate: PASS required in off arms (switch absent = 2883 + PRIO2 + receipts); recorded only in on arms.
+KEEP/DROP (independent of the score): the register-derived mask is the portable, contract form (per-device binning: a 7-
+and an 8-core M1 differ; G14X has three CORE_MASK registers at 0xe01500 - a table/probe entry, not logic; a G14X+ RunVertex
+has no core_mask field and the lever refuses there). Recommendation: KEEP on NO_EFFECT; DROP only on REGRESSION or a fault.
+STOP: Code 43/31, GPU fault event, reset / TDR / bugcheck, firmware error receipt, perf gate FAIL with the switch absent,
+TACM_VERDICT REFUSED/MISMATCH in an on arm.
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record).
+HARDWARE STATE WE DO NOT SET: none known; the B6L BEFORE's fault-watch for B8 applies (any GPU fault in an on arm = DROP, stop).
+
+PACKAGE: .local/experiments/AGX-C4CM-9945c13b7-signed
+- SHA256SUMS sha256 d849baa0fb7b05a011f0790275e2d0bca2c7b5b85b6f0850b31ea5fe98340f4b
+- AppleAgxRenderAdmission.sys 614e0c7acbfd14f53ab9551b69a038db947a0bb733248116d2095109db44fd52
+- kmd-build-receipt.json SourceCommit 9945c13b7e80385afeb2a32258fc9f7c22b65aa2, PackageBuild 3009, Umd32Source X86B577;
+  builder C4CM_3009_PACKAGE_BUILD_PASS, C4CM_FINAL_PACKAGE_PASS, versions coherent 30.0.3009.0, STACK_FRAMES PASS x4,
+  source integrity PASS 1009 files.
+- agx_diag_absent.py: c84-ingress 0/4, k48-replace 0/6 (standing recipe). The .sys carries "Wom1TaCoreMask" and
+  "Wom1TaCoreMaskSent" (UTF-16).
+- Tests (gpu/c4-coremask): test_c4_coremask 9/9 (contract under ASan/UBSan, template all-ones, apply order, read-back
+  export only with the switch and never under the switch name, decoder, verdict rules, the EXP3007 trace), test_default_
+  switches, test_job_timing_export_rate (RED before the export stub); full suite NEW set = the 96 environment entries.
+- Verdict tools from gpu/c4-coremask dcbfe64c4 (tools only after the package commit).
+KIT: .local/experiments/KIT-C4CM-9945c13b7 (c4-boot.sh / c4-steps.sh from KIT-K48W-33d3ede6c; step 7 = the C4 arm step).
+
+BENCH ADDENDUM (before the run; arm on2 = boot 4 of 4: EXP3016 off1 / EXP3017 on1 / EXP3018 off2 / EXP3019 on2):
+- Kit KIT-C4CM-9945c13b7 SHA256SUMS b6ef929a (44 OK, bench + architect); package AGX-C4CM-9945c13b7-signed SHA256SUMS d849baa0 (8 OK). Run: C4_ARM=on2 CAND_DIR=<package> c4-boot.sh 3019 <prevN> <prevDir> <this body>. Previous guest: EXP3018-c4 (post-rollback, 2883 staged).
+- Sequencing (architect): after K48W (EXP3015, gate INCONCLUSIVE), before B19. Power: host-Mac port + hub charging input (restored after the EXP3011/3013 USB fault; EXP3014 confirmed). Battery read by the kit.
+- Gates the bench adds: disk gate (pwdev >= 8 GiB, system data >= 2 GiB), AppX v3, early USB gate in the background of the launch (v857gate), read-only Defender watcher (defwatch, 60 s) for the whole boot; per-arm verdict by defjudge.py (WindowsUpdate install inside GM_START..GM_RESULT or a signature/engine change in in-arm polls = INVALID; that arm is repeated under a new ID and passed to agx_c4_verdict.py with --invalid until repeated).
+- Stop: GATE_BOOT_<N>_FAIL, C4_DROP (reset/TDR in an on arm), or a perf-gate FAIL in an off arm -> no further arms; architect informed.
+- Evidence .local/experiments/EXP3019-c4/.
+- Launcher launch-kbd3019.sh sha256 30d2af6240fd3e13 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 0831ef9af.
