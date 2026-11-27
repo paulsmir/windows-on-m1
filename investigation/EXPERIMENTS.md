@@ -90780,3 +90780,87 @@ EXP3036 ACTUAL 2026-11-27T23:32:50Z (refs EXP3036 BEFORE; TDRH1, tdrh1-boot.sh 3
 - Cleanup: KMD receipts read before the switch removal (GPU_RESET none). Switch removed and read back absent twice (SWITCH_REMOVED_OK). NO_H1_RECOVERY_NEEDED. TDRH1_BOOT_3036_DONE rc=9. V857GATE OK; DW_BREACH_LINES 0.
 - VERDICT: INCOMPLETE (kit packaging defect, no restart ran). Not a driver or firmware result.
 - Guest left up with 2883 bound and the switch absent. Owed: TDRH1 rerun on a resealed kit that includes agx_irq_rx_decode.py.
+
+EXP3037 HARDWARE BEFORE 2026-11-27T23:35:19Z:
+C2P - C84 C2 prototype: honour incoming queue waits (application Wait and the swapchain present-release wait) event-driven,
+behind APPLE_AGX_D3D12_INGRESS_PROBE=3, OFF by default (architect ruling after EXP3027) - preregistration, written before any run
+
+WHAT: AppleAgx 30.0.3018.0 from gpu/c84-c2 2b8853a913b78e8dde7afbce3e2f8403bebc1545 = standing candidate lineage (c96dd5862, line
+3015) + the C84 receipt diagnostic (ported from f5be6bb77) + the QWAIT probe step + the C2 prototype and present receipts; diagnostic
+build (AppleAgxDiagIngress=true -> APPLE_AGX_D3D12_DIAG_INGRESS); with the define off the DDI reduces byte for byte to c96dd5862
+(test). C2 (design D3D12-C84-incoming-queue-wait.md REVISION 2 + RULING after EXP3027): per Execute/Present one ingress signal on
+the queue's second context and ONE non-blocking read; passed and FIFO empty = today's path; otherwise the lists are deep-copied
+into a per-queue FIFO, the queue context gets a GPU wait on a per-queue egress fence at the entry's value, the call returns; one
+persistent worker per queue, woken by the OS (pfnWaitForSynchronizationObjectFromCpuCb hAsyncEvent), replays the head under the
+owner lock with the immediate path's sequence, submits with the C83 outgoing wait on an egress context, signals the entry's egress
+value only after its replay, drains following passed entries, re-arms on the first that has not passed. State machine IDLE /
+DEFERRING / DRAINING / REMOVED / STOPPED, fail-closed (agx_d3d12_c2_gate.h, host-tested under ASan/UBSan, every transition).
+Receipts: measure-d3d12-c2-setup / -defer / -replay / -batch / -fail / -final; present receipts -present (existing), -present-path,
+-present-config, -present-release (emitted with the switch off too).
+Probe: agx_d3d12_probe_c2_arm64.exe 1df0d148c3d392126101f8f24d9bafef65afec6bb683cd3dd40cdd3e72cb8cd4 (built from 2b8853a91: QWAIT
+steps CPULATE / OTHERQ / ALREADY / CROSS / TEARDOWN + QWAITLIFE SNAP / FREE).
+
+WHY THIS HYPOTHESIS:
+1. EXP2996-dx / EXP3027: 91.6 % of GM Executes are issued while the present-release wait is pending; in 32 % of frames our owner
+   work starts on the GPU before the release; C2_PRICE 4.33 ms/frame (upper bound), C2_IDLE 3.8 ms/frame (static estimate):
+   not decidable from a run that did not hold.
+2. Present timeline (EXP2996-dx ETW): the release is VSync-locked (411/411 within 0.065 ms after VSyncDPC); GM issues the next
+   frame's first Execute two releases ahead; the compositor takes our token at the next VSync - the cost under the contract is
+   refresh-phase quantization of a sub-60-fps windowed GM on a 60 Hz output, i.e. a property of the configuration, to be measured.
+3. Conformance: QWAIT CPULATE / OTHERQ fail today (application Wait not honoured); C2 is the design that makes them pass.
+
+ACCEPTANCE (conformance, before any GM arm; a FAIL stops the kit):
+- QWAIT with the switch on: CPULATE, OTHERQ, ALREADY, CROSS, TEARDOWN all PASS; with the switch off ALREADY, CROSS, TEARDOWN PASS
+  (CPULATE / OTHERQ expected FAIL = the RED half; a PASS there is logged, not a stop).
+- QWAITLIFE (deferred-list lifetime: reset/re-record after Execute, release after own fence) PASS with the switch off and on.
+- Suite e2459 with the switch on: 119 PASS / 0 FAIL (the switch-off suite runs in step 4 as always).
+MEASUREMENT: GM HD FULL foff1 fon1 foff2 fon2 (score + fps, traceless runner), traced GM HD PERF poff (mode 2: receipt-only waits)
+and pon (mode 3: deferral / replay receipts), present cadence (median present interval, p10/p90 spread), wait duration in refresh
+periods, present flags / path / configuration from the receipts, output refresh rate and resolution from the guest
+(Win32_VideoController). What the UMD cannot see (swap effect, declared buffer count, composed vs independent flip, DO_NOT_WAIT)
+is recorded as not visible; a DxgKrnl ETW arm is out of this kit (per-frame join after the run only if the result is ambiguous).
+FULLSCREEN PAIR (independent-flip candidate, no new code path): GM -Fullscreen 1 at the guest's current resolution, soff (mode 2)
+/ son (mode 3) PERF; valid only if the mode set (no "can't set" in err, "Creating WxH" in out); if invalid, the kit says so and
+"fullscreen / independent flip on our driver" becomes its own plan row.
+VERDICT (fixed, c2p_verdict.py): COST = (mean FULL score off - mean on) / mean off. COST <= 1 % -> C2 becomes the default in the
+next standing candidate; 1-5 % -> the owner decides with the numbers; > 5 % -> the owner decides, plus the statement from the ETW
+structure of what a conformant driver pays in this configuration. INVALID if an arm lacks a score or the off/off spread > 1 %.
+PRICED EXPECTATION: between 0 (frames only start later, cadence unchanged) and ~19 % (C2_IDLE static estimate, no backlog
+reshaping); the fullscreen pair near 0 if the release there is not VSync-paced.
+NOTE FOR THE OWNER: macOS GravityMark is display-paced by its drawable pool; the like-for-like comparison is conformant Windows
+against macOS. If C2 costs frames, today's 8770 is not that number.
+STOP: Code 43/31, GPU reset / TDR / bugcheck, firmware error receipt, conformance FAIL, suite-on FAIL.
+REPORTED (not a stop): every measure-d3d12-c2-fail code per arm (C2P_FAIL line); codes 9-11 (replay / egress signal / worker wait
+failed) in an on arm make that arm's numbers unusable for the verdict and are stated as such.
+RECOVERY: rollback to 30.0.2883.0 (accepted).
+
+PACKAGE: .local/experiments/AGX-C2P-2b8853a91-signed
+- SHA256SUMS sha256 c725150dd702042ff8bd377e8a7845e6e9252256790410fad3e32c4f44b10eb9
+- AppleAgxRenderAdmission.sys 2e1fc9577d58fb618f0427afcfe1f94643c31fbb277208752d9246073e264ae6
+- AppleAgxRenderAdmissionUmdArm64.dll 2073311553a04a0dcbd271c6610ad91f0c73b112c8ab9d38d0fdc176b2fa468b
+- kmd-build-receipt.json SourceCommit 2b8853a913b78e8dde7afbce3e2f8403bebc1545, PackageBuild 3018, Umd32Source X86B585;
+  C2P_3018_PACKAGE_BUILD_PASS, STACK_FRAMES_PASS, C2P_FINAL_PACKAGE_PASS, versions coherent 30.0.3018.0, source integrity PASS
+  1013 files.
+- agx_diag_absent.py --expect c84-ingress --expect c84-c2: c84-ingress 5/5, c84-c2 9/9 PRESENT, every other feature ABSENT,
+  DIAG_CHECK PASS; the c2 and present-path receipts are in the ARM64 and x86 UMDs.
+- Builder compile gate before the build: agx_d3d12_ddi.cpp + agx_d3d12_windows.cpp ARM64 /W4 /WX with and without
+  APPLE_AGX_D3D12_DIAG_INGRESS rc=0.
+- Host tests on gpu/c84-c2: test_d3d12_c2_gate 3/3 (8 ASan/UBSan cases, every transition), test_d3d12_c2_ddi 19/19 (production
+  source byte-identical, one signal + one read, egress after replay, destroy order, fail-closed paths, present receipts),
+  test_d3d12_probe_qwait 7/7, test_agx_diag_absent 5/5, test_d3d12_ingress_probe, test_d3d12_ingress_receipt; full suite NEW set =
+  the unmodified c96dd5862 run's (worktree lacks .local/reference).
+- Tools: tools/agx_ingress_exec.py from gpu/c84-receipt 4d8f786e8 (one clock), tools/agx_diag_absent.py from 2b8853a91.
+KIT: .local/experiments/KIT-C2P-2b8853a91 (= KIT-C84R-f5be6bb77 with step 7 replaced, c2p_summary.py, c2p_verdict.py, the c2 probe,
+GM_FS fullscreen support in gm_render). Kit selftest: SELFTEST_PASS.
+Run: CAND_DIR=/Volumes/pwdev/public_windows/.local/experiments/AGX-C2P-2b8853a91-signed bash c84r-boot.sh <N> <prevN> <prevDir> <before-file>
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-C2P-2b8853a91 SHA256SUMS 0e3c885d (49 OK, bench + architect), BEFORE-C2P ebeb6ca3; package AGX-C2P-2b8853a91-signed 30.0.3018.0 SHA256SUMS c725150d (8 OK, bench + architect). Run: CAND_DIR=<package> c84r-boot.sh 3037 3036 EXP3036-tdrh1 <this body>.
+- Sequencing (architect): after TRK49 boot 1 (EXP3034; boot 2 held), B23A (EXP3035, rejected) and TDRH1 (EXP3036, incomplete: kit defect), before K48MUT3. Bound base at start: 30.0.2883.0 BOUND (EXP3036 fresh standing boot; TDRH1 stopped before any drill, switch removed and read absent). The kit removes the bound base, stages 3018 (3015 lineage) and rolls back to 2883. Previous guest EXP3036-tdrh1.
+- Conformance first (QWAIT with the switch on: CPULATE, OTHERQ, ALREADY, CROSS, TEARDOWN; QWAITLIFE off/on; suite 119/0 on); any FAIL stops the kit before GM.
+- First on arm watched live: hang, reset, TDR, DWM fault or frozen/blank desktop = stop, recover, report; no next arm. Defender rule per arm; bench cross-check defwatch2 + defjudge.py.
+- Disk: diskgate2 before the boot; diskwatch throughout. Launcher rev2. Bench gates: AppX v3, v857gate. Power: host-Mac port + hub charging input.
+- Evidence .local/experiments/EXP3037-c84/.
+- Kit text (architect ruling 2026-11-27, no reseal): README.md "Run:" line names AGX-C84R-f5be6bb77-signed and c84r-steps.sh:2 names KIT-C84R-f5be6bb77/BEFORE-C84R.txt; both are stale documentation inherited from KIT-C84R. Executable checks pin GP1_COMMIT 2b8853a9 and fail closed on a wrong candidate. Run with CAND_DIR=AGX-C2P-2b8853a91-signed.
+- Evidence folder EXP3037-c84 is the name c84r-boot.sh writes (D=EXP$N-c84); this is the C2P run, NOT a C84R rerun.
+- Launcher launch-kbd3037.sh sha256 aa50bce5deca739c (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD b3be1e427.
