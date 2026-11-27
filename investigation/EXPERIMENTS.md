@@ -88724,3 +88724,23 @@ EXP3008 ACTUAL 2026-11-27T12:43:27Z (refs EXP3008 BEFORE 12:30:05Z; evidence .lo
 - TDR 0, bugcheck 0. Display, input, SSH, storage and all CPUs alive. Ordered end LAUNCH_WIFI_3008_ENDED 12:43:04Z.
 - Verdict: confirmed (preregistered checkpoint reached); rule result R4 LIBRARY_OR_CORE_PENDING_IMAC.
 - Next: sha256_i on macOS (cpuload_mac -DWITH_SHA256_I) at the next macOS session to split library from core. Optional: re-run the cpuload P4 block at Normal priority to test the B18 priority hypothesis. Queue: EXP3001 remainder -> AGXPWRON -> DRAM pair.
+
+EXP3000 ACTUAL 2026-11-27T12:44:46Z (refs EXP3000 BEFORE 08:43:16Z; L1 pair arm A, image f34b8efd, evidence .local/experiments/EXP3000-lev-l1a/evidence/lev):
+- Attempt 1 (08:43Z): SMC23_CONFIRM FAIL "ensure" at 08:47:29Z = bench bug in smc23confirm.sh (its expected sys hash constant was truncated by a prefix sed; evidence kept in smc23confirm-attempt1-benchbug). Runner stopped; guest left up.
+- Attempt 2 (08:48Z, same boot, constant fixed to 79834c2ea26f980c): SMC23_CONFIRM PASS (DriverVer 0.1.0.23, sys 79834c2e, telemetry v13, B0 PASS, battery visible, 60 s logger non-ok 0). IDLESTATS gate OK. Battery 99 %, AC online, not charging.
+- idle600 (09:06:44Z -> 09:16:45Z, after a 901 s TCMz cool-down): SMCIDLE PSTR_mean 7.63 W (max 11.90), PHPC_mean 2.89 W, TCMz_mean 62.59 C. IDLEPS off_pct 0.00 on every E and P domain (59034 samples, 0 faults). Per-core idle: cpu0 92.6 %, cpu4 85.2 % (3147 wakes/s, 82.8 % IPI), cpu5-7 96.7-98.1 %. IRQ887 v887_sum 4008 in 42 lines.
+- PERF gm3000p1 fps_frames 55.789; PERF_GATE PASS worst 47.604 vs 47.007 (+1.27 %). Cold FULL gm3000f1 score 8748 (reference 8727/8861/8843 on 9bddd9aa). IDLEPS off 0.00 in both GM blocks.
+- IDLESTATS_STOPS 0 everywhere; no unhandled/SError; TDR 0. Pre-shutdown PendingFileRename=1 (Defender signature update 08:54:17Z). Ordered end LAUNCH_WIFI_3000_ENDED 09:54:50Z.
+- Verdict: confirmed (arm A reference complete). Note: AppleSmc 0.1.0.23 became standing on this smc23confirm PASS.
+
+EXP3001 ACTUAL (partial) 2026-11-27T12:44:46Z (refs EXP3001 BEFORE 09:54:58Z; L1 pair arm B = deep WFI, image aba559e7, evidence .local/experiments/EXP3001-lev-l1b/evidence/lev):
+- Boot STD_DONE 09:57:13Z; IDLESTATS gate OK; L1_GATE_OK "HV: DEEPWFI v1 armed policy=xnu ... mode=3/2 eligible=P(cl1) cpu0=excluded retention=1 selfcheck=1". Same AppleSmc 0.1.0.23 as arm A. Battery 99 %, AC online, not charging.
+- 10:07:17Z BENCH_STOP by architect order (the owner's macOS session pre-empted): the runner was stopped cleanly during the idle600 cool-down; the SMC logger ended (9249 rows, telemetry 0 timeouts/errors), STANDING.json restored, ordered end LAUNCH_WIFI_3001_ENDED 10:08:08Z.
+- Measured before the stop (bench-partial-l1.txt, from full.log over the cool-down idle, about 10 min):
+  - L1_STOPS_OK idle_lines=600, every line with sc fields, sc_nonzero=0, deepwfi_disabled=0, idleps_faults=0, unhandled=0, serror=0, bugcheck=0.
+  - L1_DEEP cpu4 deep 2053386 / irq 541; cpu5 deep 351684 / irq 2; cpu6 deep 241657 / irq 0; cpu7 deep 840450 / irq 0.
+  - IDLEPS_SUM_ALL (73183 samples): PCPU0 82.4 %, PCPU1 92.1 %, PCPU2 93.7 %, PCPU3 92.9 %, PCPM 0.3 %, every E domain 0.0 % (arm A: all 0.00).
+  - IRQ887 sum 2720 in 75 lines (counting, not flat).
+- NOT run: idle600 SMC power (PSTR/PHPC vs A), PERF, cold FULL, 30 min soak and its stops.
+- Verdict: inconclusive (partial). Deep WFI is armed and power-gates the P cores at idle with no stop condition; the PASS criteria for PERF/FULL/soak and idle power vs A remain open.
+- Next: EXP3001 remainder on its own boot of image aba559e7 (idle600 power, PERF + cold FULL, 30 min soak with stops), per the architect queue.
