@@ -88545,3 +88545,84 @@ EXP3005 ACTUAL 2026-11-27T12:01:02Z:
 EXP3006 HARDWARE BEFORE 2026-11-27T12:03:26Z:
 Plain standing staging boot for the K48 transplant kit (architect queue 2026-11-27: K48 first after the macOS session and the return to the standing Windows profile). Standing m1n1 9bddd9aa + Mu IRQ01 170a91b4, package 2883 bound, nothing staged, AppleSmc 0.1.0.23 (standing since EXP3000), Wi-Fi 0.1.71.2, PARK1. No measurement; guest LEFT UP as the staging guest for EXP3007 (K48 kit). Checks logged: presence, battery, APPL0002 status, AppleSmc DriverVer. Mac disk >= 8 GiB. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP3006-std/.
 - Launcher launch-kbd3006.sh sha256 b4e831c3a327354b (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 2830cb0f9.
+
+EXP3007 HARDWARE BEFORE 2026-11-27T12:08:42Z:
+K48R - k48 in-situ transplant (Apple's m208 code in our pipeline) - preregistration (architect go 2026-11-27; written before any run)
+
+WHAT: AppleAgx 30.0.3001.0 from gpu/k48-replace b4fcfda926cea53c19c362c1e349730b92f55cf8 = accepted 2883 (e783c48bb) + PIPE-PRIO2 (e52858ee8) + kept
+receipts (OV6c / R6-ADMIT v2, 6b7d7c77e) + the K48 replace hook and output gate, built with AppleAgxDiagShaderReplace=true,
+i.e. APPLE_AGX_D3D12_SHADER_REPLACE_BUILD (diagnostic build: the standing recipe never sets it; tools/agx_diag_absent.py
+refuses a standing candidate with its markers; the off path is textually the unpatched Mesa projection, tested).
+Inert unless the process environment names a blob: APPLE_AGX_D3D12_SHADER_REPLACE=a8260e4297efffb3:<path>.
+Blob (never tracked; Apple bytes): .local/k48-transplant/k48-transplant.agxr sha256 d7ae1dd78ff29ba4e1fb4ff0c02e049577e1b7fc0638942bed4e144b8628761d (5540 bytes: 32-byte header,
+142-byte stub, Apple preamble 0x00-0xbc verbatim, Apple main 0x100-0x1504 verbatim at 0x180; gprs 120, preamble gprs 20,
+push 66), built by .local/k48-transplant/tools/build_k48.py from m208.text.bin sha256 7a7d432e...8ba2.
+
+TWIN CONFIDENCE (Apple m208 = our a8260e4297efffb3 = GM's k48): same kernel, not a look-alike.
+- Every Metal argument maps 1:1 by access role onto our root layout in the same order: buffer(0) 228-word view table
+  (stride u31l = 912 = 228*4) = our b0; buffer(1) params = our b1 (preamble loads cb[9], cb[3]/cb[12], cb[1]/cb[4] on both
+  sides); buffers 2..6 = our root UAVs u0..u4 (loads/stores/atomics of the same widths at the same index formulas).
+- The 7 pushed constants (u24 cb[0], u25..27 cb[2..4], u28 cb[6], u29 cb[9], u30 cb[12]) and both immediates (0xffff marker,
+  1.0f) each match an expression of our NIR (ROW listing lines in the design note): counter atomic add at cb[12]+55,
+  overflow ior at cb[12], capacity compare cb[0], 9-vec4 record store at 9n+cb[4]+k, slot store at n+cb[6], 5x+cb[2] load,
+  tgid pair cb[9]+2g(+1), instance row cb[3]+4v.
+- Same control structure (2 shared-memory phases with barriers, the same nested loops), workgroup 256, 3 threadgroup words,
+  threads/core tier 832 both (our 127 GPRs, Apple 120 halfregs). Measured per-frame gap ours - Apple = 0.209 ms
+  (ROW1-REPORT-3; EXP2310 a826 0.870 vs d48 0.656).
+- Residual risk: Apple may rely on hardware state our launch sets differently that no offline check sees (none found:
+  no scratch, textures, samplers, imageblocks; same special registers). The output gate below catches it.
+
+WHY THIS HYPOTHESIS (the k48 gap is the generated code):
+1. k48 is 0.209 ms/frame slower than Apple's on the same scene (EXP2310 split: a826 0.870 vs 0.656 ms), and its memory path
+   is at parity (EXP2982 G1/C1 rows match macOS to 0.1-0.5 % at throughput).
+2. Our code issues one dynamic CB load per wait where Apple keeps ~15 in flight (C1 form, ROW1-REPORT-3 section 2); the
+   C1-priced bound explains 0.072 of the 0.209 ms, so a per-group constant (~38 ns/group) is unexplained by countable terms.
+3. Running Apple's exact instructions on our binding, launch, firmware and scheduling isolates code from everything else.
+
+GATES BEFORE ANY TIMING (both must pass):
+G1 offline (done): .local/k48-transplant/tools/abi_equality.py: ABI_EQUALITY PASS rows 20 trials 2000 mismatches 0
+   (emulates the blob's preamble on random params, compares 20 address/compare expressions with ours); a stub mutation
+   fails it. Tracked test tests/test_agx_shader_replace.py runs it where the material exists.
+G2 hardware output gate (gm<N>kg, gate mode): APPLE_AGX_D3D12_SHADER_REPLACE=a8260e4297efffb3:C:\Users\pavel\k48\k48t.agxr
+   APPLE_AGX_D3D12_K48_GATE=600:C:\Users\pavel\k48 . At the 600th k48 dispatch, one batch on identical real inputs:
+   A (copy of every view) / ours / B / restore A / transplant / C / restore B (GM continues with our outputs).
+   tools/agx_k48_gate.py k48gate.bin (fixed before the run):
+   PASS_EXACT   B == C byte for byte, >= 1 item appended
+   PASS_SORTED  counter equal, appended (slot, record) pairs the same multiset, every other byte equal, >= 1 item appended
+   FAIL         anything else -> STOP, no timing; report the differing ranges (hardware-state finding or remap error)
+   INCONCLUSIVE no item appended or no gate file -> STOP, no timing
+   Receipts required in the run's UMD log: measure-d3d12-shader-replace-setup loaded=3, measure-d3d12-shader-replace
+   result 1 (the shadow compile), measure-d3d12-k48-gate state 1 then 2.
+
+TIMING (only after G2 PASS; same boot): GM HD PERF traced, APPLE_AGX_D3D12_SPLIT_TAGS=97efffb3,b1db88bf in every arm
+(k48 becomes its own compute job; b1db88bf follows it every frame), arms in order off1, on1, off2, on2 (on =
+APPLE_AGX_D3D12_SHADER_REPLACE set, swap mode; off = unset), GPU cold gate before each.
+T = per-frame firmware exact time of the k48 job (agx_gpu_frame_breakdown.py --jobs position of the single-dispatch job
+between the two splits), median over the 60 s window; CI = 95 % bootstrap CI of the median difference.
+code_share = (T_off - T_on) / 0.209 ms (the measured ours - Apple gap).
+  >= 0.7 CODE_OWNS (the code explains the gap: the compiler work is justified)
+  <= 0.3 NOT_CODE (the gap is elsewhere: binding/launch/data)
+  otherwise MIXED
+  INVALID on any G2 output mismatch, a split-tag CI wider than 0.02 ms, or off1/off2 medians differing by > 0.02 ms.
+
+STOP: Code 43/31, GPU reset / TDR / bugcheck, firmware error receipt, G2 FAIL/INCONCLUSIVE (no timing), perf gate FAIL with
+every switch unset (package must behave as 2883 + PRIO2 + kept receipts).
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record).
+HARDWARE STATE WE DO NOT SET: none found offline; report at once if the gate shows one.
+
+PACKAGE: .local/experiments/AGX-K48R-b4fcfda92-signed
+- SHA256SUMS sha256 758111b4e17a8e91d7b314d332ec1014dde7c9421aabcc97e5955750c88976d5
+- AppleAgxRenderAdmission.sys 7fd99968995cd1e3c39139e31bd32e2a1a4bac7f89756eb6bf43cafa0614815d
+- kmd-build-receipt.json SourceCommit b4fcfda926cea53c19c362c1e349730b92f55cf8, PackageBuild 3001, Umd32Source X86B575;
+  builder K48R_3001_PACKAGE_BUILD_PASS, K48R_FINAL_PACKAGE_PASS, versions coherent 30.0.3001.0.
+- agx_diag_absent.py --expect k48-replace: DIAG_PRESENT 6/6 (arm64, x64, x86 UMDs), c84-ingress ABSENT 0/4.
+- The define reached every closure (161 compile commands each, arm64/x64/x86) and each projected agx_state.c carries the
+  hook (definition + call).
+- Blob: KIT-K48R-b4fcfda92/blob/k48t.agxr sha256 d7ae1dd78ff29ba4e1fb4ff0c02e049577e1b7fc0638942bed4e144b8628761d (= .local/k48-transplant/k48-transplant.agxr).
+KIT: .local/experiments/KIT-K48R-b4fcfda92 (k48-boot.sh / k48-steps.sh from KIT-C84E-0ced2a657, step 7 = the K48 step).
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-K48R-b4fcfda92 SHA256SUMS 2cf8e51b (36 OK); package AGX-K48R-b4fcfda92-signed SHA256SUMS 758111b4 (8 OK; unlisted file = kmd-build-receipt.json, not installed). k48-boot.sh = c84-boot lineage + agx_diag_absent --expect k48-replace; k48-steps.sh step 7 reviewed: blob k48t.agxr d7ae1dd7 pinned local and guest (stays under .local; only its sha256 in tracked text), G2 output gate first (agx_k48_gate.py), timing only on PASS_EXACT|PASS_SORTED. Dry run: the gate tool raises on a missing or empty file -> no verdict -> timing skipped (fail-closed); the timing tool raises on empty logs (verdict empty, logged). Kit self-test prints SELFTEST_FAIL pkg_bound version from an inherited stale fixture - the proven WICDUMP kit (EXP2997 PASS) fails identically; not specific to this kit.
+- Sequencing (architect, own message): first after the macOS session (EXP3005) and the return to the standing Windows profile. Staging guest = EXP3006-std (2883 bound, nothing staged). AppX gate v3, memory floor = kit default 3700 MB, Mac disk >= 8 GiB. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP3007-k48/.
+- Power state at staging (EXP3006, 12:05:51Z): battery 80 %, charging=True at 15.8 W on AC (the macOS session drained it from 100 to 80 %). The off/on arms alternate within one boot (off1 on1 off2 on2), so a slow charge trend affects both arms; the charging state is read at the kit's end and reported.
+- Launcher launch-kbd3007.sh sha256 bda8f66019f92948 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 2c363d104.
