@@ -90490,3 +90490,93 @@ EXP3034 ACTUAL 2026-11-27T23:21:50Z (refs EXP3034 BEFORE; TRK49 boot 1 of 2, K48
 - Gate files with sha256: evidence/gate/GATE-FILES-SHA256.txt, handed to the GPU line.
 
 EXP3034 CORRECTION 2026-11-27T23:22:00Z (refs EXP3034 ACTUAL): the first T3 quiet-gate wait line is 23:02:45Z (GM_GATE_WAIT gm3034kgT3 ... waited_s=3), not 23:02:49Z.
+
+EXP3035 HARDWARE BEFORE 2026-11-27T23:25:08Z:
+B23A - standing candidate: 3015 (accepted 2883 + PIPE-PRIO2 + kept receipts + C4/B19 defaults) + the B23 fail-closed user-context
+fix set. Full acceptance preregistration (architect order 2026-11-27 after EXP3033 D1 OPEN; written before any run).
+
+WHAT: AppleAgx 30.0.3021.0 from gpu/b23-hardening dda47d3fcd9ad4b8261ccf0ad0436810b725015e = e1f86b64d (3015) + c96dd5862 (doc) +
+- D1a 8f37a198d: under G3 a user context without VirtualAddressing fails CreateContext with STATUS_NOT_SUPPORTED (only the
+  dxgkrnl system/paging and GDI contexts are admitted without VA). Closes the EXP3033 OPEN path.
+- U1 04ef3e55f: a G3 job without a leased VM slot fails (receipt JobSlotRefusals/Fence) instead of running in slot 1.
+- D1b 08c8a1b26: the mixed-batch compute stream runs in the leased slot, not slot 63.
+- D1c 8e1264fba: under G3 context 63 maps no local reserve and no arena alias; b7deaec9b static check keeps it so.
+- U2 42161d13a: a render whose command copies name another VM slot is refused.
+- D2 5d076be86: GPU-private cached leaves are refused until unmap invalidates caches.
+- C10 c7feb82d6: v1/v2 render envelopes are refused on the G3 path.
+- U4 a3dd43d42: the KMD restores its tiler-list words while the manager is idle (ListRestoreChecks / ListRestoredWords).
+- Receipts dda47d3fc: Wom1B23Counters v1 (40 bytes, written once any counter is non-zero; absent = all zero) and the faulting
+  job's VM slot in Wom1GpuFault (flag 0x10).
+NOT included: the exclusive-grant KMD side (H1, later candidate with the broker); the U4 tiler-list hash (dc03da7b0) is compiled
+out (diag marker u4-list-hash must be ABSENT, gate-boot.sh fails otherwise).
+
+WHY THIS HYPOTHESIS (the fix set is behaviour-identical on every product path):
+1. EXP3033: the D1 probe showed a LegacyMode/non-VA user context ADMITTED on 3015; source review shows every product path
+   creates VA contexts (umd_runtime_device.c:627-633 under APPLE_AGX_GPUVA_WINSYS, set for ARM64 by build-driver.ps1:143/216
+   and the x64/x86 build scripts; the D3D12 and GL ICDs use the Virtual call; only one-shot tools use the non-virtual call), so
+   D1a refuses only a path no product uses.
+2. U1/D1b/U2/D2/C10 refuse states the product never produces (leased slot always present for G3 jobs, compute in the leased
+   slot, copies within the slot, no private cached leaves, v3 envelopes only); the host tests pin each refusal and the default
+   path (B23 rows in investigation/CHANGES.csv).
+3. U4 restore rewrites only words that differ from the KMD-owned values; on a correct run it must find none (RestoredWords 0).
+
+PREREGISTERED VERDICT (gate_verdict.py), reference and floors exactly as STDC4C (accepted 2883 on the standing pair Mu 170a91b4
++ m1n1 9bddd9aa; derivation in KIT-B23A README / the STDC4C record):
+  SUITE   TOOL_SUITE PASS >= 119 and FAIL == 0
+  RRQ     RRQ_IDENTITY IDENTICAL
+  PERF    both PERF points VALID and GATE_GM PASS vs standing-perf-baseline.json (47.551, -2 % floor 46.600). This covers U4:
+          the restore check runs on every idle manager transition inside the PERF and FULL windows.
+  FULL    >= 2 of 3 FULL points VALID, mean >= 8740, no VALID point < 8700
+  DEFAULT median C6 driver launches == 1;  TACM TACM_CHECK APPLIED;  DWM DWM_FAULTS new 0
+  B23_REGRESSION PASS (step b23, after the suite):
+          D1 probe (PROBE-D1-a59528bc1 exe 4dfca66b...; one variant per run) B then A: each line must read
+          create_device=0x00000000 create_context=0xc00000bb. Expectation for B (control, LegacyMode=0, non-virtual
+          D3DKMTCreateContext): REFUSED with STATUS_NOT_SUPPORTED, the same as A - D1a keys on VirtualAddressing of the context,
+          not on LegacyMode of the device, and the non-virtual call never sets VA. "B created" would mean D1a is not effective.
+          A different non-zero status (dxgkrnl mapping) is a FAIL to be explained, not a pass.
+          D3D11 FL11.1 probe default suite (stagerb2 exe e31393c0...): failures=0 (D3D11/DXGI UMD path, VA contexts).
+  B23_CHECK PASS (b23_check.py on kmd-receipts-final.txt):
+          Wom1B23Counters present, v1, 40 bytes; JobSlotRefusals == 0 (and Fence 0); ListRestoreChecks > 0;
+          ListRestoredWords == 0 - a non-zero value is reported as GATE_FINDING (a real repair, to be explained), not a gate fail;
+          no Wom1GpuFault event with JobVmSlot valid (flag 0x10) and == 63 (no context-63 fault).
+  HEALTH  no KIT_STOP / STOP_TEMP; measured points VALID; no GPU reset / TDR / BUGCHECK
+  CS      separate (STEAM_OK=1 only), never blocks GATE_PASS
+  GATE_PASS = all main checks. A correctness failure -> bisect by fix item (each B23 commit alone on 3015), not by guess.
+  RESTART: rollback restart shows BUGCHECK code=0x0 in the m1n1 log and 2883 bound again.
+  CORPUS: NOT RUN (same waiver basis as STDC4C: no shader/compiler/D3D translation change; reported as not run).
+
+MULTI-PROCESS COVERAGE (named, not implied):
+  covered: DWM and GravityMark render concurrently (two G3 processes holding leased VM slots at once; the suite and the D1/D3D11
+           probes are further processes created and destroyed during the boot, so slot lease/release churn is exercised).
+  NOT covered: two GM-class heavy clients rendering at once (slot contention under load); the FAULT_INFO slot read opt-in is not
+           used (it aborted in EXP592 / EXP671); a fault in a second process while the first renders. These stay open for a
+           multi-client kit.
+
+DEFENDER RULE: as STDC4C (versions before/after every measured arm; a change invalidates the arm, one repeat, second change stops).
+STOP: Code 43/31, GPU reset / TDR / bugcheck, firmware error receipt, suite FAIL, B23_REGRESSION FAIL.
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record; gate-boot.sh does it at the end).
+
+PACKAGE: .local/experiments/AGX-B23A-dda47d3fc-signed
+- SHA256SUMS sha256 6223170a3de057ffcec1bcfc6e254d8aed23cc22adb23da8ad42b0b047327968
+- AppleAgxRenderAdmission.sys 00fba32c58707b47f155218702d09a88393eae6cf8e63cb45031402c52de6d1f (UMD arm64 ccf4e955..., Umd32 X86B588 e6443b91...)
+- kmd-build-receipt.json SourceCommit dda47d3fcd9ad4b8261ccf0ad0436810b725015e, PackageBuild 3021, Umd32Source X86B588; INF DriverVer 11/28/2026,30.0.3021.0; builder B23A_3021_PACKAGE_BUILD_PASS,
+  B23A_FINAL_PACKAGE_PASS, versions coherent 30.0.3021.0, source integrity PASS 1010 files, STACK_FRAMES PASS, X64 gates PASS;
+  builder-listed hashes equal the fetched files. Wom1B23Counters string present in the KMD.
+- tools/agx_diag_absent.py: all six features ABSENT (c84-ingress, k48-replace, wic-dump, c4-switch, b19-conformance,
+  u4-list-hash), DIAG_CHECK PASS.
+- Host: test_b23_context63_static 3 OK, test_b23_receipts 5 OK, test_g4_fault_mapping 1 OK, test_change_ledger OK; full suite
+  and the per-fix tests as recorded in the B23 CHANGES rows.
+KIT: .local/experiments/KIT-B23A-dda47d3fc (from KIT-STDC4C-e1f86b64d: same boot/steps/floors, plus step b23 with the two probes,
+b23_check.py in final, B23 checks in gate_verdict.py, selftest cases for both; SELFTEST_PASS, KIT_FOREIGN_NAMES_OK).
+
+BENCH ADDENDUM (before the run):
+- Package AGX-B23A-dda47d3fc-signed 30.0.3021.0 SHA256SUMS 6223170a (9 OK); kit KIT-B23A-dda47d3fc SHA256SUMS 42ea0605 (48 OK); BEFORE-B23A 8feee362. All verified by bench and architect.
+- Run: CAND_DIR=<package> gate-boot.sh 3035 3034 EXP3034-k48 <this body>.
+- Previous guest EXP3034-k48 (TRK49 gate-only boot 1). At start, the TRK49 rollback leaves 30.0.2883.0 staged on Problem 28, with nothing bound. The kit's own pins and guard decide. If the guard refuses because of that staging state, the bench stops and reports; no guard is adjusted.
+- Sequencing (architect): next after TRK49 boot 1 and its ACTUAL. TRK49 boot 2 is held (timing-only mode cannot select classes). Then TDRH1 (EXP3036) and C2P (EXP3037).
+- Watched live: boot, DWM start, the first suite steps. Any adapter Code 43, TDR, DWM fault or suite failure = stop, recover, report with receipts first.
+- D1 step: both runs must read create_device=0 and create_context=0xc00000bb; either one created = B23_REGRESSION FAIL and stop.
+- b23_check.py: a missing receipt is FAIL; RestoredWords > 0 is a FINDING.
+- Pre-kit: presence clear; AppX busy=0; MoUsoCoreWorker absent, waited for up to 10 min, after which the kit's quiet gate decides (EXP3034 lost T3 to the WU orchestrator).
+- Disk: diskgate2 before; diskwatch during; defwatch2 + defjudge per arm. Launcher rev2. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP3035-b23/.
+- Launcher launch-kbd3035.sh sha256 4710832355601c11 (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 8bd4a97f0.
