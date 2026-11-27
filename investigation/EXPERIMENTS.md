@@ -88381,3 +88381,12 @@ EXP2995 CORRECTION 2026-11-27T07:07:34Z (refs EXP2995 ACTUAL; architect rulings,
 - The single SMC timeout belongs to CPU-check B's 8-thread block, where RETRY_GATE FAIL stands as preregistered.
 - CPU-check B: PASS for the cost bound (8-thread -1.5 % sustained, TCMz max -4.4 K, Tp4z > 110 48 s vs 85 s; P-only -1.5 % vs 7766.3), with the caveat that the seconds-above figures are lower bounds (SMC logger starved, 160 TCMz rows in 607 s).
 - Net: no zone promotion now; decision waits for the macOS CPU-load twin and the power line's reading of the FULL3 event. No further zone runs until then.
+
+EXP2996 ACTUAL 2026-11-27T07:11:28Z:
+- Plain standing staging boot (9bddd9aa + IRQ01, 2883 bound, nothing staged). STD_DONE 07:07:05Z; presence clear; battery 99 % on AC; APPL0002 Started. Mac free 15 GiB at start. Verified copies of dxg-sync-window.sh (38306fb0) and dxg-sync.ps1 (113b8e0f) ran from evidence/scripts, ps1 pin passed explicitly.
+- ETW_PRE: sessions named agxsync 0; guest C: free 34041 MB.
+- gm2996dx (traced GM HD PERF, not scored, floor 3450, start avail 3804 MB): VALID, fps_frames 55.797, GPUCOL mean 1218 MHz, s6 93.1 %; done=TIMEOUT CLOSED 102 s (perf window form).
+- DxgKrnl ETW 8 s at GM+30 s: DXG_SYNC_FREE_MB_BEFORE 34026, LOGMAN_START 0, TRACERPT 0; dxgsync.etl 32505856 bytes (sha d865eccb4a72d29d), dxgsync.csv 102713547 (sha 6d90cb8b8d82878f), dxg-manifest.xml 332692 (sha 91d95f44d3562707); all fetched with matching hashes, guest copies cleaned. gm2996dx-umd.log fetched (sha 1efe83d9e2b53956), guest copy deleted.
+- ETW_POST: sessions named agxsync 0 (stop condition met: session verified absent).
+- No TDR, no bugcheck. Guest left up as the EXP2997 staging guest.
+- Verdict: measurement complete (ran, files as listed). Decoding offline by the GPU line. Evidence .local/experiments/EXP2996-dx/evidence/dx/.
