@@ -90488,3 +90488,5 @@ EXP3034 ACTUAL 2026-11-27T23:21:50Z (refs EXP3034 BEFORE; TRK49 boot 1 of 2, K48
 - Boot 2 (EXP3035 timing-only): HELD by architect ruling. The timing-only mode cannot select classes (k48-steps.sh:174 sets TRAV_OK=K49_OK=H1_OK=1) and would run the withheld traversal timing.
 - Owed in a resealed TRK49 revision: k49 timing, H1 timing (both admitted here), traversal gates T1-T3 after the pairing question, retry for not-quiet arms.
 - Gate files with sha256: evidence/gate/GATE-FILES-SHA256.txt, handed to the GPU line.
+
+EXP3034 CORRECTION 2026-11-27T23:22:00Z (refs EXP3034 ACTUAL): the first T3 quiet-gate wait line is 23:02:45Z (GM_GATE_WAIT gm3034kgT3 ... waited_s=3), not 23:02:49Z.
