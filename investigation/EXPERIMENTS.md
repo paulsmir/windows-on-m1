@@ -88308,3 +88308,28 @@ BENCH ADDENDUM (before the run):
 - Bench preflight of the new qrun: arm-toolrun/toolrun backup copies take -EnvName/-EnvValue and write <tag>-umd.log (APPLE_AGX_UMD_TRACE_FILE); gate()/coldgate()/kmd() defined; agx_ingress_verdict.py on empty inputs prints C84_PREMISE INCONCLUSIVE (rc 0), on a missing qw1 file it raises (verdict line absent -> premise=[none] in the log). First qrun watched live by the bench.
 - Staging guest = the EXP2993 kit boot's guest (base 30.0.2883.0 staged, not bound; the kit's documented deviation path removes it). AppX gate v3 (appxcheck3.ps1). Memory floor = kit default 3700 MB. Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2994-c84/.
 - Launcher launch-kbd2994.sh sha256 4d086c34e9d562dc (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD cb102aeaa.
+
+EXP2994 ACTUAL 2026-11-27T05:37:59Z:
+- Sequencing note: launched 05:19:48Z on the GPU line's relay of the architect's earlier order (C84E after the 2993 re-dump). The architect's revised sequence (C84E after T1R + CPU-check B) crossed the launch; the architect ruled no STOP (run to the end under the stop rules).
+- Kit KIT-C84E-0ced2a657 with candidate AGX-C84E-0ced2a657-signed (30.0.2995.0, sys c2df2f41), on the EXP2993 kit-boot guest.
+  - Before staging: the staged-not-bound base was removed via the documented deviation path. agx_diag_absent on the candidate: DIAG_PRESENT c84-ingress 4/4.
+  - Baseline: 0 GPU resets, 0 TDRs. IRQ_GATE PASS (vector 2817, state 769). TOOL_SUITE 119/0.
+- Perf gate with the switch unset: gm2994p1/p2 memory clean; PERF_GATE PASS, worst 47.567 vs 47.007 (+1.19 %).
+- Step 7 (first run of the new qrun, watched):
+  - qw0 (switch unset): CPULATE FAIL, OTHERQ FAIL, ALREADY PASS, CROSS PASS, TEARDOWN PASS (released without the signal). This is the expected RED baseline of the defect.
+  - qw1 (APPLE_AGX_D3D12_INGRESS_PROBE=1): the same pattern.
+  - Both UMD logs were fetched after a hash match; guest copies deleted. No variant hung (each about 1 s).
+- agx_ingress_verdict.py on qw1:
+  - C84_WAITED: cpulate 8 + otherq 8, second_ctx_passed_in_poll [] (none), queue_ctx_held 16.
+  - C84_RELEASE: after_cpulate seen1=8, after_otherq seen1=16.
+  - C84_UNWAITED: n 8, held 0, p50 0, p90 1, max 1 us.
+  - C84_PREMISE PREMISE_HOLDS.
+- Traced GM HD PERF gm2994ig with the switch set (avail 4427 MB, memory clean):
+  - second_ctx: n 4706, held 4267, p50 0, p90 0, p99 4587, max 4954 us; le50us_share 0.975.
+  - queue_ctx: n 4706, held 4623, p50 0, p90 488, p99 3338, max 3338 us; le50us_share 0.855.
+  - PERF_GATE_GM_INGRESS (recorded only): 47.490 (+1.03 %).
+- Rollback: GPU_RESET none; candidate removed cleanly; switch was a per-process env only (nothing persisted); AGX_GUARD ACCEPT; base 30.0.2883.0 re-staged.
+- Architect's added check: agx_diag_absent on the restaged base (BASE-2883-bench/package, sys 779d90dd matches sheet-hashes) -> DIAG_ABSENT c84-ingress 0/4, DIAG_CHECK PASS. Evidence evidence/base-diag-absent.txt.
+- POST_KIT: no pending reboot. Last WU install 05:32:20Z was a Security Intelligence update (Defender).
+- No TDR and no bugcheck. Display, input, SSH and storage alive.
+- Verdict: C84 premise HOLDS (diagnostic, not a standing candidate). Raw files to the GPU line, verdict to the architect. Guest ended by stdend2 (new: no SystemSettings kill) before EXP2995.
