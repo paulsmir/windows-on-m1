@@ -183,3 +183,9 @@ SoC-independent. KEEP/DROP: to be decided on the §6 checkpoint.
   4. The ADT describes the RTC itself (R, J313 ADT): `/arm-io/nub-spmi/spmi-pmu` has `reg` slave 0x0f,
      `info-clock_offset = [0xD100, 6]` (= `info-rtc_scrpad`, = the Asahi DT cell) and `info-rtc = [0xD002]` (a PMU RTC
      register, meaning U). The offset location can come from the ADT instead of a per-SoC table.
+- Q3 answered (power line, 2026-11-27, R from source at 8e2e0ba2 = 0.1.0.23): AppleSmc never reads or writes CLKM,
+  any RTC key or rtc_offset, and never sets the time. Its write policy is `smc_policy_read_only` with an empty
+  allow-list (common/smc_client.c:113, smc_proto.c:11). Its user key reads admit only the key classes T/P/V/I/B
+  (smc_keys.c:23), so CLKM (class C) is refused. There is no stage-2-like path in AppleSmc.
+- Coordination: TZ1P01 edits neither .dsc file (only AcpiTables DSDT*.asl and J313AppleSmcThermal.asl.inc). The two
+  images merge cleanly.
