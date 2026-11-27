@@ -1,0 +1,30 @@
+diff --color -ru LCV2-pc-81c450e2/proxyclient/m1n1/hv/__init__.py LCV2-pc-81c450e2-rtc1/proxyclient/m1n1/hv/__init__.py
+--- LCV2-pc-81c450e2/proxyclient/m1n1/hv/__init__.py	2026-11-18 01:36:14
++++ LCV2-pc-81c450e2-rtc1/proxyclient/m1n1/hv/__init__.py	2026-11-27 15:56:25
+@@ -1759,6 +1759,11 @@
+             print(f"HV: wireless profile: pcie_init rc={rc}")
+             if rc != 0:
+                 raise RuntimeError("wireless profile: pcie_init failed")
++            # B20 stage 1: m1n1 (RTC_ANCHOR) filled the /chosen RTC placeholders during pcie_init, after this
++            # guest ADT was fetched; copy them (M1N1_RTC_PLACEHOLDERS=1 only, otherwise a no-op).
++            from .. import rtc_anchor_host
++            if rtc_anchor_host.enabled():
++                rtc_anchor_host.refresh(self.adt, load_adt(self.u.get_adt()))
+         print("Initializing hypervisor over iodev %s" % self.iodev)
+         hv_init_result = self.p.hv_init()
+         legacy_zero = os.environ.get("WOM1_ALLOW_LEGACY_HV_INIT_ZERO", "0")
+Only in LCV2-pc-81c450e2-rtc1/proxyclient/m1n1: rtc_anchor_host.py
+diff --color -ru LCV2-pc-81c450e2/proxyclient/tools/chainload.py LCV2-pc-81c450e2-rtc1/proxyclient/tools/chainload.py
+--- LCV2-pc-81c450e2/proxyclient/tools/chainload.py	2026-11-18 01:36:14
++++ LCV2-pc-81c450e2-rtc1/proxyclient/tools/chainload.py	2026-11-27 15:56:25
+@@ -112,6 +112,10 @@
+                ((utc_before_ns + utc_after_ns) // 2) // 1_000_000)
+ set_chosen_u64("m1n1-iomfb-utc-cntpct", iomfb_utc_cntpct)
+ set_chosen_u64("m1n1-iomfb-utc-cntfrq", u.mrs("CNTFRQ_EL0"))
++# B20 stage 1: opt-in zero placeholders for the m1n1 RTC_ANCHOR hardware anchor (M1N1_RTC_PLACEHOLDERS=1 only)
++from m1n1 import rtc_anchor_host
++if rtc_anchor_host.add_placeholders(u.adt["chosen"]):
++    print("RTC: /chosen placeholders " + " ".join(rtc_anchor_host.RTC_PROPS))
+ 
+ print("Setting secondary CPU RVBARs...")
+ 
