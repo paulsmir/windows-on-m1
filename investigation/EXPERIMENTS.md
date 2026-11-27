@@ -89626,3 +89626,193 @@ EXP3021 ACTUAL 2026-11-27T16:56:11Z (refs EXP3021 BEFORE; B19 conformance set, p
 - Rule for FUTURE kits (next BEFOREs): a reference arm with a Defender change is INVALID like any measured arm; when two reference arms exist the clean one is used and the verdict says so.
 
 EXP3021 CORRECTION 2026-11-27T16:57:20Z (refs EXP3021 ACTUAL; appended): the kit ended GATE_BOOT_3021_FAIL guard-end at 16:56:42Z, not DONE. The cause was the bench. I committed the EXP3021 ACTUAL (94c1e41b6) while the kit was still in its rollback, and the kit's end guard refuses any experiment that already has an ACTUAL ("AGX_GUARD REFUSE ... experiment-EXP3021-already-has-ACTUAL"). The rollback itself had completed before the guard: candidate removed (REMOVE1 rc=0, oem inf deleted, STAGED_LEFT 0, certs and trace env absent, UMD renamed .del), and 2883 re-staged (agxpkg-end.json: oem13.inf 30.0.2883.0, inf sha256 45c1e2b86ba80440..., the accepted record's InfHash), with the base switches set. The lines after the guard (TH1 switch read, BASE_RESTAGED) did not run. Measurements and the verdict are unaffected. Rule: write a kit's ACTUAL only after its GATE_BOOT_<N>_DONE line.
+
+EXP3022 HARDWARE BEFORE 2026-11-27T17:20:11Z:
+K48W2H - k48 in-situ transplant, gate repeat after EXP3020 with the PASS_FLOAT criterion and the audited timing tool (Apple's
+m208 code in our pipeline) - preregistration v4 (= v3 BEFORE-K48W2G + the timing-tool fix from the audit; written before any run)
+
+WHAT: AppleAgx 30.0.3014.0 from gpu/k48-replace ce51b949dd43efc491fb5a01e39aa9c885bd2af9 = K48W (33d3ede6c, EXP3015) + the gate memory fix (57787f3ec)
++ the floor fix (ce51b949d)
+(+ tool / host-test commits c2b6c86c7, 380a45443; verdict tool 3a8ac42a4) = accepted 2883 (e783c48bb) + PIPE-PRIO2 (e52858ee8) + kept
+receipts (OV6c / R6-ADMIT v2, 6b7d7c77e) + the K48 replace hook and output gate, built with AppleAgxDiagShaderReplace=true,
+i.e. APPLE_AGX_D3D12_SHADER_REPLACE_BUILD (diagnostic build: the standing recipe never sets it; tools/agx_diag_absent.py
+refuses a standing candidate with its markers; the off path is textually the unpatched Mesa projection, tested).
+Inert unless the process environment names a blob: APPLE_AGX_D3D12_SHADER_REPLACE=a8260e4297efffb3:<path>.
+Blob (never tracked; Apple bytes): .local/k48-transplant/k48-transplant.agxr sha256 d7ae1dd78ff29ba4e1fb4ff0c02e049577e1b7fc0638942bed4e144b8628761d (5540 bytes: 32-byte header,
+142-byte stub, Apple preamble 0x00-0xbc verbatim, Apple main 0x100-0x1504 verbatim at 0x180; gprs 120, preamble gprs 20,
+push 66), built by .local/k48-transplant/tools/build_k48.py from m208.text.bin sha256 7a7d432e...8ba2.
+
+
+WHAT CHANGED SINCE K48W2G (audit 2026-11-27, investigation/analysis/K48-GATE-AUDIT-2026-11-27.md; tool only, the driver
+package is the same 3014 K48W2G build): tools/agx_k48_timing.py from gpu/k48-replace bd0304e2c. The completion record's
+submit QPC is the KMD DdiSubmitCommandVirtual time, 7-20 ms (p50 12.3 ms, 99.9 % of jobs) after the UMD submit returns
+(EXP2310 b / EXP2315 c1 traces, 81791 / 76547 jobs VA-matched), so the first version, which compared it with the UMD-clock
+split replay QPC, picked other jobs (real-trace dry run: n 1743, median 0.7038 ms). The k48 job is now the one
+measure-umd-submit between the k48 replay and the next split replay, joined to its completion by order and command VA
+(alignment >= 0.99 or INVALID): same traces, exactly the k48 job, n 2362, median 0.7392 ms; CI width 0.0023 ms and off/off
+drift 0.0002 ms across two boots (thresholds 0.02). An unusable arm log prints INVALID instead of raising. The verdict rules
+(window, 500 jobs, CI, drift, code_share thresholds) are unchanged. First-run parts named in the audit: the synchronous
+copy-and-free and held_ms, swap mode for a full arm, the split-replay receipt's real emission, the <arm>b repeat.
+
+WHAT CHANGED SINCE K48W2F (EXP3020; the only difference: one constant in the gate, diagnostic code only):
+refused at the gate with reason 6: measure-d3d12-k48-gate hr E_FAIL {3, 0x0a, 0x016f3600, 97efffb3, 6, 0x41d}, K48_AVAIL
+kg arm_start=4516MB gate=[phase=0 avail_mb=1053 sets_kb=70504]. Inside GM available memory is ~1 GB; the 4096 MB floor came from
+the kit's reading before GM starts and refused every run (the gm3020kg run itself VALID 55.736 fps, no low-memory wait, Defender
+unchanged). Fix ce51b949d: the gate keeps at least 256 MB available after its three sets (69 MB). The floor guards Windows'
+low-memory condition, which the pool's slab growth waits on; Microsoft documents its default as about 32 MB per 4 GB, at most 64 MB
+(CreateMemoryResourceNotification), so 256 MB is four times that. At EXP3020's 1053 MB the gate would run with ~984 MB left.
+Host test: the 57787f3ec header refuses at 1053 MB (RED, the EXP3020 receipt), ce51b949d runs (GREEN); low memory 300 MB refuses.
+verdict: INCONCLUSIVE (no gate file, gate refused by its own floor); no timing ran.
+
+AGAINST K48W (3008, EXP3015): the variable under test is unchanged (the K48 transplant: hook, blob, shadow compile, windows,
+timing path); the gate implementation changed (synchronous copy-and-free, memory floor, memory receipts) and the verdict tool
+changed (counter disambiguation, PASS_FLOAT). Driver package 3014 K48W2G (ce51b949d) = the
+accepted 3013 K48W2 driver with the floor constant only.
+
+WHAT CHANGED SINCE K48W (EXP3015):
+G2 ran (receipts state 1 then 2, file 72,328,000 bytes, hashes equal) but the tool said INCONCLUSIVE "counter UAV not
+found: [3, 4]". Cause (bytes from the file): GM's params are cb[0] 0x249f0, cb[4] 0x92860, cb[6] 0, cb[12] 0 (CPU read ==
+CBV copy), so the counter word 55 is also slot word 55 of the slots UAV: u3 word 55 A 0x00019900 -> B 0x00019f00 (an
+appended item's slot), u4 word 55 A 2 -> B 0xc45c (50268, the counter; u4's only changed word). Slot mapping, windows and
+the CBV copy were all right; the tool took any UAV whose word 55 changed as the counter. The host test's mock used separate
+offsets (2000 / 3000) and never met this. Fixed c2b6c86c7 (counter = the candidate whose changes stay on cb[12] / cb[12]+55);
+host case gm3015 with the hardware params 380a45443 (RED with the old tool: the EXP3015 line, GREEN after).
+VERDICT (architect ruling, no retroactive PASS): INCONCLUSIVE as run; FAIL as the offline re-evaluation under the
+strict registered rule (same file, fixed tool c2b6c86c7; the gate arm overlapped a Defender signature install at 14:49:31Z).
+Fact: the whole difference is word8 float rounding (23849 of the 48244 items whose id occurs once on both sides; 24939 of
+50266 appended items counting repeated ids; p50 1 ULP, max 46 ULP, relative max 3.31e-6), with ids, slots, counter
+(2 -> 50268 both) and every integer word equal. Under PASS_FLOAT (below, registered after EXP3015 and not applied to it) the
+same file reads PASS_FLOAT.
+Gate memory (EXP3015 receipt total 0x016f3600 = 24,065,536 bytes per set): three sets = 72.2 MB of CPU-visible readback,
+allocated at the gate dispatch and held until a later dispatch wrote the file (~4.1 s between the state-1 and state-2
+receipts: QPC delta 98,592,492, read at 24 MHz). The gate run had one pool floor refusal (rf 0->1, floor 0->1, waits 0->1, failed 0: a slab growth refused while
+Windows LowMemoryCondition was set, retried after the wait). Recorded as NOT SHOWN TO BE THE GATE: 72.3 MB is not the
+pool-OOM class (1.6 % of the 4516 MB the run started with; gm3015p1 started at 3789 MB with no refusal).
+Fix 57787f3ec (diagnostic code only): (1) the gate waits for its batch once (synchronised map of the last copy), writes the file
+and frees the three sets before the dispatch returns - GM never runs with them allocated (fallback to the deferred write if
+that read fails); (2) it refuses (reason 6, detail = available MB) when available physical memory minus the three sets would
+fall under 4096 MB (EXP3020: wrong level, now 256 MB, see WHAT CHANGED SINCE K48W2F); (3) receipt measure-d3d12-k48-gate-mem {phase 0 at the gate dispatch / 1 after allocating / 2 after
+freeing, available MB, sets KB, held ms}. Host tests: sets freed before return (RED with the 33d3ede6c header), deferred
+fallback, low-memory refusal.
+
+TWIN CONFIDENCE (Apple m208 = our a8260e4297efffb3 = GM's k48): same kernel, not a look-alike.
+- Every Metal argument maps 1:1 by access role onto our root layout in the same order: buffer(0) 228-word view table
+  (stride u31l = 912 = 228*4) = our b0; buffer(1) params = our b1 (preamble loads cb[9], cb[3]/cb[12], cb[1]/cb[4] on both
+  sides); buffers 2..6 = our root UAVs u0..u4 (loads/stores/atomics of the same widths at the same index formulas).
+- The 7 pushed constants (u24 cb[0], u25..27 cb[2..4], u28 cb[6], u29 cb[9], u30 cb[12]) and both immediates (0xffff marker,
+  1.0f) each match an expression of our NIR (ROW listing lines in the design note): counter atomic add at cb[12]+55,
+  overflow ior at cb[12], capacity compare cb[0], 9-vec4 record store at 9n+cb[4]+k, slot store at n+cb[6], 5x+cb[2] load,
+  tgid pair cb[9]+2g(+1), instance row cb[3]+4v.
+- Same control structure (2 shared-memory phases with barriers, the same nested loops), workgroup 256, 3 threadgroup words,
+  threads/core tier 832 both (our 127 GPRs, Apple 120 halfregs). Measured per-frame gap ours - Apple = 0.209 ms
+  (ROW1-REPORT-3; EXP2310 a826 0.870 vs d48 0.656).
+- Residual risk: Apple may rely on hardware state our launch sets differently that no offline check sees (none found:
+  no scratch, textures, samplers, imageblocks; same special registers). The output gate below catches it.
+
+WHY THIS HYPOTHESIS (the k48 gap is the generated code):
+1. k48 is 0.209 ms/frame slower than Apple's on the same scene (EXP2310 split: a826 0.870 vs 0.656 ms), and its memory path
+   is at parity (EXP2982 G1/C1 rows match macOS to 0.1-0.5 % at throughput).
+2. Our code issues one dynamic CB load per wait where Apple keeps ~15 in flight (C1 form, ROW1-REPORT-3 section 2); the
+   C1-priced bound explains 0.072 of the 0.209 ms, so a per-group constant (~38 ns/group) is unexplained by countable terms.
+3. Running Apple's exact instructions on our binding, launch, firmware and scheduling isolates code from everything else.
+
+GATES BEFORE ANY TIMING (both must pass):
+G1 offline (done): .local/k48-transplant/tools/abi_equality.py: ABI_EQUALITY PASS rows 20 trials 2000 mismatches 0
+   (emulates the blob's preamble on random params, compares 20 address/compare expressions with ours); a stub mutation
+   fails it. Tracked test tests/test_agx_shader_replace.py runs it where the material exists.
+G2 hardware output gate (gm<N>kg, gate mode): APPLE_AGX_D3D12_SHADER_REPLACE=a8260e4297efffb3:C:\Users\pavel\k48\k48t.agxr
+   APPLE_AGX_D3D12_K48_GATE=600:C:\Users\pavel\k48 . At the 600th k48 dispatch, one batch on identical real inputs:
+   A (copy of every view) / ours / B / restore A / transplant / C / restore B (GM continues with our outputs).
+   tools/agx_k48_gate.py k48gate.bin (fixed before the run):
+   (when the full views exceed 96 MiB: over the captured windows, see WHAT CHANGED)
+   PASS_EXACT   B == C byte for byte, >= 1 item appended
+   PASS_SORTED  counter equal, appended (slot, record) pairs the same multiset, every other byte equal, >= 1 item appended
+   PASS_FLOAT   as GATE CRITERION below (same items / slots / integer words; float words same sign and class, relative 1e-4)
+   FAIL         anything else -> STOP, no timing; report the differing ranges (hardware-state finding or remap error);
+                K48_GATE_FLOAT_DIST is printed on every run (share, ULP and relative p50 / p99 / max per float word)
+   INCONCLUSIVE no item appended, no gate file, or CPU-read params != CBV copy -> STOP, no timing
+   Receipts required in the run's UMD log: measure-d3d12-shader-replace-setup loaded=3, measure-d3d12-shader-replace
+   result 1 (the shadow compile), measure-d3d12-k48-gate state 1 then 2 (state 3 = refused: fields 5/6 name the reason; 6 = available memory under the floor),
+   measure-d3d12-k48-gate-mem phases 0, 1, 2 (K48_AVAIL line).
+
+TIMING (only after G2 PASS_EXACT / PASS_SORTED / PASS_FLOAT; same boot): GM HD PERF traced, APPLE_AGX_D3D12_SPLIT_TAGS=97efffb3,b1db88bf in every arm
+(k48 becomes its own compute job; b1db88bf follows it every frame), arms in order off1, on1, off2, on2 (on =
+APPLE_AGX_D3D12_SHADER_REPLACE set, swap mode; off = unset), GPU cold gate before each.
+T = per-frame firmware exact time of the k48 job (agx_gpu_frame_breakdown.py --jobs position of the single-dispatch job
+between the two splits), median over the 60 s window; CI = 95 % bootstrap CI of the median difference.
+code_share = (T_off - T_on) / 0.209 ms (the measured ours - Apple gap).
+  >= 0.7 CODE_OWNS (the code explains the gap: the compiler work is justified)
+  <= 0.3 NOT_CODE (the gap is elsewhere: binding/launch/data)
+  otherwise MIXED
+  INVALID on any G2 output mismatch, a split-tag CI wider than 0.02 ms, or off1/off2 medians differing by > 0.02 ms.
+
+GATE CRITERION (architect ruling 2026-11-27, registered now, before the repeat; not fitted to the observed 46 ULP):
+PASS_FLOAT: item count, IDs, slots, counter and every integer word exactly equal (sorted-set form allowed as in PASS_SORTED);
+every float word equal in sign and class (no NaN / Inf / zero-vs-nonzero mismatch) and within relative error 1e-4, absolute
+floor 1e-30 near zero; anything outside = FAIL. The tool prints the distribution every run (share differing, p50 / p99 / max
+in ULP and relative). PASS_FLOAT is read like PASS for the timing arms and the report names which of PASS / PASS_SORTED /
+PASS_FLOAT it was.
+Reasoning (architect, verbatim): the gate proves both kernels do the same work on the same inputs so their times are
+comparable; same work = same item set and same control decisions, witnessed by the integer words; bit-equal floats are not
+required between two code forms (fused multiply-add, association). 1e-4 is about three orders above one ULP and far below a
+difference that could change a visibility or sort decision.
+Word classes (tool FLOAT_WORDS, from our NIR of a8260e4297efffb3, the nine record vec4 stores): float w8, w9, w12-w35;
+integer w0-w7 (loaded item record with its id in w0, shared load, counter phi, iadd), w10-w11 (constant 0).
+WORD8 SOURCE AND THE INSTRUCTION-FORM DIFFERENCE (offline: m208 main listing 0xd54-0xe22 vs our NIR
+(.local/night-20261110/r11-c0-dynload) and our selected code (n6b baseline listing, 0xcfa-0xd50)): w8 = (|c - p| - r) * s,
+the distance from the eye to the item's bounding sphere surface times a per-view scale; r = sqrt(max column length^2 of the
+item matrix) * sqrt(sum of half-extent^2); |c - p| = sqrt(dx^2 + dy^2 + dz^2); w9 and the in/out range test use w8.
+Same formula, three code-form differences:
+  (1) Apple forms r as ONE square root of the product, sqrt(maxcol^2 * ext^2) (fmul32 r29 = max * ext; rsqrt_special +
+      fmul32); ours as the product of TWO square roots, sqrt(maxcol^2) * sqrt(ext^2) (NIR %335 = fmul(fsqrt, fsqrt); two rsqrts).
+  (2) Apple fuses the eye distance into the subtraction: fmadd32 r3 = rsqrt(d2) * d2 - r (the x*rsqrt(x) square root is never
+      rounded on its own); ours rounds sqrt(d2) first (fmul) and fuses the radius product instead: ffma -(sqrtA*sqrtB) + sqrt(d2).
+  (3) d2 accumulation order: Apple x, then y, then z (fmul then two fmadd); ours y, then x, then z.
+  Then both multiply by s. These are association / fma-contraction differences of one expression, not a different formula.
+BOUND FOR WORD8 (said now, before the repeat): w8 is a difference of two nearly equal magnitudes (|c - p| ~ 4000-7000 and r),
+so its rounding error is absolute, about one ULP of |c - p| (EXP3015: |difference| ~ 7e-4 at w8 = 212, ~ulp(4096) = 4.9e-4),
+and its relative error grows as w8 -> 0. On EXP3015's frame (|w8| >= 83.5) the relative maximum is 3.31e-6, 30x inside 1e-4;
+the same 600th dispatch of the same scene is expected to stay inside. On other inputs an item within ~10 units of its sphere
+surface would exceed 1e-4 relative (or flip sign near 0) from rounding alone: the correct bound for w8 is relative to the
+operand scale (e.g. |difference| <= 1e-4 * max |w8| of the dispatch), not to w8 itself. Not adopted here: the registered
+criterion is applied as written; a PASS_FLOAT FAIL confined to w8 items with |w8| small against the dispatch maximum will be
+reported as this rounding case, not softened.
+
+DEFENDER RULE (architect 2026-11-27, amended after EXP3015): the kit reads the Defender signature and engine versions before
+and after every step-7 arm (K48_DEFENDER lines). Gate arm: a change is recorded and does not void a gate PASS (both shaders
+run on the same inputs in one batch). Timing arms: a change (or an unreadable version) makes the arm INVALID; the kit repeats
+it once as <arm>b and stops on a second one.
+
+GATE-ONLY: K48_GATE_ONLY=1 runs validity, quiet gate, settle and the G2 gate arm alone (no suite, perf gate or timing).
+MEMORY: K48_AVAIL kg line = census available MB at arm start + the gate's mem receipts (available MB at the gate dispatch,
+after allocating, after freeing; held ms).
+
+STOP: Code 43/31, GPU reset / TDR / bugcheck, firmware error receipt, G2 FAIL/INCONCLUSIVE (no timing), perf gate FAIL with
+every switch unset (package must behave as 2883 + PRIO2 + kept receipts).
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record).
+HARDWARE STATE WE DO NOT SET: none found offline; report at once if the gate shows one.
+
+PACKAGE: .local/experiments/AGX-K48W2G-ce51b949d-signed
+- SHA256SUMS sha256 238b17e69037109562fc3fa09b1c7374eaaca0b7a7f2fa2011f212fe5cbb1e19
+- AppleAgxRenderAdmission.sys 973e82d3014cbb7094b0b63fbc7ce73414ae05d4e810c1b85ded4667a82a25dc
+- kmd-build-receipt.json SourceCommit ce51b949dd43efc491fb5a01e39aa9c885bd2af9, PackageBuild 3014, Umd32Source X86B581;
+  builder K48W2G_3014_PACKAGE_BUILD_PASS, K48W2G_FINAL_PACKAGE_PASS, versions coherent 30.0.3014.0, source integrity PASS 1011 files.
+- agx_diag_absent.py --expect k48-replace: DIAG_PRESENT 6/6, DIAG_CHECK PASS.
+- Host tests (tests/test_agx_k48_gate_host.py, 10): EXP3020 level 1053 MB -> gate runs (57787f3ec header refuses: RED);
+  low memory 300 MB -> reason 6; sets freed before the dispatch returns; deferred fallback; gm3015 params -> PASS_SORTED.
+- Timing tool: KIT tools/agx_k48_timing.py = gpu/k48-replace bd0304e2c (UMD-clock job mapping; tests UmdClockMapping).
+- Verdict tool: KIT tools/agx_k48_gate.py = gpu/k48-replace 3a8ac42a4 (= ce51b949d; PASS_FLOAT), sha256
+  be6d50d215d74dfaacbd307f5d2ca7b4ccf30c73760d7017d4fac2e7d654290d.
+- Blob unchanged: blob/k48t.agxr sha256 d7ae1dd78ff29ba4e1fb4ff0c02e049577e1b7fc0638942bed4e144b8628761d.
+KIT: .local/experiments/KIT-K48W2H-bd0304e2c (= KIT-K48W2G-ce51b949d with tools/agx_k48_timing.py from bd0304e2c and this BEFORE;
+driver AGX-K48W2G-ce51b949d-signed unchanged).
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-K48W2H-bd0304e2c SHA256SUMS 4df2b81b (46 OK, bench + architect), BEFORE-K48W2H 9787693c; package AGX-K48W2G-ce51b949d-signed 30.0.3014.0 SHA256SUMS 238b17e6 (8 OK, bench + architect). KIT-K48W2F and KIT-K48W2G are not used. Full kit (gate, then off1/on1/off2/on2); K48_GATE_ONLY not set. Run: CAND_DIR=<package> k48-boot.sh 3022 3021 EXP3021-b19 <this body>.
+- Sequencing (architect, own message): right after B19 (EXP3021) and its rollback, before C84R. Previous guest EXP3021-b19 (post-rollback, 2883 staged). Before the launch, the owner may reconnect the guest Wi-Fi by hand on that guest (orphaned profile after the EXP3011 devnode uninstall; he types the password himself); the bench reads the per-GUID profile count before and after (read-only wlanguid.ps1).
+- Disk: standing floor 8192 MiB (pwdev is a sparsebundle on the external SSD); the free figure is logged by the chain.
+- Bench gates: disk gate, AppX v3, early USB gate (v857gate) in the background. Defender is handled by the kit's K48_DEFENDER lines. Power: host-Mac port + hub charging input.
+- First-run parts the bench watches live and reports: the synchronous copy-and-free (held_ms), swap mode for a whole arm (about 3300 blob dispatches), the measure-d3d12-split-replay receipt, any <arm>b repeat. Any reset or TDR in an on arm = stop.
+- Evidence .local/experiments/EXP3022-k48/.
+- Previous-guest note: EXP3021 ended GATE_BOOT_3021_FAIL guard-end only because the bench had already committed its ACTUAL (kit end guard). The rollback had completed (2883 oem13.inf staged, inf 45c1e2b8..., candidate removed; ledger correction 651feec0e), so the guest is the normal post-rollback state.
+- Launcher launch-kbd3022.sh sha256 baa8d104f2cd146e (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 651feec0e.
