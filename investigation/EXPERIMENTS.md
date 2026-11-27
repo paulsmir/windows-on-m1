@@ -90368,3 +90368,104 @@ EXP3033 ACTUAL 2026-11-27T22:47:02Z (refs EXP3033 BEFORE; chain3033 + d1run.sh s
 - 2883 and 3015 are identical in the four KMD files on the D1 path (GPU line, from source), so this result stands for 3015 as well.
 - Fetch hash-verified; outputs and exe deleted from the guest. TDRCOUNT tdr4101=0 bugcheck1001=0. V857GATE OK. DW_BREACH_LINES 0.
 - VERDICT (preregistered criterion): OPEN, from stdout (create_context 0, patch_list 64 > 0). The receipt corroboration is not attributable for A. Guest left up with 2883 bound as the TRK49 staging guest (EXP3034).
+
+EXP3034 HARDWARE BEFORE 2026-11-27T22:49:08Z:
+TRK49 - transplant package: traversal (7aa43c6c <- Apple m183) and k49 (b1db88bf <- Apple m207), each with its own switch,
+gates and timing; H1 preamble-frequency rider (architect orders 2026-11-27) - preregistration, written before any run
+
+WHAT: AppleAgx 30.0.3017.0 from gpu/trav-gate 7711ad8e8c32c3071ad4b0a38aac24679e2fe891 = K48MUT driver (8729d2a8e, EXP3023) +
+diagnostic-only additions (APPLE_AGX_D3D12_SHADER_REPLACE_BUILD; inert without the environment words):
+- gate profile trav (APPLE_AGX_D3D12_GATE_PROFILE=trav): b1 cb0..5 read on the CPU, role windows (+4 KiB margins) or whole views,
+  refusal when a core window lies outside its view (state 3 reason 7, same predicate as our atomics' guards), file v3
+  (profile, nth, workgroups); profile k49: k48's windows + the same refusal;
+- APPLE_AGX_D3D12_LAUNCH_DUMP=<tag>: measure-d3d12-launch {tag, pso, seq (= the gate's nth), x, y, z, readable, cb0..5, guard
+  bytes UAV5/6} per dispatch; APPLE_AGX_D3D12_SPLIT_AFTER=<tag>: the batch ends at each dispatch of the tag;
+- APPLE_AGX_D3D12_TRAV_OBSERVE=1: flags/counters copied before and after every launch into a readback ring, outside the timed
+  job (traversal: u16[cb5], u16[cb5+31], u14[cb5+8]; k49: UAV4 cb12 (bit 0x2000), cb12+55).
+Tools from gpu/trav-gate 4aff48f89 (7711ad8e8 + the python3 -I import fix found by the kit self-check).
+Blobs (Apple bytes, blob/ only): traversal-transplant.agxr f8c9793d41b8d49a1862bd095d06c3867a052f3ee21116866d2512b405586831;
+k49-transplant.agxr 8297ee6426f7f42aad1eb9c01181cc4e874a45dec7c8e48ec7ddc6e8307fded0; k48-h1-k16.agxr
+9decb17ba0a9cec34bcdbbf78eb3555555498cacdeeca00a8ae53c67c2479695; k48-h1-ctl.agxr
+828103e379158c1522ffd2d39f359027e1a4a9a3dff99f138052f5b03136d709.
+Construction proofs (.local only): traversal ABI_EQUALITY PASS rows 26 / 2000 trials, MUTATE_SWEEP 14/14 killed (incl. the
+oracle-constant row); k49 ABI_EQUALITY PASS rows 26, MUTATE_SWEEP 31/31 killed by behaviour rows; H1 K16 and ctl: Apple preamble,
+main and the k48 stub byte-equal to k48t (EXP3022 blob), ABI_EQUALITY PASS, K=0 tool control = k48t byte for byte, ctl differs
+from K16 only inside the dummy block (16 device_loads + wait vs 16 iadd + wait).
+
+WHY THIS HYPOTHESIS:
+1. EXP3022/EXP3023: Apple's k48 binary on our binding/firmware runs 0.189 ms faster and 61 % of that is priced to our code forms
+   (M2 address form OWNS 0.094); the traversal (~0.31 ms all launches) and k49 (0.157) carry the same code-form differences
+   (indexed loads with lsl 0, source-vs-compiler verdict (C) for both), so the transplant D of each is the price of its code.
+2. GM's real launch structure (EXP3022 UMD logs, three runs identical): traversal 5 launches per cycle (pos 0 direct 16x1x1,
+   pos 1-4 indirect), seq 601 = pos 0; k49 one indirect launch per frame (3543 receipts, EXP2310) right after k48.
+3. H1: Apple's k48 preamble precomputes per-dispatch constants; whether the preamble runs once per dispatch or once per
+   workgroup decides whether such constants can live there; 16 extra preamble loads are free once per dispatch (< 0.005 ms) and
+   cost tens of us once per workgroup (1748 groups).
+
+GATES (one-shot each, APPLE_AGX_D3D12_K48_GATE=<nth>:C:\Users\pavel\k48, ours stays, the blob runs as a shadow on identical inputs):
+- traversal x5: nth 601..605 = launch positions 0..4, GATE_PROFILE=trav, LAUNCH_DUMP=7aa43c6c; verdict tools/agx_trav_gate.py
+  --dump <arm UMD log> --launch-pos <nth-601>. Rule (architect-approved): the gated seq must sit at the named position with
+  b1 and workgroups equal to the file, else INCONCLUSIVE; counters (u14[cb5+8], u16[cb5+31]) and flags (u16[cb5]) byte-exact
+  and every captured byte outside the append ranges byte-exact, any difference FAIL; a flag 4/128 newly set with equal counters
+  INCONCLUSIVE (overflow); records = sorted (64-byte u8 record, u10 id) tuples, leaves = sorted 16-byte u12 records: equal
+  PASS_SORTED (PASS_EXACT when all bytes equal), float transform rows (words 4..15) within 1e-4 relative, same sign/class,
+  integers equal PASS_FLOAT; nothing appended INCONCLUSIVE; our run writing outside the store sites INCONCLUSIVE (slot map).
+  Traversal timing runs only if position 0 is PASS_* and no class is FAIL or INCONCLUSIVE for a reason other than
+  "nothing appended" (an empty indirect class carries no work).
+- k49: nth 600, GATE_PROFILE=k49; verdict tools/agx_k48_gate.py (k49's record layout = k48's: 9 vec4 + slot word, float words
+  8, 9, 12..35); PASS_EXACT / PASS_SORTED / PASS_FLOAT admits k49 timing.
+- H1 and ctl: k48 gate (nth 600) for each; both must PASS_* to admit the H1 timing.
+A reason-7 refusal (core window outside its view) is INCONCLUSIVE "transplant not valid on this data", reported, not a FAIL.
+
+TIMING (same boot, GM HD PERF traced, GPU cold gate before each arm, Defender rule as before):
+- traversal: toff1 ton1 toff2 ton2 with SPLIT_TAGS=7aa43c6c SPLIT_AFTER=7aa43c6c LAUNCH_DUMP=7aa43c6c TRAV_OBSERVE=1
+  GATE_PROFILE=trav (on = + the traversal blob); agx_k48_timing.py --per-launch --gap 0.31: per launch position D_p =
+  median(off) - median(on), 95 % bootstrap CI; class INVALID on < 500 jobs per arm, CI > 0.02, off drift > 0.02, ANY observed
+  newly set overflow flag in any arm (timing is never read from a run where either side overflowed), observer coverage < 99 %;
+  D_frame = sum of the classes; code_share = D_frame / 0.31; CODE_OWNS >= 0.7, NOT_CODE <= 0.3, MIXED between, only when every
+  class present in all arms is valid. Launch record count must equal the replay count (else INVALID).
+- k49: koff1 kon1 koff2 kon2 with SPLIT_TAGS=b1db88bf SPLIT_AFTER=b1db88bf LAUNCH_DUMP=b1db88bf TRAV_OBSERVE=1 GATE_PROFILE=k49;
+  --per-launch --overflow-mask 2000 --gap 0.157 (period 1: one class).
+- H1: hoff1 (ctl) hH1 (K16) hoff2 (ctl) with SPLIT_TAGS=97efffb3,b1db88bf; agx_k48_timing.py --variant H1 (series mode against
+  the pooled ctl arms).
+PRICED EXPECTATIONS:
+- traversal: D_frame 0.15-0.31 ms if code-owned like k48 (90 %); expect position 0 to carry most of it if the indirect
+  launches are small (unknown: their group counts are GPU-written).
+- k49: D 0.10-0.157 ms (same family and form as k48).
+- H1: dT < 0.005 ms = preamble once per dispatch (expected, I); dT >= 0.02 ms = once per workgroup (then the preamble-placement
+  classes PREAMBLE_OWNS / MAIN_OWNS / SPLIT from the earlier note apply).
+FIRST-RUN ITEMS (fail closed, TRAV-GATE-AUDIT-2026-11-27.md section 6): traversal b1 CPU readability (dump `readable`), traversal
+view sizes and the reason-7 predicate (dump guard bytes), launch-record/replay pairing, kernel job = first submit after the
+replay with SPLIT_AFTER, observer coverage and overhead, k49 b1 sharing with k48 (dump of both tags).
+KNOBS: K48_GATE_ONLY=1 (gates only), K48_TIMING_ONLY=1 (timing only, after the gates passed in an earlier boot of this package).
+LENGTH: 8 gate arms + up to 11 timing arms (~17 min each with the cool-down) ~ 5.5 h after the suite and perf gate: split
+K48_GATE_ONLY=1 first and K48_TIMING_ONLY=1 in the next boot.
+STOP: Code 43/31, GPU reset / TDR / bugcheck, firmware error receipt, suite FAIL, perf gate FAIL with every switch unset.
+RECOVERY: rollback to 30.0.2883.0 (accepted).
+
+PACKAGE: .local/experiments/AGX-TRK49-7711ad8e8-signed
+- SHA256SUMS sha256 f927e34061d1d5a57942d30ca3e7b7f4013667e9a35818cb3aa24c81c6af4354
+- AppleAgxRenderAdmission.sys 27732d30c069cd8e8f19cf7c56f56fae2a9671aea56e68c67c511e88764aa1bf
+- AppleAgxRenderAdmissionUmdArm64.dll fa4641c372401142f78eec49e8a5077413263638ed125d12967bbc15b08c81eb
+- kmd-build-receipt.json SourceCommit 7711ad8e8c32c3071ad4b0a38aac24679e2fe891, PackageBuild 3017, Umd32Source X86B584;
+  TRK49_3017_PACKAGE_BUILD_PASS, STACK_FRAMES_PASS, TRK49_FINAL_PACKAGE_PASS, versions coherent 30.0.3017.0, source integrity
+  PASS 1013 files.
+- agx_diag_absent.py --expect k48-replace: DIAG_PRESENT 6/6, DIAG_CHECK PASS; the new receipts (measure-d3d12-launch,
+  measure-d3d12-trav-observe) and APPLE_AGX_D3D12_SPLIT_AFTER present in the ARM64 UMD.
+- Host tests on 7711ad8e8: test_agx_trav_gate (21), test_agx_k48_gate_host (TravGateHost trav/travbig/travoob/travovf/position/
+  observer, K49GateHost k49/k49oob/k49obs), test_agx_k48_gate, test_agx_k48_timing (per-launch classes, overflow, coverage,
+  iteration-proxy undefined); builder syncheck ddi+windows ARM64 /W4 /WX with the diagnostic define rc=0; full host suite: NEW set
+  identical to the base commit's run (the worktree lacks .local/reference).
+- Audit: investigation/analysis/TRAV-GATE-AUDIT-2026-11-27.md (conditions 1-6, constants vs GM).
+KIT: .local/experiments/KIT-TRK49-7711ad8e8 (= KIT-K48MUT-8729d2a8e with step 7 replaced, the 4 blobs, the tools from 4aff48f89,
+selftest/trk49-check.sh, this BEFORE). Kit selftest: SELFTEST_PASS incl. PREAMBLE_RUN_OK (k48-boot/k48-steps) and TRK49_CHECK_OK.
+
+BENCH ADDENDUM (before the run; boot 1 of 2, K48_GATE_ONLY=1):
+- Kit KIT-TRK49-7711ad8e8 SHA256SUMS 18a87377 (50 OK, bench + architect), BEFORE-TRK49 761e596e; package AGX-TRK49-7711ad8e8-signed 30.0.3017.0 SHA256SUMS f927e340 (8 OK). Run: K48_GATE_ONLY=1 CAND_DIR=<package> k48-boot.sh 3034 3033 EXP3033-d1 <this body>.
+- Sequencing (architect): after STDC4C (EXP3030 GATE_PASS), its restart confirmation EXP3031 (PASS) and D1 (EXP3032 not run; EXP3033 2883 standing boot + D1); boot 1 gate-only, boot 2 timing-only. Previous guest EXP3033-d1 (2883 bound).
+- Disk: diskgate2 before each boot (inside-free figure reported to the architect before boot 1; nothing launches below 8192 MiB inside-free); diskwatch throughout (BREACH or SSD < 1536 MiB = stop at the arm boundary). Launcher rev2 (launch-kbd.sh 26ea26b5..., launch-kbd-hr.sh 4e1023b0...).
+- Defender and per-arm validity as in the BEFORE; bench cross-check with defwatch2 + defjudge.py.
+- Watched live: launch dump receipt, per-class split, overflow observer coverage >= 99 %, reason-7 bounds refusal; reset/TDR in a transplant arm = stop that kernel's arms.
+- Bench gates: AppX v3, v857gate. Power: host-Mac port + hub charging input.
+- Evidence .local/experiments/EXP3034-k48/.
+- Launcher launch-kbd3034.sh sha256 386308260538c48e (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 4918148e0.
