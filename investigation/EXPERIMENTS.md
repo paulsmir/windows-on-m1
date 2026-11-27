@@ -89534,3 +89534,70 @@ EXP3020 ACTUAL 2026-11-27T16:19:15Z (refs EXP3020 BEFORE; K48W2F, package 30.0.3
 - Reading: the gate refused itself with reason 6. Its new memory floor is 4096 MB + sets (about 69 MB), and 1053 MB was available at the dispatch inside GravityMark (4516 MB at arm start). So no copy was made, there is no gate file, and the verdict is INCONCLUSIVE. The floor was a design value that cannot be met under GM (architect: traced to a figure of his), not a bench condition. Defender did not change during the gate arm.
 - Timing arms not run (preregistered stop). Rollback: candidate removed, 2883 re-staged, GATE_BOOT_3020_DONE rc=0. Post-kit PendingFileRename=4.
 - Verdict: inconclusive (the gate floor is a design defect). Next K48 repeat: a full kit under a new ID once the GPU line has fixed the floor and audited the gate constants, and the architect has sent verified hashes. The temporary 7168 MiB disk floor is now retired; the floor is back at 8192.
+
+EXP3021 HARDWARE BEFORE 2026-11-27T16:21:48Z:
+B19 - conformance set C2 / C3 / C5 / C6 (WIC field diff, investigation/analysis/WIC-FIELDDIFF-render-15.7.8-vs-13.5.md) -
+preregistration (architect order 2026-11-27, plan row B19; written before any run). No performance claim is expected.
+
+WHAT: AppleAgx 30.0.3010.0 from gpu/b19-conformance 6df4531ac6015d9683a69c1a7ed011187b31d068 (2852372db + the MSVC
+_dupenv_s fix of the first build attempt) = c7a019f2b (accepted 2883
+e783c48bb + PIPE-PRIO2 e52858ee8 + kept receipts 6b7d7c77e) + four render flags (APPLE_AGX_G4_RENDER_CONF_*, bits 24..27
+above the Asahi UAPI bits), set per process by the UMD from APPLE_AGX_D3D12_CONFORMANCE (hex: 1 C2, 2 C3, 4 C5, 8 C6;
+absent / malformed = none). Without the word the work items are byte-identical to the template path (builder test).
+Each flag replaces one template value of the G13 / V13_5 work items with Asahi's:
+  C2 RunVertex +0x46c tpc_size (m1n1 "tvb_size"): Asahi render.rs get_tiling_params formula, one cluster
+     (720p 0x3000, 4096x4096 0x20000; template 0x4000 everywhere, 8x under the formula on R7). The UMD's TPC range
+     reserves eight clusters (AppleAgxG4ProcessRequiredBytes raw[6]), so the value never exceeds the buffer.
+  C3 RunVertex +0x130 JobParameters1 unk_f0: 0x1c + align(meta1_blocks, 4) = 0x1c with one cluster (render.rs 455;
+     template 0x20; G14X register 0x1c9a8 "min_free_tvb_pages?").
+  C5 RunFragment +0x658 JobParameters3 unk_290: per-generation table AppleAgxG4Unk290 (render.rs g14_unk: G13 0, G14
+     0x4040404). The template carries the G14 value on this G13 part - a per-SoC table error, fixed in the table. M4 Pro
+     class (and every G14X+ part): no G13-layout RunFragment and no primary source for the word - the table returns
+     unknown and the builder refuses the flag there.
+  C6 RunFragment aux_fb width/height (+0xb8/+0xbc, +0x6e0/+0x6e4): the render's pixels (render.rs 613-621; template 16x16).
+Single variable per arm: APPLE_AGX_D3D12_CONFORMANCE (per GM / suite process; nothing persists on the guest).
+
+WHY: the WIC field diff shows each of these four values differing from both Apple 15.7.8 and Asahi (Asahi = the contract
+for our firmware generation); C2's consumer is the firmware only (the hardware gets TE_TPC address + stride, equal to
+Apple's), C3 matters only near TVB overflow, C5/C6 have unknown consumers. Each is cheap, deterministic and portable;
+none is expected to move a score.
+
+PROCEDURE (one boot, b19-steps.sh): validity, IRQ gate, quiet gate, settle, suite 119/0 and perf gate with the word
+unset (steps 1-6, as K48W); step 7 arms in order off_a, C2, C3, C5, C6, off_b:
+- conformance arm: tool suite (e2459, 119 steps) with the word = render-correctness gate; then GPU cold gate and one GM HD
+  PERF with the word (GM_EXTRA_ENV); UMD receipt measure-d3d12-conformance must name the arm's mask;
+- off arm: GPU cold gate and one GM HD PERF without the word (their suite is step 4's);
+- per arm: GPU fault events, resets and TDRs (delta over the arm), Defender signature timestamp before / after.
+VERDICT per item (tools/agx_b19_verdict.py on run.log, fixed before the run):
+  INVALID       Defender signature changed during the arm, no fps, receipt mask != arm mask, or the off arms differ by
+                > 2 % fps (repeat the set)
+  INCORRECT     suite FAIL > 0 or PASS != 119, or any GPU fault / reset / TDR in the arm -> DROP that item
+  REGRESSION    fps < off_mean x (1 - max(1 %, 2 x off relative spread)) -> report; DROP unless the architect keeps it
+  NO_REGRESSION otherwise -> KEEP candidate on parity grounds (Asahi / Apple form), no performance claim
+STOP: Code 43/31, bugcheck, a reset or TDR in any arm (the step stops the remaining arms), firmware error receipt, perf gate
+FAIL with the word unset.
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record).
+HARDWARE STATE WE DO NOT SET: none known.
+
+PACKAGE: .local/experiments/AGX-B19-6df4531ac-signed
+- SHA256SUMS sha256 106730294884b85d11a1b343d2965146efc353e168f7fd103eabdcb1b3d6ca35
+- AppleAgxRenderAdmission.sys 767c3cd1cde58d2418aa4050daf83912043be4bd3b546c6c1becab7478f45e9e
+- kmd-build-receipt.json SourceCommit 6df4531ac6015d9683a69c1a7ed011187b31d068, PackageBuild 3010, Umd32Source X86B578;
+  builder B19C_3010_PACKAGE_BUILD_PASS, B19C_FINAL_PACKAGE_PASS, versions coherent 30.0.3010.0, STACK_FRAMES PASS x4,
+  source integrity PASS 1009 files. First attempt (2852372db) failed the MSVC UMD compile (getenv C4996 in the C++ TU);
+  fixed by _dupenv_s in 6df4531ac; the stale X86B578 output of that attempt was removed before the chain re-ran.
+- agx_diag_absent.py: DIAG_CHECK PASS (standing recipe). The arm64 / x64 / x86 UMDs carry APPLE_AGX_D3D12_CONFORMANCE and
+  measure-d3d12-conformance.
+- Tests (gpu/b19-conformance): apple_agx_g4_builder_test (template values 0x4000 / 0x20 / 0x4040404 / 16x16, off path
+  byte-identical, each flag changes exactly its field, C2 = formula and within the TPC range, C5 table incl. unknown for
+  G15 / G16), test_b19_conformance 4/4 (parser fail-closed, ABI and check wiring, UMD order, verdict rules); host replays
+  include the header; full suite NEW set = the 96 environment entries of this submodule-less worktree.
+KIT: .local/experiments/KIT-B19-6df4531ac (b19-boot.sh / b19-steps.sh from KIT-K48W-33d3ede6c; step 7 = the B19 arms).
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-B19-6df4531ac SHA256SUMS dee4839b (43 OK; the README-note revision; 95897d99 superseded), BEFORE-B19 a1892eee; package AGX-B19-6df4531ac-signed 30.0.3010.0 SHA256SUMS 10673029 (8 OK). Run: CAND_DIR=<package> b19-boot.sh 3021 3020 EXP3020-k48 <this body>. One boot, arms off_a, C2, C3, C5, C6, off_b.
+- Sequencing (architect): after C4CM (NO_EFFECT, KEEP) and the K48W2F stop (EXP3020, gate refused on its memory floor), before C84R. Previous guest EXP3020-k48 (post-rollback, 2883 staged).
+- Defender: the kit's B19_ARM line carries the per-arm signature change; an update during an arm makes that arm INVALID (passed to the verdict); no bench watcher (the kit reads it).
+- Bench gates: disk gate at the standing floor (pwdev >= 8192 MiB, system data >= 2048 MiB; pwdev is a sparsebundle on the external SSD), AppX v3, early USB gate (v857gate) in the background. Power: host-Mac port + hub charging input.
+- Verdict: tools/agx_b19_verdict.py run.log, lines reported verbatim. Evidence .local/experiments/EXP3021-b19/.
+- Launcher launch-kbd3021.sh sha256 ac38a398d50f77c5 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 6406022f2.
