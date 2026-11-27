@@ -88229,3 +88229,18 @@ BENCH ADDENDUM (before the run):
 - First launch at 04:57Z was stopped by the bench in the AppX gate (nothing staged or booted) to apply the 3450 floor; log appxcheck-attempt1.log.
 - AppX gate v3 (bench ~05:03Z): attempt 2 waited on AppXDeploymentServer events that were only AppXSvc lifecycle transitions (ids 939-942) demand-started by the gate's own Get-AppxPackage; v3 excludes those ids, all else as v2. Attempt 2 stopped in the gate, nothing staged; log appxcheck-attempt2.log.
 - Launcher launch-kbd2993.sh sha256 891579b5fbd559e2 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 07d2de183.
+
+EXP2993 ACTUAL 2026-11-27T05:17:42Z:
+- Launch: attempts 1 (04:57Z) and 2 (04:58Z) were stopped by the bench inside the AppX gate, before any staging or boot. Attempt 1 was stopped to apply the architect's 3450 MB floor. Attempt 2 was waiting on AppXSvc lifecycle events (ids 939-942) that the gate's own Get-AppxPackage had triggered. Logs: appxcheck-attempt1.log, appxcheck-attempt2.log. Attempt 3 ran gate v3 (lifecycle ids excluded) and passed on try 1 at 04:59:57Z.
+- Kit KIT-WICDUMP-a669201a4 with candidate AGX-WICD4-a669201a4-signed (30.0.2993.0), on the EXP2992 kit-boot guest. The base was staged but not bound (Problem 28), so the kit removed it through its documented deviation path. Baseline: 0 GPU resets, 0 TDRs. IRQ_GATE PASS (vector 2817, state 769). TOOL_SUITE 119/0.
+- Perf: gm2993p1 and gm2993p2 memory clean. PERF_GATE gravitymark_hd_perf PASS, worst 47.516 vs 47.007 (+1.08 %).
+- WICDUMP: armed in gm2993wd. WICDUMP_STATUS st 0, status 2. TA/3D/CL 144 each, 432 kicks, drops/misses 0. AGX_D3D12_WICDUMP PASS. Armed PERF_GATE PASS 47.459 (+0.96 %). Dump wicdump-2993.bin sha e68686ad399afc60 (5990773 bytes); guest copy deleted after a hash match.
+- Decode (af0c756bd):
+  - complete_frames 36 OK; low_subs 0 OK.
+  - 3D microsequence StartFragment..FinalizeFragment..RetireStamp decoded on R1/R3/R5/R7, x36 each.
+  - TA microsequence StartVertex..FinalizeVertex..RetireStamp: R5 x33, R1 x2, R3 x1, R7 x0.
+  - Checks: R5 TA 33 OK, R5 3D 36 OK, R7 3D 36 OK, R7 TA 0 FAIL. WIC_CHECK_VERDICT FAIL.
+- The preregistered open outcome (3D running past 0x800) did not occur: 3D fits in 0x800 in every frame. The TA gap is reported as an observation; the cause is not established. Hypotheses to test offline: a per-slot pointee cap (at most 2 per slot) or dedup of a shared TA pointee.
+- Rollback: GPU_RESET none; candidate removed cleanly; AGX_GUARD ACCEPT; base 30.0.2883.0 re-staged. POST_KIT: no pending reboot. Appx v3 busy=1 came from MoUsoCoreWorker only; no package in progress and 0 deployment events.
+- No TDR and no bugcheck. Display, input, SSH and storage alive.
+- Verdict: REJECTED on the pass rule (R7 TA 0). The capture fix is CONFIRMED for 3D (all positions) and for R5 TA. Raw files sent to the GPU line. The architect and the m1n1 line were told about the TA pattern because the macOS capture uses a similar sub4 cap.
