@@ -89816,3 +89816,35 @@ BENCH ADDENDUM (before the run):
 - Evidence .local/experiments/EXP3022-k48/.
 - Previous-guest note: EXP3021 ended GATE_BOOT_3021_FAIL guard-end only because the bench had already committed its ACTUAL (kit end guard). The rollback had completed (2883 oem13.inf staged, inf 45c1e2b8..., candidate removed; ledger correction 651feec0e), so the guest is the normal post-rollback state.
 - Launcher launch-kbd3022.sh sha256 baa8d104f2cd146e (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 651feec0e.
+
+EXP3022 ACTUAL 2026-11-27T17:50:07Z (refs EXP3022 BEFORE; K48W2H, package 30.0.3014.0 on the EXP3021-b19 post-rollback guest; evidence .local/experiments/EXP3022-k48/evidence):
+- Pre-launch: owner Wi-Fi window 16:57:47Z-17:18:18Z. The owner did not reconnect: current interface GUID {EFC2434E...} had 0 profiles; one profile sits under the old GUID {80AF4777...}; driver 0.1.71.2 (oem17.inf) Started. Launched without it, per the architect. Disk gate pwdev 8263 MiB (floor 8192). AppX OK on try 1. V857GATE OK [882, 236, 511, 215]. IRQ gate PASS (769). Suite 119/0.
+- Perf: gm3022p1 55.805, gm3022p2 55.865, both VALID. PERF_GATE PASS worst=47.530 (+1.11 %).
+- Gate and timing lines, verbatim:
+  K48_DEFENDER kg start sig=1.463.497.0 engine=1.1.26100.4
+  K48_DEFENDER kg end sig=1.463.497.0 engine=1.1.26100.4 unchanged (gate arm: recorded; does not void a gate PASS)
+  K48_GATE_FILE local=d2efb7a94bab632d guest=d2efb7a94bab632d bytes=72328000
+  K48_RECEIPTS setup=[hr=0x00000000 00000003 000015a4 a8260e42 97efffb3] replace=[   1 hr=0x00000000 a8260e42 97efffb3 00000001 00001584 912cec80 00000042;] gate=[hr=0x00000000 00000001 0000000a 016f3600 97efffb3 00000000 00000000;hr=0x00000000 00000002 0000000a 016f3600 97efffb3 e482642e 6403f955;]
+  K48_AVAIL kg arm_start=4515MB gate=[phase=0 avail_mb=1022 sets_kb=70504 held_ms=0; phase=1 avail_mb=987 sets_kb=70504 held_ms=0; phase=2 avail_mb=940 sets_kb=70504 held_ms=4240; ] floor_mb=256+sets (gate refuses below: reason 6)
+  K48_GATE K48_GATE tag 97efffb3 uavs [0, 1, 2, 3, 4] cbvs [0, 1] windowed True K48_GATE_COUNTER candidates [3, 4] -> counter/flag-only [4] K48_GATE_ITEMS slot 4 before 2 ours 50242 transplant 50242 capacity 150000 K48_GATE_FLOAT_DIST items 50240 w8 25105/50240 (50.0%) ulp p50 1 p99 14 max 47 rel p50 1.03e-07 p99 1.1e-06 max 3.13e-06 K48_GATE_VERDICT PASS_FLOAT (roles ['records', 'slots']: float words within the PASS_FLOAT bound) 
+  K48_DEFENDER off1 start sig=1.463.497.0 engine=1.1.26100.4
+  K48_ARM off1 replace_receipts=0 split_replays=9312 defender_end=[sig=1.463.497.0 engine=1.1.26100.4]
+  K48_DEFENDER on1 start sig=1.463.497.0 engine=1.1.26100.4
+  K48_ARM on1 replace_receipts=1 split_replays=9384 defender_end=[sig=1.463.497.0 engine=1.1.26100.4]
+  K48_DEFENDER off2 start sig=1.463.497.0 engine=1.1.26100.4
+  K48_ARM off2 replace_receipts=0 split_replays=9310 defender_end=[sig=1.463.497.0 engine=1.1.26100.4]
+  K48_DEFENDER on2 start sig=1.463.497.0 engine=1.1.26100.4
+  K48_ARM on2 replace_receipts=1 split_replays=9424 defender_end=[sig=1.463.497.0 engine=1.1.26100.4]
+  K48_ARMS_USED off1=off1 on1=on1 off2=off2 on2=on2
+  K48_TIMING K48_TIMING off1 n 3200 median 0.7311 off2 n 3203 median 0.7303 on1 n 3222 median 0.5419 on2 n 3239 median 0.5410 K48_TIMING D 0.1893 ms CI [0.1883, 0.1902] width 0.0019 off_drift 0.0008 code_share 0.906 (gap 0.209) K48_TIMING_VERDICT CODE_OWNS code_share 0.906 
+  K48_STEPS_DONE perf=[PERF_GATE gravitymark_hd_perf PASS worst=47.530 baseline=47.007 delta=+1.11% tolerance=-2.0% source=Re-based 2026-11-12 on the three normal-path two-plane control boots EXP2366 (DP-1 04850c6ba) / EXP2367 / EXP2368 (NP-1 4e231cb19), m1n1 s2v3, DisableDDisplay absent, Wom1MpoTwoPlanes=1: mean of the per-boot worst fps_presents of r2/r3 (47.098 / 47.057 / 46.865); lowest control boot -0.30 %. HD PERF 100k -temporal 0 (10 + 60 s window). Previous 45.865 (legacy-path band EXP2339/2341/2348).] gate=[PASS_FLOAT] timing=[K48_TIMING_VERDICT CODE_OWNS code_share 0.906]
+- GM runs: gm3022kg VALID 54.565 (the gate copy run), off1 54.907, on1 55.453, off2 55.020, on2 55.641, all VALID.
+- First-run parts, observed:
+  - The synchronous copy-and-free ran in phase 2, held 4240 ms then freed; available memory never fell below 940 MB against a floor of 256 MB + sets.
+  - Alignment is enforced by agx_k48_timing.py (below 0.99 raises) but not printed; the verdict was produced, so every arm was >= 0.99.
+  - k48 jobs timed per arm: n 3200 / 3222 / 3203 / 3239.
+  - The replace receipt is per pipeline (1 per on arm); there is no per-dispatch receipt.
+  - split-replay receipts: 9310-9424 per arm.
+  - No <arm>b repeat: Defender 1.463.497.0 at every arm's start and end.
+- Health: no reset or TDR in any arm. Rollback: candidate removed, 2883 re-staged, GATE_BOOT_3022_DONE rc=0.
+- Verdict: confirmed. Gate PASS_FLOAT (counts, IDs, slots, counter and integer words exact; word8 float within rel 3.13e-6, p50 1 ULP, max 47 ULP). Timing CODE_OWNS, code_share 0.906: D 0.1893 ms, CI [0.1883, 0.1902], off_drift 0.0008 ms, gap 0.209 ms. Apple's m208 kernel code runs the K48 job 0.189 ms faster (0.541 vs 0.731 ms median); about 91 % of the K48 gap is the kernel code itself.
