@@ -7,10 +7,10 @@ import re,sys
 def t(s): h,m,x=s.split(':'); return int(h)*3600+int(m)*60+int(x)
 W=[]; INST=set()
 for l in open(sys.argv[1],errors='replace'):
-    m=re.match(r'(\d\d:\d\d:\d\d)Z DEFWATCH sig=(\S+) sigupd=\S+ engine=(\S+) ev19=\S*T(\d\d:\d\d:\d\d) ev19msg=(.*)',l)
+    m=re.match(r'(\d\d:\d\d:\d\d)Z DEFWATCH sig=(\S+) sigupd=\S+ engine=(\S+)(?: ev19=(\S*?)(?:T(\d\d:\d\d:\d\d))? ev19msg=(.*))?',l)
     if m:
         W.append((t(m.group(1)),m.group(2),m.group(3)))
-        if 'Installation Successful' in m.group(5): INST.add((t(m.group(4)),m.group(5)[:90]))
+        if m.group(5) and m.group(6) and 'Installation Successful' in m.group(6): INST.add((t(m.group(5)),m.group(6)[:90]))
 st={}; en={}
 for l in open(sys.argv[2],errors='replace'):
     m=re.match(r'(\d\d:\d\d:\d\d)Z GM_START (\S+)',l)

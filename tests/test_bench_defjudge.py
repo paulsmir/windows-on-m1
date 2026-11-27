@@ -28,5 +28,10 @@ class DefJudge(unittest.TestCase):
     def test_vbs_timer_lines_alone_never_invalidate(self):
         r = self.run_tool(DW.splitlines(True)[0] + DW.splitlines(True)[1], RUN)
         self.assertTrue(all(v in ('OK', 'NO_DATA') for v in r.values()))
+    def test_watcher_v2_lines_without_install_event_parse(self):
+        dw = DW.replace('ev19=2026-11-27T14:33:33 ev19msg=Virtualisation Based Security new timer creation status', 'ev19=none ev19msg=')
+        dw = dw.replace('ev19=2026-11-27T14:38:39 ev19msg=Virtualisation Based Security new timer creation status', 'ev19=none ev19msg=')
+        r = self.run_tool(dw, RUN)
+        self.assertEqual(r['gm3015p1'], 'OK'); self.assertEqual(r['gm3015kg'], 'INVALID')
 if __name__ == '__main__':
     unittest.main()
