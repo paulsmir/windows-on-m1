@@ -88121,3 +88121,46 @@ EXP2991 ACTUAL 2026-11-27T04:05:25Z:
 - Verdict: JFLOOR v2.3 late-0 criterion REJECTED (late 15 in both runs, state-independent); AppleSmc 0.1.0.21 CONFIRMED standing. Raw JFLOOR files to the GPU line. Next: EXP2992 WICDUMP re-dump on this guest (AppX gate, GM floor 3450 for that run only).
 
 EXP2991 CORRECTION 2026-11-27T04:11:28Z (refs EXP2991 ACTUAL): "v2.3 is not better than v2.2 (EXP2989 late 1 total)" is wrong. Per the GPU line's umd.log reading, EXP2989 jf22 r1-r3 were also late on every shape. The late flag is structural, not gate sizing: the UMD's 4-deep in-flight window blocks Execute behind the fillers, and burst jobs recorded after queue->Wait(gate) are submitted and completed inside the Execute loop before the gate Signal (the owner context does not honour the queue Wait). The verdict that the late-0 criterion is unmet stands; the cause is now attributed to UMD queue-wait semantics, not to v2.3 sizing. No rerun until the architect orders one.
+
+EXP2992 HARDWARE BEFORE 2026-11-27T04:16:14Z:
+WICDUMP re-dump - preregistration (architect order 2026-11-27; written before any run)
+
+WHAT: AppleAgx 30.0.2980.0 from gpu/wicdump 5013a301df8de3b02320ca0eea1ce3208eb76649 = 2979 (165f578c7) + a54d754bf
+only (WICDUMP never resolves objects below GpuVa 0x10000). One variable vs 2979: the dump resolver fix. No PIPE-PRIO2.
+The commit on top of a54d754bf (5013a301d) touches tools/agx_wic15.py only (not in the package).
+
+WHY: EXP2987's dump carried a queue object at GpuVa 0, so small integers became pointees (2605 SUBs below 4 GiB) and
+spent the 24-pointee budget before the render microsequence pointer; TA/3D microsequence was not captured. The render
+microsequence is the likeliest home of the render fixed cost; the owner's macOS session follows.
+
+KIT: KIT-WICDUMP-5013a301d = the bench's corrected kit (toolrun from the backup location hash-pinned, Wom1WorkItemDump
+read-back stop, prerollback receipts) with commit/version 2980 and the decoder run as `agx_wic15.py --check`.
+
+PASS (fixed now; all required):
+1. complete_frames >= 32 (R1/R3/R5/R7 TA each paired with a 3D item);
+2. render microsequence (a Start*/Finalize* pair) captured for R5 and R7, TA and 3D, in >= 32 frames each;
+3. 0 SUB records resolved below 4 GiB;
+4. perf gate PASS with the switch absent; perf gate PASS on the armed run;
+5. AGX_D3D12_WICDUMP: PASS (DONE, all slots read, drops 0).
+Predicate proof before the boot: `agx_wic15.py --check` on EXP2987's wicdump-2987.bin prints complete_frames 36 OK,
+render_microseq R5/R7 TA/3D frames 0 FAIL (x4), low_subs 2605 FAIL, WIC_CHECK_VERDICT FAIL - failing for the right
+reason; the positive path is covered by tests/test_agx_wic15.py test_check_predicates (34 synthetic frames PASS).
+STOP: Code 43/31, GPU reset / TDR / bugcheck, firmware error receipt, Wom1WorkItemDump left present, perf gate FAIL with
+the switch absent.
+RECOVERY: rollback to 30.0.2883.0 (accepted, hashes in the standing record).
+
+PACKAGE: .local/experiments/AGX-WICD3-5013a301d-signed
+- SHA256SUMS sha256 8afc949d55929f5b8fbccf197909158bad51bc4ff6d4dad079d7d0ef3c6d188d
+- sys b213d069def71480231e42b0bdeeceda09224a7dc06bc2cfd191eb8f849beaa8; UmdArm64 071e2284a165bd85537c95863d400bf0b71d73ca3497d5b24f059abee719d7a6
+- receipt SourceCommit 5013a301d, PackageBuild 2980; drift2_cand.py PASS 30.0.2980.0
+- Builder WICD3-2980-final: 0 errors /W4 /WX, STACK_FRAMES PASS x4, versions coherent 30.0.2980.0.
+PROBE: unchanged from 2979 (the probe header did not change): agx_d3d12_probe_wicdump_arm64.exe sha256
+8b5ea11e107c65f1946c04ba9316f84c03edcdb4ece4289cdaf2e77070cee577.
+
+BENCH ADDENDUM (before the run):
+- Kit KIT-WICDUMP-5013a301d as issued by the GPU line from the bench-corrected 2979 kit (SHA256SUMS 56be4dae, 45 OK); verified to carry the five bench fixes (Wom1WorkItemDump read-back stop before the rollback; hash-verified UMD-log deletion; wfup.sh pin ff39dc91; KMD receipts before the candidate removal; toolrun copies from the backup pinned 1d534b13/feaa80fa) and the agx_wic15.py --check / WIC_CHECK_VERDICT verdict part. GP1_COMMIT 5013a301; package AGX-WICD3-5013a301d-signed SHA256SUMS 8afc949d (9 OK), sys b213d069. L1b package (769 expected, strict).
+- Pass rule (architect, fixed): complete_frames >= 32; render microsequence (Start*/Finalize* pair) for R5 and R7, TA and 3D, in >= 32 frames each; 0 SUBs below 4 GiB; both perf gates PASS; probe PASS; WIC_CHECK_VERDICT PASS. Stops as before incl. the switch read-back.
+- Staging guest = EXP2991 (plain standing boot with JFLOOR v2.3, nothing staged). Power: host-Mac port + hub charging input. Evidence .local/experiments/EXP2992-wicd/evidence/gate/. Raw files to the GPU line, verdict to the architect. 2980 not standing.
+- MEMORY FLOOR (architect ~04:05Z, this run only): GM_GATE_MB=3450 instead of 3700 (the kit waits for >= 3450 MB available before every GravityMark start and logs it in GM_START available=...); below 3450 it is not started. Census in EXP2991 (avail 3589 vs EXP2985 3807): new session-1 consumers M365Copilot (WS 147 MB, private 68) and SystemSettings (private 112, the Settings app open in the owner's session); pool nonpaged unchanged (195 vs 196.5 MB) = not driver pool; none of our tools running. Neither consumer is ours - not stopped.
+AppX gate v2 (bench, 2026-11-27 ~04:10Z): the v1 gate counted 6 packages in a static Modified/NeedsRemediation state (SecHealthUI, ZuneMusic, BingWeather, ScreenSketch, StorePurchaseApp, SolitaireCollection; present before the gate, no change across tries) as activity and held. v2 (appxcheck2.ps1) measures the architect's condition directly: busy = a deployment/servicing process, a package in DeploymentInProgress/Servicing, or an AppXDeploymentServer operational event in the last 120 s; static states and running service hosts are logged but are not activity. Dry run 04:08Z: procs none, in-progress 0, events 0, busy=0.
+- Launcher launch-kbd2992.sh sha256 7da8d212da6ec038 (launch-kbd.sh 51d76b6354b693e4); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 08b0ac455.
