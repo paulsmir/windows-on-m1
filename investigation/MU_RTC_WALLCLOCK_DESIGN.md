@@ -153,3 +153,33 @@ shows the real downtime.
 
 PORTABILITY: per-SoC table only (ADT path or DT reg, PMIC USID, cell offset). The conversion and the anchor are
 SoC-independent. KEEP/DROP: to be decided on the §6 checkpoint.
+
+## 9. Corrections and stage-1 findings (2026-11-27, after the Architect rulings)
+
+- Correction to §1 (R): `LibRtcInitialize` sets `BaseTime` to 2019-01. Windows therefore sees 2019-01-01 + uptime
+  (day modulo 28), not year 0. The conclusion is unchanged: there is no wall time.
+- Stage 0 is implemented as a separate library instance, `tools/rtc_wallclock/mu/AnchorRealTimeClockLib`.
+  - It is selected in `AppleSiliconPkg.dsc.inc` only when `J313_RTC_ANCHOR=TRUE` (platform default FALSE), so the base
+    build is untouched when the flag is off.
+  - It reads both anchors at init. The host anchor wins. It logs `RTC: wall-clock source=...` and, when both anchors
+    exist, `RTC: hardware minus host = <ms>`.
+  - `repro-rtc0.sh` defines gates G1-G4: base = 170a91b4 bit for bit; only `RealTimeClockRuntimeDxe.efi` differs;
+    every ACPI table is identical; the AGX IRQ AML check passes.
+- Bench host anchor (R): the bench launcher runs the integration tree's `proxyclient/tools/chainload.py:111-114`, which
+  writes `m1n1-iomfb-utc-{ms,cntpct,cntfrq}`. `HV.init` builds the guest ADT from `u.get_adt()` (hv/__init__.py:1736).
+  `setup_adt` deletes nodes but not `/chosen` props, so Mu should see the host anchor (I; the Mu log line confirms it).
+- Stage-1 findings that change the design (R):
+  1. Standing m1n1 (WIFI_PCIE_LINK) already opens the SMC in `pcie_wlan_rail_on` (`pcie_wlan.c:119-120`) and keeps the
+     session for m1n1's lifetime. The file comment says: "quiescing the SMC IOP from the AP reset the SoC (EXP2410)".
+     `smc_shutdown()` = `rtkit_quiesce`, so it must NOT run on J313. The `dcp.c` open/shutdown path never runs here:
+     the J313 ADT has no `function-hdmi_pwr_en`. To leave the Windows AppleSmc start state unchanged, the RTC reader must
+     reuse the one open session (one extra READ_KEY) and never shut it down.
+  2. m1n1's C `adt_setprop` can only replace an existing property (`rust/src/adt.rs:706`, `named_prop_mut`). A
+     `/chosen` anchor written by m1n1 therefore needs zero placeholders that the loader creates first (opt-in, so
+     standing launches stay byte-identical).
+  3. In the bench flow, the guest ADT is fetched in `HV.init` before the wireless-profile `pcie_init` opens the SMC
+     (full.log order). A value filled at rail time arrives too late, unless the launcher refreshes the three props
+     after `pcie_init`.
+  4. The ADT describes the RTC itself (R, J313 ADT): `/arm-io/nub-spmi/spmi-pmu` has `reg` slave 0x0f,
+     `info-clock_offset = [0xD100, 6]` (= `info-rtc_scrpad`, = the Asahi DT cell) and `info-rtc = [0xD002]` (a PMU RTC
+     register, meaning U). The offset location can come from the ADT instead of a per-SoC table.

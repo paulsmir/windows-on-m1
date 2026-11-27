@@ -1,0 +1,30 @@
+## @file
+#  RealTimeClockLib for Apple silicon: read-only wall clock from an ADT /chosen UTC anchor (plan B20).
+#  SPDX-License-Identifier: MIT
+##
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = AnchorRealTimeClockLib
+  FILE_GUID                      = 082A0DF8-DAE6-5FD7-886C-8DC29DB06BEE
+  MODULE_TYPE                    = BASE
+  VERSION_STRING                 = 1.0
+  LIBRARY_CLASS                  = RealTimeClockLib
+
+[Sources.common]
+  AnchorRealTimeClockLib.c
+  rtc_wallclock.h
+
+[Packages]
+  ArmPkg/ArmPkg.dec
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  EmbeddedPkg/EmbeddedPkg.dec
+  AppleSiliconPkg/AppleSiliconPkg.dec
+
+[LibraryClasses]
+  AppleDTLib
+  ArmGenericTimerCounterLib
+  BaseLib
+  DebugLib
+  TimerLib
