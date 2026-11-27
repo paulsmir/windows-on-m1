@@ -189,3 +189,9 @@ SoC-independent. KEEP/DROP: to be decided on the §6 checkpoint.
   (smc_keys.c:23), so CLKM (class C) is refused. There is no stage-2-like path in AppleSmc.
 - Coordination: TZ1P01 edits neither .dsc file (only AcpiTables DSDT*.asl and J313AppleSmcThermal.asl.inc). The two
   images merge cleanly.
+- Guest timezone (R, bench read-only query on the EXP3016 guest, 2026-11-27T15:09:46Z, evidence
+  .local/experiments/EXP3016-c4/evidence/tzquery.txt): `RealTimeIsUniversal` is absent; TimeZoneKeyName "Romance
+  Standard Time"; Bias = ActiveTimeBias = 0xffffffc4 (-60 min, i.e. UTC+1 now, no DST active). The UEFI side is clear
+  (Mu returns TimeZone = 0 = UTC); whether Windows honours it is undocumented (U). So the stage-0 kit's likely
+  outcomes are O1 (UTC honoured) or O2 (local assumed: boot time = host - 60 min). O2 would make RealTimeIsUniversal=1
+  an installer requirement (owner decision; no registry write on the bench guest).
