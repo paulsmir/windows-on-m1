@@ -90265,3 +90265,15 @@ BENCH ADDENDUM (before the run):
 - PASS -> standing candidate; standing after its restart confirmation; rollback 2883. Correctness failure -> stop, bisect on the architect's order.
 - Evidence .local/experiments/EXP3030-std/.
 - Launcher launch-kbd3030.sh sha256 2d05cd572c7f0e0e (launch-kbd.sh 26ea26b598a9d2b9); m1n1 9bddd9aa24d384e2034a1cda60b18d971cad99b6338ddbcf57aeade743e61691; Mu 170a91b4d7470450640e25d915785afcb1719b58deb69c07f2c2a8fae6369b6b; run_uefi.py f20d9a2d15fe7c77; no AppleAgx package (APPL0002 inert, basic display driver); integration HEAD 339233e5b.
+
+EXP3030 ACTUAL 2026-11-27T22:27:08Z (refs EXP3030 BEFORE; STDC4C on EXP3029/EXP3028-std guest; evidence .local/experiments/EXP3030-std/evidence):
+- Verdict: GATE_PASS (main part; CS reported separately: GATE_CS SKIPPED, no owner word for Steam). GATE_BOOT_3030_DONE rc=0 at 22:25:28Z; CHAIN3030_END rc=0 at 22:25:29Z. STDC4C becomes the standing candidate; standing only after its restart confirmation (not yet run).
+- Gates: DISKGATE2 PASS (inside 26330, SSD 5631, bands 38068). TOOL_SUITE PASS=119 FAIL=0. RRQ IDENTICAL fnv=f0188f81facdd45e resets 0->0 tdr 0->0.
+- PERF: gm3030p1 55.772 fps, gm3030p2 55.898 fps, both VALID. PERF_GATE gravitymark_hd_perf PASS worst=47.669 baseline=47.551 delta=+0.25% tolerance=-2.0%. Recheck gm3030rc 55.884 fps VALID.
+- FULL: f1 8790, f2 8788, f3 8811, all VALID (warm-up gm3030wu 8769). Mean 8796.3; criterion >= 2 VALID, mean >= 8740, no VALID < 8700: met. GPUCOL mean 1250-1251 MHz, limited 0.1 %.
+- Other gates: TACM_CHECK APPLIED samples 32 applied 32 ignored 0. DWM_FAULTS 0 start 0 new 0. HV_TOTAL PACED=0 STORM=0 UNH=0 BUGCHECK=0. gpu_resets=0, tdr4101=0. FINAL_RECEIPTS GPU_RESET none, reservefail/newslabfail/commitfail 0.
+- Defender: every arm resets 0->0 tdr 0->0, defender sig=1.463.499.0 engine=1.1.26100.4; DEFJUDGE wu/p1/p2/f1/f2/f3/rc all OK. lastWUinstall 2026-11-27T20:15:38Z, before CHAIN3030_START 20:30:17Z.
+- WER: FINAL_WER WER_REPORTS 2 STOPS 0. Bench trace: the BlueScreen 0x116 report (ffffd68f9f30e010 ... c0000483) is the 2026-11-21 bugcheck re-filed at 20:35:04Z. The LiveKernelEvent 193 report is WATCHDOG-20261126. The remaining entries are Edge setup.exe crashpad logs. No dump from this boot (boot 20:32:24Z).
+- Disk: DW_BREACH_LINES 0; DISK_END ssd=4931 bands=38159 inside=24651 OK. Battery 99 %. Wi-Fi Disconnected (orphaned profile, known).
+- End state: rollback to 2883 staged (APPL0002 CM_PROB_FAILED_INSTALL until the next boot). Guest left up. POST_KIT RebootPending=0 PackagesPending=0 PendingFileRename=4.
+- Next: STDC4C restart confirmation (architect to sequence it with D1); then TRK49.
