@@ -89990,3 +89990,16 @@ EXP3023 ACTUAL 2026-11-27T19:54:27Z (refs EXP3023 BEFORE; K48MUT, package 30.0.3
   - M1, M4a, M4b: NONE.
   - Sum M1+M2+M3 = 0.1129 ms = 0.598 of the 0.189 ms gap; M_all 0.1163 ms (interaction +0.0033 ms).
   - The remaining about 40 % needs the next preregistered set.
+
+EXP3024 ACTUAL 2026-11-27T19:55:29Z (refs EXP3024 BEFORE; evidence .local/experiments/EXP3024-rbbw/evidence):
+- Both probes ran the hash-verified copies (guest exe re-hashed after each run), rc=0, 10 s and 9 s wall. Outputs fetched with sha256 on both sides; guest outputs and both exes deleted.
+- agx_d3d12_probe_rbbw_arm64 "only RBBW": the whole output is "AGX adapter not found". The guest had no bound AGX driver: the K48MUT rollback leaves 2883 staged on Problem 28, and it binds only at the next boot.
+- agx_d3d11_fl111_probe_stagerb_arm64 "only STAGERB": it ran on the default (non-AGX) adapter. Output:
+  AGX_D3D11_STAGERB_DEFECT B21 (a ratio FAIL is the known write-combined readback defect until B21 is fixed)
+  AGX_D3D11_STAGERB: PASS size_mib=1 rb_mbps=47662.5 ref_mbps=47482.7 ratio=1.004 pattern=ok stale=ok
+  AGX_D3D11_STAGERB: PASS size_mib=32 rb_mbps=28597.5 ref_mbps=28716.8 ratio=0.996 pattern=ok stale=ok
+  AGX_D3D11_STAGERB: PASS size_mib=64 rb_mbps=28408.9 ref_mbps=27862.4 ratio=1.020 pattern=ok stale=ok
+  AGX_D3D11_FL111_PROBE_DONE failures=0
+  A ratio of about 1.0 is expected for a software or basic adapter whose staging memory is ordinary cached memory. This is not a measurement of our driver.
+- Verdict: inconclusive - not measured on the accepted driver. The risk was noted in the BEFORE: a post-rollback guest has no bound AGX driver. First-run gate: both binaries start and exit cleanly. The D3D12 probe fails closed without an AGX adapter; the D3D11 probe reports which path it measured only through its numbers, not through an adapter line.
+- Next: rerun on a guest where 2883 is bound, e.g. the first standing boot, or a kit's base phase before the candidate install. Slot by the architect.
